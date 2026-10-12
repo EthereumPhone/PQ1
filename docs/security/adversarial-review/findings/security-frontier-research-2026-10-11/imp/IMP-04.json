@@ -1,0 +1,28 @@
+{
+ "id": "IMP-04",
+ "title": "Active tamper mesh over the display connector, both SEs and the MCU on PC13 (TAMP_IN1) driven by the U585 active-tamper PRNG (ATCR/ATOR/ATSEEDR), routed into TAMP confirmed-mode erase",
+ "threat": "Physical opening/drilling/re-soldering of the display region or SE area in transit or after purchase (evil maid). The V10 board has no mesh, no case switch and no TAMP_IN pin assigned; firmware preconfigures FLTCR only and never sets any TAMPxE bit.",
+ "proposal": "Board: a 4-layer LDS/PCB mesh over the display connector + U585 + OPTIGA + SE050 whose return goes to PC13 (bonded on the 48-pin part, listed free; confirm TAMP_IN1 mapping in the STM32U585CIU6 pin table before committing) with TAMP_OUT on a second free pad (PA10/PB4 candidate), backed by the already-specified 0.47\u20131 F VBAT supercap (12\u201324 h armed when unplugged; no battery, per owner decision). Firmware: configure ATCR1/ATCR2 active mode (open AND short detection), seed ATSEEDR from the 3-source TRNG, read ATOR twice (trust only on match), set TAMP1E with precharge/filter per RM0456, keep CR3=0 so a trip erases BKP0R..7R (BHK) in hardware; production-only arm (Trezor arms external tamper only in PRODUCTION kernel) with prodtest 'tamper-read' for factory QA. Pair with #50 (TAMPSEC/TAMPPRIV so NS cannot disable it).",
+ "rationale": "The U585 ships the active-tamper block for exactly this (RM0456 \u00a764.1; ST confirms open+short detection); it is the shipped answer in Keystone/GridPlus/Foundation and the one that works unpowered in the sense that a mesh an implant had to cut stays cut and trips at the next power-on. Trezor T3W1 only uses a passive TAMP_IN2 and no active pair, so this is parity-plus. It closes the post-ownership evil-maid class that IMP-01's destructive-open shell only makes visible.",
+ "repo_evidence": [
+  "secure/src/hw/tamp.rs (grep 'ATCR|ATOR|ATSEEDR|TAMP1E|TAMP2E' -> none; only ITAMPxE at :194-221, :288-298)",
+  "secure/src/hw/tamp.rs:274-281 (FLTCR preconfigured for external pins, TAMPxE never set); secure/src/hw_platform_under_test/pure_tests.rs:1728 (negative_tamp_init_skips_external_pins)",
+  "secure/src/board/pq1.rs:345 (FREE_PINS PA10/PC13/PB4, all NC)",
+  "docs/hardware/hardware_requirements.md 'Anti-tamper & physical security' (board not started; ext-pin cfg open); gh search 'mesh'/'enclosure'/'TAMP_IN' -> no issue",
+  "gh #50 (BKPRWSEC/TAMPSEC OPEN), #47 (HW-mode erase unconfirmed on silicon), #248"
+ ],
+ "vendor_precedent": "GridPlus Lattice1 LDS mesh with constant waveform (bricks on short/alteration, 5-year battery); Keystone 3 Pro PCI-level anti-tamper; Foundation Passport Prime screen-removal factory reset; Trezor T3W1 passive TAMP_IN2 (tamper.c:131-160, PRODUCTION-only arm).",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P1",
+ "risks": "An implant installed while unpowered that does not breach the mesh (e.g. soldered to an unmeshed net) is not detected \u2014 mesh coverage must include the display FPC/connector and the button nets. Supercap-only VBAT bounds unplugged arming to hours; after that only persistent opens are caught. False trips (ESD, flex, moisture) wipe the BHK and force re-provisioning \u2014 the TAMP/ITAMP stack is not yet silicon-validated at all (#75, evt-silicon-validation \u00a710.1), so characterise before shipping it armed. ATOR must be read twice per RM0456 or a glitch can defeat the comparator. Costs a board spin and a pin or two.",
+ "sources": [
+  "https://community.st.com/stm32-mcus-products-25/stm32u585-tamp-mechanism-165329",
+  "https://docs.gridplus.io/lattice1/security-features",
+  "https://github.com/KeystoneHQ/keystone3-firmware",
+  "https://docs.foundation.xyz/glossary/home/",
+  "file:///home/nicola/repos/trezor-firmware/core/embed/sec/tamper/stm32u5/tamper.c"
+ ],
+ "surface": "implant"
+}

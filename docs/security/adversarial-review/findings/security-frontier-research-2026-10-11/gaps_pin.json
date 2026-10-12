@@ -1,0 +1,249 @@
+{
+ "surface": "PIN / wipe / duress (key=pin)",
+ "improvements": [
+  {
+   "id": "pin-01",
+   "title": "Make the OPTIGA attempt counter 'resettable under all circumstances' so a lockout wipe never bricks the ship profile",
+   "threat": "Attempt-counter / wipe atomicity: on the shipping profile (optiga-lock-operational) the E120 LUC is never reset after a lockout wipe; the next boot's directional reconcile reads E120 (saturated to 10) > page 124 (reset to 0) and wipes again, so the 'restore from seed' promise on the WALLET WIPED screen is undeliverable and a stolen-then-returned or self-locked device is a permanent brick. Also a DoS: anyone with 10 USB attempts bricks the user's hardware, not just the wallet.",
+   "proposal": "Adopt Trezor's stated design invariant for the F1D0/E120 metadata ceremony: every path that can reset E120 must overwrite a secret the KDF/unlock needs, and conversely every wipe path MUST be able to reset or retire E120. Concretely, carry one of two designs into the S-1 ceremony: (a) F1D0 'Change' authorised by a wipe-only credential (its own AuthRef object, itself gated by an OPTIGA LUC) that `factory_reset_admin` presents and then destroys, mirroring Trezor's PIN_SECRET-writable-Always/STRETCHED_PIN-read-gated loop; or (b) a durable 'wiped-at-range-N' marker so that reconcile compares page 124 against the E120 of the CURRENT provisioning range only and never against an abandoned range. Add a post-wipe boot assertion that the device enters the wizard rather than the reconcile wipe loop, exercised by `make pin-gate-wipe-e2e` extended with a cold reboot. This is a ceremony-design requirement to fold into S-1, not a re-raise of the S-1/S-2/S-3 deferral.",
+   "rationale": "Code read: `optiga/mod.rs:2795-2814` skips `reset_e120_via_transient_auth` under `optiga-lock-operational` ('a forgotten-PIN wipe abandons this OID range'); `nsc/mod.rs:1689-1717` wipes whenever `se_count > mcu`; `trigger_lockout_wipe` resets page 124 to 0 (`cmd_request_unlock.rs:190-211`). Those three facts compose into a boot-wipe loop on exactly the profile `PROD_SHIP_FEATURES` builds (`Makefile:2718`). Trezor explicitly documents 'resettable under all circumstances' as an invariant and designs the OID access conditions around it; BitBox02 Nova ships an OPTIGA-counter-gated PIN without this brick, so the design space exists on this exact part.",
+   "repo_evidence": [
+    "secure/src/optiga/mod.rs:2795-2814 (E120 reset skipped under optiga-lock-operational)",
+    "secure/src/nsc/mod.rs:1689-1717 (reconcile wipes on se_count > mcu)",
+    "secure/src/nsc/cmd_request_unlock.rs:190-211 (page-124 reset to 0 after wipe)",
+    "Makefile:2662,2718 (RELEASE_FEATURES / PROD_SHIP_FEATURES include optiga-lock-operational + optiga-hw-counter)",
+    "GitHub #168 (OPEN: post-lockout-wipe permanent brick), #123, #170, #254"
+   ],
+   "vendor_precedent": "Trezor Safe 3/5: docs/core/misc/optiga.md 'resettable under all circumstances' + optiga.c:392-413 access conditions (PIN_SECRET change=ALWAYS, STRETCHED_PIN change=PIN_SECRET); BitBox02 Nova OPTIGA Trust M V3 hardware attempt counter in production.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P0",
+   "risks": "Touches the irreversible OPTIGA lifecycle ceremony (S-1), which the owner deferred by design; must be designed on paper and rehearsed on a sacrificial chip before any metadata lands. Design (a) adds a wipe credential that must itself be unforgeable by a desoldered-chip attacker (gate it with its own LUC and derive it from DHUK/BHK). Design (b) leaves E120 saturated and relies on the marker being tamper-evident. Code-read conclusion, not silicon-observed (#254 open).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga.c:392-413",
+    "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf",
+    "https://github.com/EthereumPhone/PQ1/issues/168"
+   ]
+  },
+  {
+   "id": "pin-02",
+   "title": "Verified wipe: destroy-fastest-first ordering, post-wipe readback, boot-time 'wipe verified' assertion, and sweep the duress objects",
+   "threat": "Wipe atomicity: `trigger_lockout_wipe` discards every result (`let _ =`) and always prints WALLET WIPED; the SE050 sweep does not include the duress OIDs, so after a lockout the decoy half_E stays readable with the (unlimited-attempt) duress PIN; a power cut or SE transport fault mid-wipe leaves a device that claims to be wiped but is not.",
+   "proposal": "(1) Order the wipe by destruction speed/reliability: SE050 UserID-gated objects first (one SCP03 session), then OPTIGA, then page 124/125/127; arm the page-125 flag before step 1 (already done). (2) Make the verdict honest: after each SE wipe, read back that every target OID is absent/blank (SE050 ReadObject on each DATA_AND_CANARY + DURESS id must return 'no such object'; OPTIGA GetDataObject on F1D1/F1D2/F1D8-F1DA must fail) and only then clear the page-125 flag and show WALLET WIPED; otherwise show 'WIPE INCOMPLETE \u2014 reboot to resume' and leave the flag armed. (3) At every boot, when the flag is clear AND page 124 is blank AND the wizard is about to run, re-assert the readback (Ledger's 'wipe verified at startup'); any surviving object re-arms the wipe. (4) Add DURESS_USERID/ENTROPY/VK/BOOTSTRAP_VK (0x7B10_0010..13) to the SE050 sweep lists. (5) Restore and track the untracked 19-test lockout-wipe FI matrix so the WipeFault hooks in MockSecureElement are exercised in CI.",
+   "rationale": "`cmd_request_unlock.rs:196-209` `let _ = se.factory_reset_admin(); let _ = pin_attempts_reset();` then unconditional WALLET WIPED; `se050/mod.rs:2266-2300` DATA_AND_CANARY_OBJS / AUTH_OBJS_BEST_EFFORT contain no DURESS entries while `se050/mod.rs:66-71` claims the sweep reclaims them; `main.rs:1935-1951` boot resume also `let _`s both calls. Ledger's LSB-003 fix history shows exactly this bug class (3-wrong-PIN wipe cleared OS data but not app data) and the fix shape (wipe verified at startup). Trezor erases the active sector first and re-inits so a torn wipe is never half-observable.",
+   "repo_evidence": [
+    "secure/src/nsc/cmd_request_unlock.rs:190-211 (let _ = on every wipe result; unconditional WALLET WIPED)",
+    "secure/src/main.rs:1935-1951 (boot resume ignores results)",
+    "secure/src/se050/mod.rs:2266-2300 (sweep lists lack DURESS_* OIDs) vs secure/src/se050/mod.rs:66-71 (claims they are reclaimed)",
+    "secure/src/secure_element.rs:429-450 (WipeFault hooks only used by the untracked suite); git status `?? secure/src/secure_lockout_wipe_fi_pure_tests.rs`",
+    "GitHub #106 (wipe verdict coercion), #107 (duress objects survive wipe), #123, #129"
+   ],
+   "vendor_precedent": "Ledger LSB-003 / firmware 1.4: user-zone wipe 'verified at startup'. Trezor storage/norcow.c:284-299 + storage.c:1805-1813 (active sector first, immediate re-init with fresh keys).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "Readback costs extra APDUs on a path where the SE may already be flaky; must be bounded and must not be able to block the page-125 flag from ever clearing (resume loop). The 'WIPE INCOMPLETE' screen is itself an oracle that one SE survived; acceptable because the secret is already XOR-split and the flag re-arms the wipe.",
+   "sources": [
+    "https://donjon.ledger.com/lsb/003/",
+    "https://www.ledger.com/firmware-1-4-deep-dive-security-fixes",
+    "/home/nicola/repos/trezor-firmware/storage/norcow.c:284-299",
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:1805-1813"
+   ]
+  },
+  {
+   "id": "pin-03",
+   "title": "FI-hardened page-124 / page-123 record codec: expanded-bit encoding, replicated halfwords, and 'blank page is ill-formed'",
+   "threat": "Attempt-counter bypass by fault: page 124 encodes 'erased = 0 attempts' (`[0xFF;16]` blank, `[0x00;16]` consumed, any non-0xFF byte counts). A glitch on the flash read path that returns 0xFF (the exact Trezor 2019 voltage-glitch outcome, 'read the PIN entry counter as 0xFFFFFFFF') decodes as a fresh counter; the forward/reverse double scan narrows but does not remove this because both scans share the same 'is it 0xFF' predicate.",
+   "proposal": "Port Trezor's blockwise (U5 ECC-flash) scheme to the page-124 QW record and to page-123 16-B increments: encode the per-record value bit-wise (1->01, 0->10) into a 16-bit word replicated across all eight halfwords of the quad-word; decode every halfword, require the `(c ^ (c<<1)) & 0xAAAA == 0xAAAA` well-formedness on each, and require all eight to agree, else route to the fault handler. Make the erased state ill-formed: `pin_attempts_reset` erases AND writes `expand(0)` as record 0, so an all-0xFF page is a fault, not 'zero attempts' (Trezor `pin_logs_init` verifies compress(expand(fails))==fails before writing). Keep the bump as 'program the next blank QW' so the one-program-per-attempt wear property is preserved. Implement the codec in a pure workspace crate (next to `pqsigner-fi`) and add Kani harnesses for encode/decode round-trip, ill-formed detection, and scan monotonicity (#397).",
+   "rationale": "`flash.rs:764-792` documents the layout ('Programmed sentinel [0x00;16]. Blank sentinel [0xFF;16]'; 'any non-blank pattern marks consumed'); `flash.rs:824-836` double-scan returns 32 on disagreement but both scans agree on a uniformly-faulted 0xFF read. No Kani harness touches page 124 (grep over kani::proof files). Trezor explicitly chose this simplified codec for U5 because an SE counter is primary and flash is ECC \u2014 pq1 is in the same position, so the full guard-key scheme is not needed.",
+   "repo_evidence": [
+    "secure/src/hw/flash.rs:764-792 (erased-equals-zero-attempts layout)",
+    "secure/src/hw/flash.rs:824-836 (fwd+rev scan, same predicate)",
+    "secure/src/hw/flash.rs:916-949 (bump programs [0u8;16])",
+    "grep kani::proof -> no harness over pin_attempts_*",
+    "GitHub #397 (Kani page-124 scan/bump monotonicity, open)"
+   ],
+   "vendor_precedent": "Trezor storage/pinlogs_blockwise.h:8-26 (expand/compress with ill-formed check), :27-73 (all halfwords must agree; init verifies round-trip); docs/storage/index.md 'PIN entry counter protection'.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Changes a flash layout that the first-boot blank-check (first_boot/mod.rs:200-204) and reconcile read; must keep 'blank page after RDP-2 self-lock' as a distinct, expected state (write expand(0) during Phase B). Page 123 records are also parsed by host tooling; version the codec. A fault that hits the reset-write of expand(0) must fail closed (treat as locked), which the halt-sink review (#835) warns can burn budget if done carelessly.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/pinlogs_blockwise.h:8-73",
+    "/home/nicola/repos/trezor-firmware/docs/storage/index.md:172-380"
+   ]
+  },
+  {
+   "id": "pin-04",
+   "title": "Ship the duress/decoy path: add `duress-pin` to the production envelope with a compile fence, and close its policy residuals",
+   "threat": "Coerced unlock: the threat model lists coercion and names the decoy as the answer, but the shipping image compiles no duress path at all, so a coerced user has no option but to hand over the real wallet. The absence is implicit (no fence), so a future feature-list edit cannot even be caught.",
+   "proposal": "Add `duress-pin` to `RELEASE_FEATURES`, `PROD_SHIP_FEATURES` and `PROD_REQUIRED` and a `compile_error!` in `nsc/mod.rs` that forces it for `mode-production + dual-se` (same shape as the tamp-wipe fence). Close the policy coupling in the wizard the way Trezor does for the wipe code: duress != PIN is already enforced; additionally refuse to change the main PIN to the duress value if a PIN-change flow ever lands, and always-provision a random decoy (already done). Align `provision_duress_wallet` with the strict rng_strong semantics (#370) so a failed SE RNG halts rather than degrading the decoy's entropy. Tick the #280 manual-UI checklist on pq1 silicon once an LCD unit exists (#700). Document the owner choice 'duress = decoy by default, wipe-on-duress opt-in' in threat-model.md \u00a77.16 and HARDENING \u00a75.3, replacing the 'not currently implemented' text.",
+   "rationale": "`Makefile:2662,2718` do not list `duress-pin`; `grep duress secure/src/nsc/mod.rs` finds only the e2e fences (387-388) and the dispatch (1513), no production fence. The implementation is complete and silicon-validated (`dual_se.rs:228-354`, `nsc/mod.rs:1513-1553`, #280). Trezor ships only wipe-code (no decoy), Coldcard ships Duress Wallet + Trick PINs; pq1's independent-entropy decoy is already stronger than both, but only if it compiles into the product.",
+   "repo_evidence": [
+    "Makefile:2662 (RELEASE_FEATURES), 2718 (PROD_SHIP_FEATURES), PROD_REQUIRED block \u2014 no duress-pin",
+    "secure/src/nsc/mod.rs:387-388 (only e2e duress fences), 1513-1553 (dispatch exists)",
+    "docs/security/threat-model.md:432 and docs/security/HARDENING.md:279 (say 'not implemented' / 'consider')",
+    "GitHub #636, #280, #370, #446, #258"
+   ],
+   "vendor_precedent": "Trezor wipe code (storage.c:1151-1180, checked first on every PIN prompt; policy coupling at storage.c:1711-1716, 1773-1780); Coldcard Trick PINs (Duress Wallet, Wipe & Reboot, Countdown & Brick); Passport/BitBox none.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Deniability depends on the real and decoy unlock paths being bus- and timing-indistinguishable (Coinkite's own caveat that chip traffic can reveal a Trick PIN); the `duress_pad` op-count match exists but has not been measured on the I2C bus with a scope. The decoy wallet must hold real funds to be credible, which is a user-education problem. Wipe-on-duress returns PinLocked without resetting page 124 (nsc/mod.rs:1521-1547) and inherits the pin-01 brick.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:1151-1180",
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:1711-1716",
+    "https://coldcard.com/docs/pins/",
+    "https://github.com/EthereumPhone/PQ1/issues/636"
+   ]
+  },
+  {
+   "id": "pin-05",
+   "title": "One lockout response for all three unlock entry arms (boot-interactive, PendSV re-unlock, USB)",
+   "threat": "Attempt-counter bypass / inconsistent wipe: only the USB arm calls `trigger_lockout_wipe`. The boot-interactive and PendSV arms print 'PIN locked / power cycle' and rely on the next boot's `page124 >= 10` check. An SE-originated PinLocked (SE050 AuthMethodBlocked, E120 exhaustion, or a forged bare 0x6986 status word) with page 124 < 10 therefore leaves a locked-but-unwiped device whose halves are intact on both SEs, and the next boot does not wipe either.",
+   "proposal": "Route every `UnlockError::PinLocked` through the same FI-shaped `trigger_lockout_wipe` (moved out of cmd_request_unlock into nsc/mod.rs so all arms share it), with the Trezor rule 'if ctr+1 >= PIN_MAX_TRIES then wipe' evaluated identically regardless of trigger. Keep the #715 honesty fix: the AlreadyAtMax short-circuit (counter at MAX, nothing wiped) must display 'PIN locked' and arm the page-125 flag so the next boot's resume path wipes, while a fresh verdict-class PinLocked wipes immediately and prints WIPING/WALLET WIPED. Add the case 'SE says locked while page 124 < MAX' to the boot `attempts_exhausted` check (treat as wipe_armed).",
+   "rationale": "`main.rs:4197-4206` and `main.rs:4587-4597` break on PinLocked with no wipe; `main.rs:1935-1951` only wipes on `wipe_armed || pin_attempts_read() >= MAX_ATTEMPTS`; `cmd_request_unlock.rs:159-164` is the only caller of `trigger_lockout_wipe`. Trezor's unlock() wipes at the counter check regardless of how it was invoked. Not tracked as its own issue (adjacent #104/#125/#715).",
+   "repo_evidence": [
+    "secure/src/main.rs:4197-4206 (boot-unlock PinLocked arm: no wipe)",
+    "secure/src/main.rs:4587-4597 (PendSV PinLocked arm: no wipe)",
+    "secure/src/main.rs:1935-1951 (boot check keyed only on page 124)",
+    "secure/src/nsc/cmd_request_unlock.rs:159-164 (sole wipe caller)"
+   ],
+   "vendor_precedent": "Trezor storage.c:1224-1240 (wrong PIN: wipe if ctr+1 >= PIN_MAX_TRIES, single code path for every caller).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "Making SE-originated PinLocked wipe immediately strengthens the #104/#105 forged-status-word concern (an unauthenticated bare 0x6986 becomes a one-APDU wipe trigger from a bus tap); gate the immediate wipe on an R-MAC-authenticated status, and on an unauthenticated one only arm the flag and require a second confirmation at next boot. Inherits pin-01 until the brick is fixed.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:1180-1240",
+    "https://github.com/EthereumPhone/PQ1/issues/715"
+   ]
+  },
+  {
+   "id": "pin-06",
+   "title": "Exponential inter-attempt backoff on the S-only timer, with the announced countdown always run to completion",
+   "threat": "Attempt-counter bypass via rate: an attacker who finds any counter-reset or glitch-assisted retry primitive can drive attempts at USB speed; a human-speed floor bounds the value of such a primitive. Also a timing side channel: today the wrong-PIN path returns as soon as the SE verdict arrives, so wall-clock reveals at which step the check failed.",
+   "proposal": "Before the page-124 precharge in `gated_unlock`, wait `2^fails - 1` seconds (fails = pre_count) measured on the secure TIM already used for the 120 s idle timer (NS cannot shorten it; NS pings do not reset it), rendering 'x s left' on the trusted UI and cancellable only by the left button. On a wrong PIN, run the remainder of a pre-computed total unlock time to completion before showing 'Wrong PIN', so the wrong and right paths have the same announced duration. Make the backoff independent of the attempt-log and of `CMD_GET_REMAINING` so it cannot be probed faster than it runs. Update HARDENING.md:280 / threat-model.md:431 from 'eventual' to implemented, or move them to residuals if declined (#637).",
+   "rationale": "grep for backoff/progressive/stretch across the PIN path finds nothing; #637 confirms it is a proposal only. Trezor ships exactly this (`get_backoff_time_ms`, 2^fails-1 s, UI-cancellable; 'Finish the countdown' on wrong PIN). With 8 digits and a 10-attempt silicon cap the brute-force value is bounded, which is why this is P1 defence-in-depth rather than P0.",
+   "repo_evidence": [
+    "grep -rniE 'backoff|progressive' secure/src/nsc secure/src/se050 secure/src/optiga secure/src/dual_se.rs secure/src/ui/pin_entry.rs -> no hits",
+    "docs/security/HARDENING.md:280 and docs/security/threat-model.md:431 (describe it as a mitigation)",
+    "secure/src/timeout.rs:27 (S-only TIM already present)",
+    "GitHub #637 (OPEN)"
+   ],
+   "vendor_precedent": "Trezor storage.c:1158-1161 (get_backoff_time_ms), 1198-1207 (sleep before check), 1233-1240 (finish countdown on wrong PIN); core/src/trezor/pin.py:49-112.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "The countdown length leaks the attempt number to a shoulder-surfer (Trezor accepts this; pq1 already discloses it over USB). A long backoff interacts with the 120 s idle wipe and the PendSV re-unlock loop (#692): the delay must count as 'trusted-UI waiting' for the watchdog, and the e2e fast path must bypass it. The 'finish the countdown' pad must not run while a fault halt is pending.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:1158-1240",
+    "https://github.com/EthereumPhone/PQ1/issues/637"
+   ]
+  },
+  {
+   "id": "pin-07",
+   "title": "Periodic random-delay interrupts (RDI) during the PIN window and a session-refreshed floating mean on every NSC call",
+   "threat": "Fault injection timed from an external trigger: the PIN gate is linear from the USB dispatch to the SE verdict and the only desync is `wait_random` at a handful of call sites (0..255 loop iterations, ~19 us), which `nsc/mod.rs:1404-1413` itself says defeats only an uncalibrated single-shot attacker. A profile-then-attack rig re-aligns on the display/USB/I2C activity between those sites.",
+   "proposal": "Port Trezor's RDI: from the existing 1 ms SysTick, when an RDI-armed window is open (gated_unlock, PIN entry, boot reconcile, FSBL image verify if it has a timer), insert `wait(drbg8() + session_delay)` where `session_delay` is a per-session uniform[0,255] refreshed on every USB packet / NSC dispatch; feed it from the secure TRNG via the existing `fi_delay_pool` (not a software PRNG). Arm/disarm around the sensitive windows only so bench timing and sign latency are unaffected. Pair with the pin-06 backoff so the absolute offset from trigger to counter write is never constant across attempts.",
+   "rationale": "grep for rdi/random_delay/floating-mean in secure/src finds only the fi.rs:77 doc reference to Trezor's file; `fi::wait_random` (fi.rs:86-95) is call-site jitter only. `pqsigner_fi::wait_random_loop` (pqsigner-fi/src/lib.rs:129-155) already has the i+j==wait and loop-completion self-checks, so only the periodic component is missing. TIM2/TIM3 are secured in sau.rs so NS cannot stop the source timer.",
+   "repo_evidence": [
+    "secure/src/fi.rs:86-95 (wait_random is call-site only)",
+    "grep -rniE 'rdi\\b|random_delay|floating' secure/src -> only fi.rs:77 comment",
+    "secure/src/nsc/mod.rs:1399-1414 (self-described limit of entry jitter)",
+    "pqsigner-fi/src/lib.rs:129-155 (loop self-checks already present)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/random_delays/stm32/random_delays.c:131-175 (RDI start/stop/refresh, floating-mean handler), usb.c:728,748 and smcall_dispatch.c:166 (session refresh on packet/syscall); Clavier et al. / Tunstall-Benoit cited in random_delays.h:24-39.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "#835 found that the current delay pool can hand out a zero-length delay under an interrupt race and that a halt inside `pin_attempts_bump` after the flash program durably burns an attempt; RDI adds ISR-context delay draws and must be built on the fixed pool (take() atomic) and must never halt between a flash commit and its readback. Adds latency inside the ui-px frame budget if armed during rendering; arm only in the PIN/unlock windows.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:131-197",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/inc/sec/random_delays.h:24-39",
+    "https://github.com/EthereumPhone/PQ1/issues/835"
+   ]
+  },
+  {
+   "id": "pin-08",
+   "title": "Anti-swap 'security words' computed inside a secure element from the PIN prefix, needing no new flash page",
+   "threat": "Lookalike-device swap / implant PIN phishing: before the user types all 8 digits nothing proves the device in hand is theirs; the boot fingerprint is identical on every unit running the same image (#601), so a swapped or implanted unit harvests the PIN. #601 is blocked on storage geometry for a persistent user artifact.",
+   "proposal": "After the first 4 PIN digits are committed in the S-world PIN dialog, compute two BIP-39 words = `CMAC_k(prefix)` where k is a per-device secret generated at wizard time and stored only inside an SE object (OPTIGA PRESSEC data object gated by its own LUC, or an SE050 object under a dedicated UserID), rate-limited by that SE counter; render the words on the trusted UI with a distinctive frame and continue PIN entry. The user learns the words at setup (shown once, no persistent MCU state). The object is in the wipe sweep so no words exist after a wipe or under duress (the decoy must have its own key so the prefix words differ, or share the key so they match \u2014 owner decision; sharing is the deniable choice). Because k lives in the SE, nothing needs page 123-127 and #601's geometry blocker is sidestepped.",
+   "rationale": "grep for personaliz/anti-phishing/greeting in secure/src returns nothing (#601 triage); measured_boot.rs renders only image-derived words. Coldcard (SE1-computed HMAC over the hashed prefix, 2 s rate limit) and Passport Prime ('Security Words') ship this; pq1 has two SEs with counters and a trusted UI, so the port is small. Note it does NOT defeat a passive display-bus tap (Grand's Nano X implant) \u2014 it defeats the swap/phish class only.",
+   "repo_evidence": [
+    "secure/src/measured_boot.rs:161-227 (fingerprint is image-derived, not device-personal)",
+    "GitHub #601 (OPEN, blocked on storage geometry)",
+    "secure/src/ui/pin_entry.rs:54-146 (dialog has no mid-entry hook today)"
+   ],
+   "vendor_precedent": "Coldcard Mk4 anti-phishing words (SE1 HMAC over PIN prefix, rate-limited); Foundation Passport Prime 'Security Words'.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "Introduces an SE operation on a partial PIN: the prefix must be hashed/one-way'd before leaving the MCU and the SE op must be counter-gated so it is not a prefix oracle (Coldcard's rate limit exists for this). Adds one SE round-trip (~ms) and a page to the PIN flow; the words are a shoulder-surfable signal of 'this is the owner's device'. Needs #700 (trusted UI on pq1 silicon) to validate.",
+   "sources": [
+    "https://blog.coinkite.com/understanding-mk4-security-model/",
+    "https://coldcard.com/docs/pins/",
+    "https://docs.foundation.xyz/prime/prime-apps/settings/general/",
+    "https://github.com/EthereumPhone/PQ1/issues/601"
+   ]
+  },
+  {
+   "id": "pin-09",
+   "title": "Turn the already-enabled ADC4 analog-watchdog tampers (ITAMP7/12/13) into a live voltage-glitch detector",
+   "threat": "Fault injection on the PIN gate and counter writes: pq1's only FI sensors are code redundancy and TAMP internal tampers; ITAMP7/12/13 are enabled in CR1 but no ADC is configured, so like Trezor's they 'are never triggered'. The STM32U5 has no RP2350-style glitch detector, so a VDD glitch that stays below the BOR threshold is invisible to hardware today.",
+   "proposal": "Configure ADC4 (internal channels only: VREFINT, VCORE/VDDA, temperature \u2014 no bonded pins needed on the 48-pin pq1) in continuous low-power mode with tight analog-watchdog windows around the measured nominal; route AWD1/2/3 to ITAMP7/12/13 which already feed the confirmed-mode (CR3=0) tamper path and `tamp-wipe`. Characterise thresholds on silicon with the Scaffold/crowbar bench first (log-only build, record false-positive rate across temperature and USB-source swaps), then ship with `tamp-irq` so the response latency is cycles, not the 1 ms SysTick poll. Keep the secure TIM as the ADC trigger so NS cannot stop sampling.",
+   "rationale": "`tamp.rs:290-307` enables ITAMP7/12/13 and writes CR3=0 (its comment still says 'we don't have data in backup SRAM', which is stale: the BHK lives in BKP0R..7R per #208); `grep -rni adc4 secure/src` finds no ADC driver, so the three tampers can never fire. Trezor's tamper.c:139-151 enables the same bits and documents them as never triggered \u2014 pq1 can go beyond parity cheaply because the plumbing already exists. ADC bandwidth is slow, so this complements (not replaces) pin-03/pin-07.",
+   "repo_evidence": [
+    "secure/src/hw/tamp.rs:290-307 (ITAMP7/12/13 enabled; CR3=0; stale 'no backup SRAM data' comment)",
+    "grep -rniE 'adc4|adc_' secure/src -> no hits",
+    "Makefile:2662 (ship set lacks tamp-irq)",
+    "GitHub #391 (TAMP never run on silicon), #208 (TAMP x BHK), #256 (tamp-irq flip), #248"
+   ],
+   "vendor_precedent": "Trezor tamper.c:139-151 enables the same ITAMP7/12/13 but configures no ADC ('never triggered'); ST AN5156 treats power/clock glitching as a typical threat. No wallet vendor documents a configured ADC4 AWD glitch detector.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "False positives under confirmed mode wipe the device (CR3=0 erases BKPxR including the loaded BHK, and tamp-wipe arms the page-125 wipe); thresholds must be characterised on every board revision and across USB sources, and #391/#208 (TAMP never silicon-tested; ITAMP6 trips on probe attach at RDP>0) must close first. A glitcher who knows the AWD window can shape the pulse below it; this raises cost, it is not a guarantee.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/tamper/stm32u5/tamper.c:112-173",
+    "https://www.st.com/resource/en/application_note/an5156-introduction-to-security-for-stm32-mcus-stmicroelectronics.pdf",
+    "https://github.com/EthereumPhone/PQ1/issues/391"
+   ]
+  },
+  {
+   "id": "pin-10",
+   "title": "Fault-handler policy for the PIN gate: verdict-class FI trips charge one attempt and a second trip wipes; RNG-availability failures never do; the halt sink zeroizes",
+   "threat": "Repeated glitch characterisation on a stolen device: today an FI detection in gated_unlock either refuses (InternalError, no durable cost) or over-reacts (CounterUnstable -> PinLocked -> full wipe on the USB arm), and `halt_on_glitch` parks in `wfe` with `master_secret` still in S-SRAM (#835 H4). Also the PIN-entry scrambler silently degrades to start-at-0 on an RNG error, contrary to the owner's 2026-10-09 'if the RNG fails, error out' decision.",
+   "proposal": "Adopt Trezor's `__handle_fault` ladder for the PIN gate only: (a) a verdict-class detection (sentinel mismatch on `allowed`/`bumped`/`is_ok`, counter fwd/rev disagreement, unexpected SE status) increments page 124 by exactly one with readback, zeroizes SRAM, then halts; (b) a second detection while the first is being handled (volatile re-entrancy flag) arms the page-125 wipe flag and resets; (c) RNG/TRNG availability failures (SECS/CECS, pool contention) refuse the operation and zeroize but never touch page 124 \u2014 explicitly excluding the #835 C3 shape; (d) `halt_on_glitch` must call `nsc::zeroize_sensitive_state()` and mask interrupts before `wfe`. Separately, make `pin_entry::enter_pin` refuse (return Cancelled with an 'RNG error' screen) when `rng_strong::fill` fails instead of using zero starts.",
+   "rationale": "`nsc/mod.rs:1429-1495` returns PinLocked/InternalError on FI trips without a graded response; `cmd_request_unlock.rs:117-125` wipes on a single unstable read; #835 verified that `halt_on_glitch` retains secrets and that a halt inside `pin_attempts_bump` after the flash program burns an attempt. `pin_entry.rs:73-78` `let _ = rng_strong::fill(...)` with a documented fallback to zero starts, which #834's owner quote forbids. Trezor's storage.c:1815-1848 is the precedent for 'fault counter == PIN fail counter' with wipe on re-entry.",
+   "repo_evidence": [
+    "secure/src/nsc/mod.rs:1429-1495 (FI trips -> PinLocked/InternalError, no graded ladder)",
+    "secure/src/nsc/cmd_request_unlock.rs:117-125 (single unstable read -> wipe)",
+    "secure/src/ui/pin_entry.rs:73-78 (RNG failure silently degrades scrambling)",
+    "GitHub #835 (halt sink retains secrets; durable PIN-budget burn), #834 (owner: RNG failure must error out)"
+   ],
+   "vendor_precedent": "Trezor storage.c:181-182, 1815-1848 (handle_fault: PIN fail counter doubles as fault counter, verify the burn, wipe on re-entry); bootloader/main.c:676-688 (fatal error attributed to glitching -> BHK regenerate + erase).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "Charging attempts on detections converts spurious trips (SE transport flake, the #715 unexplained ten-attempt burn, #692 PendSV retries) into real lockouts; the classification between verdict-class and availability-class must be reviewed per call site and the rule must be proven on the FI sweep (rainbow) before shipping. DROPPED: lifetime total-operation counter on E122 (#485, fold into the S-1 ceremony); symmetric page124->E120 reconcile (charge E120 when MCU leads; SE050 leg impossible under production policy, #200); PIN-derived KEK over SE credentials (rejected: a wrong PIN would then fail the SCP03 handshake before the SE050 UserID verify and break three-way consumption, and it edges toward a software PIN compare); BHK erase/regenerate as a tamper-time cryptographic erase (rejected: the SE050 admin-wipe root derives from BHK, so erasing it forfeits the SE wipe and re-provisioning, #707); Coldcard Delta-mode / covert countdown-to-brick Trick PINs; persisting the attempt ring at lockout (#719 owner decision pending); S-world MPU window over pages 123-127; TAMP x BHK ITAMP6 masking (#208); restoring the untracked 19-test lockout-wipe FI suite (folded into pin-02); trusted-UI PIN/duress flows on pq1 silicon (#700).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:1815-1848",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/main.c:676-690",
+    "https://github.com/EthereumPhone/PQ1/issues/835",
+    "https://github.com/EthereumPhone/PQ1/issues/834"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,28 @@
+{
+ "id": "FWU-6",
+ "title": "Complete option-byte self-enforcement: pin the WRP1A/WRP2A/OEM-lock layouts, assert OEM keys cleared and BOOT_LOCK in the FSBL tripwire, and re-verify the full ship profile on EVERY post-lock boot with wipe escalation",
+ "threat": "A unit whose WRP was cleared (or an OEM RDP-regression key planted) before the RDP-2 self-lock passes the tz-1 tripwire today and freezes forever with a writable FSBL \u2014 permanently forfeiting invariant #10 for that die; after lock, no code re-checks the option bytes, so an OEM-key RDP regression or SWAP_BANK flip is never noticed.",
+ "proposal": "(1) Close #46: pin WRP1AR/WRP2AR/NSSR.OEMxLOCK bit layouts from RM0456 + the on-box SVD with a bench read-back receipt, flip WRP1A_MASK_PINNED/OEM_LOCK_MASK_PINNED to true so both the FSBL tripwire and first-boot Phase A fail closed on them. (2) FSBL tz-1: add `OEM1LOCK == 0 && OEM2LOCK == 0` and `SECBOOTADD0R.BOOT_LOCK == 1` (post-lock profile) to confirmed_fields_match. (3) Secure world: on every boot where RDP == L2, run verify_ship_profile (post-lock variant) before SE unlock; on mismatch trigger tzic::trigger_intrusion_wipe (dual-SE admin wipe, BHK regeneration) and halt, Trezor's secret_safety_erase semantics \u2014 a device whose protections were weakened must be useless, not merely stopped. (4) Phase A: before the RDP-2 burn, write OEM1/OEM2 key registers to 0xFFFFFFFF and assert OEMxLOCK clear so no RDP-regression key can exist post-lock (today Phase A only READS the lock status).",
+ "rationale": "Trezor's boardloader compares OPTR, SECBOOTADD0R (with BOOT_LOCK), all four WRP registers and both SECWM registers against the compiled profile on every boot, erases secrets on mismatch, and additionally resets OEM keys and asserts OEMxLOCK clear. pq1 has the two-profile pattern and the read-only tripwire but deliberately skips the two registers that decide whether the FSBL is actually immutable, and first_boot returns early at RDP-2 so the post-lock state is never re-verified.",
+ "repo_evidence": [
+  "fsbl/src/optbytes.rs:24-29 ('deliberately does NOT act on WRP1A or the OEM locks ... a unit whose WRP was cleared before RDP-2 passes this tripwire')",
+  "shared/src/lockdown.rs:290 (OEM_LOCK_MASK_PINNED = false), :445 (WRP1A_MASK_PINNED = false)",
+  "secure/src/first_boot/mod.rs:174-176 (`if rdp_level() == L2 { return; }` \u2014 no post-lock re-verification), :178-194 (Phase A verifies WRP/OEM only pre-lock, 'verify, don't set')",
+  "secure/src/first_boot/state.rs:78-80 (ObOemLockPresentOrUnpinned fails closed while unpinned)",
+  "docs/security/vendor-signing-key-compromise.md:11-13 + inventory (WRP never programmed anywhere in the tree)",
+  "GitHub #46 OPEN, #35 OPEN, #42 OPEN, #43 OPEN"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/option_bytes/stm32u5/option_bytes.c:138-182 (flash_check_option_bytes every boot), :218-228 (OEM1/OEM2 keys written 0xFFFFFFFF), :253-266 (option_bytes_check_oem_keys ensures OEMxLOCK clear), boardloader main.c:304-322 (secret_safety_erase then re-set loop); legacy/memory.c:31-68.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Pinning wrong bit layouts bricks genuine boards at Phase A or halts every FSBL boot \u2014 the pin MUST come with a silicon read-back receipt on both boards before the masks flip (the 0x0C00_007C vs 0x0018_0000 SECBOOTADD0 confusion in firmware-update.md:465-473 is the cautionary precedent). Wipe-on-mismatch is irreversible for the user's SE halves (recoverable from the 24 words) and needs an owner decision on the halt-vs-wipe policy; a transient read fault must not wipe (keep the two-pass 'persistent' rule). Writing OEM key registers is an option-byte write, which Draft 1.2 C1 permits only in the confirm-gated first-boot ceremony \u2014 this fits there but must be added to the ceremony spec, not improvised.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+  "https://github.com/EthereumPhone/PQ1/issues/46",
+  "RM0456 \u00a77.6.2 (RDP-2 freeze exceptions: SWAP_BANK, SECBOOTADD0 unless BOOT_LOCK), \u00a77.9.19/\u00a77.9.23 (WRP1AR/WRP2AR)"
+ ],
+ "surface": "fwupdate"
+}

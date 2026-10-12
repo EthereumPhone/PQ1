@@ -70,21 +70,26 @@ pub(crate) fn find_count(
     pct: u8,
 ) -> (u32, [u8; 32], [u8; L]) {
     let wots_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
-    for count in 0..10_000_000u32 {
+    let mut count = 0u32;
+    while count < 10_000_000 {
         let d = wots_digest(seed, &wots_adrs, msg_hash, count);
         let digits = extract_digits(&d);
-        let sum: usize = digits.iter().map(|&d| d as usize).sum();
+        // Indexed form keeps the extracted sum explicit, as in pk_from_sig.
+        let mut sum: usize = 0;
+        for i in 0..L {
+            sum += digits[i] as usize;
+        }
         if sum == TARGET_SUM {
             return (count, d, digits);
         }
         if count % GRIND_REPORT_EVERY == GRIND_REPORT_EVERY - 1 {
             crate::hypertree::report(progress, pct);
         }
+        count += 1;
     }
     // For C10 (L=43, w=8, TARGET_SUM=205) the grinder is expected to
-    // succeed in ≪ 10M trials. Hitting this branch implies the digest
-    // distribution is broken — fail loudly rather than emit an invalid
-    // signature.
+    // succeed in ≪ 10M trials. Exhaustion remains possible: fail loudly
+    // rather than emit an invalid signature.
     panic!("WOTS+C count grinding failed after 10M iterations");
 }
 

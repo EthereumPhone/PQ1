@@ -1,0 +1,27 @@
+Adversarial design review. DO NOT MODIFY ANY FILE. Read the actual source yourself; do not trust my summary.
+
+Read:
+- contracts/smart-wallet/src/PQSmartWallet.sol, PQSmartWalletFactory.sol, PQMultiOwnable.sol
+- CLAUDE.md (invariants 5, 6, 7; the EntryPoint v0.6 freeze; "What NOT to do")
+- docs/security/vendor-signing-key-compromise.md lines 130-140 and 398-415
+- The draft under review: /home/nicola/.claude/projects/-home-nicola-repos-PQSigner-OS/7844318a-f4f1-49a2-b794-31ae48f548cc/research/report/13-onchain-policy.md
+
+Context: single-signer post-quantum ERC-4337 v0.6 wallet signed by a hardware device. All keys derive from one 24-word seed. The wallet contract has no upgrade path and is already deployed and audited on Base mainnet. Threats: T1 the seed leaks (hardware implant on the display bus); T2 the device signs something other than what it showed, once; T3 coercion.
+
+The decision under attack is the draft's recommendation: decline any in-wallet policy, and instead build "Option A", a separate vault contract with all parameters fixed at creation (controlling wallet address, delay, safe address, hash of a recovery code), delayed withdrawals announced by the wallet and executable by anyone after the delay, and an instant "recover" that sends everything to the fixed safe address, callable by the wallet OR by anyone presenting the recovery-code preimage. No signature checks, no setters, no oracle in the vault.
+
+The failures I most fear:
+(1) a hole that lets a seed-holder, or a single mis-signed operation, take vault funds faster than the delay, or lock them permanently;
+(2) a reason the wallet contract itself must change before launch that the draft misses (a real now-or-never);
+(3) a false claim in the "Nine traps" section when checked against the wallet source or EntryPoint v0.6 behaviour.
+
+Attack specifically:
+a. The recovery code as a hash preimage: front-running, replay across vaults and chains (same code hash reused), griefing, what an observer of the mempool gains, what happens after the first reveal, whether keccak/sha256 preimage reveal is sound here.
+b. Interaction with this wallet: executeWithOffchainCount / executeBatchWithOffchainCount, removeOwnerAtIndex, the bootstrap and slot use caps. Can a seed-holder brick the wallet, and does that matter to the vault? Can a batch be used to announce and do something else in one confirmed operation?
+c. Deposit-time substitution: a hostile companion presents a vault whose safe address is the attacker's. What exactly must the device verify, and can it, given it has no network?
+d. The claim that Option A needs no wallet change. Is there anything about funds at the wallet's own address, EIP-1271 signatures, fee payment or the 4337 prefund that makes an in-wallet change necessary before launch after all?
+e. ERC-20 edge cases for an instant sweep (blocklisted safe address, fee-on-transfer, rebasing, tokens that revert, gas griefing in a multi-token sweep), and announcement spam / queue exhaustion.
+f. Whether a guardian-free design really handles T1 when attacker and owner hold the same key, including races around the delay boundary and reorgs.
+g. Anything in invariants 5, 6, 7 that the proposal violates in letter or spirit.
+
+Output, under 900 words: a prioritized list of holes, each with a concrete attack sequence and the fix or the reason it is unfixable; then "where the draft is too optimistic"; then one recommended action. Cite file paths and line numbers for every claim about this repository.

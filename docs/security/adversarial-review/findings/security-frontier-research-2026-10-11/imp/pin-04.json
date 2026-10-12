@@ -1,0 +1,26 @@
+{
+ "id": "pin-04",
+ "title": "Ship the duress/decoy path: add `duress-pin` to the production envelope with a compile fence, and close its policy residuals",
+ "threat": "Coerced unlock: the threat model lists coercion and names the decoy as the answer, but the shipping image compiles no duress path at all, so a coerced user has no option but to hand over the real wallet. The absence is implicit (no fence), so a future feature-list edit cannot even be caught.",
+ "proposal": "Add `duress-pin` to `RELEASE_FEATURES`, `PROD_SHIP_FEATURES` and `PROD_REQUIRED` and a `compile_error!` in `nsc/mod.rs` that forces it for `mode-production + dual-se` (same shape as the tamp-wipe fence). Close the policy coupling in the wizard the way Trezor does for the wipe code: duress != PIN is already enforced; additionally refuse to change the main PIN to the duress value if a PIN-change flow ever lands, and always-provision a random decoy (already done). Align `provision_duress_wallet` with the strict rng_strong semantics (#370) so a failed SE RNG halts rather than degrading the decoy's entropy. Tick the #280 manual-UI checklist on pq1 silicon once an LCD unit exists (#700). Document the owner choice 'duress = decoy by default, wipe-on-duress opt-in' in threat-model.md \u00a77.16 and HARDENING \u00a75.3, replacing the 'not currently implemented' text.",
+ "rationale": "`Makefile:2662,2718` do not list `duress-pin`; `grep duress secure/src/nsc/mod.rs` finds only the e2e fences (387-388) and the dispatch (1513), no production fence. The implementation is complete and silicon-validated (`dual_se.rs:228-354`, `nsc/mod.rs:1513-1553`, #280). Trezor ships only wipe-code (no decoy), Coldcard ships Duress Wallet + Trick PINs; pq1's independent-entropy decoy is already stronger than both, but only if it compiles into the product.",
+ "repo_evidence": [
+  "Makefile:2662 (RELEASE_FEATURES), 2718 (PROD_SHIP_FEATURES), PROD_REQUIRED block \u2014 no duress-pin",
+  "secure/src/nsc/mod.rs:387-388 (only e2e duress fences), 1513-1553 (dispatch exists)",
+  "docs/security/threat-model.md:432 and docs/security/HARDENING.md:279 (say 'not implemented' / 'consider')",
+  "GitHub #636, #280, #370, #446, #258"
+ ],
+ "vendor_precedent": "Trezor wipe code (storage.c:1151-1180, checked first on every PIN prompt; policy coupling at storage.c:1711-1716, 1773-1780); Coldcard Trick PINs (Duress Wallet, Wipe & Reboot, Countdown & Brick); Passport/BitBox none.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Deniability depends on the real and decoy unlock paths being bus- and timing-indistinguishable (Coinkite's own caveat that chip traffic can reveal a Trick PIN); the `duress_pad` op-count match exists but has not been measured on the I2C bus with a scope. The decoy wallet must hold real funds to be credible, which is a user-education problem. Wipe-on-duress returns PinLocked without resetting page 124 (nsc/mod.rs:1521-1547) and inherits the pin-01 brick.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:1151-1180",
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:1711-1716",
+  "https://coldcard.com/docs/pins/",
+  "https://github.com/EthereumPhone/PQ1/issues/636"
+ ],
+ "surface": "pin"
+}

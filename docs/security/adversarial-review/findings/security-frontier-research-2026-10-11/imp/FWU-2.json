@@ -1,0 +1,31 @@
+{
+ "id": "FWU-2",
+ "title": "FI-harden the FSBL's SPHINCS+C10 VERIFIER against the WOTS checksum/target-sum fault class, give the FSBL a real TRNG for wait_random, and make the branch target default-to-fail",
+ "threat": "A single laser/voltage fault during boot-time or BEGIN-time signature verification accepts a forged firmware signature (Wagner et al. PQCrypto 2023; BSI/AISEC LFI 2025 on an ordinary MCU). In WOTS+C the 'checksum' is the target-sum check, and it is a single bare compare on the verify path; the FSBL verifies once, its retiming jitter is a constant, and the final branch reads the reset vector of whichever slot enum value survives.",
+ "proposal": "(a) Inside sphincs_c10 verify: recompute the digit sum from a second extraction of the digest, route `sum == TARGET_SUM` and the forced-zero FORS constraint through a Hamming-distant sentinel (pqsigner_fi::check_true_into_sentinel) with black_box, and gate chain-length derivation on the sentinel; (b) in the FSBL, verify the manifest signature twice with an independent recomputed root compared constant-time (redundant-recomputation, the same discipline c10_sign_verified already applies to signing), or at minimum re-verify the chosen candidate once more immediately before `into_slot`; (c) initialise the STM32U585 TRNG in the FSBL (RCC AHB2 RNG clock + GTZC RNG secure bit, the same pattern fsbl/src/hash.rs uses for HASH) so wait_random is attacker-unpredictable; (d) in fsbl/src/branch.rs keep the branch address in a sentinel-encoded register initialised to a halt stub and overwritten only after the chosen slot's `img_ok_*` is re-confirmed, so a fault that flips the `Slot` enum cannot land in the unverified slot; (e) run the rainbow instruction-skip/stuck-at sweeps for fsbl::filter_valid, fsbl::verify_images and the CHUNK->COMMIT window (#591, #633).",
+ "rationale": "The signer is covered by double-compute, but a national-agency-backed practical LFI result targets VERIFICATION of hash-based signatures, and pq1's FSBL verifier is the one component that can never be patched after RDP-2. The outer sentinel wraps only the boolean result of a single verify; a fault inside wots.rs:178 makes the verify return the attacker's chosen root, which the outer gate then happily accepts. Trezor's boardloader uses TRNG-seeded fih_delay before every ensure and a default-fail jump pointer; pq1's FSBL has neither.",
+ "repo_evidence": [
+  "sphincs-c10/src/wots.rs:171-180 (single bare `if sum != TARGET_SUM { return [0u8; N] }` on the verify path)",
+  "sphincs-c10/src/hypertree.rs:378-381 (bare `if fors_indices[K-1] != 0 { return false }`)",
+  "fsbl/src/main.rs:343-347 (one verify_signature call per candidate; sentinel wraps only its bool)",
+  "fsbl/src/fi.rs:31-33 (`fn rng_byte() -> u8 { 0x42 }` \u2014 no TRNG, retiming defence absent by the module's own admission)",
+  "fsbl/src/branch.rs:38-45 (reads MSP/reset from `slot_secure_addr(slot)` with no re-check; VTOR written unconditionally)",
+  "fsbl/src/main.rs:219-221 (pick_slot result carried as a plain enum to the branch)",
+  "GitHub #591 OPEN, #633 OPEN (no FI sweep covers fsbl::verify_images / cmd_fw_commit / staging window)"
+ ],
+ "vendor_precedent": "Trezor boardloader core/embed/projects/boardloader/main.c:109-117 (fih_delay 0-127 us TRNG jitter before every ensure), bootloader main.c:632-644 (firmware_present/backup compared under dont_optimize_out_true), bootloader main.c:404/559-593 per inventory (volatile jump pointer initialised to failed_jump_to_firmware), boot_header.c:97-106 (sigmask + inverse mask). No vendor hardens the SLH-DSA verifier internals themselves \u2014 that part is beyond parity.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "Boot time: a second full C10 verify costs ~0.375 s per candidate at HSI16 (fsbl/src/verify.rs header) \u2014 acceptable against the 4 s fingerprint hold but must be re-measured. FSBL flash budget for TRNG init + extra sentinels (~300-600 B) against ~2 KB free on the bench linker. The sphincs-c10 crate is Aeneas/Lean-modelled (wots.rs comment 'Indexed form ... Aeneas model'); changing verify's control flow moves extraction hashes and may break the Lean pipeline pins \u2014 coordinate with the FV track. Hardening the shared crate also changes the on-chain-equivalent verifier semantics only in fail-closed direction, but the differential tests vs SPHINCsC10Asm.sol must be re-run. Countermeasure cost in eprint 2025/2096 is not quantified in the abstract \u2014 read the PDF before estimating.",
+ "sources": [
+  "https://eprint.iacr.org/2023/1572",
+  "https://eprint.iacr.org/2025/2096",
+  "https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/Studies/LFI_Attack_XMSS/LFI_Attack_XMMS.html",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/main.c",
+  "RFC 9814 \u00a7A.2 / Gen\u00eat TCHES 2023 (redundant recomputation, already cited in CLAUDE.md for the signer)"
+ ],
+ "surface": "fwupdate"
+}

@@ -1,0 +1,218 @@
+{
+ "merge": {
+  "cluster": "memory-fault-resilience",
+  "title": "Fail-stop memory integrity: MSPLIM with a re-basing fault trampoline, a decoded and region-scoped ECC NMI, secrets in an ECC-on secure bank, and the SRAM option bits pinned into the ship profile before RDP-2 freezes them",
+  "threat": "Three silent-corruption classes with no detector today. (1) Stack overflow: no image programs MSPLIM/PSPLIM (the only hits in fsbl/, secure/, nonsecure/ are two comments, fsbl/src/main.rs:172 and fsbl/src/manifest.rs:30). The secure stack grows down from the top of the 192 K SRAM1 window (secure/memory-stm32u585.x:31-35) straight into .bss, where `static mut STATE` holds master_secret and SLOT_CACHE (secure/src/nsc/state.rs:542). Companion-shaped parsers (ERC-7730, EIP-712, multiSend, typed-call) run on that stack and its worst case is unproven (#374). (2) Bit flips: secrets live in SRAM1, and per #48 only SRAM2 and part of SRAM3 are ECC-capable, so SRAM1 has no ECC at all. A laser/EM flip in key material or signing state is invisible; the double-compute compare only catches faults that differ between the two passes (SLasH-DSA, arXiv 2509.13048). (3) Remanence: the software boot scrub covers named caches only and is skipped on Cold and OptionByte resets (secure/src/main.rs:1311-1333, secure/src/reset_cause.rs:66-112); stack residue (entropy temporaries, C10 scratch) is never wiped; the hardware erase bit that covers the secret bank (SRAM_RST) is not set by any recipe (Makefile:364-380 sets SRAM2_RST, the NS bank).",
+  "proposal": "Four phases, ordered by irreversibility.\n\nPHASE 0 \u2014 option bits, before any die runs the RDP-2 self-lock. Add SRAM_RST=0 (hardware erase of SRAM1/3/4 on system reset), SRAM2_RST=0, and the ECC bit for whichever bank holds secrets (SRAM3_ECC and/or SRAM2_ECC, active-low per #48) to:\n- the ship option-byte profile;\n- `ObField` and the Phase A verifier, which today check only BootLock, OemLock, Rdp, SecBootAdd0, Secwm1/2, SwapBank, Tzen, Wrp1a/2a (secure/src/first_boot/state.rs; shared/src/lockdown.rs has only an advisory BOR decode at :517-521);\n- the RDP-0 pre-power SWD check.\nRDP-2 freezes these forever, so a die locked without them can never gain hardware SRAM erase or ECC. Confirm bit positions and polarity on a sacrificial board (#82, #46).\n\nPHASE 1 \u2014 MSPLIM (small).\n- Secure world: first instructions of reset/pre_init set MSPLIM_S = end of .bss/.uninit (`__sheap`) plus a 256 B guard. The limit must not be ORIGIN(RAM); the thing to protect is STATE in .bss.\n- HardFault needs a naked trampoline that re-bases MSP to `_stack_start` (or zeroes MSPLIM) before any Rust runs. The current handler (secure/src/main.rs:4682-4690) calls `zeroize_sensitive_state` through `with_state` closures on a stack already at the limit; a second STKOF at HardFault priority risks lockup with secrets still resident. Trezor does exactly this re-base (systask.c:823-840).\n- At NS handover set MSPLIM_NS (secure/src/boot_ns.rs:19-77 sets only MSP_NS/PSP_NS). This is DoS hygiene only; NS owns that register.\n- FSBL: MSPLIM belongs in the replacement FSBL's guard policy (#542 FA-2.0/2.1). Clear it before `bx` in fsbl/src/branch.rs:76-92 (already a P2 port at docs/architecture/trezor-comparison.md:645).\n- CI: assert guard + worst-case bound < static_end..stack_start, fed by #374's cargo-call-stack result.\n\nPHASE 2 \u2014 NMI decode.\n- Secure NMI handler reads FLASH_ECCR (ECCD, address, bank) and the RAMCFG ISR/FEAR registers, clears the flags, then zeroizes and resets.\n- A double error inside per-device data pages 123-127 must take a defined fail-safe path (treat the quadword as torn, or halt with a fatal code), not a blind reset loop. This is #94's undecided branch.\n- FSBL gets an NMI handler with Trezor's region rule: fatal only if the address is inside the FSBL's own range; a double error inside a slot marks that slot invalid so the other slot can still boot.\n\nPHASE 3 \u2014 ECC-on secret bank.\n- Dedicated linker section for STATE, the SE driver caches, OptRand/shuffle seeds and signing scratch, placed in the ECC-capable part of SRAM3 and kept secure via MPCBB3. Not SRAM2: that is the NS world's RAM today (nonsecure/memory-stm32u585.x:9; secure/src/sau.rs:436-440 sets MPCBB2 all non-secure).\n- Enable RAMCFG ECC with double-error routed to NMI and single-error counts readable for telemetry.\n- Prerequisites: secure RAMCFG first (#150, it is NS-attributed today); zero-fill the region at boot before first use if RM0456 requires initialised ECC RAM (to confirm).\n\nPHASE 4 \u2014 remanence residue (small).\n- Volatile clear of the unused stack below SP on lock, idle-wipe, panic/HardFault/NMI, and before `bxns`.\n- Extend the boot scrub to run on every reset cause, including Cold.",
+  "members": [
+   {
+    "id": "FI-10",
+    "disposition": "modified",
+    "note": "Kept: (1) MSPLIM and (2) ECC bank + double-error NMI. Round-1 confirmed nothing is implemented and no decision contradicts it. Corrections applied: SRAM2 is not available as the secret bank (it is NS RAM); #150 is a prerequisite; the limit goes at the end of .bss. Parts (3) page-123 tag, (4) page-124 encoding and (5) Kani fault models are moved out of this cluster to #93/#230/#397; see dropped_parts."
+   },
+   {
+    "id": "SYS-03",
+    "disposition": "modified",
+    "note": "Backbone of the merge. No round-1 verdict, so I checked it. Confirmed: no MSPLIM/PSPLIM/RAMCFG/ECC code in any image; the NMI handler exists (secure/src/main.rs:4651). Corrected: (a) the existing HardFault cannot be reused unchanged on a limit-exhausted stack; (c) the target bank is SRAM3, not SRAM2; (d) 'arm flash ECCD' becomes 'decode and region-scope', because ECCD very likely already raises NMI; the Trezor precedent 'pins SRAM3 ECC in OPTR' is probably inverted (see precedent). P0 downgraded to P1: no production build can exist while the S-2 fence stands. (e) stays with #374."
+   },
+   {
+    "id": "USB-03",
+    "disposition": "modified",
+    "note": "No round-1 verdict; checked. Confirmed: no MSPLIM anywhere; boot_ns.rs sets only MSP_NS/PSP_NS; no UsageFault handler, so STKOF escalates to HardFault. Trezor precedent confirmed (systask.c:170 `stack_base + 256`; sysutils.c:94). Corrected: 'keep the existing HardFault' is unsafe without an MSP re-base; 'stack_base + 256' has no meaning here because there is no dedicated stack region, so the limit is end-of-.bss plus guard; FSBL MSPLIM goes into the replacement FSBL, not the legacy 32 KiB bench image; the FSBL fault handler adds bytes against the FSBL budget."
+   },
+   {
+    "id": "SYS-09",
+    "disposition": "modified",
+    "note": "No round-1 verdict; checked. Kept: clear unused stack on lock/fault/handoff; hardware SRAM erase in the ship profile. Corrected: (4) names the wrong bit, SRAM2_RST erases the NS bank and the secret bank needs SRAM_RST (secure/src/reset_cause.rs:96-98, #82); the 'zero hits, only named-cache wipes' evidence understates what exists, a reset-cause-gated boot scrub is present (main.rs:1311-1333) and the real gap is named-state-only plus skipped on Cold. Dropped: FSBL random-then-zero fill, wipe-all-secure-SRAM before NS, BKP clear, temperature floor."
+   }
+  ],
+  "dropped_parts": [
+   "FI-10(3) DHUK-rooted tag over the page-123 live set, as written: it does not detect its own stated threat. Dropping the newest record together with its tag leaves the previous record/tag pair valid, so a one-commit rollback verifies. It also doubles the 16 B/increment log cost and, per established fact (d), any secure-world code can recompute a DHUK tag. Design it with #93 (per-quadword integrity) and #230 (generation marker).",
+   "FI-10(4) Hamming-structured page-124 marker: moved to #397 at P3, not refuted. SE050 enforces the 10-attempt bound in silicon, and a page forced to read blank while E120 has advanced trips the boot wipe (`E120_used > page124_used`, CLAUDE.md invariant #2), so the result is fail-secure DoS, not extra PIN attempts. Round-1 also showed the encoding needs an 'initialised' header record because the page is legitimately all-0xFF after every successful unlock (secure/src/hw/flash.rs:779).",
+   "FI-10(5) Kani/rainbow stuck-at models for the page-123/124 decoders: counter-integrity work, extend #397 instead of opening a parallel harness.",
+   "FI-10 / SYS-03(c) 'place secrets in SRAM2': not available without evicting the NS world. NS links at 0x2003_0000/64 K (nonsecure/memory-stm32u585.x:9) and MPCBB2 is all non-secure (secure/src/sau.rs:436-440). Use the ECC part of SRAM3.",
+   "SYS-03(d) / #248 'arm the flash ECCD NMI': replaced. ECCD very likely needs no enable (Trezor handles it inside NMI and sets no enable bit anywhere in core/embed). The work is decoding and scoping, not arming.",
+   "SYS-09(1) FSBL TRNG-random-then-zero fill of all SRAM: the FSBL has no TRNG and its size and boot time are the recorded NO-GO budget (a-b-firmware-rollback-architecture, memory note project_ab_rollback_spec_review). SRAM_RST=0 gives a hardware erase on every system reset at zero flash cost. A zero-only fill remains only if ECC RAM turns out to need initialisation.",
+   "SYS-09(2) wipe all secure SRAM before branching to NS: contradicts the architecture. STATE must survive across NSC calls, and NS cannot read secure SRAM anyway (MPCBB1 all secure, sau.rs:428-433). Only the unused-stack clear survives.",
+   "SYS-09(3) clear non-BHK TAMP backup registers at handoff: no secret is shown to live there. BKP0R..7R hold the BHK and must stay, and they are reloaded from page 126 each boot (established fact c). No threat is closed.",
+   "SYS-09(5) temperature floor against frozen-SRAM attacks: belongs to the SYS-01 cluster (HARDENING.md \u00a74.7 states it as a requirement only). Not evaluated here.",
+   "SYS-09(4) SRAM2_RST=0 as the remanence control: wrong bank. Kept only as a companion bit; SRAM_RST=0 is the load-bearing one (#82).",
+   "USB-03 'install an FSBL HardFault handler with a distinctive LCD pattern' in the legacy bench FSBL: the 32 KiB bench linker is legacy and the pq1 FSBL cannot light the panel at all (#705). Fold into the replacement FSBL's guard/fault policy (#542).",
+   "USB-03 'MSPLIM as the first instruction of main': too late. cortex-m-rt's pre-main init has already run on an unguarded stack; set it in the reset path / pre_init.",
+   "SYS-03 risk note 'ECC double-error NMI during a flash write must not corrupt the journal (extend TLA+)': kept only as a prerequisite pointer to #542 FA-2.2/2.3; no new work proposed here."
+  ],
+  "tracked_issues": [
+   "#48 (OPEN, ship-blocker): secret SRAM in an ECC-on bank, double-error as tamper. Covers Phase 3; names SRAM2, which is NS RAM today.",
+   "#82 (OPEN): SRAM_RST=0 option byte on a sacrificial board. Covers the Phase 0 erase bit; does not cover adding it to ObField / the Phase A verifier.",
+   "#248 (OPEN, priority:low): SRAM2/3 ECC option bits, SRAM2_RST, ECCD double-bit NMI handler reading RAMCFG. Overlaps Phases 0, 2 and 3.",
+   "#150 (OPEN): RAMCFG and ICACHE are NS-attributed. Hard prerequisite for a trustworthy SRAM ECC NMI.",
+   "#374 (OPEN, ship-blocker, critical): worst-case secure stack bound on the production feature set. Sizes the Phase 1 guard.",
+   "#542 (OPEN): FA-2.0/2.1 OPEN-RAM-1 guard/fault policy for the FSBL; FA-2.2 isolated ECC-NMI model. Home for FSBL MSPLIM, but does not name MSPLIM.",
+   "#543 (OPEN, ship-blocker, owner-gated): OPEN-ECC-1 read primitive and reviewed spec digest. Gates the page-123..127 fail-safe read in Phase 2.",
+   "#94 (OPEN): torn-quadword read, silent-skip vs ECC NMI brick, undetermined on silicon. This is the Phase 2 availability defect.",
+   "#46 (OPEN): pin RM0456 register-exact option-byte values into the read-back verifier. Home for the new ObField entries.",
+   "#268 (OPEN): first-boot provisioning and RDP-0 verifiable shipping. The ship profile that must carry the new bits.",
+   "#366 (OPEN): Trezor June-2026 critical-port backlog. Adjacent; no MSPLIM item in it.",
+   "#178 (CLOSED): F33/RUN-5 NMI handler added. Its 'no NMI source is armed' premise is the comment now in doubt.",
+   "#93, #230, #92, #397 (all OPEN): page-123 torn-quadword integrity, crash-atomic compaction, erase atomicity, page-124 Kani model. Homes for the moved FI-10(3)(4)(5).",
+   "#124 (OPEN): secret residue twins in SE driver buffers. Adjacent to Phase 4.",
+   "#705 (OPEN): pq1 FSBL cannot light the panel. Blocks any FSBL fatal-screen idea."
+  ],
+  "untracked_delta": "No issue names any of these:\n1. Programming the MSPLIM register in the secure world, with the limit at end-of-.bss rather than a 'stack base'.\n2. The naked HardFault trampoline that re-bases MSP before the zeroize path. Without it, MSPLIM can turn an overflow into a lockup with secrets resident.\n3. MSPLIM_NS at handover, and MSPLIM clear in fsbl/src/branch.rs.\n4. Adding SRAM_RST, SRAM2_RST and the SRAM ECC bits to `ObField` / the Phase A verifier / the RDP-0 pre-power check. #82 and #248 only touch the bench Makefile recipe.\n5. Decoding FLASH_ECCR in the existing NMI handler and the FSBL region-scoping rule. #94 asks only for a silicon determination.\n6. The fact that SRAM2 is the NS bank, so #48's suggested placement needs an SRAM3/MPCBB3 design.\n7. Unused-stack clear, and the boot scrub skipping Cold resets.\n8. Doc and comment corrections: docs/security/brownout-hardening.md:321 says ECC is 'always active' on SRAM1/2/3; secure/src/main.rs:4643 says no NMI source is armed.",
+  "decision_conflicts": [
+   "No recorded owner decision is contradicted by the kept parts. The Trezor critical-port memory note declines only the secmon port.",
+   "Invariant #10 / RDP-2 freezes option bytes: the ECC and SRAM_RST bits must enter the single ship profile before any self-lock. The bank choice (Phase 3) therefore has to be decided before Phase 0 can be frozen; that ordering is an owner decision.",
+   "A/B rollback architecture, FSBL size and boot budget is the NO-GO: FSBL-side additions (MSPLIM, NMI handler) must be costed inside the replacement FSBL's 40 KiB registry (#540/#542), not added to the legacy image. The FSBL random fill is dropped for this reason.",
+   "Secure slot is already 76,949 B over with ui-px: Phases 1, 2 and 4 are tens to low hundreds of bytes; Phase 3 moves data, not code, but touches the linker scripts and SAU/MPCBB tables.",
+   "CLAUDE.md 'no new per-signature flash state beyond page 123' and the 16 B/increment format: the reason the page-123 tag is not carried here.",
+   "Invariant #2 (SE silicon is the PIN authority): the reason the page-124 encoding is demoted to P3."
+  ],
+  "hardware_asks": [
+   "No board or enclosure change is required.",
+   "One sacrificial pq1 (STM32U585CIU6) die for the irreversible-adjacent option-byte work: confirm the bit positions and polarity of SRAM_RST, SRAM2_RST, SRAM2_ECC and SRAM3_ECC, run a canary-plus-reset residue test, and determine whether a torn or double-error flash quadword raises NMI (#82, #94, #544).",
+   "pq1 bench board with debug access for the on-target MSPLIM fault test and stack high-water measurement. The bench board has no LCD, so evidence must come from the UART or a marker page, not the screen."
+  ],
+  "prerequisites": [
+   "#374 worst-case stack bound on the production feature combination, to size the guard without bench false-faults in deep C10 verify paths.",
+   "#150 secure RAMCFG before any SRAM ECC NMI is treated as trustworthy.",
+   "RM0456 read for three points I did not re-read: (a) FLASH_ECCR.ECCD raises NMI unconditionally; (b) option-bit polarity; (c) whether ECC-enabled SRAM must be initialised before read or sub-word write.",
+   "Owner decision on the secret bank (SRAM3 ECC region via MPCBB3, versus swapping the NS world out of SRAM2), made before the ship option-byte profile is frozen.",
+   "#543 / #94 for the fail-safe semantics of a double error inside pages 123-127.",
+   "Replacement FSBL geometry cutover (#540) before FSBL-side MSPLIM and NMI scoping are worth implementing.",
+   "Check whether any armed HardFault path must stay alive across the re-base (the fatal screen from #484 runs only in the panic handler today)."
+  ],
+  "precedent": "Trezor ships the software half of all of this.\n- MSPLIM at reset: core/embed/sys/startup/stm32u5/startup_init.c:336 (`_stack_section_start + 128`); per-stack programming at core/embed/sys/startup/stm32/sysutils.c:94; disabled at stage handoff at sysutils.c:289 and :327; per-task `sp_lim = stack_base + 256` at core/embed/sys/task/stm32/systask.c:170.\n- STKOF-aware fault entry that re-bases MSP: systask.c:823-840.\n- Flash ECCD decoded inside NMI with region scoping in boardloader and bootloader: systask.c:877-900.\n- Unused-stack clear and RAM fill: startup_init.c:349, :365-367; core/embed/sys/startup/stm32/bootutils.c:115-121, :152-158, :257-266.\n\nCorrection to SYS-03's precedent: option_bytes.c:79-82 sets the FLASH_OPTR_SRAM3_ECC and FLASH_OPTR_SRAM_RST bits to 1. Under the active-low polarity recorded in #48, that means SRAM3 ECC disabled and no hardware erase of SRAM1/3 on reset; Trezor relies on the software fill instead. I could not confirm polarity from the local Trezor tree (the vendored ST header is not checked out), so treat this as likely, not certain. A grep for RAMCFG in core/embed finds only backup-RAM use, so Trezor does not appear to route an SRAM ECC NMI. Ledger: nothing verifiable (closed SE firmware).",
+  "novelty": "parity",
+  "kind": "mixed",
+  "cost": "M",
+  "priority": "P1",
+  "rationale": "Priority is P1, not SYS-03's P0: no production image can be built while the S-2 fence stands, so nothing here is exploitable in a shipped unit today. It is not P2 either, because Phase 0 has a hard deadline. The first-boot self-lock freezes option bytes, and the verifier that gates that lock does not look at any SRAM erase or ECC bit.\n\nCost is M overall: Phases 1, 2 and 4 are small firmware changes; Phase 0 is mostly ceremony and a sacrificial-board run; Phase 3 is the real work (linker section, MPCBB3, RAMCFG, #150).\n\nKind is mixed because half the value is the option-byte profile and its verification, which is process, not code.\n\nPhase 1 alone is worth doing first: it is the only available stack-overflow detector in a Rust no_std image, and it converts #374's unproven bound from silent corruption of STATE into fail-stop.",
+  "live_defects": [
+   {
+    "what": "The secure NMI handler zeroizes and resets without reading or clearing FLASH_ECCR, and the FSBL has no NMI handler at all (panic-halt plus cortex-m-rt defaults). If a double-ECC flash read raises NMI, a torn quadword in page 123/124 becomes a reset loop, and a damaged slot page halts the FSBL even when the other slot is good.",
+    "evidence": "secure/src/main.rs:4636-4656 (handler; comment 'today NO NMI source is armed'); fsbl/src/main.rs:76-78 and fsbl/Cargo.toml:131 (panic-halt, no exception handlers found in fsbl/src); Trezor handles ECCD inside NMI with no enable bit (core/embed/sys/task/stm32/systask.c:877-900); #94 records the silicon behaviour as undetermined.",
+    "reachable_in_production_config": "Conditional. Depends on whether STM32U585 raises NMI on a double-ECC flash read (believed yes per RM0456, not re-read here, not measured on silicon). If yes it is reachable by a power cut during a page-123/124 program on any build.",
+    "severity": "Medium (availability only: fail-secure, possible brick)"
+   },
+   {
+    "what": "The ship option-byte verifier does not cover SRAM_RST, SRAM2_RST, SRAM2_ECC or SRAM3_ECC, and BOR is advisory only. The RDP-2 self-lock would freeze whatever the factory left, including defaults with no hardware SRAM erase and no ECC.",
+    "evidence": "ObField variants used in secure/src/first_boot/state.rs are BootLock, OemLock, Rdp, SecBootAdd0, Secwm1, Secwm2, SwapBank, Tzen, Wrp1a, Wrp2a; shared/src/lockdown.rs:517-521 (BOR decode 'not yet a hard gate'); grep for SRAM/ECC in secure/src/first_boot returns nothing.",
+    "reachable_in_production_config": "Not yet. `rdp2-self-lock` is a production-quarantined candidate and `mode-production + optiga-trust-m` is compile-fenced by OPTIGA_S2_PRODUCTION_BLOCKED. It becomes permanent per die the moment that path ships.",
+    "severity": "High once the self-lock ships (irreversible per die); none today"
+   },
+   {
+    "what": "The only recipe that sets a RAM-erase option bit sets the wrong bank: SRAM2_RST erases the NS world's RAM, while secrets live in SRAM1.",
+    "evidence": "Makefile:364-380 (`--optionbytes BOR_LEV=3 SRAM2_RST=0`); secure/src/reset_cause.rs:96-98; secure/memory-stm32u585.x:31 (secure RAM at 0x3000_0000, 192 K); nonsecure/memory-stm32u585.x:9 (NS RAM at 0x2003_0000, 64 K). Already known as #82.",
+    "reachable_in_production_config": "Bench recipe only; the ship profile has no such bit at all (see previous defect).",
+    "severity": "Low today (known, tracked)"
+   },
+   {
+    "what": "Two statements in the repo are wrong or in doubt and will mislead the next reader: brownout-hardening says single-bit ECC is 'always active, no config needed' on SRAM1/2/3; the NMI handler comment says no NMI source is armed.",
+    "evidence": "docs/security/brownout-hardening.md:321 versus #48 (ECC is an option bit, off by default, SRAM2 and part of SRAM3 only); secure/src/main.rs:4643 versus the ECCD point above. Round-1 already flagged the first.",
+    "reachable_in_production_config": "Documentation only.",
+    "severity": "Low (claim drift)"
+   },
+   {
+    "what": "The boot-time secret scrub wipes named caches only and is skipped on Cold and OptionByte resets; stack residue is never cleared on any path.",
+    "evidence": "secure/src/main.rs:1311-1333; secure/src/reset_cause.rs:66-112 (`requires_secret_scrub` = abnormal or Software); secure/src/nsc/mod.rs:1729-1744 (`zeroize_sensitive_state` touches STATE and the SE caches only).",
+    "reachable_in_production_config": "Yes on any build, but exploitation needs physical SRAM readout after a fast power cycle; startup re-zeroes .bss, so the exposed data is stack residue.",
+    "severity": "Low"
+   }
+  ],
+  "residual_after": "What an attacker can still do once all four phases land:\n- Fault registers, the instruction stream, or peripheral data paths (HASH, SAES, I2C). ECC covers stored bits only.\n- Inject a matched double-bit flip that produces a valid codeword, or repeat the same fault in both signing passes; ECC plus double-compute raises the cost but does not close SLasH-DSA-class faults.\n- Overflow within the guard: a single frame larger than 256 B can step over the guard without touching it between probes. MSPLIM checks SP updates, so this is caught only if the limit is exact and #374's bound holds.\n- Use the fail-stop as a DoS: every induced fault is now a deterministic reset. This is accepted policy (reset, not SE wipe).\n- Read SRAM invasively on a powered, unlocked device (probing, not reset-based remanence). SRAM_RST and stack clears do nothing against that.\n- Recover data from flash pages 123-127 or roll the page-123 tally back by one record; counter integrity is not addressed here (#93/#230).\n- Any die locked to RDP-2 before Phase 0 keeps its original option bits forever.\n- NS can still clear MSPLIM_NS and crash itself.",
+  "repo_evidence": [
+   "grep -rniE 'msplim|psplim' over fsbl/, secure/, nonsecure/: only fsbl/src/main.rs:172 and fsbl/src/manifest.rs:30, both comments saying there is none",
+   "secure/memory-stm32u585.x:31-35, secure/memory-stm32u585-slot-a.x:41-45, fsbl/memory-stm32u585.x:34-37, nonsecure/memory-stm32u585.x:9-12: `_stack_start` only, no lower bound",
+   "secure/src/nsc/state.rs:542: `static mut STATE: SecureState` in .bss, directly below the stack",
+   "secure/src/main.rs:4636-4656 (NMI), 4682-4690 (HardFault: zeroize then sys_reset, no MSP re-base)",
+   "secure/src/boot_ns.rs:19-77: sets VTOR_NS, MSP_NS, PSP_NS, CONTROL_NS; no MSPLIM_NS",
+   "fsbl/src/branch.rs:60-95: installs MSP, scrubs registers, no MSPLIM handling",
+   "grep RAMCFG|SRAM2_ECC|SRAM3_ECC|ECCD|ECCR over fsbl/src, secure/src, nonsecure/src: no code, only comments (secure/src/main.rs:4643, secure/src/main_sau_pure_tests.rs:1326)",
+   "secure/src/sau.rs:190-191, 428-440: MPCBB1 (SRAM1) all secure, MPCBB2 (SRAM2) all non-secure; no MPCBB3 handling",
+   "secure/src/reset_cause.rs:66-112 and secure/src/main.rs:1311-1333: scrub gate and its Cold/OptionByte skip",
+   "Makefile:364-380: bench-only `stm32-harden-opts` with SRAM2_RST=0",
+   "docs/security/adversarial-review/secure-runtime-resource-adversarial-review.md:45: RT4, no MSPLIM/PSPLIM, high-priority open surface",
+   "docs/security/a-b-firmware-rollback-architecture.md:803, :826, :5084, :5515: FSBL has no MSPLIM guard; guard policy is an open gate",
+   "docs/architecture/trezor-comparison.md:634-645: only MSPLIM-related port listed is 'disable at handoff'",
+   "docs/security/brownout-hardening.md:321-323: ECC NMI off, RAMCFG untouched"
+  ],
+  "sources": [
+   "https://arxiv.org/abs/2509.13048",
+   "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32u5/startup_init.c:336-367",
+   "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32/sysutils.c:94,289,327",
+   "/home/nicola/repos/trezor-firmware/core/embed/sys/task/stm32/systask.c:170,823-840,877-900",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-84",
+   "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32/bootutils.c:115-266",
+   "ARM DDI 0553 (ARMv8-M): MSPLIM/PSPLIM, UsageFault STKOF, CCR.STKOFHFNMIGN",
+   "ST RM0456 (STM32U5): FLASH_OPTR SRAM bits, FLASH_ECCR, RAMCFG - cited from memory and from #48, not re-read in this run"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.78,
+  "reason": "The core survives: no image programs a stack limit, the ship option-byte verifier ignores every SRAM erase/ECC bit, and the NMI path neither decodes nor scopes a flash double-ECC error. I confirmed each by reading the code. No recorded owner decision is contradicted.\n\nSix parts of the merge are wrong or weaker than stated; none sinks it, but Phase 3 and Phase 4 need rewriting.\n\n1. **Phase 3 protects the wrong object.** It moves STATE and named caches to an ECC bank but leaves the stack in SRAM1. The signing computation (entropy reconstruction, C10 secret seeds, WOTS/FORS scratch, the double-compute buffers) runs on the stack, so the stated bit-flip threat is mostly untouched.\n2. **The Trezor precedent is inverted on the bank question.** Trezor's secret RAM is SRAM2: `MAIN_RAM_START = 0x30030000` (core/embed/models/T3T1/memory.ld:42), and secmon.ld:67-69 says .data/.bss sit there because SRAM2 \"is cleared on security events\". Its OPTR value leaves SRAM2_ECC and SRAM2_RST at 0 (option_bytes.c:78-84), which is enabled under the active-low polarity from #48. The merge said Trezor relies on software fill and dismissed SRAM2.\n3. **Phase 4's \"extend the boot scrub to Cold\" is a no-op.** STATE is in .bss (secure/src/nsc/state.rs:539-542) and cortex-m-rt zeroes .bss on every reset before main. The only real residue is stack and .uninit.\n4. **The \"lockup with secrets resident\" risk is overstated.** `iwdg` is in PROD_SHIP_FEATURES (Makefile:2718) with a ~2 s timeout (secure/src/hw/iwdg.rs:108-117), so a lockup is bounded to about 1-3 s before a watchdog reset and .bss re-zero. The trampoline is still the right design.\n5. **The \"frame larger than 256 B steps over the guard\" residual is wrong.** MSPLIM is a comparison on SP updates and exception stacking, not a guard page; a large `sub sp` faults.\n6. **Existing mechanisms were missed.** cortex-m-rt 0.7.5 (Cargo.lock:338) already provides `_stack_end = __euninit` (link.x.in:189) and the `zero-init-ram` and `paint-stack` features.\n\nBypass residual after the corrected plan: faults on registers, the instruction stream and peripherals; identical faults in both signing passes; invasive probing of a powered, unlocked unit; deterministic reset as DoS.\n\nNot verified: the RM0456 points (ECCD raises NMI unconditionally, option-bit polarity, ECC-RAM initialisation) were not re-read; I rely on Trezor's handler setting no enable bit. The advisor was rate-limited, so this had no second review.",
+  "corrections": "1. **Phase 3, redesign.** Do not build a dedicated section for STATE only. Put the whole secure RAM region (.data, .bss and stack) in an ECC bank. Two options for the owner:\n   - (a) Relink secure RAM into the ECC part of SRAM3 (secure alias 0x3004_0000; ECC span to confirm in RM0456) and program MPCBB3. This is a one-line memory.x change plus an MPCBB table, and it covers the stack.\n   - (b) Follow Trezor: swap banks so secure uses SRAM2 (ECC, SRAM2_RST, and hardware erase on tamper, which matters because `tamp`/`tamp-wipe` are forced on for shipping) and NS moves to SRAM1 or SRAM3. This needs the secure world to fit in 64 K, which is unknown until #374. It also changes the SAU NS-SRAM window (secure/src/sau.rs:49-51) and the proto NS_SRAM pointer-validation window, both under const asserts.\n   - The bank choice gates Phase 0.\n\n2. **Precedent, fix.** Trezor does use an ECC, reset-erased bank for secrets, and that bank is SRAM2. Only SRAM3 ECC and SRAM_RST are left off. Trezor also marks RAMCFG secure and privileged (core/embed/sec/trustzone/stm32u5/tz_init.c:269-271), which is direct precedent for #150.\n\n3. **Phase 4, rewrite.**\n   - Drop \"extend the boot scrub to Cold\"; .bss is already zeroed on every reset.\n   - Replace with cortex-m-rt's `zero-init-ram` feature, which zeroes `_ram_start.._ram_end` including the stack region at startup. This also satisfies any ECC-RAM initialisation requirement. Add SRAM_RST=0 on top.\n   - Keep the volatile unused-stack clear on lock, idle wipe and fault.\n   - \"Before bxns\" is ambiguous. Specify: once at boot handover, and optionally on NSC return bounded by a high-water mark. A full clear on every gateway return is avoidable cost.\n\n4. **Phase 1, adjust.**\n   - Use the existing `_stack_end` symbol; no custom `__sheap` arithmetic is needed.\n   - The Trezor re-base cited at systask.c:823-840 is in `UsageFault_Handler`, not HardFault. pq1 has no UsageFault handler, so STKOF escalates to HardFault.\n   - Either enable UsageFault and re-base there, or use a naked HardFault trampoline. The cheap fallback is CCR.STKOFHFNMIGN=1, at the price of the handler's own frames descending into .bss while it wipes.\n   - State the lockup risk as bounded by the ~2 s IWDG, not as indefinite secret residency.\n   - QEMU mps2-an505 models MSPLIM, so a fault test can run in `make e2e` before any silicon work.\n\n5. **Residual, fix.** Delete the \"frame larger than the guard skips it\" item. The true residual is SP-relative writes below SP without an SP update, and the limit being checked on MSP only.\n\n6. **Phase 2, tighten.**\n   - FLASH_ECCR resets with the system, so the current zeroize-and-reset handler does not wedge on a stale flag. The brick case is a persistent double error in a page read on every boot (123/124), giving a reset loop.\n   - The handler must record the address before reset, or the loop is undiagnosable on a board with no LCD.\n   - The FSBL has no exception handlers at all, so an NMI lands in cortex-m-rt's default infinite loop, and the FSBL has no watchdog. Scope this to the replacement FSBL (#542) as the merge says.\n\n7. **Phase 0, add.**\n   - `ob_field_code` in secure/src/first_boot/state.rs:150 is an exhaustive match, so new ObField variants force new FirstBootError codes and doc updates.\n   - The option-byte write path itself is the known-defective #268 (control bits written to SECCR instead of NSCR).\n   - Nothing in secure/ or nonsecure/ relies on SRAM surviving reset (no .uninit or noinit use found), so SRAM_RST=0 has no functional conflict.\n\n8. **Tracked issues.**\n   - The list is accurate; all states check out.\n   - #484 is CLOSED and belongs in the list, not only in prerequisites.\n   - #544 (sacrificial-silicon campaign, owner-gated) is the real gate for the hardware asks and should be in the list.\n   - #545 is the campaign tracker for #540/#542.\n   - #248's title is \"TAMP + CSS + PVD\"; the ECC/RAMCFG content is in its body, and `#21-tamp-css_pvd` in the NMI comment is the same item.\n\n9. **Docs.** docs/security/brownout-hardening.md:314-315 also says IWDG is disabled and has no code, which is stale: hw/iwdg.rs exists and the feature is in the ship set. Add it to the doc-fix list beside line 321.\n\n10. **Cost.** L for the whole cluster (Phase 3, #150, #374 and sacrificial silicon); Phase 1 alone is S. Suggest splitting it: Phase 1 as its own P1/S item, Phase 0 as a P1 process item gated on the bank decision.\n\n11. **Live defects, verdicts.**\n   - (1) NMI not decoded, FSBL has no NMI handler: CONFIRMED, conditional on ECCD raising NMI. See `live_defect`.\n   - (2) Verifier ignores SRAM bits: CONFIRMED. ObField (shared/src/lockdown.rs:295-312) has no SRAM, ECC or BOR variant. Not reachable today.\n   - (3) Wrong bank in the bench recipe: CONFIRMED (Makefile:364-380, `SRAM2_RST=0` only). Tracked as #82.\n   - (4) Doc and comment drift: CONFIRMED (brownout-hardening.md:321; secure/src/main.rs:4643), plus the stale IWDG row.\n   - (5) Boot scrub skipped on Cold: PARTLY DENIED. The skip is real (main.rs:1331, reset_cause.rs:110-112) but harmless, since .bss is zeroed at every startup. Only the stack-residue half stands: Low, needs physical readout.",
+  "corrected_priority": "P1",
+  "corrected_cost": "L",
+  "corrected_kind": "mixed",
+  "tracked_issues": [
+   "#48 OPEN ship-blocker: secret SRAM in an ECC-on bank (names SRAM2, which matches Trezor's actual layout)",
+   "#82 OPEN: SRAM_RST=0 on a sacrificial board",
+   "#248 OPEN priority:low: TAMP + CSS + PVD (body carries ECC/RAMCFG/ECCD NMI; same item as `#21-tamp-css_pvd` in the NMI comment)",
+   "#150 OPEN: RAMCFG + ICACHE NS-attributed (Trezor secures RAMCFG, tz_init.c:269-271)",
+   "#374 OPEN ship-blocker critical: worst-case secure stack bound",
+   "#542 OPEN: FA-2 OPEN-RAM-1 linker/stack policy + ECC-NMI model",
+   "#543 OPEN ship-blocker: OPEN-ECC-1 spec digest",
+   "#544 OPEN ship-blocker owner-gated: sacrificial-silicon campaign (missing from the merge's list; gates the hardware asks)",
+   "#545 OPEN: Foundation A campaign tracker for #540/#542",
+   "#540 OPEN: FSBL geometry crate / cutover",
+   "#94 OPEN: torn-quadword ECC read, silent-skip vs brick",
+   "#46 OPEN: register-exact option-byte values in the read-back verifier",
+   "#268 OPEN ship-blocker: first-boot provisioning; also the SECCR-vs-NSCR option-byte write defect",
+   "#366 OPEN: Trezor critical-port backlog (no MSPLIM item)",
+   "#178 CLOSED: NMI handler added",
+   "#484 CLOSED: fatal screen, panic handler only",
+   "#93, #230, #92, #397 OPEN: page-123/124 integrity homes",
+   "#124 OPEN: secret residue twins",
+   "#705 OPEN: pq1 FSBL cannot light the panel"
+  ],
+  "untracked_delta": "An issue search for MSPLIM, PSPLIM, \"stack limit\" and \"stack overflow\" returns only #374, so these remain untracked:\n1. MSPLIM_S programmed in the secure reset path, using cortex-m-rt's `_stack_end`.\n2. Fault entry that is safe on an exhausted stack (UsageFault enable plus re-base, a naked HardFault trampoline, or STKOFHFNMIGN).\n3. MSPLIM_NS at handover.\n4. SRAM_RST, SRAM2_RST and the SRAM ECC bits in ObField, ShipProfile, the Phase A verifier and the RDP-0 SWD check.\n5. FLASH_ECCR decode and address logging in the secure NMI handler; region scoping in the replacement FSBL.\n6. The bank decision, restated: the whole secure RAM including the stack must sit in an ECC bank (SRAM3 relink, or a Trezor-style SRAM2 swap). #48 does not say the stack must be covered.\n7. `zero-init-ram` and an unused-stack clear for remanence. The \"boot scrub on Cold\" item is not a gap.\n8. Doc fixes: brownout-hardening.md:314-315 (IWDG) and :321 (ECC); main.rs:4643 and main_sau_pure_tests.rs:1326 (NMI not armed).",
+  "decision_conflicts": [
+   "None with a recorded owner decision. CLAUDE.md invariants, the Trezor critical-port note (declines secmon only) and the rollback architecture are all respected by the kept parts.",
+   "The option-byte additions must land in the single ship profile before any RDP-2 self-lock (invariant #10), so the bank decision is an owner decision that gates Phase 0.",
+   "A Trezor-style SRAM2 swap would change the NS RAM window (secure/src/sau.rs:49-51 and the proto NS_SRAM pointer-validation window, both const-asserted) and the NS linker script. That touches invariant #4's validation surface and needs its own review.",
+   "FSBL-side work must be costed in the replacement FSBL (#540/#542), not the legacy 32 KiB image; the FSBL budget is the recorded NO-GO.",
+   "The secure slot is already 76,949 B over with ui-px. A naked trampoline, an NMI decode and a stack clear are small, but any added code competes for the same unresolved flash lever."
+  ],
+  "evidence": [
+   "grep -rniE 'msplim|psplim' over fsbl/src, secure/src, nonsecure/src, shared/src: only fsbl/src/main.rs:172 and fsbl/src/manifest.rs:30, both comments",
+   "secure/memory-stm32u585.x: RAM ORIGIN 0x30000000 LENGTH 192K, `_stack_start` at top; nonsecure/memory-stm32u585.x: RAM 0x20030000 64K",
+   "secure/src/nsc/state.rs:539-542: `static mut STATE` in .bss",
+   "cortex-m-rt 0.7.5 (Cargo.lock:338): link.x.in:186-189 `PROVIDE(_stack_end = __euninit)`; Cargo.toml:152 `zero-init-ram`; src/lib.rs:188-192",
+   "secure/src/main.rs:4636-4656 (NMI: zeroize + sys_reset, no ECCR read; comment 'NO NMI source is armed'); HardFault handler directly below it, same body, no MSP re-base",
+   "grep for exception handlers in fsbl/src: none",
+   "secure/src/boot_ns.rs: only `msr MSP_NS`, `msr PSP_NS`, `msr CONTROL_NS`",
+   "shared/src/lockdown.rs:295-312 (ObField: Tzen, Rdp, Secwm1, Secwm2, SecBootAdd0, Wrp1a, Wrp2a, SwapBank, BootLock, OemLock); :517-523 BOR advisory",
+   "secure/src/first_boot/state.rs:150 `ob_field_code` exhaustive match",
+   "Makefile:2718 PROD_SHIP_FEATURES includes iwdg, tamp, tamp-wipe, tzic-wipe, rdp2-self-lock; Makefile:364-380 `--optionbytes BOR_LEV=3 SRAM2_RST=0`",
+   "secure/src/hw/iwdg.rs:108-117: ~2 s IWDG",
+   "secure/src/main.rs:1311-1333 and secure/src/reset_cause.rs:66-112: scrub gate skips Cold and OptionByte",
+   "secure/src/sau.rs:428-440: MPCBB1 all secure, MPCBB2 all non-secure, no MPCBB3; :49-51 SAU NS SRAM 0x2003_0000..0x2003_FFFF",
+   "grep ECCR|ECCD|RAMCFG|SRAM3 in secure/fsbl/nonsecure/shared src: comments and tests only",
+   "docs/security/brownout-hardening.md:314-315 (IWDG 'disabled', stale), :321-322 (ECC 'always active', wrong)",
+   "trezor core/embed/models/T3T1/memory.ld:42-43: MAIN_RAM_START 0x30030000 (SRAM2), size 0x7000",
+   "trezor core/embed/sys/linker/stm32u58/secmon.ld:67-69: .data/.bss placed in SRAM2, 'cleared on security events'",
+   "trezor core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-84: OPTR value sets SRAM3_ECC and SRAM_RST bits, leaves SRAM2_ECC and SRAM2_RST clear",
+   "trezor core/embed/sys/startup/stm32u5/startup_init.c:336 (MSPLIM), :349 (clear_unused_stack), :365-367 (RAM fill)",
+   "trezor core/embed/sys/task/stm32/systask.c:823-840: STKOF re-base is in UsageFault_Handler; :877-900 ECCD decode in NMI with region scoping, no enable bit",
+   "trezor core/embed/sec/trustzone/stm32u5/tz_init.c:269-271: RAMCFG secure + privileged",
+   "gh issue view for all 21 cited issues: states as listed; search for MSPLIM/stack limit returns only #374"
+  ],
+  "live_defect": {
+   "is_defect": true,
+   "evidence": "secure/src/main.rs:4636-4656: NMI handler zeroizes and resets with no FLASH_ECCR read or address log. fsbl/src has no exception handlers, so an NMI there falls into cortex-m-rt's default infinite loop with no watchdog. shared/src/lockdown.rs:295-312: ObField has no SRAM_RST/SRAM2_RST/SRAM*_ECC variant, so the Phase A verifier that gates the RDP-2 burn cannot see them. No MSPLIM in any image (grep: two comments only). Denied: 'boot scrub skipped on Cold' is harmless because STATE is in .bss (secure/src/nsc/state.rs:542) and startup zeroes .bss on every reset; only stack residue remains.",
+   "reachable_in_production_config": "NMI reset loop or FSBL hang: conditional on FLASH ECCD raising NMI unconditionally (consistent with Trezor's handler; not re-read in RM0456, not measured, #94). If so, a power cut during a page-123/124 program reaches it on any build. Option-byte gap: not reachable today (`rdp2-self-lock` is quarantined and `mode-production + optiga-trust-m` is compile-fenced); permanent per die once the self-lock ships. Missing stack limit: present in every build including PROD_SHIP_FEATURES; exploitability depends on #374's unproven bound.",
+   "severity": "Medium today (availability: fail-secure reset loop or FSBL hang; silent stack overflow into STATE is unbounded but unproven). High and irreversible per die for the option-byte gap once the self-lock ships."
+  }
+ }
+}

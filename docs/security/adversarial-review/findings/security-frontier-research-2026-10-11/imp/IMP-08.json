@@ -1,0 +1,27 @@
+{
+ "id": "IMP-08",
+ "title": "Measurement-bound credential release (DICE-style): derive the page-126 BHK wrap context and the OPTIGA PBS salt context from the FSBL-measured active-slot hash so a modified or glitched-past secure image cannot unwrap the SE tunnels",
+ "threat": "Malicious firmware that boots despite the FSBL check (glitched verify, future signing-key compromise, RDP-regressed die) still has the DHUK and can recompute every transport/final key today, because the key derivation depends only on die identity (DHUK) + persisted salt, not on what code is running. The Donjon Safe 3 result is exactly 'possession of the pairing secret proves access, not the software running'.",
+ "proposal": "FSBL (immutable after WRP+RDP-2) computes H_img = sha256 over the measured slot windows and writes it into a register/SRAM mailbox that the secure image reads once (and that NS can never reach); the secure world derives `wrap_ctx = CMAC_DHUK('pq1-bhk-wrap-v2' || H_img || salt)` for page 126 and the OPTIGA PBS salt context likewise, so an image with a different hash unwraps garbage and the SE handshakes fail closed. Firmware update becomes a journaled re-wrap: COMMIT runs under the OLD image, pre-computes H_img_new from the staged slot (same measurement code path as the FSBL, pinned by a paired-constants test), re-wraps page 126 / re-derives PBS under the new context and writes a two-slot journal before switching; rollback to the old slot re-uses the old wrap. Optional SE-side variant: SE050 UserID for half_E is additionally gated on a session value derived from H_img (Trezor VTRUST analogy, but measurement- not signature-driven).",
+ "rationale": "It turns the FSBL fingerprint from a human-checked indicator into a cryptographic gate (Tillitis cdi = H(UDS, H(app)) is the shipped example), closes the 'glitch the measurer then run anything' residual that Donjon exploited on Safe 3, and directly answers the user's 'malicious code in the FSBL/secure slot' question without touching the FSBL range or adding a primitive. Trezor only releases SE pairing material to VTRUST-approved images; measurement is stronger than a trust bit.",
+ "repo_evidence": [
+  "grep -n 'measure|firmware_hash|image hash|epoch' secure/src/hw/secret_keys.rs -> none (keys derive from OTP master / DHUK+salt / BHK only)",
+  "secure/src/first_boot/mod.rs:296-335 (bhk_provision_and_lock: BHK wrap context has no image binding)",
+  "secure/src/measured_boot.rs:102-120 (hash computed but used only for display)",
+  "fsbl/src/main.rs:283-320, fsbl/src/verify.rs:40-115 (verdict is boolean; no measurement handed to the slot)",
+  "docs/security/user-device-verification.md 'does NOT prove' items; invariant #10 'a later fake screen is the accepted residual'"
+ ],
+ "vendor_precedent": "Tillitis TKey (CDI = blake2s(UDS, H(app), USS), no persistent storage); Trezor secret.c:598-651 (unofficial firmware gets only public slots; secret_disable_access) and VTRUST bitmap; Ledger SE-verifies-MCU-flash (bypassed in LSB-002 precisely because the reader was adversary-controlled \u2014 pq1's FSBL reads flash directly).",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "L",
+ "priority": "P2",
+ "risks": "Every legitimate firmware update becomes a crypto migration with a power-cut window \u2014 needs the same atomic old/new/KVN journal that is still an OPEN gate for first boot (#712, #386 PUT KEY atomicity). A bug in the re-wrap bricks the wallet (seed halves become unreachable) \u2014 the SE halves are still recoverable from the 24 words, so the failure is availability, not loss, but it must be stated. The mailbox from FSBL to slot must be unforgeable by NS and by a later secure image (write-once SRAM or TAMP backup register set before branch). Interacts with the rollback A/B design (Draft 1.1), which is not implementation-approved; sequence after #540.",
+ "sources": [
+  "https://dev.tillitis.se/intro/",
+  "file:///home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c",
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+  "https://donjon.ledger.com/lsb/002/"
+ ],
+ "surface": "implant"
+}

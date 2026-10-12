@@ -1,0 +1,28 @@
+{
+ "id": "USB-01",
+ "title": "Make the NSC gateway actually non-reentrant: atomic try-enter at the dispatcher, Busy refusal, source-invariant test (LSB-023 class)",
+ "threat": "A hostile NS image (NS is untrusted by design) installs an NS-targeted ISR (USB OTG, NS SysTick, any NS IRQ) that calls a second NSC veneer while the secure thread is blocked for up to 120 s in confirm()/enter_pin() inside a sign or unlock handler. Under ARMv8-M, NS exceptions preempt secure thread-mode code; AIRCR.PRIS only orders S above NS. The nested handler runs on top of the outer one: it wipes-and-refills the shared `static mut SIGN_SNAP_BUF` (and the pixel-UI screen tail carved out of the same static), can zeroize `master_secret` via CMD_LOCK mid-handler, raise the page-123 floor via OFFCHAIN_SYNC behind the outer dialog, or paint a second dialog that consumes the user's chord. This is exactly Ledger LSB-023 (host mutates signing parameters after display, before signature) and the BitBox pre-setup hostile-host class.",
+ "proposal": "Replace `HandlerGuard::enter()` (unconditional fetch_add) with `HandlerGuard::try_enter()` doing `compare_exchange(0, 1)`; call it ONCE at the chokepoint \u2014 the start of every `cmse-nonsecure-entry` veneer and the QEMU `dispatch` \u2014 and return a new `NscStatus::Busy` on failure before any argument is read. Keep the depth semantics for SysTick (`handler_is_busy`). Additionally wrap the short handlers that today run unguarded (cmd_lock, cmd_is_unlocked, cmd_get_remaining, cmd_pin_attempt_log) under the same chokepoint so LOCK cannot land inside a live sign. Add a `main_sau_pure_tests`/`source_invariants` test asserting every `extern \"cmse-nonsecure-entry\" fn` body begins with the try-enter, and a QEMU e2e that issues a second mailbox command while a sign is parked in confirm() and asserts Busy + unchanged outer signature. Document the audited guarantee in threat-model.md as 'no NSC call is serviced while a trusted-UI dialog is pending'.",
+ "rationale": "The inventory and threat-model credit `HandlerGuard`/`HANDLER_DEPTH` with 'non-reentrancy', but the code only counts depth; nothing refuses. Every per-handler TOCTOU defence (snapshot buffer, sender binding, display\u2194commit sentinel) assumes a single live handler, and `SIGN_SNAP_BUF` is a `static mut` shared by all three sign handlers through `addr_of_mut!` \u2014 a nested entry creates two live `&mut` into it (UB) and the LSB-023 shape where bytes change between render and sign. Ledger's lesson is that the guard must live in the dispatcher, not in each cmd_*; Trezor treats an out-of-contract smcall as fatal rather than ambiguous. The fix is one CAS and one status code.",
+ "repo_evidence": [
+  "secure/src/nsc/mod.rs:1268-1281 (HANDLER_DEPTH + HandlerGuard::enter is an unconditional fetch_add; no refusal path)",
+  "secure/src/nsc/mod.rs:1303-1305 (handler_is_busy only consulted by SysTick idle-wipe; grep shows no veneer or handler checks it)",
+  "secure/src/nsc/mod.rs:1923-1960 (veneers call cmd_*::run directly with no busy check and no NS-IRQ masking; `interrupt::free` appears only in flash.rs/uart_log.rs/shio.rs)",
+  "secure/src/nsc/mod.rs:1813-1879 (dispatch has no busy gate; unknown CMD -> InternalError)",
+  "secure/src/nsc/cmd_sign_offchain.rs:130-151 (SIGN_SNAP_BUF is a shared `static mut`, pixel screens buffer carved from its tail)",
+  "secure/src/nsc/cmd_request_unlock.rs:33-35 (enter() used as a counter only)",
+  "docs/security/threat-model.md:282 (ceremony-mutation row 'NONE TODAY')"
+ ],
+ "vendor_precedent": "Ledger Secure SDK v26.6.1 (LSB-023, 2026-08-21) rejects interleaved APDUs centrally before application code; Trezor smcall_dispatch.c:475-488 fails fatal on any out-of-contract smcall and secmon never blocks in UI (UI is NS-resident), so it has no equivalent 120 s window.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P0",
+ "risks": "A benign NS that legitimately issues a heartbeat/IS_UNLOCKED from an ISR during a dialog would now get Busy \u2014 audit nonsecure/src/main.rs (polling today, no #[interrupt]) and the IWDG heartbeat path so liveness is not broken; Busy must not be mapped to a USB SW that makes the companion retry in a tight loop. Do NOT implement as PRIMASK_S for the whole handler (would starve the NS USB IRQ for the dialog duration).",
+ "sources": [
+  "https://donjon.ledger.com/lsb/023/",
+  "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_dispatch.c:475-488",
+  "ARM DDI 0553 (ARMv8-M ARM) \u2014 AIRCR.PRIS and exception priority between security states"
+ ],
+ "surface": "usb"
+}

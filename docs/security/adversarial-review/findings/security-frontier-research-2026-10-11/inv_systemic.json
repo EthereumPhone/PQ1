@@ -1,0 +1,514 @@
+{
+ "surface": "Systemic / novel defences (key=systemic): RNG health, glitch/tamper detectors, watchdog, reset-cause/fault handlers, FI primitives, die identity, stack/ECC/PVD resilience, drift/vacuity gates (semgrep, Kani, Lean, never-run-tests, HW-ASSUME ledger), telemetry. Read-only inventory of /home/nicola/repos/PQSigner_OS (branch feat/pq1-board-target) with Trezor firmware (/home/nicola/repos/trezor-firmware/core/embed/{sec,sys}) used as the comparison baseline.",
+ "has": [
+  {
+   "item": "STM32U585 TRNG driver with AN4230 per-part configuration (CR=0x00F00D00, HTCR=0xA2B0, NSCR=0x17CBB), CONFIGLOCK set last, bounded polls, software zero + continuous-repetition (CRNGT) tests on every word, SR re-sampled AFTER DR read, FI-hardened fail-initialized receipts on every copy/progress step",
+   "evidence": [
+    "secure/src/hw/rng.rs:42-74",
+    "secure/src/hw/rng.rs:95-122",
+    "secure/src/hw/rng.rs:124-131",
+    "secure/src/hw/rng.rs:395-489",
+    "secure/src/hw/rng.rs:493-575",
+    "secure/src/rng_health.rs:14-16",
+    "secure/src/rng_exact.rs:1-60"
+   ],
+   "status": "implemented",
+   "notes": "Hardware SP800-90B tests are the peripheral's own (SEIS/SECS/CEIS/CECS); software adds only zero + repeat. #704: this is RM0456 configuration C, not NIST-certifiable configuration A \u2014 HW-ASSUME-TRNG-ENTROPY row still says 'cert-cited' (see drift). The #833/#834 halt sink criticised in #835 is NOT on this branch (no `replenish`/pool in rng.rs)."
+  },
+  {
+   "item": "Three-source strong RNG (STM32 TRNG XOR OPTIGA TRNG XOR SE050 TRNG), strict fail-closed (any source failure aborts, buffer zeroized), per-source nonzero receipts, per-chunk continuous-repetition history across both SE sources, post-fold nonzero gate checked twice",
+   "evidence": [
+    "secure/src/rng_strong.rs:1-51",
+    "secure/src/rng_strong.rs:81-130",
+    "secure/src/rng_strong_fold.rs:1-45",
+    "secure/src/rng_strong.rs:206-218"
+   ],
+   "status": "implemented",
+   "notes": "Under `mock-se` SE contributions are absent by design. Consumed for OptRand on every C10 sign (secure/src/crypto.rs:206-269, all-zero OptRand rejected)."
+  },
+  {
+   "item": "Linked-artifact receipts for RNG backend selection: `PQ1_RNG_BACKEND=STM32U585_TRNG` and `PQ1_STRONG_RNG_SOURCES=STM32U585+OPTIGA_TRUST_M+SE050` strings in `.pqsigner.rng_backend`, kept alive by a volatile load from main; `scripts/prod_symbol_audit.sh` requires the hardware value and forbids host_rng/yasmarang/urandom",
+   "evidence": [
+    "secure/src/rng.rs:11-76",
+    "scripts/prod_symbol_audit.sh:1-80",
+    "Makefile:4420-4429"
+   ],
+   "status": "implemented",
+   "notes": "prod-symbol-audit is a local target only (not in any workflow; CI grep found no invocation). Cannot be pointed at a true PROD_SHIP_FEATURES ELF while OPTIGA_S2_PRODUCTION_BLOCKED stands."
+  },
+  {
+   "item": "RNG consumer allowlist audit: `scripts/rng_consumer_audit.py` refuses any new direct `rng::fill/byte/byte_nonsecret` caller and any software PRNG identifier outside two named non-secret files; wired as a prerequisite of `prod-feature-check` -> `prod-check-ship` (per-PR blocking)",
+   "evidence": [
+    "scripts/rng_consumer_audit.py:1-50",
+    "Makefile:2733-2737",
+    "Makefile:2775-2777",
+    ".github/workflows/ci.yml:173"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Non-secret FI-delay RNG path: `rng::byte_nonsecret(fallback)` degrades to the last good byte instead of panicking so a transient TRNG seed error cannot hang a sign mid-flight; secret consumers (`byte()`/`fill()`) still fail loudly",
+   "evidence": [
+    "secure/src/rng.rs:97-121",
+    "secure/src/fi.rs:33-60"
+   ],
+   "status": "implemented",
+   "notes": "Tracked tension: #834/#643 argue last-good reuse makes the FI delay predictable; #835 argues the proposed halt replacement is net-negative. Owner decision pending."
+  },
+  {
+   "item": "TAMP internal-tamper monitoring (ITAMP1/2/3/5/6/7/8/9/11/12/13 \u2014 backup-domain voltage, LSECSS, SWD-at-RDP>0, crypto-peripheral fault canary, IWDG-with-tamper), CR3=0 (erase backup registers on confirmed tamper), polled from SysTick or IRQ under `tamp-irq`; under `tamp-wipe` escalates to `tzic::trigger_intrusion_wipe` (zeroize SRAM + arm page-125 wipe flag + reset)",
+   "evidence": [
+    "secure/src/hw/tamp.rs:1-76",
+    "secure/src/hw/tamp.rs:84-114",
+    "secure/src/hw/tamp.rs:132",
+    "secure/src/hw/tamp.rs:267-325",
+    "secure/src/hw/tamp.rs:364-396",
+    "secure/src/main.rs:4392-4401",
+    "secure/src/hw/tamp_reason.rs:1-40"
+   ],
+   "status": "partial",
+   "notes": "Base-address bug (was LPTIM1) fixed; `tamp`+`tamp-wipe` are in RELEASE_FEATURES (Makefile:2662) and forced by the nsc/mod.rs fence. BUT: never run on silicon (#391); `tamp-irq` is NOT in RELEASE_FEATURES so shipping is polled (~1 ms); ITAMP3 (LSECSS) is vacuous because the RTC runs on LSI not LSE (tamp.rs:238-258); CR3=0 erases the BHK living in BKP0R..7R so ITAMP6 (probe attach at RDP>0) erases the loaded BHK (#208, #47); GTZC2/TAMPSEC not configured (sau.rs:672-673, #50, #81)."
+  },
+  {
+   "item": "Production fence forcing tamper + intrusion wipe on dual-SE shipping builds: `compile_error!` unless `tamp`+`tamp-wipe`+`tzic-wipe` (keyed on dual-se + mode-production/!debug_assertions, exempt for e2e-test/dev-testkey)",
+   "evidence": [
+    "secure/src/nsc/mod.rs:727-765",
+    "Makefile:2662"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "GTZC1 TZIC illegal-access controller: IER mirrors the SECCFGR masks, IRQ 8 handler snapshots SR1..4, bumps a counter, write-1-to-clears, and under `tzic-wipe` fires the shared intrusion wipe; counter readable by NS via CMD_TZIC_STATUS for the `gtzc-enforcement-hw` 7/7 silicon test",
+   "evidence": [
+    "secure/src/hw/tzic.rs:1-30",
+    "secure/src/hw/tzic.rs:160-212",
+    "secure/src/hw/tzic.rs:227-260",
+    "secure/src/nsc/cmd_tzic_status.rs:1-18",
+    "Makefile:950"
+   ],
+   "status": "implemented",
+   "notes": "Violation counter and LAST_SR are SRAM-only (not persisted); forensic bank-4 IER has no SECCFGR counterpart."
+  },
+  {
+   "item": "Secure-owned independent watchdog: IWDG at the secure alias 0x5000_3000 with SECCFGR1 bit 7 SECURE, kicked from SysTick while any of {NS heartbeat advanced, gateway handler busy (capped MAX_BUSY_TICKS=30 s), trusted-UI wait + idle timer live}; NS_STALL_LIMIT_TICKS=4 s + ~2 s IWDG; NS heartbeat address validated through the NsPtr typestate; production fence requires `iwdg`",
+   "evidence": [
+    "secure/src/hw/iwdg.rs:1-66",
+    "secure/src/hw/iwdg.rs:74",
+    "secure/src/hw/iwdg.rs:126-137",
+    "secure/src/hw/iwdg.rs:156-240",
+    "secure/src/nsc/mod.rs:247-260",
+    "secure/src/nsc/mod.rs:1999-2005",
+    "secure/src/main.rs:4252-4257",
+    "secure/src/main.rs:4302-4309",
+    "secure/src/sau.rs:257-269"
+   ],
+   "status": "implemented",
+   "notes": "Silicon denial receipts for NS kick attempts still open (#79); coverage gaps #176 (no watchdog before post-unlock init, boot grace unbounded, re-callable heartbeat registration). IWDG_SW hardware-watchdog option byte (cannot be disabled by firmware) not set (#248)."
+  },
+  {
+   "item": "Reset-cause classification from RCC_CSR at the very top of boot (Cold/Software/Watchdog/LowPower/OptionByte/Unknown), bit layout silicon-verified; abnormal AND Software causes trigger `nsc::zeroize_sensitive_state()` before any unlock logic",
+   "evidence": [
+    "secure/src/reset_cause.rs:1-70",
+    "secure/src/reset_cause.rs:108-112",
+    "secure/src/main.rs:1180-1186",
+    "secure/src/main.rs:1311-1333",
+    "secure/src/reset_cause.rs:198-250"
+   ],
+   "status": "implemented",
+   "notes": "Brownout-hardening Stage 1. Order-sensitivity of `classify_bits` was once silently broken by an arm swap while mirror tests stayed green (74d949e9) \u2014 now covered by host tests."
+  },
+  {
+   "item": "HardFault and NMI handlers route to FI-barriered zeroize + SYSRESETREQ (not the destructive SE wipe); DefaultHandler dispatches TAMP (IRQ 2) and GTZC (IRQ 8); panic handler zeroizes then draws a best-effort fatal screen (Trezor RSOD analog)",
+   "evidence": [
+    "secure/src/main.rs:4637-4691",
+    "secure/src/main.rs:4392-4415",
+    "secure/src/main.rs:4693-4740",
+    "secure/src/nsc/mod.rs:1729-1744"
+   ],
+   "status": "implemented",
+   "notes": "NMI is reachable only via glitch/bug today: no NMI source is armed (CSS/ECCD-NMI tracked as #248). Full-project sweep noted the unmatched DefaultHandler arm parks without zeroize (findings/full-project-sweep-2026-07-18-discovery.md:491) \u2014 verify current main.rs:4404-4415 before citing."
+  },
+  {
+   "item": "Shared FI primitive crate `pqsigner-fi` (OK/FAIL Hamming-distant sentinels, Trezor `i+j==wait` invariant random-delay loop, double-evaluated `check_true_into_sentinel` with branchless select, `fi_min` with `black_box`-protected recompute guard), all `#[inline(never)]`; secure-world shim adds `CfiCounter`, `read_volatile_voted`, `zeroize_barrier`, `scrub_sentinel_register`",
+   "evidence": [
+    "pqsigner-fi/src/lib.rs:1-62",
+    "pqsigner-fi/src/lib.rs:129-250",
+    "secure/src/fi.rs:1-30",
+    "secure/src/fi.rs:86-330",
+    "scripts/check_fi_ir.sh:1-40",
+    "Makefile:4431-4436"
+   ],
+   "status": "implemented",
+   "notes": "`check-fi-ir` (IR-level gate proving the fi_min guard survives -O, with two-sided self-test) is local-only, not in CI. #130 remains open as the tracking issue."
+  },
+  {
+   "item": "FI-hardened security booleans `FihBool` (value/complement pair, SEC_TRUE/SEC_FALSE 28-bit Hamming distance, double volatile read with wait_random) used for `pin_verified`, `has_signed`, `slot_master_derived`",
+   "evidence": [
+    "secure/src/fih.rs:1-40",
+    "secure/src/nsc/state.rs:250-305",
+    "secure/src/nsc/state.rs:357-364"
+   ],
+   "status": "implemented",
+   "notes": "#802: `is_true_fi()` runs wait_random unconditionally so the idle SysTick gate does a full TRNG draw every ms after 120 s (open bug)."
+  },
+  {
+   "item": "FI-hardened C10 signing chain: double-compute, ct-compare, verify-before-release under a 7-step CfiCounter, fresh three-source OptRand (all-zero rejected), Fisher-Yates DPA shuffle; signing rate limiter (1 s interval, 250 sigs/unlock session) called from `crypto::c10_sign_verified*`",
+   "evidence": [
+    "secure/src/crypto.rs:94-96",
+    "secure/src/crypto.rs:206-269",
+    "secure/src/sign_rate.rs:1-50",
+    "CLAUDE.md (Code Conventions: c10_sign_verified)"
+   ],
+   "status": "implemented",
+   "notes": "Rate limiter is SRAM-only; a flash-persistent daily quota was deferred (sign_rate.rs:37-41). Full rainbow FI sweep campaign only smoke-run (docs/STATUS.md 'blocked-on: compute')."
+  },
+  {
+   "item": "Boot-time crypto self-tests: HW SHA-256 KAT (`SHA-256(\"abc\")`, halts on FAIL) and SAES self-test / DHUK round-trip under `saes-self-test` (bench target `saes-self-test-hw`); BHK self-test path in main",
+   "evidence": [
+    "secure/src/hw/hash.rs:32-40",
+    "secure/src/main.rs:671",
+    "secure/src/main.rs:765-815",
+    "secure/src/main.rs:1441",
+    "secure/Cargo.toml:492-494",
+    "Makefile:3564"
+   ],
+   "status": "implemented",
+   "notes": "`saes-self-test` is production-forbidden (nsc/mod.rs:128-140) \u2014 it is a bench KAT, not a shipping power-on self-test. Per-sign HASH KAT (#367) and per-op HASH fault check (#278) are open."
+  },
+  {
+   "item": "Die identity probe: `DBGMCU_IDCODE` read at boot, decoded host-side (`DieId`), logs whether the die is the SESIP-2400133-01 rev U (DEV_ID 0x482 / REV_ID 0x3003); report-only by design",
+   "evidence": [
+    "secure/src/hw/dbgmcu.rs:1-61",
+    "secure/src/die_id.rs:1-62",
+    "secure/src/main.rs:1208-1217",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json (HW-ASSUME-REV-U)"
+   ],
+   "status": "implemented",
+   "notes": "Nobody has yet recorded the output on bench dies (HW-ASSUME-REV-U falsifying_test.exists=false). The wider anti-counterfeit boot policy (CPUID r0p4 + UID plausibility + DHUK fingerprint, halt-on-anomaly) exists only as a plan in docs (threat-model.md:341, production-security.md:391)."
+  },
+  {
+   "item": "Boot-time option-byte checks in the secure world (mode-production): RDP != L2 warns (halts under `rdp-enforce-halt`, or unconditionally after first-boot journal ALL_DONE under `rdp2-self-lock`); SECBOOTADD0R must select the FSBL base (warn only)",
+   "evidence": [
+    "secure/src/main.rs:1232-1290",
+    "secure/Cargo.toml (rdp-enforce-halt)",
+    "shared/src/lockdown.rs:258-262",
+    "shared/src/lockdown.rs:519-522"
+   ],
+   "status": "partial",
+   "notes": "Default is WARN-and-continue by design of the ship-RDP-0 model. BOR_LEV is only read into the ship-profile (`lockdown.rs`), never set at runtime; `make stm32-harden-opts` (BOR_LEV=3, SRAM2_RST=0) is a bench-side STM32_Programmer_CLI step (Makefile:364-380), not a verified production ceremony."
+  },
+  {
+   "item": "FSBL tz-1 option-byte read-back tripwire: reads OPTR/SECWM1R1/SECWM2R1/SECBOOTADD0R via the shared `lockdown::verify_confirmed_fields` phase profile, two sentinel-gated passes with `scrub_sentinel_register`, halts only on a PERSISTENT mismatch; never writes option bytes",
+   "evidence": [
+    "fsbl/src/optbytes.rs:1-85",
+    "fsbl/src/main.rs:234-250"
+   ],
+   "status": "implemented",
+   "notes": "Deliberately does not act on WRP1A / OEM locks while their masks are unpinned (#46) \u2014 a unit whose WRP was cleared before RDP-2 passes. Accepted single-fault suppression (post-lock tripwire, not an authorization gate)."
+  },
+  {
+   "item": "FSBL FI-hardened manifest admission (`filter_valid`: digest, vendor fingerprint, signature, rollback floor each through `check_true_into_sentinel` with r0 scrub between), FI-gated image verify and display verdict",
+   "evidence": [
+    "fsbl/src/main.rs:321-351",
+    "fsbl/src/verify.rs:77-106",
+    "fsbl/src/main.rs:287",
+    "fsbl/src/fi.rs:1-65"
+   ],
+   "status": "partial",
+   "notes": "FSBL has NO TRNG: `wait_random` uses a fixed 0x42 loop length (fsbl/src/fi.rs:26-33), so attacker retiming is unaffected; fsbl/src has zero `rng` references. Invariant #10 says FI-hardened FSBL image verify (EF-swarm F15) is still an OPEN gate. No tracking issue found for FSBL TRNG init (gh search 'FSBL TRNG' returned only #595)."
+  },
+  {
+   "item": "FSBL geometry + stack bound gate: `scripts/check_fsbl_geometry.py` (run by `make fsbl`) reads the physical LOAD span from program headers, derives the WRP page range, and sums `-Z emit-stack-sizes` frames (50 frames / 10,372 B of 16,384 B) as an upper bound",
+   "evidence": [
+    "scripts/check_fsbl_geometry.py:74-217",
+    "Makefile:2454-2466",
+    "CLAUDE.md invariant #10"
+   ],
+   "status": "implemented",
+   "notes": "Frame-sum bound only; call-graph worst case needs cargo-call-stack. No MSPLIM anywhere in secure or FSBL (grep: only comments fsbl/src/main.rs:172, fsbl/src/manifest.rs:30). Secure-world worst-case stack bound is ship-blocker #374."
+  },
+  {
+   "item": "Consumption-mask (randomised-duty PWM on TIM2_CH1/PA5 iota2, TIM3_CH1/PA6 pq1) seeded from the TRNG with periodic reseed in `randomize()` from SysTick; timers secured in TZSC so NS cannot stop them; forced on production hardware builds by fence",
+   "evidence": [
+    "secure/src/hw/consumption_mask.rs:1-50",
+    "secure/src/hw/consumption_mask.rs:156-183",
+    "secure/src/nsc/mod.rs:706-725",
+    "secure/src/sau.rs:351-352",
+    "secure/src/main.rs:4337"
+   ],
+   "status": "partial",
+   "notes": "Neither board drives a load from the mask pin; dilution is unmeasured (evt-silicon-validation.md \u00a79). #831: the sca-1 reseed fails open and silently, biased toward signing windows; #646 degradation not explicit."
+  },
+  {
+   "item": "Flash torn-write defences: `write_quadword_verified` read-back compare; OTP master-key region classified per quad-word (blank/complete/interrupted) by host-tested `otp_state.rs` (D4 fix); page-127 journal exclusivity enforced by `flash_policy::GenericSecureQwAddr`",
+   "evidence": [
+    "secure/src/hw/flash.rs:357",
+    "secure/src/otp_state.rs:1-25",
+    "secure/src/flash_policy.rs:1-45",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json (HW-ASSUME-QW-ATOMIC)"
+   ],
+   "status": "implemented",
+   "notes": "Relies on HW-ASSUME-QW-ATOMIC (vendor-doc, falsifying power-cut test does not exist). No flash ECCD/ECCC handling anywhere (grep secure/src/hw/flash.rs, fsbl/src: only SECCR hits)."
+  },
+  {
+   "item": "SAU/GTZC configuration with compile-time const assertions (NS windows subset of SAU regions; exact SECCFGR1/3 images) and `lock_security_config` (AIRCR LOCKSVTAIRCR + SYSCFG CSLCKR + TZSC lock) with read-back verify; TZSC enforcement silicon-validated 7/7",
+   "evidence": [
+    "secure/src/sau.rs:1-70",
+    "secure/src/sau.rs:521-562",
+    "secure/src/sau.rs:676-700",
+    "Makefile:950"
+   ],
+   "status": "implemented",
+   "notes": "GTZC2 (TAMP/BKP-SRAM domain) intentionally not configured or locked (sau.rs:672-673). RCC/PWR/SYSCFG SECCFGR (tz-3) specified but not committed (#366)."
+  },
+  {
+   "item": "MMIO address drift gate: `verify-mmio-addresses` diffs every hand-typed base in secure/src/hw/* and sau.rs against ST's CMSIS stm32u585xx.h (resolver self-tested)",
+   "evidence": [
+    "scripts/check_mmio_addresses.py:1-25",
+    "Makefile:4577",
+    "scripts/gate_enforcement.json (verify-mmio-addresses = local_documented)"
+   ],
+   "status": "implemented",
+   "notes": "Local-only (needs the vendor SDK on the box); checks bases, not register offsets/bits."
+  },
+  {
+   "item": "Bounded model checking + UB checking: 30 Kani harnesses (census locked in `scripts/kani_census.lock.json`, `verify-kani-census` per-PR), `make kani` + `verify-kani-mutation` anti-vacuity nightly, `make miri` per-PR, `kani-heavy` local",
+   "evidence": [
+    "Makefile:4512-4611",
+    "scripts/kani_census.lock.json",
+    ".github/workflows/ci.yml:521-524",
+    ".github/workflows/ci.yml:701",
+    ".github/workflows/nightly.yml:87-128"
+   ],
+   "status": "implemented",
+   "notes": "Scope is host-reachable logic only; CMSE veneers, MMIO and NS-pointer deref are cfg'd out (Makefile:4506-4511). Nightly Kani had a long non-completion streak (memory: unblocked 10-05, #776)."
+  },
+  {
+   "item": "Lean 4 on-chain FV stack (theft_free with explicit 10-axiom base, Halmos + Kontrol bytecode bridges, A3.1 interpreter refinement) plus anti-vacuity gates: verify-audit, verify-ledger-consistency, verify-fv-lints, verify-storage-mutators (per-PR), verify-proof-mutation (nightly), verify-lean4checker (local)",
+   "evidence": [
+    "contracts/verification/docs/THE_CLAIM.md:1-80",
+    "contracts/verification/Makefile:332-400",
+    "contracts/verification/Makefile:645-659",
+    "scripts/gate_enforcement.json"
+   ],
+   "status": "implemented",
+   "notes": "All `\u2228 BreaksHash` theorems must be cited as reductions, not unconditional assurance (THE_CLAIM.md). FV has caught zero product bugs within scope (FV_VALUE_AND_GAPS.md \u00a73). Firmware-side FV is Kani/Verus/crux/TLA pilots, mostly local_documented."
+  },
+  {
+   "item": "Protocol/model gates with baseline verdict pinning: `verify-protocol-models` (ProVerif/Tamarin, nightly), `verify-cryptoverif` (local), TLA+ page-123 crash-atomicity (local), Verus page-123 journal pilot (local), crux-mir NS-pointer diversity (local)",
+   "evidence": [
+    "Makefile:4879-4895",
+    "contracts/verification/Makefile:493-557",
+    ".github/workflows/nightly.yml:417"
+   ],
+   "status": "implemented",
+   "notes": "#665: Tamarin identity pins bind name+verdict only \u2014 a lemma gutted to `T` stays green."
+  },
+  {
+   "item": "Gate-enforcement meta-gate G1: `verify-gate-enforcement` parses live workflows and asserts each of 68 enrolled gates is wired as declared (per_pr_blocking / nightly / local_documented), rejects continue-on-error/path-filter escapes, plus completeness pass that every `make verify-*` invoked by CI is enrolled",
+   "evidence": [
+    "scripts/check_gate_enforcement.py:1-40",
+    "scripts/gate_enforcement.json",
+    ".github/workflows/ci.yml:696"
+   ],
+   "status": "implemented",
+   "notes": "~30 of 68 gates are local_documented (checkct, verify-tla, verify-verus, verify-halmos, verify-kontrol, verify-mmio-addresses, verify-lean4checker, kani-heavy, ...). #450/#451 note the fuzz workspace and some F13/semgrep/vet items were outside the manifest at filing time; CI now runs cargo deny + semgrep + cargo vet (ci.yml:47-151)."
+  },
+  {
+   "item": "Never-run-tests oracle: `scripts/check_tests_actually_run.py` (declared-vs-executed by name, derives suites from ci.yml, fails both directions, 218-entry allowlist)",
+   "evidence": [
+    "scripts/check_tests_actually_run.py:1-60",
+    "scripts/tests_never_run_allowlist.json"
+   ],
+   "status": "partial",
+   "notes": "Script exists but is invoked by NO Makefile target and NO workflow (grep Makefile/.github: zero hits) \u2014 tracked as #725; follow-ups #720/#721/#722/#724 list suites that run nowhere (pqsigner-rollback 156 tests, pqsigner-geometry 8, fsbl-tests geometry guards, 17 sphincs-c10 KAT-adjacent tests, 21 feature-gated tests)."
+  },
+  {
+   "item": "HW-ASSUME ledger (14 rows: QW-ATOMIC, OTP-ONEWAY, PUTKEY-*, DHUK-*, CMSE-SAU, TRNG-ENTROPY, RDP2, REV-U, OEM2-ABSENT, SE050-CERT-VERSION, SE-INTERNALS) with `verify-hw-assumptions` per-PR gate: id discipline, schema, anchors resolve in source, falsifying tests must be real make targets, bidirectional consumed_by",
+   "evidence": [
+    "contracts/verification/docs/HW_ASSUMPTIONS.json",
+    "contracts/verification/scripts/check_hw_assumptions.py:1-40",
+    ".github/workflows/ci.yml:113"
+   ],
+   "status": "implemented",
+   "notes": "Gate falsifies the bookkeeping around premises, not the premises. Most falsifying tests have exists=false (bench work)."
+  },
+  {
+   "item": "Semgrep invariant rules (no classical signer import, no ecrecover in wallet contracts, no key rotation/cap reset, no unsafe in pure-logic crates with a 3-file allowlist asserted by script, prefer ascii_str) + cargo-deny + cargo-vet, run in CI `invariant-gates` job and locally via `make invariant-gates`",
+   "evidence": [
+    ".semgrep/pqsigner-invariants.yml:18-129",
+    ".semgrep/check_unsafe_exclude_allowlist.py",
+    "Makefile:4445-4460",
+    ".github/workflows/ci.yml:47-151"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Production never-ship fences in nsc/mod.rs (~40 compile_error! arms: mode-production vs debug-log/e2e-test/mock-se/dev-testkey/ui-noop/saes-self-test/fw-rollback-e2e/fwup-transport-e2e; mandatory iwdg, consumption-mask, tamp+tamp-wipe+tzic-wipe, rdp2-self-lock; OPTIGA_S2_PRODUCTION_BLOCKED) plus `prod-check-ship` feature-graph resolution (expected-fail CI gate)",
+   "evidence": [
+    "secure/src/nsc/mod.rs:95-945",
+    "Makefile:2737-2777",
+    ".github/workflows/ci.yml:173"
+   ],
+   "status": "implemented",
+   "notes": "prod-check-ship is designed to FAIL today (rollback backend unapproved); a true production ELF cannot be built while S-2 is open."
+  },
+  {
+   "item": "Constant-time proof driver set: `make checkct` (cargo-checkct/binsec on thumbv8m: kdf/fors/th/saes/ct_eq SECURE + shuffle as by-design-INSECURE control); Muscat TVLA/CPA self-test; rainbow emulation fault sweeps (14 harnesses) and lascar leakage targets with F-1..F-29 findings log",
+   "evidence": [
+    "Makefile:4926-4950",
+    "tools/sca/README.md:318-2997",
+    "docs/STATUS.md (blocked-on: code / compute rows)"
+   ],
+   "status": "partial",
+   "notes": "checkct is local_documented (needs opam switch); no dudect/DWT t-test on real silicon (#298); on-silicon SCA/FI campaign not run (#236, #301); full FI sweep only smoke-run."
+  },
+  {
+   "item": "Reproducible-build and artifact-identity gates: `verify-repro` nightly byte-diff, `verify-fsbl-identity`, `verify-ship-state` (read-only board option-bytes + flash vs declared profile), SBOM keyed to the FSBL-measured hash",
+   "evidence": [
+    "Makefile:2422-2438",
+    "Makefile:2597",
+    ".github/workflows/nightly.yml:144-145",
+    "Makefile:4480-4500"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "PIN-attempt reason ring (RAM-resident) recording why each page-124 attempt was consumed, to make field lockouts like #715 falsifiable",
+   "evidence": [
+    "secure/src/pin_attempt_log.rs:1-32"
+   ],
+   "status": "partial",
+   "notes": "Does not survive reset; persisting at lockout needs a flash page decision (CLAUDE.md forbids new per-signature flash state). This is the closest thing to telemetry in the tree."
+  },
+  {
+   "item": "Inactivity timeout with FI-hardened value/complement tick pair, S-only; `TrustedUiWaitGuard` lets the watchdog distinguish a legitimate button wait from a wedge without resetting the idle timer; PendSV lowest priority / SysTick highest fixed (#729)",
+   "evidence": [
+    "secure/src/timeout.rs:1-32",
+    "secure/src/main.rs:867-879",
+    "secure/src/main.rs:4476-4485"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Secure-runtime and SCA/FI adversarial-review playbooks (16 surfaces incl. sca-fi, secure-runtime-resource, entropy-key-lifecycle, silicon-lockdown) with stable failure catalogs and findings directory",
+   "evidence": [
+    "docs/security/adversarial-review/README.md:14-60",
+    "docs/security/adversarial-review/sca-fi-adversarial-review.md:13-136",
+    "docs/security/adversarial-review/findings/"
+   ],
+   "status": "implemented",
+   "notes": "Process artefacts, not runtime defences; Phase-D findings are deliberately not filed as issues (README 'Where findings go')."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "No PVD (programmable voltage detector) armed, no runtime BOR level enforcement, no CSS/HSECSS \u2014 the only brownout handling is post-hoc reset-cause classification. Trezor arms PVD level 5 (2.8 V) with an IRQ to error_shutdown (trezor core/embed/sys/pvd/stm32/pvd.c:27-57)",
+   "tracked_in": "#49, #248 (Stage 2 'NOT STARTED'), docs/security/brownout-hardening.md:312 + :644",
+   "notes": "grep for PVD/PVDE/CSSON across secure/src and fsbl/src finds no code; BOR_LEV only appears in the ship-profile reader (shared/src/lockdown.rs:258-262) and a bench STM32_Programmer_CLI recipe (Makefile:364-380)."
+  },
+  {
+   "gap": "SRAM ECC never configured: RAMCFG untouched, SRAM2_ECC/SRAM3_ECC option bytes not set, no ECC double-error NMI, secrets not relocated to an ECC-on bank, flash ECCD not handled \u2014 an FI bit-flip in SRAM is silent",
+   "tracked_in": "#48, #94 (FVX-3), #542, #543 (OPEN-ECC-1), #248, brownout-hardening.md:322-323",
+   "notes": "grep RAMCFG|SRAM2_ECC|ECCIE in secure/src shared/src: zero hits. NMI handler exists (main.rs:4650-4656) but nothing arms it."
+  },
+  {
+   "gap": "No stack-overflow protection in either world: no MSPLIM/PSPLIM programming, no MPU, no stack canary, no clear-unused-stack; secure-world worst-case stack is an open ship-blocker. Trezor has sys/stack (clear_unused_stack) + sys/mpu privilege bands",
+   "tracked_in": "#374 (ship-blocker), #542 (OPEN-RAM-1), #277 (MPU-lite design entry), threat-model.md \u00a79.9",
+   "notes": "grep MSPLIM|MPU_|stack_chk|flip-link across secure/fsbl/nonsecure: only two comments in fsbl. FSBL stack is frame-sum bounded only (check_fsbl_geometry.py)."
+  },
+  {
+   "gap": "FSBL fault-injection hardening runs with a FIXED random-delay byte (0x42) because the FSBL never initialises the TRNG \u2014 attacker retiming of the two required faults is free",
+   "tracked_in": "NOT tracked as an issue (gh search 'FSBL TRNG' / 'wait_random FSBL' returned nothing relevant); only fsbl/src/fi.rs:18-22 'Future:' comment and invariant #10's 'FI-hardened FSBL image verify (EF-swarm F15)' open gate",
+   "notes": "fsbl/src has zero rng references."
+  },
+  {
+   "gap": "TAMP has never been exercised on silicon; ITAMP3 (LSECSS) is vacuous on an LSI-clocked RTC; CR3=0 erase-on-tamper destroys the loaded BHK on ITAMP6 (probe attach at RDP>0) and the TAMP\u00d7BHK interaction is unresolved; TAMPSEC/GTZC2 secure-zone not configured; shipping config is polled (no tamp-irq); no hardware-mode (CPU-less) tamper erase",
+   "tracked_in": "#391, #208, #47, #50, #81, #75, #256, #52",
+   "notes": "tamp.rs:238-258 selects LSI; RELEASE_FEATURES (Makefile:2662) omits tamp-irq; sau.rs:672-673 leaves GTZC2 unlocked."
+  },
+  {
+   "gap": "TRNG configuration is RM0456 configuration C (AIS-31 verified, not NIST SP800-90B certifiable configuration A); no raw-noise health characterisation possible; HSI48/RCC readiness waits are unbounded before RNG init; startup repetition test for the first accepted SE responses missing",
+   "tracked_in": "#704 (priority:high, decide before any OTP master burn), #642, #641, #369, #371 (external-entropy verifiability decision)",
+   "notes": "rcc.rs:132-201 spins unbounded on HSIRDY/HSI48RDY/PLL."
+  },
+  {
+   "gap": "FI-delay randomness: last-good-byte reuse on TRNG failure (predictable delay) vs the proposed halt sink that two reviewers found net-negative; nested RNG attempts in ISR context fall back to the stale byte; after 120 s idle SysTick does a full TRNG draw every ms (+55% render cost); no global always-on random-delay interrupt (Trezor runs a 1 ms RDI)",
+   "tracked_in": "#834, #835 (critical), #643, #802 (high), #805",
+   "notes": "Owner decision needed on the halt-vs-reuse policy; nothing from #833/#834 is on this branch."
+  },
+  {
+   "gap": "Consumption-mask effectiveness unmeasured on either board (no load on the mask pin), reseed fails open silently",
+   "tracked_in": "#831, #646, docs/hardware/evt-silicon-validation.md \u00a79",
+   "notes": "Production fence forces the feature, so a shipping image is 'satisfied-by-construction' with no evidence (CLAUDE.md Build and Test)."
+  },
+  {
+   "gap": "No persistent telemetry / fault counters: TZIC violation count, TAMP reasons, PIN-attempt reasons, reset causes and ECC events are SRAM-only or log-only; a unit returned from the field cannot explain a lockout. Trezor persists telemetry (core/embed/sec/telemetry) and unit_properties/hw_revision",
+   "tracked_in": "pin_attempt_log.rs:20-27 names the persist-at-lockout follow-up; #715 (field lockout with no evidence); #595 (per-unit option-byte record in prodtest report); #487 (no hw-model/revision binding in signed preimage). No dedicated telemetry issue found (grep docs for 'telemetry' hits only vendor-signing-key-compromise.md:292)",
+   "notes": "CLAUDE.md 'No new per-signature flash state' constrains the design; a lockout-time write is the proposed exception."
+  },
+  {
+   "gap": "Anti-counterfeit / MCU attestation: only DBGMCU_IDCODE is read (report-only, never recorded on bench); no CPUID/UID plausibility, DHUK-fingerprint-vs-factory record, or boot-time SE attestation; no MCU device certificate (Trezor has sec/mcu_attestation with ML-DSA-44 + sys/cpuid)",
+   "tracked_in": "#210, #244, #249, #27, threat-model.md \u00a79.4 and :341, production-security.md:391, HW-ASSUME-REV-U (falsifying test exists=false)",
+   "notes": "Owner caveat: invariant #5 forbids any classical signer and any second PQ signer in the wallet ('one algorithm in the wallet, one in the FSBL'); an ML-DSA attestation key as Trezor does would need an explicit owner decision."
+  },
+  {
+   "gap": "Debug re-enable surface: OEM2/Debug-Authentication keys not provisioned (ship outside the SESIP-evaluated configuration), RDP check is warn-and-continue by default, WRP1A/OEM lock masks unpinned so the FSBL tripwire cannot detect a cleared WRP",
+   "tracked_in": "#40, #46, #34, #36, HW-ASSUME-OEM2-ABSENT, fsbl/src/optbytes.rs:24-29",
+   "notes": "Owner decision 2026-07-14/07-21 (ship RDP-0, first-boot self-lock) constrains the shape; do not propose a factory RDP-2 burn."
+  },
+  {
+   "gap": "Never-run-tests oracle not wired to Makefile or any workflow; 218-entry allowlist; multiple suites (pqsigner-rollback 156, pqsigner-geometry 8, fsbl geometry guards, 17 sphincs-c10 KAT-adjacent, 21 feature-gated) execute nowhere even though invariant #10 calls geometry 'CI-pinned'",
+   "tracked_in": "#725, #720, #721, #722, #724",
+   "notes": "Confirmed by grep: no `check_tests_actually_run` in Makefile or .github/."
+  },
+  {
+   "gap": "Several drift/soundness gates are local-only: prod-symbol-audit (binary-level never-ship audit), check-fi-ir, verify-mmio-addresses, checkct, verify-tla/verus/crux/halmos/kontrol/lean4checker, kani-heavy, verify-kani-mutation-heavy",
+   "tracked_in": "scripts/gate_enforcement.json (local_documented tier), #312 (checkct CI rewire), #466 (nanoda allowlist in CI), docs/STATUS.md \u00a7B 'blocked-on: code'",
+   "notes": "G1 meta-gate makes the tier explicit, so this is honest rather than hidden, but a reviewer must not read 'gate exists' as 'gate runs'."
+  },
+  {
+   "gap": "On-silicon validation of nearly every systemic defence is outstanding: no FI rig campaign (Scaffold/FaultyCat on hand, ChipWhisperer not acquired), no dudect on U585, no TAMP test, no IWDG NS-denial receipt, no power-cut torn-QW rig, no RDP-2 downgrade attempt; literature now shows 76% PIN-glitch bypass on the STM32U5 sibling",
+   "tracked_in": "#301, #298, #236, #391, #79, #392 (C7 reset-at-swept-delay, zero new hardware), #544, HW_ASSUMPTIONS.json falsifying_test rows, docs/security/red-teaming.md \u00a7\u00a74-6, \u00a713.2",
+   "notes": "The reset-at-swept-delay harness (#392) and TAMP test (#391) need no new hardware and are the cheapest next evidence."
+  },
+  {
+   "gap": "Temperature / cold-boot SRAM-retention defence is required by HARDENING.md \u00a74.7 but no code reads the internal temperature sensor or ADC",
+   "tracked_in": "Not tracked as an issue (gh 'temperature' search returns only #52/#248/#705); only docs/security/HARDENING.md:251-256",
+   "notes": "grep TSENSE|VREFINT|ADC in secure/src: no sensor driver. Partially mitigated by SRAM2_RST=0 plan (not applied) and reset-cause scrub."
+  },
+  {
+   "gap": "Correlated-fault class (same fault in both double-compute passes), 3-fault sweeps, leakage over the FI guards themselves, and a proof that no single fault bypasses both FI gates in c10_sign_verified remain open; firmware-update staging window and fsbl::verify_images have no FI sweep",
+   "tracked_in": "#592, #593, #240, #241, #296, #633, #591",
+   "notes": "The SHAKE/masked-SHA2 lever is DECIDED-closed (memory feedback_shake_vs_sha2_decided) \u2014 do not list it as a mitigation candidate."
+  }
+ ],
+ "drift": [
+  "docs/security/threat-model.md:508-509 \u00a79.5 says 'TAMP IRQ handler is log-only ... must wipe before production' \u2014 code already escalates under `tamp-wipe` (secure/src/hw/tamp.rs:364-396, tzic.rs:227) and the nsc/mod.rs:745-765 fence forces it for shipping dual-SE builds; the doc is stale in the pessimistic direction (issue #75's checklist is likewise partly stale).",
+  "secure/src/main.rs:1395-1405 call-site comment says TAMP is 'Log-only; never halts and never wipes' and secure/src/hw/tamp.rs:367-370 doc comment on `on_tamp_irq` says 'Never halts and never wipes \u2014 production hardening will flip the trigger response in a later commit', while the body immediately below (tamp.rs:383-396) calls `trigger_intrusion_wipe` under `tamp-wipe`.",
+  "docs/security/brownout-hardening.md:314 posture table says 'IWDG | disabled | no code (Stage 4)' and :646 'Stage 4 ... not started' \u2014 secure/src/hw/iwdg.rs is a 354-line implemented, production-forced driver (nsc/mod.rs:247-260, RELEASE_FEATURES Makefile:2662).",
+  "docs/security/threat-model.md:502-503 \u00a79.3 says the TZSC allowlist is 'regressed to all-NS' with GTZC2 base unconfirmed \u2014 secure/src/sau.rs:257-383 writes exact SECCFGR1/SECCFGR3 images under const assertions and CLAUDE.md records silicon validation 2026-05-20; issue #70 (ship-blocker 'Restore GTZC1_TZSC_SECCFGR allowlist') also reads as stale against the code.",
+  "contracts/verification/docs/HW_ASSUMPTIONS.json HW-ASSUME-TRNG-ENTROPY status 'cert-cited' with statement 'meets NIST SP 800-90B in our RNG_CR configuration' \u2014 issue #704 shows RNG_CR=0x00F00D00 is RM0456 configuration C, which per Table 465 is not NIST-certifiable; the ledger row has not been downgraded (last_reviewed 2026-07-17).",
+  "secure/src/consumption_mask_prng.rs:22-30 STATUS block (2026-09-01) says the module has 'NO production caller' and the live driver keeps a duplicate xorshift \u2014 secure/src/hw/consumption_mask.rs:156-183 now calls `consumption_mask_prng::seed`/`advance`; the stale comment misstates test coverage in the pessimistic direction.",
+  "Issue #366's grep-verified-open checklist is partly stale: `rr-2` ('0 BUSY_TICKS in iwdg.rs') \u2014 MAX_BUSY_TICKS exists at secure/src/hw/iwdg.rs:137; `tz-2` ('0 CSLCKR/LCK in sau.rs') \u2014 `lock_security_config` writes SYSCFG CSLCKR + AIRCR lock at sau.rs:676-700; `tz-1` ('no OPTR read in fsbl/') \u2014 fsbl/src/optbytes.rs reads OPTR; `sca-1` periodic reseed exists (consumption_mask.rs:174-183). `tz-3` (RCC_SECCFGR) and `sh-3` (bhk.rs:197-207 'any byte != 0xFF') remain genuinely open.",
+  "Issue #47 still describes the tamp.rs base-address bug (0x5600_4400) as open \u2014 fixed: secure/src/hw/tamp.rs:132 uses 0x5600_7C00; the hardware-mode-erase half of #47 remains open.",
+  "CLAUDE.md invariant #10 says the geometry registry 'is CI-pinned' \u2014 issue #720 and memory project_tests_never_run_gate record that pqsigner-geometry's 8 tests execute in no workflow; the never-run oracle itself is unwired (#725).",
+  "docs/security/HARDENING.md \u00a74.4-4.7 is written as requirements ('BOR set high', 'wire tamper inputs', 'PVD/supervisor', 'temperature sensing', 'wipe ISR invoked by TAMP') with no status column; a reader could take it as implemented \u2014 only the TAMP\u2192wipe path and the inactivity timer exist in code; BOR/PVD/temperature/ bulk-capacitor-sized wipe ISR do not.",
+  "docs/STATUS.md 'AT A GLANCE' says `make checkct` CI enrollment is keyboard-doable now and lists it under blocked-on: code \u2014 gate_enforcement.json registers checkct as local_documented, consistent, but the 'driver coverage now complete' row cites Makefile:4367 while the target is at Makefile:4926 (line-number rot, low severity).",
+  "Trezor-comparison doc \u00a7C-1 and the critical-port backlog meta-finding (#366 \u00a70) state the bottleneck is execution, not discovery \u2014 consistent with this inventory: most systemic gaps (PVD, ECC, MSPLIM/MPU, TAMP silicon test, FSBL TRNG) have existed as tracked rows since 2026-05/06 with no code."
+ ],
+ "owner_decisions": [
+  "ML-KEM-1024 inner wrap DESCOPED 2026-07-07 \u2014 do not re-raise; consequence: per-device final SE rotation is load-bearing for the Grover-2^64 residual (CLAUDE.md invariant #3).",
+  "SHAKE / masked-SHA2 for SLH-DSA is DECIDED-closed (stay on plain SHA-2; HASH peripheral does not accelerate Keccak; parameter switch would move the CREATE2 address). Never list as an SCA mitigation candidate (memory feedback_shake_vs_sha2_decided).",
+  "Shipping model 2026-07-14 (work-todo #36): ship at RDP-0, first field boot self-locks to RDP-2, BHK first write and transport-credential rotation happen on-device; NO factory/fixture RDP-2 burn and no factory-held final pairing secret. Any PVD/BOR/option-byte proposal must fit the WRP-set \u2192 RDP-2 ordering of invariant #10 (RDP-2 with unprotected FSBL pages permanently forfeits the guarantee).",
+  "Invariant #10 (2026-07-21): no runtime write path may touch the FSBL range; FSBL must own the display for its fingerprint window; monolithic builds are bench-only. FSBL changes (e.g. TRNG init for wait_random) must respect the 40,960 B / 38,912 B LOAD-span and 16 KiB stack budgets (scripts/check_fsbl_geometry.py).",
+  "Invariant #5: one signing primitive (SPHINCS+C10) in the wallet, one in the FSBL; no classical signer anywhere and no 'just-in-case' fallback \u2014 a Trezor-style ML-DSA-44 MCU attestation key would require an explicit owner decision, not a port.",
+  "No new per-signature flash state beyond the page-123 counter (CLAUDE.md 'What NOT to do') \u2014 constrains persistent telemetry / sign-quota / fault-counter designs to at most exceptional-event writes (e.g. lockout-time ring persist proposed in pin_attempt_log.rs).",
+  "OPTIGA S-1/S-2/S-3 ship-blockers are deferred BY DESIGN (chips cost money, LcsO ratchet irreversible); mention once as known/planned, do not frame as a competing priority (memory feedback_optiga_shipblockers_deferred).",
+  "TROPIC01 removed 2026-07-14 (dual-SE only); no third entropy/SE source should be proposed.",
+  "Domain tags are sticky-but-renamable pre-launch; KDF tag changes are forbidden mid-bring-up.",
+  "Pixel UI (ui-px) scroll-to-end ON (2026-09-24) and atlas-in-NS-slot (2026-09-23) decisions are closed \u2014 'do not re-litigate without new evidence'; the ui-px flash lever (76,949 B over) is an open owner decision that competes with any systemic-defence code growth in the secure slot.",
+  "tamp-wipe/tzic-wipe default-OFF on bench builds is a deliberate bring-up-safety choice (audit tz-tamper 20260611 MEDIUM-1); production is forced ON by fence \u2014 proposals must preserve bench safety (a false ITAMP9 during probe sessions would wipe bench chips).",
+  "Three-way boot reconciliation is explicitly NOT claimable (invariant #2 narrowed; production SE050 UserID policy denies attempt-attribute reads) \u2014 do not propose SE050 as a boot-reconciliation input without a separately reviewed policy/backend decision."
+ ]
+}

@@ -1,0 +1,438 @@
+{
+ "surface": "Fault-injection hardening (voltage/EM/laser glitch) \u2014 key=fi. Threat model: glitching FSBL image verify, PIN gate / attempt counter, SE tunnel establishment, signature release, RDP/option-byte checks, wipe paths.",
+ "vendor": "Trezor (SatoshiLabs) trezor-firmware, /home/nicola/repos/trezor-firmware @ 6ab39e95cf45d4b25b3f677806012ac660ae7a51 (2026-10-07). All paths below are relative to that repo unless prefixed PQSigner_OS/.",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "secbool Hamming-distant booleans + ensure() fatal gate",
+   "evidence": [
+    "core/embed/rtl/inc/rtl/secbool.h:24-26",
+    "core/embed/rtl/inc/rtl/secbool.h:28-47",
+    "core/embed/rtl/inc/rtl/error_handling.h:144-149",
+    "core/embed/rtl/error_handling.c:97-102"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Every security predicate is a 32-bit `secbool` where sectrue=0xAAAAAAAA and secfalse=0 (16-bit Hamming distance), so a single bit flip or a register zeroing cannot produce 'true'. `secbool_and/or/not` compare explicitly against sectrue rather than testing non-zero, and `ensure(cond,msg)` halts via `__fatal_error` whenever the value is not exactly sectrue \u2014 any corrupted/intermediate value is treated as failure. This is the base layer every other measure builds on. pq1 already has OK_SENTINEL/FAIL_SENTINEL in `pqsigner-fi` (PQSigner_OS/secure/src/fi.rs:1-30) but the rest of the secure crate still passes ordinary Rust `bool`/`Result` through most gates, so only the sentinel-wrapped call sites get this property.",
+   "notes": "Trezor applies the type universally (every driver returns secbool); pq1 applies it only where `check_true_into_sentinel` is used. Audit the secure-world sign/unlock/wipe paths for plain `bool` verdicts that feed a branch."
+  },
+  {
+   "item": "fih_delay()/fih_ensure(): random 0\u2013127 \u00b5s jitter before every boardloader critical check",
+   "evidence": [
+    "core/embed/projects/boardloader/main.c:111-129",
+    "core/embed/projects/boardloader/main.c:152",
+    "core/embed/projects/boardloader/main.c:255-275"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`fih_delay(v)` calls `systick_delay_us(rng_get() % 128)` and returns v unchanged; `fih_ensure` routes the condition through it before casting to secbool and calling ensure. The boardloader (equivalent of pq1's FSBL) starts `ensure_signed_bootloader` and `try_bootloader_update` with `fih_delay(0)` and wraps header-validity, signature, model and anti-downgrade checks in `fih_ensure`, so an attacker cannot trigger a glitch at a fixed offset from reset/power-on. pq1's FSBL already wraps `verify_signature` in `fi::check_true_into_sentinel` with a wait-random loop (PQSigner_OS/fsbl/src/main.rs:314-321, fsbl/src/verify.rs:83-86) but not every ensure-equivalent (manifest parse, floor compare, slot selection) is jittered.",
+   "notes": "Trezor's delay is TRNG-driven per check; the function is `no_stack_protector` so it cannot itself be a glitch target via the canary path."
+  },
+  {
+   "item": "Volatile next-stage address zeroed first and set only at the end of the verification chain (boardloader)",
+   "evidence": [
+    "core/embed/projects/boardloader/main.c:250-252",
+    "core/embed/projects/boardloader/main.c:279",
+    "core/embed/projects/boardloader/main.c:356-369"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`next_stage_addr` is a `volatile uint32_t` in main() initialised to 0 (comment '// FIH'); `ensure_signed_bootloader` writes 0 again on entry and writes the aligned code address only as its last statement after all fih_ensure gates. `jump_to_next_stage(next_stage_addr)` therefore jumps to address 0 (reset-vector/fault) if any check was skipped by an instruction-skip glitch, instead of into unverified code. pq1's FSBL branches to a slot after `filter_valid`/`verify_images`; the same 'jump target is data produced by the last verified step, default 0' structure is cheap and directly applicable.",
+   "notes": "Pairs with measure 4 (bootloader uses a function pointer with the same idea)."
+  },
+  {
+   "item": "Default-fail function pointer + triple redundant compare before jumping to firmware (bootloader)",
+   "evidence": [
+    "core/embed/projects/bootloader/main.c:118-121",
+    "core/embed/projects/bootloader/main.c:380",
+    "core/embed/projects/bootloader/main.c:593-595",
+    "core/embed/projects/bootloader/main.c:630-632",
+    "core/embed/projects/bootloader/main.c:693-701"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`firmware_jump_fn` is a `volatile` function pointer initialised to `failed_jump_to_firmware` (which calls `error_shutdown(\"(glitch)\")`); it is only reassigned to `real_jump_to_firmware` inside `if (sectrue == fw.firmware_present)`. Before that, `ensure(dont_optimize_out_true * (fw.firmware_present == fw.firmware_present_backup))` is evaluated three separate times (after fw_check, after the touch window, immediately before the assignment) using a volatile global so the compiler cannot fold them; `firmware_present_backup` is a second copy written in fw_check.c:152. A glitch that flips one copy or skips one check is caught by the others. Applicable to pq1's FSBL slot branch and to the secure world's post-verify release of a signature.",
+   "notes": "`real_jump_to_firmware` (bootloader/main.c:417-476) re-runs the entire verification chain via `fw_run_prepare` with plain `ensure`s \u2014 verification is done twice (fw_check, then fw_run_prepare) before the jump."
+  },
+  {
+   "item": "fw_check: volatile secbool staircase \u2014 each stage runs only if the previous one equals sectrue, combined with secbool_and",
+   "evidence": [
+    "core/embed/projects/bootloader/fw_check.c:59-66",
+    "core/embed/projects/bootloader/fw_check.c:71-100",
+    "core/embed/projects/bootloader/fw_check.c:111-153",
+    "core/embed/projects/bootloader/fw_check.c:167-231"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Every intermediate verdict (vhdr_present, vhdr_keys_ok, vhdr_lock_ok, img_hdr_ok, model_ok, signatures_ok, version_ok, secmon_*) is a `volatile secbool` initialised to secfalse and the next step is guarded by `if (sectrue == prev)`; later stages additionally fold the previous verdict in with `secbool_and(prev, new)`. Skipping any one check leaves its variable at secfalse, so the final `firmware_present` cannot become sectrue without every stage having executed and stored sectrue. This is exactly the shape of pq1's FSBL manifest\u2192floor\u2192image verify chain and the secure-world `c10_sign_verified` 7-step CfiCounter; the volatile-staircase variant is a cheap complement to a step counter.",
+   "notes": "pq1 already has `fi::CfiCounter` (CLAUDE.md, c10_sign_verified); the staircase adds data-flow dependency on top of control-flow counting."
+  },
+  {
+   "item": "Bootloader workflow fatal path: treat 'impossible' state as glitch \u2192 regenerate BHK + erase storage + erase backup RAM",
+   "evidence": [
+    "core/embed/projects/bootloader/main.c:677-690"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "When the bootloader workflow returns `WF_ERROR_FATAL` or any unexpected enum value ('erase storage if we saw flips randomly flip, most likely due to glitch'), it calls `secret_bhk_regenerate()` (new random BHK \u2192 all SAES-wrapped data unrecoverable), `erase_storage()`, `backup_ram_erase_protected()`, then `error_shutdown`. Unexplained control-flow is punished with key destruction rather than a retry. pq1 has the equivalent primitive (`tzic::trigger_intrusion_wipe` / dual-SE admin-wipe) but it is wired to tamper and PIN exhaustion, not to 'default:' arms of state-machine switches in the sign/unlock/first-boot flows.",
+   "notes": "Policy decision: Trezor accepts bricking-by-wipe on any unreachable state in the bootloader. pq1 should decide the same for fw_update staging and first_boot journal states."
+  },
+  {
+   "item": "wait_random(): TRNG-length busy loop with invariant check (i + j == wait) and completion double-check",
+   "evidence": [
+    "core/embed/sec/random_delays/stm32/random_delays.c:186-203",
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:270-273"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Draws a byte from a ChaCha DRBG, then loops `wait` times with two volatile counters moving in opposite directions; every iteration asserts `i + j == wait` and after the loop asserts `i == wait && j == 0`, calling `error_shutdown(\"(glitch)\")` on violation. The loop both desynchronises timing (jitter) and detects instruction-skip/loop-exit faults on itself. pq1 has ported exactly this (PQSigner_OS/secure/src/fi.rs:79-82 cites these lines; used in nsc/mod.rs:1405-1430 around gated_unlock and in FSBL) \u2014 already applied.",
+   "notes": "Trezor compiles it out under TREZOR_PRODTEST (random_delays.c:187); pq1 no-ops it under e2e-test (fi.rs). CI must gate that both are off in production builds. Note `drbg_random8` returns constant 128 if its critical section is locked (random_delays.c:72-85) \u2014 accepted degradation."
+  },
+  {
+   "item": "RDI (Random Delay Interrupt): 1 ms periodic secure timer inserting floating-mean random stalls, DRBG-seeded, session component refreshed on every USB packet / syscall",
+   "evidence": [
+    "core/embed/sec/random_delays/stm32/random_delays.c:33-70",
+    "core/embed/sec/random_delays/stm32/random_delays.c:105-180",
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:229-245",
+    "core/embed/io/usb/stm32/usb.c:728",
+    "core/embed/io/usb/stm32/usb.c:748",
+    "core/embed/sys/smcall/stm32/smcall_dispatch.c:161-167",
+    "core/embed/projects/secmon/main.c:117-120",
+    "core/embed/projects/kernel/main.c:145-148"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "A systimer callback fires every 1 ms and executes `wait(drbg_random8() + session_delay)`, a hand-written assembly loop with a 3-cycle body and a tbb-dispatched remainder so the delay is exact to the cycle. `session_delay` is a second random byte refreshed only when an externally observable event occurs (USB packet, SMCALL from NS), implementing the Clavier/Coron/Dabbous 'floating mean' so an attacker who triggers on a USB packet cannot predict the cumulative offset of later code. The DRBG is ChaCha seeded with 50 B TRNG and reseeded every 1000 generates. The handler also `ensure`s that `rdi_disabled` holds a valid secbool, detecting corruption of its own enable flag. For pq1 this is the missing piece: `wait_random` only protects call sites that invoke it; RDI protects everything else (the multi-second SPHINCS+C10 sign, SE tunnel setup) against trigger-locked glitching. pq1 has an S-only TIM already (timeout.rs, TIM2/TIM3 secured in sau.rs) so a secure periodic handler is available; cost is a few % of sign time (~255 cycles/ms at 160 MHz is ~0.2%).",
+   "notes": "Floating mean: refresh hook should be called at the NSC veneer entry (the point an attacker can observe) \u2014 Trezor does this in smcall_dispatch.c:166. Interaction with pq1's DWT-timed sign benchmarks: expect \u00b1jitter."
+  },
+  {
+   "item": "Option-byte exact-equality check at every boardloader boot, force-rewrite loop, and 'had to change' \u21d2 secret_safety_erase (BHK regeneration)",
+   "evidence": [
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:124-170",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:188-264",
+    "core/embed/projects/boardloader/main.c:325-340",
+    "core/embed/sec/secret/stm32u5/secret.c:655-658"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`flash_check_option_bytes` compares FLASH->OPTR, SECBOOTADD0R, WRP1AR/1BR/2AR/2BR, SECWM1R1/1R2/2R1/2R2 against compile-time constants with `!=` (exact equality, not bit tests), so any unexpected bit (e.g. RDP regressed, TZEN cleared, WRP removed, BOR lowered) fails. If they mismatch, `option_bytes_configure` loops `do { flash_set_option_bytes(); } while (sectrue != flash_check_option_bytes())` and then returns secfalse, upon which main() calls `secret_safety_erase()` \u2014 regenerating the BHK so all previously wrapped secrets are destroyed \u2014 and resets. The security posture is 'option bytes are either exactly right or the device wipes itself and repairs them'. pq1's FSBL tz-1 tripwire (PQSigner_OS/fsbl/src/optbytes.rs, main.rs:243-268) reads and halts on mismatch but does not wipe or repair, and the FSBL does not own option bytes by design (invariant #10). pq1's first_boot does 'verify, don't set' (first_boot/mod.rs:178-183). The applicable delta is: on a persistent mismatch after RDP-2, trigger the intrusion wipe (BHK/SE wipe) rather than just halting \u2014 because a halted device with intact secrets is a better glitch target than a wiped one.",
+   "notes": "Trezor's BOR level is forced to OB_BOR_LEVEL_4 (~2.8 V) for 3V3 parts (option_bytes.c:40-48,78-84); pq1 should pin BOR_LEV in the ship profile and have the tripwire check it (voltage glitch defence at the silicon level)."
+  },
+  {
+   "item": "OEM1/OEM2 RDP-regression keys cleared to 0xFFFFFFFF before locking and OEMxLOCK asserted clear on every boot (boardloader, secmon, kernel)",
+   "evidence": [
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:213-222",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:247-250",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:261",
+    "core/embed/projects/secmon/main.c:122-124",
+    "core/embed/projects/kernel/main.c:180-182",
+    "core/embed/models/build.rs:276-337"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "STM32U5 has write-only OEM1KEYR/OEM2KEYR registers; if an OEM key is programmed, RDP can later be regressed with that key (Trezor's comment: 'to ensure that there is no ability to reverse the RDP'). Trezor writes all four key words to 0xFFFFFFFF immediately before writing OPTR, and because the keys cannot be read back it checks the only observable, `FLASH->NSSR OEM1LOCK/OEM2LOCK == 0`, with `ensure(..., \"OEM1 KEY SET\")` \u2014 run in the boardloader lock path and again in secmon/kernel init on every boot (USE_OEM_KEYS_CHECK is set for all U5 models in models/build.rs). For pq1 this is directly load-bearing: the device ships at RDP-0 and self-locks to RDP-2 on first field boot (invariant #10, rdp2-self-lock). A factory/transit attacker who programs an OEM2 key at RDP-0 could keep a regression path through the self-lock. first_boot Phase A must clear OEM keys and assert OEMxLOCK==0 before programming RDP=0xCC, and the FSBL tripwire should include OEMxLOCK in its persistent check.",
+   "notes": "Confirm the exact regression semantics against RM0456 \u00a7FLASH 'RDP regression with OEM keys' before relying on the write-0xFFFFFFFF idiom; Trezor's comment states the OEMxLOCK bits are unset only when the keys are written as 0xFFFFFFFF."
+  },
+  {
+   "item": "Secure boot address lock (SECBOOTADD0R BOOT_LOCK) pinned to boardloader start",
+   "evidence": [
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:86-87",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:132-134",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:196"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`FALSH_SECBOOTADD0R_VALUE` ORs `FLASH_SECBOOTADD0R_BOOT_LOCK` with the boardloader address so the secure boot vector cannot be redirected (BOOT0 pin/option override ignored) and the value is part of the exact-equality check. For pq1's 'verify-once-physically' story (FSBL must always run first), BOOT_LOCK is the silicon guarantee that a glitch on BOOT0 sampling or an option-byte edit cannot bypass the FSBL; it belongs in the ship option-byte profile and in the tz-1 tripwire set.",
+   "notes": "Check whether PQSigner_OS/fsbl/src/optbytes.rs already includes SECBOOTADD0R; the grep showed four registers compared but not which."
+  },
+  {
+   "item": "PVD (programmable voltage detector) at 2.8 V, highest-priority IRQ, any excursion \u21d2 error_shutdown",
+   "evidence": [
+    "core/embed/sys/pvd/stm32/pvd.c:28-56",
+    "core/embed/projects/bootloader/main.c:320-322",
+    "core/embed/projects/kernel/main.c:169-171"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Independently of the BOR option byte, `pvd_init` enables the PWR PVD at level 5 (~2.8 V) with rising+falling interrupt at IRQ_PRI_HIGHEST; the handler resets the MPU and calls `error_shutdown(\"PVD IRQ\")`. A supply dip used for a voltage glitch that is long enough to be seen by the PVD comparator therefore aborts the device before the glitched code path can release anything. Enabled in the bootloader and kernel (comment notes it is active 'regardless of the flash option byte BOR setting'). pq1 is USB-powered with no battery, so VBUS/USB-C is the primary voltage-glitch injection point; PQSigner_OS/secure/src has no PVD driver (only a comment in main.rs:4643 and ITAMP1 backup-domain monitoring in tamp.rs). This is a small, self-contained add: configure PWR_SVMCR PVDLS/PVDE in the secure world, route PVD_PVM_IRQn secure, and treat it as a tamper/zeroize event.",
+   "notes": "PVD is a slow comparator (\u00b5s); it does not catch ns-scale crowbar glitches but raises the attacker's bar and catches cheap USB-supply attacks. Pair with BOR level pinning (measure 9 notes)."
+  },
+  {
+   "item": "TAMP internal tampers in 'confirmed' (erase) mode: voltage, temperature, LSE clock, SWD-at-RDP, ADC analog watchdogs, crypto-peripheral fault, IWDG; highest-priority secure IRQ",
+   "evidence": [
+    "core/embed/sec/tamper/stm32u5/tamper.c:125-173",
+    "core/embed/sec/tamper/stm32u5/tamper.c:252-276",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:376-379",
+    "core/embed/projects/kernel/main.c:139-144"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`tamper_init` enables PWR BDCR1 MONEN (battery/voltage monitoring), sets an external-input filter, enables ITAMP1/2/3/5/6/7/8/9/11/12/13 and writes `TAMP->CR3 = 0` so every internal tamper is 'confirmed' \u2014 the hardware itself erases the backup registers (where the BHK and cached SE pairing keys live) with no software in the loop. ITAMP9 (SAES/AES/PKA/TRNG fault) is the direct FI detector: a glitch that corrupts a crypto peripheral triggers hardware key erasure. ITAMP7/12/13 (ADC4 analog watchdogs) are enabled although Trezor notes some 'are never triggered'. The IRQ is secure (NVIC_ClearTargetState(TAMP_IRQn)) and highest priority; the handler re-initialises the MPU (tamper erases SRAM2) and reboots into RSOD. pq1 has already ported this (PQSigner_OS/secure/src/hw/tamp.rs:1-58 cites tamper.c:100-207; `tamp-wipe` forced on for shipping dual-SE images). Residual delta: (a) tamp.rs is 'log-only' unless tamp-wipe and 'polled' unless tamp-irq \u2014 production must use the IRQ path; (b) confirm CR3=0 confirmed-mode so BKP erase is hardware-driven, not dependent on firmware reaching the handler; (c) pq1 does not appear to configure the ADC4 analog watchdogs that back ITAMP7/12/13 \u2014 on pq1 an ADC watchdog on VDD/VBUS is a cheap additional voltage-glitch sensor.",
+   "notes": "Trezor only enables the external tamper input in PRODUCTION kernel builds (kernel/main.c:141-143); pq1's 48-pin package may have no free TAMP_INx pin \u2014 internal tampers still apply."
+  },
+  {
+   "item": "Every reboot/halt/panic path runs on a fresh stack with interrupts off, MPU off, BKP registers hardware-erased (TAMP BKERASE), SAES clock cut, all RAM except the new stack zeroed, GPRs cleared",
+   "evidence": [
+    "core/embed/sys/startup/stm32/sysutils.c:31-137",
+    "core/embed/sys/startup/stm32/bootutils.c:103-138",
+    "core/embed/sys/startup/stm32/bootutils.c:142-199",
+    "core/embed/sys/startup/stm32/bootutils.c:244-285",
+    "core/embed/sys/stack/stm32/stack_utils.c:24-37",
+    "core/embed/sys/task/stm32/system.c:92-166"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`call_with_new_stack` (naked asm, no stack protector) does CPSID F, disables MPU, optionally disables SAES and sets TAMP_CR2 BKERASE (hardware erase of all backup registers \u2014 the BHK copy and cached secrets), moves MSP/MSPLIM to a fresh stack, clears LSPACT and R4\u2013R12, then branches to a phase-2 routine that resets peripherals (no DMA in flight), `clear_unused_stack`s, `memregion_fill`s all runtime RAM except the stack/bootargs and only then NVIC_SystemReset / jumps. `system_emergency_rescue` does the same on any panic/fault, re-initialises .data/.bss and restores the stack-protector guard before displaying RSOD. The point for FI: an error path never continues on the (possibly corrupted) stack and never leaves secrets in SRAM or BKP where a second glitch could reach them. pq1 zeroizes on lock/tamper/brownout/inactivity (CLAUDE.md Lifecycle) and has `tzic::trigger_intrusion_wipe`, but the 'panic \u21d2 new stack \u21d2 BKERASE \u21d2 wipe all SRAM \u21d2 reset' discipline as a single primitive used by every fatal path is worth checking against the Rust panic handler and the SE-unlock error paths.",
+   "notes": "`RSOD_INFINITE_LOOP` is explicitly unsupported on battery devices (bootutils.c:35-41) \u2014 pq1 has no battery, so halting after a fatal error (which Trezor prefers where power allows) is an option; a halted device must still have had its secrets erased first (halt_device_phase_2)."
+  },
+  {
+   "item": "BHK loaded into TAMP BKP0-7 then hardware-locked (BHKLOCK) and secret flash sector HDP-disabled before any firmware runs; reboot if already locked",
+   "evidence": [
+    "core/embed/sec/secret/stm32u5/secret.c:170-185",
+    "core/embed/sec/secret/stm32u5/secret.c:393-424",
+    "core/embed/sec/secret/stm32u5/secret.c:598-651",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:37-46"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`secret_prepare_fw` copies the BHK from the secret sector into the backup registers, then sets `TAMP_S->SECCFGR BHKLOCK` so the CPU can never read BKP0-7 again (only SAES can consume them), uncaches non-public keys, and unconditionally `secret_disable_access()` (FLASH SECHDPCR HDP1/2_ACCDIS) so the secret sector is unreadable until the next reset. `secret_bhk_load` reboots if BHKLOCK is already set (a glitch that re-entered the loader cannot reload a different key). secure_aes performs the documented 8 dummy reads of BKP0-7 before using the key (secure_aes.c:37-46). pq1 already uses BHK (bhk feature; MEMORY: 8-dummy-read latch validated) and page 126 holds the DHUK-wrapped SE050 BHK; the FI-relevant deltas are (a) assert BHKLOCK is set before the first signing/SE operation and treat an unexpected unlocked state as fatal, (b) pq1 has no HDP-style 'make the key material pages unreadable after boot' step \u2014 pages 123\u2013127 remain readable to secure code all session, so a glitch that redirects a secure read can exfiltrate them; HDP (or SECWM/HDP on the page range) closes that.",
+   "notes": "HDP is an STM32U5 feature (FLASH_SECHDPCR) available on pq1's U585; it is per-bank page-range and resets only on system reset."
+  },
+  {
+   "item": "Monotonic anti-rollback counter: unary encoding in the secret flash sector (16-byte all-zero slots), tail-must-be-erased validity check, write then read-back ensure",
+   "evidence": [
+    "core/embed/sec/monoctr/stm32u5/monoctr.c:61-158",
+    "core/embed/sec/monoctr/stm32f4/monoctr.c:50-124",
+    "core/embed/projects/bootloader/version_check.c:41-75",
+    "core/embed/sec/monoctr/inc/sec/monoctr.h:28"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The counter value is the number of leading 16-byte slots programmed to zero; `monoctr_read` counts them and then verifies that every remaining slot is fully 0xFF, returning secfalse if any later slot is partially programmed (an FI-induced partial write or a read glitch producing a stray zero is detected as corruption rather than read as a lower value). `monoctr_write` refuses decreases and programs one slot at a time. Callers (`ensure_firmware_min_version` etc.) write, read back, and `ensure(val == version)`, halting with 'downgrade protection' if the read-back disagrees. MONOCTR_MAX_VALUE=63 is a _Static_assert at build time. pq1's legacy OTP unary tally is rejected/fenced and Draft 1.1's typed floor is not approved (CLAUDE.md), so the specific layout is not transferable, but the two FI properties \u2014 'any non-monotone bit pattern is a hard error, not a smaller number' and 'write\u21d2readback\u21d2ensure' \u2014 are requirements the replacement floor API should carry.",
+   "notes": "On F4 Trezor uses OTP bits; on U5 it moved to the HDP/WRP-protected secret sector (readable only in MPU_MODE_SECRET)."
+  },
+  {
+   "item": "Flash write: pre-check only 1\u21920 transitions, skip-if-identical, read-back compare after program; erase verified by full 0xFFFFFFFF scan",
+   "evidence": [
+    "core/embed/sys/flash/stm32u5/flash.c:131-172",
+    "core/embed/sys/flash/stm32u5/flash.c:174-213",
+    "core/embed/sys/flash/stm32u5/flash.c:215-254"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`flash_write_quadword/burst` first checks `data[i] == (data[i] & current[i])` (refuse writes that would need 0\u21921), then compares the whole quadword and returns success without programming if it already matches, programs, and finally reads every word back and returns secfalse on any mismatch. `flash_sector_erase` scans the whole page for 0xFFFFFFFF after HAL erase. Every PIN-counter, monoctr and norcow write therefore has a read-back verification whose failure propagates as secfalse into `ensure`/`handle_fault`. For pq1 this matters for page 124 attempt precharge, page 123 tally commits and the first-boot journal on page 127 \u2014 a glitch during program or erase must not be silently accepted. PQSigner_OS/secure/src/hw/flash.rs should be checked for read-back-after-program and full-page verify-after-erase.",
+   "notes": "The '0\u21921 impossible' pre-check also catches a wrong-address write early."
+  },
+  {
+   "item": "PIN-attempt counter encoding resistant to bit-reset faults: each bit expanded to 01/10 (so 0x0000/0xFFFF are ill-formed), replicated across the whole flash block, every copy must agree, wait_random between copies",
+   "evidence": [
+    "storage/pinlogs_blockwise.h:8-55",
+    "storage/pinlogs_blockwise.h:57-87",
+    "storage/pinlogs_bitwise.h:17-68",
+    "docs/storage/index.md:176-215",
+    "docs/storage/index.md:337-345"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Blockwise (U5) variant: `expand_counter` maps an 8-bit fail count into a 16-bit value where each bit becomes a 2-bit pair with the second bit the complement (`^0xAAAA`), so an erased word (0xFFFF), a zeroed word (0x0000) or any single-bit flip fails `compress_counter`'s `((c ^ (c<<1)) & 0xAAAA) == 0xAAAA` well-formedness test and calls `handle_fault(\"ill-formed counter\")`. The value is written as many times as fit in a flash block and `pin_get_fails` decodes every copy with a `wait_random()` between them and requires all `PIN_LOG_HALFWORDS` copies to agree. Bitwise (F4) variant uses a random guard key with Hamming-weight/run-length constraints so half the bits are decoys. docs/storage/index.md:176 records that the original 0xFFFFFFFF counter was defeated by USB voltage manipulation. pq1's page-124 attempt counter is the same asset; its on-flash encoding should have no all-0xFF or all-0 valid state and a redundant-copy consensus read.",
+   "notes": "Explicit decision: blockwise (ECC-flash + SE models) encoding is 'significantly simplified' because the SE counters are the primary protection (docs/storage/index.md:337-345) \u2014 pq1 is in the same position (OPTIGA E120 + SE050 UserID) and can justify the simpler scheme, but not an unencoded one."
+  },
+  {
+   "item": "Increment-before-verify with read-back confirmation (ctr+1 == ctr_ck) and wipe checks both before and after the PIN check",
+   "evidence": [
+    "storage/storage.c:1182-1195",
+    "storage/storage.c:1209-1221",
+    "storage/storage.c:1223-1231",
+    "storage/storage.c:1297-1302"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`unlock()` reads the fail counter, `wait_random()`, wipes if `ctr >= PIN_MAX_TRIES`, sleeps the exponential backoff, then increments the counter BEFORE testing the PIN, immediately re-reads it and calls `handle_fault(\"PIN counter increment\")` unless `ctr + 1 == ctr_ck`. Only then is the PIN tested; on failure it `wait_random()`s and wipes if `ctr + 1 >= PIN_MAX_TRIES`; on success `pin_fails_reset()`. A glitch that skips the increment is caught by the read-back; a glitch that skips the pre-check wipe is caught by the post-check wipe. pq1's `gated_unlock` already precharges page 124 before the SE attempt (invariant #2) \u2014 the read-back-equality check after the precharge and the duplicated wipe test are the parts to confirm.",
+   "notes": "Trezor also syncs MCU and SE counters in `storage_get_pin_rem` (storage.c:1668-1693), burning MCU attempts down to the SE's remaining count \u2014 the analogue of pq1's directional boot cross-check (E120_used > page124_used \u21d2 wipe)."
+  },
+  {
+   "item": "handle_fault(): PIN counter doubles as a fault counter; re-entrant fault \u21d2 immediate wipe; increment + verify then fatal",
+   "evidence": [
+    "storage/storage.c:181-182",
+    "storage/storage.c:1815-1844"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Every FI check in storage.c calls `handle_fault(msg)`. It keeps a static `in_progress` secbool: if a fault is reported while one is already being handled (i.e. the attacker glitched the fault handler itself), it wipes storage and halts. Otherwise it reads the PIN-fail counter, increments it, reads it back, wipes if the increment did not take, and halts. Thus every detected fault costs the attacker one of the limited PIN attempts, bounding the number of glitch trials to PIN_MAX_TRIES before the device self-destructs, and the handler is itself fault-hardened. For pq1 this is a high-value, low-cost policy: route `fi::check_*` failures, CfiCounter mismatches and SE-tunnel verification failures through a handler that charges page 124 (and thus the E120/UserID attempt budget) before halting, so an attacker cannot glitch indefinitely.",
+   "notes": "Interacts with pq1 caveat #692 (persistent SE fault burning the page-124 budget on e2e images) \u2014 the design accepts that genuine faults consume attempts."
+  },
+  {
+   "item": "Loop-completion checks in constant-time compares and storage scans; random-masked word compare",
+   "evidence": [
+    "storage/storage.c:201-218",
+    "storage/storage.c:220-243",
+    "storage/storage.c:364-367",
+    "storage/storage.c:380-386",
+    "crypto/consteq.c:29-46",
+    "core/embed/crypto/src/fault_handler.c:26-28",
+    "crypto/fault_handler_noop.c:24-27"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`secequal`/`consteq` OR-accumulate differences (constant time) and then assert `i == n` after the loop (`volatile` i in consteq) so an early loop exit forced by a glitch is detected and reported via `handle_fault`/`tc_fault_handler` (which is `system_exit_error` in firmware; the noop variant carries a build-time 'NOT SUITABLE FOR PRODUCTION' warning). `secequal32` additionally masks each word with `random32()` (`(*p1 + mask - *p2) ^ mask`) so the compared values never appear in a register in clear form (combined SCA/FI hardening of the PVC compare). `auth_get` counts entries (`entry_count`/`other_count`) and checks that one extra `norcow_get_next` returns secfalse, so a glitch that terminates the storage scan early is detected. pq1 uses the `subtle` crate for constant-time equality; `subtle::ct_eq` has no loop-completion assertion and Rust iterators give no `i` to check \u2014 a thin wrapper that compares lengths and re-verifies via a second pass (as pq1 already does for the 4008-B signature compare in `c10_sign_verified`) would close this.",
+   "notes": "The ECDSA verifier also rejects an all-zero digest explicitly because it 'could be induced by a fault injection' and enables forgery (crypto/ecdsa.c:1127-1135) \u2014 N/A to C10 directly, but the generic lesson (reject degenerate inputs that a fault can create) applies to the C10 verifier's inputs (zero message/seed)."
+  },
+  {
+   "item": "Wipe-code (duress) comparison: integrity tag over stored code, HMAC computed twice with wait_random between and compared, then compared to stored tag",
+   "evidence": [
+    "storage/storage.c:423-473",
+    "storage/storage.c:1151-1156",
+    "core/embed/sec/rsod/rsod_special.c:34-46"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`is_not_wipe_code` first verifies an HMAC tag over the stored wipe-code data ('Check integrity in case of flash read manipulation attack'), then computes the entered PIN's HMAC twice (`computed_tag1`, `computed_tag2`) separated by `wait_random()` and `handle_fault(\"wipe code fault\")`s if they differ, and only then compares with the stored tag. A glitch that corrupts one HMAC evaluation to force or suppress a match is caught by the redundant evaluation. `ensure_not_wipe_code` wipes storage and reboots with the wipe screen. pq1 has a duress PIN (MEMORY: 'duress-pin IS implemented'); the double-compute-and-compare on the duress-match predicate (both directions: an attacker wants to suppress the duress wipe) is the applicable pattern.",
+   "notes": "Trezor compares via HMAC tags rather than raw PINs so the comparison itself never touches the plaintext duress code."
+  },
+  {
+   "item": "Storage authentication tag over the set of protected keys + version/upgrade-flag consistency checks with wipe on downgrade or bypassed upgrade",
+   "evidence": [
+    "storage/storage.c:253-259",
+    "storage/storage.c:300-388",
+    "storage/storage.c:1026-1076",
+    "storage/storage.c:178-179"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`auth_get` recomputes an HMAC-SHA256 over the XOR of per-key HMACs for every protected entry while scanning norcow and `handle_fault`s if it does not match the stored STORAGE_TAG \u2014 so deleting or reordering an entry by flash manipulation is detected. `check_storage_version` cross-checks the authenticated (encrypted) version, the unauthenticated version and the norcow sector version, plus a `STORAGE_UPGRADED_KEY` flag stored as Hamming-distant TRUE_WORD/FALSE_WORD (0xC35A69A5/0x3CA5965A); a downgrade or an upgrade-flag inconsistency calls `storage_wipe()` then `handle_fault`. pq1's page-123 log-structured off-chain counter store has per-record framing but the CLAUDE.md description does not mention an authentication tag over the set of records or a 'deleted record' detector \u2014 a glitch/flash-manipulation that drops the newest tally record would silently lower `local_offchain_count`.",
+   "notes": "The wipe-on-inconsistency policy is the key decision; detection without wipe leaves a retry oracle."
+  },
+  {
+   "item": "Hamming-distant / random 32-bit constants for state and command enums (boot commands, storage flags, Noise handshake stages)",
+   "evidence": [
+    "core/embed/sys/startup/inc/sys/bootargs.h:30-44",
+    "storage/storage.c:176-179",
+    "crypto/noise_xxpsk3.h:78-84",
+    "crypto/noise_xxpsk3.h:98-104"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Boot commands (STOP_AND_WAIT=0x0FC35A96, WIPE=0xD965CE36, \u2026), the storage upgraded flag (TRUE_WORD/FALSE_WORD) and the Noise handshake stage enums ('Random values are used for greater resilience agains glitching attacks') are all sparse random 32-bit values rather than 0/1/2, so a register/memory fault cannot move a state machine to an adjacent valid state and `default:` arms catch anything else. pq1 state machines with FI exposure \u2014 fw_update staging BEGIN\u2192CHUNK\u2192COMMIT, the first-boot journal phases on page 127, `SecureState.pin_verified`, the sign-dispatch mode (deploy/rotation/normal) \u2014 should use such encodings (pq1 already does for OK/FAIL sentinels and CfiCounter).",
+   "notes": "Cheap and compiler-proof; also makes RAM-dump forensics clearer."
+  },
+  {
+   "item": "Boot-header signature check with dual bookkeeping of used keys (sigmask / sigmask_inv) and hybrid Ed25519 + SLH-DSA verification",
+   "evidence": [
+    "core/embed/sec/image/boot_header.c:49-109",
+    "core/embed/projects/boardloader/main.c:258-270"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`boot_header_check_signature` iterates the required signature count, verifies the Ed25519 signature over H(merkle_root\u2016slh_sig) first and then the SLH-DSA signature over the Merkle root, and tracks consumption of key bits in two complementary variables (`sigmask &= ~bit`, `sigmask_inv |= bit`); at the end it requires `sigmask == 0 && sigmask_inv == hdr->sigmask` (comment '// FIH'), so a glitch that skips one verification iteration or corrupts the mask leaves the two masks inconsistent and the check fails. The Merkle root binds header+code. pq1 has a single C10 signature (invariant #5, no hybrid), but the complementary-mask 'every required step consumed exactly once' idea is the same family as pq1's 7-step CfiCounter \u2014 the delta is representing it as two redundant variables checked against each other, not one counter.",
+   "notes": "Trezor's boardloader PQ migration (TRZQ header, USE_BOOT_UCB) is the closest peer to pq1's FSBL; note Trezor keeps a classical co-signature, which pq1 has explicitly rejected."
+  },
+  {
+   "item": "Reset-cause gating in production: boot proceeds only from a genuine power-on (PINRSTF|BORRSTF exactly), then flags are cleared",
+   "evidence": [
+    "core/embed/sys/startup/stm32u5/reset_flags.c:26-42",
+    "core/embed/projects/boardloader/main.c:323"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`reset_flags_check` requires RCC->CSR's reset-source bits to equal exactly `PINRSTF | BORRSTF` in PRODUCTION (comment: 'assure that we arrive here due to a regular full power-on event, and not as a result of a lesser reset') and the boardloader clears them with RMVF on every boot. A glitch-induced software/watchdog/low-power reset therefore yields a distinguishable state. pq1 already classifies RCC_CSR (PQSigner_OS/secure/src/reset_cause.rs; `classify_bits(BORRSTF|PINRSTF) == Cold` in main_sau_pure_tests.rs:147) and zeroizes SRAM on abnormal IWDG resets; the policy question Trezor answers is whether an abnormal reset should also charge an attempt or refuse to unlock until a cold power cycle.",
+   "notes": "Trezor only enforces in PRODUCTION because it 'makes development painful' \u2014 a documented not-in-dev decision."
+  },
+  {
+   "item": "Compiler stack protector on all firmware (-fstack-protector-strong for board/bootloader, -all elsewhere) with __stack_chk_fail \u21d2 error_shutdown; MSPLIM set with safety margin",
+   "evidence": [
+    "core/embed/models/build.rs:88-92",
+    "core/embed/rtl/error_handling.c:25-34",
+    "core/embed/sys/startup/stm32/sysutils.c:91-95",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:29-30",
+    "core/embed/projects/boardloader/main.c:114"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "GCC stack canaries are enabled project-wide (strong in the loaders to save flash, all in kernel/secmon/prodtest); the failure hook halts the device. Functions that must not be glitchable through the canary path or that run before the guard exists (`fih_delay`, option-byte code, `call_with_new_stack`) are marked `no_stack_protector`. The Cortex-M33 MSPLIM is programmed 256 B above the stack base on every new-stack transition so overflow traps rather than corrupting data. Rust has no stack-protector equivalent, so the transferable part is MSPLIM: PQSigner_OS/fsbl/src/manifest.rs:30 notes the FSBL has '16 KB stack, no MSPLIM' and main.rs:172 flags it; the secure world should also set MSPLIM_S (and PSPLIM if used) so a glitch-induced deep recursion or stack-pointer corruption faults instead of overwriting page-123/124 buffers.",
+   "notes": "pq1 has `-Z emit-stack-sizes` bounding (10,372 B of 16,384 B) \u2014 MSPLIM turns that bound into a hardware trap."
+  },
+  {
+   "item": "MPU mode gating: secret/storage/bootloader/OTP flash windows are mapped only while in the specific MPU mode that needs them; SRAM XN; peripherals privileged-only",
+   "evidence": [
+    "core/embed/sys/mpu/stm32u5/mpu.c:43-79",
+    "core/embed/sys/mpu/stm32u5/mpu.c:446-538",
+    "core/embed/sec/secret/stm32u5/secret.c:110-117",
+    "core/embed/sec/monoctr/stm32u5/monoctr.c:111-149",
+    "storage/storage.c:1805-1813"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Region 6 is re-banked by `mpu_reconfig(MPU_MODE_SECRET|STORAGE|OTP|BOOTLOADER|\u2026)` around each access and restored afterwards, so outside those short windows the secret sector, storage and bootloader flash are simply unmapped and any glitch-redirected load/store faults. SRAM regions are XN (code injection via a glitched return is non-executable), peripherals are privileged-only. In pq1 the equivalent isolation is TrustZone SAU/GTZC (secure vs NS), but inside the secure world every page is always mapped; a secure-world MPU with a small 'window' discipline around page 123/124/126/127 and the OTP/option-byte reads would give the same 'wrong address \u21d2 fault' property against glitch-redirected accesses.",
+   "notes": "Trezor also uses TrustZone (secmon) on U5 AND the MPU inside the secure side \u2014 the two are complementary, not alternatives."
+  },
+  {
+   "item": "Image contents hashed per chunk and the padding to the end of the flash area verified (all 0xFF or all 0x00)",
+   "evidence": [
+    "core/embed/sec/image/image.c:437-523",
+    "core/embed/sec/image/image.c:428-435",
+    "core/embed/sec/image/inc/sec/image_hash_conf.h"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`check_image_contents` compares a SHA-256 (hardware HASH over secure DMA when USE_HASH_PROCESSOR) per IMAGE_CHUNK_SIZE chunk against the header's hash table, then scans every remaining byte/word of the slot and requires it to equal a single padding byte that must be 0x00 or 0xFF. Code or data hidden after the signed image (e.g. a glitch-reachable gadget written by an attacker with flash write access) fails verification; and chunked hashes bound how much a single skipped compare can admit. pq1's FSBL measures the active slot via `verify_images` (fsbl/src/verify.rs:38); whether it checks the unused tail of the 466,944-B secure slot and the NS slot for a uniform fill is worth confirming.",
+   "notes": "Per-chunk hashing also limits the blast radius of one glitched memcmp to one chunk; a single whole-image hash has an all-or-nothing compare."
+  },
+  {
+   "item": "TrustZone hardening of fault/reset routing: SYSRESETREQ restricted to secure in production, BusFault/HardFault/NMI secure-only, secure interrupt priority (PRIS), GTZC illegal-access IRQ at highest priority, FPU state cleared on exception return",
+   "evidence": [
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:110-146",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:253-281",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:287-298"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`tz_configure_arm` sets AIRCR.PRIS (secure exceptions pre-empt NS), clears BFHFNMINS (faults always land in the secure handler, so a glitch-induced fault cannot be serviced/suppressed by NS code), sets SYSRESETREQS in PRODUCTION (NS cannot reset the chip to escape a lockout/wipe in progress) and enables CLRONRET for the FPU. GTZC TZIC illegal-access interrupts are enabled for all peripherals at highest priority. RNG/SAES/HASH/IWDG/WWDG/RAMCFG/cache registers are forced secure. pq1's sau.rs already secures the AHB2 crypto block, I2C, TIM2/3, UCPD and has `tzic-wipe`; SYSRESETREQS and BFHFNMINS/PRIS should be confirmed set in `secure/src/sau.rs`/startup (grep in this review did not establish it).",
+   "notes": "Trezor leaves SYSRESETREQS off in dev builds for debuggability \u2014 pq1 CI should pin it on for mode-production."
+  },
+  {
+   "item": "Bootloader update via UCB: re-verify header hash, address-range/non-overlap and full signature in the boardloader before copying; bootloader erases the UCB at start so a glitched/partial update cannot repeat",
+   "evidence": [
+    "core/embed/sec/image/stm32/boot_ucb.c:59-123",
+    "core/embed/projects/boardloader/main.c:148-248",
+    "core/embed/projects/bootloader/main.c:496-500",
+    "core/embed/sec/image/stm32/boot_image.c:243-286"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The firmware stages a new bootloader and writes an update control block containing a hash of the new header; the boardloader independently re-reads the UCB, normalises addresses to the secure alias, bounds-checks that header and code lie in flash and do not overlap the destination, recomputes the header hash, recomputes the Merkle root and re-verifies the hybrid signature before erasing/writing page-by-page with ensure on every flash op. The verification that was done at install time (boot_image_replace) is repeated at boot by the trust root, so a glitch at install time cannot install unsigned code. pq1 by design has no FSBL update path (invariant #10), so the UCB mechanism itself is N/A; the transferable rule is 'verify at install AND verify at every boot by the immutable root' \u2014 which pq1's A/B fw_update + FSBL measurement already follows, and the non-overlap/alias-normalisation checks are relevant to fw_update staging address validation.",
+   "notes": "Trezor explicitly disabled a bootloader hash whitelist: 'don't whitelist the valid bootloaders for now' (boot_image.c:83-85)."
+  },
+  {
+   "item": "RNG: FIPS continuous test + SECS/CECS error gating; strong RNG XORs MCU TRNG with SE outputs and asserts via use-flags that every source was actually consumed",
+   "evidence": [
+    "core/embed/sys/rng/stm32/rng.c:41-82",
+    "core/embed/sec/rng/rng_strong.c:38-84"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`rng_read_u32` waits until SR shows DRDY with neither SECS (seed error) nor CECS (clock error) and rejects a value equal to the previous (RM continuous test); `rng_fill_buffer_strong` XORs in 32-byte blocks from Optiga/Tropic, `ensure`s on any SE failure ('cannot be accidentally ignored') and then `ensure_true`s that the MCU and each SE use-flag was set \u2014 detecting a glitch that skipped one entropy source entirely (which would silently degrade keys/nonces to a single source). pq1's `rng_strong` (3-source OptRand, fi.rs comments) is the same design; the 'use-flag set by the source, checked by the consumer' pattern is the FI addition to confirm/port.",
+   "notes": "pq1's fi.rs deliberately degrades `wait_random` to last-good byte on SECS/CECS (non-secret use) \u2014 fine, but the strong path must keep Trezor's hard-fail semantics."
+  },
+  {
+   "item": "Consumption mask: TIM2 PWM whose duty is refreshed every period from a 119-entry random table by a secure circular GPDMA channel",
+   "evidence": [
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-38",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:40-143",
+    "core/embed/projects/bootloader/main.c:335-337",
+    "core/embed/projects/kernel/main.c:161-163"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "A ~10 kHz PWM on PA5 (TIM2_CH1, OCIdleState set) has its CCR1 rewritten on every update event from `pwm_data[]` (random mod TIMER_PERIOD) via a secure, privileged GPDMA linked-list in circular mode, so the power noise pattern changes every cycle without CPU involvement and cannot be stopped by NS. Trezor runs it in the bootloader too, covering image verification. pq1 has ported the mask (TIM3_CH1/PA6 on pq1, secured with TIM2 in sau.rs) but per CLAUDE.md the caller 'must call randomize() periodically' (software refresh) and dilution is unmeasured; Trezor's DMA-fed circular refresh removes the dependency on firmware reaching the refresh call (a glitched or busy CPU would otherwise leave a constant duty) and it is also enabled during boot/verify.",
+   "notes": "Shared caveat: neither project drives a real load from the pin (pq1 PA6 is NC) \u2014 Trezor's pin is also just a GPIO; effectiveness depends on board-level load."
+  },
+  {
+   "item": "IWDG runtime limit for untrusted firmware; IWDG and WWDG forced secure; ITAMP11 couples watchdog reset with tamper",
+   "evidence": [
+    "core/embed/sec/iwdg/stm32/iwdg.c:28-47",
+    "core/embed/projects/bootloader/main.c:465-469",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:261-275",
+    "core/embed/sec/tamper/stm32u5/tamper.c:149"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Before jumping to a firmware whose vendor header lacks VTRUST_ALLOW_UNLIMITED_RUN, the bootloader starts the IWDG with a 1-hour reload that the firmware cannot disable (IWDG_SW/IWDG_STOP/IWDG_STDBY are fixed in the option bytes; IWDG is secure-only), so even a glitch-booted or custom image gets a bounded execution window and must reboot through the verified path. pq1 has an IWDG for NS hang detection (PQSigner_OS/secure/src/hw/iwdg.rs) and a 120 s S-only inactivity timeout; the 'untrusted firmware' concept does not exist (single vendor, FSBL-measured), but a bounded unlocked-session wall-clock enforced by an undisableable secure watchdog (independent of the S-TIM) is a cheap backstop against a glitch that disables the inactivity timer.",
+   "notes": "IWDG_STOP/IWDG_STDBY option bits are part of Trezor's exact OPTR check (option_bytes.c:78-84)."
+  },
+  {
+   "item": "Two-stage secret-sector state detection: inaccessible (HDP \u21d2 reads as 0x00) vs erased (0xFF) vs programmed, and lock record written before disabling access",
+   "evidence": [
+    "core/embed/sec/secret/stm32u5/secret.c:219-242",
+    "core/embed/sec/secret/stm32u5/secret.c:255-285",
+    "core/embed/sec/secret/stm32u5/secret.c:544-587"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`secret_record_present` treats both 0x00 (post-HDP or manual erase) and 0xFF (blank) as 'absent' so a glitch that makes a protected read return zeros is never mistaken for a present key; `secret_is_locked` returns locked if the header reads all-zero (sector inaccessible) OR a lock record exists, and `secret_lock` writes the lock record first and only then `secret_disable_access()`. Order and encoding ensure a half-completed lock or a faulted read fails closed. pq1's first-boot journal (page 127) and page-126 BHK blob have similar 'blank vs programmed vs inaccessible' ambiguities; the rule 'all-zero and all-0xFF both mean absent; only a well-formed magic means present' applies.",
+   "notes": "The SECRET_HEADER_MAGIC 'TRZS' plus the lock slot is the pattern; pq1's journal should not have a valid state that is all-zero."
+  },
+  {
+   "item": "Explicit decisions NOT to do / accepted gaps (documented)",
+   "evidence": [
+    "docs/storage/index.md:337-345",
+    "docs/storage/index.md:156",
+    "docs/storage/index.md:160-166",
+    "core/embed/sec/image/stm32/boot_image.c:83-85",
+    "core/embed/sys/startup/stm32u5/reset_flags.c:27-30",
+    "core/embed/sys/startup/stm32/bootutils.c:35-41",
+    "core/embed/sec/random_delays/stm32/random_delays.c:72-85",
+    "core/embed/sec/random_delays/stm32/random_delays.c:187",
+    "core/embed/sec/image/image.c:125-127",
+    "core/embed/models/build.rs:88-92"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "(1) Blockwise-flash PIN counter deliberately simplified because SE counters + ECC flash make FI 'harder' (docs/storage/index.md:337-345) \u2014 pq1 is in the same dual-SE position. (2) PBKDF2 stretching is justified specifically as the fallback 'in case the attacker is able to circumvent the PIN entry counter mechanism \u2026 e.g. fault injection' (index.md:156) \u2014 pq1's SE-silicon PIN compare plus Tier-1 SAES-CMAC(DHUK) KDF plays this role; worth stating the same explicit rationale. (3) AES-XTS was considered for better diffusion against 'malleability and fault injection attacks' and rejected for implementation cost (index.md:160-166). (4) Bootloader hash whitelist intentionally disabled (boot_image.c:83-85). (5) Reset-flag gating and RDP-2 only in PRODUCTION; dev builds deliberately weaker (reset_flags.c:27-30, option_bytes.c:32-38). (6) RSOD infinite loop (halt) not supported on battery devices \u2014 reboot after 10 s instead (bootutils.c:35-41, :231-238); pq1 has no battery so halt-after-wipe is allowed. (7) drbg_random8 returns a constant when its lock is contended ('should be ok for our purposes') and wait_random is compiled out in prodtest. (8) Image expiry mechanism left as TODO ('needs to be ironed out before production'). (9) Loaders use -fstack-protector-strong rather than -all with no documented rationale (flash budget implied).",
+   "notes": "No document in the repo states a global FI threat model or a decision not to pursue EM/laser countermeasures; the only glitch-detector configuration discussion is for the TROPIC01 SE (docs/core/misc/tropic_configs.md:28,261 GLITCH_DET_DIS = ENTER_ALARM_MODE in production configs), which pq1 removed from scope (dual-SE only). OPTIGA PIN verification in Trezor is HMAC/counter-chained on the SE (core/embed/sec/optiga/optiga.c:1016-1075) with COUNTER_EXCEEDED mapped to wipe (storage.c:838-845), matching pq1's E120/UserID consumption."
+  }
+ ]
+}

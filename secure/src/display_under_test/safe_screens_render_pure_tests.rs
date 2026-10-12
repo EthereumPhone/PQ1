@@ -374,6 +374,41 @@ fn multisend_approve_presign_screens() {
     assert_golden("multisend", &b, GOLDEN_MULTISEND);
 }
 
+/// Owner decision 2026-10-09: in a Safe-wrapped CoW order both legs — SELL
+/// TOKEN, BUY MIN and BUY TOKEN included — come before the `Confirm?`, in
+/// the single-call and the multiSend shape alike.
+#[test]
+fn safe_cow_confirm_follows_the_buy_leg() {
+    fn confirm_ids(mut screens: Screens) -> Vec<String> {
+        let hero = screens.as_slice()[0];
+        screens.push(&hero).unwrap();
+        let at = screens.insert_confirm_look(Look::SAFE).unwrap().expect("long flow earns a Confirm?");
+        assert_eq!(pqsigner_ui_px::check::check_flow(&screens), Ok(()), "{}", screen_text(&screens));
+        let id = ids(&screens);
+        assert_eq!(id[at], "CONFIRM");
+        id[..=at].to_vec()
+    }
+    let cow = bound_cow_stub();
+    let single = both(GPV2_SETTLEMENT_ADDRESS, 0, &presign_calldata_stub(), Some(&cow), None);
+    let id = confirm_ids(single.screens);
+    let tail = &id[id.len() - 6..];
+    assert!(
+        tail == ["COWORDER", "SELLTOK", "SELLAMT", "BUYTOK", "BUYAMT", "CONFIRM"]
+            || tail == ["COWORDER", "SELL", "SELLTOK", "BUY", "BUYTOK", "CONFIRM"],
+        "{id:?}"
+    );
+
+    let approve = erc20_approve(GPV2_VAULT_RELAYER_ADDRESS, 456);
+    let mut packed = pack_record(0, &WSTETH, &ZERO_VALUE, &approve);
+    packed.extend_from_slice(&pack_record(0, &GPV2_SETTLEMENT_ADDRESS, &ZERO_VALUE, &presign_calldata_stub()));
+    let raw = encode_multisend(&packed);
+    let meta = wsteth_meta();
+    let batch = both(MULTISEND_CALL_ONLY_ADDRESSES[0], 1, &raw, Some(&cow), Some(&meta));
+    let id = confirm_ids(batch.screens);
+    assert!(id.iter().any(|s| s == "RECORD2"), "{id:?}");
+    assert!(id[id.len() - 2] == "BUYTOK" || id[id.len() - 2] == "BUYAMT", "{id:?}");
+}
+
 /// The 2026-09-23 EVT refusal: a Safe v1.5.0 MultiSendCallOnly batch
 /// `[USDC.approve(VaultRelayer), setPreSignature]` selling 10 USDC for at
 /// least a full-precision, quote-derived `1234.987654321098765432 DAI`.

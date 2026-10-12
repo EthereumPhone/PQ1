@@ -1,0 +1,25 @@
+{
+ "id": "FI-09",
+ "title": "Timing canaries around FI-critical blocks (software Instruction Timer) and write\u2192jitter\u2192readback of the clock tree and TZ configuration",
+ "threat": "CfiCounter catches skipped steps but not clock-glitch or stuck-at faults that leave the counter intact; the RCC/PLL setup is itself a fault target (\u03bc-Glitch had to glitch the L5 PLL config to get under the BoD), and while sau.rs has a post-write readback the RCC path has none and neither inserts a random delay before the readback.",
+ "proposal": "(1) `fi::TimedWindow`: snapshot a secure-only TIM (or DWT CYCCNT with LAR unlocked, secured) at block entry, compute the expected cycle envelope at build time per block (min/max with RDI jitter budget), and on exit require entry+min \u2264 now \u2264 entry+max through check_true_into_sentinel; apply to ct_eq of the two 4008-B sigs, verify-before-release, gated_unlock pre-commit \u2192 SE verdict, SCP03/CCM unwrap, SAU/GTZC/AIRCR setup and the first-boot RDP authorisation. Over/under-run \u21d2 handle_fault (FI-05). (2) rcc.rs: after PLL/SWS switch, wait_random then re-read CFGR1/PLL1CFGR/PLL1DIVR and compare to the constants under a sentinel; mirror in the FSBL once it has a TRNG. (3) sau.rs: insert wait_random before each readback pass and add a second voted pass (read_volatile_voted) of SAU_RBAR/RLAR, GTZC SECCFGR and AIRCR, since the existing F6 verifier is a single pass.",
+ "rationale": "NXP's LPC55 Code Watchdog pairs a secure counter with an instruction timer precisely because counters alone miss timing faults; RP2350's digital glitch detectors are the hardware form of the same idea. A software window on a secure timer is the closest U585 equivalent and is cheap. Readback after jitter is the standard answer to the \u03bc-Glitch SAU/PLL targets.",
+ "repo_evidence": [
+  "grep CYCCNT|DWT|timing canary secure/src \u2192 only test-key-speed register strings in main_sau_pure_tests.rs:1073-1099; no runtime canary",
+  "secure/src/hw/rcc.rs (PLL1/SWS constants at :62-81; grep 'read.?back|verify|mismatch' \u2192 empty)",
+  "secure/src/sau.rs:401-409 (single-pass post-write readback verifier F6; no wait_random before it)",
+  "secure/src/fi.rs:199-252 (CfiCounter: control-flow only; doc admits 2-fault stack-write bypass)"
+ ],
+ "vendor_precedent": "NXP AN12912 Code Watchdog (Secure Counter + Instruction Timer); RP2350 datasheet \u00a710.9 glitch detectors; \u03bc-Glitch countermeasure (random 0\u20139 cycle pre-delay per fault target).",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Envelopes must absorb legitimate variance (C10 target-sum grinding spreads sign time by \u00b11 s, HASH DMA stalls, RDI jitter) \u2014 set them on measured distributions, not estimates, or they become a reliability bug; DWT is a debug resource and must be locked/secured so NS cannot reset CYCCNT. Adds flash to the already-over-budget ui-px image.",
+ "sources": [
+  "https://www.nxp.com/docs/en/application-note/AN12912.pdf",
+  "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf",
+  "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf"
+ ],
+ "surface": "fi"
+}

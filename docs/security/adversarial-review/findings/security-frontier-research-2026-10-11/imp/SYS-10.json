@@ -1,0 +1,27 @@
+{
+ "id": "SYS-10",
+ "title": "User-influenced entropy provenance: mandatory user-supplied entropy phase in the seed wizard (with visible effect), a two-run divergence test, and a documented or host-committed OptRand to bound the SPHINCS+ randomizer covert channel",
+ "threat": "A backdoored or mis-configured TRNG, a factory-image RNG bug (Coldcard 2026: every test passed while seeds came from a 32-bit-bounded PRNG), or a malicious/implanted firmware that encodes key bits into the per-signature randomizer R / C10 grinding nonce (SPHINCS+ subliminal channel) \u2014 the one class the 3-source XOR does not address because all three sources are chosen by the device.",
+ "proposal": "(a) Seed wizard: add a required entropy phase where the user enters >= 65 chord/arrow presses (or dice/coin values) that are hashed with the 3-source draw (`entropy = SHA256(rng_strong || user_bytes)`) and show the user that the FIRST word changes when they change one input, so a pre-programmed seed is impossible and the user can see their contribution; (b) add a host-side/QEMU differential test that two wizard runs with identical UID/SysTick/mock-SE inputs produce different seeds and that `rng_strong` output has >= 32 distinct bytes (Coldcard's `>4 distinct` check was vacuous), plus a KAT-style startup repetition test for the first SE responses (#641); (c) OptRand covert channel: either implement a host-commitment mode where the companion sends a nonce h and the device derives `opt_rand = SHA256(\"optrand-v1\" || h || d)` with device nonce d returned alongside the signature (auditable later by a second device holding the same seed \u2014 not by the host alone, since R = PRF_msg(SK.prf, opt_rand, M) is unverifiable without SK.prf), or document explicitly in HARDENING.md that the R / target-sum-grind channel is an accepted residual against malicious firmware and that the FSBL fingerprint is the only defence; do not silently leave it unstated.",
+ "rationale": "User-visible, user-manipulated entropy is the one defence that provably held across the 2026 Coldcard incident, and NGRAVE/Coldcard ship it; pq1's wizard takes none. Anti-exfil (Jade/BitBox02 anti-klepto) is the shipped answer to nonce covert channels on ECDSA; hash-based signatures have no host-verifiable analogue, so honesty plus a second-device audit path is the realistic 'beyond'. pq1's invariant #1/#4 story is strongest when the user can also rule out the device's own randomness as a single point of failure.",
+ "repo_evidence": [
+  "secure/src/ui/seed_wizard.rs \u2014 grep user.?entropy|dice|coin|key.?press: zero hits; entropy comes only from `rng_strong` (decoys at :434-456)",
+  "secure/src/dual_se.rs:96-108 \u2014 `generate_split_half` = `rng_strong::fill_with_store` only (3-source, no user input)",
+  "secure/src/crypto.rs:206-262 \u2014 OptRand drawn from `rng_strong::fill`, no host nonce, no commitment, no residual statement",
+  "secure/src/rng_health.rs / rng_exact.rs \u2014 only zero + repetition tests (inventory); #641/#642/#704 open"
+ ],
+ "vendor_precedent": "Coldcard Mk4 requires >= 65 key presses / 50 dice rolls / 128 coin flips mixed with device entropy; NGRAVE ZERO lets the user shuffle groups of the generated key; Cypherock XORs two chips' TRNGs at generation; Blockstream Jade (0.1.24) and BitBox02 anti-klepto for the ECDSA nonce channel. No PQ wallet ships a randomizer-commitment scheme (none).",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "UX cost in the wizard (65 presses on a two-button device) \u2014 owner decision on mandatory vs opt-in; user bytes must be hashed in, never XORed (they are low-entropy); the host-commitment OptRand changes the unified-sign wire format (frozen) and would need a new flag/field pre-launch and a Lean/Kani update of the sign input parser; a deterministic-from-host OptRand must NOT be the only randomness (Gen\u00eat grafting + F-9 TVLA defences need unpredictability to the host), so d must stay device-random. DROPPED (over the 10-item cap): DMA-fed consumption-mask table on a secure+priv GPDMA channel plus a real load on the mask pin and a measured dilution (#831/#646); C10 MCU attestation keyed from DHUK+persisted salt with per-element proof binding (owner decision under invariant #5; Trezor ML-DSA-44 precedent); DICE-style binding of the page-126 wrap key / an extra share to H(DHUK, FSBL-measured image) so a glitched FSBL check cannot unlock funds; active-tamper (ATAMP PRNG mesh) over MCU+SEs on the EVT board; bench pin of WRP1A/OEM-lock masks (#46) so the tz-1 tripwire detects a cleared WRP or a planted OEM2 key; 01/10-expanded page-124/123 counter encoding with format check (Trezor storage doc); flash-persistent daily sign quota (sign_rate.rs:37-41); SE PIN-stretch HMAC chain so a compromised SE/bus cannot weaken below the no-SE baseline; TVLA campaign on the HASH-peripheral PRF and SAES-CMAC(DHUK) unwrap (sca surface); gateway output oracle audit per LSB-022.",
+ "sources": [
+  "https://engineering.block.xyz/blog/predictable-rng-fallback-and-32-bit-reseed-in-coldcard-firmware",
+  "https://blog.coinkite.com/understanding-mk4-security-model/",
+  "https://docs.cypherock.com/getting-started/how-cypherock-generates-your-24-word-seed-phrase",
+  "https://blog.blockstream.com/blockstream-jade-tech-overview-part-1/",
+  "https://eprint.iacr.org/2023/042"
+ ],
+ "surface": "systemic"
+}

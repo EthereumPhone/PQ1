@@ -74,6 +74,10 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    "counter_common", "full_counter_word", "pad_common", "hmsg_input_common",
+    "th_input_common", "pair_input_common", "multi_input_common", "wots_input_common",
+    "wots_payload_common", "randomizer_input_common", "raw_wots_input_common", "role_randomizer_input_common",
+    "hypertree_common", "forest_common", "wots_common", "decode_word",
     'physical_byte_canonical_euf_bound',
     'original_byte_canonical_euf_bound',
     'adaptive_canonical_coverage_bound',

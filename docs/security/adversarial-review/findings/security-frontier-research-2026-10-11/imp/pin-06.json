@@ -1,0 +1,24 @@
+{
+ "id": "pin-06",
+ "title": "Exponential inter-attempt backoff on the S-only timer, with the announced countdown always run to completion",
+ "threat": "Attempt-counter bypass via rate: an attacker who finds any counter-reset or glitch-assisted retry primitive can drive attempts at USB speed; a human-speed floor bounds the value of such a primitive. Also a timing side channel: today the wrong-PIN path returns as soon as the SE verdict arrives, so wall-clock reveals at which step the check failed.",
+ "proposal": "Before the page-124 precharge in `gated_unlock`, wait `2^fails - 1` seconds (fails = pre_count) measured on the secure TIM already used for the 120 s idle timer (NS cannot shorten it; NS pings do not reset it), rendering 'x s left' on the trusted UI and cancellable only by the left button. On a wrong PIN, run the remainder of a pre-computed total unlock time to completion before showing 'Wrong PIN', so the wrong and right paths have the same announced duration. Make the backoff independent of the attempt-log and of `CMD_GET_REMAINING` so it cannot be probed faster than it runs. Update HARDENING.md:280 / threat-model.md:431 from 'eventual' to implemented, or move them to residuals if declined (#637).",
+ "rationale": "grep for backoff/progressive/stretch across the PIN path finds nothing; #637 confirms it is a proposal only. Trezor ships exactly this (`get_backoff_time_ms`, 2^fails-1 s, UI-cancellable; 'Finish the countdown' on wrong PIN). With 8 digits and a 10-attempt silicon cap the brute-force value is bounded, which is why this is P1 defence-in-depth rather than P0.",
+ "repo_evidence": [
+  "grep -rniE 'backoff|progressive' secure/src/nsc secure/src/se050 secure/src/optiga secure/src/dual_se.rs secure/src/ui/pin_entry.rs -> no hits",
+  "docs/security/HARDENING.md:280 and docs/security/threat-model.md:431 (describe it as a mitigation)",
+  "secure/src/timeout.rs:27 (S-only TIM already present)",
+  "GitHub #637 (OPEN)"
+ ],
+ "vendor_precedent": "Trezor storage.c:1158-1161 (get_backoff_time_ms), 1198-1207 (sleep before check), 1233-1240 (finish countdown on wrong PIN); core/src/trezor/pin.py:49-112.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "The countdown length leaks the attempt number to a shoulder-surfer (Trezor accepts this; pq1 already discloses it over USB). A long backoff interacts with the 120 s idle wipe and the PendSV re-unlock loop (#692): the delay must count as 'trusted-UI waiting' for the watchdog, and the e2e fast path must bypass it. The 'finish the countdown' pad must not run while a fault halt is pending.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:1158-1240",
+  "https://github.com/EthereumPhone/PQ1/issues/637"
+ ],
+ "surface": "pin"
+}

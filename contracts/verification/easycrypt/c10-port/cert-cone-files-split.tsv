@@ -92,6 +92,8 @@ cdrafts-split/C10RawGrind.ec
 cdrafts-split/C10RawOracle.ec
 cdrafts-split/C10ReductionChoose.ec
 cdrafts-split/C10ReductionForge.ec
+cdrafts-split/C10Representation.ec
+cdrafts-split/C10RepresentationBridge.ec
 cdrafts-split/C10SearchBounds.ec
 cdrafts-split/C10SharedSearch.ec
 cdrafts-split/C10SpecControls.ec
@@ -661,3 +663,4 @@ cdrafts-split/WotsZeroSentinel.ec
 cdrafts-split/XMSSMT_C_Scheme.ec
 cdrafts-split/XmssmtCCCharged.ec
 cdrafts-split/XmssmtCC_All.ec
+cdrafts-split/C10HashInputBridge.ec

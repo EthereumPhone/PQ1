@@ -1,0 +1,25 @@
+{
+ "id": "pin-07",
+ "title": "Periodic random-delay interrupts (RDI) during the PIN window and a session-refreshed floating mean on every NSC call",
+ "threat": "Fault injection timed from an external trigger: the PIN gate is linear from the USB dispatch to the SE verdict and the only desync is `wait_random` at a handful of call sites (0..255 loop iterations, ~19 us), which `nsc/mod.rs:1404-1413` itself says defeats only an uncalibrated single-shot attacker. A profile-then-attack rig re-aligns on the display/USB/I2C activity between those sites.",
+ "proposal": "Port Trezor's RDI: from the existing 1 ms SysTick, when an RDI-armed window is open (gated_unlock, PIN entry, boot reconcile, FSBL image verify if it has a timer), insert `wait(drbg8() + session_delay)` where `session_delay` is a per-session uniform[0,255] refreshed on every USB packet / NSC dispatch; feed it from the secure TRNG via the existing `fi_delay_pool` (not a software PRNG). Arm/disarm around the sensitive windows only so bench timing and sign latency are unaffected. Pair with the pin-06 backoff so the absolute offset from trigger to counter write is never constant across attempts.",
+ "rationale": "grep for rdi/random_delay/floating-mean in secure/src finds only the fi.rs:77 doc reference to Trezor's file; `fi::wait_random` (fi.rs:86-95) is call-site jitter only. `pqsigner_fi::wait_random_loop` (pqsigner-fi/src/lib.rs:129-155) already has the i+j==wait and loop-completion self-checks, so only the periodic component is missing. TIM2/TIM3 are secured in sau.rs so NS cannot stop the source timer.",
+ "repo_evidence": [
+  "secure/src/fi.rs:86-95 (wait_random is call-site only)",
+  "grep -rniE 'rdi\\b|random_delay|floating' secure/src -> only fi.rs:77 comment",
+  "secure/src/nsc/mod.rs:1399-1414 (self-described limit of entry jitter)",
+  "pqsigner-fi/src/lib.rs:129-155 (loop self-checks already present)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/random_delays/stm32/random_delays.c:131-175 (RDI start/stop/refresh, floating-mean handler), usb.c:728,748 and smcall_dispatch.c:166 (session refresh on packet/syscall); Clavier et al. / Tunstall-Benoit cited in random_delays.h:24-39.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "#835 found that the current delay pool can hand out a zero-length delay under an interrupt race and that a halt inside `pin_attempts_bump` after the flash program durably burns an attempt; RDI adds ISR-context delay draws and must be built on the fixed pool (take() atomic) and must never halt between a flash commit and its readback. Adds latency inside the ui-px frame budget if armed during rendering; arm only in the PIN/unlock windows.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:131-197",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/inc/sec/random_delays.h:24-39",
+  "https://github.com/EthereumPhone/PQ1/issues/835"
+ ],
+ "surface": "pin"
+}

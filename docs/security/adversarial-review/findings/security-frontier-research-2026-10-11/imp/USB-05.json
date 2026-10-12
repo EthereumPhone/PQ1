@@ -1,0 +1,26 @@
+{
+ "id": "USB-05",
+ "title": "MCU-rooted genuineness attestation over USB with SPHINCS+C10 (DHUK-derived key, factory-issued certificate) \u2014 single-algorithm answer to clones and interposers",
+ "threat": "Over the wire a companion cannot tell a genuine pq1 from a clone, a reflashed unit, or an interposer MCU speaking APDU v2: FW_VERSION is a fixed 3.0.0, device_uid is 16 zero bytes, the USB serial is '0001', and the SE certificates are not surfaced through any gateway command. The user's only check is the RDP-0 pre-first-power SWD verification and the boot fingerprint; after that, the companion is origin-blind.",
+ "proposal": "Add CMD_ATTEST (new INS): input = 32-byte host challenge; secure world derives a per-die C10 attestation seed as `SAES-CMAC(DHUK, \"pq1-mcu-attest-v1\" || TRNG-salt-from-page-127)` (final only after the RDP-2 self-lock, exactly like the SE PBS rotation), keygen + sign `sha256(\"pq1-attest\" || challenge || fw_measurement || uid96)`, zeroize, return sig + the factory-issued certificate blob (C10-signed by a PQ1 attestation CA over the attestation pubkey + UID96, stored in a read-only page written at factory and bound at first boot). Companion verifies the chain and shows a green 'genuine' state; also replace the FW_VERSION/uid placeholders with the real build hash and UID96 so the attested fields are meaningful. Combine with the existing SE attestation so the companion checks MCU+OPTIGA+SE050 identity binding (#249/#22 triple-UID).",
+ "rationale": "Trezor ships MCU attestation (ML-DSA-44 over a host challenge, key from the privileged master secret, cert via startup args) as its 'genuineness check'; Ledger's Genuine Check attests the SE. pq1 can get the same host-verifiable property without a second algorithm by reusing C10 (invariant #5 holds) and the per-die DHUK story it already relies on. Honest scope: attestation detects a replaced/cloned MCU or an interposer that cannot produce the key; it does NOT detect a passive display-bus tap (the Grand Nano X implant sat behind a genuine SE).",
+ "repo_evidence": [
+  "nonsecure/src/usb/commands.rs:176-182 (FW_VERSION hardcoded placeholder)",
+  "nonsecure/src/usb/commands.rs:420-421 (device_uid 16 zero bytes unconditionally)",
+  "nonsecure/src/usb/mod.rs:200 (serial_number '0001')",
+  "grep -i attest proto/src/lib.rs secure/src/nsc/*.rs -> no attestation command (only the selector self-attest trailer in commands.rs)",
+  "GitHub #249/#22 (supply-chain + provisioning attestation, triple-UID binding) OPEN"
+ ],
+ "vendor_precedent": "Trezor mcu_attestation.c:24-85 (ML-DSA-44, key from secret_key_mcu_device_auth, cert via startup args, exposed only via probed smcalls); Ledger Genuine Check (SE-side).",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P1",
+ "risks": "~seconds per attestation on pq1 silicon (one C10 keygen+sign); requires a factory CA ceremony and a per-unit cert write that must fit the already-blocked shipping/first-boot flow (page budget, blank-check rules in Phase A); the attestation key must not be final before RDP-2 or a factory-held DHUK-derived value leaks; adds a new NS-callable surface (must go through USB-01's chokepoint and USB-06's table).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/mcu_attestation/mcu_attestation.c:24-85",
+  "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_verifiers.c:237-286",
+  "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security"
+ ],
+ "surface": "usb"
+}

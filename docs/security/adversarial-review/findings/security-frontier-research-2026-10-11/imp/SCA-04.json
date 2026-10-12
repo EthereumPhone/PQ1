@@ -1,0 +1,25 @@
+{
+ "id": "SCA-04",
+ "title": "Arm the ADC4 analog watchdogs so ITAMP7/12/13 actually fire (in-silicon voltage-glitch / temperature / rail-manipulation detector feeding tamp-wipe)",
+ "threat": "SCA and FI attackers lower/raise VDD, cool/heat the die and inject rail glitches to raise leakage or skip checks (Masaryk thesis ~76% PIN-glitch bypass on STM32U5; Donjon t-test-guided double LFI on Coldcard SE2). pq1 has no analog monitor of its own supply: the three ADC4-watchdog tamper enables are set but ADC4 is never configured, so they can never trigger.",
+ "proposal": "Configure ADC4 (low-power ADC in the SRD domain) in continuous/injected mode on the internal channels VREFINT, VCORE and the temperature sensor, set AWD1/AWD2/AWD3 windows from factory-characterised values (per-die calibration stored on page 127 at first boot alongside the salt), route the AWD events to ITAMP7/12/13 (already enabled, tamp.rs:288-299) so a confirmed excursion zeroizes the BHK backup registers and triggers the existing tzic intrusion wipe. Ship in two stages: (1) log-only with a page-127 excursion counter and bench characterisation on EVT (voltage sweep, thermal chamber) to set thresholds; (2) `tamp-wipe` escalation once false-positive rate is measured. Secure ADC4 in GTZC (it is in GTZC2/SRD, the same open follow-up as TAMP).",
+ "rationale": "It is the only on-die signal that the attacker is operating outside nominal conditions, it costs no board change, and it turns three already-enabled-but-dormant tamper bits into a real detector. ST intends exactly this use (RM0456 TAMP: 'ADC4 analog watchdog monitoring 1/2/3'). Both Trezor and pq1 currently enable the flags without the ADC \u2014 so this is beyond both.",
+ "repo_evidence": [
+  "secure/src/hw/tamp.rs:288-299 (TAMP_CR1 ITAMP7E|ITAMP12E|ITAMP13E set)",
+  "grep -rln 'ADC4|adc4|ADC_' secure/src hw/src -> no files (ADC4 never initialised)",
+  "docs/hardware/evt-silicon-validation.md:\u00a710.1 (TAMP response never silicon-validated; false ITAMP9 would wipe)",
+  "secure/src/sau.rs:386-388,548 (GTZC2/TAMP isolation still open; #50, #70)"
+ ],
+ "vendor_precedent": "Trezor enables ITAMP7/12/13 (tamper.c:146-151) but grep over core/embed shows no ADC4 configuration either (only hal_conf.h module enable) \u2014 flags dormant there too. Ledger SE has voltage/temperature sensors inside the certified SE (Ledger Academy claim).",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "False positives on a noisy EVT rail wipe a customer device (\u00a710.1 already warns of this for ITAMP9) \u2014 thresholds need silicon characterisation across temperature and USB-supply variation, and the detector must be log-only until measured. ADC4 sampling adds a small periodic current signature (itself a trace feature). pq1 has no battery, so VBAT=VDD semantics for ITAMP1 differ from Trezor.",
+ "sources": [
+  "RM0456 \u00a7TAMP internal tamper sources (ITAMP7/12/13 = ADC4 AWD1/2/3), \u00a7ADC4",
+  "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/tamper/stm32u5/tamper.c:140-155"
+ ],
+ "surface": "sca"
+}

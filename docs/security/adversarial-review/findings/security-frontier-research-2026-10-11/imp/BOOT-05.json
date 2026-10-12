@@ -1,0 +1,27 @@
+{
+ "id": "BOOT-05",
+ "title": "Boot-time dual-SE attestation with factory-pinned UIDs plus a C10 MCU attestation command (AuthenticateDevice analogue), bound to the FSBL measurement",
+ "threat": "Chip swap (OPTIGA or SE050) in transit or after sale; a cloned board with genuine-looking firmware; a stolen device re-shelled around a fresh MCU \u2014 none detected today because no code reads an SE attestation object, pins SE UIDs, or lets the companion challenge the unit remotely.",
+ "proposal": "(1) At boot, after SCP03/Shielded sessions are up: read OPTIGA UID (0xE0C2) and the SE050 chipId, compare against the per-device binding record (already specified 3\u00d7 in threat-model \u00a79.4 rows; store the SHA-256 anchor in the OTP birth record from BOOT-04); mismatch after first-boot ALL_DONE \u2192 admin-wipe path. Verify a fresh-nonce signature from each SE's factory cert (OPTIGA 0xE0E3 type-0x12 device cert already present; SE050 C-class 0xF0000013) against the Infineon/NXP roots pinned in the image \u2014 the SE is the signer, so invariant #5 (no classical signer in the WALLET) holds; document that these are vendor-mandated verifications like dbgen's EAS fence. (2) Add `CMD_ATTEST_DEVICE`: the secure world signs `'pq1-attest:' || compactsize(challenge) || challenge || secure_digest` with a SPHINCS+C10 key derived per use from SAES-CMAC(DHUK, 'attest') (never stored), whose public key the factory certifies into the per-unit record; companion verifies chain + both SE proofs; stream the 4008-B signature in APDU chunks. (3) Bind: the attestation message includes the FSBL-forwarded secure digest (BOOT-03 handoff), so the proof says 'this die, these SEs, this measured image'.",
+ "rationale": "Trezor (ML-DSA-44 MCU cert + OPTIGA + TROPIC01), Ledger (SE genuine check) and BitBox (device attestation) all ship post-sale genuineness checks; pq1 has none, so a swapped SE or cloned unit is invisible once the SWD window has passed. Donjon showed attestation keyed from an MCU-held secret only proves possession \u2014 hence binding to the measurement and to DHUK (per-die, RDP-2-only final) rather than a flash secret.",
+ "repo_evidence": [
+  "docs/security/threat-model.md:339-345 (rows say 'PRE-PROD-CAVEAT: per-device binding manifest not yet landed', 'Untested in mainline boot today'), :505 (\u00a79.4 'not yet landed')",
+  "docs/security/HARDENING.md:178-189 (\u00a73.4 written present-tense; no code) \u2014 drift",
+  "grep attest in secure/src/se050/mod.rs, secure/src/optiga/mod.rs, secure/src/dual_se.rs: no hits; proto/src/lib.rs: only ERC-7730 'self-attest' trailer, no device attestation CMD",
+  "secure/src/die_id.rs:31-87 (DBGMCU_IDCODE report-only, secure_log, silent in production)",
+  "Issues #210, #244, #249, #206, #61, #27, #272"
+ ],
+ "vendor_precedent": "Trezor Safe 7 AuthenticateDevice: core/embed/sec/mcu_attestation/mcu_attestation.c:63-97 (key derived per use from master, zeroized), core/src/apps/management/authenticate_device.py:33-78 (challenge framing, three signers), prodtest certdev-write verifies chain before storing; BitBox02 Nova device attestation; Coldcard SE-enforced genuine LED.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P1",
+ "risks": "Variant constraint: only SE050 C/E/F carry factory attestation certs (the pq1 bench board is an E2 \u2014 confirm the production part). A C10 attestation is 4008 B + cert \u2248 5 KB per proof over 64-B HID (Trezor hit the same with ML-DSA and chunked, PR #6893). The per-use C10 keygen costs <1 s. Does not see a board-level implant on the display SPI (out of scope here). Factory HSM compromise still yields valid units until the transparency log exists (#68).",
+ "sources": [
+  "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/mcu_attestation/mcu_attestation.c",
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+  "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf"
+ ],
+ "surface": "boot"
+}

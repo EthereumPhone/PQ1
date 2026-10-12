@@ -1,0 +1,28 @@
+{
+ "id": "SCA-03",
+ "title": "WOTS PRF midstate-resume: compute the two per-layer SHA-256 midstates once per sign, resume per call (byte-identical output, no address re-base)",
+ "threat": "44,118 wots_secret calls per sign each push the raw 32-byte sk_seed through the HASH peripheral's DIN at the same intra-call offset \u2014 the horizontal/template residual of archive \u00a718 and the exact 'SK.seed reused across thousands of PRF calls' pattern of Kannwischer 2018 / Saarinen 2024. #229 assumed closing this requires re-basing every key (invariant #6).",
+ "proposal": "Because block 1 of wots_secret is sk_seed||\"wots\"||to_b4(layer)||tree_b32[0..24] and tree_b32[0..24] is always zero (u64 right-aligned in 32 B), the chaining value after block 1 is a constant per (sk_seed, layer). Compute the two midstates (layer 0, layer 1) once per sign (or once per SLOT_CACHE keygen) and run only block 2 per call, either (a) via the HASH peripheral's context-swap registers (HASH_CSRx suspend/resume, RM0456 \u00a7HASH 'context swapping') or (b) via `sha2::compress256` in software for the 64-byte second block with explicit padding. Outputs are bit-identical to the current `sha256(...)`, so pubkeys, CREATE2 addresses, the on-chain verifier and all test vectors are untouched; pin with a differential test against the existing wots_secret. Store the midstates as ZeroizeOnDrop in the SigningKey cache. Side effect: ~44k fewer compressions per sign (~8% of the 539,616 hashes).",
+ "rationale": "Reduces sk_seed-absorbing compressions from 44,118+26,636 to 26,636 (FORS only) + 2 without any wire/derivation change, closing the WOTS half of #229 pre- AND post-launch. Honest limit: block-2 compressions still combine a secret chaining value with varying known input, so the vertical-DPA exposure on the midstate (which suffices to forge WOTS for that layer; layer-1 WOTS alone is a full forgery) is UNCHANGED \u2014 this item removes the horizontal/template surface on sk_seed itself, which is the key shared with FORS and grind_r. FORS cannot be restructured this way (single block, secret and varying input mixed).",
+ "repo_evidence": [
+  "sphincs-c10/src/hash.rs:376-392 (wots_secret update order: sk_seed, \"wots\", layer, tree_b32, kp, chain_idx)",
+  "sphincs-c10/src/hash.rs:178-182 (u64_to_b32 zero-pads bytes 0..24)",
+  "sphincs-c10/src/hash.rs:106-125 (hw-sha256 hook: init/update/final only \u2014 no midstate API)",
+  "hw/src/hash.rs (no CSR/context-swap usage: grep CSR -> only DHCSR)",
+  "issue #229 (states the restructure 'violates launch invariant #6' \u2014 not true for WOTS as the layout already isolates the secret in block 1)",
+  "docs/archive/work-todo-retired-2026-07-19.md:1910-1919 (\u00a718 step (a)/(b))"
+ ],
+ "vendor_precedent": "none for SLH-DSA on a wallet; conceptually Fluhrer's 'PRF tree' (NIST PQC 2024) and HMAC's precomputed ipad/opad midstates.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "If (b) is chosen, one secret-CV compression per call moves from the HASH peripheral to the CPU, where Lecomte 2026 SASCA applies \u2014 prefer (a) and validate HASH CSR semantics on U585 (CSR count differs per HASH revision). The midstate is a new long-lived secret in SRAM (same class as sk_seed). Double-compute/F-16 shuffle interaction: both passes must use the same midstates. Must re-run hash_counts.rs expectations (\u226560,000 lower bound would fall to ~26,638 secret calls \u2014 update the test, do not weaken the census).",
+ "sources": [
+  "https://eprint.iacr.org/2018/673",
+  "https://eprint.iacr.org/2024/367",
+  "https://csrc.nist.gov/csrc/media/Events/2024/fifth-pqc-standardization-conference/documents/papers/side-channel-resistant-sphincs-plus.pdf",
+  "RM0456 \u00a7HASH context swap (HASH_CSRx)"
+ ],
+ "surface": "sca"
+}

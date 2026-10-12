@@ -384,14 +384,14 @@ pub fn wots_secret(
 ) -> [u8; N] {
     bump!(WOTS_SECRET);
     let tree_b32 = u64_to_b32(tree);
-    let mut h = Sha256::new();
-    h.update(sk_seed);
-    h.update(b"wots");
-    h.update(layer.to_be_bytes()); // to_b4(layer) — 4 bytes
-    h.update(&tree_b32); // to_b32(tree) — 32 bytes
-    h.update(kp.to_be_bytes()); // to_b4(kp) — 4 bytes
-    h.update(chain_idx.to_be_bytes()); // to_b4(chain_idx) — 4 bytes
-    truncate(&h.finalize().into())
+    truncate(&sha256_parts(&[
+        sk_seed,
+        b"wots",
+        &layer.to_be_bytes(), // to_b4(layer) — 4 bytes
+        &tree_b32, // to_b32(tree) — 32 bytes
+        &kp.to_be_bytes(), // to_b4(kp) — 4 bytes
+        &chain_idx.to_be_bytes(), // to_b4(chain_idx) — 4 bytes
+    ]))
 }
 
 // ---------------------------------------------------------------------------
@@ -409,11 +409,11 @@ pub fn wots_secret(
 /// reassemble the shared forest and forge (CWE-347 / few-time-key reuse).
 pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32) -> [u8; N] {
     bump!(FORS_SECRET);
-    let mut h = Sha256::new();
-    h.update(sk_seed);
-    h.update(b"fors");
-    h.update(ht_idx.to_be_bytes()); // to_b4 — hypertree-position binding
-    h.update(tree_idx.to_be_bytes()); // to_b4
-    h.update(leaf_idx.to_be_bytes()); // to_b4
-    truncate(&h.finalize().into())
+    truncate(&sha256_parts(&[
+        sk_seed,
+        b"fors",
+        &ht_idx.to_be_bytes(), // to_b4 — hypertree-position binding
+        &tree_idx.to_be_bytes(), // to_b4
+        &leaf_idx.to_be_bytes(), // to_b4
+    ]))
 }

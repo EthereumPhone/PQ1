@@ -27,7 +27,8 @@
 //! * a chain screen (`CHAIN`) follows the `TO` or `AMOUNT` it qualifies;
 //! * flow shape: hero first (committing), last byte-equal to it, exactly
 //!   two heroes; `Confirm?` exactly at index 5 iff ≥ 7 detail-like screens,
-//!   else none; no `Legacy` record.
+//!   else none (a CoW order, direct or Safe-wrapped, moves it past the buy leg —
+//!   [`confirm_index`]); no `Legacy` record.
 
 use crate::fit::{measure_q6, Region};
 use crate::screen::{screen_exact, Kind, Screen, Screens, Tier, Weight};
@@ -55,10 +56,7 @@ pub enum Violation {
     GlyphMissing(usize),
 }
 
-/// `Confirm?` sits here when the rule inserts it.
-pub const CONFIRM_INDEX: usize = 5;
-/// … and the rule inserts it from this many detail-like screens.
-pub const CONFIRM_MIN_DETAILS: usize = 7;
+pub use crate::screen::{confirm_index, CONFIRM_INDEX, CONFIRM_MIN_DETAILS};
 
 fn is_hex(b: u8) -> bool {
     b.is_ascii_hexdigit()
@@ -172,7 +170,7 @@ pub fn check_flow(screens: &Screens) -> Result<(), Violation> {
     let details = visible.iter().filter(|s| s.kind().is_some_and(Kind::is_detail_like)).count();
     let at = visible.iter().position(|s| s.kind() == Some(Kind::Confirm));
     let confirms = visible.iter().filter(|s| s.kind() == Some(Kind::Confirm)).count();
-    let expected = if details >= CONFIRM_MIN_DETAILS { Some(CONFIRM_INDEX) } else { None };
+    let expected = if details >= CONFIRM_MIN_DETAILS { Some(confirm_index(visible)) } else { None };
     if at != expected || confirms > 1 {
         return Err(Violation::ConfirmMisplaced { at, details });
     }

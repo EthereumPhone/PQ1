@@ -1,0 +1,25 @@
+{
+ "id": "pin-09",
+ "title": "Turn the already-enabled ADC4 analog-watchdog tampers (ITAMP7/12/13) into a live voltage-glitch detector",
+ "threat": "Fault injection on the PIN gate and counter writes: pq1's only FI sensors are code redundancy and TAMP internal tampers; ITAMP7/12/13 are enabled in CR1 but no ADC is configured, so like Trezor's they 'are never triggered'. The STM32U5 has no RP2350-style glitch detector, so a VDD glitch that stays below the BOR threshold is invisible to hardware today.",
+ "proposal": "Configure ADC4 (internal channels only: VREFINT, VCORE/VDDA, temperature \u2014 no bonded pins needed on the 48-pin pq1) in continuous low-power mode with tight analog-watchdog windows around the measured nominal; route AWD1/2/3 to ITAMP7/12/13 which already feed the confirmed-mode (CR3=0) tamper path and `tamp-wipe`. Characterise thresholds on silicon with the Scaffold/crowbar bench first (log-only build, record false-positive rate across temperature and USB-source swaps), then ship with `tamp-irq` so the response latency is cycles, not the 1 ms SysTick poll. Keep the secure TIM as the ADC trigger so NS cannot stop sampling.",
+ "rationale": "`tamp.rs:290-307` enables ITAMP7/12/13 and writes CR3=0 (its comment still says 'we don't have data in backup SRAM', which is stale: the BHK lives in BKP0R..7R per #208); `grep -rni adc4 secure/src` finds no ADC driver, so the three tampers can never fire. Trezor's tamper.c:139-151 enables the same bits and documents them as never triggered \u2014 pq1 can go beyond parity cheaply because the plumbing already exists. ADC bandwidth is slow, so this complements (not replaces) pin-03/pin-07.",
+ "repo_evidence": [
+  "secure/src/hw/tamp.rs:290-307 (ITAMP7/12/13 enabled; CR3=0; stale 'no backup SRAM data' comment)",
+  "grep -rniE 'adc4|adc_' secure/src -> no hits",
+  "Makefile:2662 (ship set lacks tamp-irq)",
+  "GitHub #391 (TAMP never run on silicon), #208 (TAMP x BHK), #256 (tamp-irq flip), #248"
+ ],
+ "vendor_precedent": "Trezor tamper.c:139-151 enables the same ITAMP7/12/13 but configures no ADC ('never triggered'); ST AN5156 treats power/clock glitching as a typical threat. No wallet vendor documents a configured ADC4 AWD glitch detector.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "False positives under confirmed mode wipe the device (CR3=0 erases BKPxR including the loaded BHK, and tamp-wipe arms the page-125 wipe); thresholds must be characterised on every board revision and across USB sources, and #391/#208 (TAMP never silicon-tested; ITAMP6 trips on probe attach at RDP>0) must close first. A glitcher who knows the AWD window can shape the pulse below it; this raises cost, it is not a guarantee.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/tamper/stm32u5/tamper.c:112-173",
+  "https://www.st.com/resource/en/application_note/an5156-introduction-to-security-for-stm32-mcus-stmicroelectronics.pdf",
+  "https://github.com/EthereumPhone/PQ1/issues/391"
+ ],
+ "surface": "pin"
+}

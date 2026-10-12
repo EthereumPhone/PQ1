@@ -70,6 +70,8 @@ import hashlib
 import json
 import re
 import sys
+import shlex
+import tomllib
 from pathlib import Path, PurePosixPath
 
 VERIF_DIR = Path(__file__).resolve().parents[1]
@@ -81,6 +83,76 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-secure-wrapper': (
+        ('secure/src/crypto.rs', 'secure/src/fi.rs', 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', 'contracts/verification/tools/secure-wrapper-model/build.rs', 'contracts/verification/tools/secure-wrapper-model/generate.rs', 'contracts/verification/tools/secure-wrapper-model/Cargo.toml', 'contracts/verification/tools/secure-wrapper-model/Cargo.lock', 'contracts/verification/scripts/materialize_secure_wrapper.py', 'contracts/verification/scripts/normalize_secure_wrapper_extraction.py'),
+        ('contracts/verification/extracted/Extracted/SecureWrapper/Funs.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/Types.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/FunsExternal.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/TypesExternal.lean'),
+    ),
+    'extract-sign-release': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/fors.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/shuffle.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs'),
+        ('contracts/verification/extracted/Extracted/SignRelease/Funs.lean', 'contracts/verification/extracted/Extracted/SignRelease/Types.lean', 'contracts/verification/extracted/Extracted/SignRelease/FunsExternal.lean'),
+    ),
+    'extract-sign-forest': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/fors.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/shuffle.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs'),
+        ('contracts/verification/extracted/Extracted/SignForest/Funs.lean', 'contracts/verification/extracted/Extracted/SignForest/Types.lean', 'contracts/verification/extracted/Extracted/SignForest/FunsExternal.lean'),
+    ),
+    'extract-shuffle': (
+        ('sphincs-c10/src/shuffle.rs',),
+        ('contracts/verification/extracted/Extracted/Shuffle/Funs.lean', 'contracts/verification/extracted/Extracted/Shuffle/Types.lean', 'contracts/verification/extracted/Extracted/Shuffle/FunsExternal.lean'),
+    ),
+    'extract-wots-sign': (
+        ('sphincs-c10/src/wots.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/shuffle.rs', 'sphincs-c10/src/hypertree.rs'),
+        ('contracts/verification/extracted/Extracted/WotsSign/Funs.lean', 'contracts/verification/extracted/Extracted/WotsSign/Types.lean', 'contracts/verification/extracted/Extracted/WotsSign/FunsExternal.lean'),
+    ),
+    'extract-xmss-auth': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/XmssAuth/Funs.lean', 'contracts/verification/extracted/Extracted/XmssAuth/Types.lean', 'contracts/verification/extracted/Extracted/XmssAuth/FunsExternal.lean'),
+    ),
+    'extract-xmss-root': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/XmssRoot/Funs.lean', 'contracts/verification/extracted/Extracted/XmssRoot/Types.lean', 'contracts/verification/extracted/Extracted/XmssRoot/FunsExternal.lean'),
+    ),
+    'extract-fors-auth': (
+        ('sphincs-c10/src/fors.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/ForsAuth/Funs.lean', 'contracts/verification/extracted/Extracted/ForsAuth/Types.lean', 'contracts/verification/extracted/Extracted/ForsAuth/FunsExternal.lean'),
+    ),
+    'extract-fors-root': (
+        ('sphincs-c10/src/fors.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/ForsRoot/Funs.lean', 'contracts/verification/extracted/Extracted/ForsRoot/Types.lean', 'contracts/verification/extracted/Extracted/ForsRoot/FunsExternal.lean'),
+    ),
+    'extract-fors-secret': (
+        ('sphincs-c10/src/hash.rs', 'sphincs-c10/src/params.rs'),
+        ('contracts/verification/extracted/Extracted/ForsSecret/Funs.lean', 'contracts/verification/extracted/Extracted/ForsSecret/Types.lean', 'contracts/verification/extracted/Extracted/ForsSecret/FunsExternal.lean'),
+    ),
+    'extract-wots-keygen': (
+        ('sphincs-c10/src/wots.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/WotsKeygen/Funs.lean', 'contracts/verification/extracted/Extracted/WotsKeygen/Types.lean', 'contracts/verification/extracted/Extracted/WotsKeygen/FunsExternal.lean'),
+    ),
+    'extract-wots-secret': (
+        ('sphincs-c10/src/hash.rs', 'sphincs-c10/src/params.rs'),
+        ('contracts/verification/extracted/Extracted/WotsSecret/Funs.lean', 'contracts/verification/extracted/Extracted/WotsSecret/Types.lean', 'contracts/verification/extracted/Extracted/WotsSecret/FunsExternal.lean'),
+    ),
+    'extract-fors-pk': (
+        ('sphincs-c10/src/fors.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/ForsPk/Funs.lean', 'contracts/verification/extracted/Extracted/ForsPk/Types.lean', 'contracts/verification/extracted/Extracted/ForsPk/FunsExternal.lean'),
+    ),
+    'extract-verifier': (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/fors.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/merkle.rs'),
+        ('contracts/verification/extracted/Extracted/Verify/Funs.lean', 'contracts/verification/extracted/Extracted/Verify/Types.lean', 'contracts/verification/extracted/Extracted/Verify/FunsExternal.lean'),
+    ),
+
+    "extract-fors-grind-r": (
+        ("sphincs-c10/src/fors.rs", "sphincs-c10/src/params.rs", "sphincs-c10/src/hash.rs"),
+        ("contracts/verification/extracted/Extracted/GrindR/Funs.lean",
+         "contracts/verification/extracted/Extracted/GrindR/Types.lean",
+         "contracts/verification/extracted/Extracted/GrindR/FunsExternal.lean"),
+    ),
+    "extract-wots-find-count": (
+        ("sphincs-c10/src/wots.rs", "sphincs-c10/src/params.rs",
+         "sphincs-c10/src/hypertree.rs", "sphincs-c10/src/address.rs", "sphincs-c10/src/hash.rs"),
+        ("contracts/verification/extracted/Extracted/FindCount/Funs.lean",
+         "contracts/verification/extracted/Extracted/FindCount/Types.lean",
+         "contracts/verification/extracted/Extracted/FindCount/FunsExternal.lean"),
+    ),
     "extract-sphincs-adrs": (
         ("sphincs-c10/src/address.rs",),
         ("contracts/verification/extracted/Extracted/Adrs.lean",),
@@ -107,6 +179,10 @@ REQUIRED_ENTRY_PATHS = {
         ("contracts/verification/extracted/Extracted/Merkle/Funs.lean",
          "contracts/verification/extracted/Extracted/Merkle/Types.lean",
          "contracts/verification/extracted/Extracted/Merkle/FunsExternal.lean"),
+    ),
+    "extract-fors-recovery": (
+        ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/params.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/hash.rs'),
+        ('contracts/verification/extracted/Extracted/ForsRecovery/Funs.lean', 'contracts/verification/extracted/Extracted/ForsRecovery/Types.lean', 'contracts/verification/extracted/Extracted/ForsRecovery/FunsExternal.lean'),
     ),
     "extract-wots-pkfromsig": (
         ("sphincs-c10/src/wots.rs", "sphincs-c10/src/params.rs"),
@@ -178,7 +254,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "6dbf6e5fa48a7733a7ca39660b66469c0f656a9cd2e648ead39bad11a2919df7"
+REGISTRY_BINDING_SHA256 = "fbf973b43398a3fe0965ee2246c0276a8b06a6184d721a7f21b18bb58da60364"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")
@@ -347,6 +423,50 @@ def max_attempts_consistency_errors(
     return []
 
 
+def c10_profile_errors(make_text: str | None = None, cargo_text: str | None = None) -> list[str]:
+    """Bind the extracted MIR assertion/overflow modes to the intended callers.
+
+    This is a configuration tripwire, not a compiler-correctness proof. The
+    checked signer caller is retained solely for its explicit comparison theorem.
+    Every registered C10 component and the release caller use assertions off.
+    """
+    make_text = make_text if make_text is not None else (VERIF_DIR / "Makefile").read_text()
+    cargo_text = cargo_text if cargo_text is not None else (REPO_ROOT / "Cargo.toml").read_text()
+    errors = []
+    for target, (rust_paths, _) in REQUIRED_ENTRY_PATHS.items():
+        if not rust_paths[0].startswith("sphincs-c10/") and target != "extract-secure-wrapper":
+            continue
+        mode = "on" if target == "extract-sign-forest" else "off"
+        blocks = re.findall(r"(?ms)^_" + re.escape(target) + r"-impl:\n(.*?)(?=\n\n|\Z)", make_text)
+        if len(blocks) != 1:
+            errors.append(f"{target}: missing/duplicate extraction recipe")
+            continue
+        block = blocks[0]
+        commands = re.findall(r"\$\(PQLEAN\)/charon (.*?) 2>&1", block, re.S)
+        if len(commands) != 1:
+            errors.append(f"{target}: missing/duplicate Charon command")
+            continue
+        try:
+            args = shlex.split(commands[0].replace("\\\n", " "))
+        except ValueError:
+            errors.append(f"{target}: malformed Charon arguments")
+            continue
+        profile_args = [a for a in args if "debug-assertions" in a or "overflow-checks" in a]
+        expected = [f"--rustc-arg=-Cdebug-assertions={mode}", "--rustc-arg=-Coverflow-checks=on"]
+        if profile_args != expected:
+            errors.append(f"{target}: expected exact assertion/overflow flags {expected}, got {profile_args}")
+    try:
+        profile = tomllib.loads(cargo_text)["profile"]["release"]
+        if profile.get("debug-assertions", False) is not False or profile.get("overflow-checks") is not True:
+            errors.append("Cargo release must disable debug assertions and enable overflow checks")
+        for name, override in profile.get("package", {}).items():
+            if "debug-assertions" in override or "overflow-checks" in override:
+                errors.append(f"Cargo package profile {name}: assertion/overflow override requires review")
+    except (tomllib.TOMLDecodeError, KeyError, TypeError) as exc:
+        errors.append(f"Cargo release profile unreadable: {exc}")
+    return errors
+
+
 def evaluate(reg: dict) -> tuple[list[str], list[str], list[str], int, int]:
     """The check core, against an in-memory registry dict (self_test passes mutated
     copies here — the real extraction_registry.json is never touched).
@@ -358,6 +478,7 @@ def evaluate(reg: dict) -> tuple[list[str], list[str], list[str], int, int]:
 
     try:
         floor_fails.extend(max_attempts_consistency_errors())
+        floor_fails.extend(c10_profile_errors())
     except OSError as exc:
         floor_fails.append(f"PinState MAX_ATTEMPTS cross-check unreadable: {exc}")
 
@@ -640,6 +761,29 @@ def self_test() -> int:
     reg = load_registry()
     fw = next(e for e in reg["entries"] if e["target"] == "extract-fwmanifest-preimage")
     ok = True
+
+    make_text = (VERIF_DIR / "Makefile").read_text()
+    cargo_text = (REPO_ROOT / "Cargo.toml").read_text()
+    if c10_profile_errors(make_text, cargo_text):
+        print("  FAIL: clean C10 extraction/release profile check")
+        ok = False
+    else:
+        controls = [
+            make_text.replace("--rustc-arg=-Cdebug-assertions=off", "--rustc-arg=-Cdebug-assertions=on", 1),
+            make_text.replace("--rustc-arg=-Cdebug-assertions=off", "", 1),
+            make_text.replace("--rustc-arg=-Coverflow-checks=on", "--rustc-arg=-Coverflow-checks=off", 1),
+            make_text.replace("--rustc-arg=-Coverflow-checks=on", "", 1),
+            make_text.replace("--rustc-arg=-Coverflow-checks=on", "--rustc-arg=-Coverflow-checks=on --rustc-arg=-Coverflow-checks=off", 1),
+            make_text.replace("--rustc-arg=-Cdebug-assertions=on", "--rustc-arg=-Cdebug-assertions=off", 1),
+        ]
+        rejected = all(c10_profile_errors(value, cargo_text) for value in controls)
+        rejected = rejected and bool(c10_profile_errors(make_text, cargo_text.replace("overflow-checks = true", "overflow-checks = false")))
+        rejected = rejected and bool(c10_profile_errors(make_text, cargo_text + '\n[profile.release.package."profile-probe"]\ndebug-assertions = false\n'))
+        if rejected:
+            print("  ok: eight wrong/missing/conflicting C10 profile controls rejected")
+        else:
+            print("  FAIL: a C10 profile control survived")
+            ok = False
 
     if registry_binding(reg) == REGISTRY_BINDING_SHA256:
         print("  ok: clean registry matches its checker-owned integrity binding")

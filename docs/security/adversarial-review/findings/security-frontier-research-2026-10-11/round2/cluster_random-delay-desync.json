@@ -1,0 +1,237 @@
+{
+ "merge": {
+  "cluster": "random-delay-desync",
+  "title": "Land the fixed FI-delay source on master, add dispatcher-entry jitter, then a measurement-gated always-on RDI on the existing secure SysTick (no timing canary)",
+  "threat": "Fault injection (voltage/EM) timed at a fixed offset from an externally observable anchor (NSC veneer entry driven by a host HID frame, button edge, SE I2C or LCD SPI activity), and to a lesser degree SCA trace alignment.\n\nThree concrete exposures, in order of weight:\n\n1. LIVE on master and on this branch: `secure/src/fi.rs:58-59,72` replays `FI_DELAY_LAST_GOOD` when the TRNG errors. A glitcher who latches SECS/CECS collapses every `wait_random` length to one constant. Inside every `rng::fill`, 31 of 32 delays are identical because nested draws lose `DriverGuard` (#832, measured on silicon). The check-delay-recheck pairs in `hw/rng.rs` therefore sit at a known separation.\n2. The first sentinel/pointer check after NS->S entry sits at a fixed cycle offset from the veneer. `nsc/mod.rs` veneers go straight into `cmd::run`; `cmd_sign_userop.rs:105-116` reaches the `pin_verified` sentinel with no prior delay. Only the recheck is jittered (`nsc/ns_ptr.rs:84-90`).\n3. Code between annotated sites (231 non-test `wait_random()` call lines across secure/src) has no continuous jitter.",
+  "proposal": "Three stages. Only stage 2 is the contested RDI.\n\n**Stage 0 \u2014 fix the delay source on master (S, effectively P1, already owner-decided).**\n- Merge the `perf/flash-opt-level-z` delay-source work: `fi_delay_pool` (#832), no-reuse arm (#834), and the owner-chosen \"option 2\" from #835 (poison flag that makes `rng::fill` and release gates refuse; no halt).\n- Include the #835 C1/C2/C3 fixes and the loud, counted consumption-mask reseed (#831).\n- None of this is on master: `git merge-base --is-ancestor dd901592 master` fails and `fi_delay_pool.rs` is absent from master and HEAD.\n- Add a release-gate test that the reuse arm is gone.\n\n**Stage 1 \u2014 dispatcher-entry jitter (S).**\n- One `fi::wait_random()` (TRNG pool) as the first statement after `HandlerGuard::enter` in the shared entry of all 36 `cmse-nonsecure-entry` veneers.\n- Purpose: the first unlock-sentinel and pointer check stop being at a fixed offset from the NS call. RDI cannot cover this window, because a 1 ms tick lands in a sub-ms window with low probability.\n\n**Stage 2 \u2014 always-on floating-mean RDI (M, P2, behind silicon gates).**\n- Host: the existing 1 kHz secure SysTick (`main.rs:4285`, highest priority via SHPR3 at `main.rs:885-888`). Not TIM2/TIM3, which are the consumption-mask PWM timers.\n- Handler: cycle-exact asm busy-wait of `fresh8 + session8` units (0..510, at most ~340 cycles, about 0.2% CPU).\n- Generator: a dedicated ChaCha DRBG that only the ISR consumes. A single context means no lock, so no Trezor-style \"return 128 on contention\" arm. At least 246-bit state in S-SRAM, zeroized on lock/tamper/brownout, not in `rng.rs`, separate from the mask xorshift and from the call-site TRNG pool (master CLAUDE.md:364 conditions a-f).\n- Seeding: seed and `session_delay` are drawn in thread mode at NSC veneer entry/exit and at S-world button edges, then handed to the ISR through an atomic mailbox. The ISR never touches the TRNG driver (it would lose `DriverGuard`, #835 H5), the HASH/SAES peripherals, or SE I2C.\n- Reseed failure sets the stage-0 poison flag (loud, counted). No halt, no constant.\n- An FihBool enable flag whose corruption counts as a fault.\n- Compiled out under `e2e-test`, like `wait_random` (`fi.rs:87-91`), with a fence so that state cannot ship.\n- No masking windows. SysTick already preempts SE I2C, LCD and NS USB every millisecond with more work than this, and a mask flag would itself be a fault target.\n\n**Ship gates for stage 2.**\n- `test-key-speed` re-baseline on pq1.\n- TE/tearing re-measured in the pq1-uiconform worktree (#780 margin 27.9 ms against 31.4 ms; the RDI adds at most ~70 us per frame).\n- USB HID soak and SE050/OPTIGA stress with the RDI on.\n- `isr_fb`-style counters in the evidence record.\n- An explicit written answer to #805 sub-question 5 (numbers under `rationale`).\n\n**Rider (S, optional).** After `hw::rng::init()` (`main.rs:1384`), one `wait_random` + `read_volatile_voted` + sentinel re-read of RCC CFGR1/PLL1CFGR/PLL1DIVR and SAU/GTZC/AIRCR. Land it with #642 (bounded RCC waits) and #269.",
+  "members": [
+   {
+    "id": "FI-04",
+    "disposition": "modified",
+    "note": "Core kept (RDI + no-reuse TRNG policy). Applied round-1 corrections: host on SysTick not TIM2/TIM3; no USB-packet refresh (OTG is NS-owned, veneer entry is the equivalent); ISR never draws TRNG; poison flag instead of fault/halt or ~800 fallible sites; add dispatcher-entry wait because RDI gives nothing in the first ~1 ms. Trezor date is 2020 not 2019; Trezor refreshes only on USB data events, so veneer/button refresh is slightly beyond. Priority lowered P1 -> P2 for the RDI part; the no-reuse part is stage 0."
+   },
+   {
+    "id": "SCA-05",
+    "disposition": "modified",
+    "note": "Same RDI, merged. Its threat statement is overstated: the sign path already has the F-16 Fisher-Yates shuffle (sphincs-c10/src/shuffle.rs, hypertree.rs:18,48) and per-signature target-sum grinding (+-1 s), so the timeline is not deterministic. Dropped: 'SP 800-90A-shaped' label (CLAUDE.md:364(e) forbids the claim for ChaCha), TIM2 host, masking around T=1'/IFX guard windows. Its dependency ordering 'fix #835 first' is adopted as stage 0. SCA benefit rated low."
+   },
+   {
+    "id": "pin-07",
+    "disposition": "modified",
+    "note": "Merged, but windowed arm/disarm is rejected in favour of always-on: cost is ~0.2%, and an arm flag is a fault target that leaves other paths uncovered. 'Feed from existing fi_delay_pool' is wrong twice: the pool is not on master/HEAD, and a 1 kHz consumer is exactly the case the DRBG carve-out exists for. FSBL RDI dropped (fsbl/src/fi.rs has no TRNG; Trezor's bootloader does not start RDI either). pin-06 backoff pairing belongs to another cluster. Its P2 is the adopted priority."
+   },
+   {
+    "id": "SYS-05",
+    "disposition": "modified",
+    "note": "(a) RDI merged. (b) DWT-CYCCNT canary DROPPED: frequency-invariant, blind to data faults, and DWT is deliberately NS-writable (main.rs:4263-4273). (c) wait_random before SAU/GTZC/RCC writes is not realisable as written because RNG init (main.rs:1384) runs after rcc::init (1193) and sau::init (1351), so the delay would be the constant 0x5A; re-scoped to the post-RNG voted re-read rider. Bounded RCC spins are already #642. (d) #802 gate is already fixed on master (the `is_idle() && is_unlocked()` line is gone there; still present on this branch at main.rs:4350). Novelty 'beyond' rested on the dropped canary, so it becomes parity."
+   },
+   {
+    "id": "USB-02",
+    "disposition": "modified",
+    "note": "Veneer-entry wait_random kept as stage 1 (verified: veneers call cmd::run directly, first sentinel at fixed offset). Veneer-exit wait dropped: nothing security-relevant follows the return. Two evidence claims are false: 'callers only in crypto.rs:352,407 and fih.rs:114' (actual: 231 non-test call lines in ~40 files, including nsc/ns_ptr.rs:88,112) and threat-model.md:321 'Planned' is stale doc text, not code state. 'Source from rng_strong' rejected (fi.rs:30-45 and the sca-1 rule: never rng_strong in ISR or per-delay)."
+   },
+   {
+    "id": "FI-09",
+    "disposition": "dropped",
+    "note": "Headline TimedWindow refuted by round-1 feasibility and not rescued here: a core-clocked window cannot see PLL perturbation on HSI16->PLL1, is blind to stuck-at faults, and its envelope must absorb the very jitter this cluster adds. Only its parts (2)/(3) survive, as the optional post-RNG voted readback rider. A real clock-anomaly detector (LSI-clocked LPTIM ratio) is a different proposal and is not included."
+   }
+  ],
+  "tracked_issues": [
+   "#805 (open, priority:medium, mislabelled surface:clear-signing): the RDI itself, five open sub-questions, carve-out conditions a-f",
+   "#835 (open, priority:critical): halt sink net-negative; owner chose option 2; fixes exist only on perf/flash-opt-level-z",
+   "#834 (open, priority:high): no-reuse FI delay; dd901592 not on master",
+   "#832 (CLOSED 2026-10-09): constant delay inside rng::fill; closed although fi_delay_pool.rs is absent from master and HEAD",
+   "#643 (open): predictable FI-delay reuse under nested RNG operations; same defect as #832",
+   "#831 (open): consumption-mask reseed fails open and silent; prerequisite for carve-out condition (d)",
+   "#802 (open, priority:high): SysTick idle TRNG draw; gate fixed on master, DRBG remainder open",
+   "#642 (open): bound RCC/HSI48 readiness waits (SYS-05c / FI-09 rider)",
+   "#269 (open) and #80 (open): secure RCC/PWR config; precondition for a meaningful clock-tree readback",
+   "#46 (open): pin RM0456 option-byte values into the read-back verifier",
+   "#228 (open): on-silicon PRF leakage measurement; decides whether there is any SCA motive",
+   "#241 (open): leakage pass over the FI guards themselves",
+   "#301 (open) and #401 (open): glitch bench campaign that would measure the RDI's effect",
+   "#783 (open): chooser freeze / EXTI latch, relevant to the TE-strobe interaction",
+   "#780 (closed): TE-sync margin the RDI must be re-measured against"
+  ],
+  "untracked_delta": "- **Merge to master is untracked.** No issue covers landing the perf/flash-opt-level-z delay-source commits on master (24 commits ahead). #832 is closed without it, so the shipping branch still carries the reuse arm with nothing open saying so.\n- **Dispatcher-entry `wait_random`** for all 36 veneers is not in any issue.\n- **RDI design decisions absent from #805:** ISR-only lock-free generator; thread-mode seed/session mailbox; poison-flag degraded path; no masking windows; always-on rather than windowed.\n- **Archive rebuttal not recorded.** #805 does not cite or answer the 2026-05-28 \"do NOT build\" verdict; the rebuttal is under `rationale`.\n- **Pre-RNG-init delays are constant.** Any `wait_random` before `hw::rng::init()` uses 0x5A; unrecorded.\n- **Doc drift.** `docs/security/threat-model.md:321` still lists `wait_random` as \"Planned\".\n- **Label fix.** #805 is labelled surface:clear-signing; it should be surface:sca-fi.\n- **Post-RNG voted readback rider** (RCC/SAU/GTZC/AIRCR) is untracked as such.",
+  "decision_conflicts": [
+   "Archive work-todo line 1940-1964 (2026-05-28): 'RDI NOT MOTIVATED ... Do NOT build the subsystem'. Partly overturned, partly standing; see rationale. That passage itself rates FI benefit 'marginal'.",
+   "Archive line 1937 (2026-05-20): entry jitter deliberately scoped to the PIN gate only, 'NOT an always-on RDI timer'. Stage 1 widens it to all veneers; stage 2 reverses the RDI part. The owner reopened the question in #805 (2026-10-08).",
+   "CLAUDE.md on this branch (line 355) still reads the absolute 'No software PRNG'. The carve-out naming 'any future always-on RDI, #805' exists only on master (165577a5, CLAUDE.md:364); this branch is 104 commits behind. Stage 2 must be built on master.",
+   "Carve-out condition (c), one consumer per generator: the RDI DRBG cannot be shared with call-site wait_random or the mask xorshift, and cannot live in rng.rs.",
+   "Carve-out condition (d), 'not the dominant path': wording still ambiguous and awaiting an owner ruling per the #805 comments.",
+   "Carve-out condition (f): the FSBL delay stub is deterministic; adding RDI makes the secure world and FSBL diverge further. Must be recorded as a contract-vs-code gap.",
+   "#834 owner quote 'if the RNG fails ... it should error out' was first implemented as a halt, then replaced by option 2 (#835 comment). The RDI degraded path must follow option 2, not the halt.",
+   "Flash: the ui-px image is 76,949 B over the secure slot. A ChaCha core plus handler is roughly 1-3 KB (estimate, unmeasured; chacha20 is in Cargo.lock only as a host dependency) and adds to an open owner decision.",
+   "No conflict with invariant #9's 'no new per-signature flash state': the proposal stores nothing in flash."
+  ],
+  "hardware_asks": [
+   "None required. No board or enclosure change; no new pin (PA6/TIM3 stays the mask output).",
+   "Bench only: a glitch/EM rig (#301) and a scope on the SE rail to measure before/after hit rates. Without it the stage-2 benefit stays unmeasured."
+  ],
+  "precedent": "**Trezor (only vendor found shipping a periodic RDI).**\n- `core/embed/sec/random_delays/stm32/random_delays.c:139-181`: 1 ms systimer, `wait(drbg_random8() + session_delay)`, `ensure` on a corrupted flag.\n- `sec/rdi` is in the default features of both `kernel/Cargo.toml:102` and `secmon/Cargo.toml:81`.\n- Started at `secmon/main.c:117-119` and `kernel/main.c:145-147`.\n- `session_delay` is refreshed only from USB data in/out (`usb.c:728,748`) through an NS->S smcall (`smcall_stubs.c:160`, `smcall_dispatch.c:166`).\n- T3W1 is `mcu = \"stm32u5g\"` with `secmon = true`. `random_delays.c` is compiled under SECURE_MODE and `usb.c` under KERNEL_MODE, so Trezor runs the RDI in the TrustZone secure monitor preempting a non-secure USB stack on U5 silicon.\n- Trezor's bootloader does not start the RDI (`bootloader/main.c:319`).\n- Wart not to copy: `drbg_random8` returns the constant 128 on lock contention (`random_delays.c:72-85`).\n\n**Others.**\n- Ledger: no public evidence of a software RDI. The Donjon FDTC23 DS28C36 talk (slide 28) recommends combining double verification with jitter.\n- TF-M and the u-Glitch paper (Sass et al., USENIX Security 2023) use call-site delays only.\n- Timing canary: NXP AN12912 Code Watchdog and RP2350 glitch detectors are hardware features with an independent reference; no software equivalent on U585 was found, and that part is dropped.",
+  "novelty": "parity",
+  "kind": "firmware",
+  "cost": "M",
+  "priority": "P2",
+  "live_defects": [
+   {
+    "what": "FI-delay reuse arm: on a TRNG error every wait_random length becomes the last good byte (initially 0x5A), so an attacker who latches SECS/CECS turns all call-site jitter into a constant.",
+    "evidence": "secure/src/fi.rs:58-59 and :72 on HEAD; `git show master:secure/src/fi.rs` has 3 FI_DELAY_LAST_GOOD references; secure/src/rng.rs:115-121 byte_nonsecret returns the fallback on Err; the fix dd901592 is only on perf/flash-opt-level-z.",
+    "reachable_in_production_config": "Yes. The arm is under cfg(not(test)) and wait_random is live unless e2e-test, which production excludes. Not attacker-demonstrated on a bench.",
+    "severity": "high (tracked #834/#835, but master still carries it)"
+   },
+   {
+    "what": "Inside every rng::fill, 31 of 32 FI delays are identical, so the check-delay-recheck pairs in the function that produces BIP-39 entropy, SE handshake keys and OptRand are at a known separation. The issue is CLOSED while the fix is not on master.",
+    "evidence": "master secure/src/hw/rng.rs:173,227,287,343,372 wait_random under DriverGuard (try_acquire at :579,:620); #832 silicon measurement 32 calls / 31 fallbacks; `git ls-tree master secure/src/fi_delay_pool.rs` is empty.",
+    "reachable_in_production_config": "Yes; measured configuration-independent on the EVT unit, including with consumption-mask live.",
+    "severity": "medium-high (FI hardening degraded, not a direct break)"
+   },
+   {
+    "what": "Consumption-mask periodic reseed is fail-open and silent: `if rng::fill(..).is_ok() {}` with no else, log or counter.",
+    "evidence": "#831; code is in hw/consumption_mask.rs randomize() (not re-opened in this pass); main.rs:4329-4337 calls it from SysTick with the comment 'fail-open'. Contention measured zero at bench load, untested during a sign.",
+    "reachable_in_production_config": "Yes (consumption-mask is production-forced). Impact is bounded because the mask pin drives no load on either board.",
+    "severity": "low-medium"
+   },
+   {
+    "what": "First sentinel check after NS->S entry is at a fixed cycle offset from the veneer; only the duplicate check is jittered.",
+    "evidence": "secure/src/nsc/mod.rs veneers call cmd::run directly; secure/src/nsc/cmd_sign_userop.rs:105-116 reaches pin_verified.check_sentinel with no prior wait_random; nsc/ns_ptr.rs:84-90 jitters only between v1 and v2.",
+    "reachable_in_production_config": "Yes. Needs two coordinated faults to matter (sentinel plus duplicate), so it is a hardening gap rather than a bypass.",
+    "severity": "low-medium"
+   },
+   {
+    "what": "wait_random executed before hw::rng::init() uses the constant 0x5A, and DWT CYCCNT is NS-writable, so no secure timing reference exists.",
+    "evidence": "secure/src/main.rs:1193 (rcc), :1351 (sau), :1384 (rng init); fi.rs:72 initial value 0x5A; main.rs:4263-4273 DWT unlocked for NS. Not checked which gates actually run in that pre-init window.",
+    "reachable_in_production_config": "Yes, by construction.",
+    "severity": "low"
+   },
+   {
+    "what": "Doc drift: threat-model lists the wait_random glitch sentinel as 'Planned' although it is implemented.",
+    "evidence": "docs/security/threat-model.md:321 against 231 non-test wait_random() call lines in secure/src.",
+    "reachable_in_production_config": "n/a (documentation)",
+    "severity": "low"
+   }
+  ],
+  "residual_after": "- **Pattern-triggered FI is unaffected.** An attacker who re-arms on a power/EM signature or a bus edge within ~1 ms of the target sees no RDI tick in between. pq1 exposes many such edges (two SEs on I2C, the LCD SPI), which is why stage 2 is P2.\n- **The NS-chosen anchor remains.** A compromised NS world or the host still picks the veneer-entry instant; stage 1 adds only 0-255 loop iterations (about 19 us) there.\n- **SCA: trace count rises, leakage does not fall.** Traces can be re-aligned elastically on HASH-peripheral bursts. Single-trace/template attacks on boot-once operations (entropy unwrap, DHUK KDF, XOR reconstruction) are untouched, as the archive argued.\n- **DRBG state recovery.** If the state is recovered from a trace within a reseed window, the jitter can be subtracted.\n- **Multi-fault attacks** with a per-shot re-trigger remain possible.\n- **No clock or voltage glitch detector.** HSI16->PLL with no independent reference check; the canary was dropped.\n- **Stuck-at/data faults** inside un-instrumented code are not addressed.\n- **FSBL has no jitter** (no TRNG): its image-verify gates stay at fixed offsets from reset.\n- **Pre-RNG-init boot gates** keep constant delays.\n- **Consumption-mask dilution** stays unmeasured.",
+  "rationale": "**Where I downgraded.** The RDI part goes from the P1 that three members proposed to P2. The one piece that deserves P1 is stage 0, which is a merge of already-decided work, not new design.\n\n**Engaging the archive verdict (work-todo-retired lines 1937-1964). It makes three arguments.**\n\n1. *\"RDI fights our NS-world USB stack; Trezor runs USB + crypto + RDI in one secure context.\"* Overturned by new evidence.\n   - Trezor's current tree runs the RDI inside the TrustZone secure monitor on STM32U5G with USB in the non-secure kernel (T3W1 `secmon = true`; `random_delays.c` is SECURE_MODE, `usb.c` is KERNEL_MODE; refresh crosses via smcall).\n   - pq1's secure SysTick already preempts NS USB, SE I2C and the LCD every millisecond at highest priority. #802 measured 257 us per tick in that ISR on the EVT unit; the RDI adds at most ~2 us.\n   - OPTIGA guard time is a minimum, so stretching it is harmless.\n   - Not yet shown: a USB/SE soak with the RDI actually on. That is a stage-2 gate.\n2. *\"SCA is the motive, and the remaining leaks are single-trace value leaks on boot-once operations that RDI cannot fix.\"* Stands. I did not find evidence against it. The SCA-05 framing is weak because the sign path already has the F-16 shuffle and grinding variance. SCA is not the reason to build this.\n3. *\"FI benefit is marginal because the gates are already hardened.\"* Partly stands.\n   - New since then: #832 showed the call-site jitter was largely constant inside `rng::fill`; the reuse arm is an attacker-controllable off switch; Donjon's FDTC23 result says double verification alone is not enough.\n   - These argue mainly for fixing the delay source (stage 0), less for a global timer.\n\n**Answer to #805 sub-question 5 (my estimate, not measured).**\n- Per-tick jitter has a standard deviation of roughly 50 cycles, so drift is about 50*sqrt(N) cycles: ~1,500 cycles after 1 s, ~4,000 after 7 s.\n- That is a several-hundred-fold per-shot cost for a fixed-offset glitch far from any anchor.\n- It gives nothing within ~1 ms of a bus edge the attacker can trigger on.\n- The sign-release gates already move by up to a second per signature from grinding with fresh OptRand.\n\n**Net.** Cheap (~0.2% CPU, no hardware), vendor-proven on the same silicon family with the same world split, permitted by the amended contract on master. Benefit is unquantified and narrower than the members claimed, so it should ship only after the bench can show a difference.\n\n**Not done in this pass.**\n- The external reviewers (GPT-5.6 via MCP, the advisor tool) were unavailable (connection closed / rate-limited); the judgement above is single-model.\n- Trezor's systimer behaviour inside secmon was read from source, not run.\n- The TE-sync code lives in the pq1-uiconform worktree and was not opened.",
+  "prerequisites": [
+   "Stage 0 on master first: fi_delay_pool, no-reuse, option-2 poison flag, #835 C1/C2/C3 fixes, #831 loud reseed",
+   "Build on master, not feat/pq1-board-target (which lacks the CLAUDE.md:364 carve-out and the #802 gate fix)",
+   "Owner ruling on carve-out condition (d) wording and on whether #805 moves from 'research' to 'build'",
+   "Owner decision on the ui-px flash lever, or build the RDI only in non-ui-px images until then",
+   "Measure handler and ChaCha flash/CPU cost on pq1; re-baseline test-key-speed",
+   "Soak tests with RDI on: USB HID signing, make se050-stress, OPTIGA hw-counter e2e, TE/tearing in pq1-uiconform",
+   "Glitch bench (#301) for a before/after number; otherwise record the benefit as unmeasured",
+   "Record the FSBL stub as a contract-vs-code gap under condition (f)"
+  ],
+  "dropped_parts": [
+   "DWT-CYCCNT / TimedWindow timing canary (SYS-05b, FI-09 part 1): core-clocked so frequency-invariant, blind to data faults, envelope swallowed by the jitter, and DWT is NS-writable (main.rs:4263-4273). An LSI/LPTIM ratio check would be a separate proposal and was not evaluated.",
+   "TIM2/TIM3 as the RDI timer (FI-04, SCA-05, SYS-05, USB-02): both are the consumption-mask PWM timers (sau.rs:316-341); the secure SysTick already exists.",
+   "Session refresh on USB packet RX/TX (FI-04, SYS-05, pin-07): USB OTG is NS-owned; the secure world cannot see packets. Veneer entry is the equivalent.",
+   "Masking the RDI around SE I2C / T=1' / LCD windows (SCA-05, USB-02, FI-04 risk note): unnecessary at ~2 us on top of an ISR that already preempts them, and a mask flag is a fault target.",
+   "Windowed arm/disarm RDI (pin-07): no cost reason, leaves other paths uncovered, adds a faultable flag.",
+   "RDI or jitter in the FSBL (pin-07): no TRNG in the FSBL, 32 KiB budget, Trezor's bootloader does not do it, and the FSBL range must not grow casually before the #540 cutover.",
+   "Feeding the RDI from fi_delay_pool or raw TRNG (pin-07) or rng_strong (USB-02): recreates the #802 drain and DriverGuard contention; rng_strong is forbidden per-delay and in ISR.",
+   "ISR-side 'RDI switches to fault on TRNG error' (FI-04 item 3 as written) and per-site fallible wait_random: the ISR never sees the TRNG; replaced by the option-2 poison flag.",
+   "'SP 800-90A-shaped' DRBG claim (SCA-05): forbidden by carve-out condition (e).",
+   "wait_random before SAU/GTZC/RCC writes inside rcc::init/sau::init (SYS-05c, FI-09 parts 2-3 as written): no TRNG at that point; re-scoped to a post-RNG voted re-read.",
+   "Veneer-exit wait_random (USB-02): no gate follows the return.",
+   "SYS-05(d) #802 fix: already on master.",
+   "Timing envelopes on gated_unlock -> SE verdict and SCP03/CCM unwrap (FI-09): I2C/WTX latency varies by orders of magnitude; a reliability bug."
+  ],
+  "repo_evidence": [
+   "/home/nicola/repos/PQSigner_OS/secure/src/fi.rs:46-72,86-95 (reuse arm; e2e-test no-op)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/rng.rs:115-121 (byte_nonsecret fallback)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/main.rs:885-888 (SysTick highest priority), :4285-4365 (SysTick body), :1193/:1351/:1384 (init order), :4263-4273 (DWT handed to NS)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/mod.rs:1399-1414 (PIN entry jitter and its stated limit), veneers near :1920-1960",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/cmd_sign_userop.rs:105-116",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/ns_ptr.rs:84-90,108-113",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/rcc.rs:132-201 (unbounded readiness spins)",
+   "/home/nicola/repos/PQSigner_OS/sphincs-c10/src/shuffle.rs and hypertree.rs:18,48 (F-16 shuffle)",
+   "/home/nicola/repos/PQSigner_OS/docs/archive/work-todo-retired-2026-07-19.md:1937-1964",
+   "/home/nicola/repos/PQSigner_OS/docs/security/threat-model.md:321",
+   "master CLAUDE.md:364-366 (commit 165577a5) against this branch's CLAUDE.md:355",
+   "git: dd901592 not an ancestor of master; fi_delay_pool.rs present only on perf/flash-opt-level-z",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:31,72-85,139-181",
+   "/home/nicola/repos/trezor-firmware/core/embed/projects/secmon/main.c:117-119 and secmon/Cargo.toml:81",
+   "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/model.toml:1,3",
+   "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb.c:20,728,748",
+   "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_stubs.c:160 and smcall_dispatch.c:166"
+  ],
+  "sources": [
+   "https://github.com/EthereumPhone/PQ1/issues/805",
+   "https://github.com/EthereumPhone/PQ1/issues/835",
+   "https://github.com/EthereumPhone/PQ1/issues/834",
+   "https://github.com/EthereumPhone/PQ1/issues/832",
+   "https://github.com/EthereumPhone/PQ1/issues/831",
+   "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/random_delays/stm32/random_delays.c",
+   "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+   "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+   "Clavier, Coron, Dabbous, CHES 2000 (floating-mean random delays), as cited in Trezor random_delays.h:25-41"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.78,
+  "reason": "The core survives. Stage 0 is a real, live, already-decided fix that is not on master. Stage 1 addresses a real gap but is mis-specified. Stage 2 is feasible on pq1 with no board change and is correctly gated and P2, though its rationale has errors.\n\n**Stage 0 (confirmed).**\n- The reuse arm is on HEAD and master (secure/src/fi.rs:58-59,72; secure/src/rng.rs:115-121).\n- dd901592 is not an ancestor of master, and fi_delay_pool.rs is absent from both master and HEAD.\n- perf/flash-opt-level-z is 24 commits ahead of master and 0 behind; `git merge-tree master perf/flash-opt-level-z` produced a clean tree.\n- #835 records the owner decision \"go with option 2\", landed in 7594e606 on that branch.\n- #832 is closed with silicon evidence that exists only on that branch.\n\n**Stage 1 (bypassable as written).**\n- There is no shared veneer entry on stm32u585. Each veneer calls its own `cmd_*::run` (secure/src/nsc/mod.rs:1923-1948), and `HandlerGuard::enter` is per-handler.\n- In secure/src/nsc/cmd_sign_userop.rs:109-114, `ui::show_status(\"Sign\",\"validating...\")` runs between `HandlerGuard::enter` and the first `pin_verified` sentinel. That is an LCD flush (secure/src/ui/mod.rs:238-248), which the proposal's own threat statement lists as an attacker anchor.\n- A delay placed \"first after HandlerGuard::enter\" is therefore re-anchored by the SPI burst that follows it. The delay has to sit immediately before the first gate.\n\n**Stage 2 (feasible, benefit unmeasured).**\n- SysTick is highest priority (secure/src/main.rs:885-888) and is masked only inside flash/OTP/IWDG/log critical sections.\n- The Trezor precedent checks out in source: random_delays.c:31 is SECURE_MODE, usb.c:20 is KERNEL_MODE, secmon/Cargo.toml:81 has `sec/rdi`, secmon/main.c:119 starts it, and T3W1 model.toml has `secmon = true`.\n- This overturns the archive's \"Trezor runs it all in one secure context\" argument. The archive's SCA argument stands, and its \"FI benefit marginal\" argument mostly stands, as the recommendation concedes.\n- Residual after all three stages: an attacker who re-triggers on an LCD SPI, SE I2C or power-pattern edge within about 1 ms of the target is unaffected. The PIN verdict follows an SE I2C response, so it is in that class.\n\nNot checked: Trezor's systimer was read, not run; the TE-sync code in pq1-uiconform was not opened; no build or size measurement was made.",
+  "corrections": "**Stage 1**\n1. No \"shared entry\" exists. It needs a macro or per-veneer edits plus a source-grep gate.\n2. \"36 veneers\" is a grep artefact (three hits are comment lines at nsc/mod.rs:11,1902,1904). There are about 32 veneers; 17 are production-reachable (`stm32u585`/`iwdg` gated), 13 are `prodtest`, 2 are `e2e-test`.\n3. Placement must be immediately before the first gate, after any `ui::show_status` or other bus activity (cmd_sign_userop.rs:109-112).\n4. On the fixed branch, `wait_random` on `None` poisons the delay source and `rng::fill` refuses while poisoned. An entry wait in `nsc_lock`, `nsc_is_unlocked` or `nsc_fw_abort` must not make LOCK or zeroize refusable. Specify that.\n5. The first check is not a bare compare. `check_sentinel` goes through `check_true_into_sentinel` (secure/src/fih.rs:134-136), which double-evaluates with a `wait_random` between. Keep the \"needs two faults\" framing.\n\n**Stage 0**\n6. Cost S holds for the merge itself, but the branch also carries the opt-level-z flash change, ui-px bench probes and 73287916 (a probe that provokes a real latched RNG error behind a new fence). The merge needs a check that these are out of the ship feature set.\n7. #835 is still open at priority:critical with active bench commits. Treat it as \"land and close\", not \"already done\".\n8. dd901592 already touches secure_fi_pin_rng_pure_tests.rs (+77 lines). Check whether the \"reuse arm gone\" test already exists before adding one.\n9. \"#833\" resolves to an unrelated merged XMSS PR. The `fix(#833)` commit titles and the #835 title are a provenance mis-reference.\n\n**Stage 2**\n10. Units are inconsistent: 0..510 units cannot be \"at most ~340 cycles\". Trezor's figure is about 3 us, roughly 480 cycles at 160 MHz. A ChaCha block refill in the ISR every 64 ticks adds thousands of cycles on those ticks.\n11. \"#802 measured 257 us per tick, so SysTick already does more\" cites the defect that master removed. It does not establish steady-state ISR cost, so the USB/SE soak gate carries the whole rebuttal of the archive.\n12. The drift estimate gives only the sqrt(N) walk. The floating-mean term (session delay x N, varying per session) is the point of the Clavier-Coron-Dabbous design and is missing.\n13. Carve-out condition (a) requires a bounded reseed policy. Reseeding only on veneer and button events has no bound while idle or during a multi-second sign. Add a tick-count bound.\n14. Carve-out condition (b) requires zeroize on lock. \"Always-on\" then needs a defined post-lock state: immediate reseed, or the poison state.\n15. Flash: ui-px is not in PROD_SHIP_FEATURES (Makefile:2718), so the 76,949 B overage constrains the pilot, not shipping. The ship-shaped image has 34,071 B headroom per CLAUDE.md, but the true `mode-production` + `rdp2-self-lock` size is unmeasured. chacha20 is not in the secure dependency graph (`cargo tree -i chacha20` finds no package).\n\n**Other**\n16. \"Pre-RNG-init delays are constant\" is not untracked. The perf branch already counts and bounds it (`fixed_delay_permitted`, BOOTSTRAP_DELAYS, 7c53fcfb). rcc.rs and sau.rs contain zero `wait_random` or `check_true` sites, so no gate there depends on it.\n17. Priority split: stage 0 is P1 and already tracked (#834/#835); stage 1 is P2; stage 2 is P2 at most, and arguably P3 until the #301 bench can measure a difference.\n\nLive-defect verdicts are in `live_defect.evidence`.",
+  "corrected_priority": "P2",
+  "corrected_cost": "M",
+  "corrected_kind": "firmware",
+  "live_defect": {
+   "is_defect": true,
+   "evidence": "1. Reuse arm: CONFIRMED, severity overstated. secure/src/fi.rs:58-59,72 and secure/src/rng.rs:115-121 on HEAD; master has the same 3 FI_DELAY_LAST_GOOD references. But fill_bound checks `sr0 & ERROR_FLAGS` and runs `init_locked()` first (secure/src/hw/rng.rs:650-662), so one latched SECS/CECS is recovered. A constant results only from a persistent error (which also fails secret draws, so signing fails) or a per-call fault. Medium, not high.\n2. 31 of 32 constant inside rng::fill: CONFIRMED on HEAD and master. wait_random sits under DriverGuard (hw/rng.rs:620,639,680,709); fixed only on perf/flash-opt-level-z (2d9304d6, e23fc5cd). #832 is closed without the fix on master. Per the #805 measurement, the caller's own top-level draw is always fresh; the replay is confined to the RNG driver's internal delays.\n3. Consumption-mask reseed fail-open and silent: CONFIRMED. secure/src/hw/consumption_mask.rs:183 is `if crate::rng::fill(&mut sb).is_ok() {` with no else; consumption-mask is in PROD_SHIP_FEATURES (Makefile:2718). Low, since the pin drives no load.\n4. First sentinel at fixed offset: PARTLY CONFIRMED. There is no wait before cmd_sign_userop.rs:112, but the nearest external anchor is the LCD flush at :109, not the veneer, and the check itself is double-evaluated with jitter (fih.rs:134-136). Hardening gap, low.\n5. Pre-init constant 0x5A: CONFIRMED by construction (main.rs:1193, 1351, 1384), but low. rcc.rs and sau.rs have no delay sites, and the fixed branch already bounds and counts the window. DWT is handed to NS at main.rs:4263-4273: confirmed.\n6. threat-model.md:321 says \"Planned\": CONFIRMED doc drift; there are 231 non-test wait_random() call lines in secure/src.",
+   "reachable_in_production_config": "Yes for items 1-5. wait_random is live unless `e2e-test` (fi.rs:87-91), which mode-production excludes; consumption-mask is production-forced. None has been demonstrated by an attacker on a bench.",
+   "severity": "medium overall: FI hardening is degraded, with no direct bypass. Item 1 medium, item 2 medium, items 3-5 low, item 6 documentation only."
+  },
+  "tracked_issues": [
+   "#805 (open, priority:medium, labelled surface:clear-signing): the RDI question, carve-out conditions a-f, condition (d) wording awaiting owner",
+   "#835 (open, priority:critical): owner chose option 2; implemented only on perf/flash-opt-level-z (7594e606 and later)",
+   "#834 (open, priority:high): no-reuse FI delay; dd901592 not on master",
+   "#832 (CLOSED 2026-10-09): silicon-verified on the perf branch only; fi_delay_pool.rs absent from master and HEAD",
+   "#643 (open): nested-RNG FI-delay reuse, same defect as #832",
+   "#831 (open): consumption-mask reseed fail-open and silent",
+   "#802 (open, priority:high): SysTick idle TRNG draw; the gate line is gone on master, still present on this branch at main.rs:4350",
+   "#241 (open): leakage pass over the FI guards",
+   "#228 (open): on-silicon PRF leakage measurement",
+   "#780 (closed): TE-sync margin",
+   "Not re-verified in this pass: #642, #269, #80, #46, #301, #401, #783",
+   "Mis-reference: '#833' in commit titles and the #835 title resolves to an unrelated merged XMSS PR"
+  ],
+  "untracked_delta": "- Landing the perf/flash-opt-level-z delay-source commits on master has no issue of its own, and #832 is closed without it. The branch is 0 behind master and merges cleanly.\n- Gate-adjacent jitter for the production veneers (17, not 36) is untracked. It must sit after `ui::show_status`, immediately before the first gate.\n- RDI design decisions are missing from #805: ISR-only generator, thread-mode seed mailbox, poison-flag degraded path, a bounded reseed interval for condition (a), and post-lock state for condition (b).\n- #805 does not answer the 2026-05-28 \"do NOT build\" verdict in the archive.\n- docs/security/threat-model.md:321 still says \"Planned\".\n- #805 carries the wrong label (surface:clear-signing).\n- Not untracked, contrary to the recommendation: the pre-RNG-init constant-delay window is already counted and bounded on the perf branch (7c53fcfb, `fixed_delay_permitted`).",
+  "decision_conflicts": [
+   "Archive work-todo-retired-2026-07-19.md:1962 ('RDI NOT MOTIVATED ... Do NOT build'): its TrustZone/USB argument is overturned by Trezor's secmon source; its SCA argument stands; its FI-marginal argument mostly stands. Stage 2 needs an explicit owner reversal recorded in #805.",
+   "Archive :1960 (2026-05-20): entry jitter was deliberately scoped to the PIN gate only, not the sign path and not an always-on RDI. Stages 1 and 2 both widen this.",
+   "This branch's CLAUDE.md:355 is the absolute 'No software PRNG'. The carve-out exists only on master (CLAUDE.md:364). Stage 2 must be built on master.",
+   "Carve-out condition (a), bounded reseed policy: event-only reseeding (veneer and button) has no bound. Not flagged by the recommendation.",
+   "Carve-out condition (b), zeroize on lock: conflicts with 'always-on' unless the post-lock state is defined. Not flagged by the recommendation.",
+   "Carve-out condition (c): the generator cannot live in rng.rs or be shared with wait_random or the mask xorshift.",
+   "Carve-out condition (d): wording still awaiting an owner ruling per the #805 comments.",
+   "Carve-out condition (f): the FSBL deterministic delay stub must be recorded as a contract-vs-code gap.",
+   "#835 option 2: a wait_random that returns None poisons the source and rng::fill refuses. Adding waits to LOCK-class veneers must not make lock or zeroize refusable.",
+   "Flash: ui-px is not in PROD_SHIP_FEATURES, so the 76,949 B overage is a pilot constraint only. The production image size with mode-production + rdp2-self-lock is unmeasured."
+  ],
+  "evidence": [
+   "/home/nicola/repos/PQSigner_OS/secure/src/fi.rs:46-72,86-95",
+   "/home/nicola/repos/PQSigner_OS/secure/src/rng.rs:115-121",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/rng.rs:620,639,650-662,680,709",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/cmd_sign_userop.rs:105-116 (show_status at :109 precedes the sentinel at :112)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/mod.rs:238-248",
+   "/home/nicola/repos/PQSigner_OS/secure/src/fih.rs:134-136",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/mod.rs:1272-1305 (HandlerGuard), :1921-2373 (veneers and their cfg gates)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/nsc/ns_ptr.rs:84-113",
+   "/home/nicola/repos/PQSigner_OS/secure/src/main.rs:885-888, 1193, 1351, 1384, 4263-4273, 4285-4365",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/consumption_mask.rs:183",
+   "/home/nicola/repos/PQSigner_OS/Makefile:2718 (PROD_SHIP_FEATURES: no ui-px, has consumption-mask)",
+   "/home/nicola/repos/PQSigner_OS/docs/archive/work-todo-retired-2026-07-19.md:1960-1962",
+   "/home/nicola/repos/PQSigner_OS/docs/security/threat-model.md:321",
+   "git: `merge-base --is-ancestor dd901592 master` exits 1; master..perf/flash-opt-level-z = 24, reverse = 0; merge-tree clean; HEAD..master = 104",
+   "perf/flash-opt-level-z secure/src/fi.rs:219-236 (wait_random poisons on None) and hw/rng.rs:750-774 (fixed_delay_permitted); worktree /home/nicola/repos/pq1-uiconform",
+   "master CLAUDE.md:364 (carve-out conditions a-f)",
+   "GitHub #805 comments (K=31 measured; condition (d) open), #835 comment ('go with option 2'), #832 close comment",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:31,72-85,139-181",
+   "/home/nicola/repos/trezor-firmware/core/embed/projects/secmon/main.c:119 and secmon/Cargo.toml:81; kernel/Cargo.toml:102",
+   "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/model.toml:1-3; io/usb/stm32/usb.c:20,728,748; sys/smcall/stm32/smcall_dispatch.c:166"
+  ]
+ }
+}

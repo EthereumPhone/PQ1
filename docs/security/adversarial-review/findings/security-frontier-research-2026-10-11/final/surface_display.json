@@ -1,0 +1,120 @@
+{
+ "surface": "display",
+ "items_written_here": [
+  {
+   "id": "M03",
+   "type": "cluster",
+   "key": "display-emanation",
+   "home": "display",
+   "members": [
+    "D-04",
+    "D-05",
+    "SCA-10",
+    "D-01"
+   ],
+   "title": "Secret-frame display hardening: close the shipping-path constant-time bypass for typed letters and PIN digit, stop re-streaming secret frames, then a measured low-distance constant-weight colour pair gated by an NV3007 leakage receipt",
+   "priority": "P2",
+   "merger_priority": "P1",
+   "cost": "M",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#237",
+    "#258",
+    "#259",
+    "#260",
+    "#700",
+    "#772",
+    "#779",
+    "#780",
+    "#783",
+    "#784",
+    "#786",
+    "#794",
+    "#805"
+   ],
+   "live_defects": 4,
+   "hardware_asks": 3,
+   "file": "data/round2/cluster_display-emanation.json"
+  },
+  {
+   "id": "D-07",
+   "type": "single",
+   "home": "display",
+   "title": "Zeroize pixel-form secret residue and clear the panel GRAM/backlight on every lock, wipe and idle-timeout",
+   "priority": "P1",
+   "orig_priority": "P1",
+   "cost": "S",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible",
+    "vendor-claim"
+   ],
+   "file": "data/verify/D-07.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M10",
+   "key": "electrical-fingerprint-implant-detection",
+   "home": "implant",
+   "title": "Display/button-net RC-decay self-check in the secure world against a factory OTP baseline, gated on a bench go/no-go study; input-current sense as an optional EVT-spin add-on",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "D-02",
+    "D-03"
+   ]
+  },
+  {
+   "id": "M11",
+   "key": "enclosure-and-tamper-mesh",
+   "home": "implant",
+   "title": "MP-revision physical-access spec (buried/shielded display nets, no S-world test pads, no void behind the panel, destructive-open shell, published comparables) plus an optional passive PC13 case/display-removal input; active mesh dropped",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "D-08"
+   ]
+  },
+  {
+   "id": "M13",
+   "key": "security-words-anti-swap",
+   "home": "pin",
+   "title": "Pre-PIN \"device words\": two BIP-39 words from SAES-CMAC(DHUK) over the PIN prefix, shown mid-entry so a substituted unit is noticed before the last four digits are typed",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "D-09"
+   ]
+  },
+  {
+   "id": "M15",
+   "key": "consumption-mask",
+   "home": "sca",
+   "title": "Consumption mask: measure it on the signing channel first, then either load-and-keep or demote it; stop presenting an unloaded PWM as a CPA/DPA defence",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "D-06"
+   ]
+  },
+  {
+   "id": "M19",
+   "key": "assurance-gates-in-ci",
+   "home": "systemic",
+   "title": "Make the existing assurance execute and block: land the phantom fi_min gate, enrol the local-only gates and never-run suites per-PR, restore the nightly, then add emulation-FI and glyph-leak regression nets",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "D-10"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "id": "SE-08",
+ "title": "Lifetime, unresettable OPTIGA usage budget on the half_O read path (E122, Change=Never) plus Security-Event-Counter (E0C5) awareness so counter-reset bugs and throttling are bounded and visible",
+ "threat": "Any bug or fault that resets E120 / page-124 (the E120 reset already runs after every success and on admin wipe; F25 shows it also ratchets on successes) converts the OPTIGA into an unbounded PIN-guessing oracle; separately, repeated failed AUTOREF verifies raise the chip's SEC and the resulting throttling (>127 \u2192 up to 5 s/command) is currently indistinguishable from a transport wedge, which under OP17-4 burns page-124 toward self-wipe.",
+ "proposal": "(a) Provision E122 as a monotonic LUC with Change=Never after init (limit sized for the device lifetime, e.g. 200,000 \u2014 ~20 years at 25 unlocks/day) and add `&& LUC(E122)` to the Read AC of F1D1 (half_O) and F1D2 (master) so every release of the half consumes one unit of a budget no code path can reset; park the device with 'lifetime budget exhausted \u2014 restore from words' when it hits the limit. (b) Read E0C5 at boot and before unlock, size the PRL timeouts from it, log it in the journal, and classify 'SEC high' as inconclusive-throttled rather than tamper. (c) Expose E122 remaining and SEC via CMD_GET_REMAINING-adjacent read-only status (non-secret).",
+ "rationale": "Trezor's PIN_TOTAL_CTR (E121, 600,000, Change=Never) exists precisely to make 'attacker found a counter-reset bug' a bounded loss; pq1 has only E120 (resettable) and E121 (duress). E122/E123 are free on this chip and the command path (`provision_counter`/UPCTR metadata) already exists. SEC handling is a same-chip operational lesson that avoids misclassifying throttling as an attack.",
+ "repo_evidence": [
+  "secure/src/optiga/apdu.rs:231-246 only E120 (PIN ctr) and E121 (duress ctr) defined; grep 'E122|E123' hits comments only",
+  "secure/src/optiga/mod.rs:1621-1628 reset_hw_pin_counter after every success; :1668-1700 reset_e120_via_transient_auth on wipe (E120 is resettable by design)",
+  "secure/src/optiga/ \u2014 grep 'E0C5|security_event|sec_counter' returns nothing",
+  "secure/src/optiga/apdu.rs:1182-1199 build_metadata_protected (Read = Auto(F1D0) only \u2014 no LUC arm)",
+  "Issues #170 (F25), #119 (OP17-4), #116 (OP17-1)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/optiga/optiga.c:52-77,482-522 (PIN_TOTAL_CTR E121 limit 600000, Change=Never) and docs/core/misc/optiga.md:18-22; optiga_init.c:101-139 + optiga_commands.c:80-110 (SEC read, keep powered until SEC decays, throttling model).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Irreversible once Change=Never is set \u2014 must be part of the frozen S-3 profile and validated on sacrificial silicon with the Read-AC AND expression (0xFD) before any customer part; budget sizing is a product decision; E122 must NOT be bound to the duress path's timing-twin unless mirrored on E123, or duress becomes distinguishable; SEC-based timeout sizing must not become a lever to delay the wipe indefinitely.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga.c:482-522",
+  "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md:18-22",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga_init.c:101-139"
+ ],
+ "surface": "se"
+}

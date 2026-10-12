@@ -60,6 +60,9 @@ IMPORT_LINE_RE = re.compile(r"(?m)^[ \t]*import[^\r\n]*(?:\r?\n|$)")
 # these committed implementations deliberately carry rust_fun bindings. Keep
 # that asymmetry explicit and checker-owned; every other local extra is drift.
 ALLOWED_EXTRA_LOCAL_BINDINGS = {
+    ("extract-shuffle", "FunsExternal.lean"): collections.Counter({
+        ("rust_fun", "sphincs_c10::shuffle::shuffle_hash_block", "shuffle.shuffle_hash_block"): 1,
+    }),
     ("extract-hash-fns", "FunsExternal.lean"): collections.Counter(
         {
             (

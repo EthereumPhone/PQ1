@@ -1,0 +1,27 @@
+{
+ "id": "pin-01",
+ "title": "Make the OPTIGA attempt counter 'resettable under all circumstances' so a lockout wipe never bricks the ship profile",
+ "threat": "Attempt-counter / wipe atomicity: on the shipping profile (optiga-lock-operational) the E120 LUC is never reset after a lockout wipe; the next boot's directional reconcile reads E120 (saturated to 10) > page 124 (reset to 0) and wipes again, so the 'restore from seed' promise on the WALLET WIPED screen is undeliverable and a stolen-then-returned or self-locked device is a permanent brick. Also a DoS: anyone with 10 USB attempts bricks the user's hardware, not just the wallet.",
+ "proposal": "Adopt Trezor's stated design invariant for the F1D0/E120 metadata ceremony: every path that can reset E120 must overwrite a secret the KDF/unlock needs, and conversely every wipe path MUST be able to reset or retire E120. Concretely, carry one of two designs into the S-1 ceremony: (a) F1D0 'Change' authorised by a wipe-only credential (its own AuthRef object, itself gated by an OPTIGA LUC) that `factory_reset_admin` presents and then destroys, mirroring Trezor's PIN_SECRET-writable-Always/STRETCHED_PIN-read-gated loop; or (b) a durable 'wiped-at-range-N' marker so that reconcile compares page 124 against the E120 of the CURRENT provisioning range only and never against an abandoned range. Add a post-wipe boot assertion that the device enters the wizard rather than the reconcile wipe loop, exercised by `make pin-gate-wipe-e2e` extended with a cold reboot. This is a ceremony-design requirement to fold into S-1, not a re-raise of the S-1/S-2/S-3 deferral.",
+ "rationale": "Code read: `optiga/mod.rs:2795-2814` skips `reset_e120_via_transient_auth` under `optiga-lock-operational` ('a forgotten-PIN wipe abandons this OID range'); `nsc/mod.rs:1689-1717` wipes whenever `se_count > mcu`; `trigger_lockout_wipe` resets page 124 to 0 (`cmd_request_unlock.rs:190-211`). Those three facts compose into a boot-wipe loop on exactly the profile `PROD_SHIP_FEATURES` builds (`Makefile:2718`). Trezor explicitly documents 'resettable under all circumstances' as an invariant and designs the OID access conditions around it; BitBox02 Nova ships an OPTIGA-counter-gated PIN without this brick, so the design space exists on this exact part.",
+ "repo_evidence": [
+  "secure/src/optiga/mod.rs:2795-2814 (E120 reset skipped under optiga-lock-operational)",
+  "secure/src/nsc/mod.rs:1689-1717 (reconcile wipes on se_count > mcu)",
+  "secure/src/nsc/cmd_request_unlock.rs:190-211 (page-124 reset to 0 after wipe)",
+  "Makefile:2662,2718 (RELEASE_FEATURES / PROD_SHIP_FEATURES include optiga-lock-operational + optiga-hw-counter)",
+  "GitHub #168 (OPEN: post-lockout-wipe permanent brick), #123, #170, #254"
+ ],
+ "vendor_precedent": "Trezor Safe 3/5: docs/core/misc/optiga.md 'resettable under all circumstances' + optiga.c:392-413 access conditions (PIN_SECRET change=ALWAYS, STRETCHED_PIN change=PIN_SECRET); BitBox02 Nova OPTIGA Trust M V3 hardware attempt counter in production.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P0",
+ "risks": "Touches the irreversible OPTIGA lifecycle ceremony (S-1), which the owner deferred by design; must be designed on paper and rehearsed on a sacrificial chip before any metadata lands. Design (a) adds a wipe credential that must itself be unforgeable by a desoldered-chip attacker (gate it with its own LUC and derive it from DHUK/BHK). Design (b) leaves E120 saturated and relies on the marker being tamper-evident. Code-read conclusion, not silicon-observed (#254 open).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/optiga/optiga.c:392-413",
+  "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf",
+  "https://github.com/EthereumPhone/PQ1/issues/168"
+ ],
+ "surface": "pin"
+}

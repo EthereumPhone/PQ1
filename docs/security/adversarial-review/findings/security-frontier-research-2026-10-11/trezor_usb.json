@@ -1,0 +1,355 @@
+{
+ "surface": "USB / companion attack surface and TrustZone NS isolation (key=usb)",
+ "vendor": "Trezor (trezor-firmware @ 6ab39e95cf45d4b25b3f677806012ac660ae7a51, 2026-10-07; STM32U5 Safe 3/5/7 secmon/kernel/coreapp architecture)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "Hardware-assisted NS pointer probing (CMSE TT) on every secure-monitor call argument",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_probe.c:131-192",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_probe.h:28-98",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_verifiers.c:36-686",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_dispatch.c:481-488",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:183-185"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Every smcall has a `__verified` wrapper that runs before the implementation. `probe_read_access`/`probe_write_access` reject NULL explicitly, reject `addr+len` wrap-around, then call `cmse_check_address_range(addr, len, CMSE_MPU_READ|CMSE_NONSECURE)` (resp. `CMSE_MPU_READWRITE|CMSE_NONSECURE`), i.e. the Cortex-M33 TT/TTA instruction, which answers from the live SAU/IDAU/MPU configuration rather than from a static address window. Optional-pointer variants (`_opt` = NULL implies len 0, `_opt_const_size` = NULL allowed regardless) make the NULL contract explicit per argument. The `cmse_nonsecure_entry` gateway itself first probes the whole `smcall_args_t` struct for write access. Any failure calls `apptask_access_violation()` \u2192 `system_exit_fatal` (secmon panic \u2192 emergency rescue + reboot), never a soft error.",
+   "notes": "pq1 already has the equivalent `NsPtr<T>` typestate + window check + volatile copy (shared/src/ns_ptr_validate.rs, Kani/Miri proven). Delta worth taking: add a TT-instruction (`cmse_check_address_range`-equivalent inline asm `tta`/`ttat`) check as a second, hardware-derived opinion on every NS pointer so a mis-set window constant or a future SAU change cannot silently widen the accepted range. Also adopt the explicit `_opt` vs non-opt split so NULL handling is a documented per-argument contract."
+  },
+  {
+   "item": "Copy-then-verify for nested NS structures (TOCTOU) at the smcall boundary",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_verifiers.c:50-88"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`boot_image_check__verified` probes the NS `boot_image_t` descriptor, copies it to a secure stack local (`boot_image_t image_copy = *image;` with the comment 'Work on a copy so that the verified fields cannot differ from the ones the implementation uses'), then probes `image_copy.image_ptr/image_size` and passes only the copy down. This closes the double-fetch race where NS (or a DMA master) rewrites the descriptor between check and use.",
+   "notes": "pq1's contract ('copy NS buffers to S-stack before parse') is already stricter: Trezor copies only the descriptor and then reads the image buffer in place (acceptable for flash images); pq1 copies the whole payload. No change needed; keep the stricter rule."
+  },
+  {
+   "item": "Single NSC entry veneer region, numbered dispatch with fatal default, SG stubs isolated in their own SAU NSC region",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_dispatch.c:61-63,475-488",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:64-74,88",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/linker/stm32u58/secmon.ld:11-12,54-56",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_numbers.h:24-60",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_invoke.h:22-120"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "The NS kernel reaches the secure world only through one `__attribute__((cmse_nonsecure_entry)) smcall_invoke(args, number)`; the compiler emits its SG veneer into `.gnu.sgstubs`, and the linker exports `_sgstubs_section_start/end` so `tz_configure_sau` marks exactly that span as Non-Secure-Callable (SAU region 3, NSC=1). All arguments travel in a 6-word `smcall_args_t` (\u22646 u32), results are written back into the same struct; an unknown number hits `default: system_exit_fatal(\"Invalid smcall\")`. There is therefore no secure code reachable from NS except via one audited switch, and the NSC window cannot accidentally cover other secure code.",
+   "notes": "pq1 uses real CMSE veneers on U585 with a dispatcher in secure/src/nsc/mod.rs; verify (a) the SAU NSC region is bounded to the veneer section by linker symbols, not a hand-written size, (b) unknown CMD is a hard refusal. Trezor treats an invalid smcall as fatal (reboot) \u2014 a deliberate 'fail loud' choice that trades DoS for not leaving the secure state ambiguous."
+  },
+  {
+   "item": "Deny-by-default SAU map with explicit NS regions, then hardware-locked SAU/AIRCR and GTZC configuration",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:79-100",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:410-415",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:144-152"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`SAU->CTRL=0` first, then exactly seven regions are declared NS: a 0x800-byte OTP/UID window at 0x0BFA0000, the NS code span (`FIRMWARE_START+_secmon_size` .. end, derived from a linker symbol so it tracks secmon size), assets flash, the SG-stub span (NSC), two NS SRAM ranges, and the 256 MB NS peripheral alias. Everything not listed is Secure. After peripheral attribution the configuration is frozen until reset: `SYSCFG->CSLCKR |= LOCKSAU | LOCKSVTAIRCR` (SAU, VTOR_S and AIRCR become read-only) and `GTZC_TZSC1/2->CR |= LCK` (TZSC peripheral attributes locked). A later secure-world bug or fault-injected write therefore cannot re-open the SAU or re-attribute peripherals.",
+   "notes": "pq1's secure/src/sau.rs has the SAU/GTZC map; confirm it also sets CSLCKR.LOCKSAU/LOCKSVTAIRCR and TZSC_CR.LCK after configuration \u2014 this is a cheap, one-line FI/bug containment for invariant #4 and is exactly the class of 'freeze after setup' pq1 already values for option bytes."
+  },
+  {
+   "item": "Block-based memory attribution (GTZC MPCBB for SRAM, FLASH SECBB/PRIVBB for flash): default all-secure-privileged, carve out NS/unprivileged windows at 512 B / 8 KiB granularity",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:149-175,191-210,244-247",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/trustzone/stm32u5/trustzone.c:91-165,202-276",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/trustzone/inc/sys/trustzone.h:24-48"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`tz_configure_sram` writes `0xFFFFFFFF` into every MPCBB SecConfig and PrivConfig vector for SRAM1\u20134 (secure+privileged), `tz_configure_flash` does the same for both flash banks' block-based registers; then `tz_set_sram_unsecure`/`tz_set_flash_unsecure` clear only the bits covering the NS kernel code, NS RAM and assets (alignment is `ensure()`d). Because GTZC attribution is enforced on the bus for all masters (DMA included), this is what actually stops a NS-programmed DMA from reading secure SRAM \u2014 the SAU alone only filters CPU accesses. The same helpers later flip privilege bits per applet so even the NS kernel's unprivileged apps are fenced at the bus level.",
+   "notes": "pq1 secures peripherals via GTZC1_TZSC and uses bank-2 flash for NS, but CLAUDE.md does not mention MPCBB SRAM block attribution. If pq1's NS world can program any DMA (GPDMA1) or if USB OTG uses DMA, SAU-only partitioning leaves secure SRAM reachable by that master; verify MPCBB1-4 SecConfig covers all secure SRAM. Trezor also disables USB DMA (usbd_conf.c:507) and leaves only GPDMA channel 12 secure (tz_init.c:331-337)."
+  },
+  {
+   "item": "Peripheral and pin-level security attribution: RCC/PWR/SYSCFG/SAES/RNG/HASH/IWDG/WWDG/RAMCFG/cache regs secure; SE bus, reset and power GPIO pins secured per-pin; NVIC target state per IRQ",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:249-298,304-337,339-406",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/secmon/main.c:61-98"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "After defaulting all peripherals to NS+privileged, secmon re-secures the crypto blocks (RNG, SAES, HASH), the watchdogs (IWDG, WWDG), RAMCFG and the ICACHE/DCACHE control registers; makes every RCC clock/PLL source secure except PLL3 (display) and every PWR wake-up/low-power/voltage-monitor bit secure, with PRIVCFGR requiring privilege in both worlds; marks SYSCFG (FPUSEC, CLASSBSEC, SYSCFGSEC) secure-only; and \u2014 critically for SE isolation \u2014 sets `GPIOx->SECCFGR` bits for the OPTIGA RST and PWR pins, the I2C SCL/SDA pins, and all Tropic SPI/INT/PWR pins, so NS code cannot toggle an SE reset or power rail or bit-bang the bus even though GPIO ports are otherwise NS. Interrupts are all retargeted NS (`NVIC_SetTargetState` for 0..511) and then only GTZC, GPDMA ch12, TAMP and the OPTIGA I2C EV/ER lines are pulled back to Secure. Because PWR/RCC are secure, USB VDDUSB/PHY power and the HSI48 CRS trimming are done by secmon on the kernel's behalf.",
+   "notes": "Directly actionable for pq1: PA8 (`LDO2_EN`, rail for BOTH SEs) and PB5 (`SE1_EN`) and PA15 (`SE_RST`) should be secured in `GPIOA/B_SECCFGR` (CLAUDE.md says USB hands only PA11/PA12 to NS and UCPD1 is secured \u2014 confirm the per-pin SECCFGR bits are set too, not just 'not handed over'). Securing RCC/PWR denies a hostile NS the clock-glitch / under-volt / stop-mode levers against secure code. pq1 already secures AES/HASH/RNG/PKA/SAES/I2C1/I2C4/UCPD1/TIM2/TIM3; TAMP (GTZC2) is noted open in CLAUDE.md \u2014 Trezor secures the TAMP IRQ as well."
+  },
+  {
+   "item": "GTZC illegal-access interrupt (TZIC) for all peripherals, secure-targeted at highest priority",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:110-118,292-293,408"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`HAL_GTZC_TZIC_ClearFlag(GTZC_PERIPH_ALL)` + `HAL_GTZC_TZIC_EnableIT(GTZC_PERIPH_ALL)`, `NVIC_SetPriority(GTZC_IRQn, IRQ_PRI_HIGHEST)` and `NVIC_ClearTargetState(GTZC_IRQn)` make every NS access to a secure peripheral a secure-world interrupt instead of a silent RAZ/WI. A probing host (or a compromised NS stack scanning for leaks) is detected on the first touch; the handler path ends in RSOD + reset.",
+   "notes": "pq1 already has this and goes further (`tzic-wipe` \u2192 `tzic::trigger_intrusion_wipe`, silicon-validated RAZ-fault). Trezor only resets (no wipe). Keep pq1's stronger policy; nothing to adopt."
+  },
+  {
+   "item": "AIRCR hardening: PRIS, SYSRESETREQS (production), BFHFNMINS=0, FPU context clear-on-return",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:121-146"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`tz_configure_arm` sets `SCB_AIRCR_PRIS` (secure exceptions always pre-empt NS ones, so NS cannot starve secure handlers), `SYSRESETREQS` in PRODUCTION (only the secure world may request a system reset \u2014 a NS reset is a DoS and a retry-counter/boot-journal lever), clears `BFHFNMINS` (BusFault/HardFault/NMI are taken in Secure state, so NS cannot install its own HardFault handler to observe secure faults), enables the FPU for NS via NSACR while clearing `FPCCR.TS` and setting `CLRONRET` so FP registers are scrubbed on exception return and secure FP state is not leaked.",
+   "notes": "Confirm secure/src/sau.rs or main.rs sets PRIS, SYSRESETREQS and BFHFNMINS=0; SYSRESETREQS matters for pq1's first-boot journal (page 127) and the PIN precharge (page 124) \u2014 a NS-triggered reset mid-ceremony should not be possible. If pq1's secure code uses the FPU at all (it is no_std; probably not), CLRONRET is the cheap leak guard."
+  },
+  {
+   "item": "Secure fault handlers that kill the offending NS task and record a validated post-mortem instead of hanging; faulting PC is read only after a CMSE/MPU-validated dereference",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/task/stm32/systask.c:96-101,460-507,509-568,777-850",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/secmon/main.c:154-160",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:73-77"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`system_init` enables UsageFault/BusFault and, under CMSE, SecureFault handlers. The naked handlers reset MSP to the top of the secure stack when a stack overflow is suspected and branch to `systask_exit_fault`, which decodes EXC_RETURN (secure bit 0x40, handler/PSP bits, NS CONTROL.SPSEL) to pick the right NS/S, MSP/PSP stack, captures CFSR/MMFAR/BFAR/HFSR/SFSR/SFAR, and only reads the stacked return address after `cmse_check_address_range(ret_addr, 4, CMSE_MPU_READ[|UNPRIV][|NONSECURE])` succeeds (so a crafted NS stack pointer cannot make the secure handler read secure memory on NS's behalf). The task is then killed; secmon's panic handler stores the post-mortem in bootargs and reboots. A NS crash therefore never wedges or corrupts the secure world.",
+   "notes": "pq1's documented fault policy is `loop { wfe() }` halts (e.g. HW SHA KAT fail) \u2014 fine for secure-side self-tests, but for the 'DoS/wedge' threat the SecureFault/BusFault path should zeroize secrets and reset (optionally rendering a distinctive error screen on the NV3007 first) rather than park. The CMSE-validated read of the faulting frame is the subtle part worth copying verbatim."
+  },
+  {
+   "item": "Register/RAM scrubbing at every world/stage transition: S\u2192NS jump zeroes R0-R12 and MSPLIM_NS; reboot/next-stage paths clear all RAM except stack+bootargs, disable lazy FP stacking, and erase TAMP backup registers + SRAM2",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32/sysutils.c:31-137,199-220,306-346",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32/bootutils.c:142-178,244-270",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/stack/stm32/stack_utils.c:25-37"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`jump_to_vectbl_ns` loads the NS vector table, sets MSP_NS from it, disables MSPLIM_NS, zeroes R0\u2013R12 and performs `BXNS` with bit0 cleared \u2014 the NS kernel starts with no secure register residue. `call_with_new_stack` (used by every reboot/next-stage path) disables the MPU, optionally disables SAES and sets `TAMP_CR2_BKERASE` (wipes BKP registers where BHK/keys were cached, and SRAM2), installs a fresh MSP/MSPLIM, clears `FPCCR.LSPACT` so no deferred FP frame is written later, zeroes R4\u2013R12, then `memregion_fill` clears all runtime RAM except the stack and bootargs and `clear_unused_stack` scrubs the stack below SP. On F4, `clear_otg_hs_memory` additionally zeroes the USB OTG FIFO RAM.",
+   "notes": "pq1 zeroizes on lock/tamper/brownout/inactivity; verify the S\u2192NS handoff (`main.rs` 'boot NS') scrubs registers and that the lock path also clears any FP/lazy-stack state and the USB packet buffers in NS (NS buffers never hold secrets in pq1, so the FIFO clear is optional). The BKERASE-before-reboot idea maps to pq1's TAMP backup registers if BHK material is ever cached there."
+  },
+  {
+   "item": "Hardware stack limits (MSPLIM/PSPLIM) per task with guard margin, saved/restored on context switch; stack protector on all non-dispatch code with a per-task TLS canary",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/task/stm32/systask.c:161-180,575-632,632-720,793-813",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32/sysutils.c:89-95",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_verifiers.c:20-22",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:385-386"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`systask_init` sets `sp_lim = stack_base + 256` (a 256-byte guard below which the ARMv8-M hardware raises a fault), PendSV saves `MSPLIM`/`PSPLIM` alongside SP for each task and restores them on switch, `call_with_new_stack` programs `MSPLIM` for the fresh secure stack, and MemManage/UsageFault handlers detect 'MSP below stack base' and reset MSP to the top before handling. GCC `-fstack-protector` is on globally (the `__stack_chk_guard` is swapped per task via the TLS mechanism), and is disabled only in the syscall/smcall dispatch and fault files via `#pragma GCC optimize(\"no-stack-protector\")` for performance and because those manipulate the stack.",
+   "notes": "Strong, cheap recommendation for pq1: program MSPLIM in the FSBL and in the secure world (and PSPLIM if a process stack is used). CLAUDE.md states the FSBL stack is 'bounded rather than closed' (10,372 of 16,384 B by frame sum, no call-graph proof) \u2014 MSPLIM turns any unproven overflow into a deterministic UsageFault instead of silent corruption of the measurement code's data. Rust has no `-fstack-protector`, so the hardware limit is the available equivalent."
+  },
+  {
+   "item": "Unprivileged-app syscall layer: per-applet layout-based pointer probing, overflow-safe bitblt size checks, syscall allowlist for third-party apps, fatal on unknown/forbidden syscall",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/syscall/stm32/syscall_probe.c:33-164",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/syscall/stm32/syscall_verifiers.c:35-60,447-470",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/syscall/stm32/syscall_dispatch.c:100-143,1159-1162",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/mpu/stm32u5/mpu.c:239-297,330-405,540-595",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/task/stm32/coreapp.c:79-156"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Inside the NS world Trezor adds a second ring: the USB stack and drivers live in the privileged kernel, the protocol parser/business logic (coreapp, MicroPython+Rust) runs unprivileged behind an 8-region MPU that is re-banked per code path (regions 2\u20134 = applet code/data, 5 = framebuffer, 6 = banked flash/bootargs/OTP/secret/storage windows, 7 = TLS or peripherals). Each syscall's pointers are checked against the applet's `data1/data2/code1/code2/assets` areas (NULL and wrap rejected; bitblt `stride*height` protected by a `_Static_assert` that the product cannot overflow `size_t`). Applets without `unlimited_syscalls` may use only a 13-entry allowlist; anything else is `applet_exit_fatal(\"Forbidden syscall\")`, unknown numbers are `\"Invalid syscall\"`. `usb_start__verified` and `usb_get_state__verified` probe their argument structs.",
+   "notes": "pq1's NS world is a single privileged image and the threat model already assumes it is hostile, so this is defence-in-depth, not a gap in the security argument. Low-cost partial adoption: run the NS USB class/APDU parser unprivileged under the NS MPU so a parser bug cannot reprogram the USB peripheral, NS flash, or forge NSC calls from arbitrary NS addresses. Note the documented caveat that coreapp itself has unlimited syscalls (embed-arch.md:325-326)."
+  },
+  {
+   "item": "USB class layer: fixed 64-byte packets, one static RX buffer per interface, read-gated re-arming (backpressure instead of overrun), DMA disabled, normal-priority IRQ, interface-index bounds check, EP0 stall on unknown requests, length-clamped descriptor replies",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb_class_hid.c:93-174,202-227,333-347,404-444",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb_class_webusb.c:205-233,247-262,319-359",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb.c:593-603,699-721",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usbd_ctlreq.c:174-202,437-445,723-728",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usbd_conf.c:157,507",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/usb_config.c:90-117,257-294",
+    "/home/nicola/repos/trezor-firmware/core/embed/upymod/modtrezorio/modtrezorio-usb-if.h:77-136"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Each interface is registered with a caller-owned `rx_buffer` of exactly `USB_PACKET_LEN` (64) and `max_packet_len` equal to it; `DataOut` only records `last_read_len` and does NOT re-arm the OUT endpoint \u2014 `USBD_LL_PrepareReceive` is issued again only inside `on_read` after the consumer copied the packet, so the host cannot overrun the buffer or race the parser, it is simply NAKed. `usb_class_setup` rejects `wIndex >= USBD_MAX_NUM_INTERFACES` before indexing the interface table (the ST core's own `<=` check at usbd_ctlreq.c:182 is off-by-one and is corrected here), unknown class/standard requests call `USBD_CtlError` which stalls EP0 in both directions, every descriptor reply is clamped with `MIN_8bits(req->wLength, sizeof(...))`, string fields are `strncpy`-bounded to `USB_MAX_STR_SIZE`, `dma_enable = 0`, and the OTG IRQ runs at `IRQ_PRI_NORMAL` so it cannot pre-empt secure-priority handlers. The MicroPython binding refuses any read/write whose length is not exactly 64.",
+   "notes": "pq1's Rust usb-device/HID stack has a different TCB (Trezor's ST core is a 2015 V2.4.2 fork), but the policies transfer directly: exact-size HID reports, no re-arm until consumed, no DMA on the NS USB path, explicit interface/endpoint index bounds, stall on anything unrecognised. Check pq1's `usb/transport.rs` for the re-arm-after-consume property specifically; a 'drop on full' ring buffer would be weaker than Trezor's NAK backpressure."
+  },
+  {
+   "item": "Random-delay FI/SCA countermeasures wired into the USB path: `wait_random()` on every control-request branch and data callback, and RDI 'session delay' refreshed on every USB packet in/out",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/inc/sec/random_delays.h:26-43",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:37-80,139-162,189-230",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb.c:617,622,648,653,691,696,705,716,728,748",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb_class_hid.c:250,326,337",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb_class_webusb.c:209,215,240,252",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/secmon/main.c:117-120"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Random Delay Interrupts run from a 1 ms secure systimer in secmon: each tick waits `drbg_random8() + session_delay` cycles, where `session_delay` is the second term of a 'floating mean' distribution (Clavier/Coron/Dabbous; Tunstall/Benoit) that is re-sampled whenever the device performs an operation that reveals its execution-flow phase to the outside \u2014 concretely `random_delays_refresh_rdi()` is called from `usb_class_data_in` and `usb_class_data_out`, so a host cannot use its own packet timing as a stable alignment trigger for power/EM traces or glitches. Independently, `wait_random()` (0\u2013255 cycle busy loop with a dual-counter `i + j == wait` invariant that calls `error_shutdown(\"(glitch)\")` on mismatch) is inserted before each USB control-request reply/error, so the host-observable timing of the USB stack is jittered and single-instruction skips in those branches are detected. The DRBG is ChaCha-based, seeded from the TRNG with periodic reseed; if the lock is contended it returns a constant 128 ('should be ok for our purposes').",
+   "notes": "pq1 has FI counters/double-compute on signing and a power-domain consumption mask, but nothing in the time domain at the NS\u2192S boundary. Adopt: (1) a TRNG-fed `wait_random` with the glitch-detecting double counter at NSC entry and before each NSC return; (2) re-sample a 'session jitter' term on every NSC call (the NSC call is exactly the host-visible phase marker). This complements, not replaces, the consumption mask (whose dilution is unmeasured per CLAUDE.md). Keep in mind Trezor's RDI timer lives in secure mode so it jitters secure code; pq1's S-only TIM could host the same 1 ms handler."
+  },
+  {
+   "item": "THP encrypted and mutually authenticated host channel (Noise XX, X25519/AES-GCM/SHA-256) with masked device static key, per-direction counter nonces, low-order-point rejection, DECRYPTION_FAILED channel teardown, and device-unlock gating of the handshake",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/docs/common/thp/specification.md:3,459-470,541,618-636,879-882",
+    "/home/nicola/repos/trezor-firmware/core/embed/rust/src/thp/crypto.rs:45-93",
+    "/home/nicola/repos/trezor-firmware/rust/trezor-thp/src/channel/mod.rs:853-866",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/thp/crypto.py:11-30",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/thp/interface_context.py:414-450",
+    "/home/nicola/repos/trezor-firmware/rust/trezor-thp/src/channel/device.rs:462-469",
+    "/home/nicola/repos/trezor-firmware/core/embed/rust/src/thp/mod.rs:648-664"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "New models replace the plaintext codec v1 with THP: a Noise `XX` handshake (`Noise_XX_25519_AESGCM_SHA256`) yields `k_req`/`k_resp`; the device's long-term X25519 key is never sent raw \u2014 a per-handshake masked key `X25519(SHA256(S_T,pub || e_pub), S_T,pub)` is used so an unpaired host cannot fingerprint/track the device. Transport AEAD nonces are 96-bit `0^32 || u64 counter` starting at 0 (requests) and 1 (responses), strictly incrementing, so replay/reorder of ciphertexts fails authentication. DH rejects zero inputs and zero outputs (`pubkey.is_zero()`, `output.is_zero()`), and the spec asserts the CPace shared secret is non-zero 'to prevent the host from using low-order points to bypass code entry authentication'. On tag failure the device sends `DECRYPTION_FAILED` and the host must destroy the channel context and re-handshake (no retry oracle). The device static key is derived from the device secret (`bip32.from_seed(get_device_secret(), 'curve25519')` at hardened index `\\x00THP`) which is only available when storage is unlocked: a handshake on a locked device either gets `DeviceLocked` or spawns the PIN unlock dialog \u2014 so no authenticated channel exists pre-PIN.",
+   "notes": "pq1's companion link is plaintext APDU v2; its security argument is S-world verification + WYSIWYS, which THP does not replace. What THP adds: an unpaired/unknown host cannot reach the message parser at all (surface pre-pairing shrinks to channel allocation + handshake), the channel is confidential (no plaintext tx/intent on the wire for a USB sniffer), and host identity persists. Blocker for pq1: X25519 authentication conflicts with the PQ-only stance (invariant #5 is about signers, and ML-KEM for SE tunnels was descoped) \u2014 a pq1 variant would need a PQ KEM + PAKE-style pairing or a symmetric PSK established via on-device code entry. Flag as an owner decision, not a drop-in."
+  },
+  {
+   "item": "THP pairing (commit-then-challenge 6-digit code, CPace PAKE bound to the handshake transcript) and long-lived pairing credentials (HMAC under a SLIP-21-derived key with a revocation counter; autoconnect credentials never issued right after pairing)",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/src/apps/thp/pairing.py:99-137,231-260,294-322,393-420",
+    "/home/nicola/repos/trezor-firmware/core/src/apps/thp/credential_manager.py:20-49,51-85,111-128",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/thp/__init__.py:41-64",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/thp/pairing_context.py:133-136",
+    "/home/nicola/repos/trezor-firmware/docs/common/thp/specification.md:726-731"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "After the Noise handshake, an unpaired host must pass a user-mediated pairing. For CodeEntry the device first sends `commitment = sha256(code_entry_secret)` and only then receives the host challenge; the displayed code is `int(sha256(method || handshake_hash || secret || challenge)) % 1e6` \u2014 the commitment stops the host from grinding a challenge toward a code it already knows, and binding to `handshake_hash` ties the code to this exact channel (a MITM relaying to another device gets a different code). The host proves knowledge of the 6 digits via CPace (balanced PAKE) and `sha256(shared_secret)` compared with `utils.consteq`; the device only then reveals the secret. `host_name`/`app_name` are shown on-device before approval and the selected method is validated against `get_enabled_pairing_methods` (production: CodeEntry only; QR/NFC/SkipPairing are `__debug__`). Credentials are `ThpPairingCredential{metadata, mac}` where `mac = HMAC-SHA256(SLIP-21(device_secret)/'TREZOR'/'THP credential authentication key'/counter, host_static_pubkey || metadata)`; `invalidate_cred_auth_key` bumps the counter to revoke all; validation is constant-time; an `autoconnect=True` credential cannot be requested in the same session as pairing.",
+   "notes": "If pq1 ever adds host pairing this is the reference design; pq1 has the needed trusted display (6 digits fit on the NV3007) and two buttons for approve/decline. No camera/NFC on pq1, so only code-entry (or QR *display*) applies. The 'show host_name/app_name on device before approving' step is cheap and valuable on its own."
+  },
+  {
+   "item": "THP transport robustness and DoS limits: CRC-32 per payload, alternating-bit ACK protocol, retransmission cap (50) then channel close, TRANSPORT_BUSY backpressure, bounded channel tables with LRU eviction, nonce-matched channel allocation, bad-sequence packets dropped",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/docs/common/thp/specification.md:206-216,222-245,298-308,312-330,432-434",
+    "/home/nicola/repos/trezor-firmware/core/embed/rust/src/thp/mod.rs:42-43,425-454,636-647,750-765,777-785",
+    "/home/nicola/repos/trezor-firmware/rust/trezor-thp/src/channel/mod.rs:405-421,916"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Every transport payload carries CRC-32-IEEE over header+payload; a new initiation packet on a channel discards any half-reassembled payload; if the single reassembly buffer is busy on another channel the device replies `TRANSPORT_BUSY` (host backs off randomly up to 500 ms) rather than allocating; a 1-bit alternating sequence number with ACKs gives reliability, and the device closes a channel after `MAX_RETRANSMISSION_COUNT = 50` retries so an unresponsive/abusive host cannot pin resources. Channel tables are fixed-size (`MAX_CHANNELS_OPENING = 4`, `MAX_CHANNELS_APPDATA = 10`) with least-recently-used release; channel IDs are allocated from a counter and checked unique; unknown CIDs get `UNALLOCATED_CHANNEL`; the 8-byte allocation nonce lets the host match responses. Packets with a wrong sequence bit are dropped (or the last ACK re-sent) 'without checksum verification because we drop the continuations'.",
+   "notes": "pq1 has one companion and no multiplexing need, but the 'bound everything and fail closed' rules apply to usb-protocol-v2: explicit abort of partial reassembly on a new header, a retransmit/abandon cap, a hard max message size, and no allocation on the receive path. Trezor's `insert_replace_queue` logs 'THP queue full' and drops the oldest \u2014 pq1 should prefer refusing new work over dropping queued work for sign-related messages."
+  },
+  {
+   "item": "Legacy codec v1 framing parser: magic checks on every packet, oversize messages drained-then-rejected to keep the stream in sync, single 8 KiB shared wire buffer taken by the active session, 64-bit math on attacker-supplied lengths in the bootloader flush",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/codec/codec_v1.py:13-79",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/__init__.py:164-167",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/codec/codec_context.py:36-43,94-113",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/wire/codec_v1.c:47-56,149-164,223-249",
+    "/home/nicola/repos/trezor-firmware/docs/common/protocol_v1/protocol.md:5-21"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`read_message` requires `'?##'` on the first report and `'?'` on every continuation, unpacks `(type, size)` big-endian, and if `size` exceeds the 8192-byte provider buffer it either allocates or, on `MemoryError`, enters `read_and_throw_away` mode: it still consumes exactly the announced number of continuation reports and only then raises `CodecError('Message too large')`, so the host cannot desynchronise the framing by sending a giant length. The buffer is a `Provider` that is `take()`n once per session \u2014 a second interface trying to start a message gets `WireError('Another session in progress')` while still being allowed small (\u2264128 B) error replies. The C bootloader counterpart `codec_flush` computes the number of packets to drain with `uint64_t` arithmetic explicitly 'to avoid 32-bit wrap for large attacker-supplied msg_size values', and `read_retry` tolerates \u226410 timeouts before `iface->error()`.",
+   "notes": "Direct checklist for pq1's APDU v2 router (nonsecure/src/usb/commands.rs, transport.rs): verify oversize/invalid length is drained-and-refused (not just refused, which desyncs chunked transfers), that length arithmetic cannot wrap, and that a second concurrent 'session' is refused rather than interleaved."
+  },
+  {
+   "item": "Bounded protobuf decoder: nesting depth cap (16), experimental-message gate, wire-type vs schema check, enum membership, UTF-8 validation, required-field enforcement, checked length conversions, unknown fields skipped only for well-formed wire types",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/rust/src/protobuf/decode.rs:14-27,59-75,99-157,199-278",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/message_handler.py:22-53"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "The Rust decoder refuses whole message types marked `experimental` (and individual experimental fields) unless `EXPERIMENTAL_ENABLED` (False in production), bounds recursion with `MAX_NESTING = 16` (`Error::OutOfRange` beyond), rejects a field whose on-wire primitive type disagrees with the schema (`invalid_value`), checks enum values against the declared set, validates `String` as UTF-8, converts every length with `try_into()` on an `InputStream` that bounds-checks reads, and after decoding walks the schema to fail on missing `required` fields. Unknown fields are skipped only when varint or length-delimited; any other wire type is an error (no silent acceptance of fixed32/64 or groups).",
+   "notes": "pq1's unified sign input is fixed-offset binary (stronger: no schema ambiguity), but the same explicit bounds belong on every recursive/TLV decoder pq1 ships \u2014 ERC-7730 IR/nested EIP-712 descent, the typed-call ABI parser, multiSend records (\u22646 records already) and Safe inner decoding. Confirm each has an explicit depth bound and an 'unknown type \u2192 error, not skip' policy."
+  },
+  {
+   "item": "Wire dispatch discipline: deny-first handler filters (PIN-lock filter wraps every handler not in a small ALLOW_WHILE_LOCKED allowlist), unexpected message aborts and restarts the workflow, interpreter state reset between messages, ButtonRequest/ButtonAck with host-cancellation lockout after errors",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/message_handler.py:95-183,214-258",
+    "/home/nicola/repos/trezor-firmware/core/src/apps/common/lock_manager.py:204-268",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/workflow.py:20-42",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/protocol_common.py:125-310",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/__init__.py:174-234",
+    "/home/nicola/repos/trezor-firmware/core/src/apps/base.py:569-572"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "`find_handler` resolves the registered handler for the wire type and then applies `filters` in order; filters are deny-first (an earlier rejection stops evaluation). When the device is locked `_pinlock_filter` is appended last and wraps every handler with `await unlock_device()` except the explicit `ALLOW_WHILE_LOCKED` tuple (EndSession, GetFeatures, Cancel, LockDevice, DoPreauthorized, WipeDevice, SetBusy, Ping [+Initialize on codec v1]); it is removed only by `unlock_device()` after `verify_user_pin()`. Any message the current workflow did not expect raises `UnexpectedMessageException`, the workflow is aborted and the new message is processed as a fresh request (host cannot leave the device stuck in a half-finished flow), `workflow.spawn` closes other workflows, and after each message the MicroPython loop is cleared/restarted unless the type is in `AVOID_RESTARTING_FOR` (state hygiene between host requests). The `ButtonRequestHandler` shows a 'trouble communicating' screen after 2 s without ButtonAck and `ContinueOnErrors` deliberately stops honouring host cancellation for the rest of a workflow once an unexpected error occurred.",
+   "notes": "pq1 gates NSC on `pin_verified` and has a S-only inactivity timer that NS pings cannot reset (already stronger than Trezor's host-pingable autolock). Adopt the explicit pre-unlock CMD allowlist as a single reviewed constant (today: GET_REMAINING, REQUEST_UNLOCK, IS_UNLOCKED; everything else including FW_* requires unlock \u2014 make that a table, not scattered checks). Also note Trezor's WipeDevice is allowed while locked; pq1's wipe policy is SE-driven (10 wrong PINs), which avoids a host-triggered wipe DoS."
+  },
+  {
+   "item": "Bootloader USB exposure only after a physical gesture or an in-firmware pre-confirmed upgrade; firmware upload verified before flash writes (size/alignment, vendor header keys+model, header signature, per-chunk hash table, secmon hash, monotonic downgrade counters, vendor-change seed wipe, locked-bootloader vendor policy, hash-pinned auto-upgrade)",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/main.c:598-660",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/workflow/wf_image_upload.c:110-250,252-334",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/workflow/wf_firmware_update.c:91-135,136-342,367-402",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/protob/protob.c:170-211",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/version_check.c:26-73",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/bootloader/fw_check.c:35-197",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/inc/sys/bootargs.h:27-45"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The bootloader starts its USB workflow only if the user touched/held a button at boot, bootargs carry STOP_AND_WAIT/STOP_AND_CONNECT from the running firmware, no valid firmware is present, or the firmware pre-confirmed an upgrade (`INSTALL_UPGRADE` + 32-byte hash in bootargs; the bootloader recomputes the hash of the received headers and refuses if it differs or if the vendor changed). `run_image_upload` rejects sizes below the init chunk, not `FLASH_BLOCK_SIZE`-aligned, or above the handler max; `fw_on_headers` parses the vendor header (model, SatoshiLabs-signed keys), verifies the firmware header signature under the vendor's m-of-n keys, enforces firmware and secmon monotonic-version floors (monoctr; 'Firmware downgrade protection' / 'Secmon downgrade protection'), detects new-vendor installs (seed is wiped), applies the locked-bootloader policy, and only then shows the install confirmation; each subsequent chunk must match its header hash (2 retries, then fail) and the streamed secmon code must hash to the header's expected value; the nanopb payload callback refuses `bytes_left > buffer_size`; a 10 s receive timeout aborts.",
+   "notes": "pq1 is already in a better place for this specific surface: the FSBL has no USB at all and firmware update is an in-firmware CMD 20\u201324 flow requiring PIN unlock on every call. Transferable pieces: (a) the 'confirm hash in the trusted world, then let the loader apply exactly that image' pattern maps to pq1's FW_COMMIT; (b) monotonic floors are what pq1's rollback Draft 1.1 is trying to get right (OTP-first); (c) 'no USB pre-auth unless a physical gesture' is a policy pq1 should state explicitly for any future recovery/DFU mode."
+  },
+  {
+   "item": "Boot-time option-byte expected-value verification (RDP, SECBOOTADD0 BOOT_LOCK, WRP on boardloader, SECWM/HDP watermarks) and an every-boot check that OEM RDP-regression keys are NOT programmed",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c:30-40,75-140,143-242,228-232",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/secmon/main.c:122-124",
+    "/home/nicola/repos/trezor-firmware/core/embed/projects/kernel/main.c:179-184",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:20-22"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`option_bytes_configure` compares `FLASH->OPTR` (TZEN, DUALBANK, BOR level, RDP=0xCC in PRODUCTION, nRST_* bits), `SECBOOTADD0R` (boardloader address with `BOOT_LOCK`), `WRP1AR` (boardloader pages write-protected in PRODUCTION), the other WRP registers, and `SECWM1R1/2` + `SECWM2R1/2` (secure watermarks and HDP range) against compile-time constants and rewrites them if any differs; when rewriting it first programs all four `OEMxKEYRy` registers to 0xFFFFFFFF 'to ensure that there is no ability to reverse the RDP'. Separately `option_bytes_check_oem_keys` \u2014 run at every secmon boot (and kernel boot on non-secmon models) \u2014 `ensure()`-panics if `FLASH->NSSR` shows OEM1LOCK or OEM2LOCK set, i.e. if an OEM key that could enable RDP regression exists.",
+   "notes": "Maps onto invariant #10 and the `rdp2-self-lock` Phase A: pq1's FSBL has the tz-1 read-back tripwire; add the OEM1/OEM2 LOCK-bit check (NSSR) before programming RDP=0xCC and on every boot, and verify SECWM/HDP registers as part of the expected set, not only RDP/WRP. Also note Trezor's expected `OPTR` includes `SRAM3_ECC`, `IWDG_SW/IWDG_STOP/IWDG_STDBY` and `nRST_SHDW/STDBY/STOP` \u2014 worth comparing against pq1's ship option-byte profile."
+  },
+  {
+   "item": "Secrets flash area read once into BHK/backup registers, then BHK locked and the area hidden by HDP so no later stage (secmon, kernel, NS) can read it; per-slot keys stored DHUK-encrypted; re-entry prevented",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/secret/stm32u5/secret.c:176-190,303-345,399-432",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:21,87-88,133-134"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The bootloader is the last stage with access to the secret sector: `secret_bhk_load` copies the BHK words into `TAMP->BKP0R..`, `secret_bhk_lock` sets `TAMP_SECCFGR.BHKLOCK` (BHK becomes usable only by SAES, unreadable by software), key slots are written as `secure_aes_ecb_encrypt_hw(key, DHUK_SP)` ciphertext and cached into further backup registers, and `secret_disable_access` sets `FLASH_SECHDPCR.HDP1_ACCDIS/HDP2_ACCDIS` so the pages are unreadable until reset. `secret_bhk_load` reboots if BHKLOCK is already set, so the flow cannot be re-run from a later stage.",
+   "notes": "pq1 already roots SE050 SCP03/admin in BHK (page 126 DHUK-wrapped) and uses DHUK/SAES; the transferable lever against NS\u2192S bugs and FI is HDP: after the secure world has loaded what it needs from page 126 (and any other read-once pages), hide them for the rest of the session. Pages 123/124 are read/written at runtime so cannot be hidden; page 126/127 candidates should be evaluated in the first-boot design."
+  },
+  {
+   "item": "MCU attestation: post-quantum (ML-DSA-44) signature over a host challenge with a key derived from the privileged master secret, certificate provisioned via startup args, exposed to NS only through probed smcalls; secmon also offers ML-DSA-44 verification to NS",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/mcu_attestation/mcu_attestation.c:24-85",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/mcu_attestation/inc/sec/mcu_attestation.h:24-54",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_verifiers.c:237-286,659-684",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:33,208"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`mcu_attestation_sign` regenerates the ML-DSA-44 key pair from a seed obtained via `secret_key_mcu_device_auth` (DHUK/BHK-rooted, requires `SECRET_PRIVILEGED_MASTER_KEY_SLOT`), signs the host challenge with fresh TRNG randomness (hedged signing) and an empty context string, and zeroizes seed/private key/rnd. The matching certificate is delivered by the previous boot stage through startup args, so NS can read cert + signature only via `mcu_attestation_*__verified` (pointer-probed). Together with the Optiga/Tropic attestation this is Trezor's 'genuineness check' \u2014 the host can prove it is talking to a specific, factory-provisioned MCU, not a clone or an interposer, which is the practical answer to 'detect malicious hardware' at the companion boundary.",
+   "notes": "pq1 attests via the SEs (OPTIGA/SE050 certs) but has no MCU-rooted attestation. Invariant #5 ('one signing primitive') rules out ML-DSA; a SPHINCS+C10 attestation key derived from DHUK (per-die) with a factory-issued certificate would give the same host-verifiable genuineness without a second algorithm, and ties into the RDP-0-verify-then-self-lock story (the attestation key only becomes final once the DHUK is final at RDP-2). Flag as a candidate, cost = one C10 keygen+sign per attestation (~seconds on pq1 silicon)."
+  },
+  {
+   "item": "Boot-args channel as the only NS\u2192bootloader input: 248-byte RAM region with sparse 32-bit magic command words, size-bounded copy with zero-fill, MPU-banked access window, command consumed and cleared at bootloader start",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/inc/sys/bootargs.h:27-58",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32/bootutils.c:46-85,93-100",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/mpu/stm32u5/mpu.c:486-488",
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:90,136"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Firmware-to-bootloader requests (reboot, stay-in-bootloader, install-upgrade with hash, show-RSOD with post-mortem, wipe) are expressed as `boot_command_t` values that are random-looking 32-bit constants (0x0FC35A96, 0x3B7E1C64, 0xFA4A5C8D, \u2026) rather than small integers, so a glitched or corrupted word is unlikely to decode as a valid command; `bootargs_set` copies at most `BOOT_ARGS_MAX_SIZE` and zero-fills the remainder, is only callable from SECURE_MODE, and the region is reachable only while MPU region 6 is banked to `MPU_MODE_BOOTARGS`. The bootloader snapshots the command and overwrites it with NONE before doing anything else (one-shot). The docs state explicitly that this is the bootloader's only external input and 'No callable interface is exposed to the next stage'.",
+   "notes": "pq1's FSBL has no NS-writable input at all (stronger). The sparse-magic-command pattern is the same discipline as pq1's F-2 Hamming-distant sentinels in fi.rs; apply it to the page-127 first-boot journal states and any future boot-state markers."
+  },
+  {
+   "item": "Thread-mode execution of long syscalls (queued to the kernel task instead of running in the SVC handler), bounded IPC queues with explicit item-size validation, cross-task copies through a single helper",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/syscall/stm32/syscall_ipc.c:57-98",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/task/stm32/systask.c:721-756",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/ipc/ipc.c:80-100,120-146,212-250",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/ipc/stm32u5/ipc_memcpy.c:28-32"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The SVC handler extracts the syscall number from the stacked PC (`((uint8_t*)stack[6])[-2]`), gathers 6 args from the stacked r0\u2013r3 plus r4/r5, and if `SYSCALL_THREAD_MODE` is set it enqueues the call and yields to the kernel task, which executes it in thread mode and writes r0/r1 back into the task frame only if the task is still alive (`on_task_killed` drops the queued call). IPC queues are per (target, origin) pair with `IPC_MAX_BUFFER_SIZE`, alignment checks, free-space checks before enqueue, and header/size sanity on dequeue and free ('Invalid item size => queue corruption'). `ipc_memcpy` is the single place where the MPU is dropped to copy between differently-protected tasks.",
+   "notes": "pq1's NSC veneers already execute in secure thread mode (no handler-mode work), so the main lesson is met. Do NOT copy the 'disable MPU to memcpy' pattern; pq1's explicit validated copy is the better model. The 'drop queued results for a killed task' detail is relevant if pq1 ever makes NSC calls asynchronous."
+  },
+  {
+   "item": "Secure-to-NS callback discipline: NS function pointers accepted only after `probe_execute_access`, converted with `cmse_nsfptr_create`, invoked through a `cmse_nonsecure_call` wrapper; unprivileged callbacks are guarded against task death and unexpected task switches",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/smcall/stm32/smcall_verifiers.c:290-317",
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/task/stm32/systask.c:280-310"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Trezor's storage/PIN UI runs in NS, so secmon needs to call back into NS for progress updates. `storage_setup__verified` probes the pointer (NULL allowed to disable), creates a NS function pointer via `cmse_nsfptr_create`, and all calls go through `storage_callback_wrapper` typed `__attribute__((cmse_nonsecure_call))` so the compiler emits the register-clearing BLXNS sequence. In the kernel, `systask_invoke_callback` pushes a frame on the unprivileged stack (`error_shutdown(\"Callback stack low\")` if it cannot), yields, and `error_shutdown`s if the task was killed or `in_callback` was not cleared by a proper return ('Callback invalid op').",
+   "notes": "pq1 has no S\u2192NS callbacks (the trusted UI, PIN entry and confirm dialogs are entirely in S-world), which removes this whole class. Keep it that way; this entry documents why Trezor needs it (NS-resident UI) and that pq1's design choice is the stronger one."
+  },
+  {
+   "item": "Programmable voltage detector (2.8 V) at highest priority \u2192 shutdown, BOR level in option bytes, secure-only IWDG/WWDG, USB-powered readiness glitch handling",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sys/pvd/stm32/pvd.c:28-52",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/option_bytes/stm32u5/option_bytes.c:26-31",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/iwdg/stm32/iwdg.c:28-50",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:261-263,273-275",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usb.c:268-343"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "`pvd_init` arms the PVD at level 5 (~2.8 V) with rising+falling interrupt at `IRQ_PRI_HIGHEST`; the handler reconfigures the MPU to default and `error_shutdown(\"PVD IRQ\")` \u2014 a supply dip (classic voltage-glitch precursor, or a hostile USB host browning the rail) terminates execution rather than letting glitched code continue. The BOR option byte is set to level 4 (~2.8 V) for 3.3 V parts as the hardware backstop. IWDG and WWDG are attributed secure+privileged so NS cannot disable or feed a watchdog the secure world relies on (IWDG max 4 h, stop/standby-frozen per OPTR). On USB-powered models (no power manager) `usb_configured` tolerates a 2 s 'ready recently' window to ride through enumeration glitches without re-initialising.",
+   "notes": "pq1 is USB-powered with no battery (same as Safe 3/5): verify (a) PVD level and that the handler zeroizes before reset, (b) IWDG/WWDG are in the secure GTZC set (they are not in CLAUDE.md's allowlist: AES/HASH/RNG/PKA/SAES/I2C/UCPD1/TIM2/TIM3), (c) a hostile host cannot wedge the device by holding enumeration in a half-configured state \u2014 Trezor's `ready_time` workaround shows this is a real-world issue on USB-powered units."
+  },
+  {
+   "item": "Documented decisions NOT to do / accepted residuals on this surface",
+   "evidence": [
+    "/home/nicola/repos/trezor-firmware/docs/core/embed-arch/embed-arch.md:24,92,106,325-326,360-362,383",
+    "/home/nicola/repos/trezor-firmware/docs/common/thp/specification.md:3,731",
+    "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/thp/__init__.py:41-64",
+    "/home/nicola/repos/trezor-firmware/core/embed/io/usb/stm32/usbd_conf.c:507,540,578",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/trustzone/stm32u5/tz_init.c:137-142,152-153",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:71-80",
+    "/home/nicola/repos/trezor-firmware/core/embed/rust/src/thp/mod.rs:777-785"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Trezor states in its architecture doc that: PKA is not used (crypto stays in firmware libraries); secmon does not re-verify the kernel (trusts the bootloader's verification); the secure-unprivileged TrustZone quadrant is unused; coreapp has unlimited syscalls and 'can ask for access to raw secrets and will just get them' (separation 'gradually improving'); the third-party-app syscall allowlist is still a TODO in the doc; and there is no mechanism preventing a third-party app from calling unexposed coreapp code (policy, not enforcement). The THP spec says only CodeEntry pairing is shipped (QR/NFC are debug-only) and that older models keep the unencrypted codec v1. USB DMA is disabled on all three PHY configurations. `SYSRESETREQS` is applied only in PRODUCTION builds so dev builds can reset from NS. The MPCBB is configured with 'No exceptions on illegal access' (`SRWILADIS_DISABLE`). `drbg_random8` returns the constant 128 when its lock is contended ('should be ok for our purposes'). The THP queue drops the oldest element when full.",
+   "notes": "For pq1 the relevant takeaways: (1) pq1 already avoids the biggest residual (NS UI/business logic with unlimited secure access) by keeping PIN/UI/parsing in S-world; (2) do not treat 'USB DMA off' as optional \u2014 it is a load-bearing assumption for SAU-only SRAM partitioning; (3) make any 'constant on lock contention' fallback in pq1's RNG paths a hard error, not a silent 128; (4) when writing pq1's own 'not doing' list for this surface, be as explicit as Trezor is (coreapp raw-secret access is called out in the doc rather than hidden)."
+  }
+ ]
+}

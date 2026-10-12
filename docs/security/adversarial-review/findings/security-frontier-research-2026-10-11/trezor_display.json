@@ -1,0 +1,303 @@
+{
+ "surface": "Display / seed-exfiltration side channels (key=display)",
+ "vendor": "Trezor (trezor-firmware monorepo @ 6ab39e95cf, 2026-10-07; legacy/ = Trezor One, core/ = T2B1/T3B1 OLED + T2T1/T3T1/T3W1 TFT)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "Hardware consumption mask: DMA-fed random-duty PWM on a dedicated timer pin (CVE-2019-14354-class OLED row-power leak mitigation on the core OLED models)",
+   "evidence": [
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-38",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:43-50",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:73-142",
+    "core/embed/sec/consumption_mask/stm32f4/consumption_mask.c:28-41",
+    "core/embed/sec/consumption_mask/stm32f4/consumption_mask.c:46-53",
+    "core/embed/sec/consumption_mask/stm32f4/consumption_mask.c:94-109",
+    "core/embed/models/T3B1/model.toml:5",
+    "core/embed/models/T2B1/model.toml:5",
+    "core/embed/projects/kernel/main.c:161-163",
+    "core/embed/projects/bootloader/main.c:335-337"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already ports this (TIM2_CH1/PA5 on iota2, TIM3_CH1/PA6 on pq1) but as a periodic-tick CCR write from software rather than Trezor's 10 kHz DMA-fed 119-entry table; and pq1's own module documents that neither board drives a load from the mask pin so the dilution is unmeasured (secure/src/hw/consumption_mask.rs:40-52). Trezor's firmware likewise does not show whether PA5/PC6 drives a load \u2014 that is a board-level fact not derivable from the repo.",
+   "notes": "Mechanism: `consumption_mask_randomize()` fills `pwm_data[SAMPLES]` (119 on U5, 110 on F4) with `rng_get() % TIMER_PERIOD` (16000 @160 MHz \u2248 10 kHz). On U5 a GPDMA1 channel in circular linked-list mode is triggered by `GPDMA1_REQUEST_TIM2_UP` and writes each sample into `TIM2->CCR1` on every timer update, so the duty cycle of TIM2_CH1 on PA5 (AF1, pull-up, PWM1, OCPOLARITY_LOW, idle SET) changes every 100 \u00b5s with no CPU involvement; `TIM_CR2_CCPC|CCUS` preload the CCR so the duty switches atomically on the update event. F4 is the same with TIM8_CH1/PC6 + DMA2_Stream1. Trezor enables the feature ONLY on the two monochrome-OLED models (T2B1 = STM32F427, T3B1 = STM32U58); TFT models T2T1/T3T1/T3W1 do not list `consumption_mask` in model.toml. Init happens in both the kernel and the bootloader (both render UI); the F4 version has `#error Not implemented for boardloader!` and the U5 boardloader project.toml does not use it (core/embed/projects/boardloader/project.toml:4-19). pq1 difference: pq1 re-randomises from the secure tick (secure/src/main.rs:4330-4337) with a xorshift PRNG reseeded every ~1024 ticks; Trezor draws every sample from `rng_get()` (TRNG) and refreshes at a much higher rate via DMA. Porting the DMA-fed table (GPDMA secure channel) to pq1 is a direct follow-up Trezor's code already demonstrates on the same MCU family."
+  },
+  {
+   "item": "Mask re-randomisation hooked to every display refresh (decorrelates the mask from frame content)",
+   "evidence": [
+    "core/embed/io/display/vg-2864/display_driver.c:407-425",
+    "core/embed/io/display/vg-2864/display_driver.c:414-418"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 randomises only from the periodic tick (secure/src/main.rs:4337). Adding a `consumption_mask::randomize()` call inside `lcd.rs::flush`/`flush_with_secret_rows` before the SPI frame goes out mirrors Trezor's design: the frame transmission (the moment the content-dependent current/EM appears) is what the attacker aligns on, so a fresh mask table at exactly that moment denies a stable per-frame template.",
+   "notes": "The comment in display_refresh reads: \"This is an intentional randomization of the consumption masking algorithm after every change on the display\". It runs before `mpu_set_active_fb(NULL,0)` and `display_sync_with_fb`. Only the OLED driver carries this hook; TFT drivers (st-7789, ltdc_dsi) have no consumption-mask reference at all."
+  },
+  {
+   "item": "Legacy (Trezor One) constant-weight row padding for seed-word display \u2014 `oledSCA` pads every OLED row of the word band to a fixed minimum lit-pixel count",
+   "evidence": [
+    "legacy/oled.c:451-473",
+    "legacy/firmware/layout2.c:832-837",
+    "legacy/firmware/recovery.c:468-470",
+    "legacy/firmware/CHANGELOG.md:331-334"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The physical cause (SSD1306-class OLED row current \u221d lit pixels per row, visible on the USB power line) does not exist on pq1's NV3007 TFT (backlit LCD; pixel data does not modulate emissive current). The *principle* \u2014 make every secret row's SPI payload / drive current content-independent \u2014 does transfer: pq1's `flush_with_secret_rows` (secure/src/ui/lcd.rs:172-200) already makes the glyph FETCH constant-time, but the SPI MOSI byte stream still carries the content-dependent pixel pattern, which is the remaining EM channel on an SPI panel.",
+   "notes": "Mechanism (commit 1c9fa5d3c6, 2019-07-17 \"legacy: fix SCA when displaying the words\", shipped as 1.8.2 \"OLED display security improvements\"): for rows y1..y2 it counts lit pixels; if fewer than `width` (30 = max pixel row of the widest BIP-39 word \"abstract\" in FONT_FIXED|FONT_DOUBLE) it lights extra pixels growing inward from the left and right screen edges until the row has \u2265 width lit pixels. Each row thus has constant-ish Hamming weight regardless of which word is displayed, so the row-refresh current signature no longer identifies the word. Applied to the word band in `layoutResetWord` and to the recovery prompt band in `next_word` (35 px for \"the 21st word\")."
+  },
+  {
+   "item": "Legacy inverted word band \u2014 secret word rendered black-on-white inside a fully lit band so the constant background dominates row current",
+   "evidence": [
+    "legacy/firmware/layout2.c:834-838",
+    "legacy/firmware/recovery.c:469-471"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Again OLED-specific physics, but the general lesson \u2014 surround the secret with a large content-independent lit area \u2014 is cheap on pq1's pixel UI and would also reduce the dynamic range of any residual SPI/EM signal relative to a fixed background. Low priority for a TFT.",
+   "notes": "`oledInvert(0, y1, OLED_WIDTH-1, y2)` is called immediately after `oledSCA` on the same rows, so the band is mostly white with the glyph pixels dark: lit-pixel count per row becomes (128 \u2212 glyph pixels), with glyph variance already clamped by oledSCA."
+  },
+  {
+   "item": "Legacy PIN-matrix row padding `oledSCAInside` \u2014 PIN digits displayed in a 3x3 matrix get per-row padding growing inward from fixed columns",
+   "evidence": [
+    "legacy/oled.c:475-497",
+    "legacy/firmware/pinmatrix.c:29-55",
+    "legacy/firmware/pinmatrix.c:48-53"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 does not use a host-entered PIN matrix; the PIN is entered on-device with per-position random start digits (secure/src/ui/pin_entry.rs:10-23). The displayed digit layout on pq1 is content-independent by construction, so there is no digit-dependent row weight to pad.",
+   "notes": "Commit 9107731079 (2019-07-25 \"legacy: fix SCA when displaying the PIN matrix\"). Each of the three digit rows is padded to \u226556 lit pixels (comment: 36 is the true max, 56 adds margin) with pixels added at columns <38 and \u226590 so they do not overlap the matrix. The permutation itself is generated with `random_permute` (crypto/rand.c:34-46, Fisher-Yates over TRNG) and wiped after use (pinmatrix.c:79)."
+  },
+  {
+   "item": "Legacy decoy frames in scrambled recovery \u2014 device asks for randomly chosen FAKE words so the host (and a screen observer) cannot tell word count or which positions are real",
+   "evidence": [
+    "legacy/firmware/recovery.c:56-64",
+    "legacy/firmware/recovery.c:447-472",
+    "legacy/firmware/recovery.c:526-536",
+    "legacy/firmware/CHANGELOG.md:331-334"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already implements a stronger form for the backup-display direction (`decoy-frames` feature: N_DECOYS full valid BIP-39 mnemonics interleaved with the real one, secure/src/ui/seed_wizard.rs:427-445). Trezor's variant covers the host-assisted RECOVERY direction; if pq1 ever adds a companion-assisted recovery path, the fake-word technique is the relevant precedent. For pq1's fully on-device wizard it is already covered.",
+   "notes": "`word_order[]` is zero-padded to 24 entries and `random_permute`d; when the next requested position is 0 the device picks `mnemonic_get_word(random_uniform(2048))` into `fake_word`, displays it (with `oledSCA`, commit 8190bf3819 \"fix oledSCA in simple recovery\") and asks the host to type it; `recovery_scrambledword` discards fake entries. The host sees 24 requests regardless of a 12/18/24-word seed."
+  },
+  {
+   "item": "Legacy randomised word order (scrambled) and randomised 3x3 word-matrix recovery \u2014 host never learns the position\u2194word mapping",
+   "evidence": [
+    "legacy/firmware/recovery.c:521-536",
+    "legacy/firmware/recovery.c:273-299",
+    "legacy/firmware/recovery.c:87-100"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 has no host-typed recovery; seed entry is on-device in the secure world. If a companion-assisted recovery were ever added, this (not plain word entry) is the minimum bar.",
+   "notes": "Scrambled mode: Fisher-Yates over positions, host types words in that order. Matrix mode: device shows a random permutation of up to 9 word-prefix choices; host sends only the matrix index (base-9 pincode), so a keylogger/host sees indices whose meaning is only on the screen \u2014 combined with oledSCA padding so the screen's power signature does not reveal the layout either."
+  },
+  {
+   "item": "Core on-device PIN keypad randomisation: shuffled digit buttons on touch models, random start digit (re-randomised after every entered digit) on the button model",
+   "evidence": [
+    "core/embed/rust/src/ui/layout_bolt/component/keyboard/pin.rs:101-108",
+    "core/embed/rust/src/ui/layout_delizia/component/keyboard/pin.rs:298-300",
+    "core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs:89-91",
+    "core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs:168-171",
+    "core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs:324-326"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already has F-20 per-position random start digit (secure/src/ui/pin_entry.rs:10-23, 55-60). Trezor's caesar variant additionally re-draws a fresh random digit position AFTER each accepted digit (line 324-326), which pq1 should be checked for: with a fixed random start per position the press count per position is `(target\u2212start) mod 10`; re-randomising on every entry removes correlation across positions within one session too.",
+   "notes": "Button model (T2B1/T3B1 `layout_caesar`): `ChoicePage::with_initial_page_counter(get_random_digit_position())`, uniform over 0..9 via `trezorhal::random::uniform_between`; touch models: `random::shuffle` over the 10 digit labels so touch coordinates do not reveal digits. Both also mitigate display-power leakage because the rendered frame for a given PIN digit is not fixed."
+  },
+  {
+   "item": "Removal of the `display_random` feature (showing the device's internal entropy on screen) \u2014 explicit decision NOT to render raw entropy",
+   "evidence": [
+    "legacy/firmware/CHANGELOG.md:57",
+    "core/.changelog.d/4119.removed (commit 2a567f3a0c, 2024-08-22)",
+    "legacy/firmware/reset.c (diff of 2a567f3a0c: removed int_entropy hex pages with oledSCA padding)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Documented precedent that the vendor removed a screen that displayed seed-equivalent material (32-byte entropy hex) even though it had SCA padding, replacing it with the non-displaying entropy-check protocol below. pq1 should audit every path that could render entropy/seed bytes outside the dedicated wizard (e.g. debug/e2e builds, `secret_text`) and treat them as production-forbidden.",
+   "notes": "The removed code rendered `int_entropy` as 8 hex groups across two screens with `oledSCA(..., 40)` on each row. Commit message gives no rationale; the replacement (`entropy_check`) was already in the same release line. Trezor explicitly decided NOT to keep a display-based entropy audit."
+  },
+  {
+   "item": "Entropy-check protocol \u2014 device commits to internal entropy (HMAC), host contributes external entropy, host verifies the resulting seed via `GetPublicKey(show_display=False)`, device reveals previous entropy on the next round; backup-trust established WITHOUT showing the seed",
+   "evidence": [
+    "core/src/apps/management/reset_device/__init__.py:91-126",
+    "core/src/apps/management/reset_device/__init__.py:168-197"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Addresses malicious-firmware/RNG backdoor during wallet creation without a display round-trip. pq1 generates entropy on-device too, so the commit/reveal loop is implementable over the NSC/USB gateway. However pq1's seed\u2192address derivation is SPHINCS+C10 (keygen \u2248 seconds) rather than instant secp256k1 xpubs, and the companion would need the C10 derivation to verify; feasibility is bounded by that cost. Also, pq1's dual-chip XOR split (invariant #1) means the reveal step must never move a half across a bus \u2014 it reveals the pre-split entropy only inside the already-trusted creation session.",
+   "notes": "Loop: `entropy_commitment = HMAC-SHA256(int_entropy, \"\")` sent in `EntropyRequest`; host answers `EntropyAck(entropy)`; device derives the secret, enters `_entropy_check`, answers `GetPublicKey` requests from the derived seed with display suppressed; host says `EntropyCheckContinue(finish=False)` to force a new internal entropy, and the device then sends `prev_entropy=int_entropy` so the host can verify the previous commitment and the previous xpubs. Only when the host is satisfied does it send `finish=True`."
+  },
+  {
+   "item": "N1W1 backup method \u2014 seed written to an external NFC tag instead of being displayed (backup flow that never shows the words)",
+   "evidence": [
+    "core/src/apps/management/reset_device/layout.py:200-221",
+    "core/src/apps/management/reset_device/layout.py:236-303",
+    "core/embed/projects/firmware/project.toml:73",
+    "core/src/apps/debug/n1w1_mock.py:17-60",
+    "core/translations/en.json:178"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The concept (an alternative backup channel so the mnemonic never hits the display) is directly relevant to pq1's threat model, but N1W1 is still gated behind a build option with a debug-link mock transport (`TODO(N1W1)` markers, `apps.debug.n1w1_mock`), so there is no production mechanism to port yet. pq1 has no NFC; the analogue would be an encrypted secure-element-to-secure-element or SD/USB blob \u2014 which conflicts with invariant #1 unless the blob is itself XOR-split or SE-wrapped.",
+   "notes": "`choose_backup_handler` offers `BackupMethod.N1W1` when `utils.USE_N1W1`; `_N1W1Backup._backup_share` concatenates the share words into a blob and `ctx.write(key=\"mnemonic\", value=blob)` after `ctx.read` confirms the tag is empty. The `_DisplayBackup` handler remains the default."
+  },
+  {
+   "item": "On-device backup confirmation by randomised 3-choice word quiz (three checks, one per third of the share) instead of re-displaying the seed",
+   "evidence": [
+    "core/src/apps/management/reset_device/layout.py:22-50",
+    "core/src/apps/management/reset_device/layout.py:103-121",
+    "core/src/trezor/ui/layouts/caesar/reset.py:73-95",
+    "core/embed/rust/src/ui/layout_caesar/ui_firmware.rs:936-953"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's wizard already spot-checks 3 random words (secure/src/ui/seed_wizard.rs:6 `verify_mnemonic`). Trezor's refinement worth matching: deduplicate, pick the probe word from a shuffled set, then shuffle the 3 choices again so the correct answer is not always first; choices are other words of the SAME share (so the quiz screen never leaks a word that is not already in the backup).",
+   "notes": "`_confirm_word`: `sorted(set(share_words))` \u2192 `random.shuffle` \u2192 first three are the choices, `choices[0]` is the checked word, index resolved, choices shuffled again; the UI returns the index only. If fewer than three unique words exist the last is duplicated (caesar/reset.py:83-86)."
+  },
+  {
+   "item": "Share-words display gating: explicit 'Show words' confirm before the words appear, paged display with a trailing non-word page, and hold-to-confirm on the last page only",
+   "evidence": [
+    "core/src/trezor/ui/layouts/caesar/reset.py:19-70",
+    "core/embed/rust/src/ui/layout_caesar/ui_firmware.rs:1311-1325",
+    "core/embed/rust/src/ui/layout_caesar/component/share_words.rs:36-47",
+    "core/embed/rust/src/ui/layout_caesar/component/share_words.rs:123-132",
+    "core/embed/rust/src/ui/layout_delizia/flow/show_share_words.rs:108-113",
+    "core/embed/rust/src/ui/layout_eckhart/flow/show_share_words.rs:92-101"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's wizard confirms only on the last page with long-Right (seed_wizard.rs:328-331) and the ui-px scroll-to-end rule already exists for sign dialogs. Trezor's additional 'Show words' gate (words are not rendered until the user actively asks) limits the exposure window of the seed frames to the moment the user is ready to write, which is also the moment they are least likely to be looking away \u2014 worth adopting as a cheap UX hardening.",
+   "notes": "caesar: `confirm_action(..., verb=TR.buttons__show_words)` loops with `show_share_words` until CONFIRMED; `ShareWords::new` adds one final page (`words_screen + 1`) whose content is the 'I wrote down all N words in order' text, and `ButtonPage` attaches a hold-to-confirm button; delizia/eckhart use `PromptScreen::new_hold_to_confirm()` on a separate Confirm page reached only by swiping past all words."
+  },
+  {
+   "item": "Pre-display warning 'Never put your backup anywhere digital' (anti-photo/anti-screenshot UX step before the words)",
+   "evidence": [
+    "core/src/apps/management/reset_device/layout.py:176-180",
+    "core/translations/en.json:2248"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Pure UX; trivially portable to pq1's wizard and relevant to the 'camera over the shoulder' residual that no electrical countermeasure addresses.",
+   "notes": "`_DisplayBackup.backup` calls `show_warning_backup()` once before iterating shares."
+  },
+  {
+   "item": "Legacy single-word-per-frame, two-pass display ('Write down the seed' then 'Please check the seed'), each frame with SCA padding + inversion",
+   "evidence": [
+    "legacy/firmware/reset.c:206-231",
+    "legacy/firmware/layout2.c:785-839"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "One word per frame minimises the information in any single leaked frame (vs pq1's 3 or 8 words per page), at the cost of 24\u201348 frames. The second pass doubles exposure; Trezor core replaced it with the word quiz. For pq1 the relevant trade-off is pages-per-exposure vs. decoy interleave: fewer words per frame makes the `decoy-frames` scheme cheaper per frame.",
+   "notes": "Both passes show every word in order; `protectButton(ConfirmWord)` per word. Core models dropped the second pass."
+  },
+  {
+   "item": "Frame-buffer privilege gating: the active frame buffer is the only SRAM window unprivileged UI code may touch, and access is revoked at refresh (MPU region 5; TZ unprivileged SRAM attribute on U5)",
+   "evidence": [
+    "core/embed/sys/mpu/stm32u5/mpu.c:407-422",
+    "core/embed/sys/mpu/stm32u5/mpu.c:541-560",
+    "core/embed/io/display/vg-2864/display_driver.c:390-404",
+    "core/embed/io/display/vg-2864/display_driver.c:420-424",
+    "core/embed/io/display/st-7789/display_fb.c:79-86",
+    "core/embed/io/display/st-7789/display_fb.c:204-205",
+    "core/embed/io/display/st-7789/display_fb.c:251-252",
+    "core/embed/projects/kernel/main.c:175-177"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 keeps the whole trusted UI in the secure world (invariant #4), so there is no unprivileged renderer to fence; the framebuffer/row buffer lives in S-SRAM and NS cannot address it. The residual analogue on pq1 is intra-secure-world: a bug in a non-UI secure module could read the row buffer. Trezor's pattern (hand out the FB pointer only for the draw, revoke before SPI/DMA transfer) is a defence-in-depth idea if pq1 ever splits privilege inside S-world.",
+   "notes": "`display_get_frame_buffer` calls `mpu_set_active_fb(ptr,size)` which programs MPU region 5 as unprivileged RW only in `MPU_MODE_APP*` and only while `app_fb_access`; `display_refresh` calls `mpu_set_active_fb(NULL,0)` before the SPI copy. On TZ models `display_set_unpriv_access(true)` additionally marks the physical FB SRAM (and GFXMMU) unprivileged via GTZC."
+  },
+  {
+   "item": "Consumption-mask DMA channel and transfer marked SECURE+PRIVILEGED so lower-privilege code cannot stop, re-point or read the mask table",
+   "evidence": [
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:85-87",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:117-118"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 secures TIM2/TIM3 via GTZC so NS cannot clear CEN (CLAUDE.md, sau.rs), which covers the timer. If pq1 adopts Trezor's DMA-fed duty table, the GPDMA channel must be given the same `DMA_CHANNEL_SEC|SRC_SEC|DEST_SEC|PRIV` attributes and the table must live in S-SRAM \u2014 otherwise NS could freeze the mask by halting the channel.",
+   "notes": "`HAL_DMA_ConfigChannelAttributes(&dma_handle, DMA_CHANNEL_PRIV | DMA_CHANNEL_SEC | DMA_CHANNEL_SRC_SEC | DMA_CHANNEL_DEST_SEC)` and node `SrcSecure/DestSecure`. Note T3B1 itself is not a TrustZone model (no `trustzone`/`secmon` in its model.toml), so there the attribute is belt-and-braces."
+  },
+  {
+   "item": "Random-delay interrupts (RDI, floating-mean distribution) running at 1 kHz plus `wait_random()` at every USB packet boundary and smcall \u2014 desynchronises display-refresh and crypto timing from externally observable events",
+   "evidence": [
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:25-40",
+    "core/embed/sec/random_delays/stm32/random_delays.c:166-178",
+    "core/embed/sec/random_delays/stm32/random_delays.c:184-203",
+    "core/embed/io/usb/stm32/usb.c:728",
+    "core/embed/io/usb/stm32/usb.c:748",
+    "core/embed/projects/secmon/main.c:117-119",
+    "core/embed/projects/kernel/main.c:145-148"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 has FI-hardened signing with shuffles/OptRand but no documented always-on RDI tick. For the display surface specifically, RDI makes it harder to align a power/EM trace to a frame boundary using USB traffic as the trigger (the attacker in CVE-2019-14354 used USB power and timing). The `wait_random` loop with the `i+j != wait` glitch check is an FI-aware delay pq1 could lift verbatim (pure C, no peripheral).",
+   "notes": "Delay = fresh uniform[0,255] + `session_delay` (uniform[0,255], refreshed on `random_delays_refresh_rdi()` which USB rx/tx and smcalls invoke). Random source is a ChaCha DRBG reseeded from the TRNG every 1000 calls; the ISR path returns a constant 128 if the DRBG critical section is already held. RDI is started in secmon/kernel (`random_delays_start_rdi` under `RDI`)."
+  },
+  {
+   "item": "Constant-time BIP-39 word lookup and `mnemonic_to_bits` (linear scan with masked select instead of binary search) \u2014 closes a timing/power channel on the word index during recovery entry and seed derivation",
+   "evidence": [
+    "crypto/bip39.c:244-262",
+    "core/CHANGELOG.md:171-172",
+    "commit 9b1c06205c (2025-11-12)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 has its own no_std `bip39/` crate used by the seed wizard and derivation. Any word\u2192index or index\u2192word lookup that branches or binary-searches on the secret index leaks through timing/power exactly as Trezor's did; pq1's LCD path already does a constant-time 96-entry glyph scan (secure/src/ui/lcd.rs:195-200), so the wordlist lookup should be audited to the same standard.",
+   "notes": "`mnemonic_find_word` compares the input against all 2048 words with `consteq` and selects the index with an all-ones/all-zeros mask; the commit also made `mnemonic_to_bits` constant time and removed a legacy integrity re-check 'to reduce the number of computations over seed'. `mnemonic_complete_word` (prefix completion for the keyboard) is still a plain early-exit loop (crypto/bip39.c:264-273)."
+  },
+  {
+   "item": "Screen-content tracing and seed/entropy read-out exist ONLY in debug builds (`if __debug__` DebugLinkGetState; `ui_debug` trace of ShareWords content)",
+   "evidence": [
+    "core/src/apps/debug/__init__.py:8",
+    "core/src/apps/debug/__init__.py:285-291",
+    "core/embed/rust/src/ui/layout_caesar/component/share_words.rs:146-170"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Same structure as pq1's `ui-capture` / `debug-log` / `e2e-test` gating. Trezor's `pyopt` production option is what strips `__debug__`; pq1's equivalent is the `nsc/mod.rs` compile_error fences \u2014 worth keeping an explicit test that a production image contains no trace strings of the share-words component.",
+   "notes": "`DebugLinkGetState` returns `mnemonic_secret`, `reset_entropy` and the traced layout tokens (`screen_content` string with the words). This is a deliberate test-only exfiltration path."
+  },
+  {
+   "item": "Decision NOT to mask TFT models: `consumption_mask` is absent from T2T1/T3T1/T3W1 model.toml and no TFT display driver references it",
+   "evidence": [
+    "core/embed/models/T2T1/model.toml",
+    "core/embed/models/T3T1/model.toml",
+    "core/embed/models/T3W1/model.toml",
+    "core/embed/io/display/st-7789/display_io.c:80-115",
+    "core/embed/io/display/ltdc_dsi/display_driver.c"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Trezor's implicit position is that the OLED row-current leak is panel-specific and a backlit TFT (parallel FMC i8080 on T2T1/T3T1, DSI on T3W1) does not need the mask. pq1's NV3007 is also a backlit TFT, but it is driven over a 3-wire SPI (SCK/MOSI, no MISO) whose MOSI stream is the full pixel bitmap \u2014 an EM/crosstalk channel that Trezor's parallel/DSI panels do not share in the same form. So Trezor's 'no mask on TFT' decision should NOT be taken as evidence that pq1's SPI panel is safe; the relevant channel on pq1 is bus EM, not row current.",
+   "notes": "Trezor does not document the rationale in-repo; it is inferred from the feature matrix. The grep over the TFT drivers for `consumption`/`random`/`mask` returns nothing."
+  },
+  {
+   "item": "Decision NOT to carry per-row constant-weight padding into core: the T3B1 OLED `ShareWords` renderer draws plain text with no padding and relies on the hardware mask instead",
+   "evidence": [
+    "core/embed/rust/src/ui/layout_caesar/component/share_words.rs:76-100",
+    "core/embed/io/display/vg-2864/display_driver.c:199-233"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Shows Trezor moved from software constant-weight encoding (legacy) to a hardware noise source (core) on the same panel class. For pq1 the two are complementary: the SPI payload itself can be made content-independent (software) AND the mask can decorrelate the supply (hardware). pq1 already has the software half for the glyph fetch; the SPI payload and the loaded-mask half remain open.",
+   "notes": "vg-2864 `display_sync_with_fb` packs the 8-bit mono framebuffer into page bytes with `COLLECT_ROW_BYTE` and sends the raw 128-byte rows via `HAL_SPI_Transmit`; nothing is padded, inverted or scrambled."
+  },
+  {
+   "item": "Raw framebuffer sent over SPI with no bus-level obfuscation (legacy and core) \u2014 Trezor has NO countermeasure for SPI MOSI content leakage / in-line bus taps",
+   "evidence": [
+    "legacy/oled.c:207-226",
+    "legacy/oled.c:116-123",
+    "core/embed/io/display/vg-2864/display_driver.c:128-159",
+    "core/embed/io/display/vg-2864/display_driver.c:181-243"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Gap, not a measure: a probe on the display flex or EM near the SPI lines recovers the exact frame on both vendors. pq1's panel is SPI too and the secure image owns the SPI peripheral, so pq1 could go beyond Trezor here (e.g. constant-weight pixel encoding of secret rows, dummy traffic/decoy rows on the bus, randomised row order, or transmitting the secret page as full-frame XOR against a per-frame random pattern that the panel cannot apply \u2014 the last is not possible on a dumb panel, so constant-weight/decoy is the realistic lever).",
+   "notes": "Legacy SPI runs at the libopencm3 default with a `delay(1)` before each burst; core uses `SPI_BAUDRATEPRESCALER_16`, 8-bit, MSB first, NSS hard output. Both transfer the entire framebuffer every refresh (no partial updates), which at least makes the bus traffic length content-independent."
+  },
+  {
+   "item": "Consumption mask NOT active during the earliest boot stage (boardloader) \u2014 `#error Not implemented for boardloader!` on F4, and the U5 boardloader project does not include the feature",
+   "evidence": [
+    "core/embed/sec/consumption_mask/stm32f4/consumption_mask.c:31-33",
+    "core/embed/projects/boardloader/project.toml:4-19"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's FSBL renders the 8-word firmware fingerprint before the secure world starts the mask. The fingerprint is public, so the gap is harmless for this surface; it matters only if the FSBL ever renders something secret (it must not).",
+   "notes": "The bootloader (second stage) and kernel both initialise the mask; only the boardloader is excluded."
+  },
+  {
+   "item": "Frame buffers zeroed on display (re)initialisation and display content mode `DISPLAY_RESET_CONTENT` vs `DISPLAY_RETAIN_CONTENT` on stage transitions",
+   "evidence": [
+    "core/embed/io/display/st-7789/display_fb.c:118-124",
+    "core/embed/io/display/inc/io/display.h:47-62",
+    "core/embed/models/T3B1/model_T3B1.h:49"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's `flush` overwrites every cell (lcd.rs:181-184) so no stale secret row survives a page change; the stage-transition case (secure world \u2192 NS boot, or wipe/lock) should likewise guarantee the panel GRAM and the row buffer are cleared, since a TFT retains its GRAM until overwritten or powered down.",
+   "notes": "`display_fb_clear` memsets both physical frame buffers under a temporary MPU window. T2B1/T3B1/T2T1/T3T1 use RETAIN across bootloader\u2192firmware for a seamless boot; T3W1 resets. Not a leak mitigation per se but the primitive that any 'clear on lock' policy builds on."
+  }
+ ]
+}

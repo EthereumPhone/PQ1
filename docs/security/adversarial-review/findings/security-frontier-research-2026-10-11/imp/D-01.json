@@ -1,0 +1,29 @@
+{
+ "id": "D-01",
+ "title": "Route the PIN active digit and the restore-wizard letter row through the constant-time secret glyph path on a forced frame, and pin it with a regression test",
+ "threat": "EM/power probe on the NV3007 SPI stream or on the MCU during PIN entry / seed restore. Each PIN commit screen paints exactly one secret digit at a known cell through the address-keyed public font (legacy) or the non-forced Item::Text run (px, strip-digest skip + 64-bit digest of secret pixels left in `static mut SHOWN`); eight screens = the PIN. The restore wizard letter row leaks every typed seed letter the same way (#784). This is the same channel F-24/F-27 closed for the word pages \u2014 TVLA on the legacy scan measured 650.90 leaky vs 0.00 CT.",
+ "proposal": "(1) Legacy: in `pin_entry::render_pin_screen` and `seed_wizard::render_letter_screen` build the secret row via `secret_text::secret_glyph_cols` and emit it with `flush_with_secret_rows` instead of `draw_line`+`flush`. (2) px: make `status_map::pin_row` / `letter_row` emit the active digit / typed letters as `Item::Secret` cells (placeholders in the record, bytes passed as `secret`) and call `screens::show_with(&row, &secret)` so `play_screen` sets `force = true` (present_frame_ex streams every strip, records no digest, invalidates SHOWN). Extend `Font::blit_secret_run`'s candidate range from a-z to a-z + 0-9 (or a second numeric run) for the digit. (3) Add the host test #784 recommends: every Screen produced by pin_row/letter_row/seed_page/candidate_list that carries a secret is presented with a non-empty `secret` (force=true) and never through `show()`. (4) Also re-randomise the start digit of the NEXT position after each accepted digit (Trezor caesar `set_page_counter(get_random_digit_position())`), not once per session.",
+ "rationale": "Cheapest, highest-certainty fix on the surface: the CT primitives, the forced-frame discipline and the host-test scaffolding already exist; only two call sites and one builder still bypass them. The PIN is the key to the device and the restore letters are the seed itself \u2014 both are strictly more valuable than the word pages that are already protected.",
+ "repo_evidence": [
+  "secure/src/ui/pin_entry.rs:177-210 (render_pin_screen: px `show(&row)` at 182-186; legacy `row1[col] = b'0' + d` at 200-201 then `d.draw_line(1, ...)` \u2192 public_glyph_cols)",
+  "secure/src/ui/px/status_map.rs:276-293 (pin_row: `glyphs[i] = b'0' + pin[i] % 10` into an Entry record, Item::Text)",
+  "secure/src/ui/px/status_map.rs:296-317 (letter_row: `glyphs[i] = buf[i]` for committed and active letters)",
+  "secure/src/ui/seed_wizard.rs:911-916 (render_letter_screen px branch calls `screens::show`, not `show_with`) and :918-935 (legacy branch draws letters via draw_line)",
+  "secure/src/ui/px/lcd.rs:663 (`let force = !secret.is_empty()`) and :304-322 (present_frame_ex: digest skip unless forced)",
+  "secure/src/ui/pin_entry.rs:55-60 (F-20 start digits drawn once at session start, never re-randomised per digit)",
+  "gh #784 OPEN priority:medium (letter row); PIN active digit is NOT tracked by any issue"
+ ],
+ "vendor_precedent": "Trezor core caesar PIN: fresh random digit position after every accepted digit (core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs:320-328). Trezor crypto/bip39.c constant-time word lookup (commit 9b1c06205c). Ledger 1.6/2023 inverted-digit PIN UI (LSB-006, new-pin-screen).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P0",
+ "risks": "blit_secret_run currently scans 26 lowercase glyphs; adding digits widens the scan (~36 candidates per pixel) and the cost per forced PIN frame rises; must keep black_box barriers (secret_text.rs:44-50 documents the LLVM-fold regression). Per-digit re-randomisation changes the F-20 UX slightly (user re-dials from a new start each position) \u2014 already the case per position, so minimal. Must also verify with `make e2e-px` so the change is compiled IN (ui-px path), not only the legacy path.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs",
+  "https://donjon.ledger.com/lsb/006/",
+  "https://www.ledger.com/blog/new-pin-screen/",
+  "tools/sca/README.md:1254-1263 (F-24 stage table, TVLA figures)"
+ ],
+ "surface": "display"
+}

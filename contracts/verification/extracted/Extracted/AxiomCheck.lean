@@ -1,3 +1,29 @@
+import Extracted.C10HashInputBridge
+import Extracted.C10RepresentationBridge
+import Extracted.SecureWrapperBridge
+import Extracted.SecureWrapperCleanup
+import Extracted.SecureWrapperRefusal
+import Extracted.SignReleaseBridge
+import Extracted.SignWholeSpec
+import Extracted.SignHeaderDiffVectors
+import Extracted.SignHypertreeCaller
+import Extracted.SignHypertreeDiffVectors
+import Extracted.SignForestSerializeCaller
+import Extracted.SignLayerSerializeCaller
+import Extracted.SignSerializationDiffVectors
+import Extracted.SignForestPrefix
+import Extracted.WotsSignBridge
+import Extracted.XmssRootBridge
+import Extracted.XmssAuthRecovery
+import Extracted.ForsRoundtripSpec
+import Extracted.ForsAuthBridge
+import Extracted.ForsRootBridge
+import Extracted.ForsSecretBridge
+import Extracted.WotsKeygenBridge
+import Extracted.WholeVerifierSpec
+import Extracted.HypertreeStrictSpec
+import Extracted.ForsVerifierPrefix
+import Extracted.ForsRejectSpec
 /- Axiom-discipline check (extends the SphincsCVerify no-sorry/axiom-lint
    culture to the extracted-code project; CI wiring tracked in §33 P1).
 
@@ -7,6 +33,11 @@
    library (Aeneas/Std/Slice.lean etc.) are not on our proof paths. -/
 import Extracted.HMsgSpecBridge
 import Extracted.WotsSpecBridge
+import Extracted.WotsRecoveryBridge
+import Extracted.MerkleRecoveryBridge
+import Extracted.ForsRecoveryBridge
+import Extracted.FindCountSpec
+import Extracted.GrindRSpec
 import Extracted.AdrsEquiv
 import Extracted.Bits
 import Extracted.ForsExtract
@@ -40,6 +71,15 @@ import Extracted.FormatDecimal.EmitSpec
 -- axiom gate elaborates them — the replay lives in Extracted/ExtractDiffCheck.lean)
 import Extracted.ExtractDiffVectors
 import Extracted.FormatDecimalDiffVectors
+
+-- XMSS authentication-path construction and actual-helper membership composition.
+#print axioms Extracted.Equiv.xmss_auth_leaf_schedule
+#print axioms Extracted.Equiv.xmss_build_auth_spec
+#print axioms Extracted.Equiv.xmss_auth_path_matches_vendored
+#print axioms Extracted.Equiv.firmware_xmss_auth_matches_vendored
+#print axioms Extracted.Equiv.xmss_auth_recovery_root
+#print axioms Extracted.Equiv.firmware_xmss_build_recover_root
+#print axioms Extracted.Equiv.firmware_xmss_build_recover_matches_vendored
 
 -- FV-#2 sequel: slot_entropy byte-layout (invariant #8). Closure = kernel triple
 -- + the disclosed `sha256_pure_bytes` hash axiom (the FV-#2 single-shot SHA-256
@@ -154,3 +194,209 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.firmware_extract_digits_matches_vendored
 #print axioms Extracted.Equiv.firmware_wots_digit_array_matches_vendored
 #print axioms Extracted.Equiv.firmware_wots_digit_sum_matches_vendored
+
+#print axioms Extracted.Equiv.find_count_first_success
+#print axioms Extracted.Equiv.find_count_exhausted
+#print axioms Extracted.Equiv.find_count_total
+
+#print axioms Extracted.Equiv.grind_r_first_success
+#print axioms Extracted.Equiv.grind_r_exhausted
+#print axioms Extracted.Equiv.grind_r_total
+
+-- Complete WOTS recovery value and outcome bridge.
+#print axioms Extracted.Equiv.firmware_chain_hash_matches_vendored
+#print axioms Extracted.Equiv.firmware_th_multi_matches_vendored
+#print axioms Extracted.Equiv.firmware_pk_from_sig_matches_vendored
+#print axioms Extracted.Equiv.vendored_wots_recovery_outcome
+
+-- XMSS pair hash and complete nine-level recovery.
+#print axioms Extracted.Equiv.firmware_th_pair_matches_vendored
+#print axioms Extracted.Equiv.firmware_verify_auth_path_matches_vendored
+
+-- FORS secret leaf and complete eleven-level recovery.
+#print axioms Extracted.Equiv.fors_recovery_spec
+#print axioms Extracted.Equiv.firmware_fors_recovery_matches_vendored
+
+-- Forest-stage correspondences and whole-verifier forced-zero refusal.
+#print axioms Extracted.Equiv.fors_pk_spec
+#print axioms Extracted.Equiv.firmware_fors_pk_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_normal_roots
+#print axioms Extracted.Equiv.firmware_verify_rejects_nonzero_fors
+
+-- Complete FORS prefix through the unchanged WOTS/XMSS continuation.
+#print axioms Extracted.Equiv.firmware_parse_fors_secrets_value
+#print axioms Extracted.Equiv.firmware_parse_fors_auth_value
+#print axioms Extracted.Equiv.forsForestPhase_matches_vendored
+#print axioms Extracted.Equiv.firmware_verify_fors_prefix
+
+-- Exact layer parsing and two-layer continuation, with a conditional strict bridge.
+#print axioms Extracted.Equiv.firmware_parse_layer_wots_value
+#print axioms Extracted.Equiv.firmware_parse_layer_xmss_value
+#print axioms Extracted.Equiv.parsedLayerCount_val
+#print axioms Extracted.Equiv.firmware_verify_layer_body
+#print axioms Extracted.Equiv.firmware_verify_hypertree_loop
+#print axioms Extracted.Equiv.firmware_verifier_hypertree_continuation
+#print axioms Extracted.Equiv.strict_hypertree_success_eq_raw
+#print axioms Extracted.Equiv.firmware_continuation_matches_strict_success
+
+-- Complete signature bytes and whole verifier; strict acceptance is one-way.
+#print axioms Extracted.Equiv.loadValue16_signatureNode
+#print axioms Extracted.Equiv.loadU32BE_parsed_count
+#print axioms Extracted.Equiv.deserialise_matches_parsedSignature
+#print axioms Extracted.Equiv.firmware_verify_raw_result
+#print axioms Extracted.Equiv.byteVerifier_eq_strictResult
+#print axioms Extracted.Equiv.firmware_verify_accepts_strict_signature
+#print axioms Extracted.Equiv.firmware_verify_matches_strict_success
+#print axioms Extracted.Equiv.firmware_verify_strict_forced_refusal
+
+-- Actual WOTS secret and complete public-key generation.
+#print axioms Extracted.Equiv.wotsSecretPreimage_length
+#print axioms Extracted.Equiv.wots_secret_spec
+#print axioms Extracted.Equiv.firmware_wots_secret_matches_vendored
+#print axioms Extracted.Equiv.wots_keygen_loop_spec
+#print axioms Extracted.Equiv.wots_keygen_pk_spec
+#print axioms Extracted.Equiv.firmware_wots_keygen_matches_vendored
+
+-- FORS secret generation, including hypertree-position binding.
+#print axioms Extracted.Equiv.forsSecretPreimage_length
+#print axioms Extracted.Equiv.fors_secret_spec
+#print axioms Extracted.Equiv.firmware_fors_secret_matches_vendored
+
+-- FORS tree construction and final signature slot.
+#print axioms Extracted.Equiv.fors_root_schedule
+#print axioms Extracted.Equiv.fors_compute_root_spec
+#print axioms Extracted.Equiv.fors_root_node_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_root_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_final_slot_matches_vendored
+
+#print axioms Extracted.Equiv.fors_auth_leaf_schedule
+#print axioms Extracted.Equiv.fors_auth_carry_schedule
+#print axioms Extracted.Equiv.fors_sign_tree_spec
+#print axioms Extracted.Equiv.fors_auth_path_matches_vendored
+#print axioms Extracted.Equiv.firmware_fors_auth_matches_vendored
+
+-- Actual FORS signing/recovery composition
+#print axioms Extracted.Equiv.fors_auth_recovery_root
+#print axioms Extracted.Equiv.firmware_fors_sign_recover_root
+#print axioms Extracted.Equiv.firmware_fors_sign_recover_matches_vendored
+
+-- Actual XMSS key-generation trees and top-level public root.
+#print axioms Extracted.Equiv.xmss_root_schedule
+#print axioms Extracted.Equiv.xmss_compute_root_spec
+#print axioms Extracted.Equiv.xmss_compute_pk_root_spec
+#print axioms Extracted.Equiv.xmss_root_node_matches_vendored
+#print axioms Extracted.Equiv.firmware_xmss_root_matches_vendored
+#print axioms Extracted.Equiv.firmware_pk_root_matches_vendored
+
+-- Actual shuffled WOTS construction and recovery: kernel-only, no backend/freshness claim.
+#print axioms Extracted.Equiv.shuffle_permutation_spec
+#print axioms Extracted.Equiv.wots_sign_first_success
+#print axioms Extracted.Equiv.wots_sign_exhausted
+#print axioms Extracted.Equiv.wots_sign_total
+#print axioms Extracted.Equiv.wots_sign_shuffle_independent
+#print axioms Extracted.Equiv.firmware_wots_sign_recovers_keygen
+#print axioms Extracted.Equiv.firmware_wots_sign_matches_vendored
+
+-- Actual shuffled FORS signing forest and unconditional caller prefix.
+#print axioms Extracted.Equiv.firmware_sign_fors_normal_loop
+#print axioms Extracted.Equiv.signer_fors_phase_spec
+#print axioms Extracted.Equiv.firmware_sign_fors_recovers_pk
+#print axioms Extracted.Equiv.firmware_sign_fors_shuffle_independent
+#print axioms Extracted.Equiv.firmware_sign_fors_matches_vendored
+#print axioms Extracted.Equiv.firmware_sign_fors_prefix
+
+-- Actual signer serialization, complete byte frame and decoded fields.
+#print axioms Extracted.Equiv.firmware_write16
+#print axioms Extracted.Equiv.firmware_write_fors_secrets
+#print axioms Extracted.Equiv.firmware_write_fors_auth
+#print axioms Extracted.Equiv.firmware_write_wots_chains
+#print axioms Extracted.Equiv.firmware_write_xmss_path
+#print axioms Extracted.Equiv.firmware_write_count
+#print axioms Extracted.Equiv.firmware_serialize_forest
+#print axioms Extracted.Equiv.serializedForest_fields
+#print axioms Extracted.Equiv.firmware_signer_forest_serialization
+#print axioms Extracted.Equiv.firmware_serialize_layer
+#print axioms Extracted.Equiv.serializedLayer_fields
+#print axioms Extracted.Equiv.signer_layer_serialization_factor
+#print axioms Extracted.Equiv.firmware_serialize_layer_at_params
+
+-- Actual two-layer signer and post-FORS caller, preserving bounded failure.
+#print axioms Extracted.Equiv.firmware_wots_sign_pure
+#print axioms Extracted.Equiv.firmware_xmss_signing_path
+#print axioms Extracted.Equiv.firmware_sign_layer_body
+#print axioms Extracted.Equiv.firmware_sign_hypertree_loop
+#print axioms Extracted.Equiv.firmware_sign_hypertree_success
+#print axioms Extracted.Equiv.firmware_sign_hypertree_top_root
+#print axioms Extracted.Equiv.firmware_signer_hypertree_suffix
+#print axioms Extracted.Equiv.firmware_signer_after_forest_pure
+#print axioms Extracted.Equiv.signer_root_check_match
+
+-- Actual nonce/header and complete functional signer composition.
+#print axioms Extracted.Equiv.firmware_grind_r_pure
+#print axioms Extracted.Equiv.pure_grind_r_success
+#print axioms Extracted.Equiv.firmware_sign_header_pure
+#print axioms Extracted.Equiv.firmware_sign_header_tail
+#print axioms Extracted.Equiv.header_indices_bound
+#print axioms Extracted.Equiv.grind_header_forced_zero
+#print axioms Extracted.Equiv.serialized_nonce_decodes
+#print axioms Extracted.Equiv.firmware_sign_whole_pure
+#print axioms Extracted.Equiv.firmware_sign_whole_shuffle_independent
+#print axioms Extracted.Equiv.firmware_sign_nonce_exhausted
+#print axioms Extracted.Equiv.signer_root_check_success
+#print axioms Extracted.Equiv.firmware_sign_whole_success
+
+-- Release-assertion caller: shared backend/helper models remain explicit.
+#print axioms Extracted.Equiv.release_layer_body_projection
+#print axioms Extracted.Equiv.firmware_release_sign_loop_step
+#print axioms Extracted.Equiv.firmware_release_sign_loop_done
+#print axioms Extracted.Equiv.firmware_release_sign_hypertree_loop
+#print axioms Extracted.Equiv.release_caller_factor
+#print axioms Extracted.Equiv.release_after_forest_pure
+#print axioms Extracted.Equiv.firmware_sign_release_pure
+#print axioms Extracted.Equiv.whole_sign_nodes_root
+#print axioms Extracted.Equiv.checked_whole_nodes_factor
+#print axioms Extracted.Equiv.firmware_sign_checked_release_relation
+#print axioms Extracted.Equiv.firmware_sign_release_valid_key
+#print axioms Extracted.Equiv.firmware_keygen_sign_release
+#print axioms Extracted.Equiv.firmware_sign_release_shuffle_independent
+#print axioms Extracted.Equiv.firmware_sign_release_nonce_exhausted
+
+-- Sequential source-lifted wrapper; environmental and translation boundaries remain explicit.
+#print axioms secure_wrapper_model.wrapper_success_certificate
+#print axioms secure_wrapper_model.wrapper_entry_success_certificate
+#print axioms secure_wrapper_model.wrapper_entry_success_verified
+#print axioms secure_wrapper_model.wrapper_rate_refusal
+#print axioms secure_wrapper_model.wrapper_rate_readback_refusal
+#print axioms secure_wrapper_model.wrapper_rate_sentinel_refusal
+#print axioms secure_wrapper_model.wrapper_inner_cleanup
+#print axioms secure_wrapper_model.wrapper_inner_refusal
+#print axioms secure_wrapper_model.wrapper_firmware_release
+#print axioms secure_wrapper_model.wrapper_success_requires_rate
+
+-- Source-linked paired representation endpoints; kernel-only.
+#print axioms Extracted.C10RepresentationBridge.digest_byte_word
+#print axioms Extracted.C10RepresentationBridge.digest_word_window
+#print axioms Extracted.C10RepresentationBridge.extracted_ht_word
+#print axioms Extracted.C10RepresentationBridge.extracted_fors_words
+#print axioms Extracted.C10RepresentationBridge.extracted_wots_words
+#print axioms Extracted.C10RepresentationBridge.counter_word
+#print axioms Extracted.C10RepresentationBridge.signature_words
+#print axioms Extracted.C10RepresentationBridge.signature_byte_domain
+#print axioms Extracted.C10RepresentationBridge.digest_byte_domain
+
+-- Paired hash-preimage endpoints, independent of hash output equality.
+#print axioms Extracted.C10HashInputBridge.u32_bytes_value
+#print axioms Extracted.C10HashInputBridge.pad_node_value
+#print axioms Extracted.C10HashInputBridge.hmsg_input_value
+#print axioms Extracted.C10HashInputBridge.th_input_value
+#print axioms Extracted.C10HashInputBridge.pair_input_value
+#print axioms Extracted.C10HashInputBridge.multi_input_value
+#print axioms Extracted.C10HashInputBridge.wots_input_value
+#print axioms Extracted.C10HashInputBridge.r_input_value
+#print axioms Extracted.C10HashInputBridge.extracted_hmsg_input
+#print axioms Extracted.C10HashInputBridge.extracted_th_input
+#print axioms Extracted.C10HashInputBridge.extracted_pair_input
+#print axioms Extracted.C10HashInputBridge.extracted_multi_input
+#print axioms Extracted.C10HashInputBridge.extracted_wots_input
+#print axioms Extracted.C10HashInputBridge.randomizer_input
+#print axioms Extracted.C10HashInputBridge.extracted_grind_input

@@ -1,0 +1,25 @@
+{
+ "id": "D-06",
+ "title": "Consumption mask parity: re-randomise on every display flush, DMA-fed TRNG duty table on a secure GPDMA channel, and put an actual load on the mask pin",
+ "threat": "Trace alignment on frame transmission: the attacker aligns a power/EM trace on the SPI frame (the moment content-dependent current/EM appears). pq1's mask is re-randomised only from the secure tick, from a xorshift PRNG, and drives an NC pad, so it neither decorrelates per frame nor demonstrably dilutes anything.",
+ "proposal": "(1) Call `hw::consumption_mask::randomize()` at the top of `lcd::Display::flush` / `flush_with_secret_rows` and in `px::lcd::present_frame_ex` before the first strip goes out (Trezor's `display_refresh` hook), drawing that sample from rng_strong rather than the xorshift. (2) Port Trezor's DMA-fed table: a 119-entry duty table in S-SRAM refreshed from the TRNG, GPDMA1 channel in circular linked-list mode triggered by TIMx_UP writing CCR1 every 100 us, with the channel configured SEC|PRIV|SRC_SEC|DEST_SEC so NS cannot halt it (the module header already lists this as the follow-up). (3) EVT: route the mask pin (pq1 PA6, currently NC) to a small resistive load across the 3V3 near the die so the duty cycle actually modulates supply current; then measure dilution with the SCA bench (TVLA before/after) and close the 'unmeasured' caveat.",
+ "rationale": "Direct Trezor parity on the same MCU family; (1) is a two-line change, (3) is the only thing that makes the production-mandatory fence mean something. Without (3) the feature is satisfied-by-construction, as CLAUDE.md admits.",
+ "repo_evidence": [
+  "secure/src/main.rs:4337 (the ONLY `consumption_mask::randomize()` call \u2014 periodic tick); grep randomize in secure/src/ui/lcd.rs, secure/src/ui/px/lcd.rs, secure/src/hw/lcd_nv3007.rs: none",
+  "secure/src/hw/consumption_mask.rs:12-20 ('A full DMA port is a follow-up'), :41-51 (neither board drives a load; dilution unmeasured), :166-192 (randomize from xorshift32)",
+  "gh #831 OPEN priority:medium (reseed fails open, biased toward signing windows); gh #646 OPEN",
+  "docs/hardware/evt-silicon-validation.md \u00a79 (unloaded-pin bench item)"
+ ],
+ "vendor_precedent": "Trezor core/embed/io/display/vg-2864/display_driver.c:407-425 (`consumption_mask_randomize()` on every display_refresh); core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:73-142 (GPDMA1 linked-list, TIM2_UP trigger, SEC|PRIV channel attributes at :85-87,117-118).",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Trezor only enables the mask on OLED models and has no mask on TFT \u2014 its 'no mask on TFT' choice is not evidence that pq1's SPI TFT is safe (different channel: bus EM, not row current). A loaded pin costs a few mA continuously. The GPDMA channel must be verified blocked from NS on silicon (#53 still open). Per-frame randomisation adds a TRNG read per frame \u2014 bound it so it cannot stall the frame.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/io/display/vg-2864/display_driver.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/consumption_mask/stm32u5/consumption_mask.c",
+  "https://donjon.ledger.com/lsb/006/"
+ ],
+ "surface": "display"
+}

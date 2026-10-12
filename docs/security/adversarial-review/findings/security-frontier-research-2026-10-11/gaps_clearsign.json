@@ -1,0 +1,249 @@
+{
+ "surface": "Blind-signing elimination / clear-signing coverage (key=clearsign) \u2014 verified against HEAD c75b0d9c read-only. Confirmed already present (NOT proposed): non-reentrant dispatcher HandlerGuard/HANDLER_DEPTH (secure/src/nsc/mod.rs:1001-1002,1303) + AIRCR.PRIS (secure/src/sau.rs:648) closes the LSB-023 class; strict ERC-20 length + address-padding (tx/src/erc20/calldata.rs:22-23,54-71); 7730 canonical address/integer/bool words (pqsigner-erc7730/src/display/render/formatters.rs:3024-3026,360-372,3050); enum unknown-key refusal (pqsigner-erc7730/src/render/enums.rs:49-80); MAX_ARRAY_RENDER=8 refuse-not-wrap (pqsigner-erc7730/src/render/array.rs:43,151) closes the LSB-024 class; nested calldata CallZeroValue-only policy (calldata_nested.rs:179-180); proxy descriptors refused at dbgen (dbgen/src/erc7730.rs:4651-4654); Permit2/EIP-2612 covered via EIP-712 descriptors (secure/data/erc7730.review.txt:31,1157,1199); ERC-8213 32-byte-BE length prefix (tx-core/src/erc8213.rs:24-31); ERC-7730 v2 schema already ingested (dbgen/src/erc7730.rs:4-5); unlimited-approve label (tx/src/erc20/calldata.rs:105-108). Codex MCP failed to connect this session, so no external-model cross-check was run.",
+ "improvements": [
+  {
+   "id": "CS-01",
+   "title": "Make RAW32 a compile-time fenced, default-off tier with a per-signature re-authentication ceremony if ever enabled",
+   "threat": "Hostile companion downgrades supported typed data (Permit/Permit2/SafeTx/GPv2Order) to a 32-byte hash and the user approves a '! BLIND RAW32' page; the structured clear-sign guarantee is bypassed entirely. Permit-class signatures were 3 of the 11 largest 2025 drains.",
+   "proposal": "Add `offchain-raw32` feature (default OFF) gating kind=0 in cmd_sign_offchain; add it to PROD_FORBIDDEN and a `mode-production` compile_error fence alongside forced-blind; with the feature OFF return a dedicated NscStatus 'RAW32 disabled'. If the owner records a compatibility acceptance, require for every RAW32 release: a fresh PIN entry on-device (not session unlock), a per-session RAW32 cap (e.g. 3) in SRAM, a 'NO INTENT - dapp hash only' danger interstitial before the hash pages, and companion-visible counter in OFFCHAIN_STATUS so audits can see RAW32 use.",
+   "rationale": "Trezor core ships NO blind typed-hash path at all (only legacy T1 has EthereumSignTypedHash); Ledger requires blind signing to be disabled by default. pq1 currently has no switch at all, so a production image necessarily carries the downgrade oracle the CLAUDE.md scope paragraph warns about. A fence makes the owner decision (#381) executable rather than documentary.",
+   "repo_evidence": [
+    "secure/Cargo.toml: no `raw32` feature exists (grep -i raw32 secure/Cargo.toml \u2192 empty)",
+    "secure/src/nsc/cmd_sign_offchain.rs:213-218 (RAW32 accepted unconditionally after replay_safe_hash nesting)",
+    "secure/src/nsc/cmd_sign_offchain.rs:918-1120 (RAW32 page set)",
+    "Makefile:2672-2675 PROD_FORBIDDEN lists forced-blind etc. but not a raw32 flag",
+    "docs/companion/companion-app-integration.md:963-969 (companion-policy-only mitigation)",
+    "tracked: #381 (ship-blocker, owner decision pending)"
+   ],
+   "vendor_precedent": "Trezor core: absence of EthereumSignTypedHash handler (trezor-firmware core/src/apps/ethereum has no sign_typed_hash; legacy/firmware/ethereum.c:1210-1228 only). Ledger app security requirements: blind signing must be disabled by default.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P0",
+   "risks": "Breaks dapps that only offer eth_sign/raw isValidSignature flows (Safe approveHash via EOA-style UIs); companion must surface a clear 'unsupported on PQ1' error. Fresh-PIN-per-RAW32 burns PIN attempts under an SE fault (see #692 class) \u2014 bound retries.",
+   "sources": [
+    "https://donjon.ledger.com/lsb/020/",
+    "https://drops.scamsniffer.io/scam-sniffer-2025-crypto-phishing-losses-fall-83-to-84-million/",
+    "https://developers.ledger.com/docs/device-app/develop/requirements/security",
+    "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/ (no typed-hash handler)"
+   ]
+  },
+  {
+   "id": "CS-02",
+   "title": "Custody-change 'danger class' with mandatory interstitial, plus same-(Safe,nonce) re-sign detection",
+   "threat": "Radiant/Bybit pattern: owner/threshold/module/guard/fallback changes, unlimited approvals and setApprovalForAll look like ordinary management pages; attackers harvest extra signatures by prompting 'retry after gas failure' for the same Safe nonce. The user's familiarity with the page shape is what gets exploited.",
+   "proposal": "(a) Classify SafeTx mgmt ops (add/remove/swap owner, changeThreshold, enable/disableModule, setGuard, setFallbackHandler), ERC-20 unlimited approve, setApprovalForAll(true), Permit2 max-amount and every blind tier as `Danger`; in ui-px give them a distinct State/Icon (red glyph + inverted hero) and in 16x4 a mandatory first page '! CUSTODY CHANGE / press to continue' that cannot be skipped (scroll-to-end already arms only after last page). (b) Keep an SRAM ring of the last N (safe_address, safe_nonce, safeTxHash) tuples released this unlock session; a second request for the same (safe, nonce) renders '! RE-SIGN nonce N' (and '! DIFFERENT TX same nonce' if the hash differs) as a danger page. (c) Add the same for repeated UserOp (sender, nonce) within a session.",
+   "rationale": "Trezor renders a `show_danger` interstitial before unknown-contract/unknown-token paths and a separate 'Approving unlimited amount' warning; pq1's only custody banner today is '! MULTISIG OFF' when threshold==1, and blind screens use the same `Look::plain` chrome as benign ones. Radiant's post-mortem identifies the resubmission trick as the harvesting mechanism; a device is the only place that can see 'you already signed this nonce'. The arXiv 2601.16751 user study shows risk cues, not more hex, raise detection accuracy.",
+   "repo_evidence": [
+    "secure/src/tx/display/safe_mgmt.rs:53-91 (plain 'Add Safe owner' / 'Remove Safe ownr' pages; only '! MULTISIG OFF' when threshold==1)",
+    "secure/src/tx/display/blind_sign_screens.rs:38-39 (Icon::Blind with Look::plain \u2014 no danger state)",
+    "secure/src/ui/px/status_map.rs:206-241 (State::Warning exists only for WIPING/WORKING status screens, never for sign dialogs)",
+    "secure/src/tx/display/safe_display.rs:2181 (nonce row rendered; no re-sign detection anywhere: grep resubmi|same nonce|SAFE_NONCE \u2192 empty)",
+    "secure/src/nsc/cmd_sign_userop.rs (no per-session (sender,nonce) memory)"
+   ],
+   "vendor_precedent": "Trezor core/src/apps/ethereum/layout.py:132-142,415-418 show_danger; core/src/trezor/ui/layouts/eckhart/__init__.py:1066-1080,1235-1239. No vendor ships nonce re-sign detection (beyond).",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "Legitimate re-signs after a real gas failure now show a scary page (acceptable: that is exactly the moment to look). SRAM ring is per-unlock only; power-cycle clears it (document). Danger chrome must stay inside the transcript proofs (#762 chrome-mask gap) or it becomes an unproven row.",
+   "sources": [
+    "https://hacken.io/insights/radiant-hack-review/",
+    "https://www.nccgroup.com/research/in-depth-technical-analysis-of-the-bybit-hack/",
+    "https://arxiv.org/abs/2601.16751",
+    "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/layout.py"
+   ]
+  },
+  {
+   "id": "CS-03",
+   "title": "S-world spending-policy guard (Coldcard SSSP-class) evaluated before confirm",
+   "threat": "Clear signing shows the truth but does not stop a coerced ($5 wrench), hurried, or socially-engineered user, nor a compromised companion that waits for a legitimate unlock; a single approved page can move everything.",
+   "proposal": "Add an owner-configured policy record (page-123-style durable config, NOT per-signature state): per-op max native value and per-token max amount, recipient allowlist (addresses + 'self' = any account_index CREATE2 address recomputed in S-world), chain allowlist, minimum wall-clock/TIM interval between releases, and 'Safe mgmt / unlimited approve forbidden' toggles. Evaluate on the parsed S-stack copy BEFORE pick_sign_pages; out-of-policy \u2192 refuse without explanation (Coldcard semantics). Policy edits require a separate Policy PIN entered on-device whose compromise cannot export the seed, with an optional lockdown bit that makes the policy immutable until a wipe.",
+   "rationale": "Coldcard ships exactly this and assumes the attacker already holds the main PIN; Ledger/Trezor have no on-device policy. The repo's own roadmap names 'on-device policy guard (refuse out-of-policy ops before confirm)' as a security differentiator but nothing is implemented. It is the only way to get module-grade limits on PQSmartWallet, where no on-chain module can ever be installed.",
+   "repo_evidence": [
+    "grep -rln 'spending.policy|SpendingPolicy|velocity|allowlist' secure/src \u2192 no hits (only codex runtime logs under docs/security/adversarial-review/findings/)",
+    "docs/feature-roadmap-research-2026-06.md:176-178 (proposed, not built; no GitHub issue found via `gh issue list --search 'policy guard spend'`)",
+    "secure/src/offchain_state.rs (page-123 log store is the precedent for durable config, not reused for policy)",
+    "secure/src/sign_rate.rs:1-50 (only a 1 s / 250-per-session SCA limiter exists)"
+   ],
+   "vendor_precedent": "Coldcard SSSP (max magnitude, velocity via nLockTime, 25-address whitelist, lockdown, web 2FA) \u2014 https://coldcard.com/docs/sssp/",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "New durable flash config must stay outside the per-signature prohibition (invariant: no new per-signature flash state) \u2014 it is per-edit state. Policy PIN adds a third PIN surface to the three-way attempt model (invariant #2) \u2014 scope it to MCU-only enforcement and state that honestly. Allowlist matching must use the authenticated S-world address, never a companion-supplied name.",
+   "sources": [
+    "https://coldcard.com/docs/sssp/",
+    "https://github.com/Toporin/SatochipApplet/releases"
+   ]
+  },
+  {
+   "id": "CS-04",
+   "title": "Render paymaster semantics: carry raw paymasterAndData, show sponsor identity and fee-token pull",
+   "threat": "The device signs keccak/sha256(paymasterAndData) but never sees the bytes: it cannot show WHO sponsors gas or that an ERC-20 fee-token paymaster will debit USDC up to a max cost. A compromised companion can route through a hostile paymaster; the user sees only '! PAYMASTER SET / may debit tokens'.",
+   "proposal": "Pre-launch wire change (input format only; on-chain output unchanged): replace the 32-byte `paymaster_and_data_hash` input with `[pm_len(2)][paymasterAndData \u2264 256 B]`, compute the hash in S-world, and render: paymaster address with NAMES_DB-verified name ('+' sentinel), mode decode for pinned providers (Pimlico ERC20PaymasterV06: fee token + exchange-rate/max-cost words \u2192 'Gas paid in USDC, max 1.23'), 'Sponsored (no debit)' for verifying-paymaster shapes, and a loud '! UNKNOWN PAYMASTER' danger page otherwise. Cross-check: an inner `approve(spender==paymaster)` in the same UserOp renders the spender as 'PAYMASTER' with the amount, refusing unlimited unless the policy (CS-03) allows.",
+   "rationale": "No shipping hardware wallet decodes 4337 UserOps at all, so this is pure 'beyond'; but today pq1's own guarantee has a hole the docs do not state. v0.6 folds keccak(paymasterAndData) into userOpHash, so what the device renders is exactly what the C10 signature authorises \u2014 the device becomes the source of truth on who pays. The roadmap already identifies this and the unlimited-approve(paymaster) hazard.",
+   "repo_evidence": [
+    "aa/src/userop.rs:56,678,717,827 (only a 32-byte hash of paymasterAndData enters the sphincs digest; firmware never sees bytes)",
+    "secure/src/tx/display/value_page.rs:544-551 (page text '! PAYMASTER SET / Gas sponsored / may debit tokens' \u2014 no address, no token)",
+    "CLAUDE.md wire format offset 244: paymaster_and_data_hash (sha256)",
+    "docs/feature-roadmap-research-2026-06.md:168-172 (proposal, 'LOUD-flag any unlimited/oversized approve(paymaster)')",
+    "gh issue search 'paymaster' returns only #328 (CFI parity of the existing page), no decoding issue"
+   ],
+   "vendor_precedent": "none (Ledger/Trezor have no UserOp path; Ethereum Magicians eth_signUserOperation thread confirms no standard)",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "CLAUDE.md labels the sign input 'frozen'; the freeze rationale (on-chain verifier) applies to the OUTPUT, so this needs an explicit owner decision + companion + e2e fixture update. Paymaster mode decoding is provider-specific and churns (Alchemy v0.6 sunset) \u2014 pin by (chain, address, codehash-era) in dbgen like ERC-7730, refuse unknown.",
+   "sources": [
+    "https://ethereum-magicians.org/t/eip-idea-eth-signuseroperation-rpc/16184",
+    "docs/feature-roadmap-research-2026-06.md:168-172"
+   ]
+  },
+  {
+   "id": "CS-05",
+   "title": "Generic EIP-712 field walker gated by a registry-known-domain omission filter (Bloom twin) and empty-domain refusal",
+   "threat": "Any typed-data request for a dapp without a curated ERC-7730 EIP-712 descriptor is signable only as RAW32 (blind); users are pushed to the worst tier precisely for long-tail dapps, and a hostile companion can strip the descriptor from a registry-known domain only if there is a generic path \u2014 so the two must land together.",
+   "proposal": "(1) Build a 16 KiB Bloom of every registry-declared (chain_id, verifyingContract, primaryType-hash) tuple (same dbgen pipeline and 25% occupancy cap as known_calls); a kind-2/3 request whose domain is Bloom-positive but carries no bound descriptor hard-refuses ('7730 eip712 proof needed'), exactly mirroring the contract-call filter. (2) For Bloom-negative domains, add a structural walker: render EVERY leaf (no 'show more' skipping), label by field name from the companion-supplied type string whose hash the device recomputes into the EIP-712 typeHash (so names are bound to the signed hash), refuse arrays-of-arrays, nested EIP712Domain members, missing chainId/verifyingContract, non-UTF-8 strings; banner '! NO INTENT / structure only'; final Eip712Final ERC-8213 page; chord/hold after last page. (3) Keep RAW32 (CS-01) off.",
+   "rationale": "Trezor and Ledger both render arbitrary EIP-712 generically; pq1 refuses, which is sound but drives long-tail dapps to RAW32. The walker is NOT semantic clear-signing (no intent claim) but is strictly better than a 32-byte hash, and the Bloom twin preserves the 'registry-known shape either clear-signs or refuses' contract for typed data, which today holds only for contract calls.",
+   "repo_evidence": [
+    "secure/src/nsc/cmd_sign_offchain.rs:479-487 ('7730 bundle fail' \u2014 kinds 2/3 require a descriptor)",
+    "pqsigner-erc7730/src/known_calls.rs (contract-call Bloom only; grep -i eip712|typed \u2192 empty)",
+    "proto/src/lib.rs:1271 MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN=512 (bound already exists for a walker)",
+    "gap listed as untracked in inventory (adjacent #381, #534)"
+   ],
+   "vendor_precedent": "Trezor core/src/apps/ethereum/sign_typed_data.py:69-140 (field-by-field hashing with type validation), 293-296 (nested EIP712Domain rejected), 407-426 (empty-domain warning), 491-566 (_validate_value); Ledger EIP-712 filtering.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Owner decision: curated-only stance vs structural display. Field names come from the companion's type string \u2014 bound to the hash but still attacker-chosen vocabulary (e.g. a field named 'refund' that is actually 'spender'); the '! NO INTENT' banner and danger chrome (CS-02) must make that explicit. Page budget (31) caps struct size \u2014 refuse, never truncate.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/sign_typed_data.py",
+    "https://eips.ethereum.org/EIPS/eip-7730"
+   ]
+  },
+  {
+   "id": "CS-06",
+   "title": "On-chain intent commitment: PQSmartWallet verifies a canonical intent digest for native shapes",
+   "threat": "Today WYSIWYS is a device property only: a faulted/compromised render path (FI on the dispatcher, a future renderer bug of the LSB-024 class) can produce a valid C10 signature over calldata whose semantics were never shown, and the chain accepts it.",
+   "proposal": "Design spike then implement: extend `executeWithOffchainCount` (pre-launch; no address change constraints beyond re-pinning codehashes) with an `intentDigest` argument; the firmware sets it to sha256 over a frozen canonical encoding of the rendered intent class + operands it actually displayed (e.g. `ETH_TRANSFER\u2016chain\u2016to\u2016value`, `ERC20_TRANSFER\u2016token\u2016to\u2016amount`, `ERC20_APPROVE\u2016token\u2016spender\u2016amount`, `BLIND\u2016calldataDigest`); the contract recomputes the digest from (target,value,data) with a tiny on-chain decoder for the native shapes (ERC-20 selectors, empty data, else BLIND) and reverts on mismatch. Because the digest is in callData it is covered by the existing userOpHash/sphincsDigest \u2014 no verifier change. Companion fixtures + Kani harness 'rendered operands == committed operands'.",
+   "rationale": "Unique lever: pq1 controls both the signer and the wallet contract, which Ledger/Trezor never do. It converts 'the device showed X' into 'the chain will only execute what the device committed to', closing the gap between transcript proofs (device) and execution (chain) for the shapes that carry >80% of drain value.",
+   "repo_evidence": [
+    "contracts/smart-wallet/src/PQSmartWallet.sol:239,264 (executeWithOffchainCount / executeBatchWithOffchainCount take no intent field)",
+    "contracts/smart-wallet/src/PQSmartWallet.sol:546-547 (_isSlotAllowedSelector already pins execution selectors \u2014 natural hook)",
+    "grep -rni intentHash|descriptionHash|transcript contracts/smart-wallet/src \u2192 empty",
+    "secure/src/tx/display/dispatch.rs:551-566 (ladder already yields a discrete intent class per request)"
+   ],
+   "vendor_precedent": "none shipped; academic: 'Enforceable Human-Readable Transactions' (ethresear.ch 21836) and EIP-719 Trustless Signing UI Protocol",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P1",
+   "risks": "Gas: +1 word calldata + on-chain decode (~2-5k gas). Grammar must be frozen before launch and reproduced byte-exact in Solidity, Rust and Lean (new FV surface; a mismatch = funds frozen, not stolen \u2014 fail-closed). BLIND class must commit to calldataDigest so the on-chain check is never a semantic claim. Interacts with invariant #6 only via implementation codehash pins, not CREATE2 salt.",
+   "sources": [
+    "https://ethresear.ch/t/enforceable-human-readable-transactions-how-to-solve-bybit-like-hacks/21836",
+    "https://donjon.ledger.com/lsb/024/"
+   ]
+  },
+  {
+   "id": "CS-07",
+   "title": "Native decoders for the remaining drain primitives: setApprovalForAll, increaseAllowance, on-chain permit(), approve(0)=REVOKE, spender naming",
+   "threat": "Approval-class calls are the dominant single-tx drain (approve/increaseApproval, setApprovalForAll in the 2025 top-11). Outside the 4 catalogue descriptors, `setApprovalForAll(operator,true)` and `increaseAllowance` on any NFT/token fall to typed-call 'GUESS:' or loud blind; `approve(x,0)` renders as an approve of 0 rather than a revocation.",
+   "proposal": "Extend tx/src/erc20/calldata.rs (same strict framing) with `setApprovalForAll(address,bool)` (0xa22cb465, bool word canonical \u2208{0,1}), `increaseAllowance/decreaseAllowance`, and `permit(owner,spender,value,deadline,v,r,s)` (0xd505accf \u2014 render spender/value/deadline, 'UNLIMITED' banner); render `approve(_,0)` / `setApprovalForAll(_,false)` as 'REVOKE' intent; name the spender via NAMES_DB when present and show '! native' value as a REFUSAL for these non-payable selectors (today a warning row). Route all through the Danger class (CS-02) when amount is unlimited/true.",
+   "rationale": "Trezor built-ins cover approve/transfer with revoke detection, unlimited threshold warning, known-spender naming and native-value surfacing; Ledger 1.22.3's LSB-025 fix shows why selector-first dispatch matters. These are S-cost additions to an already Kani-covered decoder family.",
+   "repo_evidence": [
+    "tx/src/erc20/calldata.rs:14-16 (only transfer/transferFrom/approve selectors)",
+    "grep a22cb465|setApprovalForAll|39509351|d505accf tx/src secure/src/tx/display/dispatch.rs \u2192 empty (setApprovalForAll exists only as 4 catalogue formats: secure/data/erc7730.review.txt:1341,1601,3356)",
+    "secure/src/tx/display/erc20_known.rs:52-55 (non-zero native value on ERC-20 is a warning row, not a refusal); no 'REVOKE' wording in erc20_known.rs/erc20_unknown.rs",
+    "secure/src/tx/display/typed_call/mod.rs (fallback renders 'GUESS:' with 4-byte provenance only, #420)"
+   ],
+   "vendor_precedent": "Trezor core/src/apps/ethereum/clear_signing.py:1411-1482 (_handle_approve: revoke, unlimited 2^255, known spender, native_amount), clear_signing_definitions.py:100-120; Ledger LSB-025.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Selector collisions for unknown contracts remain (ERC-721 approve tokenId-as-amount, #343): keep the unknown-token loud banner. Must not widen the forced-blind clean-absence class (#343 owner note). Each new selector needs the WYSIWYS differential + Kani decode-soundness harness.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/clear_signing.py",
+    "https://donjon.ledger.com/lsb/025/",
+    "https://drops.scamsniffer.io/scam-sniffer-2025-crypto-phishing-losses-fall-83-to-84-million/"
+   ]
+  },
+  {
+   "id": "CS-08",
+   "title": "Real-world attack-vector regression corpus (must-refuse / must-render) wired into CI with path-succeeds assertions",
+   "threat": "The defences exist but their evidence is host transcripts and locally-run Kani (nightly broken since 2026-09-06); a future refactor can silently reopen a Bybit-, LSB-024-, LSB-025- or 0x00-calldata-class hole and CI would stay green.",
+   "proposal": "Add a fixture crate (host-runnable, in the default `cargo test` CI lane, not fuzz/ or nightly) with byte-exact vectors and expected verdicts: Bybit SafeTx (operation=1 to 0x9622\u20267242 with transfer-shaped data \u2192 REFUSE); operation=0 CALL to a MultiSend address \u2192 loud blind, never per-record; LSB-024 shape: 257-element array descriptor \u2192 REFUSE (MAX_ARRAY_RENDER); LSB-025: approve vs transfer with identical args \u2192 distinct intents, trailing byte \u2192 REFUSE; Ledger 1.22.0 single-byte 0x00 calldata \u2192 NOT a value transfer; LSB-020 odd-length-hex uint \u2192 companion-side canonicalisation test; Radiant transferOwnership/swapOwner \u2192 Danger class; Permit2 domain submitted as kind 2 without descriptor \u2192 REFUSE; same inputs under `ui-px` (make e2e-px) and legacy. Each test asserts the SUCCESS/REFUSAL path was actually taken (status code + page banner), per the repo's 'green can mean never ran' lesson.",
+   "rationale": "Ledger's LSB-024 timeline (fix merged 2026-05-05, tagged release shipped without it) and Trezor's admission that signature-only fixtures cannot distinguish clear from blind paths are both process failures a named corpus catches. pq1 has no Bybit vector and its fuzz/Kani evidence is not CI-enforced.",
+   "repo_evidence": [
+    "grep -rli bybit secure/src tx/src fsbl-tests dbgen/tests \u2192 empty",
+    "fuzz/ workspace outside CI (#451); nightly Kani not completing (#776); CI enforcement found advisory (#456)",
+    "secure/src/tx/display/dispatch.rs:1104 (empty-data value-transfer rung \u2014 no explicit 0x00 single-byte negative test found)",
+    "#680 (no fuzz target for cowswap/safe EIP-712 decode legs)"
+   ],
+   "vendor_precedent": "Ledger app-ethereum release notes 1.22.0/1.22.3 enumerate regression classes; Trezor tests/device_tests/ethereum/test_definitions.py:576-609 asserts the mismatch path.",
+   "novelty": "parity",
+   "kind": "process",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Fixture bytes must be real calldata (pull Bybit tx 0x46deef0f52e3a983b67abf4714448a41dd7ffd6d32d32da69d62081c68ad7882 from chain data) and checked in with provenance; stale fixtures (#532 class) need a freshness gate.",
+   "sources": [
+    "https://donjon.ledger.com/lsb/024/",
+    "https://donjon.ledger.com/lsb/025/",
+    "https://www.nccgroup.com/research/in-depth-technical-analysis-of-the-bybit-hack/",
+    "https://github.com/LedgerHQ/app-ethereum/releases"
+   ]
+  },
+  {
+   "id": "CS-09",
+   "title": "Address-display integrity: EIP-55 casing, 4-char chunking with isolated 0x, S-world 'THIS WALLET' self-tag",
+   "threat": "Misread or look-alike addresses (address-poisoning) on a 142x428 panel; a companion labelling a counterparty as 'your other account' cannot be authenticated; users compare only first/last characters.",
+   "proposal": "(a) Render every address row with EIP-55 mixed case (keccak already in tx-core) on both 16x4 and ui-px, and chunk 4 hex chars per group with '0x' in its own group; (b) in S-world, recompute the CREATE2 address for the current account_index (already cached, <1 ms) and for a bounded set of sibling account_indexes, and tag a matching `to`/receiver/refund address as 'THIS WALLET' / 'MY ACCT N' \u2014 never from a companion claim; (c) for cross-device claims add an HMAC-SHA256(DHUK-derived key) address tag returned by CMD_GET_WALLET_ADDRESS that the companion must echo for a 'self' label, Trezor address-MAC style; (d) ERC-20/approval selectors with native value\u22600 become a refusal (non-payable), not a warning row.",
+   "rationale": "Trezor ships EIP-55/RSKIP60, chunkify with isolated 0x, and a SLIP-21 address MAC that lets refund/self addresses be authenticated rather than trusted; pq1 has none of these, and its CoW refund / Safe receiver pages trust the companion for 'who is this'.",
+   "repo_evidence": [
+    "grep -rni 'eip.55|eip55|checksum.*address|mixed.case' pqsigner-erc7730/src/display/primitives.rs secure/src/tx/display/*.rs \u2192 no address-checksum rendering",
+    "grep -rn 'is_self|self_addr|address_mac|== sender' secure/src/tx/eip712/cowswap_display.rs secure/src/tx/display/safe_display.rs secure/src/nsc/cmd_get_wallet_address.rs \u2192 empty",
+    "secure/src/tx/display/erc20_known.rs:52-55 (native value on ERC-20 = warning, not refusal)",
+    "pqsigner-erc7730/src/display/primitives.rs:475-520 (6+6 hex fingerprint row only)"
+   ],
+   "vendor_precedent": "Trezor core/src/apps/ethereum/helpers.py:25-58 (address_from_bytes EIP-55/RSKIP60), layout.py:588-594 (chunkify, issue #6601), core/src/apps/common/address_mac.py:14-44 (HMAC address MAC), staking.py:126-127 (non-payable value refused).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Mixed case costs glyph variety on the px atlas (atlas hash re-pin via make ui-px-assets). Address MAC must use a DHUK/seed-derived key that is NOT the signing key and must be presented as 'device vouches this is its own derivation', never as counterparty identity. Sibling-account recompute costs a keygen per index (<1 s) \u2014 bound to a small window or cache.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/helpers.py",
+    "/home/nicola/repos/trezor-firmware/core/src/apps/common/address_mac.py",
+    "https://frameworks.securityalliance.org/wallet-security/signing-and-verification/secure-multisig-safe-verification"
+   ]
+  },
+  {
+   "id": "CS-10",
+   "title": "C10-signed catalogue refresh with monotonic data-version floor, decoupled from firmware images",
+   "threat": "Descriptor/token/name roots are compiled in, so catalogue freshness = firmware update cadence; ERC-8176 attestations are brittle (any label change invalidates the hash) and the registry governance moved to the EF in 2026-05. The clear set C will drift stale fast, pushing users to blind tiers, and invariant #10's 'never trust a firmware update again' makes frequent images undesirable.",
+   "proposal": "Define a `PQCAT` bundle: {data_version u32, ERC7730_DESCRIPTORS_ROOT, ERC20_DB_ROOT, NAMES_DB_ROOT, SELECTOR_DB_ROOT, KNOWN_CALLS Bloom hash, P73S receipt} signed with SPHINCS+C10 by a vendor catalogue key whose pubkey is pinned in the secure image (single algorithm, invariant #5). New CMD_CATALOGUE_UPDATE (PIN-unlocked, on-device confirm showing data_version + 8-word fingerprint of the bundle) verifies the C10 signature in S-world, requires data_version > the floor stored in a dedicated config page, writes the roots to that page, and the dispatcher reads roots from the page (falling back to compiled-in only if the page is blank). Leaves keep a type-domain byte so a token leaf can never parse as a descriptor leaf. Rollback of data_version refused; firmware images carry a minimum floor.",
+   "rationale": "Trezor's external-definitions model (Merkle + CoSi root + one-month freshness floor + built-ins override) decouples coverage from firmware; pq1 keeps stronger provenance (pinned roots) but zero agility. A C10-signed bundle keeps the one-primitive policy and avoids Trezor's regression to a single CoSi signer by using one PQ key with an on-device fingerprint ceremony.",
+   "repo_evidence": [
+    "secure/src/db_roots.rs:60-68,76-84,115-134,137-142 (all roots compiled in)",
+    "proto/src/lib.rs: no CMD_* for descriptor/catalogue/root update (grep -i DESCRIPTOR|CATALOG|ROOT_UPDATE \u2192 empty)",
+    "#345 (signed-release-manifest binding), #403 (registry-update lock-in), #377 (ERC-8176 ship-blocker) all assume image-bound roots",
+    "docs/erc8176-attestation-status.md:1-20"
+   ],
+   "vendor_precedent": "Trezor docs/common/external-definitions.md:60-66,122-170; core/embed/rust/src/definitions/blob.rs:34-89 (min_data_version Outdated check, type byte, Merkle+CoSi); definitions.py:38-40,73-76 (built-ins override).",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P2",
+   "risks": "New durable flash page (config, not per-signature \u2014 permitted) and a new vendor key = new provenance surface; the catalogue key must be as reproducible/escrowed as the fw-signing key. The floor interacts with the A/B rollback OTP design (do not reuse the rejected unary tally). DROPPED: (i) 'intent not outcome' threat-model statement in README/HARDENING (no simulation text exists; doc-only); (ii) proxy descriptors admitted with implementation-codehash witness (dbgen already refuses proxies at erc7730.rs:4651-4654; chain-state witness unverifiable on-device); (iii) ERC-7730 CBOR/protobuf device wire format alignment with Trezor's trzd (depends on CS-10); (iv) Safe domainSeparator/hashStruct trailer page for safe_hashes cross-check (SafeTxHash ERC-8213 page already exists); (v) Kuhn-style per-render pixel randomisation against display-bus TEMPEST (display surface, not clearsign); (vi) tx-hash-bound second-device 2FA (Satochip-class) \u2014 subsumed by CS-03 policy guard scope.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/docs/common/external-definitions.md",
+    "/home/nicola/repos/trezor-firmware/core/embed/rust/src/definitions/blob.rs",
+    "https://github.com/ethereum/clear-signing-erc7730-registry/issues/2970",
+    "https://eips.ethereum.org/EIPS/eip-8176"
+   ]
+  }
+ ]
+}

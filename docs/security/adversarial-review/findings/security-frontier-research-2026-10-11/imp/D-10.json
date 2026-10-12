@@ -1,0 +1,27 @@
+{
+ "id": "D-10",
+ "title": "Evidence and drift closure for the display surface: ui-px SCA harness for blit_secret_run, forced-frame/CT regression tests, threat-model \u00a77.10 row, playbook rows, redact ui-capture, and fix the stale decoy/README/comment claims",
+ "threat": "Silent regression: the px secret run's black_box barriers have the same LLVM-fold failure mode the legacy scan documents, and nothing measures it; stale docs claim gates that do not exist (font.rs:270 defers to a harness that only covers the legacy FONT_5X8 scan), so a future reviewer banks a false 'covered'.",
+ "proposal": "(1) Add pqsigner-ui-px as a dependency of tools/sca/kdf_target and a `make -C tools/sca px-glyph-leak` TVLA (rainbow+lascar, mem_address + Hamming models) over `Font::blit_secret_run` with a leaky-baseline sentinel, run in CI like glyph-leak. (2) Kani/proptest over Item::Secret: pixel count and write pattern independent of the secret bytes. (3) Host tests: every secret-carrying Screen is presented forced (D-01) and scratch buffers are zero after a forced frame (D-07). (4) Redact seed rows in `semihosting::flush` before hashing (#186) instead of relying on the denylist. (5) Docs: add the \u00a77.10 display-emanation row and trusted-UI/sca-fi playbook rows (bus EM, SPI timing, framebuffer residue, implant tap); correct tools/sca/README.md:1339-1400 (deleted `render_secret_row`/oled.rs references; decoy 'path forward' vs the recorded 20 MHz failure), seed_wizard.rs:315-320/1089-1096 stale predictions, px/screens.rs:14-17 'secrets never enter a record' (PIN digit/letters do), and refresh #237/#260 bodies from SSD1306 to NV3007 (single-LED AW99703, 20 mA full scale).",
+ "rationale": "Every 'implemented' row on the px seed path is code-read evidence only; the project's own memory records that green runs with the path compiled out are not evidence. This item converts structural claims into measured ones and stops the documented drift from re-propagating.",
+ "repo_evidence": [
+  "grep ui-px/pqsigner-ui-px in tools/sca/kdf_target/Cargo.toml: none (rc=1); tools/sca/Makefile:231-237 glyph-leak targets FONT_5X8 only",
+  "pqsigner-ui-px/src/font.rs:270 ('The tools/sca F-24 harness, not this comment, is the gate') \u2014 no such harness for this path",
+  "secure/src/ui/semihosting.rs:92-114 (hashes raw grid incl. seed rows; gh #186 OPEN)",
+  "docs/security/threat-model.md:323-331 (\u00a77.10 has no display row; gh #237 OPEN)",
+  "tools/sca/README.md:1381-1400 (cites deleted render_secret_row / oled.rs); secure/src/ui/seed_wizard.rs:315-320 (stale 'should work on LCD' prediction vs #258)",
+  "secure/src/ui/px/screens.rs:14-17 vs status_map.rs:285, 303-309 (claim drift)"
+ ],
+ "vendor_precedent": "Trezor keeps screen-content tracing and seed read-out debug-only (`if __debug__` DebugLinkGetState, core/src/apps/debug/__init__.py:285-291) and ships a constant-time bip39 lookup with a CHANGELOG entry; no vendor publishes a TVLA gate for its glyph path \u2014 this is beyond-parity on evidence.",
+ "novelty": "beyond",
+ "kind": "process",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "rainbow models mem_address/HW, not the SPI line itself \u2014 the harness bounds the MCU-side leak only; bus EM still needs a bench receipt on the EVT (no LCD on the bench board). DROPPED: always-on RDI jitter for the display/wizard window (blocked on the 'No software PRNG' owner question, #805); Trezor-style entropy-check commit/reveal with the companion (C10 keygen cost; wallet-creation surface); user-contributed dice/keypress entropy phase (NGRAVE/Coldcard; wallet-creation surface); no-display backup via SE-sealed share to a second device/companion (conflicts with invariant #1 unless split, owner-undecided, XL); NSC dispatcher re-entrancy guard during confirm() (LSB-023 class; clearsign/usb surface); on-chain intent-commitment in sphincsDigest (clearsign surface); Krux-style whole-bank measurement incl. unused pages (boot surface); FSBL-window RDI/poisoned-jump-target FI hardening (boot surface); FSBL backlight (#705, already tracked).",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/src/apps/debug/__init__.py",
+  "https://github.com/trezor/trezor-firmware/blob/main/crypto/bip39.c",
+  "tools/sca/README.md:1254-1263, 1292-1304, 1339-1400"
+ ],
+ "surface": "display"
+}

@@ -1,0 +1,25 @@
+{
+ "id": "CS-07",
+ "title": "Native decoders for the remaining drain primitives: setApprovalForAll, increaseAllowance, on-chain permit(), approve(0)=REVOKE, spender naming",
+ "threat": "Approval-class calls are the dominant single-tx drain (approve/increaseApproval, setApprovalForAll in the 2025 top-11). Outside the 4 catalogue descriptors, `setApprovalForAll(operator,true)` and `increaseAllowance` on any NFT/token fall to typed-call 'GUESS:' or loud blind; `approve(x,0)` renders as an approve of 0 rather than a revocation.",
+ "proposal": "Extend tx/src/erc20/calldata.rs (same strict framing) with `setApprovalForAll(address,bool)` (0xa22cb465, bool word canonical \u2208{0,1}), `increaseAllowance/decreaseAllowance`, and `permit(owner,spender,value,deadline,v,r,s)` (0xd505accf \u2014 render spender/value/deadline, 'UNLIMITED' banner); render `approve(_,0)` / `setApprovalForAll(_,false)` as 'REVOKE' intent; name the spender via NAMES_DB when present and show '! native' value as a REFUSAL for these non-payable selectors (today a warning row). Route all through the Danger class (CS-02) when amount is unlimited/true.",
+ "rationale": "Trezor built-ins cover approve/transfer with revoke detection, unlimited threshold warning, known-spender naming and native-value surfacing; Ledger 1.22.3's LSB-025 fix shows why selector-first dispatch matters. These are S-cost additions to an already Kani-covered decoder family.",
+ "repo_evidence": [
+  "tx/src/erc20/calldata.rs:14-16 (only transfer/transferFrom/approve selectors)",
+  "grep a22cb465|setApprovalForAll|39509351|d505accf tx/src secure/src/tx/display/dispatch.rs \u2192 empty (setApprovalForAll exists only as 4 catalogue formats: secure/data/erc7730.review.txt:1341,1601,3356)",
+  "secure/src/tx/display/erc20_known.rs:52-55 (non-zero native value on ERC-20 is a warning row, not a refusal); no 'REVOKE' wording in erc20_known.rs/erc20_unknown.rs",
+  "secure/src/tx/display/typed_call/mod.rs (fallback renders 'GUESS:' with 4-byte provenance only, #420)"
+ ],
+ "vendor_precedent": "Trezor core/src/apps/ethereum/clear_signing.py:1411-1482 (_handle_approve: revoke, unlimited 2^255, known spender, native_amount), clear_signing_definitions.py:100-120; Ledger LSB-025.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Selector collisions for unknown contracts remain (ERC-721 approve tokenId-as-amount, #343): keep the unknown-token loud banner. Must not widen the forced-blind clean-absence class (#343 owner note). Each new selector needs the WYSIWYS differential + Kani decode-soundness harness.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/clear_signing.py",
+  "https://donjon.ledger.com/lsb/025/",
+  "https://drops.scamsniffer.io/scam-sniffer-2025-crypto-phishing-losses-fall-83-to-84-million/"
+ ],
+ "surface": "clearsign"
+}

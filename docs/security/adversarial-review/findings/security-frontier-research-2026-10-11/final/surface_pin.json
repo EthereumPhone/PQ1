@@ -1,0 +1,242 @@
+{
+ "surface": "pin",
+ "items_written_here": [
+  {
+   "id": "M12",
+   "type": "cluster",
+   "key": "pin-attempt-rate-limiting",
+   "home": "pin",
+   "members": [
+    "pin-06",
+    "SCA-08",
+    "USB-07"
+   ],
+   "title": "Capped, reboot-surviving inter-attempt PIN back-off inside gated_unlock (Trezor parity, closes #637) plus an S-SRAM cooldown on host-initiated unlock prompts that the user dismissed",
+   "priority": "P3",
+   "merger_priority": "P3",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#119",
+    "#148",
+    "#175",
+    "#329",
+    "#600",
+    "#637",
+    "#692",
+    "#700",
+    "#713",
+    "#715",
+    "#728",
+    "#729",
+    "#802"
+   ],
+   "live_defects": 2,
+   "hardware_asks": 0,
+   "file": "data/round2/cluster_pin-attempt-rate-limiting.json"
+  },
+  {
+   "id": "M13",
+   "type": "cluster",
+   "key": "security-words-anti-swap",
+   "home": "pin",
+   "members": [
+    "IMP-10",
+    "D-09",
+    "pin-08"
+   ],
+   "title": "Pre-PIN \"device words\": two BIP-39 words from SAES-CMAC(DHUK) over the PIN prefix, shown mid-entry so a substituted unit is noticed before the last four digits are typed",
+   "priority": "P3",
+   "merger_priority": "P2",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#206",
+    "#249",
+    "#268",
+    "#280",
+    "#601",
+    "#636",
+    "#700",
+    "#705",
+    "#772",
+    "#784"
+   ],
+   "live_defects": 0,
+   "hardware_asks": 0,
+   "file": "data/round2/cluster_security-words-anti-swap.json"
+  },
+  {
+   "id": "M14",
+   "type": "cluster",
+   "key": "verified-wipe-and-lockout-recovery",
+   "home": "pin",
+   "members": [
+    "pin-02",
+    "SE-07",
+    "pin-01"
+   ],
+   "title": "Wipe as a verified, resumable transaction with a designed post-wipe recovery path (honest verdicts, boot-time 'wipe verified' assertion, complete object list, and an E120/UserID generation-or-reset rule folded into the S-1 ceremony)",
+   "priority": "P1",
+   "merger_priority": "P1",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#5",
+    "#8",
+    "#12",
+    "#22",
+    "#75",
+    "#104",
+    "#106",
+    "#107",
+    "#120",
+    "#123",
+    "#127",
+    "#129",
+    "#168",
+    "#170",
+    "#200",
+    "#204",
+    "#254",
+    "#256",
+    "#320",
+    "#692",
+    "#712",
+    "#715"
+   ],
+   "live_defects": 6,
+   "hardware_asks": 3,
+   "file": "data/round2/cluster_verified-wipe-and-lockout-recovery.json"
+  },
+  {
+   "id": "pin-03",
+   "type": "single",
+   "home": "pin",
+   "title": "FI-hardened page-124 / page-123 record codec: expanded-bit encoding, replicated halfwords, and 'blank page is ill-formed'",
+   "priority": "P3",
+   "orig_priority": "P1",
+   "cost": "L",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#200",
+    "#216",
+    "#392",
+    "#397",
+    "#692",
+    "#715",
+    "#835"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/pin-03.json"
+  },
+  {
+   "id": "pin-04",
+   "type": "single",
+   "home": "pin",
+   "title": "Ship the duress/decoy path: add `duress-pin` to the production envelope with a compile fence, and close its policy residuals",
+   "priority": "P2",
+   "orig_priority": "P1",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#10",
+    "#107",
+    "#123",
+    "#171",
+    "#258",
+    "#280",
+    "#370",
+    "#446",
+    "#626",
+    "#636",
+    "#700",
+    "#772"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/pin-04.json"
+  },
+  {
+   "id": "pin-05",
+   "type": "single",
+   "home": "pin",
+   "title": "One lockout response for all three unlock entry arms (boot-interactive, PendSV re-unlock, USB)",
+   "priority": "P2",
+   "orig_priority": "P1",
+   "cost": "S",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#75",
+    "#104",
+    "#120",
+    "#125",
+    "#127",
+    "#168",
+    "#200",
+    "#692",
+    "#715"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/pin-05.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M04",
+   "key": "fault-escalation-policy",
+   "home": "fi",
+   "title": "Fault response without attempt-charging: zeroize-then-reset in the glitch-halt sink, a written verdict-vs-availability rule, sparse phase words, PIN-scrambler RNG fail-closed, and diagnostics-only SE fault counting",
+   "priority": "P2",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "pin-10"
+   ]
+  },
+  {
+   "id": "M06",
+   "key": "random-delay-desync",
+   "home": "fi",
+   "title": "Land the fixed FI-delay source on master, add dispatcher-entry jitter, then a measurement-gated always-on RDI on the existing secure SysTick (no timing canary)",
+   "priority": "P2",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "pin-07"
+   ]
+  },
+  {
+   "id": "M20",
+   "key": "glitch-environment-sensing",
+   "home": "systemic",
+   "title": "Close the NS clock/power/tamper levers (RCC/PWR/SYSCFG/TAMP secure attribution), then add PVD-5 over BOR-3 with an SRAM-only zeroize, pin BOR_LEV in the ship profile, and run ADC4 analog watchdogs as a log-only slow supply/temperature tamper",
+   "priority": "P0",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "pin-09"
+   ]
+  }
+ ]
+}

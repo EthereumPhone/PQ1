@@ -1,0 +1,28 @@
+{
+ "id": "BOOT-02",
+ "title": "FSBL fault-injection delta before the WRP freeze: TRNG online, random pre-gate delays, default-poisoned branch target, duplicated verdicts, MSPLIM, WOTS-checksum redundancy, and a release-ELF survival gate",
+ "threat": "Voltage/EM glitch on the FSBL's deterministic-timing verify chain (HSI16, fixed `wait_random` length) to boot an unsigned slot or skip tz-1; WOTS checksum fault on the on-device C10 VERIFIER (Wagner et al. 2023/2025: affects verification, not just signing) to accept a forged firmware signature; LTO/opt-level-s folding the redundant compares away so the sentinel discipline exists only in source.",
+ "proposal": "(a) Bring the RNG peripheral up in the FSBL (RCC AHB2 clock + CONDRST sequence already written in secure/src/hw/rng.rs) so `fi::rng_byte` returns TRNG bytes instead of 0x42; fall back to halt, not to a constant. (b) Insert `wait_random()` immediately before each `check_true_into_sentinel` call in `filter_valid`/`verify_images`/tz-1 and before the branch. (c) Replace the `Option`/let-else slot selection with a volatile branch target initialised to a poison address (e.g. 0xFFFF_FFFE \u2192 HardFault) and assigned only after the last gate, plus a duplicated slot/verdict pair compared under `black_box` right before `branch::into_slot`. (d) Set MSPLIM in the FSBL reset path (currently 'no MSPLIM'). (e) In the FSBL's C10 verify (and the signer), recompute the WOTS checksum/target-sum from the message digest a second time via an independent code path and compare before the hypertree walk (the 2023/1572 countermeasure class). (f) Add a CI gate that disassembles the release FSBL/secure ELFs and asserts the double-evaluate + compare sequences survived (TF-M's explicit warning), using the existing `rainbow` instruction-skip sweep on `fsbl::verify_images`/`filter_valid` (#591).",
+ "rationale": "Every byte of the FSBL becomes physically permanent at RDP-2; this is the last window to add FI hardening to the only code the user ever trusts. The gate currently needs ~2 coordinated faults but with fixed timing an attacker can characterise both offsets offline; Trezor's boardloader adds `fih_delay()` before every ensure and sets `next_stage_addr` last for exactly this reason.",
+ "repo_evidence": [
+  "fsbl/src/fi.rs:31-33 (`fn rng_byte() -> u8 { 0x42 }` \u2014 'FSBL has no TRNG online')",
+  "fsbl/src/main.rs:172 and fsbl/src/manifest.rs:30 ('16 KB stack ... no MSPLIM')",
+  "fsbl/src/main.rs:218-222 (`let Some((slot, secure_digest)) = pick_slot(..) else { halt() }` \u2014 no poisoned default target, single verdict)",
+  "fsbl/src/main.rs:313-351 (sentinel gates exist but no random pre-delay between them beyond the loop inside the gate)",
+  "fsbl/src/verify.rs:88-110 (aggregate gate; no checksum-independent recomputation in the verifier)",
+  "Issues #591 (rainbow sweep of fsbl::verify_images not done), #401, #301, #633; CLAUDE.md #10 'FI-hardened FSBL image verify (EF-swarm F15)' OPEN"
+ ],
+ "vendor_precedent": "Trezor boardloader main.c:111-129 (fih_delay/fih_ensure, commit ad0ee485c9), :250-280 and :356-369 (volatile next_stage_addr zeroed then set last); bootloader/main.c:118-121,380 (default jump fn = '(glitch)' shutdown), fw_check.c:59-67; boot_header.c:56-57,102-106 (sigmask/sigmask_inv). TF-M FIH profile HIGH (random delay + duplicated execution).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "FSBL budget: RNG init \u2248 300-600 B, poison-target + duplicate verdict \u2248 100 B \u2014 must fit under FSBL_MAX_LOAD_SPAN 38,912 after the #540 cutover (current physical span 30,720 B). Adds \u2248 tens of ms to boot. RNG bring-up in the FSBL adds a peripheral driver to the immutable range (a bug there is permanent \u2014 keep it minimal and KAT-free; use the SR error flags only). Checksum-redundancy in the verifier costs one extra WOTS chain pass (~ms).",
+ "sources": [
+  "https://eprint.iacr.org/2023/1572",
+  "https://eprint.iacr.org/2025/2096",
+  "https://nrfconnectdocs.nordicsemi.com/ncs/latest/tfm/design_docs/tfm_physical_attack_mitigation.html",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/boardloader/main.c"
+ ],
+ "surface": "boot"
+}

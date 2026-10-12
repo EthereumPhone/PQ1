@@ -1,0 +1,27 @@
+{
+ "id": "USB-06",
+ "title": "Centralise gateway policy in the dispatcher: deny-first LOCKED allowlist table, NsPtr typestate on every handler, sentinel-gate the pin-attempt-log handler, count unknown CMDs as anomalies",
+ "threat": "PIN gating and pointer validation are discipline-enforced per handler (20 `pin_verified` reads across 15 cmd_* files; the `NsPtr<T>` typestate adopted by one veneer), so a new command (e.g. USB-05, OFFCHAIN_SYNC, the 2026-09 pin-attempt log) can and did land without the uniform FI shape: `cmd_pin_attempt_log.rs:23` is a production, PIN-less handler with a bare `if !validate_ns_write_ptr` \u2014 the FAIL-OUT shape HIGH-1 removed elsewhere; a single branch-skip writes 23 bytes into secure SRAM. Unknown CMDs return a soft InternalError with no counting, so a host can probe the dispatcher indefinitely.",
+ "proposal": "(1) In `dispatch`/the veneers: a single `const LOCKED_OK: &[u32] = &[CMD_GET_REMAINING, CMD_REQUEST_UNLOCK, CMD_IS_UNLOCKED, CMD_GET_PIN_ATTEMPT_LOG(pending #719)]` checked deny-first through the FI sentinel before the match; handlers keep their own check as belt-and-braces but the table is the reviewed policy (mirrors Trezor ALLOW_WHILE_LOCKED). (2) Migrate every cmd_* to `NsPtr::<T>::new(addr).validate_read/write(len)` so pointer validation is type-enforced; delete the free functions once no caller remains and add a semgrep rule forbidding `validate_ns_*_ptr(` outside ns_ptr.rs. (3) Fix cmd_pin_attempt_log to `check_true_into_sentinel` + HandlerGuard and track it (untracked today; #140 covers prodtest only and still says 12 gates \u2014 now 15). (4) Unknown/forbidden CMD increments an S-SRAM anomaly counter; above N (e.g. 8 per unlock session) the device locks (zeroize, not wipe) and the reason is logged to the pin-attempt ring.",
+ "rationale": "Ledger's LSB-023 root cause was per-app guards decaying; Trezor's wire layer applies deny-first filters centrally and treats an invalid smcall/syscall as fatal. pq1's threat-model.md:263 already describes the typestate as THE mechanism \u2014 making the docs true is cheaper than keeping the drift.",
+ "repo_evidence": [
+  "secure/src/nsc/mod.rs:1813-1879 (dispatch: no locked-allowlist, `_ => InternalError`)",
+  "grep -c pin_verified|is_unlocked() secure/src/nsc/cmd_*.rs -> 20 sites in 15 of 20 handler files",
+  "grep -rl NsPtr secure/src -> only nsc/ns_ptr.rs, nsc/mod.rs, nsc_core_under_test/pure_tests.rs",
+  "secure/src/nsc/cmd_pin_attempt_log.rs:23-25 (bare `if !validate_ns_write_ptr`, no sentinel, no HandlerGuard)",
+  "docs/security/threat-model.md:263 (claims NsPtr validates every gateway pointer \u2014 drift)",
+  "GitHub #140 OPEN (prodtest bare gates), #719 OPEN (pin-log disclosure decision)"
+ ],
+ "vendor_precedent": "Trezor message_handler.py:95-183 + lock_manager.py (ALLOW_WHILE_LOCKED deny-first filter), smcall_dispatch.c:475-488 (fatal on invalid smcall), smcall_verifiers.c (every smcall has a `__verified` probe wrapper).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "Lock-on-N-unknown-CMDs is a host-triggerable DoS of an unlocked session (acceptable: re-PIN) \u2014 keep N generous and never escalate to the SE wipe; the NsPtr migration touches every handler and needs the QEMU e2e + Kani pure-tests re-run; the #719 decision must be taken before the table is frozen.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/message_handler.py:95-183",
+  "/home/nicola/repos/trezor-firmware/core/src/apps/common/lock_manager.py:204-268",
+  "https://donjon.ledger.com/lsb/023/"
+ ],
+ "surface": "usb"
+}

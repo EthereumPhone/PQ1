@@ -1,0 +1,27 @@
+{
+ "id": "FWU-10",
+ "title": "Merkle-batched release signing: one C10 ceremony per release covering every (board, secure, NS) artifact, with a bounded per-image proof in the unsigned manifest region",
+ "threat": "Each additional signed artifact (now two boards, later revisions, plus a future PQDESC_V1 descriptor root) consumes one signature of the vendor key's finite C10 budget (OPEN-C10-1) and one HSM ceremony; today's format signs one 75/121-byte preimage per image, so the signature count scales with the artifact count and the insider/ceremony surface grows with it.",
+ "proposal": "In the V6 amendment (with FWU-3): the signed value becomes a Merkle root over leaves `SHA-256(0x00 || preimage_i)` with order-independent internal nodes `SHA-256(0x01 || min || max)`; each manifest carries its own leaf preimage plus a proof path (<= 8 nodes, 32 B each) in the unsigned region; the device recomputes the root and verifies ONE C10 signature. fwsign gains a `sign-release-set` that builds the tree over all artifacts of a release set (both boards, optional descriptor-root leaf) and emits per-artifact manifests. Bound the proof length and check it fits inside the manifest page before any pointer is formed.",
+ "rationale": "Trezor moved its PQ bootloader signing to exactly this structure so one slow SLH-DSA ceremony covers all models/revisions/builds, with proof size independent of batch size \u2014 directly relevant to pq1 where C10 signing is expensive, the key budget is capped, and the release set just doubled with the second board. It also gives the OPEN-REL-1 'release-set authority' a cryptographic object (the root) rather than a convention.",
+ "repo_evidence": [
+  "fw-manifest/src/lib.rs:17-31 (signature covers one preimage per image; no batch structure)",
+  "fwsign/src/subcommands/sign.rs:1-60 per inventory (single-artifact sign; grep merkle|batch in fwsign/src hits only erc7730_release_metadata.rs)",
+  "GitHub #225 OPEN (OPEN-REL-1 release-set authority + OPEN-C10-1 per-key signature cap)",
+  "docs/erc7730-root-rotation-and-update-policy.md:107-120 (roadmapped PQDESC_V1 signed by the SAME key \u2014 a natural extra leaf)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/image/boot_header.c:111-141,226-261 (boot_header_calc_merkle_root), python/src/trezorlib/merkle_tree.py:23-36, core/tools/trezor_core_tools/headertool_pq.py:22-36; docs/common/external-definitions.md (same tree shape for signed definitions).",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "V6 schema change (owner-gated, see FWU-3). The FSBL must parse a proof path \u2014 new bounds-checked parser in the frozen stage (fuzz + Kani before freeze; BitBox's AI-found bootloader flaw is the warning). Order-independent node hashing must be modelled in the ProVerif fw_update_authenticity.pv (domain separation of 0x00/0x01 prefixes vs PQFW tags). DROPPED: per-chunk pre-write hash authentication (usb-fw-update-hardening.md:329 judged no security gain over whole-image COMMIT re-hash); fix_version soft floor with forced SE wipe on security-relevant downgrade (overlaps the 2026-07-26 errata's declined availability paths); first-boot 0xFF image padding + published page-mutation map for the SWD verify story (Trezor combine.rs \u2014 not verified against pq1's release packaging in this pass); FSBL pre-jump SRAM/peripheral reset (only public data in FSBL SRAM today); signed-flag prodtest image class + OTP line-complete latch (Trezor ALLOW_PROVISIONING); companion GetFirmwareHash (explicitly NOT recommended \u2014 known-bypassable); OptRand anti-klepto and measurement-bound key wrap (both on the do-not-resurface list in vendor-signing-key-compromise.md:457-466,666-676).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/boot_header.c",
+  "/home/nicola/repos/trezor-firmware/python/src/trezorlib/merkle_tree.py",
+  "/home/nicola/repos/trezor-firmware/core/tools/trezor_core_tools/headertool_pq.py",
+  "https://github.com/EthereumPhone/PQ1/issues/225",
+  "https://decrypt.co/375886/bitcoin-wallet-bitbox-ai-severe-flaws-firmware"
+ ],
+ "surface": "fwupdate"
+}

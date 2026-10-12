@@ -1,0 +1,1618 @@
+{
+ "items": [
+  {
+   "id": "FI-01",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE-BENCH",
+   "drafts": [
+    "FI-01-on-silicon-fault-campaign-firmware-gates.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "(1) Sweep the RDP-2 option-byte fetch on sacrificial iota2 kits",
+     "status": "COVERED",
+     "by": "#401",
+     "evidence": "#401 body: \"The headline red-team, and the single highest-leverage unverifiable premise. FaultyCat EMFI (µGlitch/L5 shape) + Scaffold voltage (Šimoník/U5A9 shape).\" Rig stand-up is #301."
+    },
+    {
+     "what": "(2) Glitch the bootloader admission gates, slot word and slot choice on silicon, after adding a trigger toggle to the bootloader",
+     "status": "UNTRACKED",
+     "by": "none (emulated half is #591; code defects are #847)",
+     "evidence": "fsbl/Cargo.toml:72 has stage-marker only, no trigger feature; #591 body: \"This is pure host emulation (unicorn/rainbow) — no bench, no silicon.\""
+    },
+    {
+     "what": "(3) Glitch gated_unlock with a wrong PIN, using a fenced bench feature that re-arms the three counters",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "docs/security/red-teaming.md:852 names the target; no issue found by searching the dump for gated_unlock + glitch/fault/silicon. secure/src/nsc/mod.rs:1494 precharges page 124. The bench image must not use e2e-test: secure/src/fi.rs:87-89 turns wait_random into an immediate return there."
+    },
+    {
+     "what": "(4) Glitch the ct_eq compare with double-compute on and off; never-ship feature; C10-specific grafting oracle",
+     "status": "UNTRACKED",
+     "by": "none on silicon (emulated: #232, #592, #296)",
+     "evidence": "secure/src/crypto.rs:373; no feature disables the second computation (grep of secure/Cargo.toml for double/single-compute is empty)."
+    },
+    {
+     "what": "(5) Leakage test at 10k traces or more",
+     "status": "COVERED",
+     "by": "#228 (plus comment draft c-228)",
+     "evidence": "#228 body: \"capture power traces, TVLA max|t| on the sk_seed-absorption window\""
+    },
+    {
+     "what": "Wire the sca-trigger pin at the targets",
+     "status": "PARTLY",
+     "by": "#228",
+     "evidence": "#228 body: \"Wire `sca-trigger` (F-18b) around the PRF region\". No call site exists at master (grep for Trigger::raise / trig_high finds only the module and source-text tests). The gate targets are in the draft."
+    },
+    {
+     "what": "One release gate with a publication criterion: scripts and traces committed, each receipt bound to the reproducible-build hash, null results scoped",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "No issue body asks for publication or a receipt format (searched: release gate, publish trace/script, reproducible campaign)."
+    },
+    {
+     "what": "Host orchestration for the bench (tools/bench)",
+     "status": "COVERED",
+     "by": "#402",
+     "evidence": "#402 body: \"Scaffold Python driver + Rigol SCPI capture + FaultyCat serial + the sweep/classify loop in `tools/bench/`.\" At master `git ls-files tools/bench` is empty."
+    }
+   ],
+   "issues_read": [
+    401,
+    301,
+    402,
+    591,
+    232,
+    592,
+    296,
+    228,
+    236,
+    240,
+    241,
+    229,
+    376,
+    388,
+    398,
+    399,
+    400,
+    544,
+    847,
+    865,
+    715,
+    392,
+    211
+   ],
+   "one_line": "New issue for the three on-silicon glitch legs nobody tracks (PIN gate, signature compare, bootloader admission), the bench-only firmware they need, and a rule for what counts as a result; the RDP-2 leg (#401), the rig (#301), host tooling (#402) and leakage (#228) are already tracked and excluded.",
+   "unsure": "Whether the owner wants this as one new issue or as comments on #401/#301. The bench plan in docs/security/red-teaming.md (sections 4.4, 9, 11) already describes these legs, so the issue is 'execute and publish the written plan', not a new idea. tools/bench/ is untracked on master (the report said it holds probes only; on master it does not exist), which #402 does not say."
+  },
+  {
+   "id": "M05",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-864-M05-fsbl-trng-and-tail-scan-constraints.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "A1 fail-closed admission, default halt target, verdict words folded into the branch address, encoded slot word bound to the fingerprint",
+     "status": "COVERED",
+     "by": "#847",
+     "evidence": "#847 fix directions: \"Make the gate fail closed: reject as the fall-through, default to a halt stub.\" and \"Carry the slot as a Hamming-distant word plus its complement, re-compare before the branch, bind the displayed fingerprint digest to it\""
+    },
+    {
+     "what": "A2 minimal TRNG in the bootloader for the delay",
+     "status": "PARTLY",
+     "by": "#864 item 1",
+     "evidence": "#864: \"Decide: TRNG bring-up in the FSBL (clock, size budget), or record the constant as an accepted residual in the freeze review.\" The irreversible-design constraints (no-boot failure mode, clock choice, configuration lock, GTZC) are not there; they are in the comment draft."
+    },
+    {
+     "what": "A3 one delay before each gate and before the branch",
+     "status": "PARTLY",
+     "by": "#864 item 1",
+     "evidence": "#864 states the fixed separation but has no checkbox for pre-gate delays; added in the comment draft."
+    },
+    {
+     "what": "A4 0xFF tail scan bounded by the geometry registry",
+     "status": "COVERED",
+     "by": "#864 item 2",
+     "evidence": "#864: \"Add a blank (0xFF) scan of the tail, bounded by the geometry registry, at boot and at COMMIT.\" Master: fsbl/src/slot.rs:47 still uses the fw-manifest capacities, which differ from geometry/src/lib.rs:51 and :53; verdict folding and the pad-and-sign alternative are in the comment draft."
+    },
+    {
+     "what": "A5 stack limit register in the bootloader",
+     "status": "COVERED",
+     "by": "#854",
+     "evidence": "#854: \"Set `MSPLIM` in the secure reset path and in the FSBL, with a fault path that re-bases the stack before it runs.\""
+    },
+    {
+     "what": "A6 widened #591 sweep as acceptance test, on the pq1 ELF",
+     "status": "COVERED",
+     "by": "#847, #591",
+     "evidence": "#847: \"Run the widened #591 sweep on the pq1 release FSBL ELF first, to get a failing baseline.\" The extra windows (pick_slot, option-byte verdict, display verdict) are one line in the comment draft."
+    },
+    {
+     "what": "C10 verifier sweep stops before the target-sum compare",
+     "status": "COVERED",
+     "by": "#865 item 2",
+     "evidence": "#865: \"Sweep the WOTS target-sum and root-compare regions explicitly, and correct the README.\""
+    },
+    {
+     "what": "Stage B: second independent target-sum computation in the WOTS verifier, only if the sweep shows a single-fault forge",
+     "status": "UNTRACKED",
+     "by": "none (conditional on #865 item 2)",
+     "evidence": "sphincs-c10/src/wots.rs:183 is the single compare. Not drafted as an issue because it is conditional; mentioned in the comment draft."
+    },
+    {
+     "what": "pick_slot can be steered to the older valid slot",
+     "status": "COVERED",
+     "by": "#847, #31",
+     "evidence": "#847: \"`pick_slot` can also be steered to the older valid slot, because no rollback floor works today (#31).\""
+    },
+    {
+     "what": "Stale 28,704 B figure and bootloader sources arguing against their own default",
+     "status": "COVERED",
+     "by": "#866",
+     "evidence": "#866: \"`CLAUDE.md` invariant 10 and `fsbl/memory-stm32u585.x:14` quote 28,704 B\". Master CLAUDE.md:31 now also carries a 2026-10-05 update quoting 19,708 B."
+    }
+   ],
+   "issues_read": [
+    847,
+    854,
+    864,
+    865,
+    866,
+    591,
+    226,
+    542,
+    540,
+    541,
+    758,
+    31,
+    46,
+    130,
+    189,
+    301,
+    366,
+    374,
+    401,
+    489,
+    633,
+    642,
+    704,
+    705,
+    742,
+    777,
+    805,
+    832,
+    834,
+    835
+   ],
+   "one_line": "Everything in the bootloader bundle is already in #847, #854, #864, #865 and #866; one comment on #864 adds the design constraints those bodies lack (a bootloader TRNG is a permanent no-boot risk and needs its own owner decision; the tail scan must take its bounds from the geometry crate or it rejects every image after the #540 cutover).",
+   "unsure": "The conditional Stage B (second target-sum in the verifier) has no issue; I left it as one line in the #864 comment because it depends on the #865 sweep. No production bootloader can be built at master (fsbl/src/main.rs:67-70), so all of this is about the code that would be frozen."
+  },
+  {
+   "id": "M04",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-715-M04-split-noverdict-and-se-retry-counters.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "(A) zeroize then reset in the glitch-halt sink",
+     "status": "COVERED",
+     "by": "#851",
+     "evidence": "#851: \"Pass a diverging `on_glitch` action into `wait_random_loop`: mask interrupts, zeroize sensitive state, then request a system reset.\""
+    },
+    {
+     "what": "(A) close stack residue with SRAM_RST=0 before the RDP-2 burn",
+     "status": "COVERED",
+     "by": "#848, #82",
+     "evidence": "#848: \"Add `SRAM_RST = 0` to the ship profile, to `verify_ship_profile` (Phase A), to the FSBL tripwire and to the user-side read set.\""
+    },
+    {
+     "what": "(B) written rule that detected faults do not consume PIN attempts outside the PIN gate, with a source test",
+     "status": "COVERED",
+     "by": "#851",
+     "evidence": "#851: \"Record, with a source test, that a detected fault does not consume a PIN attempt outside the PIN gate.\""
+    },
+    {
+     "what": "(C) first-boot done gates through check_true_into_sentinel",
+     "status": "COVERED",
+     "by": "#862",
+     "evidence": "#862: \"Route each `done` gate through `fi::check_true_into_sentinel`.\""
+    },
+    {
+     "what": "(D) PIN scrambler: one bounded retry, then refuse",
+     "status": "COVERED",
+     "by": "#860",
+     "evidence": "#860: \"Scrambler: one bounded retry, then refuse with a status. This reverses the recorded rationale, so it needs an owner decision.\""
+    },
+    {
+     "what": "(E) reason sub-codes and per-session secure-element retry counters, diagnostics only",
+     "status": "UNTRACKED",
+     "by": "none (belongs with #715, exposure decided by #719)",
+     "evidence": "secure/src/pin_attempt_log.rs:80 NoVerdict covers transport, session and FI gate; secure/src/nsc/mod.rs:1638 and :1650 both record it."
+    },
+    {
+     "what": "Owner question: one disagreeing page-124 read pair ends in a wipe",
+     "status": "COVERED",
+     "by": "#861 (third checkbox)",
+     "evidence": "#861: \"A single faulted read of the PIN-attempt page ends in a wipe (owner question).\""
+    },
+    {
+     "what": "Correct #835's 'H4 closed' wording",
+     "status": "COVERED",
+     "by": "#851",
+     "evidence": "#851 summary: \"This issue tracks those sites so they are not closed by accident with #835.\""
+    }
+   ],
+   "issues_read": [
+    851,
+    848,
+    82,
+    862,
+    860,
+    861,
+    835,
+    834,
+    715,
+    719,
+    692,
+    109,
+    47,
+    200,
+    208,
+    366,
+    484,
+    485,
+    707,
+    802,
+    805
+   ],
+   "one_line": "All of M04 is already filed (#851, #848, #862, #860, #861) except the diagnostics part; one comment on #715 proposes splitting the catch-all 'no verdict' reason code and adding secure-element retry counters, with no attempt charging.",
+   "unsure": "Nothing. The 'written verdict rules' part I was told may be untracked is the third checkbox of #851."
+  },
+  {
+   "id": "M06",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-805-M06-rdi-design-constraints.md",
+    "c-861-M06-entry-jitter-must-not-block-lock.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Stage 0: land the delay-source commits from perf/flash-opt-level-z on master",
+     "status": "COVERED",
+     "by": "#865 item 3, #834, #835",
+     "evidence": "#865: \"Land or explicitly drop each of these, and reopen or annotate #832.\" Still not on master: secure/src/fi_delay_pool.rs is absent, secure/src/fi.rs:58 keeps the reuse arm, and dd901592, e23fc5cd, 7594e606, 2363fb9d, 7c53fcfb are not ancestors of c2fab970. The branch is now 24 ahead and 55 behind master."
+    },
+    {
+     "what": "Stage 1: one random delay immediately before the first gate of each production gateway entry, with a source-grep gate",
+     "status": "COVERED",
+     "by": "#861 (first checkbox)",
+     "evidence": "#861: \"Fix: one `wait_random` immediately before the first gate of each production veneer, with a source-grep gate.\" The comment draft adds one constraint (lock, status and abort must not become refusable)."
+    },
+    {
+     "what": "Stage 2: always-on random delay interrupt on the secure SysTick, gated on measurements",
+     "status": "PARTLY",
+     "by": "#805",
+     "evidence": "#805 poses the question and carries the PRNG carve-out research; it has no design constraints for conditions (a) and (b), and does not answer docs/archive/work-todo-retired-2026-07-19.md:1940 (\"Do NOT build the subsystem\")."
+    },
+    {
+     "what": "Doc: threat model lists wait_random as Planned",
+     "status": "COVERED",
+     "by": "#866 (last checkbox)",
+     "evidence": "#866: \"`wait_random` listed as \\\"Planned\\\". `docs/security/threat-model.md:321`.\" Still so at master."
+    },
+    {
+     "what": "Rider: voted read-back of clock and TrustZone configuration registers after RNG init",
+     "status": "UNTRACKED",
+     "by": "none (adjacent: #269, #80)",
+     "evidence": "Optional in the research and not endorsed by the reviewer; not drafted."
+    },
+    {
+     "what": "Delays before RNG init are a constant",
+     "status": "OWNER",
+     "by": "dropped on re-check",
+     "evidence": "#861: the claim that `wait_random` uses a constant before the RNG is initialised was dropped (no caller runs that early)."
+    }
+   ],
+   "issues_read": [
+    805,
+    861,
+    865,
+    834,
+    835,
+    832,
+    831,
+    643,
+    802,
+    642,
+    269,
+    80,
+    241,
+    228,
+    301,
+    401,
+    46,
+    780,
+    783
+   ],
+   "one_line": "Landing the fixed delay source (#865) and the per-entry jitter (#861) are already tracked; one comment on #805 records the design constraints and the unanswered 2026-05-28 'do not build' verdict for the random delay interrupt, and a two-line comment on #861 adds that the new delay must never make LOCK refusable.",
+   "unsure": "The delay-source branch is no longer '0 behind master' as the report said (24 ahead, 55 behind at c2fab970); whether it still merges cleanly was not checked. '#833' in the manifest is not in the issue dump (the report says it is an unrelated PR)."
+  },
+  {
+   "id": "SCA-02",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "SCA-02-se050-tunnel-aes-on-saes.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "AES-128 key size and a load-once multi-block API in the SAES driver",
+     "status": "UNTRACKED",
+     "by": "none (#246 covers register bit fields only)",
+     "evidence": "secure/src/hw/saes.rs:487 hard-codes CR_KEYSIZE_256; :464 resets the peripheral per block."
+    },
+    {
+     "what": "SCP03 key derivation, MAC and CBC over SAES behind the cmac_generic seam, all five handshake sites together",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "secure/src/scp03_logic.rs:175 software Cmac<Aes128>; secure/src/cmac.rs:61; secure/src/se050/mod.rs:244, :365, :447, :467, :513."
+    },
+    {
+     "what": "OPTIGA Shielded AES-CCM over SAES",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "Not proposed as work in the draft: the reviewer found it protects only the session keys of a replayed session, not the pairing secret (secure/src/optiga/shield.rs:397). Listed under Limits."
+    },
+    {
+     "what": "Add shield.rs to the emulated leakage harness",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "Dropped: the reviewer found the emulated harness sees only the address channel and would come back flat, so it cannot measure this threat."
+    },
+    {
+     "what": "Gate landing on the tunnel leakage measurement",
+     "status": "COVERED",
+     "by": "#236",
+     "evidence": "#236: \"The value-channel + SE-side-channel confirmation belongs on real hardware under a scope\""
+    }
+   ],
+   "issues_read": [
+    236,
+    246,
+    55,
+    202,
+    228,
+    299,
+    648,
+    419,
+    452,
+    697
+   ],
+   "one_line": "New issue: run the SE050 channel AES on the chip's hardware AES block, because today a software AES under the long-term channel key processes bus-supplied data on every boot before the PIN; design now, land only after the #236 measurement.",
+   "unsure": "Priority: one reviewer said P1, the other P2; I used medium. Whether failed pre-PIN handshakes are counted or rate-limited was not traced."
+  },
+  {
+   "id": "SCA-01",
+   "outcome": "COMMENT",
+   "board": "DOABLE-BENCH",
+   "drafts": [
+    "c-228-SCA-01-retarget-prf-measurement.md",
+    "c-236-SCA-01-tunnel-measurement-first.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Amend #228 to target fors_secret and the second block of wots_secret",
+     "status": "UNTRACKED",
+     "by": "none (comment on #228)",
+     "evidence": "sphincs-c10/src/hash.rs:378, :180 (first WOTS block is constant per key and layer), :410 (FORS single block with varying known words)."
+    },
+    {
+     "what": "Add a grind_r bucket to the hash counters and correct the README that says grind_r never reads sk_seed",
+     "status": "UNTRACKED",
+     "by": "none (comment on #228)",
+     "evidence": "sphincs-c10/src/fors.rs:117; sphincs-c10/src/hash.rs:63; tools/sca/README.md:620."
+    },
+    {
+     "what": "Correct the sca_trigger module doc; wire per-call triggers; build a chosen-input harness image on the hw-sha256 path",
+     "status": "PARTLY",
+     "by": "#228",
+     "evidence": "#228: \"Wire `sca-trigger` (F-18b) around the PRF region\". Per-call wiring and the harness are in the comment."
+    },
+    {
+     "what": "Measure the pre-PIN tunnel crypto first",
+     "status": "PARTLY",
+     "by": "#236",
+     "evidence": "#236 asks for on-silicon confirmation of the scp03 and optiga sweeps but names no target and no order; comment on #236."
+    },
+    {
+     "what": "SAES-CMAC under the device key as single-trace characterisation",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "Demoted to last by the reviewer (no varying known input); not drafted."
+    },
+    {
+     "what": "Shunt footprint and trigger pad on a pq1 bench variant",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "A board change. A hand-fitted shunt on one bench unit is enough for the campaign."
+    }
+   ],
+   "issues_read": [
+    228,
+    229,
+    236,
+    241,
+    298,
+    299,
+    301,
+    312,
+    402,
+    697,
+    722,
+    646
+   ],
+   "one_line": "Two comments: #228 should aim at the one hash call where the secret and known data meet (fors_secret), count the grind hash it misses, and use a per-call trigger and harness image; #236 (tunnel crypto) should be measured first because it is the only half that firmware can fix.",
+   "unsure": "The research said the pq1 bench SE050 cannot complete the handshake; #697 says that was fixed (keyset made selectable), so I did not repeat the claim."
+  },
+  {
+   "id": "M15",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-866-M15-remaining-stale-mask-claims.md",
+    "c-831-M15-cap-the-reseed-retry.md",
+    "c-228-SCA-01-retarget-prf-measurement.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Reword the fence comment and the docs that present the unloaded mask as a defence",
+     "status": "PARTLY",
+     "by": "#866 (third and ninth checkboxes)",
+     "evidence": "#866: \"Consumption mask \\\"keeps the signature uncorrelated\\\". `secure/src/nsc/mod.rs:699-701`.\" Eleven further sites are in the comment on #866."
+    },
+    {
+     "what": "Commit the PRNG refactor and delete the STATUS block in consumption_mask_prng.rs",
+     "status": "COVERED",
+     "by": "#865 item 3",
+     "evidence": "#865: \"The refactor that fixes this exists in no commit on any branch.\" Master: secure/src/hw/consumption_mask.rs:138 still has the inline state."
+    },
+    {
+     "what": "Skip counter and a capped reseed retry",
+     "status": "PARTLY",
+     "by": "#831, #646",
+     "evidence": "#831 suggests \"Retry on the next tick\" uncapped; the cap is the comment on #831."
+    },
+    {
+     "what": "Label selftest_pin_toggles as bench-only",
+     "status": "UNTRACKED",
+     "by": "none (comment on #866)",
+     "evidence": "secure/src/hw/consumption_mask.rs:102 gates the check on debug-log."
+    },
+    {
+     "what": "Three-arm measurement (mask off, unloaded, loaded) on an iota2 kit, raw and high-pass filtered",
+     "status": "PARTLY",
+     "by": "#646, #228",
+     "evidence": "#646: \"Obtain on-silicon trace evidence under the existing FI/SCA hardware campaign before claiming masking efficacy.\" The arms are section 4 of the comment on #228. Needs an iota2 kit, a resistor on PA5, a shunt and an oscilloscope."
+    },
+    {
+     "what": "Keep or demote the mask as a production requirement (whether the compile fence stays)",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "secure/src/nsc/mod.rs:712; the decision follows the measurement."
+    },
+    {
+     "what": "Load on the pq1 mask pin (PA6), shunt footprint and trigger pad on a bench variant",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "secure/src/board/pq1.rs:327: PA6 is not connected on this board."
+    }
+   ],
+   "issues_read": [
+    866,
+    865,
+    831,
+    646,
+    228,
+    229,
+    236,
+    802,
+    805,
+    832,
+    834,
+    835,
+    6,
+    53,
+    237,
+    261,
+    298,
+    312,
+    786,
+    792
+   ],
+   "one_line": "No new issue: the mask's wording and refactor are in #866 and #865; comments add the stale sites #866 misses, a cap on the reseed retry in #831, and a three-arm mask measurement (on an iota2 kit) to #228. Loading the pin on pq1 needs a new board; keeping the mask mandatory is an owner decision after the measurement.",
+   "unsure": "Whether the owner wants a standalone 'keep or demote the consumption mask' decision issue. I did not draft one because every piece has a home and the decision depends on a measurement that is parked."
+  },
+  {
+   "id": "SCA-03",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-229-SCA-03-wots-midstate-correction.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Build WOTS midstate-resume",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "Refuted as a countermeasure by the review; not drafted (the manifest marks the item 'redesign needed')."
+    },
+    {
+     "what": "Correct #229 and the archive line that say no cacheable midstate exists",
+     "status": "UNTRACKED",
+     "by": "none (comment on #229)",
+     "evidence": "sphincs-c10/src/hash.rs:378 and :180: the first 64-byte block is sk_seed, the label, the layer and 24 zero bytes; docs/archive/work-todo-retired-2026-07-19.md:1920."
+    },
+    {
+     "what": "Split the hash census into raw-seed absorptions and secret-chaining-value compressions",
+     "status": "UNTRACKED",
+     "by": "none (comment on #229)",
+     "evidence": "sphincs-c10/src/hash.rs:63; sphincs-c10/tests/hash_counts.rs:73. The tests run in no CI suite (#722)."
+    }
+   ],
+   "issues_read": [
+    229,
+    228,
+    299,
+    722
+   ],
+   "one_line": "Comment on #229 only: its 'no cacheable midstate' premise is wrong for the WOTS half (the first hash block is constant per key and layer), but the midstate change itself was refuted and should not be built; split the hash census.",
+   "unsure": "Nothing."
+  },
+  {
+   "id": "X8a",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X8a-secure-mpu-execute-never-sram.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "One execute-never MPU region over secure RAM, read back, bounds from linker symbols",
+     "status": "UNTRACKED",
+     "by": "none (#277 is the privilege split only; #54 only asks to record the MPU decision)",
+     "evidence": "No MPU register is written in any image at master (search of secure/src, fsbl/src, nonsecure/src, shared/src, hw/src); secure/src/nsc/mod.rs:1042."
+    },
+    {
+     "what": "No-access stack-guard region",
+     "status": "COVERED",
+     "by": "#854",
+     "evidence": "#854: \"Set `MSPLIM` in the secure reset path and in the FSBL\". The stack limit register is the same control, so the guard region is not in the draft."
+    },
+    {
+     "what": "Map-file gate, acceptance test with an odd target and a negative control, QEMU fault path",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "secure/src/main.rs:4749: the zeroizing HardFault handler is compiled for stm32u585 only."
+    },
+    {
+     "what": "Record the decision in #54 and the status tables",
+     "status": "PARTLY",
+     "by": "#54",
+     "evidence": "#54: \"MPU (likely unused — no RTOS)\""
+    }
+   ],
+   "issues_read": [
+    277,
+    374,
+    54,
+    854,
+    540,
+    846,
+    366,
+    542
+   ],
+   "one_line": "New issue: program one memory-protection region that makes secure RAM non-executable, so a fault that redirects the program counter into companion-supplied bytes ends in the existing zeroize-and-reset handler; defence in depth, small, firmware only.",
+   "unsure": "Other groups may draft the stack-bound or secure-slot ledger items (M21, X10b) that touch #374 and #854; this draft deliberately leaves the stack guard to #854."
+  },
+  {
+   "id": "X8b",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-542-X8b-fsbl-execute-protection-decision.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Decide before the freeze whether the bootloader programs a default-deny MPU table; land it or record the decline",
+     "status": "UNTRACKED",
+     "by": "none (comment on #542, the bootloader guard and fault policy freeze)",
+     "evidence": "fsbl/src/sau.rs:35 and :36 are the only region registers in fsbl/src; #542: \"freeze ... the guard/fault policy\"."
+    },
+    {
+     "what": "Record the outcome in #54",
+     "status": "PARTLY",
+     "by": "#54",
+     "evidence": "#54: \"MPU (likely unused — no RTOS)\""
+    }
+   ],
+   "issues_read": [
+    542,
+    540,
+    54,
+    277,
+    374,
+    591,
+    854,
+    847,
+    226
+   ],
+   "one_line": "Comment on #542: decide before the first unit is locked whether the bootloader gets a small execute-protection table (it can never be added after the freeze); the reviewer rates it below the bootloader gate defects in #847.",
+   "unsure": "#854 (filed yesterday, bootloader stack limit and NMI handler 'that can never be added after the freeze') is an equally good home; the report names #542, so I used that."
+  }
+ ],
+ "citations": [
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 12,
+   "snippet": "has *never* been exercised on any hardware at all"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 852,
+   "snippet": "`gated_unlock` verdict"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 854,
+   "snippet": "Signature verify-before-release"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 855,
+   "snippet": "FW signature verify"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/hw/sca_trigger.rs",
+   "line": 26,
+   "snippet": "c10_sign_verified_with_progress"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/hw/sca_trigger.rs",
+   "line": 31,
+   "snippet": "nsc::gated_unlock"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/Cargo.toml",
+   "line": 679,
+   "snippet": "sca-trigger = [\"stm32u585\"]"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 135,
+   "snippet": "feature = \"sca-trigger\","
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 338,
+   "snippet": "pub const SCA_TRIGGER: Option<(u32, u32)> = Some((GPIOB_S, 3));"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 317,
+   "snippet": "it is already on the 10-pin"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "fsbl/src/main.rs",
+   "line": 344,
+   "snippet": "let sig_verdict = fi::check_true_into_sentinel(|| {"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "fsbl/Cargo.toml",
+   "line": 72,
+   "snippet": "stage-marker = []"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1415,
+   "snippet": "pub unsafe fn gated_unlock("
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1494,
+   "snippet": "let bump_result = crate::hw::flash::pin_attempts_bump();"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 1368,
+   "snippet": "pub const HW_PIN_CTR_LIMIT: u32 = 32;"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 53,
+   "snippet": "#[cfg(feature = \"e2e-test\")]"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 54,
+   "snippet": "mod cmd_test_pin_lockout;"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/fi.rs",
+   "line": 87,
+   "snippet": "#[cfg(feature = \"e2e-test\")]"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/fi.rs",
+   "line": 89,
+   "snippet": "return;"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1614,
+   "snippet": "let reset_result = crate::hw::flash::pin_attempts_reset();"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2650,
+   "snippet": "if let Err(e) = self.reset_hw_pin_counter() {"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 152,
+   "snippet": "/// `MAX_ATTEMPTS` (chip auto-resets on success, cache mirrors)."
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/crypto.rs",
+   "line": 350,
+   "snippet": "let sig_a = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_a, progress.0);"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/crypto.rs",
+   "line": 358,
+   "snippet": "let sig_b = sk.sign_with_shuffle(msg_hash, opt_rand, &shuffle_b, progress.1);"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/crypto.rs",
+   "line": 373,
+   "snippet": "if !bool::from(sig_a[..].ct_eq(&sig_b[..])) {"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/crypto.rs",
+   "line": 366,
+   "snippet": "is itself a single-instruction"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "secure/src/hw/rcc.rs",
+   "line": 3,
+   "snippet": "Configures SYSCLK to 160 MHz via PLL1"
+  },
+  {
+   "draft": "FI-01-on-silicon-fault-campaign-firmware-gates.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 125,
+   "snippet": "`tools/bench/` once stood up):"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 277,
+   "snippet": "card_challenge.copy_from_slice(&resp[13..21]);"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 286,
+   "snippet": "session.s_enc = kdf(static_enc, &dd_enc);"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/scp03_logic.rs",
+   "line": 390,
+   "snippet": "pub(crate) fn kdf(static_key: &[u8; 16], dd: &[u8; 32]) -> [u8; 16] {"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/scp03_logic.rs",
+   "line": 175,
+   "snippet": "let mut mac = <Cmac<Aes128> as CmacMac>::new_from_slice(key).unwrap();"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/scp03_logic.rs",
+   "line": 24,
+   "snippet": "use aes::Aes128;"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/Cargo.toml",
+   "line": 67,
+   "snippet": "aes = { version = \"0.8\", default-features = false, features = [\"zeroize\"] }"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 95,
+   "snippet": "let enc = secret_keys::se050_scp03_enc_key().map_err(|_| Se050Error::Scp03)?;"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "Makefile",
+   "line": 2719,
+   "snippet": "se050-derived-scp03"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 244,
+   "snippet": "scp03::establish(&mut self.scp03, &mut self.t1)?;"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 365,
+   "snippet": "scp03::establish_with(&mut self.scp03, &mut self.t1, &enc, &mac)"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 447,
+   "snippet": "match scp03::establish_with(&mut self.scp03, &mut self.t1, &final_enc, &final_mac) {"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 467,
+   "snippet": "scp03::establish_with(&mut self.scp03, &mut self.t1, &tr_enc, &tr_mac)"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 513,
+   "snippet": "scp03::establish_with(&mut self.scp03, &mut self.t1, &final_enc, &final_mac)"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/main.rs",
+   "line": 3982,
+   "snippet": "if !is_provisioned(&mut *core::ptr::addr_of_mut!(SE)) {"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 1789,
+   "snippet": "if self.init().is_err() {"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/main.rs",
+   "line": 4174,
+   "snippet": "let mut pin = match enter_pin() {"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/hw/saes.rs",
+   "line": 487,
+   "snippet": "let cr_base = CR_KEYSIZE_256 | keysel_bits | CR_KMOD_NORMAL;"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/hw/saes.rs",
+   "line": 448,
+   "snippet": "sw_key: Option<&[u8; 32]>,"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/hw/saes.rs",
+   "line": 464,
+   "snippet": "REG.cr.write(CR_IPRST);"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/hw/saes.rs",
+   "line": 495,
+   "snippet": "if let Some(key) = sw_key {"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/cmac.rs",
+   "line": 61,
+   "snippet": "pub(crate) fn cmac_generic<E, F>("
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/hw/bhk.rs",
+   "line": 397,
+   "snippet": "let expected = match saes::encrypt_ecb_block(KeySel::Software, Some(&bhk), &ACTIVE_KEY_KAT"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 397,
+   "snippet": "tls_prf_sha256(&self.pbs, PRF_LABEL, random_s, &mut key_material);"
+  },
+  {
+   "draft": "SCA-02-se050-tunnel-aes-on-saes.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 1047,
+   "snippet": "let cipher = Aes128::new(key.into());"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/sau.rs",
+   "line": 80,
+   "snippet": "rbar: Reg32,"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/memory-stm32u585.x",
+   "line": 31,
+   "snippet": "RAM   : ORIGIN = 0x30000000, LENGTH = 192K"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/memory-stm32u585-slot-a.x",
+   "line": 52,
+   "snippet": "RAM   : ORIGIN = 0x30000000, LENGTH = 192K"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/memory.x",
+   "line": 24,
+   "snippet": "RAM   : ORIGIN = 0x38000000, LENGTH = 128K"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1042,
+   "snippet": "pub(super) static mut SIGN_SNAP_BUF: [u8; SIGN_SNAP_BUF_LEN] = [0u8; SIGN_SNAP_BUF_LEN];"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/main.rs",
+   "line": 4751,
+   "snippet": "unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/main.rs",
+   "line": 4756,
+   "snippet": "nsc::zeroize_sensitive_state();"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/main.rs",
+   "line": 4749,
+   "snippet": "#[cfg(all(not(test), feature = \"stm32u585\"))]"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/main.rs",
+   "line": 1354,
+   "snippet": "sau::init();"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "docs/architecture/trezor-comparison.md",
+   "line": 429,
+   "snippet": "PQSigner currently uses only SAU; MPU is unused. Adding MPU is the standard DEP defense and costs ~150 LOC"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "docs/architecture/trezor-comparison.md",
+   "line": 433,
+   "snippet": "W^X recommendation in the first paragraph of §3.2 stands"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "docs/STATUS.md",
+   "line": 626,
+   "snippet": "MPU privilege-banking"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/rng.rs",
+   "line": 20,
+   "snippet": "#[link_section = \".pqsigner.rng_backend\"]"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/db_roots.rs",
+   "line": 151,
+   "snippet": "#[link_section = \".pqsigner.erc7730_forced_eligible\"]"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "secure/src/fw_update/vendor_pubkey.rs",
+   "line": 31,
+   "snippet": "#[link_section = \".pqsigner.vendor_pubkey\"]"
+  },
+  {
+   "draft": "X8a-secure-mpu-execute-never-sram.md",
+   "path": "hw/src/mmio.rs",
+   "line": 37,
+   "snippet": "pub struct Reg32 {"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 378,
+   "snippet": "pub fn wots_secret("
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 180,
+   "snippet": "out[24..32].copy_from_slice(&v.to_be_bytes());"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 410,
+   "snippet": "pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32) -> [u8; "
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "sphincs-c10/src/fors.rs",
+   "line": 148,
+   "snippet": "for j in 0..n_leaves {"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "sphincs-c10/src/hypertree.rs",
+   "line": 214,
+   "snippet": "let fors_order = shuffle::fisher_yates(&fors_shuffle_seed, K - 1);"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "sphincs-c10/src/fors.rs",
+   "line": 117,
+   "snippet": "Some(rand) => sha256_parts(&[sk_seed, b\"R_grind\", rand, message, &nonce_b32]),"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 63,
+   "snippet": "self.wots_secret + self.fors_secret"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "tools/sca/README.md",
+   "line": 620,
+   "snippet": "It NEVER reads `sk_seed`"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "secure/src/hw/sca_trigger.rs",
+   "line": 26,
+   "snippet": "c10_sign_verified_with_progress"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 103,
+   "snippet": "power SCA needs a"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 920,
+   "snippet": "needs a ChipWhisperer-Husky / ChipSHOUTER"
+  },
+  {
+   "draft": "c-228-SCA-01-retarget-prf-measurement.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 327,
+   "snippet": "(vendor pin table, PIN 16), so the PWM drives"
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "docs/archive/work-todo-retired-2026-07-19.md",
+   "line": 1920,
+   "snippet": "No cacheable post-sk_seed midstate because sk_seed isn't block-aligned"
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 378,
+   "snippet": "pub fn wots_secret("
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 180,
+   "snippet": "out[24..32].copy_from_slice(&v.to_be_bytes());"
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "sphincs-c10/src/params.rs",
+   "line": 25,
+   "snippet": "pub const D: usize = 2;"
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 410,
+   "snippet": "pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32) -> [u8; "
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 63,
+   "snippet": "self.wots_secret + self.fors_secret"
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "sphincs-c10/src/fors.rs",
+   "line": 117,
+   "snippet": "Some(rand) => sha256_parts(&[sk_seed, b\"R_grind\", rand, message, &nonce_b32]),"
+  },
+  {
+   "draft": "c-229-SCA-03-wots-midstate-correction.md",
+   "path": "sphincs-c10/tests/hash_counts.rs",
+   "line": 73,
+   "snippet": "s.secret_touching() >= 60_000,"
+  },
+  {
+   "draft": "c-236-SCA-01-tunnel-measurement-first.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 286,
+   "snippet": "session.s_enc = kdf(static_enc, &dd_enc);"
+  },
+  {
+   "draft": "c-236-SCA-01-tunnel-measurement-first.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 277,
+   "snippet": "card_challenge.copy_from_slice(&resp[13..21]);"
+  },
+  {
+   "draft": "c-236-SCA-01-tunnel-measurement-first.md",
+   "path": "secure/src/main.rs",
+   "line": 3982,
+   "snippet": "if !is_provisioned(&mut *core::ptr::addr_of_mut!(SE)) {"
+  },
+  {
+   "draft": "c-236-SCA-01-tunnel-measurement-first.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 1789,
+   "snippet": "if self.init().is_err() {"
+  },
+  {
+   "draft": "c-236-SCA-01-tunnel-measurement-first.md",
+   "path": "secure/src/scp03_logic.rs",
+   "line": 24,
+   "snippet": "use aes::Aes128;"
+  },
+  {
+   "draft": "c-236-SCA-01-tunnel-measurement-first.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 397,
+   "snippet": "tls_prf_sha256(&self.pbs, PRF_LABEL, random_s, &mut key_material);"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/src/sau.rs",
+   "line": 35,
+   "snippet": "const SAU_RBAR: usize = 0xE000_EDDC;"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/src/sau.rs",
+   "line": 36,
+   "snippet": "const SAU_RLAR: usize = 0xE000_EDE0;"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/memory-stm32u585.x",
+   "line": 34,
+   "snippet": "RAM   : ORIGIN = 0x30000000, LENGTH = 16K"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/memory-stm32u585.x",
+   "line": 19,
+   "snippet": "Manifest A      8 KB"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/memory-stm32u585.x",
+   "line": 23,
+   "snippet": "Slot B secure 464 KB"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/src/manifest.rs",
+   "line": 41,
+   "snippet": "pub fn at(slot: Slot) -> ManifestRef<'static> {"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/src/verify.rs",
+   "line": 119,
+   "snippet": "const CHUNK: usize = 256;"
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/src/branch.rs",
+   "line": 76,
+   "snippet": "\"msr MSP, r2\","
+  },
+  {
+   "draft": "c-542-X8b-fsbl-execute-protection-decision.md",
+   "path": "fsbl/src/manifest.rs",
+   "line": 32,
+   "snippet": "QEMU/e2e load the secure world directly"
+  },
+  {
+   "draft": "c-715-M04-split-noverdict-and-se-retry-counters.md",
+   "path": "secure/src/pin_attempt_log.rs",
+   "line": 80,
+   "snippet": "NoVerdict = 0x06,"
+  },
+  {
+   "draft": "c-715-M04-split-noverdict-and-se-retry-counters.md",
+   "path": "secure/src/pin_attempt_log.rs",
+   "line": 77,
+   "snippet": "transport, session, or"
+  },
+  {
+   "draft": "c-715-M04-split-noverdict-and-se-retry-counters.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1638,
+   "snippet": "crate::pin_attempt_log::AttemptReason::NoVerdict,"
+  },
+  {
+   "draft": "c-715-M04-split-noverdict-and-se-retry-counters.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1650,
+   "snippet": "_ => crate::pin_attempt_log::AttemptReason::NoVerdict,"
+  },
+  {
+   "draft": "c-715-M04-split-noverdict-and-se-retry-counters.md",
+   "path": "secure/src/main.rs",
+   "line": 4535,
+   "snippet": "const PENDSV_MAX_NO_VERDICT_FAILURES: u32 = 3;"
+  },
+  {
+   "draft": "c-715-M04-split-noverdict-and-se-retry-counters.md",
+   "path": "secure/src/se050/t1oi2c.rs",
+   "line": 47,
+   "snippet": "const MAX_WTX_RETRIES: u32 = 500;"
+  },
+  {
+   "draft": "c-805-M06-rdi-design-constraints.md",
+   "path": "docs/archive/work-todo-retired-2026-07-19.md",
+   "line": 1940,
+   "snippet": "NOT MOTIVATED for the non-sign secret paths. Do NOT build the subsystem."
+  },
+  {
+   "draft": "c-805-M06-rdi-design-constraints.md",
+   "path": "docs/archive/work-todo-retired-2026-07-19.md",
+   "line": 1944,
+   "snippet": "Trezor runs USB + crypto + RDI in one secure context"
+  },
+  {
+   "draft": "c-805-M06-rdi-design-constraints.md",
+   "path": "CLAUDE.md",
+   "line": 364,
+   "snippet": "effective internal state ≥ 246 bits"
+  },
+  {
+   "draft": "c-805-M06-rdi-design-constraints.md",
+   "path": "secure/src/main.rs",
+   "line": 889,
+   "snippet": "const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;"
+  },
+  {
+   "draft": "c-805-M06-rdi-design-constraints.md",
+   "path": "secure/src/fi.rs",
+   "line": 58,
+   "snippet": "let b = crate::rng::byte_nonsecret(FI_DELAY_LAST_GOOD.load(Ordering::Relaxed));"
+  },
+  {
+   "draft": "c-831-M15-cap-the-reseed-retry.md",
+   "path": "secure/src/hw/consumption_mask.rs",
+   "line": 200,
+   "snippet": "if crate::rng::fill(&mut sb).is_ok() {"
+  },
+  {
+   "draft": "c-831-M15-cap-the-reseed-retry.md",
+   "path": "secure/src/hw/consumption_mask.rs",
+   "line": 382,
+   "snippet": "REG.tim_arr.write(TIMER_PERIOD - 1);"
+  },
+  {
+   "draft": "c-861-M06-entry-jitter-must-not-block-lock.md",
+   "path": "secure/src/fi.rs",
+   "line": 58,
+   "snippet": "let b = crate::rng::byte_nonsecret(FI_DELAY_LAST_GOOD.load(Ordering::Relaxed));"
+  },
+  {
+   "draft": "c-861-M06-entry-jitter-must-not-block-lock.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 2007,
+   "snippet": "pub extern \"cmse-nonsecure-entry\" fn nsc_lock() -> u32 {"
+  },
+  {
+   "draft": "c-861-M06-entry-jitter-must-not-block-lock.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1997,
+   "snippet": "pub extern \"cmse-nonsecure-entry\" fn nsc_is_unlocked() -> u32 {"
+  },
+  {
+   "draft": "c-861-M06-entry-jitter-must-not-block-lock.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 2322,
+   "snippet": "pub extern \"cmse-nonsecure-entry\" fn nsc_fw_abort() -> u32 {"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "secure/src/hw/rcc.rs",
+   "line": 143,
+   "snippet": "while REG.cr.read() & HSI48RDY == 0 {}"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fsbl/src/clock.rs",
+   "line": 1,
+   "snippet": "Minimal clock bring-up: MSIS 4 MHz (reset)"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "secure/src/hw/rng.rs",
+   "line": 43,
+   "snippet": "are ignored until the next RNG reset"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "secure/src/hw/rng.rs",
+   "line": 542,
+   "snippet": "REG.cr.write(RNG_CR_NIST_DEFAULT | RNGEN | CONFIGLOCK);"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fsbl/src/hash.rs",
+   "line": 27,
+   "snippet": "GTZC1_TZSC_SECCFGR3 bit 12 (HASHSEC)"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fsbl/src/slot.rs",
+   "line": 47,
+   "snippet": "pub use fw_manifest::{SLOT_NS_CAPACITY, SLOT_SECURE_CAPACITY};"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fw-manifest/src/lib.rs",
+   "line": 177,
+   "snippet": "pub const SLOT_SECURE_CAPACITY: u32 = 58 * 8 * 1024;"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fw-manifest/src/lib.rs",
+   "line": 180,
+   "snippet": "pub const SLOT_NS_CAPACITY: u32 = 64 * 8 * 1024;"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "geometry/src/lib.rs",
+   "line": 51,
+   "snippet": "pub const SECURE_SLOT_SPAN: u32 = 0x72000;"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "geometry/src/lib.rs",
+   "line": 53,
+   "snippet": "pub const NS_SLOT_SPAN: u32 = 0x7A000;"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "geometry/src/lib.rs",
+   "line": 203,
+   "snippet": "pub const ROUTE1_JOURNAL_PAGES: [u8; 2] = [64, 122];"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fsbl/src/main.rs",
+   "line": 367,
+   "snippet": "fn pick_slot(a: Option<Candidate>, b: Option<Candidate>) -> Option<(Slot, [u8; 32])> {"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fsbl/src/main.rs",
+   "line": 250,
+   "snippet": "if !optbytes::persistent_confirmed_match() {"
+  },
+  {
+   "draft": "c-864-M05-fsbl-trng-and-tail-scan-constraints.md",
+   "path": "fsbl/src/main.rs",
+   "line": 287,
+   "snippet": "if display_verdict != fi::OK_SENTINEL {"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 723,
+   "snippet": "since neither board drives a load from the mask pin"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 712,
+   "snippet": "not(feature = \"consumption-mask\"),"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "README.md",
+   "line": 261,
+   "snippet": "TIM2 CH1 PWM consumption mask on PA5"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "README.md",
+   "line": 417,
+   "snippet": "TIM2 CH1 PWM SCA mask on PA5"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 333,
+   "snippet": "pub const MASK_PWM_PIN: u32 = 6;"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "CLAUDE.md",
+   "line": 230,
+   "snippet": "`consumption-mask` (TIM2 CH1 PWM on PA5"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "CLAUDE.md",
+   "line": 327,
+   "snippet": "| `secure/src/hw/consumption_mask.rs` | TIM2 CH1 PWM on PA5, randomised duty cycle. |"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 306,
+   "snippet": "(TIM2 PWM on PA5)"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 308,
+   "snippet": "masking is the only SCA mitigation today"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "sphincs-c10/src/hypertree.rs",
+   "line": 214,
+   "snippet": "let fors_order = shuffle::fisher_yates(&fors_shuffle_seed, K - 1);"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "docs/security/red-teaming.md",
+   "line": 881,
+   "snippet": "measurably raises CPA trace count"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 175,
+   "snippet": "PA5, TIM2_CH1 AF1"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "docs/architecture/trezor-comparison.md",
+   "line": 425,
+   "snippet": "Recommended for signature operations"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "secure/src/main.rs",
+   "line": 1411,
+   "snippet": "TIM2 CH1 PWM on PA5"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "secure/src/hw/consumption_mask.rs",
+   "line": 178,
+   "snippet": "into TIM2 CCR1"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "secure/src/hw/consumption_mask.rs",
+   "line": 185,
+   "snippet": "physically drives the observable PA5 PWM duty"
+  },
+  {
+   "draft": "c-866-M15-remaining-stale-mask-claims.md",
+   "path": "secure/src/hw/consumption_mask.rs",
+   "line": 102,
+   "snippet": "#[cfg(feature = \"debug-log\")]"
+  }
+ ],
+ "measurements": [
+  {
+   "surface": "fi",
+   "what": "Can the bootloader gate defects (signature gate single skip, slot word, slot choice) be hit on silicon?",
+   "needs": "Open bench board with debug port, glitch rig, a trigger toggle in the bootloader (does not exist yet)",
+   "tracked_by": "none (leg 3 of the FI-01 draft; code defects are #847)"
+  },
+  {
+   "surface": "fi",
+   "what": "Flash cost of the bootloader pre-freeze changes and whether the derived write-protected page range changes",
+   "needs": "Host build only: make fsbl BOARD=pq1 before and after",
+   "tracked_by": "none directly (#541 is the combined-link gate)"
+  },
+  {
+   "surface": "sca",
+   "what": "Does the consumption mask change traces-to-detect at all (off, unloaded, loaded), raw and after a high-pass filter?",
+   "needs": "iota2 kit with a resistor on PA5 (the pq1 pin PA6 is not connected), shunt, oscilloscope",
+   "tracked_by": "#646 (one line); arms specified in the comment draft on #228"
+  },
+  {
+   "surface": "sca",
+   "what": "Can pre-PIN SCP03 handshakes be repeated without limit by power-cycling, and are failed handshakes counted anywhere?",
+   "needs": "Code trace plus a logic analyser on the SE050 I2C bus over repeated power cycles on the open bench board",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "sca",
+   "what": "Is the oscilloscope-plus-shunt chain sensitive enough for a leakage test, or is a ChipWhisperer needed?",
+   "needs": "Capture a known-leaky reference (for example software AES on the same board) and report the noise floor",
+   "tracked_by": "none (#866 lists the two documents that disagree)"
+  },
+  {
+   "surface": "sca",
+   "what": "Leakage of the single SHA-256 over the 8-digit PIN in the OPTIGA driver (secure/src/optiga/mod.rs:916)",
+   "needs": "Same capture chain and a trigger around the hash",
+   "tracked_by": "none"
+  }
+ ],
+ "new_defects": [
+  {
+   "file": "secure/src/hw/consumption_mask.rs",
+   "line": 138,
+   "quote": "static mut PRNG_STATE: u32 = 0;",
+   "note": "CLAUDE.md:364 permits a TRNG-seeded generator for the mask's PWM duty only under conditions that include (b) 'effective internal state ≥ 246 bits' and zeroize on lock. The mask's generator is a 32-bit xorshift whose state is referenced nowhere outside the driver, so it is not zeroized on lock; #805 and #831 discuss condition (d) only, and no issue mentions (b). Not drafted anywhere; it would attach naturally to #831 or #646."
+  },
+  {
+   "file": "docs/security/threat-model.md",
+   "line": 242,
+   "quote": "MPU regions enforced in both worlds",
+   "note": "The threat model lists this as a present control against reading secure RAM from the non-secure world. No image programs any MPU register at master (search of secure/src, nonsecure/src, fsbl/src, shared/src, hw/src), and #866 does not list this sentence. Not drafted anywhere; it would attach naturally to #866, or to the X8a issue as a doc fix."
+  }
+ ]
+}

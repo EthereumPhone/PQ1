@@ -1,0 +1,178 @@
+{
+ "merge": {
+  "cluster": "consumption-mask",
+  "title": "Consumption mask: measure it on the signing channel first, then either load-and-keep or demote it; stop presenting an unloaded PWM as a CPA/DPA defence",
+  "threat": "Bench CPA/DPA/TVLA attacker with a shunt or EM probe on a powered, unlocked device, targeting the ~70,754 sk_seed-absorbing SHA-256 PRF calls per C10 sign that run through the non-DPA-hardened HASH peripheral. The production fence (secure/src/nsc/mod.rs:694-725) forces `consumption-mask` on and its text says that without it the WOTS/FORS secrets are exposed to bench CPA/DPA. That overstates what the mask does: on pq1 it is a 10 kHz PWM into an NC pad (PA6, secure/src/board/pq1.rs:301-316), stepped once per ~1 ms SysTick from an xorshift32 (secure/src/main.rs:4329-4337). Into a bare pad the duty cycle does not change supply current; only frequency does (CV\u00b7f is sub-microamp at 10 kHz). So the only \"hiding\" layer claimed for the signing channel is, as built, almost certainly a physical no-op, and nobody has measured it. The display-SPI variant of the threat (D-06) is out of scope: a 10 kHz mask cannot touch 20 MHz bus content.",
+  "proposal": "SCA-07 survives for the signing channel only, as a measurement-gated item rather than a build item. D-06 is absorbed only where it overlaps.\n\nStep 1, measurement (bench, no pq1 board change). Add three arms to the already-planned on-silicon PRF TVLA (#228): mask off, mask on unloaded, mask on loaded. Run on iota2, where a resistor can be hung on PA5/TIM2_CH1 (round-1 says it is header-accessible; confirm on the board) from the MCU VDD domain to GND, sized inside the GPIO limit (a few mA). Use the Rigol MHO934 with a 1-10 ohm shunt and the `sca-trigger` GPIO (secure/Cargo.toml:644-652). Report max|t| and traces-to-detect for each arm, both raw and after a >100 kHz high-pass filter; the filtered number is the one that matters. Record it in docs/hardware/evt-silicon-validation.md, which today has no mask row in \u00a79 (:908-924) even though consumption_mask.rs:48-49 and pq1.rs:314-315 say it does.\n\nStep 2, decision gate.\n- If the loaded mask gives a material, filter-robust increase in traces-to-detect: raise the pq1 hardware ask (load on PA6 on the MCU VDD domain, next spin) and do the GPDMA port as the #831/#646 fix. Port details: GPDMA1 channel in circular linked-list mode, request TIM3_UP on pq1 and TIM2_UP on iota2, destination CCR1, SEC|PRIV|SRC_SEC|DEST_SEC, table in secure SRAM, refilled from the platform TRNG (`rng::fill`, never `rng_strong`) continuously during signing. A faithful Trezor port is not enough here: Trezor refills its 119-entry table only on display refresh (consumption_mask.c:34-38, vg-2864/display_driver.c:417), so over a 7 s sign with no refresh it is a fixed 11.9 ms periodic pattern that averages out. A TRNG-fed table also removes the xorshift32, which is currently an allowlisted exception to CLAUDE.md:355 \"No software PRNG\".\n- If not (my expectation, from an unmeasured back-of-envelope: the load adds a low-frequency term that a high-pass removes, leaving two edge transients per 100 us that touch only a few percent of PRF calls): do not add a load to pq1 and do not port GPDMA. Demote the claim instead. Reword the fence in nsc/mod.rs:694-725, CLAUDE.md, README.md:233 and red-teaming.md \u00a76.7 from countermeasure to unvalidated noise source. Whether to keep the fence at all is an owner decision. The signing-channel SCA posture then rests on the F-16 shuffle, the per-chain cap, the PIN/dual-SE gate and the #228/#229 disposition.\n\nStep 3, independent of the measurement (firmware and docs, small).\n(a) Close #831/#646 minimally: count reseed skips, retry on the next tick instead of waiting a full 1024-tick window, add host tests for the success / all-zero / error transitions. The #831 follow-up comment measured zero lost acquires on a non-signing bench, so the bias toward signing windows is structural but unobserved; measure the skip rate under a signing workload.\n(b) Land the driver half of the PRNG refactor. At HEAD, hw/consumption_mask.rs still has inline `static mut PRNG_STATE`/`RESEED_TICKS` (HEAD:138,145,194-208), while consumption_mask_prng.rs:22-42 states it has no production caller, so its tests cover a reference copy. The fix exists only as an uncommitted working-tree diff (41+/75-).\n(c) `selftest_pin_toggles()` runs only under `debug-log` (consumption_mask.rs:93-110), so a shipping image never checks that the PWM reaches the pad. Either run it unconditionally with a non-fatal sticky flag, or state that it is bench-only.\n(d) Fix stale claims: red-teaming.md:694 (\"seeded from rng_strong\"; it is the platform TRNG), red-teaming.md:306 (\"masking is the only SCA mitigation today\"; F-16 exists), README.md:88,261,417 and nsc/mod.rs:698 / main.rs:1408 comments (\"TIM2 CH1 on PA5\"; pq1 is TIM3_CH1/PA6), and the dangling \u00a79 reference.",
+  "members": [
+   {
+    "id": "D-06",
+    "disposition": "dropped",
+    "note": "Refuted on feasibility in round 1 (confidence 0.82), and I agree after reading the code. The named threat is content-dependent SPI leakage at 20 MHz; the mask is a 10 kHz PWM, and the Trezor precedent defends OLED row current on T2B1/T3B1 only, a different channel. Part 1 (randomize on every flush, drawn from rng_strong) is a no-op next to the existing 1 ms cadence, and rng_strong must stay out of the display path. Part 2 (GPDMA table) and part 3 (load plus TVLA) are the same as SCA-07 (b) and (a)/(c) and are carried there, re-pointed at the signing channel and gated on measurement."
+   },
+   {
+    "id": "SCA-07",
+    "disposition": "modified",
+    "note": "No round-1 verdict existed; I verified it myself. Its repo-evidence claims hold: unloaded NC pad, SysTick-stepped xorshift, fail-open silent reseed, stale docs, Trezor's 119-sample GPDMA table on OLED models only, and its own admission that neither vendor documents a load or a measured figure. Kept: the measurement (c), the #831/#646 fix, the doc and fence honesty outcome. Changed: order reversed to measure first on iota2, with the pq1 load and the GPDMA port conditional on the result; priority P1 to P3. Dropped: tying TIM3_CH1 to the backlight driver enable, and 'refill per display refresh' as the refill trigger."
+   }
+  ],
+  "dropped_parts": [
+   "D-06 part 1, randomize() at the top of every display flush / present_frame_ex: no-op on pq1 (a 48.6 ms blit already spans ~48 duty changes) and the wrong band for a 20 MHz bus signal.",
+   "D-06, drawing the per-flush sample from rng_strong: rng_strong does SE I2C round-trips; consumption_mask.rs documents that calling it here broke se_random's init precondition, and the wizard has the SE bus live.",
+   "D-06 as a display-emanation countermeasure in any form: no supply-side mask addresses SPI bus EM. Display emanation stays with #237 and a separate cluster.",
+   "SCA-07 (a) alternative, tie TIM3_CH1 to the backlight/LED driver enable: LCM_EN (PB15) enables the I2C-controlled AW99703 boost driver (pq1.rs:118-124, 247-248). A 10 kHz random duty there modulates trusted-display brightness, loads the boost converter rather than the MCU rail, and couples a security pin to the display the FSBL fingerprint depends on (#705).",
+   "SCA-07 (b), refill the table 'per display refresh': that is Trezor's OLED-specific trigger. For signing the table must be refilled during the sign, or it becomes a subtractable periodic pattern.",
+   "Populating a load on pq1 PA6 now: PA6 is pin 16 NC, so this is a PCB respin for an effect that is unmeasured and physically doubtful. Deferred behind the iota2 measurement.",
+   "GPDMA port now, unconditionally: it polishes a pin with no demonstrated electrical effect, adds flash to an image that is 76,949 B over the slot with ui-px (34,071 B headroom without), and adds a secure DMA channel whose NS isolation is not silicon-verified (#53). Deferred behind the measurement.",
+   "P1 / 'Trezor parity on the same MCU family' framing: Trezor enables the mask only on its two OLED models and publishes no load and no measurement, so there is no vendor evidence that it protects a signing channel."
+  ],
+  "tracked_issues": [
+   "#831 (open): periodic reseed fails open and silently; follow-up comment measured zero lost acquires at non-signing bench load, so the signing-window bias is unobserved; count/retry fix still open",
+   "#646 (open): make reseed degradation explicit; acceptance criteria already include host tests and 'on-silicon trace evidence before claiming masking efficacy'",
+   "#228 (open): on-silicon TVLA on the sk_seed-absorption PRF window, explicitly 'with F-16 shuffle + consumption-mask + hardware noise floor combined'; the natural home for the mask arms",
+   "#236 (open): on-silicon SCA confirmation of emulation-only sweeps; same rig",
+   "#229 (open): v2 PRF restructure, the only remaining SHA-2-preserving fix if the PRF leaks; breaks invariant #6, so next-generation only",
+   "#53 (open): GPDMA blocked from secure SRAM never verified on silicon; prerequisite for any secure GPDMA mask channel",
+   "#805 (open): no global timing jitter / RDI; adjacent, not part of this cluster",
+   "#237 (open): display-emanation side channel, seed-wizard scope; where D-06's actual threat belongs"
+  ],
+  "untracked_delta": "No issue tracks any of the following.\n1. The mask's physical efficacy: mask-off / unloaded / loaded TVLA arms on the signing window, and the keep-or-demote decision that follows. #646 says \"obtain trace evidence\" but nothing specifies the loaded/unloaded comparison or the high-pass test.\n2. The fence and doc over-claim (nsc/mod.rs:694-725 against an NC pad) and the decision whether the ship-blocker fence should stay.\n3. A load on the mask pin as a pq1 board ask (conditional).\n4. The GPDMA TRNG-table port with during-sign refill (conditional).\n5. `selftest_pin_toggles()` running only under `debug-log`, so shipping images never check that the PWM reaches the pad.\n6. The uncommitted driver half of the consumption_mask_prng refactor: at HEAD the tests cover a module with no production caller.\n7. Stale docs: red-teaming.md:694 and :306, README.md:88/261/417, the PA5/TIM2 comments in nsc/mod.rs:698 and main.rs:1408, and the dangling \u00a79 reference in consumption_mask.rs:48-49 and pq1.rs:314-315.",
+  "decision_conflicts": [
+   "No conflict with the SHAKE/masked-SHA2 decision: that memory note lists consumption-mask as a retained SCA layer. If the measurement demotes the mask, the retained list shrinks to F-13/F-16/F-17 + OptRand; that must be stated to the owner, and it must not be used to reopen SHAKE or masked SHA-2.",
+   "No conflict with the recorded argument against a global RDI timer (work-todo archive ~:1950-1962): the mask is an amplitude noise source, not timing jitter. The reasoning style of that decision (measure before building) supports gating this item on measurement.",
+   "CLAUDE.md:355 'No software PRNG': the mask's xorshift32 is an allowlisted exception (per #646). A TRNG-fed table would remove it; keeping xorshift keeps the exception.",
+   "CLAUDE.md already says the mask is 'satisfied-by-construction, not demonstrated'; the fence text in nsc/mod.rs still asserts exposure to CPA/DPA without it. The two disagree, and this recommendation resolves toward CLAUDE.md.",
+   "#831 cites a 'CLAUDE.md countermeasure-timing carve-out (2026-10-08), condition (d)'. `grep carve-out CLAUDE.md` returns nothing in the current file, so do not quote that condition as contract text.",
+   "Slot budget: any GPDMA port must report its flash delta; ui-px is already 76,949 B over the 466,944 B secure slot."
+  ],
+  "hardware_asks": [
+   "None now for pq1. Do not spin a board for the mask before the measurement.",
+   "Bench only (iota2): a resistor from the mask pin (PA5/TIM2_CH1) to GND on the MCU VDD domain, sized inside the GPIO current limit, plus a 1-10 ohm shunt or current probe in the MCU supply and a low-noise differential amp (already listed as missing gear in red-teaming.md:99-104).",
+   "Conditional on a positive measurement, for the EVT owner at the next spin: route PA6 (pin 16, currently NC) to a small resistive load on the MCU VDD domain close to the MCU supply pins, not on VDD1_3V3 (the isolated SE rail gated by PA8), with a DNP footprint so it can be depopulated. Budget a few mA continuous; with no battery and supercap only, check this against the power budget.",
+   "Regardless of outcome, useful for all SCA work: a shunt/jumper footprint in the MCU VDD path and an accessible trigger pad (PB3/SWO is the current sca-trigger repoint) on a bench variant of pq1; the enclosed EVT unit has neither."
+  ],
+  "prerequisites": [
+   "Analog capture chain on the bench: the Rigol MHO934 capture path is validated (tools/bench scope_capture.py), but the shunt/diff-amp and the DUT coupling are open. A passive power capture on iota2 does not need the Scaffold glitch coupling or a ChipWhisperer.",
+   "`sca-trigger` wired around the PRF region (first unchecked box in #228).",
+   "A non-shipping build that can turn the mask off for the control arm (the fence allows this under `e2e-test` / `dev-testkey`).",
+   "Commit the driver half of the consumption_mask_prng refactor so the measured firmware is the tested one.",
+   "For the conditional GPDMA port only: #53 silicon check extended to the secure GPDMA channel, plus a flash/SRAM delta against the slot."
+  ],
+  "precedent": "Trezor ships a consumption mask: core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-27 (119 samples, 10 kHz), :34-38 (table filled from rng_get), :82-87 and :117-118 (circular GPDMA linked list, PRIV|SEC|SRC_SEC|DEST_SEC), :94 (TIM2_UP request), initialised in kernel (projects/kernel/main.c:162) and bootloader (projects/bootloader/main.c:336). The feature is enabled only on T2B1 and T3B1 (models/T2B1/model.toml:5, T3B1/model.toml:5), the two monochrome OLED models; no colour-TFT model has it. The table is re-randomised only from the OLED driver's display_refresh (io/display/vg-2864/display_driver.c:417). So the Trezor precedent is for OLED pixel-current leakage, not a signing power channel, and Trezor publishes neither the pin's load nor any measured dilution. Ledger's response to the OLED channel (CVE-2019-14354) was randomised screen-update parameters and inverted-pixel boxes, not a PWM mask. No vendor documents a measured mask on a hash-based signer.",
+  "novelty": "parity",
+  "kind": "mixed",
+  "cost": "M",
+  "priority": "P3",
+  "rationale": "Novelty: the mask itself is Trezor parity (it already exists in pq1); a published loaded-vs-unloaded measurement would be beyond both vendors, but it is evidence, not a feature. Cost: the unconditional part (Step 3 fixes plus the mask arms added to an already-planned capture) is S; M covers the bench analog chain; the conditional load plus GPDMA port would make it M-L with a board spin. Priority P3: the mask does not close the PRF residual either way, the fix that would (#229) is blocked by invariant #6, and the honest-claim correction is cheap. It should rise only if the measurement shows the loaded mask works.",
+  "live_defects": [
+   {
+    "what": "The production-mandatory consumption mask drives no load on pq1, so its randomised duty cannot modulate supply current; the ship-blocker fence nonetheless asserts that the mask is what stands between WOTS/FORS secrets and a bench CPA/DPA attacker.",
+    "evidence": "secure/src/board/pq1.rs:301-316 (PA6 NC); secure/src/hw/consumption_mask.rs:41-51 (unloaded, unmeasured); secure/src/nsc/mod.rs:694-725 (fence text); Makefile:2718 (consumption-mask in PROD_SHIP_FEATURES)",
+    "reachable_in_production_config": "Yes; this is the shipping feature set. The defect is a missing or over-claimed defence, not an exploit by itself. Electrical no-op is by physics argument, not measured.",
+    "severity": "low-medium (claim-vs-reality on an SCA layer; the underlying PRF leak is unmeasured, #228)"
+   },
+   {
+    "what": "Periodic mask reseed is fail-open with no counter or log, and a skipped window costs a full ~1 s before retry.",
+    "evidence": "secure/src/hw/consumption_mask.rs:166-192 (working tree) / HEAD:194-208; secure/src/consumption_mask_prng.rs:84-93; #831, #646",
+    "reachable_in_production_config": "Yes, but the #831 follow-up measured zero skips at non-signing bench load; rate under signing is unmeasured.",
+    "severity": "low"
+   },
+   {
+    "what": "At HEAD the live driver carries its own inline xorshift and reseed state while the tested pure module has no production caller; the fix is an uncommitted working-tree diff.",
+    "evidence": "git show HEAD:secure/src/hw/consumption_mask.rs lines 138,145,194-208; secure/src/consumption_mask_prng.rs:22-42; git diff --stat HEAD shows 41+/75- on the driver",
+    "reachable_in_production_config": "Yes at HEAD (test-coverage gap, not a behavioural bug found).",
+    "severity": "low"
+   },
+   {
+    "what": "The pad-reachability self-test runs only under debug-log, so a shipping image never checks that the mask PWM reaches the pin.",
+    "evidence": "secure/src/hw/consumption_mask.rs:93-110 (#[cfg(feature = \"debug-log\")] around selftest_pin_toggles); no other caller (grep)",
+    "reachable_in_production_config": "Yes; production forbids debug-log.",
+    "severity": "low"
+   },
+   {
+    "what": "Docs describe the mask incorrectly: seeded from rng_strong; TIM2 CH1 on PA5 for all boards; 'masking is the only SCA mitigation'; a \u00a79 bench item that does not exist.",
+    "evidence": "docs/security/red-teaming.md:694, :306; README.md:88, 261, 417; secure/src/nsc/mod.rs:698; secure/src/main.rs:1408; docs/hardware/evt-silicon-validation.md:908-924 vs consumption_mask.rs:48-49",
+    "reachable_in_production_config": "n/a (documentation)",
+    "severity": "low"
+   }
+  ],
+  "residual_after": "Once this lands, the signing power/EM channel is honestly characterised but not closed.\n- An attacker with a shunt or near-field probe still sees ~70,754 sk_seed-absorbing compressions per sign at a fixed intra-call offset through a HASH peripheral with no DPA resistance. A loaded mask at best raises the trace count for low-bandwidth global-rail measurements; it does nothing against a localised EM probe, and a high-pass filter is expected to remove most of it.\n- Single-trace horizontal and template attacks are unaffected by any additive mask.\n- The mask output is itself observable on the pin, so its contribution can be recorded and subtracted by an attacker who probes it.\n- The only structural fix (#229, one secret compression per sign) changes every derived key and is blocked by invariant #6 for this generation. Masked SHA-2 and SHAKE are decided-closed.\n- Practical exposure therefore rests on physical possession of an unlocked device (PIN + dual-SE gate), the F-16 shuffle, and the per-key signature caps, with the #228 measurement deciding whether that is enough.\n- Display-bus emanation (D-06's original threat) and pre-PIN leakage of the SE tunnel keys in software AES/HMAC are untouched by this cluster.",
+  "repo_evidence": [
+   "secure/src/hw/consumption_mask.rs:12-20 (CPU-stepped, 'A full DMA port is a follow-up'), :41-51 (no load on either board, dilution unmeasured), :93-110 (selftest debug-log only), :166-192 (randomize, fail-open reseed)",
+   "secure/src/consumption_mask_prng.rs:22-42 (STATUS: no production caller at HEAD), :46 (RESEED_PERIOD_TICKS 1024), :84-93 (reseed window reset before the offer)",
+   "secure/src/main.rs:4329-4337 (only randomize() caller, SysTick), :1407-1415 (init)",
+   "secure/src/board/pq1.rs:301-316 (PA6/TIM3_CH1/AF2, NC), :118-124 and :247-248 (LCM_EN / AW99703 backlight)",
+   "secure/src/nsc/mod.rs:694-725 (ship-blocker fence text)",
+   "secure/src/sau.rs:316-352, :517-518 (TIM2 and TIM3 secured)",
+   "Makefile:2718 (PROD_SHIP_FEATURES includes consumption-mask)",
+   "docs/hardware/evt-silicon-validation.md:175 (mask 'must sit near/across the die supply to matter'), :757-764, :908-924 (\u00a79 has no mask row; SCA rig not on bench)",
+   "docs/security/red-teaming.md:99-104 (Rigol capability, shunt/diff-amp missing), :306, :692-700",
+   "README.md:88, 233, 261, 417",
+   "docs/archive/work-todo-retired-2026-07-19.md:1950-1962 (RDI rejected on measurement)",
+   "/home/nicola/repos/trezor-firmware/core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-38, 82-94, 115-118",
+   "/home/nicola/repos/trezor-firmware/core/embed/io/display/vg-2864/display_driver.c:417",
+   "/home/nicola/repos/trezor-firmware/core/embed/models/T2B1/model.toml:5, T3B1/model.toml:5"
+  ],
+  "sources": [
+   "gh issues EthereumPhone/PQ1 #831 (with follow-up comment), #646, #228, #236, #229, #53, #805, #237",
+   "scratchpad data: imp/D-06.json, imp/SCA-07.json, verify/D-06.json (already-have / feasible / vendor-claim), inv_sca.json, trezor_sca.json",
+   "memory: feedback_shake_vs_sha2_decided.md, project_bench_harness_tooling.md, project_trezor_critical_port_2026_06.md",
+   "https://donjon.ledger.com/lsb/006/ and https://www.ledger.com/blog/oled-vuln (via round-1 vendor-claim verdict; not re-fetched)"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.8,
+  "reason": "The core recommendation survives: measure before building, stop presenting an unloaded PWM as a CPA/DPA defence, and land the small firmware/doc fixes. All five live_defects are confirmed against the code under PROD_SHIP_FEATURES (Makefile:2718 includes consumption-mask and mode-production, so debug-log is off), with line drift and one severity downgrade. Trezor citations check out (119 samples, TIM2_UP, SEC|PRIV attrs, T2B1/T3B1 only, refresh only from vg-2864/display_driver.c:417).\n\nIt is not refuted, but it has six real holes.\n\n1. Bypass: the mask is weaker than the merge states, even loaded. CCR1 changes once per 1 ms SysTick against a 100 us PWM period, so each duty repeats about 10 times. One SHA-256 compression is about 3 us, so a PRF call sees a constant offset or one edge. In edge-aligned PWM mode 1 the rising edge sits on a fixed 10 kHz grid; only the falling edge moves. Per-trace mean subtraction or a high-pass removes it, and the pin is attacker-observable. Trezor's design has the same property. The loaded arm is therefore very likely negative; it is worth one resistor in an already-planned capture session, not a dedicated one.\n\n2. The over-claim fix is wrongly gated on the measurement. Rewording nsc/mod.rs:694-725 sits in Step 2's negative branch, behind #228, which is priority:low and parked with no bench chain. The same over-claim is listed as a live defect today, and consumption_mask.rs:41-51 plus the compile_error text itself (nsc/mod.rs:717-722) already admit efficacy is unmeasured. Only the comment at :694-705 (\"so the signature stays uncorrelated\") and the first half of the message still assert protection. The rewording should be unconditional.\n\n3. Step 3(a) \"retry on the next tick\" is a regression risk. SysTick is priority 0 (main.rs:885-888). The #831 follow-up measured that a successful reseed runs about 31 nested wait_random loops inside the ISR, and #802 measured what a per-tick rng::fill costs there (about 356 us per 1 ms tick, +55% render, #780 tear bound broken). Uncapped per-tick retry under a persistent TRNG error recreates #802.\n\n4. The conditional GPDMA port is infeasible as specified. \"Refilled from rng::fill continuously during signing\" at 10 kHz is about 10,000 FI-hardened TRNG words per second, and it contends for DriverGuard with the sign path's own draws. It also needs ARR (period) randomisation, not only CCR1, or the rising-edge grid stays subtractable.\n\n5. The iota2 measurement transfers asymmetrically. iota2 is a 169-pin part with a different power network and decoupling from pq1's 48-pin UFQFPN. A negative result supports demotion; a positive result cannot justify a pq1 board spin by itself.\n\n6. A bench prerequisite conflicts with a checked-in doc. evt-silicon-validation.md:921-923 says on-silicon power SCA needs a ChipWhisperer-Husky/ChipSHOUTER that is not on the bench; red-teaming.md:99-104 says the Rigol plus shunt and diff amp suffices. The merge asserts the Rigol path without naming the conflict.\n\nNot checked: whether iota2 PA5 is actually reachable on a header (the merge already says \"confirm on the board\"), and the 70,754 PRF-call figure.",
+  "corrections": "1. Move the fence/doc demotion to Step 3 (unconditional). Reword nsc/mod.rs:694-705 and the first half of the compile_error, README.md:233, and red-teaming.md:306 and \u00a76.7 to \"unvalidated noise source; efficacy pending #228/#646\". A positive measurement can strengthen it later. Whether the fence stays is still an owner decision.\n\n2. Downgrade live defect 1 from low-medium to low. The compile_error text already says \"neither board drives a load from the mask pin and its effectiveness is unmeasured\" (nsc/mod.rs:717-722), and CLAUDE.md:200 says \"satisfied-by-construction, not demonstrated\". What remains is comment and wording drift.\n\n3. Step 3(a): replace \"retry on the next tick\" with a capped or backed-off retry (for example a shortened window, at most N attempts) plus a skip counter. A lost DriverGuard acquire must stay cheap. Measure the skip rate under a signing workload before choosing.\n\n4. Step 3(b): when the working-tree driver diff lands (confirmed 41+/75- on secure/src/hw/consumption_mask.rs; HEAD still has inline PRNG_STATE at :138, RESEED_TICKS at :145, :196-198), delete the STATUS block at consumption_mask_prng.rs:22-43 in the same commit. It becomes false at that moment, and the block itself says so.\n\n5. Step 3(c): choose \"state it is bench-only\". The AF mapping is a build constant already verified on pq1 silicon (CLAUDE.md:200), the pad is NC, and a runtime check that a no-op PWM reaches an unconnected pad adds flash to an over-budget image for no security value. Line drift: the cfg block is at :99-116 in the working tree and :102 at HEAD, not :93-110.\n\n6. Step 3(d): add these stale claims.\n   - docs/hardware/evt-silicon-validation.md:758-764 says a mode-production pq1 image is unsatisfiable because the mask is on PA5; stale since 4dee0b65.\n   - evt-silicon-validation.md:175 has a PA5/TIM2 row with wrong file:line refs.\n   - CLAUDE.md:221 and :318 say \"TIM2 CH1 PWM on PA5\".\n   - docs/hardware/hardware_requirements.md:119-122.\n   - consumption_mask.rs:73, :162, :170.\n   - consumption_mask_prng.rs:4, :12.\n   - docs/architecture/trezor-comparison.md:423-425 recommends the mask \"for signature operations\" and says Trezor drives \"typically a no-connect pin\". The second half is unverified here; if true, it further undercuts the load premise.\n   - The dangling \"\u00a79\" reference also appears in CLAUDE.md:200 and board/iota2.rs:176-180.\n\n7. Step 2, positive branch:\n   - A positive iota2 result does not justify a pq1 spin; repeat on a pq1 bench variant with a shunt footprint first.\n   - The GPDMA design must randomise ARR (period), not only CCR1.\n   - Replace \"refilled continuously from rng::fill\" with a costed design (bulk refill at sign start, or a cheap non-FI raw TRNG read path). Report ISR/CPU cost against #802 and DriverGuard contention against the sign path.\n   - Allocate the GPDMA channel against the ui-px blit DMA (#261/#786/#792, pq1-uiconform worktree).\n\n8. Step 1:\n   - Name and resolve the Rigol-vs-ChipWhisperer conflict between evt-silicon-validation.md:921-923 and red-teaming.md:99-104, or mark the capture chain as unvalidated for TVLA sensitivity.\n   - The mask-off arm needs e2e-test/dev-testkey, which also short-circuits confirm() and makes timing deterministic. Keep that confound constant across all three arms.\n   - sca-trigger is production-fenced (nsc/mod.rs:134-142), so every arm is a non-shipping image.\n\n9. tracked_issues: add #802 and #805's \"25.7% CPU at one site\" note (ISR TRNG cost), #832 (closed), #834 and #835 (rng::fill halt-sink candidate). The halt sink is not on this branch (no \"halt\" in secure/src/hw/rng.rs), but if it lands, the ISR reseed's failure mode changes from fail-open to halt. Also add #261/#786/#792 (GPDMA channel contention) and #312/#298 (adjacent). The existing eight entries are accurate; the #831 follow-up comment is as described.\n\n10. decision_conflicts are accurate. `grep carve-out CLAUDE.md` is empty, confirmed. The work-todo archive :1950-1962 says RDI is \"complementary to the consumption-mask (TIM2 PWM adds amplitude noise but not time jitter)\", and the SHAKE memory lists consumption-mask as a retained layer. Demotion shrinks that list and must be put to the owner explicitly without reopening SHAKE or masked SHA-2.\n\n11. Fix the cost line: the unconditional Step 3 work is S and should not wait on the M bench chain. Split the item into S-now (doc/fence honesty, PRNG refactor commit, capped retry plus counter) and M-parked (mask arms under #228).",
+  "corrected_priority": "P3",
+  "corrected_cost": "M",
+  "corrected_kind": "mixed",
+  "evidence": [
+   "secure/src/hw/consumption_mask.rs:41-51 (unloaded, unmeasured), :99-116 (selftest only under debug-log; sole caller is init), :166-192 (randomize, fail-open reseed via consumption_mask_prng::advance)",
+   "git show HEAD:secure/src/hw/consumption_mask.rs :138, :145, :196-198 (inline PRNG_STATE/RESEED_TICKS; no consumption_mask_prng call); git diff --stat HEAD shows 41+/75-",
+   "secure/src/consumption_mask_prng.rs:22-43 (STATUS: no production caller at HEAD), :85-93 (window reset before the offer; None keeps state)",
+   "secure/src/nsc/mod.rs:694-705 (comment asserts 'stays uncorrelated', 'TIM2-CH1 PWM on PA5'), :706-725 (compile_error; :717-722 already says effectiveness is unmeasured)",
+   "secure/src/main.rs:885-888 (SysTick priority 0), :1407-1415 (init; stale TIM2/PA5 comment), :4329-4337 (sole randomize caller)",
+   "secure/src/board/pq1.rs:301-316 (PA6 NC, TIM3_CH1 AF2); secure/src/board/iota2.rs:172-181 (PA5 unloaded)",
+   "Makefile:2718 (PROD_SHIP_FEATURES has consumption-mask and mode-production; no debug-log)",
+   "docs/hardware/evt-silicon-validation.md:175, :758-764 (stale PA5 / 'unsatisfiable' text), :908-923 (\u00a79 has no mask row; says ChipWhisperer needed and not on bench)",
+   "docs/security/red-teaming.md:99-104, :306, :692-700; README.md:88, 233, 261, 417; CLAUDE.md:200, 221, 318",
+   "trezor-firmware core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-38, 82-94, 132-135; io/display/vg-2864/display_driver.c:417; models/T2B1 and T3B1 model.toml:5 (only these two models)",
+   "gh #831 body and follow-up comment (zero lost acquires at non-signing load; reseed runs ~31 nested delays in the ISR), #646, #228 (priority:low, parked), #802 (per-tick rng::fill in SysTick: ~356 us/ms, +55% render), #835/#834, #53, #237",
+   "docs/archive/work-todo-retired-2026-07-19.md:1950-1962 (RDI rejected on measurement; mask described as amplitude noise)",
+   "grep 'halt' secure/src/hw/rng.rs returns nothing (halt sink #833/#834 not on this branch); grep 'carve-out' CLAUDE.md returns nothing"
+  ],
+  "tracked_issues": [
+   "#831 open",
+   "#646 open",
+   "#228 open (priority:low, parked on bench)",
+   "#236 open",
+   "#229 open",
+   "#53 open",
+   "#805 open",
+   "#237 open",
+   "#802 open (missing from merge: SysTick-context rng::fill cost; constrains the reseed-retry fix and any TRNG-refilled table)",
+   "#834 open and #835 open (missing: rng halt-sink candidate would turn ISR reseed failure from fail-open into a halt; not on this branch)",
+   "#832 closed (missing: rng::fill delay pool, context for ISR fill cost)",
+   "#261, #786, #792 open (missing: ui-px blit GPDMA, channel allocation conflict for a mask DMA channel)",
+   "#312, #298 open (adjacent: CT/SCA regression gate, dudect on silicon)"
+  ],
+  "untracked_delta": "The merge's seven untracked items hold. Four more are untracked:\n1. Reseed retry must be capped because SysTick-context rng::fill is expensive (#802 interaction); neither #831 nor #646 says this.\n2. Stale mask claims beyond the merge's list: evt-silicon-validation.md:175 and :758-764, CLAUDE.md:221 and :318, hardware_requirements.md:119-122, trezor-comparison.md:423-425, consumption_mask.rs:73/:162/:170, consumption_mask_prng.rs:4/:12, and the STATUS block at :22-43 once the driver half lands.\n3. The Rigol-vs-ChipWhisperer contradiction between evt-silicon-validation.md \u00a79 and red-teaming.md:99-104.\n4. Edge-aligned PWM leaves a fixed 10 kHz rising-edge grid; any future mask design needs period randomisation.",
+  "decision_conflicts": [
+   "No conflict with the SHAKE/masked-SHA2 decision, but that memory note lists consumption-mask as a retained SCA layer; demotion must be put to the owner explicitly and must not reopen SHAKE or masked SHA-2.",
+   "No conflict with the RDI decision (work-todo archive :1950-1962); it calls the mask amplitude noise complementary to timing jitter, and its measure-before-build reasoning supports this item.",
+   "CLAUDE.md 'No software PRNG': xorshift32 is an allowlisted exception per #646; unchanged unless the conditional TRNG table lands.",
+   "CLAUDE.md:200 already says 'satisfied-by-construction, not demonstrated' and the compile_error text already says 'unmeasured'; the remaining disagreement is the nsc/mod.rs:694-705 comment plus README and red-teaming wording. Resolving toward CLAUDE.md needs no measurement.",
+   "Removing or relaxing the ship-blocker fence itself is an owner decision (audit secret-lifecycle 20260611 MEDIUM-3); rewording is not.",
+   "Slot budget: ui-px is 76,949 B over the 466,944 B secure slot; a production self-test or a GPDMA port must report its flash delta.",
+   "#831 cites a CLAUDE.md 'countermeasure-timing carve-out (2026-10-08) condition (d)' that is not in the current CLAUDE.md; do not quote it as contract text."
+  ],
+  "live_defect": {
+   "is_defect": true,
+   "severity": "low",
+   "reachable_in_production_config": "Yes for all four code defects under PROD_SHIP_FEATURES (consumption-mask on, debug-log off). None is an exploit by itself; each is a missing, unverified or over-described defence layer. The electrical no-op is a physics argument, not a measurement.",
+   "evidence": "Defect 1 (unloaded mask, fence over-claims): CONFIRMED, severity lowered to low. PA6 is NC (pq1.rs:301-316) and the header admits it (consumption_mask.rs:41-51), but the compile_error already says 'unmeasured' (nsc/mod.rs:717-722); only the :694-705 comment and the first half of the message over-claim. Defect 2 (fail-open silent reseed, full-window retry): CONFIRMED (consumption_mask.rs:181-189; consumption_mask_prng.rs:85-93). Skips measured at zero on a non-signing bench (#831 comment); the proposed per-tick retry needs a cap (#802). Defect 3 (tested PRNG module has no production caller at HEAD): CONFIRMED (HEAD :138, :145, :196-198; consumption_mask_prng.rs:22-43; working-tree diff 41+/75- uncommitted). Test-coverage gap only. Defect 4 (selftest only under debug-log): CONFIRMED (:99-116 working tree, sole caller init), but low value to fix: the AF mapping is a build constant already verified on silicon and the pad is NC, so label it bench-only. Defect 5 (stale docs): CONFIRMED at red-teaming.md:694 and :306, README.md:88/261/417, nsc/mod.rs:698, main.rs:1408, and \u00a79 has no mask row (:908-923). Additional stale sites are listed in corrections."
+  }
+ }
+}

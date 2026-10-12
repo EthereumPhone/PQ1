@@ -1,0 +1,27 @@
+{
+ "id": "FI-07",
+ "title": "Make the emulation FI story a CI gate: nightly rainbow sweeps over fsbl::verify_images, cmd_fw_commit + staging window, confirm/chord gate and the real c10 signer with the correlated-fault model, plus an ELF-level check that double-read/compare sequences survived LTO",
+ "threat": "A green tree says nothing about FI regressions since the last manual sweep: ci.yml has no rainbow step, the full C10 sweep was only smoke-run, the harness c10 target signs twice with plain sk.sign (no F-16 independent shuffle), the correlated-fault class (same deterministic HASH/position fault in both passes) is unmodelled, and TF-M's documented hazard \u2014 the compiler folding redundant reads under -Os/LTO \u2014 has only a local fi_min IR check that is not in invariant-gates.",
+ "proposal": "(1) Add a nightly CI job (self-hosted runner, time-boxed) running tools/sca fault_sweep_* under the three single-fault models + two-fault, publishing the SECURE/INSECURE map as an artifact and failing on any new INSECURE site vs a committed baseline (fi_check style). (2) New targets: fsbl::verify_images + filter_valid (#591), cmd_fw_commit + staging BEGIN\u2192CHUNK\u2192COMMIT (#633), confirm_checked + px chord arming (#211), batch member loop (#335). (3) Correlated-fault mode: inject the identical fault at the identical hash-call index in both sign passes, with and without the F-16 shuffle seeds, and assert ct_eq catches it only when seeds differ (#592/#296). (4) Disassembly gate over the release secure ELF and FSBL ELF: for each `check_true*`, `read_volatile_voted`, FihBool double-read and ct_eq site, assert the expected volatile load/compare count is present (objdump + a small script), added to `make invariant-gates` with check-fi-ir. (5) Retain sweep receipts in-tree so CLAUDE.md claims are auditable.",
+ "rationale": "Ledger ships exactly this workflow (rainbow + fi_check in CI mapping hits to source) and TF-M explicitly warns that optimisation removes FIH code; it is cheaper than the on-silicon gates and is the regression net for every other item here.",
+ "repo_evidence": [
+  ".github/workflows/ci.yml (no rainbow/sca step); nightly.yml:147-215 (cargo-checkct only)",
+  "tools/sca/out/ (only scp03_fi_*.log + f29_regression_matrix.log retained)",
+  "Makefile:4431-4433 check-fi-ir vs :4445-4460 invariant-gates (not included); gh #130 OPEN",
+  "gh #232 OPEN (C10 full sweep), #591 OPEN high, #633 OPEN, #211 OPEN, #592/#296/#593 (correlated fault), #335 (batch loop)",
+  "tools/sca/README.md:55-58 (harness stub contract no longer matches fi.rs's byte_nonsecret/AtomicU8 \u2014 fi_target may not build)"
+ ],
+ "vendor_precedent": "Ledger Donjon rainbow fault_skip/fault_stuck_at + fi_check in CI (blog 'fault-injection-simulation'); TF-M FIH design doc (compiler-elimination warning, simulated skip list for SAU/MPC/PSP-limit/NS-entry).",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "~40 h host compute for the full C10 sweep \u2014 needs sharding or a reduced per-night subset with the full sweep weekly; emulation cannot find unmodelled effects (Ledger's own caveat), so it complements FI-01, not replaces it. Baseline-diff gating can be gamed by moving a site; review the baseline on every change.",
+ "sources": [
+  "https://www.ledger.com/blog/fault-injection-simulation",
+  "https://github.com/Ledger-Donjon/rainbow",
+  "https://nrfconnectdocs.nordicsemi.com/ncs/latest/tfm/design_docs/tfm_physical_attack_mitigation.html",
+  "https://eprint.iacr.org/2023/042"
+ ],
+ "surface": "fi"
+}

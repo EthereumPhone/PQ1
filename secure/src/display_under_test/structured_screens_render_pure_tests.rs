@@ -115,9 +115,11 @@ fn cow_direct_decoded_screens() {
     for want in ["NETWORK", "ORDER", "SELL", "SELLTOK", "BUY", "BUYTOK", "RECEIVER", "EXPIRES", "FEE", "SOURCES", "APPDATA", "MAXFEE", "WORST"] {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
+    // Owner decision 2026-10-09: both legs come before the `Confirm?`.
+    assert_eq!(ids[..8], ["SIGN", "NETWORK", "ORDER", "SELL", "SELLTOK", "BUY", "BUYTOK", "CONFIRM"], "{ids:?}");
     let text = screen_text(&l.screens);
     assert!(text.contains("Wrapped Ether") && text.contains("USD Coin"), "{text}");
-    check("cowswap", "swap", &l, MAINNET, "cow", "8411a6c90b41bc74068808d97b164103c6a7cdc75fd36e13663dbff2de2a9aa3");
+    check("cowswap", "swap", &l, MAINNET, "cow", "8dec40422069f258dc0c0ea6c1c9887bd0249db978eb4eaaa9728ff196d89b16");
 }
 
 #[test]
@@ -128,7 +130,8 @@ fn cow_direct_address_mode_screens() {
     for want in ["SELLTOK", "SELLAMT", "BUYTOK", "BUYAMT"] {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
-    check("cowswap", "address_mode", &l, MAINNET, "cow", "f366018833e32a87ca997ce239332cfd6c9b608e4288d6f43cac1187ed523f82");
+    assert_eq!(ids[3..8], ["SELLTOK", "SELLAMT", "BUYTOK", "BUYAMT", "CONFIRM"], "{ids:?}");
+    check("cowswap", "address_mode", &l, MAINNET, "cow", "33cb8120d9cc40f90ba237bdac98b2591eb909af45e9d96e18b7b85927d73ab5");
 }
 
 #[test]

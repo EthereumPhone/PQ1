@@ -65,7 +65,7 @@
       "axiom_mentions": 1
     },
     "SphincsCVerify/Spec/Hash.lean": {
-      "sha256": "08a5b6abfe95f82acb985d99cfe74be50f67a19e05b99efeb5641b3efeaed695",
+      "sha256": "fba186cef2ebca6dd740da51df6aea6a89788be61101a2d5ad9a14ae19b9e2be",
       "axiom_mentions": 6
     },
     "SphincsCVerify/Spec/Sha256Impl.lean": {

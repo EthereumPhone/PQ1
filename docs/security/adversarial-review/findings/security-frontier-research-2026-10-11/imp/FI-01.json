@@ -1,0 +1,29 @@
+{
+ "id": "FI-01",
+ "title": "Run and publish the first on-silicon FI campaign on the U585: RDP-2 fetch, FSBL verify chain, gated_unlock, c10 ct_eq gate",
+ "threat": "Every FI gate in the tree is evidenced only by source shape, host tests and Unicorn emulation; HW-ASSUME-RDP2 (RDP-2 resists glitching) is the single highest-leverage unverified premise. Bozzato/Focardi 2019 downgraded RDP-2\u2192RDP-1 on STM32F373 with one 11 \u00b5s glitch; Kraken/Unciphered did the same class on F2/F4; Donjon glitched Safe 3's MCU integrity check; \u03bc-Glitch defeated TZ-M on the L5 sibling; \u0160imon\u00edk reports ~76% PIN-check bypass on a U5 sibling. Neither Trezor nor Ledger has published a U5 data point.",
+ "proposal": "Treat it as a release gate with receipts: (1) Scaffold/ChipWhisperer-Husky crowbar + PicoEMP campaign on a sacrificial RDP-2 pq1 board, sweeping the boot-time option-byte fetch (RDP/TZEN latch) for RDP-1 behaviour; (2) glitch sweep of fsbl::filter_valid + verify_images with a deliberately corrupted slot (goal: branch into unsigned slot); (3) gated_unlock pre-commit bump and the SE verdict sentinel with a wrong PIN (goal: unlock or no page-124 charge); (4) c10_sign_verified ct_eq/verify gate with a grafting oracle (Gen\u00eat's SPHINCSplus-FA tooling) to measure exploitable-fault rate with the double-compute ON vs OFF; (5) fixed-vs-random TVLA (1k traces) on the secret-seed PRF to put a number on F-16. Publish scripts + traces under tools/bench as reproducible evidence (Ledger does not publish its own).",
+ "rationale": "Converts 'countermeasures present' into 'countermeasures measured' and either closes HW-ASSUME-RDP2 or forces the design to stop leaning on it. Both the FSBL (frozen forever after RDP-2 per invariant #10) and the first-boot ceremony depend on this answer, so it must precede the shipping ceremony, not follow it.",
+ "repo_evidence": [
+  "docs/hardware/evt-silicon-validation.md:12 ('fault-injection resistance \u2014 has *never* been exercised on any hardware at all')",
+  "tools/bench/ (probe_scaffold.py, probe_rigol.py exist; no fault campaign script)",
+  "contracts/verification/docs/HW_ASSUMPTIONS.json HW-ASSUME-RDP2",
+  "gh #301 OPEN (ChipWhisperer-Husky + PicoEMP + U585 RDP-downgrade question), #376 OPEN ship-blocker (on-silicon descriptor-authority fault campaign), #236 OPEN, #232 OPEN (C10 full sweep never completed)",
+  "secure/Cargo.toml:644-652 sca-trigger feature present, never used (#301)"
+ ],
+ "vendor_precedent": "Ledger Donjon runs Scaffold/laser/EMFI campaigns on its own and competitors' parts and publishes write-ups (Safe 3, TROPIC01, Tangem, RP2350); Trezor's U5 resistance claim rests on 'no public attack yet' \u2014 same unevidenced assumption pq1 currently shares.",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "L",
+ "priority": "P0",
+ "risks": "Burns sacrificial boards; a positive RDP-downgrade result would force a redesign of the verify-once-physically story (but that is exactly why it must run first). Campaign must be fault-model-complete (voltage, clock, EM; laser out of budget) and must not be read as proof of absence beyond the swept windows.",
+ "sources": [
+  "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561",
+  "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+  "https://github.com/AymericGenet/SPHINCSplus-FA",
+  "https://github.com/Ledger-Donjon/scaffold",
+  "https://eprint.iacr.org/2024/367.pdf"
+ ],
+ "surface": "fi"
+}

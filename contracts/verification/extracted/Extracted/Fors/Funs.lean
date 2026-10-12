@@ -59,8 +59,6 @@ def fors.read_bits_le
   (num_bits : Std.Usize) :
   Result Std.U64
   := do
-  massert (num_bits > 0#usize)
-  massert (num_bits <= 57#usize)
   let i ← bit_offset / 8#usize
   let byte_start ← 31#usize - i
   let bit_in_byte ← bit_offset % 8#usize

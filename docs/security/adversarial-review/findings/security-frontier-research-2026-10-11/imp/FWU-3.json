@@ -1,0 +1,27 @@
+{
+ "id": "FWU-3",
+ "title": "Bind the board model and hardware revision into the signed manifest preimage and check it at BEGIN and in the FSBL (the #487 trigger has fired: two boards exist)",
+ "threat": "A validly-signed iota2 image installed on pq1 silicon (or vice-versa) via the companion or a swapped .pqfw. On pq1, PA8 is LDO2_EN \u2014 the rail enable for BOTH secure elements \u2014 while on iota2 it is the RIGHT button; the wrong pin map is physically dangerous and the signature does not prevent it because nothing in the preimage says which board the image is for.",
+ "proposal": "Add `hw_model` (4-byte tag, e.g. b\"PQ1A\" / b\"IOTA\") and `hw_revision` (u16) to the Draft 1.1 V6 signed preimage (owner spec amendment: 121 -> 127 bytes, new digest), bake the expected pair into both the FSBL and the secure image (same allocated-section pattern as `.pqsigner.vendor_pubkey`), and reject on mismatch BEFORE the expensive C10 verify in both `fw_update::verify_manifest` and `fsbl::filter_valid`. fwsign refuses to sign without `--hw-model`, and the release gate cross-checks the model tag against the ELF's `board-*` feature. Until V6 lands, add the same check as an unsigned fast-reject on V1 plus a `make release` refusal, documented as non-authoritative.",
+ "rationale": "Trezor signs hw_model and hw_revision in every header and refuses before signature verification; the boardloader additionally exports board_capabilities so firmware will not stage a bootloader for a different board. pq1 made board selection MANDATORY at build time precisely because a silent wrong pin map put iota2 pins on pq1 silicon once already (CLAUDE.md, 2026-08-31 retraction) \u2014 the update path has no equivalent guard, and the V6 draft, which is the only place a new signed field can go, was frozen without one.",
+ "repo_evidence": [
+  "fw-manifest/src/lib.rs:64-80 (V1 wire layout: no board field; only version + two hashes signed)",
+  "fw-manifest/src/v6.rs:54-76 (121-byte PQFW_V6 preimage: tag, schema, slot, release_version, security_epoch, two lengths, two hashes, vendor_fpr \u2014 no hw_model/hw_revision)",
+  "grep -rn hw_model|hw_revision|board_id over fw-manifest/src fsbl/src secure/src/fw_update secure/src/nsc/cmd_fw_*.rs fwsign/src returns nothing",
+  "secure/src/nsc/cmd_fw_begin.rs:174-178 (slot byte informational; no board check anywhere in BEGIN)",
+  "GitHub #487 OPEN: 'No hw-model/revision binding in the firmware signed preimage (add when a second board exists)' \u2014 BOARD=iota2|pq1 both exist (CLAUDE.md Board targets)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/image/image.c:140-166 (hw_model/hw_revision must equal compiled-in HW_MODEL/HW_REVISION), boot_header.c:183-186, boardloader main.c:119-130 (board_capabilities), wf_firmware_update.c:131-135,166-170. Ledger: model-bound firmware via SE-side checks.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "Any change to the V6 preimage requires the exact approved spec digest + dual review + owner stage decision (CLAUDE.md 'Rollback manifest work is not implementation-approved'); do not land the field without that. Adding it to V1 is not possible without re-provisioning every bench image. Model tag must be chosen so a future board revision that is pin-compatible can be accepted by a range rule rather than exact match, or every ECO forces a new release set (Trezor hit this with its 'expiry' field and shipped without enforcing it).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/image.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/boot_header.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+  "https://github.com/EthereumPhone/PQ1/issues/487"
+ ],
+ "surface": "fwupdate"
+}

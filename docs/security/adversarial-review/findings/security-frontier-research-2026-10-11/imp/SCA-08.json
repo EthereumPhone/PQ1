@@ -1,0 +1,24 @@
+{
+ "id": "SCA-08",
+ "title": "Exponential on-device back-off before every PIN attempt (S-only timer, cancellable), ahead of the counter precharge",
+ "threat": "Automated SCA/FI campaigns against the unlock sequence (profiled PIN-digit recovery on wrong-PIN traces, glitch sweeps on gated_unlock, template attacks on the page-124 precharge) run at the natural ~5 s unlock cadence; the only brake is the 10-attempt wipe, which a glitch campaign is specifically trying to bypass.",
+ "proposal": "Add get_backoff_ms = (2^fails - 1) * 1000 using the page-124 used-count (already read at boot/unlock) and busy-wait it on the S-only TIM (the same timer discipline as the inactivity timeout, so NS cannot shorten it) BEFORE the page-124 precharge and SE call, with the trusted-UI showing a countdown the user can cancel (cancel = no attempt consumed). Apply the same wait before the PendSV re-unlock retry so a persistent SE fault (#692) cannot burn the budget quickly.",
+ "rationale": "Trezor ships exactly this (storage.c:1158-1207); it costs nothing, is S-world only, and multiplies the wall-clock cost of every wrong-attempt trace, which is the unit of work for both the Donjon PIN-SCA and the Masaryk PIN-glitch classes. pq1's lockout is purely count-based today.",
+ "repo_evidence": [
+  "grep -rn 'backoff|back_off|back-off|exponential' secure/src/nsc/cmd_request_unlock.rs secure/src/nsc/mod.rs secure/src/ui/pin_entry.rs -> none",
+  "secure/src/nsc/cmd_request_unlock.rs:82-150 (wait_random + double page-124 reads, no delay scaled by fails)",
+  "secure/src/timeout.rs (S-only TIM exists for the idle timeout)",
+  "issue #692 (PendSV retry burns page-124 budget on a persistent SE fault)"
+ ],
+ "vendor_precedent": "Trezor storage/storage.c:1158-1161 get_backoff_time_ms, :1199-1207 sleep loop with ui_progress cancel (per inventory B).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Must not be gated on an NS-controllable clock; the countdown UI must not itself reset the inactivity timer semantics; the e2e-test build should skip it the way MIN_SIGN_INTERVAL is skipped. A reboot does not reset page-124, so the back-off survives power-cycles by construction.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:1158-1207",
+  "https://www.ledger.com/blog/Breaking-Trezor-One-with-SCA"
+ ],
+ "surface": "sca"
+}

@@ -1,0 +1,212 @@
+{
+ "surface": "fi",
+ "items_written_here": [
+  {
+   "id": "M04",
+   "type": "cluster",
+   "key": "fault-escalation-policy",
+   "home": "fi",
+   "members": [
+    "FI-05",
+    "pin-10",
+    "SYS-04"
+   ],
+   "title": "Fault response without attempt-charging: zeroize-then-reset in the glitch-halt sink, a written verdict-vs-availability rule, sparse phase words, PIN-scrambler RNG fail-closed, and diagnostics-only SE fault counting",
+   "priority": "P2",
+   "merger_priority": "P1",
+   "cost": "M",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#47",
+    "#82",
+    "#109",
+    "#200",
+    "#208",
+    "#366",
+    "#484",
+    "#485",
+    "#692",
+    "#707",
+    "#715",
+    "#719",
+    "#802",
+    "#805",
+    "#834",
+    "#835"
+   ],
+   "live_defects": 5,
+   "hardware_asks": 0,
+   "file": "data/round2/cluster_fault-escalation-policy.json"
+  },
+  {
+   "id": "M05",
+   "type": "cluster",
+   "key": "fsbl-fi-bundle",
+   "home": "fi",
+   "members": [
+    "FI-03",
+    "BOOT-02",
+    "SYS-02",
+    "FWU-2"
+   ],
+   "title": "FSBL pre-freeze FI bundle: fail-closed gate polarity + default-poisoned, redundantly-encoded branch target; minimal TRNG for wait_random; 0xFF tail scan; MSPLIM; #591 sweep as acceptance test (C10 target-sum internals staged behind the sweep)",
+   "priority": "P1",
+   "merger_priority": "P1",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#46",
+    "#130",
+    "#189",
+    "#226",
+    "#301",
+    "#366",
+    "#374",
+    "#401",
+    "#489",
+    "#540",
+    "#542",
+    "#591",
+    "#633",
+    "#642",
+    "#704",
+    "#705",
+    "#742",
+    "#758",
+    "#777",
+    "#805",
+    "#832",
+    "#834",
+    "#835"
+   ],
+   "live_defects": 6,
+   "hardware_asks": 2,
+   "file": "data/round2/cluster_fsbl-fi-bundle.json"
+  },
+  {
+   "id": "M06",
+   "type": "cluster",
+   "key": "random-delay-desync",
+   "home": "fi",
+   "members": [
+    "FI-04",
+    "SCA-05",
+    "pin-07",
+    "SYS-05",
+    "USB-02",
+    "FI-09"
+   ],
+   "title": "Land the fixed FI-delay source on master, add dispatcher-entry jitter, then a measurement-gated always-on RDI on the existing secure SysTick (no timing canary)",
+   "priority": "P2",
+   "merger_priority": "P2",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#46",
+    "#80",
+    "#228",
+    "#241",
+    "#269",
+    "#301",
+    "#401",
+    "#642",
+    "#643",
+    "#780",
+    "#783",
+    "#802",
+    "#805",
+    "#831",
+    "#832",
+    "#833",
+    "#834",
+    "#835"
+   ],
+   "live_defects": 6,
+   "hardware_asks": 2,
+   "file": "data/round2/cluster_random-delay-desync.json"
+  },
+  {
+   "id": "FI-01",
+   "type": "single",
+   "home": "fi",
+   "title": "Run and publish the first on-silicon FI campaign on the U585: RDP-2 fetch, FSBL verify chain, gated_unlock, c10 ct_eq gate",
+   "priority": "P0",
+   "orig_priority": "P0",
+   "cost": "L",
+   "kind": "process",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible",
+    "vendor-claim"
+   ],
+   "file": "data/verify/FI-01.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M01",
+   "key": "measurement-bound-release",
+   "home": "boot",
+   "title": "Measurement-bound secret release: drop. HDP makes it constructible, but the gain is one extra FSBL fault at XL cost; fold the HDP hygiene into #39",
+   "priority": "drop",
+   "status": "rejected",
+   "members_from_this_surface": [
+    "FI-08"
+   ]
+  },
+  {
+   "id": "M02",
+   "key": "option-byte-posture",
+   "home": "boot",
+   "title": "Option-byte posture: pin the unpinned masks on silicon (OEM-lock bits are wrong today), make the surviving production-silent verdicts halt, measure the whole slot window, and keep halt (not wipe) as the mismatch response",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "FI-06"
+   ]
+  },
+  {
+   "id": "M19",
+   "key": "assurance-gates-in-ci",
+   "home": "systemic",
+   "title": "Make the existing assurance execute and block: land the phantom fi_min gate, enrol the local-only gates and never-run suites per-PR, restore the nightly, then add emulation-FI and glyph-leak regression nets",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "FI-07"
+   ]
+  },
+  {
+   "id": "M20",
+   "key": "glitch-environment-sensing",
+   "home": "systemic",
+   "title": "Close the NS clock/power/tamper levers (RCC/PWR/SYSCFG/TAMP secure attribution), then add PVD-5 over BOR-3 with an SRAM-only zeroize, pin BOR_LEV in the ship profile, and run ADC4 analog watchdogs as a log-only slow supply/temperature tamper",
+   "priority": "P0",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "FI-02"
+   ]
+  },
+  {
+   "id": "M21",
+   "key": "memory-fault-resilience",
+   "home": "systemic",
+   "title": "Fail-stop memory integrity: MSPLIM with a re-basing fault trampoline, a decoded and region-scoped ECC NMI, secrets in an ECC-on secure bank, and the SRAM option bits pinned into the ship profile before RDP-2 freezes them",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "FI-10"
+   ]
+  }
+ ]
+}

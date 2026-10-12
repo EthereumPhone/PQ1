@@ -1,0 +1,24 @@
+COMMENT_ON: 854
+---
+**Implementation notes for the secure-world stack limit, plus one related gap that no issue carries: nothing ever clears the stack (2026-10-11 security frontier research, item M21). Lines re-read at master `c2fab970`.**
+
+**1. This has already happened once.** The body says a stack overflow into static data is unproven. The tree records a real one: `secure/src/nsc/mod.rs:1026` describes the sign path's stack growing "down past the BSS top" and overwriting the slot-key cache, which showed up only as an unrelated `InternalError`. (The comment gives a 128 KB RAM size, which is the emulator build's.) It was fixed by shrinking static data, not by a limit. So the failure this issue is about is silent corruption that was observed, not a hypothesis.
+
+**2. Details for the secure-world half.**
+
+- [ ] The runtime crate already exports the right symbol. `cortex-m-rt` is locked at 0.7.5 (`Cargo.lock:339`), and its linker script provides `_stack_end` at the end of static data. Use it as the limit. No custom arithmetic is needed, and the limit must be the end of static data, not the bottom of the RAM region, because the thing to protect is the state in `.bss`. (Read in the local cargo registry copy of 0.7.5, not in the master tree.)
+- [ ] Set the limit in the reset path, before the runtime's own start-up code runs. Setting it at the top of `main` is too late.
+- [ ] Make fault entry safe on an exhausted stack. A stack-limit violation is a UsageFault, and this image enables no UsageFault handler (a search of `secure/src/main.rs` and `secure/src/sau.rs` for `SHCSR` finds nothing), so it escalates to the HardFault handler at `secure/src/main.rs:4751`. That handler is ordinary Rust that calls the zeroize routine, so it would start on a stack that is already at the limit. Options, in the order the research prefers them: enable UsageFault and re-base the stack pointer there (what Trezor does); a naked HardFault entry that re-bases the stack pointer before any Rust runs; or, as the cheap fallback, the control bit that makes HardFault ignore the limit, at the price of the handler's own frames running into `.bss` while it wipes.
+- [ ] If the handler does lock up, the hold time is bounded: the watchdog is in the ship feature set (`Makefile:2662`) and resets after about 2 s (`secure/src/hw/iwdg.rs:108`), and start-up then clears `.bss`.
+- [ ] Set the non-secure stack limit at handover. `secure/src/boot_ns.rs:30` sets the non-secure stack pointers and nothing else. This is hygiene only: the non-secure world owns that register afterwards.
+- [ ] Test it before silicon. The research's reviewer states that the emulated board (`mps2-an505`) models the stack limit register, so a fault test could run in `make e2e`. I did not check that.
+
+**3. Nothing clears the stack, on any path.** `zeroize_sensitive_state` (`secure/src/nsc/mod.rs:1750`) wipes named statics. The stack below the current stack pointer keeps whatever the last deep call left there: entropy temporaries and signing scratch. Start-up clears `.bss` and `.data` on every reset but not the stack region. The hardware fix is the `SRAM_RST` option bit (#848). Two software complements cost nothing irreversible and are not in any issue:
+
+- [ ] Turn on the runtime crate's `zero-init-ram` feature. It zeroes the whole RAM region, stack included, at start-up. `Cargo.toml:146` enables no features today. This also covers a unit whose option bit was set wrongly, and it satisfies an error-corrected bank's need for initialised RAM if secrets move there (#48).
+- [ ] Clear the unused part of the stack on lock, on the idle wipe and in the fault handlers, with volatile writes.
+- [ ] The same crate has a `paint-stack` feature that fills the stack region with a known value at start-up. It gives the on-target high-water measurement that #374 asks for at almost no cost.
+
+**Limits.** A stack limit catches stack-pointer updates and exception stacking. It does not catch a write below the stack pointer that never moves the pointer. The research's claim about Trezor's re-base (in its UsageFault handler) was read in the Trezor source by the reviewer, not by me. Nothing here was run, on the emulator or on silicon. The first-stage bootloader half of this issue is unchanged by this comment and keeps its deadline.
+
+<sub>**Provenance.** Security frontier research, 2026-10-11 (report item M21, section 11). Report priority P1 is a research rating, not an owner decision. Code lines re-read at master `c2fab970` on 2026-10-12; the runtime crate was read in the local cargo registry. Evidence: code reading and public sources; nothing was run on silicon. Report: `docs/security/adversarial-review/findings/security-frontier-research-2026-10-11.md`, committed on branch `docs/security-frontier-research-2026-10` and not yet on master when this was written, so this text is meant to stand alone.</sub>

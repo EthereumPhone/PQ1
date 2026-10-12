@@ -18,11 +18,13 @@
 #   keccak256_pure            aa/userop keccak (UserOp/FunsExternal.lean:14)
 #   sha256_pure_bytes         slot KDF single-shot SHA-256 (SlotKdf/FunsExternal.lean:27)
 #   hmac_sha512_pure_bytes    bip39 seed HMAC-SHA512 (SlotKdf/FunsExternal.lean:41)
+#   The release helper proofs consume no opaque debug-panic Formatter type.
+#     Formatter remains in the dependency environment but no headline closure.
 # `sha256_pure` is a COMPUTABLE def (kernel-only closure), not an axiom.
 #
 # Regenerate/verify against a fresh dump with the same 4-bucket structure:
-#   67 kernel-only + 4 sha256_pure_bytes + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes)
-#   + 4 keccak256_pure = 76 headlines.
+#   211 kernel-only + 4 sha256_pure_bytes
+#   + 1 (sha256_pure_bytes+hmac_sha512_pure_bytes) + 4 keccak256_pure = 220 headlines.
 # The 3 ~42 GB FormatDecimalSpec.* heavies (verify-extracted-heavy) are gated
 # separately with a kernel-only allowlist.
 #
@@ -108,3 +110,214 @@ Extracted.Equiv.firmware_wots_digest_matches_vendored
 Extracted.Equiv.firmware_extract_digits_matches_vendored
 Extracted.Equiv.firmware_wots_digit_array_matches_vendored
 Extracted.Equiv.firmware_wots_digit_sum_matches_vendored
+
+Extracted.Equiv.find_count_first_success
+Extracted.Equiv.find_count_exhausted
+Extracted.Equiv.find_count_total
+
+Extracted.Equiv.grind_r_first_success
+Extracted.Equiv.grind_r_exhausted
+Extracted.Equiv.grind_r_total
+
+# WOTS recovery, including the explicit none/zero distinction.
+Extracted.Equiv.firmware_chain_hash_matches_vendored
+Extracted.Equiv.firmware_th_multi_matches_vendored
+Extracted.Equiv.firmware_pk_from_sig_matches_vendored
+Extracted.Equiv.vendored_wots_recovery_outcome
+
+# XMSS authentication-path recovery.
+Extracted.Equiv.firmware_th_pair_matches_vendored
+Extracted.Equiv.firmware_verify_auth_path_matches_vendored
+
+# FORS single-tree recovery, including the initial secret hash.
+Extracted.Equiv.fors_recovery_spec
+Extracted.Equiv.firmware_fors_recovery_matches_vendored
+
+# FORS forest stage: kernel-only, with full verifier/refinement still open.
+Extracted.Equiv.fors_pk_spec
+Extracted.Equiv.firmware_fors_pk_matches_vendored
+Extracted.Equiv.firmware_fors_normal_roots
+Extracted.Equiv.firmware_verify_rejects_nonzero_fors
+
+# Exact FORS parsers and composed actual-verifier prefix.
+Extracted.Equiv.firmware_parse_fors_secrets_value
+Extracted.Equiv.firmware_parse_fors_auth_value
+Extracted.Equiv.forsForestPhase_matches_vendored
+Extracted.Equiv.firmware_verify_fors_prefix
+
+# Actual hypertree continuation; strict relation assumes a successful strict result.
+Extracted.Equiv.firmware_parse_layer_wots_value
+Extracted.Equiv.firmware_parse_layer_xmss_value
+Extracted.Equiv.parsedLayerCount_val
+Extracted.Equiv.firmware_verify_layer_body
+Extracted.Equiv.firmware_verify_hypertree_loop
+Extracted.Equiv.firmware_verifier_hypertree_continuation
+Extracted.Equiv.strict_hypertree_success_eq_raw
+Extracted.Equiv.firmware_continuation_matches_strict_success
+
+# Complete byte decoder and whole actual/strict verifier relation.
+Extracted.Equiv.loadValue16_signatureNode
+Extracted.Equiv.loadU32BE_parsed_count
+Extracted.Equiv.deserialise_matches_parsedSignature
+Extracted.Equiv.firmware_verify_raw_result
+Extracted.Equiv.byteVerifier_eq_strictResult
+Extracted.Equiv.firmware_verify_accepts_strict_signature
+Extracted.Equiv.firmware_verify_matches_strict_success
+Extracted.Equiv.firmware_verify_strict_forced_refusal
+
+# WOTS generation: kernel-only under the existing supplied SHA backend.
+Extracted.Equiv.wotsSecretPreimage_length
+Extracted.Equiv.wots_secret_spec
+Extracted.Equiv.firmware_wots_secret_matches_vendored
+Extracted.Equiv.wots_keygen_loop_spec
+Extracted.Equiv.wots_keygen_pk_spec
+Extracted.Equiv.firmware_wots_keygen_matches_vendored
+
+Extracted.Equiv.forsSecretPreimage_length
+Extracted.Equiv.fors_secret_spec
+Extracted.Equiv.firmware_fors_secret_matches_vendored
+
+# FORS tree construction and final signature slot
+Extracted.Equiv.fors_root_schedule
+Extracted.Equiv.fors_compute_root_spec
+Extracted.Equiv.fors_root_node_matches_vendored
+Extracted.Equiv.firmware_fors_root_matches_vendored
+Extracted.Equiv.firmware_fors_final_slot_matches_vendored
+
+# FORS authentication-path generation (2026-10-09)
+Extracted.Equiv.fors_auth_leaf_schedule
+Extracted.Equiv.fors_auth_carry_schedule
+Extracted.Equiv.fors_sign_tree_spec
+Extracted.Equiv.fors_auth_path_matches_vendored
+Extracted.Equiv.firmware_fors_auth_matches_vendored
+
+# Actual FORS signing/recovery composition
+Extracted.Equiv.fors_auth_recovery_root
+Extracted.Equiv.firmware_fors_sign_recover_root
+Extracted.Equiv.firmware_fors_sign_recover_matches_vendored
+
+# XMSS key-generation trees and public-root wrapper.
+Extracted.Equiv.xmss_root_schedule
+Extracted.Equiv.xmss_compute_root_spec
+Extracted.Equiv.xmss_compute_pk_root_spec
+Extracted.Equiv.xmss_root_node_matches_vendored
+Extracted.Equiv.firmware_xmss_root_matches_vendored
+Extracted.Equiv.firmware_pk_root_matches_vendored
+
+# XMSS authentication paths and actual-helper membership composition.
+Extracted.Equiv.xmss_auth_leaf_schedule
+Extracted.Equiv.xmss_build_auth_spec
+Extracted.Equiv.xmss_auth_path_matches_vendored
+Extracted.Equiv.firmware_xmss_auth_matches_vendored
+Extracted.Equiv.xmss_auth_recovery_root
+Extracted.Equiv.firmware_xmss_build_recover_root
+Extracted.Equiv.firmware_xmss_build_recover_matches_vendored
+
+Extracted.Equiv.shuffle_permutation_spec
+Extracted.Equiv.wots_sign_first_success
+Extracted.Equiv.wots_sign_exhausted
+Extracted.Equiv.wots_sign_total
+Extracted.Equiv.wots_sign_shuffle_independent
+Extracted.Equiv.firmware_wots_sign_recovers_keygen
+Extracted.Equiv.firmware_wots_sign_matches_vendored
+
+Extracted.Equiv.firmware_sign_fors_normal_loop
+Extracted.Equiv.signer_fors_phase_spec
+Extracted.Equiv.firmware_sign_fors_recovers_pk
+Extracted.Equiv.firmware_sign_fors_shuffle_independent
+Extracted.Equiv.firmware_sign_fors_matches_vendored
+Extracted.Equiv.firmware_sign_fors_prefix
+
+# Actual signature byte writers, parser correspondence and signer caller factoring.
+Extracted.Equiv.firmware_write16
+Extracted.Equiv.firmware_write_fors_secrets
+Extracted.Equiv.firmware_write_fors_auth
+Extracted.Equiv.firmware_write_wots_chains
+Extracted.Equiv.firmware_write_xmss_path
+Extracted.Equiv.firmware_write_count
+Extracted.Equiv.firmware_serialize_forest
+Extracted.Equiv.serializedForest_fields
+Extracted.Equiv.firmware_signer_forest_serialization
+Extracted.Equiv.firmware_serialize_layer
+Extracted.Equiv.serializedLayer_fields
+Extracted.Equiv.signer_layer_serialization_factor
+Extracted.Equiv.firmware_serialize_layer_at_params
+
+Extracted.Equiv.firmware_wots_sign_pure
+Extracted.Equiv.firmware_xmss_signing_path
+Extracted.Equiv.firmware_sign_layer_body
+Extracted.Equiv.firmware_sign_hypertree_loop
+Extracted.Equiv.firmware_sign_hypertree_success
+Extracted.Equiv.firmware_sign_hypertree_top_root
+Extracted.Equiv.firmware_signer_hypertree_suffix
+Extracted.Equiv.firmware_signer_after_forest_pure
+Extracted.Equiv.signer_root_check_match
+
+# Actual nonce/header and complete functional signer, preserving failure.
+Extracted.Equiv.firmware_grind_r_pure
+Extracted.Equiv.pure_grind_r_success
+Extracted.Equiv.firmware_sign_header_pure
+Extracted.Equiv.firmware_sign_header_tail
+Extracted.Equiv.header_indices_bound
+Extracted.Equiv.grind_header_forced_zero
+Extracted.Equiv.serialized_nonce_decodes
+Extracted.Equiv.firmware_sign_whole_pure
+Extracted.Equiv.firmware_sign_whole_shuffle_independent
+Extracted.Equiv.firmware_sign_nonce_exhausted
+Extracted.Equiv.signer_root_check_success
+Extracted.Equiv.firmware_sign_whole_success
+
+# Release-configured caller; existing opaque helper/backend boundaries retained.
+Extracted.Equiv.release_layer_body_projection
+Extracted.Equiv.firmware_release_sign_loop_step
+Extracted.Equiv.firmware_release_sign_loop_done
+Extracted.Equiv.firmware_release_sign_hypertree_loop
+Extracted.Equiv.release_caller_factor
+Extracted.Equiv.release_after_forest_pure
+Extracted.Equiv.firmware_sign_release_pure
+Extracted.Equiv.whole_sign_nodes_root
+Extracted.Equiv.checked_whole_nodes_factor
+Extracted.Equiv.firmware_sign_checked_release_relation
+Extracted.Equiv.firmware_sign_release_valid_key
+Extracted.Equiv.firmware_keygen_sign_release
+Extracted.Equiv.firmware_sign_release_shuffle_independent
+Extracted.Equiv.firmware_sign_release_nonce_exhausted
+
+secure_wrapper_model.wrapper_success_certificate
+secure_wrapper_model.wrapper_entry_success_certificate
+secure_wrapper_model.wrapper_entry_success_verified
+secure_wrapper_model.wrapper_rate_refusal
+secure_wrapper_model.wrapper_rate_readback_refusal
+secure_wrapper_model.wrapper_rate_sentinel_refusal
+secure_wrapper_model.wrapper_inner_cleanup
+secure_wrapper_model.wrapper_inner_refusal
+secure_wrapper_model.wrapper_firmware_release
+secure_wrapper_model.wrapper_success_requires_rate
+
+# Paired integer/list representation of digest fields and complete wire decoding.
+Extracted.C10RepresentationBridge.digest_byte_word
+Extracted.C10RepresentationBridge.digest_word_window
+Extracted.C10RepresentationBridge.extracted_ht_word
+Extracted.C10RepresentationBridge.extracted_fors_words
+Extracted.C10RepresentationBridge.extracted_wots_words
+Extracted.C10RepresentationBridge.counter_word
+Extracted.C10RepresentationBridge.signature_words
+Extracted.C10RepresentationBridge.signature_byte_domain
+Extracted.C10RepresentationBridge.digest_byte_domain
+
+# Paired hash preimages; existing concrete hash model, kernel-only.
+Extracted.C10HashInputBridge.u32_bytes_value
+Extracted.C10HashInputBridge.pad_node_value
+Extracted.C10HashInputBridge.hmsg_input_value
+Extracted.C10HashInputBridge.th_input_value
+Extracted.C10HashInputBridge.pair_input_value
+Extracted.C10HashInputBridge.multi_input_value
+Extracted.C10HashInputBridge.wots_input_value
+Extracted.C10HashInputBridge.r_input_value
+Extracted.C10HashInputBridge.extracted_hmsg_input
+Extracted.C10HashInputBridge.extracted_th_input
+Extracted.C10HashInputBridge.extracted_pair_input
+Extracted.C10HashInputBridge.extracted_multi_input
+Extracted.C10HashInputBridge.extracted_wots_input
+Extracted.C10HashInputBridge.randomizer_input
+Extracted.C10HashInputBridge.extracted_grind_input

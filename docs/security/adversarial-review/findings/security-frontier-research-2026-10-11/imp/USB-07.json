@@ -1,0 +1,22 @@
+{
+ "id": "USB-07",
+ "title": "Bound unsolicited PIN prompts on a LOCKED device: physical 'press to unlock' gate before the keypad plus exponential cooldown per host request",
+ "threat": "When the device is locked, every INS 0x10 pops the trusted PIN dialog and arms a fresh 120 s window; nothing bounds the rate. A hostile companion trains the user to type the PIN into unsolicited prompts (prompt fatigue), blocks NS/USB for up to 120 s per pop, and can time pops to coincide with a shoulder-surf or an EM/power capture of PIN entry. F3 idempotency only covers the UNLOCKED state.",
+ "proposal": "On a host-initiated unlock while locked, paint a passive 'Unlock requested \u2014 press \u2713 to enter PIN' screen; the keypad appears only after a physical button event, so the host can at most show a banner. Track `unlock_requests_since_boot` in S-SRAM and apply an exponential cooldown (1 s, 2 s, 4 s ... capped at 60 s) during which further INS 0x10 return a new `NscStatus::Cooldown` without touching the display; reset the cooldown on a successful unlock or a user-initiated (button) unlock. Apply the same gesture gate to the PendSV idle re-unlock loop so the 120 s NS/USB starvation (#700/#692) becomes user-paced.",
+ "rationale": "The PIN entry is pq1's most SCA/FI-sensitive user interaction and the only secret the user ever types; letting the host schedule it is a gift to an attacker with a probe on the rail. A gesture gate costs one screen and keeps the dialog user-initiated; Trezor also pops its unlock on any host message, so this is beyond parity.",
+ "repo_evidence": [
+  "secure/src/nsc/cmd_request_unlock.rs:18-49 (F3 idempotency only when already unlocked; locked path arms the window and calls enter_pin unconditionally; grep cooldown|backoff|rate -> none)",
+  "GitHub #600 (sign-path anomaly layer only), #700/#692 (PendSV re-unlock loop starvation) \u2014 the locked-prompt storm itself is untracked"
+ ],
+ "vendor_precedent": "none (Trezor's `_pinlock_filter` spawns the unlock dialog on any non-allowlisted message; Ledger requires the app to be opened on-device but the PIN prompt is device-initiated at power-on)",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Adds one button press to every USB-initiated unlock (UX); companions must handle Cooldown; the e2e-test `enter_pin` short-circuit must bypass the gesture gate or `make e2e` breaks; interacts with #713's window-arming decision (arm only after the gesture).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/src/apps/common/lock_manager.py:204-268",
+  "https://donjon.ledger.com/lsb/013/ (screen-off / social-engineering prompt attacks)"
+ ],
+ "surface": "usb"
+}

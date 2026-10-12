@@ -1,0 +1,25 @@
+{
+ "id": "SCA-06",
+ "title": "Device-bound PIN whitening via SAES-CMAC(DHUK) before presentation to either SE (digest-before-send), replacing the raw 8-byte PIN on the SE050 path and the software SHA-256 on the OPTIGA path",
+ "threat": "The raw PIN is sent to SE050 inside SCP03 (se050/mod.rs:3025 unlock(pin: &[u8;8])), and the OPTIGA path hashes the 8-digit PIN on the CPU with software SHA-256 once per attempt (optiga/mod.rs:916-918). Under invariant #3's accepted Grover-2^64 bus residual the plaintext an attacker recovers is the PIN itself; and a single-trace template/SPA attack on one SHA-256 over a ~27-bit input learns typed digits even on a WRONG-PIN trace (Donjon Trezor-One PIN attack class), bypassing the 10-attempt bound.",
+ "proposal": "Pre-launch (CLAUDE.md allows re-provisioning): present to each SE a per-SE, device-bound digest d_X = SAES-CMAC(DHUK, label_X || PIN || salt) (Tier-1 KDF already exists, secret_keys.rs derive_into_saes_kdf) instead of the PIN: SE050 UserID value = d_E (16 B), OPTIGA AuthRef secret = d_O. The PIN bytes then never meet software SHA-256 or the I2C bus; a tapped tunnel yields a value useless without the die; each SE sees a different digest so a leaky SE reveals nothing about the other. Keep invariant #2 intact (the compare stays in SE silicon); update the first-boot wizard, duress-PIN and admin-wipe provisioning to use the same transform. Optionally fold the PIN into SAES via DHUK^BHK so it is bound to the BHK too (Trezor XORK pattern).",
+ "rationale": "Trezor stretches on the MCU (PBKDF2 x20000 + device salt) and then SAES-whitens before anything reaches the Optiga/Tropic, and its docs state the rationale: a compromised link or malicious SE cannot reduce security below 'no SE'. pq1 has the stronger SE-side compare but the weaker transport story. Using SAES-CMAC(DHUK) instead of PBKDF2 keeps the transform on the DPA-hardened block and avoids a long software hash on a low-entropy input.",
+ "repo_evidence": [
+  "secure/src/se050/mod.rs:3025 (unlock(&mut self, pin: &[u8; 8]) -> authenticate_and_read(pin): raw PIN in the SCP03-wrapped APDU)",
+  "secure/src/optiga/mod.rs:70,916-918 (derive_pin_secret = crypto::kdf(PIN_AUTH_DOMAIN, pin, 0): software SHA-256 over the PIN per attempt)",
+  "secure/src/hw/secret_keys.rs:145-200 (derive_into_saes_kdf exists \u2014 DHUK-rooted CMAC KDF available)",
+  "grep 'pbkdf|stretch' secure/src/nsc/cmd_request_unlock.rs -> none"
+ ],
+ "vendor_precedent": "Trezor storage.c:628-677 mcu_pin_stretch + storage.c:665-671 SAES whitening; docs/core/misc/optiga.md:58-66 digest-before-send; optiga.c:976-979 (per inventory B). Ledger: PIN handled inside the SE.",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Re-provisions every bench board and changes the SE050 UserID / OPTIGA AuthRef values \u2014 must land before any shipping provisioning and before the rdp2-self-lock first-boot flow is frozen; DHUK is only final after RDP-2 self-lock, so the transform must use the post-lock DHUK (or BHK) consistently. Duress PIN and admin-wipe UserID flows need the same mapping. Does not change the attempt-counter semantics.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:628-677,665-671",
+  "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md:58-66",
+  "https://www.ledger.com/blog/Breaking-Trezor-One-with-SCA"
+ ],
+ "surface": "sca"
+}

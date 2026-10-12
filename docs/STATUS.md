@@ -7,8 +7,143 @@ This closes the decoder component of #288. The H_msg input-construction
 bridge is also proved against the verifier specification, with an explicit
 streaming backend model. The WOTS digest bridge covers every 32-bit count,
 and all 43 WOTS digits and their sum agree with the verifier specification.
-Hash backend correctness, bounded-grinder/session refinement and the complete
-Rust/EasyCrypt relation remain open.
+The extracted WOTS and FORS grinders now prove first success and bounded
+exhaustion, including unconditional results for every input. The FORS proof
+also covers the exact secret-keyed nonce preimage in both OptRand modes.
+The WOTS recovery caller now agrees with the verifier's chain walks,
+endpoint compression and full-counter recovery values. Its checked outcome
+relation preserves verifier rejection versus Rust's zero sentinel; zero alone
+is not claimed to prove rejection. The extracted XMSS pair hash and nine-level
+authentication-path recovery now also agree with the verifier computation,
+including sibling order and parent/address fields. The actual private FORS
+helper is also extracted and proved to agree with the verifier for its initial
+secret hash and all eleven siblings, including position/domain binding.
+The thirteen-root compression and actual verifier's twelve-root loop now
+preserve every input position and the last slot. The complete Rust verifier
+also has a universal early-refusal theorem for a nonzero final FORS index.
+The actual signature parsers and special last leaf now compose into a
+complete FORS prefix theorem (2026-10-09): on the forced-zero branch, the
+full verifier equals its unchanged WOTS/XMSS continuation supplied with the
+specified FORS public key and offset 2,336. The actual two-layer continuation
+is now total and computes the specified root comparison at final offset 4,008,
+including full four-byte WOTS counters and Rust's zero-node fallback. Successful
+strict-verifier reconstruction agrees with that result. The complete 4,008-byte
+signature decoder now agrees with the actual parser fields, including the final
+partial-word load and all counter bytes. The whole actual verifier is total and
+agrees unconditionally with an executable model preserving Rust's zero-node
+fallback. Acceptance by the faithful strict byte verifier implies Rust acceptance;
+successful strict reconstruction gives the same final Boolean, and forced-zero
+refusal agrees in both. The converse acceptance implication remains open because
+strict rejection is distinct from Rust's zero-node continuation. These results
+do not close the signer/session relation. The actual WOTS secret derivation
+and complete 43-chain public-key generation now agree with the faithful
+reference for every seed and full-width address. FORS secret derivation now
+also agrees with the corrected reference, including all 48 preimage bytes and
+the full hypertree-position field (#820). The reference signer and round-trip
+callers carry that field consistently. The actual FORS stack algorithm now
+provably constructs the recursive height-11 root over all 2,048 leaves, for every
+seed and full-width index. The reference signer's final FORS slot carries that
+full root (#823), and its honest round-trip proof still holds. The actual FORS
+authentication-path generator now also terminates and returns the reference
+secret and all eleven recursive-tree siblings for every valid 11-bit leaf,
+every seed and full-width hypertree/tree index. The actual signing helper,
+eleven-level recovery helper and root builder now compose: the generated
+secret and path recover exactly the constructed root, also matching the
+faithful reference tree. This is a per-tree component theorem with an explicit
+valid-leaf bound. XMSS key-generation tree construction now also agrees with
+the recursive reference: the actual stack processes all 512 WOTS leaves and
+returns the height-nine root, preserving full-width layer/tree addresses. The
+actual public-key-root wrapper pads the public seed and selects layer one,
+tree zero. The actual XMSS authentication-path builder now returns that same
+root and all nine reference siblings for every valid leaf below 512. Its capture
+flags and final copy loop are proved total; the actual WOTS public-key leaf and
+recovery helper recover the independently constructed root. The actual shuffled
+WOTS signer now also has total first-success/bounded-exhaustion semantics,
+43 positional reference chains, shuffle-seed independence, and recovery to
+its actual generated public key. The extracted shuffle itself terminates with
+a permutation of every prefix of length at most 64; no desired-permutation
+premise is imposed. Its private SHA-block helper has an explicit computable
+backend model. The unchanged RustCrypto byte computation is factored into that
+helper for extraction; this does not verify RustCrypto or physical shuffling.
+Eighteen builder/caller-consuming headlines explicitly retain Aeneas's existing opaque
+`Formatter` type dependency from the unreachable debug-panic branch; the
+environment axiom inventory remains unchanged.
+These totality results concern the existing callback-free extraction;
+normal and extraction Rust corpora agree, with progress transcripts checked in
+the normal configuration. The actual shuffled FORS signing forest now terminates
+with every secret, authentication path and root in its specified position,
+including the special final transmitted root and separately hashed compression
+slot. Its outputs recover the same public key through the actual verifier
+forest, and are independent of shuffle seed. An unconditional equality connects
+this result to the unchanged actual signer caller; it preserves header failures
+and the remaining serialization/hypertree continuation. Signature serialization
+now also has exact byte/frame contracts for the actual extracted writers,
+decoder recovery of every supplied field, full four-byte counters and caller
+factoring for both forest and layer writes. An unconditional Result equality
+now composes both actual signer layers with first accepted WOTS counts,
+canonical chains and paths, exact wire offsets, preserved nonce/FORS bytes
+and the top tree root. It preserves bounded signing failure and connects the
+post-FORS caller through the existing final root check. The actual nonce/header
+now has exact first-success/exhaustion semantics, nonce bytes, all digest fields
+and their bounds. An unconditional whole-signer Result equality composes that
+header, canonical FORS forest, both serialized layers and the final root check,
+including shuffle independence. Successful output retains the first nonce bytes
+and matches the independently constructed top key-generation root. This is a
+functional signer result under the existing backend model. The extraction
+retains the source’s final offset/root debug assertions; the normal release
+profile omits them. Root-mismatch failure and success implying a matching root
+are therefore extracted-model facts, not a release-build guarantee. Release
+caller correspondence is now narrower: a separately generated caller with
+all four signer debug assertions disabled has an unconditional pure Result
+relation (2026-10-10). For a root returned by the extracted key-generation call,
+it agrees with the checked caller, including all bounded failures. For arbitrary
+roots the exact relation retains the checked caller's final root guard.
+All 20 registered C10 component extractions now also disable debug assertions
+and retain overflow checks (2026-10-10). Six generated bodies change; their
+bit-window, tree-root, authentication-path, shuffle and whole-verifier proofs
+have been re-established on the release bodies. The other 14 complete raw
+outputs are byte-identical. The 244 audited headlines now comprise 235 with
+only kernel axioms and nine with the existing disclosed hash assumptions;
+none consumes the assertion-formatting type. The helper assertion-profile
+mismatch is closed for these registered components. Concrete hash backends,
+shuffle sub-seed modeling and callback/erasure effects remain explicit boundaries.
+Four host build configurations compare all 4,008 output bytes in both OptRand
+modes and distinguish checked root-mismatch panic from release output rejected
+by verification.
+
+The paired Lean/EasyCrypt representation endpoints now cover every 32-byte
+digest and every 4,008-byte signature, including both full-width counters. Both
+proofs consume definitions emitted from one integer/list expression tree, with
+fidelity and typed mutation checks. The generator and cross-tool arithmetic/list
+interpretation remain explicit TCB; this is a representation component, not a
+full Rust/EasyCrypt session theorem. The research owner documents the remaining
+hash/caller, oracle-history and wrapper-cost obligations. Paired preimage
+endpoints additionally cover H_msg, one-node/pair/multi-node hashing, WOTS
+digest inputs and R derivation, including zero padding, domain tags, both
+OptRand modes and full u32 counter encoding. The extracted hash adapters and
+bounded grinder body consume these forms. These equalities concern the input
+bytes before hashing; address construction, other private derivation inputs,
+hash-backend/oracle interpretation and stateful caller composition remain open.
+
+The ordinary secure-wrapper entry now has a sequential, source-linked model
+(2026-10-11). Its release theorem requires an accepted rate charge and exact
+wrapping read-back, two equal signatures using the same key/message/OptRand,
+verification of the returned bytes, a matching CFI sum, then wipe and barrier.
+Every normally returning inner path has a cleanup certificate; refusal tails
+distinguish entropy cleanup from bad comparison/sentinel/CFI gates followed by
+relock, wipe and barrier. Instantiating its oracles with the extracted release
+signer and raw Rust verifier proves the returned bytes satisfy those models.
+Three production-cfg host builds compare 12,232 cases each; typed Lean and
+compiled Rust mutations test release and refusal gates.
+
+This uses a mechanical explicit-state transformation of the exact wrapper
+slice, Unit progress callbacks and defined dependency models. The transformation,
+SigningKey/backend interpretation and callback non-interference remain trusted
+boundaries, checked by source pins, complete regeneration and finite corpora;
+this is not an all-input proof of the original effectful Rust program. Forced
+receipt validation, physical erasure/fault resistance, hash backend correctness,
+randomness freshness and the complete Rust/EasyCrypt signer/session relation
+remain open. The raw verifier's zero-node continuation remains explicit.
 
 **EasyCrypt coverage tightening (2026-10-08):** canonical witness counting
 reduces the adaptive FORS coverage term while retaining the initialized byte

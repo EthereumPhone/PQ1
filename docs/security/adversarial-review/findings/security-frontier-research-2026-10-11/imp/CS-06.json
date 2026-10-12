@@ -1,0 +1,24 @@
+{
+ "id": "CS-06",
+ "title": "On-chain intent commitment: PQSmartWallet verifies a canonical intent digest for native shapes",
+ "threat": "Today WYSIWYS is a device property only: a faulted/compromised render path (FI on the dispatcher, a future renderer bug of the LSB-024 class) can produce a valid C10 signature over calldata whose semantics were never shown, and the chain accepts it.",
+ "proposal": "Design spike then implement: extend `executeWithOffchainCount` (pre-launch; no address change constraints beyond re-pinning codehashes) with an `intentDigest` argument; the firmware sets it to sha256 over a frozen canonical encoding of the rendered intent class + operands it actually displayed (e.g. `ETH_TRANSFER\u2016chain\u2016to\u2016value`, `ERC20_TRANSFER\u2016token\u2016to\u2016amount`, `ERC20_APPROVE\u2016token\u2016spender\u2016amount`, `BLIND\u2016calldataDigest`); the contract recomputes the digest from (target,value,data) with a tiny on-chain decoder for the native shapes (ERC-20 selectors, empty data, else BLIND) and reverts on mismatch. Because the digest is in callData it is covered by the existing userOpHash/sphincsDigest \u2014 no verifier change. Companion fixtures + Kani harness 'rendered operands == committed operands'.",
+ "rationale": "Unique lever: pq1 controls both the signer and the wallet contract, which Ledger/Trezor never do. It converts 'the device showed X' into 'the chain will only execute what the device committed to', closing the gap between transcript proofs (device) and execution (chain) for the shapes that carry >80% of drain value.",
+ "repo_evidence": [
+  "contracts/smart-wallet/src/PQSmartWallet.sol:239,264 (executeWithOffchainCount / executeBatchWithOffchainCount take no intent field)",
+  "contracts/smart-wallet/src/PQSmartWallet.sol:546-547 (_isSlotAllowedSelector already pins execution selectors \u2014 natural hook)",
+  "grep -rni intentHash|descriptionHash|transcript contracts/smart-wallet/src \u2192 empty",
+  "secure/src/tx/display/dispatch.rs:551-566 (ladder already yields a discrete intent class per request)"
+ ],
+ "vendor_precedent": "none shipped; academic: 'Enforceable Human-Readable Transactions' (ethresear.ch 21836) and EIP-719 Trustless Signing UI Protocol",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P1",
+ "risks": "Gas: +1 word calldata + on-chain decode (~2-5k gas). Grammar must be frozen before launch and reproduced byte-exact in Solidity, Rust and Lean (new FV surface; a mismatch = funds frozen, not stolen \u2014 fail-closed). BLIND class must commit to calldataDigest so the on-chain check is never a semantic claim. Interacts with invariant #6 only via implementation codehash pins, not CREATE2 salt.",
+ "sources": [
+  "https://ethresear.ch/t/enforceable-human-readable-transactions-how-to-solve-bybit-like-hacks/21836",
+  "https://donjon.ledger.com/lsb/024/"
+ ],
+ "surface": "clearsign"
+}

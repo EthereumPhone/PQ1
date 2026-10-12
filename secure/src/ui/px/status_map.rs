@@ -207,7 +207,9 @@ pub fn classify(title: &str, sub: &str) -> Status {
         "WALLET WIPED" | "WIPED" => v(b"WIPED", Icon::Wipe, State::Failed, ResultMark::None, &[b"WALLET WIPED"]),
         "TAMPER DETECT" => v(b"TAMPER", Icon::Alert, State::Failed, ResultMark::None, &[b"TAMPER DETECTED"]),
         "RNG failed" => v(b"RNG", Icon::Die, State::Failed, ResultMark::None, &[b"RNG FAILED"]),
-        "Factory" => v(b"FACTORY", Icon::Gear, State::Awaiting, ResultMark::None, &[b"FACTORY SIGNING"]),
+        // Work in progress inside the sign window: Busy, so a running signing
+        // film keeps the glass instead of being cut for a 3 s notice.
+        "Factory" => Status::Busy(verdict(b"FACTORY", Icon::Gear, State::Awaiting, ResultMark::None, &[b"FACTORY SIGNING"])),
         // ---- the seed wizard -------------------------------------------------
         "Backup OK" => v(b"BACKUPOK", Icon::Shield, State::Done, ResultMark::Check, &[b"BACKUP OK"]),
         "Wrong word" | "Verify fail" => v(b"NOMATCH", Icon::Shield, State::Failed, ResultMark::Cross, &[b"NO MATCH"]),

@@ -226,12 +226,13 @@ def wotsSecret
 
 /-- FORS secret-key derivation.
 
-    `sha256(sk_seed_b32 || "fors" || tree_idx_b4 || leaf_idx_b4)[0..N]` -/
+    `sha256(sk_seed_b32 || "fors" || ht_idx_b4 || tree_idx_b4 || leaf_idx_b4)[0..N]` -/
 def forsSecret
-    (skSeed : ByteVec 32) (treeIdx leafIdx : UInt32) : ByteVec 16 :=
+    (skSeed : ByteVec 32) (htIdx treeIdx leafIdx : UInt32) : ByteVec 16 :=
   truncate16 (sha256 [
     ByteSeg.ofByteVec skSeed,
     ByteSeg.ofByteVec forsTag,
+    ByteSeg.ofByteVec (ofU32BE htIdx),
     ByteSeg.ofByteVec (ofU32BE treeIdx),
     ByteSeg.ofByteVec (ofU32BE leafIdx)])
 

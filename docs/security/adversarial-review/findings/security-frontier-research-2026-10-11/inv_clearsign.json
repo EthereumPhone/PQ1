@@ -1,0 +1,451 @@
+{
+ "surface": "Blind-signing elimination / clear-signing coverage (key=clearsign) \u2014 on-chain UserOp dispatcher (single + batch), off-chain EIP-1271 kinds (RAW32 / PERSONAL_SIGN / EIP712_TYPED / EIP712_TYPED_V3), Safe/CoW/ERC-7730/typed-call/ERC-20 decoders, known-call omission filter, forced-blind candidate, ERC-8213 fingerprints, mandatory envelope pages, trusted-UI consent gates. Read-only inventory, HEAD c75b0d9c on feat/pq1-board-target. EIP-7702 is OUT of scope by design (no EOA key; docs/feature-roadmap-research-2026-06.md:189) and is not treated as a gap.",
+ "has": [
+  {
+   "item": "Priority-ladder sign dispatcher: native CoW v3 > Safe v1 (approveHash) > Safe execTransaction > ERC-7730 (two-pass transcript) > known-call omission filter > value transfer > ERC-20 known > ERC-20 unknown > typed-call > loud blind sign",
+   "evidence": [
+    "secure/src/tx/display/dispatch.rs:551-566",
+    "secure/src/tx/display/dispatch.rs:880-1171",
+    "secure/src/tx/display/mod.rs:159-168"
+   ],
+   "status": "implemented",
+   "notes": "Ordering documented as load-bearing; Safe surface wins over bare CoW so refund pages cannot be hidden (dispatch.rs:896-928). Any Err(()) from the ladder is a refuse-to-sign in the handler (cmd_sign_userop.rs:1559-1561)."
+  },
+  {
+   "item": "Safe approveHash clear-sign: 8-step verifier (framing, selector, len==36, chain pin, safe-addr pin, operation gate, keccak(raw_data)==data_hash, recomputed safeTxHash==calldata[4..36])",
+   "evidence": [
+    "secure/src/tx/eip712/safe/verify.rs:1-45",
+    "secure/src/tx/eip712/safe/verify.rs:113",
+    "secure/src/nsc/cmd_sign_userop.rs:908"
+   ],
+   "status": "implemented",
+   "notes": "Inner SafeTx rendered via safe_display with refund worst-case bound pages (gasToken/gasPrice/refundReceiver) \u2014 safe_display.rs:1-80."
+  },
+  {
+   "item": "Safe execTransaction direct decode (no trailer): strict head length, canonical address words, operation in {0,1}, dynamic-tail framing; Kani-verified host crate pqsigner_tx::safe_tx",
+   "evidence": [
+    "secure/src/tx/eip712/safe/exec_decode.rs:1-50",
+    "secure/src/nsc/cmd_sign_userop.rs:932-1020"
+   ],
+   "status": "implemented",
+   "notes": "Dual verify_and_bind_exec_into + CFI sentinels A/B in the handler."
+  },
+  {
+   "item": "Safe multiSend (MultiSendCallOnly DELEGATECALL) clear-sign: 3 pinned addresses, per-record op==0, <=6 records, strict ABI framing, per-record inner ladder, page-budget refuse-not-truncate via multisend_sign_gate",
+   "evidence": [
+    "secure/src/tx/eip712/safe/multi_send.rs:1-80",
+    "proto/src/lib.rs:1793",
+    "proto/src/lib.rs:1813",
+    "secure/src/nsc/cmd_sign_userop.rs:1224-1263",
+    "secure/src/tx/display/safe_display.rs:48-62"
+   ],
+   "status": "implemented",
+   "notes": "operation=0 CALL to a MultiSend address deliberately stays on generic path (multi_send.rs:65-71). Matches CLAUDE.md claim."
+  },
+  {
+   "item": "Safe management ops (addOwnerWithThreshold/removeOwner/swapOwner/changeThreshold/enableModule/disableModule/setGuard/setFallbackHandler) decoded and rendered with full parameters when SafeTx.to == safe_address",
+   "evidence": [
+    "secure/src/tx/eip712/safe/mgmt_decode.rs:1-29",
+    "proto/src/lib.rs:1837-1851",
+    "secure/src/tx/display/safe_mgmt.rs"
+   ],
+   "status": "implemented",
+   "notes": "Pure logic in pqsigner_tx::safe_mgmt (Kani decode-soundness per shim doc)."
+  },
+  {
+   "item": "Safe-wrapped CoW presign: one binding resolver (direct / approveHash / execTransaction / multiSend-record) requires uid.owner == the Safe and binds the v3 trailer to the exact 164-byte record; fail-closed by construction",
+   "evidence": [
+    "secure/src/tx/eip712/safe/cow_binding.rs:1-60",
+    "secure/src/nsc/cmd_sign_userop.rs:1058-1115"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "CoW downgrade-mitigation gates: setPreSignature on GPv2 (direct or via verified Safe) REQUIRES a verified v3 order trailer; direct-path target must be GPv2; approveHash selector REQUIRES safe_v1 trailer (selector-only claim, closes the 37-byte parser differential)",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_userop.rs:1156-1222",
+    "secure/src/tx/eip712/safe/mod.rs:205-207",
+    "secure/src/nsc/cmd_sign_userop_batch.rs:32-38"
+   ],
+   "status": "implemented",
+   "notes": "Same gates fire per inner-tx in the batch handler."
+  },
+  {
+   "item": "CoW GPv2Order decoded on-device; sell/buy token metadata Merkle-verified against ERC20_DB_ROOT; unknown/failed leg falls to AddrHex (address + raw amount), not a refusal",
+   "evidence": [
+    "secure/src/tx/eip712/cowswap/verify.rs:196-224",
+    "secure/src/tx/eip712/cowswap_display.rs",
+    "secure/src/db_roots.rs:60-68"
+   ],
+   "status": "implemented",
+   "notes": "CLAUDE.md's 'SELL 0.2 USDC for at least 0.0004 WETH' holds only for DB-known tokens; unknown tokens render as hex address legs."
+  },
+  {
+   "item": "ERC-7730 contract-call clear-signing: proof-set trailer Merkle-verified against firmware-pinned ERC7730_DESCRIPTORS_ROOT with canonical leaf-count enforcement (365 prod / 11 e2e), (chain,to) binding cross-check with FI-hardened A/B gates, two-pass render transcript proof, every verified-descriptor render error is a hard refusal",
+   "evidence": [
+    "secure/src/tx/erc7730.rs:53-77",
+    "secure/src/tx/erc7730.rs:112-160",
+    "secure/src/nsc/cmd_sign_userop.rs:595-640",
+    "secure/src/nsc/cmd_sign_userop.rs:796-880",
+    "secure/src/tx/display/dispatch.rs:782-878",
+    "secure/src/tx/display/dispatch.rs:1174-1209",
+    "secure/src/db_roots.rs:115-134"
+   ],
+   "status": "implemented",
+   "notes": "15 FormatOps incl. PQSigner-specific UniswapV3Path (pqsigner-erc7730/src/ir.rs:258-279); COMPACT_MODE=false pinned by const assert (render/mod.rs:374-391, #383)."
+  },
+  {
+   "item": "Known-call omission filter: 16 KiB Bloom of every registry-declared (chain,contract,selector) incl. formats the strict renderer refuses; Bloom-positive without a bound descriptor hard-refuses ('7730 proof needed'); FI-hardened A/B gate; applies also to to=None via all-zero sentinel",
+   "evidence": [
+    "pqsigner-erc7730/src/known_calls.rs:1-25",
+    "secure/src/tx/display/dispatch.rs:1023-1103",
+    "secure/src/tx/erc7730.rs:225",
+    "secure/src/db_roots.rs:137-142",
+    "secure/data/erc7730.review.txt:19"
+   ],
+   "status": "implemented",
+   "notes": "4615 known tuples, 28646/131072 bits set, 25% hard cap (review.txt). Applies to contract calls only \u2014 there is NO analogous omission filter for EIP-712 typed data (see gaps)."
+  },
+  {
+   "item": "ERC-7730 nested-calldata child proof (one level, proof-set trailer, derived child target/selector/interval, child binds to parent chain/target)",
+   "evidence": [
+    "docs/erc7730-nested-calldata-child-proof-design.md:1-12",
+    "secure/src/tx/erc7730.rs:21-25",
+    "dbgen/tests/erc7730_nested_calldata_fixture.rs:82"
+   ],
+   "status": "partial",
+   "notes": "Mechanism landed (#346 closed) but PRODUCTION_NESTED_CALLDATA_ENROLLMENTS is empty and the production catalogue has zero op=calldata formats; only the synthetic fixture (feature erc7730-nested-calldata-test-fixture) exercises it, and its 5 tests run in no CI suite (#724)."
+  },
+  {
+   "item": "Native ERC-20 decode (transfer/transferFrom/approve, strict length + canonical address words) with Merkle-verified metadata (symbol/decimals) when (chain,contract)==tx.to; exact-amount renderability refusal; 'unlimited' approve label; unknown-token loud banner with raw uint256; transferFrom 'From (debited)' page",
+   "evidence": [
+    "tx/src/erc20/calldata.rs:1-27",
+    "secure/src/tx/display/dispatch.rs:1104-1150",
+    "pqsigner-erc7730/src/display/primitives.rs:1321-1325",
+    "secure/src/tx/display/erc20_known.rs:69-94",
+    "secure/src/tx/display/erc20_unknown.rs:14-60"
+   ],
+   "status": "implemented",
+   "notes": "ERC-721 approve(address,uint256) selector collision is acknowledged as indistinguishable (calldata.rs:7-10); for an unknown token a tokenId renders as an 'amount'."
+  },
+  {
+   "item": "Typed-call renderer (selector -> text_sig Merkle-verified against SELECTOR_DB_ROOT, strict two-pass ABI walk, <=6 args rendered, decline-and-fall-back to loud blind sign) plus self-attest selector path labelled 'GUESS:'",
+   "evidence": [
+    "secure/src/tx/display/typed_call/mod.rs:1-45",
+    "secure/src/nsc/cmd_sign_userop.rs:552-575",
+    "secure/src/nsc/cmd_sign_userop.rs:1117-1155",
+    "secure/src/tx/display/blind_sign.rs:46-70",
+    "docs/companion/companion-selector-decoding.md:1-40"
+   ],
+   "status": "implemented",
+   "notes": "Both selector trailers present => refuse. Self-attest has only 4-byte keccak provenance (#420 open owner decision). Banner stays '! BLIND SIGN' on typed-call pages \u2014 types trusted, semantics not."
+  },
+  {
+   "item": "Loud blind-sign fallback: '! BLIND SIGN / Unknown call / Verify on dapp' banner, full target, chain, data length, SHA-256 calldata rows, selector row, optional FUNCTION/GUESS page",
+   "evidence": [
+    "secure/src/tx/display/blind_sign.rs:1-45",
+    "secure/src/tx/display/dispatch.rs:1163-1166"
+   ],
+   "status": "implemented",
+   "notes": "Reachable only after Bloom non-membership is proven (dispatch.rs:566)."
+  },
+  {
+   "item": "Mandatory handler-owned envelope pages with CFI/transcript proofs: signer identity, target identity, native value (when !=0), paymaster warning, 192-bit nonce lane, UserOp gas triple, deployment-mode (initCode factory) page, legacy fee pages; each 'unshown'/'changed' is a refusal",
+   "evidence": [
+    "secure/src/tx/display/value_page.rs:1-45",
+    "secure/src/tx/display/deployment.rs:1-30",
+    "secure/src/tx/display/nonce_lane.rs",
+    "secure/src/tx/display/userop_gas_lane.rs",
+    "secure/src/nsc/cmd_sign_userop.rs:1574-1880"
+   ],
+   "status": "implemented",
+   "notes": "Reserved-page accounting feeds multisend_sign_gate so the 31-page budget fails closed (pqsigner-erc7730/src/display/mod.rs:74)."
+  },
+  {
+   "item": "ERC-8213 two-page fingerprint appended on every companion-supplied signing path (CalldataDigest for UserOp/batch members, Eip712Final, Raw32 + ReplaySafeHash for RAW32, SafeTxHash), with completion proofs; Type-1 rotation consent is the documented sole exemption",
+   "evidence": [
+    "secure/src/tx/display/erc8213.rs:1-50",
+    "secure/src/nsc/cmd_sign_userop.rs:1718-1742",
+    "secure/src/nsc/cmd_sign_userop_batch.rs:1489",
+    "secure/src/nsc/cmd_sign_userop_batch.rs:1945",
+    "docs/companion/erc8213-fingerprints.md:1-18"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Off-chain EIP-1271 kinds: RAW32(0), PERSONAL_SIGN(1), EIP712_TYPED(2), EIP712_TYPED_V3(3, nested-struct display witness); firmware (never companion) performs Solady replay-safe nesting for every kind; bootstrap ownerIndex 0 forbidden; unregistered slot refused except ERC-6492 slot-0 counterfactual",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_offchain.rs:1-60",
+    "secure/src/nsc/cmd_sign_offchain.rs:210-260",
+    "secure/src/nsc/cmd_sign_offchain.rs:286-294",
+    "secure/src/nsc/cmd_sign_offchain.rs:846-905",
+    "proto/src/lib.rs:1317-1339"
+   ],
+   "status": "implemented",
+   "notes": "RAW32 UserOp-forgery oracle fixed 2026-06-11 (replay_safe_hash on-device); CI runs the RAW32-forgery-oracle negative tests (ci.yml:218)."
+  },
+  {
+   "item": "EIP-712 typed-data clear-signing (kind 2/3) requires an ERC-7730 EIP-712 descriptor bundle Merkle-verified against ERC7730_DESCRIPTORS_ROOT plus FI-hardened (chain_id, domain_separator) binding; field-level pages + Eip712Final fingerprint; render failure refuses (never falls to raw hash)",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_offchain.rs:421-560",
+    "secure/src/nsc/cmd_sign_offchain.rs:636-660",
+    "secure/src/tx/erc7730.rs:159"
+   ],
+   "status": "implemented",
+   "notes": "Intent interpolation on EIP-712 formats is rejected ('7730 eip712 interpolation unsupported', render/mod.rs:1131-1133). Nested Permit2/UniswapX structs supported via V3 hashStruct binding (pqsigner-erc7730/src/display/render/nested.rs:1-30)."
+  },
+  {
+   "item": "RAW32 loud blind tier: '! BLIND RAW32' banner, full supplied H AND full replay-safe signed hash both shown as ERC-8213 pages, context pages (chain/account/slot/signer/budget), ERC-6492 '! Undeployed sig' warning",
+   "evidence": [
+    "secure/src/tx/display/eip1271.rs:441-460",
+    "secure/src/nsc/cmd_sign_offchain.rs:918-1120",
+    "docs/companion/companion-app-integration.md:954-969"
+   ],
+   "status": "implemented",
+   "notes": "RAW32 is intentionally opaque \u2014 no semantic claim; disable-in-production is the stated preference (open owner decision #381). There is NO feature flag today that removes/gates RAW32 (grep of secure/Cargo.toml: none)."
+  },
+  {
+   "item": "personal_sign rendering: message bytes paged 48 chars/page with 'Msg N/M' footer, non-printable/non-ASCII bytes replaced by '?', budget/gap row on final page",
+   "evidence": [
+    "secure/src/tx/display/eip1271.rs:331-440",
+    "secure/src/tx/display/eip1271.rs:503-513"
+   ],
+   "status": "implemented",
+   "notes": "Non-injective rendering (?-substitution, trailing whitespace, no byte length) is an open finding #154."
+  },
+  {
+   "item": "Batch sign (CMD 30): per-member pages through the same pick_sign_pages ladder, same per-member CoW/Safe downgrade gates, trailer kinds 1,3..8 routed by tx_idx, batch-wide name bundles, final 'Sign N txs?' gate with Raw32 batch fingerprint, MAX_BATCH_TXS=4, wire v2 only",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_userop_batch.rs:1-46",
+    "secure/src/nsc/cmd_sign_userop_batch.rs:456-600",
+    "proto/src/lib.rs:1936",
+    "proto/src/lib.rs:1975-1993"
+   ],
+   "status": "implemented",
+   "notes": "Forced-blind is explicitly excluded from batch (cmd_sign_userop_forced.rs:3-6)."
+  },
+  {
+   "item": "Forced-blind (feature erc7730-forced-blind): terminal branch after ordinary classification; exact P73K refused-known set F=K\\C (560 groups / 3290 tuples) + Bloom double-check; fixed 29-page raw transcript; PIN-armed single attempt; sign_rate limiter; two warning pages; receipts consumed once",
+   "evidence": [
+    "secure/src/nsc/cmd_sign_userop_forced.rs:1-40",
+    "secure/src/tx/display/forced_blind.rs:1-60",
+    "pqsigner-erc7730/src/forced_eligible.rs:1-30",
+    "secure/src/tx/erc7730.rs:298",
+    "secure/src/db_roots.rs:144-164",
+    "secure/src/nsc/mod.rs:1325-1352",
+    "secure/src/nsc/cmd_sign_userop.rs:1265-1300"
+   ],
+   "status": "fenced-off",
+   "notes": "Default-off; in PROD_FORBIDDEN (Makefile:2675) and asserted forbidden (secure/src/main_sau_pure_tests.rs:1508); mode-production+forced-blind compile_error unless stm32u585+iwdg+ui-lcd (nsc/mod.rs:271-290); stays on the legacy page dialog not ui-px (confirm.rs:90, HARDENING.md:53). v1 architecture REJECTED; v2 awaits owner prompt-abuse decision + fresh dual review (#329). 14 of its guard-rail tests run in no CI suite (#724)."
+  },
+  {
+   "item": "Descriptor catalogue provenance: P73S 256-byte status receipt embedded in firmware, provenance byte dev-unattested vs ERC-8176-verified; erc7730-dev-unattested feature is mutually exclusive with mode-production via compile_error; prod-erc7730-provenance-check Make gate; dbgen computes ERC-8176 keccak(JCS) hashes; DEV UNATTESTED warning page on dev builds",
+   "evidence": [
+    "pqsigner-erc7730/src/catalogue_status.rs:1-60",
+    "secure/src/db_roots.rs:245-254",
+    "secure/Cargo.toml:896-906",
+    "Makefile:2726-2731",
+    "fsbl-tests/tests/erc7730_provenance_fences.rs:59",
+    ".github/workflows/ci.yml:184-198",
+    "pqsigner-erc7730/src/display/render/intent.rs:28-38",
+    "docs/erc8176-attestation-status.md:1-20"
+   ],
+   "status": "partial",
+   "notes": "Host verifier half exists; 0 of our descriptors are ERC-8176 attested; canonical catalogue is dev-unattested (ship-blocker #377)."
+  },
+  {
+   "item": "dbgen curation: PQSigner-local fail-closed overlay (deploymentFormats allowlist, refusalOnlyFormats quarantine), strict-corpus dedup, Bloom occupancy cap, canonical review.txt with per-descriptor emitted semantics and skips",
+   "evidence": [
+    "dbgen/src/erc7730.rs:1018-1046",
+    "dbgen/src/erc7730.rs:4133-4199",
+    "dbgen/src/erc7730.rs:3244-3295",
+    "secure/data/erc7730.review.txt:1-20",
+    "Makefile:2055-2064"
+   ],
+   "status": "implemented",
+   "notes": "EIP-712 descriptors without an explicit overlay keep the historical emit-all default (#534 open, low). dbgen/src/erc7730.rs is a 6,472-line single file (#356)."
+  },
+  {
+   "item": "Address-name trailer: companion-supplied names Merkle-verified against NAMES_DB_ROOT; verified name shown with '+' sentinel plus a 6+6 hex address fingerprint row; chain id numeric always ground truth, chain label advisory",
+   "evidence": [
+    "secure/src/names/mod.rs:1-20",
+    "pqsigner-erc7730/src/display/primitives.rs:475-520",
+    "secure/src/db_roots.rs:76-84"
+   ],
+   "status": "implemented",
+   "notes": "QEMU e2e scenario 5w (name trailer) is a known failing regression (#469/#500)."
+  },
+  {
+   "item": "Legacy 16x4 trusted-UI consent gate: long-right accepted only after the last page has actually been painted (FI-hardened seen_last in NavigationCore); long-left cancels",
+   "evidence": [
+    "secure/src/ui/confirm.rs:136-170",
+    "docs/security/HARDENING.md:46-53"
+   ],
+   "status": "implemented",
+   "notes": "Hint text 'R=Confirm' is hardcoded into value_transfer.rs:81-82 and shows on a non-final page (#714)."
+  },
+  {
+   "item": "Pixel trusted UI (ui-px): every sign dialog (Safe, UserOp, rotation, CoW, ERC-7730, off-chain, batch; forced_blind excepted) renders as pixel screens; chord arms only after last screen painted (PX_COMMIT_REQUIRES_SEEN_LAST = true, pinned by source test); atlas SHA-256 re-hashed before/after every dialog; native trailer screens with per-slot + set proofs",
+   "evidence": [
+    "secure/src/ui/px/confirm_px.rs:57",
+    "secure/src/ui/px/confirm_px.rs:139",
+    "fsbl-tests/tests/source_invariants.rs:878-890",
+    "secure/src/tx/display/mod.rs:36-80",
+    "secure/src/tx/display/trailer_screens.rs",
+    "docs/ui/pixel-ui-pilot.md:120-140"
+   ],
+   "status": "partial",
+   "notes": "NOT in make release (CLAUDE.md: 76,949 B over the secure slot). Chrome mask (Pages::nav) is outside every transcript proof (#762). Interactive presenter has zero automated coverage: all 47 e2e-px transcripts take the e2e-test auto-confirm fast path (#779). Frame-time of the shipping config unmeasured (#781), render cost grows over time (#794)."
+  },
+  {
+   "item": "e2e-test auto-confirm fast path renders every page then returns Confirmed without input; compiled out of production by PROD_FORBIDDEN and nsc/mod.rs fences",
+   "evidence": [
+    "secure/src/ui/confirm.rs:115-134",
+    "Makefile:2672-2675"
+   ],
+   "status": "fenced-off",
+   "notes": "Means no automated test can prove physical consent (#421)."
+  },
+  {
+   "item": "Host-side WYSIWYS assurance: display_under_test harness #[path]-mounts the real dispatcher/renderers; Kani harnesses over multiSend/CoW/typed-call/SafeTx/Safe-mgmt/erc20/erc7730; revm MultiSendCallOnly bytecode differential; fuzz target for erc7730 render dispatch",
+   "evidence": [
+    "secure/src/display_under_test/wysiwys_dispatch_differential_tests.rs",
+    "secure/src/display_under_test/",
+    "secure/src/tx/eip712/safe/multi_send.rs:40-54",
+    "docs/STATUS.md:468",
+    ".github/workflows/ci.yml:269-299"
+   ],
+   "status": "partial",
+   "notes": "Nightly Kani has not completed since ~09-06 (#776); no fuzz target for the cowswap/safe EIP-712 decode legs (#680); fuzz/ workspace outside CI (#451)."
+  },
+  {
+   "item": "Signing rate limiter (1 s min interval, 250 sigs per unlock session) as SCA defence on all sign paths",
+   "evidence": [
+    "secure/src/sign_rate.rs:1-50"
+   ],
+   "status": "implemented",
+   "notes": "SRAM-only; power-cycle resets; daily flash quota deferred."
+  },
+  {
+   "item": "Scope statement of the clear-signing guarantee (structured dispatchers only; RAW32 and forced-blind are NOT clear signing; a tuple in C either clear-signs or fatal-refuses)",
+   "evidence": [
+    "CLAUDE.md 'Scope of the clear-signing guarantee'",
+    "docs/STATUS.md:105-142",
+    "docs/companion/companion-app-integration.md:963-969"
+   ],
+   "status": "implemented",
+   "notes": "Code matches: Bloom-positive without descriptor refuses (dispatch.rs:1070-1101); present-but-broken descriptor refuses (dispatch.rs:1174-1209)."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "RAW32 typed-data downgrade residual: a hostile companion can hash otherwise-supported EIP-712 data and submit it as RAW32, suppressing semantic pages; no feature flag exists to disable RAW32 and no EIP-712-domain omission filter (Bloom analogue) exists for off-chain typed data",
+   "tracked_in": "#381 (ship-blocker, owner decision pending)",
+   "notes": "secure/src/nsc/cmd_sign_offchain.rs:213-218, 918-1120; companion policy only (docs/companion/companion-app-integration.md:963-969). Contract-call omission filter (known_calls.rs) has no typed-data twin."
+  },
+  {
+   "gap": "No generic EIP-712 struct renderer: kind 2/3 REQUIRE an ERC-7730 EIP-712 descriptor ('7730 bundle fail' otherwise), so any typed-data signature for a dapp without a curated descriptor is only signable as RAW32 (blind) \u2014 Ledger/Trezor render arbitrary EIP-712 fields generically",
+   "tracked_in": "NOT tracked as its own issue (adjacent: #381, #534)",
+   "notes": "secure/src/nsc/cmd_sign_offchain.rs:479-487. Coverage gap, not a soundness bug; a design decision on generic field rendering vs curated-only is needed."
+  },
+  {
+   "gap": "personal_sign rendering is non-injective: non-ASCII -> '?', trailing whitespace invisible, no byte length shown; no SIWE (EIP-4361) parsing/structured display",
+   "tracked_in": "#154 (personal_sign); SIWE untracked",
+   "notes": "secure/src/tx/display/eip1271.rs:503-513."
+  },
+  {
+   "gap": "ERC-8176 provenance: canonical catalogue is dev-unattested; 0 of 365 descriptors attested; production build refuses the root, so a production-shaped image currently has NO ERC-7730 catalogue it can ship",
+   "tracked_in": "#377 (ship-blocker), #345, #379, #341",
+   "notes": "docs/erc8176-attestation-status.md:1-20; Makefile:2726-2731."
+  },
+  {
+   "gap": "Forced-blind v2 design decision + fresh dual review outstanding; v1 REJECTED; feature forbidden in production; its 14 guard-rail tests run in no CI suite",
+   "tracked_in": "#329, #655, #602, #724",
+   "notes": "Must not be enabled before #79 silicon closure per nsc/mod.rs:271-290."
+  },
+  {
+   "gap": "Physical NV3007 WYSIWYS campaign on a production-like build never run; trusted-UI flows never exercised on pq1 silicon; pq1 bench board has no LCD",
+   "tracked_in": "#375 (ship-blocker), #700, #477",
+   "notes": "All current WYSIWYS evidence is host/QEMU transcripts."
+  },
+  {
+   "gap": "On-silicon FI campaign against descriptor-authority / confirm gates not run; many FI-hardening rows explicitly list 'executable FI and fresh review remain'",
+   "tracked_in": "#376 (ship-blocker), #330, #331, #332, #333, #334, #335, #336, #337, #328, #211",
+   "notes": "Sentinel/CFI gates exist in code (dispatch.rs:1023-1101, cmd_sign_offchain.rs:490-547) but are unevidenced on hardware."
+  },
+  {
+   "gap": "Worst-case secure-world stack on the final production feature combination unbounded (clear-signing renderers are the deepest paths)",
+   "tracked_in": "#374 (ship-blocker)"
+  },
+  {
+   "gap": "ui-px chrome mask (Pages::nav) decides which rows reach the screen but no transcript proof covers it; a content row misclassified as chrome is silently dropped while all byte proofs pass",
+   "tracked_in": "#762",
+   "notes": "px_lift::prefix_matches and ERC-7730 range_matches digest buf only."
+  },
+  {
+   "gap": "Interactive pixel presenter has zero automated coverage (e2e-px uses the e2e-test auto-confirm path); auto-confirm cannot prove physical consent",
+   "tracked_in": "#779, #421"
+  },
+  {
+   "gap": "Generic (non-ERC-7730) Safe/CoW paths show an aggregate gas context rather than exact per-component UserOp envelope pages",
+   "tracked_in": "#384"
+  },
+  {
+   "gap": "Nested-calldata (op=calldata) child proofs landed but zero production enrollments; synthetic fixture tests gated behind a feature no CI enables",
+   "tracked_in": "#724 (test gating); enrollment policy in docs/erc7730-nested-calldata-child-proof-design.md (no dedicated issue found)"
+  },
+  {
+   "gap": "EIP-712 descriptors without an explicit _pqsigner overlay keep emit-all admission (no default-deny for newly introduced typed-data descriptors)",
+   "tracked_in": "#534, #535, #494"
+  },
+  {
+   "gap": "No fuzz target for the cowswap/safe EIP-712 decode legs; fuzz workspace outside CI; nightly Kani has not completed since ~2026-09-06; WYSIWYS differential corpus extension residuals",
+   "tracked_in": "#680, #451, #776, #324, #306, #323, #380"
+  },
+  {
+   "gap": "Self-attest selector trailer gives only 4-byte keccak provenance for the function name (companion-chosen text shown as 'GUESS:')",
+   "tracked_in": "#420 (owner decision pending)"
+  },
+  {
+   "gap": "Unknown-token ERC-20/ERC-721 selector collision: approve(address,uint256) on a non-DB contract renders a tokenId as an amount; native direct ERC-20 clear rendering for unknown tokens undecided",
+   "tracked_in": "#343 (design-first); collision itself acknowledged in tx/src/erc20/calldata.rs:7-10, no issue"
+  },
+  {
+   "gap": "Confirm-dialog affordance bug: 'R=Confirm' hint on a non-final page (hardcoded into value_transfer.rs:81-82); page-shift and append-only residuals",
+   "tracked_in": "#714, #333, #337"
+  },
+  {
+   "gap": "Compact display mode blocked until skipped signed operands have their own proof; long exact amounts lack semantic row breaks",
+   "tracked_in": "#383, #650, #352"
+  },
+  {
+   "gap": "Companion-catalogue <-> firmware-root pairing not authenticated; registry drift detector and registry-update lock-in deferred",
+   "tracked_in": "#379, #599, #403, #535, #502"
+  },
+  {
+   "gap": "Combined ERC-7730 playbook lock-in and fresh A/B implementation review on the exact landed commit still owed before any production recommendation",
+   "tracked_in": "#78 (ship-blocker), #350 (ship-blocker), #351, #340"
+  }
+ ],
+ "drift": [
+  "CLAUDE.md (Pixel trusted-UI caveat) says `fsbl-tests/tests/paired_constants.rs` pins PX_COMMIT_REQUIRES_SEEN_LAST to the legacy scroll-to-end gate; the actual pin lives in fsbl-tests/tests/source_invariants.rs:878-890, while paired_constants.rs:168-172 still carries a stale comment claiming the constant is `false` and the pair is 'deliberately ABSENT pending an owner decision' \u2014 contradicting secure/src/ui/px/confirm_px.rs:57 (`= true`) and the 2026-09-24 owner decision.",
+  "docs/companion/erc8213-fingerprints.md:22-30 lists fingerprint kinds UserOpHash / Eip1559Tx / PersonalSign with helpers `userop_hash` and `eip1559::sighash`; tx-core/src/erc8213.rs exposes only calldata_digest and eip712_final_hash, and the firmware enum (secure/src/tx/display/erc8213.rs:66-101) is CalldataDigest / Eip712Final / Raw32 / ReplaySafeHash / SafeTxHash. The UserOp path fingerprints the calldata digest, not the userOpHash (cmd_sign_userop.rs:1718).",
+  "CLAUDE.md 'CoW Swap orders ... the user sees the exact intent (e.g. SELL 0.2 USDC ...)' is true only for tokens in ERC20_DB_ROOT; secure/src/tx/eip712/cowswap/verify.rs:196-214 silently degrades an unverifiable leg to AddrHex (address + raw amount) rather than refusing. Not a soundness bug, but the doc overstates uniform coverage.",
+  "secure/src/tx/eip712/safe/verify.rs:16 header still documents step 3 as 'inner_data.len() == 36' while the handler gate was deliberately re-keyed on selector alone (cmd_sign_userop.rs:1207-1219, is_approve_hash_claim). Behaviour is consistent (verifier fails on 37 B, claim gate then refuses) but the verifier comment no longer explains the pairing.",
+  "docs/STATUS.md:468 and CLAUDE.md describe Kani/Miri FV as 'CI-wired'; nightly Kani has not completed since ~2026-09-06 (#776) and CI enforcement was found dead/advisory (#456) \u2014 clear-signing FV claims are local-run evidence until green runs exist.",
+  "docs/companion/safe-multisig-clear-sign.md:3 says 'Status: landed 2026-04-26. Validated end-to-end through QEMU' \u2014 the QEMU e2e name-trailer scenario 5w is currently failing on master (#469/#500) and batch native-value fixtures are stale (#532), so 'validated' is partially stale.",
+  "CLAUDE.md invariant text: 'ERC-7730 clear-sign descriptors ... incomplete registry-known formats are hard refusals' \u2014 holds for contract calls via the Bloom (known_calls.rs:8-9), but there is no equivalent omission detection for EIP-712 typed data; the CLAUDE.md 'Scope' paragraph does acknowledge RAW32 as the escape, so this is a scope nuance rather than a false claim."
+ ],
+ "owner_decisions": [
+  "RAW32 production policy is an OPEN owner decision (#381): stated preference is to disable in production unless an explicit compatibility acceptance is recorded; do not claim the structured known-shape guarantee covers it.",
+  "Forced-blind v1 architecture is REJECTED and must never be implemented; v2 awaits the owner prompt-abuse semantics decision and fresh dual review (#329, 2026-07-16). Feature stays default-off, in PROD_FORBIDDEN, and off the ui-px path. ERC-8176 may admit into C but grants no forced-blind semantic authority.",
+  "Scroll-to-end is ON for the pixel UI (owner decision 2026-09-24, PX_COMMIT_REQUIRES_SEEN_LAST = true) superseding 2026-09-22 \u2014 do not re-litigate without new evidence.",
+  "Pixel trusted-UI pilot (ui-px) is an owner decision 2026-09-22; atlas lives in the NS slot (2026-09-23); ui-px stays out of make release until the flash lever lands (76,949 B over budget).",
+  "EntryPoint v0.6 is frozen (no v0.7/v0.8 migration); EIP-7702 flows are out of scope because the device has no secp256k1 EOA key (invariant #5) \u2014 not a clear-signing gap.",
+  "COMPACT_MODE must stay false until skipped signed operands have their own proof (#383, const assert in render/mod.rs:390).",
+  "Native direct ERC-20 clear rendering for unknown tokens must be decided design-first and separately from forced blind; it cannot broaden the forced-blind clean-absence class (#343).",
+  "ERC-7730 coverage is a stated selling-point priority (memory: feedback_erc7730_coverage_priority) \u2014 build hard levers properly rather than reframing to OPTIGA blockers.",
+  "ERC-7730 catalogue provenance: the first erc8176-verified root rotation MUST remove erc7730-dev-unattested from the debug-log/mock-se aliases in the same change (secure/Cargo.toml:187-191).",
+  "Docs hygiene: amend existing docs (STATUS.md, erc8176-attestation-status.md, companion-*.md) with dated UPDATE notes rather than creating parallel documents."
+ ]
+}

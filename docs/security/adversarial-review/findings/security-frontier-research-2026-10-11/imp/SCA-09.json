@@ -1,0 +1,23 @@
+{
+ "id": "SCA-09",
+ "title": "Additive-random-masked secret compares for the MCU-side master cross-check and PIN-confirm (Trezor secequal32 parity)",
+ "threat": "subtle::ct_eq is constant-TIME but the Hamming weight of (derived XOR stored) still modulates power while the two 32-byte secrets are compared; dual_se.rs runs that compare twice per unlock (both operands secret: derived_master vs on-chip stored master), and pin_entry's XOR-OR confirm compares two secret PIN buffers. A profiled attacker gets one such trace per unlock.",
+ "proposal": "Add `ct_eq_masked32(a, b)` to pqsigner-fi: per 32-bit word draw a fresh mask m from the pre-drawn TRNG pool and accumulate diff |= ((a + m) - b) ^ m, with the loop-completion FI check (i == wn), returning a Hamming-distant sentinel; use it at dual_se.rs:305-310 (both compares) and in pin_entry's confirm fold. Keep subtle::ct_eq for public-vs-public compares (the 4008-B double-compute signature compare is public output and does not need masking).",
+ "rationale": "Low-cost, verified Trezor construction (storage.c:220-243, re-read this session) that hides operand Hamming weights during the compare; pq1's fi helpers already have the sentinel and loop-completion idioms, so it is a drop-in. Complements SCA-01: a masked compare is the kind of change whose effect a TVLA can confirm.",
+ "repo_evidence": [
+  "secure/src/dual_se.rs:305-310 (derived_master.ct_eq(&stored_master) twice around wait_random; subtle, unmasked)",
+  "secure/src/ui/pin_entry.rs:235-268 (XOR-OR fold confirm compare, unmasked)",
+  "grep 'mask' pqsigner-fi/src/lib.rs -> no masked compare helper"
+ ],
+ "vendor_precedent": "Trezor storage/storage.c:220-243 secequal32 with random32() per word; used at the PVC accept decision (:1139-1140).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Needs 8 random words per compare \u2014 must come from the #832 pool, not a blocking TRNG read in the unlock path; a predictable mask (the #643 class) silently degrades to unmasked. The compare must stay inline-never so a glitch cannot skip it; cargo-checkct should re-prove the new helper SECURE (it has no secret-dependent branches by construction).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/storage/storage.c:220-243",
+  "https://www.ledger.com/blog/Breaking-Trezor-One-with-SCA"
+ ],
+ "surface": "sca"
+}

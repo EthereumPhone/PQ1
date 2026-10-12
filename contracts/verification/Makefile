@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-secure-wrapper extract-sign-release extract-sign-forest extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1727,6 +1727,35 @@ _verify-lake-path-self-test:
 #   make verify-extract-differential GEN=1    re-execute the Rust to regenerate them
 verify-extract-differential: ## Extracted-Lean vs shipped-Rust differential
 ifeq ($(GEN),1)
+	@cd $(REPO_ROOT) && PQ_SIGN_HEADER_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_header_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_HYPERTREE_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_hypertree_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_FOREST_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_forest_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SHUFFLE_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release shuffle_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_AUTH_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_auth_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=1 cargo test --locked -p sphincs-c10 --features sim-internals \
+	  --target x86_64-unknown-linux-gnu --test gen_wots_secret_vectors --release gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_KEYGEN_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_keygen_corpus -- --nocapture
 	@echo "=== regenerating EXPECTED outputs from the SHIPPED Rust (ground truth) ==="
 	@cd $(REPO_ROOT) && cargo test -p fw-manifest --test gen_extract_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_extract_vectors:|test result'
@@ -1739,7 +1768,148 @@ ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --features sim-internals \
 	  --test gen_wots_bridge_vectors --release -- --nocapture 2>&1 \
 	  | grep -E 'gen_wots_bridge_vectors:|test result'
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 \
+	  --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WHOLE_VERIFIER_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release whole_verifier_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_HYPERTREE_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree_continuation_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_PREFIX_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_prefix_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=1 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=1 cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
 endif
+	@cd $(REPO_ROOT) && PQ_SIGN_HEADER_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_header_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_HYPERTREE_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_hypertree_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_FOREST_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_forest_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SHUFFLE_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release shuffle_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_HEADER_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_header_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_HYPERTREE_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_hypertree_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_SERIALIZATION_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_serialization_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SIGN_FOREST_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree::recovery_corpus::sign_forest_corpus -- --exact --nocapture
+	@cd $(REPO_ROOT) && PQ_SHUFFLE_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release shuffle_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SIGN_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_sign_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_AUTH_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_auth_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_ROOT_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_root_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_XMSS_AUTH_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release xmss_auth_corpus -- --nocapture
+	@cd $(REPO_ROOT) && cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_sign_recover_corpus -- --nocapture
+	@cd $(REPO_ROOT) && RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_sign_recover_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_AUTH_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_auth_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_ROOT_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_root_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_AUTH_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_auth_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_ROOT_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_root_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_fors_secret_vectors gen_fors_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_KEYGEN_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_keygen_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_SECRET_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test gen_wots_secret_vectors gen_wots_secret_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_KEYGEN_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release wots_keygen_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WHOLE_VERIFIER_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release whole_verifier_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WHOLE_VERIFIER_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release whole_verifier_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_HYPERTREE_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree_continuation_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_HYPERTREE_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release hypertree_continuation_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_PREFIX_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_prefix_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_PREFIX_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_prefix_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_FOREST_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_forest_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=0 cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_FORS_RECOVERY_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked \
+	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
+	  --target x86_64-unknown-linux-gnu --release fors_recovery_corpus -- --nocapture
+	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=0 cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_MERKLE_RECOVERY_GENERATE=0 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --test gen_merkle_recovery_vectors --release gen_merkle_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_RECOVERY_CHECK=1 cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
+	@cd $(REPO_ROOT) && PQ_WOTS_RECOVERY_CHECK=1 RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 \
+	  --target x86_64-unknown-linux-gnu --test gen_wots_recovery_vectors --release gen_wots_recovery_vectors -- --nocapture
 	@cd $(REPO_ROOT) && PQ_WOTS_BRIDGE_CHECK=1 cargo test --locked -p sphincs-c10 \
 	  --target x86_64-unknown-linux-gnu --features sim-internals \
 	  --test gen_wots_bridge_vectors --release -- --nocapture
@@ -1753,13 +1923,93 @@ endif
 	  Extracted.FwManifest.Funs Extracted.FormatDecimal.Funs \
 	  Extracted.ForsSpecBridge Extracted.ForsExtractDiffVectors \
 	  Extracted.HMsgSpecBridge Extracted.HMsgDiffVectors \
-	  Extracted.WotsSpecBridge Extracted.WotsBridgeDiffVectors 2>&1 | tail -1
+	  Extracted.WotsSpecBridge Extracted.WotsBridgeDiffVectors \
+	  Extracted.WotsRecoveryBridge Extracted.WotsRecoveryDiffVectors \
+	  Extracted.MerkleRecoveryBridge Extracted.MerkleRecoveryDiffVectors \
+	  Extracted.ForsRecoveryBridge Extracted.ForsRecoveryDiffVectors \
+	  Extracted.ForsRejectSpec Extracted.ForsForestDiffVectors \
+	  Extracted.ForsVerifierPrefix Extracted.ForsPrefixDiffVectors \
+	  Extracted.HypertreeStrictSpec Extracted.HypertreeDiffVectors \
+	  Extracted.WholeVerifierSpec Extracted.WholeVerifierDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_hmsg_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsBridgeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_wots_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsRecoveryDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_wots_recovery_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/MerkleRecoveryDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_merkle_recovery_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsRecoveryDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_recovery_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsForestDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_forest_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsPrefixDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_prefix_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HypertreeDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_hypertree_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.XmssRootBridge Extracted.XmssRootDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/XmssRootDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_xmss_root_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignForestPrefix Extracted.SignForestDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignForestDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_sign_forest_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignLayerSerializeCaller Extracted.SignForestSerializeCaller Extracted.SignSerializationDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignSerializationDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_sign_serialization_proof_controls.py
+	@$(_FV_PYTHON3) scripts/test_c10_representation_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignHypertreeCaller Extracted.SignHypertreeDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignHypertreeDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_sign_hypertree_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignWholeSpec Extracted.SignHeaderDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignHeaderDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_sign_whole_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignReleaseBridge 2>&1 | tail -1
+	@$(_FV_PYTHON3) scripts/test_sign_release_proof_controls.py
+	@$(_FV_PYTHON3) scripts/test_sign_release_profiles.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SecureWrapperBridge Extracted.SecureWrapperCleanup Extracted.SecureWrapperRefusal 2>&1 | tail -1
+	@$(_FV_PYTHON3) scripts/test_secure_wrapper_source.py
+	@$(_FV_PYTHON3) scripts/test_secure_wrapper_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsSignBridge Extracted.ShuffleDiffVectors Extracted.WotsSignDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ShuffleDiffCheck.lean
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSignDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_wots_sign_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.XmssAuthRecovery Extracted.XmssAuthDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/XmssAuthDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_xmss_auth_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ForsRoundtripSpec Extracted.ForsAuthDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsAuthDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_auth_proof_controls.py
+	@$(_FV_PYTHON3) scripts/test_fors_roundtrip_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ForsRootBridge Extracted.ForsRootDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsRootDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_root_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.ForsSecretBridge Extracted.ForsSecretDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsSecretDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_fors_secret_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsKeygenBridge Extracted.WotsSecretDiffVectors Extracted.WotsKeygenDiffVectors 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsSecretDiffCheck.lean
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsKeygenDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_wots_keygen_proof_controls.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WholeVerifierDiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_whole_verifier_proof_controls.py
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test wots_grind
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test wots_grind
+	@cd $(REPO_ROOT) && RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test wots_grind
+	@$(_FV_PYTHON3) scripts/test_find_count_proof_controls.py
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test fors_grind
+	@cd $(REPO_ROOT) && cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test fors_grind
+	@cd $(REPO_ROOT) && RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals --test fors_grind
+	@cd $(REPO_ROOT) && RUSTFLAGS="--cfg lean_extract" cargo test --locked -p sphincs-c10 --release \
+	  --target x86_64-unknown-linux-gnu --features sim-internals,hw-sha256 --test fors_grind
+	@$(_FV_PYTHON3) scripts/test_grind_r_proof_controls.py
 
 verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@cd $(EXTRACTED_DIR) && $(LAKE) build 2>&1 | tee /tmp/pq_extracted_build.out
@@ -1782,8 +2032,7 @@ verify-extracted: ## S33 Aeneas-extracted build + axiom-discipline
 	@# bidirectional and fails closed: an UNLISTED headline (rogue/undisclosed
 	@# theorem), a MISSING headline (silently dropped / dump truncated), or a
 	@# closure carrying an undisclosed axiom all fail. Manifest =
-	@# extracted/axiom_closure_manifest.txt (67 kernel-only + 4 sha256_pure_bytes
-	@# + 1 sha256+hmac + 4 keccak256_pure = 76 headlines).
+	@# extracted/axiom_closure_manifest.txt (the authoritative per-headline list).
 	@$(_FV_PYTHON3) scripts/check_axiom_closure.py --manifest $(EXTRACTED_DIR)/axiom_closure_manifest.txt /tmp/pq_axiomcheck.out
 	@# WIRED-IN NEGATIVE CONTROL: the Evil:False canary MUST be rejected. A *pass*
 	@# of the checker here is a *failure* of the meta-gate (the gate is toothless).
@@ -1843,7 +2092,7 @@ _extract-sphincs-adrs-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --start-from 'sphincs_c10::address' --dest-file $${EXTRACTION_TMP_ROOT}/adrs.llbc 2>&1 | tail -1 )
 	@rm -rf $${EXTRACTION_TMP_ROOT}/out && mkdir -p $${EXTRACTION_TMP_ROOT}/out
 	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/adrs.llbc
@@ -1872,7 +2121,7 @@ _extract-fors-index-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --start-from 'sphincs_c10::fors::extract_ht_index' \
 	  --start-from 'sphincs_c10::fors::extract_fors_indices' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/fors.llbc 2>&1 | tail -1 )
@@ -1891,10 +2140,25 @@ _extract-fors-index-impl:
 # (Sha256Vendored.lean, source Spec/Sha256Impl.lean).
 .PHONY: verify-spec-vendored-fidelity
 verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
+	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_representation.py --self-test
+	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_representation_controls.py --self-test
 	@$(_FV_PYTHON3) scripts/check_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_hmsg_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_wots_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_wots_recovery_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_merkle_recovery_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_recovery_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_forest_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_prefix_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_hypertree_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_signature_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_root_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_xmss_root_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_xmss_auth_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_auth_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_fors_secret_vendored_spec.py
+	@$(_FV_PYTHON3) scripts/test_wots_keygen_vendored_spec.py
 
 # §33 — AI-prover loop: drive a headless Claude agent to close ONE proof
 # obligation, gated on the Lean kernel + axiom discipline. See
@@ -1930,7 +2194,7 @@ _extract-wots-digits-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --start-from 'sphincs_c10::wots::extract_digits' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/wots.llbc 2>&1 | tail -1 )
 	@rm -rf $${EXTRACTION_TMP_ROOT}/wout && mkdir -p $${EXTRACTION_TMP_ROOT}/wout
@@ -2030,7 +2294,7 @@ _extract-merkle-verify-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::th_pair' \
 	  --start-from 'sphincs_c10::merkle::verify_auth_path' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/merkle.llbc 2>&1 | tail -1 )
@@ -2047,6 +2311,26 @@ _extract-merkle-verify-impl:
 	  || { echo "DRIFT: sphincs-c10/src/merkle.rs changed — re-extract, re-prove, re-commit"; exit 1; }
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-merkle-verify $${EXTRACTION_TMP_ROOT}/mkout $${EXTRACTION_TMP_ROOT}/mkout/Funs.fixed.lean
 
+# Actual private FORS recovery helper; dependencies reuse their extracted bodies.
+_extract-fors-recovery-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::th' --opaque 'sphincs_c10::hash::th_pair' \
+	  --start-from 'sphincs_c10::hypertree::reconstruct_fors_root' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/forsroot.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/frout
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/frout -split-files $${EXTRACTION_TMP_ROOT}/forsroot.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/frout/Funs.lean $${EXTRACTION_TMP_ROOT}/frout/Funs.fixed.lean \
+	  --sed-import 'Forsroot.=Extracted.ForsRecovery.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::params::A' \
+	  --kill 'sphincs_c10::hash::pad16' --kill 'sphincs_c10::params::N' \
+	  --add-import Extracted.Adrs --add-import Extracted.Fors.Funs --add-import Extracted.Hash.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsRecovery/Funs.lean $${EXTRACTION_TMP_ROOT}/frout/Funs.fixed.lean \
+	  && echo "OK: committed FORS recovery extraction matches the current Rust" \
+	  || { echo "DRIFT: FORS recovery extraction changed — re-extract and re-prove"; exit 1; }
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-recovery $${EXTRACTION_TMP_ROOT}/frout $${EXTRACTION_TMP_ROOT}/frout/Funs.fixed.lean
+
 # §33 rank 5 — wots::pk_from_sig (verifier-side WOTS+C; wots_digest/chain_hash/
 # th_multi opaque → _pure axioms in PkFromSig/FunsExternal.lean; dedup drops
 # the re-extracted make_adrs/set_chain_index/extract_digits/params/pad16).
@@ -2055,7 +2339,7 @@ _extract-wots-pkfromsig-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::hash::th_multi' \
 	  --opaque 'sphincs_c10::hash::wots_digest' \
 	  --start-from 'sphincs_c10::wots::pk_from_sig' \
@@ -2074,6 +2358,44 @@ _extract-wots-pkfromsig-impl:
 	  && echo "OK: committed pk_from_sig extraction matches the current Rust" \
 	  || { echo "DRIFT: sphincs-c10/src/wots.rs changed — re-extract, re-prove, re-commit"; exit 1; }
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-pkfromsig $${EXTRACTION_TMP_ROOT}/pout $${EXTRACTION_TMP_ROOT}/pout/Funs.fixed.lean
+
+# Actual bounded WOTS search; the three dependencies are reused extracted bodies.
+_extract-wots-find-count-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::wots_digest' \
+	  --opaque 'sphincs_c10::address::make_adrs' \
+	  --opaque 'sphincs_c10::wots::extract_digits' \
+	  --start-from 'sphincs_c10::wots::find_count' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/findcount.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/gout
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/gout -split-files $${EXTRACTION_TMP_ROOT}/findcount.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/gout/Funs.lean $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean \
+	  --sed-import 'Findcount.=Extracted.FindCount.' \
+	  --kill 'sphincs_c10::params::L' --kill 'sphincs_c10::params::TARGET_SUM' \
+	  --kill 'sphincs_c10::params::ADRS_WOTS' --add-import Extracted.PkFromSig.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/FindCount/Funs.lean $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-find-count $${EXTRACTION_TMP_ROOT}/gout $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
+
+# Actual FORS randomizer search; reuse the existing SHA backend and extracted helpers.
+_extract-fors-grind-r-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --opaque 'sphincs_c10::hash::pad16' --opaque 'sphincs_c10::hash::truncate' \
+	  --opaque 'sphincs_c10::hash::h_msg' --opaque 'sphincs_c10::fors::read_bits_le' \
+	  --start-from 'sphincs_c10::fors::grind_r' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/grindr.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/gout
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/gout -split-files $${EXTRACTION_TMP_ROOT}/grindr.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/gout/Funs.lean $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean \
+	  --sed-import 'Grindr.=Extracted.GrindR.' \
+	  --kill 'sphincs_c10::params::A' --kill 'sphincs_c10::params::K' \
+	  --add-import Extracted.Fors.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/GrindR/Funs.lean $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-grind-r $${EXTRACTION_TMP_ROOT}/gout $${EXTRACTION_TMP_ROOT}/gout/Funs.fixed.lean
 
 # §33 rank 11 — tx::erc20::merkle::verify_proof (trust-bundle merkle walk;
 # leaf_hash/node_hash opaque → _pure axioms in TxMerkle/FunsExternal.lean).
@@ -2159,7 +2481,7 @@ _extract-hash-fns-impl:
 	@$(_begin_private_extraction)
 	@mkdir -p $${EXTRACTION_TMP_ROOT}
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
-	  $(PQLEAN)/charon cargo --preset=aeneas --opaque sha2 --opaque zeroize \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
 	  --opaque 'sphincs_c10::hash::sha256_bytes' \
 	  --opaque 'sphincs_c10::hash::sha256_parts' \
 	  --start-from 'sphincs_c10::hash::th' \
@@ -2249,6 +2571,8 @@ _extract-slotkdf-impl:
 # Current vendored split artifact (#670, #683-#686). Fast checks do not run proofs.
 .PHONY: verify-easycrypt-split-pins verify-easycrypt-split
 verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/assumption census and controls
+	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/c10_representation.py --self-test
+	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/c10_representation_controls.py --self-test
 	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/check_source_binding.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_split_contract.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_proof_jobs.py
@@ -2257,3 +2581,344 @@ verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/
 
 verify-easycrypt-split: ## Full current split proof replay in the pinned image (parallel; PQ_EASYCRYPT_JOBS=N, 1 = serial)
 	$(_FV_PYTHON3) -B scripts/run_easycrypt_split.py
+
+# Actual sphincs_c10::fors::compute_fors_pk; reused dependencies retain their proved bodies.
+_extract-fors-pk-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::th_multi' \
+	  --start-from 'sphincs_c10::fors::compute_fors_pk' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/forspk.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/forspk-out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/forspk-out -split-files $${EXTRACTION_TMP_ROOT}/forspk.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.lean $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.fixed.lean \
+	  --sed-import 'Forspk.=Extracted.ForsPk.' \
+	  --kill 'sphincs_c10::address::make_adrs' \
+	  --add-import Extracted.Adrs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsPk/Funs.lean $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-pk $${EXTRACTION_TMP_ROOT}/forspk-out $${EXTRACTION_TMP_ROOT}/forspk-out/Funs.fixed.lean
+
+# Actual sphincs_c10::hypertree::verify; reused dependencies retain their proved bodies.
+_extract-verifier-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::h_msg' \
+	  --opaque 'sphincs_c10::hash::th' \
+	  --opaque 'sphincs_c10::fors::extract_fors_indices' \
+	  --opaque 'sphincs_c10::fors::extract_ht_index' \
+	  --opaque 'sphincs_c10::hypertree::reconstruct_fors_root' \
+	  --opaque 'sphincs_c10::fors::compute_fors_pk' \
+	  --opaque 'sphincs_c10::wots::pk_from_sig' \
+	  --opaque 'sphincs_c10::merkle::verify_auth_path' \
+	  --start-from 'sphincs_c10::hypertree::verify' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/verifyfors.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/verifyfors-out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/verifyfors-out -split-files $${EXTRACTION_TMP_ROOT}/verifyfors.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.lean $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.dedup.lean \
+	  --sed-import 'Verifyfors.=Extracted.Verify.' \
+	  --kill 'sphincs_c10::address::make_adrs' \
+	  --kill 'sphincs_c10::params::N' \
+	  --kill 'sphincs_c10::hash::pad16' \
+	  --kill 'sphincs_c10::params::ADRS_FORS_TREE' \
+	  --kill 'sphincs_c10::params::L' \
+	  --kill 'sphincs_c10::params::H' \
+	  --kill 'sphincs_c10::params::A' \
+	  --kill 'sphincs_c10::params::K' \
+	  --kill 'sphincs_c10::params::D' \
+	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --add-import Extracted.Adrs \
+	  --add-import Extracted.Fors.Funs \
+	  --add-import Extracted.Wots.Funs
+	@$(_FV_PYTHON3) scripts/normalize_verify_extraction.py $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean
+	@rm $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.dedup.lean
+	@diff -u $(EXTRACTED_DIR)/Extracted/Verify/Funs.lean $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-verifier $${EXTRACTION_TMP_ROOT}/verifyfors-out $${EXTRACTION_TMP_ROOT}/verifyfors-out/Funs.fixed.lean
+
+# Actual WOTS generation; reused dependencies have already proved extracted bodies.
+_extract-wots-secret-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --start-from 'sphincs_c10::hash::wots_secret' --dest-file $${EXTRACTION_TMP_ROOT}/wotssecret.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/wotssecret.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Wotssecret.=Extracted.WotsSecret.' \
+	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::truncate' \
+	  --add-import Extracted.Hash.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/WotsSecret/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-secret $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual WOTS generation; reused dependencies have already proved extracted bodies.
+_extract-wots-keygen-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::wots_secret' --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::hash::th_multi' \
+	  --start-from 'sphincs_c10::wots::keygen_pk' --dest-file $${EXTRACTION_TMP_ROOT}/wotskeygen.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/wotskeygen.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Wotskeygen.=Extracted.WotsKeygen.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::address::set_chain_index' --kill 'sphincs_c10::params::W' --kill 'sphincs_c10::params::L' --kill 'sphincs_c10::params::ADRS_WOTS' --kill 'sphincs_c10::params::ADRS_WOTS_PK' \
+	  --add-import Extracted.PkFromSig.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/WotsKeygen/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-keygen $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual FORS secret derivation through the existing SHAparts boundary.
+_extract-fors-secret-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --start-from 'sphincs_c10::hash::fors_secret' --dest-file $${EXTRACTION_TMP_ROOT}/forssecret.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/forssecret.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Forssecret.=Extracted.ForsSecret.' \
+	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::truncate' \
+	  --add-import Extracted.Hash.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsSecret/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-secret $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual FORS iterative root construction through existing proved hash bodies.
+_extract-fors-root-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::fors_secret' --opaque 'sphincs_c10::hash::th' \
+	  --opaque 'sphincs_c10::hash::th_pair' --opaque 'sphincs_c10::hash::pad16' \
+	  --start-from 'sphincs_c10::fors::compute_fors_root' --dest-file $${EXTRACTION_TMP_ROOT}/forsroot.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/forsroot.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Forsroot.=Extracted.ForsRoot.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::params::ADRS_FORS_TREE' --kill 'sphincs_c10::params::A' \
+	  --add-import Extracted.ForsRecovery.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsRoot/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-root $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual FORS authentication-path generation through existing proved hash bodies.
+_extract-fors-auth-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::hash::fors_secret' --opaque 'sphincs_c10::hash::th' \
+	  --opaque 'sphincs_c10::hash::th_pair' --opaque 'sphincs_c10::hash::pad16' \
+	  --start-from 'sphincs_c10::fors::sign_fors_tree' --dest-file $${EXTRACTION_TMP_ROOT}/forsauth.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/forsauth.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Forsauth.=Extracted.ForsAuth.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::params::ADRS_FORS_TREE' --kill 'sphincs_c10::params::A' --kill 'sphincs_c10::params::FORS_LEAVES' \
+	  --add-import Extracted.ForsRoot.Funs
+	@diff -u $(EXTRACTED_DIR)/Extracted/ForsAuth/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-auth $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual authentication capture and final copy loops; reuse the same proved dependencies.
+_extract-xmss-auth-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::wots::keygen_pk' --opaque 'sphincs_c10::hash::th_pair' \
+	  --opaque 'sphincs_c10::hash::pad16' \
+	  --start-from 'sphincs_c10::merkle::build_subtree_with_auth' --dest-file $${EXTRACTION_TMP_ROOT}/xmssauth.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/xmssauth.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Xmssauth.=Extracted.XmssAuth.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::hypertree::report' --kill 'sphincs_c10::merkle::REPORT_EVERY' \
+	  --kill 'sphincs_c10::params::ADRS_TREE' --kill 'sphincs_c10::params::D' --kill 'sphincs_c10::params::H' \
+	  --kill 'sphincs_c10::params::SUBTREE_H' --kill 'sphincs_c10::params::SUBTREE_LEAVES' \
+	  --add-import Extracted.XmssRoot.Funs
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
+	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
+	@diff -u $(EXTRACTED_DIR)/Extracted/XmssAuth/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-xmss-auth $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual XMSS stack construction and top-level public root; reuse proved dependencies.
+_extract-xmss-root-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::wots::keygen_pk' --opaque 'sphincs_c10::hash::th_pair' \
+	  --opaque 'sphincs_c10::hash::pad16' \
+	  --start-from 'sphincs_c10::hypertree::compute_pk_root' --dest-file $${EXTRACTION_TMP_ROOT}/xmssroot.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/xmssroot.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Xmssroot.=Extracted.XmssRoot.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::params::ADRS_TREE' \
+	  --kill 'sphincs_c10::params::D' --kill 'sphincs_c10::params::H' --kill 'sphincs_c10::params::SUBTREE_H' --kill 'sphincs_c10::hypertree::report' \
+	  --add-import Extracted.Merkle.Funs --add-import Extracted.FindCount.Funs
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
+	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
+	@diff -u $(EXTRACTED_DIR)/Extracted/XmssRoot/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-xmss-root $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual initialization, seed fold, stream assembly and Fisher-Yates swaps.
+_extract-shuffle-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::shuffle::shuffle_hash_block' \
+	  --start-from 'sphincs_c10::shuffle::fisher_yates' --dest-file $${EXTRACTION_TMP_ROOT}/shuffle.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/shuffle.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Shuffle.=Extracted.Shuffle.'
+	@diff -u $(EXTRACTED_DIR)/Extracted/Shuffle/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-shuffle $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual signing loop and caller; every opaque callee reuses a proved extraction.
+_extract-wots-sign-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::wots::find_count' --opaque 'sphincs_c10::hash::wots_secret' \
+	  --opaque 'sphincs_c10::hash::chain_hash' --opaque 'sphincs_c10::shuffle::fisher_yates' \
+	  --start-from 'sphincs_c10::wots::sign_with_shuffle' --dest-file $${EXTRACTION_TMP_ROOT}/wotssign.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/wotssign.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Wotssign.=Extracted.WotsSign.' \
+	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::address::set_chain_index' \
+	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::pad16' \
+	  --kill 'sphincs_c10::params::L' --kill 'sphincs_c10::params::ADRS_WOTS' \
+	  --add-import Extracted.PkFromSig.Funs
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
+	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
+	@diff -u $(EXTRACTED_DIR)/Extracted/WotsSign/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-sign $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual signer; proved component bodies are reused without changing Rust.
+_extract-sign-forest-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=on --rustc-arg=-Coverflow-checks=on \
+	  --opaque 'sha2' \
+	  --opaque 'zeroize' \
+	  --opaque 'sphincs_c10::fors::grind_r' \
+	  --opaque 'sphincs_c10::fors::extract_fors_indices' \
+	  --opaque 'sphincs_c10::fors::extract_ht_index' \
+	  --opaque 'sphincs_c10::fors::sign_fors_tree' \
+	  --opaque 'sphincs_c10::fors::compute_fors_root' \
+	  --opaque 'sphincs_c10::fors::compute_fors_pk' \
+	  --opaque 'sphincs_c10::hypertree::reconstruct_fors_root' \
+	  --opaque 'sphincs_c10::merkle::build_subtree_with_auth' \
+	  --opaque 'sphincs_c10::wots::sign_with_shuffle' \
+	  --opaque 'sphincs_c10::shuffle::fisher_yates' \
+	  --opaque 'sphincs_c10::shuffle::_::derive' \
+	  --opaque 'sphincs_c10::hash::th' \
+	  --opaque 'sphincs_c10::wots::pk_from_sig' \
+	  --opaque 'sphincs_c10::merkle::verify_auth_path' \
+	  --start-from 'sphincs_c10::hypertree::sign_inner' --dest-file $${EXTRACTION_TMP_ROOT}/signforest.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/signforest.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean \
+	  --sed-import 'Signforest.=Extracted.SignForest.' \
+	  --kill 'sphincs_c10::address::make_adrs' \
+	  --kill 'sphincs_c10::params::N' \
+	  --kill 'sphincs_c10::hash::pad16' \
+	  --kill 'sphincs_c10::hypertree::report' \
+	  --kill 'sphincs_c10::params::ADRS_FORS_TREE' \
+	  --kill 'sphincs_c10::params::L' \
+	  --kill 'sphincs_c10::params::D' \
+	  --kill 'sphincs_c10::params::H' \
+	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --kill 'sphincs_c10::params::SIG_HT_LAYER' \
+	  --kill 'sphincs_c10::params::A' \
+	  --kill 'sphincs_c10::params::K' \
+	  --kill 'sphincs_c10::params::SIG_FORS_AUTH' \
+	  --kill 'sphincs_c10::params::SIG_FORS_SECRETS' \
+	  --kill 'sphincs_c10::params::SIG_R' \
+	  --kill 'sphincs_c10::params::SIG_FORS_TOTAL' \
+	  --kill 'sphincs_c10::params::SIGNATURE_LEN' \
+	  --add-import Extracted.Verify.Funs
+	@$(_FV_PYTHON3) scripts/normalize_verify_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean
+	@$(_FV_PYTHON3) scripts/normalize_sign_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@rm $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
+	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
+	@diff -u $(EXTRACTED_DIR)/Extracted/SignForest/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-sign-forest $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Signer caller with release debug assertions disabled; shared opaque component models remain explicit.
+_extract-sign-release-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas \
+	  --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on \
+	  --opaque 'sha2' \
+	  --opaque 'zeroize' \
+	  --opaque 'sphincs_c10::fors::grind_r' \
+	  --opaque 'sphincs_c10::fors::extract_fors_indices' \
+	  --opaque 'sphincs_c10::fors::extract_ht_index' \
+	  --opaque 'sphincs_c10::fors::sign_fors_tree' \
+	  --opaque 'sphincs_c10::fors::compute_fors_root' \
+	  --opaque 'sphincs_c10::fors::compute_fors_pk' \
+	  --opaque 'sphincs_c10::hypertree::reconstruct_fors_root' \
+	  --opaque 'sphincs_c10::merkle::build_subtree_with_auth' \
+	  --opaque 'sphincs_c10::wots::sign_with_shuffle' \
+	  --opaque 'sphincs_c10::shuffle::fisher_yates' \
+	  --opaque 'sphincs_c10::shuffle::_::derive' \
+	  --opaque 'sphincs_c10::hash::th' \
+	  --opaque 'sphincs_c10::wots::pk_from_sig' \
+	  --opaque 'sphincs_c10::merkle::verify_auth_path' \
+	  --start-from 'sphincs_c10::hypertree::sign_inner' --dest-file $${EXTRACTION_TMP_ROOT}/signrelease.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/signrelease.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean \
+	  --sed-import 'Signrelease.=Extracted.SignRelease.' \
+	  --kill 'sphincs_c10::address::make_adrs' \
+	  --kill 'sphincs_c10::params::N' \
+	  --kill 'sphincs_c10::hash::pad16' \
+	  --kill 'sphincs_c10::hypertree::report' \
+	  --kill 'sphincs_c10::params::ADRS_FORS_TREE' \
+	  --kill 'sphincs_c10::params::L' \
+	  --kill 'sphincs_c10::params::D' \
+	  --kill 'sphincs_c10::params::H' \
+	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --kill 'sphincs_c10::params::SIG_HT_LAYER' \
+	  --kill 'sphincs_c10::params::A' \
+	  --kill 'sphincs_c10::params::K' \
+	  --kill 'sphincs_c10::params::SIG_FORS_AUTH' \
+	  --kill 'sphincs_c10::params::SIG_FORS_SECRETS' \
+	  --kill 'sphincs_c10::params::SIG_R' \
+	  --kill 'sphincs_c10::params::SIG_FORS_TOTAL' \
+	  --kill 'sphincs_c10::params::SIGNATURE_LEN' \
+	  --add-import Extracted.Verify.Funs
+	@$(_FV_PYTHON3) scripts/normalize_verify_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean
+	@$(_FV_PYTHON3) scripts/normalize_release_sign_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@rm $${EXTRACTION_TMP_ROOT}/out/Funs.dedup.lean $${EXTRACTION_TMP_ROOT}/out/Funs.trait.lean
+
+	@diff -u $(EXTRACTED_DIR)/Extracted/SignRelease/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-sign-release $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Exact production-cfg source slice with explicit dependency state; no production edits.
+_extract-secure-wrapper-impl:
+	@$(_begin_private_extraction)
+	@$(_FV_PYTHON3) scripts/materialize_secure_wrapper.py $${EXTRACTION_TMP_ROOT}/model
+	@( cd $${EXTRACTION_TMP_ROOT}/model/crate && RUSTFLAGS="" \
+	  $(PQLEAN)/charon cargo --preset=aeneas \
+	  --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on \
+	  --opaque secure_wrapper_model::Effects \
+	  --opaque secure_wrapper_model::fi --opaque secure_wrapper_model::sign_rate \
+	  --opaque secure_wrapper_model::rng_strong --opaque secure_wrapper_model::nsc \
+	  --opaque secure_wrapper_model::zeroize --opaque secure_wrapper_model::subtle \
+	  --opaque secure_wrapper_model::sphincs_c10 \
+	  --include secure_wrapper_model::sphincs_c10::shuffle::ShuffleSeed \
+	  --include secure_wrapper_model::sphincs_c10::SigningKey \
+	  --include secure_wrapper_model::sphincs_c10::params \
+	  --include secure_wrapper_model::fi::CfiCounter \
+	  --include secure_wrapper_model::fi::OK_SENTINEL \
+	  --start-from secure_wrapper_model::production::c10_sign_verified_with_progress \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/securewrapper.llbc 2>&1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/securewrapper.llbc
+	@$(_FV_PYTHON3) scripts/normalize_secure_wrapper_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/normalize_secure_wrapper_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-secure-wrapper $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean

@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	88f7513fc775f338200a45ef5c38e086
+split	6d7a639651a572e9160bdb9e05b0bab8
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1556,3 +1556,37 @@ fork	9c2d21280c84d52c30b22111151f1135
 # expectation results (one new, six existing), add two scanner regressions.
 # Proof sources and assumption census unchanged; 4024 pins / 3518 statements.
 # Split identity df670cd34584c260568448c6e00e9b83 -> 6dc1d872107b5b684b48f22b062b5789.
+
+# 2026-10-08: extractable bounded Rust WOTS search and test-only entry point.
+# Source binding changed; EasyCrypt proof sources and assumptions unchanged.
+# Split identity 88f7513fc775f338200a45ef5c38e086 -> eeccd2afca8898b60616feb1b501b927. Full replay required.
+
+# 2026-10-09: WOTS secret uses existing ordered streaming SHA helper.
+# Rust source-binding changes; EasyCrypt proof sources/census unchanged.
+# Split identity aaf747777d1e559c722482ffa37f0152 -> 63463c2158987d54aacfa14a7707c673.
+# Full replay required; software/extraction/hardware-adapter preimage checks accompany the refactor.
+
+# 2026-10-09: preserve FORS-secret five-segment byte behavior through existing SHAparts helper; refresh manual Rust binding. No EasyCrypt proof/axiom/census change; fresh full replay required.
+
+# 2026-10-09: factor the unchanged RustCrypto shuffle SHA block into a private
+# helper for extraction; refresh the manual Rust source-binding aggregate.
+# EasyCrypt proof sources, statements, assumptions and controls are unchanged.
+# Split identity 27015a144ca3e10d6a96b4375c3e29e8 -> 01b6d821baae24efe8b63a52ded33d9a.
+# Full pinned-image replay required; source pins alone are not proof evidence.
+
+# 2026-10-11: paired Lean/EasyCrypt digest and complete wire representations.
+# Two checked EasyCrypt modules, nine common definitions and 12 lemmas;
+# 664 targets / 696 controls. Existing assumptions are unchanged.
+# Includes the shared expression generator, endpoint controls and source pins.
+# Split identity 01b6d821baae24efe8b63a52ded33d9a -> d7c8071703400ab2f8f6050122278fb0.
+# Fresh full pinned-image replay required; focused passes are insufficient.
+
+# 2026-10-12: make the 512 <= 2^256 side condition explicit in
+# ObservedValueOpening.valid_chain_key_unique. The previous broad SMT step
+# failed the mandatory CLI replay even alone; the power rewrites pass both
+# drivers at their unchanged budgets. Statements and assumptions unchanged.
+# Split identity d7c8071703400ab2f8f6050122278fb0 -> 6a5c1e4e6fa9c6df59391b48f952626b. Fresh full replay required.
+
+# 2026-10-12: paired hash-preimage endpoints, full u32 serialization,
+# 15 Lean closures, 14 EC lemmas, 8 shared operators and typed controls.
+# New source bindings include the local Lean dependency closure. No new axiom.

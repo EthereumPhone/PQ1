@@ -1,0 +1,256 @@
+{
+ "surface": "clearsign",
+ "items_written_here": [
+  {
+   "id": "CS-01",
+   "type": "single",
+   "home": "clearsign",
+   "title": "Make RAW32 a compile-time fenced, default-off tier with a per-signature re-authentication ceremony if ever enabled",
+   "priority": "P1",
+   "orig_priority": "P0",
+   "cost": "S",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#338",
+    "#381",
+    "#692",
+    "#700"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-01.json"
+  },
+  {
+   "id": "CS-02",
+   "type": "single",
+   "home": "clearsign",
+   "title": "Custody-change 'danger class' with mandatory interstitial, plus same-(Safe,nonce) re-sign detection",
+   "priority": "P2",
+   "orig_priority": "P1",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "beyond",
+   "status": "recommended",
+   "tracked": [
+    "#329",
+    "#377",
+    "#474",
+    "#600",
+    "#603",
+    "#700",
+    "#714",
+    "#762",
+    "#770"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-02.json"
+  },
+  {
+   "id": "CS-03",
+   "type": "single",
+   "home": "clearsign",
+   "title": "S-world spending-policy guard (Coldcard SSSP-class) evaluated before confirm",
+   "priority": "P2",
+   "orig_priority": "P1",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#280",
+    "#343",
+    "#474",
+    "#636",
+    "#758"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-03.json"
+  },
+  {
+   "id": "CS-04",
+   "type": "single",
+   "home": "clearsign",
+   "title": "Render paymaster semantics: carry raw paymasterAndData, show sponsor identity and fee-token pull",
+   "priority": "P3",
+   "orig_priority": "P1",
+   "cost": "L",
+   "kind": "firmware",
+   "novelty": "beyond",
+   "status": "recommended",
+   "tracked": [
+    "#324",
+    "#328",
+    "#337",
+    "#353"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-04.json"
+  },
+  {
+   "id": "CS-05",
+   "type": "single",
+   "home": "clearsign",
+   "title": "Generic EIP-712 field walker gated by a registry-known-domain omission filter (Bloom twin) and empty-domain refusal",
+   "priority": "P2",
+   "orig_priority": "P1",
+   "cost": "L",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#329",
+    "#374",
+    "#381",
+    "#493",
+    "#494",
+    "#534",
+    "#602",
+    "#693"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-05.json"
+  },
+  {
+   "id": "CS-06",
+   "type": "single",
+   "home": "clearsign",
+   "title": "On-chain intent commitment: PQSmartWallet verifies a canonical intent digest for native shapes",
+   "priority": "drop",
+   "orig_priority": "P1",
+   "cost": "XL",
+   "kind": "mixed",
+   "novelty": "beyond",
+   "status": "rejected",
+   "tracked": [
+    "#78",
+    "#306",
+    "#691"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-06.json"
+  },
+  {
+   "id": "CS-07",
+   "type": "single",
+   "home": "clearsign",
+   "title": "Native decoders for the remaining drain primitives: setApprovalForAll, increaseAllowance, on-chain permit(), approve(0)=REVOKE, spender naming",
+   "priority": "P3",
+   "orig_priority": "P2",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#78",
+    "#329",
+    "#343",
+    "#403",
+    "#409",
+    "#410",
+    "#411",
+    "#420",
+    "#425",
+    "#474"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-07.json"
+  },
+  {
+   "id": "CS-09",
+   "type": "single",
+   "home": "clearsign",
+   "title": "Address-display integrity: EIP-55 casing, 4-char chunking with isolated 0x, S-world 'THIS WALLET' self-tag",
+   "priority": "P3",
+   "orig_priority": "P2",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#348",
+    "#349",
+    "#366",
+    "#472",
+    "#603"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-09.json"
+  },
+  {
+   "id": "CS-10",
+   "type": "single",
+   "home": "clearsign",
+   "title": "C10-signed catalogue refresh with monotonic data-version floor, decoupled from firmware images",
+   "priority": "P3",
+   "orig_priority": "P2",
+   "cost": "XL",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#224",
+    "#225",
+    "#329",
+    "#345",
+    "#377",
+    "#379",
+    "#403",
+    "#486",
+    "#535",
+    "#540"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/CS-10.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M19",
+   "key": "assurance-gates-in-ci",
+   "home": "systemic",
+   "title": "Make the existing assurance execute and block: land the phantom fi_min gate, enrol the local-only gates and never-run suites per-PR, restore the nightly, then add emulation-FI and glyph-leak regression nets",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "CS-08"
+   ]
+  }
+ ]
+}

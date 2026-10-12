@@ -1,0 +1,28 @@
+{
+ "id": "BOOT-04",
+ "title": "Ship the one-command external verifier: full reset-halt dump + option-byte/OTP profile diff against published per-release digests, an OTP-burned per-unit birth certificate / bag serial rendered by the FSBL on first boot, and a WebUSB variant for non-experts",
+ "threat": "Pre-sale reflash, option-byte tamper or chip swap in transit against a device that is deliberately debug-open (RDP-0) until first power \u2014 the exact window Ledger named in LSB-013 \u2014 where the whole pq1 trust story assumes the user verifies first, yet nothing a user can run exists; and a non-expert buyer who cannot run SWD gets no transit-tamper signal at all.",
+ "proposal": "(1) Turn docs/security/user-device-verification.md into code: `pq1-verify` (host, probe-rs/STM32_Programmer_CLI connect-under-reset, no VBAT) dumps both banks + OTP + every option-byte register (incl. OEM1LOCK/OEM2LOCK, BOOT_LOCK, WRP both banks, SECWM, HDP, BOR_LEV), diffs against a signed, published release descriptor (image digests per slot, FSBL digest, ship option-byte profile, expected-0xFF map for unused pages) and prints the same 8 fingerprint words the FSBL will show; fail = 'do not power'. (2) Factory burns a per-unit record into OTP (unit serial, tamper-bag serial, SHA-256 of the per-unit SE UIDs) and the FSBL renders the bag serial on the first-boot screen so an ordinary user compares it to the physical bag (Coldcard pattern); the verifier checks the same record. (3) Append each unit's record to a transparency log (#68/#67) so a clone missing from the log is detectable. (4) Fill the `ship-option-b` profile's PENDING fields from BOOT-01's pin and the `flash: []` digest list from the non-monolithic shipping image (#226/#696).",
+ "rationale": "Owner decision (tools/verify_ship_state.py:8-19): 'external verification is the only kind that counts at RDP-0'. Trezor/Ledger cannot offer verify-before-first-power at all (Trezor ships blank + seal; Ledger relies on SE genuine-check), so this is pq1's genuine differentiator \u2014 but today it is a design doc, a bench-only profile and an uncheckable template, so the differentiator does not exist for any buyer.",
+ "repo_evidence": [
+  "docs/security/user-device-verification.md:3-4 ('Nothing here is implemented'), :201-218 (work breakdown, no issue)",
+  "tools/verify_ship_state.py:1-177 (option-byte-level read-only script; refuses PENDING profiles)",
+  "tools/ship-profiles/ship-option-b.template.json (WRP/BOOT_LOCK/HDP/SECWM PENDING, `flash: []`)",
+  "docs/firmware/reproducible-builds.md:241 (claims CI runs verify-repro; no workflow does \u2014 drift)",
+  "fsbl/src/render.rs:80-202 (fingerprint render only; no serial/birth-record page)",
+  "Issues #595 (option bytes not in prodtest report), #68, #67, #249, #226, #696"
+ ],
+ "vendor_precedent": "Coldcard Mk4 numbered tamper-evident bag with number recorded in-device and shown on first power-up; Trezor verify_signed_firmware.py (strip signatures, byte-diff vs reproducible build, re-verify against PRODUCTION keys); Star Labs pre-dispatch verification pack; Foundation onboarding integrity check.",
+ "novelty": "beyond",
+ "kind": "process",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Depends on BOOT-01 (pinned profile) and the non-monolithic shipping image for the digest list; OTP record consumes OTP words the rejected unary rollback tally also wanted (draft 1.1 typed floor must agree on the OTP map). A birth record is only as trustworthy as the factory that burns it \u2014 state that it detects transit tamper and cloning-without-factory-access, not a malicious factory. WebUSB over the SBU\u2192SWD adapter is unproven on the enclosed EVT unit.",
+ "sources": [
+  "https://coldcard.com/mk4",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/tools/trezor_core_tools/verify_signed_firmware.py",
+  "https://donjon.ledger.com/lsb/013/",
+  "https://starlabs.systems/blogs/news/anti-interdiction-service"
+ ],
+ "surface": "boot"
+}

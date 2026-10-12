@@ -2484,3 +2484,22 @@ cdrafts-split/CanonicalNumericalBound.ec	defined-op:e84e6503db39	canonical_physi
 cdrafts-split/CanonicalPoolEvent.ec	defined-op:06c225a679d3	canonical_pool_enumerated
 cdrafts-split/CanonicalPoolEvent.ec	defined-op:b27fbfd11a1c	canonical_pool_j
 cdrafts-split/CanonicalPoolWitness.ec	defined-op:3eb2adb9ed46	canonical_pool_coverage
+cdrafts-split/C10Representation.ec	defined-op:08eaa515ae0d	byte_word_le	# line 5
+cdrafts-split/C10Representation.ec	defined-op:468e3d6c6dff	byte_word	# line 8
+cdrafts-split/C10Representation.ec	defined-op:90e59343ccc7	word_window	# line 11
+cdrafts-split/C10Representation.ec	defined-op:b99c6c233ea8	ht_field	# line 14
+cdrafts-split/C10Representation.ec	defined-op:12505377d598	fors_field	# line 17
+cdrafts-split/C10Representation.ec	defined-op:20d7dd631510	wots_field	# line 20
+cdrafts-split/C10Representation.ec	defined-op:486f1047c3c3	word_nodes	# line 23
+cdrafts-split/C10Representation.ec	defined-op:695f3584d39d	word_layer	# line 26
+cdrafts-split/C10Representation.ec	defined-op:dff09e1a80b6	word_decode	# line 29
+
+# 2026-10-12 paired hash-preimage definitions; no new axiom or admit.
+cdrafts-split/C10Representation.ec	defined-op:8b3abdf192b6	pad_node	# line 32
+cdrafts-split/C10Representation.ec	defined-op:c1f695a0dcf9	u32_bytes	# line 35
+cdrafts-split/C10Representation.ec	defined-op:8603e15a59ae	hmsg_preimage	# line 38
+cdrafts-split/C10Representation.ec	defined-op:7a299d19add7	th_preimage	# line 41
+cdrafts-split/C10Representation.ec	defined-op:3e59828f0cf3	pair_preimage	# line 44
+cdrafts-split/C10Representation.ec	defined-op:e96a0fb69401	multi_preimage	# line 47
+cdrafts-split/C10Representation.ec	defined-op:2f10a09fa70e	wots_preimage	# line 50
+cdrafts-split/C10Representation.ec	defined-op:c9cb28afd800	r_preimage	# line 53

@@ -2930,6 +2930,25 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // `type2_nonce` was derived before trusted-display rendering so the
     // sequence/lane shown to the user is byte-identical to this signed nonce.
 
+    // The pixel route's signing film starts HERE, before the slot keygen,
+    // not at the Type-2 sign. On a SLOT_CACHE miss (the first sign after
+    // unlock, or a new chain) the keygen's progress hook otherwise started
+    // an undressed GENERATING KEYS busy film, and `film_start` then threw it
+    // away mid-orbit for the family's film: white dots, a cut, then the
+    // green Safe film from the seed again. With the family film already
+    // live, every progress hook below (slot / master keygen, the Type-1 and
+    // factory signs) advances this one film.
+    // #773: arm the landing guard with the film. Every way out of this
+    // scope but the success landing below lands the film on the X instead
+    // of freezing the orbit.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    let mut film_landing: Option<crate::ui::px::lcd::FilmLanding> = None;
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if px_route {
+        crate::ui::px::lcd::film_start();
+        film_landing = Some(crate::ui::px::lcd::FilmLanding::armed());
+    }
+
     // ── 12. Slot C10 keygen (cached by (account_index, chain_id, slot_index)) ──
     //
     // Post-Coinbase-port slot keys are chain-specific. With multi-
@@ -3296,19 +3315,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     let t2_digest = compute_sphincs_digest_v06(&t2_params, &t2_call_digest);
 
-    // The pixel route plays the qubit loading film around the sign (started
-    // here, paced by the signer's opaque progress hook, landed at the
-    // post-release site below); every other route keeps the progress text.
-    // #773: arm the landing guard with the film. Every way out of this
-    // scope but the success landing below — 25 error returns today, and any
-    // added later — lands the film on the X instead of freezing the orbit.
+    // The pixel route's film is already running (started before the slot
+    // keygen, above); every other route shows the progress text.
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
-    let mut film_landing: Option<crate::ui::px::lcd::FilmLanding> = None;
-    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
-    if px_route {
-        crate::ui::px::lcd::film_start();
-        film_landing = Some(crate::ui::px::lcd::FilmLanding::armed());
-    } else {
+    if !px_route {
         ui::show_progress("Slot C10 sign", 0);
     }
     #[cfg(not(all(feature = "ui-px", feature = "ui-lcd")))]

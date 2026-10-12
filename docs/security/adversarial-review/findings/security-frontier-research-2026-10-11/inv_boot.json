@@ -1,0 +1,440 @@
+{
+ "surface": "Measured boot / RDP-2 / option bytes / verify-before-first-power trust chain (key=boot). Threats: modified firmware or bootloader pre/post sale, RDP downgrade, option-byte tamper, fake fingerprint screen, attestation gaps. Overall: the FSBL measurement mechanism and an on-device first-boot RDP-2 candidate both exist as code, but NEITHER is buildable as a shipping image (FSBL `mode-production` is compile_error'd; secure `rdp2-self-lock` requires `mode-production`, which `FW_ROLLBACK_PRODUCTION_BLOCKED` panics on). No unit has ever been at RDP-2, WRP is set on no board, and the RDP-2 burn routine has a known-inert register defect (#268). Invariant #10 is explicitly NOT claimable today.",
+ "has": [
+  {
+   "item": "FSBL A/B slot selector with full manifest verify chain (structural, CRC, digest, vendor fingerprint, SPHINCS+C10 signature, rollback floor), each verdict FI-sentinel-gated with r0 scrub between gates",
+   "evidence": [
+    "fsbl/src/main.rs:255-290 (filter_valid)",
+    "fsbl/src/main.rs:300-350 (pick_slot)",
+    "fw-manifest/src/lib.rs:450-569 (verify_* chain, verify_rollback)",
+    "fsbl/src/fi.rs:44-65"
+   ],
+   "status": "implemented",
+   "notes": "Bench-only: the crate hard-errors under mode-production (fsbl/src/main.rs:73-80, fsbl/build.rs:56-65). Legacy PQFW_V1 manifest; the v6 slot-bound preimage (fw-manifest/src/v6.rs) is a research candidate, not wired."
+  },
+  {
+   "item": "FSBL re-hashes both slot images from flash and compares against signed hashes through a double-evaluated sentinel gate; returns the secure digest for the fingerprint",
+   "evidence": [
+    "fsbl/src/verify.rs:38-110",
+    "fsbl/src/verify.rs:102-108 (check_true_into_sentinel aggregate)"
+   ],
+   "status": "implemented",
+   "notes": "Software path header comments (verify.rs:3-7, main.rs:52-55, Cargo.toml note) still say 'software sha2' but `hw-sha256` is the default feature and routes through the HASH peripheral."
+  },
+  {
+   "item": "FSBL renders the 8-word fingerprint on the NV3007 BEFORE branching, holds 4 s, and refuses handoff (halt) when any SPI transfer or the AW99703 backlight enable did not read back",
+   "evidence": [
+    "fsbl/src/main.rs:198-223 (display_verdict != OK_SENTINEL -> halt)",
+    "fsbl/src/render.rs:49 (FINGERPRINT_HOLD_MS=4_000)",
+    "fsbl/src/render.rs:80-202",
+    "fsbl/src/aw99703.rs (pq1 backlight, 501 lines)"
+   ],
+   "status": "implemented",
+   "notes": "Fail-closed is recoverable (no latch). Verdict proves 'no observable step failed', not that the user saw words (no MISO, no panel feedback). Backlight receipt measured 2026-09-23 on a board WITHOUT an LCD fitted. Hold of 4 s and ~6.93 s total boot are EXPECTED, not re-measured on silicon."
+  },
+  {
+   "item": "FSBL and secure world share one pure layout function so both rows must show identical words for an honest slot; dwell times pinned equal by test",
+   "evidence": [
+    "fsbl/src/render.rs:14,97",
+    "secure/src/measured_boot.rs:153-180",
+    "fsbl-tests/tests/paired_constants.rs:85,116",
+    "bip39/tests/prefix5_roundtrip.rs (cited docs/security/measured-boot.md:170)"
+   ],
+   "status": "implemented",
+   "notes": "Secure-world row is ADVISORY (self-attested by the measured image)."
+  },
+  {
+   "item": "Secure-world 'OS Fingerprint' advisory screen (SHA-256 of [__vector_table, __veneer_limit), base derived from linker symbol so it tracks slot relocation)",
+   "evidence": [
+    "secure/src/measured_boot.rs:59-122",
+    "secure/src/measured_boot.rs:216-359"
+   ],
+   "status": "fenced-off",
+   "notes": "OWNER DECISION 2026-09-28: compiled OUT of mode-production (secure/src/main.rs:256-276 `#[cfg(not(feature=\"mode-production\"))] mod measured_boot`, call site main.rs:1750). Shipping images therefore have ONE fingerprint row; the two-row divergence tamper signal exists only in debug builds."
+  },
+  {
+   "item": "tz-1: FSBL read-only option-byte tripwire before every branch \u2014 TZEN, phase-appropriate RDP (0xAA ship / 0xCC locked), SECWM1/2 watermark fields, SECBOOTADD0 address, SWAP_BANK clear; halts only on a persistent (2-pass) mismatch; never writes option bytes",
+   "evidence": [
+    "fsbl/src/optbytes.rs:66-85",
+    "fsbl/src/main.rs:164-194",
+    "shared/src/lockdown.rs:366-371 (phase_profile)",
+    "shared/src/lockdown.rs (verify_confirmed_fields, after line 560)",
+    "fsbl-tests/tests/source_invariants.rs:135 (negative_tz1_tripwire_runs_before_branch_and_never_writes)"
+   ],
+   "status": "partial",
+   "notes": "Deliberately does NOT act on WRP1A/WRP2A or OEM locks (unpinned layouts fail closed, would halt every bench board). A unit whose WRP was cleared before RDP-2 passes this tripwire (optbytes.rs:24-29). Two-pass OR accepts a single-fault 'match' suppression by design (optbytes.rs:31-40). Issue #270 still lists adding this file as remaining work \u2014 stale."
+  },
+  {
+   "item": "Shared, host-tested silicon-lockdown comparator library: RDP decode, SECBOOTADD0 address+BOOT_LOCK bit, SECWM field compares, WRP area compare (both banks, frozen last page 4), OEM-lock compare, option-byte command-register authority (NSCR owns OPTSTRT/OBL_LAUNCH/OPTLOCK)",
+   "evidence": [
+    "shared/src/lockdown.rs:28-97",
+    "shared/src/lockdown.rs:130-167 (FLASH_NSCR_OFF, seccr_accepts)",
+    "shared/src/lockdown.rs:338-356 (SHIP_PROFILE_U585 / LOCKED_PROFILE_U585)",
+    "shared/src/lockdown.rs:~440-560 (wrp_covers_fsbl, oem_locks_absent, verify_ship_profile)"
+   ],
+   "status": "implemented",
+   "notes": "Pin switches are OFF: `WRP1A_MASK_PINNED=false`, `OEM_LOCK_MASK_PINNED=false`, `require_boot_lock=false` in both profiles; `optr_matches_ship` is a partial OPTR mask (BOR_LEV, nSWBOOT0, NRST_MODE not compared, lockdown.rs:373-397)."
+  },
+  {
+   "item": "First-boot Phase A (candidate): idempotent RDP check, verify_ship_profile over OPTR/SECWM1/SECWM2/SECBOOTADD0/WRP1AR/WRP2AR/OEM, blank-check pages 123..127, OTP-master-present pre-lock, BOTH-buttons confirm gate with FI sentinel, then RDP=0xCC burn",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:169-261",
+    "secure/src/first_boot/mod.rs:216-242 (R2.4 confirm gate)",
+    "secure/src/first_boot/state.rs (937 lines, pure state machine + power-cut matrix)",
+    "secure/src/hw/flash.rs:428-505 (OB raw readers, is_secure_page_blank)"
+   ],
+   "status": "fenced-off",
+   "notes": "Only compiles under `rdp2-self-lock`, which nsc/mod.rs:645-650 forces to require `mode-production`, which secure/build.rs:37-40 panics on (FW_ROLLBACK_PRODUCTION_BLOCKED). So no flashable image exists; `make build-rdp2-self-lock` (Makefile:2785) only proves the negative. Today every real first boot would halt at E0809 (WRP unpinned, fail-closed) before any burn."
+  },
+  {
+   "item": "RDP-2 burn routine `program_rdp_level2_and_launch` (stage RDP=0xCC preserving other OPTR bits, commit, OBL_LAUNCH)",
+   "evidence": [
+    "secure/src/hw/flash.rs:531-591",
+    "secure/src/hw/flash.rs:384-397 (KNOWN DEFECT #268 banner)"
+   ],
+   "status": "partial",
+   "notes": "KNOWN DEFECT #268: OPTSTRT/OBL_LAUNCH/OPTLOCK are written to/read from SECCR (0x2C) which implements none of them; commit is inert and the function returns Ok(()) without burning. Deliberately unfixed pending owner decision + sacrificial silicon; guarded by a negative test that the defect is marked or fixed. `REG.nscr` is already bound for the fix."
+  },
+  {
+   "item": "First-boot Phase B (candidate): page-127 commit-LAST journal, resumable BHK first-write (anti-pre-plant erase of page 126), SE050 SCP03/admin rotation transport->BHK-final, OPTIGA PBS rotation transport->DHUK+TRNG-salt, numbered E08xx fault screens",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:276-441",
+    "secure/src/first_boot/journal.rs (420 lines)",
+    "secure/src/hw/flash.rs:506-514 (write_journal_qw)",
+    "docs/provisioning/first-boot-provisioning.md:193-224 (error table)"
+   ],
+   "status": "fenced-off",
+   "notes": "Host-tested only; never run on silicon. HW_ASSUMPTIONS PUTKEY-ATOMIC / KCV-RESP / REPUT-IDEMPOTENT open. #712 (reset strands SE050) and #707 (mass-erase unrecoverability) open."
+  },
+  {
+   "item": "Secure-world RDP regression detection: hard-halt if RDP<L2 after journal ALL_DONE; otherwise warn-and-continue (opt-in `rdp-enforce-halt` halts)",
+   "evidence": [
+    "secure/src/main.rs:1240-1267",
+    "secure/Cargo.toml:156 (rdp-enforce-halt)"
+   ],
+   "status": "partial",
+   "notes": "mode-production only. The warn path is `secure_log!`, which compiles to nothing in a production image (no debug-log), so below ALL_DONE the check is silent. #192: `rdp-enforce-halt` x `rdp2-self-lock` contradiction unfenced (would make the self-lock unreachable)."
+  },
+  {
+   "item": "Secure-world SECBOOTADD0 boot-redirect check (address only)",
+   "evidence": [
+    "secure/src/main.rs:1272-1290",
+    "shared/src/lockdown.rs:75-80 (secboot_selects)"
+   ],
+   "status": "partial",
+   "notes": "Warn-only via secure_log (silent in production); BOOT_LOCK not asserted (#214); does not prove FSBL extent, WRP or HDP."
+  },
+  {
+   "item": "Frozen Section-5 flash geometry registry crate with compile-time exact-once page coverage proof (FSBL pages 0..4 in BOTH banks, FSBL_SPAN 40,960, FSBL_MAX_LOAD_SPAN 38,912, updater_must_preserve rule)",
+   "evidence": [
+    "geometry/src/lib.rs:17-53",
+    "geometry/src/lib.rs:121-138 (REGISTRY)",
+    "geometry/src/lib.rs:186-199 (updater_must_preserve)",
+    "geometry/src/lib.rs:272-295 (const asserts)"
+   ],
+   "status": "partial",
+   "notes": "The FSBL linker is NOT migrated: fsbl/memory-stm32u585.x:33-36 still declares 32K / pages 0..3 (cutover #540, blocked by #758: page 4 is manifest A / boot-state cascade). `updater_must_preserve` has no consumer in secure/ (flash_policy.rs:68-74 says enforcing it would break the live NS update). Crate tests run in no workflow (#720) despite CLAUDE.md invariant #10 saying 'CI-pinned'."
+  },
+  {
+   "item": "FSBL geometry MEASUREMENT gate: physical LOAD span from program headers, single-FLASH-LOAD requirement, start==boot base, span<=region, derived WRP page range, static RAM check, stack-frame-sum upper bound",
+   "evidence": [
+    "scripts/check_fsbl_geometry.py:106-233",
+    "Makefile:2454-2480 (`make fsbl` runs it with -Z emit-stack-sizes)"
+   ],
+   "status": "implemented",
+   "notes": "Runs only via local `make fsbl`; no .github workflow invokes check_fsbl_geometry.py (grep across .github/workflows: zero hits). Does not select/approve a geometry."
+  },
+  {
+   "item": "FSBL ship/production compile fences: mode-production -> compile_error (FW_ROLLBACK_FSBL_PRODUCTION_BLOCKED); bench builds must opt in `legacy-fw-rollback-unsafe`; dev vendor key requires explicit FSBL_ALLOW_DEV_KEY; all-zero key refused; production key must be absolute path + match reviewed policy fingerprint; real production key cannot compose with legacy backend",
+   "evidence": [
+    "fsbl/src/main.rs:73-80",
+    "fsbl/build.rs:56-77",
+    "fsbl/build.rs:124-131,150-163",
+    "fsbl/build.rs:236-260 (reject_real_key_with_legacy_backend)",
+    "Makefile:2508-2509 (fsbl-release -> $(error))",
+    "fsbl-tests/tests/rollback_ship_fences.rs:177,617",
+    "ci.yml:182"
+   ],
+   "status": "implemented",
+   "notes": "Negative-controlled in CI. Consequence: no release FSBL is buildable at all today."
+  },
+  {
+   "item": "Vendor SPHINCS+C10 public key embedded as the sole runtime copy in a named ELF section; `fwsign sign --fsbl` checks the FSBL ELF's retained key sections against the trusted fingerprint",
+   "evidence": [
+    "fsbl/src/vendor_pubkey.rs:20-33",
+    "fwsign/src/subcommands/sign.rs:60-77",
+    "config/development-firmware-vendor-pubkey.hex (fsbl/build.rs:24)"
+   ],
+   "status": "implemented",
+   "notes": "Proves FSBL and bundle share a vendor; does NOT bind which FSBL is on the part (#742) and the key is not OTP-hash-locked (#220, threat-model \u00a79.8)."
+  },
+  {
+   "item": "FSBL FI shim over pqsigner-fi (double-eval sentinel, wait-random invariant loop, r0 scrub)",
+   "evidence": [
+    "fsbl/src/fi.rs:24-65"
+   ],
+   "status": "partial",
+   "notes": "FSBL has no TRNG online: `rng_byte()` returns the constant 0x42 (fi.rs:31-33), so the wait loop is fixed-length and the attacker-retiming defence is absent; the gate still needs ~2 coordinated faults. Rainbow FI sweeps for fsbl::verify_images not done (#591); 'FI-hardened FSBL image verify (EF-swarm F15)' listed OPEN in CLAUDE.md #10."
+  },
+  {
+   "item": "OTP rollback floor read in FSBL (two independent passes, max) feeding verify_rollback",
+   "evidence": [
+    "fsbl/src/otp.rs:27-42",
+    "secure/src/hw/otp.rs:266-282",
+    "fw-manifest/src/lib.rs:563-569"
+   ],
+   "status": "fenced-off",
+   "notes": "The unary 1,024-bit tally is REJECTED as physically invalid on STM32U5 OTP (otp.rs:4-10); runtime floor writer removed (FA-1.5), so CMD_FW_COMMIT refuses activation and the floor never advances in the field (secure/src/nsc/cmd_fw_commit.rs:372). Replacement = Draft 1.1 research candidate (#31, #543, #546, #544)."
+  },
+  {
+   "item": "FSBL minimal SAU region so secure-state reads of the bank-2 NS alias do not return zeros (root cause of the 2026-09-16 silent-halt boot failure)",
+   "evidence": [
+    "fsbl/src/sau.rs:56-69",
+    "fsbl/src/main.rs:144-156",
+    "fsbl-tests/tests/source_invariants.rs:201"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "FSBL HASH peripheral: GTZC HASHSEC set before use, clock enable, SHA-256('abc') KAT, halt on engine fault (no reset loop)",
+   "evidence": [
+    "fsbl/src/hash.rs:55-85",
+    "fsbl/src/main.rs:117-134",
+    "fsbl/Cargo.toml (default = [\"hw-sha256\"])"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Branch hygiene: VTOR repoint, MSP install, scrub of all GPRs except r2/r3 handoff, bx to slot reset handler",
+   "evidence": [
+    "fsbl/src/branch.rs:38-98"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Legacy try-once / boot-state page (CRC-protected, unsigned, written only by CMD_FW_COMMIT) consulted in the two-valid-candidate path",
+   "evidence": [
+    "fsbl/src/main.rs:323-350",
+    "fsbl/src/boot_state.rs",
+    "secure/src/hw/boot_state.rs:1-14"
+   ],
+   "status": "fenced-off",
+   "notes": "Explicitly not the production rollback contract (no first-successful-unlock confirmation write; single-candidate fast path skips it). Tamper changes only slot choice; every candidate still passes signature verify."
+  },
+  {
+   "item": "stage-marker bench diagnostic (DWT-timed stage records into the erased manifest-B page) with mode-production compile_error; HSI16 clock switch with clock-derived delays",
+   "evidence": [
+    "fsbl/src/marker.rs:36-37",
+    "fsbl/src/clock.rs",
+    "docs/security/measured-boot.md:282-347 (2.930 s work measured; 4 s hold + ~6.93 s total NOT re-measured)"
+   ],
+   "status": "implemented",
+   "notes": "FSBL has no logging by construction; marker is the only observability and never ships."
+  },
+  {
+   "item": "Die-identity probe: DBGMCU_IDCODE decode, SESIP rev-U scope check (report-only)",
+   "evidence": [
+    "secure/src/die_id.rs:31-87",
+    "secure/src/hw/dbgmcu.rs:23-60",
+    "secure/src/main.rs:1217",
+    "contracts/verification/docs/HW_ASSUMPTIONS.json:333-364 (HW-ASSUME-REV-U)"
+   ],
+   "status": "partial",
+   "notes": "secure_log only (silent in production); never faults by design; HW_ASSUMPTIONS says nobody has RUN it on the bench dies yet. The anti-counterfeit boot policy (CPUID r0p4 + UID plausibility + DHUK fingerprint + errata fingerprint, halt-on-anomaly) is a plan (#249), not code."
+  },
+  {
+   "item": "External READ-ONLY ship-state verifier (STM32_Programmer_CLI, connect-under-reset, write-verb allow-list, refuses profiles with PENDING fields)",
+   "evidence": [
+    "tools/verify_ship_state.py:1-177",
+    "tools/ship-profiles/bench-rdp0-tzen.json",
+    "tools/ship-profiles/ship-option-b.template.json"
+   ],
+   "status": "partial",
+   "notes": "Only the bench profile is checkable; the ship profile is a TEMPLATE with WRP/BOOT_LOCK/HDP/SECWM PENDING and `flash: []` (no shipping-layout digest to pin). The full 'pq1-verify' reset-halt dump+diff+fingerprint tool from docs/security/user-device-verification.md:201-218 is DESIGN only ('Nothing here is implemented', :3-4)."
+  },
+  {
+   "item": "Reproducible builds (pinned toolchain, Nix flake, remap/build-id flags) + `./measure.sh` + host `fwmeasure` byte-identity with firmware_fingerprint_lines + `make verify-repro` A/B clean-build diff",
+   "evidence": [
+    "docs/firmware/reproducible-builds.md:44-130,225-240",
+    "Makefile:2597-2620 (verify-repro)",
+    "fwmeasure/tests/byte_identity.rs",
+    "fsbl-tests/tests/footprint.rs (ci.yml:470)"
+   ],
+   "status": "implemented",
+   "notes": "reproducible-builds.md:241 claims 'CI runs verify-repro on every PR' \u2014 no workflow in .github/workflows invokes verify-repro (grep: only contract bytecode repro hits)."
+  },
+  {
+   "item": "Source-invariant and fence tests pinning the boot story (verify_images returns digest, render-before-branch, tz-1 before branch and read-only, SAU before NS read, display-verdict gates branch, board map parity, measured_boot survives, production FSBL cannot use dev/zero/relative key)",
+   "evidence": [
+    "fsbl-tests/tests/source_invariants.rs:70,103,135,201,570,729,787,807",
+    "ci.yml:253-256 (named host-only suites enrolled)"
+   ],
+   "status": "implemented",
+   "notes": "geometry_consistency.rs (5 tests incl. 'fsbl_linker_32k_flash_region_is_deliberate_legacy') and qemu_integration.rs are in NO workflow (#721)."
+  },
+  {
+   "item": "Runtime secure-flash write capability types (`GenericSecurePage`, `GenericSecureQwAddr`) exclude the first-boot journal page 127 from generic writers",
+   "evidence": [
+    "secure/src/flash_policy.rs:32-49",
+    "secure/src/flash_policy.rs:129-168",
+    "secure/src/hw/flash.rs:1307-1320 (erase_secure_page uses the proof)"
+   ],
+   "status": "partial",
+   "notes": "They accept bank-1 pages 0..126 / any bank-1 address outside page 127 \u2014 the FSBL pages 0..4 and manifest pages are NOT excluded. Invariant #10's 'no runtime write path may touch the FSBL range' has no software fence; it rests entirely on WRP, which no unit has set."
+  },
+  {
+   "item": "Hardware-assumption ledger entries covering this surface (HW-ASSUME-RDP2 via SESIP-2400133-01, REV-U, DHUK-RDP12, DHUK-UNIQUE, OEM2-ABSENT) with falsification procedures",
+   "evidence": [
+    "contracts/verification/docs/HW_ASSUMPTIONS.json:167-220,302-392"
+   ],
+   "status": "claimed-not-verified",
+   "notes": "RDP2 is called 'the single highest-leverage unverifiable premise'; DHUK at RDP-2 unmeasured (no board has ever been at RDP-2); device ships deliberately OUTSIDE the SESIP-evaluated configuration (no OEM2 key)."
+  },
+  {
+   "item": "Confirm-gated lock, factory/first-boot responsibility split and E08xx field error codes documented; Draft 1.2 Option B (factory sets WRP+SECWM+TZEN+BOOT_LOCK, keeps RDP-0; first boot verifies then sets RDP-2 last) adopted",
+   "evidence": [
+    "docs/provisioning/first-boot-provisioning.md:38-154,193-234",
+    "tools/ship-profiles/ship-option-b.template.json (flow)",
+    "secure/src/first_boot/mod.rs:4-12"
+   ],
+   "status": "implemented",
+   "notes": "Documentation of a candidate; it authorizes no irreversible action."
+  },
+  {
+   "item": "Boot-time SE attestation / chip-swap detection",
+   "evidence": [
+    "docs/security/HARDENING.md:178-189 (\u00a73.4, written as present-tense requirement)",
+    "docs/security/threat-model.md:505 (\u00a79.4 'not yet landed')",
+    "grep 'attest' in secure/src/se050/mod.rs, secure/src/optiga/mod.rs, secure/src/dual_se.rs: no hits"
+   ],
+   "status": "planned",
+   "notes": "No code reads an SE attestation object or pins SE UIDs at boot. Tracked #210, #244, #249, #206, #61, #27."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "RDP-2 burn is inert: `program_rdp_level2_and_launch` writes OPTSTRT/OBL_LAUNCH to SECCR and reads OPTLOCK from SECCR, none of which exist there (NSCR 0x28 owns them); returns Ok(()) after failing to burn",
+   "tracked_in": "#268 (open, ship-blocker) + banner at secure/src/hw/flash.rs:384-397 + negative test",
+   "notes": "Deliberately unfixed pending owner decision and a sacrificial-silicon plan. Memory note: option-byte control bits live in NSCR."
+  },
+  {
+   "gap": "WRP1A/WRP2A register layout not silicon-pinned (WRP1A_MASK_PINNED=false) -> Phase A fails closed at E0809 on every genuine first boot, and the every-boot tz-1 tripwire cannot detect a cleared WRP at all; no board has WRP set",
+   "tracked_in": "#46, #35, #45; shared/src/lockdown.rs WRP1A_MASK_PINNED doc",
+   "notes": "WRP-before-RDP-2 is the load-bearing ordering of invariant #10."
+  },
+  {
+   "gap": "OEM1/OEM2 lock status register + bits unpinned (OEM_LOCK_MASK_PINNED=false) -> E080A fail-closed; a planted OEM2 RDP-regression password is undetectable; device ships outside the SESIP-evaluated OEM2 configuration",
+   "tracked_in": "#387, #40, #46; HW-ASSUME-OEM2-ABSENT"
+  },
+  {
+   "gap": "BOOT_LOCK not required by either profile (require_boot_lock=false) and not set at factory; without TZEN+BOOT_LOCK, SWAP_BANK is EXCEPTED from the RDP-2 freeze and is NS-programmable, so the physical bank serving 0x0C00_0000 can be flipped post-lock",
+   "tracked_in": "#38, #44, #753, #214",
+   "notes": "Factory ordering (SECBOOTADD0/SWAP_BANK before BOOT_LOCK) is mandatory and irreversible (#753)."
+  },
+  {
+   "gap": "HDP1/HDP2 hide-protect over the FSBL range not configured or verified in any profile (bench profile reads HDP1EN=0; ship template PENDING)",
+   "tracked_in": "#39, #43, #214"
+  },
+  {
+   "gap": "FSBL not staged in both banks; the frozen registry's bank-2 FSBL mirror pages 0..4 are currently inside the live NS slot A, so a SWAP_BANK flip is a brick/redirect rather than a no-op",
+   "tracked_in": "#42, #43, #540/#758; secure/src/flash_policy.rs:68-74"
+  },
+  {
+   "gap": "FSBL linker still 32 KiB / pages 0..3 while the frozen registry says 40 KiB / pages 0..4; adopting 40 KiB now would WRP-freeze page 4 while empty; the cutover cascades into manifest A / boot-state page and deletes an FI gate from CMD_FW_COMMIT",
+   "tracked_in": "#540 (open), #758 (blocked), #752 (v7 drafts rejected)"
+  },
+  {
+   "gap": "No non-monolithic shipping image target exists (bench boards hold a monolithic secure world at 0x0C00_0000); no shipping-layout flash digest to pin; CMD_FW_* never proven on pq1 silicon as the only field-update path once BOOT0 is strapped + RDP-2",
+   "tracked_in": "#226, #696, tools/ship-profiles/ship-option-b.template.json blocked_on"
+  },
+  {
+   "gap": "No software fence prevents the runtime secure-world flash API from erasing/programming FSBL pages 0..4 or the manifest pages; `GenericSecurePage`/`GenericSecureQwAddr` exclude only page 127 and `updater_must_preserve` has no consumer",
+   "tracked_in": "Not an explicit issue; indirectly referenced at secure/src/flash_policy.rs:73 and #540/#758",
+   "notes": "Invariant #10's 'no runtime write path may touch the FSBL range' currently relies solely on hardware WRP, which is unset everywhere."
+  },
+  {
+   "gap": "FSBL vendor public key is not hash-locked in OTP; a re-flashed FSBL (at RDP-0) carrying a different vendor key is accepted, and two FSBLs from the same vendor key are indistinguishable by the fwsign check",
+   "tracked_in": "#220; docs/security/threat-model.md \u00a79.8"
+  },
+  {
+   "gap": "The signed release bundle contains no FSBL field or measurement; 'the bundle verified' proves nothing about which bootloader is on the part (DEMONSTRATED 2026-09-28 by booting an unchanged bundle under a different FSBL)",
+   "tracked_in": "#742; docs/security/measured-boot.md:49-99",
+   "notes": "By design (FSBL is the verifier), but no release receipt emits an FSBL measurement and no automation exists for the manual key-extraction check."
+  },
+  {
+   "gap": "End-user verification tool (reset-halt full dump, diff vs published image + ship option-byte profile + per-device OTP birth certificate, fingerprint-word output; WebUSB variant; SBU->SWD routing; no-VBAT requirement) is design-only; only the option-byte-level read-only script exists with an uncheckable ship template",
+   "tracked_in": "docs/security/user-device-verification.md:201-218 work breakdown (no dedicated issue found); #249/#68/#67 for the birth certificate/transparency log"
+  },
+  {
+   "gap": "Boot-time SE attestation and MCU anti-counterfeit boot policy are not implemented (die_id is report-only and silent in production); chip-swap after sale is undetected at runtime",
+   "tracked_in": "#210, #244, #249, #206, #61, #27, #272; threat-model \u00a79.4"
+  },
+  {
+   "gap": "Authenticated per-unit factory transport handoff/receipt (`verify_factory_receipt`) is a spec stub; the device cannot distinguish genuine factory transport state from attacker-planted state before welding RDP-2",
+   "tracked_in": "#76, #268, #249; docs/provisioning/first-boot-provisioning.md:338-362"
+  },
+  {
+   "gap": "Anti-rollback root: unary OTP tally rejected, runtime floor writer removed, Draft 1.1 typed floor/journal not implementation-approved; no field anti-rollback advancement exists",
+   "tracked_in": "#31, #543, #546, #544, #545, #541"
+  },
+  {
+   "gap": "FSBL FI posture: no TRNG in FSBL (fixed 0x42 wait length), no rainbow/emulated fault sweep of fsbl::verify_images or cmd_fw_commit, FI-hardened FSBL image verify (EF-swarm F15) open, no bench glitch campaign on the RDP-2 / TrustZone-M disable question",
+   "tracked_in": "#591, #401, #301, #633; CLAUDE.md #10 open gates"
+  },
+  {
+   "gap": "Silicon receipts absent for the whole lifecycle: direct RDP 0->2 with TZEN=1 behaviour, OPTWERR bit, DHUK RDP-1 vs RDP-2 equality, SESIP rev-U die confirmation, power-cut matrix across OPTSTRT window, page-126 program-hostility",
+   "tracked_in": "#388, #400, #33, #247, #45, #544; HW_ASSUMPTIONS.json HW-ASSUME-RDP2/REV-U/DHUK-RDP12; first-boot-provisioning.md runbook \u00a7252-273"
+  },
+  {
+   "gap": "CI enrolment holes on this surface: pqsigner-geometry tests, fsbl-tests geometry_consistency + qemu_integration, scripts/check_fsbl_geometry.py and `make verify-repro` run in no GitHub workflow",
+   "tracked_in": "#720, #721 (geometry/fsbl-tests); verify-repro and check_fsbl_geometry CI absence not separately tracked"
+  },
+  {
+   "gap": "Fake-fingerprint-screen residual: nothing makes the FSBL window visually distinctive from a screen a later (malicious) slot could paint (same 4x16 ASCII grid as the advisory row; nv3007 colour fills exist only in lcd-test), and the two-row cross-check is removed from release images; user-personalised boot artifact is design-first with no free flash page",
+   "tracked_in": "#601; accepted residual per CLAUDE.md #10(c); owner decision 2026-09-28 (secure/src/main.rs:256-276)"
+  },
+  {
+   "gap": "Debug-only enforcement: the production-mode RDP<L2 (pre-ALL_DONE), SECBOOTADD0 and die-id checks are `secure_log!` warnings that compile to nothing without `debug-log`; `rdp-enforce-halt` x `rdp2-self-lock` contradiction unfenced",
+   "tracked_in": "#192 (contradiction); silent-warning behaviour not separately tracked"
+  },
+  {
+   "gap": "BHK/SE050 recoverability around the first-boot lock: a reset mid-ceremony can strand the SE050 with a key that differs from the persisted one; DFU reflash of a sealed unit always mass-erases and BHK-rooted SE050 becomes unrecoverable",
+   "tracked_in": "#712, #707, #204, #77"
+  },
+  {
+   "gap": "Per-unit factory evidence: option bytes not recorded/verified per unit in the prodtest report; transparency-log append and SLH-DSA factory manifest unbuilt",
+   "tracked_in": "#595, #68, #67, #249"
+  }
+ ],
+ "drift": [
+  "docs/provisioning/first-boot-provisioning.md:123-134 and docs/security/user-device-verification.md:129-141 say the Phase-A confirm gate is 'Not yet implemented \u2014 current code runs Phase A unconditionally'; the code implements the both-buttons sentinel gate (secure/src/first_boot/mod.rs:216-242) and the same provisioning doc's UPDATE 2026-07-21 (:305-310) says so. The earlier paragraphs are stale.",
+  "docs/provisioning/first-boot-provisioning.md:48 says the factory sets 'WRP1A on FSBL pages 0\u20133'; `verify_ship_profile` requires both WRP1A and WRP2A to cover pages 0..=4 (`FSBL_LAST_PAGE_FROZEN = 4`, shared/src/lockdown.rs) \u2014 a factory following the doc would fail E0809 even after the layout pin.",
+  "CLAUDE.md invariant #10 says the geometry registry 'is CI-pinned'; no .github workflow runs pqsigner-geometry tests, fsbl-tests/geometry_consistency.rs, or scripts/check_fsbl_geometry.py (#720, #721 confirm).",
+  "CLAUDE.md Lifecycle: 'The FSBL fingerprint and the secure-world measured_boot::run screen show the SAME 8 words' and 'Honest-row divergence is a strong defect/tamper signal' \u2014 in mode-production `measured_boot` is compiled out (secure/src/main.rs:256-276, call at :1750), so a shipping image has one row and no divergence signal (owner decision 2026-09-28, recorded only in the main.rs comment).",
+  "docs/firmware/reproducible-builds.md:241 '**CI runs `verify-repro` on every PR**' \u2014 no workflow invokes `make verify-repro` (only Foundry bytecode-repro jobs match 'repro').",
+  "docs/security/HARDENING.md:178-189 (\u00a73.4 Boot-Time Attestation) is written as a present-tense requirement and HARDENING.md:32 lists an 'SE050 attestation root cert' hardcoded in the image; no attestation code or root cert exists (grep in secure/src/se050, optiga, dual_se, main: no hits); threat-model.md:505 \u00a79.4 correctly says not landed. threat-model.md:345 also claims a swapped chip 'fails attestation -> permanent lockdown' (row flags itself untested).",
+  "docs/security/measured-boot.md:282 heading says 'the boot is MEASURED, and is now 5.9 s' while its table totals 12.932 s and the 2026-09-24 update says ~6.93 s EXPECTED; CLAUDE.md Lifecycle says ~6.9 s expected. Internally inconsistent heading.",
+  "fsbl/src/main.rs:52-55 ('We use sha2::Sha256 in software'), fsbl/src/verify.rs:3-7 and the fsbl/Cargo.toml dependency note ('we use the SOFTWARE SHA-256 path in FSBL') contradict `default = [\"hw-sha256\"]` and fsbl/src/hash.rs, which route through the HASH peripheral.",
+  "Issue #270 (tz-1) still lists 'Add fsbl/src/optbytes.rs' as remaining work; the module exists and is wired before the branch (fsbl/src/main.rs:164-194). Issue #133 (X17-SL1: OTP master checked only post-lock) is addressed by R2.3 pre-lock check (first_boot/mod.rs:212-214) but remains open. Issue #705 (FSBL cannot light pq1 panel) appears addressed by fsbl/src/aw99703.rs + render.rs:130-179 with a measured receipt, but remains open \u2014 verify and close or state what is still missing.",
+  "docs/security/user-device-verification.md:96-97 states that a device already at RDP-2 fails verification 'which is the tamper signal'; consistent. But docs/security/HARDENING.md:217-219 says 'Verify the RDP level in boot code; refuse to run if debug build flags are set' \u2014 the boot code warns (secure_log, silent in production) and only refuses under opt-in `rdp-enforce-halt` or post-ALL_DONE.",
+  "CLAUDE.md #10 says the bench image 'occupies pages 0..3' with span '28,704'; issue #758 (2026-09-28) measured the hw-sha256 image at 30,720 B physical span. Both are pages 0..3 but the number in CLAUDE.md is stale.",
+  "docs/security/measured-boot.md:44-48 says physical-fault attacks on the FSBL's SHA-256/display path are 'defended within the FI envelope FSBL already maintains'; fsbl/src/fi.rs:26-33 documents that the FSBL has no TRNG so the wait-random retiming defence is absent \u2014 the envelope is weaker than the secure world's and the doc does not say so."
+ ],
+ "owner_decisions": [
+  "Shipping model (2026-07-14, work-todo #36): ship at RDP-0 so anyone can verify flash + option bytes + OTP over SWD connect-under-reset before first power; the device self-locks to RDP-2 on first field boot. There is NO factory/fixture RDP-2 burn and no factory-held final pairing secret. Do not propose a factory RDP-2 burn as the primary mechanism.",
+  "Verify-once-physically trust chain (2026-07-21, invariant #10): FSBL is the post-sale trust root; WRP-set -> RDP-2 ordering is mandatory; RDP-2 with unprotected FSBL pages permanently forfeits the guarantee; no runtime write path (fw_update or otherwise) may touch the FSBL range; FSBL must own the display for its fingerprint window (a later fake screen is the ACCEPTED residual; keep the boot-time window visually distinctive); monolithic builds are bench-only.",
+  "Phase A must be confirm-gated (2026-07-17): the RDP=0xCC burn requires a deliberate on-device chord; decline/idle stays at RDP-0 and re-prompts; an attacker confirming in transit yields a returned unit.",
+  "Self-lock implemented in secure-app early boot, not in the FSBL (owner amendment 2026-07-14) because the FSBL is at ~99% of its 32 KB budget; may migrate later with the geometry reshuffle.",
+  "Option B adopted (Draft 1.2 \u00a72.1, 2026-07-21): factory sets WRP+SECWM+TZEN+BOOT_LOCK and keeps RDP-0; first field boot verifies (never sets WRP), requires physical confirmation, sets RDP-2 LAST.",
+  "tz-1 FSBL option-byte read-back tripwire: KEEP (2026-07-23), halt only on persistent (two-pass) mismatch; the FSBL never writes option bytes (Draft 1.2 C1: the only on-device option-byte write is the confirm-gated RDP burn).",
+  "#268 (inert RDP-2 commit) is NOT to be drive-by fixed: it wants an owner decision plus a sacrificial-silicon plan.",
+  "Fingerprint hold: 10 s (2026-09-16) superseded by 4 s (2026-09-24) to match measured_boot::WORDS_MS; dwell is an owner policy, not a performance knob; paired_constants.rs pins them equal.",
+  "Secure-world 'OS Fingerprint' screen gated OUT of release (2026-09-28); kept in debug builds \u2014 the two-row cross-check is deliberately absent from shipping images.",
+  "Rollback: Draft 0.9 V4 and Draft 1.1/1.2 PQFW_V6 are preserved references / research candidates, NOT implementation authority; no 'reset rollback floor' path; the legacy unary OTP tally is rejected; any schema change needs an exact approved digest + dual review + owner stage decision (owner de-minimis acceptance of current bytes 2026-09-16).",
+  "Flash geometry v7 drafts REJECTED (#752); the frozen Section-5 registry (pages 0..4 FSBL, both banks) stands but the #540 linker cutover is parked on a decision (#758); the ui-px flash lever is an open owner decision.",
+  "ML-KEM-1024 inner wrap DESCOPED (2026-07-07) \u2014 do not re-raise; TROPIC01 backend removed (2026-07-14) \u2014 dual-SE only. OPTIGA S-1/S-2/S-3 deferred BY DESIGN pending sacrificial silicon \u2014 do not frame as avoidance.",
+  "No classical signer anywhere (invariant #5) constrains the factory handoff/receipt design to symmetric MAC or SPHINCS+C10 (the choice is an open owner decision).",
+  "HASH peripheral in the FSBL was adopted (default `hw-sha256`) despite earlier notes judging it not worth 1\u20132 KB; stale 'software SHA-256' comments remain.",
+  "External verification is the only kind that counts at RDP-0 (tools/verify_ship_state.py:8-19): on-device self-verification is worth zero against interdiction; do not propose on-device 'heal' or self-check as a substitute."
+ ]
+}

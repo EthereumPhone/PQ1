@@ -1,0 +1,27 @@
+{
+ "id": "FWU-7",
+ "title": "Adopt Trezor's Update-Control-Block invariants as explicit review rows for the Route-1 journal, and version every FSBL-consumed record so the mutable side can route around immutable-stage bugs",
+ "threat": "The A/B activation path that will replace today's fail-closed COMMIT refusal re-creates the legacy try-once defects (no confirm-alive writer, both-copies-torn coerced to 'try the unproven winner', single-candidate fast path skipping arbitration), and once the FSBL is WRP+RDP-2 frozen any bug in how it consumes the journal is permanent in the field (Trezor shipped exactly such a bug: BOARDLOADER_UCB_ZERO_ADDR_BUG).",
+ "proposal": "Before FA-2/#546 implementation starts, amend the Draft 1.1 Route-1 journal spec with a checklist copied from boot_ucb.c/boardloader main.c: (a) the control record is bound to the staged artifact by its SHA-256 (re-hashed by the FSBL, not trusted); (b) apply is idempotent and the record is erased as the FIRST act of the activated image; (c) the FSBL re-runs structural/CRC/digest/signature/floor on the staged candidate even though the runtime already did; (d) record validation checks magic, every address range, and non-overlap before any pointer is formed, double-checked in both producer and consumer; (e) the record carries a schema/flags byte reserved so a later mutable image can disable or reinterpret a field the frozen FSBL mis-handles; (f) confirm-alive (TRIED->COMMITTED) is written by the booted image only after a defined health milestone, never by the FSBL. Add these as named rows in the Draft 1.1 acceptance table and as fsbl-tests source_invariants pins once implemented.",
+ "rationale": "pq1 already has A/B slots so 'copy' becomes 'select', but the control-record discipline transfers directly and the existing legacy arbitration violates (b), (f) and the torn-state rule. Trezor's model_T3W1.h bug is a concrete, shipped example of invariant #10's cost: the fix lives in the mutable bootloader as a workaround flag because the boardloader can never change.",
+ "repo_evidence": [
+  "fsbl/src/main.rs:384-411 (legacy TRIED/COMMITTING arbitration; 'not the reviewed A/B rollback contract'; both-copies-unreadable -> try the winner)",
+  "secure/src/hw/boot_state.rs:129-141 + inventory (only writer is the refusing COMMIT; no TRIED->COMMITTED confirm-alive writer)",
+  "geometry/src/lib.rs:124-127,195 (Route-1 journal pages 64/122 reserved; no consumer yet)",
+  "fw-manifest/src/v6.rs:77-100 (journal QW layout: PENDING/CONFIRMED/INSTALL_ID \u2014 no schema/flags QW for route-around)",
+  "GitHub #271 OPEN, #138 OPEN, #758 OPEN, #696 OPEN"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/image/stm32/boot_ucb.c:56-171 (UCB write/validate/erase), boardloader main.c:148-250 (re-verify, non-overlap, idempotent copy), bootloader main.c:496-500 (erase UCB first), core/embed/models/T3W1/model_T3W1.h:56-68 (BOARDLOADER_UCB_ZERO_ADDR_BUG workaround in the mutable stage).",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Any amendment to Draft 1.1 reopens the frozen digest (dual review + owner re-ratification). Rows (e) and (f) interact with the 2026-07-26 errata (no RecoverySameEpoch/FloorBoundAccepted paths) \u2014 the route-around flag must not become a hidden availability path; constrain it to disabling features, never to lowering a floor.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/image/stm32/boot_ucb.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/projects/boardloader/main.c",
+  "/home/nicola/repos/trezor-firmware/core/embed/models/T3W1/model_T3W1.h",
+  "https://github.com/EthereumPhone/PQ1/issues/271"
+ ],
+ "surface": "fwupdate"
+}

@@ -1,0 +1,464 @@
+{
+ "surface": "Secure-element usage (key=se): OPTIGA Trust M V3 + SE050 drivers, Shielded Connection / SCP03 tunnels, transport\u2192final credential rotation (rdp2-self-lock candidate), PIN-attempt lockstep (page 124 / E120 / UserID), lifecycle lockdown (S-1/S-2/S-3), attestation/anti-substitution, wipe paths",
+ "has": [
+  {
+   "item": "Dual-chip XOR seed split (invariant #1): half_O\u2192OPTIGA, half_E\u2192SE050; both-or-fail 3-source TRNG draw for half_O; XOR reconstruct + FI-double ct_eq consistency check on unlock",
+   "evidence": [
+    "secure/src/dual_se.rs:95-110 (generate_split_half, strict 3-source)",
+    "secure/src/dual_se.rs:145-227 (provision: half_e = entropy XOR half_o, Zeroizing closure)",
+    "secure/src/dual_se.rs:356-490 (unlock: OPTIGA first, SE050 called only on Ok|PinIncorrect, kdf consistency check via fi::check_true_into_sentinel)"
+   ],
+   "status": "implemented",
+   "notes": "Validated on silicon via make dual-se-*-e2e per dual_se.rs:688 docs. Cross-chip master_secret consistency check uses OPTIGA's stored master as authority."
+  },
+  {
+   "item": "OPTIGA Shielded Connection (PRL) \u2014 TLS-PRF(PBS,'Platform Binding',random_S) \u2192 AES-128-CCM-8, 4-step handshake, per-direction sequence counters with inverted-copy FI guards, renegotiate-before-nonce-wrap, CCM receipt sentinel before plaintext release",
+   "evidence": [
+    "secure/src/optiga/shield.rs:381-409 (derive_session_keys)",
+    "secure/src/optiga/shield.rs:679-760 (establish: MasterHello/SlaveHello/MasterFinished)",
+    "secure/src/optiga/shield.rs:558-650 (unwrap_response, ccm_receipt == OK_SENTINEL double volatile check)",
+    "secure/src/optiga/shield.rs:45,240-242 (nonce-wrap renegotiation, atomic seq reserve)"
+   ],
+   "status": "implemented",
+   "notes": "Host protocol conformance pinned against OpenSSL/Python golden vectors: secure/src/optiga_under_test/prl_tests.rs (32 tests) + prl_peer.rs. Known design limit: handshake carries no host nonce (shield.rs:698-700) \u2192 whole-session replay (OP17-2 #117)."
+  },
+  {
+   "item": "Every OPTIGA PIN-auth / TRNG APDU must traverse the shield (CRIT-8); random() fails closed after one bounded PRL self-heal retry, zeroizes buf on every failure",
+   "evidence": [
+    "secure/src/optiga/mod.rs:277-322 (random: ensure_shield mandatory, 2 attempts, buf.zeroize())",
+    "secure/src/optiga/mod.rs:2384-2390 (authenticate_and_read: init + ensure_shield before any APDU)",
+    "secure/src/optiga/mod.rs:532-600 (ensure_shield; HandshakeTransport\u2192Transport vs HandshakeRejected\u2192Shield D1 split)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "SE050 SCP03 with P1=0x33 (C-DEC|R-ENC|C-MAC|R-MAC) \u2014 S-5 fixed; FI-hardened card-cryptogram verify and fail-initialized R-MAC receipt before any plaintext copy",
+   "evidence": [
+    "secure/src/se050/scp03.rs:7-14,324-335 (P1=0x33 rationale, EXTERNAL AUTHENTICATE)",
+    "secure/src/se050/scp03.rs:286-300 (card cryptogram CT+FI gate)",
+    "secure/src/se050/scp03.rs:636-700 (verify_rmac_into OK_SENTINEL, two volatile checks, no infective mask)"
+   ],
+   "status": "implemented",
+   "notes": "docs/STATUS.md:390 marks S-5 code+functional-silicon done; the logic-analyzer wire capture (red-teaming \u00a75.1, issue #7) is still open."
+  },
+  {
+   "item": "SCP03 static keys per-device derived (se050-derived-scp03) with NO runtime fallback to published AN12436 keys; fallback compiled only in the provisioning-tool feature",
+   "evidence": [
+    "secure/src/se050/scp03.rs:82-100 (load_platform_keys cfg split)",
+    "secure/src/se050/scp03.rs:190-224 (establish: fallback arm gated on se050-scp03-allow-factory-fallback)",
+    "secure/src/nsc/mod.rs:227-268 (Tier-1 REQUIRE fence: shipping dual-SE must enable saes-dhuk + se050-derived-scp03)",
+    "secure/src/nsc/mod.rs:148-176 (denylist fence rejects se050-rotate-scp03 / se050-scp03-allow-factory-fallback on release hardware)"
+   ],
+   "status": "implemented",
+   "notes": "Published PLATFORM_* constants remain in secure/src/scp03_logic.rs:76-107, variant-selected by se050-part-c2 (default E2/0xA921)."
+  },
+  {
+   "item": "Three-tier key hierarchy: DHUK (SAES KEYSEL, never CPU-visible) \u2192 SAES-CMAC counter KDF for OPTIGA PBS; BHK (TAMP BKP0R..7R + BHKLOCK, DHUK-wrapped in flash page 126) \u2192 SE050 SCP03 ENC/MAC/DEK + admin PIN; OTP master \u2192 transport keysets",
+   "evidence": [
+    "secure/src/hw/secret_keys.rs:119-176 (derive_into / derive_into_saes_kdf)",
+    "secure/src/hw/secret_keys.rs:220-262 (derive_into_bhk / derive_into_saes_bhk_kdf)",
+    "secure/src/hw/secret_keys.rs:306-368 (se050_scp03_{enc,mac,dek}_key, se050_admin_pin)",
+    "secure/src/hw/bhk.rs:104-107,318-421 (TAMP_S=0x5600_7C00, load_and_lock sets BHKLOCK bit 30)"
+   ],
+   "status": "implemented",
+   "notes": "Under neither bhk nor bhk-hardcoded-master-key, derive_into_bhk silently falls through to DHUK (secret_keys.rs:244-251) \u2014 the Tier-2 split is degenerate in such builds. secret_keys.rs:61-74 compile_error! fences bhk + otp-hardcoded-master-key."
+  },
+  {
+   "item": "Transport keysets (HKDF over factory-burned OTP master, 'pqsigner/transport/*' prefix) for SE050 SCP03 ENC/MAC/DEK, SE050 admin PIN, OPTIGA PBS; reproducible at RDP-0 and RDP-2",
+   "evidence": [
+    "secure/src/hw/secret_keys.rs:372-432 (TRANSPORT_PREFIX, transport_derive_into via otp::read_device_master, transport_* fns)",
+    "secure/src/hw/otp.rs:519,605 (is_device_master_burned, read_device_master)"
+   ],
+   "status": "implemented",
+   "notes": "Public-by-assumption at RDP-0 per the #36 model; load-bearing only until first-boot rotation."
+  },
+  {
+   "item": "Salted-final OPTIGA PBS ('pqsigner/optiga-pbs-v2' \u2016 32-B TRNG salt persisted in page-127 journal) + current_pbs() single-source resolver with 3-state FinalPbs (PreRotation / Rotated / RotatedSaltMissing \u2192 hard error, never silent fallback)",
+   "evidence": [
+    "secure/src/hw/secret_keys.rs:434-473 (optiga_pairing_secret_salted)",
+    "secure/src/hw/secret_keys.rs:484-507 (current_pbs)",
+    "secure/src/first_boot/mod.rs:29-72 (FinalPbs, final_pbs_state)"
+   ],
+   "status": "implemented",
+   "notes": "Compiled only under rdp2-self-lock; outside it current_pbs() == unsalted optiga_pairing_secret()."
+  },
+  {
+   "item": "First-boot Phase A (pre-lock): verify ship option-byte profile, blank-check pages 123..127 (anti-pre-plant), OTP master burned pre-lock, user BOTH-button confirm gate with FI sentinel, then RDP=0xCC + OBL_LAUNCH",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:188-277 (run_pre_lock_and_maybe_lock)",
+    "secure/src/first_boot/mod.rs:285-290 (park_unlocked_reprompt_next_boot)"
+   ],
+   "status": "fenced-off",
+   "notes": "Only compiles with rdp2-self-lock, which requires mode-production (nsc/mod.rs:631-651) \u2014 and mode-production + optiga-trust-m is rejected by OPTIGA_S2_PRODUCTION_BLOCKED (nsc/mod.rs:313-321). No flashable image contains Phase A today."
+  },
+  {
+   "item": "First-boot Phase B (post-lock, page-127 journaled, resumable): transport SE050 SCP03 for entropy \u2192 BHK page-126 unconditional erase + 3-source BHK provision + load_and_lock \u2192 PUT KEY transport\u2192final (KVN 0x0B) with KCV response verify \u2192 admin UserID rekey \u2192 OPTIGA transport shield \u2192 TRNG salt \u2192 E140 PBS rotate with re-shield confirm",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:296-441 (FirstBootHwImpl + run_post_lock_provisioning)",
+    "secure/src/se050/mod.rs:420-535 (rotate_scp03_transport_to_final)",
+    "secure/src/se050/mod.rs:537-618 (rekey_admin_transport_to_final)",
+    "secure/src/optiga/mod.rs:644-671 (establish_transport_shield), 673-752 (rotate_pbs_to_salted)",
+    "secure/src/first_boot/state.rs, journal.rs (pure host-tested state machine + codec)"
+   ],
+   "status": "fenced-off",
+   "notes": "Device-side candidate, not production-approved. Named open gates: per-unit handoff/receipt, authenticate-before-rotate review, atomic old/new/KVN recovery, E140 order, silicon receipts (issues #268, #76). Was deterministically bricking at E0851 until #443 fix (closed 2026-07-21)."
+  },
+  {
+   "item": "Authenticate-before-rotate proof object (TransportAuthProof): fail-initialized FI sentinel bound to a context tag, consumed immediately before PUT KEY / admin delete / E140 SetData",
+   "evidence": [
+    "secure/src/scp03_logic.rs:582-637 (TransportAuthProof, AUTH_CTX_*)",
+    "secure/src/se050/mod.rs:457-492 (SCP03 proof consume before PUT KEY)",
+    "secure/src/optiga/mod.rs:717-734 (PBS proof consume before set_data_object)"
+   ],
+   "status": "implemented",
+   "notes": "Mechanism exists; STATUS/HIGH-1 still lists the 'authenticate-before-rotate rule' as an unreviewed production gate (docs/STATUS.md:395)."
+  },
+  {
+   "item": "D1 inconclusive-vs-authoritative error split on every destructive rotation probe (bus fault never falls through to an irreversible write)",
+   "evidence": [
+    "secure/src/se050/mod.rs:431-452 (is_inconclusive on FINAL probe)",
+    "secure/src/se050/mod.rs:552-566 (check_exists Err propagated, not unwrap_or(false))",
+    "secure/src/optiga/mod.rs:690-706 (rotate_pbs_to_salted probe classification)"
+   ],
+   "status": "implemented",
+   "notes": "Residual: OptigaError::Shield still conflates wrong-PBS vs handshake-faulted in places (issue #385)."
+  },
+  {
+   "item": "OPTIGA E120 LUC hardware PIN counter bound to F1D0 Execute (optiga-hw-counter): provision E120 (0, limit=32), Trezor-shape GetRandom auto-state + DecryptSym verify, pre-verify lockout check curr>=limit, reset to (0,32) after success via Auto(F1D0); admin-wipe resets E120 via 3-source transient secret",
+   "evidence": [
+    "secure/src/optiga/mod.rs:1368 (HW_PIN_CTR_LIMIT = 32)",
+    "secure/src/optiga/mod.rs:2407-2437 (E120 pre-check, NotProvisioned on (_,0))",
+    "secure/src/optiga/mod.rs:2500-2528 (get_random_auto_state + hmac_verify_auto_state)",
+    "secure/src/optiga/mod.rs:1621-1628 (reset_hw_pin_counter)",
+    "secure/src/optiga/mod.rs:1668-1700 (reset_e120_via_transient_auth)",
+    "secure/src/dual_se.rs:113-138 (reset_optiga_for_admin)"
+   ],
+   "status": "implemented",
+   "notes": "make optiga-hw-counter-e2e PASSED 2026-04-22 (docs/STATUS.md:389). The curr>=limit branch is validated by inspection only (mod.rs:2416-2432). Production fence requires the feature (nsc/mod.rs:550-565)."
+  },
+  {
+   "item": "SE050 native UserID PIN gating: user UserID max_attempts=10 with NO admin-delete entry (S-6), data objects write-once (no ALLOW_WRITE) + admin DELETE-only entry, REQUIRE_SM on every entry; admin UserID unlimited attempts (S-7a explicit form)",
+   "evidence": [
+    "secure/src/se050/apdu.rs:552-578 (write_userid rejects max_attempts==0 or >=256)",
+    "secure/src/se050/apdu.rs:683-702 (write_binary_write_once)",
+    "secure/src/se050/apdu.rs:596-625 (write_userid_unlimited)",
+    "secure/src/se050/mod.rs:2003-2010,2073 (store_objects: USERID_OBJ with None admin_ref; data via write_binary_write_once)",
+    "secure/src/se050/mod.rs:2878-2950 (provision: admin PIN \u2192 provision_admin \u2192 policy_roundtrip_selftest \u2192 store_objects)"
+   ],
+   "status": "implemented",
+   "notes": "Write-once policy is bench-validation-pending on silicon (apdu.rs:671-681). Issue #59 ('drop ALLOW_WRITE') is stale relative to code."
+  },
+  {
+   "item": "SE050 lockout SW mapping: CreateSession/VERIFY SW=0x6986 \u2192 AuthMethodBlocked \u2192 PinLocked \u2192 wipe; 0x6982 deliberately NOT mapped (false-wipe hazard); A3 reinit after a failed verify",
+   "evidence": [
+    "secure/src/se050/apdu.rs:741-768,826-845 (create_session / verify_session)",
+    "secure/src/se050/mod.rs:2865-2871 (classify_se050_unlock_error)",
+    "secure/src/se050/mod.rs:2763-2790 (authenticate_and_read: reinit on verify failure)"
+   ],
+   "status": "implemented",
+   "notes": "S-7d resolved on silicon (commit ef3d00da per docs/STATUS.md:393)."
+  },
+  {
+   "item": "MCU page-124 pre-commit attempt counter: double-read + Hamming-distant sentinel gate, bump-by-exactly-one FI check BEFORE calling either SE; FAIL-IN wipe dispatch on remaining==0; PinLocked from any leg \u2192 trigger_lockout_wipe (both SEs + page-124 erase + SRAM zeroize)",
+   "evidence": [
+    "secure/src/nsc/mod.rs:1394-1490 (gated_unlock precharge)",
+    "secure/src/nsc/cmd_request_unlock.rs:99-175 (dispatch arms)",
+    "secure/src/nsc/cmd_request_unlock.rs:190-211 (trigger_lockout_wipe)"
+   ],
+   "status": "implemented",
+   "notes": "make pin-gate-hw-counter-e2e / pin-gate-wipe-e2e pass per CLAUDE.md and docs/security/threat-model.md:569-571."
+  },
+  {
+   "item": "Directional boot reconciliation: wipe iff SE_used > page124 (or OPTIGA/SE050 disagree when both readable); SE050 leg is None under production policy (ReadObjectAttributes denied 0x6986), so effectively page124 vs E120 only; skipped loudly when no SE leg",
+   "evidence": [
+    "secure/src/nsc/mod.rs:1661-1716 (reconcile_pin_attempts)",
+    "secure/src/dual_se.rs:528-562 (pin_attempt_count = max, divergence only when both Some)",
+    "secure/src/se050/mod.rs:891-926 (pin_attempt_count_raw returns None on policy denial / max_attempts==0)",
+    "secure/src/main.rs:1781-1802 (call site, excluded for prodtest)"
+   ],
+   "status": "partial",
+   "notes": "Matches CLAUDE.md invariant #2 wording. Cold-reboot silicon receipt for both directions is OPEN (issue #200; threat-model.md:570). TLA+ model exists: contracts/verification/tla/PinReconcileDirectional.tla; Tamarin pin_lockstep.spthy is an idealized SYMMETRIC research model and explicitly not evidence for the deployed policy (contracts/verification/tamarin/README.md:1-9)."
+  },
+  {
+   "item": "Dual-SE admin wipe path: OPTIGA factory_reset over shield (Conf(E140) arm) + optional E120 reset; SE050 admin_factory_reset with page-125 wipe-flag armed first and erased only if admin object confirmed gone; crash-safe resume on next boot",
+   "evidence": [
+    "secure/src/dual_se.rs:631-648 (factory_reset_admin)",
+    "secure/src/se050/mod.rs:3168-3238 (Se050::factory_reset_admin)",
+    "secure/src/optiga/mod.rs:2718-2760 (factory_reset variants)"
+   ],
+   "status": "implemented",
+   "notes": "Post-S-6, USERID_OBJ is orphaned-locked after lockout (threat-model.md:148); re-provisioning the same SE050 needs an OID-range bump (F23 #168 'permanent brick' finding open). Wipe-verdict coercion / atomicity gaps tracked (#106, #123)."
+  },
+  {
+   "item": "OPTIGA user-OID access conditions: Change = Auto(F1D0) OR Conf(E140); Read = Auto(F1D0) (require_shielded_read=false at all four call sites); Execute=NEV; F1D0 LUC metadata; verify-before-lock readback refuses to ratchet mismatched metadata",
+   "evidence": [
+    "secure/src/optiga/apdu.rs:1182-1199 (build_metadata_protected)",
+    "secure/src/optiga/mod.rs:2225-2229 (provision_user_oid(..., false) \u00d74)",
+    "secure/src/optiga/mod.rs:1040-1140 (lock_oid / verify_and_lock, Status(0xEB) refusal)",
+    "secure/src/optiga/mod.rs:1171-1200 (F1D0 at LcsO=Op must carry LUC + Auto(F1D0) Change)"
+   ],
+   "status": "partial",
+   "notes": "OP17-1 (#116, HIGH): Read lacks the Conf(E140) AND arm, so after an F1D0 verify the secrets are readable without the shield at the AC level (shield is still used in practice by firmware). The code comment at mod.rs:2178-2180 ('while shielded is disabled \u2026 plaintext for now') is stale."
+  },
+  {
+   "item": "OPTIGA lifecycle lockdown primitives exist but are intentionally unwired/fenced: lock_oid only under optiga-lock-operational; E140 ratchet (ensure_pbs_lcso_operational) dead_code; lockdown_ta_pool emits NO APDU and returns Err(Status(0xEC)); E140 metadata keeps 'LcsO<Op OR Conf(E140)' so PBS stays rotatable",
+   "evidence": [
+    "secure/src/optiga/mod.rs:1030-1055 (lock_oid cfg)",
+    "secure/src/optiga/mod.rs:880-914 (ensure_pbs_lcso_operational, #[allow(dead_code)])",
+    "secure/src/optiga/mod.rs:2031-2063 (lockdown_ta_pool)",
+    "secure/src/optiga/apdu.rs:1453-1500 (build_metadata_pbs_final, no LcsO tag)",
+    "secure/src/optiga/mod.rs:2231-2246 (store_objects calls lockdown_ta_pool only under optiga-lock-operational + factory-production-irreversible-im-sure)"
+   ],
+   "status": "fenced-off",
+   "notes": "S-1/S-2/S-3 remain ship-blockers; see nsc/mod.rs fences below."
+  },
+  {
+   "item": "Compile-time ship-blocker fences for the SE surface: OPTIGA_S2_PRODUCTION_BLOCKED (mode-production+optiga-trust-m always rejected); OPTIGA_TA_POOL_LOCKDOWN_BLOCKED; OPTIGA_RESET_OIDS_RETIRED; S-3 optiga-hw-counter required; S-1 optiga-lock-operational required for mode-production; otp-hardcoded-master-key \u00d7 optiga-lock-operational; optiga-no-shield must not ship; HIGH-1 se050-derived-scp03 required; tamp+tamp-wipe+tzic-wipe required; rdp2-self-lock \u21d4 mode-production and incompatible with dev features; rdp2-self-lock requires dual-se",
+   "evidence": [
+    "secure/src/nsc/mod.rs:313-335",
+    "secure/src/nsc/mod.rs:550-580",
+    "secure/src/nsc/mod.rs:604-616",
+    "secure/src/nsc/mod.rs:631-696",
+    "secure/src/nsc/mod.rs:744-765",
+    "secure/src/nsc/mod.rs:812-836",
+    "secure/src/nsc/mod.rs:295-304"
+   ],
+   "status": "implemented",
+   "notes": "Consequence: the full RELEASE_FEATURES / PROD_SHIP_FEATURES set (Makefile:2662,2718) cannot compile today by design; Makefile:2863-2866 acknowledges mode-production + rdp2-self-lock are outside the measured size set."
+  },
+  {
+   "item": "Make-level production feature gate: PROD_FORBIDDEN / PROD_REQUIRED lists and prod-check-ship target independent of the compile fences",
+   "evidence": [
+    "Makefile:2672-2718 (PROD_FORBIDDEN, PROD_REQUIRED, PROD_SHIP_FEATURES)",
+    "Makefile:2775 (prod-check-ship)",
+    "Makefile:2785 (build-rdp2-self-lock negative check)"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "TZSC isolation of the SE buses and crypto block: I2C1, I2C2, I2C4 (pq1 SE050 bus), IWDG, UCPD1, TIM2/TIM3 SECURE in SECCFGR1; AES/HASH/RNG/PKA/SAES SECURE in SECCFGR3 (OTG NS)",
+   "evidence": [
+    "secure/src/sau.rs:257-283 (I2C1/I2C2/I2C4 bits)",
+    "secure/src/sau.rs:372-397 (SECCFGR3 crypto block)"
+   ],
+   "status": "implemented",
+   "notes": "Silicon-validated 2026-05-20 (CLAUDE.md pre-prod caveats). TAMP (GTZC2) follow-up open (#50)."
+  },
+  {
+   "item": "TAMP escalation to intrusion wipe (tamp-wipe) with correct TAMP base 0x5600_7C00 cross-checked against bhk.rs; internal tampers ITAMP1/3/6/9/11 etc. enabled",
+   "evidence": [
+    "secure/src/hw/tamp.rs:127-132 (base-address fix note)",
+    "secure/src/hw/tamp.rs:194-215 (ITAMP enables)",
+    "secure/src/hw/tamp.rs:84-114 (poll \u2192 trigger_intrusion_wipe under tamp-wipe)"
+   ],
+   "status": "implemented",
+   "notes": "Hardware-mode backup-register erase for BHK-protecting tampers and the TAMP silicon test are still open (#47, #391)."
+  },
+  {
+   "item": "OPTIGA/SE050 provisioned-state detection: OPTIGA fails SAFE (transport wedge \u2192 assume provisioned, never auto-wizard); SE050 fails OPEN (init/check_exists error \u2192 false)",
+   "evidence": [
+    "secure/src/optiga/mod.rs:945-1012 (check_provisioned, two-pass self-heal, fail-safe true)",
+    "secure/src/se050/mod.rs:1788-1797 (check_provisioned unwrap_or(false))",
+    "secure/src/dual_se.rs:141-143 (is_provisioned = optiga && se050)"
+   ],
+   "status": "partial",
+   "notes": "Asymmetry tracked as SE17-8 (#111); dual-SE AND means an SE050 transport glitch reports 'unprovisioned' \u2192 wizard misfire hazard (F24 #169)."
+  },
+  {
+   "item": "Bench pre-wizard OPTIGA transport pairing: write device-root PBS to E140 in plaintext at LcsO=Creation before the wizard draws entropy (idempotent), then RST pulse",
+   "evidence": [
+    "secure/src/optiga/mod.rs:603-642 (pair_for_first_boot)",
+    "secure/src/optiga/mod.rs:820-860 (setup_pbs_no_handshake uses current_pbs())",
+    "secure/src/optiga/mod.rs:2083-2114 (store_objects step 1 unconditionally rewrites E140 plaintext)"
+   ],
+   "status": "implemented",
+   "notes": "OP17-3 (#118): after a completed rotation, a wizard re-provision writes the SALTED-final PBS in plaintext over I2C (step 1 is unconditional)."
+  },
+  {
+   "item": "SE050 anti-substitution helper get_version_ext (OEF/variant marker) exists but is called only from the stress harness, never at boot",
+   "evidence": [
+    "secure/src/se050/apdu.rs:936-963 (get_version_ext)",
+    "secure/src/se050_stress/ctx.rs:502-505 and tests/audit.rs:433 (only callers)",
+    "secure/src/main.rs:60-120 (boot path: no variant assertion)"
+   ],
+   "status": "partial",
+   "notes": "Issues #61 / #206 open; Case-2 Le bug on this APDU (#444)."
+  },
+  {
+   "item": "Host-side pure test harnesses for both drivers (source-pinning + protocol tests), on-silicon SE050 stress runner, ProVerif dual_se_unlock / scp03 / shield models, Tamarin scp03_replay + seed_split_xor, TLA+ PinReconcileDirectional",
+   "evidence": [
+    "secure/src/optiga_under_test/{pure_tests.rs (147 fns),prl_tests.rs,prl_peer.rs}",
+    "secure/src/se050_under_test/pure_tests.rs (193 fns)",
+    "secure/src/se050_stress/tests/{audit,object,scp03,trng,userid}.rs",
+    "contracts/verification/proverif/{dual_se_unlock,scp03_handshake,scp03_replay,optiga_shield_handshake_vendor}.pv",
+    "contracts/verification/tamarin/{pin_lockstep,scp03_replay,seed_split_xor}.spthy",
+    "contracts/verification/tla/PinReconcileDirectional.tla"
+   ],
+   "status": "implemented",
+   "notes": "THREAT_CLAIM_MAP.md:73 flags driver-derived optiga_shield_handshake.pv as do-not-cite (invents a host nonce); the vendor re-derivation proves whole-session replay POSSIBLE."
+  },
+  {
+   "item": "Hardware-assumption ledger rows for SE: PUTKEY-ATOMIC, PUTKEY-KCV-RESP, PUTKEY-REPUT-IDEMPOTENT, SE050-CERT-VERSION = bare-tcb; DHUK-UNIQUE, SE-INTERNALS = silicon-tested; DHUK-RDP12 = bare-tcb",
+   "evidence": [
+    "contracts/verification/docs/HW_ASSUMPTIONS.json (ids HW-ASSUME-PUTKEY-ATOMIC, HW-ASSUME-PUTKEY-KCV-RESP, HW-ASSUME-PUTKEY-REPUT-IDEMPOTENT, HW-ASSUME-SE050-CERT-VERSION, HW-ASSUME-SE-INTERNALS)"
+   ],
+   "status": "implemented",
+   "notes": "Bench procedures #386/#398/#400 open."
+  },
+  {
+   "item": "Duress (decoy) wallet credential set on both SEs (F1D8/E121 matched-LUC on OPTIGA, DURESS_* objects on SE050, unlimited attempts) with duress-first timing-uniform dispatch in gated_unlock",
+   "evidence": [
+    "secure/src/optiga/apdu.rs:213-246 (duress OIDs)",
+    "secure/src/se050/mod.rs:78 (DURESS_BOOTSTRAP_VK_OBJ)",
+    "secure/src/nsc/mod.rs:1503-1551 (duress-first dispatch under duress-pin)",
+    "secure/src/dual_se.rs:228-355 (provision_duress / unlock_duress / duress_pad)"
+   ],
+   "status": "implemented",
+   "notes": "Feature-gated (duress-pin). Decoy objects survive wipes (SE17-4 #107); manual UI pre-ship checklist #280."
+  },
+  {
+   "item": "Factory provisioning ceremony firmware (factory-provisioning feature): provisions zero user state to establish SE infrastructure (admin UserID, PBS, OID structure) then admin-wipes; writes OTP sentinel",
+   "evidence": [
+    "secure/src/factory_provisioning.rs:209 (run_and_halt), 368-425 (step_dual_se_provision_infrastructure), 483 (step_write_otp_sentinel)",
+    "secure/Cargo.toml:592-601 (factory-provisioning rejected for every STM32U585 build via rollback quarantine)"
+   ],
+   "status": "fenced-off",
+   "notes": "Comment at factory_provisioning.rs:388-390 claims 'SCP03 keys rotated (SE050) \u2014 survives the wipe' but no rotate call exists in the file. Power-cut strand finding #445 open."
+  },
+  {
+   "item": "Zeroize discipline on SE paths: Zeroizing wrappers on derived SCP03 keys (F12), PBS zeroized after shield load, session zeroize on lock, zeroize_barrier at security boundaries",
+   "evidence": [
+    "secure/src/hw/secret_keys.rs:306-343 (Zeroizing<[u8;16]> returns)",
+    "secure/src/optiga/mod.rs:496-500 (pbs.zeroize after load)",
+    "secure/src/optiga/shield.rs:336-345 (zeroize_session)",
+    "secure/src/se050/scp03.rs:155 (zeroize_session)"
+   ],
+   "status": "partial",
+   "notes": "LCR-F4 (#419) and SE17-5/OP17-9 residue findings still open."
+  },
+  {
+   "item": "ML-KEM-1024 inner wrap prototype retained feature-gated (mlkem-inner-wrap) with production fences",
+   "evidence": [
+    "secure/src/dual_se.rs:170-200,424-450",
+    "secure/src/nsc/mod.rs:178-203 (fences)",
+    "secure/src/hw/secret_keys.rs:276-294 (mlkem_seed / mlkem_wrap_secret)"
+   ],
+   "status": "fenced-off",
+   "notes": "DESCOPED by owner decision 2026-07-07 (do not re-raise)."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "S-1: F1D0 Change AC and LcsO=Operational ratchet not production-approved; candidate Auto(F1D0) metadata unvalidated on sacrificial silicon; E140 ratchet actor/order unresolved",
+   "tracked_in": "issues #5, #12, #24, #73, #11, #22, #41; docs/STATUS.md:387",
+   "notes": "Deferred BY DESIGN (chips cost money, LcsO irreversible). Fenced by nsc/mod.rs:604-616."
+  },
+  {
+   "gap": "S-2: real type-0x11 trust-anchor pool {E0E8,E0E9,E0EF} unclosed; device-cert slots E0E1..E0E3 unratcheted; policy (HSM anchor vs neutralization) unselected; SKU/revision inventory unpinned; AC-builder cannot emit Int(X)/0xD8/0xF0/0x11 descriptors",
+   "tracked_in": "issues #6, #16-#21, #23, #25, #26, #86, #205; docs/STATUS.md:388",
+   "notes": "OPTIGA_S2_PRODUCTION_BLOCKED (nsc/mod.rs:313-321) makes every mode-production+optiga-trust-m build uncompilable until closed; lockdown_ta_pool emits no APDU."
+  },
+  {
+   "gap": "S-3: final F1D0/E120/F1E1 metadata + lifecycle profile not frozen; E120 exhaustion (curr>=limit) and reset/power-cut behaviour unvalidated on silicon; F1E1 sentinel disposition open",
+   "tracked_in": "issues #14, #215, #254, #255; docs/STATUS.md:389"
+  },
+  {
+   "gap": "Transport\u2192final credential handoff (#36) not production-closed: authenticated per-unit factory handoff/receipt, authenticate-before-rotate review, atomic durable old/new/KVN recovery proof, E140 ordering, silicon receipts",
+   "tracked_in": "issues #268, #76, #55, #56, #57, #34, #32, #36; docs/STATUS.md:395 (HIGH-1); docs/provisioning/first-boot-provisioning.md:1-20"
+  },
+  {
+   "gap": "BHK-rooted SE050 is unrecoverable after a page-126 loss (mass erase / DFU reflash / RDP regression) and a reset mid-first-boot can leave active BHK \u2260 persisted BHK \u2014 no re-pair path without the old keys or NXP RESERVED_ID_FACTORY_RESET",
+   "tracked_in": "issues #204 (ship-gate), #707, #712, #77, #203",
+   "notes": "Owner answered 2026-09-21: keep BHK axis but fix #712 lifecycle bug first. nsc/mod.rs:243-247 comment still says bhk 'must NOT be enabled' while RELEASE_FEATURES (Makefile:2662) includes it."
+  },
+  {
+   "gap": "No boot-time SE attestation / anti-substitution: no SE050 cert-chain or UID check, no OPTIGA E0E0/E0F0 chain or E0C2 UID pin, no GetVersion OEF assertion at boot; triple-UID binding manifest + transparency log unbuilt",
+   "tracked_in": "issues #210, #244, #245, #61, #206, #249, #27, #272; threat-model.md \u00a79.4 (:505-506), \u00a77.11 (:339-345)"
+  },
+  {
+   "gap": "OPTIGA Shielded Connection has no host nonce \u2192 whole-session replay of a captured unlock session is symbolically possible (inj-agreement false); CCM tag check single-skip plain-bool (F13)",
+   "tracked_in": "issues #117 (OP17-2), #158 (F13), #396; contracts/verification/docs/THREAT_CLAIM_MAP.md:73"
+  },
+  {
+   "gap": "OPTIGA secret OIDs provisioned with Read = Auto(F1D0) only (no Conf(E140) AND arm) and verify_and_lock would ratchet that weak AC irreversibly",
+   "tracked_in": "issue #116 (OP17-1, HIGH); secure/src/optiga/mod.rs:2225-2229",
+   "notes": "Playbook SE6 'DEFENDED' was a false closure per issue body."
+  },
+  {
+   "gap": "Salted-final PBS written in plaintext on every unprovisioned boot / wizard re-provision (store_objects step 1 unconditional); check_provisioned trusts plaintext F1E1 answer at cold boot; unauthenticated session-kill forces plaintext",
+   "tracked_in": "issues #118 (OP17-3), #121 (OP17-6), #126 (OP17-11)"
+  },
+  {
+   "gap": "SCP03 accepts any bare 2-byte SW without R-MAC (GP Amd D exemption): a forged 0x6986 on CreateSession \u2192 AuthMethodBlocked \u2192 PinLocked \u2192 one-shot dual-SE wipe with zero attempt budget; forged 0x6985 burns page-124 on a correct PIN",
+   "tracked_in": "issues #104 (SE17-1, HIGH), #105 (SE17-2), #120 (OP17-5), #106 (SE17-3); secure/src/se050/scp03.rs:614-634"
+  },
+  {
+   "gap": "Directional cold-reboot reconciliation (E120-ahead wipes, MCU-ahead retained) has no silicon receipt; SE050 is not a boot-reconciliation input; Tamarin model is symmetric/idealized, not the deployed policy",
+   "tracked_in": "issue #200 (ship-blocker), #320 (PM-1), #216; threat-model.md:570; contracts/verification/tamarin/README.md:1-9"
+  },
+  {
+   "gap": "S-5 wire-level confidentiality proof (logic-analyzer capture of SCP03 read_authed / Shielded Connection) not performed; S-6 admin-delete policy silicon verification on a sacrificial part pending",
+   "tracked_in": "issues #7, #8, #9, #10; docs/security/red-teaming.md \u00a75.1/\u00a75.2; docs/STATUS.md:390-391"
+  },
+  {
+   "gap": "SE050 PUT KEY atomicity / KCV-response / re-PUT idempotence are bare-TCB assumptions with no falsifying bench test; SE050 provisioned-policy readback stress test missing",
+   "tracked_in": "issues #386, #398, #207; contracts/verification/docs/HW_ASSUMPTIONS.json (HW-ASSUME-PUTKEY-ATOMIC, HW-ASSUME-PUTKEY-KCV-RESP, HW-ASSUME-PUTKEY-REPUT-IDEMPOTENT)"
+  },
+  {
+   "gap": "Post-lockout-wipe SE050 USERID_OBJ is orphaned-locked \u2192 device is a permanent brick ('restore from seed' undeliverable without an OID-range bump); wipe atomicity/verification and legacy-OID wipe-list completeness gaps; duress objects survive wipes",
+   "tracked_in": "issues #168 (F23), #123, #129, #107, #445"
+  },
+  {
+   "gap": "SE050 check_provisioned fails open (transport error \u2192 'unprovisioned' \u2192 wizard) while OPTIGA fails safe; wizard misfire on a used device can destroy the live wallet",
+   "tracked_in": "issues #111 (SE17-8), #169 (F24)"
+  },
+  {
+   "gap": "No PRL self-heal on the unlock path (a PRL wedge burns page-124 toward self-wipe); page-124 charged on post-verify InternalError; E120 ratchets on successful verifies and reset failure aborts post-verify",
+   "tracked_in": "issues #119 (OP17-4), #109 (SE17-6), #170 (F25), #127"
+  },
+  {
+   "gap": "Production SE050 part (E2 vs C2) unconfirmed with the ODM; repo documents contradict (board/pq1.rs says E2, evt-silicon-validation.md names C2); decides which factory keyset the transport handoff targets",
+   "tracked_in": "issue #697"
+  },
+  {
+   "gap": "SE050 applet LockState / transport lock and platform-SCP forcing undecided; ReadIDList provisioning-acceptance check absent; unused-feature decisions unrecorded",
+   "tracked_in": "issues #63, #64, #62, #65, #66, #28, #29"
+  },
+  {
+   "gap": "TAMP backup-register secure-zone config, hardware-mode erase for BHK-protecting tampers, and a TAMP silicon test are open; secret SRAM not in an ECC-on bank",
+   "tracked_in": "issues #47, #50, #391, #48, #208"
+  },
+  {
+   "gap": "Per-unit option-byte / provisioning receipts and factory SE-genuineness gate absent; factory provisioning ceremony phases B-F unbuilt",
+   "tracked_in": "issues #595, #272, #263, #33"
+  }
+ ],
+ "drift": [
+  "CLAUDE.md Key File Map (CLAUDE.md:304) says SE050 'current OID range 0x7B0C_*'; code is v6 = 0x7B10_xxxx (secure/src/se050/mod.rs:23-62: USERID 0x7B10_0000, ENTROPY 0x7B10_0001, ADMIN_WIPE 0x7B10_00A0); 0x7B0C was v4, retired 2026-04-21.",
+  "CLAUDE.md Lifecycle line ('\u2026 SAES self-test \u2192 SE attest \u2192 PIN entry \u2026') names an 'SE attest' boot step; no attestation code exists in secure/src/{optiga,se050,main}.rs (grep 'attest' hits only ERC-7730 trailers). Issue #210 is 'NOT STARTED'; threat-model.md \u00a79.4 honestly says not landed.",
+  "docs/security/HARDENING.md:32 lists 'SE050 attestation root cert \u2014 U585 Secure flash (hardcoded in image)' and \u00a73.4 (:178-189) describes boot-time attestation 'on every boot'; no NXP root cert or attestation APDU is present in the firmware. Design text reads as implemented.",
+  "docs/security/threat-model.md:233 claims 'freshness nonce on each session' for both tunnels; the OPTIGA Shielded Connection handshake carries only the chip's random_S and no host nonce (secure/src/optiga/shield.rs:698-700), and the vendor-faithful ProVerif model proves whole-session replay possible (THREAT_CLAIM_MAP.md:73, issue #117).",
+  "secure/src/factory_provisioning.rs:388-390 comment lists 'SCP03 keys rotated (SE050) \u2014 survives the wipe' as a step outcome; the file contains no PUT KEY / rotate_scp03 call (grep: none) \u2014 provision() does not rotate SCP03.",
+  "secure/src/optiga/mod.rs:2178-2180 comment ('While shielded is disabled we drop the Conf(E140) arm from Read AC \u2026 I\u00b2C traffic is plaintext for now') is stale: the shield is mandatory on every secret path (mod.rs:277-290, 2384-2390), yet the weak Read=Auto(F1D0)-only AC it justified is still what ships to silicon (OP17-1 #116).",
+  "secure/src/nsc/mod.rs:243-247 fence comment says `bhk` 'must NOT be enabled until phase-2B BHK provisioning exists, or derivations are zero-keyed'; hw/bhk.rs implements provision/provision_from_entropy/load_and_lock and Makefile:2662 RELEASE_FEATURES includes `bhk`.",
+  "Issue #59 ('SE050 half_E: drop ALLOW_WRITE at the FIRST provisioning run \u2014 SHIP ITEM', OPEN) says code grants READ|WRITE|DELETE; code already provisions ENTROPY/VK/BVK via write_binary_write_once with no ALLOW_WRITE (secure/src/se050/mod.rs:2073, apdu.rs:683-702). Only the silicon validation of the write-once refusal remains.",
+  "docs/secure-elements/se050-silicon-findings.md:250 records the lockout SW as 0x6982 and recommends mapping it; code maps 0x6986 and deliberately refuses 0x6982 (secure/src/se050/apdu.rs:53-60,835-845). docs/STATUS.md:393 already flags this doc as stale.",
+  "CLAUDE.md invariant #2 calls E120 a '32-lifetime-attempt anti-extraction backstop'; code resets E120 to (0,32) after every successful PIN (optiga/mod.rs:1621-1628, 2648-2655) and on every admin wipe via transient auth (mod.rs:1668-1700), so it is a 32-consecutive-failure cap, not a lifetime budget; and F25 (#170) notes it also ratchets on successful verifies.",
+  "docs/secure-elements/se050-userid-pin-auth.md architecture block (:50-60) still says 'SCP03 channel (platform keys)' for provisioning; shipping config fences published platform keys out (nsc/mod.rs:227-268). The doc's own OID-range banner is correct; the body is v1/v2-era.",
+  "CLAUDE.md invariant #3 and docs describe 'OPTIGA PBS moves to a DHUK derivation bound to a persisted fresh-TRNG salt' as part of the candidate; but outside `rdp2-self-lock` (every buildable image today) current_pbs() is the UNSALTED deterministic SAES-CMAC(DHUK,label) ladder (secret_keys.rs:484-507) \u2014 the salted path exists in no compilable image because rdp2-self-lock \u21d4 mode-production and mode-production+optiga-trust-m is rejected (nsc/mod.rs:313-321, 631-651)."
+ ],
+ "owner_decisions": [
+  "ML-KEM-1024 inner wrap DESCOPED 2026-07-07 (work-todo #9): both tunnels symmetric-rooted, accepted residual is Grover-2^64 per captured session; per-device final rotation is load-bearing for this acceptance. Do not re-raise.",
+  "Dual-SE only (OPTIGA Trust M V3 + SE050); standalone TROPIC01 backend removed 2026-07-14. Do not reintroduce.",
+  "Shipping model 2026-07-14 (work-todo #36): factory provisions SE-internal irreversible state on per-device TRANSPORT keysets and ships at RDP-0; first field boot self-locks RDP-2, BHK first write, transport\u2192final rotation before the seed wizard. No factory/fixture RDP-2 burn; no factory-held final pairing secret.",
+  "Invariant #10 ordering (2026-07-21): WRP-set \u2192 RDP-2 is mandatory; first-boot Phase A verifies but never sets WRP.",
+  "Invariant #2 wording is deliberately narrow: do NOT claim three-way boot reconciliation; SE050 attempt-attribute reads are policy-denied (0x6986) and making it three-way needs a separately reviewed SE050 policy/backend + silicon decision.",
+  "S-1/S-2/S-3 OPTIGA lockdown is deferred BY DESIGN (irreversible LcsO on parts that cost money); the compile fences (OPTIGA_S2_PRODUCTION_BLOCKED etc.) are the intended state, not avoidance. Do not treat FV work as a substitute or flag it as avoidance.",
+  "Ordinary pairing must never ratchet E140; the E140 LcsO=Op actor is factory-side but its order relative to the final PBS rotation is OPEN \u2014 no ceremony is authorized from any historical doc (optiga-brick-postmortem overlay, first-boot-provisioning.md correction 2026-07-26).",
+  "Keep BHK as the SE050 root axis (answered 2026-09-21), but the axis is orthogonal to recoverability; #712 lifecycle bug must be resolved first.",
+  "No software PIN compare; no plaintext secrets on I2C; no full entropy on one chip (invariants #1-#3, 'What NOT to do').",
+  "RDP-2 burn requires an explicit BOTH-button user confirm (owner decision 2026-07-17) \u2014 must not run automatically.",
+  "Forced-blind / clear-signing decisions do not touch this surface; SHAKE-vs-SHA2 is decided (plain SHA-2) and must not be re-raised.",
+  "Pre-production: domain tags / labels are sticky-but-renamable; a label change without on-chip rotation is a silent data-corruption bug (bump the -vN suffix)."
+ ]
+}

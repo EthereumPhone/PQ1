@@ -1,0 +1,33 @@
+{
+ "id": "SCA-01",
+ "title": "On-silicon TVLA/CPA campaign re-targeted at fors_secret and the pre-PIN tunnel crypto (first measurement ever)",
+ "threat": "Every leakage claim in the repo is Unicorn mem_address Hamming weight; register-value and HASH/SAES coprocessor leakage have never been measured. Saarinen (ePrint 2024/367) hit t=24.5 at 1,000 traces on an SLH-DSA PRF; Belenky (TCHES 2023/3) forges HMAC-SHA-2 from a pure-hardware core at 30K-275K traces; pq1's 65,536-per-chain cap (bootstrap: C x 65,536) sits inside that budget, and horizontal exploitation multiplies traces per signature.",
+ "proposal": "Run the first silicon campaign with hardware already on the bench (Scaffold + Rigol MHO934, red-teaming.md \u00a713.1 recipe, sca-trigger GPIO PB3 on pq1) in this order: (a) fixed-vs-random TVLA on the fors_secret window \u2014 it is a single SHA-256 compression whose message block is sk_seed(32)||\"fors\"||12 known varying bytes, 26,636 calls/sign in natural leaf order, i.e. the ideal vertical-DPA shape (known varying W[8..11] added to a secret constant state in rounds 8-11); (b) TVLA on wots_secret block 2 (secret midstate chaining value + varying tree/kp/chain input); (c) CPA on the boot-time SCP03 S-ENC/S-MAC software AES (scp03_logic.rs) and the Shielded TLS-PRF HMAC (shield.rs), which an attacker can trigger unlimited times by power-cycling WITHOUT the PIN (Jade precedent); (d) SAES-CMAC(DHUK) at first-boot/page-126 unwrap. Publish the max|t| curves vs trace count in tools/sca/README.md as receipts; use them to close or escalate #228/#236 per the disposition rule already written in #228. Add a hash-counters bucket for grind_r so the secret-PRF census (70,754) stops excluding its ~2048 sk_seed-absorbing iterations.",
+ "rationale": "#228 frames the measurement around the WOTS 'sk_seed-absorption window', but the code shows the WOTS first block is a per-layer CONSTANT (no varying known input, so only horizontal/template leakage) while FORS is the direct known-input DPA target \u2014 a campaign aimed at the wrong PRF would produce a false clean. The tunnel crypto is pre-PIN and unlimited-trace, so it is the cheaper attack than anything behind the 10-attempt gate. The 2025 PQC-SCA SoK (ePrint 2025/1222) records essentially no public SCA result on SHA-2 SPHINCS+ signers, so pq1 cannot cite prior art as assurance \u2014 it has to produce its own numbers, and publishing them is something neither Ledger nor Trezor does for their devices.",
+ "repo_evidence": [
+  "sphincs-c10/src/hash.rs:408-416 (fors_secret: sk_seed||\"fors\"||ht_idx||tree_idx||leaf_idx = 48 B, one compression)",
+  "sphincs-c10/src/fors.rs:148-150 (for j in 0..n_leaves \u2014 natural leaf order per FORS tree; F-16 shuffles only tree order)",
+  "sphincs-c10/src/hash.rs:376-392 + :178-182 (wots block 1 = sk_seed||\"wots\"||layer||24 zero bytes; varying data only in block 2)",
+  "sphincs-c10/src/fors.rs:110-123 (grind_r hashes sk_seed per iteration; no bump!() \u2014 uncounted)",
+  "secure/src/se050/mod.rs:225-244 (init -> scp03::establish at boot, pre-PIN, software AES)",
+  "secure/src/main.rs:1778-1782 (load_pbs at boot, pre-PIN)",
+  "docs/hardware/evt-silicon-validation.md:908-925 (\u00a79.2/9.3 open; LA1010 digital-only note)",
+  "issues #228, #236, #298, #301 (all OPEN, priority:low)"
+ ],
+ "vendor_precedent": "Ledger Donjon publishes SCA attacks (Trezor One PIN 2019, Jade ESP32 CPA 2022, pqm4 ML-KEM 2026) but no leakage receipts for its own devices; Trezor checks in no TVLA tooling or results (grep over trezor-firmware: none). Publishing per-primitive TVLA curves is beyond both.",
+ "novelty": "beyond",
+ "kind": "process",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "Rigol MHO934 (no ChipWhisperer) limits bandwidth/alignment; a clean TVLA at the scope's noise floor is NOT proof of absence \u2014 report trace counts and the noise floor explicitly. SE050/OPTIGA-side capture is gated behind the sacrificial-unit plan; the MCU-side captures above are non-destructive. pq1 bench board has no LCD, so the display windows cannot be captured there.",
+ "sources": [
+  "https://eprint.iacr.org/2024/367",
+  "https://tches.iacr.org/index.php/TCHES/article/view/10955",
+  "https://eprint.iacr.org/2026/2071",
+  "https://eprint.iacr.org/2018/673",
+  "https://eprint.iacr.org/2025/1222",
+  "https://www.ledger.com/blog/firmware-extraction-evil-maid-attacks-on-blockstream-jade-hardware-wallet",
+  "docs/security/red-teaming.md:935-963 (\u00a713.1 capture recipe)"
+ ],
+ "surface": "sca"
+}

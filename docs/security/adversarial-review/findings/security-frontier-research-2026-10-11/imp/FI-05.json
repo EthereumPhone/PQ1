@@ -1,0 +1,27 @@
+{
+ "id": "FI-05",
+ "title": "Fault-detected \u21d2 escalate: charge the three-way PIN budget on every sentinel/CFI/receipt trip, re-entrant fault \u21d2 wipe, and zeroize SRAM before any glitch halt",
+ "threat": "Every FI detection today ends in a refusal (return FAIL_SENTINEL / relock) or a bare `wfe` loop with master_secret still in SRAM and HandlerGuard suppressing the idle wipe. A stolen unlocked-capable device can therefore be glitch-characterised indefinitely: each failed attempt costs nothing, and a halt leaves the secrets resident for the next pulse.",
+ "proposal": "(1) A single `fi::handle_fault(code)` sink (Trezor handle_fault + WF_ERROR_FATAL policy): static FihBool `in_progress` \u2014 a fault reported while one is being handled \u21d2 immediate dual-SE admin wipe + page-125 flag; otherwise charge page 124 via pin_attempts_bump (which also advances E120/UserID on the next unlock by construction of the directional reconciliation), read back `pre+1`, zeroize_sensitive_state, then reset. Route check_true_into_sentinel failures at authorization sites, CfiCounter mismatches, ct_eq mismatches in c10_sign_verified, SCP03/CCM receipt failures, read_volatile_voted CounterUnstable, and `default:` arms of the fw_update/first-boot/sign-dispatch state machines through it. (2) halt_on_glitch and the panic path: zeroize SRAM secrets + TAMP BKERASE (BHK regs) + mask interrupts before `wfe`, on a fresh stack (Trezor call_with_new_stack); FSBL halt stays bare (no secrets). (3) Encode the state machines' phase words as sparse random u32s so a flipped enum lands in `default:`. Decide explicitly (owner) that genuine faults consume attempts \u2014 Trezor accepts this.",
+ "rationale": "Bounds the attacker's glitch trials to the 10-attempt budget before self-destruction and makes the fault handler itself fault-hardened; cheap because every primitive (bump, admin wipe, zeroize, page-125 flag) already exists and only the policy wiring is missing. #835 H4 already adjudicated the halt-with-secrets problem; it is fixed only on a side branch.",
+ "repo_evidence": [
+  "pqsigner-fi/src/lib.rs:274-285 (halt_on_glitch: bare wfe loop, no zeroize)",
+  "secure/src/fi.rs:106-117 (check_true/check_true_into_sentinel return a verdict; no escalation)",
+  "grep pin_attempts_bump secure/src \u2192 only nsc/mod.rs:1473 (gated_unlock) and cmd_test_pin_lockout.rs:158; no FI-trip site charges an attempt",
+  "secure/src/crypto.rs:373-391 (ct_eq mismatch \u2192 zeroize_sensitive_state relock only)",
+  "gh #835 OPEN critical (H4: halt retains secrets; fix on perf/flash-opt-level-z only)"
+ ],
+ "vendor_precedent": "Trezor storage/storage.c:181-182,1815-1844 (handle_fault: in_progress \u21d2 wipe; increment+verify PIN counter then halt); bootloader/main.c:677-690 (WF_ERROR_FATAL \u21d2 secret_bhk_regenerate + erase_storage + backup_ram_erase); sys/startup/stm32/bootutils.c:103-199 (fresh stack, BKERASE, RAM fill before halt/reset).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Interacts with #109/#692/#715 (page-124 charged on genuine SE InternalError; e2e images burn the budget on a persistent SE fault) \u2014 the policy must distinguish 'SE unreachable' from 'verdict inconsistent' or a flaky board bricks itself; owner decision #484 (halts must not touch peripherals) still holds, zeroize is register/SRAM only. Wipe-on-fault makes a bench FI campaign (FI-01) consume boards faster.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/storage/storage.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/bootloader/main.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/startup/stm32/bootutils.c",
+  "https://donjon.ledger.com/blog/bypassing-tangem-card-security-with-laser-attack/"
+ ],
+ "surface": "fi"
+}

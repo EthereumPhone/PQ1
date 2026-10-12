@@ -1784,3 +1784,202 @@ fn positive_request_unlock_arms_the_input_window_before_prompting() {
         "the window must be armed BEFORE enter_pin(), not after"
     );
 }
+
+// ---------------------------------------------------------------------------
+// #846: the gateway is one-at-a-time, and the single-sign handler binds the
+// calldata it signs to the calldata it showed.
+//
+// These are source-text pins because `nsc/` cannot be linked into a host
+// test. The behaviour itself is tested where it can run: the gate in
+// `crate::gateway_gate::tests`, the decoder in `pqsigner_aa::execute_bind`.
+// ---------------------------------------------------------------------------
+
+/// For every `cmse-nonsecure-entry` function in `src`, return its name and
+/// the first statement of its body (the first non-blank line after the line
+/// that opens the body).
+fn gateway_entries_and_first_statements(src: &str) -> Vec<(String, String)> {
+    let lines: Vec<&str> = src.lines().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        if let Some(rest) = lines[i].strip_prefix("pub extern \"cmse-nonsecure-entry\" fn ") {
+            let name = rest.split('(').next().unwrap_or("").to_string();
+            let mut j = i;
+            while !lines[j].trim_end().ends_with('{') {
+                j += 1;
+            }
+            let mut k = j + 1;
+            while lines[k].trim().is_empty() {
+                k += 1;
+            }
+            out.push((name, lines[k].trim().to_string()));
+            i = j;
+        }
+        i += 1;
+    }
+    out
+}
+
+/// The complement of [`every_gateway_entry_takes_the_gate_first`] (#835/#846).
+///
+/// That test pins `gateway_enter!` as the FIRST statement, which is also what
+/// enforces the ordering between the two gateway-entry guards: the nested-entry
+/// refusal must happen before `fi_boundary` clears the FI-delay poison, or a
+/// nested call would wipe the OUTER operation's "ran with an unprotected
+/// delay" flag on its way to being refused, and a compromised operation would
+/// report success.
+///
+/// But "the gate is first" says nothing about whether the poison boundary is
+/// there at all. Deleting `fi_boundary` from a veneer leaves that test green
+/// while the operation silently stops reporting unprotected delays. These two
+/// assertions only pin the composition together.
+#[test]
+fn every_gateway_entry_also_carries_the_fi_delay_boundary() {
+    let entries = gateway_entries_and_first_statements(NSC_MOD_SRC);
+    assert_eq!(
+        entries.len(),
+        33,
+        "gateway entry count changed: review the new entry, then update this pin"
+    );
+    for (name, _) in &entries {
+        // Slice the entry's own body, so a `fi_boundary` elsewhere in the file
+        // cannot satisfy the check for a veneer that lacks one.
+        let at = NSC_MOD_SRC
+            .find(&format!("fn {name}"))
+            .unwrap_or_else(|| panic!("{name} not found"));
+        let rest = &NSC_MOD_SRC[at..];
+        let end = rest.find("\n}\n").map_or(rest.len(), |i| i + 2);
+        let body = &rest[..end];
+        assert!(
+            body.contains("fi_boundary"),
+            "{name}: no `fi_boundary` — this veneer would run a command \
+             without the FI-delay poison boundary, so an operation whose \
+             delays went unprotected would report success (#835)"
+        );
+    }
+}
+
+#[test]
+fn every_gateway_entry_takes_the_gate_first() {
+    let entries = gateway_entries_and_first_statements(NSC_MOD_SRC);
+    // The count is pinned so a search that silently matches nothing, or a new
+    // entry added without thought, both fail here.
+    assert_eq!(entries.len(), 33, "gateway entry count changed: review the new entry, then update this pin");
+    for (name, first) in &entries {
+        assert!(
+            first.starts_with("gateway_enter!("),
+            "{name}: first statement is `{first}`; a gateway entry must take the gate before it logs or reads an argument (#846)"
+        );
+    }
+    // The three entries whose return value is not an `NscStatus` refuse with
+    // a value that means "no" in their own convention.
+    for (name, refusal) in [
+        ("nsc_is_unlocked", "gateway_enter!(0);"),
+        ("nsc_get_remaining_attempts", "gateway_enter!(0);"),
+        ("nsc_register_heartbeat", "gateway_enter!(1);"),
+    ] {
+        let first = &entries.iter().find(|(n, _)| n == name).expect("entry exists").1;
+        assert_eq!(first, refusal, "{name}");
+    }
+}
+
+#[test]
+fn negative_control_an_ungated_entry_is_detected() {
+    let synthetic = "#[no_mangle]\npub extern \"cmse-nonsecure-entry\" fn nsc_new_thing(\n    p: u32,\n) -> u32 {\n    secure_log!(\"x\");\n    gateway_enter!(GATEWAY_REFUSED);\n    0\n}\n";
+    let entries = gateway_entries_and_first_statements(synthetic);
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].0, "nsc_new_thing");
+    assert!(
+        !entries[0].1.starts_with("gateway_enter!("),
+        "the classifier must see that the gate is not the FIRST statement here"
+    );
+}
+
+#[test]
+fn the_gate_macro_refuses_and_the_emulator_dispatcher_uses_it() {
+    // The macro must take the real gate and return on refusal; a rename or a
+    // no-op body would otherwise leave every `gateway_enter!` line inert.
+    let macro_at = NSC_MOD_SRC.find("macro_rules! gateway_enter {").expect("macro exists");
+    let macro_body = &NSC_MOD_SRC[macro_at..macro_at + 400];
+    assert!(macro_body.contains("match GATEWAY_GATE.try_enter() {"));
+    assert!(macro_body.contains("None => return $refused,"));
+    assert!(NSC_MOD_SRC.contains(
+        "const GATEWAY_REFUSED: u32 = sphincs_tz_shared::NscStatus::InternalError as u32;"
+    ));
+    assert!(NSC_MOD_SRC.contains(
+        "pub(crate) static GATEWAY_GATE: crate::gateway_gate::GatewayGate ="
+    ));
+    // The macro is defined before its first use (macro_rules is textual).
+    assert!(macro_at < NSC_MOD_SRC.find("gateway_enter!(").expect("used"));
+    // QEMU path: the mailbox dispatcher takes the same gate, so the e2e run
+    // exercises release-on-return for every handler.
+    let dispatch_at = NSC_MOD_SRC.find("unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {").expect("dispatch exists");
+    let after = &NSC_MOD_SRC[dispatch_at..];
+    let gate_at = after.find("gateway_enter!(GATEWAY_REFUSED);").expect("dispatch takes the gate");
+    assert!(gate_at < after.find("match cmd {").expect("dispatch matches on cmd"));
+    // `HandlerGuard` keeps its own meaning and its unconditional increment:
+    // the gate is a separate token, not a change to the idle-wipe guard.
+    assert!(NSC_MOD_SRC.contains("HANDLER_DEPTH.fetch_add(1, core::sync::atomic::Ordering::SeqCst);"));
+}
+
+#[test]
+fn idle_reunlock_dialog_holds_the_gate() {
+    const MAIN_SRC: &str = include_str!("main.rs");
+    let pendsv = MAIN_SRC.find("fn PendSV() {").expect("PendSV handler exists");
+    let body = &MAIN_SRC[pendsv..];
+    let gate = body.find("let _gateway_token = nsc::GATEWAY_GATE.try_enter();").expect("PendSV takes the gate");
+    let dialog = body.find("enter_pin()").expect("PendSV runs the PIN dialog");
+    assert!(gate < dialog, "the gate must be taken before the dialog starts");
+    // Bound to a name, not to `_`, or the token would be dropped at once.
+    assert!(!body[..dialog].contains("let _ = nsc::GATEWAY_GATE.try_enter();"));
+}
+
+#[test]
+fn single_sign_binds_signed_calldata_to_the_pre_display_commitment() {
+    const SRC: &str = include_str!("nsc/cmd_sign_userop.rs");
+    let at = |needle: &str| SRC.find(needle).unwrap_or_else(|| panic!("missing: {needle}"));
+    let snapshot = at("let inner_data: &[u8] = &snap[SIGN_USEROP_HEADER_LEN..SIGN_USEROP_HEADER_LEN + data_len];");
+    let reference = at("let calldata_ref_digest = pqsigner_tx_core::erc8213::calldata_digest(inner_data);");
+    let first_page_use = at("let tx_for_display = Eip1559Tx {");
+    let fingerprint = at("let calldata_fingerprint = pqsigner_tx_core::erc8213::calldata_digest(inner_data);");
+    let unchanged = at("calldata_fingerprint.ct_eq(&calldata_ref_digest)");
+    let confirm = at("None => confirm_checked(pages.as_slice()),");
+    let encode = at("let t2_exec = match reconstruct_execute_calldata(");
+    let bind = at("crate::aa::execute_bind::execute_calldata_binds(");
+    let digest = at("let t2_call_digest = sha256_bytes(t2_exec.as_slice());");
+
+    // The reference is taken straight after the snapshot slice exists and
+    // before anything is built for display.
+    assert!(snapshot < reference && reference < first_page_use);
+    // The displayed fingerprint is checked against it before the dialog.
+    assert!(fingerprint < unchanged && unchanged < confirm);
+    // After confirm: encode once into a private copy, bind that copy, and
+    // only then hash it for signing.
+    assert!(confirm < encode && encode < bind && bind < digest);
+
+    // The bind reads the private copy and the reference, never the shared
+    // snapshot.
+    let bind_call = &SRC[bind..bind + 320];
+    assert!(bind_call.contains("t2_exec.as_slice(),"));
+    assert!(bind_call.contains("&calldata_ref_digest,"));
+    assert!(!bind_call.contains("inner_data"));
+
+    // The receipt is fail-initialised and read twice: once after the
+    // comparison and once immediately before the digest that is signed.
+    let between = &SRC[encode..digest];
+    assert!(between.contains("let mut calldata_bind_verdict = crate::fi::FAIL_SENTINEL;"));
+    assert_eq!(
+        between.matches("core::ptr::read_volatile(&calldata_bind_verdict) } != crate::fi::OK_SENTINEL").count(),
+        2
+    );
+
+    // No read of the shared snapshot after the one that fills the private
+    // copy: from the end of the encoder call to the exit wipe, the handler
+    // must not mention the snapshot slice again.
+    let encode_end = encode + SRC[encode..].find("    ) {").expect("encoder call closes");
+    let exit_wipe = at("// L-2: wipe the TOCTOU snapshot on exit too.");
+    assert!(encode_end < exit_wipe);
+    let tail = &SRC[encode_end..exit_wipe];
+    assert!(!tail.contains("inner_data"), "a post-confirm read of the shared snapshot was added");
+    assert!(!tail.contains("snap["), "a post-confirm read of the shared snapshot was added");
+}

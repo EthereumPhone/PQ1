@@ -1,3 +1,15 @@
+import Extracted.C10HashInputBridge
+import Extracted.C10RepresentationBridge
+import Extracted.SecureWrapperBridge
+import Extracted.SecureWrapperCleanup
+import Extracted.SecureWrapperRefusal
+import Extracted.SignReleaseBridge
+import Extracted.WotsSignBridge
+import Extracted.WotsKeygenBridge
+import Extracted.WholeVerifierSpec
+import Extracted.HypertreeStrictSpec
+import Extracted.ForsVerifierPrefix
+import Extracted.ForsRejectSpec
 import Extracted.Adrs
 import Extracted.AdrsEquiv
 import Extracted.AxiomCheck
@@ -45,3 +57,19 @@ import Extracted.FormatDecimalDiffVectors
 import Extracted.HMsgSpecBridge
 
 import Extracted.WotsSpecBridge
+import Extracted.FindCountSpec
+
+import Extracted.GrindRSpec
+
+import Extracted.WotsRecoveryBridge
+import Extracted.MerkleRecoveryBridge
+import Extracted.ForsRecoveryBridge
+
+import Extracted.ForsSecretBridge
+
+import Extracted.ForsAuthBridge
+import Extracted.ForsRootBridge
+
+import Extracted.ForsRoundtripSpec
+import Extracted.XmssRootBridge
+import Extracted.XmssAuthRecovery

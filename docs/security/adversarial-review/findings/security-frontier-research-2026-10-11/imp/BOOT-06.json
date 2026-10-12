@@ -1,0 +1,26 @@
+{
+ "id": "BOOT-06",
+ "title": "Make the production-silent boot checks fatal (RDP<L2, SECBOOTADD0, die-id), gate the irreversible first-boot ceremony on reset cause, and declare RDP-1 a fatal wipe state",
+ "threat": "A production image (no debug-log) in which an RDP regression before ALL_DONE, a redirected SECBOOTADD0, or a non-rev-U / counterfeit die produces NO observable effect because the checks compile to nothing; a glitch- or watchdog-induced reset mid-Phase-A that lets the RDP=0xCC burn run from a corrupted state; and a unit stranded at RDP-1 (RDP Freeze: cycle-accurate RAM/register capture of seed material in S-SRAM).",
+ "proposal": "(1) Replace `secure_log!`-only outcomes in main.rs:1240-1290 and die_id with a `FihBool` verdict that halts (pre-ALL_DONE) or escalates to the intrusion-wipe path (post-ALL_DONE) in `mode-production`; resolve #192 by making `rdp-enforce-halt` the production default with the self-lock exemption expressed as 'RDP-0 is allowed ONLY while the page-127 journal is blank'. (2) Read RCC_CSR reset flags at Phase A entry: allow the RDP burn only after a POR/BOR/pin reset (`PINRSTF|BORRSTF` exactly, Trezor's rule), refuse and re-prompt after SFTRST/IWDG/WWDG/OBL/LPWR resets; clear flags via RMVF. (3) Treat an observed RDP level 1 (0xDC/0.5 or any non-0xAA/0xCC) as fatal: pre-ALL_DONE \u2192 halt with an E08xx code and refuse the burn; post-ALL_DONE \u2192 wipe. (4) Add a host test that greps the production cfg for any `secure_log!`-only security verdict (the pattern that produced this gap).",
+ "rationale": "Trezor's boardloader enforces reset-flags and option-byte checks only in PRODUCTION precisely because they are the checks that matter after shipping; pq1 has the opposite polarity today (checks visible only in debug builds). Cheapest item on this list and closes a class of 'green in bench, silent in field'.",
+ "repo_evidence": [
+  "secure/src/main.rs:1240-1267 (RDP<L2 below ALL_DONE is warn-and-continue via secure_log!, which is a no-op without debug-log), :1272-1290 (SECBOOTADD0 warn-only, 'does not check BOOT_LOCK')",
+  "secure/Cargo.toml:156 (`rdp-enforce-halt` opt-in; #192 contradiction with rdp2-self-lock unfenced)",
+  "secure/src/die_id.rs:31-87 (report-only, never faults)",
+  "grep CSR|RMVF|PINRSTF|BORRSTF in fsbl/src, secure/src/hw/rcc.rs, secure/src/main.rs: no reset-cause read anywhere",
+  "secure/src/first_boot/mod.rs:212-242 (Phase A gate is confirm + sentinel; no reset-cause input)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sys/startup/stm32u5/reset_flags.c:26-42 (PRODUCTION-only POR gate), option_bytes.c:252-264 + boardloader/main.c:325-340 (mismatch is fatal, not logged), kernel/main.c:181 (OEM check repeated every stage).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "pq1 relies on warm resets on the bench (USB-C cc_open_then_reset, probe-rs halts) \u2014 scope the POR rule to the first-boot ceremony only, never to normal boot. A fatal die-id check needs the bench dies actually run through HW-ASSUME-REV-U first (nobody has). Halt-vs-wipe thresholds must be 2-pass to avoid wiping on a transient OPTR read fault.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/startup/stm32u5/reset_flags.c",
+  "https://ieeexplore.ieee.org/document/11107115/ (RDP Freeze, RDP-1 state capture)",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/boardloader/main.c"
+ ],
+ "surface": "boot"
+}

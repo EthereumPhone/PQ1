@@ -1,0 +1,29 @@
+{
+ "id": "IMP-03",
+ "title": "Boot-time electrical self-fingerprint of the display, button and SE nets using the STM32U585 TSC/ADC (capacitance + rail current), compared to a design-derived band and a verifier-enrolled baseline; anomaly refuses the seed wizard and signing",
+ "threat": "A logger or injector soldered to SPI1/DC/TE, PA0/PA1 or the SE I2C nets adds pad/trace capacitance (pF-scale) and, if active, mW-scale current on the LCD or SE rail. Nothing on the board or in firmware measures either today; the FSBL render verdict only proves the SPI peripheral finished.",
+ "proposal": "Firmware spike + minimal board delta: (1) at each boot, before the FSBL fingerprint window and again before the seed wizard/sign, drive each candidate net (SPI1 CS/SCK/MOSI, DC, TE, LEFT/RIGHT buttons, I2C1/I2C4 SDA/SCL while the SE rail is OFF via LDO2_EN/SE1_EN) through the Touch Sensing Controller charge-transfer measurement (AN5105) and record the transfer count per net; (2) with the rails ON, sample the LCD and SE rail current via a low-side shunt + ADC4 (one shunt each, placed on the EVT board) and the VDD level via ADC4 analog watchdogs wired to ITAMP7/12/13 (already enabled in CR1 but never configured because no ADC code exists); (3) compare counts to (a) a published design band derived from the Gerbers/BOM and fleet statistics (golden-free, so a pre-first-boot implant outside the band is caught) and (b) a baseline enrolled during the confirm-gated first boot and stored in page 127; (4) a persistent out-of-band reading refuses to enter the seed wizard or sign and shows a loud 'HARDWARE CHANGED' page; an AWD trip goes to TAMP confirmed-mode erase. Temperature-compensate the threshold (PACTOR's documented FPR driver) using the on-die temp sensor.",
+ "rationale": "It is the only firmware-reachable mechanism that can notice a soldered tap on the write-only display bus; the TSC is already on this die (no new silicon) and the consumption-mask timer is a ready stimulus source. The literature (ImpedanceVerif, PACTOR, Piliposyan) establishes both the feasibility and the honest floors: pF capacitance and mW current, so it catches a probe clip, an added IC or an active LTE implant, not a femtofarad passive. Combined with IMP-01/02 it turns 'accepted residual' into 'detected unless sub-pF and battery-powered'.",
+ "repo_evidence": [
+  "grep -rln 'TSC|ADC1|ADC4|COMP1|0x4202_8000' secure/src fsbl/src -> no matches (no ADC/TSC/COMP driver exists)",
+  "secure/src/hw/tamp.rs:199-221 (ITAMP7/12/13 bits set in CR1 but no ADC4 AWD configuration anywhere)",
+  "secure/src/hw/se_power.rs:200-232 (rail enables exist; read-back is ODR only, result discarded in production)",
+  "secure/src/board/pq1.rs:286-291 (FLAGB PB10 never read), :345 (FREE_PINS PA10/PC13/PB4)",
+  "secure/src/hw/consumption_mask.rs:1-25 (TIM3_CH1 on PA6 NC \u2014 unused stimulus source)",
+  "fsbl/src/render.rs:62-72 (verdict cannot observe the panel)"
+ ],
+ "vendor_precedent": "none in any shipped wallet; academic only (ImpedanceVerif TCHES 2023 on-chip PDN analyzer, PACTOR ISSCC 2024 0.5 pF trace sensing with temperature-selected threshold, Piliposyan IEEE TC 2022 ~1 mW current floor, NAIST on-IC capacitance variation re-identifies individual PCBs). Trezor/Ledger measure nothing on the display path.",
+ "novelty": "beyond",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P1",
+ "risks": "Research-grade: FPR vs temperature/humidity/aging must be characterised on pq1 silicon before it can gate anything, else it bricks or nags honest units (the #835 halt-sink lesson). A self-enrolled first-boot baseline cannot catch an implant present at enrolment \u2014 only the design band can, and the band must be wide enough for lot variation. An adversary who also spoofs the sensing path (CryptoBilis replaced the NTC and bypassed the fuel gauge) defeats rail-current sensing; capacitance is harder to spoof but a buffered high-impedance tap stays sub-pF. Shunts cost two parts and a board spin; TSC needs a sampling capacitor per group (one more part per net group). Must respect the bench/prod split (no refusal on bench builds).",
+ "sources": [
+  "https://eprint.iacr.org/2022/946",
+  "https://spectrum.ieee.org/hardwired-to-self-destruct",
+  "https://livrepository.liverpool.ac.uk/3166747/6/PCB_Hardware_Trojan_Run-Time_Detection_Through_Machine_Learning.pdf",
+  "https://www.st.com/resource/en/application_note/an5105-getting-started-with-touch-sensing-control-on-stm32-mcus-stmicroelectronics.pdf",
+  "https://ken.ieice.org/ken/paper/202110198C57/eng/"
+ ],
+ "surface": "implant"
+}

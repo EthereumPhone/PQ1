@@ -7,6 +7,7 @@
 //!  SIGN COWSWAP?                                   hero (direct route)
 //!  NETWORK · ORDER
 //!  SELL · [SELL TOKEN] · BUY MIN · [BUY TOKEN]     one leg = amount + token
+//!  Confirm?                                        after the buy leg (`screen::confirm_index`)
 //!  RECEIVER · EXPIRES · FEE (SELL) · SOURCES · APP DATA
 //! ```
 //!

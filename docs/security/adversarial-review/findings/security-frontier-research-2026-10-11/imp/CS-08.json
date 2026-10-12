@@ -1,0 +1,26 @@
+{
+ "id": "CS-08",
+ "title": "Real-world attack-vector regression corpus (must-refuse / must-render) wired into CI with path-succeeds assertions",
+ "threat": "The defences exist but their evidence is host transcripts and locally-run Kani (nightly broken since 2026-09-06); a future refactor can silently reopen a Bybit-, LSB-024-, LSB-025- or 0x00-calldata-class hole and CI would stay green.",
+ "proposal": "Add a fixture crate (host-runnable, in the default `cargo test` CI lane, not fuzz/ or nightly) with byte-exact vectors and expected verdicts: Bybit SafeTx (operation=1 to 0x9622\u20267242 with transfer-shaped data \u2192 REFUSE); operation=0 CALL to a MultiSend address \u2192 loud blind, never per-record; LSB-024 shape: 257-element array descriptor \u2192 REFUSE (MAX_ARRAY_RENDER); LSB-025: approve vs transfer with identical args \u2192 distinct intents, trailing byte \u2192 REFUSE; Ledger 1.22.0 single-byte 0x00 calldata \u2192 NOT a value transfer; LSB-020 odd-length-hex uint \u2192 companion-side canonicalisation test; Radiant transferOwnership/swapOwner \u2192 Danger class; Permit2 domain submitted as kind 2 without descriptor \u2192 REFUSE; same inputs under `ui-px` (make e2e-px) and legacy. Each test asserts the SUCCESS/REFUSAL path was actually taken (status code + page banner), per the repo's 'green can mean never ran' lesson.",
+ "rationale": "Ledger's LSB-024 timeline (fix merged 2026-05-05, tagged release shipped without it) and Trezor's admission that signature-only fixtures cannot distinguish clear from blind paths are both process failures a named corpus catches. pq1 has no Bybit vector and its fuzz/Kani evidence is not CI-enforced.",
+ "repo_evidence": [
+  "grep -rli bybit secure/src tx/src fsbl-tests dbgen/tests \u2192 empty",
+  "fuzz/ workspace outside CI (#451); nightly Kani not completing (#776); CI enforcement found advisory (#456)",
+  "secure/src/tx/display/dispatch.rs:1104 (empty-data value-transfer rung \u2014 no explicit 0x00 single-byte negative test found)",
+  "#680 (no fuzz target for cowswap/safe EIP-712 decode legs)"
+ ],
+ "vendor_precedent": "Ledger app-ethereum release notes 1.22.0/1.22.3 enumerate regression classes; Trezor tests/device_tests/ethereum/test_definitions.py:576-609 asserts the mismatch path.",
+ "novelty": "parity",
+ "kind": "process",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Fixture bytes must be real calldata (pull Bybit tx 0x46deef0f52e3a983b67abf4714448a41dd7ffd6d32d32da69d62081c68ad7882 from chain data) and checked in with provenance; stale fixtures (#532 class) need a freshness gate.",
+ "sources": [
+  "https://donjon.ledger.com/lsb/024/",
+  "https://donjon.ledger.com/lsb/025/",
+  "https://www.nccgroup.com/research/in-depth-technical-analysis-of-the-bybit-hack/",
+  "https://github.com/LedgerHQ/app-ethereum/releases"
+ ],
+ "surface": "clearsign"
+}

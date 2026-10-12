@@ -1,0 +1,259 @@
+{
+ "surface": "Side-channel analysis on signing, KDF, PIN, SE tunnels (key=sca) \u2014 pq1 repo /home/nicola/repos/PQSigner_OS @ feat/pq1-board-target (working tree), Trezor @ /home/nicola/repos/trezor-firmware 6ab39e95. All repo_evidence lines were re-read with grep/sed in this session; Trezor line numbers marked '(per inventory B)' were not independently re-read. Verified corrections to the inventory: (1) SAES already enables SHSI and force-resets the block (saes.rs:225-244) \u2014 Trezor parity on that point is DONE, not proposed; (2) TAMP enables every Trezor ITAMP incl. ITAMP7/12/13 (tamp.rs:288-299) but NO code anywhere in secure/src or hw/src configures ADC4, so the three analog-watchdog tampers are dormant \u2014 in Trezor too (grep over core/embed finds ADC4 only in tamper.c + hal_conf.h); (3) the WOTS PRF first 64-byte block is sk_seed(32)||\"wots\"(4)||layer(4)||24 ZERO bytes (hash.rs:376-392 with u64_to_b32 at :178-182), i.e. constant per (key, layer) \u2014 the #229 'v2 restructure' is already achievable byte-identically for WOTS without re-basing addresses; (4) fors_secret is a SINGLE compression with sk_seed || 12 varying public bytes (hash.rs:408-416), 26,636 calls/sign in natural leaf order (fors.rs:148-150) \u2014 the textbook vertical-DPA target, not WOTS; (5) rng_strong already has fail-initialized per-source receipts (rng_strong.rs:115-150), so Trezor's use-flag assertion is NOT a gap.",
+ "improvements": [
+  {
+   "id": "SCA-01",
+   "title": "On-silicon TVLA/CPA campaign re-targeted at fors_secret and the pre-PIN tunnel crypto (first measurement ever)",
+   "threat": "Every leakage claim in the repo is Unicorn mem_address Hamming weight; register-value and HASH/SAES coprocessor leakage have never been measured. Saarinen (ePrint 2024/367) hit t=24.5 at 1,000 traces on an SLH-DSA PRF; Belenky (TCHES 2023/3) forges HMAC-SHA-2 from a pure-hardware core at 30K-275K traces; pq1's 65,536-per-chain cap (bootstrap: C x 65,536) sits inside that budget, and horizontal exploitation multiplies traces per signature.",
+   "proposal": "Run the first silicon campaign with hardware already on the bench (Scaffold + Rigol MHO934, red-teaming.md \u00a713.1 recipe, sca-trigger GPIO PB3 on pq1) in this order: (a) fixed-vs-random TVLA on the fors_secret window \u2014 it is a single SHA-256 compression whose message block is sk_seed(32)||\"fors\"||12 known varying bytes, 26,636 calls/sign in natural leaf order, i.e. the ideal vertical-DPA shape (known varying W[8..11] added to a secret constant state in rounds 8-11); (b) TVLA on wots_secret block 2 (secret midstate chaining value + varying tree/kp/chain input); (c) CPA on the boot-time SCP03 S-ENC/S-MAC software AES (scp03_logic.rs) and the Shielded TLS-PRF HMAC (shield.rs), which an attacker can trigger unlimited times by power-cycling WITHOUT the PIN (Jade precedent); (d) SAES-CMAC(DHUK) at first-boot/page-126 unwrap. Publish the max|t| curves vs trace count in tools/sca/README.md as receipts; use them to close or escalate #228/#236 per the disposition rule already written in #228. Add a hash-counters bucket for grind_r so the secret-PRF census (70,754) stops excluding its ~2048 sk_seed-absorbing iterations.",
+   "rationale": "#228 frames the measurement around the WOTS 'sk_seed-absorption window', but the code shows the WOTS first block is a per-layer CONSTANT (no varying known input, so only horizontal/template leakage) while FORS is the direct known-input DPA target \u2014 a campaign aimed at the wrong PRF would produce a false clean. The tunnel crypto is pre-PIN and unlimited-trace, so it is the cheaper attack than anything behind the 10-attempt gate. The 2025 PQC-SCA SoK (ePrint 2025/1222) records essentially no public SCA result on SHA-2 SPHINCS+ signers, so pq1 cannot cite prior art as assurance \u2014 it has to produce its own numbers, and publishing them is something neither Ledger nor Trezor does for their devices.",
+   "repo_evidence": [
+    "sphincs-c10/src/hash.rs:408-416 (fors_secret: sk_seed||\"fors\"||ht_idx||tree_idx||leaf_idx = 48 B, one compression)",
+    "sphincs-c10/src/fors.rs:148-150 (for j in 0..n_leaves \u2014 natural leaf order per FORS tree; F-16 shuffles only tree order)",
+    "sphincs-c10/src/hash.rs:376-392 + :178-182 (wots block 1 = sk_seed||\"wots\"||layer||24 zero bytes; varying data only in block 2)",
+    "sphincs-c10/src/fors.rs:110-123 (grind_r hashes sk_seed per iteration; no bump!() \u2014 uncounted)",
+    "secure/src/se050/mod.rs:225-244 (init -> scp03::establish at boot, pre-PIN, software AES)",
+    "secure/src/main.rs:1778-1782 (load_pbs at boot, pre-PIN)",
+    "docs/hardware/evt-silicon-validation.md:908-925 (\u00a79.2/9.3 open; LA1010 digital-only note)",
+    "issues #228, #236, #298, #301 (all OPEN, priority:low)"
+   ],
+   "vendor_precedent": "Ledger Donjon publishes SCA attacks (Trezor One PIN 2019, Jade ESP32 CPA 2022, pqm4 ML-KEM 2026) but no leakage receipts for its own devices; Trezor checks in no TVLA tooling or results (grep over trezor-firmware: none). Publishing per-primitive TVLA curves is beyond both.",
+   "novelty": "beyond",
+   "kind": "process",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "Rigol MHO934 (no ChipWhisperer) limits bandwidth/alignment; a clean TVLA at the scope's noise floor is NOT proof of absence \u2014 report trace counts and the noise floor explicitly. SE050/OPTIGA-side capture is gated behind the sacrificial-unit plan; the MCU-side captures above are non-destructive. pq1 bench board has no LCD, so the display windows cannot be captured there.",
+   "sources": [
+    "https://eprint.iacr.org/2024/367",
+    "https://tches.iacr.org/index.php/TCHES/article/view/10955",
+    "https://eprint.iacr.org/2026/2071",
+    "https://eprint.iacr.org/2018/673",
+    "https://eprint.iacr.org/2025/1222",
+    "https://www.ledger.com/blog/firmware-extraction-evil-maid-attacks-on-blockstream-jade-hardware-wallet",
+    "docs/security/red-teaming.md:935-963 (\u00a713.1 capture recipe)"
+   ]
+  },
+  {
+   "id": "SCA-02",
+   "title": "Move SE-tunnel AES (SCP03 S-ENC/S-MAC KDF + session CMAC/CBC, Shielded AES-CCM) off software AES onto SAES; add shield.rs to the leakage harness",
+   "threat": "The long-term SCP03 static keys and the Shielded session keys are exercised by the bitsliced software `aes`/`cmac` crates on the CPU at EVERY boot, before any PIN, with a fixed key and attacker-known/chosen inputs \u2014 unlimited power-cycle CPA traces. Recovering S-ENC lets a bus tap decrypt half_E on the next legitimate unlock (symmetrically PBS -> half_O), defeating invariant #1 without touching either SE. Invariant #3's accepted Grover-2^64 residual silently assumes the tunnel keys are not SCA-extractable.",
+   "proposal": "(a) Extend hw/saes.rs with KEYSIZE=128 (bit 18 is hard-coded to 256 at :487) and keep ECB as the only hardware mode; (b) implement CBC/CTR/CMAC for SCP03 and CCM-CTR/CBC-MAC for the Shielded Connection as software XOR/chaining over SAES ECB blocks with KeySel::Software (cmac_generic is already parameterised over a block function, cmac.rs:61), so no AES round ever runs on the CPU; (c) load the SAES-CMAC(DHUK)/BHK-derived static keys into SAES_KEYR and wipe KEYR on exit as the Tier-1 KDF already does, so the static S-ENC/S-MAC bytes have the shortest possible CPU residency; (d) the 64-B PBS TLS-PRF (HMAC-SHA256) has no SAES analogue \u2014 mitigate by running it once per power-on (not per shield re-establish), zeroizing immediately, and adding a rainbow/lascar `shield_target` (TLS-PRF, CCM tag verify, sequence window) mirroring scp03_target; (e) measure before/after with SCA-01(c).",
+   "rationale": "ST documents SAES as having internal side-channel countermeasures (RNG-driven randomisation, noted at saes.rs:194 as an unmeasured hardware claim); the Tier-1 KDF already trusts it for DHUK. The SCP03 KDF and all session crypto are AES-only, so the whole SE050 tunnel can run on SAES with a small driver delta. This is the SCA counterpart of Trezor's 'hardware-keyed SAES for all PIN-derived material' and of the Jade boot-time CPA lesson. The SHSI clock and force-reset Trezor pattern is already present (saes.rs:225-244), so only the mode/keysize delta is missing.",
+   "repo_evidence": [
+    "secure/src/scp03_logic.rs:24-27,125,137,155,175 (Aes128/Cmac software crates for KDF, ENC, MAC)",
+    "secure/src/optiga/shield.rs:16-17,1047,1116 (software Aes128 for CCM), :984-1021 (software HMAC-SHA256 TLS-PRF keyed by PBS)",
+    "secure/src/hw/saes.rs:122-123 (CHMOD ECB only), :487 (CR_KEYSIZE_256 hard-coded), :23 (CMAC mode explicitly not implemented)",
+    "grep 'KeySel::Software' outside saes.rs: only bhk.rs:397 KAT \u2014 no tunnel user",
+    "tools/sca/README.md:973-999 (SCP03 harness explicitly scopes out value-channel); no shield harness exists (tools/sca has no shield_target)",
+    "issue #236 (nearest tracker; generic)"
+   ],
+   "vendor_precedent": "Trezor routes every PIN-derived key through SAES (secure_aes.c:48-57, storage.c:665-671) but, like pq1, runs its Optiga Shielded AES in software (optiga_transport.c:776 aes_encrypt_key128, per inventory B) \u2014 so SAES-backed SE tunnels would be beyond Trezor. Ledger: SE-internal, not applicable.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "SAES ECB-per-block throughput is fine for APDU sizes but adds ~1 register round-trip per 16 B; first-boot rotation code (rdp2-self-lock) also derives these keys and must use the same path; CCM tag compare must stay the double out-of-line recompute. SAES's DPA claim is a vendor statement \u2014 SCA-01(d) is the only way to know. Does not help the HMAC-SHA256 PBS path (no hardware HMAC on U5; HASH peripheral is not DPA-hardened).",
+   "sources": [
+    "RM0456 \u00a7SAES (KEYSIZE bit, KEYSEL, internal countermeasures)",
+    "https://www.ledger.com/blog/firmware-extraction-evil-maid-attacks-on-blockstream-jade-hardware-wallet",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/secure_aes/stm32u5/secure_aes.c:48-57 (per inventory B)",
+    "https://tches.iacr.org/index.php/TCHES/article/view/10955"
+   ]
+  },
+  {
+   "id": "SCA-03",
+   "title": "WOTS PRF midstate-resume: compute the two per-layer SHA-256 midstates once per sign, resume per call (byte-identical output, no address re-base)",
+   "threat": "44,118 wots_secret calls per sign each push the raw 32-byte sk_seed through the HASH peripheral's DIN at the same intra-call offset \u2014 the horizontal/template residual of archive \u00a718 and the exact 'SK.seed reused across thousands of PRF calls' pattern of Kannwischer 2018 / Saarinen 2024. #229 assumed closing this requires re-basing every key (invariant #6).",
+   "proposal": "Because block 1 of wots_secret is sk_seed||\"wots\"||to_b4(layer)||tree_b32[0..24] and tree_b32[0..24] is always zero (u64 right-aligned in 32 B), the chaining value after block 1 is a constant per (sk_seed, layer). Compute the two midstates (layer 0, layer 1) once per sign (or once per SLOT_CACHE keygen) and run only block 2 per call, either (a) via the HASH peripheral's context-swap registers (HASH_CSRx suspend/resume, RM0456 \u00a7HASH 'context swapping') or (b) via `sha2::compress256` in software for the 64-byte second block with explicit padding. Outputs are bit-identical to the current `sha256(...)`, so pubkeys, CREATE2 addresses, the on-chain verifier and all test vectors are untouched; pin with a differential test against the existing wots_secret. Store the midstates as ZeroizeOnDrop in the SigningKey cache. Side effect: ~44k fewer compressions per sign (~8% of the 539,616 hashes).",
+   "rationale": "Reduces sk_seed-absorbing compressions from 44,118+26,636 to 26,636 (FORS only) + 2 without any wire/derivation change, closing the WOTS half of #229 pre- AND post-launch. Honest limit: block-2 compressions still combine a secret chaining value with varying known input, so the vertical-DPA exposure on the midstate (which suffices to forge WOTS for that layer; layer-1 WOTS alone is a full forgery) is UNCHANGED \u2014 this item removes the horizontal/template surface on sk_seed itself, which is the key shared with FORS and grind_r. FORS cannot be restructured this way (single block, secret and varying input mixed).",
+   "repo_evidence": [
+    "sphincs-c10/src/hash.rs:376-392 (wots_secret update order: sk_seed, \"wots\", layer, tree_b32, kp, chain_idx)",
+    "sphincs-c10/src/hash.rs:178-182 (u64_to_b32 zero-pads bytes 0..24)",
+    "sphincs-c10/src/hash.rs:106-125 (hw-sha256 hook: init/update/final only \u2014 no midstate API)",
+    "hw/src/hash.rs (no CSR/context-swap usage: grep CSR -> only DHCSR)",
+    "issue #229 (states the restructure 'violates launch invariant #6' \u2014 not true for WOTS as the layout already isolates the secret in block 1)",
+    "docs/archive/work-todo-retired-2026-07-19.md:1910-1919 (\u00a718 step (a)/(b))"
+   ],
+   "vendor_precedent": "none for SLH-DSA on a wallet; conceptually Fluhrer's 'PRF tree' (NIST PQC 2024) and HMAC's precomputed ipad/opad midstates.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "If (b) is chosen, one secret-CV compression per call moves from the HASH peripheral to the CPU, where Lecomte 2026 SASCA applies \u2014 prefer (a) and validate HASH CSR semantics on U585 (CSR count differs per HASH revision). The midstate is a new long-lived secret in SRAM (same class as sk_seed). Double-compute/F-16 shuffle interaction: both passes must use the same midstates. Must re-run hash_counts.rs expectations (\u226560,000 lower bound would fall to ~26,638 secret calls \u2014 update the test, do not weaken the census).",
+   "sources": [
+    "https://eprint.iacr.org/2018/673",
+    "https://eprint.iacr.org/2024/367",
+    "https://csrc.nist.gov/csrc/media/Events/2024/fifth-pqc-standardization-conference/documents/papers/side-channel-resistant-sphincs-plus.pdf",
+    "RM0456 \u00a7HASH context swap (HASH_CSRx)"
+   ]
+  },
+  {
+   "id": "SCA-04",
+   "title": "Arm the ADC4 analog watchdogs so ITAMP7/12/13 actually fire (in-silicon voltage-glitch / temperature / rail-manipulation detector feeding tamp-wipe)",
+   "threat": "SCA and FI attackers lower/raise VDD, cool/heat the die and inject rail glitches to raise leakage or skip checks (Masaryk thesis ~76% PIN-glitch bypass on STM32U5; Donjon t-test-guided double LFI on Coldcard SE2). pq1 has no analog monitor of its own supply: the three ADC4-watchdog tamper enables are set but ADC4 is never configured, so they can never trigger.",
+   "proposal": "Configure ADC4 (low-power ADC in the SRD domain) in continuous/injected mode on the internal channels VREFINT, VCORE and the temperature sensor, set AWD1/AWD2/AWD3 windows from factory-characterised values (per-die calibration stored on page 127 at first boot alongside the salt), route the AWD events to ITAMP7/12/13 (already enabled, tamp.rs:288-299) so a confirmed excursion zeroizes the BHK backup registers and triggers the existing tzic intrusion wipe. Ship in two stages: (1) log-only with a page-127 excursion counter and bench characterisation on EVT (voltage sweep, thermal chamber) to set thresholds; (2) `tamp-wipe` escalation once false-positive rate is measured. Secure ADC4 in GTZC (it is in GTZC2/SRD, the same open follow-up as TAMP).",
+   "rationale": "It is the only on-die signal that the attacker is operating outside nominal conditions, it costs no board change, and it turns three already-enabled-but-dormant tamper bits into a real detector. ST intends exactly this use (RM0456 TAMP: 'ADC4 analog watchdog monitoring 1/2/3'). Both Trezor and pq1 currently enable the flags without the ADC \u2014 so this is beyond both.",
+   "repo_evidence": [
+    "secure/src/hw/tamp.rs:288-299 (TAMP_CR1 ITAMP7E|ITAMP12E|ITAMP13E set)",
+    "grep -rln 'ADC4|adc4|ADC_' secure/src hw/src -> no files (ADC4 never initialised)",
+    "docs/hardware/evt-silicon-validation.md:\u00a710.1 (TAMP response never silicon-validated; false ITAMP9 would wipe)",
+    "secure/src/sau.rs:386-388,548 (GTZC2/TAMP isolation still open; #50, #70)"
+   ],
+   "vendor_precedent": "Trezor enables ITAMP7/12/13 (tamper.c:146-151) but grep over core/embed shows no ADC4 configuration either (only hal_conf.h module enable) \u2014 flags dormant there too. Ledger SE has voltage/temperature sensors inside the certified SE (Ledger Academy claim).",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "False positives on a noisy EVT rail wipe a customer device (\u00a710.1 already warns of this for ITAMP9) \u2014 thresholds need silicon characterisation across temperature and USB-supply variation, and the detector must be log-only until measured. ADC4 sampling adds a small periodic current signature (itself a trace feature). pq1 has no battery, so VBAT=VDD semantics for ITAMP1 differ from Trezor.",
+   "sources": [
+    "RM0456 \u00a7TAMP internal tamper sources (ITAMP7/12/13 = ADC4 AWD1/2/3), \u00a7ADC4",
+    "https://fdtc.deib.polimi.it/FDTC23/slides/FDTC2023-slides-3-3.pdf",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/tamper/stm32u5/tamper.c:140-155"
+   ]
+  },
+  {
+   "id": "SCA-05",
+   "title": "Always-on secure-timer random-delay interrupt (RDI) with a TRNG-reseeded DRBG and per-NSC-entry session refresh \u2014 after resolving #835",
+   "threat": "C10 signing is ~7 s of highly repetitive secret-dependent SHA-256 that aligns trivially across traces; wait_random() only perturbs annotated sites (PIN gate, sign gates), so the 70k PRF calls inside a sign run on a deterministic timeline relative to the sca-trigger/USB event. Trace alignment is the enabling step for every horizontal and vertical attack in SCA-01.",
+   "proposal": "Port Trezor's RDI as a 1 ms ISR on the already-secured TIM2 (sau.rs secures TIM2/TIM3 so NS cannot stop it): wait(fresh U[0,255] + session U[0,255]) with the exact-cycle asm loop, session term refreshed on every NSC dispatch entry/exit (the pq1 analogue of smcall/USB events). Feed it from a SP 800-90A-shaped ChaCha-DRBG seeded from the platform TRNG (register read only, never rng_strong \u2014 the sca-1 owner rule), reseeded every N calls, consumed bytes zeroized, with the #832 pre-drawn pool replacing the #833/#834 halt sink that #835 found net-negative. The ISR must never touch SE I2C and must be masked around the T=1'/IFX-I2C guard-time-critical windows.",
+   "rationale": "Issue #805 already makes the case and the earlier 'category error' rejection (2026-06-30) is superseded by its new measurements; Trezor runs it everywhere for ~0.2% CPU. It is the cheapest broad-spectrum desync available and the only one that covers the FORS/WOTS inner loops without touching sphincs-c10. The FI delay source has had three defects in a month (#643/#832/#835) \u2014 building the RDI on the same pool forces that source to be fixed properly first.",
+   "repo_evidence": [
+    "secure/src/nsc/mod.rs:1400-1414 (wait_random only at the PIN gate entry; comment concedes it does not defeat profile-then-attack)",
+    "grep -rin 'rdi|periodic jitter' secure/src -> no periodic jitter source",
+    "pqsigner-fi/src/lib.rs:112-155 (wait_random_loop, one-shot)",
+    "issue #805 (OPEN, medium), #835 (OPEN, critical: halt sink net-negative), #643, #832"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/random_delays/stm32/random_delays.c:139-144,168-181 (systimer 1 ms, floating-mean wait; verified :168-181 this session), refresh at usb.c:728,748 and smcall_dispatch.c:161-167 (per inventory B); 'sec/rdi' in default features for every kernel/secmon build.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Delays raise trace count, they do not remove leakage; a DRBG whose state is recovered from a trace can be subtracted (same argument as #831), so reseed cadence matters. ISR jitter interacts with the SE drivers' timing-sensitive polling and with the SysTick consumption-mask step; measured sign latency (6.4-7.2 s cached Type-2) grows by a few percent. #835's failure modes (zero-length-delay race, PIN-budget burn) must be closed first or the RDI inherits them.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/stm32/random_delays.c:105-134,168-181",
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/random_delays/inc/sec/random_delays.h:24-39 (Clavier/Coron/Dabbous; Tunstall/Benoit) (per inventory B)",
+    "NIST SP 800-90A (CTR_DRBG shape)"
+   ]
+  },
+  {
+   "id": "SCA-06",
+   "title": "Device-bound PIN whitening via SAES-CMAC(DHUK) before presentation to either SE (digest-before-send), replacing the raw 8-byte PIN on the SE050 path and the software SHA-256 on the OPTIGA path",
+   "threat": "The raw PIN is sent to SE050 inside SCP03 (se050/mod.rs:3025 unlock(pin: &[u8;8])), and the OPTIGA path hashes the 8-digit PIN on the CPU with software SHA-256 once per attempt (optiga/mod.rs:916-918). Under invariant #3's accepted Grover-2^64 bus residual the plaintext an attacker recovers is the PIN itself; and a single-trace template/SPA attack on one SHA-256 over a ~27-bit input learns typed digits even on a WRONG-PIN trace (Donjon Trezor-One PIN attack class), bypassing the 10-attempt bound.",
+   "proposal": "Pre-launch (CLAUDE.md allows re-provisioning): present to each SE a per-SE, device-bound digest d_X = SAES-CMAC(DHUK, label_X || PIN || salt) (Tier-1 KDF already exists, secret_keys.rs derive_into_saes_kdf) instead of the PIN: SE050 UserID value = d_E (16 B), OPTIGA AuthRef secret = d_O. The PIN bytes then never meet software SHA-256 or the I2C bus; a tapped tunnel yields a value useless without the die; each SE sees a different digest so a leaky SE reveals nothing about the other. Keep invariant #2 intact (the compare stays in SE silicon); update the first-boot wizard, duress-PIN and admin-wipe provisioning to use the same transform. Optionally fold the PIN into SAES via DHUK^BHK so it is bound to the BHK too (Trezor XORK pattern).",
+   "rationale": "Trezor stretches on the MCU (PBKDF2 x20000 + device salt) and then SAES-whitens before anything reaches the Optiga/Tropic, and its docs state the rationale: a compromised link or malicious SE cannot reduce security below 'no SE'. pq1 has the stronger SE-side compare but the weaker transport story. Using SAES-CMAC(DHUK) instead of PBKDF2 keeps the transform on the DPA-hardened block and avoids a long software hash on a low-entropy input.",
+   "repo_evidence": [
+    "secure/src/se050/mod.rs:3025 (unlock(&mut self, pin: &[u8; 8]) -> authenticate_and_read(pin): raw PIN in the SCP03-wrapped APDU)",
+    "secure/src/optiga/mod.rs:70,916-918 (derive_pin_secret = crypto::kdf(PIN_AUTH_DOMAIN, pin, 0): software SHA-256 over the PIN per attempt)",
+    "secure/src/hw/secret_keys.rs:145-200 (derive_into_saes_kdf exists \u2014 DHUK-rooted CMAC KDF available)",
+    "grep 'pbkdf|stretch' secure/src/nsc/cmd_request_unlock.rs -> none"
+   ],
+   "vendor_precedent": "Trezor storage.c:628-677 mcu_pin_stretch + storage.c:665-671 SAES whitening; docs/core/misc/optiga.md:58-66 digest-before-send; optiga.c:976-979 (per inventory B). Ledger: PIN handled inside the SE.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Re-provisions every bench board and changes the SE050 UserID / OPTIGA AuthRef values \u2014 must land before any shipping provisioning and before the rdp2-self-lock first-boot flow is frozen; DHUK is only final after RDP-2 self-lock, so the transform must use the post-lock DHUK (or BHK) consistently. Duress PIN and admin-wipe UserID flows need the same mapping. Does not change the attempt-counter semantics.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:628-677,665-671",
+    "/home/nicola/repos/trezor-firmware/docs/core/misc/optiga.md:58-66",
+    "https://www.ledger.com/blog/Breaking-Trezor-One-with-SCA"
+   ]
+  },
+  {
+   "id": "SCA-07",
+   "title": "Consumption mask: GPDMA-fed TRNG sample table, a real load on the mask pin, and a measured dilution figure (close #831/#646 on the way)",
+   "threat": "The production fence forces the mask on, yet neither board drives a load from the mask pin (pq1 PA6 is NC), the duty is stepped by the CPU once per SysTick from an xorshift32 whose reseed fails open and is biased away from signing windows (#831) \u2014 so the only CPA/DPA noise source the firmware claims is unmeasured and physically doubtful.",
+   "proposal": "(a) Hardware (EVT): populate a load on PA6 (series resistor to GND sized for a few mA, or tie the TIM3_CH1 output to the existing backlight/LED driver enable) so duty changes actually modulate die/rail current; (b) firmware: port Trezor's GPDMA circular linked-list (119 TRNG samples, secure+privileged channel, TIM3_UP request -> CCR1) so the mask pattern changes at ~10 kHz with zero CPU involvement and is uncorrelated with code; refill the table from the TRNG at sign start/end and per display refresh; make the reseed fail-closed with a counter (the #831 fix); (c) measure: capture a sign with the mask off vs on (Rigol, \u00a713.1) and report SNR/t-statistic reduction in evt-silicon-validation.md \u00a79 \u2014 convert 'satisfied-by-construction' into a number.",
+   "rationale": "Trezor's DMA design decouples the mask from firmware activity; pq1's SysTick-stepped design is correlated with the 1 ms cadence and gives ~1 kHz of entropy. More importantly nobody has measured either vendor's mask, so a measured figure is a differentiator. If the measurement shows no dilution, the honest outcome is to stop presenting the mask as a load-bearing CPA/DPA defence (README.md:233 vs nsc/mod.rs fence text disagree today).",
+   "repo_evidence": [
+    "secure/src/hw/consumption_mask.rs:13-20 ('A full DMA port is a follow-up'; CPU-driven randomize())",
+    "docs/hardware/evt-silicon-validation.md:757-764 (PA6 free/NC; mask only repointed), \u00a79 (dilution unmeasured)",
+    "secure/src/hw/consumption_mask.rs:44-60 (header: no load on either board)",
+    "issues #831 (reseed fail-open, OPEN), #646",
+    "docs/security/red-teaming.md:692-700 and README.md:88,261,417 (stale: 'seeded from rng_strong', 'TIM2 CH1 PA5' for pq1)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:26-37,82-142 (119-sample GPDMA linked list, rng_get() per sample, re-randomised after every display refresh; only on T2B1/T3B1 models) (per inventory B). Neither vendor documents the external load or a measured dilution.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "A load on PA6 is a BOM/EVT change and costs power; a PWM into a resistive load only modulates rail current, not core switching noise, so dilution may be small \u2014 the measurement may legitimately conclude the mask is cosmetic. GPDMA channel must be SEC|PRIV and its SRAM table in secure SRAM; TIM3 is already secured in sau.rs. The DMA table itself is a secret-independent trace feature an attacker can subtract if the TRNG refill cadence is too slow.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/core/embed/sec/consumption_mask/stm32u5/consumption_mask.c",
+    "docs/hardware/evt-silicon-validation.md \u00a79"
+   ]
+  },
+  {
+   "id": "SCA-08",
+   "title": "Exponential on-device back-off before every PIN attempt (S-only timer, cancellable), ahead of the counter precharge",
+   "threat": "Automated SCA/FI campaigns against the unlock sequence (profiled PIN-digit recovery on wrong-PIN traces, glitch sweeps on gated_unlock, template attacks on the page-124 precharge) run at the natural ~5 s unlock cadence; the only brake is the 10-attempt wipe, which a glitch campaign is specifically trying to bypass.",
+   "proposal": "Add get_backoff_ms = (2^fails - 1) * 1000 using the page-124 used-count (already read at boot/unlock) and busy-wait it on the S-only TIM (the same timer discipline as the inactivity timeout, so NS cannot shorten it) BEFORE the page-124 precharge and SE call, with the trusted-UI showing a countdown the user can cancel (cancel = no attempt consumed). Apply the same wait before the PendSV re-unlock retry so a persistent SE fault (#692) cannot burn the budget quickly.",
+   "rationale": "Trezor ships exactly this (storage.c:1158-1207); it costs nothing, is S-world only, and multiplies the wall-clock cost of every wrong-attempt trace, which is the unit of work for both the Donjon PIN-SCA and the Masaryk PIN-glitch classes. pq1's lockout is purely count-based today.",
+   "repo_evidence": [
+    "grep -rn 'backoff|back_off|back-off|exponential' secure/src/nsc/cmd_request_unlock.rs secure/src/nsc/mod.rs secure/src/ui/pin_entry.rs -> none",
+    "secure/src/nsc/cmd_request_unlock.rs:82-150 (wait_random + double page-124 reads, no delay scaled by fails)",
+    "secure/src/timeout.rs (S-only TIM exists for the idle timeout)",
+    "issue #692 (PendSV retry burns page-124 budget on a persistent SE fault)"
+   ],
+   "vendor_precedent": "Trezor storage/storage.c:1158-1161 get_backoff_time_ms, :1199-1207 sleep loop with ui_progress cancel (per inventory B).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Must not be gated on an NS-controllable clock; the countdown UI must not itself reset the inactivity timer semantics; the e2e-test build should skip it the way MIN_SIGN_INTERVAL is skipped. A reboot does not reset page-124, so the back-off survives power-cycles by construction.",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:1158-1207",
+    "https://www.ledger.com/blog/Breaking-Trezor-One-with-SCA"
+   ]
+  },
+  {
+   "id": "SCA-09",
+   "title": "Additive-random-masked secret compares for the MCU-side master cross-check and PIN-confirm (Trezor secequal32 parity)",
+   "threat": "subtle::ct_eq is constant-TIME but the Hamming weight of (derived XOR stored) still modulates power while the two 32-byte secrets are compared; dual_se.rs runs that compare twice per unlock (both operands secret: derived_master vs on-chip stored master), and pin_entry's XOR-OR confirm compares two secret PIN buffers. A profiled attacker gets one such trace per unlock.",
+   "proposal": "Add `ct_eq_masked32(a, b)` to pqsigner-fi: per 32-bit word draw a fresh mask m from the pre-drawn TRNG pool and accumulate diff |= ((a + m) - b) ^ m, with the loop-completion FI check (i == wn), returning a Hamming-distant sentinel; use it at dual_se.rs:305-310 (both compares) and in pin_entry's confirm fold. Keep subtle::ct_eq for public-vs-public compares (the 4008-B double-compute signature compare is public output and does not need masking).",
+   "rationale": "Low-cost, verified Trezor construction (storage.c:220-243, re-read this session) that hides operand Hamming weights during the compare; pq1's fi helpers already have the sentinel and loop-completion idioms, so it is a drop-in. Complements SCA-01: a masked compare is the kind of change whose effect a TVLA can confirm.",
+   "repo_evidence": [
+    "secure/src/dual_se.rs:305-310 (derived_master.ct_eq(&stored_master) twice around wait_random; subtle, unmasked)",
+    "secure/src/ui/pin_entry.rs:235-268 (XOR-OR fold confirm compare, unmasked)",
+    "grep 'mask' pqsigner-fi/src/lib.rs -> no masked compare helper"
+   ],
+   "vendor_precedent": "Trezor storage/storage.c:220-243 secequal32 with random32() per word; used at the PVC accept decision (:1139-1140).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P2",
+   "risks": "Needs 8 random words per compare \u2014 must come from the #832 pool, not a blocking TRNG read in the unlock path; a predictable mask (the #643 class) silently degrades to unmasked. The compare must stay inline-never so a glitch cannot skip it; cargo-checkct should re-prove the new helper SECURE (it has no secret-dependent branches by construction).",
+   "sources": [
+    "/home/nicola/repos/trezor-firmware/storage/storage.c:220-243",
+    "https://www.ledger.com/blog/Breaking-Trezor-One-with-SCA"
+   ]
+  },
+  {
+   "id": "SCA-10",
+   "title": "Secret-frame emanation hardening on the NV3007 SPI path: per-render pixel/backlight randomisation after atlas verification, LCD decoy re-test, and the #784 bypass fix",
+   "threat": "The LCD MOSI line carries plaintext pixel data on a periodic TE-synced refresh and ui-px renders from a fixed SHA-256-pinned glyph atlas \u2014 the cached-glyph anti-pattern Kuhn showed 'merely assists the eavesdropper' (readable text at 3-10 m from an FPD link by frame averaging). Backlight/panel current also correlates with lit pixels (CVE-2019-14354 class, recurred on Ledger's non-SSD1306 panel in 2023). F-24's decoy-frames mitigation was validated only on the removed OLED; the restore wizard renders seed letters on a non-forced frame (#784).",
+   "proposal": "(a) Fix #784 so every secret glyph goes through the CT blitter/force path; (b) in the compositor, AFTER the atlas hash check, randomise the low-order colour bits of every pixel of a secret frame and the row/strip write order per render (fresh TRNG per frame, so frame averaging no longer converges), keeping the rendered intent identical; (c) randomise backlight PWM phase/duty within a visually invisible band during secret frames (Ledger's 'randomized screen-update parameters' analogue); (d) re-run the F-24 decoy/TVLA experiment on the real NV3007 panel with the \u00a713.1 rig and record the result in tools/sca/README.md (replacing the stale SSD1306 section); (e) keep secret frames on screen for the minimum time and prefer never-display backup flows where the UX allows.",
+   "rationale": "This is the one SCA window where the secret is the seed itself (wizard) or the PIN, and the one with a real-world implant precedent (Grand's Nano X SPI tap). Randomisation must sit after atlas verification so the WYSIWYS pin stays intact. The repo already has the CT blitter (lcd.rs:196) \u2014 the missing delta is per-render entropy, the LCD re-test, and closing the bypass.",
+   "repo_evidence": [
+    "secure/src/ui/lcd.rs:196 (secret pass exists: CT glyph fetch, branchless blit \u2014 but deterministic pixels per render)",
+    "secure/src/ui/px/assets.rs (atlas SHA-256 re-hash; no per-render randomisation)",
+    "secure/Cargo.toml:541 (decoy-frames = [] default OFF; validated only on removed OLED)",
+    "tools/sca/README.md:1245-1405 (F-24 cites oled.rs/SSD1306; LCD re-test never run)",
+    "issue #784 (OPEN bug: letter row on non-forced frame), #237 (display emanation, OPEN)"
+   ],
+   "vendor_precedent": "Ledger firmware 1.6 (2019): randomised contrast/supply/oscillator parameters + inverted-box rendering; Ledger 2023: UI-level fix after conceding 'no amount of physical noise could hide the dependency'; Trezor decoy pixels (2019). No vendor documents SPI-link TEMPEST mitigation.",
+   "novelty": "beyond",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "The pq1 bench board has NO LCD \u2014 validation needs the LCD-equipped EVT unit and a scope/EM probe near the flex; low-order-bit randomisation must be proven invisible on the NV3007 (65k colour) and must not alter the ui-capture frame-hash tests (which would need a seeded/deterministic test mode). Does not stop a passive SPI tap that template-matches glyph shapes (Grand implant) \u2014 only emanation averaging; a tap needs the display-bus implant detection items on the implant surface. DROPPED (lower value / tracked elsewhere / needs owner call): CI-gate cargo-checkct + rainbow leakage harnesses (#312, #232 \u2014 execution only); flash-persistent daily sign quota (F-17 'owed' \u2014 with 7 s/sign silicon latency and the 65,536 per-slot cap the marginal trace-rate gain is small and conflicts with the no-new-flash-state rule; owner call); within-FORS-tree leaf-order shuffle (needs ~32 KB leaf buffer per tree; marginal over F-16); anti-klepto commitment for R (#238 \u2014 needs a host nonce in the frozen sign wire format; docs-only now); PDN-impedance / TSC-capacitance EM-probe proximity self-fingerprint (research spike, on-chip runtime variant unestablished per the deep-research digest, cannot see pre-first-boot implants); SHAFI ADRS masking (#593 citation unverified); grind_r hash-counter bucket folded into SCA-01.",
+   "sources": [
+    "https://www.cl.cam.ac.uk/~mgk25/pet2004-fpd.pdf",
+    "https://donjon.ledger.com/lsb/006/",
+    "https://www.ledger.com/blog/new-pin-screen/",
+    "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+    "https://blog.inhq.net/posts/oled-side-channel-status-summary/"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "id": "USB-03",
+ "title": "Program MSPLIM in the FSBL and the secure world so any stack overflow is a deterministic fault, not silent corruption",
+ "threat": "The FSBL stack is bounded by frame-sum (10,372 of 16,384 B) with no call-graph proof and no hardware limit; the secure world runs attacker-shaped parsers (ERC-7730, EIP-712, multiSend, typed-call ABI) on the same MSP with no limit either. A deeper-than-expected path driven by a hostile companion payload overflows into .bss/.data below the stack (the measurement code's data in the FSBL; `static mut` handler state and the sign snapshot in the secure image) silently. The FSBL already hit exactly this (two 8 KB manifest copies peaked main at ~24.7 KB) and only found it by inspection.",
+ "proposal": "Set MSPLIM_S = stack_base + 256 B guard as the first instruction of `main` in both `fsbl/src/main.rs` and `secure/src/main.rs` (cortex-m-rt does not program it; use `cortex_m::register::msplim::write` or inline `MSR MSPLIM`). In the secure world a STKOF UsageFault escalates to the existing HardFault (zeroize + reset) because UsageFault is not separately enabled \u2014 keep that, but add a distinct fatal-screen code so bench reproduction is possible. In the FSBL install a HardFault handler that halts with a distinctive LCD pattern (the FSBL has no secrets). Also set MSPLIM_NS to the NS stack base at handover (boot_ns.rs) \u2014 an NS overflow then faults in NS (DoS only) instead of walking into the NS USB buffers. Add a `-Z emit-stack-sizes`-derived assert that guard + max frame-sum < region.",
+ "rationale": "Rust has no `-fstack-protector`; the ARMv8-M hardware stack limit is the available equivalent and costs two instructions. CLAUDE.md invariant #10 says the FSBL stack is 'bounded rather than closed'; MSPLIM converts the unproven residual into a fail-stop. Trezor programs sp_lim per task with a 256 B guard and saves/restores MSPLIM/PSPLIM on every switch.",
+ "repo_evidence": [
+  "fsbl/src/main.rs:172 ('16 KB RAM budget with no MSPLIM \u2014 a silent stack overflow / HardFault')",
+  "fsbl/src/manifest.rs:30 ('_stack_start = 0x3000_4000, no MSPLIM')",
+  "grep MSPLIM secure/src nonsecure/src -> no hits",
+  "secure/src/main.rs:4392,4682 (only DefaultHandler + HardFault exist; no UsageFault handler, so STKOF escalates to HardFault)",
+  "secure/src/boot_ns.rs:19-77 (NS handover sets MSP_NS, not MSPLIM_NS)"
+ ],
+ "vendor_precedent": "Trezor systask.c:161-180 (`sp_lim = stack_base + 256`), sysutils.c:89-95 (MSPLIM programmed for every fresh secure stack), stack protector on globally.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "If the guard is set too tight the first deep C10 verify path faults on the bench \u2014 size from the emitted stack-sizes table and validate on QEMU + pq1; the FSBL change touches the frozen-geometry image (recompute `make fsbl` LOAD span, +~16 B); FSBL HardFault handler must not touch flash.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/embed/sys/task/stm32/systask.c:161-180",
+  "/home/nicola/repos/trezor-firmware/core/embed/sys/startup/stm32/sysutils.c:89-95",
+  "ARM DDI 0553 \u2014 MSPLIM/PSPLIM and STKOF UsageFault"
+ ],
+ "surface": "usb"
+}

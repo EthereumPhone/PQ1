@@ -1,0 +1,26 @@
+{
+ "id": "CS-10",
+ "title": "C10-signed catalogue refresh with monotonic data-version floor, decoupled from firmware images",
+ "threat": "Descriptor/token/name roots are compiled in, so catalogue freshness = firmware update cadence; ERC-8176 attestations are brittle (any label change invalidates the hash) and the registry governance moved to the EF in 2026-05. The clear set C will drift stale fast, pushing users to blind tiers, and invariant #10's 'never trust a firmware update again' makes frequent images undesirable.",
+ "proposal": "Define a `PQCAT` bundle: {data_version u32, ERC7730_DESCRIPTORS_ROOT, ERC20_DB_ROOT, NAMES_DB_ROOT, SELECTOR_DB_ROOT, KNOWN_CALLS Bloom hash, P73S receipt} signed with SPHINCS+C10 by a vendor catalogue key whose pubkey is pinned in the secure image (single algorithm, invariant #5). New CMD_CATALOGUE_UPDATE (PIN-unlocked, on-device confirm showing data_version + 8-word fingerprint of the bundle) verifies the C10 signature in S-world, requires data_version > the floor stored in a dedicated config page, writes the roots to that page, and the dispatcher reads roots from the page (falling back to compiled-in only if the page is blank). Leaves keep a type-domain byte so a token leaf can never parse as a descriptor leaf. Rollback of data_version refused; firmware images carry a minimum floor.",
+ "rationale": "Trezor's external-definitions model (Merkle + CoSi root + one-month freshness floor + built-ins override) decouples coverage from firmware; pq1 keeps stronger provenance (pinned roots) but zero agility. A C10-signed bundle keeps the one-primitive policy and avoids Trezor's regression to a single CoSi signer by using one PQ key with an on-device fingerprint ceremony.",
+ "repo_evidence": [
+  "secure/src/db_roots.rs:60-68,76-84,115-134,137-142 (all roots compiled in)",
+  "proto/src/lib.rs: no CMD_* for descriptor/catalogue/root update (grep -i DESCRIPTOR|CATALOG|ROOT_UPDATE \u2192 empty)",
+  "#345 (signed-release-manifest binding), #403 (registry-update lock-in), #377 (ERC-8176 ship-blocker) all assume image-bound roots",
+  "docs/erc8176-attestation-status.md:1-20"
+ ],
+ "vendor_precedent": "Trezor docs/common/external-definitions.md:60-66,122-170; core/embed/rust/src/definitions/blob.rs:34-89 (min_data_version Outdated check, type byte, Merkle+CoSi); definitions.py:38-40,73-76 (built-ins override).",
+ "novelty": "parity",
+ "kind": "mixed",
+ "cost": "L",
+ "priority": "P2",
+ "risks": "New durable flash page (config, not per-signature \u2014 permitted) and a new vendor key = new provenance surface; the catalogue key must be as reproducible/escrowed as the fw-signing key. The floor interacts with the A/B rollback OTP design (do not reuse the rejected unary tally). DROPPED: (i) 'intent not outcome' threat-model statement in README/HARDENING (no simulation text exists; doc-only); (ii) proxy descriptors admitted with implementation-codehash witness (dbgen already refuses proxies at erc7730.rs:4651-4654; chain-state witness unverifiable on-device); (iii) ERC-7730 CBOR/protobuf device wire format alignment with Trezor's trzd (depends on CS-10); (iv) Safe domainSeparator/hashStruct trailer page for safe_hashes cross-check (SafeTxHash ERC-8213 page already exists); (v) Kuhn-style per-render pixel randomisation against display-bus TEMPEST (display surface, not clearsign); (vi) tx-hash-bound second-device 2FA (Satochip-class) \u2014 subsumed by CS-03 policy guard scope.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/docs/common/external-definitions.md",
+  "/home/nicola/repos/trezor-firmware/core/embed/rust/src/definitions/blob.rs",
+  "https://github.com/ethereum/clear-signing-erc7730-registry/issues/2970",
+  "https://eips.ethereum.org/EIPS/eip-8176"
+ ],
+ "surface": "clearsign"
+}

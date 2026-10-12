@@ -1,0 +1,25 @@
+{
+ "id": "BOOT-07",
+ "title": "Sign and measure the FULL slot capacity (padding included) and pin the state of every page outside the measured images (erased-check or first-boot random fill), so no unmeasured flash can host an implant stage or stale code",
+ "threat": "A second-stage payload, a stale previous image, or planted data parked in the tail of a slot, in a free bank-2 page, or in the unused manifest-B/boot-state pages: the FSBL hashes only `secure_len`/`ns_len` bytes, so the 8-word fingerprint and the SWD diff both stay identical while the device carries attacker bytes that a glitched or trampolined boot can reach.",
+ "proposal": "(1) Manifest v6 (when adopted) signs hashes over the full `SLOT_SECURE_CAPACITY`/`SLOT_NS_CAPACITY` (image + deterministic 0xFF padding), and `verify_images` hashes the full capacity \u2014 Trezor's `check_image_contents` rule \u2014 or, cheaper for the FSBL budget, after hashing the image the FSBL erase-checks (reads == 0xFFFFFFFF) every remaining word of both slots and halts otherwise. (2) Every page not owned by the geometry registry (free pages, inactive manifest, retired boot-state page) must read erased at boot; the registry crate gains an `expect_erased` set checked by the FSBL and by `pq1-verify` (BOOT-04). (3) Optional Krux variant: first boot fills free pages with TRNG data and pins their SHA-256 in page 127 so a later change flips the fingerprint; prefer the erased-check because it needs no per-unit state.",
+ "rationale": "Measured boot that leaves unmeasured flash is a known hole (Ledger LSB-002's code-cave lived in unused/duplicated bytes; Krux fills free blocks for this reason). The HASH peripheral makes reading 2 MB cheap relative to the 2.9 s C10 verify, and the check is pure reads inside the immutable range.",
+ "repo_evidence": [
+  "fsbl/src/verify.rs:38-110 (hashes exactly `m.secure_len()` and `m.nonsecure_len()` bytes; capacity checks are upper bounds only)",
+  "fsbl/src/main.rs:323-350 (legacy boot-state page consulted but never integrity-bound to the manifest)",
+  "geometry/src/lib.rs:121-199 (registry has `updater_must_preserve` but no erased-expectation set; no consumer in secure/)",
+  "docs/security/measured-boot.md (grep 'unused page|whole bank|free flash': no coverage statement)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/image/image.c:438-523 (chunked hash check includes the 0xFF/0x00 padding to the end of the area 'so trailing bytes cannot hide code'); Krux TC Flash Hash fills empty blocks with entropy and hashes the whole flash; Ledger 1.4 'CRC fill of unused memory'.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "Boot time: reading ~1.9 MB at HSI16 adds an estimated 0.2-0.5 s (measure with the stage-marker, do not estimate). Interacts with #540/#758 (page 4 / manifest-A cascade) and with the A/B updater, which must erase the inactive slot's tail before COMMIT. Full-capacity signing changes the manifest preimage (Draft 1.1 is not implementation-approved; the erased-check path avoids touching it).",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/image/image.c",
+  "https://selfcustody.github.io/krux/getting-started/features/tamper-detection/",
+  "https://donjon.ledger.com/lsb/002/"
+ ],
+ "surface": "boot"
+}

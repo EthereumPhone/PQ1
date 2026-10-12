@@ -1,60 +1,27 @@
 #!/usr/bin/env python3
-"""Fault-injection sweep over the real `c10_sign_verified_with_progress`
-production signing primitive (post-F-1/F-2/F-5 hardening).
+"""Tail fault sweep of a host-emulated C10 sign/verify gate mirror.
 
-**What this sweeps that the existing harnesses don't.** `make c10` sweeps
-the verify-before-release *gate* with sign/verify stubbed; `make c10v`
-sweeps the *real* `sphincs_c10::verify` for forge-acceptance. This harness
-sweeps the production gate with the *real* sign + *real* verify in series,
-catching any single-fault that releases a corrupted-but-bytewise-different
-signature through the layered hardening end-to-end. Same shape as Tier-1
-item 3 — the C10-sign FI surface neither `c10` nor `c10v` covers alone.
+The target uses real sphincs-c10 signing and verification, fixed test keys,
+fixed randomness and a deterministic delay stub. It is not the production
+firmware image or a hardware experiment. Only the final TAIL_DEPTH instructions
+are sampled, under three emulator fault models, for one message/key pair.
 
-**Success criterion.** Per fault model × instruction position:
-  - Function returns 1 (Ok) **and** the produced sig bytes ≠ baseline sig:
-    BYPASS — a corrupted signature was released past the verify-gate. This
-    is the catastrophic FI outcome (the released sig wouldn't actually
-    verify under the intended message; the gate's job is to catch this
-    before release).
-  - Function returns 1 **and** sig == baseline: clean release. The fault
-    didn't affect output.
-  - Function returns 0: correctly rejected by the gate.
-  - Crash / hang: counted separately.
+An unfaulted baseline must return 1 and pass a separate, unfaulted invocation
+of the same ELF's verifier. Every byte-different output returned with literal
+success (1) is verified; verifier crashes, budget exhaustion or noncanonical
+returns are errors, never rejection evidence. A changed accepted output fails
+this check, but is not by itself an EUF-CMA forgery on a new message. Rejected
+changed outputs are reported as output corruption, not dismissed as harmless.
 
-**Scope.** Each unfaulted emulation runs the full ~2.6 B-unicorn-instruction
-SPHINCS+C10 sign + verify + gate sequence (~14 s wallclock). A naive
-500-position × 3-model sweep would be ~6 hours. So we use the
-**snapshot-restore trick**:
+Calibration runs in an isolated process. Each trial restores CPU/RAM, with an
+unfaulted restore tripwire. These checks do not establish complete emulator
+fidelity, coverage of the signer body, fault resistance or shipment authority.
 
-  1. Run sign+verify to ~96 % completion (instruction count `SNAPSHOT_AT`),
-     then snapshot Unicorn CPU state via `context_save()` + every mapped
-     RAM region via `mem_read()`. One-time cost ~14 s.
-
-  2. Per fault iteration: `context_restore()` + re-write the snapshotted
-     RAM + `start_and_fault(model, rel_idx, …)`. The post-snapshot
-     emulation is only ~89 M instructions (~0.6 s) instead of 2.6 B.
-     Net: 22× per-iteration speedup, **500-position × 3-model sweep in
-     ~10 minutes** instead of 6 hours.
-
-  3. Off-board independent verify: the baseline signature is validated by
-     calling the same ELF's `sca_c10_verify_real` entry point with the
-     baked vendor pk_seed/pk_root. Closes the loop on baseline correctness.
-
-The verify-gate code itself (sentinel helpers in `fi.rs`, the cmp+branch)
-is comprehensively covered by `make fi` and `make c10`; the
-`sphincs_c10::verify` internals are covered by `make c10v`. This harness
-fills the remaining gap: "does the production gate, with the *real* sign +
-verify, release the right sig under a single fault?" — now with sweep
-coverage wide enough to be an audit-grade negative result.
-
-Tripwire: a no-op `context_restore()` must reach RET with `r0=1` and
-`sig == baseline_sig`. If it doesn't, the snapshot is missing state and
-the sweep results would be silently wrong. The harness asserts this.
-
-Run:   donjon-sca run tools/sca/fault_sweep_c10_sign.py
-       (or: make -C tools/sca c10-sign)
+Run: make -C tools/sca c10-sign
 """
+import glob
 import os
+import subprocess
 import sys
 import time
 
@@ -221,8 +188,30 @@ def call_from_snapshot(e, snapshot):
             bytes(e[SIG_ADDR:SIG_ADDR + SIG_LEN]))
 
 
+def load_pk_root():
+    """Reject missing or conflicting build roots; baseline binds the value to ELF."""
+    paths = glob.glob(os.path.join(HERE, "c10_sign_target", "target",
+        "thumbv8m.main-none-eabi", "release", "build",
+        "sca-c10-sign-target-*", "out", "pk_root.bin"))
+    roots = set()
+    for path in paths:
+        with open(path, "rb") as stream:
+            roots.add(stream.read())
+    if len(roots) != 1 or any(len(root) != 16 for root in roots):
+        raise RuntimeError("missing, malformed or conflicting pk_root.bin; rebuild target")
+    return roots.pop()
+
+
+def classify_release(ret, sig, baseline):
+    if ret == 0:
+        return "rejected"
+    if ret != 1:
+        return "invalid_return"
+    return "clean" if sig == baseline else "needs_verify"
+
+
 def offboard_verify(e, msg: bytes, sig: bytes) -> bool:
-    """Independent verify of a produced sig via the same ELF's
+    """Unfaulted verify of a produced sig via the same ELF's
     `sca_c10_verify_real` entry point. Re-uses the same pk_seed/pk_root
     the build.rs baked into the mirror — closes the loop on baseline."""
     PK_SEED_ADDR = 0x6010_0000
@@ -233,19 +222,7 @@ def offboard_verify(e, msg: bytes, sig: bytes) -> bool:
     # read it back from the ELF's `.rodata` (it's referenced as the static
     # `PK_ROOT`, so it lives in flash and is mapped by `e.load(ELF)`).
     pk_seed = b"\x77" * 16
-    # Find PK_ROOT bytes via the same build artifact:
-    import glob
-    matches = glob.glob(os.path.join(HERE, "c10_sign_target", "target",
-                                     "thumbv8m.main-none-eabi", "release",
-                                     "build", "sca-c10-sign-target-*", "out",
-                                     "pk_root.bin"))
-    if not matches:
-        raise RuntimeError(
-            "pk_root.bin not found in any build dir; rebuild with "
-            "`make -C tools/sca build-c10-sign`")
-    with open(matches[0], "rb") as f:
-        pk_root = f.read()
-    assert len(pk_root) == 16, f"pk_root: expected 16 bytes, got {len(pk_root)}"
+    pk_root = load_pk_root()
     e.reset()
     e[STACK_TOP - _STACK_LEN] = b"\x00" * _STACK_LEN
     e["sp"] = STACK_TOP
@@ -260,9 +237,14 @@ def offboard_verify(e, msg: bytes, sig: bytes) -> bool:
     e["lr"] = RET
     try:
         e.start(e.functions["sca_c10_verify_real"][0], RET, count=COUNT_BUDGET)
-    except Exception as ex:
-        return False
-    return e["pc"] == RET and (e["r0"] & 0xFFFF_FFFF) == 1
+    except (RuntimeError, UcError) as ex:
+        raise RuntimeError("unfaulted verifier failed") from ex
+    if e["pc"] != RET:
+        raise RuntimeError("unfaulted verifier exceeded its instruction budget")
+    result = e["r0"] & 0xFFFF_FFFF
+    if result not in (0, 1):
+        raise RuntimeError(f"unfaulted verifier returned noncanonical value {result}")
+    return result == 1
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +257,46 @@ def offboard_verify(e, msg: bytes, sig: bytes) -> bool:
 # becomes the goal, revisit; FaultFinder (ASHES'24) is the proven multi-
 # core Unicorn pattern to adopt.)
 # ---------------------------------------------------------------------------
+
+
+def calibrate_count():
+    """Count an unfaulted execution without installing per-instruction hooks.
+
+    Scan in bounded chunks, then bisect only the final chunk using complete
+    CPU/RAM snapshots. This process is discarded before fault injection.
+    """
+    e = fresh_emu()
+    setup(e)
+    pc = e.functions["sca_c10_sign_verified"][0]
+    consumed = 0
+    chunk = 100_000_000
+    while consumed < COUNT_BUDGET:
+        ctx = e.emu.context_save()
+        memory = {
+            begin: bytes(e.emu.mem_read(begin, end - begin + 1))
+            for begin, end, _ in e.emu.mem_regions() if begin >= 0x0900_0000
+        }
+        budget = min(chunk, COUNT_BUDGET - consumed)
+        e.start(pc, RET, count=budget)
+        if e["pc"] == RET:
+            if (e["r0"] & 0xFFFF_FFFF) != 1:
+                raise RuntimeError("calibration baseline returned failure")
+            low, high = 0, budget
+            while high - low > 1:
+                middle = (low + high) // 2
+                e.emu.context_restore(ctx)
+                for addr, data in memory.items():
+                    e.emu.mem_write(addr, data)
+                e.start(pc, RET, count=middle)
+                if e["pc"] == RET:
+                    high = middle
+                else:
+                    low = middle
+            print(consumed + high)
+            return
+        consumed += budget
+        pc = e["pc"]
+    raise RuntimeError("calibration did not return within its instruction budget")
 
 
 def main():
@@ -293,7 +315,7 @@ def main():
     print(f"ELF: {ELF}")
     print(f"Test message: {TEST_MSG.hex()}")
     print(f"Fault models: {[ml for ml, _ in SWEEP_MODELS]}  "
-          f"(use --all-models for all three)")
+          f"(all three enabled)")
     print()
 
     # ---- Single-emulator pattern (verbatim from /tmp/single_thread_late_snap.py POC) ----
@@ -317,59 +339,35 @@ def main():
     e_main["lr"] = RET
     # Baseline run
     e_main.start(e_main.functions["sca_c10_sign_verified"][0], RET, count=10_000_000_000)
+    if e_main["pc"] != RET or (e_main["r0"] & 0xFFFF_FFFF) != 1:
+        sys.exit("baseline did not return success within its instruction budget")
     baseline_sig = bytes(e_main[SIG_ADDR:SIG_ADDR + SIG_LEN])
     print(f"  baseline run finished in {time.time() - t0:.1f} s, "
           f"sig[0..16]={baseline_sig[:16].hex()}")
     print()
 
-    # ---- Use a hardcoded total_estimate (it's deterministic across runs) ----
-    # Avoids running a bisect, which empirically leaves residual state in the
-    # emulator that breaks subsequent fault-injection results (the per-segment
-    # diagnostic POC at /tmp/single_thread_late_snap.py reproduces this:
-    # post-bisect, ~100 % of stuck-at faults crash where they would otherwise
-    # show a normal mix of rejected/clean/anomaly. Single-emulator-no-bisect
-    # gives clean results.)
-    total_estimate = 6_622_918_000   # measured 2026-05-18 via bisect under harness setup
-                                     # (e.reset() + stack-zero) — actual ∈ (6_622_915_000,
-                                     # 6_622_918_000]; snap_at = total - 30K = 6_622_888_000
-                                     # lands well inside the function. Re-measure if the
-                                     # mirror's instruction count drifts (MMIO refactor or
-                                     # sphincs-c10 changes will).
+    # Calibrate in a separate process: bisection must not contaminate the
+    # emulator used for fault injection. A fixed count goes stale when the
+    # compiler or any linked source changes.
+    calibrated = subprocess.run(
+        [sys.executable, os.path.abspath(__file__), "--calibrate-count"],
+        check=True, capture_output=True, text=True,
+    )
+    total_estimate = int(calibrated.stdout.strip().splitlines()[-1])
+    if not TAIL_DEPTH < total_estimate <= COUNT_BUDGET:
+        sys.exit(f"invalid calibrated instruction count: {total_estimate}")
     sweep_snap_at = total_estimate - TAIL_DEPTH
     sweep_start_rel = 1
     sweep_end_rel = TAIL_DEPTH + 16   # small margin past function end → some "short" iterations
-    print(f"  total instructions = {total_estimate:_} (hardcoded constant)")
+    print(f"  total instructions = {total_estimate:_} (measured in isolated process)")
     print(f"  sweep snapshot point: {sweep_snap_at:_} "
           f"(tail sweep covers {TAIL_DEPTH:_} instr past it)")
     print()
 
     sweep_t0 = time.time()
 
-    # ---- Sweep — now cheap thanks to snapshot/restore ----
-    # An anomalous case is `ret==1 and sig != baseline`. The harness then
-    # classifies it as either:
-    #   FORGE_RELEASE  (sig != baseline AND off-board sphincs_c10::verify
-    #                   accepts it under the intended message) — SECURITY
-    #                   finding; this is the real "gate bypass."
-    #   OUTPUT_CORRUPTION (sig != baseline AND off-board verify rejects) —
-    #                   benign: the fault corrupted the post-gate output
-    #                   copy (sig-write loop runs AFTER the gate approved),
-    #                   but the produced sig wouldn't verify and can't be
-    #                   used for a forge. Worth noting (post-gate code is
-    #                   fault-sensitive) but not a security issue.
-    # Cheap heuristic to dodge the expensive off-board verify for the
-    # obvious sig-write-loop case. The harness zero-fills SIG_ADDR before each
-    # call; if a fault drops a `write_volatile` iteration the corresponding
-    # byte stays 0x00. So a single-byte diff where the produced byte is 0x00
-    # is unambiguously a sig-write-loop fault — no forge possible (SPHINCS+
-    # verify rejects any byte change). Multi-byte or non-zero diffs need
-    # actual off-board verify to classify.
-    def classify_anomaly(sig, baseline):
-        diff_pos = [i for i, (a, b) in enumerate(zip(sig, baseline)) if a != b]
-        if len(diff_pos) == 1 and sig[diff_pos[0]] == 0x00:
-            return ("benign_write_drop", diff_pos)
-        return ("needs_verify", diff_pos)
-
+    # Save every changed successful output for actual unfaulted verification.
+    # A byte pattern alone cannot establish that a signature is invalid.
     # Verbatim POC: setup + partial run to snap, capture ctx + mem snapshot.
     print(f"  taking sweep-snapshot at instr {sweep_snap_at:_} (inline POC pattern) …")
     t0 = time.time()
@@ -412,7 +410,7 @@ def main():
     corruption_cases = []
     needs_verify_cases = []
     counters = {ml: {"forge": 0, "benign_drop": 0, "rejected": 0, "clean": 0,
-                     "crash": 0, "hang": 0, "short": 0} for ml, _ in SWEEP_MODELS}
+                     "crash": 0, "hang": 0, "short": 0, "invalid_return": 0} for ml, _ in SWEEP_MODELS}
 
     for model_label, model in SWEEP_MODELS:
         c = counters[model_label]
@@ -432,18 +430,12 @@ def main():
             if sweep_emu["pc"] != RET:
                 c["hang"] += 1; continue
             ret_val = sweep_emu["r0"] & 0xFFFF_FFFF
-            if ret_val == 0:
-                c["rejected"] += 1; continue
             sig = bytes(sweep_emu[SIG_ADDR:SIG_ADDR + SIG_LEN])
-            if sig == baseline_sig:
-                c["clean"] += 1; continue
-            # Anomaly. Cheap heuristic: 1-byte diff @ 0x00 = sig-write drop.
-            diff_pos = [k for k, (a, b) in enumerate(zip(sig, baseline_sig)) if a != b]
-            if len(diff_pos) == 1 and sig[diff_pos[0]] == 0x00:
-                c["benign_drop"] += 1
-                corruption_cases.append((model_label, i, ret_val, 1))
-            else:
+            outcome = classify_release(ret_val, sig, baseline_sig)
+            if outcome == "needs_verify":
                 needs_verify_cases.append((model_label, i, sig))
+            else:
+                c[outcome] += 1
         model_t = time.time() - model_t0
         n_swept = sweep_end_rel - sweep_start_rel
         print(f"  [{model_label:11s}]  swept {n_swept}:  ({model_t:.1f} s, "
@@ -452,10 +444,14 @@ def main():
     sweep_t = time.time() - sweep_t0
     print(f"  sweep complete: wallclock={sweep_t:.1f} s")
 
-    # Off-board verify only the ambiguous (non-cheap-heuristic) anomalies.
+    # A separate unfaulted verifier invocation; this is the same implementation,
+    # not an independent cryptographic oracle. Never reuse the faulted emulator.
+    verify_emu = fresh_emu()
+    if not offboard_verify(verify_emu, TEST_MSG, baseline_sig):
+        raise RuntimeError("unfaulted baseline signature failed verification")
+    print("  Baseline signature verified")
     if needs_verify_cases:
-        print(f"  Off-board verifying {len(needs_verify_cases)} ambiguous case(s) …")
-        verify_emu = fresh_emu()
+        print(f"  Verifying all {len(needs_verify_cases)} changed successful outputs …")
         t_v0 = time.time()
         for ml, idx, sig in needs_verify_cases:
             if offboard_verify(verify_emu, TEST_MSG, sig):
@@ -473,12 +469,13 @@ def main():
         c = counters[ml]
         total = sum(c.values())
         print(f"  [{ml:11s}]  swept {total}:  "
-              f"FORGE_RELEASE={c['forge']}  output-corruption={c['benign_drop']}  "
+              f"ACCEPTED_CHANGED_OUTPUT={c['forge']}  output-corruption={c['benign_drop']}  "
               f"crashes={c['crash']}  hangs={c['hang']}  shorts={c['short']}  "
+              f"noncanonical-returns={c['invalid_return']}  "
               f"correctly-rejected={c['rejected']}  clean-release={c['clean']}")
         if c["forge"] > 0:
             forges_for_model = [f for f in forge_cases if f[0] == ml]
-            print(f"     !!! {c['forge']} TRUE FORGE-RELEASE (sig validates under intended message):")
+            print(f"     !!! {c['forge']} ACCEPTED CHANGED OUTPUT (sig validates under intended message):")
             for fm, fi, fret, _fsig in forges_for_model[:20]:
                 abs_instr = sweep_snap_at + fi
                 print(f"        [{fm}] rel_instr {fi} (abs {abs_instr:_}): ret={fret}")
@@ -487,46 +484,24 @@ def main():
           f"off-board verify called {len(needs_verify_cases)} of "
           f"{len(corruption_cases) + len(forge_cases)} anomalies)")
     print()
-    # Summarize benign output-corruption (informational, post-gate sig-write loop).
+    # Report observed corruption without inferring the fault location or harmlessness.
     if corruption_cases:
         print(f"  Informational: {len(corruption_cases)} output-corruption case(s) "
-              f"(post-gate sig-write loop is fault-sensitive — benign, sigs don't validate)")
+              f"(each changed output was rejected by the unfaulted verifier)")
         print()
 
-    # ---- Findings ----
-    print("=" * 75)
-    print()
-    print("Note on crash counts. Standalone POC at /tmp/single_thread_late_snap.py")
-    print("shows ~5 % stuck-at crash rate over the same fault index range; in this")
-    print("harness the rate is ~100 %. The discrepancy is an unresolved harness")
-    print("interaction — likely a subtle state leak from baseline / snapshot")
-    print("setup. The SECURITY finding (FORGE_RELEASE == 0 across all 90 k faults)")
-    print("is unaffected: even at 100 % crash, every reached gate decision is the")
-    print("correct one — no forged signature is released. For nuanced per-position")
-    print("fault outcomes, run the POC directly.")
-    print()
+    print("Scope: one fixed key/message, emulator gate mirror, final instruction tail;")
+    print("crashes, hangs, noncanonical returns and unsampled paths remain explicit.")
     if not any_forge:
-        print("ALL SWEEPS CLEAN — no single fault in the gate tail released a")
-        print("FORGEABLE signature through `c10_sign_verified_with_progress`.")
-        print()
-        print("This empirically validates the F-1 (CSE black_box) + F-2 (sentinel")
-        print("caller cmp) + F-5 (sentinel-encoded check_true) fix stack end-to-end")
-        print("with the *real* SPHINCS+C10 sign + verify (vs the stubs `make c10`")
-        print("uses for speed). The production verify-before-release gate rejects")
-        print("every forge-relevant single-fault attack in this region; output-")
-        print("corruption cases (post-gate sig-write loop) don't produce a sig that")
-        print("validates and so can't be used for a forge.")
+        print("PASS: no changed output returned with literal success was accepted")
+        print("by the unfaulted verifier in these sampled trials.")
         sys.exit(0)
-
-    print("FINDING — single-fault released a FORGEABLE signature past the gate")
-    print()
-    print(f"  {len(forge_cases)} forge-release(s) across {len({b[0] for b in forge_cases})} fault model(s).")
-    print("  The F-1/F-2/F-5 gate didn't catch a corrupted-sign that validates")
-    print("  independently. Investigate the specific instruction position — likely")
-    print("  a fault between the gate's `return 0` Err-path and the function's")
-    print("  Ok-return, or a fault inside the sentinel-cmp branch.")
+    print(f"FAIL: {len(forge_cases)} changed successful outputs passed verification")
     sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--calibrate-count"]:
+        calibrate_count()
+    else:
+        main()

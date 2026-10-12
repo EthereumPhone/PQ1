@@ -1,0 +1,265 @@
+{
+ "surface": "Measured boot / RDP-2 / option bytes / verify-before-first-power trust chain (key=boot). Threats: modified firmware or bootloader pre/post sale, RDP downgrade, option-byte tamper, fake fingerprint screen, attestation gaps. Verified read-only against /home/nicola/repos/PQSigner_OS (branch feat/pq1-board-target) and /home/nicola/repos/trezor-firmware @ 6ab39e95 on 2026-10-11. Corrections to inventory (B) made while verifying: pq1 ALREADY ships TAMP confirmed mode (CR3=0) with ITAMP6/7/9/12/13 (secure/src/hw/tamp.rs:198-323), SYSCFG CSLCKR LOCKSAU|LOCKSVTAIRCR + AIRCR PRIS/BFHFNMINS/SYSRESETREQS(production) (secure/src/sau.rs:635-742), BHK-in-TAMP + BHKLOCK (secure/src/main.rs:1487-1534), RNG HTCR + continuous repetition test (secure/src/hw/rng.rs:97-127) and NsPtr TOCTOU copies, so those Trezor parity items are NOT proposed below. Everything proposed is a missing delta.",
+ "improvements": [
+  {
+   "id": "BOOT-01",
+   "title": "Pin the FULL option-byte profile (WRP both banks, OEM1/OEM2 lock, BOOT_LOCK, BOR_LEV, nBOOT0/nSWBOOT0, HDP) and escalate a persistent post-lock mismatch from halt to wipe",
+   "threat": "Option-byte tamper / RDP regression in the RDP-0\u2192RDP-2 transit window and after lock: a unit whose WRP was cleared before the RDP-2 burn, an OEM1/OEM2 RDP-regression password planted at the factory or in transit, a SWAP_BANK flip (NS-programmable without BOOT_LOCK), or a lowered BOR level (the \u03bc-Glitch L5 attack needed to defeat BoD) \u2014 none of which today's tz-1 tripwire or Phase A can see; and a halted (not wiped) device leaves secrets in place for a second physical attempt.",
+   "proposal": "(1) Run the deferred silicon pin on sacrificial U585 dies for WRP1AR/WRP2AR, NSSR.OEM1LOCK/OEM2LOCK, SECBOOTADD0R.BOOT_LOCK, OPTR.BOR_LEV/nBOOT0/nSWBOOT0/SWAP_BANK and SECWM1R2.HDP1 polarity, then flip `WRP1A_MASK_PINNED`, `OEM_LOCK_MASK_PINNED` and `require_boot_lock` to true in BOTH `SHIP_PROFILE_U585`/`LOCKED_PROFILE_U585` and widen `optr_matches_ship` to an exact OPTR mask (Trezor compares the whole OPTR constant). (2) FSBL tz-1 compares the full set every boot (\u2248 +100 B). (3) First-boot Phase A asserts OEMxLOCK clear and BOOT_LOCK set BEFORE the RDP=0xCC burn (OEM keys cannot be cleared after RDP-2) and the factory ship profile JSON lists OEM1KEYR/OEM2KEYR=0xFFFFFFFF + lock bits for the SWD verifier. (4) Secure world: once journal ALL_DONE, a 2-pass persistent mismatch on ANY pinned field drives `tzic::trigger_intrusion_wipe` (admin-wipe both SEs + page 126 erase) instead of `secure_log!`; FSBL keeps halt (no SE driver there).",
+   "rationale": "Invariant #10 rests on 'WRP set before RDP-2'; today no software can tell a unit where that ordering was violated from a good one, and OEM keys are the documented U5 path to make RDP-2 reversible. Trezor's shipped boardloader treats any divergence from the pinned profile as 'first boot OR hardware fault OR exploit attempt' and destroys the BHK; pq1's halt is strictly weaker for a stolen device. Pinning the layout is a one-time silicon receipt; the comparator code already exists host-tested in shared::lockdown.",
+   "repo_evidence": [
+    "fsbl/src/optbytes.rs:24-29 ('deliberately does NOT act on WRP1A or the OEM locks ... a unit whose WRP was cleared before RDP-2 passes this tripwire')",
+    "shared/src/lockdown.rs:338-356 (SHIP/LOCKED profiles with WRP1A_MASK_PINNED=false, OEM_LOCK_MASK_PINNED=false, require_boot_lock=false)",
+    "shared/src/lockdown.rs:373-397 (optr_matches_ship is a partial OPTR mask; SWAP_BANK/nSWBOOT0/nBOOT0/NRST_MODE not compared)",
+    "shared/src/lockdown.rs:517-522 (BOR level advisory only, 'not yet a hard gate', #36)",
+    "secure/src/hw/flash.rs:74-79 (BOOT_LOCK follow-up #214; HDP1 polarity still unconfirmed)",
+    "secure/src/main.rs:1240-1290 (RDP<L2 pre-ALL_DONE and SECBOOTADD0 checks are secure_log! warnings, silent without debug-log)",
+    "Issues #46, #387, #40, #38, #44, #753, #214, #192"
+   ],
+   "vendor_precedent": "Trezor Safe 7 boardloader: core/embed/sec/option_bytes/stm32u5/option_bytes.c:78-101 (full OPTR/SECBOOTADD0R|BOOT_LOCK/SECWM/WRP constants), :213-222 (OEM keys written 0xFFFFFFFF), :247-250 (ensure OEM1LOCK/OEM2LOCK clear, fatal), core/embed/projects/boardloader/main.c:325-340 (mismatch \u2192 secret_safety_erase()).",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "Pinning needs sacrificial silicon (owner has deferred irreversible chip work by design \u2014 this is the same bucket as #268, bundle them into one ceremony). A wrong pin bricks every genuine first boot at E0809/E080A (already the fail-closed behaviour today). Wipe-on-mismatch must stay 2-pass + reset-cause-gated (BOOT-06) so a transient read fault never wipes a good device; FSBL budget \u2248 +100-200 B must land before the #540 geometry freeze.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+    "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf (\u03bc-Glitch: BoD had to be defeated on STM32L5)",
+    "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561 (Shaping the Glitch: RDP2\u2192RDP1 at boot)",
+    "https://www.cypherock.com/keylabs.pdf (RDP2 glitch to RDP1 behaviour)"
+   ]
+  },
+  {
+   "id": "BOOT-02",
+   "title": "FSBL fault-injection delta before the WRP freeze: TRNG online, random pre-gate delays, default-poisoned branch target, duplicated verdicts, MSPLIM, WOTS-checksum redundancy, and a release-ELF survival gate",
+   "threat": "Voltage/EM glitch on the FSBL's deterministic-timing verify chain (HSI16, fixed `wait_random` length) to boot an unsigned slot or skip tz-1; WOTS checksum fault on the on-device C10 VERIFIER (Wagner et al. 2023/2025: affects verification, not just signing) to accept a forged firmware signature; LTO/opt-level-s folding the redundant compares away so the sentinel discipline exists only in source.",
+   "proposal": "(a) Bring the RNG peripheral up in the FSBL (RCC AHB2 clock + CONDRST sequence already written in secure/src/hw/rng.rs) so `fi::rng_byte` returns TRNG bytes instead of 0x42; fall back to halt, not to a constant. (b) Insert `wait_random()` immediately before each `check_true_into_sentinel` call in `filter_valid`/`verify_images`/tz-1 and before the branch. (c) Replace the `Option`/let-else slot selection with a volatile branch target initialised to a poison address (e.g. 0xFFFF_FFFE \u2192 HardFault) and assigned only after the last gate, plus a duplicated slot/verdict pair compared under `black_box` right before `branch::into_slot`. (d) Set MSPLIM in the FSBL reset path (currently 'no MSPLIM'). (e) In the FSBL's C10 verify (and the signer), recompute the WOTS checksum/target-sum from the message digest a second time via an independent code path and compare before the hypertree walk (the 2023/1572 countermeasure class). (f) Add a CI gate that disassembles the release FSBL/secure ELFs and asserts the double-evaluate + compare sequences survived (TF-M's explicit warning), using the existing `rainbow` instruction-skip sweep on `fsbl::verify_images`/`filter_valid` (#591).",
+   "rationale": "Every byte of the FSBL becomes physically permanent at RDP-2; this is the last window to add FI hardening to the only code the user ever trusts. The gate currently needs ~2 coordinated faults but with fixed timing an attacker can characterise both offsets offline; Trezor's boardloader adds `fih_delay()` before every ensure and sets `next_stage_addr` last for exactly this reason.",
+   "repo_evidence": [
+    "fsbl/src/fi.rs:31-33 (`fn rng_byte() -> u8 { 0x42 }` \u2014 'FSBL has no TRNG online')",
+    "fsbl/src/main.rs:172 and fsbl/src/manifest.rs:30 ('16 KB stack ... no MSPLIM')",
+    "fsbl/src/main.rs:218-222 (`let Some((slot, secure_digest)) = pick_slot(..) else { halt() }` \u2014 no poisoned default target, single verdict)",
+    "fsbl/src/main.rs:313-351 (sentinel gates exist but no random pre-delay between them beyond the loop inside the gate)",
+    "fsbl/src/verify.rs:88-110 (aggregate gate; no checksum-independent recomputation in the verifier)",
+    "Issues #591 (rainbow sweep of fsbl::verify_images not done), #401, #301, #633; CLAUDE.md #10 'FI-hardened FSBL image verify (EF-swarm F15)' OPEN"
+   ],
+   "vendor_precedent": "Trezor boardloader main.c:111-129 (fih_delay/fih_ensure, commit ad0ee485c9), :250-280 and :356-369 (volatile next_stage_addr zeroed then set last); bootloader/main.c:118-121,380 (default jump fn = '(glitch)' shutdown), fw_check.c:59-67; boot_header.c:56-57,102-106 (sigmask/sigmask_inv). TF-M FIH profile HIGH (random delay + duplicated execution).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P0",
+   "risks": "FSBL budget: RNG init \u2248 300-600 B, poison-target + duplicate verdict \u2248 100 B \u2014 must fit under FSBL_MAX_LOAD_SPAN 38,912 after the #540 cutover (current physical span 30,720 B). Adds \u2248 tens of ms to boot. RNG bring-up in the FSBL adds a peripheral driver to the immutable range (a bug there is permanent \u2014 keep it minimal and KAT-free; use the SR error flags only). Checksum-redundancy in the verifier costs one extra WOTS chain pass (~ms).",
+   "sources": [
+    "https://eprint.iacr.org/2023/1572",
+    "https://eprint.iacr.org/2025/2096",
+    "https://nrfconnectdocs.nordicsemi.com/ncs/latest/tfm/design_docs/tfm_physical_attack_mitigation.html",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/boardloader/main.c"
+   ]
+  },
+  {
+   "id": "BOOT-03",
+   "title": "Measurement-bound secret release (DICE-style): seal the SE050 BHK wrap / an extra entropy share to H(DHUK, FSBL-measured secure-image digest) so a modified secure image cannot reconstruct the seed even with full MCU code execution",
+   "threat": "Malicious or implanted firmware on the MCU after sale (RDP downgrade by glitch, or a pre-sale reflash the user did not SWD-verify) that passes or skips the FSBL fingerprint check: today any code on the die can recompute the DHUK-derived PBS/BHK material and unlock both SEs \u2014 the fingerprint is a human-checked indicator, not a cryptographic gate (the Donjon Safe 3 lesson: pairing-secret possession proves access to a secret, not the software running).",
+   "proposal": "The FSBL (which already holds the verified secure digest `secure_digest` at the branch) hands that digest forward in a typed SRAM handoff block; early secure-world boot derives `seal_key = SAES-CMAC(DHUK, 'pq1-seal-v1' || secure_digest)` and uses it (not plain DHUK) as the wrap key for page 126 (SE050 BHK) and as a third XOR share of the entropy reconstruction (`entropy = half_O \u2295 half_E \u2295 KDF(seal_key)`), or at minimum as the OPTIGA PBS salt derivation input. A legitimate firmware update becomes a journaled re-seal: the OLD image (still running, PIN-unlocked, after CMD_FW_COMMIT verified the new manifest) re-wraps page 126 under the NEW image's signed `secure_hash` from the manifest, exactly like the Phase-B transport\u2192final rotation journal on page 127. The FSBL additionally zeroes the handoff block's SRAM alias before any NS code runs.",
+   "rationale": "This is the strongest shipped primitive against malicious firmware (Tillitis TKey CDI, DICE/Caliptra): it converts the 8-word fingerprint from 'the user must notice' into 'wrong code cannot unwrap'. It needs no new SE primitive, no classical signer, no new per-signature state, and reuses the existing journal machinery. Because it consumes FSBL bytes (handoff block) and the FSBL freezes at RDP-2, the DECISION must be taken before the #540 cutover even if implementation lands later.",
+   "repo_evidence": [
+    "docs/security/vendor-signing-key-compromise.md:459 ('No measurement-bound secrets, in any form' \u2014 recorded as a current property, not a decision against it)",
+    "secure/src/hw/secret_keys.rs (grep measure|digest|fingerprint: no hits \u2014 PBS/BHK derive from DHUK + persisted salt only)",
+    "secure/src/dual_se.rs (grep measure|fsbl|digest: no hits \u2014 entropy reconstruction has no measurement input)",
+    "fsbl/src/branch.rs:38-98 (handoff carries only MSP/reset vector; the verified `secure_digest` is dropped after render)",
+    "secure/src/measured_boot.rs:59-122 (secure world re-measures itself, advisory, compiled out of mode-production per main.rs:256-276)",
+    "docs/security/supply-chain-defense-research-brief.md:108,134,160 (DICE listed as research direction only)"
+   ],
+   "vendor_precedent": "Tillitis TKey (cdi = blake2s(UDS, H(app), USS) \u2014 altered app \u21d2 different keys); DICE/Caliptra layered CDI. Neither Trezor nor Ledger seal wallet secrets to a firmware measurement (Trezor: 'coreapp can ask for access to raw secrets and will just get them', embed-arch.md:325-326).",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "XL",
+   "priority": "P0",
+   "risks": "Brick class: an interrupted re-seal or a signed-but-buggy update that changes the measured bytes in an unplanned way leaves page 126 unwrappable \u2014 mitigated by the page-127 journal pattern and by keeping half_O/half_E unchanged (only the extra share/wrap is sealed; the 24-word mnemonic always recovers). Doubles the update ceremony's state machine (#712/#707 recoverability gates apply). Does not defend against a glitched FSBL that forwards the GENUINE digest while branching to a modified image (BOOT-02 covers that). The P0 is for the owner DECISION (FSBL-byte-affecting); implementation is post-cutover.",
+   "sources": [
+    "https://dev.tillitis.se/intro/",
+    "https://trustedcomputinggroup.org/resource/dice-attestation-architecture/",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://docs.trezor.io/trezor-firmware/core/embed-arch/embed-arch.html"
+   ]
+  },
+  {
+   "id": "BOOT-04",
+   "title": "Ship the one-command external verifier: full reset-halt dump + option-byte/OTP profile diff against published per-release digests, an OTP-burned per-unit birth certificate / bag serial rendered by the FSBL on first boot, and a WebUSB variant for non-experts",
+   "threat": "Pre-sale reflash, option-byte tamper or chip swap in transit against a device that is deliberately debug-open (RDP-0) until first power \u2014 the exact window Ledger named in LSB-013 \u2014 where the whole pq1 trust story assumes the user verifies first, yet nothing a user can run exists; and a non-expert buyer who cannot run SWD gets no transit-tamper signal at all.",
+   "proposal": "(1) Turn docs/security/user-device-verification.md into code: `pq1-verify` (host, probe-rs/STM32_Programmer_CLI connect-under-reset, no VBAT) dumps both banks + OTP + every option-byte register (incl. OEM1LOCK/OEM2LOCK, BOOT_LOCK, WRP both banks, SECWM, HDP, BOR_LEV), diffs against a signed, published release descriptor (image digests per slot, FSBL digest, ship option-byte profile, expected-0xFF map for unused pages) and prints the same 8 fingerprint words the FSBL will show; fail = 'do not power'. (2) Factory burns a per-unit record into OTP (unit serial, tamper-bag serial, SHA-256 of the per-unit SE UIDs) and the FSBL renders the bag serial on the first-boot screen so an ordinary user compares it to the physical bag (Coldcard pattern); the verifier checks the same record. (3) Append each unit's record to a transparency log (#68/#67) so a clone missing from the log is detectable. (4) Fill the `ship-option-b` profile's PENDING fields from BOOT-01's pin and the `flash: []` digest list from the non-monolithic shipping image (#226/#696).",
+   "rationale": "Owner decision (tools/verify_ship_state.py:8-19): 'external verification is the only kind that counts at RDP-0'. Trezor/Ledger cannot offer verify-before-first-power at all (Trezor ships blank + seal; Ledger relies on SE genuine-check), so this is pq1's genuine differentiator \u2014 but today it is a design doc, a bench-only profile and an uncheckable template, so the differentiator does not exist for any buyer.",
+   "repo_evidence": [
+    "docs/security/user-device-verification.md:3-4 ('Nothing here is implemented'), :201-218 (work breakdown, no issue)",
+    "tools/verify_ship_state.py:1-177 (option-byte-level read-only script; refuses PENDING profiles)",
+    "tools/ship-profiles/ship-option-b.template.json (WRP/BOOT_LOCK/HDP/SECWM PENDING, `flash: []`)",
+    "docs/firmware/reproducible-builds.md:241 (claims CI runs verify-repro; no workflow does \u2014 drift)",
+    "fsbl/src/render.rs:80-202 (fingerprint render only; no serial/birth-record page)",
+    "Issues #595 (option bytes not in prodtest report), #68, #67, #249, #226, #696"
+   ],
+   "vendor_precedent": "Coldcard Mk4 numbered tamper-evident bag with number recorded in-device and shown on first power-up; Trezor verify_signed_firmware.py (strip signatures, byte-diff vs reproducible build, re-verify against PRODUCTION keys); Star Labs pre-dispatch verification pack; Foundation onboarding integrity check.",
+   "novelty": "beyond",
+   "kind": "process",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Depends on BOOT-01 (pinned profile) and the non-monolithic shipping image for the digest list; OTP record consumes OTP words the rejected unary rollback tally also wanted (draft 1.1 typed floor must agree on the OTP map). A birth record is only as trustworthy as the factory that burns it \u2014 state that it detects transit tamper and cloning-without-factory-access, not a malicious factory. WebUSB over the SBU\u2192SWD adapter is unproven on the enclosed EVT unit.",
+   "sources": [
+    "https://coldcard.com/mk4",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/tools/trezor_core_tools/verify_signed_firmware.py",
+    "https://donjon.ledger.com/lsb/013/",
+    "https://starlabs.systems/blogs/news/anti-interdiction-service"
+   ]
+  },
+  {
+   "id": "BOOT-05",
+   "title": "Boot-time dual-SE attestation with factory-pinned UIDs plus a C10 MCU attestation command (AuthenticateDevice analogue), bound to the FSBL measurement",
+   "threat": "Chip swap (OPTIGA or SE050) in transit or after sale; a cloned board with genuine-looking firmware; a stolen device re-shelled around a fresh MCU \u2014 none detected today because no code reads an SE attestation object, pins SE UIDs, or lets the companion challenge the unit remotely.",
+   "proposal": "(1) At boot, after SCP03/Shielded sessions are up: read OPTIGA UID (0xE0C2) and the SE050 chipId, compare against the per-device binding record (already specified 3\u00d7 in threat-model \u00a79.4 rows; store the SHA-256 anchor in the OTP birth record from BOOT-04); mismatch after first-boot ALL_DONE \u2192 admin-wipe path. Verify a fresh-nonce signature from each SE's factory cert (OPTIGA 0xE0E3 type-0x12 device cert already present; SE050 C-class 0xF0000013) against the Infineon/NXP roots pinned in the image \u2014 the SE is the signer, so invariant #5 (no classical signer in the WALLET) holds; document that these are vendor-mandated verifications like dbgen's EAS fence. (2) Add `CMD_ATTEST_DEVICE`: the secure world signs `'pq1-attest:' || compactsize(challenge) || challenge || secure_digest` with a SPHINCS+C10 key derived per use from SAES-CMAC(DHUK, 'attest') (never stored), whose public key the factory certifies into the per-unit record; companion verifies chain + both SE proofs; stream the 4008-B signature in APDU chunks. (3) Bind: the attestation message includes the FSBL-forwarded secure digest (BOOT-03 handoff), so the proof says 'this die, these SEs, this measured image'.",
+   "rationale": "Trezor (ML-DSA-44 MCU cert + OPTIGA + TROPIC01), Ledger (SE genuine check) and BitBox (device attestation) all ship post-sale genuineness checks; pq1 has none, so a swapped SE or cloned unit is invisible once the SWD window has passed. Donjon showed attestation keyed from an MCU-held secret only proves possession \u2014 hence binding to the measurement and to DHUK (per-die, RDP-2-only final) rather than a flash secret.",
+   "repo_evidence": [
+    "docs/security/threat-model.md:339-345 (rows say 'PRE-PROD-CAVEAT: per-device binding manifest not yet landed', 'Untested in mainline boot today'), :505 (\u00a79.4 'not yet landed')",
+    "docs/security/HARDENING.md:178-189 (\u00a73.4 written present-tense; no code) \u2014 drift",
+    "grep attest in secure/src/se050/mod.rs, secure/src/optiga/mod.rs, secure/src/dual_se.rs: no hits; proto/src/lib.rs: only ERC-7730 'self-attest' trailer, no device attestation CMD",
+    "secure/src/die_id.rs:31-87 (DBGMCU_IDCODE report-only, secure_log, silent in production)",
+    "Issues #210, #244, #249, #206, #61, #27, #272"
+   ],
+   "vendor_precedent": "Trezor Safe 7 AuthenticateDevice: core/embed/sec/mcu_attestation/mcu_attestation.c:63-97 (key derived per use from master, zeroized), core/src/apps/management/authenticate_device.py:33-78 (challenge framing, three signers), prodtest certdev-write verifies chain before storing; BitBox02 Nova device attestation; Coldcard SE-enforced genuine LED.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "L",
+   "priority": "P1",
+   "risks": "Variant constraint: only SE050 C/E/F carry factory attestation certs (the pq1 bench board is an E2 \u2014 confirm the production part). A C10 attestation is 4008 B + cert \u2248 5 KB per proof over 64-B HID (Trezor hit the same with ML-DSA and chunked, PR #6893). The per-use C10 keygen costs <1 s. Does not see a board-level implant on the display SPI (out of scope here). Factory HSM compromise still yields valid units until the transparency log exists (#68).",
+   "sources": [
+    "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/mcu_attestation/mcu_attestation.c",
+    "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+    "https://bitbox.swiss/bitbox02/nova/BitBox02_Nova_BTC_Datasheet.pdf"
+   ]
+  },
+  {
+   "id": "BOOT-06",
+   "title": "Make the production-silent boot checks fatal (RDP<L2, SECBOOTADD0, die-id), gate the irreversible first-boot ceremony on reset cause, and declare RDP-1 a fatal wipe state",
+   "threat": "A production image (no debug-log) in which an RDP regression before ALL_DONE, a redirected SECBOOTADD0, or a non-rev-U / counterfeit die produces NO observable effect because the checks compile to nothing; a glitch- or watchdog-induced reset mid-Phase-A that lets the RDP=0xCC burn run from a corrupted state; and a unit stranded at RDP-1 (RDP Freeze: cycle-accurate RAM/register capture of seed material in S-SRAM).",
+   "proposal": "(1) Replace `secure_log!`-only outcomes in main.rs:1240-1290 and die_id with a `FihBool` verdict that halts (pre-ALL_DONE) or escalates to the intrusion-wipe path (post-ALL_DONE) in `mode-production`; resolve #192 by making `rdp-enforce-halt` the production default with the self-lock exemption expressed as 'RDP-0 is allowed ONLY while the page-127 journal is blank'. (2) Read RCC_CSR reset flags at Phase A entry: allow the RDP burn only after a POR/BOR/pin reset (`PINRSTF|BORRSTF` exactly, Trezor's rule), refuse and re-prompt after SFTRST/IWDG/WWDG/OBL/LPWR resets; clear flags via RMVF. (3) Treat an observed RDP level 1 (0xDC/0.5 or any non-0xAA/0xCC) as fatal: pre-ALL_DONE \u2192 halt with an E08xx code and refuse the burn; post-ALL_DONE \u2192 wipe. (4) Add a host test that greps the production cfg for any `secure_log!`-only security verdict (the pattern that produced this gap).",
+   "rationale": "Trezor's boardloader enforces reset-flags and option-byte checks only in PRODUCTION precisely because they are the checks that matter after shipping; pq1 has the opposite polarity today (checks visible only in debug builds). Cheapest item on this list and closes a class of 'green in bench, silent in field'.",
+   "repo_evidence": [
+    "secure/src/main.rs:1240-1267 (RDP<L2 below ALL_DONE is warn-and-continue via secure_log!, which is a no-op without debug-log), :1272-1290 (SECBOOTADD0 warn-only, 'does not check BOOT_LOCK')",
+    "secure/Cargo.toml:156 (`rdp-enforce-halt` opt-in; #192 contradiction with rdp2-self-lock unfenced)",
+    "secure/src/die_id.rs:31-87 (report-only, never faults)",
+    "grep CSR|RMVF|PINRSTF|BORRSTF in fsbl/src, secure/src/hw/rcc.rs, secure/src/main.rs: no reset-cause read anywhere",
+    "secure/src/first_boot/mod.rs:212-242 (Phase A gate is confirm + sentinel; no reset-cause input)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sys/startup/stm32u5/reset_flags.c:26-42 (PRODUCTION-only POR gate), option_bytes.c:252-264 + boardloader/main.c:325-340 (mismatch is fatal, not logged), kernel/main.c:181 (OEM check repeated every stage).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "S",
+   "priority": "P1",
+   "risks": "pq1 relies on warm resets on the bench (USB-C cc_open_then_reset, probe-rs halts) \u2014 scope the POR rule to the first-boot ceremony only, never to normal boot. A fatal die-id check needs the bench dies actually run through HW-ASSUME-REV-U first (nobody has). Halt-vs-wipe thresholds must be 2-pass to avoid wiping on a transient OPTR read fault.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/startup/stm32u5/reset_flags.c",
+    "https://ieeexplore.ieee.org/document/11107115/ (RDP Freeze, RDP-1 state capture)",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/boardloader/main.c"
+   ]
+  },
+  {
+   "id": "BOOT-07",
+   "title": "Sign and measure the FULL slot capacity (padding included) and pin the state of every page outside the measured images (erased-check or first-boot random fill), so no unmeasured flash can host an implant stage or stale code",
+   "threat": "A second-stage payload, a stale previous image, or planted data parked in the tail of a slot, in a free bank-2 page, or in the unused manifest-B/boot-state pages: the FSBL hashes only `secure_len`/`ns_len` bytes, so the 8-word fingerprint and the SWD diff both stay identical while the device carries attacker bytes that a glitched or trampolined boot can reach.",
+   "proposal": "(1) Manifest v6 (when adopted) signs hashes over the full `SLOT_SECURE_CAPACITY`/`SLOT_NS_CAPACITY` (image + deterministic 0xFF padding), and `verify_images` hashes the full capacity \u2014 Trezor's `check_image_contents` rule \u2014 or, cheaper for the FSBL budget, after hashing the image the FSBL erase-checks (reads == 0xFFFFFFFF) every remaining word of both slots and halts otherwise. (2) Every page not owned by the geometry registry (free pages, inactive manifest, retired boot-state page) must read erased at boot; the registry crate gains an `expect_erased` set checked by the FSBL and by `pq1-verify` (BOOT-04). (3) Optional Krux variant: first boot fills free pages with TRNG data and pins their SHA-256 in page 127 so a later change flips the fingerprint; prefer the erased-check because it needs no per-unit state.",
+   "rationale": "Measured boot that leaves unmeasured flash is a known hole (Ledger LSB-002's code-cave lived in unused/duplicated bytes; Krux fills free blocks for this reason). The HASH peripheral makes reading 2 MB cheap relative to the 2.9 s C10 verify, and the check is pure reads inside the immutable range.",
+   "repo_evidence": [
+    "fsbl/src/verify.rs:38-110 (hashes exactly `m.secure_len()` and `m.nonsecure_len()` bytes; capacity checks are upper bounds only)",
+    "fsbl/src/main.rs:323-350 (legacy boot-state page consulted but never integrity-bound to the manifest)",
+    "geometry/src/lib.rs:121-199 (registry has `updater_must_preserve` but no erased-expectation set; no consumer in secure/)",
+    "docs/security/measured-boot.md (grep 'unused page|whole bank|free flash': no coverage statement)"
+   ],
+   "vendor_precedent": "Trezor core/embed/sec/image/image.c:438-523 (chunked hash check includes the 0xFF/0x00 padding to the end of the area 'so trailing bytes cannot hide code'); Krux TC Flash Hash fills empty blocks with entropy and hashes the whole flash; Ledger 1.4 'CRC fill of unused memory'.",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "M",
+   "priority": "P1",
+   "risks": "Boot time: reading ~1.9 MB at HSI16 adds an estimated 0.2-0.5 s (measure with the stage-marker, do not estimate). Interacts with #540/#758 (page 4 / manifest-A cascade) and with the A/B updater, which must erase the inactive slot's tail before COMMIT. Full-capacity signing changes the manifest preimage (Draft 1.1 is not implementation-approved; the erased-check path avoids touching it).",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/image/image.c",
+    "https://selfcustody.github.io/krux/getting-started/features/tamper-detection/",
+    "https://donjon.ledger.com/lsb/002/"
+   ]
+  },
+  {
+   "id": "BOOT-08",
+   "title": "HDP hide-protection over the per-device secret pages after the BHK/salt are latched, with the FSBL/first-boot stage as the only reader",
+   "threat": "A runtime secure-world bug (NSC parser, SE driver, ERC-7730 renderer) or a mid-session glitch reading page 126 (DHUK-wrapped SE050 BHK) / page 127 (journal + OPTIGA PBS salt) and leaking or replaying them; today those pages stay readable by the entire secure runtime for the whole power cycle.",
+   "proposal": "Relocate the read-once-per-boot pages (126 BHK wrap, 127 journal/salt; NOT 123/124 which are written at runtime) into an HDP-capable region \u2014 HDP1 covers a contiguous range from the SECWM1 start, so either pages immediately after the FSBL (pages 5..6 of bank 1, inside the frozen registry's spare) or HDP2 over the low pages of bank 2 \u2014 and set `SECHDPCR.HDP1_ACCDIS`/`HDP2_ACCDIS` in early secure boot right after the BHK is loaded into TAMP BKP0R-7R + BHKLOCK and the PBS salt is consumed, making them invisible to all code (even secure) until the next reset. First-boot Phase B writes the journal BEFORE disabling access; the secure-world RDP/SECBOOTADD0 checks (BOOT-06) also confirm HDP is set. Pin the HDP1 polarity (flash.rs:79) in the BOOT-01 silicon ceremony.",
+   "rationale": "Trezor's secret sector (BHK, master-key slots, counters, device cert) is exactly this shape and is HDP-hidden before every stage hand-off; pq1 has zero HDP/SECHDPCR usage. pq1 already does the hard half (BHK into TAMP registers + BHKLOCK), so hiding the source pages is the natural completion and removes page 126/127 from the reach of every later secure-world bug.",
+   "repo_evidence": [
+    "grep HDP|SECHDPCR -r secure/src fsbl/src shared/src: only comments at secure/src/hw/flash.rs:74-79 ('HDP1 polarity IS still unconfirmed') \u2014 no runtime use",
+    "secure/src/main.rs:1487-1534 (BHK latched + BHKLOCK, but page 126 remains readable afterwards)",
+    "secure/src/flash_policy.rs:32-49,129-168 (page 127 excluded from generic WRITERS only; reads are unrestricted and pages 0..126 fully writable)",
+    "geometry/src/lib.rs:121-138 (registry pins 126/127 at the END of bank 1, outside any HDP1 window)",
+    "Issues #39, #43, #214"
+   ],
+   "vendor_precedent": "Trezor option_bytes.c:66-69,89-95 (SECWM1 + HDP1 end = secret sector), secret.c:170-173 (secret_disable_access \u2192 SECHDPCR HDP1_ACCDIS|HDP2_ACCDIS), secret.c:598-651 (secret_prepare_fw: cache, lock BHK, disable access unconditionally), mpu.c:500-501 (MPU_MODE_SECRET window).",
+   "novelty": "parity",
+   "kind": "firmware",
+   "cost": "L",
+   "priority": "P1",
+   "risks": "Geometry cascade: moving pages 126/127 is a registry change (v7 drafts were REJECTED #752; this is a narrower proposal but still needs an owner stage decision and re-pins `Phase A blank-check pages 123..127`). HDP covers reads for the rest of the boot only (resets re-expose), so it complements, not replaces, the wrap. The first-boot RDP burn itself is unaffected (OPTR is not in flash pages). If HDP1 start is forced to the SECWM start (page 0), the FSBL range would also become hidden after the FSBL stage \u2014 acceptable (it is already executed) but the secure-world advisory measured_boot re-hash of the FSBL range would stop working; it is compiled out of production anyway.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/secret/stm32u5/secret.c",
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/option_bytes/stm32u5/option_bytes.c",
+    "https://docs.trezor.io/trezor-firmware/core/embed-arch/embed-arch.html"
+   ]
+  },
+  {
+   "id": "BOOT-09",
+   "title": "2-of-3 SPHINCS+C10 vendor-key quorum in the FSBL, OTP hash-lock of the vendor key set, and an FSBL measurement field in every release receipt",
+   "threat": "Single vendor-key compromise (one HSM, one insider) signs a malicious firmware that every FSBL accepts forever; a re-flashed FSBL at RDP-0 carrying a different vendor key is accepted by the signing tool's fingerprint check as long as the bundle matches; a release receipt that says 'bundle verified' proves nothing about which FSBL is on the part (demonstrated 2026-09-28, #742).",
+   "proposal": "(1) Embed three C10 vendor public keys in the FSBL's named section and require any 2 distinct signatures (sigmask with exact-consumption + complement discipline, Trezor boot_header.c) over the manifest digest; `fwsign sign` becomes a two-ceremony flow with separately held seeds (threshold is at the key-set level, no classical CoSi). (2) Burn SHA-256 of the three-key set into an OTP word at factory and have both the FSBL (read-only, pre-branch) and `pq1-verify` (BOOT-04) compare it (#220). (3) Every release receipt and the signed release descriptor carry the FSBL ELF/flash digest the bundle was verified against, so the 'bundle under a different FSBL' case is a receipt mismatch (#742). Keep one verifier algorithm (invariant #5); measured cost is 0.375 s per verify chain on pq1 at HSI16, so 2 signatures \u2248 +0.4 s boot.",
+   "rationale": "Every surveyed vendor with a reflashable second stage uses an m-of-n quorum (Trezor 2-of-3, Foundation 2-of-4); pq1's FSBL is the one component that can never be patched, so the key-management failure mode it accepts must be the smallest. OTP-locking the key set is the only way to make the verify-before-first-power diff detect a swapped-vendor FSBL without comparing the whole FSBL image.",
+   "repo_evidence": [
+    "fsbl/src/vendor_pubkey.rs:20-33 (exactly one 32-byte `PQSIGNER_FSBL_VENDOR_PUBKEY`)",
+    "fsbl/src/main.rs:336-346 (single `verify_vendor_fpr` + `verify_signature`)",
+    "fwsign/src/subcommands/sign.rs:60-77 (single-key flow; FSBL check is 'same vendor fingerprint', not 'this FSBL')",
+    "docs/security/threat-model.md:517 (\u00a79.8 'Vendor-pubkey OTP hash lock is not yet burned')",
+    "Issues #220, #742"
+   ],
+   "vendor_precedent": "Trezor boot_header.c:49-109 (2 signature slots from 3 root keys, sigmask fully consumed and == sigmask_inv), root_keys.h:647-692 (DEV set must never ship); Foundation Passport Prime 2-of-4 release signing.",
+   "novelty": "parity",
+   "kind": "mixed",
+   "cost": "M",
+   "priority": "P2",
+   "risks": "FSBL budget: +64 B keys + sigmask logic \u2248 200-300 B, and the manifest grows by one 4008-B signature (slot/manifest page layout under #540/#758). Doubles signing-ceremony operational burden. OTP word allocation must be reconciled with the typed rollback floor draft and BOOT-04's birth record. Threshold does not help if both signing seeds are derived from one root \u2014 the process must enforce independent generation.",
+   "sources": [
+    "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/image/boot_header.c",
+    "https://docs.foundation.xyz/firmware-updates/passport-prime/",
+    "https://donjon.ledger.com/lsb/002/"
+   ]
+  },
+  {
+   "id": "BOOT-10",
+   "title": "Feasibility study: in-field electrical self-fingerprint of the board (TSC capacitance of display/SE nets, PDN response via ADC+TIM stimulus, panel-rail current) enrolled at the RDP-0 verification and re-checked before unlock",
+   "threat": "Hardware implants and probes the firmware cannot see: a passive tap on the LCD SPI (the Grand/Nano X implant class \u2014 the display is a plaintext sink even though the device is otherwise all-internal-flash), an EM/laser FI probe parked over the package, a swapped PCB or added IC \u2014 all invisible to measured boot, option-byte checks and SE attestation.",
+   "proposal": "Run a bench study on pq1 silicon (not an EVT change first): (1) STM32U585 TSC charge-transfer counts on candidate nets that can be sampled without a dedicated electrode (LCD SCK/MOSI/CS PA5/PA7/PA4 between frames, SE I2C lines during bus idle, the NC pins PA6/PC13), temperature-compensated with the internal temp sensor; (2) ADC1/ADC4 sampling of VDD/VDDA ripple while the consumption-mask TIM drives a known stimulus \u2014 a cheap on-chip proxy for ImpedanceVerif's PDN response; (3) if the EVT allows, a sense resistor on the LCM_EN/backlight rail read by ADC (panel-rail current signature vs. an added load). Enrol the baseline during the first-boot ceremony (after the user's SWD verification and before RDP-2), seal it in page 127/SE, and compare at boot and before each sign with a Wasserstein/Fr\u00e9chet distance; a large distance refuses to unlock (never wipes \u2014 FPR is unknown). Deliverable is a go/no-go with measured intra-unit drift vs. probe-clip/implant deltas.",
+   "rationale": "This is the only mechanism in the literature by which a device can notice an implant or a probe from the inside, and no vendor ships it; the user explicitly asked for it. The U585 already has the peripherals (TSC, ADC, COMP, OPAMP, TIM) and pq1 already owns a secure TIM stimulus source (consumption mask). Honest limit stated up front: a self-enrolled baseline cannot catch an implant inserted BEFORE enrolment \u2014 which is exactly why enrolment must sit after the RDP-0 verify-before-first-power step and why BOOT-04 (per-unit factory PDN/Z-profile with a VNA, offline) is the complementary supply-chain half.",
+   "repo_evidence": [
+    "grep TSC|ADC4|ADC1|COMP1|OPAMP -r secure/src fsbl/src: no hits (no sensing peripheral is used anywhere)",
+    "secure/src/hw/consumption_mask.rs (TIM stimulus exists; dilution unmeasured, evt-silicon-validation.md \u00a79)",
+    "docs/security/threat-model.md:100 (transit capability list has no in-field implant detection row)",
+    "CLAUDE.md pre-production caveats: pq1 bench board has NO LCD fitted (memory note) \u2014 the LCD-net study needs the EVT unit"
+   ],
+   "vendor_precedent": "none shipped. Academic: ImpedanceVerif (TCHES 2023, on-chip PDN impedance tamper detection), PDNPulse (IEEE TIFS 2023, offline VNA golden profiles, 100% TPR/0% FPR on PoC boards, per-batch FPR caveat), NAIST IEICE HWS2021-50 (on-IC capacitance sensors re-identify individual PCBs). Coldcard's SE-enforced genuine LED and GridPlus LDS mesh are the only shipped physical-integrity signals and neither detects a passive bus tap.",
+   "novelty": "beyond",
+   "kind": "mixed",
+   "cost": "XL",
+   "priority": "P3",
+   "risks": "Unvalidated as a security self-test; temperature/aging drift will dominate unless compensated; a sophisticated implant can be tuned below the detection floor (PDNPulse needed a bench VNA for fF sensitivity); refusing to unlock on a false positive is a usability failure (never wipe on this signal). Needs EVT pins for any rail sensing (PA6/PC13 are the only candidates). DROPPED (lower value or out of scope for this surface): typed FSBL\u2192S handoff block + full RAM/BKP scrub at stage transitions + FSBL capabilities TLV with geometry refusal (Trezor startup_args/boardcaps; S-M, P2); SE-driven genuine LED (Coldcard; hardware); CI enrolment holes for pqsigner-geometry tests, fsbl-tests geometry_consistency/qemu_integration, check_fsbl_geometry.py and `make verify-repro` (#720/#721; S, P2 process); user-keyed fingerprint words (Krux TC Code) / visually distinctive FSBL window (#601); U585 RDP-2/TZ-M bench glitch campaign with the Scaffold rig before the ceremony is approved (#401/#633); transparency-log append (#68/#67, folded into BOOT-04); stale-comment cleanup (fsbl 'software sha2' comments, first-boot-provisioning.md:48 WRP pages 0-3 vs 0..4, reproducible-builds.md:241 CI claim).",
+   "sources": [
+    "https://eprint.iacr.org/2022/946",
+    "https://arxiv.org/abs/2204.02482",
+    "https://ken.ieice.org/ken/paper/202110198C57/eng/",
+    "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+    "https://www.st.com/resource/en/application_note/an5105-getting-started-with-touch-sensing-control-on-stm32-mcus-stmicroelectronics.pdf"
+   ]
+  }
+ ]
+}

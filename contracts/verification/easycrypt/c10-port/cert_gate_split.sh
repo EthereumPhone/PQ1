@@ -37,7 +37,7 @@ trap 'rm -rf "$TMPD"' EXIT
 # cone files (1016).  Bumping only one turns the gate RED at PHASE 1c with
 # "statement pin file truncated" -- which is exactly what it did on the first
 # run of this promotion.
-EXPECT_PINS=4064
+EXPECT_PINS=4107
 # 1167 -> 1166 on 2026-09-15: a DUPLICATE row removed.  op:base-c10-split/OpenPRE_From_TCR_DSPR_THF.eca::f
 # sat on two identical rows from 92ecb63 (2026-08-20), so this count was one pin HIGH for 26 days.
 # PHASE 1c now also requires the UNIQUE key count to equal it.
@@ -48,7 +48,7 @@ EXPECT_PINS=4064
 # somebody must say why.  896 measured 2026-08-20; 993 after the 2026-08-25 pins;
 # 1016 on 2026-08-31 when cdrafts-split/BadEncCountermodel.ec was promoted into the
 # closure (+23 statements, all pinned in the same commit).
-EXPECT_STMTS=3545
+EXPECT_STMTS=3571
 # 1081 -> 1082 on 2026-09-14: GprocTCollNamed.ec (one lemma, pinned in the same commit).
 # 1024 -> 1081 on 2026-09-14 (+57, the T_COLL_RES_ENUM chain; all pinned in the same commit).
 # COMMITTED CONTROL COUNT (added 2026-09-14).  The PHASE 3 guard used to be
@@ -57,7 +57,7 @@ EXPECT_STMTS=3545
 # nine control ROWS still scored OK.  Claim-vs-code drift inside the fail-open guard
 # itself, authored in this tree.  Now an equality against a committed constant, the
 # same shape as EXPECT_WATCHED: a deleted row AND an unaccounted added row both fail.
-EXPECT_CTLS=674
+EXPECT_CTLS=719
 # 44 -> 49 on 2026-09-15 (later): a per-file scope negative for each of the other five headline
 # files.  Kimi K3 review: they had inherited isolation through GprocTCollNamed's require chain,
 # which nothing gated (all six are closure roots).
@@ -164,7 +164,7 @@ for n in WOTS_TW_ES FL_SL_XMSS_MT_ES FORS_ES SPHINCS_PLUS; do ROOTS_ID="$ROOTS_I
 # list.  Two copies of one list drift apart silently; a file added to only the first would
 # be hashed at the start and never re-checked.  Both call sites now use inputs_id().
 # tools/proof_jobs.py and its tests joined the list the same day: the runner is machinery.
-ID_FILES="$CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert-source-binding.json tools/check_source_binding.py tools/proof_jobs.py tools/test_proof_jobs.py cert_gate_split.sh"
+ID_FILES="$CLOSURE $BASELINE $STMTS cert-controls-split.tsv cert-watched-split.tsv cert-margin-split.tsv $CTL_SRC $CANARY_SRC tools/cert_cone.py tools/stmt_digest.py tools/forsc_grinding_margin.py tools/policy_cap_fence.py cert-quarantine-split.tsv tools/stmt_coverage.py cert-cone-files-split.tsv scratch/sweep.py tools/taint_closure.py cert-taint-closure.tsv scratch/taint_controls.sh scratch/taint_count_controls.sh tools/split_contract.py tools/test_split_contract.py tools/split_proof_controls.py cert-toolchain-split.json cert-source-binding.json tools/check_source_binding.py tools/c10_representation.py tools/c10_representation_controls.py tools/proof_jobs.py tools/test_proof_jobs.py cert_gate_split.sh"
 inputs_id() {
   { CERT_CONE_DIRS="base-c10-split,cdrafts-split" python3 tools/cert_cone.py $ROOTS_ID 2>/dev/null \
       | sed -n 's/^#   //p' | sort -u | while read -r f; do [ -f "$f" ] && sha256sum "$f"; done

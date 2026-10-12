@@ -1,0 +1,23 @@
+{
+ "id": "USB-08",
+ "title": "Signing-ceremony anomaly layer (#600) made concrete: S-SRAM intent fingerprint, 'CHANGED SINCE LAST ATTEMPT' diff page, per-session repeat cap",
+ "threat": "Error-mimicry: the companion reports 'failed, sign again' and re-submits a mutated payload (recipient, amount, slot, chain) until the user stops reading; the trusted display defeats substitution but not attention exhaustion. threat-model.md:282 records 'NONE TODAY'.",
+ "proposal": "Keep in S-SRAM (reset on lock) the last K=4 rendered-intent fingerprints: `sha256(dialog kind || every rendered page's bytes)` plus the decoded salient fields (to, value/amount, token, chain_id, slot) and a timestamp. On the next sign request: if a fingerprint matches within 10 min, show a 'REPEAT #n of same request' banner and after n \u2265 3 require scroll-to-end plus a 2-s hold; if the salient fields differ from the most recent attempt within the window, prepend a mandatory 'CHANGED SINCE LAST ATTEMPT: <field old -> new>' page before the normal pages. Cap identical-intent re-prompts per unlock session (e.g. 5) with a refusal that names the reason; since F-17 already limits 250 signs/session, reuse its counters. Add a QEMU e2e that mutates the recipient between two signs and asserts the diff page is rendered.",
+ "rationale": "This is the one companion-substitution attack the trusted display does not address, and pq1 already has everything needed (page builders produce byte-exact pages; `ui-capture` hashes frames). Trezor's `ContinueOnErrors` stops honouring host cancellation after an error; none of the vendors render a diff \u2014 a cheap, visible 'beyond' feature.",
+ "repo_evidence": [
+  "docs/security/threat-model.md:282 ('Error-mimicry / attention exhaustion ... NONE TODAY \u2014 added 2026-07-31')",
+  "GitHub #600 OPEN priority:high (design entry only; no code)",
+  "secure/src/sign_rate.rs:18-52 (per-session counters that can host the repeat tally)"
+ ],
+ "vendor_precedent": "partial \u2014 Trezor protocol_common.py ContinueOnErrors (ignores host cancel after an unexpected error); no vendor renders an intent diff.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "False positives on legitimate retries (gas bump re-submits differ only in fee fields \u2014 exclude fee fields from the diff or label them); S-SRAM footprint (~K x 200 B); page-budget interaction with `MAX_PAGES` and the ui-px scroll-to-end gate; must not persist anything to flash (invariant: no new per-signature flash state).",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/src/trezor/wire/protocol_common.py:125-310",
+  "https://donjon.ledger.com/lsb/025/ (operation-nature not displayed)"
+ ],
+ "surface": "usb"
+}

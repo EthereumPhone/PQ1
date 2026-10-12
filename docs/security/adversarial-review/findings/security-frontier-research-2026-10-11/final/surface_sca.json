@@ -1,0 +1,210 @@
+{
+ "surface": "sca",
+ "items_written_here": [
+  {
+   "id": "M15",
+   "type": "cluster",
+   "key": "consumption-mask",
+   "home": "sca",
+   "members": [
+    "D-06",
+    "SCA-07"
+   ],
+   "title": "Consumption mask: measure it on the signing channel first, then either load-and-keep or demote it; stop presenting an unloaded PWM as a CPA/DPA defence",
+   "priority": "P3",
+   "merger_priority": "P3",
+   "cost": "M",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#6",
+    "#53",
+    "#228",
+    "#229",
+    "#236",
+    "#237",
+    "#261",
+    "#298",
+    "#312",
+    "#646",
+    "#786",
+    "#792",
+    "#802",
+    "#805",
+    "#831",
+    "#832",
+    "#834",
+    "#835"
+   ],
+   "live_defects": 5,
+   "hardware_asks": 4,
+   "file": "data/round2/cluster_consumption-mask.json"
+  },
+  {
+   "id": "SCA-01",
+   "type": "single",
+   "home": "sca",
+   "title": "On-silicon TVLA/CPA campaign re-targeted at fors_secret and the pre-PIN tunnel crypto (first measurement ever)",
+   "priority": "P2",
+   "orig_priority": "P0",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "beyond",
+   "status": "recommended",
+   "tracked": [
+    "#228",
+    "#229",
+    "#236",
+    "#241",
+    "#298",
+    "#299",
+    "#301",
+    "#312"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SCA-01.json"
+  },
+  {
+   "id": "SCA-02",
+   "type": "single",
+   "home": "sca",
+   "title": "Move SE-tunnel AES (SCP03 S-ENC/S-MAC KDF + session CMAC/CBC, Shielded AES-CCM) off software AES onto SAES; add shield.rs to the leakage harness",
+   "priority": "P2",
+   "orig_priority": "P0",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "beyond",
+   "status": "recommended",
+   "tracked": [
+    "#55",
+    "#202",
+    "#228",
+    "#236",
+    "#246",
+    "#299",
+    "#648"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SCA-02.json"
+  },
+  {
+   "id": "SCA-03",
+   "type": "single",
+   "home": "sca",
+   "title": "WOTS PRF midstate-resume: compute the two per-layer SHA-256 midstates once per sign, resume per call (byte-identical output, no address re-base)",
+   "priority": "P3",
+   "orig_priority": "P1",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "beyond",
+   "status": "redesign needed (refuted as written; a narrower residue survives)",
+   "tracked": [
+    "#228",
+    "#229",
+    "#299"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SCA-03.json"
+  },
+  {
+   "id": "SCA-09",
+   "type": "single",
+   "home": "sca",
+   "title": "Additive-random-masked secret compares for the MCU-side master cross-check and PIN-confirm (Trezor secequal32 parity)",
+   "priority": "drop",
+   "orig_priority": "P2",
+   "cost": "S",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "rejected",
+   "tracked": [
+    "#228",
+    "#240",
+    "#299",
+    "#312",
+    "#366",
+    "#643",
+    "#805",
+    "#832",
+    "#834",
+    "#835"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SCA-09.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M03",
+   "key": "display-emanation",
+   "home": "display",
+   "title": "Secret-frame display hardening: close the shipping-path constant-time bypass for typed letters and PIN digit, stop re-streaming secret frames, then a measured low-distance constant-weight colour pair gated by an NV3007 leakage receipt",
+   "priority": "P2",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SCA-10"
+   ]
+  },
+  {
+   "id": "M06",
+   "key": "random-delay-desync",
+   "home": "fi",
+   "title": "Land the fixed FI-delay source on master, add dispatcher-entry jitter, then a measurement-gated always-on RDI on the existing secure SysTick (no timing canary)",
+   "priority": "P2",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SCA-05"
+   ]
+  },
+  {
+   "id": "M12",
+   "key": "pin-attempt-rate-limiting",
+   "home": "pin",
+   "title": "Capped, reboot-surviving inter-attempt PIN back-off inside gated_unlock (Trezor parity, closes #637) plus an S-SRAM cooldown on host-initiated unlock prompts that the user dismissed",
+   "priority": "P3",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SCA-08"
+   ]
+  },
+  {
+   "id": "M16",
+   "key": "pin-credential-die-binding",
+   "home": "se",
+   "title": "Die-bind and salt the PIN credentials presented to both SEs (per-SE SAES-CMAC(DHUK) digest plus a wipe-erased per-provisioning salt), and DHUK-mask each XOR half at rest",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SCA-06"
+   ]
+  },
+  {
+   "id": "M20",
+   "key": "glitch-environment-sensing",
+   "home": "systemic",
+   "title": "Close the NS clock/power/tamper levers (RCC/PWR/SYSCFG/TAMP secure attribution), then add PVD-5 over BOR-3 with an SRAM-only zeroize, pin BOR_LEV in the ship profile, and run ADC4 analog watchdogs as a log-only slow supply/temperature tamper",
+   "priority": "P0",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SCA-04"
+   ]
+  }
+ ]
+}

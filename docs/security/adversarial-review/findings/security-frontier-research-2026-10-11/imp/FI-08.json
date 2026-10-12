@@ -1,0 +1,26 @@
+{
+ "id": "FI-08",
+ "title": "SE-bound release of the entropy halves on a firmware measurement: each SE releases its half only after the measured-boot digest matches a value sealed at first boot, so a glitched FSBL/MCU integrity check cannot unlock funds",
+ "threat": "Donjon's Safe 3 result is the concrete 'malicious hardware/firmware in the MCU' case: SE pairing secrets prove possession of a key, not what code is running, so a glitch on the MCU's own integrity check yields a reprogrammed device that still passes SE attestation. pq1 is structurally the same: OPTIGA PBS / SE050 SCP03 keys are DHUK/BHK-derived and any code running on the die can recompute them; a glitched FSBL verify (or an RDP downgrade) therefore still reaches both halves after PIN.",
+ "proposal": "At first boot (Phase B), seal `M0 = SHA-256(fingerprint_digest_slotA \u2016 fingerprint_digest_slotB_or_empty \u2016 fsbl_digest \u2016 option_byte_profile)` into each SE: OPTIGA as an AuthRef/confidentiality-protected data object whose read of half_O requires a session bound to a HMAC(M_current) proof via Shielded Connection (or as a key-derivation input into the PBS-equivalent session), SE050 by binding the UserID-protected object policy to a `HMAC-SHA256(K_se050_meas, M_current)` presented as part of the SCP03 session key derivation. The secure world recomputes M_current every boot from measured_boot::run (not the FSBL, since the FSBL is pre-secret) and derives the per-boot session material from it; a wrong measurement produces an undecryptable half rather than a visible refusal. Legitimate A/B updates re-seal under the PIN-gated fw_commit path (COMMIT already requires unlock) by writing the new M under the old session before the boot pointer flips, with a journaled rollback. Pair with a C10 MCU attestation (fingerprint-signed challenge) for the companion.",
+ "rationale": "Moves the trust anchor for fund release from 'the MCU's integrity check was not glitched' to 'the SEs saw the expected measurement', which no public attack on an SE-less path can forge without also faulting the SE policy; it is the only design that makes a successful RDP downgrade or FSBL-verify glitch insufficient on its own. Trezor's May-2026 ML-DSA MCU attestation shows vendors are moving toward measured-MCU evidence, but none bind the seed release to it.",
+ "repo_evidence": [
+  "secure/src/dual_se.rs:461-477 (unlock cross-check is entropy\u2192master self-consistency only; no measurement input)",
+  "secure/src/measured_boot.rs (advisory fingerprint; not consumed by any SE policy)",
+  "secure/src/hw/secret_keys.rs (PBS/SCP03 derive from DHUK+salt / BHK \u2014 possession keys, no code binding)",
+  "docs/security/threat-model.md (no SE-bound measurement entry); issue search 'measurement SE release' \u2192 none"
+ ],
+ "vendor_precedent": "None binds seed release to a firmware measurement. Nearest: Trezor mcu_attestation.c (ML-DSA MCU attestation for Suite, not for seed release); Ledger Secure Screen/Genuine Check attests the SE only.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "L",
+ "priority": "P2",
+ "risks": "Touches invariants #1/#3 adjacent code (SE provisioning, S-1/S-2/S-3 OPTIGA lockdown is already a ship-blocker \u2014 this adds another object/policy to that ceremony); a fw_update that fails between re-seal and boot-pointer flip could brick (needs the journaled recovery proof the first-boot flow already lacks); the FSBL cannot participate (pre-secret, frozen), so the measurement is the secure world's \u2014 a fully compromised secure image could lie, which is why FI-03/FI-06 (FSBL + RDP integrity) remain load-bearing. Must stay SPHINCS+C10-only for any attestation signature.",
+ "sources": [
+  "https://trezor.io/vulnerability/donjon-s-trezor-safe-3-evaluation",
+  "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security",
+  "/home/nicola/repos/trezor-firmware/core/embed/sec/mcu_attestation/mcu_attestation.c",
+  "https://trezor.io/learn/security-privacy/how-trezor-keeps-you-safe/trezor-safe-device-authentication-check"
+ ],
+ "surface": "fi"
+}

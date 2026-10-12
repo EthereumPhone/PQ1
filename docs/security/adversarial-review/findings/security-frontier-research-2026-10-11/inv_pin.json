@@ -1,0 +1,458 @@
+{
+ "surface": "PIN / wipe / duress (key=pin) \u2014 PIN entry, MCU page-124 attempt counter, dual-SE per-attempt consumption, directional boot reconcile, lockout wipe + crash-safe resume, tamper/TZIC intrusion wipe, duress/decoy PIN, attempt-number disclosure channels.",
+ "has": [
+  {
+   "item": "Single choke point `gated_unlock` for every PIN verify (USB CMD_REQUEST_UNLOCK, boot-interactive unlock, PendSV idle re-unlock all route through it)",
+   "evidence": [
+    "secure/src/nsc/mod.rs:1394-1634",
+    "secure/src/nsc/cmd_request_unlock.rs:100",
+    "secure/src/main.rs:4176-4181",
+    "secure/src/main.rs:4575-4596"
+   ],
+   "status": "implemented",
+   "notes": "Docstring at mod.rs:1355-1392 states the pre-commit contract. QEMU (no stm32u585) is a passthrough with no counter (mod.rs:1416, 1552)."
+  },
+  {
+   "item": "Page-124 pre-commit attempt charge BEFORE the SE verify, with FI-hardened double-read, Hamming-distant sentinel gate, and exact +1 readback (FAIL-IN shape)",
+   "evidence": [
+    "secure/src/nsc/mod.rs:1429-1495",
+    "secure/src/hw/flash.rs:824-836 (pin_attempts_read fwd+rev double scan, fail-closed to 32)",
+    "secure/src/hw/flash.rs:916-949 (pin_attempts_bump #[inline(never)] + readback + sentinel)"
+   ],
+   "status": "implemented",
+   "notes": "Page 124 is one programmed QW per attempt, erased only on success (flash.rs:764-792). Any Err from the SE (transport, FI gate, InternalError) leaves the charge burned \u2014 the #692/#715 drain class."
+  },
+  {
+   "item": "Counter reset on correct PIN is fail-closed: a failed page-124 erase after a correct PIN returns InternalError rather than releasing the master (F17/SCAFI-5)",
+   "evidence": [
+    "secure/src/nsc/mod.rs:1579-1606",
+    "secure/src/hw/flash.rs:955-977 (pin_attempts_reset under interrupt::free)"
+   ],
+   "status": "implemented",
+   "notes": "Logged as AttemptReason::OkResetFailed (pin_attempt_log.rs:70-73)."
+  },
+  {
+   "item": "Double-captured is_ok verdict through sentinel; glitched Ok falls to InternalError without counter reset",
+   "evidence": [
+    "secure/src/nsc/mod.rs:1556-1572",
+    "secure/src/nsc/mod.rs:1607-1616"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Entry jitter (`fi::wait_random`) at the USB-trigger site and at gated_unlock entry, plus around the SE call",
+   "evidence": [
+    "secure/src/nsc/cmd_request_unlock.rs:85-92",
+    "secure/src/nsc/mod.rs:1399-1414",
+    "secure/src/nsc/mod.rs:1497-1502, 1554"
+   ],
+   "status": "implemented",
+   "notes": "Self-described as ~0..19 \u00b5s, defeats uncalibrated single-shot only, not profile-then-attack (mod.rs:1404-1413). No silicon FI campaign against this gate is recorded; #391/#392 (crash/glitch harnesses) open."
+  },
+  {
+   "item": "Dual-SE per-attempt consumption: OPTIGA F1D0 HMAC verify (fires E120 LUC under optiga-hw-counter) then SE050 UserID VerifySession on every PinIncorrect/Ok OPTIGA verdict (skipped only on non-PIN OPTIGA errors)",
+   "evidence": [
+    "secure/src/dual_se.rs:356-378",
+    "secure/src/optiga/mod.rs:1337-1368 (E120 LUC, HW_PIN_CTR_LIMIT=32)",
+    "secure/src/optiga/mod.rs:2431-2433 (curr>=limit -> PinLocked)",
+    "secure/src/se050/mod.rs:2938-2942 (USERID_OBJ written with max_attempts=MAX_ATTEMPTS=10)"
+   ],
+   "status": "implemented",
+   "notes": "MAX_ATTEMPTS=10, PIN_LEN=8 in proto/src/lib.rs:21-23. Silicon: `make pin-gate-hw-counter-e2e` (Makefile:3378) per-attempt within one run; CLAUDE.md says validated end-to-end."
+  },
+  {
+   "item": "SE050 lockout (SW=0x6986 at CreateSession) -> AuthMethodBlocked -> UnlockError::PinLocked; dual-SE `remaining_attempts` = min of both drivers",
+   "evidence": [
+    "secure/src/se050/apdu.rs:741-768",
+    "secure/src/se050/mod.rs:2853-2868 (classify_se050_unlock_error)",
+    "secure/src/se050/mod.rs:3025-3049",
+    "secure/src/dual_se.rs:509-514"
+   ],
+   "status": "implemented",
+   "notes": "S-7d silicon mapping resolved as 0x6986 (docs/STATUS.md:393); docs/secure-elements/se050-silicon-findings.md still said 0x6982 per STATUS.md:372."
+  },
+  {
+   "item": "Lockout wipe path (USB entry point): PinLocked or remaining_after==0 -> trigger_lockout_wipe = factory_reset_admin both SEs + page-124 reset + zeroize SRAM, FAIL-IN shape on the remaining!=0 check",
+   "evidence": [
+    "secure/src/nsc/cmd_request_unlock.rs:113-164",
+    "secure/src/nsc/cmd_request_unlock.rs:190-211",
+    "secure/src/dual_se.rs:631-644 (factory_reset_admin: OPTIGA then SE050, zeroize caches)"
+   ],
+   "status": "implemented",
+   "notes": "All wipe results are `let _ =` and the screen always says WALLET WIPED (cmd_request_unlock.rs:196-209) \u2014 #106 wipe-verdict coercion is still as described in code."
+  },
+  {
+   "item": "Crash-safe wipe resume: page-125 wipe-in-progress flag (QW1, 1->0 bit-clear) armed before destructive work; boot resumes an interrupted wipe and also wipes when page 124 is already at MAX",
+   "evidence": [
+    "secure/src/hw/flash.rs:619-694 (ADMIN_PAGE 125, arm_wipe_flag, is_wipe_armed, erase_admin_page)",
+    "secure/src/se050/mod.rs:3209-3231 (arm, conditional erase only if admin UserID gone)",
+    "secure/src/optiga/mod.rs:2787-2794 (arm_wipe_flag in factory_reset_body)",
+    "secure/src/main.rs:1903-1953 (boot resume: wipe_armed || attempts_exhausted)",
+    "secure/src/se050/mod.rs:1555-1660 (se050-crash-safety-e2e two-phase runbook)"
+   ],
+   "status": "implemented",
+   "notes": "Boot resume is skipped under `se050-crash-safety-e2e` and `prodtest` cfgs (main.rs:1920-1925)."
+  },
+  {
+   "item": "Directional boot reconcile: wipe only when readable OPTIGA E120 used-count > page-124 count (or both SE legs readable and divergent); SE050 leg is None under production policy; FAIL-IN on the 'safe' verdict",
+   "evidence": [
+    "secure/src/nsc/mod.rs:1636-1717",
+    "secure/src/dual_se.rs:528-562 (pin_attempt_count = max of available; divergence only when both Some)",
+    "secure/src/optiga/mod.rs:3243-3278 (E120 current saturated to 10; None if shield down or limit==0)",
+    "secure/src/se050/mod.rs:830-905 (pin_attempt_count_raw returns None on 0x6986)",
+    "secure/src/main.rs:1785-1802 (call site; skipped under prodtest/test)"
+   ],
+   "status": "partial",
+   "notes": "Matches CLAUDE.md invariant #2's narrowed scope. A coordinated both-counter reset or an OPTIGA-only E120 reset is not caught (contracts/verification/tamarin/README.md:46-56). No cold-reboot silicon receipt for either directional branch (#200, README.md:83)."
+  },
+  {
+   "item": "Directional reconcile is formally modelled: idealized symmetric Tamarin model (explicitly NOT the deployed code) plus a faithful directional TLA+/TLC model",
+   "evidence": [
+    "contracts/verification/tamarin/pin_lockstep.spthy:1-30",
+    "contracts/verification/tamarin/README.md:41-59",
+    "contracts/verification/tla/PinReconcileDirectional.tla"
+   ],
+   "status": "implemented",
+   "notes": "Issue #320 (re-model directional) still OPEN although README says PM-1 follow-up done 2026-07-17 \u2014 issue state lags."
+  },
+  {
+   "item": "Boot-time `attempts_exhausted` safety net + remaining-attempts mirror ratchet-down (sync_remaining_with_mcu, min-only)",
+   "evidence": [
+    "secure/src/main.rs:1935-1951",
+    "secure/src/main.rs:1955-1970",
+    "secure/src/optiga/mod.rs:3226-3231",
+    "secure/src/dual_se.rs:516-519"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Tamper -> intrusion wipe: TAMP ITAMP1/2/3/5/6/7/8/9/11/12/13 polled from SysTick (IRQ mode optional via tamp-irq); GTZC1 TZIC illegal-access IRQ; both escalate under tamp-wipe/tzic-wipe to zeroize SRAM + arm page-125 flag + reset (SE wipe completes on next boot)",
+   "evidence": [
+    "secure/src/hw/tamp.rs:1-76, 82-114",
+    "secure/src/hw/tzic.rs:1-27, 160-200, 226-275",
+    "secure/src/nsc/mod.rs:727-767 (fence forces tamp+tamp-wipe+tzic-wipe on shipping dual-SE)",
+    "Makefile:2662 (RELEASE_FEATURES includes tamp,tamp-wipe,tzic-wipe; NOT tamp-irq)"
+   ],
+   "status": "partial",
+   "notes": "tamp-wipe has never run on silicon and the driver sat at a wrong base address for an unknown period (#391; tamp.rs:127-132). External tamper pins deliberately not enabled (tamp.rs:274-276). TAMP\u00d7BHK erase interaction unresolved (#208, #47)."
+  },
+  {
+   "item": "Trusted-UI 2-button 8-digit PIN entry entirely in S-world, per-position random start digit (F-20) against button-count shoulder-surf, entered digits masked, zeroize on every exit; NS never sees the PIN",
+   "evidence": [
+    "secure/src/ui/pin_entry.rs:1-31, 54-146, 177-227",
+    "secure/src/ui/px/status_map.rs:277 (pin_row), 675 (masking test)",
+    "secure/src/nsc/cmd_request_unlock.rs:54-75"
+   ],
+   "status": "implemented",
+   "notes": "Honest limitation stated in-file: the active digit is shown in clear, so a camera on screen+hands sees it (pin_entry.rs:25-31). RNG failure silently degrades scrambling to start-at-0 (pin_entry.rs:73-78)."
+  },
+  {
+   "item": "REQUEST_UNLOCK idempotent when already unlocked (prompt-fatigue defence) and arms a fresh input window only on the locked path (#713); PIN entry does not reset the idle timer on entry (HIGH-13)",
+   "evidence": [
+    "secure/src/nsc/cmd_request_unlock.rs:21-52",
+    "secure/src/ui/pin_entry.rs:91-97, 112"
+   ],
+   "status": "implemented"
+  },
+  {
+   "item": "Duress / decoy wallet (`duress-pin` feature): second independent-entropy decoy XOR-split across OPTIGA (F1D8 AuthRef + E121 matched LUC, F1D9/F1DA) and SE050 (DURESS_USERID_OBJ 0x7B10_0010 with max_attempts=0 + three gated data objects); duress-first dispatch in gated_unlock with timing pad so real-correct and duress-correct unlocks run the same op-count; decoy entropy FI cross-checked against stored decoy master",
+   "evidence": [
+    "secure/Cargo.toml:410-441",
+    "secure/src/nsc/mod.rs:1503-1553",
+    "secure/src/dual_se.rs:228-354",
+    "secure/src/se050/mod.rs:63-79, 2092-2183",
+    "secure/src/optiga/mod.rs:1370-1387, 1826-1905",
+    "secure/src/crypto.rs:504-525, 544-590",
+    "secure/src/secure_element.rs:61-106 (trait defaults)"
+   ],
+   "status": "fenced-off",
+   "notes": "Complete and silicon-validated per #280 (2026-05-20), but `duress-pin` is in neither RELEASE_FEATURES nor PROD_SHIP_FEATURES (Makefile:2662, 2718) and no compile fence forces it \u2014 a production image has no duress path (#636). Implies dual-se + optiga-hw-counter."
+  },
+  {
+   "item": "Always-provision decoy (random 8-byte PIN when the user declines) for deniability; decoy-provision failure rolls back BOTH wallets and panics to restart the wizard",
+   "evidence": [
+    "secure/src/crypto.rs:504-525",
+    "secure/src/crypto.rs:555-571",
+    "secure/src/ui/seed_wizard.rs:232-277 (collect_duress_pin, 3 tries, must differ from main)"
+   ],
+   "status": "fenced-off",
+   "notes": "Only reachable with duress-pin; host source-text tests pin the shape (secure_crypto_glue_under_test/pure_tests.rs:2347-2410)."
+  },
+  {
+   "item": "Wipe-on-duress mode persisted on page-125 QW2 BEFORE provisioning; read is fail-closed (anything but 0xFF = wipe); arm failure panics instead of silently downgrading to decoy (F26/LIFE-1)",
+   "evidence": [
+    "secure/src/hw/flash.rs:696-742",
+    "secure/src/main.rs:4012-4040",
+    "secure/src/nsc/mod.rs:1515-1550 (decoy release is the explicit sentinel conditional; wipe is the fall-through)",
+    "secure/src/ui/seed_wizard.rs:279-286"
+   ],
+   "status": "fenced-off",
+   "notes": "Under duress-pin only. Duress wipe path calls factory_reset_admin and returns PinLocked without resetting page 124 (mod.rs:1521-1547)."
+  },
+  {
+   "item": "Duress UI dialogs appear only on the first-boot (unprovisioned) path, never on the unlock path",
+   "evidence": [
+    "secure/src/main.rs:4000-4011"
+   ],
+   "status": "fenced-off",
+   "notes": "Manual-UI checklist #280 (a)-(d) not yet ticked; `make play-hw-duress-ui` harness exists (Makefile:339-356)."
+  },
+  {
+   "item": "Status-word per failure class to the companion (PinIncorrect -> SW_SECURITY_NOT_SATISFIED, PinLocked -> SW_CONDITIONS_NOT_SATISFIED, InternalError -> SW_INTERNAL_ERROR) and on-screen split Wrong PIN / LAST ATTEMPT / PIN locked / Unlock error",
+   "evidence": [
+    "nonsecure/src/usb/commands.rs:1241-1244",
+    "secure/src/nsc/cmd_request_unlock.rs:152-157",
+    "secure/src/ui/px/status_map.rs:192-198, 610-615",
+    "secure/src/main.rs:4204-4210, 4595-4596"
+   ],
+   "status": "implemented",
+   "notes": "On-screen the exact attempt number is NOT shown (only the LAST ATTEMPT warning at remaining==1); the exact number is exposed over USB instead (next two rows)."
+  },
+  {
+   "item": "CMD_GET_REMAINING (1) returns min(page-124 remaining, SE-driver mirrors) to NS/companion with no PIN required",
+   "evidence": [
+    "secure/src/nsc/cmd_get_remaining.rs:1-37",
+    "nonsecure/src/usb/commands.rs:456-470",
+    "proto/src/lib.rs:89"
+   ],
+   "status": "implemented",
+   "notes": "Unauthenticated exact attempt count over USB \u2014 the real 'attempt number leak' channel on this surface; documented as not a three-way silicon receipt."
+  },
+  {
+   "item": "CMD_GET_PIN_ATTEMPT_LOG (4): RAM-resident 16-entry ring of (reason code, pre-attempt count) readable unauthenticated on a locked device; ships in production by design pending owner decision",
+   "evidence": [
+    "secure/src/pin_attempt_log.rs:1-110",
+    "secure/src/nsc/mod.rs:2052-2063",
+    "secure/src/nsc/cmd_pin_attempt_log.rs:9-31 (NS write-ptr validated)",
+    "nonsecure/src/usb/commands.rs:480-495",
+    "proto/src/lib.rs:93-125"
+   ],
+   "status": "implemented",
+   "notes": "Owner decision #719 OPEN: do not gate/ungate without it (pin_attempt_log.rs:32-36). Not persisted across reset (pin_attempt_log.rs:20-26)."
+  },
+  {
+   "item": "HandlerGuard reentrancy depth so SysTick idle-wipe cannot race PIN entry / master derivation",
+   "evidence": [
+    "secure/src/nsc/cmd_request_unlock.rs:33-35",
+    "secure/src/nsc/mod.rs:1254-1305"
+   ],
+   "status": "implemented",
+   "notes": "#152 says production veneers other than this run without HandlerGuard."
+  },
+  {
+   "item": "Idle wipe: 120 s S-only timer, zeroize + PendSV re-unlock loop bounded at 12 verdictless iterations",
+   "evidence": [
+    "secure/src/timeout.rs:27, 320-327",
+    "secure/src/main.rs:4448, 4521-4530",
+    "secure/src/nsc/mod.rs:1729-1748 (zeroize_sensitive_state)"
+   ],
+   "status": "implemented",
+   "notes": "Guard never exercised on silicon; on e2e images a persistent SE fault burns all 10 attempts before it fires (#692). On production images each PendSV pass is a human PIN entry."
+  },
+  {
+   "item": "#715 label fix landed: boot-unlock and PendSV PinLocked arms now say 'PIN locked / power cycle' and do NOT claim a factory reset; the real wipe prints its own WIPING/WALLET WIPED",
+   "evidence": [
+    "secure/src/main.rs:4197-4206",
+    "secure/src/main.rs:4587-4597"
+   ],
+   "status": "implemented",
+   "notes": "Part 2 of #715 (what consumed ten attempts) remains unexplained; the attempt log was added to diagnose it."
+  },
+  {
+   "item": "Boot-time and PendSV PinLocked arms do NOT run trigger_lockout_wipe; they break and rely on the next boot's attempts_exhausted check (page 124 >= 10) to wipe",
+   "evidence": [
+    "secure/src/main.rs:4197-4206",
+    "secure/src/main.rs:4587-4597",
+    "secure/src/main.rs:1935-1951"
+   ],
+   "status": "partial",
+   "notes": "Asymmetric with the USB path (cmd_request_unlock.rs:159-164). If PinLocked originates from an SE (SE050 AuthMethodBlocked or E120 exhaustion) while page 124 < 10, neither the boot path nor next boot wipes; only a USB CMD_REQUEST_UNLOCK would. Not tracked as its own issue; adjacent to #104/#125."
+  },
+  {
+   "item": "Compile-time fences: optiga-hw-counter required for production OPTIGA (S-3); all reset/wipe/duress-probe/pin-gate e2e harnesses forbidden with mode-production; tamp+tamp-wipe+tzic-wipe forced on shipping dual-SE; e2e-test enter_pin fast path cannot exist in production",
+   "evidence": [
+    "secure/src/nsc/mod.rs:540-566",
+    "secure/src/nsc/mod.rs:369-414",
+    "secure/src/nsc/mod.rs:748-767",
+    "secure/src/ui/pin_entry.rs:169-175",
+    "Makefile:2672-2702 (PROD_FORBIDDEN / PROD_REQUIRED)"
+   ],
+   "status": "implemented",
+   "notes": "No fence requires `duress-pin`; no fence requires `tamp-irq`."
+  },
+  {
+   "item": "Lockout wipe resets OPTIGA E120 via three-source transient auth (Trezor parity) so the LUC does not carry over \u2014 ONLY when NOT optiga-lock-operational",
+   "evidence": [
+    "secure/src/dual_se.rs:113-138",
+    "secure/src/optiga/mod.rs:2785-2814 (S-1 comment: skipped under lock-operational; 'a forgotten-PIN wipe abandons this OID range')"
+   ],
+   "status": "fenced-off",
+   "notes": "PROD_SHIP_FEATURES includes optiga-lock-operational (Makefile:2718), so in the shipping profile E120 is never reset after a wipe. Combined with reconcile reading E120 (saturated to 10) > page 124 (reset to 0) this is a boot-wipe loop / permanent brick on the ship profile \u2014 see gaps; #168, #123, #170."
+  },
+  {
+   "item": "OPTIGA F1D0 secret derivation from PIN is a single unsalted KDF (`kdf(PIN_AUTH_DOMAIN, pin, 0)`); no PBKDF2 stretching anywhere on the PIN path",
+   "evidence": [
+    "secure/src/optiga/mod.rs:915-918",
+    "grep pbkdf2|stretch over secure/src/nsc, se050, optiga, dual_se, crypto: no hits"
+   ],
+   "status": "implemented",
+   "notes": "Consistent with 'no software PIN compare' (SE silicon verifies); contradicts HARDENING \u00a75.1/5.2 \u2014 see drift."
+  },
+  {
+   "item": "Host-side coverage of this surface is mostly source-text assertions (NSC_MOD_SRC.contains(...)) rather than behavioural tests; the 19-test lockout-wipe FI matrix is untracked and not compiled",
+   "evidence": [
+    "secure/src/nsc_core_under_test/pure_tests.rs:447-595",
+    "secure/src/hw_platform_under_test/pure_tests.rs:1133-1160, 1374-1384",
+    "secure/src/secure_crypto_glue_under_test/pure_tests.rs:2195-2410",
+    "secure/src/main.rs:411-421 (NOTE: suite removed in e537e7cf)",
+    "git status: ?? secure/src/secure_lockout_wipe_fi_pure_tests.rs"
+   ],
+   "status": "partial",
+   "notes": "MockSecureElement has WipeFault hooks in secure_element.rs:429-450 that only the untracked suite exercises. No Kani harness touches the attempt counter (grep over kani::proof files: none)."
+  },
+  {
+   "item": "SE050 admin-wipe credential is derived on demand from a silicon root (BHK in the ship shape); page-125 admin-PIN slot removed so flash/chip desync cannot wedge the wipe",
+   "evidence": [
+    "secure/src/se050/mod.rs:3169-3194",
+    "secure/src/hw/flash.rs:623-627, 661-670",
+    "secure/src/se050/mod.rs:80-112"
+   ],
+   "status": "implemented",
+   "notes": "BHK loss (mass erase / DFU reflash) makes the SE050 unwipeable and unrecoverable (#707, #204); S-6 makes USERID_OBJ non-admin-deletable so a locked chip is single-use (threat-model.md:146)."
+  },
+  {
+   "item": "First-boot RDP-2 self-lock blank-checks pages 123..127 (counter, admin/wipe, BHK, journal) before locking",
+   "evidence": [
+    "secure/src/first_boot/mod.rs:197-205"
+   ],
+   "status": "fenced-off",
+   "notes": "rdp2-self-lock is production-only and blocked by the S-2 fence; not bench-runnable."
+  },
+  {
+   "item": "E2E-only CMD_TEST_PIN_LOCKOUT (200) burns 9 real wrong PINs + MCU-gate-at-MAX pass; HW make targets pin-gate-e2e / pin-gate-hw-counter-e2e / pin-gate-wipe-e2e / optiga-hw-counter-e2e",
+   "evidence": [
+    "secure/src/nsc/cmd_test_pin_lockout.rs:1-80",
+    "nonsecure/src/e2e_test.rs:2956",
+    "Makefile:3085, 3378, 3401, 3703"
+   ],
+   "status": "implemented",
+   "notes": "All are hardware/bench targets; none run in CI (.github/workflows grep for pin-gate/duress/tamp-wipe: no hits). Reboot/reconcile branches not covered (Makefile:3703 says so)."
+  }
+ ],
+ "gaps": [
+  {
+   "gap": "Shipping image has no duress/decoy path: `duress-pin` absent from RELEASE_FEATURES/PROD_SHIP_FEATURES and no fence forces it, while the threat model lists coercion and the decoy as the answer",
+   "tracked_in": "#636 (plus residuals #280, #370, #446, #258)",
+   "notes": "Makefile:2662, 2718; secure/src/nsc/mod.rs has no duress-pin fence. Either ship it or record the decision; today it is implicit."
+  },
+  {
+   "gap": "Post-lockout-wipe brick / boot-wipe loop on the SHIP profile: under optiga-lock-operational the E120 LUC is never reset (optiga/mod.rs:2795-2800 skips it), reconcile reads E120 (>=10, saturated) > page 124 (reset to 0) at the next boot and wipes again (nsc/mod.rs:1689-1717); re-provisioning in place is impossible ('abandons this OID range')",
+   "tracked_in": "#168, #123, #170, #14",
+   "notes": "Code-read conclusion, not silicon-observed; #254 (E120 exhaustion on silicon) also open. The SE050 side is single-use post-lockout too (S-6, threat-model.md:146)."
+  },
+  {
+   "gap": "Wipe atomicity/verification: trigger_lockout_wipe discards every result (`let _ =`) and shows WALLET WIPED regardless; SE050 page-125 erase gated on admin_exists() rather than on the wipe verdict; OPTIGA duress blanks and arm_wipe_flag are best-effort; no post-wipe readback of OIDs",
+   "tracked_in": "#106, #123, #129",
+   "notes": "cmd_request_unlock.rs:196-209; se050/mod.rs:3209-3231; optiga/mod.rs:2787-2794, 2852-2859."
+  },
+  {
+   "gap": "Duress objects survive SE050 wipe: DURESS_* OIDs (0x7B10_0010-0013) are not in DATA_AND_CANARY_OBJS / AUTH_OBJS_BEST_EFFORT, so the decoy half_E stays readable with the old (unlimited-attempt) duress PIN after a wipe, contradicting se050/mod.rs:66-71 ('admin-wipe sweep reclaims it')",
+   "tracked_in": "#107",
+   "notes": "Verified at se050/mod.rs:2266-2300 (no DURESS entries). OPTIGA side does blank them (optiga/mod.rs:2852-2858) and F1DA stores the decoy master unsplit (#123)."
+  },
+  {
+   "gap": "Forged/unauthenticated status words drive lockout verdicts: bare 2-byte SW 0x6986 (no R-MAC) -> AuthMethodBlocked -> PinLocked -> unconditional dual-SE wipe; bare 0x6985 -> PinIncorrect burns the pre-charged page-124 attempt on a correct PIN",
+   "tracked_in": "#104, #105 (OPTIGA analogue #120 appears addressed: optiga/apdu.rs:305-317)",
+   "notes": "se050/scp03.rs:550-560, 613-625; se050/apdu.rs:741-768, 818-822."
+  },
+  {
+   "gap": "Any non-verdict SE failure (transport, PRL wedge, session) burns a page-124 attempt fail-closed; a persistent fault walks a correct-PIN device to lockout with zero wrong PINs (observed shape of #715; e2e PendSV case #692)",
+   "tracked_in": "#715, #692, #119, #125",
+   "notes": "nsc/mod.rs:1473-1495 + 1617-1631; pin_attempt_log AttemptReason::NoVerdict (pin_attempt_log.rs:81-84) exists to diagnose but not to prevent."
+  },
+  {
+   "gap": "Boot-interactive and PendSV PinLocked arms never call trigger_lockout_wipe and only the page-124>=10 boot check backstops them; an SE-originated PinLocked with page 124 < 10 leaves a locked-but-unwiped device unless USB CMD_REQUEST_UNLOCK is used",
+   "tracked_in": "not tracked as its own issue (adjacent: #104, #125, #715)",
+   "notes": "main.rs:4197-4206, 4587-4597 vs cmd_request_unlock.rs:159-164 and main.rs:1935-1951."
+  },
+  {
+   "gap": "No progressive inter-attempt delay / backoff on the PIN path (docs describe one)",
+   "tracked_in": "#637",
+   "notes": "HARDENING.md:280 and threat-model.md:431 describe it; grep finds no implementation. With 8 digits and silicon-side rate limiting at 10 attempts this is low priority, which #637 states."
+  },
+  {
+   "gap": "Three-way boot reconciliation is impossible under the production SE050 UserID policy (attribute read denied 0x6986); boot check is directional page124/E120 only and catches strictly less (both-counter reset, OPTIGA-only reset undetected). No cold-reboot silicon receipt for either directional branch",
+   "tracked_in": "#200, #320, #216",
+   "notes": "se050/mod.rs:830-905; nsc/mod.rs:1636-1717; tamarin/README.md:46-56. CLAUDE.md invariant #2 forbids claiming three-way boot reconciliation."
+  },
+  {
+   "gap": "Attempt count and attempt-reason history are readable unauthenticated over USB on a locked device (CMD_GET_REMAINING, CMD_GET_PIN_ATTEMPT_LOG); the FI-oracle argument is 'status words already leak the same per attempt'",
+   "tracked_in": "#719 (owner decision pending)",
+   "notes": "cmd_get_remaining.rs; pin_attempt_log.rs:32-49; commands.rs:456-495. Log is RAM-only, so it cannot explain a returned customer unit (pin_attempt_log.rs:20-26) \u2014 persisting it needs a page decision CLAUDE.md is restrictive about."
+  },
+  {
+   "gap": "TAMP escalation never run on silicon; driver had a wrong base address for an unknown period; polled mode only in the ship set (no tamp-irq); TAMP\u00d7BHK erase interaction (CR3=0 with ITAMP6 SWD-at-RDP) unresolved; no hardware-mode tamper erase; PVD/BOR not routed to zeroize",
+   "tracked_in": "#391, #75, #208, #47, #49, #256, #248",
+   "notes": "tamp.rs:58-76, 127-132, 274-276; Makefile:2662 lacks tamp-irq."
+  },
+  {
+   "gap": "Lockout-wipe crash/fault matrix (19 host tests) is untracked and not compiled; remaining host tests on this surface are source-text assertions; no Kani harness over page-124 counter logic",
+   "tracked_in": "main.rs:411-421 note; #216 (interleave harness) partially; no dedicated issue for restoring the suite",
+   "notes": "secure/src/secure_lockout_wipe_fi_pure_tests.rs is `??` in git status."
+  },
+  {
+   "gap": "Trusted-UI PIN/wizard/duress flows never exercised on pq1 silicon (bench board has no LCD; all pq1 results used e2e-test fast paths)",
+   "tracked_in": "#700, #280",
+   "notes": "pin_entry.rs:172-175 e2e fast path; memory: pq1 bench board has NO LCD."
+  },
+  {
+   "gap": "Anti lookalike-device-swap: no user-personalized artifact rendered before PIN entry, so a swapped device can phish the PIN",
+   "tracked_in": "#601",
+   "notes": "Design-first and geometry-gated (no free flash page)."
+  },
+  {
+   "gap": "Plaintext PIN / half_E stack residue on SE050 response/error paths",
+   "tracked_in": "#108, #419"
+  },
+  {
+   "gap": "OPTIGA lifetime total-operation counter (Trezor PIN_TOTAL_CTR analogue) absent; E120 is a 32-fail backstop only",
+   "tracked_in": "#485 (fold into #443)"
+  },
+  {
+   "gap": "Fixed 2-minute idle wipe, not user-configurable",
+   "tracked_in": "#475"
+  },
+  {
+   "gap": "S-1/S-2/S-3 OPTIGA lockdown (F1D0 Change=ALW allows desoldered brute force with E120 reset; hw-counter evidence) remain ship-blockers gating the whole PIN-gate claim (Claim 3 provisional)",
+   "tracked_in": "#5, #6, #12, #10, #24, #73; docs/STATUS.md:389-397",
+   "notes": "Deferred BY DESIGN per owner (chips cost money, LcsO irreversible); do not re-flag."
+  }
+ ],
+ "drift": [
+  "docs/security/threat-model.md:432 says 'Duress PIN / decoy wallet \u2014 Not currently implemented; architectural option per HARDENING \u00a75.3' and HARDENING.md:279 lists it under 'Consider' \u2014 the feature is fully implemented and silicon-validated behind `duress-pin` (secure/src/dual_se.rs:228-354, nsc/mod.rs:1503-1553; #280). The accurate statement is 'implemented, not in the shipping feature set' (#636).",
+  "docs/security/HARDENING.md:258-275 (\u00a75.1/5.2) describes 'NS UI collects PIN digits, passes a byte buffer into a Secure NSC entry point', PBKDF2-HMAC-SHA256 stretching sized to hundreds of ms, and PIN_key as an SCP03 AESKey. Code: PIN is collected in S-world (ui/pin_entry.rs), never passes through NS (cmd_request_unlock.rs:1-3), there is no PBKDF2/stretching on the PIN path, and the SE050 gate is a native UserID VerifySession (se050/apdu.rs:795-822) while OPTIGA uses kdf(PIN_AUTH_DOMAIN, pin, 0) as an HMAC AuthRef (optiga/mod.rs:915-918). \u00a75.1 also contradicts CLAUDE.md invariant #4.",
+  "threat-model.md:431 and HARDENING.md:280 present a progressive inter-attempt delay as a mitigation; nothing implements it (#637).",
+  "secure/src/se050/mod.rs:66-71 states the duress objects live in the v6 range so 'the admin-wipe sweep reclaims it on factory reset'; the sweep lists (se050/mod.rs:2266-2300) contain no DURESS_* OIDs (#107). optiga/mod.rs:2846-2850 likewise asserts the SE050 side deletes them.",
+  "docs/audits/pin-unlock-lockstep-20260625-114309.md:17-21 quotes invariant #2 as 'three-way lockstep \u2026 Boot reconciles to strictest; disagreement = tamper' \u2014 superseded wording; current CLAUDE.md invariant #2 is directional page124/E120 with no SE050 input. Frozen audit, but it is the file a reader of 'pin-unlock audit' lands on.",
+  "contracts/verification/tamarin/README.md:59 says the PM-1 directional re-model follow-up is DONE (2026-07-17) and tla/PinReconcileDirectional.tla exists, but issue #320 is still OPEN.",
+  "#715 part 1 (false 'factory reset' label) is fixed in code (main.rs:4197-4206, 4587-4597) while the issue stays open for part 2; the issue body still cites the old text.",
+  "docs/STATUS.md:372/393 flag docs/secure-elements/se050-silicon-findings.md as still saying lockout SW 0x6982; code maps 0x6986 (se050/apdu.rs:766-768).",
+  "secure/src/hw/flash.rs:597-616 page-125 layout comment still describes QW0 as the admin PIN and bytes 32..8192 as 'unused' although QW0 is dead (flash.rs:623-627) and QW2 holds the duress wipe mode (flash.rs:696-742); Makefile:1159 still calls page 125 the 'SE050 admin PIN' page (#446, #741).",
+  "README.md:20 and :369 say three-way PIN-attempt enforcement is 'validated end-to-end on silicon' / '\ud83d\udfe2 HW'; the same README (:83, :475) and docs/STATUS.md:397 say Claim 3 is PROVISIONAL with the reboot/reconcile branches un-receipted and S-1 open. The per-attempt leg is validated; the claim headline overstates the boot/lockdown legs."
+ ],
+ "owner_decisions": [
+  "CLAUDE.md invariant #2: boot cross-check is DIRECTIONAL page124\u2192E120 only; 'Do not claim three-way boot reconciliation'; making it genuinely three-way requires a separately reviewed SE050 policy/backend and silicon decision. red-teaming.md:378-383 adds: do not weaken the SE050 UserID policy merely to make documentation symmetric.",
+  "CLAUDE.md invariant #2 / 'What NOT to do': PIN comparison stays in SE silicon \u2014 no software PIN compare in the MCU, ever.",
+  "CLAUDE.md invariant #4: NS never sees the PIN (constrains any NS-side PIN UX or backoff logic).",
+  "CLAUDE.md invariant #3: ML-KEM inner wrap DESCOPED 2026-07-07 \u2014 do not re-raise; consequence is that per-device final credential rotation (incl. the SE050 admin-wipe root) is load-bearing.",
+  "CLAUDE.md 'What NOT to do': no new per-signature flash state beyond page 123; pin_attempt_log.rs:22-26 notes CLAUDE.md is 'deliberately restrictive about new flash state' \u2014 persisting the attempt ring needs an explicit page decision. Page 126 is exclusively the DHUK-wrapped BHK; page 127 is the first-boot journal; page 124 = attempt counter; page 125 = wipe flag + duress mode.",
+  "Owner decision pending (#719): whether CMD_GET_PIN_ATTEMPT_LOG ships unauthenticated on a locked device; pin_attempt_log.rs:32-36 says do not gate/ungate without that decision.",
+  "CLAUDE.md feature flags: `tamp-wipe` is default-off for bench safety and FORCED ON for shipping dual-SE images by the nsc/mod.rs fence; `e2e-test` short-circuits enter_pin() (a8961636) with the #692 caveat that PendSV retries burn the page-124 budget.",
+  "OPTIGA S-1/S-2/S-3 ship-blockers are deferred BY DESIGN (chips cost money, LcsO is irreversible \u2014 memory note); Claim 3 (PIN gate) is provisional until S-1 closes. Do not flag this deferral as avoidance.",
+  "Dual-SE only: the standalone TROPIC01 backend was removed 2026-07-14 (owner decision) \u2014 duress/wipe designs must target OPTIGA+SE050.",
+  "Keep BHK as the SE050 SCP03/admin axis (answered 2026-09-21, memory note); recoverability after BHK loss (#707/#204) is a lifecycle issue to resolve first, not a reason to change the axis.",
+  "Shipping model (2026-07-14, work-todo #36): ship at RDP-0, first field boot self-locks to RDP-2 and blank-checks pages 123..127 (first_boot/mod.rs:197-205); no factory RDP-2 burn.",
+  "Trezor secmon port declined (not our silicon, memory note); Trezor parity ports already taken on this surface are the pre-commit counter (flash.rs:764-770), wait_random around the SE compare, and the TAMP ITAMP mask (tamp.rs:3-25).",
+  "Threat model \u00a710.1 / HARDENING \u00a713.1: coerced unlock is architecturally out of scope; the duress decoy is the only in-tree mitigation and its shipping status is the open owner call in #636."
+ ]
+}

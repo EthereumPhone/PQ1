@@ -1910,10 +1910,32 @@ impl SecureState {
         // duration block that an EM-glitch attacker could otherwise
         // time-target; `wait_random` perturbs its temporal position.
         crate::fi::wait_random();
-        self.master_secret = master;
+        // THE INSTALL AND THE ARM ARE ONE TRANSACTION (#802). SysTick's idle
+        // wipe reads `pin_verified` and can preempt anything; if it ran
+        // between these two lines it would zeroize a master that thread mode
+        // is in the middle of installing, and then `set_true` would mark the
+        // session unlocked over wiped state — unlocked with no secret, which
+        // no later check would notice. Today that window is closed only by
+        // TIMING (every production `mark_unlocked` follows a physical PIN
+        // entry that just called `reset_activity()`, so `is_idle()` is false),
+        // and only `cmd_request_unlock` holds a `HandlerGuard` — the wizard,
+        // the boot-interactive path and PendSV hold none. Close it by
+        // construction instead.
+        //
+        // PRIMASK does not mask NMI or HardFault, which is correct: both of
+        // those wipe, which is the safe direction.
+        #[cfg(feature = "stm32u585")]
+        cortex_m::interrupt::free(|_| {
+            self.master_secret = master;
+            self.pin_verified.set_true();
+        });
+        #[cfg(not(feature = "stm32u585"))]
+        {
+            self.master_secret = master;
+            self.pin_verified.set_true();
+        }
         master.zeroize();
         crate::fi::zeroize_barrier();
-        self.pin_verified.set_true();
         self.remaining_attempts = MAX_ATTEMPTS;
         // F-17: fresh unlock = full burst budget. The session sign
         // counter resets so the user gets `MAX_SIGNS_PER_SESSION`

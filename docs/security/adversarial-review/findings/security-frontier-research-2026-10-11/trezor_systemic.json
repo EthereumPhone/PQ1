@@ -1,0 +1,378 @@
+{
+ "surface": "systemic",
+ "vendor": "trezor",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "Multi-source 'strong' RNG: MCU TRNG XOR Optiga XOR Tropic, with per-source use-flags audited after generation",
+   "evidence": [
+    "core/embed/sec/rng/rng_strong.c:38-84",
+    "core/embed/sys/rng/stm32/rng_use_flags.c:24-32",
+    "core/embed/sys/rng/inc/sys/rng_use_flags.h:24-60",
+    "core/embed/sys/rng/stm32/rng.c:67-82",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:161-175",
+    "core/embed/sec/optiga/optiga.c:768-777"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "rng_fill_buffer_strong() clears a global use-flag word, fills from the MCU TRNG, then for every 32-byte block XORs in a fresh block from each secure element; a failed SE RNG call is `ensure()`d into a fatal halt ('A failed entropy source halts the device ... so the error cannot be accidentally ignored'), and after the loop it asserts that every real TRNG implementation set its flag (RNG_TYPE_MCU/OPTIGA/TROPIC). Only hardware TRNG drivers may call rng_use_flag_set (the emulator header hides the symbol). It is used for master-key generation, Optiga PIN secrets and Tropic reset keys. pq1 already mixes 3 sources for OptRand in the signing path (CLAUDE.md fi/crypto), but the audit pattern (a sticky 'which sources actually contributed' flag checked after the fact, fatal on failure) and applying it to BIP-39 entropy generation (MCU TRNG XOR OPTIGA GetRandom XOR SE050 GetRandom) is directly portable to the dual-SE design.",
+   "notes": "rng_fill_buffer_strong_time (rng_strong.c:86-94) also exposes a time estimate so the UI can show progress for slow SE RNG calls."
+  },
+  {
+   "item": "MCU TRNG health gating: wait for DRDY with SECS/CECS clear, RM0090 FIPS continuous repetition test (reject equal consecutive words), stack protector disabled in the RNG driver",
+   "evidence": [
+    "core/embed/sys/rng/stm32/rng.c:20-21",
+    "core/embed/sys/rng/stm32/rng.c:41-65"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "rng_read_u32 spins until SR has DRDY set and both seed-error (SECS) and clock-error (CECS) clear, and rng_get_u32 keeps a previous/current history and re-reads when the new word equals the previous one. pq1's secure/src/hw/rng.rs already masks SEIS/SECS/CEIS/CECS (rng.rs:67-71) and has a continuous repetition test (rng.rs:124,455), so this is already present; the only delta is Trezor's `#pragma GCC optimize(\"no-stack-protector\")` which is a C-only concern.",
+   "notes": "Trezor does NOT run NIST SP800-90B startup health tests either; both projects rely on the STM32 RNG's built-in CECS/SECS detectors plus a 32-bit repeat check."
+  },
+  {
+   "item": "Mock/insecure PRNG hard compile-time fences plus binary marker scan in CI",
+   "evidence": [
+    "core/embed/sys/rng/unix/rng.c:27-44",
+    "core/embed/sys/rng/unix/rng_mock.c:26-44",
+    "core/embed/sys/rng/unix/rng_use_flags.c:22-47",
+    "tools/check-insecure-prng.py:11-21,60-80",
+    ".github/workflows/core.yml:180"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Every mock RNG file carries four independent guards (`#error` unless TREZOR_EMULATOR, `_Static_assert(sizeof(void*)==8)`, host-OS check, `__STDC_HOSTED__`), duplicated on purpose 'to prevent their accidental removal'. The deterministic streams embed ASCII tags ('<PRNG-MCU>', '<PRNG-Optiga>', '<PRNG-Tropic>') and CI runs check-insecure-prng.py with --present on emulator builds (proving the mock IS linked) and --absent can be run on device binaries. pq1 has cfg fences for mock-se/e2e-test/otp-hardcoded-master-key but no binary-level string marker gate; adding fixed marker strings to every dev-only path and grepping the release ELF for `--absent` (and the e2e image for `--present`) is a cheap, feature-flag-independent CI control that catches a flag leaking into a shipping build."
+  },
+  {
+   "item": "Random Delay Interrupts (RDI): 1 ms systimer handler waits a 'floating-mean' random number of cycles (fresh byte + session byte refreshed on every USB packet) from a ChaCha-DRBG seeded by the TRNG, plus a glitch-checked `wait_random()` busy loop",
+   "evidence": [
+    "core/embed/sec/random_delays/stm32/random_delays.c:33-52",
+    "core/embed/sec/random_delays/stm32/random_delays.c:55-85",
+    "core/embed/sec/random_delays/stm32/random_delays.c:87-116",
+    "core/embed/sec/random_delays/stm32/random_delays.c:121-162",
+    "core/embed/sec/random_delays/stm32/random_delays.c:168-185",
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:6-22",
+    "core/embed/io/usb/stm32/usb.c:728,748",
+    "core/embed/projects/kernel/main.c:127-130",
+    "core/embed/projects/secmon/main.c:117-119"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The RDI handler (rdi_handler) runs every ms and spins `wait(drbg_random8() + session_delay)`; the session component is re-drawn only when random_delays_refresh_rdi() is called from the USB RX/TX paths, implementing the Clavier/Coron/Dabbous and Tunstall/Benoit floating-mean distribution so that an attacker who aligns on a USB packet still sees a random offset that changes per session. The DRBG is reseeded every 1000 calls with 50 bytes of TRNG; drbg_random8 is guarded by an atomic flag and returns the constant 128 if re-entered. wait_random() (used before every syscall/smcall dispatch and in USB class handlers) counts i up and j down and calls error_shutdown('(glitch)') if i+j ever differs from the target \u2014 a loop-skip detector. The `#ifndef TREZOR_PRODTEST` disables it in prodtest only. pq1 has fi::wait_random() placed around the double-sign compare (crypto.rs:352,407; fih.rs:114) but no periodic RDI; porting a 1 ms secure-TIM RDI with the USB-packet-refreshed session delay would desynchronize SCA traces of the whole C10 sign (not just the verify step). The glitch-checked up/down loop is the same idea as pq1's CfiCounter.",
+   "notes": "Not mentioned by Trezor: the RDI costs up to ~510 cycles per ms (\u22480.3% at 160 MHz)."
+  },
+  {
+   "item": "Consumption mask: TIM2 CH1 PWM on PA5 whose CCR is fed by a circular GPDMA linked-list from a 119-entry table of random duty values, DMA channel marked secure+privileged",
+   "evidence": [
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:8-20",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:55-70",
+    "core/embed/sec/consumption_mask/stm32u5/consumption_mask.c:96-125",
+    "core/embed/projects/kernel/main.c:143-145",
+    "core/embed/projects/bootloader/main.c:336"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "consumption_mask_randomize() fills pwm_data[119] with rng_get() % 16000 and the GPDMA circularly copies the table into TIM2->CCR1 on every update event at ~10 kHz, so the duty cycle changes every PWM period without CPU involvement; the DMA channel is DMA_CHANNEL_SEC|PRIV so NS cannot stop or redirect it. pq1 already ports the mask (TIM3_CH1/PA6 on pq1, TIM2/TIM3 secured in sau.rs) but CLAUDE.md says 'caller must call randomize() periodically' \u2014 i.e. CPU-driven; moving to the DMA-fed table removes the periodic software dependency (a glitch that skips randomize() would leave a static duty). Both designs share the unaddressed weakness pq1 already documents: no measured load on the pin (pq1 PA6 is NC), so the dilution is unevidenced. Note Trezor's GPDMA1 is otherwise NS in secmon layout except channel 12 (tz_init.c:310-316)."
+  },
+  {
+   "item": "Internal TAMP: all internal tampers in 'confirmed' mode (TAMP->CR3=0 \u2192 hardware erases backup registers/SRAM2) with PWR MONEN, filtered external TAMP_IN2 enabled only in PRODUCTION, TAMP IRQ at highest priority \u2192 RSOD reboot",
+   "evidence": [
+    "core/embed/sec/tamper/stm32u5/tamper.c:118-156",
+    "core/embed/sec/tamper/stm32u5/tamper.c:157-170",
+    "core/embed/sec/tamper/stm32u5/tamper.c:252-276",
+    "core/embed/projects/kernel/main.c:121-126",
+    "core/embed/projects/boardloader/main.c:82-85",
+    "core/embed/sec/secret/stm32u5/secret.c:159-161",
+    "docs/core/embed-arch/embed-arch.md:25"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "tamper_init enables ITAMP1 (backup-domain voltage), 2 (temperature), 3 (LSECSS), 5 (RTC overflow), 6 (JTAG/SWD access at RDP>0), 7/12/13 (ADC4 analog watchdogs), 8 (monotonic counter overflow), 9 (crypto peripheral fault SAES/AES/PKA/TRNG), 11 (IWDG reset with tamper flag); CR3=0 means every one is 'confirmed' so the hardware itself wipes the TAMP backup registers \u2014 which hold the BHK (BHKLOCK) and cached secret keys \u2014 independent of software. The external TAMP_IN2 uses pre-charge + 4-sample filter at 128 Hz and is armed only `#if PRODUCTION`. The IRQ re-inits the MPU (because tamper erased RAM), reads/clears SR, builds a postmortem naming the source, and reboots into RSOD. pq1 has ported this exact list (secure/src/hw/tamp.rs:30-41) with tamp-wipe forced on for shipping images; the residual delta is that pq1 escalates to a destructive dual-SE wipe while Trezor only reboots and lets the hardware-erased BHK make storage unreadable \u2014 pq1's choice is deliberate (no seed in flash, SE shares are the secret).",
+   "notes": "Trezor explicitly skips ITAMP4 and ITAMP10 (tamper.c:138) and admits 'some of them are never triggered'; no ADC4 analog-watchdog configuration exists anywhere in core/embed (grep for AWD/ADC4 returns only tamper.c), so ITAMP7/12/13 are enabled but inert. A novel lever for pq1: actually program ADC4 AWD1/2/3 on VREFINT/VBAT/temperature so those three tampers become live voltage/temperature glitch detectors with hardware-erase semantics."
+  },
+  {
+   "item": "Programmable Voltage Detector at 2.8 V (level 5), rising+falling IRQ at highest priority \u2192 error_shutdown; BOR level 4 pinned in option bytes for 3.3 V boards",
+   "evidence": [
+    "core/embed/sys/pvd/stm32/pvd.c:28-56",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:22-30",
+    "core/embed/projects/kernel/main.c:151-153",
+    "core/embed/projects/boardloader/main.c:82",
+    "core/embed/projects/bootloader/main.c:320-322"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pvd_init() configures PWR PVD level 5 (~2.8 V) in interrupt mode on both edges and the handler reconfigures the MPU and calls error_shutdown('PVD IRQ'); the comment notes it is 'active regardless of the flash option byte BOR setting'. The BOR option byte is separately pinned (OB_BOR_LEVEL_4 \u2248 2.8 V for VDD_3V3) and verified at every boardloader boot. This runs in boardloader, bootloader and kernel. pq1 has no PVD and tracks CSS/PVD under issue '#21-tamp-css_pvd' (secure/src/main.rs:4643). A PVD threshold just below the operating point is the cheapest voltage-glitch detector available on the U585 (no extra pins; 48-pin package irrelevant) and complements ITAMP1 (backup-domain monitor) \u2014 pq1 should enable it in both FSBL and secure world with the zeroize+reset response."
+  },
+  {
+   "item": "Clock Security System on HSE with NMI routed to secure world; NMI handler distinguishes CSS from FLASH ECC double-error and exits the task as a fault",
+   "evidence": [
+    "core/embed/sys/startup/stm32u5/startup_init.c:292-294",
+    "core/embed/sys/task/stm32/systask.c:864-874",
+    "core/embed/sys/task/stm32/systask.c:908-914",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:143-144"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "SystemInit sets RCC_CR_CSSON when not HSI_ONLY, so an HSE failure/glitch triggers an NMI; the NMI handler clears CSSF and calls systask_exit_fault (RSOD path). AIRCR.BFHFNMINS is cleared so NMI/BusFault/HardFault always land in the secure world. pq1's NonMaskableInt handler already zeroizes and resets (main.rs:4651-4656) but documents 'today NO NMI source is armed'. CSS is only meaningful if pq1 clocks from HSE (the FSBL runs on HSI16 per CLAUDE.md; the secure world's PLL source is not stated in the files read) \u2014 if any stage uses HSE, arm CSSON; if HSI-only, the only clock tamper left is LSECSS (ITAMP3), which pq1 already enables."
+  },
+  {
+   "item": "FLASH ECC double-error (ECCD) detection in the NMI handler, fatal in application, region-scoped in loaders; SRAM3 ECC enabled by option byte",
+   "evidence": [
+    "core/embed/sys/task/stm32/systask.c:877-900",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:79-80"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "When FLASH->ECCR.ECCD is set the NMI handler reads the failing address/bank; in boardloader/bootloader it is fatal only if the address lies inside the loader's own code region (so a corrupt firmware area still lets the loader run and recover), while in firmware/prodtest it is always fatal. SRAM3_ECC is pinned in OPTR. pq1 does not arm ECCD-NMI (main.rs:4643) and does not reference ECCR anywhere in hw/flash.rs. An ECC double error on a flash fetch is both a corruption signal and the canonical symptom of laser/EM fault injection on flash reads; routing it to pq1's existing zeroize+reset NMI handler (with the same region-scoping in the FSBL so a damaged slot does not brick the verifier) is a direct port."
+  },
+  {
+   "item": "Option-byte exact-equality self-check (OPTR, SECBOOTADD0R+BOOT_LOCK, all four WRP registers, SECWM1/2, HDP1, OEM1/OEM2 key lock bits) at every boardloader boot, with self-repair and secret erase on mismatch, and a repeat OEM-key-lock assertion in the kernel",
+   "evidence": [
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:14-20",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:60-83",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:106-152",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:195-205",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:229-246",
+    "core/embed/projects/boardloader/main.c:145-152",
+    "core/embed/projects/kernel/main.c:161-166"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "flash_check_option_bytes compares every security-relevant option register against compile-time expected values (RDP level 2 in PRODUCTION, BOOT_LOCK set in SECBOOTADD0R, WRP over the boardloader pages, SECWM/HDP boundaries, TZEN, DUALBANK, IWDG/WWDG, nRST_*, SRAM_RST, BOR); on mismatch boardloader reprograms them in a loop and, before that, erases the secret sector (secret_safety_erase) because a mismatch 'may indicate a first boot after manufacturing, or a potential hardware fault or exploit attempt'. Crucially, flash_set_option_bytes writes 0xFFFFFFFF into OEM1KEYR1/2 and OEM2KEYR1/2 and option_bytes_check_oem_keys() `ensure()`s that NSSR.OEM1LOCK and OEM2LOCK are both clear, with the comment 'to ensure that there is no ability to reverse the RDP' \u2014 on STM32U5 a programmed OEM2 key permits RDP regression from level 2, which would silently void an 'RDP-2 is permanent' claim. pq1's FSBL optbytes tripwire (fsbl/src/main.rs:243-250) reads and halts on persistent mismatch but, from what was read, does not assert the OEMxLOCK bits; pq1's invariant #10 ('RDP-2 freezes the option bytes forever') and the rdp2-self-lock Phase A ship-profile verify should include an OEM1LOCK/OEM2LOCK == 0 assertion before burning RDP=0xCC, and the secure world should re-check it every boot like Trezor's kernel does. Verify the OEM2-key regression semantics against RM0456 before relying on this.",
+   "notes": "Trezor's non-production build deliberately writes RDP level 0 (option_bytes.c:19) with a 'dev board safe' warning \u2014 the same bench/ship split pq1 uses."
+  },
+  {
+   "item": "BOOT_LOCK + SECBOOTADD0 pinned to the boardloader, WRP over boardloader pages, HDP1 hiding the secret sector, RDP level 2 \u2014 boardloader as immutable root of trust",
+   "evidence": [
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:15-17,68-69,76-77",
+    "core/embed/sec/secret/stm32u5/secret.c:152-155",
+    "core/embed/sec/secret/stm32u5/secret.c:580-633",
+    "docs/core/embed-arch/embed-arch.md:18-22,128",
+    "docs/core/misc/boot.md:11-27"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "SECBOOTADD0R is set to the boardloader address with FLASH_SECBOOTADD0R_BOOT_LOCK so the device can only ever boot there (defeats BOOT0/DFU entry), WRP1A covers the boardloader pages, and HDP1 covers the secret sector; secret_prepare_fw loads the BHK into TAMP backup registers, sets BHKLOCK (software can no longer read it; only SAES can use it), caches the per-slot keys into BKP regs encrypted under DHUK, then sets SECHDPCR.HDP1_ACCDIS/HDP2_ACCDIS so the secret flash is hidden until the next reset. pq1's invariant #10 plan is the same shape (WRP on FSBL pages \u2192 RDP-2); the deltas worth adopting are BOOT_LOCK in SECBOOTADD0R (not mentioned in CLAUDE.md's option-byte list) and HDP-hiding the FSBL/manifest or the per-device page region after use. Note the ordering Trezor enforces: BHK load \u2192 BHKLOCK \u2192 key cache \u2192 HDP disable-access, all before jumping to firmware."
+  },
+  {
+   "item": "Stack hardening: MSPLIM set at reset, -fstack-protector-all (firmware) / -strong (loaders), per-boot TRNG stack canary, per-applet canary passed from kernel, __stack_chk_fail \u2192 shutdown, STKOF-aware UsageFault/HardFault handlers that reset MSP to the top, clear_unused_stack at every stage",
+   "evidence": [
+    "core/embed/sys/startup/stm32u5/startup_init.c:335-336",
+    "core/embed/sys/startup/stm32u5/startup_init.c:348-349",
+    "core/embed/sys/startup/stm32u5/startup_init.c:373-375",
+    "core/embed/models/build.rs:88-92",
+    "core/embed/rtl/error_handling.c:27-34",
+    "core/embed/projects/firmware/src/stm32/main.c:188-193",
+    "core/embed/sys/task/stm32/systask.c:777-790",
+    "core/embed/sys/task/stm32/systask.c:823-840",
+    "core/embed/sys/stack/stm32/stack_utils.c:24-37",
+    "tools/print-rust-stack-sizes.py:28-41",
+    ".github/workflows/core.yml:122"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "reset_handler sets MSPLIM to stack_start+128 so a stack overflow raises a UsageFault with STKOF instead of silently corrupting .data; the UsageFault handler checks CFSR.STKOF and re-bases MSP to the stack end before exiting the task, and HardFault always re-bases MSP (exception escalation). GCC's stack protector is on for every C file (strong in loaders, all elsewhere), the guard is drawn from the TRNG after RAM clearing, and each applet gets its own random guard via reset_handler(cmd, arg, random_value). clear_unused_stack zeroes from stack_start to SP at startup, before RSOD, and before every stage jump. CI prints the 50 largest Rust frames from `-Z emit-stack-sizes` (same tool pq1 already uses for the FSBL). pq1's FSBL explicitly notes 'no MSPLIM' (fsbl/src/manifest.rs:30, fsbl/src/main.rs:172) and the secure world sets none that was found; setting MSPLIM/PSPLIM in cortex-m-rt `pre_init` for FSBL, secure and NS images is a one-line, zero-cost overflow detector and is particularly valuable given the ~10 KB C10 verify frames. Rust has no SSP by default (nightly `-Z stack-protector=all` exists); a per-boot canary is less important than MSPLIM for pq1.",
+   "notes": "Trezor turns the stack protector OFF in hot/handler files (mpu.c:4-6, rng.c:20-21, option_bytes.c:11-12, syscall dispatch) for performance; the FI implication (unprotected frames in exactly the security-critical dispatchers) is not discussed."
+  },
+  {
+   "item": "Fault handlers (HardFault/MemManage/BusFault/UsageFault/SecureFault/GTZC illegal-access) capture CFSR/MMFAR/BFAR/HFSR/SFSR/SFAR + PC/SP into a postmortem record, terminate only the faulting task, and show RSOD; GTZC TZIC illegal-access IRQ enabled for all peripherals",
+   "evidence": [
+    "core/embed/sys/task/stm32/systask.c:96-102",
+    "core/embed/sys/task/stm32/systask.c:509-560",
+    "core/embed/sys/task/stm32/systask.c:777-860",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:92-100",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:112",
+    "core/embed/sys/task/stm32/system.c:92-130",
+    "docs/core/embed-arch/embed-arch.md:76,220"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "systask_exit_fault records the first fault cause (never overwriting it), including the NS-side MSP/PSP when the fault came from the non-secure world, validates the return-address pointer before dereferencing it under a temporary MPU change, and then kills the task; the kernel then runs system_emergency_rescue which resets peripherals, clears unused stack, wipes all RAM except the stack, re-inits .bss/.data, re-enables interrupts, ensures thread mode and renders RSOD. GTZC illegal access on any peripheral fires GTZC_IRQ which is treated as a fault. FPCCR.CLRONRET clears FPU registers on exception return. pq1 routes HardFault/NMI to zeroize+sys_reset (main.rs:4682-4692) and GTZC to tzic wipe, which is the stronger security response, but it discards all diagnostics; Trezor's practice of snapshotting CFSR/SFSR/SFAR/PC into a postmortem (pq1 could put it in a non-secret TAMP BKP register or page 127 journal field before reset) would give field evidence of fault-injection attempts and bugs. The per-task (NS-only) containment does not map to pq1's two-world no-RTOS design."
+  },
+  {
+   "item": "RAM remanence hygiene: fill all RAM with a random word then zero in boardloader reset; wipe all RAM except stack on every stage jump, reboot and halt; call_with_new_stack clears TAMP backup registers and SRAM2; memregion_fill via volatile pointer; applet RW segment zeroed on stop",
+   "evidence": [
+    "core/embed/sys/startup/stm32u5/startup_init.c:353-368",
+    "core/embed/sys/startup/stm32/bootutils.c:98-108",
+    "core/embed/sys/startup/stm32/bootutils.c:112-129",
+    "core/embed/sys/startup/stm32/bootutils.c:240-258",
+    "core/embed/sys/startup/stm32/sysutils.c:52-55",
+    "core/embed/sys/linker/linker_utils.c:156-168",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:107-112",
+    "docs/core/embed-arch/embed-arch.md:350"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "The boardloader fills every RAM block with rng_get() and then with 0 before .bss/.data init (MEMREGION_ALL_STARTUP_RAM minus the stack), defeating data-remanence/cold-boot reads of a previous session; every jump_to_next_stage, reboot_with_args and halt_device runs reset_peripherals_and_interrupts (no DMA in flight), clear_unused_stack, memregion_fill(0) of all runtime RAM except stack and bootargs, and on U5 call_with_new_stack additionally zeroes the BKP registers and SRAM2. memregion_fill uses a volatile pointer so the compiler cannot convert it to memset or elide it. pq1 zeroizes named secret caches on lock/fault and relies on startup .bss re-zeroing, but a whole-RAM random-then-zero pass in the FSBL and before the FSBL\u2192secure and secure\u2192NS handoffs (plus explicit TAMP BKP register clearing) is a straightforward addition and matters more for pq1 because the 24-word entropy is reconstructed into S-SRAM."
+  },
+  {
+   "item": "Secure boolean + ensure() + volatile duplicated/backup results + randomized-delay checks (fih_delay / fih_ensure) + 'next stage address set only at the end' + storage erase when glitch-flipped flags disagree",
+   "evidence": [
+    "core/embed/rtl/inc/rtl/secbool.h:6-8",
+    "core/embed/rtl/inc/rtl/error_handling.h:144-150",
+    "core/embed/projects/boardloader/main.c:52-70",
+    "core/embed/projects/boardloader/main.c:108-113",
+    "core/embed/projects/boardloader/main.c:225-233",
+    "core/embed/projects/bootloader/fw_check.c:59-66,152",
+    "core/embed/projects/bootloader/main.c:120-121",
+    "core/embed/projects/bootloader/main.c:593-595",
+    "core/embed/projects/bootloader/main.c:680-690"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "secbool is 0xAAAAAAAA/0x00000000 and ensure() only accepts exact sectrue; the boardloader wraps each verification in fih_ensure(), which first passes the result through fih_delay() (0-127 \u00b5s TRNG-randomized systick delay) so a timing-triggered glitch cannot be aimed at the compare, and the jump target `next_stage_addr` is a volatile that stays 0 until the last line of ensure_signed_bootloader so a skipped check leaves nothing to jump to. The bootloader keeps every verification stage in its own volatile secbool, keeps `firmware_present_backup`, and `ensure(dont_optimize_out_true * (present == backup))` at three points; the firmware jump pointer defaults to failed_jump_to_firmware ('(glitch)'). On WF_ERROR_FATAL ('we saw flags randomly flip, most likely due to glitch') it regenerates the BHK, erases storage and the protected backup-RAM items. pq1 already has the equivalent FI toolkit (fi::CfiCounter, Hamming-distant sentinels, fih.rs double-evaluation with wait_random, verify-before-release) in the signing path; what is worth checking is whether the FSBL's slot-admission decision uses the same 'zero target until the last gate + random delay before each ensure + duplicated volatile result' structure, and whether pq1 has any 'detected glitch \u21d2 destroy secrets' policy \u2014 pq1's HardFault deliberately avoids SE wipe (main.rs:4668-4676), which is a conscious divergence from Trezor's bootloader."
+  },
+  {
+   "item": "Monotonic version counters as unary 16-byte flash cells in the HDP-hidden secret sector (bootloader, firmware, secmon; max 63), validated for well-formedness on read, enforced in boardloader before jumping",
+   "evidence": [
+    "core/embed/sec/monoctr/stm32u5/monoctr.c:43-76",
+    "core/embed/sec/monoctr/stm32u5/monoctr.c:78-140",
+    "core/embed/sec/monoctr/inc/sec/monoctr.h:10-19",
+    "core/embed/projects/boardloader/main.c:94-99,126-131",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:48-51,76-77"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "monoctr_write refuses to go backwards and writes zeros into the next value cells; monoctr_read counts leading non-0xFF cells and returns secfalse if any later cell is also written (non-unary shape \u21d2 tampered/corrupt). The sector is write-protected by SECWM/HDP after boot and only the loaders write it. pq1 retired its OTP unary rollback tally (hw/otp.rs, 'rejected legacy') and Draft 1.1's typed floor is open; Trezor's model shows a working alternative: a small flash-resident unary counter whose *access* is gated by HDP after the loader runs, rather than a true one-way OTP, accepting that an attacker who can run code before HDP engages (i.e. in the loader itself) could erase it. For pq1 that trade-off is acceptable only if the counter lives inside the WRP'd FSBL range or an HDP region the FSBL closes before branching."
+  },
+  {
+   "item": "MCU device attestation: ML-DSA-44 key derived from the privileged master-key slot via SAES/DHUK-protected secrets, X.509 device certificate written at factory into the secret sector, challenge signing; secret master keys generated with the strong RNG and cached only in locked TAMP backup registers",
+   "evidence": [
+    "core/embed/sec/mcu_attestation/mcu_attestation.c:21-79",
+    "core/embed/sec/secret/stm32u5/secret.c:294-353",
+    "core/embed/sec/secret/stm32u5/secret.c:642-676",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:19-27",
+    "core/embed/projects/prodtest/cmd/prodtest_secrets.c:372-416",
+    "core/embed/projects/bootloader/main.c:383-401"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The MCU itself holds a per-device attestation identity (post-quantum ML-DSA-44) whose seed is derived from a master key stored DHUK-encrypted in the secret sector and cached in TAMP backup registers; the bootloader passes the device certificate to firmware via startup args and the host can challenge it. This is the mechanism that lets a host detect a swapped/cloned MCU board, not just a genuine secure element. pq1 attests via OPTIGA/SE050 only; the user's question ('detect malicious hardware in the FSBL') is partly answered by this pattern: a DHUK-rooted (die-unique) MCU key whose public half is certified at the factory means a replaced MCU cannot present the original certificate. pq1 can implement it with SPHINCS+C10 (its single primitive) rather than ML-DSA, keyed from DHUK+persisted salt like the OPTIGA PBS derivation, so invariant #5 is preserved while the companion verifies MCU + both SE certificates together. It does not detect a malicious FSBL running on the genuine die \u2014 that remains the verify-once/WRP story."
+  },
+  {
+   "item": "Prodtest factory secure channel (Noise_KK1) and OTP manufacturing lock / unit-properties with rework block, checked by firmware to close factory-only commands",
+   "evidence": [
+    "core/embed/projects/prodtest/cmd/secure_channel.h:1-15",
+    "core/embed/sec/unit_properties/stm32/unit_properties.c:72-140",
+    "core/embed/projects/prodtest/cmd/prodtest_manufacturing_lock.c:116-130",
+    "tests/prodtest_tests/test_manufacturing_lock.py",
+    "core/embed/sec/secret/stm32u5/secret.c:526-570"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Factory provisioning traffic (secrets-init, certdev-write, secrets-lock) runs over a Noise_KK1 channel with a factory HSM key, the device variant/colour/battery type live in an OTP block with an optional 'rework' OTP block override, and a separate OTP manufacturing-lock block (or locked variant block) flips `props->locked`, which gates provisioning behaviour; secret_lock writes a lock record and disables HDP access. pq1's open S-1/S-3 factory handoff is precisely this ceremony; the authenticated handoff, the explicit 'manufacturing lock' OTP bit the firmware reads on every boot, and the pytest-driven prodtest suite are the reviewed shape pq1 needs (CLAUDE.md already names Noise_KK1 as acceptable)."
+  },
+  {
+   "item": "IWDG runtime limit (1 h, 4 h max) imposed by the bootloader on firmware that lacks 'allow_unlimited_run' vendor trust; IWDG secure-only and IWDG_SW/STOP/STDBY pinned in option bytes",
+   "evidence": [
+    "core/embed/sec/iwdg/stm32/iwdg.c:28-47",
+    "core/embed/sec/iwdg/inc/sec/iwdg.h:24-37",
+    "core/embed/projects/bootloader/main.c:465-470",
+    "core/embed/projects/bootloader/fw_check.h:82",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:243-245",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:80-81"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Before jumping to a firmware whose vendor header does not grant unlimited run, the bootloader starts the IWDG with a 1-hour reload (LSI/1024, 4.096 s ticks) so untrusted or custom firmware cannot run indefinitely without a reboot through the verified bootloader. pq1 has no third-party-firmware class, so the policy use does not map, but pq1's sau.rs already reserves IWDG as secure (sau.rs:257-269, `iwdg` feature); using it as a liveness watchdog that is kicked only from inside the secure world (so a glitch-induced hang in the confirm/PIN loop or an NS-world wedge forces a reset through the FSBL re-verify) is a cheap availability+FI control."
+  },
+  {
+   "item": "Backup-RAM TLV store: two 1 KiB slots with guard words, sequence number and CRC-16, invalidate-then-write commit, PUBLIC vs PROTECTED item classes (protected erased on device wipe)",
+   "evidence": [
+    "core/embed/sec/backup_ram/stm32u5/backup_ram.c:14-60",
+    "core/embed/sec/backup_ram/stm32u5/backup_ram.c:153-216",
+    "core/embed/sec/backup_ram/stm32u5/backup_ram.c:218-265",
+    "core/embed/sec/backup_ram/stm32u5/backup_ram.c:381-413",
+    "core/embed/sec/backup_ram/inc/sec/backup_ram.h:6-17"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Each slot is written by first setting guard=NOK and crc=0, copying the payload word-by-word through volatile pointers, zero-filling the remainder, then restoring crc and guard=OK, so a power cut mid-write leaves the older slot valid; reload picks the highest seq among valid slots and zeroes invalid ones. Items are typed PUBLIC (survive wipe) or PROTECTED (erased by backup_ram_erase_protected on wipe). pq1 has no battery, so VBAT-retained backup SRAM is unavailable and the mechanism itself does not apply; the journaling discipline (guard NOK \u2192 payload \u2192 crc \u2192 guard OK, dual slot with seq) is the same shape pq1 uses for page 123/127 and could be reused to classify page-127 records into wipe-surviving public telemetry vs protected state."
+  },
+  {
+   "item": "Persistent security/health telemetry: monotonic min/max temperature and sticky battery-error bits stored as a PUBLIC backup-RAM item that survives device wipe",
+   "evidence": [
+    "core/embed/sec/telemetry/stm32u5/telemetry.c:27-66",
+    "core/embed/sec/telemetry/stm32u5/telemetry.c:68-105",
+    "core/embed/sec/telemetry/inc/sec/telemetry.h:24-44",
+    ".github/workflows/core-hw.yml:72-75"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "telemetry_update_battery_temp only lets the minimum decrease and the maximum increase, and error flags are ORed in and never cleared except by telemetry_reset, giving a tamper-evident environmental history (e.g. a device that was heated/frozen for a FI attack) that survives wipe because it is a PUBLIC item. pq1 has no battery/NTC, but the U585 internal temperature sensor via ADC plus counters of TAMP events, NMI/HardFault zeroize events, PIN failures and glitch detections could be stored as a wipe-surviving monotonic record in a non-secret flash page; this is forensic/warranty evidence rather than a prevention. Trezor disables its telemetry hardware test in CI 'because there's no battery'.",
+   "notes": "Trezor does not persist fault-injection or tamper counters; only battery/temperature."
+  },
+  {
+   "item": "RSOD and wipe screens with explicit reasons (TAMPER source names, 'Wipe code entered', 'Pin attempts exceeded', 'Install restricted'), emergency-rescue path that rebuilds a clean runtime before rendering, optional RSOD_INFINITE_LOOP halt",
+   "evidence": [
+    "core/embed/sec/rsod/rsod_special.c:34-65",
+    "core/embed/sec/tamper/stm32u5/tamper.c:209-248",
+    "core/embed/sys/task/stm32/system.c:92-140",
+    "core/embed/projects/kernel/main.c:242-297",
+    "core/embed/sys/startup/stm32/bootutils.c:112-129"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "A fatal condition is always made user-visible with its cause (the tamper handler maps each SR bit to INPUT1/2, VOLTAGE, TEMPERATURE, LSE CLOCK, SWD ACCESS, CRYPTO ERROR, IWDG, ANALOG WDG\u2026), the kernel re-initialises the system in emergency mode (RAM wiped except stack, .bss/.data rebuilt, MPU reset) before trusting the display stack, and halts or reboots afterwards. pq1 already draws a best-effort '! FATAL ERROR / Secrets wiped' screen in its panic handler (main.rs, #484) but its HardFault/NMI path resets without any screen or reason; carrying the fault/tamper reason into a reset-surviving register (RTC/TAMP BKP or a page-127 field) and rendering it after the FSBL fingerprint window would make FI attempts distinguishable from flaky hardware for the user."
+  },
+  {
+   "item": "Suspend/resume: secure drivers deinitialised (SAES clock off, Tropic deinit) before STOP2 and re-initialised after; SHSI secure oscillator only enabled while SAES is in use",
+   "evidence": [
+    "core/embed/sec/suspend/stm32u5/suspend_io.c:18-59",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:204-245"
+   ],
+   "applies_to_pq1": "no",
+   "why": "This exists to make STOP2 low-power mode safe on battery devices (SAES key registers and the Tropic session are torn down before the core sleeps). pq1 has no battery and no low-power states; the only transferable fragment is that SAES is force-reset/clock-gated whenever not in use, which pq1 could mirror by resetting SAES on lock/idle, but that is a marginal hardening."
+  },
+  {
+   "item": "PIN-stretch time estimation (cycles-per-PBKDF2-iteration / hash-to-curve constants) to drive progress UI",
+   "evidence": [
+    "core/embed/sec/time_estimate/stm32/time_estimate.c:22-39"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Purely a UX helper for Trezor's MCU-side PBKDF2 PIN stretching and Optiga hash-to-curve; pq1 compares the PIN inside SE silicon (invariant #2) with no MCU-side stretching, so there is nothing to estimate."
+  },
+  {
+   "item": "TrustZone lock-down details: SAU and AIRCR locked via SYSCFG_CSLCKR, GTZC TZSC attribute registers locked, SYSRESETREQS secure-only in PRODUCTION, all NVIC lines NS except GTZC/TAMP/Optiga-I2C/HASH-DMA, secure DMA channel for the HASH engine, RCC/PWR secure+privileged",
+   "evidence": [
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:114-127",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:269-275",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:286-308",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:310-319",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:358-361",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:392-397"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "After configuration the secmon sets SYSCFG_CSLCKR.LOCKSAU|LOCKSVTAIRCR and GTZC_TZSC1/2 CR.LCK so neither a later secure-world bug nor a glitch can re-open the SAU/GTZC partition until reset, restricts SYSRESETREQ to the secure world in production (NS cannot reset the device to escape a lock), keeps RCC and PWR secure so NS cannot alter clocks/voltage (an FI enabler), and explicitly secures the TAMP IRQ. pq1's sau.rs already secures the crypto peripherals, I2C buses, UCPD1 and TIM2/TIM3 and is silicon-validated; the items to confirm or add are the lock bits (CSLCKR, TZSC LCK), SYSRESETREQS, and RCC/PWR secure ownership \u2014 none of which were seen in the pq1 files read for this task (sau.rs main_sau_pure_tests mention AIRCR BFHFNMINS/PRIS/SYSRESETREQS handling, so part may exist)."
+  },
+  {
+   "item": "Flash erase read-back verification (every erased sector is re-read and must be all 0xFFFFFFFF)",
+   "evidence": [
+    "core/embed/sys/flash/stm32u5/flash.c:150-170"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "flash_sector_erase returns secfalse unless a word-by-word read of the sector shows 0xFFFFFFFF, catching a glitched or incomplete erase (e.g. of a PIN-attempt page or the secret sector) before the caller proceeds. pq1 already does this (secure/src/hw/flash.rs:494) so it is present; keep it for every security-relevant erase (page 124/125/127) and for the SE-wipe coordination path."
+  },
+  {
+   "item": "Board capabilities TLV emitted by the immutable boardloader and parsed by firmware with bounds checks; hardware revision strap pins read in secure world with their GPIO bits secured",
+   "evidence": [
+    "core/embed/projects/boardloader/main.c:72-81",
+    "core/embed/sec/board_capabilities/stm32/board_capabilities.c:20-70",
+    "core/embed/sec/hw_revision/stm32/hw_revision.c:17-37",
+    "core/embed/sec/trustzone/stm32u5/tz_init.c:349-356"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The boardloader publishes its model and version in a fixed flash section that later stages read (so firmware can refuse to run on an unexpected board/boardloader) and the PCB revision is read from secured strap pins. pq1 fixes board identity at compile time (BOARD=pq1 mandatory) and the 48-pin package leaves few spare pins, so revision straps are impractical; publishing the FSBL's own version/geometry in a fixed, measured location that the secure world cross-checks against the manifest is a small consistency gate against mismatched FSBL/secure pairs."
+  },
+  {
+   "item": "CI security testing: ClusterFuzzLite ASAN fuzzing of trezor-crypto on every PR (400 s), nightly hardware-in-the-loop device tests on six physical models with uhubctl power cycling and camera recording, prodtest pytest suite (tamper/OTP/manufacturing-lock/backup-RAM), burn tests, upgrade/persistence tests, Rust stack-size report and flash free-space floor",
+   "evidence": [
+    ".github/workflows/cflite.yml:17-37",
+    ".clusterfuzzlite/build.sh:1-5",
+    "crypto/fuzzer/README.md:1-60",
+    ".github/workflows/core-hw.yml:52-116",
+    "ci/hardware_tests/device/device.py:45-60",
+    "tests/prodtest_tests/test_tamper.py:21-25",
+    "tests/burn_tests/burntest_t2.py",
+    ".github/workflows/core.yml:122,180,471-543,625-642",
+    "core/tools/size/checker.py:24-43"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Trezor runs libFuzzer+ASAN continuously (PR-scoped 'code-change' mode) against the C crypto library, keeps self-hosted runners per hardware model that power-cycle the DUT through a smart USB hub and run the full device test-suite nightly (with Optiga/Tropic disabled and STORAGE_INSECURE_TESTING_MODE=1), has a factory-CLI pytest suite that exercises tamper-read, OTP, manufacturing lock and backup RAM against the prodtest emulator, and fails CI when flash headroom drops below 15 KB. pq1 has 13 cargo-fuzz targets, Kani/Miri gates and an informational size budget but no hardware-in-the-loop CI; given pq1's memory notes about tests that never ran and green-but-never-executed suites, a nightly self-hosted pq1 runner (probe-rs + a power-cycling hub) executing `make e2e-hw`-class flows and the SE stress harness, plus a hard flash-headroom floor, are the highest-leverage ports here.",
+   "notes": "Trezor's hardware CI explicitly disables secure elements, the authenticity test and the telemetry test (core-hw.yml:72-83); SE-dependent paths are not covered nightly."
+  },
+  {
+   "item": "Things Trezor explicitly does NOT do (documented): PKA unused; ITAMP4/ITAMP10 skipped and ADC analog-watchdog tampers never configured; wait_random disabled in prodtest; stack protector disabled in hot dispatch/handler files; tamper/fault response is RSOD reboot not storage erase; cooperative (non-preemptive) scheduler; RDI returns a constant when re-entered; no DBGMCU-level debug disable code (relies on RDP2 + ITAMP6)",
+   "evidence": [
+    "docs/core/embed-arch/embed-arch.md:24",
+    "core/embed/sec/tamper/stm32u5/tamper.c:138-140",
+    "core/embed/sec/random_delays/stm32/random_delays.c:169,184",
+    "core/embed/sys/mpu/stm32u5/mpu.c:4-6",
+    "core/embed/sys/syscall/stm32/syscall_dispatch.c",
+    "core/embed/sec/tamper/stm32u5/tamper.c:268-275",
+    "docs/core/embed-arch/embed-arch.md:245",
+    "core/embed/sec/random_delays/stm32/random_delays.c:54-67",
+    "core/embed/sec/option_bytes/stm32u5/option_bytes.c:60-66"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "These are the documented or code-evident non-choices: PKA 'is not currently used and is delegated to firmware crypto libraries'; two internal tampers are 'intentionally skipped' and three enabled ADC-watchdog tampers have no AWD configuration anywhere, so they are inert; wait_random is compiled out in prodtest; the MPU, RNG, option-byte, syscall/smcall and systask files opt out of the stack protector for speed; a confirmed tamper only reboots into RSOD (hardware erases BKP regs/SRAM2) and storage erase is reserved for option-byte mismatch and bootloader 'flag flip' fatal errors; the drbg_random8 critical section returns 128 rather than blocking. For pq1 the actionable ones are: (a) configure ADC4 AWD so ITAMP7/12/13 become live voltage/temperature glitch detectors (a gap Trezor leaves open), (b) do not disable FI countermeasures in bench/prodtest builds that might ship, (c) decide and document explicitly whether a detected glitch destroys SE shares (pq1 currently: no on HardFault, yes on TAMP/GTZC) \u2014 Trezor's split is the mirror image."
+  }
+ ]
+}

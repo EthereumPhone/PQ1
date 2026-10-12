@@ -1,0 +1,178 @@
+{
+ "merge": {
+  "cluster": "display-emanation",
+  "title": "Secret-frame display hardening: close the shipping-path constant-time bypass for typed letters and PIN digit, stop re-streaming secret frames, then a measured low-distance constant-weight colour pair gated by an NV3007 leakage receipt",
+  "threat": "Recovery of seed words, typed restore letters or the active PIN digit by a measuring attacker near or inside the device during the seed wizard, restore and PIN entry. Four distinct channels, which the members blurred: (1) CPU-side glyph fetch address and SPI timing, firmware-fixable and currently open on two shipping screens; (2) MOSI bus content as seen by a weight-integrating observer (IO-driver supply current, narrowband EM), where firmware can raise cost; (3) MOSI content seen by a pattern-resolving receiver or a logic-level tap, which no firmware encoding hides because the panel needs the same bits; (4) panel-internal source-driver scan and rail, periodic for as long as the word is shown, hardware territory. Members' framing error corrected: the NV3007 is GRAM-backed, so the bus is not 'periodic TE-synced refresh'. The legacy path paints each secret cell once. The px path does re-stream the forced secret frame every 16 ms while the entry animation moves, capped at 3 s (secure/src/ui/px/lcd.rs:47, :639, :663-690), so it is a bounded burst of identical transmissions, not a steady refresh.",
+  "proposal": "Ordered by soundness and cost.\n\n(A) Fix the constant-time bypass on the shipping path (S, firmware). PROD_SHIP_FEATURES has no ui-px, so the release image takes the legacy branches. render_letter_screen (seed_wizard.rs:918-949) and render_pin_screen (pin_entry.rs:187-221) put typed seed letters and the active PIN digit through draw_line + flush(), which calls public_glyph_cols, the direct-index lookup whose own doc says never to use it for secret rows (secret_text.rs:84-93). Route row 1 of both screens through flush_with_secret_rows, as F-27 already did for the candidate list. Extend #784 (px-only as filed) to cover: the legacy twin; the px PIN row (pin_row via show(), force=false, active digit in clear, so strip-digest and skip depend on the digit); and a paired-constants-style test asserting every screen carrying secret-derived glyphs uses the secret/force path.\n\n(B) Paint secret cells once (S, firmware, px only). play_screen pushes the secret words into every animation frame and force-streams each. Run the public film first and add the secret cells only on the resting frame, so the bus carries each secret frame once and gives no repetition to average.\n\n(C) Measurement receipt before any encoding claim (M, needs hardware). Run a fixed-vs-random leakage test on the real NV3007: single-shot MOSI near-field capture plus panel-rail capture, with a centre-frequency sweep (Kuhn's constant-transition pairs became readable at a different frequency). Replace the stale SSD1306/oled.rs text in tools/sca/README.md F-24 stage E. Close #258 honestly: decoys failed at 20 MHz; re-test once at 40 MHz on the EVT or drop Phase 1 and delete the decoy-frames feature.\n\n(D) Constant-weight colour pair for secret cells (S legacy, S-M px), shipped only if (C) shows a first-order weight leak and a before/after improvement. Per-call SECRET_FG/SECRET_BG (public text stays white on black). Search objective per round-1 correction: equal Hamming weight, equal intra-word transitions, equal first/last bit in transmit order, and MINIMUM Hamming distance subject to contrast (candidate 0x0400/0x0002, distance 2, about 7.5:1; not 0x6790/0x186E at distance 14). px: all anti-alias levels from one weight/transition class, strip background under the secret box pre-filled with the secret bg. Claim only 'removes first-order weight leakage against an integrating observer'.\n\n(E) Re-scope #260 instead of leaving it conditional on a Phase D that failed: constant lit-pixel count per row (Ledger 2023 PIN screen, Trezor legacy pad-to-maximum) is the lever for the panel/rail channel; decide it from (C) data.\n\n(F) UX remnant, no leakage claim, owner decision required as a ceremony change: optional one-word-per-page seed reveal and a 'Never put your backup anywhere digital' line before the words. Record as PQ-UI deviations.\n\n(G) Docs: add the display-emanation row to threat-model.md section 7.10 (the section exists at :323; the row does not) and rewrite #237, which still describes an SSD1306.",
+  "members": [
+   {
+    "id": "D-04",
+    "disposition": "modified",
+    "note": "Kept as part (D), demoted from P1 to conditional-on-measurement. Round-1 passed all three lenses with corrections that I applied: add minimum Hamming distance to the search; the claim covers only an integrating observer; the 'averaged across periodic refresh' framing is wrong for MOSI on a GRAM panel; legacy FG/BG are shared with public text so a per-call pair is needed; 'constant lit field' option dropped (a subtractable offset on a TFT, not an equaliser); LSB-006 citation does not describe the mitigation (use Ledger oled-vuln 2019 and new-pin-screen 2023). Re-checked: secure/src/ui/lcd.rs:47-48, :263-264 as cited."
+   },
+   {
+    "id": "D-05",
+    "disposition": "modified",
+    "note": "Headline (a) randomised glyph geometry / colour-LSB jitter / K variants DROPPED: refuted on Kerckhoffs (public atlas, sliding correlator and high-bit threshold defeat it) and K variants multiply an atlas budget on an image already 76,949 B over the slot. (c) wizard backlight dimming DROPPED: constant-current AW99703 with PWM dimming disabled (aw99703.rs:104-115), no content-dependent channel. Random 0-300 ms pre-display hold DROPPED: a passive tap triggers on CS/RAMWR, nothing is host-aligned. (b) one-word-per-page and (d) the never-digital warning KEPT as part (F), re-labelled parity UX with no bus-tap effect."
+   },
+   {
+    "id": "SCA-10",
+    "disposition": "modified",
+    "note": "No round-1 verdict; verified here. (a) #784 fix KEPT and widened: I confirmed #784 is still live (status_map.rs:297-317 puts buf[i] into Entry glyphs; seed_wizard.rs:915 calls show(); force = !secret.is_empty() at px/lcd.rs:663) and found the same class on the SHIPPING legacy path plus the PIN row, which #784 does not mention. (b) per-render LSB and strip-order randomisation DROPPED: thresholding the high bits defeats LSB noise, random LSBs break D-04's weight constraint, strip order is sent in clear as window commands on the same bus and fights the #780 tear bound; the averaging premise is false for legacy (painted once) and is better removed in px by part (B). (c) backlight PWM randomisation DROPPED: same reason as D-05(c); iota2 backlight is hard-wired to 3V3 (#259). (d) NV3007 re-test and README purge KEPT as part (C); staleness confirmed at tools/sca/README.md:1280, :1320, :1385. (e) minimum on-screen time folded into (F), no leakage claim. Its threat text 'periodic TE-synced refresh' is wrong. Its own 'DROPPED' list (checkct CI gates, sign quota, FORS shuffle, anti-klepto R, PDN/TSC fingerprint, SHAFI) is outside this cluster and was not re-adjudicated."
+   }
+  ],
+  "tracked_issues": [
+   "#784 (OPEN, priority:medium): restore letter row on a non-forced px frame, bypassing blit_secret_run and force; px-only as written, no mention of the legacy path or the PIN row",
+   "#237 (OPEN, priority:low): display-emanation umbrella; still SSD1306-framed; lists dim mode, random pad pixels, one-word reveal as unpicked candidates; asks for the 7.10 row",
+   "#258 (OPEN, priority:low): decoy-flicker failed at 20 MHz, 40 MHz EVT re-test pending, decoy-frames stays OFF",
+   "#260 (OPEN, priority:low): constant-pixel-count encoding, deferred on a precondition (Phase D success) that has since failed",
+   "#779 (OPEN): interactive pixel presenter has zero automated coverage, which is why #784 was missed",
+   "#700 (OPEN): trusted-UI flows never exercised on pq1 silicon",
+   "#259 (OPEN, priority:low): backlight control, ergonomics only",
+   "#772 (CLOSED): precedent that seed-ceremony changes need an owner decision before porting"
+  ],
+  "untracked_delta": "(1) Legacy shipping-path twin of #784: typed restore letters and the active PIN digit fetched through public_glyph_cols; issue searches for public_glyph_cols, legacy letter row and PIN glyph returned nothing. (2) px PIN row rendered via show() with force=false. (3) px play_screen re-streams the identical forced secret frame every 16 ms for up to 3 s. (4) The bus-level constant-weight / minimum-distance colour pair for secret cells (#260 is the row-current variant, a different channel). (5) An NV3007 bus and rail leakage receipt with frequency sweep; the existing glyph-leak harness covers only the CPU-side fetch. (6) #260's stale precondition. (7) One-word reveal and never-digital warning as a concrete owner decision rather than a candidate list in #237.",
+  "decision_conflicts": [
+   "No conflict with the recorded argument against a global random-delay timer (docs/archive/work-todo-retired-2026-07-19.md, the 'Two facts kill the RDI case' passage near :1958-1962). That passage says real single-trace leaks (F-22, F-24) were closed with constant-time code; part (A) is exactly that remedy. It also supports dropping D-05's random pre-display hold and SCA-10's per-render jitter, which are the same single-trace-ineffective mechanism.",
+   "F-24 stage E is recorded as 'hardware territory (accepted)' in tools/sca/README.md:1254 and secure/src/ui/secret_text.rs:15-17. Round-1 judged this an engineering acceptance in a comment, not an owner decision. Part (D) must not be reported as closing stage E; it narrows one sub-channel if the measurement supports it.",
+   "One-word-per-page and the warning page change the backup ceremony and deviate from the PQ-UI reference flow (WRITE DOWN 24 WORDS, 3 pages of 8). #772 set the precedent that such changes need an owner decision. Scroll-to-end (PX_COMMIT_REQUIRES_SEEN_LAST, 2026-09-24) is untouched.",
+   "ui-px is outside make release and 76,949 B over the secure slot, so every px-side part (B, px half of D, #784 as filed) protects nothing that ships until the flash lever is decided. K glyph variants would worsen that budget and are dropped.",
+   "Paired-constants rule: any secret-colour or force-path change must land on legacy and px together with a binding test.",
+   "Fact (f) from round 1: the consumption mask is an unloaded 10 kHz PWM and is not a display countermeasure; do not cite it as Trezor-style display_refresh masking parity."
+  ],
+  "hardware_asks": [
+   "LCD-equipped EVT unit (or iota2 with the NV3007 module) plus near-field probe and a rail shunt point on the panel supply for the part (C) receipt; the pq1 bench board has no panel, so nothing here can be validated on it.",
+   "Confirm no load on SCK on the EVT so the 40 MHz re-test for #258 is possible (iota2 has LED LD2 on SCK).",
+   "For the panel-internal and rail channels that firmware cannot reach: a shield over the display flex and driver IC, and series filtering or a separate regulator for the panel supply. Ask the EVT owner whether the enclosure already has a metal can or foil over the flex."
+  ],
+  "prerequisites": [
+   "Part (A) has none; it is a small change on the release path and is testable on host for the routing assertion.",
+   "Parts (B) and the px half of (D) need the ui-px flash-budget decision before they matter in a shipping image.",
+   "Part (D) is gated on the part (C) receipt and on legibility judged on glass.",
+   "Part (F) needs an owner decision and a PQ-UI deviation record.",
+   "Automated coverage of the interactive presenter (#779) so the force-path assertion is enforceable."
+  ],
+  "precedent": "Trezor legacy: oledSCA pads rows to a maximum lit-pixel count and oledInvert bands the word screen (trezor-firmware/legacy/oled.c:451-473, re-read here). Trezor core OLED models call consumption_mask_randomize() on display refresh (core/embed/io/display/vg-2864/display_driver.c:417; T2B1 and T3B1 model.toml:5); the ST7789 models have no display countermeasure. Trezor Safe 5 and Safe 7 show one word per screen (layout_delizia/component/share_words.rs:21, layout_eckhart/firmware/share_words.rs:210) and Trezor core shows 'Never put your backup anywhere digital.' (core/translations/en.json:2248). Ledger: inverted-pixel boxes plus randomised panel parameters in 2019, declared insufficient in 2023 and replaced by a constant lit-pixel count per row. Coldcard 2.1.2: masking noise on the seed screen. Literature: Kuhn PET 2004 Fig. 5 lines 5-6 is the equal-transition colour pair, and Kuhn reports it became readable at another centre frequency. No vendor ships an equal-weight, minimum-distance colour pair on an SPI TFT.",
+  "novelty": "parity",
+  "kind": "mixed",
+  "cost": "M",
+  "priority": "P1",
+  "rationale": "Priority is carried by part (A) alone: a small fix on the release feature set for an invariant the code already states, the same class the repo fixed as F-24 and F-27. Parts (B)-(G) are P2 (measurement, px-only, or conditional) and (F) is P3. Novelty is marked parity because everything that is sound and unconditional (constant-time secret rendering, constant-count encoding, one-word reveal, warning page) is shipped by Trezor or Ledger; only the conditional part (D) goes beyond vendors, and its academic precedent is Kuhn 2004, which also documents how it fails. Cost M is driven by the measurement rig; (A) and (B) are each S.",
+  "live_defects": [
+   {
+    "what": "Typed restore-wizard seed letters are rendered through the address-keyed public font lookup on the shipping (legacy 16x4) path, not the constant-time secret path.",
+    "evidence": "secure/src/ui/seed_wizard.rs:918-949 (row1[col] = buf[i]; d.draw_line(1, ..); d.flush()) -> secure/src/ui/lcd.rs:153-172 flush() calls public_glyph_cols(ch) -> secure/src/ui/secret_text.rs:84-93 direct index FONT_FLAT_5X8[ch - FIRST], documented 'NEVER call this for secret rows'. Contrast the candidate list at seed_wizard.rs:1012-1040, which F-27 moved to flush_with_secret_rows.",
+    "reachable_in_production_config": "Yes. Makefile:2718 PROD_SHIP_FEATURES contains ui-lcd and not ui-px, so the legacy branch is the only one compiled into a release image. Not observed on silicon; established by reading the code.",
+    "severity": "low-medium: one letter per keystroke through a glyph-fetch address channel; SPI traffic stays uniform because every cell and pixel is always written. Same class the repo fixed as F-24 stage C / F-27. Untracked."
+   },
+   {
+    "what": "The active PIN digit is rendered in clear through the same public lookup on the legacy path, and on the px path through a non-forced frame.",
+    "evidence": "secure/src/ui/pin_entry.rs:187-221 (row1[col] = b'0' + d for i == pos; d.flush()); px branch pin_entry.rs:181-186 calls screens::show(&pin_row(..)), and secure/src/ui/px/status_map.rs:277-290 sets glyphs[pos] to the digit; secure/src/ui/px/lcd.rs:663 force = !secret.is_empty() is false for show().",
+    "reachable_in_production_config": "Legacy half: yes, same reasoning as above. px half: no, ui-px is outside make release.",
+    "severity": "low-medium: 10-way glyph address dependence per dial step on the legacy path; on px, digit-dependent strip digest and skip pattern. Untracked (#784 mentions pin_row only as the masked contrast case)."
+   },
+   {
+    "what": "#784 as filed: px restore letter row bypasses blit_secret_run and the force path, and leaves a digest of letter-derived pixels in static SHOWN.",
+    "evidence": "secure/src/ui/px/status_map.rs:297-317; secure/src/ui/seed_wizard.rs:915; secure/src/ui/px/lcd.rs:319-322, :663 (the issue cites :853; the line has moved).",
+    "reachable_in_production_config": "No, ui-px is not in the release feature set.",
+    "severity": "medium per the issue; tracked."
+   },
+   {
+    "what": "px secret frames are force-streamed repeatedly: the identical seed-word pixels go over SPI every 16 ms while the entry animation moves, up to 3 s.",
+    "evidence": "secure/src/ui/px/lcd.rs:664-690 (paint closure pushes every secret word into each frame and calls present_frame_ex with force inside the animation loop); FRAME_PERIOD_MS = 16 at :47, PLAY_CAP_MS = 3_000 at :639. The actual number of frames per seed page was not measured.",
+    "reachable_in_production_config": "No, ui-px only.",
+    "severity": "low: gives a bus eavesdropper repeated identical transmissions to average, which the legacy path does not. Untracked."
+   }
+  ],
+  "residual_after": "A logic-level tap on MOSI/SCK/CS (the Nano X implant class) still reads every secret pixel; nothing here addresses it, and a public atlas makes template matching trivial. A wideband near-field receiver still resolves the bit slots in which the secret foreground and background differ, so the colour pair only raises the required signal quality. The panel's own source-driver scan and rail remain content-dependent and periodic for as long as a word is displayed, until a shield, supply filtering or constant-count rows are added. On-core, the 0xFFFF/0x0000 select mask and coverage arithmetic still have secret-dependent Hamming weight. Camera and shoulder-surfing are only reduced per frame by one-word reveal. The 8-word boot fingerprint and transaction confirm screens stay out of scope. Until the ui-px budget is resolved, the px-side parts protect no shipping image, and until an LCD-equipped unit is measured, every claim about parts (C)-(E) is unevidenced.",
+  "dropped_parts": [
+   "D-05(a) per-session glyph sub-cell offset, colour-LSB jitter, K glyph variants: refuted on Kerckhoffs (public atlas; sliding correlator and high-bit threshold); per-session jitter is constant across panel refreshes; K variants cost atlas flash on an over-budget image.",
+   "D-05(b) random 0-300 ms pre-display hold: a passive tap triggers on the bus itself; same single-trace-ineffective mechanism the RDI decision rejects.",
+   "D-05(c) wizard backlight dimming as a countermeasure: AW99703 is a constant-current sink with PWM dimming disabled, content-independent; cameras auto-expose.",
+   "SCA-10(b) per-render low-order colour randomisation and strip-order shuffle: defeated by thresholding and by the window commands sent in clear; conflicts with the constant-weight pair and the #780 tear bound; averaging premise false on legacy and removed more cheaply by painting once on px.",
+   "SCA-10(c) backlight PWM phase/duty randomisation: no content-dependent backlight channel exists on pq1; iota2 backlight is hard-wired.",
+   "D-04 optional constant lit field around the secret band: on a TFT it adds a subtractable offset and does not equalise per-column drive; replaced by re-scoping #260.",
+   "D-04 P1 priority and the claim that it counters Kuhn / Screen Gleaning receivers: those resolve the bit pattern; the encoding only helps against integrating observers.",
+   "Decoy frames as a default: failed on glass at 20 MHz (#258); kept only as one bounded re-test or removal.",
+   "SCA-10's threat statement of a periodic TE-synced MOSI refresh: incorrect for a GRAM panel."
+  ],
+  "repo_evidence": [
+   "/home/nicola/repos/PQSigner_OS/Makefile:2662, :2718 (RELEASE_FEATURES / PROD_SHIP_FEATURES: ui-lcd, no ui-px)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/seed_wizard.rs:911-950 (render_letter_screen, legacy branch uses flush()); :89-101 (px seed page uses show_with + secret); :992-1040 (candidate list on the secret path)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/pin_entry.rs:177-222 (render_pin_screen)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/lcd.rs:27-36 (contract: secret characters must not use the address-keyed lookup), :47-48 (FG/BG), :153-172 (flush), :180-208 (flush_with_secret_rows), :263-264 (value mask)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/secret_text.rs:15-17, :84-93",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/px/status_map.rs:277-317; /home/nicola/repos/PQSigner_OS/secure/src/ui/px/lcd.rs:47, :304-322, :639, :660-693",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/aw99703.rs:104-115, :546-547; /home/nicola/repos/PQSigner_OS/secure/src/hw/spi_hw.rs:182-222 (8-bit, 20 MHz)",
+   "/home/nicola/repos/PQSigner_OS/secure/Cargo.toml:523-541 (decoy features default off, comments still describe the OLED)",
+   "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:1245-1262, :1280, :1320, :1385 (F-24 stage E, stale SSD1306 / oled.rs references)",
+   "/home/nicola/repos/PQSigner_OS/docs/security/threat-model.md:323 (section 7.10 exists, no display row)",
+   "/home/nicola/repos/PQSigner_OS/docs/archive/work-todo-retired-2026-07-19.md:1958-1962 (RDI rejection), :2482 (Phase D failure), :2488 (#260 origin)",
+   "/home/nicola/repos/trezor-firmware/legacy/oled.c:451-473; core/embed/io/display/vg-2864/display_driver.c:417; core/translations/en.json:2248; core/embed/rust/src/ui/layout_delizia/component/share_words.rs:21; layout_eckhart/firmware/share_words.rs:210"
+  ],
+  "sources": [
+   "https://www.cl.cam.ac.uk/~mgk25/pet2004-fpd.pdf",
+   "https://ar5iv.labs.arxiv.org/html/2011.09877",
+   "https://www.ledger.com/blog/oled-vuln",
+   "https://www.ledger.com/blog/new-pin-screen",
+   "https://grandideastudio.com/media/ledger_hardware_implant_slides.pdf",
+   "https://blog.coinkite.com/noise-troll/",
+   "https://github.com/trezor/trezor-firmware/blob/main/legacy/oled.c"
+  ]
+ },
+ "skeptic": {
+  "refuted": false,
+  "confidence": 0.8,
+  "reason": "The core survives: part (A) is a real constant-time bypass on the release feature set, and all four live_defects are confirmed by reading the executing code (none observed on silicon). But (A) as written does not stop the stated threat for seed letters, and the priority is overstated.\n\n1. BYPASS. The letter dial starts at a fixed 'a' (secure/src/ui/seed_wizard.rs:817, reset to 'a' on backspace at :896), and the candidate picker starts at `cur = start` (:963). Every short press triggers one full 64-cell repaint (:824 -> :949). So the count of presses, or of SPI repaint bursts, between long presses gives the letter index outright. That needs no glyph-address side channel; an attacker who can measure the CPU fetch address can count bursts far more easily. PIN entry already defends this attacker class with F-20 random start digits (secure/src/ui/pin_entry.rs:10-23); letters have no equivalent. So (A) is worth something for the PIN digit (start is hidden, the glyph fetch would reveal the absolute digit) and is close to cosmetic for letters unless a random start letter and random candidate start are added. On top of that, the active digit and letters still go out as cleartext pixels on MOSI (the proposal's own channel 3).\n\n2. SCOPE the merger missed. `render_letter_screen` is not restore-only. `verify_mnemonic` (seed_wizard.rs:624, :656) calls `enter_single_word` for the 3 backup check words on the CREATE path, with the word index shown publicly in the title. Every newly created wallet goes through this, so 3 of 24 words with known positions are exposed to the press-count and glyph channels.\n\n3. EVIDENCE STRENGTH. The only evidence for the glyph-address channel is an emulated mem_address TVLA (secure/src/ui/secret_text.rs:46-50). A direct index into a 480-byte flash table, once per keystroke, is a weak single-trace physical channel. (A) is invariant-consistency work (same class as F-24 stage C / F-27), not a demonstrated leak. P1 is not justified with zero devices shipped and S-1/S-2/S-3 open; P2 is right.\n\n4. FEASIBILITY. (A) and the random-start addition are cost S with no board or FSBL impact. (C) cannot run on the pq1 bench board, which has no panel; it needs the EVT glass unit. The part (D) candidate colour pair is wrong on contrast (see corrections).\n\n5. TRACKING. The list is right but incomplete: #783, #786, #794 and #805 are missing.\n\n6. DECISIONS. No conflict with a recorded owner decision. The RDI rejection it leans on is being re-argued in open issue #805, so it should not be cited as settled.",
+  "corrections": "1. Add to (A), shipping path, cost S: an F-20-style `rng_strong` random start letter per position and on backspace in `enter_single_word` (seed_wizard.rs:817, :896), and a random start cursor in `pick_candidate` (:963). Without this, constant-time glyph fetch leaves the letter recoverable from the press or repaint count. Needs an owner UX decision: a random start averages about 6.5 presses per letter either way, versus alphabetical from 'a'. I found no issue for this (searches \"press count\", \"random start letter\", \"button press seed\" returned nothing relevant).\n\n2. Widen the defect scope: the letter-row defect also covers `verify_mnemonic` (seed_wizard.rs:624-656), so it hits the create path's 3 check words, not only restore. Fix the proposal's \"restore\" wording.\n\n3. Lower the severity of (A) to low. The evidence is an emulated address channel only, one trace per keystroke. Describe it as closing a stated-invariant violation (lcd.rs:27-36, secret_text.rs:84-93), not a demonstrated silicon leak.\n\n4. (A) implementation note: `flush_with_secret_rows` takes whole rows (lcd.rs:180-208). Routing row 1 through it is enough; the PIN row's '*' and '_' also go through the constant-time scan, which is harmless. Under ui-px, `flush()` goes to `paint_legacy` first (lcd.rs:164-167), so the fallback path needs the same treatment for the paired-constants test.\n\n5. (B) framing: \"every 16 ms\" is wrong. `FRAME_PERIOD_MS` is a pacing floor; a forced full frame at 20 MHz takes about 48.6 ms to stream (secure/src/hw/spi_hw.rs:203). Realistic repetition is at most about 20 frames/s, so at most about 60 frames in the 3 s cap. Tie (B) to #783: for ambient screen kinds the 3 s cap is the normal exit. Whether the Words kind used by `seed_page` and `candidate_list` is ambient was not determined.\n\n6. Add a binding constraint from #786: its dirty-x window for `blit_strip` must be bypassed under `force`, or content-dependent streaming returns on secret frames.\n\n7. (D) candidate pair 0x0400 / 0x0002: the \"about 7.5:1\" contrast is wrong. By my WCAG calculation, green 32/63 gives relative luminance about 0.158 against near-black, so about 4.1:1 on an ideal panel, and worse on a real TFT black level. Dim green on black for a seed-transcription screen is a legibility risk where a misread word loses funds. Redo the search with a real contrast floor and judge on glass. On px, a distance-2 pair leaves no intermediate anti-alias levels in the same weight class, so secret cells would have to be 1-bit glyphs. That is a typography change needing a PQ-UI deviation record, and the proposal's \"all anti-alias levels from one weight/transition class\" cannot be met with that pair.\n\n8. Decision conflicts: the archived RDI rejection (work-todo archive :1958-1962) is contested by open #805 (priority:medium, global 1 ms RDI). The single-trace argument for dropping D-05's pre-display hold and SCA-10's jitter still stands on its own.\n\n9. #784's own text says `pin_row` masks with '*'. That is true only for entered positions; the active digit is in clear (secure/src/ui/px/status_map.rs:282-284). The proposal's widening is correct.\n\n10. Priority: (A) plus the random-start addition is P2; the rest is P2-P3 as stated. Cost stays M overall because of the measurement rig; firmware parts are S.\n\n11. (C), (E), (F), (G) are unchanged. I confirmed threat-model.md section 7.10 has no display row and tools/sca/README.md:1280 still names the SSD1306.",
+  "corrected_priority": "P2",
+  "corrected_cost": "M",
+  "corrected_kind": "mixed",
+  "live_defect": {
+   "is_defect": true,
+   "evidence": "All four confirmed by code read; none observed on silicon. (1) Legacy letter row: secure/src/ui/seed_wizard.rs:918-949 puts buf[i] into row1, then draw_line and d.flush(); secure/src/ui/lcd.rs:160-172 flush() calls public_glyph_cols; secure/src/ui/secret_text.rs:84-93 is a direct index documented 'NEVER call this for secret rows'. Also reached from verify_mnemonic (seed_wizard.rs:656) on the create path. (2) Legacy PIN row: secure/src/ui/pin_entry.rs:187-221 sets row1[col] = b'0' + d for the active position, then d.flush(). The px PIN row (secure/src/ui/px/status_map.rs:282-284) puts the active digit in clear and goes through screens::show(), which is show_with(s, &[]) (secure/src/ui/px/screens.rs:127-128), so force is false. (3) #784 as filed: status_map.rs:297-317 and seed_wizard.rs:915; force = !secret.is_empty() in play_screen. (4) px re-streaming: play_screen's paint closure pushes every secret word into each animation frame and calls present_frame_ex with force inside the loop, capped by PLAY_CAP_MS = 3_000; the cadence is bounded by the roughly 48.6 ms full-frame stream time at 20 MHz, not 16 ms. New, related and untracked: the letter dial starts at a fixed 'a' (seed_wizard.rs:817, :896) and the candidate cursor at range start (:963), so press or repaint count reveals each letter on the shipping path.",
+   "reachable_in_production_config": "Legacy letter row, legacy PIN row and the fixed-'a' press-count channel: yes. Makefile:2718 PROD_SHIP_FEATURES has ui-lcd and no ui-px, and e2e-test is excluded so the interactive enter_pin is the one compiled. The px PIN row, #784 and px re-streaming: no, ui-px is outside make release and 76,949 B over the secure slot.",
+   "severity": "Low for the glyph-address channel (emulated evidence only, one trace per keystroke, pixel content is on MOSI anyway). Low-medium for the fixed-start press-count channel on seed letters, which needs only button or repaint-burst counting. Medium per the issue for #784, but not shipping. Low for px re-streaming."
+  },
+  "tracked_issues": [
+   "#784 OPEN priority:medium: px letter row on a non-forced frame; px-only, no legacy twin, wrongly implies pin_row is fully masked",
+   "#237 OPEN priority:low: display-emanation umbrella, still SSD1306-framed",
+   "#258 OPEN priority:low: decoy-flicker 40 MHz EVT re-test",
+   "#260 OPEN priority:low: constant-pixel-count encoding, stale precondition",
+   "#779 OPEN priority:medium: interactive pixel presenter has zero automated coverage",
+   "#700 OPEN priority:high: trusted-UI flows never exercised on pq1 silicon",
+   "#259 OPEN priority:low: backlight control",
+   "#772 CLOSED: precedent that ceremony changes need an owner decision",
+   "MISSING from the list: #783 OPEN priority:high: PLAY_CAP_MS is the normal exit for ambient screens and play_screen drops taps; directly shapes part (B)",
+   "MISSING from the list: #786 OPEN: dirty-x window for blit_strip; must not apply to force frames",
+   "MISSING from the list: #794 OPEN: px render cost growth breaks the #780 tear bound; constrains any px secret-path change",
+   "MISSING from the list: #805 OPEN priority:medium: global RDI timing jitter, contests the archived RDI rejection the recommendation cites"
+  ],
+  "untracked_delta": "The proposal's items (1)-(7) stand as untracked. Additions: (8) fixed-'a' letter dial start and fixed candidate cursor start make seed letters recoverable from press or repaint count on the shipping path, with no F-20 analogue for letters; no issue found. (9) The letter-row defect also reaches the create path through verify_mnemonic's 3 check words. (10) #786's dirty-x optimisation needs an explicit exemption for force frames.",
+  "decision_conflicts": [
+   "No conflict with a recorded owner decision for (A); it is the constant-time remedy the archive endorses (docs/archive/work-todo-retired-2026-07-19.md:1958-1962).",
+   "The archived RDI rejection is not settled: open issue #805 re-argues a global 1 ms RDI. Cite the single-trace argument on its merits, not as a closed decision.",
+   "A random start letter (needed to make (A) effective for letters) changes restore and backup-check ergonomics; treat it as an owner UX decision like F-20, and under ui-px as a PQ-UI deviation.",
+   "Part (D) on px forces 1-bit glyphs for secret cells (no same-weight anti-alias levels with a distance-2 pair), which deviates from PQ-UI typography; the proposal did not flag this.",
+   "F-24 stage E 'hardware territory (accepted)' (tools/sca/README.md:1254, secure/src/ui/secret_text.rs:15-17): (D) must not be reported as closing it, as the proposal already says.",
+   "One-word-per-page and the warning page need an owner decision per the #772 precedent; scroll-to-end (PX_COMMIT_REQUIRES_SEEN_LAST) is untouched.",
+   "ui-px is outside make release and 76,949 B over the slot, so (B), the px half of (D) and #784 as filed protect no shipping image today."
+  ],
+  "evidence": [
+   "/home/nicola/repos/PQSigner_OS/Makefile:2662, :2718 (release features: ui-lcd, no ui-px)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/seed_wizard.rs:817 (buf = [b'a'; MAX_LETTERS]), :824, :896 (reset to 'a'), :911-950 (render_letter_screen ends in d.flush()), :624-656 (verify_mnemonic calls enter_single_word), :963 (cur = start), :1012-1042 (candidate list on flush_with_secret_rows)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/pin_entry.rs:10-23 (F-20 rationale), :177-222 (render_pin_screen, active digit in clear, d.flush())",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/lcd.rs:27-36, :47-48, :160-172 (flush calls public_glyph_cols; paint_legacy first under ui-px), :180-208",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/secret_text.rs:46-50 (emulated TVLA evidence), :84-93 (public_glyph_cols direct index)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/px/status_map.rs:277-290 (pin_row), :297-317 (letter_row)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/px/screens.rs:108-129 (show is show_with with an empty secret list)",
+   "/home/nicola/repos/PQSigner_OS/secure/src/ui/px/lcd.rs:47 (FRAME_PERIOD_MS = 16), :304-322 (present_frame_ex force path); play_screen and PLAY_CAP_MS = 3_000 sit in the :630-700 range read here, though #784 and #783 cite them at :853 and :876-883",
+   "/home/nicola/repos/PQSigner_OS/secure/src/hw/spi_hw.rs:183-203 (20 MHz, about 48.6 ms full blit)",
+   "/home/nicola/repos/PQSigner_OS/docs/security/threat-model.md:323-333 (section 7.10, no display row)",
+   "/home/nicola/repos/PQSigner_OS/tools/sca/README.md:1254, :1280 (stage E accepted; SSD1306 text)",
+   "/home/nicola/repos/PQSigner_OS/docs/archive/work-todo-retired-2026-07-19.md:1958-1962 (RDI rejection), :2482 (Phase D failure), :2488 (#260 origin)",
+   "gh issue view 784, 783, 805 and the keyword searches on EthereumPhone/PQ1 run 2026-10-11",
+   "Not re-checked: the Trezor and Ledger precedent citations, the Kuhn claims, and aw99703.rs"
+  ]
+ }
+}

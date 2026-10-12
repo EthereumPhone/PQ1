@@ -1,0 +1,25 @@
+{
+ "id": "CS-09",
+ "title": "Address-display integrity: EIP-55 casing, 4-char chunking with isolated 0x, S-world 'THIS WALLET' self-tag",
+ "threat": "Misread or look-alike addresses (address-poisoning) on a 142x428 panel; a companion labelling a counterparty as 'your other account' cannot be authenticated; users compare only first/last characters.",
+ "proposal": "(a) Render every address row with EIP-55 mixed case (keccak already in tx-core) on both 16x4 and ui-px, and chunk 4 hex chars per group with '0x' in its own group; (b) in S-world, recompute the CREATE2 address for the current account_index (already cached, <1 ms) and for a bounded set of sibling account_indexes, and tag a matching `to`/receiver/refund address as 'THIS WALLET' / 'MY ACCT N' \u2014 never from a companion claim; (c) for cross-device claims add an HMAC-SHA256(DHUK-derived key) address tag returned by CMD_GET_WALLET_ADDRESS that the companion must echo for a 'self' label, Trezor address-MAC style; (d) ERC-20/approval selectors with native value\u22600 become a refusal (non-payable), not a warning row.",
+ "rationale": "Trezor ships EIP-55/RSKIP60, chunkify with isolated 0x, and a SLIP-21 address MAC that lets refund/self addresses be authenticated rather than trusted; pq1 has none of these, and its CoW refund / Safe receiver pages trust the companion for 'who is this'.",
+ "repo_evidence": [
+  "grep -rni 'eip.55|eip55|checksum.*address|mixed.case' pqsigner-erc7730/src/display/primitives.rs secure/src/tx/display/*.rs \u2192 no address-checksum rendering",
+  "grep -rn 'is_self|self_addr|address_mac|== sender' secure/src/tx/eip712/cowswap_display.rs secure/src/tx/display/safe_display.rs secure/src/nsc/cmd_get_wallet_address.rs \u2192 empty",
+  "secure/src/tx/display/erc20_known.rs:52-55 (native value on ERC-20 = warning, not refusal)",
+  "pqsigner-erc7730/src/display/primitives.rs:475-520 (6+6 hex fingerprint row only)"
+ ],
+ "vendor_precedent": "Trezor core/src/apps/ethereum/helpers.py:25-58 (address_from_bytes EIP-55/RSKIP60), layout.py:588-594 (chunkify, issue #6601), core/src/apps/common/address_mac.py:14-44 (HMAC address MAC), staking.py:126-127 (non-payable value refused).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P2",
+ "risks": "Mixed case costs glyph variety on the px atlas (atlas hash re-pin via make ui-px-assets). Address MAC must use a DHUK/seed-derived key that is NOT the signing key and must be presented as 'device vouches this is its own derivation', never as counterparty identity. Sibling-account recompute costs a keygen per index (<1 s) \u2014 bound to a small window or cache.",
+ "sources": [
+  "/home/nicola/repos/trezor-firmware/core/src/apps/ethereum/helpers.py",
+  "/home/nicola/repos/trezor-firmware/core/src/apps/common/address_mac.py",
+  "https://frameworks.securityalliance.org/wallet-security/signing-and-verification/secure-multisig-safe-verification"
+ ],
+ "surface": "clearsign"
+}

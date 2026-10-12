@@ -1,0 +1,30 @@
+{
+ "id": "SYS-02",
+ "title": "Close the FSBL FI gate (EF-swarm F15): TRNG-fed wait_random, poisoned-default branch target, redundant WOTS-checksum verify, MSPLIM, and tripwire-mismatch escalation via a BKP mailbox",
+ "threat": "Two coordinated faults with a single setup bypass the FSBL verify chain because every FSBL random delay is a constant; a faulted WOTS checksum during VERIFICATION accepts a forged image (Wagner et al. 2023, BSI LFI 2025); an option-byte tripwire that only halts leaves secrets and the downgraded unit intact for a second attempt; a silent FSBL stack overflow corrupts .data with no fault.",
+ "proposal": "(1) Initialise the STM32U585 RNG in the FSBL (RCC enable + CR/HTCR/NSCR profile already in secure/src/hw/rng.rs, plus the zero/repeat software tests) and swap `rng_byte()` for a real read, so `wait_random` retimes every `check_true_into_sentinel`; (2) keep the slot entry address in a volatile that is poisoned (0 / non-executable) until the LAST gate of `filter_valid` + image verify passes, with a default `failed_jump` sink (Trezor `next_stage_addr` / `failed_jump_to_firmware`); (3) in the FSBL C10 verifier recompute the WOTS checksum / C10 target-sum twice with Hamming-distant results and compare before accepting; (4) program MSPLIM in `pre_init` of the FSBL (and secure + NS images; see SYS-03); (5) on a PERSISTENT option-byte mismatch write the verdict into a non-secret TAMP backup register / fixed SRAM mailbox and still halt \u2014 the secure world reads the mailbox at next boot and arms the page-125 wipe flag (the secure world already owns that write path), so a downgrade attempt costs the attacker the SE shares without giving the FSBL a flash writer. Budget: must stay inside 40,960 / 38,912 B LOAD span and 16 KiB stack (scripts/check_fsbl_geometry.py).",
+ "rationale": "The FSBL is the one component invariant #10 makes unpatchable after RDP-2, so its FI posture must be final before freeze. Trezor's boardloader inserts a TRNG-randomised `fih_delay` before every `ensure()`, keeps the jump target zero until the end, and erases secrets on an option-byte mismatch; pq1's own fi.rs comment states the fixed-delay weakening explicitly. The BKP-mailbox escalation preserves the Draft 1.2 C1 rule (FSBL never writes option bytes) and the 'no runtime write path touches the FSBL range' rule while matching Trezor's wipe-on-mismatch outcome.",
+ "repo_evidence": [
+  "fsbl/src/fi.rs:1-33 \u2014 'FSBL doesn't currently initialise the TRNG, so wait_random uses a fixed loop length'; `fn rng_byte() -> u8 { 0x42 }`",
+  "grep rng|trng over fsbl/src: hits only in fi.rs comments \u2014 no RNG init",
+  "fsbl/src/main.rs:228-252 \u2014 tripwire verdict -> `halt()` only; no escalation record",
+  "fsbl/src/optbytes.rs:12-15,24-29 \u2014 never writes; WRP1A/OEM advisory while masks unpinned (#46)",
+  "fsbl/src/manifest.rs:30 and fsbl/src/main.rs:172 \u2014 '16 KB stack, no MSPLIM'",
+  "fsbl/src/verify.rs:62-79 \u2014 single-pass hash + verify; CLAUDE.md invariant #10 lists 'FI-hardened FSBL image verify (EF-swarm F15)' as OPEN",
+  "no tracking issue found for FSBL TRNG init (inventory gh search)"
+ ],
+ "vendor_precedent": "Trezor boardloader: core/embed/projects/boardloader/main.c:52-70,108-113,225-233 (fih_delay/fih_ensure, volatile next_stage_addr set at end), :320-340 (option-byte mismatch -> secret_safety_erase); core/embed/projects/bootloader/main.c:120-121,593-595,680-690 (default failed_jump, duplicated secbools, BHK regenerate + storage erase on flag flip); core/embed/sys/startup/stm32u5/startup_init.c:336 (MSPLIM).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "L",
+ "priority": "P0",
+ "risks": "FSBL flash budget is tight (38,912 B LOAD span; RNG init + double checksum ~1-2 KB); TRNG init adds boot latency to a ~6.9 s boot and a TRNG seed error in the FSBL must degrade to a bounded fallback, not hang pre-fingerprint; the mailbox escalation turns a transient option-byte read fault into a dual-SE wipe only if BOTH sentinel passes agree, so keep the persistent-match rule; a pre-RDP-2 bench unit must never arm the wipe (gate on lifecycle phase); every FSBL change must be re-measured by `make fsbl` and re-frozen before the WRP ceremony.",
+ "sources": [
+  "https://eprint.iacr.org/2023/1572",
+  "https://eprint.iacr.org/2025/2096",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/boardloader/main.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/projects/bootloader/main.c",
+  "https://nrfconnectdocs.nordicsemi.com/ncs/latest/tfm/design_docs/tfm_physical_attack_mitigation.html"
+ ],
+ "surface": "systemic"
+}

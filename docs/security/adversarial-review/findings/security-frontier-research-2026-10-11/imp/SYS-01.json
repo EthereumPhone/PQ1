@@ -1,0 +1,34 @@
+{
+ "id": "SYS-01",
+ "title": "Make TAMP a live environmental glitch detector: PVD + BOR pin + ADC4 analog watchdogs on VDD/VREFINT/temperature + GTZC2/TAMPSEC lock + tamp-irq in the ship set",
+ "threat": "Voltage/clock/temperature fault injection on the U585 during the unlocked window (seed reconstructed in S-SRAM), RDP-2 -> RDP-1 downgrade glitches (Bozzato TCHES 2019 class; muGlitch had to defeat the L5 brown-out detector first), cold-boot SRAM retention, and a TAMP block whose RTC-domain security (GTZC2) is unconfigured so NS could in principle touch it.",
+ "proposal": "(a) Arm PWR PVD at the level just below the pq1 operating point (Trezor: level 5 ~2.8 V) in rising+falling IRQ mode in BOTH the FSBL and the secure world, IRQ -> fi-barriered zeroize + reset (existing HardFault policy), and add PVD to the production fence so it cannot be omitted. (b) Pin BOR_LEV to the highest level compatible with the pq1 rail in the ship option-byte profile (`lockdown.rs` currently only READS BOR_LEV; `make stm32-harden-opts` is a bench recipe) and have Phase A verify it before the RDP burn. (c) Write an ADC4 driver that runs continuous conversions on VREFINT, VDD-sense and the internal temperature sensor with AWD1/2/3 thresholds, so ITAMP7/12/13 \u2014 already enabled in CR1 but inert because no ADC exists \u2014 become hardware-confirmed tampers (CR3=0) that erase backup registers and fire the existing tamp-wipe path without software in the loop; this also satisfies HARDENING.md 4.7 (refuse below ~0 C). (d) Configure and lock GTZC2 so TAMP/BKP-SRAM/RTC are secure-only (sau.rs:672-675 leaves it unconfigured on purpose today). (e) Add `tamp-irq` to RELEASE_FEATURES so shipping is IRQ-driven, not ~1 ms polled. (f) Resolve the ITAMP6 x BHK interaction (#208: CR3=0 erases BKP0R..7R holding the loaded BHK on any probe attach) before enabling ITAMP6 in confirmed mode, and run #391 (TAMP silicon test) as the acceptance gate.",
+ "rationale": "The only brownout handling today is post-hoc reset-cause classification. Trezor arms PVD in boardloader, bootloader and kernel and pins BOR in option bytes; it enables the same ADC4 tampers but leaves them inert (no AWD configured anywhere in its tree), so (c) is a genuine step beyond both incumbents on the same silicon. ADC4 AWD -> ITAMP is the only STM32-native path from an analog measurement to a CPU-less secret erase, which is what the RP2350 and TROPIC01 results say software-only detection lacks. Items (d)-(f) are the missing delta of the partially-implemented TAMP port and are prerequisites for trusting (c).",
+ "repo_evidence": [
+  "grep PVDE|PVD_|CSSON|HSECSS over secure/src fsbl/src shared/src: zero code hits; only BOR_LEV read helpers shared/src/lockdown.rs:258-262,519-522",
+  "secure/src/main.rs:4643 \u2014 'today NO NMI source is armed ... CSS/ECCD-NMI tracked #21-tamp-css_pvd'",
+  "grep ADC over secure/src fsbl/src: zero files \u2014 no ADC driver exists",
+  "secure/src/hw/tamp.rs:199-221,293-298 \u2014 ITAMP7E/12E/13E enabled in CR1 with no analog-watchdog configuration (inert)",
+  "secure/src/hw/tamp.rs:238-258 \u2014 RTC clocked from LSI, so ITAMP3 (LSECSS) is vacuous",
+  "secure/src/hw/tamp.rs:301-307 \u2014 CR3=0 confirmed mode (erases BKP regs incl. loaded BHK; #208)",
+  "secure/src/sau.rs:672-675 \u2014 GTZC2 'intentionally NOT locked \u2014 it is not configured on this branch'",
+  "Makefile:2662 \u2014 RELEASE_FEATURES contains tamp,tamp-wipe,tzic-wipe but NOT tamp-irq",
+  "docs/security/HARDENING.md:253-256 \u2014 temperature-sensing requirement with no code",
+  "issues #49 (PVD+BOR, OPEN), #248, #391 (TAMP silicon test, OPEN), #208, #50, #81"
+ ],
+ "vendor_precedent": "Trezor: core/embed/sys/pvd/stm32/pvd.c:28-56 (PVD level 5, IRQ highest priority -> error_shutdown); core/embed/sec/option_bytes/stm32u5/option_bytes.c (BOR level pinned, checked every boardloader boot); core/embed/sec/tamper/stm32u5/tamper.c:117-170 (same ITAMP set, CR3=0) but ADC4 AWD never configured ('some are never triggered'). RP2350 datasheet 10.9 on-die glitch detectors; Nordic nRF54L GLITCHDET/TAMPC; TI CC27xx voltage glitch monitor \u2014 the 2025-26 bar pq1 can only meet in firmware.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "L",
+ "priority": "P0",
+ "risks": "False tamper trips on the bench (probe attach, lab supplies, cold rooms) must stay bench-off like tamp-wipe; AWD thresholds need per-board characterisation (PACTOR: temperature is the main FPR driver); ADC4 adds ~1-2 KB to a secure slot that is already 76,949 B over with ui-px; the BOR level must fit the WRP-set -> RDP-2 ordering of invariant #10 and the ship-RDP-0 model (option-byte write only in Phase A); pq1 48-pin package has no spare analog pin for an external VDD divider, so VDD sensing must use VREFINT ratio; none of this retires software redundancy (RP2350 lesson: EMFI/laser got past on-die detectors).",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/pvd/stm32/pvd.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/tamper/stm32u5/tamper.c",
+  "https://tches.iacr.org/index.php/TCHES/article/download/7390/6562/2561",
+  "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+  "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf",
+  "https://www.st.com/resource/en/application_note/an5156-introduction-to-security-for-stm32-mcus-stmicroelectronics.pdf"
+ ],
+ "surface": "systemic"
+}

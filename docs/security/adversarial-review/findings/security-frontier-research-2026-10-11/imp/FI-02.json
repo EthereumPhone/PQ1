@@ -1,0 +1,30 @@
+{
+ "id": "FI-02",
+ "title": "Hardware-in-the-loop voltage-glitch sensing: arm PVD (~2.8 V) \u2192 zeroize, pin BOR_LEV high in the ship profile and the tripwire, and configure ADC4 analog watchdogs on VDD/VBUS/VREFINT so ITAMP7/12/13 wipe via TAMP confirmed mode",
+ "threat": "USB-C VBUS is the only supply and the primary glitch-injection point; today nothing in firmware bounds the dwell window on the rails. The BOR is at the 1.71 V default, PVD is disabled, and the ADC4-backed internal tampers (ITAMP7/12/13) are armed in tamp.rs but have no ADC behind them, so they can never fire. \u03bc-Glitch had to defeat the L5 brown-out detector to succeed \u2014 a raised BOR plus PVD is the cheapest bar-raiser on this silicon.",
+ "proposal": "(a) Pin BOR_LEV = level 4 (~2.8 V for a 3V3 part) in SHIP_PROFILE_U585, make lockdown::bor_lev_ok load-bearing (currently 'still being pinned'), and include it in both the FSBL tz-1 tripwire and first-boot Phase A. (b) Secure-world PVD driver: PWR_SVMCR PVDLS=level 5, PVDE=1, EXTI line secure, PVD_PVM_IRQn at highest secure priority \u2192 zeroize_sensitive_state + relock (not a halt). (c) Configure ADC4 in continuous mode on VREFINT/VDD (and the VBUS sense if routed) with tight AWD1/2/3 windows, so ITAMP7/12/13 trip in hardware under CR3=0 confirmed mode \u2192 BKP erase + intrusion wipe with no software in the loop. (d) Enable the ECC double-error / CSS NMI path tracked as #21-tamp-css_pvd. Run ITAMP rail-glitch characterisation as part of FI-01.",
+ "rationale": "Trezor ships PVD at 2.8 V + BOR level 4 + the same ITAMP set, but even Trezor leaves the ADC watchdogs un-driven ('never triggered'); driving ADC4 turns an existing hardware-enforced tamper into a real voltage-glitch detector, which no wallet vendor currently does on U5. PVD/BOR are slow (\u00b5s) and will not catch ns crowbars, but they catch cheap USB-supply attacks and constrain glitch parameters for the rest.",
+ "repo_evidence": [
+  "grep PVD|PVDE|PVDLS|CSSON secure/src \u2192 only a comment at secure/src/main.rs:4643 and the USB USV bit in hw/usb_hw.rs:140 (no PVD driver)",
+  "grep ADC4|analog.watchdog secure/src \u2192 empty",
+  "shared/src/lockdown.rs:519-522 ('shipped BOR_LEV target is still being pinned (#36)')",
+  "docs/security/brownout-hardening.md:305-325 (BOR default, PVD disabled, ECC double-bit NMI off)",
+  "secure/src/first_boot/mod.rs:244-246 (BOR/VBUS stability check during OPTSTRT deferred)",
+  "secure/src/hw/tamp.rs:301 (CR3=0 confirmed mode) but ITAMP7/12/13 have no ADC source",
+  "gh #49 OPEN ship-blocker/high; #248 OPEN; #48 OPEN ship-blocker (ECC NMI)"
+ ],
+ "vendor_precedent": "Trezor core/embed/sys/pvd/stm32/pvd.c:28-56 (PVD level 5, highest IRQ, error_shutdown), option_bytes.c:40-48/78-84 (BOR level 4 forced), tamper.c:125-173 (ITAMP7/12/13 enabled; ADC not configured).",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P0",
+ "risks": "A too-tight AWD window or PVD level causes spurious wipes on marginal USB hosts/cables \u2014 thresholds must be characterised on pq1 silicon across hosts (evt-silicon-validation). ADC4 conflicts with any pq1 pin already claimed must be checked (ADC on VREFINT/VDD needs no pin). ITAMP9 false-trips during legitimate SAES BHK use (#208) must be resolved before confirmed-mode wipe ships.",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sys/pvd/stm32/pvd.c",
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/tamper/stm32u5/tamper.c",
+  "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf",
+  "https://www.st.com/resource/en/application_note/an5156-introduction-to-security-for-stm32-mcus-stmicroelectronics.pdf",
+  "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
+ ],
+ "surface": "fi"
+}

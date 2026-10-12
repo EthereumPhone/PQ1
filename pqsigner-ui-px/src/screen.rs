@@ -1250,6 +1250,41 @@ impl ScreenBuilder {
     }
 }
 
+/// `Confirm?` sits here when the rule inserts it (DESIGN.md § Flow shape) —
+/// unless [`confirm_index`] moves it past a CoW order's legs.
+pub const CONFIRM_INDEX: usize = 5;
+/// … and the rule inserts it from this many detail-like screens.
+pub const CONFIRM_MIN_DETAILS: usize = 7;
+
+/// The ids of a CoW order's buy-leg screens (`cowswap_screens::emit_leg`):
+/// `BUY` / `BUYTOK` for a decoded leg, `BUYTOK` / `BUYAMT` for a hex one.
+const COW_BUY_LEG_IDS: [&[u8]; 2] = [b"BUYTOK", b"BUYAMT"];
+
+/// Where the `Confirm?` belongs in `visible` (when the detail count earns
+/// one): [`CONFIRM_INDEX`], except in a flow carrying a CoW order — a Safe
+/// flow (Safe hero) or the direct order route (CoW hero) — where it follows
+/// the order's buy leg: both tokens and both amounts are shown before the
+/// early exit, never split across it (owner decisions 2026-10-09, Safe-wrapped
+/// then direct; a deliberate departure from the upstream "always the 6th
+/// screen" rule, CoW orders only).
+///
+/// Computed over a transcript with or without the `Confirm?` in it: a
+/// correctly placed one sits after the leg, so the leg's index is the same
+/// either way.
+#[must_use]
+pub fn confirm_index(visible: &[Screen]) -> usize {
+    let cow_host = visible
+        .first()
+        .is_some_and(|h| h.kind() == Some(Kind::Hero) && matches!(h.icon(), Some(Icon::Safe | Icon::Cowswap)));
+    if !cow_host {
+        return CONFIRM_INDEX;
+    }
+    visible
+        .iter()
+        .rposition(|s| s.kind().is_some_and(Kind::is_detail_like) && COW_BUY_LEG_IDS.contains(&s.id()))
+        .map_or(CONFIRM_INDEX, |i| (i + 1).max(CONFIRM_INDEX))
+}
+
 /// A fixed-capacity transcript of up to [`MAX_SCREENS`] screens.
 ///
 /// Same ownership rules as `Pages`: the buffer is always fully allocated,
@@ -1323,7 +1358,8 @@ impl Screens {
 
     /// Insert the mid-flow `Confirm?` per DESIGN.md § Flow shape: when the
     /// transcript carries at least seven detail-like screens, a `Confirm`
-    /// screen becomes index 5 (the sixth screen). Returns the index inserted
+    /// screen becomes index 5 (the sixth screen) — or, in a CoW order (direct
+    /// or Safe-wrapped), the screen after the buy leg ([`confirm_index`]). Returns the index inserted
     /// at, `None` when the rule does not apply, `Err` when the buffer is full
     /// or a confirm screen is already present.
     pub fn insert_confirm(&mut self, icon: Icon) -> Result<Option<usize>, ()> {
@@ -1332,8 +1368,6 @@ impl Screens {
 
     /// [`Self::insert_confirm`] with a tinted disc.
     pub fn insert_confirm_look(&mut self, look: Look) -> Result<Option<usize>, ()> {
-        const CONFIRM_INDEX: usize = 5;
-        const CONFIRM_MIN_DETAILS: usize = 7;
         let icon = look.icon;
         let visible = self.as_slice();
         if visible.iter().any(|s| s.kind() == Some(Kind::Confirm)) {
@@ -1343,7 +1377,8 @@ impl Screens {
             .iter()
             .filter(|s| s.kind().is_some_and(Kind::is_detail_like))
             .count();
-        if details < CONFIRM_MIN_DETAILS || visible.len() <= CONFIRM_INDEX {
+        let at = confirm_index(visible);
+        if details < CONFIRM_MIN_DETAILS || visible.len() <= at {
             return Ok(None);
         }
         let len = self.len();
@@ -1351,10 +1386,10 @@ impl Screens {
             return Err(());
         }
         let c = ScreenBuilder::confirm(icon).look_tint(look).finish().map_err(|_| ())?;
-        self.buf.copy_within(CONFIRM_INDEX..len, CONFIRM_INDEX + 1);
-        self.buf[CONFIRM_INDEX] = c;
+        self.buf.copy_within(at..len, at + 1);
+        self.buf[at] = c;
         self.set_len(len + 1);
-        Ok(Some(CONFIRM_INDEX))
+        Ok(Some(at))
     }
 
     /// Insert `s` right after the opening hero (index 1) — the batch
@@ -1579,6 +1614,61 @@ mod tests {
             legacy.push_legacy(&page).unwrap();
         }
         assert_eq!(legacy.insert_confirm(Icon::Safe), Ok(Some(5)));
+    }
+
+    /// A Safe-wrapped CoW body: hero, NETWORK, SAFEACCT, COWORDER, then the
+    /// legs (decoded: amount then token) and the order tail.
+    fn safe_cow_flow(hero_icon: Icon, legs: [&[u8]; 4]) -> Screens {
+        let detail = |id: &[u8], _: usize| {
+            ScreenBuilder::detail(id, Icon::Safe, Side::Left, b"LABEL").tier(Tier::T22).line(b"value", Weight::Regular).finish().unwrap()
+        };
+        let mut ss = Screens::blank();
+        let hero = ScreenBuilder::hero(b"APPROVE", hero_icon, b"APPROVE SAFE TX?").finish().unwrap();
+        ss.push(&hero).unwrap();
+        for id in [b"NETWORK".as_slice(), b"SAFEACCT", b"COWORDER"] {
+            ss.push(&detail(id, 1)).unwrap();
+        }
+        for id in legs {
+            ss.push(&detail(id, 1)).unwrap();
+        }
+        for id in [b"RECEIVER".as_slice(), b"EXPIRES", b"FEE", b"TXINFO"] {
+            ss.push(&detail(id, 1)).unwrap();
+        }
+        ss.push(&hero).unwrap();
+        ss
+    }
+
+    #[test]
+    fn safe_cow_confirm_follows_the_buy_leg() {
+        // Decoded legs: SELL, SELLTOK, BUY, BUYTOK at 4..=7 -> Confirm? at 8.
+        let mut ss = safe_cow_flow(Icon::Safe, [b"SELL", b"SELLTOK", b"BUY", b"BUYTOK"]);
+        assert_eq!(ss.insert_confirm(Icon::Safe), Ok(Some(8)));
+        assert_eq!(ss.as_slice()[7].id(), b"BUYTOK");
+        assert_eq!(ss.as_slice()[8].kind(), Some(Kind::Confirm));
+        assert_eq!(crate::check::check_flow(&ss), Ok(()));
+        // Hex legs end on the amount: SELLTOK, SELLAMT, BUYTOK, BUYAMT.
+        let mut hex = safe_cow_flow(Icon::Safe, [b"SELLTOK", b"SELLAMT", b"BUYTOK", b"BUYAMT"]);
+        assert_eq!(hex.insert_confirm(Icon::Safe), Ok(Some(8)));
+        assert_eq!(hex.as_slice()[7].id(), b"BUYAMT");
+        assert_eq!(crate::check::check_flow(&hex), Ok(()));
+        // The checker rejects the old index-5 placement in this flow.
+        let mut old = safe_cow_flow(Icon::Safe, [b"SELL", b"SELLTOK", b"BUY", b"BUYTOK"]);
+        let len = old.len();
+        old.buf.copy_within(CONFIRM_INDEX..len, CONFIRM_INDEX + 1);
+        old.buf[CONFIRM_INDEX] = ScreenBuilder::confirm(Icon::Safe).finish().unwrap();
+        old.set_len(len + 1);
+        assert!(matches!(
+            crate::check::check_flow(&old),
+            Err(crate::check::Violation::ConfirmMisplaced { at: Some(5), .. })
+        ));
+        // A CoW hero (the direct order route) moves it past the buy leg too.
+        let mut direct = safe_cow_flow(Icon::Cowswap, [b"SELL", b"SELLTOK", b"BUY", b"BUYTOK"]);
+        assert_eq!(direct.insert_confirm(Icon::Cowswap), Ok(Some(8)));
+        assert_eq!(crate::check::check_flow(&direct), Ok(()));
+        // Any other hero keeps index 5, even with look-alike ids.
+        let mut other = safe_cow_flow(Icon::Eth, [b"SELL", b"SELLTOK", b"BUY", b"BUYTOK"]);
+        assert_eq!(other.insert_confirm(Icon::Eth), Ok(Some(CONFIRM_INDEX)));
+        assert_eq!(crate::check::check_flow(&other), Ok(()));
     }
 
     #[test]

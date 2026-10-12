@@ -1,19 +1,11 @@
 //! Fault-sweep target ELF for `tools/sca/fault_sweep_c10_sign.py`. Mirrors
 //! the production `secure::crypto::c10_sign_verified_with_progress`
-//! (the FI-hardened signing primitive post-F-1/F-2/F-5) bit-for-bit:
-//! `sphincs_c10::SigningKey::sign` (real) → `fi::wait_random()` →
-//! `sphincs_c10::verify` (real) → `fi::check_true_into_sentinel`
-//! re-checks the verify result with `core::hint::black_box(v)` defeating
-//! LLVM CSE → caller compares to `OK_SENTINEL`. If the gate accepts, the
-//! signature bytes are written to `out_sig_ptr`; otherwise nothing is
-//! written and the function returns 0.
-//!
-//! Vendor / signing keypair is derived deterministically from a fixed
-//! sk_seed / pk_seed so the harness can produce a baseline signature in
-//! Python (by re-running the unfaulted path) and bytewise-compare against
-//! every faulted run. Any `Ok` return whose `sig != baseline_sig` is a
-//! BYPASS — a single fault that released a sig the production gate should
-//! have rejected.
+//! using a reduced sign/compare/verify mirror with real sphincs-c10 primitives.
+//! This is not the production firmware image: fixed keys/randomness, delay
+//! stubs and omitted production caller/CFI behavior limit its evidence.
+//! The Python driver samples the final instruction tail and verifies every
+//! changed successful output separately; output differences alone do not
+//! establish a forgery or locate the fault.
 //!
 //! Build:  cargo build --release --target thumbv8m.main-none-eabi
 //!         (or: make -C tools/sca build-c10-sign)
@@ -25,14 +17,14 @@ use panic_halt as _;
 use sphincs_c10::params::{N, SIGNATURE_LEN};
 
 // ---------------------------------------------------------------------------
-// FI helpers — production `secure/src/fi.rs` verbatim. `rng::byte()`
+// FI helpers — production `secure/src/fi.rs` verbatim. `rng::byte_nonsecret()`
 // stubbed to a small constant (same pattern as fi_target, fw_verify_target,
 // ns_ptr_target).
 // ---------------------------------------------------------------------------
 
 pub mod rng {
     #[inline(never)]
-    pub fn byte() -> u8 {
+    pub fn byte_nonsecret(_last_good: u8) -> u8 {
         5
     }
 }
@@ -77,7 +69,7 @@ pub extern "C" fn sca_c10_sign_plain(
 
 // ---------------------------------------------------------------------------
 // PRODUCTION-MIRROR sign+verify gate (F-1/F-2/F-5/F-13 fixed).
-// Bit-equivalent to `secure::crypto::c10_sign_verified_with_progress`.
+// Reduced mirror; production caller/CFI behavior is outside this target.
 // Returns 1 on Ok (sig written), 0 on Err (nothing written, gate rejected).
 //
 // F-13 fix in place: double-compute + constant-time compare, then the

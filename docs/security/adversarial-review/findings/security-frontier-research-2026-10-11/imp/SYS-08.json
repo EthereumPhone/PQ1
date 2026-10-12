@@ -1,0 +1,25 @@
+{
+ "id": "SYS-08",
+ "title": "Measure the whole slot windows, not only [base, base+len): include each slot's unused tail in the FSBL fingerprint so a payload parked in free flash changes the 8 words",
+ "threat": "A stage-2 payload or implant-assisting stub written into the unused tail of the secure or NS slot (or into slack between images) is invisible to the boot fingerprint, because the FSBL hashes exactly the manifest-declared lengths; this is the 'firmware must not be compressible / spare flash must be unusable' assumption Donjon used to bypass Trezor Suite's firmware hash check on Safe 3, and the gap Krux closes by filling and hashing empty blocks.",
+ "proposal": "Change `fsbl::verify::verify_images` to hash the FULL `SLOT_SECURE_CAPACITY` and `SLOT_NS_CAPACITY` windows (image bytes followed by the tail, which the signed manifest asserts is 0xFF \u2014 or a build-time deterministic fill the manifest commits to), and make `fw_update` COMMIT erase + verify the tail to that value; keep the fingerprint derivation `firmware_fingerprint_lines` over the window hash so the secure-world advisory row stays identical; extend `verify-ship-state` and the RDP-0 pre-power verifier to assert the same tails. Per-device pages 123-127 and the NS-slot atlas offset stay outside the measured window by design (they change at runtime / are separately pinned).",
+ "rationale": "The FSBL fingerprint is the entire post-sale trust story (invariant #10 d); an unmeasured tail is free real estate for exactly the class of modification it exists to catch. Cost is hashing ~466,944 + NS-slot bytes instead of 385,568 + 7,488 (FSBL hashes at ~330 KB/s in software per verify.rs \u2014 roughly +0.3-0.5 s on a 6.9 s boot; with hw-sha256 much less).",
+ "repo_evidence": [
+  "fsbl/src/verify.rs:41-42,62,68 \u2014 `secure_len`/`ns_len` from the manifest; `hash_flash_region(secure_base, secure_len)` and `hash_flash_region(ns_base, ns_len)` only",
+  "fsbl/src/verify.rs:52-55 \u2014 capacity is checked as an upper bound, never measured",
+  "fsbl/src/main.rs:40-44 \u2014 measured hash cost 1.167 s for 385,568 B (software SHA at HSI16)",
+  "CLAUDE.md invariant #10 and Lifecycle: FSBL 'measures the active firmware slots' (declared lengths)"
+ ],
+ "vendor_precedent": "Krux 'Tamper Check Flash Hash' fills empty flash blocks and hashes them so unused space cannot host code; Trezor's own firmware-hash check (GetFirmwareHash over the firmware AREA) was bypassed by Donjon precisely because unused space/compression was available; Ledger 1.4 'CRC fill of unused memory' after LSB-002.",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "S",
+ "priority": "P1",
+ "risks": "Boot time increase must be re-measured on pq1 and fits the 'EXPECTED, not re-measured' 6.9 s figure only if hw-sha256 is used in the FSBL (currently software); fw_update must guarantee the tail state after an interrupted COMMIT (journal the erase) or every interrupted update changes the fingerprint; the manifest/fsbl-tests geometry guards and `verify-fsbl-identity` need updating; FSBL code growth is small but counts against the 38,912 B span.",
+ "sources": [
+  "https://selfcustody.github.io/krux/getting-started/features/tamper-detection/",
+  "https://www.ledger.com/why-secure-elements-make-a-crucial-difference-to-hardware-wallet-security",
+  "https://www.ledger.com/firmware-1-4-deep-dive-security-fixes"
+ ],
+ "surface": "systemic"
+}

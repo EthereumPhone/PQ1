@@ -1,0 +1,1482 @@
+{
+ "items": [
+  {
+   "id": "M09",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-249-M09-birth-record-design-corrections.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Leg 1: read-only connect-under-reset verifier with the full read set (both flash banks, every option-byte register, OEM-lock bits, OTP word map, UID, IDCODE, pages 123..127), a real allow-list, a ship profile, packaging",
+     "status": "COVERED",
+     "by": "#850",
+     "evidence": "A real ship profile: both flash banks hashed against the reproducible build, every option-byte register (including NSBOOTADD0/1, the WRP UNLOCK bits, SECWMxR2, `BOR_LEV`, the SRAM bits), the OEM-lock bits at `FLASH_NSSR` 18 and 19, an OTP programmed-word map, the UID at `0x0BFA_0700`, IDCODE, and pages 123 to 127 blank."
+    },
+    {
+     "what": "Debug port and reset reachable on a sealed unit (the route itself is a board or enclosure change)",
+     "status": "COVERED",
+     "by": "#850",
+     "evidence": "**Owner and board vendor decision first:** how SWD, NRST and ground are reached on a sealed unit (USB-C sideband with the two pins split, or a pogo-pad window), and whether NRST is included."
+    },
+    {
+     "what": "Published per-release descriptor (per-slot digests, bootloader digest, ship option-byte profile)",
+     "status": "PARTLY",
+     "by": "#850, #742",
+     "evidence": "#742: 'either the release flow emits an FSBL measurement receipt alongside the bundle, or the docs state plainly that FSBL identity is established only by WRP+RDP-2'. #850 asks for flash hashed against the reproducible build but does not name a published descriptor."
+    },
+    {
+     "what": "Leg 2: overwrite the OEM1/OEM2 keys in the RDP-2 burn, halt first if a lock bit is set",
+     "status": "COVERED",
+     "by": "#849",
+     "evidence": "Overwrite the OEM1 and OEM2 keys in the same ceremony, and halt first if a lock bit is already set (ties to #46 and #387)."
+    },
+    {
+     "what": "OEM-lock mask at bits 18/19, not 26/27",
+     "status": "COVERED",
+     "by": "comment on #46 (filed 2026-10-12)",
+     "evidence": "issues-filed/c-046-oem-lock-bits.md: 'Correct `OEM1LOCK` / `OEM2LOCK` to bits 18 / 19, with a host test bound to the SVD values.'"
+    },
+    {
+     "what": "Leg 3: HSM-signed per-unit manifest of the three chip identifiers in a public log",
+     "status": "COVERED",
+     "by": "#249, #67, #68, #595",
+     "evidence": "#249: 'Binding manifest in CBOR: `manifest_type`, 3× UIDs, `firmware_hash` (SHA3-256 over the image)' and 'Transparency log: append-only public record of every `device_serial` + manifest hash emitted at the factory'"
+    },
+    {
+     "what": "Leg 3 design corrections: verify on the host only (no on-device chain check or lockdown), bind each proof to its own root with a negative test, drop the impossible DHUK probe, fix the storage boxes against the blank-page rule and OTP map, hash choice, privacy gating of identifiers, unconfirmed OPTIGA certificate slot",
+     "status": "UNTRACKED",
+     "by": "draft c-249-M09-birth-record-design-corrections.md",
+     "evidence": "#249 body still has 'Boot-time ceremony (secure world, before entropy reconstruction)', 'Any mismatch → permanent lockdown (no entropy release).' and 'DHUK probe via SAES against factory-recorded value'; master secure/src/first_boot/mod.rs:201, secure/src/hw/otp.rs:29"
+    },
+    {
+     "what": "Secure-element identity readers (OPTIGA UID and challenge-sign, SE050 UID and attested read)",
+     "status": "PARTLY",
+     "by": "#249, #27, #210, #244",
+     "evidence": "#249: 'SE050 attestation at boot: `Se05x_API_ReadObject_W_Attst` ...' and 'OPTIGA attestation at boot'. They ask for on-device verification; the comment draft redirects to read-and-relay."
+    },
+    {
+     "what": "Leg 4: serial of the tamper-evident bag in one OTP word, read by the host tool",
+     "status": "UNTRACKED",
+     "by": "folded into the #249 comment as an optional manifest field",
+     "evidence": "isearch 'bag serial|tamper.{0,10}bag|bag number' returns no issue. The OTP copy needs a word from a contested map, so it is an owner decision."
+    },
+    {
+     "what": "Leg 5: per-die C10 attestation key enrolled by the owner",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Report: 'Leg 5 (P3, owner decision)'. Day-one genuineness claim is in 'Considered and rejected'. Not drafted; one sentence in the #249 comment says it is not proposed."
+    },
+    {
+     "what": "GET_DEVICE_INFO and USB serial placeholders",
+     "status": "COVERED",
+     "by": "#861",
+     "evidence": "**`GET_DEVICE_INFO` returns placeholders.** `nonsecure/src/usb/commands.rs:182` (`FW_VERSION = [0x03, 0x00, 0x00]`)"
+    },
+    {
+     "what": "Wrong UID address in #249 and in production-security.md",
+     "status": "COVERED",
+     "by": "comment on #249 (filed 2026-10-12)",
+     "evidence": "issues-filed/c-249-uid-address.md"
+    },
+    {
+     "what": "'No NRST needed (vector catch)' line",
+     "status": "COVERED",
+     "by": "#866, #850",
+     "evidence": "#866: '**\"No NRST needed (vector catch)\".** `docs/security/user-device-verification.md:184-186`'"
+    },
+    {
+     "what": "Docs say verify-repro runs on every PR",
+     "status": "COVERED",
+     "by": "#456 (named as its owner in #866)",
+     "evidence": "#866: 'Doc drift that already has an owner is not repeated here: ... `verify-repro` on every PR (#456)'"
+    },
+    {
+     "what": "Whether the seed wizard adopts pre-existing secure-element state left by a transit attacker who read the transport master",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "The report calls it 'a lead, not a confirmed gap'. I did not trace the provisioning path, so nothing is drafted."
+    }
+   ],
+   "issues_read": [
+    850,
+    849,
+    46,
+    387,
+    40,
+    249,
+    595,
+    27,
+    742,
+    268,
+    861,
+    866,
+    67,
+    68,
+    210,
+    244,
+    456,
+    695,
+    705
+   ],
+   "one_line": "Legs 1 and 2 are already asked for by #850 and #849; the only untracked remainder is a set of design corrections to the birth-record issue #249 (verify on the host, bind each proof to its own root, drop three boxes that cannot work), drafted as one comment.",
+   "unsure": "(1) The SE pre-state lead (does first-boot setup delete and recreate secure-element objects, or adopt what is there) was not traced; the E-secure-elements group's SE-06 draft is about a different failure (wizard offered on a provisioned device). (2) #850 does not name a published per-release descriptor; one line there would cover it, I did not draft it. (3) #268 still has an unticked 'Implement the 2026-07-17 owner confirm-gate' box although secure/src/first_boot/mod.rs:234 calls confirm_checked before the burn; a stale-tracker comment was not drafted. (4) #67, #68, #210 and #244 were read by title and through #249 only, not in full. (5) Comments on #249 were read with gh: two exist (the 2026-07-31 corroboration and the UID-address correction); neither covers the design corrections in the draft."
+  },
+  {
+   "id": "M11",
+   "outcome": "NEW-ISSUE",
+   "board": "MIXED",
+   "drafts": [
+    "M11-v10-physical-access-desk-review-and-requirements.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Route display lines as stripline between ground planes, no outer-layer vias in the display region",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "Layout change. Recorded as a next-revision rule in the draft, not as work."
+    },
+    {
+     "what": "Remove test pads on secure-world buses, buttons and BOOT0 (with an exemption for the debug pads)",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "Layout change. docs/hardware/hardware_requirements.md:163 already states the rule; row :249 says 'board not started'."
+    },
+    {
+     "what": "Bond the panel with no void, pot the display and button regions",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "Enclosure and assembly-process change with new materials; treated as new-board work."
+    },
+    {
+     "what": "Destructive-open shell",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "Enclosure tooling change, and an owner decision (welded shell versus open inspection). Listed as an unticked owner box in the draft."
+    },
+    {
+     "what": "BOOT0 strapped to ground with the USB sideband path removed",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "#695, #696",
+     "evidence": "#695: 'They said BOOT0 will be **hard-strapped to GND at mass production**.'"
+    },
+    {
+     "what": "Tier B: route PC13 to a case-open switch footprint",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "Needs PC13 wired. Also blocked on a distinct post-tamper terminal state (today a wipe ends at 'restore from seed', secure/src/main.rs:1963)."
+    },
+    {
+     "what": "Read the V10 inner-layer copper plots and schematic for where display, button and secure-element lines are exposed",
+     "status": "UNTRACKED",
+     "by": "draft M11-v10-physical-access-desk-review-and-requirements.md",
+     "evidence": "docs/hardware/pcb/README.md:32 'tamper/side-channel review is implied by its presence in this repo' (i.e. none); isearch 'copper plot|stripline|test pad' finds nothing relevant"
+    },
+    {
+     "what": "Requirement corrections: buttons rank with the display (restore enters the seed through them), no-test-pads versus debug-pads rows, tamper-mesh row, 'board not started' rows",
+     "status": "UNTRACKED",
+     "by": "same draft",
+     "evidence": "secure/src/ui/seed_wizard.rs:781; docs/hardware/hardware_requirements.md:239"
+    },
+    {
+     "what": "Published comparables: netlist, pinned BOM, reference photos, weight, X-ray",
+     "status": "UNTRACKED",
+     "by": "same draft",
+     "evidence": "docs/security/user-device-verification.md:166 names 'published board photos'; no board or unit photo is tracked in the repository (git ls-files for image types)."
+    },
+    {
+     "what": "Tamper status cleared before it is read",
+     "status": "COVERED",
+     "by": "comment on #75 (filed 2026-10-12)",
+     "evidence": "issues-filed/c-075-tamp-scr-cleared-before-read.md: 'Read and act on `TAMP_SR` before the first `TAMP_SCR` write.'"
+    },
+    {
+     "what": "Stale tamper wording in the requirements doc and source comments",
+     "status": "COVERED",
+     "by": "#866",
+     "evidence": "**Tamper docs stale in both directions.** `docs/hardware/hardware_requirements.md:100-103` says the TAMP driver is \"currently log-only and not yet wired into `main()`\""
+    },
+    {
+     "what": "Debug-port route on a sealed unit (three texts disagree)",
+     "status": "COVERED",
+     "by": "#850",
+     "evidence": "**Owner and board vendor decision first:** how SWD, NRST and ground are reached on a sealed unit"
+    },
+    {
+     "what": "Backup-supply (VBAT) contradiction and what V10 fits on that pin",
+     "status": "UNTRACKED",
+     "by": "the H-hardware group's draft H1-backup-capacitor-and-crystals.md",
+     "evidence": "That draft reads the schematic and covers this; I left it out of the M11 draft to avoid a duplicate."
+    },
+    {
+     "what": "A persistent 'this unit was opened' state instead of 'restore from seed' after a tamper wipe",
+     "status": "OWNER",
+     "by": "partly the #75 comment",
+     "evidence": "#75 comment: 'Decide what a tamper that latched while the secure world was not running should do (wipe at boot, or a persistent \"tamper seen\" state).' Mentioned under Limits in the draft."
+    }
+   ],
+   "issues_read": [
+    75,
+    695,
+    696,
+    697,
+    850,
+    866,
+    248,
+    391,
+    598,
+    47,
+    50,
+    81,
+    256,
+    52,
+    36,
+    208
+   ],
+   "one_line": "Almost all of M11 needs a new board; the draft covers only what can be done now: a desk read of the V10 copper plots for where display and button lines can be tapped, corrections to the anti-tamper requirement rows, and publishing reference photos and a parts list.",
+   "unsure": "(1) Overlap risk with the H-hardware group: its H1 draft covers VBAT and its #866 comment covers the 'four PCB layers' row, so I left both out; if that group also drafts the 'design evidence into the repository' ask (netlist, BOM, copper read, photos), this draft duplicates it. (2) 'Pot the connectors' and 'no void behind the panel' could be argued to be assembly-process steps with no PCB change; I classified them as new-board work because they change materials and enclosure fit. (3) The priority label follows the table (P1 = high) although the draft is documentation only. (4) #47, #50, #81, #256, #52, #36 and #208 were read by title only."
+  },
+  {
+   "id": "M10",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE-BENCH",
+   "drafts": [
+    "M10-display-net-rc-decay-bench-study.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Phase 0: RC-decay measurement of the four display lines against the unconnected PA6 pad, on at least 5 enclosed units, with a go/no-go rule",
+     "status": "UNTRACKED",
+     "by": "draft M10-display-net-rc-decay-bench-study.md",
+     "evidence": "isearch 'capacitan|RC.?decay|sniff|logger|soldered|implant' finds no issue about electrical sensing; grep of secure/src and fsbl/src for ADC, comparator or touch-sensing use finds nothing"
+    },
+    {
+     "what": "Phase 1: secure-world self-check against a factory baseline in OTP",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Not approved and gated on a measured GO; needs an OTP word from a contested map. Stated in the draft as out of scope."
+    },
+    {
+     "what": "Button-line measurement",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "Rejected by the report: docs/hardware/evt-silicon-validation.md:471 '100nF cap and an ESD diode'. Not drafted."
+    },
+    {
+     "what": "Reference capacitor on a free pad; input-current monitor footprint",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "Parts and layout change."
+    }
+   ],
+   "issues_read": [
+    695,
+    595,
+    249,
+    220,
+    705,
+    258,
+    260,
+    784,
+    835,
+    712
+   ],
+   "one_line": "A bench measurement campaign on existing enclosed units to find out whether a soldered display-bus tap is electrically visible to the microcontroller at all; no detector is built before the data says go.",
+   "unsure": "(1) The draft does not repeat the report's 'PACTOR, about 0.5 pF' citation, which section 14 says could not be traced; it cites PDNPulse only. (2) The research reviewer treated #695 as a blocker ('sealed units cannot run our firmware'); docs/hardware/evt-silicon-validation.md:1064 records an enclosed unit booted over USB on 2026-09-21, so I treated that as resolved without checking how many units have been flashed. (3) PA6 carries the consumption-mask output; using it as a reference in a test image means pausing the mask, which is fine for a factory-test image but was not checked against the production fence. (4) Using PA6 as-is (unconnected) does not need a board change; if the copper read finds a stub on it the method changes. (5) The schematic shows no net on PA6 and no series part on the display lines between the microcontroller and the connector (read from rendered crops); I did not search the sheets for pull resistors attached by net name, and the copper was not read."
+  },
+  {
+   "id": "IMP-09",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "IMP-09-host-check-minimal-wots-count.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Companion-committed OptRand with a transcript (the proposal as written)",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Refuted by the report's own review: R is hashed with the secret seed (sphincs-c10/src/fors.rs:117) and no verifier re-derives it. Not drafted; the draft says why under Limits."
+    },
+    {
+     "what": "Host-side check that each WOTS+C count is the first valid one",
+     "status": "UNTRACKED",
+     "by": "draft IMP-09-host-check-minimal-wots-count.md",
+     "evidence": "sphincs-c10/src/wots.rs:183 accepts any count whose digit sum matches; #238 is documentation only"
+    },
+    {
+     "what": "Decision on a publicly derivable R with a two-round commit (trades away robustness to a failed random source)",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Report: 'The two properties are mutually exclusive without a zero-knowledge proof.' Listed as an unticked owner box in the draft."
+    },
+    {
+     "what": "Reword the documents that say the channel does not exist; threat-model row",
+     "status": "COVERED",
+     "by": "#238",
+     "evidence": "Reframe the 7 \"IRRELEVANT / don't chase this\" mentions ... Add a `§7.6`/`§7.7` threat-model row for \"malicious-firmware seed exfiltration via the signature randomizer.\""
+    }
+   ],
+   "issues_read": [
+    238,
+    371
+   ],
+   "one_line": "Only the narrow surviving form is drafted: a host-side check that the grinding counters in each signature are the smallest valid ones, which closes the smaller of two covert channels; the 16-byte randomizer stays uncheckable and the real fix is an owner decision.",
+   "unsure": "(1) The check alone has little security value because R carries about 117 free bits per signature; the draft says so first under Limits. If that makes it not worth an issue, the alternative is a short comment on #238. (2) Labels: the report calls this 'firmware', but the surviving form is host and companion work, so I used surface:companion and surface:docs. (3) I did not look for an existing companion-side verifier outside this repository."
+  },
+  {
+   "id": "D-07",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "D-07-wipe-seed-words-after-paint-on-16x4-path.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Zeroize the pixel band buffer after every frame that carried secret cells",
+     "status": "DONE-ON-MASTER",
+     "by": "master",
+     "evidence": "secure/src/ui/px/lcd.rs:494 'wipe_scratch();' inside the frame drop guard; secure/src/ui/px/lcd.rs:710 'b.0.zeroize();'"
+    },
+    {
+     "what": "No digest of secret pixels outlives the frame",
+     "status": "DONE-ON-MASTER",
+     "by": "master",
+     "evidence": "secure/src/ui/px/lcd.rs:117 'The per-band content DIGEST and its `SHOWN` table were deleted here by'"
+    },
+    {
+     "what": "Zeroize the 16x4 stack rows (`secret_rows_storage`, `wb`) in the seed page and the candidate list",
+     "status": "UNTRACKED",
+     "by": "draft D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+     "evidence": "secure/src/ui/seed_wizard.rs:618, :625, :1061, :1066; #124 and #108 cover secure-element driver buffers only"
+    },
+    {
+     "what": "Clear the 16x4 glyph scratch (`cell`) after a secret flush",
+     "status": "UNTRACKED",
+     "by": "same draft",
+     "evidence": "secure/src/ui/lcd.rs:104, never cleared; holds a blank glyph today by layout only"
+    },
+    {
+     "what": "Panel fill and backlight off hooked into zeroize_sensitive_state",
+     "status": "PARTLY",
+     "by": "same draft (reshaped)",
+     "evidence": "Not proposed as written: secure/src/main.rs:4414 calls zeroize_sensitive_state from SysTick, so display traffic there could collide with a paint. Every lock path already repaints. Backlight-off is left as an owner question."
+    },
+    {
+     "what": "A wipe test that actually runs (move the wipe into a workspace crate)",
+     "status": "UNTRACKED",
+     "by": "same draft",
+     "evidence": "secure/src/main.rs:286 `mod ui;` is under cfg(not(test)); secure/src/hw_io_under_test/pure_tests.rs:2210 pins source text only"
+    }
+   ],
+   "issues_read": [
+    124,
+    108,
+    784,
+    858,
+    848,
+    851,
+    700,
+    730,
+    760,
+    419
+   ],
+   "one_line": "The pixel-UI half of D-07 landed on master (band buffers wiped on every frame, digest table deleted); what remains is wiping the seed-word byte rows on the shipping 16x4 path and adding a test that executes.",
+   "unsure": "(1) Priority label follows the table (P1 = high), but the remainder is small and defence in depth; medium would be the honest label. (2) Two things I found while reading are in new_defects and are NOT in the draft; both would fit as one more checkbox each if you prefer to fold them in. (3) I did not check whether the compiler keeps the stack rows alive in a way that makes the residue observable; the claim is source-level. (4) The band wipe and the digest deletion were already on master at 0feea78a (the commit yesterday's issues cite), not only at c2fab970."
+  },
+  {
+   "id": "M03",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-237-M03-rescope-to-nv3007-measure-first.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "(A) Route the 16x4 letter row and live PIN digit through the constant-time glyph path; random start letter and candidate cursor",
+     "status": "COVERED",
+     "by": "#858",
+     "evidence": "Route row 1 of `render_letter_screen` and of the PIN screen through `flush_with_secret_rows`. / Random start letter per position and a random candidate cursor."
+    },
+    {
+     "what": "(A) Pixel-UI letter row and live PIN digit on a non-secret frame",
+     "status": "COVERED",
+     "by": "#784 and its comment (filed 2026-10-12)",
+     "evidence": "#784: 'Route the entry row's glyphs through `Item::Secret` / `blit_secret_run`'; issues-filed/c-784-live-pin-digit.md covers the PIN digit."
+    },
+    {
+     "what": "(A) A test that every secret-glyph screen uses the secret path",
+     "status": "COVERED",
+     "by": "#784, #858",
+     "evidence": "#784: 'assert that every wizard screen carrying seed-derived glyphs is rendered with `force = true`'; #858: 'Widen #784 (the pixel-UI twin) so both paths are fixed and tested together.'"
+    },
+    {
+     "what": "(B) Stop re-streaming secret frames during animation",
+     "status": "COVERED",
+     "by": "nothing to file: the report's own re-check refuted the premise (correction B6)",
+     "evidence": "Report correction note: 'B6: the second sentence (secret frames re-streamed during animation) is refuted: one forced frame per call.' That was at the research commit; not re-probed on master, see unsure."
+    },
+    {
+     "what": "(B) Exempt forced frames from the dirty-window optimisation in #786",
+     "status": "COVERED",
+     "by": "#786",
+     "evidence": "So the rule for this change is: **`force` must also force the full-width window.** (On master the per-band digest and `blit_strip` are gone and every frame streams under one window, secure/src/ui/px/lcd.rs:468, so #786's premise has changed.)"
+    },
+    {
+     "what": "(C) Fixed-versus-random leakage capture on the real NV3007 (bus near-field and panel rail, frequency sweep)",
+     "status": "UNTRACKED",
+     "by": "draft c-237-M03-rescope-to-nv3007-measure-first.md, and a measurements entry",
+     "evidence": "isearch 'TVLA|near-field|leakage receipt' finds no NV3007 measurement issue; #237 still describes the SSD1306"
+    },
+    {
+     "what": "(C) Replace the stale OLED text in tools/sca/README.md",
+     "status": "UNTRACKED",
+     "by": "same comment",
+     "evidence": "tools/sca/README.md:1280 and :1385"
+    },
+    {
+     "what": "(C) Close #258 with one 40 MHz re-test or delete the feature",
+     "status": "COVERED",
+     "by": "#258",
+     "evidence": "If 40 MHz still can't get under the threshold, F-24 stage E Phase 1 is dropped"
+    },
+    {
+     "what": "(D) Equal-weight colour pair for secret cells",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Gated on the measurement in (C); the report says to ship it only if (C) shows a first-order weight leak. Recorded in the comment as a conditional follow-up, not drafted."
+    },
+    {
+     "what": "(E) Re-scope #260, whose precondition failed",
+     "status": "UNTRACKED",
+     "by": "same comment",
+     "evidence": "#260: 'Once Phase D validates the LCD-based defense closes sub-channel 4' and #258: 'defense FAILS'"
+    },
+    {
+     "what": "(F) One word per page and a never-digital warning",
+     "status": "OWNER",
+     "by": "partly #237",
+     "evidence": "#237 lists 'reveal words one-at-a-time' as a candidate. Recorded in the comment as an owner decision."
+    },
+    {
+     "what": "(G) Threat-model display row; rewrite #237 for the NV3007",
+     "status": "PARTLY",
+     "by": "#237",
+     "evidence": "#237: 'Add a `§7.10 SCA` threat-model row regardless of which mitigation lands.' The rewrite is the comment draft."
+    }
+   ],
+   "issues_read": [
+    237,
+    258,
+    259,
+    260,
+    700,
+    772,
+    779,
+    784,
+    786,
+    858
+   ],
+   "one_line": "The firmware defects in M03 are already filed (#858, #784); the remainder is that the umbrella issue #237 still describes the removed OLED and picks mitigations before anything is measured, so one comment re-scopes it to the NV3007 with a measure-first order.",
+   "unsure": "(1) Whether the pixel UI on master sends a seed page more than once per paint was not settled: secure/src/ui/px/lcd.rs pushes the secret cells into every frame that play_screen paints, and I could not tell by reading whether the seed-page record animates. The report's re-check (one frame per call) was at the research commit. Listed under measurements. (2) I read #780, #783, #794 and #805 by title only. (3) The comment on #237 could instead be a rewrite of the issue body by its owner; I drafted a comment because that is all I can draft. (4) Not mine to draft, but you should know: the comment filed on #784 on 2026-10-12 says a strip digest of the PIN-digit pixels 'is kept in the static' at master 0feea78a. The digest table was deleted by commit ea95a1fe, which is an ancestor of 0feea78a (git merge-base --is-ancestor), so that sentence, and point 2 of the #784 body, were already out of date when the comment was posted."
+  },
+  {
+   "id": "X1a",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X1a-masked-blind-binary-restore.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Opt-in masked, no-echo binary restore dialog on the 16x4 path, logic in a workspace crate",
+     "status": "UNTRACKED",
+     "by": "draft X1a-masked-blind-binary-restore.md",
+     "evidence": "secure/src/main.rs:1003: restore is enter_mnemonic only; isearch 'blind|masked entry|binary restore|one-time mapping' finds no issue on point"
+    },
+    {
+     "what": "Check that the button lines do not share the display flex or connector (the report's precondition for filing)",
+     "status": "PARTLY",
+     "by": "done at schematic level in this pass; the in-enclosure wiring is the draft's first checkbox",
+     "evidence": "Rendered crops of sheet 2 of docs/hardware/schematics/AL_A66_MB_V10_20260826_1500.pdf: the 40-pin display connector J201 carries LCM_RST, SPI1_CS, SPI1_SCK, SPI1_MOSI, LCM_DC, LCM_TE, LCM_LEDA, LCM_LEDK, the LED channels and supplies, and neither UP_KEY nor DOWN_KEY; the button nets go through R207/R208 (10R) to pads J203 and J205 with ground pads J204 and J206. docs/hardware/evt-silicon-validation.md:470 agrees."
+    },
+    {
+     "what": "Owner decision on a new setup option (ceremony change)",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "#772 (closed) is the precedent that ceremony changes need an owner decision first."
+    },
+    {
+     "what": "Pixel-UI version of the dialog",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Waits on the pixel UI's flash budget, which is an open owner decision."
+    }
+   ],
+   "issues_read": [
+    250,
+    784,
+    237,
+    371,
+    700,
+    772,
+    258,
+    370,
+    858,
+    860
+   ],
+   "one_line": "A design-first issue for an opt-in restore mode that never draws a seed letter (bits entered under an on-screen one-time mask); it stops a display-only tap and nothing more, and it needs an owner go before any code.",
+   "unsure": "(1) The report's precondition (buttons must not share the display connector) holds on the main-board schematic, which I read from rendered crops. What I could not check is the wiring from the button pads to the physical buttons inside the enclosure; nothing in the repository shows it. The draft keeps that as its first box. (2) The research reviewer said buttons and display lines are on 'one package edge'. The schematic gives pins 10 and 11 against 14 to 20, which on a 48-pin package is around one corner, so the draft says 'close together' instead."
+  },
+  {
+   "id": "X1b",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-371-X1b-two-share-create-mode-decision.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Owner ruling on a two-share create mode (panel shows only the device share, user share entered blind, seed is their XOR)",
+     "status": "OWNER",
+     "by": "#371 (decision home)",
+     "evidence": "#371: 'Record as a deliberate design decision (adopt vs decline), not silently drop.' The comment draft puts the concrete shape there."
+    },
+    {
+     "what": "Recorded decline of the USB-pad shape",
+     "status": "UNTRACKED",
+     "by": "same comment",
+     "evidence": "secure/src/main.rs:4012 (wizard) runs before secure/src/main.rs:4244 (USB init) and :4291 (non-secure boot); invariant 4"
+    },
+    {
+     "what": "On-device two-share restore, chunked double entry of the user share",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Mandatory scope if adopted (report review); nothing is built before the ruling."
+    }
+   ],
+   "issues_read": [
+    371,
+    250,
+    237,
+    772,
+    700
+   ],
+   "one_line": "Owner decision only, nothing to build until it is taken: adopt or decline a two-share wallet-creation mode in which the combined seed is never shown, and record that sending a pad or share over USB is declined; drafted as a comment on the existing entropy-decision issue #371.",
+   "unsure": "(1) The comment refers to the X1a issue with the placeholder {{X1a}}; replace it with the issue number once X1a is filed, or delete the parenthesis if X1a is not filed. (2) #371 is about verifiable external entropy; this mode is adjacent (user entropy mixed in, not verifiable). If you think it does not belong there, the same text works as a standalone decision issue."
+  },
+  {
+   "id": "X5a",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X5a-paint-from-hashed-copy-and-lock-dma-channels.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Mark every GPDMA1 and LPDMA1 channel secure and privileged at boot and lock the configuration",
+     "status": "PARTLY",
+     "by": "master (channel 0 only) and the draft",
+     "evidence": "secure/src/hw/gpdma.rs:175 'REG.seccfgr.set_bits(1 << CH);' for channel 0, only under ui-px-dma (secure/src/hw/lcd_nv3007.rs:1110); no RCFGLOCKR write anywhere"
+    },
+    {
+     "what": "Paint only from bytes that went through the hasher (whole-container copy first, subset capture if it does not fit)",
+     "status": "UNTRACKED",
+     "by": "draft X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+     "evidence": "secure/src/ui/px/assets.rs:135 re-reads non-secure flash after the hash at :131; isearch 'atlas' finds no issue on the hash-to-use window"
+    },
+    {
+     "what": "Cover the paints that have no second hash (status screens, PIN row, legacy pages, film ending, busy screen)",
+     "status": "UNTRACKED",
+     "by": "same draft",
+     "evidence": "secure/src/ui/px/screens.rs:111, secure/src/ui/px/lcd.rs:847, :1011, :1109"
+    },
+    {
+     "what": "Mask non-secure interrupts during the dialog",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "Decide whether veneers also raise `BASEPRI_S` to 0x80 for their critical sections. (The G-usb-systemic group has a comment draft on #846 for the atlas call sites.)"
+    },
+    {
+     "what": "Correct the two stale comments in assets.rs",
+     "status": "UNTRACKED",
+     "by": "same draft",
+     "evidence": "secure/src/ui/px/assets.rs:18 and :20"
+    },
+    {
+     "what": "Silicon test with a hostile non-secure fixture; host test that the painter never re-reads the source",
+     "status": "UNTRACKED",
+     "by": "same draft",
+     "evidence": "#779 records that the interactive pixel presenter has no automated coverage"
+    }
+   ],
+   "issues_read": [
+    53,
+    79,
+    152,
+    835,
+    261,
+    792,
+    760,
+    846,
+    374,
+    779
+   ],
+   "one_line": "On master the pixel UI still paints from non-secure flash between its two hash checks, and only one DMA channel is ever made secure (in one build flavour, never locked); the draft asks to lock all channels at boot and then paint from the hashed copy.",
+   "unsure": "(1) 'A non-secure DMA channel can drive the flash program sequence' is the research's unconfirmed hypothesis; the draft says so and makes checking it a step. (2) The reset values for the DMA attribution registers come from the vendor SVD file on this machine, not from the reference manual text. (3) I did not check whether the secure blit driver work in the separate ui-px worktree has moved since master. (4) #79 and #152 were read by title and one paragraph only. (5) 'nonsecure/src contains no DMA use' is from a case-insensitive search for 'dma' over nonsecure/src, whose only hits are the substring in 'BadManifest'."
+  }
+ ],
+ "citations": [
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 618,
+   "snippet": "let mut secret_rows_storage = [[b' '; DISPLAY_COLS]; WORDS_PER_PAGE];"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 625,
+   "snippet": "let mut wb = [0u8; MAX_WORD_BYTES];"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 648,
+   "snippet": "d.flush_with_secret_rows(&secret_rows[..secret_row_count]);"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 1061,
+   "snippet": "let mut secret_rows_storage = [[b' '; DISPLAY_COLS]; SLOTS];"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 1066,
+   "snippet": "let (wb, wlen) = word_bytes_at(idx as u16);"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/lcd.rs",
+   "line": 104,
+   "snippet": "cell: [u16; CELL_N],"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/lcd.rs",
+   "line": 264,
+   "snippet": "self.cell[cy * CELL_NX + cx] = (mask & FG) | (!mask & BG);"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/lcd.rs",
+   "line": 277,
+   "snippet": "lcd::write_pixels(&self.cell[..CELL_N]);"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/lcd.rs",
+   "line": 205,
+   "snippet": "let ch = if c < text.len() { text[c] } else { 0u8 };"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/lcd.rs",
+   "line": 102,
+   "snippet": "rows: [[u8; DISPLAY_COLS]; DISPLAY_ROWS],"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 972,
+   "snippet": "d.draw_line(1, super::ascii_str(&row1));"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 210,
+   "snippet": "d.draw_line(1, super::ascii_str(&row1));"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 111,
+   "snippet": "c.zeroize();"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 1041,
+   "snippet": "c.zeroize();"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 494,
+   "snippet": "wipe_scratch();"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 710,
+   "snippet": "b.0.zeroize();"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 676,
+   "snippet": "judging it unexploitable only \"by layout"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 117,
+   "snippet": "// The per-band content DIGEST and its `SHOWN` table were deleted here by"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/main.rs",
+   "line": 286,
+   "snippet": "mod ui;"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/hw_io_under_test/pure_tests.rs",
+   "line": 2210,
+   "snippet": "contains_in_code(UI_PX_LCD_SRC, \"impl Drop for FrameGuard {\")"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/nsc/cmd_lock.rs",
+   "line": 12,
+   "snippet": "super::zeroize_sensitive_state();"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/nsc/cmd_lock.rs",
+   "line": 13,
+   "snippet": "crate::ui::show_status(\"Locked\", \"\");"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/main.rs",
+   "line": 4414,
+   "snippet": "nsc::zeroize_sensitive_state();"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "fsbl/src/render.rs",
+   "line": 95,
+   "snippet": "lcd.clear();"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1750,
+   "snippet": "pub fn zeroize_sensitive_state() {"
+  },
+  {
+   "draft": "D-07-wipe-seed-words-after-paint-on-16x4-path.md",
+   "path": "secure/src/fi.rs",
+   "line": 290,
+   "snippet": "pub fn zeroize_barrier() {"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/wots.rs",
+   "line": 73,
+   "snippet": "let mut count = 0u32;"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/wots.rs",
+   "line": 82,
+   "snippet": "if sum == TARGET_SUM {"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/hash.rs",
+   "line": 352,
+   "snippet": "pub fn wots_digest("
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/hypertree.rs",
+   "line": 310,
+   "snippet": "&seed, sk_seed, layer, idx_tree as u64, idx_leaf, &current_node,"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/hypertree.rs",
+   "line": 324,
+   "snippet": "sig[offset..offset + 4].copy_from_slice(&count.to_be_bytes());"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/wots.rs",
+   "line": 183,
+   "snippet": "if sum != TARGET_SUM {"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol",
+   "line": 156,
+   "snippet": "let count := shr(224, calldataload(add(sigBase, countOff)))"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/fors.rs",
+   "line": 117,
+   "snippet": "Some(rand) => sha256_parts(&[sk_seed, b\"R_grind\", rand, message, &nonce_b32]),"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/hypertree.rs",
+   "line": 393,
+   "snippet": "if fors_indices[K - 1] != 0 {"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "secure/src/crypto.rs",
+   "line": 237,
+   "snippet": "if crate::rng_strong::fill(&mut opt_rand_buf).is_err() {"
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/lib.rs",
+   "line": 320,
+   "snippet": "pub fn verify("
+  },
+  {
+   "draft": "IMP-09-host-check-minimal-wots-count.md",
+   "path": "sphincs-c10/src/wots.rs",
+   "line": 60,
+   "snippet": "/// grind is message-dependent (tens of thousands of digests on average,"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 121,
+   "snippet": "pub const LCD_MISO_PIN: Option<u32> = None;"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 117,
+   "snippet": "pub const LCD_CS_PIN: u32 = 4;"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 118,
+   "snippet": "pub const LCD_SCK_PIN: u32 = 5;"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 119,
+   "snippet": "pub const LCD_MOSI_PIN: u32 = 7;"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 125,
+   "snippet": "pub const LCD_DC_PIN: u32 = 0;"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 327,
+   "snippet": "/// **PA6 is `NC` on this board** (vendor pin table, PIN 16), so the PWM drives"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 333,
+   "snippet": "pub const MASK_PWM_PIN: u32 = 6;"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "docs/security/user-device-verification.md",
+   "line": 163,
+   "snippet": "1. **Hardware implants around a genuine MCU** (e.g. a logger on the LCD SPI"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 471,
+   "snippet": "signal + GND with a 100nF cap and an ESD diode and **no board pull-up**, so the"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "proto/src/lib.rs",
+   "line": 652,
+   "snippet": "pub const CMD_PRODTEST_GET_ID: u32 = 100;"
+  },
+  {
+   "draft": "M10-display-net-rc-decay-bench-study.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 1064,
+   "snippet": "sealed EVT #1 booted end-to-end over USB-C DFU (no probe)"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/pcb/README.md",
+   "line": 7,
+   "snippet": "Six-layer stackup, one PDF per copper layer:"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/pcb/README.md",
+   "line": 32,
+   "snippet": "tamper/side-channel review is implied by its presence in this repo."
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/schematics/README.md",
+   "line": 30,
+   "snippet": "that check was waiting on. The cross-check itself has **not** been done; nothing"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/schematics/README.md",
+   "line": 76,
+   "snippet": "- **There is no BOM in this repo**, in any format or anywhere in git history"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/hardware_requirements.md",
+   "line": 163,
+   "snippet": "- **No test pads, debug headers, or probe points** exposing either SE bus, the"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/hardware_requirements.md",
+   "line": 249,
+   "snippet": "| No test pads / debug headers on any S-world bus | README"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/hardware_requirements.md",
+   "line": 166,
+   "snippet": "- **SWD + NRST pads MUST stay accessible after assembly**"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/hardware/hardware_requirements.md",
+   "line": 239,
+   "snippet": "A, `docs/security/HARDENING.md` | `secure/src/hw/tamp.rs` (ext-pin cfg pending) |"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/security/user-device-verification.md",
+   "line": 163,
+   "snippet": "1. **Hardware implants around a genuine MCU** (e.g. a logger on the LCD SPI"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "docs/security/user-device-verification.md",
+   "line": 166,
+   "snippet": "packaging/case, published board photos for visual comparison, and the SE-CA"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 781,
+   "snippet": "pub fn enter_mnemonic() -> Result<Mnemonic, WizardError> {"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "secure/src/main.rs",
+   "line": 1963,
+   "snippet": "ui::show_status(\"WALLET WIPED\", \"restore from seed\");"
+  },
+  {
+   "draft": "M11-v10-physical-access-desk-review-and-requirements.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 363,
+   "snippet": "pub const FREE_PINS: &[(u32, u32)] = &[(GPIOA_S, 10), (GPIOC_S, 13), (GPIOB_S, 4)];"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 143,
+   "snippet": "let options = [\"New Wallet\", \"Restore\"];"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/main.rs",
+   "line": 1003,
+   "snippet": "match enter_mnemonic() {"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 972,
+   "snippet": "d.draw_line(1, super::ascii_str(&row1));"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/main.rs",
+   "line": 982,
+   "snippet": "let sm = show_mnemonic(&m);"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "bip39/src/full.rs",
+   "line": 205,
+   "snippet": "m.to_entropy()?;"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/hw/buttons.rs",
+   "line": 183,
+   "snippet": "const LONG_PRESS_MS: u32 = 500;"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/hw/buttons.rs",
+   "line": 189,
+   "snippet": "const COMBO_WINDOW_MS: u32 = 80;"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 235,
+   "snippet": "pub const BTN_LEFT_PIN: u32 = 0;"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 238,
+   "snippet": "pub const BTN_RIGHT_PIN: u32 = 1;"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 470,
+   "snippet": "`J203`/`J204` (LEFT) and `J205`/`J206` (RIGHT) are bare. Each pad pair is"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 279,
+   "snippet": "> to channels `LED1..LED27` through the **`LCM+RGB` connector**, i.e. they live"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "docs/security/user-device-verification.md",
+   "line": 163,
+   "snippet": "1. **Hardware implants around a genuine MCU** (e.g. a logger on the LCD SPI"
+  },
+  {
+   "draft": "X1a-masked-blind-binary-restore.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 83,
+   "snippet": "let _ = crate::rng_strong::fill(&mut rand_bytes);"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 55,
+   "snippet": "fn window() -> &'static [u8] {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 64,
+   "snippet": "unsafe { core::slice::from_raw_parts(base, ATLAS_LEN) }"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 131,
+   "snippet": "if atlas_root_proof() != crate::fi::OK_SENTINEL {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 135,
+   "snippet": "let atlas = Atlas::parse(window()).ok_or(())?;"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 1458,
+   "snippet": "// Parsed once per flow from the view `assets::verify_atlas` proved for"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1106,
+   "snippet": "let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| \"px atlas\")?;"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1118,
+   "snippet": "let out = crate::ui::px::confirm_screens_checked(screens, &atlas);"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1125,
+   "snippet": "if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/screens.rs",
+   "line": 111,
+   "snippet": "let Ok(atlas) = super::assets::verify_atlas() else {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/screens.rs",
+   "line": 115,
+   "snippet": "super::lcd::play_screen(s, &atlas, secret);"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 184,
+   "snippet": "if super::px::screens::show(&row) {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 847,
+   "snippet": "let Some(atlas) = assets::atlas_verified() else {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 1011,
+   "snippet": "let Some(atlas) = assets::atlas_verified() else {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 1109,
+   "snippet": "let Some(atlas) = assets::atlas_verified() else {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 178,
+   "snippet": "BOOT_OK => Atlas::parse(window()).map(|atlas| AtlasRef { atlas }),"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 18,
+   "snippet": "//!   is caught before release, the same way a faulted page is;"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 20,
+   "snippet": "//!   use [`atlas`], a once-verified cached view; a bad atlas at boot makes"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/assets.rs",
+   "line": 158,
+   "snippet": "pub fn atlas_verified() -> Option<AtlasRef> {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/hw/gpdma.rs",
+   "line": 36,
+   "snippet": "const CH: u32 = 0;"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/hw/gpdma.rs",
+   "line": 175,
+   "snippet": "REG.seccfgr.set_bits(1 << CH);"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/hw/gpdma.rs",
+   "line": 176,
+   "snippet": "REG.privcfgr.set_bits(1 << CH);"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/hw/lcd_nv3007.rs",
+   "line": 1110,
+   "snippet": "crate::hw::gpdma::init();"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 47,
+   "snippet": "const FLASH_NS: u32 = 0x4002_2000;"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/fw_update/verify.rs",
+   "line": 120,
+   "snippet": "pub(crate) fn hash_flash(base: u32, len: u32) -> [u8; 32] {"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/fw_update/verify.rs",
+   "line": 122,
+   "snippet": "let mut chunk = [0u8; 256];"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/src/ui/px/atlas_root.rs",
+   "line": 14,
+   "snippet": "pub const ATLAS_LEN: usize = 75176;"
+  },
+  {
+   "draft": "X5a-paint-from-hashed-copy-and-lock-dma-channels.md",
+   "path": "secure/memory-stm32u585.x",
+   "line": 31,
+   "snippet": "RAM   : ORIGIN = 0x30000000, LENGTH = 192K"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 121,
+   "snippet": "pub const LCD_MISO_PIN: Option<u32> = None;"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 1148,
+   "snippet": "pqsigner_ui_px::rows::push_secret_word(&mut frame, k, w, 255);"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 468,
+   "snippet": "fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCost {"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "tools/sca/README.md",
+   "line": 1280,
+   "snippet": "2. **Driver-IC EM emission (hardware-addressable).** The SSD1306 (or"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "tools/sca/README.md",
+   "line": 1385,
+   "snippet": "- `secure/src/ui/oled.rs::Display::flush_with_secret_rows`"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "docs/security/threat-model.md",
+   "line": 323,
+   "snippet": "### 7.10 Side-channel analysis (SCA)"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "secure/Cargo.toml",
+   "line": 568,
+   "snippet": "decoy-frames = []"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 328,
+   "snippet": "const WORDS_PER_PAGE: usize = 3;"
+  },
+  {
+   "draft": "c-237-M03-rescope-to-nv3007-measure-first.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 79,
+   "snippet": "const PX_WORDS_PER_PAGE: usize = 8;"
+  },
+  {
+   "draft": "c-249-M09-birth-record-design-corrections.md",
+   "path": "CLAUDE.md",
+   "line": 26,
+   "snippet": "user tx). No FORS+C, no classical signer (secp256k1, P-256, Ed25519). Wallet has a single `c10Verifi"
+  },
+  {
+   "draft": "c-249-M09-birth-record-design-corrections.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 201,
+   "snippet": "for page in 123..=127u32 {"
+  },
+  {
+   "draft": "c-249-M09-birth-record-design-corrections.md",
+   "path": "secure/src/first_boot/state.rs",
+   "line": 83,
+   "snippet": "PerDevicePageNotBlank = 0x080B,"
+  },
+  {
+   "draft": "c-249-M09-birth-record-design-corrections.md",
+   "path": "geometry/src/lib.rs",
+   "line": 274,
+   "snippet": "\"geometry registry must assign every one of the 256 pages exactly one owner\""
+  },
+  {
+   "draft": "c-249-M09-birth-record-design-corrections.md",
+   "path": "secure/src/hw/otp.rs",
+   "line": 29,
+   "snippet": "//! | 0..128       | 128 B | Legacy rollback tally (**unsupported**)  |"
+  },
+  {
+   "draft": "c-249-M09-birth-record-design-corrections.md",
+   "path": "secure/src/hw/otp.rs",
+   "line": 30,
+   "snippet": "//! | 128..160     | 32 B  | Device master key (two quad-words)       |"
+  },
+  {
+   "draft": "c-249-M09-birth-record-design-corrections.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2034,
+   "snippet": "/// `{0xE0E8, 0xE0E9, 0xE0EF}`. `0xE0E3` is a device-certificate object"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "secure/src/main.rs",
+   "line": 968,
+   "snippet": "if rng_strong::fill(&mut entropy).is_err() {"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "secure/src/main.rs",
+   "line": 982,
+   "snippet": "let sm = show_mnemonic(&m);"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "bip39/src/full.rs",
+   "line": 205,
+   "snippet": "m.to_entropy()?;"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "secure/src/main.rs",
+   "line": 992,
+   "snippet": "if vm != WizardResult::Confirmed {"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "secure/Cargo.toml",
+   "line": 568,
+   "snippet": "decoy-frames = []"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "secure/src/main.rs",
+   "line": 4012,
+   "snippet": "let (mnemonic, mut pin) = run_first_boot_wizard();"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "secure/src/main.rs",
+   "line": 4244,
+   "snippet": "hw::usb_hw::init();"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "secure/src/main.rs",
+   "line": 4291,
+   "snippet": "unsafe { boot_ns::boot(NS_FLASH_BASE) }"
+  },
+  {
+   "draft": "c-371-X1b-two-share-create-mode-decision.md",
+   "path": "scripts/rng_consumer_audit.py",
+   "line": 82,
+   "snippet": "\"secure/src/main.rs\": [\"rng_strong::fill(&mut entropy)\"],"
+  }
+ ],
+ "measurements": [
+  {
+   "surface": "implant",
+   "what": "Display-line capacitance, pull-up mismatch between pins, unit-to-unit spread, temperature drift, timer noise floor and the change caused by a real soldered tap (the inputs to the M10 go/no-go rule)",
+   "needs": "at least 5 enclosed EVT units with a panel flashed over USB, one sacrificial unit opened and soldered to, a way to vary temperature; no board change",
+   "tracked_by": "draft M10-display-net-rc-decay-bench-study.md (no existing issue)"
+  },
+  {
+   "surface": "implant",
+   "what": "Whether the V10 board already routes the display and button lines on inner layers, and which pads and vias expose them",
+   "needs": "NOT a hardware measurement: a desk read of docs/hardware/pcb (six layer plots)",
+   "tracked_by": "draft M11-v10-physical-access-desk-review-and-requirements.md (no existing issue)"
+  },
+  {
+   "surface": "implant",
+   "what": "How the button pads are wired to the physical buttons inside the enclosure, and whether that wiring runs with the display flex (on the main-board schematic the two are separate; this decides whether the X1a restore mode is worth anything)",
+   "needs": "one enclosed EVT unit that may be opened; a visual inspection",
+   "tracked_by": "draft X1a-masked-blind-binary-restore.md, first box (no existing issue)"
+  },
+  {
+   "surface": "implant",
+   "what": "Whether a set OEM key can be overwritten at RDP-0 without a mass erase (the M09 leg 2 design assumes yes, from a Trezor comment)",
+   "needs": "one sacrificial STM32U585 (a dev kit die is enough) with a debug port",
+   "tracked_by": "partly #849 and #387 (neither states this question)"
+  },
+  {
+   "surface": "implant",
+   "what": "Which OPTIGA object holds the Infineon device certificate on the parts actually fitted (0xE0E3 observed on the bench, 0xE0E0 assumed by #249 and #27)",
+   "needs": "open bench board with a debug port; a read of the object metadata, nothing destructive",
+   "tracked_by": "#27 (asks whether the eval shield holds a test certificate; does not ask which object)"
+  },
+  {
+   "surface": "implant",
+   "what": "What is fitted on the VBAT pin of V10 and how long the backup domain holds",
+   "needs": "open bench board, a meter",
+   "tracked_by": "the H-hardware group's draft H1-backup-capacitor-and-crystals.md (no existing issue); do not file twice"
+  },
+  {
+   "surface": "display",
+   "what": "NV3007 display-bus and panel-supply leakage, fixed versus random content, with a receiver centre-frequency sweep",
+   "needs": "an enclosed EVT unit with a panel, a near-field probe and an oscilloscope; one opened unit for a shunt in the panel supply line",
+   "tracked_by": "no existing issue; it is the first step in the comment draft c-237-M03-rescope-to-nv3007-measure-first.md, so it needs a home if that comment is not posted"
+  },
+  {
+   "surface": "display",
+   "what": "Strength of the glyph-fetch address channel on silicon (today only an emulated trace exists) for the public versus the constant-time glyph path",
+   "needs": "open bench board with a debug port and a supply shunt or probe; no panel needed, the fetch runs without one",
+   "tracked_by": "none (#858 notes that only an emulated trace exists)"
+  },
+  {
+   "surface": "display",
+   "what": "How many frames the pixel UI streams for one seed page or candidate list on master, and whether those screens exit by the 3 s cap",
+   "needs": "NOT a hardware measurement: a host replay of the play_screen loop for the seed-page and candidate records",
+   "tracked_by": "none (#783 covers the cap for the endless chooser screen only)"
+  },
+  {
+   "surface": "display",
+   "what": "An emulated address-channel test of the pixel UI's constant-time secret run, like the existing one for the 16x4 font (pqsigner-ui-px/src/font.rs:273 names a harness that does not cover it)",
+   "needs": "NOT a hardware measurement: host emulation only (tools/sca)",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "display",
+   "what": "Whether a non-secure DMA channel can drive a flash program or erase of the atlas pages while the secure world is in a dialog (the X5a hypothesis)",
+   "needs": "open bench board with a debug port and a hostile non-secure test image; no panel needed",
+   "tracked_by": "draft X5a-paint-from-hashed-copy-and-lock-dma-channels.md (no existing issue)"
+  },
+  {
+   "surface": "display",
+   "what": "Secure stack high-water mark under the double signature, which decides whether a 75,176-byte RAM copy of the atlas fits",
+   "needs": "open bench board with a debug port",
+   "tracked_by": "#374"
+  }
+ ],
+ "new_defects": [
+  {
+   "file": "secure/src/ui/seed_wizard.rs",
+   "line": 805,
+   "quote": "EnterWordResult::IdleWipe => return Err(WizardError::IdleWipe),",
+   "what": "enter_mnemonic returns on the idle timeout without zeroizing `indices`, the array of BIP-39 word indices typed so far (up to 23 words of the seed); the two other exits of the same function do zeroize it (lines 811 and 815). This is on the shipping restore path; the typed-prefix buffer in enter_single_word (line 851) is likewise never wiped."
+  },
+  {
+   "file": "secure/src/ui/px/lcd.rs",
+   "line": 864,
+   "quote": "pub fn clear() {",
+   "what": "This full-panel clear, documented as 'Clear the panel (before the legacy glyph blitter paints again)', has no caller anywhere. So when the atlas stops verifying after a pixel frame was shown, the next paint falls back to the 16x4 blitter (secure/src/ui/lcd.rs:160), which repaints only the 64 glyph cells (about 38 percent of the panel) and leaves the previous pixel frame, which can be a seed page, visible between them until the next boot. ui-px builds only; reasoned from the code, not run."
+  }
+ ]
+}

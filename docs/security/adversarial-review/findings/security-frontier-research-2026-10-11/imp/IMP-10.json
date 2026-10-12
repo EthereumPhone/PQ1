@@ -1,0 +1,26 @@
+{
+ "id": "IMP-10",
+ "title": "Anti-swap 'security words' at PIN entry: after the first PIN digits the SE050 (or OPTIGA) returns a CMAC over the prefix under a per-device SE secret, rate-limited in silicon, rendered as two BIP-39 words; a wrong pair tells the user the device in hand is not theirs before the full PIN is typed (pairs with #601 personalised boot artifact)",
+ "threat": "Lookalike device substitution and evil-maid swap: a trojan pq1 (or a genuine one with an implant and a cloned shell) harvests the full PIN during entry; the boot fingerprint words are public and a malicious image can print them, so the user has no proof of 'my device' before committing the PIN. pq1's F-20 per-position random start digit protects against shoulder/bus observation, not against a swapped unit.",
+ "proposal": "Firmware: after the user confirms the first 4 PIN digits (prefix never leaves S-world in clear), send `CMAC_K(prefix)` request to the SE050 via SCP03 using a dedicated per-device symmetric key object created at first boot (or a derivation inside the OPTIGA E140-bound DeriveKey), with the SE's own rate limit (one query per ~2 s; separate from the PIN attempt counter so it cannot burn page-124 attempts); map the 22 MSBs to two BIP-39 words and render them; user continues only if they match the pair they memorised at setup. Enable off by default (Foundation model) with a wizard step to learn the words. Render through the secret_text constant-time path.",
+ "rationale": "Coldcard has shipped anti-phishing words since Mk1 and Foundation added 'Security Words' in Passport Prime; it is near-zero cost, needs no board change, and it covers the one swap scenario where every other layer (attestation, fingerprint, mesh) is either bypassed by a whole-device substitution or only checked by the companion. It complements #601 (pre-PIN personalised artifact) by binding the check to the SE instead of flash.",
+ "repo_evidence": [
+  "secure/src/ui/pin_entry.rs:10-31 (F-20 digit scrambling only; no prefix-derived words)",
+  "grep -rni 'anti.phish|security word|phishing word|prefix word' secure/src docs/security -> none",
+  "gh #601 (user-personalised boot artifact: design-first, no free flash page)",
+  "secure/src/ui/secret_text.rs (constant-time glyph path available for the rendering)"
+ ],
+ "vendor_precedent": "Coldcard anti-phishing words (SE1 HMAC over hashed prefix, 2 s rate limit); Foundation Passport Prime 'Security Words' (off by default).",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P2",
+ "risks": "The two words cross the display bus and are observable by the same implant \u2014 acceptable because they reveal nothing beyond the prefix an injector/logger already sees, but they must be derived with a per-device secret so a trojan cannot precompute them. Rate limit must live in the SE (SE050 policy or OPTIGA E120-style counter) to avoid an offline 4-digit oracle; user burden and recovery (forgotten words) need UX design. DROPPED: hardware-erased secret SRAM (move S-world secret .bss into SRAM2 under TAMP erase; SRAM2 is NS today, memory-stm32u585.x:8-9; #48/#82); ADC4 analog-watchdog VDD/rail glitch detector into ITAMP7/12/13 (folded into IMP-03); FSBL-side RCC_CSR reset-cause refusal (folded into IMP-06); OPTIGA Shielded-Connection host nonce + no-plaintext-fallback (folded into IMP-05, belongs to the SE surface); cargo-vet/cargo-deny dependency audit gate (software supply chain, S); SE-driven genuine LED (Coldcard \u2014 no SE GPIO on OPTIGA/SE050 as wired); 2-of-N threshold C10 release signing (#486 adjacent, fwupdate surface); IRIS backside imaging / WLCSP package selection for a future revision; stateless 'vault' mode (SeedSigner model); se_power read-back + FLAGB fail-closed in production (S, low value); Hardware-revision strap pin read by the FSBL to refuse iota2-vs-pq1 image mismatch (Trezor hw_revision).",
+ "sources": [
+  "https://blog.coinkite.com/understanding-mk4-security-model/",
+  "https://coldcard.com/docs/pins/",
+  "https://docs.foundation.xyz/prime/prime-apps/settings/general/",
+  "https://media.ccc.de/v/35c3-9597-modchips_of_the_state"
+ ],
+ "surface": "implant"
+}

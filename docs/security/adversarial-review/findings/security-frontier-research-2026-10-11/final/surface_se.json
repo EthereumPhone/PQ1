@@ -1,0 +1,282 @@
+{
+ "surface": "se",
+ "items_written_here": [
+  {
+   "id": "M16",
+   "type": "cluster",
+   "key": "pin-credential-die-binding",
+   "home": "se",
+   "members": [
+    "SE-02",
+    "SCA-06"
+   ],
+   "title": "Die-bind and salt the PIN credentials presented to both SEs (per-SE SAES-CMAC(DHUK) digest plus a wipe-erased per-provisioning salt), and DHUK-mask each XOR half at rest",
+   "priority": "P1",
+   "merger_priority": "P1",
+   "cost": "L",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#5",
+    "#12",
+    "#124",
+    "#200",
+    "#202",
+    "#203",
+    "#247",
+    "#268",
+    "#400",
+    "#485",
+    "#540",
+    "#626",
+    "#637",
+    "#692",
+    "#707",
+    "#712",
+    "#743"
+   ],
+   "live_defects": 4,
+   "hardware_asks": 0,
+   "file": "data/round2/cluster_pin-credential-die-binding.json"
+  },
+  {
+   "id": "M17",
+   "type": "cluster",
+   "key": "se-identity-attestation",
+   "home": "se",
+   "members": [
+    "IMP-05",
+    "SE-01",
+    "SE-04",
+    "BOOT-05"
+   ],
+   "title": "Per-boot refuse-only SE configuration audit over authenticated, fresh channels, with SE identity proven host-side against a factory per-unit record (no on-device classical verify, no DHUK-keyed attestation)",
+   "priority": "P2",
+   "merger_priority": "P1",
+   "cost": "L",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#6",
+    "#14",
+    "#27",
+    "#61",
+    "#63",
+    "#67",
+    "#68",
+    "#76",
+    "#87",
+    "#116",
+    "#117",
+    "#120",
+    "#121",
+    "#126",
+    "#206",
+    "#207",
+    "#209",
+    "#210",
+    "#215",
+    "#244",
+    "#245",
+    "#249",
+    "#263",
+    "#268",
+    "#272",
+    "#444",
+    "#697"
+   ],
+   "live_defects": 4,
+   "hardware_asks": 4,
+   "file": "data/round2/cluster_se-identity-attestation.json"
+  },
+  {
+   "id": "M18",
+   "type": "cluster",
+   "key": "user-entropy",
+   "home": "se",
+   "members": [
+    "SE-10",
+    "SYS-10"
+   ],
+   "title": "User-supplied entropy (button coin-flips / dice) hashed into the new-wallet seed draw, honestly scoped as an RNG-failure defence; closes the #371 adopt-vs-decline decision",
+   "priority": "P3",
+   "merger_priority": "P2",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#237",
+    "#238",
+    "#369",
+    "#370",
+    "#371",
+    "#400",
+    "#470",
+    "#594",
+    "#636",
+    "#641",
+    "#700",
+    "#704",
+    "#778",
+    "#779",
+    "#783",
+    "#784"
+   ],
+   "live_defects": 0,
+   "hardware_asks": 0,
+   "file": "data/round2/cluster_user-entropy.json"
+  },
+  {
+   "id": "SE-03",
+   "type": "single",
+   "home": "se",
+   "title": "Authenticate wipe-bearing and attempt-bearing SE verdicts: a bare 2-byte SCP03 status word is 'inconclusive', never a wipe or a page-124 charge, until an R-MAC'd probe confirms it",
+   "priority": "P1",
+   "orig_priority": "P0",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "redesign needed (refuted as written; a narrower residue survives)",
+   "tracked": [
+    "#7",
+    "#104",
+    "#105",
+    "#106",
+    "#120",
+    "#125",
+    "#126",
+    "#127",
+    "#168",
+    "#385",
+    "#692",
+    "#715"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SE-03.json"
+  },
+  {
+   "id": "SE-05",
+   "type": "single",
+   "home": "se",
+   "title": "Shielded-Connection liveness probe: after every PRL handshake, send host-TRNG data through the tunnel to a command whose response is a deterministic function of that data (CalcHash) and compare locally \u2014 a replayed session cannot answer",
+   "priority": "P1",
+   "orig_priority": "P1",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "beyond",
+   "status": "recommended",
+   "tracked": [
+    "#1",
+    "#4",
+    "#117",
+    "#123",
+    "#126",
+    "#145",
+    "#200",
+    "#307",
+    "#396"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SE-05.json"
+  },
+  {
+   "id": "SE-06",
+   "type": "single",
+   "home": "se",
+   "title": "Provisioning/first-boot ordering guards: handshake-first E140 write, no plaintext rewrite of a rotated PBS, and fail-SAFE dual is_provisioned with a third (MCU-journal) leg so a transport glitch can never enter the seed wizard on a used device",
+   "priority": "P1",
+   "orig_priority": "P1",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#11",
+    "#36",
+    "#76",
+    "#87",
+    "#111",
+    "#118",
+    "#121",
+    "#123",
+    "#126",
+    "#169",
+    "#268",
+    "#276",
+    "#366",
+    "#385",
+    "#445",
+    "#712"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SE-06.json"
+  },
+  {
+   "id": "SE-08",
+   "type": "single",
+   "home": "se",
+   "title": "Lifetime, unresettable OPTIGA usage budget on the half_O read path (E122, Change=Never) plus Security-Event-Counter (E0C5) awareness so counter-reset bugs and throttling are bounded and visible",
+   "priority": "P2",
+   "orig_priority": "P2",
+   "cost": "M",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "redesign needed (refuted as written; a narrower residue survives)",
+   "tracked": [
+    "#116",
+    "#119",
+    "#170",
+    "#251",
+    "#254",
+    "#275",
+    "#443",
+    "#485"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/SE-08.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M01",
+   "key": "measurement-bound-release",
+   "home": "boot",
+   "title": "Measurement-bound secret release: drop. HDP makes it constructible, but the gain is one extra FSBL fault at XL cost; fold the HDP hygiene into #39",
+   "priority": "drop",
+   "status": "rejected",
+   "members_from_this_surface": [
+    "SE-09"
+   ]
+  },
+  {
+   "id": "M14",
+   "key": "verified-wipe-and-lockout-recovery",
+   "home": "pin",
+   "title": "Wipe as a verified, resumable transaction with a designed post-wipe recovery path (honest verdicts, boot-time 'wipe verified' assertion, complete object list, and an E120/UserID generation-or-reset rule folded into the S-1 ceremony)",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "SE-07"
+   ]
+  }
+ ]
+}

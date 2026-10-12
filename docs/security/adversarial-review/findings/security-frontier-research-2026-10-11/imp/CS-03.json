@@ -1,0 +1,24 @@
+{
+ "id": "CS-03",
+ "title": "S-world spending-policy guard (Coldcard SSSP-class) evaluated before confirm",
+ "threat": "Clear signing shows the truth but does not stop a coerced ($5 wrench), hurried, or socially-engineered user, nor a compromised companion that waits for a legitimate unlock; a single approved page can move everything.",
+ "proposal": "Add an owner-configured policy record (page-123-style durable config, NOT per-signature state): per-op max native value and per-token max amount, recipient allowlist (addresses + 'self' = any account_index CREATE2 address recomputed in S-world), chain allowlist, minimum wall-clock/TIM interval between releases, and 'Safe mgmt / unlimited approve forbidden' toggles. Evaluate on the parsed S-stack copy BEFORE pick_sign_pages; out-of-policy \u2192 refuse without explanation (Coldcard semantics). Policy edits require a separate Policy PIN entered on-device whose compromise cannot export the seed, with an optional lockdown bit that makes the policy immutable until a wipe.",
+ "rationale": "Coldcard ships exactly this and assumes the attacker already holds the main PIN; Ledger/Trezor have no on-device policy. The repo's own roadmap names 'on-device policy guard (refuse out-of-policy ops before confirm)' as a security differentiator but nothing is implemented. It is the only way to get module-grade limits on PQSmartWallet, where no on-chain module can ever be installed.",
+ "repo_evidence": [
+  "grep -rln 'spending.policy|SpendingPolicy|velocity|allowlist' secure/src \u2192 no hits (only codex runtime logs under docs/security/adversarial-review/findings/)",
+  "docs/feature-roadmap-research-2026-06.md:176-178 (proposed, not built; no GitHub issue found via `gh issue list --search 'policy guard spend'`)",
+  "secure/src/offchain_state.rs (page-123 log store is the precedent for durable config, not reused for policy)",
+  "secure/src/sign_rate.rs:1-50 (only a 1 s / 250-per-session SCA limiter exists)"
+ ],
+ "vendor_precedent": "Coldcard SSSP (max magnitude, velocity via nLockTime, 25-address whitelist, lockdown, web 2FA) \u2014 https://coldcard.com/docs/sssp/",
+ "novelty": "parity",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "New durable flash config must stay outside the per-signature prohibition (invariant: no new per-signature flash state) \u2014 it is per-edit state. Policy PIN adds a third PIN surface to the three-way attempt model (invariant #2) \u2014 scope it to MCU-only enforcement and state that honestly. Allowlist matching must use the authenticated S-world address, never a companion-supplied name.",
+ "sources": [
+  "https://coldcard.com/docs/sssp/",
+  "https://github.com/Toporin/SatochipApplet/releases"
+ ],
+ "surface": "clearsign"
+}

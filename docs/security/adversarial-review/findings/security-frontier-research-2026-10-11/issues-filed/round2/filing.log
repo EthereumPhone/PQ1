@@ -1,0 +1,77 @@
+created H1 -> 869 The V10 schematic puts a backup capacitor on VBAT and two crystals on the MCU, b
+created M14 -> 870 Lockout wipe: bound the boot-time resume, add a terminal "wipe incomplete" state
+created SE-06 -> 871 Add an MCU-side "wallet provisioned" record as the seed-wizard gate: today the o
+created FI-01 -> 872 First on-silicon fault-injection campaign on the firmware's own gates (PIN gate,
+created M19 -> 873 Enrol the binary never-ship audit in CI with a two-sided control, give a red nig
+created M11 -> 874 Desk review of the V10 artwork for where display and button lines can be tapped,
+created X2a -> 875 fwsign: compute each vendor-key signature twice in separate processes and compar
+created X5a -> 876 Pixel UI reads glyphs from non-secure flash between two hash checks of it: paint
+created X8a -> 877 Mark secure RAM execute-never with the secure memory protection unit, so a fault
+created D-07 -> 878 Seed words stay in stack buffers after the 16x4 seed pages are drawn, and no exe
+created SYS-06 -> 879 Keep a small fault record across the security reset: fault-status registers in b
+created M17 -> 880 Add a read-only per-boot check of OPTIGA object metadata against a pinned table:
+created SCA-02 -> 881 Run the SE050 tunnel AES (SCP03 key derivation, MAC, encryption) on the SAES har
+created CS-02 -> 882 Give Safe custody-change pages one shared danger classification: today a Safe-wr
+created CS-03 -> 883 Design a secure-world spending-policy guard: allowlists, per-operation caps and
+created X6a -> 884 Document and test pq1 as a required owner of a k-of-n Safe on the shipped approv
+created IMP-09 -> 885 Host-side check that each WOTS+C count in a device signature is the smallest val
+created CS-04 -> 886 Owner decision: should production builds refuse a non-empty paymaster instead of
+created M13 -> 887 Show two device-bound words part-way through PIN entry, so a swapped unit is not
+created pin-03 -> 888 Page-124 PIN attempt counter: an all-0xFF read decodes as "zero attempts"; decid
+created X1a -> 889 Design-first: opt-in restore that never draws a seed letter, entering the phrase
+created M10 -> 890 Bench go/no-go study: can firmware see a logger soldered to the display lines by
+created CS-09 -> 891 Tag a fund-destination address that equals the current wallet ("THIS WALLET"), c
+created X7b -> 892 Show Sign-In with Ethereum (EIP-4361) messages as structured pages before the ra
+created X3a -> 893 Pin two gateway policy sets with source tests: the one handler that signs withou
+created H2 -> 894 Five open checks from the 2026-10 research that no issue carries: pre-existing s
+commented SE-03 on 104
+commented SE-05 on 117
+commented M14 on 123
+commented X7a on 154
+commented X4b on 182
+commented M07 on 220
+commented SCA-01 on 228
+commented SCA-03 on 229
+commented SCA-01 on 236
+commented M03 on 237
+commented M09 on 249
+commented M20 on 269
+commented M02 on 270
+commented SE-08 on 275
+commented X9a on 304
+commented CS-07 on 343
+commented M18-X1b on 371
+commented CS-01 on 381
+commented SE-06 on 385
+commented M02 on 46
+commented SE-08 on 485
+commented M07 on 486
+commented FWU-3 on 487
+commented M21 on 48
+commented M20 on 49
+commented X6b on 534
+commented X10a on 541
+commented X8b on 542
+commented FWU-7 on 546
+commented USB-09 on 588
+commented USB-08 on 600
+commented pin-04 on 636
+commented M12 on 637
+commented X2b on 69
+commented M04 on 715
+commented X10b on 752
+commented M19 on 776
+commented B6corr on 784
+commented M06 on 805
+commented M15 on 831
+commented X5b on 846
+commented SE-03-pin-05 on 853
+commented M21 on 854
+commented M16 on 855
+commented M02 on 856
+commented M12 on 860
+commented N1-M06 on 861
+commented M05-M08 on 864
+commented H3-M15-USB-09 on 866
+commented X4a on 89
+DONE 26 new issues 50 new comments

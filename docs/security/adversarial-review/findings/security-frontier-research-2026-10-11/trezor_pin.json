@@ -1,0 +1,329 @@
+{
+ "surface": "PIN / wipe / duress (key=pin)",
+ "vendor": "Trezor (trezor-firmware @ 6ab39e95cf45d4b25b3f677806012ac660ae7a51, 2026-10-07; models T2T1/T2B1/T3B1/T3T1/T3W1, storage/ shared with Trezor One)",
+ "read_blocked": false,
+ "measures": [
+  {
+   "item": "PIN is never stored; it is stretched into a key-encryption key (PBKDF2-HMAC-SHA256, 20000 iterations, hardware+storage+external salt) that unwraps a random DEK||SAK via ChaCha20-Poly1305, and the PIN is 'verified' only by a 64-bit PVC (truncated Poly1305 tag).",
+   "evidence": [
+    "storage/storage.c:98-105 (PIN_ITER_COUNT 20000; 1 only in insecure test mode or when STRETCHED_PIN_COUNT>1)",
+    "storage/storage.c:628-680 (mcu_pin_stretch: salt = hardware_salt||storage_salt||ext_salt, PBKDF2 in 10 progress-reporting chunks)",
+    "storage/storage.c:857-889 (set_pin: fresh 32-byte rand_salt, EDEK/ESAK/PVC written as one norcow entry)",
+    "storage/storage.c:1078-1149 (decrypt_dek: derive KEK, decrypt keys, wait_random(), secequal32(tag,pvc))",
+    "docs/storage/index.md 'PIN' and 'PIN verification and decryption' sections"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 keeps the PIN compare in SE silicon (SE050 UserID) and must not add a software PIN compare (invariant #2). A PIN-derived KEK is not a compare: it is defence-in-depth so that a compromised SE/bus still forces the attacker through a per-attempt MCU stretch plus a die-bound key. Trezor's own rationale (storage.c:633-640) is exactly 'if the MCU-Optiga link is compromised, a low-entropy PIN is still protected against an attacker who cannot read MCU storage'. pq1 could wrap the locally-held SE unlock material (e.g. page 126 BHK wrap, SCP03/PBS roots) under KEK = SAES-DHUK(PBKDF2(PIN, per-die salt)) in addition to the SE gate, without changing where the PIN is compared.",
+   "notes": "The design rationale explicitly says PBKDF2 is there to thwart brute force 'in case the attacker is able to circumvent the PIN entry counter mechanism ... e.g. fault injection attacks' and that it is NOT a defence against an attacker who can read flash (4-9 digit PIN falls to 20000-iteration PBKDF2)."
+  },
+  {
+   "item": "KEK is post-processed through the SAES peripheral under the privileged BHK-XOR-DHUK key (SECURE_AES_KEY_XORK_SP), so the storage key depends on a die-unique secret that software can never read; BHK is copied to TAMP backup registers then BHKLOCK'd so only SAES can use it.",
+   "evidence": [
+    "storage/storage.c:664-672 (secure_aes_ecb_encrypt_hw(stretched_pin, ..., XORK_SP|XORK_SN))",
+    "core/embed/sec/secure_aes/stm32u5/secure_aes.c:48-57 (keysel: DHUK_SP->HW, BHK->SW, XORK->HSW), 113-115 (8 dummy BKPxR reads latch BHK)",
+    "core/embed/sec/secret/stm32u5/secret.c:189-201 (secret_bhk_lock sets TAMP_SECCFGR_BHKLOCK; secret_bhk_locked)",
+    "core/embed/sec/secret/stm32u5/secret.c:400-424 (secret_bhk_load; reboot if already locked)",
+    "storage/storage.c:1864-1870 (storage version 6: 'changes BHK key from unprivileged to privileged'; v5->v6 upgrade re-sets PIN)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already has SAES DHUK (Tier-1 KDF) and BHK on page 126 with the 8-dummy-read latch. What is portable is the ordering discipline: load BHK -> BHKLOCK -> never expose to software, and treat XORK_SP (DHUK^BHK) as the only storage-wrap key so that neither a flash dump nor a BHK read suffices. Trezor also records that the UNPRIVILEGED-BHK path (secure_aes_unpriv.c applet) was a mistake fixed by storage v6; pq1 should keep all BHK use in S-world privileged code only."
+  },
+  {
+   "item": "BHK regeneration as a cryptographic-erase lever: the BHK flash record is erased and refilled from the TRNG on device wipe, on installing firmware from another vendor / below fix_version, on bootloader unlock, on 'empty device' flow and on a bootloader fatal error attributed to glitching.",
+   "evidence": [
+    "core/embed/sec/secret/stm32u5/secret.c:426-444 (secret_bhk_regenerate: erase BHK_AREA, write 8 rng words), 655-658 (secret_safety_erase)",
+    "core/embed/projects/bootloader/workflow/wf_firmware_update.c:343-352 (if !should_keep_seed: secret_bhk_regenerate(); erase_storage(); backup_ram_erase_protected())",
+    "core/embed/projects/bootloader/workflow/wf_unlock_bootloader.c:42-46",
+    "core/embed/projects/bootloader/workflow/wf_empty_device.c:51-55",
+    "core/embed/projects/bootloader/main.c:677-688 ('erase storage if we saw flips randomly flip, most likely due to glitch' -> bhk regenerate + erase_storage + error_shutdown)",
+    "docs/misc/update-wipes.md (vendor change / fix_version / debug firmware wipes)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's page 126 is the DHUK-wrapped SE050 BHK and the SE050 SCP03/admin credentials derive from BHK. A one-page erase+refill of the BHK root makes every BHK-derived credential unrecoverable instantly, which is far cheaper and more atomic than a multi-APDU SE wipe. Trezor's trigger set is the useful part: (a) any FI/'random flip' detection in the FSBL/boot path, (b) any untrusted-image install path, (c) explicit wipe. pq1's FSBL is pre-PIN and could own trigger (a) before any SE traffic.",
+   "notes": "Trezor regenerates BHK BEFORE erasing storage (wf_firmware_update.c:346-348) so a power cut mid-wipe still leaves storage undecryptable."
+  },
+  {
+   "item": "Fault-injection-hardened PIN counter for bitwise flash (F4 models): two guard-bit-encoded logs (pin_entry_log, pin_success_log), a random guard_key constrained by mod-6311 congruence, per-byte Hamming balance and no runs of 5, format checks (guard bits, 0*1* shape, entry&success==entry), volatile loop indices, loop-completion checks, popcount with no branches.",
+   "evidence": [
+    "storage/pinlogs_bitwise.h:17-46 (check_guard_key), 48-56 (generate_guard_key), 58-68 (expand_guard_key), 70-100 (pin_logs_init), 143-193 (pin_fails_increase with wait_random before each word and handle_fault on malformed), 195-266 (pin_get_fails: volatile current/i, format checks, 'PIN log exhausted')",
+    "docs/storage/index.md 'PIN entry counter protection' (design goals: easy 1->0 decrement, no simple 0xFFFFFFFF representation, two independent checks, minimal branching; motivated by a voltage-glitch that made the old counter read 0xFFFFFFFF)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 page 124 is a log-structured attempt counter on the MCU and is one leg of the three-way consumption and the boot cross-check input. The threat (glitch during flash read so the counter reads as 'fresh') is identical. The guard-key encoding, the dual-log 'entry vs success' cross-check and the shape checks are pure-logic and heap-free, portable to a Rust `pin_attempts_*` codec and Kani-provable host-side."
+  },
+  {
+   "item": "Simplified FI-hardened counter for blockwise (ECC) flash on U5 models: 8-bit counter expanded bit-wise (1->01, 0->10) into a 16-bit word replicated across the whole 16-byte flash block; every halfword is decoded and compared; any ill-formed word or disagreement is a fault.",
+   "evidence": [
+    "storage/pinlogs_blockwise.h:8-26 (expand_counter / compress_counter with ill-formed check)",
+    "storage/pinlogs_blockwise.h:27-55 (pin_get_fails: all PIN_LOG_HALFWORDS must decode to the same value else handle_fault)",
+    "storage/pinlogs_blockwise.h:57-73 (pin_logs_init verifies compress(expand(fails))==fails before writing)",
+    "docs/storage/index.md 'Blockwise flash' ('significantly simplified ... models with this type of flash use secure element ... flash is also ECC protected')"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "STM32U585 flash is quad-word (16 B) programmed with ECC, same as T3T1/T3W1. pq1's page 124 record (and page 123 16-B increments) can adopt the replicated-encoded-halfword format verbatim; it costs nothing in RAM and gives per-record redundancy plus an immediate 'ill-formed' detector.",
+   "notes": "Trezor explicitly decided NOT to port the full guard-key scheme to U5 because an SE counter is the primary gate and ECC flash raises the FI bar; pq1 is in the same position (E120 + SE050 are primary)."
+  },
+  {
+   "item": "Increment-before-verify with verified increment: the MCU attempt counter is bumped BEFORE the PIN is checked, then re-read and `ctr + 1 == ctr_ck` is asserted; a mismatch is routed to handle_fault. On wrong PIN the counter stays; on success it is reset only after storage version checks and SE counter resets succeed.",
+   "evidence": [
+    "storage/storage.c:1209-1221 ('First, we increase PIN fail counter in storage, even before checking the PIN'; ctr_ck check)",
+    "storage/storage.c:1224-1240 (wrong PIN: wipe if ctr+1 >= PIN_MAX_TRIES)",
+    "storage/storage.c:1246-1301 (success: storage_upgrade_unlocked, check_storage_version, Optiga/Tropic counter resets, then pin_fails_reset)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 `gated_unlock` already precharges page 124 (FI-hardened pre-commit per CLAUDE.md). The read-back assertion that the precharge actually landed, and routing any read-back mismatch into a fault path that itself charges an attempt, is the piece to confirm/port. Also the ordering 'reset MCU counter LAST, after every SE counter reset succeeded' protects against the MCU lead case."
+  },
+  {
+   "item": "Fault handler policy: any detected fault burns one PIN attempt (the PIN fail counter doubles as a fault counter), verifies the burn, then halts; a second fault while handling the first (re-entrancy flag) wipes storage.",
+   "evidence": [
+    "storage/storage.c:1815-1848 (__handle_fault: CONFIDENTIAL static in_progress; storage_wipe on re-entry; pin_fails_increase + ctr+1 check; __fatal_error)",
+    "storage/storage.c:181-182 (handle_fault macro with file/line)",
+    "Call sites: storage.c:377 (storage tag), 382 (entry/other count), 444-461 (wipe code tag / recompute), 1218 (counter increment), pinlogs_*.h (guard bits, format, exhaustion)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 has fi::CfiCounter and sentinels in signing but (per CLAUDE.md) FI detections do not consume page 124. Making every FI tripwire in gated_unlock / page-124 / boot reconciliation charge an attempt converges repeated glitching toward the 10-attempt wipe instead of giving unlimited retries. The 'second fault during fault handling => wipe' rule is a cheap escalation ladder that fits pq1's existing tzic::trigger_intrusion_wipe."
+  },
+  {
+   "item": "Wipe code (duress-wipe) checked FIRST, before the attempt counter and before PIN verification: on match the device wipes and shows a wipe-code screen. The wipe code is stored as (code, 8-byte salt, 8-byte HMAC tag); the stored tag's integrity is verified first ('flash read manipulation'), the candidate tag is computed twice and compared to detect FI, with wait_random() between steps.",
+   "evidence": [
+    "storage/storage.c:1151-1156 (ensure_not_wipe_code -> storage_wipe + show_wipe_code_screen)",
+    "storage/storage.c:1180 (first thing in unlock())",
+    "storage/storage.c:390-421 (set_wipe_code; WIPE_CODE_EMPTY sentinel distinct from empty PIN; MAX_WIPE_CODE_LEN 50)",
+    "storage/storage.c:423-473 (is_not_wipe_code: integrity check, double compute, secequal)",
+    "core/src/apps/common/request_pin.py:57-60 (config.ensure_not_wipe_code(pin) on every PIN prompt, including change-PIN/SD flows)",
+    "core/embed/upymod/modtrezorconfig/modtrezorconfig.c:253-264"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already has a duress PIN (memory note: implemented). Applicable deltas: (1) check the duress secret before any SE traffic and before page-124 precharge so a duress entry never shows up as an attempt or as a partial-unlock on either SE; (2) store it as salted HMAC tag with a separate integrity tag rather than plaintext; (3) double-compute + random delay around the compare. This is an MCU-side compare of a WIPE trigger, not of the unlock secret, so it does not violate pq1 invariant #2 (no software PIN compare) as long as a duress match can never unlock.",
+   "notes": "Trezor has NO decoy/plausible-deniability PIN: grep for duress/plausible/decoy finds only the Monero decoy and an evolu comment (core/src/apps/evolu/get_node.py:50) that deniability comes from the passphrase (hidden wallets). Wipe is the only duress action."
+  },
+  {
+   "item": "Wipe-code policy coupling: wipe code must differ from the PIN (checked at set time and at PIN-change time), cannot be set unless a PIN exists, and the PIN cannot be removed while a wipe code exists (so there is never a state where the empty PIN is the wipe code or the wipe code is dead).",
+   "evidence": [
+    "storage/storage.c:1773-1780 (storage_change_wipe_code rejects pin==wipe_code)",
+    "storage/storage.c:1711-1716 (storage_change_pin refuses new PIN equal to wipe code -> PIN_CHANGE_WIPE_CODE)",
+    "core/src/apps/management/change_pin.py:30-36 (cannot remove PIN if wipe code set)",
+    "core/src/apps/management/change_wipe_code.py:24-30 (cannot set wipe code without PIN)",
+    "core/src/apps/management/change_wipe_code.py:111-125 (reject code equal to PIN, re-entry confirm)",
+    "storage/storage.c:139-144 (WIPE_CODE_EMPTY is 4 zero bytes, 'intentionally different from an empty PIN')"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "Pure policy, zero cost. pq1's seed wizard / PIN change flows should enforce duress != PIN, duress requires PIN, and 'remove PIN' refuses while duress is set. The distinct-empty-sentinel trick avoids a special case where both are unset."
+  },
+  {
+   "item": "Wipe ordering and re-initialisation: norcow_wipe erases the ACTIVE sector first ('because it contains sensitive data'), then every other sector, writes the magic/version, and storage_wipe immediately re-inits with a fresh random DEK/SAK, fresh PIN logs, empty wipe code and empty PIN so a torn wipe never leaves an old EDEK readable.",
+   "evidence": [
+    "storage/norcow.c:284-299 (norcow_wipe; test-only skip of inactive sectors under STORAGE_INSECURE_TESTING_MODE && !PRODUCTION)",
+    "storage/norcow.c:86-128 (erase_sector: header backup, erase, magic + ~version block)",
+    "storage/storage.c:1805-1813 (storage_wipe: norcow_wipe, memzero auth sum + cached keys, init_wiped_storage)",
+    "storage/storage.c:928-957 (init_wiped_storage: rng_fill_buffer_strong keys, auth_init, version keys, pin_logs_init(0), set_wipe_code(empty), set_pin(empty))",
+    "storage/norcow.c:208-247 (compact: copy live items to other sector, then erase old)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's wipe is primarily SE-side (admin-wipe on both SEs) plus page 123-127. The transferable rule is 'destroy the thing that matters most first, then everything, then re-seed state so there is no half-wiped observable'. For pq1: because of the XOR split, erasing EITHER SE half (or the local BHK wrap root) already kills the seed; order the fastest/most reliable destroyer first (BHK page erase, then SE050 UserID-gated wipe, then OPTIGA), and re-initialise page 124/127 so a reboot after a torn wipe cannot resume into a stale counter."
+  },
+  {
+   "item": "Exponential backoff before each PIN check (2^fails - 1 seconds, UI-cancellable), and on a wrong PIN the pre-computed progress countdown is run to completion so the wrong-PIN path has the same wall-clock duration the UI announced.",
+   "evidence": [
+    "storage/storage.c:1158-1161 (get_backoff_time_ms)",
+    "storage/storage.c:1198-1207 (sleep loop before checking PIN)",
+    "storage/storage.c:1233-1240 ('Finish the countdown' with WRONG_PIN_MSG)",
+    "storage/storage.c:476-508 (ui_estimate_time_ms from measured per-op estimates incl. Optiga SEC), 1305-1350 (unlock_time adds backoff + PBKDF2 + SE op estimates)",
+    "core/src/trezor/pin.py:49-112 (progress rendering, 'x seconds left')"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 relies on silicon counters and a 10-attempt cap but has no documented inter-attempt delay. An S-only-TIM-driven backoff (NS cannot shorten it; same mechanism as the 120 s idle timer) adds cost to glitch-assisted retries and to any path that resets a counter. The 'always finish the announced countdown' rule removes a timing side channel that tells an observer at which step the check failed.",
+   "notes": "The countdown length itself is a function of the fail counter and so leaks the attempt number to anyone watching the screen; Trezor accepts this (see the explicit 'N tries left' display)."
+  },
+  {
+   "item": "Remaining attempts are deliberately disclosed on the PIN keyboard ('N tries left', 'last attempt' in warning style, transient 2 s 'wrong PIN' banner); storage_get_pin_rem() returns min(MCU, Optiga) and SYNCHRONISES the two counters on every read by decrementing whichever is higher.",
+   "evidence": [
+    "core/src/trezor/ui/layouts/eckhart/__init__.py:2567-2598 (attempts text, last_attempt flag)",
+    "core/embed/rust/src/ui/layout_eckhart/firmware/keyboard/pin.rs:39, 50-66, 175-186 (warning timer, label_title_warning on last attempt)",
+    "core/src/apps/common/request_pin.py:96-115 (get_pin_rem on every prompt; wrong_pin=True on retry)",
+    "storage/storage.c:1653-1697 (storage_get_pin_rem: while rem_mcu > rem_optiga: storage_pin_fails_increase; if rem_optiga > rem_mcu: optiga_pin_decrease_rem)",
+    "core/embed/sec/optiga/optiga.c:1218-1243 (optiga_pin_get_rem also syncs E122 vs E120), 1254-1262 (decrease both)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 CMD_GET_REMAINING is already 'min over MCU count + runtime SE mirrors'. The divergence is reconciliation: Trezor's read path is SYMMETRIC (burns MCU attempts if the SE is lower, burns SE attempts if the MCU is lower) and runs on every prompt, whereas pq1 only wipes when E120_used > page124_used and treats an MCU lead as a conservatively charged state. Trezor's direction 'if MCU leads, decrement the SE to match' is implementable for OPTIGA E120 (count op) but NOT for the SE050 UserID (attempt attribute unreadable, SW=0x6986 per CLAUDE.md), so pq1 can at best make the OPTIGA leg symmetric. Threat-model note: the explicit number on screen is a deliberate UX trade (avoid surprise wipes); it leaks attempt count to a shoulder-surfer, which Trezor accepts."
+  },
+  {
+   "item": "PIN keypad randomisation: touch models Fisher-Yates-shuffle the 10 digit buttons (hardware RNG) every time the keyboard is built; the two-button model starts the digit carousel at a random digit and re-randomises the shown digit after every entered digit.",
+   "evidence": [
+    "core/embed/rust/src/ui/layout_bolt/component/keyboard/pin.rs:101-108 (generate_digit_buttons: random::shuffle)",
+    "core/embed/rust/src/ui/layout_delizia/component/keyboard/pin.rs:298-300",
+    "core/embed/rust/src/ui/layout_caesar/component/input_methods/pin.rs:89-91 (get_random_digit_position), 168-170 (random initial page), 324-326 (random digit after each click)",
+    "core/embed/rust/src/trezorhal/random.rs:5-11 (Fisher-Yates), 14-17 (uniform_between)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 PIN entry is a two-button carousel on the NV3007 in S-world, i.e. the Caesar shape. Random start digit + re-randomise after each digit means the number/timing of button presses (observable via shoulder-surfing, button-GPIO EM/power, or the consumption-mask-less GPIO lines) no longer encodes the PIN. Needs only the S-world TRNG already present."
+  },
+  {
+   "item": "Random Delay Interrupts (RDI) plus wait_random(): a 1 ms systimer callback inserts a floating-mean random delay (fresh uniform[0,255] + session uniform[0,255], the session term refreshed on every USB packet and syscall) from a ChaCha-DRBG seeded by the TRNG; wait_random() (0-255 ticks with an i+j==wait glitch self-check and loop-completion check) is placed before every counter read/write, PVC compare and wipe-code compare.",
+   "evidence": [
+    "core/embed/sec/random_delays/stm32/random_delays.c:52-120 (DRBG, drbg_random8 with atomic lock), 131-175 (RDI start/stop/refresh, rdi_handler floating mean), 181-197 (wait_random with glitch checks)",
+    "core/embed/sec/random_delays/inc/sec/random_delays.h:24-39 (cites Clavier et al. and Tunstall-Benoit)",
+    "core/embed/projects/kernel/main.c:144-146 and core/embed/projects/secmon/main.c:117-120 (random_delays_init + start_rdi)",
+    "core/embed/io/usb/stm32/usb.c:728,748 and core/embed/sys/smcall/stm32/smcall_dispatch.c:166 (refresh on packet/syscall)",
+    "storage/storage.c + storage/pinlogs_*.h: 20 wait_random() call sites (e.g. storage.c:1140 before PVC compare, 1190 before ctr>=MAX check, 1226 before wipe decision)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 has a consumption mask (TIM2/TIM3 PWM) and FI sentinels but no documented temporal jitter. RDI is cheap (one secure TIM already exists, NS cannot stop TIM2/TIM3 on pq1), pure-logic, heap-free, and directly targets the 'time the glitch to the counter write / compare' attack class that the attempt-counter threat model is about. The wait_random self-checking loop pattern also belongs in fi.rs around gated_unlock's page-124 precharge and the E120/SE050 result handling."
+  },
+  {
+   "item": "Constant-time comparisons with FI guards: secequal (byte OR-accumulate, loop-completion check) and secequal32 (random mask per word: diff |= (a + mask - b) ^ mask, loop-completion check), both calling handle_fault on an incomplete loop.",
+   "evidence": [
+    "storage/storage.c:201-218 (secequal)",
+    "storage/storage.c:220-237 (secequal32 with random32() mask)",
+    "storage/storage.c:1140 (PVC compare uses secequal32), 455-470 (wipe-code compares use secequal)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 uses `subtle` for constant time but the random-mask arithmetic compare and the 'did the loop actually run n times' assertion are FI countermeasures, not timing ones. Portable into fi.rs as a `ct_eq_fi` used wherever a counter value, sentinel or SE status word is compared on the unlock path."
+  },
+  {
+   "item": "Storage authentication tag over the SET of protected entry keys (SAK-keyed HMAC of XOR of per-key HMACs) checked on every get, plus entry_count/other_count FI sanity, plus authenticated-vs-unauthenticated version words and an 'upgraded' flag so that a downgrade or an upgrade-bypass is treated as an attack and wipes.",
+   "evidence": [
+    "storage/storage.c:248-276 (auth_init/auth_update)",
+    "storage/storage.c:299-387 (auth_get: recompute over all entries, loop completion, tag check, other_count==entry_count)",
+    "storage/storage.c:1026-1076 (check_storage_version: 'Attack: Storage was downgraded' / 'upgrade process was bypassed' -> storage_wipe)",
+    "storage/norcow.c:266-269 (version downgrade at norcow level -> wipe)",
+    "docs/storage/index.md 'Storage authentication'"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 has no general KV store, but page 123 (per-slot offchain/registration log) and page 124/127 journals are exactly the kind of records an attacker with flash-write access would want to roll back (e.g. un-register a slot or lower a tally). A DHUK-keyed MAC over the set of live records, verified before any sign, is the same idea. Lower priority than the counter codec because pq1 counters are also reconciled on-chain, but the 'downgrade == attack == wipe' stance is worth adopting for the first-boot journal on page 127."
+  },
+  {
+   "item": "Per-entry AEAD with the (key||app) id as associated data and a fresh random IV per write; a separate DEK (not the PIN-derived KEK) encrypts entries so a PIN change only re-encrypts the EDEK.",
+   "evidence": [
+    "storage/storage.c:1416-1437 (storage_get_encrypted: rfc7539_auth(key), tag check -> handle_fault)",
+    "storage/storage.c:1472-1520 (storage_set_encrypted: rng IV, streaming encrypt, tag)",
+    "docs/storage/index.md 'Design rationale' (separate DEK; AES-XTS considered and rejected; single-IV-per-sector rejected)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "The AAD-binding of a wrapped blob to its slot/page id prevents splicing a valid wrap from one slot into another. pq1's page 126 (DHUK-wrapped BHK) and any future wrapped SE credential journal should bind page/record id as AAD. The DEK/KEK split matters only if pq1 adopts a PIN-derived KEK (see item 1)."
+  },
+  {
+   "item": "Secure-element-bound PIN stretching chain (Optiga): per unlock the MCU-stretched PIN is run through HMAC(x,'') -> Optiga CMAC(E200) and ECDH(E0F3, hash_to_curve) (both gated by a 600000-use LIFETIME counter E121) -> HMAC(E122-gated F1D8) -> AUTOREF proof against F1D4 (gated by attempt counter E120) -> read counter-protected PIN_SECRET F1D0 -> final HMAC. Two independent attempt counters (E120, E122) with different reset authorisations defeat the documented 'PIN-only attack'; write access to E122 requires knowledge of STRETCHED_PIN so the attacker cannot reset it without destroying the oracle. Every value sent to the SE is first hashed so a bus tap learns only digests. Keys in E200/E0F3 are regenerated on every PIN set.",
+   "evidence": [
+    "core/embed/sec/optiga/optiga.c:39-106 (OID map, PIN_TOTAL_CTR_LIMIT 600000, PIN_STRETCH_ITERATIONS)",
+    "core/embed/sec/optiga/optiga.c:392-525 (optiga_pin_init_metadata access conditions), 554-569 (regen CMAC/ECDH keys)",
+    "core/embed/sec/optiga/optiga.c:662-707 (stretch_cmac_ecdh with 'one-way function before sending to the Optiga')",
+    "core/embed/sec/optiga/optiga.c:759-863 (optiga_pin_set: counters reset to STRETCHED_PIN_COUNT+PIN_MAX_TRIES)",
+    "core/embed/sec/optiga/optiga.c:972-1131 (pin_stretch_hmac, optiga_pin_verify: CTR_LIMIT -> COUNTER_EXCEEDED, AUTH_FAIL -> INVALID)",
+    "docs/core/misc/optiga.md ('PIN-only attack', 'resettable under all circumstances', rationale for both counters)",
+    "storage/storage.c:702-808 (derive_kek_set), 810-855 (derive_kek_unlock)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 uses OPTIGA E120 LUC + F1D0 AuthRef purely as an attempt counter and keeps the real PIN compare on SE050. The transferable ideas: (a) a LIFETIME stretch counter (E121-style) that bounds total unlock operations for the device's life so an attacker who can reset per-session counters still has a hard ceiling; (b) two attempt counters with DIFFERENT reset authorisations, so a single SE vulnerability class (e.g. reading PRESSEC objects) leaves the other intact; (c) the 'digest before SE' pattern pq1 already approximates via Shielded Connection. Blocker: the ECDH P-256 ingredient is classical crypto inside the KDF; it is not a signer and creates no on-chain authority, but it is an owner decision against the pure-PQ stance (invariant #5 wording). CMAC-only (E200 AES) stretching is fully compatible."
+  },
+  {
+   "item": "Tropic01 Mac-and-Destroy attempt slots (T3W1): each PIN attempt consumes a distinct M&D slot (64 slots, index = (change_pin_counter*11 + attempt) mod 64 so every PIN change rotates slots), the KEK is stored only as per-attempt XOR masks (kek ^ stretched_pin[i]) in Tropic R-memory, and on success the consumed slots are restored with a reset key kept in encrypted storage; with Tropic, PIN_MAX_TRIES drops to 10 because each attempt also needs an Optiga stretched-PIN object, and PBKDF2 drops to 1 iteration because SE ops dominate.",
+   "evidence": [
+    "core/embed/sec/tropic/tropic.c:88-104 (KEK mask slots, SHIFT 11 coprime to 64, change counter in mcounter 4)",
+    "core/embed/sec/tropic/tropic.c:1593-1603 (get_mac_and_destroy_slot), 1704-1749 (tropic_pin_stretch: retry policy comment), 1756-1794 (reset_slots), 1824-1879 (pin_set), 1895-1975 (set/unmask KEK masks)",
+    "storage/storage.h:62-79 (PIN_MAX_TRIES 10 with Tropic else 16; STRETCHED_PIN_COUNT)",
+    "storage/storage.c:98-103 (PIN_ITER_COUNT 1 when STRETCHED_PIN_COUNT>1)",
+    "storage/storage.c:810-855 (pin_index = fails-1 selects the slot)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "Neither SE050 nor OPTIGA Trust M offers a Mac-and-Destroy primitive, and pq1 has no Tropic. The one reusable design point is 'per-attempt consumable secrets' rather than a decrementing counter: on SE050 this is approximable with per-attempt UserID-gated objects but would need a new provisioning design (S-1/S-2 class work) and is out of scope for the stateless-slot model.",
+   "notes": "Explicit Trezor trade-off documented at storage.h:62-72: fewer attempts (10) accepted for simplicity when both SEs are present."
+  },
+  {
+   "item": "'Resettable under all circumstances' design invariant for SE objects: every path that can reset an SE counter necessarily overwrites a secret needed to finish the KDF (PIN_SECRET writable Always but reading it needs STRETCHED_PIN; STRETCHED_PIN writable only via PIN_SECRET), so a forgotten PIN / depleted counters / wiped flash never bricks the chip, yet no reset path yields a PIN oracle.",
+   "evidence": [
+    "docs/core/misc/optiga.md 'Optiga PIN protection' diagram and last three paragraphs",
+    "core/embed/sec/optiga/optiga.c:392-403 (OID_PIN_SECRET change=ALWAYS, read=last stretched PIN), 406-413 (STRETCHED_PIN change=PIN_SECRET, execute=E120)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1's open S-1/S-2/S-3 lockdown and the SE050 admin UserID (max_attempts=0) need exactly this stated invariant: enumerate every SE reset/wipe path and prove each one destroys an input the KDF/unlock needs. This is a review checklist item for the OPTIGA F1D0/E120 metadata ceremony rather than new code."
+  },
+  {
+   "item": "Storage code confinement: storage flash is mapped only while storage code runs (mpu_reconfig(MPU_MODE_STORAGE)/mpu_restore around every entry point), PIN/ext_salt pointers from the unprivileged app are probed by syscall verifiers, and on T3W1 the whole storage/PIN path lives in the secure monitor behind SMCALLs.",
+   "evidence": [
+    "core/embed/sys/mpu/stm32u5/mpu.c:504-506 (MPU_MODE_STORAGE region)",
+    "storage/storage.c:959-962, 1353-1380, 1805-1813 (mpu_reconfig/mpu_restore)",
+    "core/embed/sys/syscall/stm32/syscall_verifiers.c:717-745 (storage_setup__verified, storage_unlock__verified probe_read_access)",
+    "core/embed/sys/smcall/stm32/smcall_dispatch.c:251-269 (SMCALL_STORAGE_WIPE/LOCK/UNLOCK)",
+    "core/embed/models/T3W1/model.toml:3 (secmon = true)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1 already has TrustZone with NSC pointer validation and S-stack copies (invariant #4), which is the stronger version of Trezor's syscall probes. The incremental idea is an S-world MPU window: keep pages 123-127 unmapped except inside the few functions that touch them, so a code-reuse or FI-redirect in other S code cannot read/write counters."
+  },
+  {
+   "item": "Hardware tamper configured in 'confirmed' mode: internal tampers (backup-domain voltage, temperature, LSE clock, SWD access at RDP>0, monotonic counter overflow, crypto peripheral fault, IWDG, ADC analog watchdogs) enabled with CR3=0 so ANY tamper erases backup registers (where BHK lives) in hardware; external TAMP_IN2 enabled only in PRODUCTION kernel; IRQ re-inits MPU and reboots into RSOD.",
+   "evidence": [
+    "core/embed/sec/tamper/stm32u5/tamper.c:112-173 (tamper_init; 'all secrets all deleted when any tamper event is triggered')",
+    "core/embed/sec/tamper/stm32u5/tamper.c:219-245 (TAMP_IRQHandler)",
+    "core/embed/projects/kernel/main.c:139-143 (tamper_init; tamper_external_enable only #if PRODUCTION)",
+    "core/embed/projects/secmon/main.c:112-115 (secmon disables external tamper)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already ports this (`tamp`, `tamp-wipe`). Points to verify against pq1: (1) BHK-derived material in TAMP BKPxR is in the erase set (confirmed mode, CR3=0) so a tamper is a cryptographic erase of page 126's wrap root; (2) ITAMP6 (SWD at RDP>0) is enabled on the shipped RDP-2 image; (3) external tamper pin: pq1 is 48-pin with no bonded TAMP_IN documented, so only internal tampers apply."
+  },
+  {
+   "item": "Fail-closed multi-source RNG for salts and PIN secrets: rng_fill_buffer_strong = MCU TRNG XOR Optiga RNG XOR Tropic RNG, with a fatal error (not a silent fallback) if any SE entropy source fails.",
+   "evidence": [
+    "core/embed/sec/rng/rng_strong.c:38-84",
+    "storage/storage.c:402 (wipe-code salt), 868 (storage salt), 938 (DEK/SAK), core/embed/sec/optiga/optiga.c:767-776 (hmac secret, pin_secret)"
+   ],
+   "applies_to_pq1": "yes",
+   "why": "pq1 already does 3-source OptRand for signing. Apply the same fail-closed XOR (TRNG ^ SE050 RNG ^ OPTIGA RNG) to the page-127 first-boot salt, BHK first write and any duress-code salt, and make a failed SE RNG a halt rather than a TRNG-only fallback."
+  },
+  {
+   "item": "Lock/zeroize discipline: storage_lock memzeroes the cached DEK/SAK and auth sum; the app auto-locks on an idle timer (USB default 10 min, min 10 s; battery default 40 s), on power button, on LockDevice wire message, and locking during PIN entry restarts the workflow so the input field is cleared.",
+   "evidence": [
+    "storage/storage.c:1008-1012 (storage_lock)",
+    "core/src/apps/common/lock_manager.py:204-236 (lock_device, lock_device_if_unlocked)",
+    "core/src/apps/base.py:425-427 (handle_LockDevice)",
+    "core/src/storage/device.py:69-81 (autolock constants)",
+    "core/src/apps/common/request_pin.py:83-95 (PIN re-verification cache window)"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "pq1's 120 s S-only timeout that NS pings cannot reset is already stricter than Trezor's host-resettable 10 min. Only the 'lock cancels an in-progress PIN entry and clears the buffer' detail is worth checking in pq1's pin_entry path."
+  },
+  {
+   "item": "Storage salt binds storage to the firmware trust class: on T3W1 the hardware salt is derived from the privileged master key keyed by vendor-header fw_type, so unofficial firmware derives a different salt and cannot decrypt official-firmware storage even with the PIN; legacy models use CPUID + a one-time TRNG block burned into OTP and locked.",
+   "evidence": [
+    "core/embed/sec/storage/stm32u5/storage_salt.c:36-56 (secret_key_storage_salt(vhdr.fw_type))",
+    "core/embed/sec/secret_keys/stm32u5/secret_keys.c:161-166",
+    "core/embed/sec/storage/stm32u5/storage_salt.c:61-91 (UID words + OTP randomness block, lock)",
+    "core/embed/sec/storage/storage_setup.c:27-30"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 ships RDP-2 with a single vendor and a WRP-locked FSBL; there is no 'other vendor firmware' state to isolate, and the DHUK already provides per-die binding. The OTP-randomness-block-as-salt idea is subsumed by DHUK."
+  },
+  {
+   "item": "Protected items in backup SRAM are erased on wipe; backup RAM uses two slots with guard words + CRC-16 + sequence so a torn write never yields a half-valid record.",
+   "evidence": [
+    "core/embed/sec/backup_ram/stm32u5/backup_ram.c:29-31, 162-209 (is_slot_valid/reload), 211-256 (commit: invalidate guard, write, re-validate), 399-430 (erase_protected)"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 has no battery and no documented backup-SRAM state. The guard-word/CRC/seq two-slot commit pattern is generic and could inform the page-127 first-boot journal, but Trezor applies it to power-management/BLE data, not PIN state."
+  },
+  {
+   "item": "SD-card salt as an optional second factor: a 32-byte external salt from the SD card is mixed into the KEK and its HMAC tag is stored in device storage so a wrong card is detected and the user prompted to retry.",
+   "evidence": [
+    "storage/storage.c:644-647 (ext_salt appended to KDF salt)",
+    "storage/storage.h:28 (EXTERNAL_SALT_SIZE 32)",
+    "core/src/apps/management/sd_protect.py:19-100",
+    "core/src/storage/sd_salt.py:30-34, 69-91",
+    "core/src/apps/common/sdcard.py:138-158"
+   ],
+   "applies_to_pq1": "no",
+   "why": "pq1 has no SD slot and its only external channel is the NS/companion path, which must never carry an unlock secret (invariant #4)."
+  },
+  {
+   "item": "Decisions Trezor documents NOT taking: no decoy/plausible-deniability PIN (deniability is left to passphrase hidden wallets); the full guard-key counter scheme is not used on U5 because SE counters + ECC flash make it unnecessary; AES-XTS and single-IV-per-sector were considered and rejected; wipe-code length capped at 50 to bound storage; with Tropic the attempt budget is cut to 10 and PBKDF2 to 1 iteration; the Optiga ECDH step is kept despite being classical because it is a counter-gated KDF ingredient, not a signer.",
+   "evidence": [
+    "core/src/apps/evolu/get_node.py:50 (deniability via passphrase; no duress PIN anywhere in core/src or storage/)",
+    "docs/storage/index.md 'Blockwise flash' and 'Design rationale'",
+    "storage/storage.c:91-96 (MAX_WIPE_CODE_LEN rationale)",
+    "storage/storage.h:62-72, storage/storage.c:98-103",
+    "docs/core/misc/optiga.md (ECDH rationale: 'attacker would need to extract each of the secrets in PIN_CMAC, PIN_ECDH, PIN_HMAC and PIN_SECRET')"
+   ],
+   "applies_to_pq1": "partial",
+   "why": "Useful as owner-decision context: pq1 already went further than Trezor on duress (a real duress PIN exists per project memory) and should decide explicitly whether duress = wipe (Trezor) or duress = decoy (not in Trezor). The 'simplify when an SE counter is primary' decision supports keeping pq1's page-124 codec simple-but-redundant (item 5) rather than porting the guard-key scheme (item 4)."
+  }
+ ]
+}

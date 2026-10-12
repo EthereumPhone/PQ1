@@ -1,0 +1,1712 @@
+{
+ "items": [
+  {
+   "id": "USB-01",
+   "outcome": "COVERED",
+   "board": "DOABLE",
+   "drafts": [],
+   "sub_actions": [
+    {
+     "what": "Atomic try-enter at the top of every gateway entry, with a Busy status and USB status-word mapping",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846: \"Refuse nested entry: an atomic `compare_exchange(0, 1)` at the top of **every** `cmse-nonsecure-entry` veneer, before any argument is read. Return a new `NscStatus::Busy` with a USB status-word mapping.\" Still unimplemented at master: secure/src/nsc/mod.rs:1299 is an unconditional fetch_add."
+    },
+    {
+     "what": "Bind the signed calldata to the confirmed calldata in the single-sign handler",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846: \"**Bind the signed bytes to the confirmed bytes in `cmd_sign_userop`**, the way the batch handler does\""
+    },
+    {
+     "what": "Scrub the shared snapshot buffer on every early return",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846: \"Scrub `SIGN_SNAP_BUF` on every early return.\""
+    },
+    {
+     "what": "Define how the PendSV idle re-unlock takes the same token; keep per-handler enter()",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846: \"Keep the per-handler `enter()` for the idle-wipe depth semantics, and define how the PendSV idle re-unlock takes the same token.\""
+    },
+    {
+     "what": "Optional BASEPRI_S mask inside veneers",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846: \"Decide whether veneers also raise `BASEPRI_S` to 0x80 for their critical sections.\" (extended by the X5b comment draft)"
+    },
+    {
+     "what": "Guard the entries with no guard (pin-attempt log, heartbeat); the four short handlers",
+     "status": "COVERED",
+     "by": "#846, #152",
+     "evidence": "#846: \"Guard the veneers that have no guard at all (`cmd_pin_attempt_log`, `nsc_register_heartbeat`).\" #152 title names get_remaining / is_unlocked / lock / tzic_status."
+    },
+    {
+     "what": "Correct the false non-reentrant comments and the sau.rs PRIS comment; add a threat-model row",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846: \"Correct the comments listed above and add a threat-model row for nested entry.\""
+    },
+    {
+     "what": "Evidence: source-invariant test over all entries, host model of the guard, one silicon test",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846: \"Evidence: a source-invariant test over all veneers (...), a host model of the guard in a workspace crate so the test actually runs, and one silicon test.\""
+    },
+    {
+     "what": "Put the try-enter itself through the FI sentinel idiom",
+     "status": "PARTLY",
+     "by": "#846",
+     "evidence": "#846 names the sentinel idiom only for the re-binding check, and says the re-binding \"closes the wrong-signature outcome even if a guard is skipped by a fault\". Too small to draft."
+    }
+   ],
+   "issues_read": [
+    846,
+    152,
+    835,
+    140,
+    418,
+    600,
+    859
+   ],
+   "one_line": "Fully covered by #846; its body carries every part of the item, and master is unchanged (the guard is still a plain counter).",
+   "unsure": "The only part not written word for word in #846 is hardening the try-enter compare itself with the sentinel idiom. #846 treats a skipped guard as covered by the re-binding check, so I did not draft anything."
+  },
+  {
+   "id": "USB-06",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X3a-pin-prompt-free-signer-set.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "(a) Sentinel-gate the pointer check in cmd_pin_attempt_log",
+     "status": "COVERED",
+     "by": "#859",
+     "evidence": "#859: \"Convert the check to the `fi::check_true_into_sentinel` gate used by `cmd_fw_status`.\""
+    },
+    {
+     "what": "(b) Finish NsPtr adoption",
+     "status": "COVERED",
+     "by": "#84",
+     "evidence": "#84: \"Structural fix: adopt the `NsPtr` typestate across all ~10 handlers, remove its `#![allow(dead_code)]`.\""
+    },
+    {
+     "what": "(b) Lint that bans validate_ns_*_ptr outside the validation modules",
+     "status": "COVERED",
+     "by": "#859",
+     "evidence": "#859: \"Finish #84 and add a lint that bans `validate_ns_*_ptr(` outside the validation modules, so the next handler cannot repeat it.\""
+    },
+    {
+     "what": "(c) Correct the threat-model line that names NsPtr as the mechanism",
+     "status": "COVERED",
+     "by": "#866",
+     "evidence": "#866: \"**`NsPtr` typestate named as the pointer-validation mechanism.** `docs/security/threat-model.md:263`.\""
+    },
+    {
+     "what": "(d) One reviewed list of entries callable while locked, with a build-time or source check that every entry is classified",
+     "status": "UNTRACKED",
+     "by": "drafted as one checkbox of the X3a issue",
+     "evidence": "No test pins the set at master: the existing checks iterate hand-maintained file lists (secure/src/nsc_batch_offchain_pure_tests.rs:687). 12 of 20 cmd_*.rs files return the not-unlocked status; the rest are a mix (secure/src/nsc/cmd_is_unlocked.rs:11 reads the flag and never refuses). 34 gateway entry functions in secure/src/nsc/mod.rs. The pin-attempt-log row waits for #719."
+    },
+    {
+     "what": "Central deny-first table in the dispatcher",
+     "status": "OWNER",
+     "by": "not drafted: refuted by the report",
+     "evidence": "secure/src/nsc/mod.rs:1833 `#[cfg(not(feature = \"stm32u585\"))]` on `dispatch`: it exists only in the emulator build. On silicon no command number crosses into the secure world."
+    },
+    {
+     "what": "Unknown-command anomaly counter with lock",
+     "status": "OWNER",
+     "by": "not drafted: in the report's rejected list",
+     "evidence": "Report section 10, Considered and rejected: unknown instruction bytes are rejected in the non-secure router, so a counter there is attacker-held."
+    }
+   ],
+   "issues_read": [
+    84,
+    859,
+    866,
+    140,
+    719,
+    715,
+    152,
+    418,
+    600,
+    846
+   ],
+   "one_line": "Parts (a) to (c) were filed yesterday or already existed (#859, #84, #866); the one surviving part, a pinned list of entries callable while locked, is folded into the X3a draft as a checkbox. No dispatcher table is drafted because there is no dispatcher on the real chip.",
+   "unsure": "My brief described the surviving form as a central deny-first table in the gateway dispatcher. The report and both review lenses say that form is the refuted one (dispatch is emulator-only). What survives is a per-entry policy list plus a check, which is the same kind of source test as X3a, so I merged it there. If you prefer it separate, or dropped until #719 is decided, remove that one checkbox and USB-06 becomes plain COVERED."
+  },
+  {
+   "id": "USB-08",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-600-USB-08-ceremony-layer-design-corrections.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Pure-logic crate: bounded ring plus semantic comparator returning Normal / RepeatBurst / MutatedRetry; design document",
+     "status": "COVERED",
+     "by": "#600",
+     "evidence": "#600: \"a bounded S-SRAM ring of recent request digests with a monotonic-tick window and (b) a semantic-equality comparator over (sender, to, value, destination class) that ignores nonce/gas, returning Normal / RepeatBurst / MutatedRetry\". Not built at master (no ceremony module, no design doc)."
+    },
+    {
+     "what": "Keep the ring across LOCK and idle lock (both host-inducible)",
+     "status": "UNTRACKED",
+     "by": "comment draft on #600",
+     "evidence": "Contradicts #600: \"State explicitly that all state is S-SRAM and cleared on lock/timeout/zeroize\". nonsecure/src/usb/commands.rs:287 routes the host LOCK command; secure/src/nsc/cmd_lock.rs:12 zeroizes."
+    },
+    {
+     "what": "Count prompts, not released signatures; do not reuse the F-17 counter",
+     "status": "UNTRACKED",
+     "by": "comment draft on #600",
+     "evidence": "secure/src/sign_rate.rs:52 SIGNS_THIS_SESSION exists (the #600 triage note says no such counter exists); charged in the signer at secure/src/crypto.rs:95."
+    },
+    {
+     "what": "Restrict the diff trigger to a real retry signal; exclude forced blind; decide batch and off-chain",
+     "status": "UNTRACKED",
+     "by": "comment draft on #600",
+     "evidence": "Report USB-08 and data file verify/USB-08.json corrections 3 to 5."
+    },
+    {
+     "what": "Friction screens (diff page, repeat banner, cap refusal)",
+     "status": "OWNER",
+     "by": "#600",
+     "evidence": "#600: \"Wiring a friction page into secure/src/ui/confirm.rs is a separate follow-up needing an owner UX decision - do not bundle it.\""
+    }
+   ],
+   "issues_read": [
+    600,
+    329,
+    616,
+    714,
+    779
+   ],
+   "one_line": "Everything buildable is already #600; the research adds design corrections (most importantly: do not clear the ring on lock, because the host can lock the device), drafted as a comment on #600.",
+   "unsure": "I did not check the research's statement that the tick does not advance on the emulator build; the comment says so."
+  },
+  {
+   "id": "USB-09",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+    "c-866-USB-09-usb-errata-row-recite.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Make the non-secure command router host-compilable",
+     "status": "COVERED",
+     "by": "#313",
+     "evidence": "#313: \"(a) the per-command dispatch in `nonsecure::usb::commands` (1111 LOC) is still host-uncompilable - needs a host-compile path before its command-boundary/report-framing can be Kani'd\". Still true at master: nonsecure/Cargo.toml has no [lib]; the file is 1274 lines."
+    },
+    {
+     "what": "Fuzz the composed HID to APDU to router path with a mock gateway",
+     "status": "PARTLY",
+     "by": "#588 (shared-crate pieces only)",
+     "evidence": "#588: \"apdu_router_state_machine should consume the input as a byte stream of 64-B HID reports fed to HidFrameAssembler::process_frame, then parse_apdu_header -> route_v2 -> ChainState::step\". The real router (nonsecure/src/usb/commands.rs:226) is not reached. Comment draft adds the oracle and refactor shape."
+    },
+    {
+     "what": "USB test rig (Cynthion or Facedancer class)",
+     "status": "COVERED",
+     "by": "#590",
+     "evidence": "#590 title; blocker recorded there as HARDWARE-PURCHASE. Bench equipment on the existing USB port, no board change."
+    },
+    {
+     "what": "Re-cite the errata row to the driver dependency",
+     "status": "UNTRACKED",
+     "by": "comment draft on #866",
+     "evidence": "docs/security/threat-model.md:373 describes the mitigation without saying it is in synopsys-usb-otg 0.4.0. I read the dependency source: single-packet IN writes and flush on reset are there."
+    },
+    {
+     "what": "A check that fails on an unreviewed dependency version change",
+     "status": "DONE-ON-MASTER",
+     "by": "cargo-vet exemption pinned to 0.4.0 plus the lockfile",
+     "evidence": "supply-chain/config.toml:747 `[[exemptions.synopsys-usb-otg]]` (version 0.4.0); Cargo.lock:1779; .github/workflows/ci.yml:146 runs `cargo vet --locked`. Not run by me."
+    },
+    {
+     "what": "Implement the errata mitigations or fork the crate",
+     "status": "OWNER",
+     "by": "not drafted: dropped by the report (false premise)",
+     "evidence": "The behaviour exists in the dependency."
+    }
+   ],
+   "issues_read": [
+    588,
+    313,
+    590,
+    596,
+    476,
+    428,
+    130,
+    136,
+    626,
+    866
+   ],
+   "one_line": "The router refactor, the fuzz target and the rig are already #313, #588 and #590; two comments add a stronger fuzz oracle and a correction to the USB errata row in the threat model (the control exists, in the driver dependency).",
+   "unsure": "Which issue should carry the oracle: I chose #588 (the fuzz target) over #313 (the host-compile prerequisite). The errata-row note sits on #866 although that row is an uncited true claim, not an absent control."
+  },
+  {
+   "id": "M20",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+    "c-269-M20-secure-alias-move-and-untracked-pieces.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Stage A: secure-attribute RCC, PWR, SYSCFG, set RCC_PRIVCFGR, lock",
+     "status": "COVERED",
+     "by": "#269, #80",
+     "evidence": "#269: \"Program `RCC_SECCFGR` (full clock tree, no NS PLL carve-out) + `RCC_PRIVCFGR SPRIV` + `PWR_SECCFGR` (incl `VBSEC`) + `SYSCFG_SECCFGR`.\" Unimplemented at master: no SECCFGR write for these blocks in secure/src."
+    },
+    {
+     "what": "Stage A: TAMPSEC preserving BHKLOCK; backup-register zones",
+     "status": "COVERED",
+     "by": "#81, #50",
+     "evidence": "#81: \"Set `TAMP_SECCFGR.TAMPSEC` (bit 31) via read-modify-OR preserving BHKLOCK\". #50 also covers the NS erase of the loaded hardware key: \"so NS code cannot disable tamper or the BHK-erase\"."
+    },
+    {
+     "what": "Stage A: RAMCFG and ICACHE attribution",
+     "status": "COVERED",
+     "by": "#150",
+     "evidence": "#150 title: \"ICACHE + RAMCFG are NS-attributed\""
+    },
+    {
+     "what": "Stage A: re-assert FLASH_ACR latency",
+     "status": "COVERED",
+     "by": "comment on #80 (2026-10-12)",
+     "evidence": "#80 comment: \"Have the secure world re-assert and read back `FLASH_ACR.LATENCY` before fault-sensitive sections (signing, unlock), since it cannot be locked.\""
+    },
+    {
+     "what": "Stage A: compile out the non-secure RCC read",
+     "status": "COVERED",
+     "by": "#269",
+     "evidence": "#269: \"Verify the debug NS RCC dump (`nonsecure/main.rs:153-158`) is compiled out.\" It is not compiled out at master (nonsecure/src/main.rs:190, runtime-gated at :188); the comment draft gives the new lines."
+    },
+    {
+     "what": "Stage A: add tamp-irq to the ship feature set",
+     "status": "COVERED",
+     "by": "#256, #75",
+     "evidence": "#256: \"Default-flip mechanics: remove the `tamp-irq` feature gate, make IRQ-mode unconditional under `tamp`\""
+    },
+    {
+     "what": "Stage A: move rcc.rs and reset_cause.rs to the secure alias (and the two host tests that pin the literal)",
+     "status": "UNTRACKED",
+     "by": "comment draft on #269",
+     "evidence": "secure/src/hw/rcc.rs:10 and secure/src/reset_cause.rs:19: `const RCC: u32 = 0x4602_0C00;`"
+    },
+    {
+     "what": "Stage A: RTC_SECCFGR, SLEEPDEEPS and the PWR low-power bits; silicon probes for the new attribution",
+     "status": "UNTRACKED",
+     "by": "comment draft on #269",
+     "evidence": "No hit for RTC_SECCFGR, SLEEPDEEPS or LPMSEC in any issue body."
+    },
+    {
+     "what": "Idle timer runs on the core clock, so NS can stretch it; CLAUDE.md wording",
+     "status": "UNTRACKED",
+     "by": "comment draft on #269",
+     "evidence": "secure/src/main.rs:896 `ARCH.syst_csr.write(0x07);` (processor clock); CLAUDE.md:287 says \"S-only TIM-driven\"."
+    },
+    {
+     "what": "Stage B: arm PVD and raise BOR",
+     "status": "COVERED",
+     "by": "#49, #248",
+     "evidence": "#49: \"Arm PVD (undervoltage interrupt) -> route the ISR to the zeroize/lockout path; raise BOR above the 1.71 V default\""
+    },
+    {
+     "what": "Stage B: BOR_LEV as a hard field of the ship profile, Phase A and the bootloader tripwire",
+     "status": "UNTRACKED",
+     "by": "comment draft on #49 (same verifier change as #848)",
+     "evidence": "shared/src/lockdown.rs:295 ObField has no brown-out entry; shared/src/lockdown.rs:521 bor_lev() is advisory. #848 covers only the SRAM bits."
+    },
+    {
+     "what": "Stage B: choose BOR level 3 with PVD level 5; reconcile the three documents",
+     "status": "OWNER",
+     "by": "comment draft on #49",
+     "evidence": "docs/hardware/evt-silicon-validation.md:792 (level 4 or above) versus docs/security/production-security.md:98 (3 or 4) versus docs/security/brownout-hardening.md:311 (level 3). Datasheet numbers not re-read."
+    },
+    {
+     "what": "Stage B: RAM-only PVD handler; PVD priority versus SysTick; mask PVD during the RDP-2 write",
+     "status": "UNTRACKED",
+     "by": "comment draft on #49",
+     "evidence": "#49 says to route to \"the zeroize/lockout path\"; the existing path writes flash (secure/src/hw/tzic.rs:246)."
+    },
+    {
+     "what": "Stage B: SRAM_RST=0 in the ship profile",
+     "status": "COVERED",
+     "by": "#848",
+     "evidence": "#848: \"Add `SRAM_RST = 0` to the ship profile, to `verify_ship_profile` (Phase A), to the FSBL tripwire and to the user-side read set.\""
+    },
+    {
+     "what": "BOR-reset scrub",
+     "status": "OWNER",
+     "by": "not drafted: refuted in the report's correction note (A19)",
+     "evidence": "Report lines 235: the runtime clears .bss and .data on every reset; what survives is the stack, which is #848."
+    },
+    {
+     "what": "Stage C: ADC4 analog-watchdog monitor on internal channels",
+     "status": "OWNER",
+     "by": "not drafted: replaced by item N1, which the requester is handling",
+     "evidence": "Report section 15, N1."
+    },
+    {
+     "what": "Rail divider to PA6 for an ADC4 rail watchdog",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "none",
+     "evidence": "PA6 is not connected on this board; needs a routed divider. Superseded by N1 (internal channels, no pin)."
+    },
+    {
+     "what": "Read the USB port-protection fault flag on PB10",
+     "status": "UNTRACKED",
+     "by": "one optional bullet in the #49 comment draft",
+     "evidence": "secure/src/board/pq1.rs:310-311: \"Nothing reads it today.\""
+    },
+    {
+     "what": "tamp + tamp-wipe + bhk co-enabled with internal tampers 6 and 9 in erase mode",
+     "status": "COVERED",
+     "by": "#208",
+     "evidence": "#208 title: \"mask debug-triggerable internal tampers before any tamp+bhk build\""
+    }
+   ],
+   "issues_read": [
+    47,
+    48,
+    49,
+    50,
+    70,
+    75,
+    79,
+    80,
+    81,
+    82,
+    150,
+    208,
+    227,
+    248,
+    256,
+    269,
+    366,
+    391,
+    848,
+    861,
+    46
+   ],
+   "one_line": "The bundle is almost entirely tracked (#269, #80, #81, #50, #150, #49, #248, #848). The untracked remainder is detail: BOR_LEV is not in the ship option-byte profile, the BOR and PVD pairing and a RAM-only handler rule, and the fact that the secure world itself still uses the non-secure RCC alias. Two comments, on #49 and #269.",
+   "unsure": "BOR_LEV in the ship profile could equally be a comment on #848 (it is the same verifier change); I put it on #49 to keep M20 to two comments. The BOR and PVD threshold numbers come from a datasheet extract nobody re-read. I did not check the polarity of the IWDG_STOP option bit that the #269 comment asks about."
+  },
+  {
+   "id": "M19",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "M19-untracked-assurance-gates.md",
+    "c-776-M19-per-harness-limits.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Step 0: required checks on master",
+     "status": "OWNER",
+     "by": "#456, #558",
+     "evidence": "#558: \"bind `verify-gate-enforcement` as a required external status check / ruleset and retain an auditable receipt\". Conflicts with pushing directly to master; owner decision."
+    },
+    {
+     "what": "Step 1: fi_min fix that survives optimisation, and a gate that can see it",
+     "status": "COVERED",
+     "by": "#777, #130 and the comments of 2026-10-12",
+     "evidence": "#777 comment: \"recompute from `black_box(a)` and `black_box(b)` separately, and make the gate assert that the value returned on the tripped path does not alias the first result\". scripts/check_fi_ir.sh still does not exist at master."
+    },
+    {
+     "what": "Step 2: enrol the never-run-tests oracle",
+     "status": "COVERED",
+     "by": "#725",
+     "evidence": "#725 title: \"Wire check_tests_actually_run.py into make + CI\". No workflow calls it at master."
+    },
+    {
+     "what": "Step 2: enrol the binary never-ship audit, two-sided, on its own dual secure-element build; markers for the other dev features",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "Makefile:4469 local target only; no workflow hit for prod_symbol_audit; #604 is closed with a local target only."
+    },
+    {
+     "what": "Step 2: gateway address check from the build recipes",
+     "status": "COVERED",
+     "by": "#690, #701",
+     "evidence": "#701: \"plus a call to `tools/check-gateway-abi.sh <secure-elf> <ns-elf>` after linking\". Sole caller at master: tools/build-evt-image.sh:83."
+    },
+    {
+     "what": "Step 3: run the rollback, geometry, sphincs-c10 feature and forced-blind suites, and make fsbl",
+     "status": "COVERED",
+     "by": "#720, #721, #722, #724",
+     "evidence": "#720: \"Separately: either wire `make fsbl` into CI, or correct invariant #10's \\\"CI-pinned\\\" wording.\" None is in .github/workflows at master."
+    },
+    {
+     "what": "Step 4: per-harness Kani time and memory limits; per-crate jobs",
+     "status": "UNTRACKED",
+     "by": "comment draft on #776",
+     "evidence": ".github/workflows/nightly.yml:88 runs `make kani` as one step under a 300-minute job limit."
+    },
+    {
+     "what": "Steps 4 to 6: a defined consequence for a red scheduled job",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "No workflow step opens an issue or blocks on a failed scheduled run."
+    },
+    {
+     "what": "Step 4: checkct as a real gate",
+     "status": "COVERED",
+     "by": "#312",
+     "evidence": "#312: \"replace the opam-install-binsec step ... and drop `continue-on-error`/`workflow_dispatch`\""
+    },
+    {
+     "what": "Step 5: repair the FI harnesses and build them in CI; the sweeps",
+     "status": "COVERED",
+     "by": "#865, #591, #633, #211, #232, #592, #296, #335",
+     "evidence": "#865: \"Fix the three stubs, and add a CI job that at least `cargo check`s every `tools/sca/*_target`.\""
+    },
+    {
+     "what": "Step 5: check on the linked image that FI primitives kept their redundancy",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "#777 only records why call-site counting is wrong; no tool inspects the image."
+    },
+    {
+     "what": "Step 6: glyph-path leakage gate (nightly, pixel-UI subjects)",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "tools/sca/Makefile:240 `glyph-leak` is manual; zero issue hits for glyph-leak."
+    },
+    {
+     "what": "Step 7: reproducibility of the bootloader, fuzz enrolment",
+     "status": "COVERED",
+     "by": "#189, #635, #680",
+     "evidence": "#189 title: \"FSBL never byte-diffed\""
+    },
+    {
+     "what": "Step 7: named must-refuse corpus in the default test lane",
+     "status": "PARTLY",
+     "by": "new-issue draft (Bybit replay only)",
+     "evidence": "The refusal the Bybit replay shows already has host tests under other names (secure/src/tx/eip712/safe/extra_tests.rs:964 multisend_delegatecall_verify_rejects_non_allowlisted_target), so the draft only asks to add the real transaction as a fixed vector. I did not check which of the other five vectors already have tests, so they are not drafted."
+    }
+   ],
+   "issues_read": [
+    10,
+    70,
+    81,
+    130,
+    136,
+    186,
+    189,
+    211,
+    232,
+    237,
+    239,
+    258,
+    260,
+    296,
+    312,
+    335,
+    389,
+    450,
+    451,
+    456,
+    558,
+    591,
+    592,
+    593,
+    604,
+    633,
+    635,
+    648,
+    664,
+    680,
+    690,
+    701,
+    720,
+    721,
+    722,
+    723,
+    724,
+    725,
+    735,
+    771,
+    776,
+    777,
+    784,
+    865,
+    866,
+    477,
+    812
+   ],
+   "one_line": "Re-read at master: none of the missing gates landed in the 159 commits. Most are already tracked one by one; the untracked remainder (binary never-ship audit in CI, a consequence for a red nightly, a linked-image FI check, a glyph-leak gate, the real Bybit transaction as a fixed test vector) is one new issue, plus a short comment on #776 about per-harness limits.",
+   "unsure": "For the long tail of related issues (#10, #186, #237, #239, #258, #260, #450, #451, #389, #593, #633, #211, #232, #296, #335, #680, #635, #189) I read the opening of each body, not every line; keyword searches over all bodies found no other owner for the drafted parts. The new issue bundles several checks that land in different files; split it if you prefer one per gate. Its sentence that the CI smoke image fails the audit's positive controls is the research reviewer's report, not something I ran."
+  },
+  {
+   "id": "M21",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-48-M21-secure-ram-bank-swap.md",
+    "c-854-M21-stack-limit-details-and-stack-scrub.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Phase 0: SRAM erase and ECC option bits in the ship profile and the Phase A verifier",
+     "status": "COVERED",
+     "by": "#848",
+     "evidence": "#848: \"Add `SRAM_RST = 0` to the ship profile, to `verify_ship_profile` (Phase A), to the FSBL tripwire and to the user-side read set.\""
+    },
+    {
+     "what": "Phase 1: stack limit in the secure world and the bootloader, with a fault path that re-bases the stack",
+     "status": "COVERED",
+     "by": "#854",
+     "evidence": "#854: \"Set `MSPLIM` in the secure reset path and in the FSBL, with a fault path that re-bases the stack before it runs.\""
+    },
+    {
+     "what": "Phase 1 details: use the runtime's _stack_end, non-secure limit at handover, emulator test, fallback options",
+     "status": "UNTRACKED",
+     "by": "comment draft on #854",
+     "evidence": "secure/src/boot_ns.rs:30 sets only the non-secure stack pointers."
+    },
+    {
+     "what": "Phase 2: decode FLASH_ECCR in the NMI handler; bootloader handler with slot fallback; fail-safe for a persistent double error",
+     "status": "COVERED",
+     "by": "#854, #94",
+     "evidence": "#854: \"Secure world: decode `FLASH_ECCR` in the NMI handler before deciding to reset (#94).\" #94: \"Acceptance: on-silicon determination + a fail-safe path if it traps.\""
+    },
+    {
+     "what": "Phase 3: move secure-world secrets to SRAM2 so that error correction and the hardware tamper erase cover them",
+     "status": "COVERED",
+     "by": "#48, #848, #46",
+     "evidence": "#48: \"Put `master_secret` / slot-cache / reconstructed entropy in an ECC-enabled region ... SRAM2 is uniquely ECC-capable AND hardware-erased on tamper\". #46: \"DECISION: secret buffers in SRAM2; set bit 24=0.\" #848: \"keep SRAM1, or move secrets to SRAM2 as Trezor does so that a hardware tamper also erases them\"."
+    },
+    {
+     "what": "Phase 3 details: SRAM2 is the non-secure bank today (a swap), the stack must move too, needs the 64 KB fit from #374, gates #848",
+     "status": "UNTRACKED",
+     "by": "comment draft on #48",
+     "evidence": "nonsecure/memory-stm32u585.x:9 links NS RAM into SRAM2; secure/src/sau.rs:440 marks it all non-secure; secure/memory-stm32u585.x:35 puts the stack at the top of SRAM1."
+    },
+    {
+     "what": "Phase 4: zero-init-ram and an unused-stack clear",
+     "status": "UNTRACKED",
+     "by": "comment draft on #854",
+     "evidence": "Cargo.toml:146 enables no cortex-m-rt features; no stack clear in secure/src/nsc/mod.rs:1750 zeroize_sensitive_state. Zero issue hits for zero-init-ram or stack clear."
+    },
+    {
+     "what": "Confirm option-bit positions and polarity; torn quad-word test",
+     "status": "COVERED",
+     "by": "#848, #82, #94, #544",
+     "evidence": "#848: \"Confirm bit position, polarity and the erase behaviour with a canary-plus-reset test on a sacrificial die.\" Needs a sacrificial die (DOABLE-BENCH)."
+    },
+    {
+     "what": "Doc fix: SRAM error correction described as always active",
+     "status": "COVERED",
+     "by": "#48 (assigned by #866)",
+     "evidence": "#866: \"Doc drift that already has an owner is not repeated here: ... SRAM ECC \\\"always active\\\" (#48)\". The row is docs/security/brownout-hardening.md:321 at master."
+    }
+   ],
+   "issues_read": [
+    21,
+    46,
+    48,
+    82,
+    92,
+    93,
+    94,
+    124,
+    150,
+    178,
+    230,
+    248,
+    268,
+    366,
+    374,
+    397,
+    484,
+    540,
+    542,
+    543,
+    544,
+    545,
+    705,
+    848,
+    854,
+    851
+   ],
+   "one_line": "Answer to the SRAM2 question: yes, #48 already asks for exactly that move and gives both reasons (error correction and erase on tamper), #46 records it as a decision and #848 lists it as a choice to make. What none of them says is that SRAM2 is the non-secure bank today, so it is a bank swap, and that the stack must move too. Two comments (#48, #854); no new issue.",
+   "unsure": "X8a (group B) proposes a stack-guard MPU region and X10b (group D) a secure-stack ledger; both touch the same ground as the #854 comment. For #92, #93, #230, #397, #543 and #545 I read only the opening of each body. The NMI handler comment at secure/src/main.rs:4710 (\"today NO NMI source is armed\") is doubtful if a flash double error raises NMI unconditionally; #854 and #94 carry that question, so I did not draft it."
+  },
+  {
+   "id": "SYS-06",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "SYS-06-fault-record-across-reset.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Read the sticky tamper status before the boot-time clear",
+     "status": "COVERED",
+     "by": "comment on #75 (2026-10-12)",
+     "evidence": "#75 comment: \"Read and act on `TAMP_SR` before the first `TAMP_SCR` write.\""
+    },
+    {
+     "what": "Capture fault-status registers after zeroize into backup registers 8 to 31 (or a RAM mailbox) and expose them through the existing diagnostic command",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "secure/src/main.rs:4751 ignores the exception frame; no fault-status register is read in secure/src or fsbl/src. The RAM-mailbox variant is ruled out by #848 (SRAM erased on every reset)."
+    },
+    {
+     "what": "Distinguish a fault-triggered reset from a deliberate software reset",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "secure/src/reset_cause.rs:179 classifies both as Software."
+    },
+    {
+     "what": "A record that survives power loss or a wipe (flash page)",
+     "status": "OWNER",
+     "by": "not drafted",
+     "evidence": "Every per-device page is owned; the project rule is no new flash state beyond page 123; page 127 is the append-only first-boot journal. Owner decision: which page, if any."
+    },
+    {
+     "what": "PIN-less readability of a persistent record",
+     "status": "OWNER",
+     "by": "#719 would have to be re-taken",
+     "evidence": "secure/src/pin_attempt_log.rs: \"being RAM-resident a seized powered-off device yields nothing\"; #719 rests on that."
+    },
+    {
+     "what": "Persist the PIN-attempt ring at lockout",
+     "status": "OWNER",
+     "by": "#715 (named as the open follow-up in its comments)",
+     "evidence": "#715 comment: \"Persisting the ring at lockout remains the follow-up.\" Needs the same page decision."
+    },
+    {
+     "what": "Render the reason on screen at next boot",
+     "status": "OWNER",
+     "by": "not drafted",
+     "evidence": "Not in the bootloader (frozen, size-bounded); a secure-world screen cannot be checked on the panel-less bench board."
+    }
+   ],
+   "issues_read": [
+    47,
+    50,
+    75,
+    208,
+    248,
+    366,
+    484,
+    540,
+    634,
+    705,
+    715,
+    719,
+    723,
+    758,
+    848,
+    81
+   ],
+   "one_line": "The item's storage is backup registers 8 to 31 (or a RAM mailbox): no flash and no per-event flash state. With no battery it only survives a warm reset, and after #848 the RAM variant is dead, so the draft is the register variant only, as a diagnostic. The persistent, wipe-surviving record needs two owner decisions and is not drafted.",
+   "unsure": "Whether a warm-reset-only record is worth an issue of its own or should be a comment on #715. I chose a new issue because fault capture is a different mechanism from the PIN-attempt ring. Whether anything on the board holds the backup supply up briefly is not recorded."
+  },
+  {
+   "id": "X3a",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X3a-pin-prompt-free-signer-set.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Host source test: the set of handlers that sign with no prompt equals exactly cmd_get_init_code.rs; per-file signer counts; negative control",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "Signer call sites at master: 3 / 3 / 2 / 1 / 1 (cmd_sign_userop.rs, cmd_sign_userop_batch.rs, cmd_sign_offchain.rs, cmd_sign_userop_forced.rs, cmd_get_init_code.rs); only the last has no confirm call. No issue body mentions GET_INIT_CODE or a prompt-free set."
+    },
+    {
+     "what": "Prompt column in the gateway audit table; additive dated note in the acceptance record",
+     "status": "UNTRACKED",
+     "by": "new-issue draft",
+     "evidence": "docs/audits/gateway-parsing-20260623-220401.md:140 has an unlock-gate column and no prompt column."
+    },
+    {
+     "what": "Confirm, tally or deterministic signature on CMD_GET_INIT_CODE",
+     "status": "OWNER",
+     "by": "not drafted: owner WON'T-FIX, do not re-raise",
+     "evidence": "docs/VULN-getinitcode-bootstrap-fewtime-oracle.md:8: \"STATUS: ACCEPTED / KNOWN TRADEOFF (per user/owner decision, 2026-06-30). WON'T-FIX\""
+    },
+    {
+     "what": "Correct the research data note that says pq1 has no silent-sign flows",
+     "status": "UNTRACKED",
+     "by": "not drafted (research data file, not product documentation)",
+     "evidence": "lit_all.json, LSB-025 relevance text."
+    }
+   ],
+   "issues_read": [
+    181,
+    89,
+    724,
+    719,
+    846,
+    859
+   ],
+   "one_line": "A regression pin only: a host test that fails if a second handler starts returning key-derived output without a prompt, plus a prompt column in the audit table and a dated note. The draft says in its first line that the WON'T-FIX is not reopened. It also carries the one surviving part of USB-06 (a pinned list of entries callable while locked).",
+   "unsure": "The test file it targets (secure/src/nsc_small_cmds_pure_tests.rs) is compiled under cfg(test), is not feature-gated and is not on the never-run allowlist, but I did not run the secure host tests. The 12 to 17 signatures per window figure is an estimate, marked EXPECTED in the draft."
+  },
+  {
+   "id": "X5b",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-846-X5b-interrupt-mask-at-atlas-sites.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Raise BASEPRI_S inside gateway entries",
+     "status": "PARTLY",
+     "by": "#846",
+     "evidence": "#846: \"Decide whether veneers also raise `BASEPRI_S` to 0x80 for their critical sections.\""
+    },
+    {
+     "what": "Hold the mask at the atlas call sites and on the PendSV idle re-unlock dialog, which is outside every entry",
+     "status": "UNTRACKED",
+     "by": "comment draft on #846",
+     "evidence": "secure/src/main.rs:4559 `fn PendSV()` runs `enter_pin()` at secure/src/main.rs:4622; secure/src/ui/pin_entry.rs:184 paints through the atlas. No BASEPRI write in secure/src."
+    },
+    {
+     "what": "Fix the sau.rs PRIS comment and the non-reentrant comments",
+     "status": "COVERED",
+     "by": "#846",
+     "evidence": "#846 lists `secure/src/sau.rs:716` under \"Comments that assert the opposite\"."
+    },
+    {
+     "what": "Restore-not-clear, BASEPRI_S is 0 at return, pin secure interrupt priorities",
+     "status": "UNTRACKED",
+     "by": "comment draft on #846",
+     "evidence": "Report item note X5b, reviewer corrections 5 and 6."
+    },
+    {
+     "what": "Silicon test with a negative control and a fixture that holds the bracket open",
+     "status": "UNTRACKED",
+     "by": "comment draft on #846",
+     "evidence": "secure/src/ui/px/confirm_px.rs:91: the e2e-test fast path short-circuits the pixel confirm. Needs the open bench board (debug port, no display)."
+    },
+    {
+     "what": "Check the PRIS and BASEPRI_S semantics in ARM DDI 0553",
+     "status": "UNTRACKED",
+     "by": "comment draft on #846 (stated as a precondition)",
+     "evidence": "Neither the proposer nor the reviewer read the manual."
+    }
+   ],
+   "issues_read": [
+    846,
+    152,
+    835,
+    700,
+    692,
+    132,
+    468,
+    729
+   ],
+   "one_line": "A comment on #846: its open BASEPRI box should cover the atlas call sites and the PendSV idle re-unlock dialog (which no gateway entry wraps), and the silicon test needs a negative control. The pixel UI code moved on master; all line numbers were re-derived there.",
+   "unsure": "X5a (group A) is the data-path half of the same atlas concern and names this mask as its first step; if X5a becomes an issue, the atlas-bracket part of this comment should be cross-linked or moved there. For #700, #692, #132, #468 and #729 I read only the opening of each body. The claim that the atlas pages can be changed between the two hashes is unproven and the draft says so."
+  }
+ ],
+ "citations": [
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "Makefile",
+   "line": 4469,
+   "snippet": "prod-symbol-audit: ## Binary-level audit of a firmware ELF for never-ship symbols/strings (ELF=path)"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "scripts/prod_symbol_audit.sh",
+   "line": 27,
+   "snippet": "#      backend receipt, the complete STM32+OPTIGA+SE050 source-set receipt, and"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": ".github/workflows/ci.yml",
+   "line": 477,
+   "snippet": "run: make build-hw"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "Makefile",
+   "line": 398,
+   "snippet": "$(MAKE) FEATURES=mock-se,debug-log,ui-semihosting,e2e-test,stm32u585 all"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "scripts/prod_symbol_audit.sh",
+   "line": 36,
+   "snippet": "#   function out of the symbol table entirely. Absence of a symbol is weaker"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "secure/src/rng.rs",
+   "line": 20,
+   "snippet": "#[link_section = \".pqsigner.rng_backend\"]"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": ".github/workflows/nightly.yml",
+   "line": 34,
+   "snippet": "- cron: '27 4 * * *'   # 04:27 UTC daily"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "tools/sca/Makefile",
+   "line": 240,
+   "snippet": "glyph-leak: build-kdf"
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "tools/demo_bybit_replay.py",
+   "line": 2,
+   "snippet": "\"\"\"Demo driver: replay the Feb 2025 Bybit Safe transaction against a pq1."
+  },
+  {
+   "draft": "M19-untracked-assurance-gates.md",
+   "path": "secure/src/tx/eip712/safe/extra_tests.rs",
+   "line": 964,
+   "snippet": "fn multisend_delegatecall_verify_rejects_non_allowlisted_target() {"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/main.rs",
+   "line": 4751,
+   "snippet": "unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/main.rs",
+   "line": 4720,
+   "snippet": "unsafe fn NonMaskableInt() -> ! {"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/reset_cause.rs",
+   "line": 179,
+   "snippet": "if csr & SFTRSTF != 0 {"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/hw/tzic.rs",
+   "line": 83,
+   "snippet": "static mut VIOLATION_COUNT: u32 = 0;"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/hw/tzic.rs",
+   "line": 88,
+   "snippet": "static mut LAST_SR: [u32; 4] = [0; 4];"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/pin_attempt_log.rs",
+   "line": 20,
+   "snippet": "//! **RAM-resident.** It answers \"why did this device just lock out\" while the"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/hw/bhk.rs",
+   "line": 59,
+   "snippet": "//! (we use BKP0R..BKP7R = 8"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "proto/src/lib.rs",
+   "line": 123,
+   "snippet": "pub const CMD_GET_PIN_ATTEMPT_LOG: u32 = 4;"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/hw/bhk.rs",
+   "line": 365,
+   "snippet": "write_volatile(PWR_DBPR, dbpr | PWR_DBPR_DBP);"
+  },
+  {
+   "draft": "SYS-06-fault-record-across-reset.md",
+   "path": "secure/src/hw/tamp.rs",
+   "line": 307,
+   "snippet": "REG.tamp_cr3.write(0);"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_get_init_code.rs",
+   "line": 78,
+   "snippet": "if super::state::peek_state(|s| s.pin_verified.check_sentinel()) != crate::fi::OK_SENTINEL {"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_get_init_code.rs",
+   "line": 31,
+   "snippet": "//!   * No OLED confirmation. The user will confirm the actual transaction"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_get_init_code.rs",
+   "line": 266,
+   "snippet": "if let Err(status) = super::factory_calldata::build("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/factory_calldata.rs",
+   "line": 78,
+   "snippet": "crate::crypto::c10_sign_verified_with_progress(master_c10_sk, &factory_digest, progress)"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 2311,
+   "snippet": "let factory_sig = match crate::crypto::c10_sign_verified_with_progress("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 2437,
+   "snippet": "let bootstrap_sig = match crate::crypto::c10_sign_verified_with_progress("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 2558,
+   "snippet": "match crate::crypto::c10_sign_verified_with_progress("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_userop_batch.rs",
+   "line": 2444,
+   "snippet": "let factory_sig = match crate::crypto::c10_sign_verified_with_progress("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_userop_batch.rs",
+   "line": 2535,
+   "snippet": "let bootstrap_sig = match crate::crypto::c10_sign_verified_with_progress("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_userop_batch.rs",
+   "line": 2651,
+   "snippet": "match crate::crypto::c10_sign_verified_with_progress("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 1337,
+   "snippet": "match crate::crypto::c10_sign_verified_with_progress(slot_ref, &hash_to_sign, crate::progress_halves"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 1499,
+   "snippet": "if let Err(status) = super::factory_calldata::build("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_sign_userop_forced.rs",
+   "line": 1387,
+   "snippet": "match crate::crypto::c10_sign_verified_forced_with_progress("
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/fw_rollback_e2e.rs",
+   "line": 80,
+   "snippet": "let mut sig = sk.sign(&digest, None);"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1833,
+   "snippet": "#[cfg(not(feature = \"stm32u585\"))]"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc/cmd_is_unlocked.rs",
+   "line": 11,
+   "snippet": "if super::state::peek_state(|s| s.pin_verified.is_true_fi()) {"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/nsc_batch_offchain_pure_tests.rs",
+   "line": 687,
+   "snippet": "fn negative_every_handler_checks_pin_verified() {"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/main.rs",
+   "line": 361,
+   "snippet": "mod nsc_small_cmds_pure_tests;"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "secure/src/main.rs",
+   "line": 171,
+   "snippet": "mod nsc;"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "docs/audits/gateway-parsing-20260623-220401.md",
+   "line": 140,
+   "snippet": "| CMD / veneer | Handler | Unlock gate | NS deref discipline | Verdict |"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "docs/VULN-getinitcode-bootstrap-fewtime-oracle.md",
+   "line": 155,
+   "snippet": "- **Harvest rate:** ~1.5 s/call, inside a **120 s idle window that `GET_INIT_CODE` does not"
+  },
+  {
+   "draft": "X3a-pin-prompt-free-signer-set.md",
+   "path": "docs/VULN-getinitcode-bootstrap-fewtime-oracle.md",
+   "line": 8,
+   "snippet": "> **STATUS: ACCEPTED / KNOWN TRADEOFF (per user/owner decision, 2026-06-30). WON'T-FIX"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/hw/rcc.rs",
+   "line": 10,
+   "snippet": "const RCC: u32 = 0x4602_0C00;"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/reset_cause.rs",
+   "line": 19,
+   "snippet": "const RCC: u32 = 0x4602_0C00;"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/hw_platform_under_test/pure_tests.rs",
+   "line": 286,
+   "snippet": "assert!(RCC_SRC.contains(\"const RCC: u32 = 0x4602_0C00;\"));"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/main_sau_pure_tests.rs",
+   "line": 407,
+   "snippet": "RESET_CAUSE_SRC.contains(\"const RCC: u32 = 0x4602_0C00;\"),"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/main.rs",
+   "line": 1196,
+   "snippet": "let mhz = hw::rcc::init();"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/main.rs",
+   "line": 1354,
+   "snippet": "sau::init();"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "nonsecure/src/main.rs",
+   "line": 190,
+   "snippet": "const RCC_NS: u32 = 0x4602_0C00;"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "nonsecure/src/main.rs",
+   "line": 188,
+   "snippet": "if (core::ptr::read_volatile(DHCSR) & 1) != 0 {"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/timeout.rs",
+   "line": 3,
+   "snippet": "//! [`tick_verified`] is called first on every SysTick (~1 ms). It advances an"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "secure/src/main.rs",
+   "line": 896,
+   "snippet": "ARCH.syst_csr.write(0x07);"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "CLAUDE.md",
+   "line": 287,
+   "snippet": "| `secure/src/timeout.rs` | S-only TIM-driven inactivity timeout (NS pings do NOT reset). |"
+  },
+  {
+   "draft": "c-269-M20-secure-alias-move-and-untracked-pieces.md",
+   "path": "CLAUDE.md",
+   "line": 372,
+   "snippet": "- **NS does not control the inactivity timer**"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "secure/memory-stm32u585.x",
+   "line": 31,
+   "snippet": "RAM   : ORIGIN = 0x30000000, LENGTH = 192K"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "nonsecure/memory-stm32u585.x",
+   "line": 9,
+   "snippet": "RAM   : ORIGIN = 0x20030000, LENGTH = 64K"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "secure/src/sau.rs",
+   "line": 440,
+   "snippet": "mpcbb_seccfgr(MPCBB2_BASE, i).write(0x0000_0000); // all blocks non-secure"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "secure/src/sau.rs",
+   "line": 49,
+   "snippet": "const SAU_NS_SRAM_BASE: u32 = 0x2003_0000;"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "proto/src/lib.rs",
+   "line": 59,
+   "snippet": "pub const NS_SRAM_BASE: u32 = 0x2003_0000;"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "secure/src/sau.rs",
+   "line": 64,
+   "snippet": "NS_SRAM_BASE >= SAU_NS_SRAM_BASE && NS_SRAM_END - 1 <= SAU_NS_SRAM_END,"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "secure/src/nsc/state.rs",
+   "line": 564,
+   "snippet": "static mut STATE: SecureState = SecureState::new();"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "secure/memory-stm32u585.x",
+   "line": 35,
+   "snippet": "_stack_start = ORIGIN(RAM) + LENGTH(RAM);"
+  },
+  {
+   "draft": "c-48-M21-secure-ram-bank-swap.md",
+   "path": "docs/security/brownout-hardening.md",
+   "line": 321,
+   "snippet": "| ECC single-bit correction (SRAM1/2/3) | silicon feature; always active; no config needed | HW |"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 295,
+   "snippet": "pub enum ObField {"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 521,
+   "snippet": "pub const fn bor_lev(optr: u32) -> u32 {"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 247,
+   "snippet": "// the #36 runbook; BOR is configured via the shipped option-byte profile.)"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "Makefile",
+   "line": 380,
+   "snippet": "--optionbytes BOR_LEV=3 SRAM2_RST=0"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "docs/hardware/evt-silicon-validation.md",
+   "line": 792,
+   "snippet": "| 3.7 | **BOR_LEV"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "docs/security/production-security.md",
+   "line": 98,
+   "snippet": "- BOR_LEV = 3 or 4 in option bytes"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "docs/security/brownout-hardening.md",
+   "line": 311,
+   "snippet": "| BOR level | chip default until `make stm32-harden-opts` runs; target BOR3 (~2.7 V) | option bytes"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "secure/src/hw/tzic.rs",
+   "line": 228,
+   "snippet": "pub(crate) unsafe fn trigger_intrusion_wipe() -> ! {"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "secure/src/hw/tzic.rs",
+   "line": 246,
+   "snippet": "let _ = unsafe { crate::hw::flash::arm_wipe_flag() };"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "secure/src/main.rs",
+   "line": 889,
+   "snippet": "const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "secure/src/hw/tamp.rs",
+   "line": 108,
+   "snippet": "crate::hw::tzic::trigger_intrusion_wipe();"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "docs/security/brownout-hardening.md",
+   "line": 314,
+   "snippet": "| IWDG | disabled | no code (Stage 4) |"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "Makefile",
+   "line": 2662,
+   "snippet": "RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-s"
+  },
+  {
+   "draft": "c-49-M20-bor-level-pin-and-pvd-handler-policy.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 310,
+   "snippet": "PB10, the AW35602 USB port-protection fault flag (input)."
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 122,
+   "snippet": "static mut CHAIN_BUF: [u8; CHAIN_BUF_LEN] = [0u8; CHAIN_BUF_LEN];"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 125,
+   "snippet": "static mut PENDING_PTR: *const u8 = core::ptr::null();"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 136,
+   "snippet": "static mut ROUTER_OWNER: Option<u16> = None;"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 863,
+   "snippet": "static mut CHUNK_BUF: [u8; APDU_MAX_RESP + 2] = [0u8; APDU_MAX_RESP + 2];"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 1196,
+   "snippet": "static mut FIRST_RESP: [u8; APDU_MAX_RESP + 2] = [0u8; APDU_MAX_RESP + 2];"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 864,
+   "snippet": "core::ptr::copy_nonoverlapping(PENDING_PTR.add(PENDING_POS), CHUNK_BUF.as_mut_ptr(), chunk);"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 226,
+   "snippet": "pub unsafe fn dispatch(&mut self, channel: u16, apdu: &[u8]) -> Response {"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 780,
+   "snippet": "unsafe fn ensure_trailer_skeleton(received_len: usize) -> usize {"
+  },
+  {
+   "draft": "c-588-USB-09-router-fuzz-oracle-and-shape.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 99,
+   "snippet": "const fn per_cmd_chain_bound(ins: u8) -> usize {"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "docs/security/threat-model.md",
+   "line": 282,
+   "snippet": "| **Error-mimicry / attention exhaustion**"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 287,
+   "snippet": "INS_V2_LOCK => return self.cmd_lock(),"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "secure/src/nsc/cmd_lock.rs",
+   "line": 12,
+   "snippet": "super::zeroize_sensitive_state();"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "secure/src/sign_rate.rs",
+   "line": 52,
+   "snippet": "static SIGNS_THIS_SESSION: AtomicU32 = AtomicU32::new(0);"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "secure/src/crypto.rs",
+   "line": 95,
+   "snippet": "crate::sign_rate::pre_sign()?;"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "secure/src/nsc/state.rs",
+   "line": 557,
+   "snippet": "crate::sign_rate::reset_counters();"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "secure/src/nsc/state.rs",
+   "line": 388,
+   "snippet": "crate::sign_rate::reset_counters();"
+  },
+  {
+   "draft": "c-600-USB-08-ceremony-layer-design-corrections.md",
+   "path": "secure/src/ui/px/confirm_px.rs",
+   "line": 57,
+   "snippet": "pub const PX_COMMIT_REQUIRES_SEEN_LAST: bool = true;"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": ".github/workflows/nightly.yml",
+   "line": 88,
+   "snippet": "run: /usr/bin/time -v make kani"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": ".github/workflows/nightly.yml",
+   "line": 56,
+   "snippet": "timeout-minutes: 300"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": "Makefile",
+   "line": 4603,
+   "snippet": "cargo kani -p pqsigner-erc7730"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": "Makefile",
+   "line": 4605,
+   "snippet": "cargo kani -p sphincs-tz-shared"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": "Makefile",
+   "line": 4608,
+   "snippet": "cargo kani -p pqsigner-aa"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": "Makefile",
+   "line": 4610,
+   "snippet": "cargo kani -p fw-manifest"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": "Makefile",
+   "line": 4646,
+   "snippet": "cargo kani -Z stubbing -p pqsigner-ui-px"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": "pqsigner-erc7730/src/ir.rs",
+   "line": 3398,
+   "snippet": "fn erc7730_ir_parse_panic_free() {"
+  },
+  {
+   "draft": "c-776-M19-per-harness-limits.md",
+   "path": ".github/workflows/nightly.yml",
+   "line": 89,
+   "snippet": "- name: capacity after (RAM + disk, and any OOM kill)"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/nsc/state.rs",
+   "line": 542,
+   "snippet": "cortex_m::interrupt::free(|_| {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1106,
+   "snippet": "let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| \"px atlas\")?;"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1125,
+   "snippet": "if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1147,
+   "snippet": "let atlas = crate::ui::px::assets::verify_atlas().map_err(|()| \"px atlas\")?;"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1167,
+   "snippet": "if crate::ui::px::assets::atlas_root_proof() != crate::fi::OK_SENTINEL {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/screens.rs",
+   "line": 111,
+   "snippet": "let Ok(atlas) = super::assets::verify_atlas() else {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/screens.rs",
+   "line": 157,
+   "snippet": "let Ok(atlas) = super::assets::verify_atlas() else {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/screens.rs",
+   "line": 183,
+   "snippet": "let Ok(atlas) = super::assets::verify_atlas() else {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/screens.rs",
+   "line": 208,
+   "snippet": "if super::assets::atlas_verified().is_none() {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 847,
+   "snippet": "let Some(atlas) = assets::atlas_verified() else {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 964,
+   "snippet": "let Some(atlas) = assets::atlas_verified() else {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 1011,
+   "snippet": "let Some(atlas) = assets::atlas_verified() else {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/lcd.rs",
+   "line": 1109,
+   "snippet": "let Some(atlas) = assets::atlas_verified() else {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/main.rs",
+   "line": 4559,
+   "snippet": "fn PendSV() {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/main.rs",
+   "line": 4622,
+   "snippet": "let mut pin = match enter_pin() {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 184,
+   "snippet": "if super::px::screens::show(&row) {"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/main.rs",
+   "line": 888,
+   "snippet": "const SHPR3_PENDSV_LOWEST: u32 = 0xFF << 16;"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/main.rs",
+   "line": 889,
+   "snippet": "const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/sau.rs",
+   "line": 716,
+   "snippet": "// unnoticed (PRIS=0"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/ui/px/confirm_px.rs",
+   "line": 91,
+   "snippet": "#[cfg(feature = \"e2e-test\")]"
+  },
+  {
+   "draft": "c-846-X5b-interrupt-mask-at-atlas-sites.md",
+   "path": "secure/src/main.rs",
+   "line": 4413,
+   "snippet": "if timeout::is_idle() && !nsc::handler_is_busy() && !nsc::is_definitely_locked() {"
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1026,
+   "snippet": "/// its deepest the stack grew down past the BSS top and clobbered the"
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "Cargo.lock",
+   "line": 339,
+   "snippet": "version = \"0.7.5\""
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "secure/src/main.rs",
+   "line": 4751,
+   "snippet": "unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {"
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "Makefile",
+   "line": 2662,
+   "snippet": "RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-s"
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "secure/src/hw/iwdg.rs",
+   "line": 108,
+   "snippet": "// Prescaler /256 (PR=6) + reload 250"
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "secure/src/boot_ns.rs",
+   "line": 30,
+   "snippet": "\"msr MSP_NS, {0}\","
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1750,
+   "snippet": "pub fn zeroize_sensitive_state() {"
+  },
+  {
+   "draft": "c-854-M21-stack-limit-details-and-stack-scrub.md",
+   "path": "Cargo.toml",
+   "line": 146,
+   "snippet": "cortex-m-rt          = \"0.7\""
+  },
+  {
+   "draft": "c-866-USB-09-usb-errata-row-recite.md",
+   "path": "docs/security/threat-model.md",
+   "line": 373,
+   "snippet": "| ZLP race / DWC2 TxFIFO atomicity (ES0499"
+  },
+  {
+   "draft": "c-866-USB-09-usb-errata-row-recite.md",
+   "path": "nonsecure/Cargo.toml",
+   "line": 97,
+   "snippet": "synopsys-usb-otg = { version = \"0.4\", features = [\"cortex-m\", \"fs\"], optional = true }"
+  },
+  {
+   "draft": "c-866-USB-09-usb-errata-row-recite.md",
+   "path": "Cargo.lock",
+   "line": 1779,
+   "snippet": "version = \"0.4.0\""
+  },
+  {
+   "draft": "c-866-USB-09-usb-errata-row-recite.md",
+   "path": "supply-chain/config.toml",
+   "line": 747,
+   "snippet": "[[exemptions.synopsys-usb-otg]]"
+  },
+  {
+   "draft": "c-866-USB-09-usb-errata-row-recite.md",
+   "path": ".github/workflows/ci.yml",
+   "line": 146,
+   "snippet": "- name: cargo vet --locked"
+  }
+ ],
+ "measurements": [
+  {
+   "surface": "usb",
+   "what": "Does a banked non-secure SysTick preempt a secure thread that is parked in a dialog on this chip, and does BASEPRI_S = 0x80 (with PRIS = 1) stop it. Needs a build with the guard and one without (negative control).",
+   "needs": "Open bench board with debug port, no display needed; a fixture image that holds the dialog bracket open and snapshots a non-secure RAM counter from the secure side.",
+   "tracked_by": "#846 (silicon test box; the negative-control form is in the X5b comment draft)"
+  },
+  {
+   "surface": "usb",
+   "what": "Stack depth of a nested gateway entry on top of an outer sign handler (the research left it unmeasured).",
+   "needs": "Open bench board with debug port; stack painting (cortex-m-rt paint-stack) or a debugger read of the stack pointer.",
+   "tracked_by": "#374 in general; not named in #846"
+  },
+  {
+   "surface": "usb",
+   "what": "How many bootstrap signatures command 15 returns inside one 120 s unlock window on pq1 (the acceptance record says 60 to 80; the research expects 12 to 17).",
+   "needs": "Bench board with both secure elements, a USB host script that loops the command after one unlock and counts. No display needed if the image pre-unlocks.",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "systemic",
+   "what": "False resets and false voltage-detector trips at the candidate brown-out and detector levels, across USB hosts and cables and across the secure-element rail switch-on transient.",
+   "needs": "Several EVT units at RDP-0 (the option byte is reversible there), a set of hosts and cables, an oscilloscope on the 3.3 V rail.",
+   "tracked_by": "none (#49 asks for the feature, not the characterisation)"
+  },
+  {
+   "surface": "systemic",
+   "what": "Can non-secure code write the clock, power and tamper registers on this silicon today, and are the writes ignored after attribution.",
+   "needs": "Open bench board with debug port; extend make gtzc-enforcement-hw with probes for RCC, PWR, SYSCFG and TAMP.",
+   "tracked_by": "#80 (clock only: \"verify NS clock re-config is WI on-silicon\"); TAMP and PWR writes: none"
+  },
+  {
+   "surface": "systemic",
+   "what": "Bit position and polarity of the SRAM erase and error-correction option bits, with a canary-plus-reset residue test.",
+   "needs": "A sacrificial die or an RDP-0 bench board; debug port.",
+   "tracked_by": "#848, #82"
+  },
+  {
+   "surface": "systemic",
+   "what": "Does a torn flash quad-word raise the non-maskable interrupt (double error) or read back silently.",
+   "needs": "A sacrificial die, a power-cut fixture; debug port.",
+   "tracked_by": "#94, #544"
+  },
+  {
+   "surface": "systemic",
+   "what": "False-trip rate of the crypto-fault internal tamper with the hardware key loaded, over normal unlock and sign use.",
+   "needs": "Bench board running a tamp build in log-only mode; soak run.",
+   "tracked_by": "#208, #391"
+  },
+  {
+   "surface": "systemic",
+   "what": "Worst-case secure stack depth on the ship feature set, and whether all secure RAM fits in 64 KB (decides the SRAM2 bank swap).",
+   "needs": "Bench board with debug port; stack painting plus the deepest sign paths; a call-graph tool on the host.",
+   "tracked_by": "#374"
+  },
+  {
+   "surface": "usb",
+   "what": "FIFO flush on USB reset as observed on the wire (the errata row in the threat model).",
+   "needs": "A USB test tool (Cynthion or Facedancer class), any unit.",
+   "tracked_by": "#590"
+  }
+ ],
+ "new_defects": [
+  {
+   "file": "docs/security/threat-model.md",
+   "line": 376,
+   "quote": "post-transfer assert `DIEPTSIZ.XFRSIZ` did not exceed declared length",
+   "note": "This threat-model row lists a post-transfer length assert as an existing mitigation. A search of every .rs file in the tree for DIEPTSIZ and XFRSIZ finds nothing, the driver dependency (synopsys-usb-otg 0.4.0) has no such check either, and the non-secure HID write reduces the result to is_ok() (nonsecure/src/usb/hid.rs:75). The report listed this claim as unchecked; it is documentation drift, not a code defect, and would fit the list in #866."
+  }
+ ]
+}

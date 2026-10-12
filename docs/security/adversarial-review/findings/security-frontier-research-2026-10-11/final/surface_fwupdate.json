@@ -1,0 +1,176 @@
+{
+ "surface": "fwupdate",
+ "items_written_here": [
+  {
+   "id": "M07",
+   "type": "cluster",
+   "key": "fsbl-freeze-decisions",
+   "home": "fwupdate",
+   "members": [
+    "BOOT-09",
+    "FWU-9",
+    "FWU-1",
+    "FWU-10"
+   ],
+   "title": "One FSBL freeze-review package: decide vendor-key policy (Option B either-key, not 2-of-3), FSBL minimum-epoch constant, Merkle-leaf signing, sealed profile, and an HDP-hidden flash counter as a Draft 1.1 review input, before WRP+RDP-2 makes each impossible",
+   "priority": "P2",
+   "merger_priority": "P1",
+   "cost": "M",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#31",
+    "#35",
+    "#39",
+    "#43",
+    "#67",
+    "#69",
+    "#212",
+    "#220",
+    "#225",
+    "#226",
+    "#266",
+    "#486",
+    "#540",
+    "#541",
+    "#543",
+    "#544",
+    "#545",
+    "#546",
+    "#696",
+    "#742",
+    "#752",
+    "#753",
+    "#758"
+   ],
+   "live_defects": 3,
+   "hardware_asks": 2,
+   "file": "data/round2/cluster_fsbl-freeze-decisions.json"
+  },
+  {
+   "id": "M08",
+   "type": "cluster",
+   "key": "whole-slot-measurement",
+   "home": "fwupdate",
+   "members": [
+    "IMP-06",
+    "BOOT-07",
+    "SYS-08",
+    "FWU-5",
+    "FWU-4"
+   ],
+   "title": "Erased-tail check on the selected slot (FSBL boot + CMD_FW_COMMIT), Trezor check_image_contents shape; optionally widen the 8-word fingerprint to the signed manifest digest",
+   "priority": "P3",
+   "merger_priority": "P2",
+   "cost": "M",
+   "kind": "mixed",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#226",
+    "#268",
+    "#486",
+    "#540",
+    "#591",
+    "#696",
+    "#705",
+    "#742",
+    "#758"
+   ],
+   "live_defects": 3,
+   "hardware_asks": 0,
+   "file": "data/round2/cluster_whole-slot-measurement.json"
+  },
+  {
+   "id": "FWU-3",
+   "type": "single",
+   "home": "fwupdate",
+   "title": "Bind the board model and hardware revision into the signed manifest preimage and check it at BEGIN and in the FSBL (the #487 trigger has fired: two boards exist)",
+   "priority": "P2",
+   "orig_priority": "P0",
+   "cost": "M",
+   "kind": "firmware",
+   "novelty": "parity",
+   "status": "recommended",
+   "tracked": [
+    "#487",
+    "#540",
+    "#543",
+    "#545"
+   ],
+   "live_defects": 1,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/FWU-3.json"
+  },
+  {
+   "id": "FWU-7",
+   "type": "single",
+   "home": "fwupdate",
+   "title": "Adopt Trezor's Update-Control-Block invariants as explicit review rows for the Route-1 journal, and version every FSBL-consumed record so the mutable side can route around immutable-stage bugs",
+   "priority": "P3",
+   "orig_priority": "P1",
+   "cost": "S",
+   "kind": "process",
+   "novelty": "parity",
+   "status": "redesign needed (refuted as written; a narrower residue survives)",
+   "tracked": [
+    "#138",
+    "#271",
+    "#480",
+    "#486",
+    "#540",
+    "#542",
+    "#543",
+    "#545",
+    "#546",
+    "#696",
+    "#758"
+   ],
+   "live_defects": 0,
+   "lenses": [
+    "already-have",
+    "feasible"
+   ],
+   "file": "data/verify/FWU-7.json"
+  }
+ ],
+ "clusters_written_elsewhere": [
+  {
+   "id": "M02",
+   "key": "option-byte-posture",
+   "home": "boot",
+   "title": "Option-byte posture: pin the unpinned masks on silicon (OEM-lock bits are wrong today), make the surviving production-silent verdicts halt, measure the whole slot window, and keep halt (not wipe) as the mismatch response",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "FWU-6"
+   ]
+  },
+  {
+   "id": "M05",
+   "key": "fsbl-fi-bundle",
+   "home": "fi",
+   "title": "FSBL pre-freeze FI bundle: fail-closed gate polarity + default-poisoned, redundantly-encoded branch target; minimal TRNG for wait_random; 0xFF tail scan; MSPLIM; #591 sweep as acceptance test (C10 target-sum internals staged behind the sweep)",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "FWU-2"
+   ]
+  },
+  {
+   "id": "M19",
+   "key": "assurance-gates-in-ci",
+   "home": "systemic",
+   "title": "Make the existing assurance execute and block: land the phantom fi_min gate, enrol the local-only gates and never-run suites per-PR, restore the nightly, then add emulation-FI and glyph-leak regression nets",
+   "priority": "P1",
+   "status": "recommended",
+   "members_from_this_surface": [
+    "FWU-8"
+   ]
+  }
+ ]
+}

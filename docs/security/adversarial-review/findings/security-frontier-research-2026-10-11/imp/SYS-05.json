@@ -1,0 +1,26 @@
+{
+ "id": "SYS-05",
+ "title": "Continuous timing desynchronisation: secure-TIM random-delay interrupt (RDI) with USB-refreshed session jitter, a DWT-CYCCNT instruction-timer canary around CfiCounter blocks, and random pre-delay + bounded waits in RCC/SAU setup",
+ "threat": "Glitches timed from an external anchor (USB packet, TE pulse, LCD frame, SE I2C transaction) against the C10 sign, the double-sign compare, PIN entry, SAU/GTZC programming and the PLL bring-up (muGlitch faulted the L5 PLL config to get below the BOD), plus SCA trace alignment across the whole 6-14 s signing window rather than only the verify step.",
+ "proposal": "(a) Port Trezor's RDI: a 1 ms secure-only timer (TIM2/TIM3 are already TZSC-secured) whose handler busy-waits `drbg8() + session_delay` cycles, with `session_delay` re-drawn on every USB RX/TX and every trusted-UI key event (floating-mean distribution), seeded from the platform TRNG and reseeded on a counter; (b) an instruction-timer canary: read DWT CYCCNT (or a secure TIM) at entry/exit of each CfiCounter-gated block (`c10_sign_verified` steps, `gated_unlock` precharge, SAU/GTZC/TZSC write sequence, fw_update verify) and treat an elapsed-cycle count outside a pre-measured [min,max] window as a fault (NXP CWT 'Instruction Timer' analogue) feeding SYS-04; (c) insert `wait_random()` before each SAU/GTZC/TZSC/RCC security write (read-back already exists) and bound the unbounded HSIRDY/HSI48RDY/PLL1RDY spins in rcc.rs with the same timeout pattern VOSRDY already uses; (d) fix #802 so `is_true_fi` does not do a full TRNG draw every SysTick after idle.",
+ "rationale": "pq1 has stronger per-signature FI structure than Trezor but no continuous jitter; Trezor runs RDI in kernel and secmon and refreshes it from usb.c so a packet-aligned attacker still sees a per-session offset. muGlitch's countermeasure (random 0-9 cycle pre-delay) made two successful glitches ~100x less likely. The CWT instruction-timer idea is the hardware twin of the existing CfiCounter and catches clock-glitch / skip faults that leave the step counter intact.",
+ "repo_evidence": [
+  "secure/src/main.rs:4333-4337 \u2014 SysTick handler calls only `consumption_mask::randomize()`; grep rdi|random_delay|jitter over main.rs/timeout.rs: no periodic random-delay interrupt",
+  "secure/src/main.rs:1850-1856,4263-4273 \u2014 DWT CYCCNT enabled only for benches / NS measurement; no timing-window check anywhere (grep CYCCNT in non-test code)",
+  "secure/src/hw/rcc.rs:132,136,143,183,187,197,201 \u2014 unbounded `while` spins on HSIRDY/SWS/HSI48RDY/latency/PLL1RDY; only VOSRDY is bounded (rcc.rs:85-86,163-170)",
+  "secure/src/sau.rs:579-590,711-744 \u2014 read-back exists but no random pre-delay before the writes",
+  "issue #802 (idle-time TRNG draw in is_true_fi, OPEN per inventory); #805"
+ ],
+ "vendor_precedent": "Trezor core/embed/sec/random_delays/stm32/random_delays.c:33-116,121-185 (DRBG, rdi_handler, wait_random i+j invariant), core/embed/io/usb/stm32/usb.c:728,748 (random_delays_refresh_rdi on RX/TX), kernel/main.c:127-130; NXP AN12912 Code Watchdog Timer (Secure Counter + Instruction Timer); Sass et al. USENIX Sec '23 random pre-delay.",
+ "novelty": "beyond",
+ "kind": "firmware",
+ "cost": "M",
+ "priority": "P1",
+ "risks": "RDI costs up to ~510 cycles/ms (~0.3% at 160 MHz) and interacts with the TE-synced LCD write budget that #780 just closed on glass (T_write 27.9 < 31.40 ms) \u2014 the handler must be bounded and measured on pq1; timing-window canaries need per-build calibration and must tolerate HASH-peripheral and C10 grinding variance (+-1 s per sign) \u2014 scope them to short fixed-cost blocks, not the whole sign; a secure-timer ISR that draws from the TRNG re-introduces the #834/#835 halt-vs-reuse tension (use a TRNG-seeded DRBG as Trezor does).",
+ "sources": [
+  "https://github.com/trezor/trezor-firmware/blob/main/core/embed/sec/random_delays/stm32/random_delays.c",
+  "https://www.nxp.com/docs/en/application-note/AN12912.pdf",
+  "https://www.usenix.org/system/files/usenixsecurity23-sass.pdf"
+ ],
+ "surface": "systemic"
+}
