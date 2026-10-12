@@ -1,0 +1,1475 @@
+{
+ "items": [
+  {
+   "id": "M02",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-046-M02-optbyte-profile-remainder.md",
+    "c-270-M02-tripwire-full-profile-needs-split.md",
+    "c-856-M02-halt-placement.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Correct the OEM-lock mask to FLASH_NSSR bits 18/19 with a host test",
+     "status": "COVERED",
+     "by": "#46 (comment of 2026-10-12)",
+     "evidence": "\"Correct `OEM1LOCK` / `OEM2LOCK` to bits 18 / 19, with a host test bound to the SVD values. This needs no silicon.\" Still unfixed at master: shared/src/lockdown.rs:278"
+    },
+    {
+     "what": "Positive bench detection with an OEM2 key before the pin flag flips",
+     "status": "COVERED",
+     "by": "#46 (comment of 2026-10-12), #387, #400",
+     "evidence": "\"Keep `OEM_LOCK_MASK_PINNED = false` until the positive bench detection is done with an **OEM2** key, not only OEM1\""
+    },
+    {
+     "what": "Factory OEM-key clear: four key registers, option-byte reload before the read-back, per-unit record",
+     "status": "UNTRACKED",
+     "by": "draft c-046 (item 5 and checklist); #595 for the record",
+     "evidence": "docs/provisioning/first-boot-provisioning.md:49 names 'OEM-key finalization' with no procedure; RM0456 Rev 7 section 7.9.7 says the lock bit reflects the key 'read during the OBL'"
+    },
+    {
+     "what": "Exact masked OPTR compare (expected value plus don't-care mask) in Phase A",
+     "status": "UNTRACKED",
+     "by": "draft c-046 (item 1); was #141 SL9, closed by 54e3ba84 without implementing it",
+     "evidence": "shared/src/lockdown.rs:375 'this is deliberately a PARTIAL mask'"
+    },
+    {
+     "what": "Brown-out level as a checked field, not advisory",
+     "status": "PARTLY",
+     "by": "#46 body (BOR_LEV pin), #49, #248; hard-field part in draft c-046",
+     "evidence": "#46: \"BOR: `FLASH_OPTR.BOR_LEV[10:8]` ... raise above 000\"; shared/src/lockdown.rs:518 'not yet a hard gate'"
+    },
+    {
+     "what": "Pin WRP1AR/WRP2AR layout and BOOT_LOCK on silicon, flip the pin flags, require_boot_lock after the factory order is fixed",
+     "status": "COVERED",
+     "by": "#46, #45, #214, #753",
+     "evidence": "#753: \"`require_boot_lock` is `false` in both shipped profiles, deliberately\"; #45: \"the both-banks WRP protection over the final frozen FSBL range\""
+    },
+    {
+     "what": "User-side checklist and per-unit factory record lines for NSSR 18/19, WRP1AR/WRP2AR, BOOT_LOCK, brown-out level",
+     "status": "COVERED",
+     "by": "#850, #595, #46 comment",
+     "evidence": "#850: \"every option-byte register (including NSBOOTADD0/1, the WRP UNLOCK bits, SECWMxR2, `BOR_LEV`, the SRAM bits), the OEM-lock bits at `FLASH_NSSR` 18 and 19\". Residue (factory text still says bank 1, pages 0 to 3) is in draft c-046 item 4"
+    },
+    {
+     "what": "Widen the bootloader tripwire (tz-1) to the full profile before the freeze",
+     "status": "PARTLY",
+     "by": "#270 (body and its 2026-09-16 comment); ship/bench split and new fields in draft c-270",
+     "evidence": "#270 comment: \"`WRP1A` and the OEM locks remain read-only-advisory while their layouts are unpinned\"; fsbl/src/optbytes.rs:68"
+    },
+    {
+     "what": "Erased-tail check of the selected slot in the bootloader",
+     "status": "COVERED",
+     "by": "#864 item 2",
+     "evidence": "\"Add a blank (0xFF) scan of the tail, bounded by the geometry registry, at boot and at COMMIT.\""
+    },
+    {
+     "what": "Make the secure-world SECBOOTADD0 verdict act, plus a host test against log-only verdicts",
+     "status": "COVERED",
+     "by": "#856",
+     "evidence": "\"Make the mismatch a verdict that does something in production\"; placement constraint (gate on RDP-2, after display init) added in draft c-856"
+    },
+    {
+     "what": "Resolve the rdp-enforce-halt versus rdp2-self-lock contradiction",
+     "status": "COVERED",
+     "by": "#192",
+     "evidence": "#192 title: \"unfenced contradiction makes the mandatory self-lock unreachable\" (open)"
+    },
+    {
+     "what": "Stale comment: SECBOOTADD0 said to be mutable at RDP-2",
+     "status": "UNTRACKED",
+     "by": "draft c-046 (item 3)",
+     "evidence": "shared/src/lockdown.rs:559 against shared/src/lockdown.rs:388 and RM0456 Rev 7 section 7.6.2"
+    },
+    {
+     "what": "OEM2 posture: #40 asks to provision an OEM2 key, the code and #387 require none",
+     "status": "OWNER",
+     "by": "#40 versus #387; flagged in draft c-046 (item 6)",
+     "evidence": "#40: \"Provision a secret OEM2 DA key so that post-RDP2 a regulated, cert-gated SWD reopen exists\"; shared/src/lockdown.rs:264"
+    },
+    {
+     "what": "#849's fix bullet puts the OEM key overwrite into the on-device ceremony",
+     "status": "UNTRACKED",
+     "by": "draft c-046 (item 5 and a checklist line); no separate comment on #849",
+     "evidence": "docs/provisioning/first-boot-requirements.md:46 'The flow MUST NOT program WRP or any option'"
+    },
+    {
+     "what": "SRAM_RST in the ship profile; inert RDP-2 burn",
+     "status": "COVERED",
+     "by": "#848, #849",
+     "evidence": "filed 2026-10-12"
+    }
+   ],
+   "issues_read": [
+    35,
+    37,
+    38,
+    39,
+    40,
+    42,
+    43,
+    44,
+    45,
+    46,
+    49,
+    82,
+    141,
+    192,
+    193,
+    214,
+    248,
+    268,
+    270,
+    366,
+    387,
+    400,
+    540,
+    595,
+    695,
+    707,
+    712,
+    753,
+    835,
+    847,
+    848,
+    849,
+    850,
+    854,
+    856,
+    861,
+    864,
+    866
+   ],
+   "one_line": "Nothing new to file: the remainder (exact OPTR compare that #141 closed without implementing, the factory OEM-key procedure, a stale comment, the ship/bench split the wider bootloader check needs, and two corrections to yesterday's #849 and #856) goes as three comments (#46, #270, #856); the silicon pinning stays with #46/#45.",
+   "unsure": "Three comments for one item is one more than the brief suggests; the one on #856 corrects a constraint in a body filed yesterday and could be a body edit instead, and #849's fourth fix bullet should be reworded (reason is in the #46 comment). #40 (provision an OEM2 key) contradicts lockdown.rs and #387 (no OEM key): owner call, not resolved by me. The report says to reopen #141 for the exact OPTR compare; I carried it on #46 instead, reopening #141 is the alternative."
+  },
+  {
+   "id": "M07",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-486-M07-freeze-review-inputs.md",
+    "c-220-M07-self-check-scope.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "(A) Decide single key versus primary plus recovery key at the freeze review",
+     "status": "COVERED",
+     "by": "#486 (note box), #266, #226 as review owner",
+     "evidence": "docs/security/vendor-signing-key-compromise.md:94 '- [ ] B accepted or declined at FSBL WRP freeze review.'; #486 comment: \"Remaining action: take the dual-key decision at the FSBL freeze review.\""
+    },
+    {
+     "what": "(A) Option B consequences missing from the note: recovery key in the secure image, either-key FW_BEGIN, fwsign gate; broken recovery flow; highest-version residual; deadline before #541",
+     "status": "UNTRACKED",
+     "by": "draft c-486 (points 1 to 5)",
+     "evidence": "fwsign/src/artifact_key.rs:596; fsbl/src/main.rs:345; fsbl/src/main.rs:378"
+    },
+    {
+     "what": "(B) Minimum-version constant in the bootloader",
+     "status": "OWNER",
+     "by": "note box under #486; conflicts with frozen Draft 1.1",
+     "evidence": "docs/security/vendor-signing-key-compromise.md:134 (open box) and :576 (note's own correction: Draft 1.1 'explicitly rejects a frozen-constant floor'). Not drafted: rollback-manifest rule."
+    },
+    {
+     "what": "(C) Merkle-leaf signing: record as declined",
+     "status": "UNTRACKED",
+     "by": "draft c-486 (point 7), as a record-only row",
+     "evidence": "changes the signed preimage, so it needs an owner reopen; default is declined"
+    },
+    {
+     "what": "(D) Trezor-style hidden flash-page counter as review input",
+     "status": "OWNER",
+     "by": "not drafted",
+     "evidence": "docs/architecture/trezor-comparison.md:413 already records 'RE-EVALUATE AFTER DRAFT-1.1 CANDIDATE GATES'; docs/security/a-b-firmware-rollback-architecture.md:3896 'authoritative rollback records MUST remain in OTP'; report lists 'selecting it now' as rejected"
+    },
+    {
+     "what": "(E) Bootloader digest in release receipts",
+     "status": "COVERED",
+     "by": "#742",
+     "evidence": "#742 comment 2026-09-28: \"Leaving open for that receipt.\""
+    },
+    {
+     "what": "(E) Freeze the per-key signature cap",
+     "status": "COVERED",
+     "by": "#225",
+     "evidence": "\"`OPEN-C10-1`: freeze the global per-physical-vendor-key signature cap before provisioning or production signing.\""
+    },
+    {
+     "what": "(E) Correct #220: a bootloader self-check against an OTP hash does not stop a replaced bootloader; fix threat-model 9.8",
+     "status": "UNTRACKED",
+     "by": "draft c-220",
+     "evidence": "docs/security/threat-model.md:518"
+    },
+    {
+     "what": "(F) Cost the sealed (no secure update) profile and record the outcome",
+     "status": "COVERED",
+     "by": "note box under #486",
+     "evidence": "docs/security/vendor-signing-key-compromise.md:140 '- [ ] Post-personalization secure-update freeze costed, and the outcome'"
+    },
+    {
+     "what": "Two-signature quorum",
+     "status": "COVERED",
+     "by": "#486 (declined); page-size reason added in draft c-486 point 6",
+     "evidence": "#486: \"DECLINE the committee\"; in the report's rejected list"
+    }
+   ],
+   "issues_read": [
+    31,
+    35,
+    39,
+    43,
+    67,
+    69,
+    212,
+    220,
+    225,
+    226,
+    266,
+    486,
+    540,
+    541,
+    543,
+    544,
+    545,
+    546,
+    696,
+    742,
+    752,
+    753,
+    758
+   ],
+   "one_line": "The freeze-review decisions already exist as open boxes in the vendor-key note under #486 and the review is owned by #226; what is new is that the note's Option B text is wrong in four places and has an earlier deadline (#541), so this is one comment on #486 plus a scope correction on #220.",
+   "unsure": "Items B, C and D touch the frozen rollback draft; I drafted nothing that asks to implement them. D is left out entirely because trezor-comparison.md already records a verdict on it."
+  },
+  {
+   "id": "FWU-3",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-487-FWU-3-second-board-exists.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Bind board model and revision into what is signed",
+     "status": "COVERED",
+     "by": "#487",
+     "evidence": "\"add a hw-model byte to the signed preimage *when* a second board/revision is introduced. Banked now so the precondition isn't forgotten; do not implement yet.\""
+    },
+    {
+     "what": "Record that the trigger has fired (two boards in the tree) and that the mechanism is an owner choice among four",
+     "status": "UNTRACKED",
+     "by": "draft c-487",
+     "evidence": "Makefile:43 'BOARD ?= iota2'; secure/src/board/pq1.rs:225"
+    },
+    {
+     "what": "Signed manifest fields (121 to about 127 bytes)",
+     "status": "OWNER",
+     "by": "candidate review #543/#545",
+     "evidence": "CLAUDE.md rollback-manifest rule; presented in the draft only as a review input"
+    },
+    {
+     "what": "fwsign requires a board identity and cross-checks the ELF board feature; release build refuses a default BOARD",
+     "status": "UNTRACKED",
+     "by": "draft c-487 (checkboxes)",
+     "evidence": "no occurrence of 'board' under fwsign/src; Makefile:2662"
+    },
+    {
+     "what": "Bootloader-side check must exist before the freeze; updater check inside the all-steps-run chain",
+     "status": "UNTRACKED",
+     "by": "draft c-487 (constraints)",
+     "evidence": "secure/src/fw_update/mod.rs:493"
+    }
+   ],
+   "issues_read": [
+    487,
+    540,
+    543,
+    545,
+    69,
+    226,
+    486
+   ],
+   "one_line": "#487 already tracks board binding but still says 'when a second board exists'; pq1 exists, so the comment records that, lays out the four mechanisms (two change the signed bytes, two do not) and lists the two host-side checks that can be done now.",
+   "unsure": "The claim that a dev-kit image bricks a locked pq1 is the research's code reading; I did not build or flash a cross-board image."
+  },
+  {
+   "id": "FWU-7",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-546-FWU-7-frozen-decoder-review-note.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Add six update-control-block rows to Draft 1.1",
+     "status": "OWNER",
+     "by": "not drafted (refuted by its own reviewer; would reopen the frozen draft)",
+     "evidence": "report section 9, rejected rows (b) and (e)"
+    },
+    {
+     "what": "Non-normative mapping note plus the producer-side route-around rule for the backend review",
+     "status": "UNTRACKED",
+     "by": "draft c-546",
+     "evidence": "fw-manifest/src/v6.rs:562, :565, :592 (strict decoder)"
+    },
+    {
+     "what": "Pre-freeze differential fuzz of bootloader decoders against the host core",
+     "status": "COVERED",
+     "by": "#635 (fuzz harnesses not in CI), #776 (Kani not reaching fw-manifest)",
+     "evidence": "fsbl/src/manifest.rs:17 links the same fw_manifest crate, so a differential is vacuous; #635: \"two harnesses get zero CI fuzzing\""
+    }
+   ],
+   "issues_read": [
+    138,
+    271,
+    480,
+    486,
+    540,
+    542,
+    543,
+    545,
+    546,
+    696,
+    758,
+    635,
+    776
+   ],
+   "one_line": "Refuted as written; the surviving residue is a short reviewer note on #546 (documentation only, P3). Optional: drop it if #546 should stay clean.",
+   "unsure": "I did not re-derive the Draft 1.1 section mapping or open the Trezor source; the comment says so. Whether a P3 documentation note is worth a comment on an owner-gated ship-blocker issue is the owner's taste."
+  },
+  {
+   "id": "M08",
+   "outcome": "COMMENT",
+   "board": "MIXED",
+   "drafts": [
+    "c-864-M08-tail-check-and-fingerprint-constraints.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Erased-tail check in the bootloader and at COMMIT",
+     "status": "COVERED",
+     "by": "#864 item 2",
+     "evidence": "\"Add a blank (0xFF) scan of the tail, bounded by the geometry registry, at boot and at COMMIT. Factory flashing must then erase whole slots.\""
+    },
+    {
+     "what": "Erase read-back at BEGIN",
+     "status": "COVERED",
+     "by": "#861",
+     "evidence": "\"No blank read-back after the page erase at `FW_BEGIN`.\""
+    },
+    {
+     "what": "Bootloader NMI / ECC handler",
+     "status": "COVERED",
+     "by": "#854",
+     "evidence": "\"FSBL: an NMI handler that reads `FLASH_ECCR`\""
+    },
+    {
+     "what": "Derive the eight words from the signed manifest digest; publish expected words per release",
+     "status": "COVERED",
+     "by": "#864 item 3 and the note under #486",
+     "evidence": "#864: \"Decide: derive the words from the manifest digest\"; docs/security/vendor-signing-key-compromise.md:142"
+    },
+    {
+     "what": "Constraints missing from #864: one-slot brick lever (#696), forced downgrade, runs on both slots, read-range growth, reviewers disagree on the COMMIT half, renderers and fwmeasure must change together",
+     "status": "UNTRACKED",
+     "by": "draft c-864",
+     "evidence": "fsbl/src/main.rs:211, :212, :220; secure/src/main.rs:278"
+    },
+    {
+     "what": "Add both scans to the #591 sweep",
+     "status": "PARTLY",
+     "by": "#591 (sweep of verify_images); one line in draft c-864",
+     "evidence": "#591 covers verify_images; the scan does not exist yet"
+    }
+   ],
+   "issues_read": [
+    226,
+    268,
+    486,
+    540,
+    591,
+    696,
+    705,
+    742,
+    758,
+    854,
+    861,
+    864
+   ],
+   "one_line": "Fully overlapped by #864, #861 and #854; the comment adds the reviewer's constraints (a dirty tail bricks a one-slot locked unit, so gate on #696) and cross-links the fingerprint decision to the box that already exists under #486.",
+   "unsure": "The report contradicts itself on the COMMIT-time tail check (M02's reviewer drops it, M08's keeps it). I reported both and picked neither."
+  },
+  {
+   "id": "X2a",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X2a-fwsign-double-compute-ledger-split.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Second signing pass in a fresh process with byte comparison before output",
+     "status": "UNTRACKED",
+     "by": "draft X2a",
+     "evidence": "fwsign/src/subcommands/sign.rs:262 (one pass), :271 (self-verify only)"
+    },
+    {
+     "what": "Ledger keyed on (key fingerprint, digest), stores signature and top-leaf index, fails closed",
+     "status": "UNTRACKED",
+     "by": "draft X2a",
+     "evidence": "fwsign/src/subcommands/sign.rs:359 skips the ledger with a warning; :363 ignores a failed mkdir"
+    },
+    {
+     "what": "Archive sweep: same top leaf implies identical top-layer one-time signature",
+     "status": "UNTRACKED",
+     "by": "draft X2a",
+     "evidence": "sphincs-c10/src/params.rs:31 (512 leaves per tree)"
+    },
+    {
+     "what": "Threat-model wording: double-compute claim does not cover the host signer",
+     "status": "UNTRACKED",
+     "by": "draft X2a (docs checkbox)",
+     "evidence": "docs/security/threat-model.md:211, :317"
+    },
+    {
+     "what": "Two-machine signing mode",
+     "status": "OWNER",
+     "by": "#69, #266",
+     "evidence": "copies the non-rotatable key to a second host"
+    },
+    {
+     "what": "Per-key signature cap",
+     "status": "COVERED",
+     "by": "#225",
+     "evidence": "OPEN-C10-1; does not address the per-fault exposure"
+    }
+   ],
+   "issues_read": [
+    69,
+    225,
+    486,
+    266,
+    592,
+    611,
+    368,
+    296,
+    742
+   ],
+   "one_line": "The host signing tool signs once and self-verifies; nothing tracks giving the non-rotatable vendor key the same sign-twice-and-compare protection the device has, so this is the one new issue (host tool and CI only, due before the production key signs anything).",
+   "unsure": "fwsign is described in CLAUDE.md as a legacy bench signer with production packaging quarantined; the draft changes no bundle or manifest format, but the owner may prefer to hold it as an acceptance criterion for the future production signer only."
+  },
+  {
+   "id": "X2b",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-069-X2b-custody-decision-inputs.md",
+    "X2a-fwsign-double-compute-ledger-split.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Custody decision record before the production key exists",
+     "status": "PARTLY",
+     "by": "#69 (key establishment), note box under #486; corrected inputs in draft c-069",
+     "evidence": "docs/security/vendor-signing-key-compromise.md:92 '- [ ] Vendor key ceremony documented (shards, threshold, HSM, air-gap)'"
+    },
+    {
+     "what": "fwsign digest / assemble split (keyless steps around a digest-only signing step)",
+     "status": "UNTRACKED",
+     "by": "folded into draft X2a (first checkbox)",
+     "evidence": "fwsign/src/main.rs:284 has extract-sig only"
+    },
+    {
+     "what": "Dedicated pq1 unit as signing appliance (firmware)",
+     "status": "OWNER",
+     "by": "not drafted",
+     "evidence": "second product; production dual-SE image cannot be built (secure/src/nsc/mod.rs:316); three of its claims fail against the code"
+    }
+   ],
+   "issues_read": [
+    69,
+    225,
+    486,
+    67,
+    266,
+    541,
+    263
+   ],
+   "one_line": "Custody is an owner decision already owned by #69 and the note under #486; the comment gives the corrected decision inputs (the appliance idea as proposed does not survive the code), and the buildable part, the fwsign split, rides in the X2a issue.",
+   "unsure": "'No HSM implements this scheme' is the research's statement; I did not survey products."
+  },
+  {
+   "id": "X9a",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-304-X9a-rust-leg-of-mutant-corpus.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Replay the 246-entry mutant corpus through the Rust verifier the bootloader links, with exact counts",
+     "status": "UNTRACKED",
+     "by": "draft c-304 (missing third leg of #304's differential)",
+     "evidence": "no Rust file references c10_mutant_corpus.json; #304: \"feed the same set to three legs\""
+    },
+    {
+     "what": "Enrol the near-miss gate tests in CI",
+     "status": "COVERED",
+     "by": "#722",
+     "evidence": "\"`tests/near_miss_validate.rs` | `near-miss-gen` | 2\" ... \"Add a CI step running these with their features\""
+    },
+    {
+     "what": "Tighten the 240 thresholds to equality",
+     "status": "UNTRACKED",
+     "by": "draft c-304",
+     "evidence": "contracts/smart-wallet/test/SPHINCsC10AsmMutantCorpus.t.sol:58; contracts/verification/lean/MutantMain.lean:126"
+    },
+    {
+     "what": "Mutation testing scoped to the verify path; tree hashes recorded for the frozen build; written scope statement",
+     "status": "UNTRACKED",
+     "by": "draft c-304",
+     "evidence": "Makefile:4745 (mutants default covers two other crates)"
+    },
+    {
+     "what": "Export near-miss vectors to forge and Lean",
+     "status": "DONE-ON-MASTER",
+     "by": "master",
+     "evidence": "contracts/smart-wallet/test/SPHINCsC10Asm.t.sol:230 (12 vectors) and :244 (asserts expectValid); contracts/verification/lean/SphincsCVerify/KatVectors.lean:59 and :63 list both near-miss vectors; c10_test_vectors.json has both with expectValid false. Not run by me."
+    },
+    {
+     "what": "hw-sha256 corpus leg on silicon",
+     "status": "OWNER",
+     "by": "dropped by the reviewer; not drafted",
+     "evidence": "fsbl/src/hash.rs:65 is the existing boot-time known-answer test"
+    }
+   ],
+   "issues_read": [
+    304,
+    722,
+    290,
+    581,
+    541,
+    486,
+    367,
+    540,
+    588,
+    865
+   ],
+   "one_line": "Comment on #304: the committed mutant corpus runs through the Yul and Lean verifiers but never through the Rust one the bootloader links; add that leg with exact counts before the freeze. One report claim was stale (near-miss vectors do reach the Solidity leg).",
+   "unsure": "Could be its own issue if the owner wants a visible freeze gate; I chose a comment because #304 already asks for a three-leg differential and the work is one test file plus two threshold edits. Nobody has run the corpus through Rust, so it may be red."
+  },
+  {
+   "id": "X9b",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-486-M07-freeze-review-inputs.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Unticked owner box: bootloader signature-algorithm agility accepted or declined at freeze, with the consequence stated",
+     "status": "UNTRACKED",
+     "by": "draft c-486 (point 7, second row, and the box list)",
+     "evidence": "CLAUDE.md:358; docs/archive/work-todo-retired-2026-07-19.md:2226 still says 'KEPT as LOW PRIORITY / future consideration'"
+    },
+    {
+     "what": "Install-time second check in the updatable secure world",
+     "status": "OWNER",
+     "by": "not drafted",
+     "evidence": "against invariant 5 and docs/feature-roadmap-research-2026-06.md:200; would reopen a decided item"
+    },
+    {
+     "what": "Fix stale Trezor-comparison claims about unused PQ keys",
+     "status": "UNTRACKED",
+     "by": "not drafted",
+     "evidence": "docs/architecture/trezor-comparison.md:485; needs the Trezor source, which I did not open"
+    }
+   ],
+   "issues_read": [
+    486,
+    696,
+    541,
+    540,
+    581
+   ],
+   "one_line": "Folded into the M07 comment on #486 as one record-only box; it states the consequence of the existing one-algorithm rule and explicitly does not reopen invariant 5.",
+   "unsure": "Left out the trezor-comparison.md correction because I could not check the Trezor code."
+  },
+  {
+   "id": "X10a",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-541-X10a-bootloader-claimants.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "List the bootloader byte claimants created by the research and yesterday's issues in the #541 reservation set, with an authority column",
+     "status": "UNTRACKED",
+     "by": "draft c-541",
+     "evidence": "#541: \"represent each still-unimplemented immutable component with an explicitly documented conservative size/RAM reservation\" (names only the rollback family and tz-1); #540 envelope row is a placeholder"
+    },
+    {
+     "what": "Report-only ledger sum; verdict stays with the combined link",
+     "status": "COVERED",
+     "by": "#541",
+     "evidence": "#541: the report \"gives a RANGE\" and never \"a point estimate presented as a final ELF\""
+    },
+    {
+     "what": "Stale 28,704 B figure in the linker comment and CLAUDE.md",
+     "status": "COVERED",
+     "by": "#866",
+     "evidence": "\"`CLAUDE.md` invariant 10 and `fsbl/memory-stm32u585.x:14` quote 28,704 B\""
+    },
+    {
+     "what": "Geometry gate not in CI; make fsbl builds the dev kit by default",
+     "status": "COVERED",
+     "by": "#720",
+     "evidence": "\"no workflow runs `make fsbl` or `scripts/check_fsbl_geometry.py`\""
+    }
+   ],
+   "issues_read": [
+    541,
+    540,
+    758,
+    752,
+    591,
+    705,
+    366,
+    226,
+    542,
+    720,
+    866,
+    54
+   ],
+   "one_line": "Comment on #541: ten bootloader changes proposed since 2026-10-11 (#847, #854, #864, wider #270, #487, #486 and others) are in no reservation list; two of them are interface changes, not byte claims.",
+   "unsure": "The execute-protection row (research item X8b) has no issue number; if another group files it, the table should cite that number."
+  },
+  {
+   "id": "X10b",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-752-X10b-secure-slot-and-stack-claims.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Secure-slot claimant list measured against the shipping slot",
+     "status": "PARTLY",
+     "by": "#752 open item 2; list and gate target in draft c-752",
+     "evidence": "#752: \"Restore the production capacity gate.\""
+    },
+    {
+     "what": "CI capacity gate measures a smoke image against the legacy cap",
+     "status": "UNTRACKED",
+     "by": "draft c-752 (point 1)",
+     "evidence": ".github/workflows/ci.yml:487; fw-manifest/src/lib.rs:177 (58 pages) versus geometry/src/lib.rs:51 (0x72000). #482 that added the gate is closed."
+    },
+    {
+     "what": "Secure stack measurement",
+     "status": "COVERED",
+     "by": "#374",
+     "evidence": "\"Combine compiler/call-graph stack sizes with on-target high-water measurement\""
+    },
+    {
+     "what": "Which image ships (pixel UI or not)",
+     "status": "OWNER",
+     "by": "#752 versus CLAUDE.md",
+     "evidence": "docs/security/adversarial-review/findings/flash-geometry-v7-2026-09-24.md:35 versus the CLAUDE.md pixel-UI caveat"
+    }
+   ],
+   "issues_read": [
+    374,
+    752,
+    540,
+    758,
+    382,
+    785,
+    781,
+    482
+   ],
+   "one_line": "Comment on #752: the only blocking size gate measures a non-shippable image against the old 475,136 B cap, nobody sums the secure-flash claims, and the secure stack is unmeasured (#374); also reports the pixel-UI record conflict without resolving it.",
+   "unsure": "The 25 to 38 KB total is the reviewer's sum of unmeasured estimates; I did not rebuild it. #781 and #785 (pixel-UI frame time and opt-level cost) were skimmed; they are adjacent, not owners of this."
+  }
+ ],
+ "citations": [
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 262,
+   "snippet": "let sig = key.sign(&digest);"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 271,
+   "snippet": "if !vk.verify(&digest, &sig) {"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/keystore.rs",
+   "line": 131,
+   "snippet": "sk.sign(msg_hash, None)"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "sphincs-c10/src/fors.rs",
+   "line": 91,
+   "snippet": "the `None` path is deterministic"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "sphincs-c10/src/params.rs",
+   "line": 25,
+   "snippet": "pub const D: usize = 2;"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "sphincs-c10/src/params.rs",
+   "line": 31,
+   "snippet": "pub const SUBTREE_LEAVES: usize = 1 << SUBTREE_H; // 512"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 355,
+   "snippet": "fn record_signing(bundle_path: &Path, version: u32, vendor_fpr: &[u8; 32]) -> Result<()> {"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 359,
+   "snippet": "eprintln!(\"warning: could not find XDG_DATA_HOME; skipping ledger update\");"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 363,
+   "snippet": "std::fs::create_dir_all(&ledger_dir).ok();"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 174,
+   "snippet": "the ledger is convenience, not"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 210,
+   "snippet": "VendorKey::open(&blob, &passphrase)"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "fwsign/src/main.rs",
+   "line": 284,
+   "snippet": "ExtractSig {"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "docs/security/threat-model.md",
+   "line": 211,
+   "snippet": "*Every Type 1 / Type 2 signature is computed twice on disjoint SRAM regions, the two outpu"
+  },
+  {
+   "draft": "X2a-fwsign-double-compute-ledger-split.md",
+   "path": "docs/security/threat-model.md",
+   "line": 317,
+   "snippet": "| SLH-DSA single-fault grafting (Genêt 2023) | T3 | Double-compute on disjoint SRAM region"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 375,
+   "snippet": "this is deliberately a PARTIAL mask"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 381,
+   "snippet": "pub const fn optr_matches_ship(optr: u32, p: &ShipProfile) -> Result<(), ObField> {"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 521,
+   "snippet": "pub const fn bor_lev(optr: u32) -> u32 {"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 518,
+   "snippet": "not yet a hard gate"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 534,
+   "snippet": "pub const fn verify_ship_profile("
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 559,
+   "snippet": "SECBOOTADD0 and SWAP_BANK mutable at RDP-2"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 388,
+   "snippet": "// SWAP_BANK, added 2026-09-24. RM0456 §7.6.2 EXCEPTS this bit from the"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "docs/provisioning/first-boot-provisioning.md",
+   "line": 48,
+   "snippet": "- Set the shipped option-byte profile: **TZEN=1, SECWM1/2, SECBOOTADD0, WRP1A"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 564,
+   "snippet": "if !wrp_covers_fsbl(wrp1ar, FSBL_LAST_PAGE_FROZEN) {"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 572,
+   "snippet": "if !wrp_covers_fsbl(wrp2ar, FSBL_LAST_PAGE_FROZEN) {"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "docs/provisioning/first-boot-provisioning.md",
+   "line": 49,
+   "snippet": "OEM-key finalization"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "docs/provisioning/first-boot-requirements.md",
+   "line": 46,
+   "snippet": "The flow MUST NOT program WRP or any option"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "fsbl/src/optbytes.rs",
+   "line": 13,
+   "snippet": "the only on-device option-byte"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 264,
+   "snippet": "A shipped unit must"
+  },
+  {
+   "draft": "c-046-M02-optbyte-profile-remainder.md",
+   "path": "docs/provisioning/first-boot-provisioning.md",
+   "line": 41,
+   "snippet": "mirrored verbatim in `docs/provisioning/factory-provisioning.md` and"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "fwsign/src/subcommands/sign.rs",
+   "line": 210,
+   "snippet": "VendorKey::open(&blob, &passphrase)"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "fwsign/src/keystore.rs",
+   "line": 130,
+   "snippet": "let sk = SigningKey::from_parts(*self.sk_seed, self.pk_seed, self.pk_root);"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "docs/firmware/how_to_make_update.md",
+   "line": 26,
+   "snippet": "on an **offline** / air-gapped laptop"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 92,
+   "snippet": "- [ ] Vendor key ceremony documented (shards, threshold, HSM, air-gap)"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "secure/src/crypto.rs",
+   "line": 237,
+   "snippet": "if crate::rng_strong::fill(&mut opt_rand_buf).is_err() {"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "fsbl/src/main.rs",
+   "line": 345,
+   "snippet": "m.verify_signature(vendor_pk_seed, vendor_pk_root).is_ok()"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "fwsign/src/keystore.rs",
+   "line": 105,
+   "snippet": "OsRng.fill_bytes(&mut sk_seed[..]);"
+  },
+  {
+   "draft": "c-069-X2b-custody-decision-inputs.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 316,
+   "snippet": "\"OPTIGA_S2_PRODUCTION_BLOCKED: the real type-0x11 trust-anchor pool \\"
+  },
+  {
+   "draft": "c-220-M07-self-check-scope.md",
+   "path": "docs/security/threat-model.md",
+   "line": 518,
+   "snippet": "A re-flashed FSBL today could substitute a different vendor key and the device would not refuse"
+  },
+  {
+   "draft": "c-270-M02-tripwire-full-profile-needs-split.md",
+   "path": "fsbl/src/optbytes.rs",
+   "line": 68,
+   "snippet": "lockdown::verify_confirmed_fields("
+  },
+  {
+   "draft": "c-270-M02-tripwire-full-profile-needs-split.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 564,
+   "snippet": "if !wrp_covers_fsbl(wrp1ar, FSBL_LAST_PAGE_FROZEN) {"
+  },
+  {
+   "draft": "c-270-M02-tripwire-full-profile-needs-split.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 572,
+   "snippet": "if !wrp_covers_fsbl(wrp2ar, FSBL_LAST_PAGE_FROZEN) {"
+  },
+  {
+   "draft": "c-270-M02-tripwire-full-profile-needs-split.md",
+   "path": "shared/src/lockdown.rs",
+   "line": 765,
+   "snippet": "revisit tz-1's scope and this control"
+  },
+  {
+   "draft": "c-270-M02-tripwire-full-profile-needs-split.md",
+   "path": "fsbl/src/optbytes.rs",
+   "line": 3,
+   "snippet": "//! Decided KEEP on 2026-07-23 (recorded in"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "fw-manifest/src/lib.rs",
+   "line": 524,
+   "snippet": "if sphincs_c10::verify("
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "fsbl/src/main.rs",
+   "line": 345,
+   "snippet": "m.verify_signature(vendor_pk_seed, vendor_pk_root).is_ok()"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "contracts/smart-wallet/test/SPHINCsC10AsmMutantCorpus.t.sol",
+   "line": 58,
+   "snippet": "require(entries.length >= 240, \"corpus unexpectedly small\");"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "contracts/verification/lean/MutantMain.lean",
+   "line": 126,
+   "snippet": "if total < 240 then"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "sphincs-c10/src/hypertree.rs",
+   "line": 393,
+   "snippet": "if fors_indices[K - 1] != 0 {"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "sphincs-c10/src/wots.rs",
+   "line": 183,
+   "snippet": "if sum != TARGET_SUM {"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "contracts/smart-wallet/test/SPHINCsC10Asm.t.sol",
+   "line": 230,
+   "snippet": "return 12;"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "contracts/smart-wallet/test/SPHINCsC10Asm.t.sol",
+   "line": 244,
+   "snippet": "v.expectValid,"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "contracts/verification/lean/SphincsCVerify/KatVectors.lean",
+   "line": 59,
+   "snippet": "{ label := \"near-miss-WOTS-digit-sum\", pkSeed := \"0xaabbccddeeff00112233445566778899000000"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "sphincs-c10/tests/near_miss_validate.rs",
+   "line": 11,
+   "snippet": "#![cfg(feature = \"near-miss-gen\")]"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "Makefile",
+   "line": 4745,
+   "snippet": "cargo mutants $(or $(MUTANTS_ARGS),--package pqsigner-tx-core --package pqsigner-domain) -"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": ".github/workflows/ci.yml",
+   "line": 226,
+   "snippet": "-p sphincs-c10 -p pqsigner-fi \\"
+  },
+  {
+   "draft": "c-304-X9a-rust-leg-of-mutant-corpus.md",
+   "path": "fsbl/src/hash.rs",
+   "line": 65,
+   "snippet": "// SHA-256(\"abc\") known-answer test, halting on mismatch."
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 94,
+   "snippet": "- [ ] B accepted or declined at FSBL WRP freeze review."
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 134,
+   "snippet": "- [ ] Option B **and** an immutable `FSBL_MIN_ACCEPTED_FW_VERSION` floor taken"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 140,
+   "snippet": "- [ ] Post-personalization secure-update freeze costed, and the outcome"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 576,
+   "snippet": "and explicitly rejects a frozen-constant floor. My decision-point prior (\"none"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "secure/src/fw_update/vendor_pubkey.rs",
+   "line": 32,
+   "snippet": "pub static PQSIGNER_SECURE_VENDOR_PUBKEY: [u8; 32] = bytes::VENDOR_PUBKEY;"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "secure/src/fw_update/mod.rs",
+   "line": 519,
+   "snippet": "m.verify_signature(vendor_pk_seed, vendor_pk_root).is_ok()"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "fwsign/src/artifact_key.rs",
+   "line": 596,
+   "snippet": "if fsbl.raw != secure.raw {"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 63,
+   "snippet": "whose embedded secure-world pubkey is the *new* primary"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "fsbl/src/main.rs",
+   "line": 345,
+   "snippet": "m.verify_signature(vendor_pk_seed, vendor_pk_root).is_ok()"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 71,
+   "snippet": "- one extra 4 kB-class signature verification at boot, FSBL footprint"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 397,
+   "snippet": "Estimated cost ~40 B of FSBL rodata+code plus one extra C10 verification at"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "fsbl/src/main.rs",
+   "line": 338,
+   "snippet": "m.verify_vendor_fpr(vendor_pk_seed, vendor_pk_root).is_ok()"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "fsbl/src/main.rs",
+   "line": 378,
+   "snippet": "let (winner, winner_slot, loser, loser_slot) = if a.0.fw_version() > b.0.fw_version() {"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 396,
+   "snippet": "the recovery key provides a path above it"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 47,
+   "snippet": "aggregate). SPHINCS+ has no signature aggregation; N slots means N full"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "fw-manifest/src/lib.rs",
+   "line": 78,
+   "snippet": "//!  4193  3995   reserved, 0xFF          no"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "fw-manifest/src/v6.rs",
+   "line": 90,
+   "snippet": "pub const OFF_TRAILING_RESERVED: usize = 4272;"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "CLAUDE.md",
+   "line": 358,
+   "snippet": "One algorithm in the wallet, one in the FSBL"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/feature-roadmap-research-2026-06.md",
+   "line": 200,
+   "snippet": "| **Falcon / ML-DSA hybrid or any classical fallback** | Invariant #5 explicitly forbids a"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/archive/work-todo-retired-2026-07-19.md",
+   "line": 2226,
+   "snippet": "KEPT as LOW PRIORITY / future consideration"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/security/a-b-firmware-rollback-architecture.md",
+   "line": 3896,
+   "snippet": "- authoritative rollback records MUST remain in OTP. An erasable main-flash"
+  },
+  {
+   "draft": "c-486-M07-freeze-review-inputs.md",
+   "path": "docs/architecture/trezor-comparison.md",
+   "line": 413,
+   "snippet": "**Verdict: RE-EVALUATE AFTER DRAFT-1.1 CANDIDATE GATES.** OTP remains the preferred"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "Makefile",
+   "line": 43,
+   "snippet": "BOARD ?= iota2"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "fw-manifest/src/lib.rs",
+   "line": 204,
+   "snippet": "pub const SIGNED_PREIMAGE_LEN: usize = DOMAIN_TAG.len() + 4 + 32 + 32;"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "fw-manifest/src/v6.rs",
+   "line": 55,
+   "snippet": "pub const SIGNED_PREIMAGE_LEN: usize = 121;"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "Makefile",
+   "line": 2962,
+   "snippet": "release: ## Build and atomically publish the signed release package (blocked)"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "secure/src/board/iota2.rs",
+   "line": 209,
+   "snippet": "pub const BTN_RIGHT_PIN: u32 = 8;"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 225,
+   "snippet": "gating the `VDD1_3V3` rail that powers **both** SEs"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "docs/security/a-b-firmware-rollback-architecture.md",
+   "line": 2436,
+   "snippet": "requires a new manifest schema/domain or"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "secure/src/fw_update/mod.rs",
+   "line": 493,
+   "snippet": "we deliberately do NOT short-circuit on early failures"
+  },
+  {
+   "draft": "c-487-FWU-3-second-board-exists.md",
+   "path": "Makefile",
+   "line": 2662,
+   "snippet": "RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050"
+  },
+  {
+   "draft": "c-541-X10a-bootloader-claimants.md",
+   "path": "fsbl/src/main.rs",
+   "line": 84,
+   "snippet": "mod aw99703;"
+  },
+  {
+   "draft": "c-541-X10a-bootloader-claimants.md",
+   "path": "Makefile",
+   "line": 2476,
+   "snippet": "@python3 scripts/check_fsbl_geometry.py $(FSBL_ELF) --linker fsbl/memory-stm32u585.x"
+  },
+  {
+   "draft": "c-541-X10a-bootloader-claimants.md",
+   "path": "Makefile",
+   "line": 43,
+   "snippet": "BOARD ?= iota2"
+  },
+  {
+   "draft": "c-546-FWU-7-frozen-decoder-review-note.md",
+   "path": "fw-manifest/src/v6.rs",
+   "line": 562,
+   "snippet": "if schema != SCHEMA_V6 {"
+  },
+  {
+   "draft": "c-546-FWU-7-frozen-decoder-review-note.md",
+   "path": "fw-manifest/src/v6.rs",
+   "line": 565,
+   "snippet": "if page[OFF_HEADER_RESERVED..OFF_HEADER_RESERVED + 2] != [0x00, 0x00] {"
+  },
+  {
+   "draft": "c-546-FWU-7-frozen-decoder-review-note.md",
+   "path": "fw-manifest/src/v6.rs",
+   "line": 592,
+   "snippet": "if page[OFF_TRAILING_RESERVED..OFF_CRC32].iter().any(|&b| b != 0xFF) {"
+  },
+  {
+   "draft": "c-546-FWU-7-frozen-decoder-review-note.md",
+   "path": "fsbl/src/manifest.rs",
+   "line": 17,
+   "snippet": "use fw_manifest::{ManifestRef, MANIFEST_SIZE};"
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": ".github/workflows/ci.yml",
+   "line": 487,
+   "snippet": "- name: Secure-slot capacity gate (make size-report)"
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": "Makefile",
+   "line": 397,
+   "snippet": "build-hw: ## Build the real-hardware STM32U585 smoke image (non-shippable)"
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": "fwmeasure/src/main.rs",
+   "line": 108,
+   "snippet": "if args.require_secure_slot && image.bytes.len() > fw_manifest::SLOT_SECURE_CAPACITY as us"
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": "fw-manifest/src/lib.rs",
+   "line": 177,
+   "snippet": "pub const SLOT_SECURE_CAPACITY: u32 = 58 * 8 * 1024;"
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": "geometry/src/lib.rs",
+   "line": 51,
+   "snippet": "pub const SECURE_SLOT_SPAN: u32 = 0x72000;"
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": ".github/workflows/ci.yml",
+   "line": 502,
+   "snippet": "continue-on-error: true"
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": "Makefile",
+   "line": 2466,
+   "snippet": "@FSBL_ALLOW_DEV_KEY=1 $(RUSTFLAGS_VAR)=\"-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $("
+  },
+  {
+   "draft": "c-752-X10b-secure-slot-and-stack-claims.md",
+   "path": "docs/security/adversarial-review/findings/flash-geometry-v7-2026-09-24.md",
+   "line": 35,
+   "snippet": "**Ship the pixel UI.** It is the shipping trusted display."
+  },
+  {
+   "draft": "c-856-M02-halt-placement.md",
+   "path": "secure/src/main.rs",
+   "line": 1281,
+   "snippet": "if !sphincs_tz_shared::lockdown::secboot_selects("
+  },
+  {
+   "draft": "c-856-M02-halt-placement.md",
+   "path": "secure/src/main.rs",
+   "line": 1622,
+   "snippet": "ui::init();"
+  },
+  {
+   "draft": "c-856-M02-halt-placement.md",
+   "path": "secure/src/main.rs",
+   "line": 1633,
+   "snippet": "first_boot::run_pre_lock_and_maybe_lock();"
+  },
+  {
+   "draft": "c-856-M02-halt-placement.md",
+   "path": "secure/src/main.rs",
+   "line": 1297,
+   "snippet": "#[cfg(all(feature = \"ui-lcd\", not(feature = \"se050\")))]"
+  },
+  {
+   "draft": "c-856-M02-halt-placement.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 194,
+   "snippet": "halt_first_boot(state::ob_field_code(field));"
+  },
+  {
+   "draft": "c-856-M02-halt-placement.md",
+   "path": "docs/provisioning/first-boot-requirements.md",
+   "line": 65,
+   "snippet": "- **R2.6 (fail unlocked).** Every Phase-A fault MUST halt with the unit"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "fsbl/src/main.rs",
+   "line": 220,
+   "snippet": "let Some((slot, secure_digest)) = pick_slot(img_ok_a, img_ok_b) else {"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "fsbl/src/main.rs",
+   "line": 211,
+   "snippet": "let img_ok_a = valid_a.and_then(|m| verify::verify_images(Slot::A, m).map(|d| (m, d)));"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "fsbl/src/main.rs",
+   "line": 212,
+   "snippet": "let img_ok_b = valid_b.and_then(|m| verify::verify_images(Slot::B, m).map(|d| (m, d)));"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "fsbl/src/marker.rs",
+   "line": 45,
+   "snippet": "/// Marker page: manifest B (bank-1 page 5), erased in this layout."
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "secure/src/fw_update/staging.rs",
+   "line": 80,
+   "snippet": "let mut qw = [0xFFu8; 16];"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 142,
+   "snippet": "- [ ] Widen the FSBL boot fingerprint beyond the secure image, and **publish"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 185,
+   "snippet": "- [ ] **C4 is now-or-never: widen the FSBL fingerprint's INPUT SCOPE before the"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "fsbl/src/main.rs",
+   "line": 286,
+   "snippet": "let display_verdict = render::render_fingerprint(&secure_digest);"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "secure/src/fw_update/mod.rs",
+   "line": 139,
+   "snippet": "let fw_words = hash_to_word_indices(manifest.secure_hash());"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "Makefile",
+   "line": 2255,
+   "snippet": "cargo run --locked -p fwmeasure -- $(SECURE_ELF)"
+  },
+  {
+   "draft": "c-864-M08-tail-check-and-fingerprint-constraints.md",
+   "path": "secure/src/main.rs",
+   "line": 278,
+   "snippet": "#[cfg(all(not(test), not(feature = \"mode-production\")))]"
+  }
+ ],
+ "measurements": [
+  {
+   "surface": "boot",
+   "what": "At RDP-0, does writing all ones to the four OEM key registers and reloading option bytes clear a planted OEM1/OEM2 lock bit (FLASH_NSSR 18/19), and does the corrected predicate trip on an OEM2 key?",
+   "needs": "A bench board with a debug port at RDP-0 that may stay keyed if the clear fails (a sacrificial STM32U585CIU6 is safest); CubeProgrammer.",
+   "tracked_by": "none for the clear and the reload timing; OEM2 detection is in the 2026-10-12 comment on #46; #387 and #400 cover reading OEM2-absent"
+  },
+  {
+   "surface": "boot",
+   "what": "At RDP-2, is the debug port dead under reset when no OEM2 key exists, and alive (auth registers only) when one does? If so it is an outside check for a planted OEM2 key.",
+   "needs": "Two sacrificial units taken to RDP-2, one with an OEM2 key provisioned first; a debug probe with connect-under-reset.",
+   "tracked_by": "none (adjacent: #45 sacrificial dry-run, #401 RDP-2 downgrade campaign)"
+  },
+  {
+   "surface": "fwupdate",
+   "what": "Bootloader work time with BOTH slots holding valid manifests (today's hashing), then again with a tail scan; the only measured figure is one slot.",
+   "needs": "The pq1 bench board with debug port, both slots flashed, and a timing method that does not use slot B's manifest page (the stage-marker harness does).",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "fwupdate",
+   "what": "Bootloader work time on the default hardware SHA-256 path on pq1; the documented 2.93 s is the software path.",
+   "needs": "The pq1 bench board with debug port and a stage-marker build.",
+   "tracked_by": "none found (comments on #742 and #758 of 2026-09-28 record a hardware-SHA bootloader boot and its size, no boot-time figure; docs/hardware/evt-silicon-validation.md has signing timings only)"
+  },
+  {
+   "surface": "boot",
+   "what": "Whether an RDP-2 to RDP-1 glitch works on STM32U585.",
+   "needs": "Fault-injection rig and sacrificial units.",
+   "tracked_by": "#401"
+  },
+  {
+   "surface": "boot",
+   "what": "ACCDIS semantics and HDP1EN polarity; BOOT_LOCK bit position.",
+   "needs": "Bench board with debug port.",
+   "tracked_by": "#214"
+  },
+  {
+   "surface": "boot",
+   "what": "DHUK value across the RDP-1 to RDP-2 transition.",
+   "needs": "One sacrificial unit (irreversible).",
+   "tracked_by": "#400"
+  },
+  {
+   "surface": "fwupdate",
+   "what": "Does an interrupted flash erase or program leave a word that raises a double-bit ECC NMI on this part?",
+   "needs": "Bench board with debug port and a power-cut fixture; possibly a sacrificial die.",
+   "tracked_by": "#854, #399"
+  },
+  {
+   "surface": "boot",
+   "what": "Is the bootloader's fingerprint visible on a sealed pq1 from a cold boot?",
+   "needs": "A sealed EVT unit (has a panel) flashed over DFU.",
+   "tracked_by": "#705"
+  },
+  {
+   "surface": "systemic",
+   "what": "Worst-case secure-world stack high-water mark on target.",
+   "needs": "Bench board with debug port.",
+   "tracked_by": "#374"
+  }
+ ],
+ "new_defects": []
+}

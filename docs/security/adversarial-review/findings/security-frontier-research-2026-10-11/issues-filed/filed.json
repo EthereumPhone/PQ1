@@ -222,5 +222,437 @@
   "title": "Owner decision before the first user wallet: take #131 (per-key budget reset) and an optional guard hook in PQSmartWallet as one contract decision; a separate vault contract is the candidate for protecting savings",
   "file": "26-wallet-contract-decision-before-launch.md",
   "pending": false
+ },
+ "r2:H1": {
+  "number": 869,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/869",
+  "title": "The V10 schematic puts a backup capacitor on VBAT and two crystals on the MCU, but three documents assume neither: confirm what is fitted, measure the hold time, align the docs",
+  "file": "H1__backup-capacitor-and-crystals.md",
+  "pending": false
+ },
+ "r2:M14": {
+  "number": 870,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/870",
+  "title": "Lockout wipe: bound the boot-time resume, add a terminal \"wipe incomplete\" state, and check both secure elements for survivors before the setup wizard",
+  "file": "M14__wipe-resume-bound-and-pre-wizard-check.md",
+  "pending": false
+ },
+ "r2:SE-06": {
+  "number": 871,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/871",
+  "title": "Add an MCU-side \"wallet provisioned\" record as the seed-wizard gate: today the only gate is two secure-element probes that can each be forced to read \"blank\"",
+  "file": "SE-06__mcu-provisioned-record-gates-seed-wizard.md",
+  "pending": false
+ },
+ "r2:FI-01": {
+  "number": 872,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/872",
+  "title": "First on-silicon fault-injection campaign on the firmware's own gates (PIN gate, signature compare, bootloader admission): untracked legs and a receipt rule",
+  "file": "FI-01__on-silicon-fault-campaign-firmware-gates.md",
+  "pending": false
+ },
+ "r2:M19": {
+  "number": 873,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/873",
+  "title": "Enrol the binary never-ship audit in CI with a two-sided control, give a red nightly a consequence, and add image-level FI and glyph-leak regression checks",
+  "file": "M19__untracked-assurance-gates.md",
+  "pending": false
+ },
+ "r2:M11": {
+  "number": 874,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/874",
+  "title": "Desk review of the V10 artwork for where display and button lines can be tapped, plus anti-tamper requirement fixes, before the next board is specified",
+  "file": "M11__v10-physical-access-desk-review-and-requirements.md",
+  "pending": false
+ },
+ "r2:X2a": {
+  "number": 875,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/875",
+  "title": "fwsign: compute each vendor-key signature twice in separate processes and compare, keep a fail-closed signature ledger, and split digest / sign / assemble",
+  "file": "X2a__fwsign-double-compute-ledger-split.md",
+  "pending": false
+ },
+ "r2:X5a": {
+  "number": 876,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/876",
+  "title": "Pixel UI reads glyphs from non-secure flash between two hash checks of it: paint from the hashed copy, and make all DMA channels secure and locked at boot",
+  "file": "X5a__paint-from-hashed-copy-and-lock-dma-channels.md",
+  "pending": false
+ },
+ "r2:X8a": {
+  "number": 877,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/877",
+  "title": "Mark secure RAM execute-never with the secure memory protection unit, so a fault that redirects the program counter cannot run bytes the companion supplied",
+  "file": "X8a__secure-mpu-execute-never-sram.md",
+  "pending": false
+ },
+ "r2:D-07": {
+  "number": 878,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/878",
+  "title": "Seed words stay in stack buffers after the 16x4 seed pages are drawn, and no executed test covers either display wipe (pixel-UI half already landed)",
+  "file": "D-07__wipe-seed-words-after-paint-on-16x4-path.md",
+  "pending": false
+ },
+ "r2:SYS-06": {
+  "number": 879,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/879",
+  "title": "Keep a small fault record across the security reset: fault-status registers in backup registers 8 to 31, read through the existing diagnostic command",
+  "file": "SYS-06__fault-record-across-reset.md",
+  "pending": false
+ },
+ "r2:M17": {
+  "number": 880,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/880",
+  "title": "Add a read-only per-boot check of OPTIGA object metadata against a pinned table: it is compared only during provisioning, so a loose chip boots normally",
+  "file": "M17__per-boot-optiga-metadata-check.md",
+  "pending": false
+ },
+ "r2:SCA-02": {
+  "number": 881,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/881",
+  "title": "Run the SE050 tunnel AES (SCP03 key derivation, MAC, encryption) on the SAES hardware block instead of software AES; land after the tunnel leakage measurement",
+  "file": "SCA-02__se050-tunnel-aes-on-saes.md",
+  "pending": false
+ },
+ "r2:CS-02": {
+  "number": 882,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/882",
+  "title": "Give Safe custody-change pages one shared danger classification: today a Safe-wrapped unlimited approve does not pulse and owner changes have plain heads",
+  "file": "CS-02__custody-change-danger-classification.md",
+  "pending": false
+ },
+ "r2:CS-03": {
+  "number": 883,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/883",
+  "title": "Design a secure-world spending-policy guard: allowlists, per-operation caps and forbid toggles checked on the decoded request before the confirm screen",
+  "file": "CS-03__secure-world-spending-policy-guard.md",
+  "pending": false
+ },
+ "r2:X6a": {
+  "number": 884,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/884",
+  "title": "Document and test pq1 as a required owner of a k-of-n Safe on the shipped approveHash route: threat-model row, version matrix, real-Safe test",
+  "file": "X6a__safe-custody-topology.md",
+  "pending": false
+ },
+ "r2:IMP-09": {
+  "number": 885,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/885",
+  "title": "Host-side check that each WOTS+C count in a device signature is the smallest valid one (closes the smaller of two firmware covert channels; R stays open)",
+  "file": "IMP-09__host-check-minimal-wots-count.md",
+  "pending": false
+ },
+ "r2:CS-04": {
+  "number": 886,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/886",
+  "title": "Owner decision: should production builds refuse a non-empty paymaster instead of warning and signing? The device signs a hash it cannot decode (review finding H-6 has no issue)",
+  "file": "CS-04__refuse-paymaster-in-production.md",
+  "pending": false
+ },
+ "r2:M13": {
+  "number": 887,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/887",
+  "title": "Show two device-bound words part-way through PIN entry, so a swapped unit is noticed before the whole PIN is typed",
+  "file": "M13__device-words-during-pin-entry.md",
+  "pending": false
+ },
+ "r2:pin-03": {
+  "number": 888,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/888",
+  "title": "Page-124 PIN attempt counter: an all-0xFF read decodes as \"zero attempts\"; decide on a self-checking record encoding, with an atomic reset designed first",
+  "file": "pin-03__page124-self-checking-counter-encoding.md",
+  "pending": false
+ },
+ "r2:X1a": {
+  "number": 889,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/889",
+  "title": "Design-first: opt-in restore that never draws a seed letter, entering the phrase as button bits under an on-screen one-time mask (stops a display-only tap)",
+  "file": "X1a__masked-blind-binary-restore.md",
+  "pending": false
+ },
+ "r2:M10": {
+  "number": 890,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/890",
+  "title": "Bench go/no-go study: can firmware see a logger soldered to the display lines by timing how fast each line charges? Measure first, build no detector",
+  "file": "M10__display-net-rc-decay-bench-study.md",
+  "pending": false
+ },
+ "r2:CS-09": {
+  "number": 891,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/891",
+  "title": "Tag a fund-destination address that equals the current wallet (\"THIS WALLET\"), computed in the secure world and never taken from the companion",
+  "file": "CS-09__this-wallet-self-tag.md",
+  "pending": false
+ },
+ "r2:X7b": {
+  "number": 892,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/892",
+  "title": "Show Sign-In with Ethereum (EIP-4361) messages as structured pages before the raw text, with on-device address and chain consistency checks",
+  "file": "X7b__siwe-structured-pages.md",
+  "pending": false
+ },
+ "r2:X3a": {
+  "number": 893,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/893",
+  "title": "Pin two gateway policy sets with source tests: the one handler that signs without a prompt (command 15) and the entries callable on a locked device",
+  "file": "X3a__pin-prompt-free-signer-set.md",
+  "pending": false
+ },
+ "r2:H2": {
+  "number": 894,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/894",
+  "title": "Five open checks from the 2026-10 research that no issue carries: pre-existing secure-element state at setup, two leakage measurements, a port-B pin readback, one unsourced figure",
+  "file": "H2__open-checks-with-no-owner.md",
+  "pending": false
+ },
+ "r2:c-104:SE-03": {
+  "comment_on": 104,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/104#issuecomment-6126667318",
+  "file": "c-104__SE-03__corroboration-cannot-authenticate.md"
+ },
+ "r2:c-117:SE-05": {
+  "comment_on": 117,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/117#issuecomment-6126668573",
+  "file": "c-117__SE-05__liveness-probe-after-handshake.md"
+ },
+ "r2:c-123:M14": {
+  "comment_on": 123,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/123#issuecomment-6126669911",
+  "file": "c-123__M14__optiga-wipe-verdict-without-readback.md"
+ },
+ "r2:c-154:X7a": {
+  "comment_on": 154,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/154#issuecomment-6126671200",
+  "file": "c-154__X7a__injective-personal-sign-design.md"
+ },
+ "r2:c-182:X4b": {
+  "comment_on": 182,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/182#issuecomment-6126672412",
+  "file": "c-182__X4b__wallet-tag-in-page123-key.md"
+ },
+ "r2:c-220:M07": {
+  "comment_on": 220,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/220#issuecomment-6126674495",
+  "file": "c-220__M07__self-check-scope.md"
+ },
+ "r2:c-228:SCA-01": {
+  "comment_on": 228,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/228#issuecomment-6126676001",
+  "file": "c-228__SCA-01__retarget-prf-measurement.md"
+ },
+ "r2:c-229:SCA-03": {
+  "comment_on": 229,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/229#issuecomment-6126677518",
+  "file": "c-229__SCA-03__wots-midstate-correction.md"
+ },
+ "r2:c-236:SCA-01": {
+  "comment_on": 236,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/236#issuecomment-6126679394",
+  "file": "c-236__SCA-01__tunnel-measurement-first.md"
+ },
+ "r2:c-237:M03": {
+  "comment_on": 237,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/237#issuecomment-6126680697",
+  "file": "c-237__M03__rescope-to-nv3007-measure-first.md"
+ },
+ "r2:c-249:M09": {
+  "comment_on": 249,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/249#issuecomment-6126681973",
+  "file": "c-249__M09__birth-record-design-corrections.md"
+ },
+ "r2:c-269:M20": {
+  "comment_on": 269,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/269#issuecomment-6126683328",
+  "file": "c-269__M20__secure-alias-move-and-untracked-pieces.md"
+ },
+ "r2:c-270:M02": {
+  "comment_on": 270,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/270#issuecomment-6126684781",
+  "file": "c-270__M02__tripwire-full-profile-needs-split.md"
+ },
+ "r2:c-275:SE-08": {
+  "comment_on": 275,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/275#issuecomment-6126686502",
+  "file": "c-275__SE-08__sec-counter-no-battery-caveat.md"
+ },
+ "r2:c-304:X9a": {
+  "comment_on": 304,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/304#issuecomment-6126687796",
+  "file": "c-304__X9a__rust-leg-of-mutant-corpus.md"
+ },
+ "r2:c-343:CS-07": {
+  "comment_on": 343,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/343#issuecomment-6126689262",
+  "file": "c-343__CS-07__approval-class-selectors.md"
+ },
+ "r2:c-371:M18-X1b": {
+  "comment_on": 371,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/371#issuecomment-6126690847",
+  "file": "c-371__M18-X1b__seed-entropy-decisions.md"
+ },
+ "r2:c-381:CS-01": {
+  "comment_on": 381,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/381#issuecomment-6126692347",
+  "file": "c-381__CS-01__raw32-gate-mechanism.md"
+ },
+ "r2:c-385:SE-06": {
+  "comment_on": 385,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/385#issuecomment-6126693683",
+  "file": "c-385__SE-06__looks-fixed.md"
+ },
+ "r2:c-46:M02": {
+  "comment_on": 46,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/46#issuecomment-6126695109",
+  "file": "c-46__M02__optbyte-profile-remainder.md"
+ },
+ "r2:c-485:SE-08": {
+  "comment_on": 485,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/485#issuecomment-6126696686",
+  "file": "c-485__SE-08__guess-path-budget-and-new-home.md"
+ },
+ "r2:c-486:M07": {
+  "comment_on": 486,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/486#issuecomment-6126698234",
+  "file": "c-486__M07__freeze-review-inputs.md"
+ },
+ "r2:c-487:FWU-3": {
+  "comment_on": 487,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/487#issuecomment-6126699610",
+  "file": "c-487__FWU-3__second-board-exists.md"
+ },
+ "r2:c-48:M21": {
+  "comment_on": 48,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/48#issuecomment-6126701044",
+  "file": "c-48__M21__secure-ram-bank-swap.md"
+ },
+ "r2:c-49:M20": {
+  "comment_on": 49,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/49#issuecomment-6126702594",
+  "file": "c-49__M20__bor-level-pin-and-pvd-handler-policy.md"
+ },
+ "r2:c-534:X6b": {
+  "comment_on": 534,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/534#issuecomment-6126704181",
+  "file": "c-534__X6b__safetx-typed-format-refusal.md"
+ },
+ "r2:c-541:X10a": {
+  "comment_on": 541,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/541#issuecomment-6126705594",
+  "file": "c-541__X10a__bootloader-claimants.md"
+ },
+ "r2:c-542:X8b": {
+  "comment_on": 542,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/542#issuecomment-6126707055",
+  "file": "c-542__X8b__fsbl-execute-protection-decision.md"
+ },
+ "r2:c-546:FWU-7": {
+  "comment_on": 546,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/546#issuecomment-6126708810",
+  "file": "c-546__FWU-7__frozen-decoder-review-note.md"
+ },
+ "r2:c-588:USB-09": {
+  "comment_on": 588,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/588#issuecomment-6126710363",
+  "file": "c-588__USB-09__router-fuzz-oracle-and-shape.md"
+ },
+ "r2:c-600:USB-08": {
+  "comment_on": 600,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/600#issuecomment-6126711908",
+  "file": "c-600__USB-08__ceremony-layer-and-safe-nonce-ring.md"
+ },
+ "r2:c-636:pin-04": {
+  "comment_on": 636,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/636#issuecomment-6126713339",
+  "file": "c-636__pin-04__duress-fence-and-prerequisites.md"
+ },
+ "r2:c-637:M12": {
+  "comment_on": 637,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/637#issuecomment-6126714907",
+  "file": "c-637__M12__backoff-design-constraints.md"
+ },
+ "r2:c-69:X2b": {
+  "comment_on": 69,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/69#issuecomment-6126716377",
+  "file": "c-69__X2b__custody-decision-inputs.md"
+ },
+ "r2:c-715:M04": {
+  "comment_on": 715,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/715#issuecomment-6126717924",
+  "file": "c-715__M04__split-noverdict-and-se-retry-counters.md"
+ },
+ "r2:c-752:X10b": {
+  "comment_on": 752,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/752#issuecomment-6126719407",
+  "file": "c-752__X10b__secure-slot-and-stack-claims.md"
+ },
+ "r2:c-776:M19": {
+  "comment_on": 776,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/776#issuecomment-6126720881",
+  "file": "c-776__M19__per-harness-limits.md"
+ },
+ "r2:c-784:B6corr": {
+  "comment_on": 784,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/784#issuecomment-6126722363",
+  "file": "c-784__B6corr__stale-digest-claim.md"
+ },
+ "r2:c-805:M06": {
+  "comment_on": 805,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/805#issuecomment-6126723953",
+  "file": "c-805__M06__rdi-design-constraints.md"
+ },
+ "r2:c-831:M15": {
+  "comment_on": 831,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/831#issuecomment-6126725553",
+  "file": "c-831__M15__cap-the-reseed-retry.md"
+ },
+ "r2:c-846:X5b": {
+  "comment_on": 846,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/846#issuecomment-6126727025",
+  "file": "c-846__X5b__interrupt-mask-at-atlas-sites.md"
+ },
+ "r2:c-853:SE-03-pin-05": {
+  "comment_on": 853,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/853#issuecomment-6126728551",
+  "file": "c-853__SE-03-pin-05__se-lockout-verdict-and-log-label.md"
+ },
+ "r2:c-854:M21": {
+  "comment_on": 854,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/854#issuecomment-6126729959",
+  "file": "c-854__M21__stack-limit-details-and-stack-scrub.md"
+ },
+ "r2:c-855:M16": {
+  "comment_on": 855,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/855#issuecomment-6126731547",
+  "file": "c-855__M16__salt-home-wipe-order-and-scope.md"
+ },
+ "r2:c-856:M02": {
+  "comment_on": 856,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/856#issuecomment-6126733279",
+  "file": "c-856__M02__halt-placement.md"
+ },
+ "r2:c-860:M12": {
+  "comment_on": 860,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/860#issuecomment-6126735057",
+  "file": "c-860__M12__prompt-bound-review-notes.md"
+ },
+ "r2:c-861:N1-M06": {
+  "comment_on": 861,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/861#issuecomment-6126736890",
+  "file": "c-861__N1-M06__entry-jitter-and-dead-tampers.md"
+ },
+ "r2:c-864:M05-M08": {
+  "comment_on": 864,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/864#issuecomment-6126738476",
+  "file": "c-864__M05-M08__fsbl-trng-tail-scan-fingerprint.md"
+ },
+ "r2:c-866:H3-M15-USB-09": {
+  "comment_on": 866,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/866#issuecomment-6126740009",
+  "file": "c-866__H3-M15-USB-09__more-stale-rows.md"
+ },
+ "r2:c-89:X4a": {
+  "comment_on": 89,
+  "url": "https://github.com/EthereumPhone/PQ1/issues/89#issuecomment-6126741494",
+  "file": "c-89__X4a__per-incarnation-cap-claim-sites.md"
  }
 }

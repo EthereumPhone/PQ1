@@ -1,0 +1,1469 @@
+{
+ "items": [
+  {
+   "id": "SE-03",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+    "c-104-SE-03-corroboration-cannot-authenticate.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Make page 124 the only wipe authority (a page-124 floor before any wipe on an SE-reported lockout)",
+     "status": "PARTLY",
+     "by": "#104",
+     "evidence": "#104 body: \"corroborate `AuthMethodBlocked` across `reinit()` + a fresh session (and a page-124 floor) before wiping\". The floor is tracked; the research shows the reinit/fresh-session corroboration cannot authenticate the verdict, which is new."
+    },
+    {
+     "what": "Map an SE-reported lockout on the USB arm to the same non-wiping state the boot and idle arms use; offer a wipe only behind a trusted-UI confirmation",
+     "status": "PARTLY",
+     "by": "#853",
+     "evidence": "#853 body: \"Decide the intended behaviour once, for all three arms, and record it in invariant 2.\" #853 spells out only the \"always wipe\" branch; the comment draft supplies the other branch. master: secure/src/nsc/cmd_request_unlock.rs:163 wipes, secure/src/main.rs:4215 and secure/src/main.rs:4664 do not."
+    },
+    {
+     "what": "Typed \"not authenticated\" result from the 2-byte arm of the SCP03 response unwrap",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "master secure/src/se050/scp03.rs:615 returns Ok(2) with no marker. #104 only asks to \"reject bare SW in {0x9000, 0x62xx, 0x63xx}\". Carried as a checkbox in the #853 comment draft."
+    },
+    {
+     "what": "Keep the page-124 charge (no refund on an unauthenticated status)",
+     "status": "COVERED",
+     "by": "#692",
+     "evidence": "#692 body: \"`gated_unlock` pre-commits a page-124 attempt before every SE call ... and keeps it on any `Err`\"; the 2026-09-21 cap (secure/src/main.rs:4535) kept the charge. Stated as a constraint in the comment."
+    },
+    {
+     "what": "Extend the verdictless cap to CMD_REQUEST_UNLOCK and the boot arm (durable)",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "master: the cap exists only in the PendSV loop (secure/src/main.rs:4535). Posed as an open design question in the #853 comment, not as work: each attempt on those arms needs a human PIN entry."
+    },
+    {
+     "what": "Invariant 2 text and comment corrections",
+     "status": "COVERED",
+     "by": "#853",
+     "evidence": "#853 body: \"Correct the four comments and the invariant text.\""
+    },
+    {
+     "what": "OPTIGA leg: re-scope away from #120's global status mapping",
+     "status": "PARTLY",
+     "by": "#120, #125",
+     "evidence": "master secure/src/optiga/apdu.rs:310 says the per-reason status arms were dead code; #120's cited trigger no longer exists. Noted in the #853 comment; no separate draft for #120."
+    }
+   ],
+   "issues_read": [
+    7,
+    104,
+    105,
+    106,
+    120,
+    125,
+    126,
+    127,
+    168,
+    385,
+    692,
+    715,
+    853
+   ],
+   "one_line": "The original proposal (confirm a bare SE050 status with an authenticated probe) was refuted; what survives is a comment on #853 saying a lockout reported by a secure element should not wipe on the USB arm either, because SCP03 cannot authenticate that verdict, plus a two-line pointer on #104 that its reinit corroboration does not hold.",
+   "unsure": "Whether #105's proposed fix (\"only authenticated 0x63Cx is a PIN failure\") is obtainable depends on whether the SE050 ever returns a MAC-protected 0x63Cx for a wrong UserID; not checked against the applet documentation or on silicon. The c-104 pointer is optional: drop it if one comment is preferred. #120's body cites a mapping that is gone on master; I flagged it inside the #853 comment and did not draft a separate note on #120."
+  },
+  {
+   "id": "SE-05",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-117-SE-05-liveness-probe-after-handshake.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Liveness probe after every OPTIGA handshake: 32 TRNG bytes through the tunnel to CalcHash, compare with a local SHA-256",
+     "status": "UNTRACKED",
+     "by": "none (threat is #117)",
+     "evidence": "#117 body lists other fixes: \"persisted `random_S` watermark, fresh GetRandom before destructive verdicts, post-wipe readback\". master: no CalcHash command in secure/src/optiga/apdu.rs (constants at :116); ensure_shield returns straight after establish (secure/src/optiga/mod.rs:573)."
+    },
+    {
+     "what": "Probe mismatch must be inconclusive, never Shield; challenge from the MCU TRNG only",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "master secure/src/optiga/mod.rs:705 and secure/src/optiga/mod.rs:706 (non-inconclusive failure falls through to the E140 rewrite); secure/src/rng_strong.rs:210 with secure/src/optiga/mod.rs:358 (rng_strong re-enters ensure_shield)."
+    },
+    {
+     "what": "Add the probe to the vendor-derived ProVerif model",
+     "status": "UNTRACKED",
+     "by": "none (#396 covers other FV follow-ups)",
+     "evidence": "contracts/verification/proverif/optiga_shield_handshake_vendor.pv:219 records injective agreement FALSE."
+    },
+    {
+     "what": "Correct the two threat-model sentences that claim OPTIGA session freshness (docs/security/threat-model.md:233, docs/security/threat-model.md:255)",
+     "status": "PARTLY",
+     "by": "#117, #866",
+     "evidence": "#117 body says the finding contradicts those two threat-model lines but has no checkbox for the correction; #866 body: \"Doc drift that already has an owner is not repeated here: Shielded Connection freshness (#117)\". Added as a checkbox in the comment."
+    },
+    {
+     "what": "Bench record-and-replay test",
+     "status": "PARTLY",
+     "by": "#117",
+     "evidence": "playbook row docs/security/adversarial-review/secure-element-adversarial-review.md:26 says \"bench replay PoC owed\"; #117 has no task for it. Needs a hand-modified unit with an active I2C interposer."
+    }
+   ],
+   "issues_read": [
+    117,
+    123,
+    126,
+    145,
+    200,
+    307,
+    396,
+    866
+   ],
+   "one_line": "A concrete fix for the OPTIGA session-replay issue #117: a challenge the host can check (CalcHash over fresh bytes) after every handshake, drafted as a comment on #117 with its three integration constraints; it also notes that #117's own 'fresh GetRandom' fix does not work and that one detail in its body is stale. Firmware only; its bench test needs a hand-modified unit with an active I2C interposer.",
+   "unsure": "I chose a comment over a new issue because the mechanism is the fix for #117's finding. If you prefer an enhancement issue separate from the candidate finding, the comment text converts directly. #1 and #4 from the manifest are not in the issue dump (probably pull requests); not read. CalcHash framing is taken from the in-repo command reference, not from the vendor manual."
+  },
+  {
+   "id": "SE-06",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+    "c-385-SE-06-looks-fixed.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Skip the E140 pairing-secret write once the first-boot journal says Rotated",
+     "status": "COVERED",
+     "by": "#118",
+     "evidence": "#118 body: \"`ensure_shield` first; once the journal is `ALL_DONE`, never plaintext-write\". The research's refinement (skip at both call sites, secure/src/optiga/mod.rs:613 and secure/src/optiga/mod.rs:2111) is carried as one line in the new issue's 'already tracked' section."
+    },
+    {
+     "what": "Make the SE050 provisioned probe tri-state / fail safe",
+     "status": "COVERED",
+     "by": "#111",
+     "evidence": "#111 body: \"Fix: mirror the OPTIGA tri-state contract.\" master still fails open: secure/src/se050/mod.rs:1790 and secure/src/se050/mod.rs:1794."
+    },
+    {
+     "what": "OPTIGA probe: clean status read as fresh chip",
+     "status": "COVERED",
+     "by": "#121",
+     "evidence": "#121 body: \"shield-first ordering; any non-clean answer = inconclusive -> fail safe\". master secure/src/optiga/mod.rs:982."
+    },
+    {
+     "what": "MCU-side 'wallet provisioned' record as the wizard discriminator, cleared at the start of every wipe",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "No record exists on master (searched secure/src, shared/src, proto/src, geometry/src); wizard gate is secure/src/main.rs:3982 over secure/src/dual_se.rs:142. isearch for sentinel/provisioned flag/wizard misfire found only #169, #121, #111."
+    },
+    {
+     "what": "Relation to the chip-side F1E1 provisioning/reset sentinel that the OPTIGA probe reads",
+     "status": "PARTLY",
+     "by": "#14, #215",
+     "evidence": "#14 body: \"Either retain F1E1 under a reviewed access-condition/lifecycle policy, or replace the marker and remove its provisioning/reset consumers.\" Neither issue proposes a microcontroller-side record; the draft lists both under 'already tracked' and says to decide them together. master: the probe reads OID_COUNTER at secure/src/optiga/mod.rs:968."
+    },
+    {
+     "what": "Home of the record (not page 127)",
+     "status": "OWNER",
+     "by": "none (#540 owns the registry)",
+     "evidence": "geometry/src/lib.rs:130 to geometry/src/lib.rs:133: every bank-1 page is owned; secure/src/first_boot/mod.rs:71: page 127 erased means RotatedSaltMissing. Same decision as the #855 salt."
+    },
+    {
+     "what": "Uniform guard at factory/transport provisioning entry points (refuse when locked, rotated or E140 operational)",
+     "status": "PARTLY",
+     "by": "#118, #87, #445",
+     "evidence": "Not drafted. #118 covers the pairing-secret write, #87 the already-operational acceptance; the factory flow is quarantined and compile-fenced (#445 body). The remaining delta is small and belongs to the factory ceremony design (#263, #268, #76)."
+    },
+    {
+     "what": "Split OptigaError::Shield (prerequisite named by the research)",
+     "status": "DONE-ON-MASTER",
+     "by": "#385 (still open)",
+     "evidence": "master secure/src/optiga/mod.rs:574 maps HandshakeTransport to Transport; commit 8e6bcd3a (2026-07-17). Drafted as a 'looks fixed' comment on #385."
+    }
+   ],
+   "issues_read": [
+    11,
+    14,
+    36,
+    76,
+    87,
+    111,
+    118,
+    121,
+    123,
+    126,
+    169,
+    215,
+    268,
+    276,
+    366,
+    385,
+    445,
+    712,
+    862,
+    855,
+    540,
+    692,
+    106
+   ],
+   "one_line": "Three of the four guards in this item are already tracked (#118, #111, #121); the untracked one is a microcontroller-side 'wallet provisioned' record so that a faulted or forged secure-element probe cannot start the seed wizard on a used device. Drafted as a new issue whose first step is the owner decision on where the record lives.",
+   "unsure": "#862 (first-boot done bits) is only adjacent, not an overlap. The report's defect table says the wizard needs a forced OPTIGA reading as well as the SE050 failure; the code ANDs the two probes (secure/src/dual_se.rs:142), so one false reading is enough, as #111 already says. The page-125 encoding sketched in the draft (armed wipe flag counts as cleared) is my reading of the constraints, not analysed for power cuts. The #385 'looks fixed' comment is outside the item proper; drop it if unwanted."
+  },
+  {
+   "id": "M16",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-855-M16-salt-home-wipe-order-and-scope.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Present SAES-CMAC(DHUK, label || salt || PIN) to each SE",
+     "status": "COVERED",
+     "by": "#855",
+     "evidence": "#855 fix direction 1: \"Present `SAES-CMAC(DHUK, label_per_SE || salt || PIN)` to each chip instead.\""
+    },
+    {
+     "what": "32-byte per-provisioning salt erased first in every wipe",
+     "status": "COVERED",
+     "by": "#855",
+     "evidence": "#855: \"Add a 32-byte per-provisioning salt, erased first in every wipe entry point.\""
+    },
+    {
+     "what": "PIN-keyed mask on each seed half at rest",
+     "status": "COVERED",
+     "by": "#855",
+     "evidence": "#855: \"Mask each seed half with a PIN-keyed value derived under the device key, so the XOR join needs the microcontroller.\""
+    },
+    {
+     "what": "Mint credentials only at RDP-2",
+     "status": "COVERED",
+     "by": "#855",
+     "evidence": "#855: \"Mint the credentials only after the device is at RDP-2, when the device key is final.\""
+    },
+    {
+     "what": "Correct threat-model and HARDENING text",
+     "status": "COVERED",
+     "by": "#855, #866",
+     "evidence": "#855: \"Correct the threat-model sentences above until this lands.\"; #866: \"PIN credential design that does not exist. HARDENING.md lines 30-31, 158-163 and 258-270 (as quoted in #866)\". The comment adds docs/security/threat-model.md:121 as one more sentence to check."
+    },
+    {
+     "what": "Where the salt lives (no free bank-1 page)",
+     "status": "OWNER",
+     "by": "none (#540 owns the registry)",
+     "evidence": "geometry/src/lib.rs:129 to geometry/src/lib.rs:133; page 124 is erased on each successful unlock (secure/src/nsc/mod.rs:1614). Not in #855."
+    },
+    {
+     "what": "Make the page-124 reset conditional on wipe success",
+     "status": "COVERED",
+     "by": "#106",
+     "evidence": "#106 body: \"the gateway discards the wipe error, resets page 124 and shows \\\"WALLET WIPED\\\" regardless\"; the 2026-10-12 comment on #106 lists the three reset sites. The #855 comment names it a prerequisite."
+    },
+    {
+     "what": "Scope facts, dropped parts, silicon unknowns (16-byte user UserID, SAES-CMAC leakage, all-zero quad-word reprogram)",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "Not in #855. master: 11 call sites of derive_pin_secret (secure/src/optiga/mod.rs:916), label cap secure/src/hw/secret_keys.rs:186, pinned tag test secure/src/optiga_under_test/pure_tests.rs:1568."
+    },
+    {
+     "what": "DHUK known-answer gate before PIN attempts",
+     "status": "PARTLY",
+     "by": "#692, #400",
+     "evidence": "Dropped from this item by the review; not drafted."
+    }
+   ],
+   "issues_read": [
+    5,
+    12,
+    124,
+    200,
+    202,
+    203,
+    247,
+    268,
+    400,
+    485,
+    540,
+    626,
+    637,
+    692,
+    707,
+    712,
+    743,
+    855,
+    106,
+    866
+   ],
+   "one_line": "#855 (filed yesterday) already asks for every part of this recommendation, including the masked seed halves. The remainder is a comment on #855 with what the independent review added: the salt has no free flash page (owner decision), the wipe-order dependency on #106, scope and cost facts, the parts the review dropped, and three silicon checks (bench unit with a debug port; an oscilloscope and shunt for one of them). No board change.",
+   "unsure": "The hint that #855 lacks 'masking each share at rest' did not hold: it is #855's third fix direction. The reviewer's line numbers for two extra threat-model sentences (:222-223) do not match master (those lines are a table header and the MCU-flash row), so I passed on only :121 and said I did not work its chain through."
+  },
+  {
+   "id": "SE-08",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-485-SE-08-guess-path-budget-and-new-home.md",
+    "c-275-SE-08-sec-counter-no-battery-caveat.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Lifetime, never-reset counter on the guess path (Execute of the PIN reference object)",
+     "status": "COVERED",
+     "by": "#485",
+     "evidence": "#485 body: \"provision E122 as a lifetime-total execute counter on the main auth path\"."
+    },
+    {
+     "what": "Counter on the Read condition of the secret objects (the proposal as written)",
+     "status": "COVERED",
+     "by": "#485 (refuted placement; nothing to file)",
+     "evidence": "master secure/src/optiga/mod.rs:2584, then secure/src/optiga/mod.rs:2619 and secure/src/optiga/mod.rs:2625: reads happen only after a successful verify, so wrong guesses would cost nothing."
+    },
+    {
+     "what": "Re-home #485 (its fold target #443 is closed); attach-point options; duress twin; budget; silicon checks",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "#485 body: \"inside the #443 first-boot ceremony work\"; #443 is CLOSED. Lands with the S-3 profile on a sacrificial part; the comment says so and does not ask for S-3 now."
+    },
+    {
+     "what": "Read the Security Event Counter (E0C5)",
+     "status": "COVERED",
+     "by": "#275",
+     "evidence": "#275 body: \"Read OPTIGA Security Event Counter (`GetDataObject 0xE0C5`) at unlock over the shielded connection; **advisory only**\"."
+    },
+    {
+     "what": "Use the counter to tell a throttled chip from a wedged one; no-battery caveat",
+     "status": "UNTRACKED",
+     "by": "none (#119 is the consumer)",
+     "evidence": "#275 is log/display only; #119 does not mention the counter. secure/src/board/pq1.rs:39: the SE supply is switched by a pin. Short comment drafted on #275."
+    },
+    {
+     "what": "Keep-powered decay of the event counter",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "Excluded by the standing no-battery owner decision, so not drafted; the #275 comment explains why Trezor's handling does not port."
+    }
+   ],
+   "issues_read": [
+    116,
+    119,
+    170,
+    251,
+    254,
+    275,
+    443,
+    485
+   ],
+   "one_line": "The read-path counter in this item was refuted; the surviving form (a lifetime counter on the guess path) is exactly what #485 already proposes. Drafted a comment that re-homes #485 from the closed #443 to the S-3 profile and lists what the design must still settle, plus a short comment on #275 about why Trezor's event-counter handling does not port to a board without a battery. No board change; the counter work needs a sacrificial OPTIGA and lands with the deferred S-3 profile.",
+   "unsure": "Both comments are deliberately worded as 'lands with S-3 on a sacrificial part', not 'do now'. If you want only one comment for this item, keep the #485 one. The claim that the event counter decays only while powered is the research's reading of the vendor manual and Trezor's driver; I did not re-check it."
+  },
+  {
+   "id": "M17",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "M17-per-boot-optiga-metadata-check.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "L0: restrict the plaintext branch to an allowlist of pre-tunnel commands",
+     "status": "COVERED",
+     "by": "#126",
+     "evidence": "#126 body: \"allow the plaintext branch only for the pairing-window PBS write\". Its cited trigger is stale on master (response unwrap no longer clears the session), which the review recorded; not drafted."
+    },
+    {
+     "what": "L0: freshness before any verdict",
+     "status": "PARTLY",
+     "by": "#117",
+     "evidence": "Carried by the SE-05 comment draft on #117."
+    },
+    {
+     "what": "L1: per-boot read-only OPTIGA metadata check against a pinned table, refuse-only",
+     "status": "UNTRACKED",
+     "by": "none (#87 is the provisioning-time form)",
+     "evidence": "master: every get_metadata caller is a provisioning, lock or duress-liveness path (secure/src/optiga/mod.rs:898, secure/src/optiga/mod.rs:1087, secure/src/optiga/mod.rs:3174); no read between secure/src/main.rs:1774 and secure/src/main.rs:1812. isearch for per-boot/metadata audit found only #87, #116, #263."
+    },
+    {
+     "what": "L1: refusal policy on a frozen, unfixable object",
+     "status": "OWNER",
+     "by": "#87",
+     "evidence": "#87 body: \"Turning the skip into verify-and-fail-closed is a security-vs-brick tradeoff ... Owner tradeoff\"."
+    },
+    {
+     "what": "L1: SE050 applet configuration pin, lock state, get-version encoding",
+     "status": "COVERED",
+     "by": "#206, #61, #63, #444",
+     "evidence": "#206: \"Promote the check to a **boot-time fail-closed assertion**\"; #63: \"Assert the applet is **Active** at boot\". A lock-state reader APDU does not exist on master; left to #63."
+    },
+    {
+     "what": "L1: factory-owned table rows (E140 lifecycle state, trust-anchor pool, certificate objects)",
+     "status": "OWNER",
+     "by": "#6, #11, #14, #215",
+     "evidence": "Deferred by design with S-1/S-2/S-3; the draft says the rows wait for that work."
+    },
+    {
+     "what": "L2: factory per-unit record, OTP anchor, host verifier where each SE signs a nonce",
+     "status": "COVERED",
+     "by": "#249 (and group A, item M09)",
+     "evidence": "#249 body: \"WebUSB verification page ... both SEs sign\" and \"SHA3-256 anchor to STM32 OTP bytes 6-37\". Not drafted here."
+    },
+    {
+     "what": "L2: retarget #210, #244, #245, #249 from on-device vendor-chain verification to host-side",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "#210: \"SE050: verify cert chain against pinned NXP root\"; #249: \"chain to pinned Infineon OPTIGA ECC Root CA 2\" at boot. scripts/check_classical_crypto_boundary.py allows ECDSA code only in dbgen. Mentioned in the new issue's 'already tracked' section; no comment drafted to avoid colliding with group A."
+    },
+    {
+     "what": "Docs that present boot attestation as existing",
+     "status": "COVERED",
+     "by": "#866",
+     "evidence": "#866 first item: \"Boot-time SE attestation. HARDENING.md line 32 and the lifecycle line in CLAUDE.md (as quoted in #866)\"."
+    }
+   ],
+   "issues_read": [
+    6,
+    14,
+    27,
+    61,
+    63,
+    67,
+    68,
+    76,
+    87,
+    116,
+    117,
+    120,
+    121,
+    126,
+    206,
+    207,
+    209,
+    210,
+    215,
+    244,
+    245,
+    249,
+    263,
+    268,
+    272,
+    444,
+    697,
+    866
+   ],
+   "one_line": "Drafted only the device-side part: a read-only check of OPTIGA object metadata at every boot against a pinned table, which nothing tracks today (#87 covers the same weakness at provisioning time only). The refusal policy is the same owner trade-off as #87; the identity and factory-record part is left to #249 and to group A.",
+   "unsure": "Overlap with M09 (group A): the factory birth record, OTP anchor and host verifier are not drafted here. One thing someone should own: #210, #244, #245 and #249 specify verifying vendor certificate chains on the device, which the classical-crypto-boundary gate (invariant 5) does not allow; I noted it in the draft but did not draft comments on those four issues. The value of the check today is modest (the reviewer's point): the first rows are objects the firmware itself provisions and compares before locking."
+  },
+  {
+   "id": "M18",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-371-M18-two-decisions-and-offline-dice-path.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Decide adopt vs decline on external-entropy verifiability",
+     "status": "COVERED",
+     "by": "#371",
+     "evidence": "#371 body: \"Record as a deliberate design decision (adopt vs decline), not silently drop.\""
+    },
+    {
+     "what": "Concrete design: coin flips hashed into the new-wallet seed draw, with its constraints; split into two decisions",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "master secure/src/main.rs:968 and secure/src/main.rs:976: one three-source draw, no user term. isearch for dice/coin flip/user entropy found no issue."
+    },
+    {
+     "what": "Document 'generate offline from dice, then Restore' as the zero-code auditable path",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "master secure/src/ui/seed_wizard.rs:781 with bip39/src/full.rs:205 (checksum validated). Carried as a checkbox in the #371 comment."
+    },
+    {
+     "what": "Duress wallet entropy fall-through",
+     "status": "DONE-ON-MASTER",
+     "by": "#370",
+     "evidence": "Already reported in the 2026-10-12 'looks fixed' comment on #370; not repeated."
+    },
+    {
+     "what": "Per-word TRNG sanity check",
+     "status": "COVERED",
+     "by": "#369",
+     "evidence": "#369 body: \"`DR != 0` per-word check + repeat-word compare in `rng.rs::fill`\"."
+    }
+   ],
+   "issues_read": [
+    237,
+    238,
+    369,
+    370,
+    371,
+    400,
+    470,
+    594,
+    636,
+    641,
+    700,
+    704,
+    778,
+    779,
+    783,
+    784
+   ],
+   "one_line": "#371 only says 'decide'. Drafted a comment that gives it the concrete design, splits it into two decisions (mix user coin flips into the seed; offer verifiability), notes that the motivating failure class is already fenced by a CI gate, and adds the zero-code alternative: document generating the phrase offline from dice and entering it with Restore.",
+   "unsure": "Research priority is P3 and the reviewer rates the marginal value low. Any new wizard screen can only be validated on a unit with a panel."
+  },
+  {
+   "id": "X4a",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-89-X4a-per-incarnation-cap-claim-sites.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Quantify the per-key margin when the device-local tally restarts",
+     "status": "COVERED",
+     "by": "#89",
+     "evidence": "#89 open checkbox: \"Quantify whether the worst-case erosion stays within the C10 birthday margin at the shipped `MAX_SLOT_USES=65536`\"."
+    },
+    {
+     "what": "State the R x 65,536 per-incarnation caveat and correct the claim sites (contracts/verification/lean/SphincsCVerify/Crypto/Quantitative.lean:155, CLAUDE.md:10, threat model, companion recovery section, pilot doc, LC8 row)",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "master: only secure/src/hw/flash.rs:1459 carries the qualifier. Drafted as a checkbox list on #89."
+    },
+    {
+     "what": "CMD 18 missing from the CLAUDE.md gateway table",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "proto/src/lib.rs:525 defines CMD_OFFCHAIN_SYNC = 18; the table in CLAUDE.md goes from 17 to 20-24. In the #89 comment."
+    },
+    {
+     "what": "Let the sync command raise the device's UserOp-signature tally to the on-chain count",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "Split out by the review as a separate P3 firmware item (wire change, proto/src/lib.rs:1466 fixes the input at 21 bytes). Not drafted; mentioned in the comment as not proposed."
+    },
+    {
+     "what": "Force a Type-1 rotation after restore",
+     "status": "COVERED",
+     "by": "#131 (rejected sub-option)",
+     "evidence": "Rejected by the research; noted in the comment."
+    }
+   ],
+   "issues_read": [
+    89,
+    179,
+    180,
+    182,
+    131
+   ],
+   "one_line": "A documentation and proof-statement correction, drafted as a comment on #89 as the report suggests: the slot cap is enforced per device, not per key, so the honest bound is R x 65,536 for R devices or counter resets; the comment lists the seven places that say otherwise and what the Lean statement should bound.",
+   "unsure": "No Lean was built. The claim that an execution-reverted UserOp is still counted on-chain is the reviewer's reading of EntryPoint v0.6 plus contracts/smart-wallet/src/PQSmartWallet.sol:515; I read the contract line, not the EntryPoint."
+  }
+ ],
+ "citations": [
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 898,
+   "snippet": "let n = apdu::get_metadata("
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 1087,
+   "snippet": "let n = apdu::get_metadata(&mut self.ifx, &mut self.shield, oid, &mut stored)?;"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 3174,
+   "snippet": "apdu::get_metadata("
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/main.rs",
+   "line": 1774,
+   "snippet": "first_boot::run_post_lock_provisioning(se);"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/main.rs",
+   "line": 1793,
+   "snippet": "(&mut *core::ptr::addr_of_mut!(SE)).load_pbs();"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/main.rs",
+   "line": 1812,
+   "snippet": "nsc::reconcile_pin_attempts(&mut *core::ptr::addr_of_mut!(SE));"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1544,
+   "snippet": "pub fn metadata_matches_expected("
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1535,
+   "snippet": "/// host never wrote. `LcsO` is intentionally excluded (the lock writes it AFTER"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 1265,
+   "snippet": "if let Err(e) = apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data) {"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 1280,
+   "snippet": "if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 1088,
+   "snippet": "if apdu::is_metadata_operational(&stored, n) {"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1182,
+   "snippet": "pub fn build_metadata_protected("
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1358,
+   "snippet": "pub fn build_metadata_auth_ref_luc_oid(ctr_oid: u16, change_is_auto: bool) -> (MetaBuf, us"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1453,
+   "snippet": "pub fn build_metadata_pbs_final() -> (MetaBuf, usize) {"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga_under_test/pure_tests.rs",
+   "line": 216,
+   "snippet": "fn positive_build_metadata_auth_ref_exact_bytes() {"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga_under_test/pure_tests.rs",
+   "line": 512,
+   "snippet": "fn positive_build_metadata_auth_ref_luc_change_auto_exact_bytes() {"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga_under_test/pure_tests.rs",
+   "line": 410,
+   "snippet": "fn positive_metadata_matches_expected_tolerates_reorder_rejects_flip() {"
+  },
+  {
+   "draft": "M17-per-boot-optiga-metadata-check.md",
+   "path": "secure/src/optiga_under_test/mod.rs",
+   "line": 18,
+   "snippet": "//! * `apdu.rs` and `shield.rs` are path-included verbatim from the"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/main.rs",
+   "line": 3982,
+   "snippet": "if !is_provisioned(&mut *core::ptr::addr_of_mut!(SE)) {"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 142,
+   "snippet": "self.optiga.is_provisioned() && self.se050.is_provisioned()"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 1790,
+   "snippet": "return false;"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 1794,
+   "snippet": ".unwrap_or(false)"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 982,
+   "snippet": "Err(OptigaError::Status(_)) | Err(OptigaError::NotProvisioned) => {"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 983,
+   "snippet": "return false;"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 968,
+   "snippet": "apdu::OID_COUNTER,"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/main.rs",
+   "line": 4074,
+   "snippet": "crypto::provision_from_mnemonic("
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 626,
+   "snippet": "const WIPE_FLAG_OFFSET: u32 = 16;"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 710,
+   "snippet": "const DURESS_WIPE_MODE_OFFSET: u32 = 32;"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 613,
+   "snippet": "self.setup_pbs_no_handshake()?;"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2111,
+   "snippet": "if let Err(e) = self.setup_pbs_no_handshake() {"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "geometry/src/lib.rs",
+   "line": 130,
+   "snippet": "Row { bank: Bank::One, first_page: 124, last_page: 124, owner: Owner::McuPinState },"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "geometry/src/lib.rs",
+   "line": 133,
+   "snippet": "Row { bank: Bank::One, first_page: 127, last_page: 127, owner: Owner::FirstBootJournal },"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 71,
+   "snippet": "None => FinalPbs::RotatedSaltMissing,"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 682,
+   "snippet": "pub unsafe fn arm_wipe_flag() -> Result<(), ()> {"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 633,
+   "snippet": "pub unsafe fn erase_admin_page() -> Result<(), ()> {"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 207,
+   "snippet": "secure_log!(\"[DUAL/prov] optiga OK, calling se050.provision\");"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/nsc/cmd_request_unlock.rs",
+   "line": 196,
+   "snippet": "let _ = se.factory_reset_admin();"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/main.rs",
+   "line": 1957,
+   "snippet": "let _ = (&mut *core::ptr::addr_of_mut!(SE)).factory_reset_admin();"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1567,
+   "snippet": "let _ = se.factory_reset_admin();"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1734,
+   "snippet": "let _ = se.factory_reset_admin();"
+  },
+  {
+   "draft": "SE-06-mcu-provisioned-record-gates-seed-wizard.md",
+   "path": "secure/src/crypto.rs",
+   "line": 495,
+   "snippet": "let _ = store.factory_reset_admin();"
+  },
+  {
+   "draft": "c-104-SE-03-corroboration-cannot-authenticate.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 615,
+   "snippet": "if n == 2 {"
+  },
+  {
+   "draft": "c-104-SE-03-corroboration-cannot-authenticate.md",
+   "path": "secure/src/se050/apdu.rs",
+   "line": 768,
+   "snippet": "Err(Se050Error::Status(0x6986)) => return Err(Se050Error::AuthMethodBlocked),"
+  },
+  {
+   "draft": "c-104-SE-03-corroboration-cannot-authenticate.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 2868,
+   "snippet": "Se050Error::AuthMethodBlocked => UnlockError::PinLocked,"
+  },
+  {
+   "draft": "c-104-SE-03-corroboration-cannot-authenticate.md",
+   "path": "secure/src/nsc/cmd_request_unlock.rs",
+   "line": 163,
+   "snippet": "trigger_lockout_wipe()"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 701,
+   "snippet": "let hello = [SCTR_HANDSHAKE_HELLO, PROTOCOL_VERSION];"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 397,
+   "snippet": "tls_prf_sha256(&self.pbs, PRF_LABEL, random_s, &mut key_material);"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 802,
+   "snippet": "let master_seq = u32::from_be_bytes([resp2[1], resp2[2], resp2[3], resp2[4]]);"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 915,
+   "snippet": "let next_master_sequence = match master_seq.checked_add(1) {"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 590,
+   "snippet": "// record state. Infineon's reference permits only a 1..=3 advance to"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/shield.rs",
+   "line": 424,
+   "snippet": "/// AAD format: `SCTR(1) | SeqNum(4 BE) | ProtocolVersion(1) | PlaintextLen(2 BE)`"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 116,
+   "snippet": "const CMD_GET_RANDOM:"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "docs/secure-elements/OPTIGATRUSTM/commands-and-oids.md",
+   "line": 198,
+   "snippet": "### CalcHash (0x30)"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 573,
+   "snippet": "self.shield.establish(&mut self.ifx).map_err(|e| match e {"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/rng_strong.rs",
+   "line": 210,
+   "snippet": "SeSource::Optiga => unsafe { crate::se_random_optiga(block) }.is_ok(),"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 358,
+   "snippet": "self.ensure_shield()?;"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 705,
+   "snippet": "Err(e) if e.is_inconclusive() => return Err(e),"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 706,
+   "snippet": "Err(_) => {}"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "contracts/verification/proverif/optiga_shield_handshake_vendor.pv",
+   "line": 219,
+   "snippet": ": FALSE (the finding: no host"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "docs/security/threat-model.md",
+   "line": 233,
+   "snippet": "freshness nonce on each session"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "docs/security/threat-model.md",
+   "line": 255,
+   "snippet": "no replay window"
+  },
+  {
+   "draft": "c-117-SE-05-liveness-probe-after-handshake.md",
+   "path": "docs/security/adversarial-review/secure-element-adversarial-review.md",
+   "line": 26,
+   "snippet": "bench replay PoC owed"
+  },
+  {
+   "draft": "c-275-SE-08-sec-counter-no-battery-caveat.md",
+   "path": "docs/secure-elements/OPTIGATRUSTM/commands-and-oids.md",
+   "line": 402,
+   "snippet": "| `0xE0C5` | Security_Event_Counter | Security event counter |"
+  },
+  {
+   "draft": "c-275-SE-08-sec-counter-no-battery-caveat.md",
+   "path": "secure/src/board/pq1.rs",
+   "line": 39,
+   "snippet": "**PA8 gates the secure elements.**"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/main.rs",
+   "line": 968,
+   "snippet": "if rng_strong::fill(&mut entropy).is_err() {"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/main.rs",
+   "line": 976,
+   "snippet": "let m = sphincs_tz_bip39::Mnemonic::from_entropy(&entropy);"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "scripts/rng_consumer_audit.py",
+   "line": 19,
+   "snippet": "r\"yasmarang|xorshift(?:32|64)?|Lcg|seed_from_u64)\\b|\\brand::(?:rngs|thread_rng)\""
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "scripts/rng_consumer_audit.py",
+   "line": 82,
+   "snippet": "\"secure/src/main.rs\": [\"rng_strong::fill(&mut entropy)\"],"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "Makefile",
+   "line": 2738,
+   "snippet": "prod-feature-check: rng-consumer-audit"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/hw/buttons.rs",
+   "line": 189,
+   "snippet": "const COMBO_WINDOW_MS: u32 = 80;"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/hw/buttons.rs",
+   "line": 297,
+   "snippet": "/// Pressing both buttons within `COMBO_WINDOW_MS` synthesizes a"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/main.rs",
+   "line": 4012,
+   "snippet": "let (mnemonic, mut pin) = run_first_boot_wizard();"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/main.rs",
+   "line": 4244,
+   "snippet": "hw::usb_hw::init();"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/main.rs",
+   "line": 4291,
+   "snippet": "unsafe { boot_ns::boot(NS_FLASH_BASE) }"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 781,
+   "snippet": "pub fn enter_mnemonic() -> Result<Mnemonic, WizardError> {"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "bip39/src/full.rs",
+   "line": 205,
+   "snippet": "m.to_entropy()?;"
+  },
+  {
+   "draft": "c-371-M18-two-decisions-and-offline-dice-path.md",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 676,
+   "snippet": "design is dead on arrival; do not fund one as mitigation."
+  },
+  {
+   "draft": "c-385-SE-06-looks-fixed.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 574,
+   "snippet": "shield::ShieldError::HandshakeTransport => OptigaError::Transport,"
+  },
+  {
+   "draft": "c-385-SE-06-looks-fixed.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 575,
+   "snippet": "_ => OptigaError::Shield,"
+  },
+  {
+   "draft": "c-385-SE-06-looks-fixed.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 68,
+   "snippet": "as of 2026-07-17 that is now *earned*"
+  },
+  {
+   "draft": "c-385-SE-06-looks-fixed.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 705,
+   "snippet": "Err(e) if e.is_inconclusive() => return Err(e),"
+  },
+  {
+   "draft": "c-485-SE-08-guess-path-budget-and-new-home.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2584,
+   "snippet": "secure_log!(\"[OPTIGA/auth] hmac_verify OK\");"
+  },
+  {
+   "draft": "c-485-SE-08-guess-path-budget-and-new-home.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2619,
+   "snippet": "apdu::OID_ENTROPY, 0, 32, &mut entropy,"
+  },
+  {
+   "draft": "c-485-SE-08-guess-path-budget-and-new-home.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2625,
+   "snippet": "apdu::OID_MASTER_SECRET, 0, 32, &mut master_secret,"
+  },
+  {
+   "draft": "c-485-SE-08-guess-path-budget-and-new-home.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1379,
+   "snippet": "push_ac_luc(&mut inner, &mut c, META_EXECUTE, ctr_oid);"
+  },
+  {
+   "draft": "c-485-SE-08-guess-path-budget-and-new-home.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 246,
+   "snippet": "pub const OID_PIN_CTR_DURESS: u16 = 0xE121;"
+  },
+  {
+   "draft": "c-485-SE-08-guess-path-budget-and-new-home.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 1621,
+   "snippet": "unsafe fn reset_hw_pin_counter(&mut self) -> Result<(), OptigaError> {"
+  },
+  {
+   "draft": "c-485-SE-08-guess-path-budget-and-new-home.md",
+   "path": "docs/secure-elements/OPTIGATRUSTM/commands-and-oids.md",
+   "line": 359,
+   "snippet": "| `0xE122` | Counter 3 | 600,000 |"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 615,
+   "snippet": "if n == 2 {"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/se050/scp03.rs",
+   "line": 633,
+   "snippet": "session.inc_counter();"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/se050/apdu.rs",
+   "line": 768,
+   "snippet": "Err(Se050Error::Status(0x6986)) => return Err(Se050Error::AuthMethodBlocked),"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 2868,
+   "snippet": "Se050Error::AuthMethodBlocked => UnlockError::PinLocked,"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/nsc/cmd_request_unlock.rs",
+   "line": 163,
+   "snippet": "trigger_lockout_wipe()"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/se050/apdu.rs",
+   "line": 824,
+   "snippet": "Err(Se050Error::Status(sw)) if sw == 0x6985 || (sw & 0xFF00) == 0x6300 => {"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1475,
+   "snippet": "return Err(UnlockError::PinLocked);"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/main.rs",
+   "line": 4215,
+   "snippet": "ui::show_status(\"PIN locked\", \"power cycle\");"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/main.rs",
+   "line": 4664,
+   "snippet": "ui::show_status(\"PIN locked\", \"power cycle\");"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/se050/apdu.rs",
+   "line": 89,
+   "snippet": "/// verify), `Status`/`PinIncorrect`/`AuthMethodBlocked`/`NotProvisioned`"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/main.rs",
+   "line": 4535,
+   "snippet": "const PENDSV_MAX_NO_VERDICT_FAILURES: u32 = 3;"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 373,
+   "snippet": "Ok(_) | Err(UnlockError::PinIncorrect) => {"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2431,
+   "snippet": "if curr >= limit {"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2390,
+   "snippet": "self.ensure_shield()?;"
+  },
+  {
+   "draft": "c-853-SE-03-se-reported-lockout-must-not-wipe.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 310,
+   "snippet": "/// (0x02 / 0x07 / 0x0E / 0x2F) onto `PinIncorrect` / `PinLocked`; those arms"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "geometry/src/lib.rs",
+   "line": 129,
+   "snippet": "Row { bank: Bank::One, first_page: 123, last_page: 123, owner: Owner::OffchainJournal },"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "geometry/src/lib.rs",
+   "line": 131,
+   "snippet": "Row { bank: Bank::One, first_page: 125, last_page: 125, owner: Owner::AdminWipeDuress },"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "geometry/src/lib.rs",
+   "line": 133,
+   "snippet": "Row { bank: Bank::One, first_page: 127, last_page: 127, owner: Owner::FirstBootJournal },"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1614,
+   "snippet": "let reset_result = crate::hw::flash::pin_attempts_reset();"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 633,
+   "snippet": "pub unsafe fn erase_admin_page() -> Result<(), ()> {"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 376,
+   "snippet": "Err(_) => None,"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 916,
+   "snippet": "fn derive_pin_secret(pin: &[u8; 8]) -> [u8; 32] {"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 2022,
+   "snippet": "apdu::write_userid("
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 2776,
+   "snippet": "if let Err(e) = apdu::verify_session("
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 570,
+   "snippet": "let ok = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, &final_pin).is_ok();"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 186,
+   "snippet": "const MAX_LABEL: usize = 64;"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 146,
+   "snippet": "#[cfg(feature = \"otp-hardcoded-master-key\")]"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 70,
+   "snippet": "const PIN_AUTH_DOMAIN: &[u8] = b\"optiga-pin-auth-v1\";"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/optiga_under_test/pure_tests.rs",
+   "line": 1568,
+   "snippet": "MOD_SRC.contains(r#\"const PIN_AUTH_DOMAIN: &[u8] = b\"optiga-pin-auth-v1\";\"#),"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 407,
+   "snippet": "pub fn se050_admin_pin() -> Result<[u8; 16], OtpError> {"
+  },
+  {
+   "draft": "c-855-M16-salt-home-wipe-order-and-scope.md",
+   "path": "docs/security/threat-model.md",
+   "line": 121,
+   "snippet": "They **cannot READ** `half_E`"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "aa/src/offchain_gate.rs",
+   "line": 166,
+   "snippet": "userop_sigs.saturating_add(offchain) < MAX_SLOT_USES"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 2089,
+   "snippet": "if !crate::aa::offchain_gate::userop_cap_ok(effective_offchain, userop_sigs) {"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 1459,
+   "snippet": "// signatures it emits (off-chain + UserOp) to `MAX_SLOT_USES` per device"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "Makefile",
+   "line": 1256,
+   "snippet": "all STM32 flash (pages 123-127 + firmware)"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 1578,
+   "snippet": "unsafe fn erase_offchain_page() -> Result<(), ()> {"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 1736,
+   "snippet": "unsafe { erase_offchain_page()? };"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 2023,
+   "snippet": "unsafe { erase_offchain_page()? };"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "secure/src/offchain_state.rs",
+   "line": 23,
+   "snippet": "pub fn slot_key_compute(account_index: u8, chain_id: u64, slot_index: u32) -> [u8; 8] {"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "contracts/smart-wallet/src/PQSmartWallet.sol",
+   "line": 515,
+   "snippet": "_bumpSlotUses(ownerIndex, MAX_SLOT_USES);"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 1453,
+   "snippet": "including ones the companion never broadcast or that"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "contracts/verification/lean/SphincsCVerify/Crypto/Quantitative.lean",
+   "line": 155,
+   "snippet": "keeps the per-key signing count `q` below `MAX_SLOT_USES`. That cap is enforced"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "contracts/verification/lean/SphincsCVerify/Crypto/Quantitative.lean",
+   "line": 166,
+   "snippet": "theorem advantage_floors_within_slot_cap {q : Nat} (hq : q ≤ MaxSlotUses) :"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "contracts/verification/lean/SphincsCVerify/Crypto/Quantitative.lean",
+   "line": 219,
+   "snippet": "theorem advantage_floor_within_bootstrap_cap_crosschain"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "CLAUDE.md",
+   "line": 10,
+   "snippet": "65,536 is a true per-key cap"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "docs/security/threat-model.md",
+   "line": 359,
+   "snippet": "forces a Type 1 rotation via `CMD_SIGN_USEROP` first"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "docs/companion/companion-app-integration.md",
+   "line": 908,
+   "snippet": "### 11.6 Recovery on a New Device"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "docs/verification/fv-pilot-combined-budget-lifetime-2026-07-17.md",
+   "line": 81,
+   "snippet": "re-registration**, which spends the separate **bootstrap** few-time budget"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "docs/security/adversarial-review/lifecycle-persistent-state-adversarial-review.md",
+   "line": 57,
+   "snippet": "clone split-brain"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "proto/src/lib.rs",
+   "line": 525,
+   "snippet": "pub const CMD_OFFCHAIN_SYNC: u32 = 18;"
+  },
+  {
+   "draft": "c-89-X4a-per-incarnation-cap-claim-sites.md",
+   "path": "proto/src/lib.rs",
+   "line": 1466,
+   "snippet": "pub const OFFCHAIN_SYNC_INPUT_LEN: usize = 1 + 8 + 4 + 8; // 21"
+  }
+ ],
+ "measurements": [
+  {
+   "surface": "secure-element",
+   "what": "OPTIGA CalcHash on the V3 part: is it callable without an access condition at the shipping lifecycle state, and how long does one call take inside the tunnel (it would be paid on every handshake)",
+   "needs": "Open bench unit with a debug port and an OPTIGA; firmware with the command added. Consumes no chip.",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "secure-element",
+   "what": "Replay of a recorded OPTIGA Shielded Connection session against stock firmware (#117 tracks the threat only; the playbook row says the demonstration is owed and no task exists)",
+   "needs": "Hand-modified bench unit: an active I2C interposer on I2C1 (PB8/PB9) that can answer as the chip, plus a logic analyzer for the recording. A logic analyzer alone cannot replay.",
+   "tracked_by": "#117"
+  },
+  {
+   "surface": "secure-element",
+   "what": "Forged bare 0x6986 on SE050 session creation leading to a dual-chip wipe on the next correct-PIN USB unlock (#104 tracks the finding; it has no bench task)",
+   "needs": "Hand-modified unit with an active interposer on the SE050 bus (I2C4, PB6/PB7). Destroys the wallet on that unit and, per #168, may leave it unprovisionable: treat the unit as sacrificial.",
+   "tracked_by": "#104"
+  },
+  {
+   "surface": "secure-element",
+   "what": "Does the SE050 accept a 16-byte user UserID value with max_attempts = 10 (a 16-byte value is in use only for the admin credential)",
+   "needs": "Bench unit with an SE050. The pq1 bench board carries the E2 variant; use a throwaway object and delete it.",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "sca",
+   "what": "Single-trace leakage of hardware AES-CMAC under the device key with the PIN as the message",
+   "needs": "Oscilloscope and shunt on a bench unit with a debug port; a test harness for the derivation.",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "hardware",
+   "what": "Does the STM32U585 ECC flash accept an all-zero reprogram of an already programmed quad-word (needed if a salt or record shares page 125 and must be destroyed before the page erase)",
+   "needs": "Bench unit with a debug port, on a scratch page. Check RM0456 first.",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "secure-element",
+   "what": "Two usage counters in one Execute access-condition expression on OPTIGA Trust M V3, and Change = Never holding after the lifecycle move (the #485 comment draft adds this; #485 itself does not contain it)",
+   "needs": "A sacrificial or fresh OPTIGA part; belongs with the S-3 profile work, not before it.",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "secure-element",
+   "what": "Read access to the OPTIGA identity objects (E0C2 UID, E0E0 certificate) and use of the E0F0 key at the shipping lifecycle state; whether the bench shield holds a test or a production certificate (#27 covers the certificate type only)",
+   "needs": "Bench unit with an OPTIGA for the reads today; the shipping-state half waits for the lifecycle work.",
+   "tracked_by": "#27"
+  },
+  {
+   "surface": "secure-element",
+   "what": "Boot time and flash added by a per-boot OPTIGA metadata check (research estimate 100 to 300 ms and 3 to 8 KB)",
+   "needs": "Bench unit with a debug port and an OPTIGA, after the check exists; size report for flash.",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "secure-element",
+   "what": "Production SE050 variant, E2 or C2",
+   "needs": "Answer from the ODM; not a measurement.",
+   "tracked_by": "#697"
+  }
+ ],
+ "new_defects": [],
+ "notes": {
+  "master": "Code citations are at c2fab970. The tree HEAD is 8934e07f, one docs-only commit later (it adds the report and its data folder and touches docs/security/adversarial-review/findings/README.md); no cited file differs.",
+  "comments_checked": "gh issue view --comments on #853, #104, #117, #855, #485, #371, #89, #275, #118 returned no comments on 2026-10-12; #87 has one (a pointer to its canonical finding record).",
+  "searches_behind_absence_claims": "X4a (no wipe path erases page 123): grepped secure/src for callers of erase_offchain_page (two: compaction and the no-live-entries self-heal), for every PER page-erase site in secure/src/hw/flash.rs (pages 123, 124, 125 by dedicated helpers; erase_secure_page callers pass page 6, page 126, the slot ranges 7-64 and 65-122 and the manifest pages), for mass-erase bits (none), and for page-123 references in first_boot, dual_se, fw_update and tzic (none beyond a journal comment). SE-06 (no MCU-side provisioned record tracked or present): isearch over all issue bodies for sentinel/provisioned flag/wizard misfire; read #14 and #215 (F1E1 chip-side sentinel, no MCU record) and the F24 section of docs/security/adversarial-review/findings/full-project-sweep-2026-07-18-discovery.md (fix direction is provisioning order and error recovery). M17 (no per-boot metadata check): grepped get_metadata callers in secure/src/optiga/mod.rs; the Makefile target optiga-oid-ceremony is a docs gate about stale ceremony instructions, not a metadata table; the existing builders and their exact-byte tests are cited in the draft as the source the table should derive from.",
+  "stale_trackers_seen": "#385 looks fixed on master (draft c-385). #120 and #126 cite triggers that no longer exist on master (secure/src/optiga/apdu.rs:310, and the OPTIGA response unwrap no longer clears the session); no drafts for those two."
+ }
+}

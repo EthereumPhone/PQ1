@@ -1,0 +1,1455 @@
+{
+ "items": [
+  {
+   "id": "CS-01",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-381-CS-01-raw32-gate-mechanism.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Owner decision: disable (gate) RAW32 in shipping firmware, or accept it with phishing UX tests",
+     "status": "OWNER",
+     "by": "#381",
+     "evidence": "#381: 'Before production, either remove/gate RAW32 or record an explicit compatibility acceptance with phishing UX tests'"
+    },
+    {
+     "what": "Concrete gate mechanism: default-off cargo feature, PROD_FORBIDDEN entry, mode-production compile_error, kind-0 rejection before any UI, dedicated status code",
+     "status": "PARTLY",
+     "by": "#381",
+     "evidence": "#381 asks for the gate but names no mechanism; master has no RAW32 feature (secure/src/nsc/cmd_sign_offchain.rs:213 admits kind 0 with only a length check; Makefile:2672 forbidden list has no entry)"
+    },
+    {
+     "what": "Bench/e2e/tool opt-in and a feature-off test that actually executes (workspace crate, not secure/src/nsc)",
+     "status": "UNTRACKED",
+     "by": "none (added to the #381 comment)",
+     "evidence": "Makefile:524 asserts scenario 5p-raw32; secure/src/main.rs:171 'mod nsc;' is under cfg(not(test))"
+    },
+    {
+     "what": "Per-signature re-authentication ceremony if RAW32 stays enabled (fresh PIN, session cap, counter)",
+     "status": "UNTRACKED",
+     "by": "not drafted: dropped inside the report item (friction only; hostile companion reports the counter; fresh PIN inherits #692)",
+     "evidence": "report item CS-01 'Dropped parts and why'"
+    }
+   ],
+   "issues_read": [
+    381,
+    338,
+    692,
+    700,
+    702,
+    693,
+    867
+   ],
+   "one_line": "The RAW32 fence is the 'gate' branch of the open decision #381; a new issue would duplicate it, so the mechanism, its breakage list and the Safe/typed-data consequences go on #381 as a comment.",
+   "unsure": "Whether the owner prefers the mechanism as its own implementation issue once #381 is decided. I chose a comment because nothing can be built before that decision."
+  },
+  {
+   "id": "CS-02",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "CS-02-custody-change-danger-classification.md",
+    "c-600-CS-02-safe-nonce-ring.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "One shared danger classification consumed by both display paths",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "secure/src/tx/display/screen_kit.rs:102 takes a bare 'pulse: bool' per call site; tracker search for danger class/interstitial/owner-change cue found nothing"
+    },
+    {
+     "what": "Safe-wrapped unlimited approve does not pulse while the direct one does",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "secure/src/tx/display/safe_screens.rs:530 passes false; secure/src/tx/display/erc20_screens.rs:136 passes true"
+    },
+    {
+     "what": "Owner add/remove/swap, changeThreshold and disableModule have no danger cue",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "secure/src/tx/display/safe_mgmt.rs:53 'Add Safe owner', secure/src/tx/display/safe_mgmt.rs:100 'Swap Safe owner', secure/src/tx/display/safe_mgmt.rs:148 'Disable module' are plain heads; secure/src/tx/display/safe_screens.rs:634 passes false"
+    },
+    {
+     "what": "Non-secret SRAM ring keyed on (safe, nonce, safeTxHash) that survives lock and records at release",
+     "status": "PARTLY",
+     "by": "#600",
+     "evidence": "#600: 'a bounded S-SRAM ring of recent request digests ... comparator over (sender, to, value, destination class) that ignores nonce/gas' and 'cleared on lock/timeout/zeroize'. The nonce-keyed identity and survive-lock requirement are the comment."
+    },
+    {
+     "what": "Mandatory first-page interstitial",
+     "status": "OWNER",
+     "by": "#600 (friction page deferred to an owner UX decision) and the #770 screen-order ruling",
+     "evidence": "#600: 'Wiring a friction page into secure/src/ui/confirm.rs is a separate follow-up needing an owner UX decision'. Not drafted; the new issue says explicitly not to add one."
+    },
+    {
+     "what": "UserOp (sender, nonce) re-sign warnings",
+     "status": "UNTRACKED",
+     "by": "not drafted: dropped inside the report item (same-nonce re-signs are routine fee bumps)",
+     "evidence": "report item CS-02 'Dropped parts and why'"
+    }
+   ],
+   "issues_read": [
+    329,
+    377,
+    474,
+    600,
+    603,
+    700,
+    714,
+    762,
+    770
+   ],
+   "one_line": "New issue for one shared danger classification and the Safe-route cue gaps (re-read on master: still present); the nonce-keyed ring goes on #600 as a comment because #600 already owns the ring.",
+   "unsure": "The exact set of operations that should count as danger is a design choice (habituation risk); the draft lists candidates and asks for a decision. The pixel half cannot be seen on the bench board."
+  },
+  {
+   "id": "CS-03",
+   "outcome": "NEW-ISSUE",
+   "board": "MIXED",
+   "drafts": [
+    "CS-03-secure-world-spending-policy-guard.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Device-side policy record (allowlists, per-op caps, forbid toggles, lockdown bit) evaluated before confirm on every release route",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "tracker search (spending policy/limit, allowlist, SSSP, Coldcard, velocity, quota, lockdown) found only #867, which is the on-chain layer and names CS-03 as a separate item; master has no policy code"
+    },
+    {
+     "what": "Policy-edit credential enforced in secure-element silicon",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "needs new SE objects and a provisioning step; alternative is on-device confirm plus bootstrap key (docs/feature-roadmap-research-2026-06.md:74)"
+    },
+    {
+     "what": "Storage for the policy record",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "geometry/src/lib.rs:121 registry assigns every page; no free page"
+    },
+    {
+     "what": "Wall-clock velocity limit",
+     "status": "NEEDS-NEW-BOARD",
+     "by": "not drafted",
+     "evidence": "no battery; secure/src/timeout.rs:253 now() counts from boot. Would need a battery-backed clock (and 'no battery' is an owner decision). Replaced by a count quota in the draft. The secure-element credential option would also add a factory provisioning step."
+    },
+    {
+     "what": "On-chain time bound (validAfter/validUntil)",
+     "status": "OWNER",
+     "by": "#867",
+     "evidence": "wallet-contract change; excluded by the brief"
+    }
+   ],
+   "issues_read": [
+    280,
+    343,
+    474,
+    636,
+    758,
+    867
+   ],
+   "one_line": "Untracked; drafted as a design-first issue with the owner product decision as the first box, explicitly separate from the on-chain decision #867.",
+   "unsure": "This is large (research cost L) and may be better recorded as an owner decision than as an issue. If you prefer OWNER-DECISION-ONLY, the decision is: 'is a device-enforced spending policy a product feature, and is its edit credential a secure-element object or an on-device confirm'."
+  },
+  {
+   "id": "CS-05",
+   "outcome": "OWNER-DECISION-ONLY",
+   "board": "DOABLE",
+   "drafts": [],
+   "sub_actions": [
+    {
+     "what": "Decide 'curated-only' versus a 'structure-only' tier for off-chain typed data that has no pinned descriptor",
+     "status": "OWNER",
+     "by": "none (depends on #381; adjacent #534, #494, #329)",
+     "evidence": "today kinds 2 and 3 refuse without a bound descriptor (secure/src/nsc/cmd_sign_offchain.rs:486, secure/src/nsc/cmd_sign_offchain.rs:528); the walker would add a new non-clear tier that CLAUDE.md's clear-signing scope statement does not have"
+    },
+    {
+     "what": "New off-chain wire kind carrying domain preimage, type string and member witnesses; typeHash deny set; omission filter",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "only meaningful if the walker is approved; the report says the omission filter alone has no security effect today"
+    }
+   ],
+   "issues_read": [
+    329,
+    374,
+    381,
+    493,
+    494,
+    534,
+    602,
+    693
+   ],
+   "one_line": "Nothing can be built until the owner decides whether typed data without a curated descriptor gets a lower 'structure only' tier; that decision should follow the RAW32 decision in #381 (one line about it is in the #381 comment).",
+   "unsure": "The report recommends filing a design-first issue for this decision. I did not draft one because the walker is a usability feature that widens what is signable, and an earlier in-repo analysis recommended not building generic EIP-712. Say if you want the decision issue drafted."
+  },
+  {
+   "id": "CS-07",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-343-CS-07-approval-class-selectors.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Fix the 'Revoke approval' mislabel on unauthenticated contracts",
+     "status": "COVERED",
+     "by": "#857",
+     "evidence": "#857: 'On the unknown-token path, do not print \"Revoke approval\"'; still present on master at secure/src/tx/display/erc20_unknown.rs:97"
+    },
+    {
+     "what": "Native decoders for setApprovalForAll, increaseAllowance, decreaseAllowance under the unknown-contract banner",
+     "status": "PARTLY",
+     "by": "#343",
+     "evidence": "#343 is the design-first decision for native ERC-20 rendering but names only transfer/approve; no issue names these selectors (tracker search empty). master: tx/src/erc20/calldata.rs:36 enum has three variants"
+    },
+    {
+     "what": "approve(0)=revoke framing, spender naming, unlimited label, native-value page",
+     "status": "DONE-ON-MASTER",
+     "by": "#474 (closed)",
+     "evidence": "secure/src/tx/display/erc20_screens.rs:136 unlimited; revoke wording at secure/src/tx/display/erc20_unknown.rs:97 and the known-token header"
+    },
+    {
+     "what": "Native on-chain permit() decoder",
+     "status": "UNTRACKED",
+     "by": "not drafted: dropped inside the report item (the wallet has no ECDSA key and cannot own a permit); #425 lists generic permit policy as a non-goal",
+     "evidence": "#425 Non-goals: 'generic permit policy'"
+    }
+   ],
+   "issues_read": [
+    78,
+    329,
+    343,
+    403,
+    409,
+    410,
+    411,
+    420,
+    425,
+    474,
+    857
+   ],
+   "one_line": "The live defect is already #857; the remaining decoders are gated on the open design decision #343, so they go there as a scope note, with permit() marked do-not-build.",
+   "unsure": ""
+  },
+  {
+   "id": "CS-09",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "CS-09-this-wallet-self-tag.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Secure-world 'THIS WALLET' tag on fund-destination fields for the current account",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "tracker search (self tag, own account, THIS WALLET, address MAC) empty; master binds the sender at secure/src/nsc/cmd_sign_userop.rs:698 but no renderer compares a destination with it"
+    },
+    {
+     "what": "EIP-55 casing",
+     "status": "DONE-ON-MASTER",
+     "by": "n/a",
+     "evidence": "pqsigner-erc7730/src/display/primitives.rs:375 eip55_hex"
+    },
+    {
+     "what": "4-character address chunking on the 16x4 pages",
+     "status": "COVERED",
+     "by": "#273",
+     "evidence": "#273: 'Chunk write_addr_full ... into equal-weight 4-char hex groups - unknown-recipient path only'"
+    },
+    {
+     "what": "Address chunking on the pixel UI and the check_words_unbroken rewrite",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "needs a PQ-UI design decision; pqsigner-ui-px/src/check.rs:136 would go vacuous under chunking. Recorded as a conditional checkbox in the draft, not as work to start."
+    },
+    {
+     "what": "Sibling-account tag via a companion account_index hint verified by recompute",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "optional second step in the draft; needs a wire decision and a keygen timing measurement"
+    },
+    {
+     "what": "DHUK-keyed address MAC",
+     "status": "UNTRACKED",
+     "by": "not drafted: dropped inside the report item (per-chip key survives re-seed and would mislabel a previous seed's addresses)",
+     "evidence": "report item CS-09 'Dropped parts and why'"
+    }
+   ],
+   "issues_read": [
+    348,
+    349,
+    366,
+    472,
+    603,
+    273,
+    473
+   ],
+   "one_line": "Only the self-tag is new: EIP-55 is on master and 16x4 chunking is the dedicated issue #273 (the manifest listed #366 only).",
+   "unsure": "Low priority and small benefit (helps only a user who expects their own account). Drop it if you want fewer P3 issues."
+  },
+  {
+   "id": "CS-04",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "CS-04-refuse-paymaster-in-production.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Owner confirmation that production should refuse a paymaster instead of warning",
+     "status": "OWNER",
+     "by": "none (first checkbox of the draft)",
+     "evidence": "the recorded decision at secure/src/tx/display/value_page.rs:466 covers pq1's own companion only"
+    },
+    {
+     "what": "Refuse a non-empty paymaster hash under mode-production (single and batch handlers)",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "master appends a page and signs: secure/src/nsc/cmd_sign_userop.rs:1577, secure/src/nsc/cmd_sign_userop_batch.rs:1824; only the forced-blind handler requires empty (secure/src/nsc/cmd_sign_userop_forced.rs:384)"
+    },
+    {
+     "what": "Track review finding H-6 (paymaster signed but never displayed)",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "docs/security/security-review-2026-05.md:421 unticked '- [ ] **H-6**'; tracker search for paymaster returns only #328/#337/#333 (page completion and FI), none on semantics"
+    },
+    {
+     "what": "Carry raw paymasterAndData, show sponsor identity and fee-token pull",
+     "status": "OWNER",
+     "by": "none",
+     "evidence": "owner decision 2026-06-27/28 recorded at secure/src/tx/display/value_page.rs:466: no paymaster-using companion ships; also a change to a wire format listed as frozen. Conditional last checkbox in the draft only."
+    },
+    {
+     "what": "Doc fix: 'optional paymaster identity' in the batch guide",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "docs/companion/companion-batch-sign-integration.md:297"
+    }
+   ],
+   "issues_read": [
+    324,
+    328,
+    337,
+    353,
+    333
+   ],
+   "one_line": "Drafted the cheap part that matches the recorded owner decision (refuse paymasters in production) and gives H-6 a tracker entry; full paymaster decoding is left as a conditional line because it reverses that decision.",
+   "unsure": "Refusing every paymaster in production goes one step beyond the recorded decision (no paymaster-using companion ships): it also blocks a third-party companion. The draft therefore opens with an owner box. A stale sentence at docs/security/red-teaming.md:757 is under new_defects, not in the draft."
+  },
+  {
+   "id": "CS-10",
+   "outcome": "OWNER-DECISION-ONLY",
+   "board": "DOABLE",
+   "drafts": [],
+   "sub_actions": [
+    {
+     "what": "Build the signed data-only catalogue channel (PQDESC_V1) decoupled from firmware images",
+     "status": "OWNER",
+     "by": "none (doc checklists only: docs/erc7730-root-rotation-and-update-policy.md:104 'Roadmapped (NOT v1)', docs/security/vendor-signing-key-compromise.md:147 unticked box)",
+     "evidence": "the decision record defers it (docs/erc7730-root-rotation-and-update-policy.md:120 '**Deferred** until the release-cadence pain is real') and says at docs/erc7730-root-rotation-and-update-policy.md:35 'No separate, lower-assurance descriptor-update path ships in v1'"
+    },
+    {
+     "what": "Monotonic data-version floor",
+     "status": "OWNER",
+     "by": "#540 / #224 (rollback floor design, not approved)",
+     "evidence": "the decision record requires an OTP-anchored floor; the typed OTP floor is an unapproved research candidate"
+    },
+    {
+     "what": "Dedicated flash page for the stored catalogue",
+     "status": "OWNER",
+     "by": "#752 / #758 (page pressure)",
+     "evidence": "geometry/src/lib.rs:121 registry assigns every page; Bloom (16 KiB) plus refused-known set need several pages"
+    },
+    {
+     "what": "Separate catalogue signing key",
+     "status": "OWNER",
+     "by": "n/a",
+     "evidence": "contradicts the decision record: 'must reuse the C10 release key, never introduce a second signer' (docs/erc7730-root-rotation-and-update-policy.md:232)"
+    }
+   ],
+   "issues_read": [
+    224,
+    225,
+    329,
+    345,
+    377,
+    379,
+    403,
+    486,
+    535,
+    540
+   ],
+   "one_line": "Not drafted: it conflicts with invariant 10 as written (a stored catalogue root changes what the device clear-signs without changing the boot fingerprint), the project's own decision record defers it past v1, it needs an OTP floor and a flash page that do not exist, and it is blocked behind #377.",
+   "unsure": "The channel has no issue at all, only two doc checklists. If you want a placeholder, the decision is: 'reverse the v1 deferral of the PQDESC_V1 data-only catalogue channel, yes or no, and if yes how the installed catalogue version becomes visible to the user'. An additive-only first slice (ERC-20 and names roots) was the reviewer's smallest version."
+  },
+  {
+   "id": "X6a",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X6a-safe-custody-topology.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Document pq1 as a required Safe owner on the approveHash route, with a version matrix",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "tracker search (Safe owner, co-signer, multisig, approveHash, custody, Transaction Service) found no topology issue; docs/companion/safe-multisig-clear-sign.md:276 says only 'can be a fully PQ Safe owner today'"
+    },
+    {
+     "what": "Threat-model row with its conditions; amend threat-model.md, HARDENING.md, STATUS.md",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "docs/security/threat-model.md:530 'we do not currently ship that'"
+    },
+    {
+     "what": "Foundry test with real Safe bytecode and a PQSmartWallet owner",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "no approveHash/execTransaction/checkNSignatures in contracts/smart-wallet src, test or script on master"
+    },
+    {
+     "what": "Safe 1.5.0 MultiSendCallOnly batches refused (skeptic correction 1)",
+     "status": "DONE-ON-MASTER",
+     "by": "commit 67db8188",
+     "evidence": "proto/src/lib.rs:1804 'MULTISEND_CALL_ONLY_ADDRESSES: [[u8; 20]; 4]' now includes v1.5.0; the draft states four and corrects the doc that still says three"
+    },
+    {
+     "what": "Companion Safe Transaction Service client",
+     "status": "UNTRACKED",
+     "by": "not drafted: separate deliverable in the companion repository, with an unverified blocker",
+     "evidence": "skeptic correction 4"
+    },
+    {
+     "what": "execTransaction-sender route red-line",
+     "status": "COVERED",
+     "by": "#332",
+     "evidence": "#332 remaining work: 'Executable skipped-call FI evidence', 'Fresh exact review'"
+    }
+   ],
+   "issues_read": [
+    332,
+    636,
+    384,
+    486,
+    680,
+    603,
+    89,
+    179,
+    381
+   ],
+   "one_line": "Untracked and needs no firmware: one docs-plus-test issue that also carries X6b's doc corrections. The report's '1.5.0 batches are refused' is stale; master allowlists four deployments.",
+   "unsure": "Nobody has run the proposed Foundry test, and I did not re-fetch the Safe sources the research read."
+  },
+  {
+   "id": "X6b",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-534-X6b-safetx-typed-format-refusal.md",
+    "X6a-safe-custody-topology.md",
+    "c-381-CS-01-raw32-gate-mechanism.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "dbgen permanent refusal of the SafeTx typed format plus a negative test",
+     "status": "PARTLY",
+     "by": "#534",
+     "evidence": "#534: 'EIP-712 descriptors without _pqsigner.deploymentFormats or refusalOnlyFormats retain the historical emit-all default'. On master the Safe typed descriptors are skipped only as uncompilable (secure/data/erc7730.review.txt:6486) and carry no refusal mark. Comment drafted."
+    },
+    {
+     "what": "Whether the eip712-Safe-* leaves are in the pinned root (report: not verified)",
+     "status": "DONE-ON-MASTER",
+     "by": "n/a",
+     "evidence": "settled by reading master: 0 rows with source=eip712-Safe in secure/data/erc7730.review.txt; all seven files are in the skip section"
+    },
+    {
+     "what": "Record that the off-chain Safe co-sign route is deferred; amend the doc that endorses RAW32 for Safe signMessage; correct the adapter and carve-out claims in the roadmap doc",
+     "status": "UNTRACKED",
+     "by": "none (folded into the X6a draft)",
+     "evidence": "docs/companion/companion-safe-tx-integration.md:388; docs/feature-roadmap-research-2026-06.md:154, docs/feature-roadmap-research-2026-06.md:155, docs/feature-roadmap-research-2026-06.md:238"
+    },
+    {
+     "what": "No 'EIP-1271-only signer' carve-out to MAX_OFFCHAIN_GAP; settle the gap question first",
+     "status": "COVERED",
+     "by": "#179",
+     "evidence": "#179: 'MAX_OFFCHAIN_GAP is companion-resettable at zero on-chain cost'. Nothing to file; the X6a draft says no carve-out is proposed."
+    },
+    {
+     "what": "The real fence against a Safe hash signed blind is the RAW32 decision",
+     "status": "COVERED",
+     "by": "#381",
+     "evidence": "#381 decision; a paragraph on the Safe case is in the #381 comment"
+    }
+   ],
+   "issues_read": [
+    179,
+    381,
+    89,
+    691,
+    693,
+    534,
+    494
+   ],
+   "one_line": "No new issue: the one code change (mark the SafeTx typed format refusal-only) is a concrete case for #534, the doc corrections ride in the X6a issue, and the fence itself is #381.",
+   "unsure": "You may prefer the dbgen refusal as a checkbox in the X6a issue instead of a comment on #534. #494 (open) asks for a structural refusal-only marker; master already has refusalOnlyFormats with never-emit semantics (dbgen/src/erc7730.rs:1047) and tests for it, so #494 may be stale. I did not draft anything for that. CLAUDE.md's gateway table omitting CMD 18 was noted by the reviewer; I left it for the X4a owner."
+  },
+  {
+   "id": "X7a",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-154-X7a-injective-personal-sign-design.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Make personal_sign rendering injective (hex mode, line-break marker, length row)",
+     "status": "COVERED",
+     "by": "#154",
+     "evidence": "#154: 'personal_sign rendering non-injective: ?-substitution + trailing-whitespace invisibility + no byte length (medium; PoC)'. The issue has no fix design; the comment supplies one."
+    },
+    {
+     "what": "Fallible renderer (Pages::with_len asserts), page-budget arithmetic, host inverse as acceptance test, single marker glyph at 0x7F",
+     "status": "UNTRACKED",
+     "by": "none (added to the #154 comment)",
+     "evidence": "secure/src/tx/display/eip1271.rs:357; secure/build.rs:415"
+    },
+    {
+     "what": "Doc fix: 'UTF-8 message' in usb-protocol-v2.md",
+     "status": "UNTRACKED",
+     "by": "none (added to the #154 comment)",
+     "evidence": "docs/companion/usb-protocol-v2.md:332; not in #866"
+    }
+   ],
+   "issues_read": [
+    154,
+    866
+   ],
+   "one_line": "#154 already tracks the defect but has no fix design; the reviewed design (and the parts of the first draft that would not work) goes there as a comment.",
+   "unsure": "Whether the 0x7F glyph slot is really free on both fonts was not checked beyond the table bound."
+  },
+  {
+   "id": "X7b",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "X7b-siwe-structured-pages.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Strict EIP-4361 parser and structured pages before the raw message",
+     "status": "UNTRACKED",
+     "by": "none",
+     "evidence": "tracker search for SIWE/4361/sign-in finds no issue; master has only comments (proto/src/lib.rs:1258)"
+    },
+    {
+     "what": "Injective raw pages (hard dependency)",
+     "status": "COVERED",
+     "by": "#154",
+     "evidence": "#154 title: 'personal_sign rendering non-injective'"
+    },
+    {
+     "what": "Flash-cost measurement before adoption",
+     "status": "UNTRACKED",
+     "by": "none (first checkbox of the draft)",
+     "evidence": "reviewer estimate 3 to 6 KB, unmeasured"
+    }
+   ],
+   "issues_read": [
+    154,
+    381,
+    700
+   ],
+   "one_line": "Untracked; drafted at low priority with a hard dependency on #154 and an explicit statement that it is legibility, not phishing protection.",
+   "unsure": "No SIWE flow ships in a companion yet, so this may be premature. Drop if you want fewer P3 issues."
+  }
+ ],
+ "citations": [
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/screen_kit.rs",
+   "line": 102,
+   "snippet": "pub(crate) fn detail(&mut self, id: &[u8], label: &[u8], lines: &[(&[u8], Weight)], pulse: bool) -> Result<(),"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/erc20_screens.rs",
+   "line": 136,
+   "snippet": "e.detail(b\"AMOUNT\", label, &[(b\"unlimited\", Weight::Regular)], true)?;"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_screens.rs",
+   "line": 530,
+   "snippet": "e.detail(b\"AMOUNT\", verb, &[(b\"unlimited\", Weight::Regular)], false)?;"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_screens.rs",
+   "line": 537,
+   "snippet": "e.value(b\"RAWAMT\", b\"RAW AMOUNT\", &[(b\"unlimited\", Weight::Regular)])?;"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_screens.rs",
+   "line": 610,
+   "snippet": "SafeMgmtOp::AddOwnerWithThreshold { new_owner, new_threshold } => {"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_screens.rs",
+   "line": 619,
+   "snippet": "SafeMgmtOp::SwapOwner { old_owner, new_owner, .. } => {"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_screens.rs",
+   "line": 623,
+   "snippet": "SafeMgmtOp::ChangeThreshold { new_threshold } => signers(e, &new_threshold),"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_screens.rs",
+   "line": 634,
+   "snippet": "e.detail(b\"DISABLE\", b\"DISABLE\", &[(b\"Module loses\", Weight::Regular), (b\"exec auth\", Weight::Regular)], false"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_mgmt.rs",
+   "line": 53,
+   "snippet": "write_line(&mut pages.buf[p][0], \"Add Safe owner\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_mgmt.rs",
+   "line": 74,
+   "snippet": "write_line(&mut pages.buf[p][0], \"Remove Safe ownr\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_mgmt.rs",
+   "line": 100,
+   "snippet": "write_line(&mut pages.buf[p][0], \"Swap Safe owner\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_mgmt.rs",
+   "line": 119,
+   "snippet": "write_line(&mut pages.buf[p][0], \"Change thrshld\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_mgmt.rs",
+   "line": 148,
+   "snippet": "write_line(&mut pages.buf[p][0], \"Disable module\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_mgmt.rs",
+   "line": 132,
+   "snippet": "write_line(&mut pages.buf[p][0], \"! ENABLE MODULE\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_mgmt.rs",
+   "line": 162,
+   "snippet": "write_line(&mut pages.buf[p][0], \"! CHANGE GUARD\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/erc20_known.rs",
+   "line": 94,
+   "snippet": "write_line(&mut pages.buf[p][1], \"unlimited\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_display.rs",
+   "line": 1930,
+   "snippet": "write_line(&mut pages.buf[next_page][1], \"unlimited\");"
+  },
+  {
+   "draft": "CS-02-custody-change-danger-classification.md",
+   "path": "secure/src/tx/display/safe_screens.rs",
+   "line": 249,
+   "snippet": "(Text::new().push(b\"! Op: DELEGATE\"), true)"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/tx/display/dispatch.rs",
+   "line": 548,
+   "snippet": "/// Pick the right renderer for a CMD_SIGN_USEROP trusted-UI confirm."
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/sign_rate.rs",
+   "line": 45,
+   "snippet": "pub const MIN_SIGN_INTERVAL_MS: u32 = 1000;"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/sign_rate.rs",
+   "line": 49,
+   "snippet": "pub const MAX_SIGNS_PER_SESSION: u32 = 250;"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/sign_rate.rs",
+   "line": 30,
+   "snippet": "//! **State is SRAM-only** (lost on lock / idle-wipe / reset). The"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/timeout.rs",
+   "line": 253,
+   "snippet": "pub fn now() -> u32 {"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "geometry/src/lib.rs",
+   "line": 121,
+   "snippet": "pub const REGISTRY: [Row; 16] = ["
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "geometry/src/lib.rs",
+   "line": 131,
+   "snippet": "Row { bank: Bank::One, first_page: 125, last_page: 125, owner: Owner::AdminWipeDuress },"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "geometry/src/lib.rs",
+   "line": 137,
+   "snippet": "Row { bank: Bank::Two, first_page: 127, last_page: 127, owner: Owner::ReservedErased },"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/nsc/cmd_fw_commit.rs",
+   "line": 9,
+   "snippet": "//! reviewed rollback backend exists until OPEN-OTP-1..3, OPEN-ECC-1,"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "docs/feature-roadmap-research-2026-06.md",
+   "line": 74,
+   "snippet": "| **On-device clear-sign policy guard** |"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 73,
+   "snippet": "pub const DURESS_USERID_OBJ: u32 = 0x7B10_0010;"
+  },
+  {
+   "draft": "CS-03-secure-world-spending-policy-guard.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 201,
+   "snippet": "for page in 123..=127u32 {"
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 295,
+   "snippet": "paymaster_and_data_hash.copy_from_slice(&snap[244..276]);"
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/tx/display/value_page.rs",
+   "line": 474,
+   "snippet": "/// but the firmware only ever receives `sha256(paymasterAndData)` over the"
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/tx/display/value_page.rs",
+   "line": 466,
+   "snippet": "The 2026-06-27/28 owner decision that PQ1 does not ship a"
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/tx/display/value_page.rs",
+   "line": 508,
+   "snippet": "pub(crate) fn enforce_paymaster_page("
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/tx/display/value_page.rs",
+   "line": 546,
+   "snippet": "primitives::write_line(&mut page[0], \"! PAYMASTER SET\");"
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 1577,
+   "snippet": "if crate::tx::display::enforce_paymaster_page("
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/nsc/cmd_sign_userop_batch.rs",
+   "line": 1824,
+   "snippet": "if crate::tx::display::enforce_paymaster_page("
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "secure/src/nsc/cmd_sign_userop_forced.rs",
+   "line": 384,
+   "snippet": "&& facts.paymaster_and_data_hash == SHA256_EMPTY"
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "docs/security/security-review-2026-05.md",
+   "line": 367,
+   "snippet": "### H-6. `paymaster_and_data` is signed but never displayed"
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "docs/security/security-review-2026-05.md",
+   "line": 421,
+   "snippet": "- [ ] **H-6**: add `paymaster_and_data` decode + display."
+  },
+  {
+   "draft": "CS-04-refuse-paymaster-in-production.md",
+   "path": "docs/companion/companion-batch-sign-integration.md",
+   "line": 297,
+   "snippet": "10. Final summary pages: `Sign N txs?`, optional paymaster identity, the same"
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 683,
+   "snippet": "// Bind the untrusted wire sender to the deterministic CREATE2 address for"
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 698,
+   "snippet": "super::cmd_get_wallet_address::bind_userop_sender("
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "pqsigner-erc7730/src/display/primitives.rs",
+   "line": 437,
+   "snippet": "pub fn write_addr_full("
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "pqsigner-erc7730/src/display/primitives.rs",
+   "line": 375,
+   "snippet": "pub fn eip55_hex(addr: &[u8; 20]) -> [u8; 40] {"
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "secure/src/tx/display/cowswap_screens.rs",
+   "line": 159,
+   "snippet": "Some(label) if receiver == [0u8; 20] => {"
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "secure/src/nsc/state.rs",
+   "line": 332,
+   "snippet": "pub(super) const BOOTSTRAP_CACHE_LEN: usize = 16;"
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "pqsigner-ui-px/src/check.rs",
+   "line": 123,
+   "snippet": "fn check_words_unbroken(s: &Screen, i: usize) -> Result<(), Violation> {"
+  },
+  {
+   "draft": "CS-09-this-wallet-self-tag.md",
+   "path": "pqsigner-ui-px/src/check.rs",
+   "line": 136,
+   "snippet": "if text.starts_with(b\"0x\") && text[2..].iter().all(|&b| is_hex(b)) {"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 1219,
+   "snippet": "if crate::tx::eip712::safe::is_approve_hash_claim(inner_data) && safe_v1_verified.is_none() {"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "contracts/smart-wallet/src/PQSmartWallet.sol",
+   "line": 255,
+   "snippet": "(bool ok, bytes memory ret) = target.call{value: value}(data);"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "contracts/smart-wallet/src/PQSmartWallet.sol",
+   "line": 246,
+   "snippet": "if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 2630,
+   "snippet": "if unsafe { crate::offchain_state::last_userop_count_set(&slot_flash_key, new_offchain_count) }"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "proto/src/lib.rs",
+   "line": 1804,
+   "snippet": "pub const MULTISEND_CALL_ONLY_ADDRESSES: [[u8; 20]; 4] = ["
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "secure/src/tx/eip712/safe/exec_decode.rs",
+   "line": 7,
+   "snippet": "//! approvals via the `signatures` argument), all SafeTx fields except `nonce`"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/companion/safe-multisig-clear-sign.md",
+   "line": 276,
+   "snippet": "This means the wallet can be a fully PQ Safe owner today, with no"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/companion/safe-multisig-clear-sign.md",
+   "line": 365,
+   "snippet": "DELEGATECALL only against the three pinned canonical"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/security/threat-model.md",
+   "line": 530,
+   "snippet": "Architecturally fixable only with multi-party approval"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/security/HARDENING.md",
+   "line": 518,
+   "snippet": "Architecturally unfixable without multi-party approval."
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/security/threat-model.md",
+   "line": 432,
+   "snippet": "| Duress PIN / decoy wallet | T5 | Not currently implemented"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "secure/Cargo.toml",
+   "line": 452,
+   "snippet": "duress-pin = [\"dual-se\", \"optiga-hw-counter\"]"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/companion/companion-safe-tx-integration.md",
+   "line": 388,
+   "snippet": "approving the resulting hash. This works as a `RAW32` off-chain sig"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/feature-roadmap-research-2026-06.md",
+   "line": 154,
+   "snippet": "Safe calls the *legacy* `isValidSignature(bytes,bytes)"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/feature-roadmap-research-2026-06.md",
+   "line": 155,
+   "snippet": "Needs a firmware special-case (a deployed EIP-1271-only signer carve-out)"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "docs/feature-roadmap-research-2026-06.md",
+   "line": 238,
+   "snippet": "a firmware carve-out"
+  },
+  {
+   "draft": "X6a-safe-custody-topology.md",
+   "path": "proto/src/lib.rs",
+   "line": 525,
+   "snippet": "pub const CMD_OFFCHAIN_SYNC: u32 = 18;"
+  },
+  {
+   "draft": "X7b-siwe-structured-pages.md",
+   "path": "proto/src/lib.rs",
+   "line": 1258,
+   "snippet": "/// surface on the trusted display. 700 bytes covers a comfortable SIWE"
+  },
+  {
+   "draft": "X7b-siwe-structured-pages.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 503,
+   "snippet": "fn sanitise_byte(b: u8) -> u8 {"
+  },
+  {
+   "draft": "X7b-siwe-structured-pages.md",
+   "path": "secure/src/tx/display/offchain_screens.rs",
+   "line": 114,
+   "snippet": "fn emit_message(e: &mut Emit<'_>, msg: &[u8]) -> Result<(), ()> {"
+  },
+  {
+   "draft": "X7b-siwe-structured-pages.md",
+   "path": "aa/src/eip1271.rs",
+   "line": 191,
+   "snippet": "pub fn personal_sign_replay_safe_hash("
+  },
+  {
+   "draft": "X7b-siwe-structured-pages.md",
+   "path": "aa/src/eip1271.rs",
+   "line": 197,
+   "snippet": "replay_safe_hash(chain_id, verifying_contract, &prefixed)"
+  },
+  {
+   "draft": "X7b-siwe-structured-pages.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 281,
+   "snippet": "fn context_page_exact(actual: &ContextPage, expected: &ContextPage) -> bool {"
+  },
+  {
+   "draft": "X7b-siwe-structured-pages.md",
+   "path": "pqsigner-erc7730/src/display/mod.rs",
+   "line": 74,
+   "snippet": "pub const MAX_PAGES: usize = 31;"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 503,
+   "snippet": "fn sanitise_byte(b: u8) -> u8 {"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 511,
+   "snippet": "b'?'"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 330,
+   "snippet": "/// render as themselves; non-printable bytes render as `?`."
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 404,
+   "snippet": "let off = p * CHARS_PER_PAGE;"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 590,
+   "snippet": "fn write_msg_footer(row: &mut [u8; DISPLAY_COLS], page: usize, total: usize) {"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/offchain_screens.rs",
+   "line": 103,
+   "snippet": "fn sanitise(b: u8) -> u8 {"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 220,
+   "snippet": "if payload_len > MAX_OFFCHAIN_PERSONAL_SIGN_LEN {"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "proto/src/lib.rs",
+   "line": 1263,
+   "snippet": "pub const MAX_OFFCHAIN_PERSONAL_SIGN_LEN: usize = 700;"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "docs/companion/usb-protocol-v2.md",
+   "line": 332,
+   "snippet": "| 1     | UTF-8 message"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/display_under_test/pure_tests.rs",
+   "line": 1547,
+   "snippet": "assert_eq!(row[1], b'?', \"0x1F (control) must become '?'\");"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/build.rs",
+   "line": 415,
+   "snippet": "const LAST_CHAR: u8 = 0x7F;"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "pqsigner-erc7730/src/display/render/formatters.rs",
+   "line": 1637,
+   "snippet": "|| value.last() == Some(&b' ')"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/eip1271.rs",
+   "line": 357,
+   "snippet": "let mut pages = Pages::with_len(total);"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "pqsigner-erc7730/src/display/mod.rs",
+   "line": 74,
+   "snippet": "pub const MAX_PAGES: usize = 31;"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "pqsigner-erc7730/src/display/mod.rs",
+   "line": 39,
+   "snippet": "pub const FINGERPRINT_PAGES: usize = 2;"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/offchain_screens.rs",
+   "line": 49,
+   "snippet": "const CHARS_PER_PAGE: usize = 48;"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/offchain_screens.rs",
+   "line": 97,
+   "snippet": "OffchainBody::Personal { msg, .. } => 5 + msg.len().div_ceil(CHARS_PER_PAGE).max(1),"
+  },
+  {
+   "draft": "c-154-X7a-injective-personal-sign-design.md",
+   "path": "secure/src/tx/display/offchain_screens.rs",
+   "line": 114,
+   "snippet": "fn emit_message(e: &mut Emit<'_>, msg: &[u8]) -> Result<(), ()> {"
+  },
+  {
+   "draft": "c-343-CS-07-approval-class-selectors.md",
+   "path": "tx/src/erc20/calldata.rs",
+   "line": 31,
+   "snippet": "pub const SELECTOR_TRANSFER: [u8; 4] = [0xa9, 0x05, 0x9c, 0xbb];"
+  },
+  {
+   "draft": "c-343-CS-07-approval-class-selectors.md",
+   "path": "tx/src/erc20/calldata.rs",
+   "line": 33,
+   "snippet": "pub const SELECTOR_APPROVE: [u8; 4] = [0x09, 0x5e, 0xa7, 0xb3];"
+  },
+  {
+   "draft": "c-343-CS-07-approval-class-selectors.md",
+   "path": "tx/src/erc20/calldata.rs",
+   "line": 36,
+   "snippet": "pub enum Erc20Call {"
+  },
+  {
+   "draft": "c-343-CS-07-approval-class-selectors.md",
+   "path": "secure/data/erc7730.review.txt",
+   "line": 1341,
+   "snippet": "format [0xa22cb465] intent=\"Set approval for all unstETH NFTs\" intent_raw=0x53657420617070726f76616c20666f7220"
+  },
+  {
+   "draft": "c-343-CS-07-approval-class-selectors.md",
+   "path": "secure/data/erc7730.review.txt",
+   "line": 1154,
+   "snippet": "format [0x39509351] intent=\"Increase allowance\" intent_raw=0x496e63726561736520616c6c6f77616e6365 static_head_"
+  },
+  {
+   "draft": "c-343-CS-07-approval-class-selectors.md",
+   "path": "secure/src/tx/display/dispatch.rs",
+   "line": 565,
+   "snippet": "///   8. Typed-call selector + verified ABI walk."
+  },
+  {
+   "draft": "c-343-CS-07-approval-class-selectors.md",
+   "path": "secure/src/tx/display/erc20_unknown.rs",
+   "line": 97,
+   "snippet": "write_line(&mut pages.buf[p][1], \"Revoke approval\");"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 213,
+   "snippet": "OFFCHAIN_KIND_RAW32 => {"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 214,
+   "snippet": "if payload_len != 32 {"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "Makefile",
+   "line": 2672,
+   "snippet": "override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "docs/companion/companion-app-integration.md",
+   "line": 968,
+   "snippet": "Preserve the dapp-requested signing method. Production should disable RAW32"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 486,
+   "snippet": "crate::ui::show_status(\"EIP-1271\", \"7730 bundle fail\");"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 528,
+   "snippet": "crate::ui::show_status(\"EIP-1271\", \"7730 binding fail\");"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 440,
+   "snippet": "//      so we never fall back to a raw-hash blind sign here."
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/Cargo.toml",
+   "line": 946,
+   "snippet": "erc7730-forced-blind = []"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "Makefile",
+   "line": 2675,
+   "snippet": "erc7730-forced-blind \\"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 274,
+   "snippet": "feature = \"erc7730-forced-blind\","
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "proto/src/lib.rs",
+   "line": 2117,
+   "snippet": "pub enum NscStatus {"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/main.rs",
+   "line": 171,
+   "snippet": "mod nsc;"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/Cargo.toml",
+   "line": 158,
+   "snippet": "mode-e2e        = [\"debug-log\", \"e2e-test\"]"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/Cargo.toml",
+   "line": 159,
+   "snippet": "mode-bench      = [\"debug-log\", \"e2e-test\"]"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "Makefile",
+   "line": 524,
+   "snippet": "Scenario 5p-raw32: RAW32 off-chain signature"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "nonsecure/src/e2e_test.rs",
+   "line": 2491,
+   "snippet": "const OFFCHAIN_KIND_RAW32: u8 = 0;"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "tools/hid_sign_offchain.py",
+   "line": 79,
+   "snippet": "OFFCHAIN_KIND_RAW32 = 0"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "secure/src/nsc_batch_offchain_pure_tests.rs",
+   "line": 1116,
+   "snippet": ".find(\"if kind == OFFCHAIN_KIND_RAW32 || kind == OFFCHAIN_KIND_PERSONAL_SIGN\")"
+  },
+  {
+   "draft": "c-381-CS-01-raw32-gate-mechanism.md",
+   "path": "docs/companion/companion-safe-tx-integration.md",
+   "line": 388,
+   "snippet": "approving the resulting hash. This works as a `RAW32` off-chain sig"
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "secure/data/erc7730-registry/registry/safe/common-eip712-Safe.json",
+   "line": 9,
+   "snippet": "\"path\": \"operation\","
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "secure/data/erc7730-registry/registry/safe/common-eip712-Safe.json",
+   "line": 11,
+   "snippet": "\"format\": \"raw\","
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "secure/data/erc7730-registry/registry/safe/common-eip712-Safe.json",
+   "line": 17,
+   "snippet": "\"format\": \"calldata\","
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "secure/data/erc7730.review.txt",
+   "line": 6486,
+   "snippet": "registry/safe/eip712-Safe-1.4.1.json"
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "dbgen/tests/erc7730_eip712_reconciliation.rs",
+   "line": 335,
+   "snippet": "let accepted_inventory ="
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "dbgen/src/erc7730.rs",
+   "line": 4708,
+   "snippet": "domain.verifying_contract = Some(dep.address.clone());"
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "secure/src/tx/erc7730.rs",
+   "line": 159,
+   "snippet": "pub fn prove_eip712_binding("
+  },
+  {
+   "draft": "c-534-X6b-safetx-typed-format-refusal.md",
+   "path": "dbgen/src/erc7730.rs",
+   "line": 1047,
+   "snippet": "#[serde(rename = \"refusalOnlyFormats\", default)]"
+  },
+  {
+   "draft": "c-600-CS-02-safe-nonce-ring.md",
+   "path": "secure/src/tx/eip712/safe/mod.rs",
+   "line": 505,
+   "snippet": "pub fn compute_safe_tx_hash("
+  },
+  {
+   "draft": "c-600-CS-02-safe-nonce-ring.md",
+   "path": "secure/src/tx/display/nonce_lane.rs",
+   "line": 1,
+   "snippet": "//! EntryPoint v0.6 nonce-lane trusted-display binding."
+  },
+  {
+   "draft": "c-600-CS-02-safe-nonce-ring.md",
+   "path": "secure/src/nsc/cmd_lock.rs",
+   "line": 12,
+   "snippet": "super::zeroize_sensitive_state();"
+  },
+  {
+   "draft": "c-600-CS-02-safe-nonce-ring.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 2630,
+   "snippet": "if unsafe { crate::offchain_state::last_userop_count_set(&slot_flash_key, new_offchain_count) }"
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "docs/erc7730-root-rotation-and-update-policy.md",
+   "line": 104,
+   "snippet": "## Roadmapped (NOT v1): a C10-signed descriptor-root artifact"
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "docs/erc7730-root-rotation-and-update-policy.md",
+   "line": 232,
+   "snippet": "must reuse the C10 release key, never introduce a second signer."
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "docs/security/vendor-signing-key-compromise.md",
+   "line": 147,
+   "snippet": "- [ ] **Build the `PQDESC_V1` signed-descriptor-root channel** (already designed"
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "tx/src/erc20/calldata.rs",
+   "line": 23,
+   "snippet": "Address words whose top 12 bytes are non-zero (left-pad violation)"
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "secure/src/tx/typed_call/abi.rs",
+   "line": 616,
+   "snippet": "Trailing word is residual."
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "secure/src/tx/typed_call/abi.rs",
+   "line": 665,
+   "snippet": "fn negative_read_address_top_byte_in_padding_zone_nonzero() {"
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "docs/security/red-teaming.md",
+   "line": 757,
+   "snippet": "shows a paymaster page (it doesn't today)"
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "CLAUDE.md",
+   "line": 14,
+   "snippet": "accepted ONLY against the three pinned canonical `MultiSendCallOnly` deployments"
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "docs/erc7730-root-rotation-and-update-policy.md",
+   "line": 35,
+   "snippet": "No separate, lower-assurance descriptor-update path ships in v1."
+  },
+  {
+   "draft": "dispositions.json",
+   "path": "docs/erc7730-root-rotation-and-update-policy.md",
+   "line": 120,
+   "snippet": "**Deferred** until the"
+  }
+ ],
+ "measurements": [
+  {
+   "surface": "clearsign",
+   "what": "Time for one additional C10 master key generation on pq1 (recomputing a sibling account's wallet address). The '<1 s' figure is a code comment, not a pq1 measurement. It decides whether CS-09's sibling tag and CS-03's 'own account' allowlist can recompute per signature.",
+   "needs": "open bench board with a debug port, DWT timing as in 'make test-key-speed BOARD=pq1'; no panel needed",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "clearsign",
+   "what": "Flash cost of a strict EIP-4361 parser plus its two renderers (X7b). The 3 to 6 KB figure is a reviewer estimate.",
+   "needs": "host build only (size report on a ship-shaped image); no hardware",
+   "tracked_by": "none (first checkbox of the X7b draft)"
+  },
+  {
+   "surface": "clearsign",
+   "what": "Two Trezor-derived checks the report left unconfirmed: non-zero ABI padding is rejected, and trailing calldata is refused outside multiSend, on every decoder. A quick read of master suggests yes for the native ERC-20 decoder (tx/src/erc20/calldata.rs:23 documents the left-pad rejection and exact-length rule) and the typed-call ABI reader (negative tests at secure/src/tx/typed_call/abi.rs:616 and secure/src/tx/typed_call/abi.rs:665); the ERC-7730 and Safe decoders were not checked.",
+   "needs": "host tests or a source audit; no hardware",
+   "tracked_by": "none"
+  },
+  {
+   "surface": "clearsign",
+   "what": "Run the Safe approveHash route against real Safe runtime bytecode (X6a). Nobody has executed it.",
+   "needs": "host only (Foundry with vm.etch fixtures)",
+   "tracked_by": "none (checkbox in the X6a draft)"
+  },
+  {
+   "surface": "clearsign",
+   "what": "Suspected pixel-UI word-wrap collision for personal_sign (a line ending in a space keeps the byte and paints nothing). Inferred from code, not executed.",
+   "needs": "host test",
+   "tracked_by": "#154 (added in the comment draft)"
+  }
+ ],
+ "new_defects": [
+  {
+   "file": "CLAUDE.md",
+   "line": 14,
+   "quote": "accepted ONLY against the three pinned canonical `MultiSendCallOnly` deployments",
+   "note": "Doc drift introduced after the report's commit: master allowlists four deployments (proto/src/lib.rs:1804, 'MULTISEND_CALL_ONLY_ADDRESSES: [[u8; 20]; 4]', Safe v1.5.0 added by 67db8188). docs/companion/safe-multisig-clear-sign.md:365 has the same stale 'three pinned' wording; that second file is corrected by a checkbox in the X6a draft, CLAUDE.md is not covered by any draft."
+  },
+  {
+   "file": "docs/security/red-teaming.md",
+   "line": 757,
+   "quote": "shows a paymaster page (it doesn't today)",
+   "note": "Stale: the device does append a presence page ('! PAYMASTER SET', secure/src/tx/display/value_page.rs:546). Low severity doc drift, not recorded by the report and not included in any draft."
+  }
+ ]
+}

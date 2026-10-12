@@ -31,3 +31,17 @@ Surfaces: implant, display, fi, sca, clearsign, boot, se, pin, fwupdate, usb, sy
 | `issues-filed/filed.json` | Draft key to GitHub issue number and URL |
 
 The issues cite master `0feea78a` line numbers. The report body cites `c75b0d9c`, an ancestor of that commit.
+
+## Added 2026-10-12 (second pass: recommendations filed)
+
+| Path | Contents |
+|---|---|
+| `issues-filed/round2/<KEY>__*.md` | The body of each of the 26 issues filed in the second pass, as filed (`{{KEY}}` stands for a sibling issue). `KEY` is the report item, or `H1` / `H2` for the two issues that came from the hardware asks and the open-question lists |
+| `issues-filed/round2/c-<N>__<KEY>__*.md` | Each of the 50 comments, as posted on existing issue N |
+| `issues-filed/round2/BRIEF.md` | The brief every reviewer was given |
+| `issues-filed/round2/dispositions/<group>.json` | Per reviewer group: the outcome for every report item, the sub-actions and which existing issue covers each, the cited master lines with snippets, the untracked measurements and the new defects found |
+| `issues-filed/round2/filing.log`, `ORDER.txt` | Filing order and the tool output |
+| `issues-filed/round2/*.py` | The filing script and the two citation checkers |
+| `issues-filed/filed.json` | Now also holds the second pass, under keys that start with `r2:` |
+
+The second-pass issues and comments cite master `c2fab970`. Report section 16 has the item-to-issue map and the corrections this pass made to the report.

@@ -1,0 +1,1304 @@
+{
+ "items": [
+  {
+   "id": "M14",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "M14-wipe-resume-bound-and-pre-wizard-check.md",
+    "c-123-M14-optiga-wipe-verdict-without-readback.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Consume the wipe result at every call site; clear the flag, reset page 124 and show WALLET WIPED only on a verified result",
+     "status": "COVERED",
+     "by": "#106",
+     "evidence": "#106 body: \"Fix: tri-state probes that propagate inconclusive; gate the flag erase and the UI on a verified wipe.\" Comment of 2026-10-12 point 3: \"Page 124 is reset unconditionally at three sites\""
+    },
+    {
+     "what": "Three-state SE050 existence probes and admin_exists; unknown means not wiped",
+     "status": "COVERED",
+     "by": "#106",
+     "evidence": "#106 comment point 1: \"The probes themselves must become tri-state (present / absent / unknown), with unknown meaning \\\"not wiped\\\".\""
+    },
+    {
+     "what": "Delete the SE050 admin object only after data objects are verified absent",
+     "status": "COVERED",
+     "by": "#106",
+     "evidence": "#106 comment point 2: \"The admin object deletes itself even when data deletes failed.\""
+    },
+    {
+     "what": "Return Err when the SE050 admin PIN cannot be derived",
+     "status": "COVERED",
+     "by": "#106",
+     "evidence": "#106 body: \"admin-PIN derivation failure returns `Ok(())` before the flag is armed\"; still at master secure/src/se050/mod.rs:3204"
+    },
+    {
+     "what": "Only the dual-SE layer clears the page-125 flag, after both legs verify",
+     "status": "PARTLY",
+     "by": "#106",
+     "evidence": "#106 comment of 2026-10-12 notes the symptom (\"in dual-SE also discards the flag the OPTIGA leg armed\"); no issue says where the clear should live. The new draft credits the comment and asks only for the structural move. master secure/src/se050/mod.rs:3222"
+    },
+    {
+     "what": "Bound the boot-time resume and add a terminal 'wipe incomplete' state (the reviewer called this mandatory once the verdict is honoured)",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "no hit in the dump for a resume bound or terminal wipe state; master secure/src/main.rs:1949-1963 has no count and no halt. In the new draft."
+    },
+    {
+     "what": "Check before the setup wizard: flag clear and wizard about to run, re-check SE050 existence and the OPTIGA sentinel, re-arm on any survivor",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "no issue asks for it; master secure/src/main.rs:3982 gates the wizard on is_provisioned only. In the new draft."
+    },
+    {
+     "what": "Complete the wipe object lists (duress objects, legacy objects)",
+     "status": "COVERED",
+     "by": "#107 #129",
+     "evidence": "#107: \"Fix: add the four OIDs to the delete + verification lists\"; #129: \"confirm the OID inventory across all historical provisioning shapes\""
+    },
+    {
+     "what": "OPTIGA verdict: data objects cannot be read without the PIN, so the verdict is write status plus the sentinel; decide sentinel-first or sentinel-last",
+     "status": "PARTLY",
+     "by": "#123",
+     "evidence": "#123 asks \"readback-verify every OID; blank secrets first, sentinel last\"; the readback part is infeasible (master secure/src/optiga/apdu.rs:1192, :1194). Comment drafted on #123."
+    },
+    {
+     "what": "Stop promising 'restore from seed' on the wipe screens",
+     "status": "PARTLY",
+     "by": "#168",
+     "evidence": "#168 title: \"'restore from seed' undeliverable\"; its comment notes the screen text but no checkbox asks to change it. One checkbox in the new draft."
+    },
+    {
+     "what": "Wipe decision logic in a workspace crate so tests run; cold reboot in pin-gate-wipe-e2e; lockout-wipe fault suite not in tree",
+     "status": "COVERED",
+     "by": "#865",
+     "evidence": "#865 item 4: \"Put the wipe decision logic in a workspace crate so its tests actually run.\" and \"Re-run `pin-gate-wipe-e2e` on a current build, add a cold reboot to it\""
+    },
+    {
+     "what": "F1D0 cannot be rewritten after a wipe; SE050 UserID orphan; object-range bump has no implementation; repeated wipe on every boot",
+     "status": "COVERED",
+     "by": "#168 #123",
+     "evidence": "#168 comment points 1 to 3; #123: \"stale E120 (never reset on re-provision) -> deterministic false-tamper wipe\""
+    },
+    {
+     "what": "Tier B: recovery rule for the secure-element lifecycle design (every counter reset destroys a secret the unlock needs; every wipe can reset or retire the counter), PIN-secret indirection or per-wipe object sets, rehearsed on one sacrificial OPTIGA and one sacrificial SE050E",
+     "status": "OWNER",
+     "by": "#168",
+     "evidence": "Owner decision needed: is a locked-out device single-use by design or must it be recoverable. Not drafted; the rule is stated in two sentences under Limits in the new draft. Needs sacrificial parts, no board change. Must stay paper plus rehearsal because the OPTIGA lifecycle work is deferred by design."
+    }
+   ],
+   "issues_read": [
+    5,
+    8,
+    12,
+    22,
+    75,
+    104,
+    106,
+    107,
+    120,
+    123,
+    125,
+    127,
+    129,
+    168,
+    170,
+    200,
+    204,
+    254,
+    256,
+    320,
+    692,
+    712,
+    715,
+    853,
+    863,
+    865
+   ],
+   "one_line": "Most of the verified-wipe item is already in #106, #123, #168 and #865; what is left is a bound and end state for the boot-time wipe resume, a survivor check before the setup wizard, and a correction to #123 (OPTIGA objects cannot be read back without the PIN).",
+   "unsure": "The new issue could instead be a second comment on #106; I drafted it as an issue because it adds new mechanisms (a possible resume counter on page 125, a terminal state, a pre-wizard check) that #106's SE050-specific title does not suggest. The c-123 comment refers to the new issue as {{M14}}; replace with the number once filed. The Tier B recovery rule is recorded only under Limits; say if you want it as a separate comment on #168."
+  },
+  {
+   "id": "pin-05",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-853-pin-05-attempt-log-label.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "One shared lockout-wipe helper; port the post-bump count check to the boot and idle re-unlock arms; arm the page-125 flag on a secure-element lockout; sequence after #104",
+     "status": "COVERED",
+     "by": "#853",
+     "evidence": "#853: \"move `trigger_lockout_wipe` into `nsc/mod.rs`, port the post-bump count check to the boot and PendSV arms, and on a secure-element lockout arm the page-125 flag that the boot check already honours.\""
+    },
+    {
+     "what": "Correct the invariant 2 sentence and the three code comments",
+     "status": "COVERED",
+     "by": "#853",
+     "evidence": "#853: \"Correct the four comments and the invariant text.\""
+    },
+    {
+     "what": "Attempt log labels every PinLocked from the secure-element call as AlreadyAtMax",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "master secure/src/nsc/mod.rs:1649; not in #853, #859 or #715. Comment drafted on #853."
+    }
+   ],
+   "issues_read": [
+    75,
+    104,
+    120,
+    125,
+    127,
+    168,
+    200,
+    692,
+    715,
+    853,
+    859
+   ],
+   "one_line": "Covered by #853; one small leftover (the attempt log cannot tell a secure-element lockout from the already-at-maximum short-circuit) is drafted as a comment on #853.",
+   "unsure": ""
+  },
+  {
+   "id": "pin-04",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-636-pin-04-duress-fence-and-prerequisites.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Ship duress or record that it does not ship",
+     "status": "OWNER",
+     "by": "#636",
+     "evidence": "#636: \"Either: add `duress-pin` to `PROD_SHIP_FEATURES` and close its residuals ... or record explicitly that the shipping image has no duress path and why\". master Makefile:2719 still has no duress-pin."
+    },
+    {
+     "what": "Per-wallet discriminator in the page-123 key before enabling",
+     "status": "COVERED",
+     "by": "#863",
+     "evidence": "#863: \"Add a wallet discriminator to the page-123 key before `duress-pin` is enabled anywhere.\""
+    },
+    {
+     "what": "SE050 decoy objects in the wipe lists",
+     "status": "COVERED",
+     "by": "#107",
+     "evidence": "#107: \"Fix: add the four OIDs to the delete + verification lists; fail loud on stale duress UserID.\""
+    },
+    {
+     "what": "CI job that compiles duress-pin; consume the duress wipe result",
+     "status": "COVERED",
+     "by": "#863",
+     "evidence": "#863: \"Add a CI job that at least compiles `duress-pin`.\" and \"Consume the duress wipe result.\""
+    },
+    {
+     "what": "#370 already fixed",
+     "status": "COVERED",
+     "by": "#370",
+     "evidence": "comment filed 2026-10-12 (c-370-looks-fixed); master secure/src/crypto.rs:553 uses fill_strong_with_store"
+    },
+    {
+     "what": "Compile-time fence that forces or forbids duress-pin in production",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "#636 says only add to PROD_SHIP_FEATURES; master secure/src/nsc/mod.rs:388-389 fence only the two test features. In the #636 comment."
+    },
+    {
+     "what": "Correct threat-model.md:432 and HARDENING.md:279",
+     "status": "PARTLY",
+     "by": "#636",
+     "evidence": "#636: \"so the threat model stops implying otherwise\"; the two lines are not named there or in #866. In the #636 comment."
+    },
+    {
+     "what": "Ship-shaped flash measurement; logic-analyser capture of both unlock sequences; #280 on a unit with a panel",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "no issue; listed as checkboxes in the #636 comment and under measurements. #280 itself exists."
+    },
+    {
+     "what": "Residuals: decoy has no mnemonic backup; wipe-on-duress is terminal for the hardware; decoy objects never locked",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "master secure/src/crypto.rs:553, secure/src/optiga/mod.rs:1332; in the #636 comment."
+    }
+   ],
+   "issues_read": [
+    10,
+    107,
+    123,
+    171,
+    258,
+    280,
+    370,
+    446,
+    626,
+    636,
+    700,
+    772,
+    863,
+    866
+   ],
+   "one_line": "The duress feature is implemented but still outside every production feature list; #636 already holds the ship-or-not decision, so the research's remaining points (a fence that records the decision, two stale doc lines, three measurements, four residuals) are one comment on #636.",
+   "unsure": "The comment says #280 needs 'an enclosed unit or the dev kit'; I did not check that the duress UI harness builds for pq1."
+  },
+  {
+   "id": "M12",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-637-M12-backoff-design-constraints.md",
+    "c-860-M12-prompt-bound-review-notes.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Capped back-off between PIN attempts, or reclassify as a residual",
+     "status": "COVERED",
+     "by": "#637",
+     "evidence": "#637: \"Deliverable: implement the delay, or move the HARDENING line into an explicit residual\""
+    },
+    {
+     "what": "Design constraints for the back-off (guard first, 60 s cap, placement, powered time only, tick source, new error variant, fixed countdown screen, workspace crate)",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "not in #637; drafted as a comment on #637. master secure/src/nsc/mod.rs:1415 has no failure-scaled delay."
+    },
+    {
+     "what": "Take the watchdog wait guard around PIN entry",
+     "status": "COVERED",
+     "by": "#852",
+     "evidence": "#852: \"Take `TrustedUiWaitGuard` around `enter_pin()`, as the confirm dialog does.\""
+    },
+    {
+     "what": "Cooldown on host-raised unlock prompts",
+     "status": "COVERED",
+     "by": "#860",
+     "evidence": "#860: \"Bound host-raised prompts (for example one per physical button press, or a minimum interval).\" The research's own review dropped both designs; objections drafted as a comment on #860. Code search at master: the PIN dialog has six callers in secure/src outside test modules, and the only gateway handler among them is secure/src/nsc/cmd_request_unlock.rs:54, which settles the report's open question on whether other commands raise a prompt while locked."
+    },
+    {
+     "what": "threat-model.md:431 'button entry without echo' is false",
+     "status": "COVERED",
+     "by": "#637",
+     "evidence": "#637 names it; #866 lists \"PIN echo and progressive delay (#637)\" as owned. Repeated as the 'if declined' deliverable in the #637 comment."
+    }
+   ],
+   "issues_read": [
+    119,
+    148,
+    175,
+    329,
+    600,
+    637,
+    692,
+    700,
+    713,
+    715,
+    728,
+    729,
+    802,
+    852,
+    860,
+    866
+   ],
+   "one_line": "The back-off itself is #637, the watchdog prerequisite is #852 and the prompt storm is #860; the research adds design constraints for #637 (including that a battery-less device can only count powered time) and the reasons its own review dropped both prompt-bound designs, as two comments.",
+   "unsure": "The #860 comment is optional: it records objections and recommends no fix. Drop it if you want fewer comments."
+  },
+  {
+   "id": "M13",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "M13-device-words-during-pin-entry.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Two words derived from the hardware key, the first-boot salt and the PIN prefix, shown after digit four",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "only #601 covers the threat, by a stored artifact; master secure/src/ui/pin_entry.rs:133 has no hook"
+    },
+    {
+     "what": "Label-collision test, forced secret frame, derivation limit, run-time 'not device-unique' label, wizard page, doc amendment",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "part of the same change; in the draft"
+    },
+    {
+     "what": "User-chosen stored artifact at boot",
+     "status": "COVERED",
+     "by": "#601",
+     "evidence": "#601: \"any persistent user-chosen artifact needs storage, and geometry/src/lib.rs:103-118 has no free page\""
+    }
+   ],
+   "issues_read": [
+    206,
+    249,
+    268,
+    280,
+    601,
+    636,
+    700,
+    705,
+    772,
+    784
+   ],
+   "one_line": "A stateless anti-swap check (two device-bound words shown part-way through PIN entry, as Coldcard does) is untracked; #601 covers the same threat by a stored artifact and is blocked on storage, so this is drafted as a new low-priority issue.",
+   "unsure": "This could be filed as a comment on #601 (an alternative that avoids its storage blocker) instead of a new issue; same threat, different mechanism. Validation needs a unit with a panel and two units at readout-protection level 1 or higher, which the bench does not have today."
+  },
+  {
+   "id": "pin-03",
+   "outcome": "NEW-ISSUE",
+   "board": "DOABLE",
+   "drafts": [
+    "pin-03-page124-self-checking-counter-encoding.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Self-checking record encoding for page 124 in a workspace crate",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "no hit in the dump; master secure/src/hw/flash.rs:768, :847, :881; page 124 only, the page-123 half of the original proposal was struck by the review (its record is full and a blank page is legal there) and is not drafted"
+    },
+    {
+     "what": "Atomic reset design (blocking)",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "master secure/src/hw/flash.rs:955 is erase-only; #392 would test it but does not ask for it"
+    },
+    {
+     "what": "Kani harnesses for page 124",
+     "status": "COVERED",
+     "by": "#397",
+     "evidence": "#397: \"Kani page-124 scan/bump monotonicity behind a model `Flash`\""
+    },
+    {
+     "what": "All-0xFF read-fault model in the fault-emulation sweep",
+     "status": "PARTLY",
+     "by": "#865",
+     "evidence": "#865 item 1 covers the harness not building; no issue asks for a flash-read fault model. master tools/sca/fault_sweep_pin.py:19"
+    }
+   ],
+   "issues_read": [
+    94,
+    200,
+    216,
+    392,
+    397,
+    692,
+    715,
+    835,
+    854,
+    865
+   ],
+   "one_line": "A fault-hardened encoding for the page-124 attempt counter is untracked and doable in firmware; it gives no extra PIN guesses today and an earlier triage accepted the weakness, so the draft is low priority and starts with a decide-or-decline step and a mandatory atomic-reset design.",
+   "unsure": "An earlier triage (tools/sca/README.md:428, F-4) recommended 'accept' for a different fault model: a skipped bump or skipped write, not a flash read that returns 0xFF. The reason it gave (the secure-element counters are the real limit) applies here too, but this fault model was not part of that triage. The draft therefore starts with a decide-or-decline step."
+  },
+  {
+   "id": "X4b",
+   "outcome": "COMMENT",
+   "board": "DOABLE",
+   "drafts": [
+    "c-182-X4b-wallet-tag-in-page123-key.md"
+   ],
+   "sub_actions": [
+    {
+     "what": "Public wallet tag in the page-123 key",
+     "status": "COVERED",
+     "by": "#863 #182",
+     "evidence": "#863: \"Add a wallet discriminator to the page-123 key before `duress-pin` is enabled anywhere.\" #182 title: \"page-123 slot keys are seed-independent -> cross-seed registration/counter inheritance\". Same change."
+    },
+    {
+     "what": "Concrete design: tag from account-0 masterPkSeed, six call sites, global cap kept, do it before launch even without duress",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "not in #182 (pointer body) or #863; drafted as a comment on #182. master secure/src/offchain_state.rs:23; the per-wallet cap option was struck by the review (it re-opens the page-123 exhaustion brick) and is not drafted"
+    },
+    {
+     "what": "Keep page 123 on lockout and duress wipe; record the policy",
+     "status": "UNTRACKED",
+     "by": "",
+     "evidence": "no issue states the policy; in the #182 comment. master secure/src/hw/flash.rs:1736 and :2023 are the only erase callers"
+    },
+    {
+     "what": "Decommission erase, later and gated",
+     "status": "PARTLY",
+     "by": "#634",
+     "evidence": "#634: \"a decommission procedure plus a verifier that reads back each store\"; the page-123 rollback constraint is added in the #182 comment"
+    }
+   ],
+   "issues_read": [
+    89,
+    106,
+    107,
+    123,
+    168,
+    180,
+    182,
+    634,
+    863
+   ],
+   "one_line": "X4b and the first checkbox of #863 are the same code change (a wallet tag in the page-123 key); #182 already tracks the finding, so the research's design and the keep-on-wipe policy are one comment on #182 that points at #863.",
+   "unsure": "I put the comment on #182 (the older, non-duress finding). It could go on #863 instead; whichever you pick, the other should get a one-line cross-reference."
+  }
+ ],
+ "citations": [
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 133,
+   "snippet": "pos += 1;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/main.rs",
+   "line": 4174,
+   "snippet": "let mut pin = match enter_pin() {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/main.rs",
+   "line": 4622,
+   "snippet": "let mut pin = match enter_pin() {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/nsc/cmd_request_unlock.rs",
+   "line": 54,
+   "snippet": "let mut pin = match enter_pin() {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/main.rs",
+   "line": 1761,
+   "snippet": "#[cfg(all(not(feature = \"e2e-test\"), not(feature = \"mode-production\")))]"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/saes_cmac.rs",
+   "line": 44,
+   "snippet": "pub fn cmac_dhuk(msg: &[u8], tag: &mut [u8; 16]) -> Result<(), SaesError> {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 499,
+   "snippet": "/// forbids the bare `SAES-CMAC(DHUK, label)` ladder). Byte-for-byte"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 83,
+   "snippet": "pub fn journal_salt_if_all_done() -> Option<[u8; 32]> {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 49,
+   "snippet": "//!   DHUK is a shared ST-substituted constant; all dev boards"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 237,
+   "snippet": "let first = match enter_pin() {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 243,
+   "snippet": "let second = match enter_pin() {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/ui/seed_wizard.rs",
+   "line": 285,
+   "snippet": "match enter_pin_with_confirm() {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/ui/px/screens.rs",
+   "line": 108,
+   "snippet": "pub fn show_with(s: &Screen, secret: &[(usize, &[u8])]) -> bool {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/ui/secret_text.rs",
+   "line": 74,
+   "snippet": "pub(crate) fn secret_glyph_cols(ch: u8) -> [u8; FONT_GLYPH_W] {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 304,
+   "snippet": "derive_into(b\"pqsigner/optiga-pbs-v1\", &mut out)?;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 314,
+   "snippet": "derive_into(b\"pqsigner/mlkem-seed-v1\", &mut out)?;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 324,
+   "snippet": "derive_into(b\"pqsigner/mlkem-wrap-huk-v1\", &mut out)?;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 344,
+   "snippet": "derive_into_bhk(b\"pqsigner/se050-scp03-enc-v1\", &mut out[..])?;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 353,
+   "snippet": "derive_into_bhk(b\"pqsigner/se050-scp03-mac-v1\", &mut out[..])?;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 373,
+   "snippet": "derive_into_bhk(b\"pqsigner/se050-scp03-dek-v1\", &mut out[..])?;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 409,
+   "snippet": "derive_into_bhk(b\"pqsigner/se050-admin-pin-v1\", &mut out)?;"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/hw/secret_keys.rs",
+   "line": 489,
+   "snippet": "const OPTIGA_PBS_V2_LABEL: &[u8] = b\"pqsigner/optiga-pbs-v2\";"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "secure/src/ui/pin_entry.rs",
+   "line": 173,
+   "snippet": "pub fn enter_pin() -> PinEntryResult {"
+  },
+  {
+   "draft": "M13-device-words-during-pin-entry.md",
+   "path": "docs/security/user-device-verification.md",
+   "line": 28,
+   "snippet": "companion protocol can distinguish them **from inside**, because every answer"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/main.rs",
+   "line": 1949,
+   "snippet": "if wipe_armed || attempts_exhausted {"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/main.rs",
+   "line": 1957,
+   "snippet": "let _ = (&mut *core::ptr::addr_of_mut!(SE)).factory_reset_admin();"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/main.rs",
+   "line": 1962,
+   "snippet": "let _ = hw::flash::pin_attempts_reset();"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/main.rs",
+   "line": 1963,
+   "snippet": "ui::show_status(\"WALLET WIPED\", \"restore from seed\");"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/main.rs",
+   "line": 3982,
+   "snippet": "if !is_provisioned(&mut *core::ptr::addr_of_mut!(SE)) {"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 142,
+   "snippet": "self.optiga.is_provisioned() && self.se050.is_provisioned()"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 976,
+   "snippet": "Ok(n) if n > 0 => return buf[0] != RESET_SENTINEL,"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2829,
+   "snippet": "apdu::OID_COUNTER, &[RESET_SENTINEL],"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 3222,
+   "snippet": "if !self.admin_exists() {"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 679,
+   "snippet": "if self.init().is_err() {"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 632,
+   "snippet": "let optiga_result = self.reset_optiga_for_admin();"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 633,
+   "snippet": "let se050_result = self.se050.factory_reset_admin();"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 626,
+   "snippet": "const WIPE_FLAG_OFFSET: u32 = 16;"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 710,
+   "snippet": "const DURESS_WIPE_MODE_OFFSET: u32 = 32;"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/hw/tzic.rs",
+   "line": 246,
+   "snippet": "let _ = unsafe { crate::hw::flash::arm_wipe_flag() };"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 2428,
+   "snippet": "// single-use post-lockout"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/nsc/cmd_request_unlock.rs",
+   "line": 209,
+   "snippet": "ui::show_status(\"WALLET WIPED\", \"restore from seed\");"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 2266,
+   "snippet": "const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &["
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/se050/mod.rs",
+   "line": 1793,
+   "snippet": "apdu::check_exists(&mut self.t1, &mut self.scp03, USERID_OBJ)"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1192,
+   "snippet": "push_ac_auto_or_conf(&mut inner, &mut c, META_READ, auth_oid, AC_AND);"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1194,
+   "snippet": "push_ac_auto(&mut inner, &mut c, META_READ, auth_oid);"
+  },
+  {
+   "draft": "M14-wipe-resume-bound-and-pre-wizard-check.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 238,
+   "snippet": "LUC counter (second of the four E120..E123"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1192,
+   "snippet": "push_ac_auto_or_conf(&mut inner, &mut c, META_READ, auth_oid, AC_AND);"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1194,
+   "snippet": "push_ac_auto(&mut inner, &mut c, META_READ, auth_oid);"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/apdu.rs",
+   "line": 1245,
+   "snippet": "push_ac_simple(&mut inner, &mut c, META_READ, AC_ALW);"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2841,
+   "snippet": "apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_ENTROPY, &blank)?;"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2844,
+   "snippet": "apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_BOOTSTRAP_VK, &blank)?;"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2829,
+   "snippet": "apdu::OID_COUNTER, &[RESET_SENTINEL],"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2822,
+   "snippet": "// Write the sentinel FIRST so a crash mid-wipe still produces a"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2781,
+   "snippet": "let _ = crate::hw::flash::arm_wipe_flag();"
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2863,
+   "snippet": "let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, "
+  },
+  {
+   "draft": "c-123-M14-optiga-wipe-verdict-without-readback.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 2867,
+   "snippet": "let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_BOOTSTRAP_"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/offchain_state.rs",
+   "line": 23,
+   "snippet": "pub fn slot_key_compute(account_index: u8, chain_id: u64, slot_index: u32) -> [u8; 8] {"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 1578,
+   "snippet": "unsafe fn erase_offchain_page() -> Result<(), ()> {"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 1736,
+   "snippet": "unsafe { erase_offchain_page()? };"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 2015,
+   "snippet": "if offchain_page_has_live_entries() {"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 2023,
+   "snippet": "unsafe { erase_offchain_page()? };"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 1573,
+   "snippet": "/// before any other code touches the page) or in a deliberate"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "domain/src/lib.rs",
+   "line": 598,
+   "snippet": "// Step 2: pk_seed = mask_n(sha256(\"pk_seed\"[7] || master[0..32]))"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/nsc/state.rs",
+   "line": 332,
+   "snippet": "pub(super) const BOOTSTRAP_CACHE_LEN: usize = 16;"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/nsc/cmd_sign_userop.rs",
+   "line": 2017,
+   "snippet": "crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/nsc/cmd_sign_userop_batch.rs",
+   "line": 2172,
+   "snippet": "crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/nsc/cmd_sign_userop_forced.rs",
+   "line": 1198,
+   "snippet": "let slot_key = crate::offchain_state::slot_key_compute("
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/nsc/cmd_sign_offchain.rs",
+   "line": 263,
+   "snippet": "crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/nsc/cmd_offchain_sync.rs",
+   "line": 110,
+   "snippet": "crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/nsc/cmd_offchain_status.rs",
+   "line": 76,
+   "snippet": "crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/secure_crypto_glue_under_test/pure_tests.rs",
+   "line": 773,
+   "snippet": "fn positive_slot_key_compute_is_8_bytes() {"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/offchain_state.rs",
+   "line": 64,
+   "snippet": "pub const MAX_DISTINCT_SLOTS: usize = 128;"
+  },
+  {
+   "draft": "c-182-X4b-wallet-tag-in-page123-key.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 201,
+   "snippet": "for page in 123..=127u32 {"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "Makefile",
+   "line": 2662,
+   "snippet": "RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "Makefile",
+   "line": 2703,
+   "snippet": "override PROD_REQUIRED := mode-production stm32u585 se050 optiga-trust-m dual-se \\"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "Makefile",
+   "line": 2719,
+   "snippet": "override PROD_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 388,
+   "snippet": "feature = \"duress-probe-e2e\","
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 389,
+   "snippet": "feature = \"duress-provision-e2e\","
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 754,
+   "snippet": "not(all(feature = \"tamp\", feature = \"tamp-wipe\", feature = \"tzic-wipe\")),"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "docs/security/threat-model.md",
+   "line": 432,
+   "snippet": "| Duress PIN / decoy wallet | T5 | Not currently implemented; architectural option per HAR"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "docs/security/HARDENING.md",
+   "line": 279,
+   "snippet": "- **Duress PIN:** a second PIN that unlocks a decoy wallet or triggers a wipe. Architectur"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 291,
+   "snippet": "let ro = unsafe { self.optiga.duress_read_half(pin) };"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 292,
+   "snippet": "let re = self.se050.duress_read_half(pin);"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1571,
+   "snippet": "Err(_) => se.unlock(pin),"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 352,
+   "snippet": "let _ = unsafe { self.optiga.duress_verify(pin) };"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/dual_se.rs",
+   "line": 353,
+   "snippet": "let _ = self.se050.duress_verify(pin);"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/optiga/mod.rs",
+   "line": 1332,
+   "snippet": "// Deliberately NO lock_oid"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/crypto.rs",
+   "line": 553,
+   "snippet": "fill_strong_with_store(store, &mut decoy_entropy)?;"
+  },
+  {
+   "draft": "c-636-pin-04-duress-fence-and-prerequisites.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1567,
+   "snippet": "let _ = se.factory_reset_admin();"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1415,
+   "snippet": "pub unsafe fn gated_unlock("
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "docs/security/HARDENING.md",
+   "line": 280,
+   "snippet": "- **Progressive delay:** increasing delay between attempts in Secure world before the SCP0"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "docs/security/threat-model.md",
+   "line": 431,
+   "snippet": "| Shoulder-surf during PIN entry | T5 | On-device button entry without echo; minimum PIN l"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/hw/buttons.rs",
+   "line": 183,
+   "snippet": "const LONG_PRESS_MS: u32 = 500;"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/timeout.rs",
+   "line": 194,
+   "snippet": "/// RAII marker for the narrow interval in which trusted UI is blocked waiting"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/timeout.rs",
+   "line": 27,
+   "snippet": "pub const TIMEOUT_TICKS: u32 = 2 * 60 * 1000;"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1450,
+   "snippet": "let pre_count_a = crate::hw::flash::pin_attempts_read();"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1452,
+   "snippet": "let pre_count_b = crate::hw::flash::pin_attempts_read();"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1494,
+   "snippet": "let bump_result = crate::hw::flash::pin_attempts_bump();"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/main.rs",
+   "line": 1647,
+   "snippet": "setup_systick();"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/main.rs",
+   "line": 4261,
+   "snippet": "setup_systick();"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/secure_element.rs",
+   "line": 20,
+   "snippet": "pub enum UnlockError {"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/main.rs",
+   "line": 4535,
+   "snippet": "const PENDSV_MAX_NO_VERDICT_FAILURES: u32 = 3;"
+  },
+  {
+   "draft": "c-637-M12-backoff-design-constraints.md",
+   "path": "secure/src/main.rs",
+   "line": 4610,
+   "snippet": "a trusted-path screen. Diagnostic text that varies"
+  },
+  {
+   "draft": "c-853-pin-05-attempt-log-label.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1649,
+   "snippet": "UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,"
+  },
+  {
+   "draft": "c-853-pin-05-attempt-log-label.md",
+   "path": "secure/src/pin_attempt_log.rs",
+   "line": 72,
+   "snippet": "/// Nothing was burned and nothing was wiped on this path."
+  },
+  {
+   "draft": "c-853-pin-05-attempt-log-label.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1568,
+   "snippet": "Err(UnlockError::PinLocked)"
+  },
+  {
+   "draft": "c-853-pin-05-attempt-log-label.md",
+   "path": "secure/src/main.rs",
+   "line": 3573,
+   "snippet": "Fire the wipe (mirror of cmd_request_unlock::trigger_lockout_wipe)"
+  },
+  {
+   "draft": "c-860-M12-prompt-bound-review-notes.md",
+   "path": "secure/src/timeout.rs",
+   "line": 27,
+   "snippet": "pub const TIMEOUT_TICKS: u32 = 2 * 60 * 1000;"
+  },
+  {
+   "draft": "c-860-M12-prompt-bound-review-notes.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 287,
+   "snippet": "INS_V2_LOCK => return self.cmd_lock(),"
+  },
+  {
+   "draft": "c-860-M12-prompt-bound-review-notes.md",
+   "path": "nonsecure/src/usb/commands.rs",
+   "line": 286,
+   "snippet": "INS_V2_UNLOCK => return self.cmd_unlock(),"
+  },
+  {
+   "draft": "c-860-M12-prompt-bound-review-notes.md",
+   "path": "secure/src/nsc/cmd_request_unlock.rs",
+   "line": 54,
+   "snippet": "let mut pin = match enter_pin() {"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 768,
+   "snippet": "// Programmed sentinel: `[0x00; 16]`. Blank sentinel: `[0xFF; 16]`."
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 847,
+   "snippet": "if unsafe { read_volatile(qw_base.add(byte_idx as usize)) } != 0xFF {"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 881,
+   "snippet": "if read_volatile(qw_base.add(byte_idx as usize)) != 0xFF {"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 828,
+   "snippet": "if fwd != rev {"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 924,
+   "snippet": "let sentinel = [0u8; 16];"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/hw/flash.rs",
+   "line": 955,
+   "snippet": "pub unsafe fn pin_attempts_reset() -> Result<(), ()> {"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1450,
+   "snippet": "let pre_count_a = crate::hw::flash::pin_attempts_read();"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1452,
+   "snippet": "let pre_count_b = crate::hw::flash::pin_attempts_read();"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1494,
+   "snippet": "let bump_result = crate::hw::flash::pin_attempts_bump();"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1614,
+   "snippet": "let reset_result = crate::hw::flash::pin_attempts_reset();"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1713,
+   "snippet": "let mcu_vs_se = se_count > mcu;"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/main.rs",
+   "line": 1947,
+   "snippet": "hw::flash::pin_attempts_read() >= sphincs_tz_shared::MAX_ATTEMPTS;"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/first_boot/mod.rs",
+   "line": 201,
+   "snippet": "for page in 123..=127u32 {"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "tools/sca/README.md",
+   "line": 428,
+   "snippet": "the page-124 attempt isn't always charged under a single fault"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "tools/sca/fault_sweep_pin.py",
+   "line": 19,
+   "snippet": "The fake page-124 counter lives in `.bss` (zero on every `e.load()`), and"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/nsc/mod.rs",
+   "line": 1735,
+   "snippet": "let _ = crate::hw::flash::pin_attempts_reset();"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/nsc/cmd_request_unlock.rs",
+   "line": 204,
+   "snippet": "let _ = crate::hw::flash::pin_attempts_reset();"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/main.rs",
+   "line": 1962,
+   "snippet": "let _ = hw::flash::pin_attempts_reset();"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/main.rs",
+   "line": 3740,
+   "snippet": "if let Err(e) = hw::flash::pin_attempts_reset() {"
+  },
+  {
+   "draft": "pin-03-page124-self-checking-counter-encoding.md",
+   "path": "secure/src/main.rs",
+   "line": 4711,
+   "snippet": "/// **Reachability (honest): today NO NMI source is armed**"
+  }
+ ],
+ "measurements": [
+  {
+   "surface": "pin",
+   "what": "Bus capture of a real-PIN unlock and a duress-PIN unlock: are the two frame sequences on the OPTIGA and SE050 I2C buses distinguishable (same operation count, different order by code read)",
+   "needs": "open bench board with debug port, a logic analyser on both I2C buses, a duress-pin build with a duress wallet provisioned",
+   "tracked_by": "none (checkbox in the #636 comment draft)"
+  },
+  {
+   "surface": "pin",
+   "what": "Flash size of duress-pin in a ship-shaped build",
+   "needs": "a build only; a true production build is blocked by the S-2 fence, so measure the nearest dual-SE feature set with and without the feature",
+   "tracked_by": "none (checkbox in the #636 comment draft)"
+  },
+  {
+   "surface": "pin",
+   "what": "Duration of a full lockout wipe inside the idle re-unlock handler against the watchdog budget",
+   "needs": "open bench board, iwdg-on image, log output; a unit whose secure elements may be consumed",
+   "tracked_by": "none (noted in the #853 comment draft)"
+  },
+  {
+   "surface": "pin",
+   "what": "Fault-injection campaign against the PIN gate on silicon (page-124 pre-commit, sentinel gates), including whether an all-0xFF flash read can be produced",
+   "needs": "fault-injection rig and sacrificial units",
+   "tracked_by": "none found for the PIN gate; #301 is the rig"
+  },
+  {
+   "surface": "pin",
+   "what": "Watchdog behaviour during a deliberately slow PIN entry",
+   "needs": "a unit with a panel and buttons, iwdg-on image",
+   "tracked_by": "#852"
+  },
+  {
+   "surface": "pin",
+   "what": "Cold-reboot boot cross-check in both directions",
+   "needs": "bench board, owner-reviewed recovery plan",
+   "tracked_by": "#200"
+  },
+  {
+   "surface": "pin",
+   "what": "Does the OPTIGA leg of the boot cross-check run at all (shield up before the counter read)",
+   "needs": "bench board with log output",
+   "tracked_by": "#127"
+  },
+  {
+   "surface": "pin",
+   "what": "Does the OPTIGA counter advance on a successful verify, and what does a saturated counter return",
+   "needs": "a spare OPTIGA shield",
+   "tracked_by": "#170 #254"
+  },
+  {
+   "surface": "pin",
+   "what": "Is the hardware unique key at readout-protection level 1 the same as at level 2",
+   "needs": "a sacrificial unit taken to level 2",
+   "tracked_by": "#400"
+  },
+  {
+   "surface": "pin",
+   "what": "Does pin-gate-wipe-e2e still pass on a current build (re-provision after the wipe, past the UserID guard)",
+   "needs": "dev kit or bench board with both secure elements",
+   "tracked_by": "#865"
+  }
+ ],
+ "new_defects": [
+  {
+   "file": "secure/src/pin_attempt_log.rs",
+   "line": 84,
+   "quote": "DuressWipe = 0x08,",
+   "note": "The attempt-reason enum defines DuressWipe and pins its value in a test, but no code records it (a search of secure/src, nonsecure/src and tools finds only the definition and the test). The wipe-on-duress arm returns PinLocked and is therefore logged as AlreadyAtMax at secure/src/nsc/mod.rs:1649. Recording it would also be a deniability tell while the log is readable on a locked device (#719), so this is a decide-and-document item, low severity."
+  }
+ ]
+}

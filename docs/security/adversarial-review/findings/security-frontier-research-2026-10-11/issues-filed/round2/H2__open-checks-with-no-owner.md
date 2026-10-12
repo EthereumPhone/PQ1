@@ -1,0 +1,30 @@
+TITLE: Five open checks from the 2026-10 research that no issue carries: pre-existing secure-element state at setup, two leakage measurements, a port-B pin readback, one unsourced figure
+LABELS: enhancement,priority:low,surface:secure-element,surface:sca-fi,surface:docs,source:frontier-research-2026-10
+---
+## Summary
+
+The research ended with a list of things it could not verify. Most of them now sit as a checkbox in the issue or comment they belong to. These five have no home anywhere in the tracker. Each is small and independent; tick them off or split them out as convenient. None needs a board change.
+
+## The five
+
+- [ ] **Does the setup wizard adopt secure-element state that was already there?** `docs/security/user-device-verification.md:209-210` lists as an open to-do: "Seed-wizard SE-state hostility rule (delete/recreate, never adopt) — verify current wizard behavior, close any gap." The concern is a unit whose secure elements were written by someone else before first setup (in transit, or at a dishonest factory): if the wizard keeps any object it finds instead of deleting and recreating it, that object's content or access conditions are the attacker's. A search of the tracker for this rule finds nothing, and the research did not trace the wizard either. Work: read the provisioning path for both chips, list every object it creates and what it does when the object already exists, and either record that it always recreates or file the gap. #87 covers one instance on the OPTIGA (an already-locked object is accepted without comparing its metadata), and #62 asks for a check at provisioning acceptance that the SE050 holds no objects other than the wallet's own. Neither states the wizard rule or records what the wizard does today. Firmware reading only; no hardware.
+- [ ] **Leakage of the PIN derivation in the OPTIGA driver, on silicon.** `secure/src/optiga/mod.rs:915-917`: `derive_pin_secret` hashes a label, the 8 PIN digits and an index with one SHA-256 (`domain/src/lib.rs:97`). The PIN has about 27 bits of entropy, so a leak of a few bits per attempt matters more here than for a full-entropy key. An emulated harness mirrors this chain (`tools/sca/kdf_target/src/main.rs:435`); nothing has been captured on the real chip. #855 proposes replacing the derivation with one keyed by the hardware key; a capture of the current one says how much it gives away in the meantime and is the baseline for the replacement. Needs the bench board with a debug port, a trigger around the call, and an oscilloscope with a shunt or near-field probe (the same capture chain as #228 and #236).
+- [ ] **The glyph-lookup address channel, on silicon.** The constant-time glyph path exists because a table lookup indexed by the character being drawn leaks that character through memory-access timing and power. The only evidence either way is an emulated trace (`tools/sca/Makefile:240`, the `glyph-leak` target). #858 and #784 are about the screens that still use the non-constant-time path; nobody has measured how strong the channel is on the real chip for either path. Needs the bench board with a debug port and the same capture chain. No display panel is needed: the lookup runs whether or not a panel is attached.
+- [ ] **Read back the port-B pin attribution on pq1.** Which pads the non-secure world may drive is set per pin. On pq1 only PA11 and PA12 (USB) are handed over (`secure/src/board/pq1.rs:307`), and a port-A readback confirming that is recorded (`secure/src/hw/usb_hw.rs:18-19`, `0xe7ff`). No port-B readback is recorded, and four of the trusted display's control lines are on port B: data/command on PB0 (`secure/src/board/pq1.rs:125`), reset on PB1 (`secure/src/board/pq1.rs:130`), the tearing signal on PB2 and the backlight enable on PB15 (`secure/src/board/pq1.rs:136`). The code hands over no port-B pin on pq1 (`secure/src/board/pq1.rs:308`), so the expected value is `0xffff`. One of the research's inventories claimed the display pins stay reachable from the non-secure world; the code says otherwise, and a readback settles it. The comment at `secure/src/hw/usb_hw.rs:158-160` still lists PA15, PB5 and PB15 as cleared, which is the dev kit's map. Needs the open bench board with a debug port. #83 covers the same question for the dev kit's display port.
+- [ ] **The "76% PIN-glitch bypass on STM32U5A9" figure needs its primary source.** It is cited as the main evidence that this chip family can be glitched: `docs/security/production-security.md:54`, `docs/security/production-security.md:450` and `docs/security/production-security.md:705`, `docs/security/red-teaming.md:682`, and the body of #248. The research's fact-check pass could not retrieve the thesis itself, only pages that refer to it, and found two statements (Ledger Donjon 2025, a Trezor spokesperson in June 2026) that no fault-injection attack on the STM32U5 had been demonstrated. Work: obtain the thesis, record its title, year, target part and what the 76% measures, or mark every citation as second-hand. Documentation only.
+
+## What it needs
+
+Items 1 and 5: reading and documentation. Items 2 and 3: an open bench board with a debug port and a power or near-field capture chain. Item 4: the same board and a debug probe. No panel, no sacrificial unit.
+
+## Limits
+
+- These are checks, not defences. Each can come back "nothing found".
+- Nothing here was run or measured. For item 1 the wizard code was not read for this issue.
+
+## Related
+
+#87, #62, #855, #228, #236, #858, #784, #83, #239, #248, #301.
+
+---
+<sub>**Provenance.** Security frontier research, 2026-10-11 (section 12, "Claims that remain unverified", and the per-surface open-question lists), collected on 2026-10-12 after the other open questions were attached to their own issues. Lines re-read at master `c2fab970`. Report: `docs/security/adversarial-review/findings/security-frontier-research-2026-10-11.md`, committed on branch `docs/security-frontier-research-2026-10` and not yet on master when this was written, so this text is meant to stand alone.</sub>

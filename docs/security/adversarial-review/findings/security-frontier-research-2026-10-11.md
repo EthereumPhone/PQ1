@@ -7,7 +7,7 @@ What pq1 does today on every security surface, what Trezor, Ledger and the liter
 | Snapshot | 2026-10-11 |
 | pq1 tree | Working tree at `c75b0d9c` on `feat/pq1-board-target`, with 28 uncommitted modified files. Five of them are cited here, so their line numbers will not reproduce at the bare commit: `fwsign/src/subcommands/sign.rs`, `pqsigner-fi/src/lib.rs`, `secure/src/hw/consumption_mask.rs`, `docs/security/production-security.md`, `.github/workflows/ci.yml`. |
 | Trezor tree | `trezor-firmware` at `6ab39e95` (2026-09-18) |
-| Updated | 2026-10-12: sections 13 to 15 added (on-chain policy, next-revision board, STM32U585 feature cross-check); the defect rows behind a new issue or comment re-checked and corrected before filing (already-tracked rows were not re-checked); issues #846 to #867 filed. Master was `0feea78a` on that date, 156 commits ahead of the snapshot commit. |
+| Updated | 2026-10-12: sections 13 to 15 added (on-chain policy, next-revision board, STM32U585 feature cross-check); the defect rows behind a new issue or comment re-checked and corrected before filing (already-tracked rows were not re-checked); issues #846 to #867 filed. Master was `0feea78a` on that date, 156 commits ahead of the snapshot commit. Second pass the same day: the 70 recommendation items checked against the tracker and master `c2fab970`; issues #869 to #894 and 50 comments filed; corrections to this report listed in section 16, the main one being that the current board already has a small backup capacitor and both crystals (#869). |
 | Status | Research. Nothing here is implementation-approved, and no priority is an owner decision. |
 | Evidence level | Code reading and public sources. Nothing in this report was run on silicon. |
 
@@ -224,6 +224,8 @@ Five groups matter most. (1) The NSC (non-secure callable) gateway is re-entrant
 Conventions: "code read" means confirmed by code reading, not on silicon. Severity is the final value after the skeptic's corrections; where merger and skeptic disagree both are given. Source item is the cluster M-id or the single proposal ID from `final/master.json`.
 
 ### Update 2026-10-12: re-check before filing, and where each defect is now tracked
+
+A second pass the same day filed the recommendation items (issues #869 to #894 and 50 comments) and found more errors in this report. They are listed in section 16. One issue from this table was edited: the fourth fix bullet of #849.
 
 Before any issue was filed, the rows behind a new issue or a new comment were re-read by an independent pass that was asked to refute them: 45 rows, of which 32 were confirmed, 12 were partly confirmed and 1 was refuted (full texts in `focused/verify_*_FINAL.md` in the data folder). The author also re-read the rows behind the top issues against the reference manual and the code. **The rows that already had a tracking issue were not re-checked in this round** (for example A3, A7, A9, A11, A12, A17, A20, C5, C6, C8, C9, D2 to D4). The corrections below come from the re-check. The tables that follow are left as first written, except row A1.
 
@@ -458,7 +460,7 @@ Each ask is marked **NEW** or **ALREADY LISTED** against `docs/hardware/hardware
 | TAMP_OUT exists only on PA0 and PA1 (the two buttons) and on PC13 itself. | An active tamper mesh needs a button moved. PA10 and PB4 have no TAMP function. | M11 dropped parts |
 | The touch-sensing controller (TSC) reaches only PB4-PB7 and PB12-PB14. | TSC cannot measure the display nets (PA4/PA5/PA7, PB0-PB2), the buttons (PA0/PA1) or I2C1 (PB8/PB9). | M10 and M11 dropped parts |
 | PA10, PC13 and PB4 have no ADC channel. | A shunt cannot be read directly by a free pad. | M10 dropped parts |
-| No battery. USB VBUS is the only supply. Whether V10 populates anything on VBAT (pin 1) is not recorded in the repository. | A tamper response runs at the next powered boot. Any "armed while unplugged" claim depends on a supercapacitor that may not exist. | M11 and M20 hardware asks |
+| No battery. USB VBUS is the only supply. Whether V10 populates anything on VBAT (pin 1) is not recorded in the repository. **Correction 2026-10-12:** the V10 schematic records it: an 11 mF backup capacitor (`J102`) with a diode charge path; see section 16 and #869. | A tamper response runs at the next powered boot. Any "armed while unplugged" claim depends on a supercapacitor that may not exist. | M11 and M20 hardware asks |
 | The clock tree is HSI16 to PLL1, with HSI48 for the random number generator. HSE and LSE are not used by firmware. | Clock glitching through a crystal is not in the model. Clock-security (CSS) asks do not apply. | `docs/hardware/evt-silicon-validation.md:729-730` |
 | Each button pad pair has a 100 nF capacitor and an ESD diode and no board pull-up. | RC-decay sensing of the button nets is impossible. | `docs/hardware/evt-silicon-validation.md:470-471` |
 | PA8 is `LDO2_EN`, the enable for the rail (`VDD1_3V3`) that powers both secure elements. `R130` (10 kΩ) pulls it down. | The secure-element rail is off while the MCU is held in reset. | `docs/hardware/evt-silicon-validation.md:387` |
@@ -548,6 +550,8 @@ Four recorded texts contradict each other. The board cannot be specified until t
 - **Status.** NEW. HR:183-186 covers second sourcing only.
 
 #### G1-8. VBAT: report what V10 populates, then implement the owner's decision (P1)
+
+> **Correction 2026-10-12.** The first half is answered by the schematic (section 16, #869): V10 has a small backup capacitor on VBAT, far smaller than the 0.47 to 1 F this ask and the requirements document assume. Whether it is fitted and how long it holds are the open measurements.
 
 - **Change.** State what is on pin 1 today (supercapacitor, tie to VDD, other). State the backup-domain hold time. Then build to decision 2 above.
 - **Needed by.** M11, M09 (so the verifier's backup-register line can be worded honestly), M20 (ITAMP1 backup-domain monitoring and backup-register erase semantics depend on it).
@@ -2563,6 +2567,8 @@ Every hardware idea in the main study was judged against the current board: a 48
 
 ### The answer first
 
+> **Correction 2026-10-12 (second pass).** This section was written believing nothing on the current board keeps the backup supply alive. The V10 schematic shows an 11 mF backup capacitor on VBAT and both crystals (section 16, #869). For the hours that capacitor holds, the internal temperature and over-voltage tampers work on an unplugged unit. The conclusions below about transit stand, because hours do not cover weeks; option 7 should be read as "a larger capacitor than the board already has".
+
 A new board does not make an implant detectable. Three findings set the ceiling:
 
 1. **No published method lets a microcontroller detect a passive tap on its own bus** with timers, ADC or comparators. The published detectors use a network analyser or an FPGA ([PDNPulse](https://arxiv.org/abs/2204.02482), [ImpedanceVerif](https://tches.iacr.org/index.php/TCHES/article/view/9954)).
@@ -2664,4 +2670,149 @@ The owner pasted a conversation with Gemini about what the STM32U585 can do to d
 
 - **N1. Make the three ADC4 watchdog tampers real, with no pin (P3).** Internal tampers 7, 12 and 13 are the three ADC4 analog watchdogs (RM0456 Rev 7, TAMP internal signals table). The firmware enables them, but no ADC4 driver exists in the secure world, so nothing useful drives them (row A34, corrected in #861). ADC4 has internal channels that need no pad: the internal reference (VIN[0], which gives the supply voltage), the core voltage (VIN[12]) and the temperature sensor (VIN[13]). A small secure-world ADC4 driver with window thresholds on those channels would give a programmable supply, core-voltage and temperature monitor that runs without the CPU. It also sees over-voltage, which the brown-out and voltage detectors do not. Limits: 2.5 Msps at best, so it sees slow excursions and long glitches only. ADC4 must be made a secure peripheral first. Today it is non-secure, because the second TrustZone controller block is never configured (`secure/src/sau.rs:672-675`; ADC4 is bit 8 of `GTZC2_TZSC_SECCFGR1`, the same block as the tamper attribution in #81). Without that, non-secure code can disarm the monitor or trip it on purpose. Start log-only, because a false trip in confirmed mode erases the hardware key that roots the SE050 credentials (#712). This replaces the PA6 divider of M20 Stage C and leaves PA6 free.
 - **N2. Internal tamper 3 is also dead.** It is the LSE clock monitor. It is enabled in `TAMP_CR1` (`secure/src/hw/tamp.rs:290`), but it needs `LSECSSON` and a running 32 kHz crystal, and the firmware uses neither. Add it to the A34 list: either remove the enable or document it as inert.
-- **N3. Confirm whether the two crystals are fitted.** The pin table shows crystal nets on pins 3 to 6. Firmware uses neither. If they are populated they are unused parts. A later revision that wants an accurate real-time clock would use the 32 kHz one. This is a question for the board vendor, not a defect.
+- **N3. Confirm whether the two crystals are fitted.** The pin table shows crystal nets on pins 3 to 6. Firmware uses neither. If they are populated they are unused parts. A later revision that wants an accurate real-time clock would use the 32 kHz one. This is a question for the board vendor, not a defect. **Correction 2026-10-12:** the V10 schematic shows both (`X101` 8 MHz, `X102` 32.768 kHz) and a backup capacitor on VBAT; whether they are fitted on built units is the remaining question (section 16, #869).
+
+---
+
+## 16. Second pass (2026-10-12): recommendations filed, and what this report had wrong
+
+After the defects were filed (#846 to #867), the owner asked for everything else that had not been filed and that can be done on the current board. This section records what was filed, what was not and why, and the errors in this report that the pass turned up. Sections 1 to 15 are left as written, apart from short dated pointers to this section.
+
+### How the pass was run
+
+- Every recommendation item (the 51 of the master table, the 19 of section 12, N1 to N3 of section 15 and the hardware asks) was checked against all 788 issues in the tracker, bodies included, and against master `c2fab970` (159 commits after the study commit). Seven reviewers did this in parallel, one per group of surfaces, each told that a duplicate issue and a stale premise were the two failures to avoid. The author did the hardware asks and section 15, and read every draft before filing.
+- A recommendation got a new issue only where an untracked remainder existed that needs no board change. Where an existing issue already owned the subject, the remainder went there as a comment.
+- 971 `path:line` citations went out. 920 were checked by script against a reviewer-supplied snippet of the cited master line. The other 51 are the author's and were read by hand.
+- Result: **26 new issues (#869 to #894) and 50 comments**, one per target issue. The new issues carry the label `source:frontier-research-2026-10`. The comments sit on older issues that mostly do not carry it, so the table below is the only complete list of where they are. One bullet of #849 was corrected in place. Drafts, the brief given to the reviewers, their dispositions and the filing log are in `issues-filed/round2/` in the data folder.
+
+### What this report had wrong
+
+Found during this pass. None was run on silicon.
+
+1. **The current board already has a backup capacitor and both crystals** (#869). The hardware section said the VBAT population "is not recorded in the repository", owner decision 2 and ask G1-8 treated it as open, section 14 said nothing is armed while the unit is unplugged, and section 15 (N3) called the crystals a question for the board vendor, although `docs/hardware/evt-silicon-validation.md:729-730` already names pq1's 8 MHz crystal. The V10 schematic in `docs/hardware/schematics/` answers all of it: MCU pin 1 (VBAT) goes to `J102`, a Seiko CPH3225A chip capacitor (11 mF, 3.3 V by distributor listings), charged from `VDD3V3` through a Schottky diode and 4.7 kΩ, and the MCU has an 8 MHz crystal (`X101`) and a 32.768 kHz crystal (`X102`). Whether the parts are fitted on built units is not established. From RM0456 Rev 7: internal tampers 1, 2 and 3 are "functional in VBAT mode" (Table 17); tamper 1 fires on over-voltage only, and an under-voltage ends in a brownout reset that erases the backup domain (section 10.6.4). So for as long as that capacitor holds, which is hours at most by arithmetic and unmeasured, the temperature and over-voltage tampers are live on an unplugged unit and the backup registers keep the hardware key. Section 14's conclusions about transit do not change: hours do not cover weeks. Its option 7 (a supercapacitor) should be read as "a larger one than the board already has". Two documents (`docs/security/user-device-verification.md:91`, `:190-191`) state the opposite of the schematic.
+2. **Safe v1.5.0 batches are not refused.** Master allowlists four `MultiSendCallOnly` deployments (`proto/src/lib.rs:1804`). Section 12 (X6a) said three and that 1.5.0 batches are refused.
+3. **The delay-source branch is not "0 behind".** `perf/flash-opt-level-z` is 24 commits ahead of and 55 behind master.
+4. **`tools/bench/` is not in git on master.** The instrument scripts the study read exist only as untracked files in one checkout.
+5. **Half of D-07 had already landed.** Master zeroizes the pixel band buffers after every frame and has deleted the per-band digest table (`ea95a1fe`). Only the 16x4 half remained (#878).
+6. **The comment posted on #784 on 2026-10-12 was stale at the commit it cited.** It said the frame is not forced and that a strip digest outlives the frame. Both were removed by `ea95a1fe`. A correction is posted there; the routing point (the live PIN digit is drawn through the non-constant-time path) stands.
+7. **X9a:** the Yul and Lean sides do have near-miss vectors for the two bespoke checks. What is missing is the Rust leg of the mutant corpus.
+8. **FWU-7:** "differential fuzz against the host core" is vacuous, because the bootloader links the same `fw-manifest` crate.
+9. **USB-06:** a "central deny-first policy table in the gateway dispatcher" is the refuted form, since `dispatch` is compiled only for the emulator. What survives is a pinned list of entries callable while locked (one checkbox of #893).
+10. **M16:** masking each seed share at rest was already a fix direction of #855, not an untracked addition.
+11. **SE-06:** the wizard misfire needs one wrong probe, not two (`secure/src/dual_se.rs:142` ANDs them).
+12. **M09 and #249:** the OPTIGA object that holds the Infineon certificate is unconfirmed (`0xE0E3` on the bench chip, `0xE0E0` assumed).
+13. **The claim that the pq1 bench SE050 cannot complete its handshake** is stale; #697 records the fix.
+14. **CS-02:** "! MULTISIG OFF" is not the only custody banner; enable-module, guard and fallback changes are already loud.
+15. **CS-04:** the paymaster gap is stated in the code and in review finding H-6; it is not an unstated hole.
+16. **X8b:** the bootloader does not copy the manifest into RAM (`fsbl/src/manifest.rs:41` borrows it from flash). The executable surface that matters is unchecked flash.
+17. **M20:** securing the clock controller would not break clock bring-up, which runs before the attribution code. It would break every later access through the non-secure alias.
+18. **M16 design note:** RM0456 Rev 7 section 7.3.7 allows programming all zeros over an already programmed flash word, which the review had listed as unknown.
+19. **#849:** its fourth fix bullet said to overwrite the OEM keys "in the same ceremony". The first-boot flow may program no option byte other than RDP (requirement R2.1), so the key write is a factory step. The issue body is corrected.
+20. **Unmeasured-claims list:** an emulated harness for the OPTIGA PIN derivation does exist (`tools/sca/kdf_target/src/main.rs:435`). What is missing is a capture on silicon.
+
+Three things the reviewers found that the study had not recorded are folded into the issues: the restore dialog returns on the idle timeout without wiping the typed word indices (in #878), the attempt log labels a lockout raised by a secure element as "already at maximum" (comment on #853), and the mask's generator is a 32-bit xorshift where the contract asks for at least 246 bits of state (comment on #831).
+
+### Where each item is tracked now
+
+| Item | Outcome | Where |
+|---|---|---|
+| USB-01 | Covered | #846 carries every part |
+| FI-01 | New issue | #872 (the three gate legs, bench firmware, receipt rule); the rest is #401, #301, #402 |
+| M20 | Comments | #49 (brown-out level and detector handler), #269 (secure alias move); the pin-less monitor (N1) on #861 |
+| M09 | Comment | #249 (verify on the host, per-proof binding); the tool and the burn are #850 and #849 |
+| D-07 | New issue | #878 (16x4 half; the pixel half had landed on master) |
+| CS-01 | Comment | #381 (the gate mechanism and what it breaks) |
+| M05 | Comment | #864; the rest is #847, #854, #865 |
+| M02 | Comments | #46, #270, #856 |
+| SE-03 | Comments | #853 and #104 (surviving form only) |
+| SE-05 | Comment | #117 |
+| SE-06 | New issue | #871; comment on #385 (looks fixed) |
+| M11 | New issue | #874 (desk review, requirement fixes, reference material; the rest needs a new board) |
+| M16 | Comment | #855 |
+| M14 | New issue | #870; comment on #123 |
+| M19 | New issue | #873; comment on #776 |
+| M21 | Comments | #48, #854 |
+| pin-05 | Covered | #853, plus one comment on the attempt-log label |
+| IMP-09 | New issue | #885 (host-side check only) |
+| M03 | Comment | #237; the firmware defects are #858 and #784 |
+| M04 | Comment | #715; the rest is #851, #848, #862 |
+| M06 | Comments | #805, #861; the delay source is #865 |
+| SCA-02 | New issue | #881 |
+| CS-02 | New issue | #882; the nonce ring is in the #600 comment |
+| SE-08 | Comments | #485, #275 |
+| M07 | Comments | #486 (also carries X9b), #220 |
+| FWU-3 | Comment | #487 |
+| USB-06 | Folded | one checkbox of #893; the rest is #859, #84, #866 |
+| SCA-01 | Comments | #228, #236 |
+| CS-03 | New issue | #883 (design first, owner box first) |
+| CS-05 | Not filed | owner decision only; one line in the #381 comment |
+| M17 | New issue | #880 (device side only) |
+| pin-04 | Comment | #636 |
+| USB-08 | Comment | #600 |
+| SYS-06 | New issue | #879 (warm-reset record only) |
+| FWU-7 | Comment | #546 (review note) |
+| M15 | Comments | #866, #831, #228; loading the pin needs a new board |
+| SCA-03 | Comment | #229 (correction; do not build) |
+| CS-07 | Comment | #343; the mislabel is #857 |
+| CS-09 | New issue | #891 (self tag only) |
+| M18 | Comment | #371 |
+| M12 | Comments | #637, #860 |
+| M13 | New issue | #887 |
+| M08 | Comment | #864 |
+| USB-09 | Comments | #588, #866 |
+| M10 | New issue | #890 (bench study only) |
+| CS-04 | New issue | #886 (owner decision first) |
+| pin-03 | New issue | #888 (decide or decline first) |
+| CS-10 | Not filed | owner decision only; conflicts with invariant 10 as written |
+| SCA-09, M01, CS-06 | Not filed | rejected by the study |
+| X1a | New issue | #889 (design first) |
+| X1b | Comment | #371 |
+| X2a | New issue | #875 |
+| X2b | Comment | #69 |
+| X3a | New issue | #893 |
+| X4a | Comment | #89 |
+| X4b | Comment | #182 |
+| X5a | New issue | #876 |
+| X5b | Comment | #846 |
+| X6a | New issue | #884 |
+| X6b | Comment | #534; doc parts ride in #884 |
+| X7a | Comment | #154 |
+| X7b | New issue | #892 |
+| X8a | New issue | #877 |
+| X8b | Comment | #542 |
+| X9a | Comment | #304 |
+| X9b | Folded | in the #486 comment |
+| X10a | Comment | #541 |
+| X10b | Comment | #752 |
+| N1, N2 | Comment | #861 |
+| N3, G1-8 | New issue | #869 |
+| Stale requirement rows | Comment | #866 |
+| Open checks with no owner | New issue | #894 |
+
+### Not filed, and why
+
+**Needs a new board, package or enclosure** (sections 14 and the hardware section keep these):
+
+- Hardware asks G1-1 (debug access on a sealed unit; the decision itself is in #850), G1-2, G1-3, G1-4, G1-5, G1-6, G2-1, G2-2, G2-5 and G2-6.
+- Every option of section 14: moving the buttons to free the tamper pins, the ball-grid package, trimmed seam loops, a fingerprinted mesh, an enclosure fingerprint, a larger backup capacitor, input-current sensing, a card-based backup.
+- Loading the consumption-mask pin (M15), a reference capacitor or divider on PA6 (M10, M20), a case-open switch on PC13 and the "this unit was opened" state that goes with it (M11, owner decision 8).
+
+**Owner decision with no work until it is taken:**
+
+- CS-05: whether typed data without a pinned descriptor gets a lower "structure only" tier. It follows the RAW32 decision in #381.
+- CS-10: a signed catalogue channel separate from firmware. As written it conflicts with invariant 10, because it changes what the device clear-signs without changing the boot fingerprint.
+- M14, second part: whether a device that locked out is meant to be single-use or recoverable (stated in #870 and #168).
+- M15: keep the consumption mask as a production requirement or demote it, after the measurement in #228.
+- OEM2 key: #40 asks to provision one, the code and #387 require none (flagged in the #46 comment).
+- The hide-protection posture (owner decision 5): #39 and #43 require it and no document configures it. Untouched by this pass.
+- A fault record that survives power loss (SYS-06): needs a flash page and a new answer to #719.
+- Not reopened: the minimum-version constant, Merkle-leaf signing, a hidden flash counter, signing-appliance firmware (each has a recorded verdict or needs an owner reopen).
+
+**Already covered:** USB-01 (#846), pin-05 (#853), and most of M05, M04, M02, M08 and M16 through the issues filed on 2026-10-12.
+
+### Limits of this pass
+
+- Code reading and document reading only. Nothing was built, run or measured.
+- "Untracked" means a search of issue titles and bodies as of 2026-10-12 found no owner. Comments on issues were read only for the comment targets.
+- Each reviewer's judgement on whether an existing issue already covers a point was not re-derived by a second reviewer.
+- No model from another family reviewed the drafts in this pass.
