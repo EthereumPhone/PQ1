@@ -713,8 +713,12 @@ mod stm32 {
         // returns VECTKEYSTAT" caveat covers ONLY bits [31:16] — PRIS /
         // BFHFNMINS / SYSRESETREQS sit in the readable low half-word,
         // so an FI'd/skipped store would otherwise sail into the freeze
-        // unnoticed (PRIS=0 → an NS IRQ can preempt a secure veneer
-        // mid-handler). Same unconditional fail-closed convention as
+        // unnoticed (PRIS=0 → an NS IRQ can preempt a secure EXCEPTION
+        // handler). PRIS does NOT protect a gateway veneer: a veneer runs
+        // in secure THREAD mode, which any exception preempts, banked
+        // non-secure SysTick/PendSV included. Nested gateway entry is
+        // refused by `nsc::GATEWAY_GATE` instead (#846). Same
+        // unconditional fail-closed convention as
         // the lock-bit readback below. Masked to exactly the bits this
         // function owns; comparing against `v`'s masked value verifies
         // both the PRIS/SYSRESETREQS sets AND the BFHFNMINS clear.

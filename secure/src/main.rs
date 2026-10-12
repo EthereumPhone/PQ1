@@ -126,6 +126,7 @@ mod board;
 mod crypto;
 mod fi;
 mod fih;
+mod gateway_gate;
 // Resilient semihosting host-stdout writer (QEMU/dev only). Replaces the
 // busy-spinning `cortex_m_semihosting` write path that hangs `make e2e`.
 #[cfg(not(test))]
@@ -4563,6 +4564,19 @@ fn PendSV() {
         }
         core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 1);
     }
+
+    // #846: hold the gateway gate for the whole re-unlock dialog when it is
+    // free, so a gateway call made from a non-secure exception handler while
+    // the PIN prompt is up is refused like any other nested entry. If the
+    // gate is already held, this handler preempted a gateway call in thread
+    // mode; that call cannot resume until we return, so its token keeps
+    // nested entries refused for as long as this dialog runs and we proceed
+    // without one of our own. That keeps the NON-SECURE world out; it does
+    // not make it safe for this dialog to use state the preempted call was
+    // in the middle of using. That overlap predates the gate and is #152
+    // (short handlers without `HandlerGuard`). Dropped on every return path
+    // below.
+    let _gateway_token = nsc::GATEWAY_GATE.try_enter();
 
     // Only run if we're actually locked (avoids spurious re-entry)
     if nsc::is_unlocked() {

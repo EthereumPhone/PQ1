@@ -36,5 +36,8 @@
 
 pub use pqsigner_aa::eip1271;
 pub use pqsigner_aa::eip6492;
+// Only the gateway handlers use this, and `nsc` is not built under test.
+#[cfg(not(test))]
+pub use pqsigner_aa::execute_bind;
 pub use pqsigner_aa::offchain_gate;
 pub use pqsigner_aa::userop;
