@@ -1,3 +1,4 @@
+import Extracted.C10HashInputBridge
 import Extracted.C10RepresentationBridge
 import Extracted.SecureWrapperBridge
 import Extracted.SecureWrapperCleanup
@@ -382,3 +383,20 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10RepresentationBridge.signature_words
 #print axioms Extracted.C10RepresentationBridge.signature_byte_domain
 #print axioms Extracted.C10RepresentationBridge.digest_byte_domain
+
+-- Paired hash-preimage endpoints, independent of hash output equality.
+#print axioms Extracted.C10HashInputBridge.u32_bytes_value
+#print axioms Extracted.C10HashInputBridge.pad_node_value
+#print axioms Extracted.C10HashInputBridge.hmsg_input_value
+#print axioms Extracted.C10HashInputBridge.th_input_value
+#print axioms Extracted.C10HashInputBridge.pair_input_value
+#print axioms Extracted.C10HashInputBridge.multi_input_value
+#print axioms Extracted.C10HashInputBridge.wots_input_value
+#print axioms Extracted.C10HashInputBridge.r_input_value
+#print axioms Extracted.C10HashInputBridge.extracted_hmsg_input
+#print axioms Extracted.C10HashInputBridge.extracted_th_input
+#print axioms Extracted.C10HashInputBridge.extracted_pair_input
+#print axioms Extracted.C10HashInputBridge.extracted_multi_input
+#print axioms Extracted.C10HashInputBridge.extracted_wots_input
+#print axioms Extracted.C10HashInputBridge.randomizer_input
+#print axioms Extracted.C10HashInputBridge.extracted_grind_input

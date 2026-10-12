@@ -13,13 +13,20 @@ from c10_representation_controls import CHANGES, changed
 
 
 def fixture(definitions):
-    proof = (ROOT / "Extracted/C10RepresentationBridge.lean").read_text()
+    proofs = [(ROOT / ("Extracted/" + name + ".lean")).read_text()
+              for name in ("C10RepresentationBridge", "C10HashInputBridge")]
     imported = "import Extracted.C10Representation\n"
-    namespace = "namespace Extracted.C10RepresentationBridge"
-    if proof.count(imported) != 1 or proof.count(namespace) != 1:
+    if any(proof.count(imported) != 1 for proof in proofs):
         raise ValueError("representation proof anchors changed")
-    proof = proof.replace(imported, "")
-    return proof.replace(namespace, definitions.replace("import Init\n", "") + "\n" + namespace)
+    imports, bodies = [], []
+    for proof in proofs:
+        body = []
+        for line in proof.replace(imported, "").splitlines():
+            if line.startswith("import "):
+                if line not in imports: imports.append(line)
+            else: body.append(line)
+        bodies.append("\n".join(body))
+    return "\n".join(imports) + "\n" + definitions.replace("import Init\n", "") + "\n" + "\n".join(bodies)
 
 
 def main():

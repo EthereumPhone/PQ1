@@ -56,6 +56,15 @@ def fold(bs, item, acc, body, zero):
     assert acc.ty == body.ty == zero.ty
     return Expr("fold",(bs,item,acc,body,zero),acc.ty)
 def product(*xs): return Expr("product",xs,PRODUCT(*(x.ty for x in xs)))
+def items(ty, *xs):
+    assert all(x.ty == ty for x in xs)
+    return Expr("items",xs,LIST(ty))
+def cat(*xs):
+    assert xs and xs[0].ty[0] == "list" and all(x.ty == xs[0].ty for x in xs)
+    return Expr("cat",xs,xs[0].ty)
+def repeat(n, x):
+    assert n.ty == COUNT
+    return Expr("repeat",(n,x),LIST(x.ty))
 
 DEFS = []
 def define(name, params, body):
@@ -102,6 +111,26 @@ word_decode = define("word_decode",(bs,),product(
     seq(literal(12),t,read_nodes(literal(11),bs,add(literal(224),mul(literal(176),t)))),
     seq(literal(2),l,word_layer(bs,add(literal(2336),mul(literal(836),l))))))
 
+# Hash inputs: equality is about the preimage, independently of SHA output.
+seed, root, address, left, right, message, random, secret = (
+    var(x,BYTES) for x in ("seed","root","address","left","right","message","random","secret"))
+value, values, tail = var("value",BYTES), var("values",NODES), var("tail",BYTES)
+nonce = var("nonce",INT)
+pad_node = define("pad_node",(value,),cat(value,repeat(literal(16),literal(0,INT))))
+u32_bytes = define("u32_bytes",(nonce,),reverse(seq(literal(4),i,
+    binary("mod",binary("div",nonce,binary("pow",literal(2,INT),mul(literal(8),i))),literal(256,INT)))))
+hmsg_preimage = define("hmsg_preimage",(seed,root,random,message),
+    cat(seed,root,random,message,repeat(literal(32),literal(255,INT))))
+th_preimage = define("th_preimage",(seed,address,value),cat(seed,address,value))
+pair_preimage = define("pair_preimage",(seed,address,left,right),cat(seed,address,left,right))
+multi_preimage = define("multi_preimage",(seed,address,values),
+    cat(seed,address,fold(values,value,tail,cat(pad_node(value),tail),items(INT))))
+wots_preimage = define("wots_preimage",(seed,address,message,nonce),
+    cat(seed,address,message,repeat(literal(28),literal(0,INT)),u32_bytes(nonce)))
+r_preimage = define("r_preimage",(secret,random,message,nonce),
+    cat(secret,items(INT,*(literal(x,INT) for x in [82,95,103,114,105,110,100])),
+        random,message,repeat(literal(28),literal(0,INT)),u32_bytes(nonce)))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"
@@ -129,6 +158,10 @@ def render(e, lean):
         bs,v,acc,b,z = a
         return f"({'List.foldr' if lean else 'foldr'} (fun {r(v)} {r(acc)} => {r(b)}) {r(z)} {r(bs)})"
     if op == "product": return "(" + ", ".join(r(x) for x in a) + ")"
+    if op == "items": return "[" + (", " if lean else "; ").join(r(x) for x in a) + "]"
+    if op == "cat": return "(" + " ++ ".join(r(x) for x in a) + ")"
+    if op == "repeat":
+        return f"({'List.replicate' if lean else 'nseq'} {r(a[0])} {r(a[1])})"
     if op == "call": return "(" + a[0] + " " + " ".join(r(x) for x in a[1:]) + ")"
     raise ValueError(op)
 

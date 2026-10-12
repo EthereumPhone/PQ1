@@ -102,7 +102,7 @@ All 20 registered C10 component extractions now also disable debug assertions
 and retain overflow checks (2026-10-10). Six generated bodies change; their
 bit-window, tree-root, authentication-path, shuffle and whole-verifier proofs
 have been re-established on the release bodies. The other 14 complete raw
-outputs are byte-identical. The 229 audited headlines now comprise 220 with
+outputs are byte-identical. The 244 audited headlines now comprise 235 with
 only kernel axioms and nine with the existing disclosed hash assumptions;
 none consumes the assertion-formatting type. The helper assertion-profile
 mismatch is closed for these registered components. Concrete hash backends,
@@ -117,7 +117,13 @@ proofs consume definitions emitted from one integer/list expression tree, with
 fidelity and typed mutation checks. The generator and cross-tool arithmetic/list
 interpretation remain explicit TCB; this is a representation component, not a
 full Rust/EasyCrypt session theorem. The research owner documents the remaining
-hash/caller, oracle-history and wrapper-cost obligations.
+hash/caller, oracle-history and wrapper-cost obligations. Paired preimage
+endpoints additionally cover H_msg, one-node/pair/multi-node hashing, WOTS
+digest inputs and R derivation, including zero padding, domain tags, both
+OptRand modes and full u32 counter encoding. The extracted hash adapters and
+bounded grinder body consume these forms. These equalities concern the input
+bytes before hashing; address construction, other private derivation inputs,
+hash-backend/oracle interpretation and stateful caller composition remain open.
 
 The ordinary secure-wrapper entry now has a sequential, source-linked model
 (2026-10-11). Its release theorem requires an accepted rate charge and exact

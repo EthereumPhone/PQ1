@@ -1,3 +1,4 @@
+import Extracted.C10HashInputBridge
 import Extracted.C10RepresentationBridge
 import Extracted.SecureWrapperBridge
 import Extracted.SecureWrapperCleanup

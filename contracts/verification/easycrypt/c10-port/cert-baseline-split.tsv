@@ -2493,3 +2493,13 @@ cdrafts-split/C10Representation.ec	defined-op:20d7dd631510	wots_field	# line 20
 cdrafts-split/C10Representation.ec	defined-op:486f1047c3c3	word_nodes	# line 23
 cdrafts-split/C10Representation.ec	defined-op:695f3584d39d	word_layer	# line 26
 cdrafts-split/C10Representation.ec	defined-op:dff09e1a80b6	word_decode	# line 29
+
+# 2026-10-12 paired hash-preimage definitions; no new axiom or admit.
+cdrafts-split/C10Representation.ec	defined-op:8b3abdf192b6	pad_node	# line 32
+cdrafts-split/C10Representation.ec	defined-op:c1f695a0dcf9	u32_bytes	# line 35
+cdrafts-split/C10Representation.ec	defined-op:8603e15a59ae	hmsg_preimage	# line 38
+cdrafts-split/C10Representation.ec	defined-op:7a299d19add7	th_preimage	# line 41
+cdrafts-split/C10Representation.ec	defined-op:3e59828f0cf3	pair_preimage	# line 44
+cdrafts-split/C10Representation.ec	defined-op:e96a0fb69401	multi_preimage	# line 47
+cdrafts-split/C10Representation.ec	defined-op:2f10a09fa70e	wots_preimage	# line 50
+cdrafts-split/C10Representation.ec	defined-op:c9cb28afd800	r_preimage	# line 53

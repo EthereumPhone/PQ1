@@ -1041,6 +1041,38 @@ secure wrapper's two signing calls and internal verification also need their own
 cost accounting; the single-library-sign session budget cannot be attached to
 the wrapper unchanged. Concrete SHA, QROM and physical claims are unaffected.
 
+Paired hash-preimage endpoints (2026-10-12): `C10HashInputBridge.lean` and
+`C10HashInputBridge.ec` extend the same small generated representation to
+H_msg, one-node, pair and ordered multi-node hashing, WOTS digest inputs and
+randomizer derivation. They prove equality of the **preimage bytes**, without
+assuming hash injectivity or inferring inputs from equal digests. The Lean
+side composes the actual extracted hash adapters and bounded grinder-body
+theorem with these forms. Multi-node execution retains the source's at-most-43
+bound; its preimage identity holds for arbitrary node lists. R derivation
+retains both OptRand modes. Counter encoding covers every u32, and the
+EasyCrypt raw WOTS caller's 32-byte slot equals 28 zero bytes followed by the
+same four big-endian bytes. Signing's ten-million-step bound is not substituted
+for the verifier's full wire-counter domain.
+
+Fifteen additional kernel-only headlines bring the default audit to **244**
+(235 kernel-only, nine with the existing hash assumptions); the elaborated
+axiom environment is unchanged. Twenty-one typed layout mutations now test
+the combined representation endpoints in each language, including field order,
+domain suffix/tag, node padding/order, counter endian/stride and optional
+randomness. Changed definitions must typecheck and unchanged endpoint proofs
+must reject normally; timeouts and resource failures are not semantic controls.
+The 43 EasyCrypt fixtures, new root and its scope probe enter the complete
+replay and exact inventories. The local Lean dependency closure of the new
+endpoint joins source binding. The generated definitions, primitive list/integer
+interpretation, extraction and supplied SHA models remain explicit boundaries.
+
+This closes those concatenation/padding/counter-layout components, not the
+address-field construction or the other private WOTS/FORS derivation layouts.
+It also does not identify concrete SHA results with ideal-oracle samples,
+prove stateful histories or arbitrary clients, or account for the secure
+wrapper's two signing calls and internal verification. No cryptographic bound,
+production Rust, signature format or hardware claim changes.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 the remaining fixed-width operations, primitive/caller computations, bounded

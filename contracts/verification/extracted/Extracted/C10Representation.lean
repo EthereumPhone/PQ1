@@ -31,4 +31,28 @@ def word_layer (bs : (List Int)) (off : Nat) : ((List (List Int)) × Int × (Lis
 def word_decode (bs : (List Int)) : ((List Int) × (List (List Int)) × (List (List (List Int))) × (List ((List (List Int)) × Int × (List (List Int)))))  :=
   ((List.take 16 bs), (word_nodes 13 bs 16), ((List.range 12).map (fun t => (word_nodes 11 bs (224 + (176 * t))))), ((List.range 2).map (fun l => (word_layer bs (2336 + (836 * l))))))
 
+def pad_node (value : (List Int)) : (List Int)  :=
+  (value ++ (List.replicate 16 0))
+
+def u32_bytes (nonce : Int) : (List Int)  :=
+  (List.reverse ((List.range 4).map (fun i => ((nonce / (2 ^ (8 * i))) % 256))))
+
+def hmsg_preimage (seed : (List Int)) (root : (List Int)) (random : (List Int)) (message : (List Int)) : (List Int)  :=
+  (seed ++ root ++ random ++ message ++ (List.replicate 32 255))
+
+def th_preimage (seed : (List Int)) (address : (List Int)) (value : (List Int)) : (List Int)  :=
+  (seed ++ address ++ value)
+
+def pair_preimage (seed : (List Int)) (address : (List Int)) (left : (List Int)) (right : (List Int)) : (List Int)  :=
+  (seed ++ address ++ left ++ right)
+
+def multi_preimage (seed : (List Int)) (address : (List Int)) (values : (List (List Int))) : (List Int)  :=
+  (seed ++ address ++ (List.foldr (fun value tail => ((pad_node value) ++ tail)) [] values))
+
+def wots_preimage (seed : (List Int)) (address : (List Int)) (message : (List Int)) (nonce : Int) : (List Int)  :=
+  (seed ++ address ++ message ++ (List.replicate 28 0) ++ (u32_bytes nonce))
+
+def r_preimage (secret : (List Int)) (random : (List Int)) (message : (List Int)) (nonce : Int) : (List Int)  :=
+  (secret ++ [82, 95, 103, 114, 105, 110, 100] ++ random ++ message ++ (List.replicate 28 0) ++ (u32_bytes nonce))
+
 end C10Representation

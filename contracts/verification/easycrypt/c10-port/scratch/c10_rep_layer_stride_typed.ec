@@ -28,3 +28,27 @@ op word_layer (bs : (int list)) (off : int) : (((int list) list) * int * ((int l
 
 op word_decode (bs : (int list)) : ((int list) * ((int list) list) * (((int list) list) list) * ((((int list) list) * int * ((int list) list)) list)) =
   ((take 16 bs), (word_nodes 13 bs 16), (mkseq (fun t => (word_nodes 11 bs (224 + (176 * t)))) 12), (mkseq (fun l => (word_layer bs (2336 + (835 * l)))) 2)).
+
+op pad_node (value : (int list)) : (int list) =
+  (value ++ (nseq 16 0)).
+
+op u32_bytes (nonce : int) : (int list) =
+  (rev (mkseq (fun i => ((nonce %/ (2 ^ (8 * i))) %% 256)) 4)).
+
+op hmsg_preimage (seed : (int list)) (root : (int list)) (random : (int list)) (message : (int list)) : (int list) =
+  (seed ++ root ++ random ++ message ++ (nseq 32 255)).
+
+op th_preimage (seed : (int list)) (address : (int list)) (value : (int list)) : (int list) =
+  (seed ++ address ++ value).
+
+op pair_preimage (seed : (int list)) (address : (int list)) (left : (int list)) (right : (int list)) : (int list) =
+  (seed ++ address ++ left ++ right).
+
+op multi_preimage (seed : (int list)) (address : (int list)) (values : ((int list) list)) : (int list) =
+  (seed ++ address ++ (foldr (fun value tail => ((pad_node value) ++ tail)) [] values)).
+
+op wots_preimage (seed : (int list)) (address : (int list)) (message : (int list)) (nonce : int) : (int list) =
+  (seed ++ address ++ message ++ (nseq 28 0) ++ (u32_bytes nonce)).
+
+op r_preimage (secret : (int list)) (random : (int list)) (message : (int list)) (nonce : int) : (int list) =
+  (secret ++ [82; 95; 103; 114; 105; 110; 100] ++ random ++ message ++ (nseq 28 0) ++ (u32_bytes nonce)).

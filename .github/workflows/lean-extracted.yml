@@ -42,6 +42,7 @@ on:
       - 'contracts/verification/easycrypt/c10-port/tools/c10_representation_controls.py'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10Representation.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10RepresentationBridge.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10HashInputBridge.ec'
       - 'contracts/verification/easycrypt/c10-port/scratch/c10_rep_*.ec'
       - 'contracts/verification/scripts/test_c10_representation_controls.py'
       - 'contracts/verification/scripts/test_sign_hypertree_proof_controls.py'

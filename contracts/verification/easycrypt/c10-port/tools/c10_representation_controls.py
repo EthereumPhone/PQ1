@@ -22,6 +22,17 @@ CHANGES = [
     ("auth-last-node", "word_layer", "word_nodes 9", "word_nodes 8", "word_nodes 9", "word_nodes 8"),
     ("layer-stride", "word_decode", "836 * l", "835 * l", "836 * l", "835 * l"),
     ("forest-last-tree", "word_decode", "List.range 12", "List.range 11", ") 12)", ") 11)"),
+    ("hmsg-order", "hmsg_preimage", "seed ++ root", "root ++ seed", "seed ++ root", "root ++ seed"),
+    ("hmsg-domain", "hmsg_preimage", "List.replicate 32 255", "List.replicate 31 255", "nseq 32 255", "nseq 31 255"),
+    ("node-padding", "pad_node", "value ++ (List.replicate 16 0)", "(List.replicate 16 0) ++ value", "value ++ (nseq 16 0)", "(nseq 16 0) ++ value"),
+    ("u32-endian", "u32_bytes", "List.reverse", "id", "rev", "idfun"),
+    ("u32-stride", "u32_bytes", "8 * i", "7 * i", "8 * i", "7 * i"),
+    ("th-value", "th_preimage", "address ++ value", "address ++ address", "address ++ value", "address ++ address"),
+    ("pair-order", "pair_preimage", "left ++ right", "right ++ left", "left ++ right", "right ++ left"),
+    ("multi-order", "multi_preimage", "(pad_node value) ++ tail", "tail ++ (pad_node value)", "(pad_node value) ++ tail", "tail ++ (pad_node value)"),
+    ("wots-padding", "wots_preimage", "List.replicate 28 0", "List.replicate 27 0", "nseq 28 0", "nseq 27 0"),
+    ("randomizer-tag", "r_preimage", "[82,", "[83,", "[82;", "[83;"),
+    ("randomizer-random", "r_preimage", " ++ random", " ++ []", " ++ random", " ++ []"),
 ]
 
 def changed(text, name, before, after, lean):
@@ -34,11 +45,16 @@ def changed(text, name, before, after, lean):
     return text[:start] + chunk.replace(before,after) + text[end:]
 
 REASONS = {'word-endian': 'nothing to rewrite', 'word-base': '[by]: cannot close goals', 'ht-bit': '[by]: cannot close goals', 'fors-width': '[by]: cannot close goals', 'wots-stride': '[by]: cannot close goals', 'counter-width': 'cannot save an incomplete proof', 'counter-high-bits': 'cannot save an incomplete proof', 'auth-last-node': 'cannot save an incomplete proof', 'layer-stride': 'the given proof-term proves:', 'forest-last-tree': 'the given proof-term proves:'}
+REASONS.update({row[0]: '[by]: cannot close goals' for row in CHANGES[10:]})
+REASONS["u32-endian"] = "not a congruence"
 
 def control_outputs(port):
     proof=(port/"cdrafts-split/C10RepresentationBridge.ec").read_text()
     anchor="require import C10Representation."
     if proof.count(anchor)!=1: raise ValueError("representation proof import drift")
+    hash_proof=(port/"cdrafts-split/C10HashInputBridge.ec").read_text()
+    if hash_proof.count(anchor)!=1: raise ValueError("hash-input proof import drift")
+    proof += "\n" + hash_proof.replace(anchor, "")
     generated=source(False)
     result={port/"scratch/c10_rep_positive.ec":proof.replace(anchor,generated)}
     for name,func,lb,la,eb,ea in CHANGES:
