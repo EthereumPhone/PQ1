@@ -1335,8 +1335,9 @@ pub fn handler_is_busy() -> bool {
 }
 
 /// #846: the one-at-a-time gate for the NS→S gateway. Every
-/// `cmse-nonsecure-entry` function (and the QEMU mailbox `dispatch`) takes
-/// it as its FIRST statement through [`gateway_enter!`], so a second
+/// `cmse-nonsecure-entry` function takes it as its FIRST statement through
+/// [`gateway_enter!`] (the QEMU mailbox takes it in `poll_gateway`, around
+/// the `dispatch` call), so a second
 /// gateway call made from a non-secure exception handler while a handler
 /// is in flight is refused before it reads an argument or touches the
 /// shared `static mut` state. Separate from [`HANDLER_DEPTH`] on purpose:
@@ -1847,7 +1848,50 @@ pub fn poll_gateway() {
             arg2: core::ptr::read_volatile(SHARED_ARG2),
         };
 
-        let result = dispatch(cmd, &args);
+        // Same gate as the hardware veneers (#846). The mailbox cannot nest,
+        // so this never refuses on QEMU; it is here so `make e2e` proves the
+        // token is released on every handler return path (a leak fails the
+        // next command).
+        //
+        // Taken HERE and not inside `dispatch`, deliberately. A token held
+        // across `dispatch`'s `match` turns its handler calls from tail
+        // calls into ordinary calls; the optimiser then merged several of
+        // the large sign handlers into `dispatch`, their frames added up,
+        // and the `ui-px` QEMU build ran its stack 1.7 KB into static data
+        // (measured under gdb: the sign-rate counter was overwritten and
+        // the first signature failed). With the token in this caller,
+        // `dispatch` is byte-for-byte what it was.
+        let result = match GATEWAY_GATE.try_enter() {
+            Some(_token) => {
+                // #835's FI-delay boundary sits HERE, not in `dispatch`.
+                //
+                // It was in `dispatch` until this merge, which would have
+                // reintroduced the exact stack regression 763eb7ec removed:
+                // holding a value across `dispatch`'s `match` stops its arms
+                // being tail calls, so the large sign handlers' frames add
+                // onto `dispatch`'s. That commit requires `dispatch` to stay
+                // byte-for-byte, and it does.
+                //
+                // `poll_gateway` already holds `args` across the call, so it
+                // is not a tail call either way and this costs nothing.
+                //
+                // Ordering is preserved a fortiori: the gate has already
+                // refused a nested entry before this arm is reached, so the
+                // clear below can never wipe an outer operation's poison.
+                crate::fi::clear_delay_poison();
+                let status = dispatch(cmd, &args);
+                if crate::fi::delay_source_failed() {
+                    secure_log!(
+                        "[S] nsc: cmd {} ran with an unprotected FI delay — refusing",
+                        cmd
+                    );
+                    sphincs_tz_shared::NscStatus::CryptoError as u32
+                } else {
+                    status
+                }
+            }
+            None => GATEWAY_REFUSED,
+        };
 
         core::ptr::write_volatile(SHARED_RESULT, result);
         // Order matters: write RESULT before DONE so NS can't see DONE=1
@@ -1870,48 +1914,6 @@ pub fn poll_gateway() {
 /// docs.
 #[cfg(not(feature = "stm32u585"))]
 unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
-    // #846 FIRST, then #835. The ordering is load-bearing, not cosmetic.
-    //
-    // `gateway_enter!` refuses a NESTED gateway entry. My poison clear below
-    // must not run before that refusal: `clear_delay_poison` resets the
-    // "this operation ran with an unprotected FI delay" flag, so a nested
-    // call reaching it would silently wipe the OUTER operation's poison and
-    // let a compromised operation report success. Refusing first means a
-    // nested call returns before the flag is touched.
-    //
-    // Same gate as the hardware veneers (#846). The mailbox cannot nest, so
-    // this never refuses on QEMU; it is here so `make e2e` proves the token
-    // is released on every handler return path (a leak fails the next call).
-    gateway_enter!(GATEWAY_REFUSED);
-
-    // #835: the gateway is the operation boundary for the FI delay poison.
-    //
-    // A delay that could not be given a fresh length performs NO delay and
-    // raises the poison instead of halting the device (which is what
-    // #833/#834 did, and which two reviews rejected: reachable from
-    // documented transient events, from lock contention with healthy
-    // hardware, and — before C3 — able to durably spend PIN attempts). The
-    // consequence has to land somewhere, and it lands here: this command
-    // failed, with a status the companion can show, and the device lives.
-    //
-    // Cleared on entry so the flag means "this operation", not "this boot" —
-    // otherwise one transient would disable the device until reboot, which is
-    // the halt again with extra steps.
-    crate::fi::clear_delay_poison();
-
-    // SAFETY: same contract as this function's own; `args` is the validated
-    // gateway argument block the caller already bound.
-    let status = unsafe { dispatch_inner(cmd, args) };
-
-    if crate::fi::delay_source_failed() {
-        secure_log!("[S] nsc: cmd {} ran with an unprotected FI delay — refusing", cmd);
-        return sphincs_tz_shared::NscStatus::CryptoError as u32;
-    }
-    status
-}
-
-#[cfg(not(feature = "stm32u585"))]
-unsafe fn dispatch_inner(cmd: u32, args: &GatewayArgs) -> u32 {
     match cmd {
         CMD_GET_REMAINING => cmd_get_remaining::run(),
         CMD_REQUEST_UNLOCK => cmd_request_unlock::run(),
