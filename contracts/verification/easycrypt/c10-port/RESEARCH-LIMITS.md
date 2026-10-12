@@ -1066,12 +1066,52 @@ replay and exact inventories. The local Lean dependency closure of the new
 endpoint joins source binding. The generated definitions, primitive list/integer
 interpretation, extraction and supplied SHA models remain explicit boundaries.
 
-This closes those concatenation/padding/counter-layout components, not the
-address-field construction or the other private WOTS/FORS derivation layouts.
+That batch closes the concatenation/padding/counter-layout components; the
+address/private-input endpoints below extend them.
 It also does not identify concrete SHA results with ideal-oracle samples,
 prove stateful histories or arbitrary clients, or account for the secure
 wrapper's two signing calls and internal verification. No cryptographic bound,
 production Rust, signature format or hardware claim changes.
+
+Paired address/private-input endpoints (2026-10-12):
+`C10AddressInputBridge.lean` and `C10AddressInputBridge.ec` extend the same
+common expression tree without adding expression-language features. The
+actual extracted address constructor and chain-index setter agree with the
+common layouts for every u32/u64 field. The chain-position update used by
+the existing hash-chain model has the corresponding byte equality. In
+EasyCrypt, both window updates equal rebuilding the existing `address`
+with the updated field, connecting them to the model's field-based callers. These
+results preserve the address type and final hash-address field, not only
+the smaller index ranges used by honest C10 callers.
+
+The actual extracted WOTS and FORS secret helpers consume the common
+preimages. WOTS retains all 80 bytes: the secret seed, `wots` tag, u32 layer,
+24 zero bytes plus the complete u64 tree, u32 keypair and u32 chain. FORS
+retains all 48 bytes, including the `fors` tag and full u32 hypertree, tree
+and leaf positions. EasyCrypt's existing address, tagged WOTS tail and
+tagged FORS tail equal those same forms under the full machine-field
+bounds. The keyed-oracle tag is connected as an input expression; this is
+not a proof relating the keyed and physical hash oracles.
+
+Twelve additional kernel-only headlines bring the default audit to **256**
+(247 kernel-only and the existing nine hash-assumption headlines). The
+27-axiom environment is unchanged. Thirty-two typed layout mutations now
+exercise the combined endpoints in both languages; the eleven additions
+cover u64 width/high bits, address type/tail, chain-update windows, both
+private tags, WOTS tree padding/keypair order and FORS hypertree binding.
+All changed definitions typecheck before unchanged endpoint proofs must
+reject normally. The 65 EasyCrypt fixtures and new root/scope probe are
+enrolled in the complete gate. Source pins include the new proof's local
+Lean dependency closure. These controls check proof sensitivity, not a
+logical-falsity theorem for each mutation.
+
+This closes the listed address and private-derivation input components.
+Cross-tool integer/list interpretation, generation, extraction and supplied
+hash models remain TCB. Composition into the actual EasyCrypt callers,
+bounded-search/error behavior, shuffle derivation and callback effects,
+stateful oracle/session histories, and secure-wrapper query costs remain
+open. No production Rust, hash assumption, signature format or hardware
+claim changes.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

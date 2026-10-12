@@ -40,7 +40,11 @@ description = "EasyCrypt source-file digest bindings"
 condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
 regexTarget = "match"
-regexes = ['''^[A-Za-z][A-Za-z0-9_]*\.eca?": "[0-9a-f]{64}"$''']
+regexes = [
+  '''^[A-Za-z][A-Za-z0-9_]*\.eca?": "[0-9a-f]{64}"$''',
+  # Public SHA256s of the two newly pinned Lean secret-derivation specifications.
+  '''^(ForsSecretSpec|WotsSecretSpec)\.lean": "[0-9a-f]{64}"$''',
+]
 
 [[rules.allowlists]]
 description = "Historical EasyCrypt proof-file digest receipts"

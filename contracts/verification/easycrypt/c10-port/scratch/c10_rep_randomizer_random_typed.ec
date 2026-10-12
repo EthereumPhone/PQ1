@@ -52,3 +52,21 @@ op wots_preimage (seed : (int list)) (address : (int list)) (message : (int list
 
 op r_preimage (secret : (int list)) (random : (int list)) (message : (int list)) (nonce : int) : (int list) =
   (secret ++ [82; 95; 103; 114; 105; 110; 100] ++ [] ++ message ++ (nseq 28 0) ++ (u32_bytes nonce)).
+
+op u64_bytes (nonce : int) : (int list) =
+  (rev (mkseq (fun i => ((nonce %/ (2 ^ (8 * i))) %% 256)) 8)).
+
+op address_words (layer : int) (tree : int) (kind : int) (kp : int) (ci : int) (cp : int) (ha : int) : (int list) =
+  ((u32_bytes layer) ++ (u64_bytes tree) ++ (u32_bytes kind) ++ (u32_bytes kp) ++ (u32_bytes ci) ++ (u32_bytes cp) ++ (u32_bytes ha)).
+
+op chain_index_words (address : (int list)) (ci : int) : (int list) =
+  ((take 20 address) ++ (u32_bytes ci) ++ (drop 24 address)).
+
+op chain_position_words (address : (int list)) (cp : int) : (int list) =
+  ((take 24 address) ++ (u32_bytes cp) ++ (drop 28 address)).
+
+op wots_private_preimage (secret : (int list)) (layer : int) (tree : int) (kp : int) (ci : int) : (int list) =
+  (secret ++ [119; 111; 116; 115] ++ (u32_bytes layer) ++ (nseq 24 0) ++ (u64_bytes tree) ++ (u32_bytes kp) ++ (u32_bytes ci)).
+
+op fors_private_preimage (secret : (int list)) (ht : int) (tree : int) (leaf : int) : (int list) =
+  (secret ++ [102; 111; 114; 115] ++ (u32_bytes ht) ++ (u32_bytes tree) ++ (u32_bytes leaf)).

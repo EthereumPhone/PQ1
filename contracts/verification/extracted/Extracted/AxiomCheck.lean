@@ -1,3 +1,4 @@
+import Extracted.C10AddressInputBridge
 import Extracted.C10HashInputBridge
 import Extracted.C10RepresentationBridge
 import Extracted.SecureWrapperBridge
@@ -400,3 +401,15 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10HashInputBridge.extracted_wots_input
 #print axioms Extracted.C10HashInputBridge.randomizer_input
 #print axioms Extracted.C10HashInputBridge.extracted_grind_input
+#print axioms Extracted.C10AddressInputBridge.u64_nat_value
+#print axioms Extracted.C10AddressInputBridge.u64_bytes_value
+#print axioms Extracted.C10AddressInputBridge.address_value
+#print axioms Extracted.C10AddressInputBridge.extracted_address_input
+#print axioms Extracted.C10AddressInputBridge.chain_index_value
+#print axioms Extracted.C10AddressInputBridge.extracted_chain_index_input
+#print axioms Extracted.C10AddressInputBridge.chain_position_value
+#print axioms Extracted.C10AddressInputBridge.wots_tree_value
+#print axioms Extracted.C10AddressInputBridge.wots_private_input_value
+#print axioms Extracted.C10AddressInputBridge.fors_private_input_value
+#print axioms Extracted.C10AddressInputBridge.extracted_wots_private_input
+#print axioms Extracted.C10AddressInputBridge.extracted_fors_private_input

@@ -459,3 +459,4 @@ OriginalCanonicalCoverage
 # Paired Lean/EasyCrypt representation endpoints, 2026-10-11.
 C10RepresentationBridge
 C10HashInputBridge
+C10AddressInputBridge
