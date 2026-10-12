@@ -102,7 +102,7 @@ All 20 registered C10 component extractions now also disable debug assertions
 and retain overflow checks (2026-10-10). Six generated bodies change; their
 bit-window, tree-root, authentication-path, shuffle and whole-verifier proofs
 have been re-established on the release bodies. The other 14 complete raw
-outputs are byte-identical. The 244 audited headlines now comprise 235 with
+outputs are byte-identical. The 256 audited headlines now comprise 247 with
 only kernel axioms and nine with the existing disclosed hash assumptions;
 none consumes the assertion-formatting type. The helper assertion-profile
 mismatch is closed for these registered components. Concrete hash backends,
@@ -122,8 +122,11 @@ endpoints additionally cover H_msg, one-node/pair/multi-node hashing, WOTS
 digest inputs and R derivation, including zero padding, domain tags, both
 OptRand modes and full u32 counter encoding. The extracted hash adapters and
 bounded grinder body consume these forms. These equalities concern the input
-bytes before hashing; address construction, other private derivation inputs,
-hash-backend/oracle interpretation and stateful caller composition remain open.
+bytes before hashing. The paired endpoints now also cover every full-width
+address field, chain-index/position updates, and the actual WOTS/FORS secret
+derivation inputs, including all 64 WOTS tree bits and the FORS hypertree field.
+Hash-backend/oracle interpretation, shuffle derivation and stateful caller
+composition remain open.
 
 The ordinary secure-wrapper entry now has a sequential, source-linked model
 (2026-10-11). Its release theorem requires an accepted rate charge and exact
