@@ -236,6 +236,28 @@ impl Drop for DriverGuard {
 /// mask and the bench keeps running. Before #835 the same condition parked the
 /// CPU in a `wfe` loop, so a failed probe would have been indistinguishable
 /// from a dead board.
+///
+/// MEASURED, enclosed EVT unit, 2026-10-12, `evt-images/px835merged` (the
+/// MERGED tree: master's 60 commits including #846's nested-entry guard, plus
+/// the 25 FI commits). Overlay read `255 / 0 / 2`:
+///
+/// ```text
+///   bit 4  a REAL SECS/CECS latched          <- the provocation worked
+///   bit 5  rng::fill returned Ok WITH it latched  <- the C1 recovery
+///   bit 6  the operation was not poisoned
+///   bit 7  SR clean afterwards: the reset ran
+/// ```
+///
+/// So the recover-before-delay ordering in `fill_bound` survives a GENUINE
+/// hardware error, not one raised by hand. That was the last inference in
+/// #835: every other claim about it was argued from source or demonstrated
+/// against a window opened artificially. Bit 4 is what makes the rest
+/// non-vacuous — without a real latch, bits 5..7 would be measuring nothing,
+/// which is why they are left clear in that case rather than reported as
+/// passes.
+///
+/// Before 0a02fe54 this exact condition halted the device, so a readable
+/// screen at all is part of the result.
 #[cfg(feature = "rng-fault-probe")]
 pub fn provoke_latched_error_and_recover() -> u32 {
     const BIT_LATCHED: u32 = 1 << 4;
