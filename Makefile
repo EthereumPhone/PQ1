@@ -457,7 +457,8 @@ e2e-px: E2E_EXTRA_FEATURES = ,ui-px
 # CoW, ERC-7730, the off-chain kinds and every batch member + final ask
 # (port steps 1-3).
 E2E_PX_TRANSCRIPTS ?= 0
-e2e-px: E2E_PX_TRANSCRIPTS = 47
+# 50 = 47 + Scenario 5e-rot (batch rotation consent, its member, final ask).
+e2e-px: E2E_PX_TRANSCRIPTS = 50
 e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
 
 e2e: ## Automated unified-sign E2E (QEMU)
@@ -513,6 +514,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 5c: cross-check rejects mismatched selector" \
 		"\\[NS\\]\\[e2e\\] Scenario 5d: typed walker declines, blind-sign fallback" \
 		"\\[NS\\]\\[e2e\\] Scenario 5e: atomic batch sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5e-rot: batch rotation emits Type 1 + Type 2" \
 		"\\[NS\\]\\[e2e\\] Scenario 5e-7730: batch ERC-7730 trailer matches + signs" \
 		"\\[NS\\]\\[e2e\\] Scenario 5e-rt-erc20: invalid Safe cannot gate ERC-7730 token metadata" \
 		"\\[NS\\]\\[e2e\\] Scenario 5e-7730-mismatch: batch mis-bound descriptor is refused" \

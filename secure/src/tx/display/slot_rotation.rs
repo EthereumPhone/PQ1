@@ -131,7 +131,8 @@ impl RotationConfirmReceipt {
 
     #[inline(never)]
     pub(crate) fn fail_initialize(&mut self) {
-        // SAFETY: every field is uniquely borrowed and has no destructor.
+        // SAFETY: every field is uniquely borrowed; the `Drop` impl only
+        // re-runs this fail-state store.
         unsafe {
             core::ptr::write_volatile(&mut self.recorded, 0);
             core::ptr::write_volatile(&mut self.context_digest, ROTATION_CONFIRM_FAIL_DIGEST);
@@ -181,31 +182,71 @@ impl RotationConfirmReceipt {
     /// bootstrap key and again immediately before the bootstrap sign.
     #[inline(never)]
     pub(crate) fn completion_proof(&self, context: &RotationConfirmContext) -> u32 {
-        // SAFETY: immutable live receipt, sampled twice around a randomized
-        // gap so one corrupt load cannot forge the authority state.
+        let expected_cfi = crate::fi::CfiCounter::INIT_VALUE.wrapping_add(ROTATION_CONFIRM_CFI_STEP);
+        let (ok_a, ok_b) = self.state_matches(1, &context.receipt_digest(), expected_cfi);
+        Self::verdict(ok_a, ok_b)
+    }
+
+    /// Read-back immediately after [`Self::fail_initialize`]: the receipt
+    /// must be in the fail state, so a skipped initialization cannot leave an
+    /// earlier call's published state live on the reused stack slot.
+    #[inline(never)]
+    pub(crate) fn pristine_proof(&self) -> u32 {
+        let (ok_a, ok_b) = self.state_matches(
+            0,
+            &ROTATION_CONFIRM_FAIL_DIGEST,
+            crate::fi::CfiCounter::INIT_VALUE,
+        );
+        Self::verdict(ok_a, ok_b)
+    }
+
+    fn verdict(ok_a: bool, ok_b: bool) -> u32 {
+        crate::fi::scrub_sentinel_register();
+        crate::fi::check_true_into_sentinel(|| {
+            core::hint::black_box(ok_a) && core::hint::black_box(ok_b)
+        })
+    }
+
+    /// Sample the whole receipt twice around a randomized gap and reduce each
+    /// sample independently against the expected publication state, digest
+    /// and CFI accumulator. One corrupt load or one skipped compare in either
+    /// reduction cannot forge both results.
+    #[inline(never)]
+    fn state_matches(&self, recorded: u32, digest: &[u8; 32], expected_cfi: u32) -> (bool, bool) {
+        // SAFETY: immutable live receipt.
         let recorded_a = unsafe { core::ptr::read_volatile(&self.recorded) };
         let digest_a = unsafe { core::ptr::read_volatile(&self.context_digest) };
+        crate::fi::scrub_sentinel_register();
+        let cfi_a = self.cfi.check_into_sentinel(expected_cfi);
         crate::fi::wait_random();
         let recorded_b = unsafe { core::ptr::read_volatile(&self.recorded) };
         let digest_b = unsafe { core::ptr::read_volatile(&self.context_digest) };
+        crate::fi::scrub_sentinel_register();
+        let cfi_b = self.cfi.check_into_sentinel(expected_cfi);
 
-        let expected = context.receipt_digest();
         let mut diff_a = 0u8;
-        let mut diff_b = 0u8;
-        for i in 0..expected.len() {
-            diff_a |= digest_a[i] ^ expected[i];
-            diff_b |= digest_b[i] ^ expected[i];
+        for i in 0..digest.len() {
+            diff_a |= digest_a[i] ^ digest[i];
         }
-        let expected_cfi = crate::fi::CfiCounter::INIT_VALUE.wrapping_add(ROTATION_CONFIRM_CFI_STEP);
-        crate::fi::scrub_sentinel_register();
-        let cfi_verdict = self.cfi.check_into_sentinel(expected_cfi);
-        let all_ok = recorded_a == 1
-            && recorded_b == 1
-            && diff_a == 0
-            && diff_b == 0
-            && cfi_verdict == crate::fi::OK_SENTINEL;
-        crate::fi::scrub_sentinel_register();
-        crate::fi::check_true_into_sentinel(|| core::hint::black_box(all_ok))
+        let ok_a = core::hint::black_box(recorded_a) == recorded
+            && core::hint::black_box(diff_a) == 0
+            && core::hint::black_box(cfi_a) == crate::fi::OK_SENTINEL;
+        let mut diff_b = 0u8;
+        for i in 0..digest.len() {
+            diff_b |= digest_b[i] ^ digest[i];
+        }
+        let ok_b = core::hint::black_box(recorded_b) == recorded
+            && core::hint::black_box(diff_b) == 0
+            && core::hint::black_box(cfi_b) == crate::fi::OK_SENTINEL;
+        (ok_a, ok_b)
+    }
+}
+
+impl Drop for RotationConfirmReceipt {
+    /// Return the stack slot to the fail state on every handler exit, so a
+    /// later call that reuses it never inherits a published receipt.
+    fn drop(&mut self) {
+        self.fail_initialize();
     }
 }
 
@@ -321,6 +362,40 @@ mod tests {
 
     fn ctx(requested: bool) -> RotationConfirmContext {
         RotationConfirmContext::new(requested, 8453, 0, 3, [0x11; 20], [0x22; 32], [[0x33; 32]; 5])
+    }
+
+    #[test]
+    fn pristine_read_back_detects_a_live_published_state() {
+        let mut fresh = RotationConfirmReceipt::new();
+        fresh.fail_initialize();
+        assert_eq!(fresh.pristine_proof(), crate::fi::OK_SENTINEL);
+
+        // A published receipt left on a reused stack slot (initialization
+        // skipped) must fail the read-back, whichever record it carries.
+        let mut rotated = RotationConfirmReceipt::new();
+        rotated.fail_initialize();
+        rotated.record_confirmed(&ctx(true)).unwrap();
+        assert_ne!(rotated.pristine_proof(), crate::fi::OK_SENTINEL);
+        let mut skipped = RotationConfirmReceipt::new();
+        skipped.fail_initialize();
+        skipped.record_not_requested(&ctx(false)).unwrap();
+        assert_ne!(skipped.pristine_proof(), crate::fi::OK_SENTINEL);
+    }
+
+    #[test]
+    fn drop_returns_the_slot_to_the_fail_state() {
+        let c = ctx(true);
+        let mut r = RotationConfirmReceipt::new();
+        r.fail_initialize();
+        r.record_confirmed(&c).unwrap();
+        assert_eq!(r.completion_proof(&c), crate::fi::OK_SENTINEL);
+        // SAFETY: `r` is dropped in place exactly once and then forgotten, so
+        // its destructor never runs a second time; the type owns no heap
+        // memory, so inspecting its bytes afterwards is sound.
+        unsafe { core::ptr::drop_in_place(&mut r) };
+        assert_eq!(r.pristine_proof(), crate::fi::OK_SENTINEL);
+        assert_ne!(r.completion_proof(&c), crate::fi::OK_SENTINEL);
+        core::mem::forget(r);
     }
 
     #[test]

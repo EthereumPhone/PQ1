@@ -3295,8 +3295,11 @@ fn negative_rotation_receipt_gates_both_bootstrap_boundaries_in_both_handlers() 
         let keygen = at("derive_c10_master_keypair_from_entropy_with_progress");
         let t1_call = at("add_owner_bytes_calldata(&slot_owner_bytes)");
         let boot_sign = at("let bootstrap_sig = match");
-        // Fail-initialised before the dialog; published only after it.
+        let readback = at("rotation_confirm_receipt.pristine_proof()");
+        // Fail-initialised and read back before the dialog; published only after it.
         assert!(new < fail_init && fail_init < dialog, "{name}: receipt not fail-initialised before the dialog");
+        assert!(fail_init < readback && readback < dialog, "{name}: no pristine read-back after fail_initialize");
+        assert_eq!(src.matches("rotation_confirm_receipt.pristine_proof()").count(), 1, "{name}: one read-back");
         assert!(dialog < record && record < skip, "{name}: record must sit in the dialog's affirmative arm");
         // The affirmative record follows the dialog's FI verdict check.
         let verdict = src[dialog..record].rfind("cr_verdict != crate::fi::OK_SENTINEL");
@@ -3330,9 +3333,19 @@ fn negative_rotation_response_releases_only_the_signed_owner_bytes() {
         // The binding proof runs after the second write-extent check and
         // before the first byte of the Type-1 section is written.
         let extent = src.rfind("out_extent_ok != crate::fi::OK_SENTINEL").expect("extent check");
-        let proof = at("rotation_output_binding_proof(");
         let section = at("if emit_type1 { TYPE1_ROTATION_SECTION_LEN } else { 0 }");
-        assert!(extent < proof && proof < section, "{name}: output binding must gate the release");
+        let register = at("offchain_count_register_slot(&slot_flash_key)");
+        let proofs: Vec<usize> =
+            src.match_indices("rotation_output_binding_proof(").map(|(i, _)| i).collect();
+        assert_eq!(proofs.len(), 2, "{name}: expected two rotation output bindings");
+        // First binding gates the durable slot registration, which is keyed
+        // on the bound Type-1 output rather than the raw flag.
+        assert!(copy < proofs[0] && proofs[0] < register, "{name}: output binding must gate the registration");
+        let guard = src[proofs[0]..register].rfind("if emit_type1 {");
+        assert!(guard.is_some(), "{name}: registration must be keyed on emit_type1");
+        assert!(!src[proofs[0]..register].contains("if register_slot {"), "{name}: registration keyed on the raw flag");
+        // Second binding gates the release.
+        assert!(extent < proofs[1] && proofs[1] < section, "{name}: output binding must gate the release");
         assert!(!src.contains("if emit_type1 { SIG_WRAPPER_LEN }"), "{name}: bare 0x0202 Type-1 length");
     }
 }

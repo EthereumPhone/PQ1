@@ -770,6 +770,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     );
     let mut rotation_confirm_receipt = crate::tx::display::RotationConfirmReceipt::new();
     rotation_confirm_receipt.fail_initialize();
+    // Read-back: a skipped initialization must not leave an earlier call's
+    // published receipt live on the reused stack slot.
+    crate::fi::scrub_sentinel_register();
+    if rotation_confirm_receipt.pristine_proof() != crate::fi::OK_SENTINEL {
+        super::zeroize_sensitive_state();
+        ui::show_status("Batch sign", "rotate consent");
+        return NscStatus::InternalError as u32;
+    }
     if register_slot {
         let mut rotate_pages = crate::tx::display::build_slot_rotation_pages(slot_index);
         let signer_pages_before = rotate_pages.len;
@@ -2763,8 +2771,27 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
     super::sig_wrapper::encode_signature_wrapper(&mut *type2_wrapper_out, t2_owner_index, &t2_sig);
 
+    // Rotation output binding ahead of every durable write: the slot is
+    // registered only when a Type-1 over the new slot's owner bytes exists
+    // under the rotation context; disabled mode carries no Type-1. The same
+    // proof runs again before any byte reaches NS.
+    crate::fi::scrub_sentinel_register();
+    if crate::tx::display::rotation_output_binding_proof(
+        &rotation_context,
+        emit_type1,
+        &type1_owner_out,
+        &slot_owner_bytes,
+        &t1_call_digest_out,
+    ) != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        ui::show_status("Batch sign", "rotate binding");
+        return NscStatus::CryptoError as u32;
+    }
+
     // ── 13. Persist the new offchain count + slot-registered flag ──
-    if register_slot {
+    if emit_type1 {
         if unsafe { crate::offchain_state::offchain_count_register_slot(&slot_flash_key) }.is_err()
         {
             entropy.zeroize();

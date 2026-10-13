@@ -2066,6 +2066,39 @@ fn main() -> ! {
         hprintln!("[NS][e2e]   → batch sign OK, t2_len={}", t2_len);
     }
 
+    // Scenario 5e-rot: a batch that rotates to a fresh slot must cross the
+    // "ROTATE SLOT?" consent, carry its receipt through the bootstrap keygen
+    // and Type-1 signature, and emit Type 1 + Type 2 (security sweep
+    // 2026-10-13, finding #1). Sepolia slot 3 is used by no other scenario.
+    hprintln!("[NS][e2e] Scenario 5e-rot: batch rotation emits Type 1 + Type 2");
+    unsafe {
+        let inner = [E2eBatchTx {
+            to: to_alice,
+            value_wei: 10_000_000_000_000_000u128, // 0.01 ETH
+            data: &[],
+        }];
+        let len = build_batch_payload(
+            &mut PAYLOAD_BUF,
+            &wallet_sender,
+            11_155_111, // Sepolia
+            3,          // fresh slot
+            true,       // register_slot
+            90,         // base nonce — fresh
+            &inner,
+        );
+        let status = nsc_api::sign_userop_batch(&PAYLOAD_BUF[..len], &mut SIG_BUF);
+        assert_eq!(
+            status,
+            NscStatus::Ok as u32,
+            "batch rotation must succeed (got {})",
+            status
+        );
+        let (t1_present, t2_len) = parse_response(&SIG_BUF);
+        assert!(t1_present, "batch rotation must emit a Type 1");
+        assert_eq!(t2_len, SIG_TYPE2_LEN);
+        hprintln!("[NS][e2e]   → batch rotation OK, t1_present={}, t2_len={}", t1_present, t2_len);
+    }
+
     // Scenario 5e-7730: the TLV-tagged batch wire must route a kind-7
     // descriptor to the selected inner transaction, bind it to that exact
     // chain/target/selector, render it, and sign. This is deliberately separate
