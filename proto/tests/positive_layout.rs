@@ -341,9 +341,21 @@ fn positive_offchain_sync_input_layout() {
 
 #[test]
 fn positive_max_sign_response_covers_unified_sign_full_bundle() {
-    // 8 (count) + 4 + initCode + 4 + type1 + 4 + type2
-    let expected = 8 + 4 + PQ_INIT_CODE_LEN + 4 + SIG_TYPE1_LEN + 4 + SIG_TYPE2_LEN;
+    // 8 (count) + 4 + initCode + 4 + type1 section (owner || wrapper) + 4 + type2
+    let expected =
+        8 + 4 + PQ_INIT_CODE_LEN + 4 + OWNER_BYTES_LEN + SIG_TYPE1_LEN + 4 + SIG_TYPE2_LEN;
     assert_eq!(MAX_SIGN_RESPONSE_LEN, expected);
+    assert_eq!(MAX_SIGN_RESPONSE_LEN, 12_620);
+}
+
+#[test]
+fn positive_type1_rotation_section_is_owner_bytes_then_wrapper() {
+    // #353 / 0x0203: the rotation section carries the exact 64-byte
+    // addOwnerBytes argument ahead of the bootstrap wrapper, and its length
+    // differs from a bare wrapper so a pre-0x0203 parser fails closed.
+    assert_eq!(TYPE1_ROTATION_SECTION_LEN, OWNER_BYTES_LEN + SIG_WRAPPER_LEN);
+    assert_eq!(TYPE1_ROTATION_SECTION_LEN, 4192);
+    assert_ne!(TYPE1_ROTATION_SECTION_LEN, SIG_WRAPPER_LEN);
 }
 
 #[test]
@@ -488,9 +500,10 @@ fn positive_usb_hid_constants() {
 
 #[test]
 fn positive_apdu_protocol_version_is_v2() {
-    // 0x0202 = v2 with the GET_WALLET_ADDRESS optional `show` flag
-    // guaranteed (#472); 0x0201 pinned the GET_STATUS 2-byte layout (#440).
-    assert_eq!(PROTOCOL_VERSION, 0x0202);
+    // 0x0203 = v2 with the 4192-byte Type-1 rotation section (#353);
+    // 0x0202 added the GET_WALLET_ADDRESS optional `show` flag (#472);
+    // 0x0201 pinned the GET_STATUS 2-byte layout (#440).
+    assert_eq!(PROTOCOL_VERSION, 0x0203);
     assert_eq!(APDU_CLA_V2, 0xF0);
     assert_eq!(APDU_MAX_RESP, 253);
 }

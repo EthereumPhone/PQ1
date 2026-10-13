@@ -87,6 +87,7 @@ parse {chain_id, flags{INCLUDE_INIT_CODE | REGISTER_SLOT | account_index | slot_
 | 15 | GET_INIT_CODE | pre-compute the 4280-B `initCode` for `(account_index, chain_id)` (companion gas-estimation) |
 | 16 | SIGN_OFFCHAIN | EIP-1271 / ERC-6492 sig (4016 B deployed, 8616 B counterfactual via `flags` byte); refuses if slot unregistered (deployed path), gap ≥ `MAX_OFFCHAIN_GAP` (100), or combined cap exceeded |
 | 17 | OFFCHAIN_STATUS | per-slot `(local_offchain_count, last_userop_count, registered)` |
+| 18 | OFFCHAIN_SYNC | raise a slot's `last_userop_count` floor (restore / second device). Plain-language "Update signature count?" confirm on a new slot or a raise, with a `! CAREFUL` page for a jump > 1,000 or < 1,000 left; **refused** (no dialog, no write) if it would leave the slot 0 signatures (`aa::offchain_gate::sync_verdict`) |
 | 20–24 | FW_BEGIN/CHUNK/COMMIT/STATUS/ABORT | streaming firmware update (PIN unlock required on every call) |
 | 30 | SIGN_USEROP_BATCH | atomic multi-UserOp sign with single user confirm |
 | 200 | TEST_PIN_LOCKOUT | E2E-only — burns a wrong-PIN cycle; compiled out of production |
@@ -122,11 +123,12 @@ offset  size  field
 ```
 [new_offchain_count(8 BE)]
 [init_code_len(4 BE)][init_code...]      ← 4280 B when FLAG_INCLUDE_INIT_CODE, else 0
-[type1_len(4 BE)][type1_wrapper...]      ← 4128 B when FLAG_REGISTER_SLOT, else 0
+[type1_len(4 BE)][new_owner_bytes(64)][type1_wrapper(4128)]
+                                         ← 4192 B when FLAG_REGISTER_SLOT, else 0 (protocol 0x0203)
 [type2_len(4 BE)][type2_wrapper...]      ← always 4128 B
 ```
 
-`new_offchain_count` is the per-slot `local_offchain_count` baked into the Type 2 calldata via `executeWithOffchainCount(...)`. `type{1,2}_wrapper = abi.encode(uint256 ownerIndex, bytes c10Sig)`. `OWNER_BYTES_LEN = 64`, `C10_SIG_LEN = 4008`.
+`new_offchain_count` is the per-slot `local_offchain_count` baked into the Type 2 calldata via `executeWithOffchainCount(...)`. `type{1,2}_wrapper = abi.encode(uint256 ownerIndex, bytes c10Sig)`. `OWNER_BYTES_LEN = 64`, `C10_SIG_LEN = 4008`. `new_owner_bytes = pkSeed‖pkRoot` of the new slot, copied out of the exact `addOwnerBytes(bytes)` calldata the bootstrap key signed (#353), so a seedless companion can rebuild the Type-1 UserOp (nonce = base, no initCode/paymaster, same gas words) and submit it before the Type-2 (nonce = base+1, separate bundle). `MAX_SIGN_RESPONSE_LEN = 12,620`. A fail-initialised rotation consent receipt (`tx/display/slot_rotation.rs`) is checked before bootstrap keygen and again before the bootstrap sign, mirroring the deployment receipt.
 
 ### Off-chain (EIP-1271 / ERC-6492) output
 

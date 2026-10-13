@@ -614,6 +614,19 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		if [ "$$badpxs" -eq 0 ]; then echo "  PASS  ui-px: every [UI-PXSR] record is 512 hex characters"; \
 		else echo "  FAIL  ui-px: $$badpxs malformed [UI-PXSR] records"; fail=1; fi; \
 		;; esac; \
+	echo "==> #353: rebuilding the scenario-1 rotation offline (tools/verify-c10-sig rotation)"; \
+	rot_resp=$$(mktemp); \
+	rot_sender=$$(sed -n 's/.*\[NS\]\[e2e\] ROT-SENDER \([0-9a-f]\{40\}\).*/\1/p' $$log | head -1); \
+	python3 scripts/extract_semihosting_hex_block.py $$log $$rot_resp --ROT-RESP-BEGIN-- --ROT-RESP-END--; xrc=$$?; \
+	if [ -z "$$rot_sender" ] || { [ "$$xrc" != "0" ] && [ "$$xrc" != "3" ]; }; then \
+		echo "  FAIL  #353: no rotation response / sender in the log"; fail=1; \
+	elif env -u RUSTFLAGS cargo run --quiet --locked --release --manifest-path tools/verify-c10-sig/Cargo.toml -- \
+		rotation $$rot_resp chain=11155111 slot=1 sender=$$rot_sender nonce=1 \
+		to=abcdef1234567890abcdef1234567890abcdef12 value=1000000000000000000 \
+		gas=50000,300000,100000,10000000000,2000000000 e2e; then \
+		echo "  PASS  #353: rotation response rebuilt + both signatures verified offline"; \
+	else echo "  FAIL  #353: rotation response did not verify offline"; fail=1; fi; \
+	rm -f $$rot_resp; \
 	[ -n "$(E2E_LOG_KEEP)" ] || rm -f $$log; \
 	if [ $$fail -eq 0 ]; then \
 		echo "==> e2e: ALL ASSERTIONS PASSED"; \

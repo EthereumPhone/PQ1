@@ -40,6 +40,19 @@
 //!      flash `write_entry` chokepoint and the host mock) refuses a new distinct
 //!      slot past a budget chosen so compaction can never fail — the page is
 //!      provably un-wedgeable by any caller, confirmed or not.
+//!
+//! Slot-exhaustion policy (sweep 2026-10-13 finding #2; owner decision
+//! "refuse + warn"): a hostile companion could pick a target that uses up the
+//! slot's whole 65,536 budget, freezing the slot. `pqsigner_aa::offchain_gate::
+//! sync_verdict` decides, from FI-double-read device counters:
+//!   * **Refuse** — the write would leave 0 signatures. No dialog, no write,
+//!     `OffchainCapExceeded`. (The device could never sign with the slot
+//!     again, so the request has no honest use.)
+//!   * **Warn** — jump > `SYNC_WARN_JUMP` or < `SYNC_WARN_LEFT` left: the
+//!     confirm carries an extra "!! CAREFUL !!" page.
+//!   * **Plain** — ordinary plain-language confirm.
+//! An exhausted slot is recovered by rotating to the next slot
+//! (`FLAG_REGISTER_SLOT`, protocol 0x0203, #353).
 
 use sphincs_tz_shared::{NscStatus, MAX_ACCOUNT_INDEX, OFFCHAIN_SYNC_INPUT_LEN};
 
@@ -92,8 +105,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     // Value-inflation → consent-free durable slot brick defence (Layer 1;
     // `docs/security/vulns/VULN-offchain-sync-value-inflation-slot-brick.md`). `target_count` is
-    // fully companion-controlled and, for an already-registered slot, is written
-    // durably WITHOUT a confirm (the gate below only fires for new slots). The
+    // fully companion-controlled. The confirm below fires for new slots and
+    // floor raises, and the sync policy below refuses an exhausting target,
+    // but the clamp stays the first line. The
     // sign paths promote it verbatim into the monotonic `offchain` counter, so an
     // un-clamped `>= MAX_SLOT_USES` would permanently trip the combined-cap gate —
     // a seed-survivable, consent-free brick of the slot. Clamp it to
@@ -125,6 +139,62 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
     let current_count = current_count_a;
 
+    // Sync policy inputs (sweep finding #2): the other two per-slot counters,
+    // read the same FI-doubled way as `cmd_sign_userop` §11. `u64::MAX` is the
+    // flash readers' corruption/disagreement sentinel.
+    let local_offchain_a = crate::offchain_state::offchain_count_read(&slot_key);
+    crate::fi::wait_random();
+    let local_offchain_b = crate::offchain_state::offchain_count_read(&slot_key);
+    let userop_sigs_a = crate::offchain_state::userop_sigs_read(&slot_key);
+    crate::fi::wait_random();
+    let userop_sigs_b = crate::offchain_state::userop_sigs_read(&slot_key);
+    if local_offchain_a != local_offchain_b
+        || local_offchain_a > crate::offchain_state::OFFCHAIN_COUNT_CEILING
+        || userop_sigs_a != userop_sigs_b
+        || userop_sigs_a > sphincs_tz_shared::MAX_SLOT_USES
+    {
+        crate::ui::show_status("Counter sync", "state invalid");
+        return NscStatus::InternalError as u32;
+    }
+    let local_offchain = local_offchain_a;
+    let userop_sigs = userop_sigs_a;
+
+    use crate::aa::offchain_gate::{
+        effective_offchain_count, sync_left_after, sync_verdict, SyncVerdict,
+    };
+    let device_count = effective_offchain_count(local_offchain, current_count);
+    let left_after = sync_left_after(local_offchain, current_count, userop_sigs, target_count);
+    let left_after_for_display = left_after;
+
+    // Refuse: evaluated through the FI sentinel (double evaluation with a
+    // randomized gap). Anything but a positive "not Refuse" proof refuses,
+    // before any dialog and before any write.
+    crate::fi::scrub_sentinel_register();
+    if crate::fi::check_true_into_sentinel(|| {
+        sync_verdict(
+            core::hint::black_box(local_offchain),
+            core::hint::black_box(current_count),
+            core::hint::black_box(userop_sigs),
+            core::hint::black_box(target_count),
+        ) != SyncVerdict::Refuse
+            && core::hint::black_box(left_after) != 0
+    }) != crate::fi::OK_SENTINEL
+    {
+        crate::ui::show_status("Can't update", "key would run out");
+        return NscStatus::OffchainCapExceeded as u32;
+    }
+    // Warn unless the policy PROVES the request is plain: a fault can only
+    // add the warning page, never remove it.
+    crate::fi::scrub_sentinel_register();
+    let warn = crate::fi::check_true_into_sentinel(|| {
+        sync_verdict(
+            core::hint::black_box(local_offchain),
+            core::hint::black_box(current_count),
+            core::hint::black_box(userop_sigs),
+            core::hint::black_box(target_count),
+        ) == SyncVerdict::Plain
+    }) != crate::fi::OK_SENTINEL;
+
     // Consent gate — two brick classes, one confirm.
     //
     // (a) NEW-SLOT (page-123 exhaustion → permanent-brick fix; module Security
@@ -152,14 +222,30 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // free. Bare unsafe facade calls match this file's existing convention.
     let is_new_slot = !crate::offchain_state::offchain_count_is_registered(&slot_key);
     let raises_floor = target_count > current_count;
-    if is_new_slot || raises_floor {
+    // FI hardening (adversarial review 2026-10-13): the dialog — and with it
+    // the `! CAREFUL` page — may be skipped ONLY on a positive, sentinel-
+    // proved "this write is a no-op on an already-registered slot". The
+    // registration is re-read from flash inside the proof, so one fault on
+    // the plain `is_new_slot || raises_floor` locals can no longer turn a
+    // floor-raising sync into a consent-free durable write: any fault makes
+    // the proof fail, and failure shows the dialog.
+    crate::fi::scrub_sentinel_register();
+    let skip_dialog = crate::fi::check_true_into_sentinel(|| {
+        !core::hint::black_box(is_new_slot)
+            && !core::hint::black_box(raises_floor)
+            && crate::offchain_state::offchain_count_is_registered(&slot_key)
+            && core::hint::black_box(target_count) <= core::hint::black_box(current_count)
+    }) == crate::fi::OK_SENTINEL;
+    if !skip_dialog {
         use crate::ui::confirm::{confirm_checked, ConfirmResult};
         let pages = crate::tx::display::build_offchain_sync_pages(
             account_index as u8,
             chain_id,
             slot_index,
-            current_count,
+            device_count,
             target_count_for_display,
+            left_after_for_display,
+            warn,
         );
         // Port step 4: every fact row of the proven pages as design screens;
         // the page dialog only when the pixel path cannot run.
@@ -188,14 +274,22 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             return NscStatus::UserRejected as u32;
         }
 
-        // The exact target rendered above must be the exact target committed
-        // below. Evaluate the binding twice through the FI sentinel; black_box
-        // prevents the optimiser from folding two immutable locals into a
-        // compile-time `true` and deleting the check.
+        // The exact target and remaining budget rendered above must be the
+        // exact values committed below, and the write must still leave at
+        // least one signature. Evaluate the binding twice through the FI
+        // sentinel; black_box prevents the optimiser from folding immutable
+        // locals into a compile-time `true` and deleting the check.
         if crate::fi::check_true_into_sentinel(|| {
             core::hint::black_box(target_count) == core::hint::black_box(target_count_for_display)
                 && core::hint::black_box(target_count)
                     <= crate::offchain_state::OFFCHAIN_COUNT_CEILING
+                && sync_left_after(
+                    core::hint::black_box(local_offchain),
+                    core::hint::black_box(current_count),
+                    core::hint::black_box(userop_sigs),
+                    core::hint::black_box(target_count),
+                ) == core::hint::black_box(left_after_for_display)
+                && core::hint::black_box(left_after_for_display) != 0
         }) != crate::fi::OK_SENTINEL
         {
             super::zeroize_sensitive_state();

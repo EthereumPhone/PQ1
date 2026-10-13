@@ -908,11 +908,26 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 
 | # | id | caption | frame |
 |---|----|---------|-------|
-| 0 | `SYNC` | SYNC OFF-CHAIN FLOOR? | ![SYNC](lifecycle-offchain-sync/00-sync-p0.png) |
+| 0 | `SYNC` | UPDATE SIGNATURE COUNT? | ![SYNC](lifecycle-offchain-sync/00-sync-p0.png) |
 | 1 | `SYNCNET` |  | ![SYNCNET](lifecycle-offchain-sync/01-syncnet-p0.png) |
 | 2 | `SLOT` |  | ![SLOT](lifecycle-offchain-sync/02-slot-p0.png) |
 | 3 | `COUNT` |  | ![COUNT](lifecycle-offchain-sync/03-count-p0.png) |
-| 4 | `SYNC` | SYNC OFF-CHAIN FLOOR? | ![SYNC](lifecycle-offchain-sync/04-sync-p0.png) |
+| 4 | `LEFT` |  | ![LEFT](lifecycle-offchain-sync/04-left-p0.png) |
+| 5 | `WHEN` |  | ![WHEN](lifecycle-offchain-sync/05-when-p0.png) |
+| 6 | `SYNC` | UPDATE SIGNATURE COUNT? | ![SYNC](lifecycle-offchain-sync/06-sync-p0.png) |
+
+## Lifecycle: offchain_sync_warn (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/offchain_sync_warn.hex`)
+
+| # | id | caption | frame |
+|---|----|---------|-------|
+| 0 | `SYNC` | UPDATE SIGNATURE COUNT? | ![SYNC](lifecycle-offchain-sync-warn/00-sync-p0.png) |
+| 1 | `SYNCNET` |  | ![SYNCNET](lifecycle-offchain-sync-warn/01-syncnet-p0.png) |
+| 2 | `SLOT` |  | ![SLOT](lifecycle-offchain-sync-warn/02-slot-p0.png) |
+| 3 | `COUNT` |  | ![COUNT](lifecycle-offchain-sync-warn/03-count-p0.png) |
+| 4 | `LEFT` |  | ![LEFT](lifecycle-offchain-sync-warn/04-left-p0.png) |
+| 5 | `CAREFUL` |  | ![CAREFUL](lifecycle-offchain-sync-warn/05-careful-p0.png) |
+| 6 | `WHEN` |  | ![WHEN](lifecycle-offchain-sync-warn/06-when-p0.png) |
+| 7 | `SYNC` | UPDATE SIGNATURE COUNT? | ![SYNC](lifecycle-offchain-sync-warn/07-sync-p0.png) |
 
 ## Lifecycle: outcomes (host fixture `pqsigner-ui-px/tests/fixtures/lifecycle/outcomes.hex`)
 

@@ -944,11 +944,15 @@ fn negative_offchain_sync_confirms_value_inflation_on_registered_slot() {
 fn negative_offchain_sync_display_binds_current_and_target_values() {
     // A generic "SYNC COUNTER?" prompt is not informed consent: the hostile
     // companion controls target_count and can ask for a near-cap floor. Pin
-    // both the data flow into the renderer and the literal trusted rows.
-    assert!(CMD_OFFCHAIN_SYNC_SRC.contains("current_count,"));
+    // the data flow into the renderer and the literal trusted rows: the
+    // device's count, the app's count and what remains (sweep 2026-10-13
+    // finding #2 replaced "Current/Target" with plain-language rows).
+    assert!(CMD_OFFCHAIN_SYNC_SRC.contains("device_count,"));
     assert!(CMD_OFFCHAIN_SYNC_SRC.contains("target_count_for_display,"));
-    assert!(OFFCHAIN_SYNC_DISPLAY_SRC.contains("b\"Current: \""));
-    assert!(OFFCHAIN_SYNC_DISPLAY_SRC.contains("b\"Target: \""));
+    assert!(CMD_OFFCHAIN_SYNC_SRC.contains("left_after_for_display,"));
+    assert!(OFFCHAIN_SYNC_DISPLAY_SRC.contains("b\"On device: \""));
+    assert!(OFFCHAIN_SYNC_DISPLAY_SRC.contains("b\"From app: \""));
+    assert!(OFFCHAIN_SYNC_DISPLAY_SRC.contains("b\"Sigs left: \""));
     assert!(
         CMD_OFFCHAIN_SYNC_SRC.contains("target_count_for_display")
             && CMD_OFFCHAIN_SYNC_SRC.contains("check_true_into_sentinel"),
@@ -962,6 +966,43 @@ fn negative_offchain_sync_display_binds_current_and_target_values() {
         .find("last_userop_count_set(")
         .expect("sync durable write");
     assert!(render < write, "current/target values must be shown before commit");
+}
+
+#[test]
+fn negative_offchain_sync_refuses_an_exhausting_target_before_any_dialog_or_write() {
+    // Sweep 2026-10-13 finding #2 (owner decision: refuse + warn). The
+    // handler must read BOTH remaining counters, run the shared aa policy,
+    // and refuse a sync that would leave 0 signatures before it renders a
+    // dialog or touches flash.
+    for needle in [
+        "offchain_count_read(&slot_key)",
+        "userop_sigs_read(&slot_key)",
+        "sync_verdict(",
+        "SyncVerdict::Refuse",
+        "SyncVerdict::Plain",
+        "NscStatus::OffchainCapExceeded",
+    ] {
+        assert!(CMD_OFFCHAIN_SYNC_SRC.contains(needle), "{needle}");
+    }
+    let refuse = CMD_OFFCHAIN_SYNC_SRC
+        .find("NscStatus::OffchainCapExceeded")
+        .expect("refusal present");
+    let render = CMD_OFFCHAIN_SYNC_SRC
+        .find("build_offchain_sync_pages(")
+        .expect("sync renderer call");
+    let write = CMD_OFFCHAIN_SYNC_SRC
+        .find("last_userop_count_set(")
+        .expect("sync durable write");
+    assert!(refuse < render && refuse < write, "refusal must precede dialog and write");
+    // The warning is fail-safe: shown unless the policy PROVES `Plain`.
+    assert!(CMD_OFFCHAIN_SYNC_SRC.contains("== SyncVerdict::Plain\n    }) != crate::fi::OK_SENTINEL;"));
+    // The dialog itself is skipped only on a sentinel-proved no-op on a
+    // registered slot (adversarial review 2026-10-13): no plain-bool gate.
+    assert!(!CMD_OFFCHAIN_SYNC_SRC.contains("if is_new_slot || raises_floor {"));
+    let skip = CMD_OFFCHAIN_SYNC_SRC.find("let skip_dialog = crate::fi::check_true_into_sentinel(").expect("skip proof");
+    let gate = CMD_OFFCHAIN_SYNC_SRC.find("if !skip_dialog {").expect("dialog gate");
+    assert!(skip < gate && gate < render);
+    assert!(CMD_OFFCHAIN_SYNC_SRC[skip..gate].contains("offchain_count_is_registered(&slot_key)"));
 }
 
 // ── 8f. Account-index range check (CLAUDE.md "8b account_index (0..=255)")
@@ -3231,4 +3272,67 @@ fn negative_proto_constants_used_by_handlers_resolve_to_pinned_values() {
     assert_eq!(PQ_CREATE_ACCOUNT_SELECTOR, [0xf6, 0x18, 0x2a, 0x73]);
     assert_eq!(PQ_SMART_WALLET_FACTORY.len(), 20);
     assert_ne!(PQ_SMART_WALLET_FACTORY, [0u8; 20]);
+}
+
+// ── Sweep 2026-10-13 finding #1 + #353: rotation consent receipt and the
+//    0x0203 owner-bytes output binding, in BOTH sign handlers. ────────────
+
+#[test]
+fn negative_rotation_receipt_gates_both_bootstrap_boundaries_in_both_handlers() {
+    for (name, src) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC),
+    ] {
+        let at = |needle: &str| {
+            src.find(needle)
+                .unwrap_or_else(|| panic!("{name}: missing `{needle}`"))
+        };
+        let new = at("RotationConfirmReceipt::new()");
+        let fail_init = at("rotation_confirm_receipt.fail_initialize()");
+        let dialog = at("build_slot_rotation_pages(");
+        let record = at(".record_confirmed(&rotation_context)");
+        let skip = at(".record_not_requested(&rotation_context)");
+        let keygen = at("derive_c10_master_keypair_from_entropy_with_progress");
+        let t1_call = at("add_owner_bytes_calldata(&slot_owner_bytes)");
+        let boot_sign = at("let bootstrap_sig = match");
+        // Fail-initialised before the dialog; published only after it.
+        assert!(new < fail_init && fail_init < dialog, "{name}: receipt not fail-initialised before the dialog");
+        assert!(dialog < record && record < skip, "{name}: record must sit in the dialog's affirmative arm");
+        // The affirmative record follows the dialog's FI verdict check.
+        let verdict = src[dialog..record].rfind("cr_verdict != crate::fi::OK_SENTINEL");
+        assert!(verdict.is_some(), "{name}: record must follow the cr_verdict gate");
+        // Exactly two spatially separate proofs: before keygen, and between
+        // the Type-1 preimage and the bootstrap sign.
+        let proofs: Vec<usize> = src
+            .match_indices("rotation_confirm_receipt.completion_proof(&rotation_context)")
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(proofs.len(), 2, "{name}: expected two rotation completion proofs");
+        assert!(skip < proofs[0] && proofs[0] < keygen, "{name}: first proof must precede bootstrap keygen");
+        assert!(t1_call < proofs[1] && proofs[1] < boot_sign, "{name}: second proof must precede the bootstrap sign");
+    }
+}
+
+#[test]
+fn negative_rotation_response_releases_only_the_signed_owner_bytes() {
+    for (name, src) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC),
+    ] {
+        let at = |needle: &str| {
+            src.find(needle)
+                .unwrap_or_else(|| panic!("{name}: missing `{needle}`"))
+        };
+        // The owner bytes are copied OUT of the signed calldata, after the
+        // bootstrap signature exists.
+        let copy = at("type1_owner_out.copy_from_slice(\n                &t1_call[crate::aa::userop::ADD_OWNER_BYTES_ARG_OFFSET..],");
+        assert!(at("let bootstrap_sig = match") < copy, "{name}: owner copied before the signature");
+        // The binding proof runs after the second write-extent check and
+        // before the first byte of the Type-1 section is written.
+        let extent = src.rfind("out_extent_ok != crate::fi::OK_SENTINEL").expect("extent check");
+        let proof = at("rotation_output_binding_proof(");
+        let section = at("if emit_type1 { TYPE1_ROTATION_SECTION_LEN } else { 0 }");
+        assert!(extent < proof && proof < section, "{name}: output binding must gate the release");
+        assert!(!src.contains("if emit_type1 { SIG_WRAPPER_LEN }"), "{name}: bare 0x0202 Type-1 length");
+    }
 }

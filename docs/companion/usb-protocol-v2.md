@@ -52,7 +52,7 @@ still needs its final data block marked P1=0x00.
 
 ### Response Chaining (GET_RESPONSE)
 
-Signing responses are up to `MAX_SIGN_RESPONSE_LEN = 12,556` bytes. The device returns the first 253
+Signing responses are up to `MAX_SIGN_RESPONSE_LEN = 12,620` bytes (12,556 before protocol 0x0203). The device returns the first 253
 bytes with `SW = 0x61FF` (more data). The companion drains the rest by
 repeatedly sending `INS 0xC0` (GET_RESPONSE) until `SW = 0x9000`.
 
@@ -100,7 +100,7 @@ F11). All clocks tick at the USB SOF cadence (1 frame ≈ 1 ms).
   regardless of keepalives. Host-visible effect on expiry is the same
   as the idle timeout (pending data scrubbed; next GET_RESPONSE →
   0x6985). A worst-case legitimate drain (17 initCode chunks; a full
-  12,556-byte signing response) needs far less even at seconds per
+  12,620-byte signing response) needs far less even at seconds per
   round-trip, so 0x6985 mid-drain means the exchange is dead — restart
   the command from scratch.
 
@@ -152,9 +152,11 @@ After the all-C10 cutover, the v2 protocol exposes the following commands:
 
 **This is the only single-UserOp signing command in the post-cutover wallet.**
 The companion's flags request initCode or Type 1 output; firmware does not infer
-registration state. Current production companions may request the slot-0
-factory-deploy path or Type 2 only. They must not request/submit Type 1 until
-the reviewed wire bump described below supplies its missing binding material.
+registration state. Against a device reporting protocol **0x0203 or later**,
+companions may request the slot-0 factory-deploy path, Type 2 only, or a slot
+rotation (`FLAG_REGISTER_SLOT`, slot N ≥ 1): the 0x0203 response carries the
+new slot's 64-byte owner bytes (#353). Never set `FLAG_REGISTER_SLOT` against
+a device reporting `< 0x0203`.
 
 **Input payload (`SIGN_USEROP_HEADER_LEN = 330` bytes of header + inner
 calldata):**
@@ -205,7 +207,9 @@ sequence. CRIT-17 rejects low-64 overflow before it can change lanes.
 [init_code_len        u32 BE]
 [init_code            init_code_len bytes]  (4280 B when FLAG_INCLUDE_INIT_CODE, else 0)
 [type1_len            u32 BE]
-[type1_wrapper        type1_len bytes]      (4128 B when FLAG_REGISTER_SLOT, else 0)
+[type1_section        type1_len bytes]      (4192 B when FLAG_REGISTER_SLOT, else 0)
+    = [new_owner_bytes 64 B]                pkSeed(32) || pkRoot(32) of the new slot
+      [type1_wrapper   4128 B]              abi.encode(0, bootstrapC10Sig)
 [type2_len            u32 BE]
 [type2_wrapper        type2_len bytes]      (always 4128 B)
 ```
@@ -213,11 +217,13 @@ sequence. CRIT-17 rejects low-64 overflow before it can change lanes.
 - `type1_len == 0` means only that no Type 1 was requested/emitted. Except for
   slot 0 installed atomically by the factory path, the companion must verify
   the selected slot is already registered on-chain before requesting Type 2.
-- `type1_len == 4128` means firmware signed a rotation to slot N≥1. Wire v2
-  does not return the 64-byte new slot public key required to reconstruct the
-  signed `addOwnerBytes(bytes)` calldata. Seedless production companions MUST
-  reject this response and MUST NOT retry it until a reviewed protocol bump
-  supplies the public key or complete Type-1 calldata.
+- `type1_len == 4192` (`TYPE1_ROTATION_SECTION_LEN`, protocol 0x0203+) means
+  firmware signed a rotation to slot N ≥ 1. `new_owner_bytes` is copied by the
+  firmware out of the exact `addOwnerBytes(bytes)` calldata the bootstrap key
+  signed, and FI-checked against the new slot's key before release. Any other
+  non-zero `type1_len` (including the pre-0x0203 bare 4128) MUST be rejected.
+  The full companion procedure is
+  `docs/companion/companion-app-integration.md` §11.4.
 
 **Type 1 / Type 2 wrapper (each exactly 4128 bytes):**
 
@@ -237,11 +243,15 @@ The companion wraps an available wrapper in an EntryPoint v0.6 `UserOperation`
 (`UserOperation06`) with the appropriate
 `callData`:
 
-- **Type 1 UserOp (rotation, currently companion-blocked):** the signed calldata
-  is exactly `addOwnerBytes(newSlotPk)`. A no-op `execute(sender,0,"")` has a
-  different hash and fails the contract's Type-1 selector gate. Do not submit
-  it. First deployment is not Type 1: set `FLAG_INCLUDE_INIT_CODE`, use slot 0,
-  and keep `FLAG_REGISTER_SLOT` clear; the factory installs slot 0.
+- **Type 1 UserOp (rotation):** `callData = addOwnerBytes(new_owner_bytes)`
+  (`0x101490cb || 0x20 || 0x40 || new_owner_bytes`, 132 bytes), `nonce = base`,
+  empty `initCode` and `paymasterAndData`, and the same five gas words as the
+  request. Submit it first and wait for inclusion; only then submit the Type 2
+  UserOp (`nonce = base + 1`). They cannot share a bundle: EntryPoint v0.6
+  validates every op before executing any, and the new slot's key is installed
+  only when `addOwnerBytes` executes. First deployment is not Type 1: set
+  `FLAG_INCLUDE_INIT_CODE`, use slot 0, and keep `FLAG_REGISTER_SLOT` clear;
+  the factory installs slot 0.
 - **Type 2 UserOp**: `callData = executeWithOffchainCount(ownerIndex,
   new_offchain_count, to, value, data)` — the wallet bumps the EIP-1271
   off-chain counter and dispatches the user's call atomically.
@@ -272,7 +282,7 @@ from the wizard UI, not from GET_STATUS.
 
 Returns a versioning + capability header. Bytes 0–1 are
 `protocol_version` (u16 BE) = `PROTOCOL_VERSION` from `proto/src/lib.rs`,
-currently **0x0202** (see §Protocol version history below). Reports
+currently **0x0203** (see §Protocol version history below). Reports
 `ep_version = 0x0006` (EntryPoint v0.6) and `sig_param_set = 2`
 (SPHINCS+C10, `C10_SIG_LEN = 4008`). Capability bit 0 is
 `CAP_SIGN_USEROP`; bit 1 is retired and remains clear; bit 2 is
@@ -391,6 +401,25 @@ count+ERC-6492 blob for counterfactual slot 0.
 
 Per-slot `(local_offchain_count, last_userop_count, registered)` readback.
 
+### 0x64 OFFCHAIN_SYNC
+
+Raise a slot's `last_userop_count` floor to the on-chain `offchainSigCount`
+(after a restore, or when the same seed is used on a second device). Body:
+`account(1) | chain_id(8 BE) | slot_index(4 BE) | target(8 BE)`; SW only.
+"Set if greater": a lower target is a no-op.
+
+- A new slot, or a target above the stored floor, needs a trusted-display
+  confirm, worded for users: *Update signature count?* — the device's count,
+  the app's count and the signatures left after the update.
+- If the update would skip more than 1,000 signatures, or leave fewer than
+  1,000, the confirm carries an extra **! CAREFUL** page.
+- If it would leave the slot **0** signatures, the device refuses without a
+  dialog and without writing (`SW 0x6985`). Rotate to the next slot instead
+  (§0x30, `FLAG_REGISTER_SLOT`).
+
+Send the true on-chain value only. A companion that inflates the target
+spends the user's per-slot budget.
+
 ### 0x70..0x74 FW_BEGIN/CHUNK/COMMIT/STATUS/ABORT
 
 Streaming firmware update. PIN unlock required on every call. See
@@ -428,9 +457,15 @@ longer dispatched (or are reserved for backwards-compat probing):
 
 ## Protocol version history
 
-Current `PROTOCOL_VERSION` (GET_DEVICE_INFO bytes 0–1): **0x0202**
+Current `PROTOCOL_VERSION` (GET_DEVICE_INFO bytes 0–1): **0x0203**
 (`proto/src/lib.rs`).
 
+- **0x0203 — slot-rotation response (#353):** with `FLAG_REGISTER_SLOT` the
+  `SIGN_USEROP` / `SIGN_USEROP_BATCH` Type-1 section is 4192 bytes,
+  `new_owner_bytes(64) || type1_wrapper(4128)`, so a seedless companion can
+  rebuild and submit the bootstrap `addOwnerBytes` UserOp. Responses without
+  a Type 1 are byte-identical to 0x0202; `MAX_SIGN_RESPONSE_LEN` grows to
+  12,620. Companions gate `FLAG_REGISTER_SLOT` on a >= 0x0203 report.
 - **0x0202 — GET_WALLET_ADDRESS `show` flag (#472):** INS 0x60 accepts
   an optional trailing flag byte; `show = 1` displays the derived
   address on the device OLED behind a physical confirm before it is

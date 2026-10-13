@@ -1044,16 +1044,24 @@ function buildSignPayload(p) {
   return concatBytes(chunks);
 }
 
+const OWNER_BYTES_LEN = 64;
+const TYPE1_ROTATION_SECTION_LEN = OWNER_BYTES_LEN + SIG_WRAPPER_LEN; // 4192, protocol 0x0203 (#353)
+
 function parseSignResponse(resp) {
-  // Wire format (secure/src/nsc/cmd_sign_userop.rs):
+  // Wire format (secure/src/nsc/cmd_sign_userop.rs, protocol 0x0203):
+  //   [new_offchain_count(8 BE)]
   //   [init_code_len(4 BE)][init_code(0 or 4280)]
-  //   [type1_len(4 BE)][type1_wrapper(0 or 4128)]   — abi.encode(uint256, bytes)
-  //   [type2_len(4 BE)][type2_wrapper(4128)]        — abi.encode(uint256, bytes)
-  if (resp.length < 12) throw new Error('response too short');
+  //   [type1_len(4 BE)][new_owner_bytes(64) || type1_wrapper(4128)]  — rotation only
+  //   [type2_len(4 BE)][type2_wrapper(4128)]                          — abi.encode(uint256, bytes)
+  if (resp.length < 20) throw new Error('response too short');
   const readU32Be = (o) => (resp[o] * 0x1000000) + (resp[o+1] << 16) + (resp[o+2] << 8) + resp[o+3];
 
-  const icLen = readU32Be(0);
-  let off = 4;
+  let newOffchainCount = 0n;
+  for (let i = 0; i < 8; i++) newOffchainCount = (newOffchainCount << 8n) | BigInt(resp[i]);
+  let off = 8;
+
+  const icLen = readU32Be(off);
+  off += 4;
   let initCode = null;
   if (icLen > 0) {
     initCode = resp.slice(off, off + icLen);
@@ -1063,16 +1071,30 @@ function parseSignResponse(resp) {
   const t1Len = readU32Be(off);
   off += 4;
   let type1 = null;
+  let newOwnerBytes = null;
   if (t1Len > 0) {
-    type1 = resp.slice(off, off + t1Len);
+    if (t1Len !== TYPE1_ROTATION_SECTION_LEN) {
+      throw new Error(`Type-1 section is ${t1Len} B; a 0x0203 rotation section is ${TYPE1_ROTATION_SECTION_LEN} B (firmware too old?)`);
+    }
+    newOwnerBytes = resp.slice(off, off + OWNER_BYTES_LEN);
+    type1 = resp.slice(off + OWNER_BYTES_LEN, off + t1Len);
     off += t1Len;
   }
 
   const t2Len = readU32Be(off);
   off += 4;
   const type2 = resp.slice(off, off + t2Len);
+  if (off + t2Len !== resp.length) throw new Error('trailing bytes after Type 2');
 
-  return { initCode, type1, type2 };
+  return { newOffchainCount, initCode, type1, newOwnerBytes, type2 };
+}
+
+/// `addOwnerBytes(bytes)` calldata for the 64-byte new slot owner — the
+/// exact preimage the bootstrap key signed (pqsigner-aa
+/// `add_owner_bytes_calldata`).
+function encodeAddOwnerBytesCalldata(owner) {
+  const word = (v) => { const w = new Uint8Array(32); w[31] = v; return w; };
+  return concatBytes([new Uint8Array([0x10, 0x14, 0x90, 0xcb]), word(0x20), word(OWNER_BYTES_LEN), owner]);
 }
 
 // ── Publish helpers ──────────────────────────────────────────────
@@ -1231,7 +1253,7 @@ function makeCopyable(label, text) {
 ///   * initCode present (no type1): 1 op, signed by slot
 ///   * type1 + type2 (rotation):    2 ops, bootstrap addOwner then slot execute
 ///   * type2 only (normal):         1 op, signed by slot
-function buildPublishOps({ initCode, type1, type2 }, params) {
+function buildPublishOps({ initCode, type1, newOwnerBytes, type2 }, params) {
   const sender = $('senderAddr').value.trim();
   if (!sender || sender === '0x' || sender.length !== 42) {
     log('Wallet (sender) address not set — fill it in before signing so the JSON is usable', 'warn');
@@ -1265,14 +1287,22 @@ function buildPublishOps({ initCode, type1, type2 }, params) {
       }),
     });
   } else if (type1 && type2) {
-    // Rotation path. Two UserOps: bootstrap addOwner (nonce base), then
-    // slot execute (nonce base+1).
-    //
-    // We need the new slot owner bytes to build Type 1's callData. They
-    // aren't in the firmware response, so we reject rotation for now and
-    // surface a TODO. A follow-up wire-format bump can emit the 64-byte
-    // slot_N_owner_bytes alongside the wrapper.
-    log('Rotation path (Type 1 + Type 2) needs the new slot pubkey to build addOwnerBytes callData. Not yet surfaced in the firmware response — skipping Type 1 op.', 'warn');
+    // Rotation path (protocol 0x0203, #353). Two UserOps, in two bundles:
+    // bootstrap addOwnerBytes(newOwnerBytes) at nonce base, then — only
+    // after it is included, since validation runs before execution — the
+    // new slot's execute at nonce base+1. The firmware signed Type 1 with
+    // no initCode, no paymaster and the same gas words as Type 2.
+    ops.push({
+      label: 'rotation: bootstrap addOwnerBytes (submit FIRST, wait for inclusion)',
+      op: buildUserOpV06({
+        ...baseOpArgs,
+        sender,
+        nonce: params.nonce,
+        initCode: null,
+        callData: encodeAddOwnerBytesCalldata(newOwnerBytes),
+        signature: type1,
+      }),
+    });
     ops.push({
       label: 'slot execute (after rotation) — submit only AFTER Type 1 lands',
       op: buildUserOpV06({
@@ -1620,8 +1650,8 @@ $('signBtn').addEventListener('click', async () => {
       selfAttestBundle: sel.selfAttest,
     };
     log('Confirm the transaction on the device...', 'info');
-    const { initCode, type1, type2 } = await DeviceAPI.signUserOp(params);
-    lastResult = { initCode, type1, type2 };
+    const { initCode, type1, newOwnerBytes, type2 } = await DeviceAPI.signUserOp(params);
+    lastResult = { initCode, type1, newOwnerBytes, type2 };
     $('icLen').textContent = initCode ? `${initCode.length} B` : '0 (no deploy)';
     $('t1Len').textContent = type1 ? `${type1.length} B (bootstrap)` : '0 (no rotation)';
     $('t2Len').textContent = `${type2.length} B`;
@@ -1647,7 +1677,7 @@ $('signBtn').addEventListener('click', async () => {
         log(`To compute sender: cast call ${parsed.factory} "getAddress(bytes32,bytes32)(address)" ${parsed.masterPkSeed} ${parsed.masterPkRoot} --rpc-url ${$('rpcUrl').value}`, 'info');
       }
     }
-    const ops = buildPublishOps({ initCode, type1, type2 }, params);
+    const ops = buildPublishOps({ initCode, type1, newOwnerBytes, type2 }, params);
     renderPublishBlocks(ops);
   } catch (e) {
     log(`Sign failed: ${e.message}`, 'err');
@@ -1682,8 +1712,8 @@ async function runSignWithParams(params, description) {
   $('testUsdcBtn').disabled = true;
   try {
     log(`Running ${description} — confirm on device...`, 'info');
-    const { initCode, type1, type2 } = await DeviceAPI.signUserOp(params);
-    lastResult = { initCode, type1, type2 };
+    const { initCode, type1, newOwnerBytes, type2 } = await DeviceAPI.signUserOp(params);
+    lastResult = { initCode, type1, newOwnerBytes, type2 };
     $('icLen').textContent = initCode ? `${initCode.length} B` : '0 (no deploy)';
     $('t1Len').textContent = type1 ? `${type1.length} B (bootstrap)` : '0 (no rotation)';
     $('t2Len').textContent = `${type2.length} B`;
@@ -1696,7 +1726,7 @@ async function runSignWithParams(params, description) {
     }
     log(`Type 2 wrapper (ownerIdx=${t2Owner}): ${type2.length}B`, 'ok');
     $('submitBtn').disabled = false;
-    const ops = buildPublishOps({ initCode, type1, type2 }, params);
+    const ops = buildPublishOps({ initCode, type1, newOwnerBytes, type2 }, params);
     renderPublishBlocks(ops);
   } catch (e) {
     log(`${description} failed: ${e.message}`, 'err');

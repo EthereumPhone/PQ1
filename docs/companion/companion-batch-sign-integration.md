@@ -23,11 +23,10 @@ the atomic multi-call **batch sign** flow. Do not use the legacy broad
 * Hard caps: `MAX_BATCH_TXS = 4` inner calls per UserOp, each call's
   `data` ≤ `MAX_TX_LEN = 4096` bytes.
 * Same flag layout as single-tx. First deployment uses
-  `FLAG_INCLUDE_INIT_CODE` with slot 0; `FLAG_REGISTER_SLOT` must remain clear.
-  Wire v2 cannot complete a seedless slot rotation because the response omits
-  the exact 64-byte new slot public key. Production companions must therefore
-  refuse Type 1 output until the reviewed protocol bump tracked on
-  `EthereumPhone/PQ1` (label `source:work-todo`) lands. Only the user-tx Type 2 is batched.
+  `FLAG_INCLUDE_INIT_CODE` with slot 0. `FLAG_REGISTER_SLOT` (slot rotation)
+  is usable against a device reporting protocol 0x0203+, whose response
+  carries the new slot's 64-byte owner bytes (#353); see
+  `companion-app-integration.md` §11.4. Only the user-tx Type 2 is batched.
 
 ## When to use it
 
@@ -181,14 +180,15 @@ refuse to send v2 payloads to firmware that doesn't advertise v2 support.
 ```text
 [new_offchain_count(8 BE)]
 [init_code_len(4 BE)] [init_code...(0 or 4280 bytes)]
-[type1_len(4 BE)]     [type1_wrapper...(0 or 4128 bytes)]
+[type1_len(4 BE)]     [new_owner_bytes(64) || type1_wrapper(4128)]   (0 or 4192 bytes)
 [type2_len(4 BE)]     [type2_wrapper...(4128 bytes)]
 ```
 
 Each `wrapper` is `abi.encode(uint256 ownerIndex, bytes c10Sig)`. The Type 2
-wrapper goes directly into `UserOperation.signature`. Although Type 1 uses the
-same wrapper encoding, a wire-v2 companion must reject that response because
-the corresponding exact calldata cannot yet be reconstructed.
+wrapper goes directly into `UserOperation.signature`. The Type-1 section is
+present only for a rotation (protocol 0x0203+): its first 64 bytes are the new
+slot's owner bytes, from which the companion rebuilds the bootstrap
+`addOwnerBytes` UserOp.
 
 `new_offchain_count` is the firmware's per-slot `local_offchain_count`
 as committed to the just-signed batch UserOp. The companion uses this
@@ -212,8 +212,8 @@ Once you have the device-emitted `(type1_wrapper?, type2_wrapper)`:
    `newOffchainCount` is the leading `u64` from the response.
 2. Wrap into a `UserOperation06`:
    * `sender` = the wallet proxy address (same one you sent in).
-   * `nonce` = `base_nonce`. A current wire-v2 companion must reject Type 1
-     output rather than constructing a second UserOp.
+   * `nonce` = `base_nonce`, or `base_nonce + 1` when the response carried a
+     rotation Type-1 section (the Type-1 UserOp uses `base_nonce`).
    * `initCode` = the device-emitted `init_code` bytes (only on first
      deploy, when you set `FLAG_INCLUDE_INIT_CODE`).
    * `callData` = the bytes from step 1.
@@ -221,14 +221,13 @@ Once you have the device-emitted `(type1_wrapper?, type2_wrapper)`:
    * Gas + paymaster fields = the values you sent to the device.
 3. Submit to the EntryPoint v0.6 bundler RPC like any other UserOp.
 
-If `type1_wrapper` is present, reject the response and do **not** retry it.
-Firmware signed `addOwnerBytes(slotN_owner_bytes)`, but wire v2 does not return
-the exact `slotN_owner_bytes = pkSeed || pkRoot` needed to reconstruct that
-signed calldata. Substituting a no-op or guessed public key hashes a different
-UserOp and cannot validate. Retrying only releases another fresh bootstrap C10
-signature without a successful on-chain counter increment. A future reviewed
-wire-version bump must return the exact public key or complete Type-1 calldata
-and bind it byte-for-byte before this workflow may be enabled.
+If the Type-1 section is present (rotation, protocol 0x0203+), build and submit
+the bootstrap UserOp first exactly as in `companion-app-integration.md` §11.4:
+`callData = addOwnerBytes(new_owner_bytes)`, `nonce = base_nonce`, empty
+`initCode` and `paymasterAndData`, the request's gas words, `signature =
+type1_wrapper`. Wait for it to be included, then submit the batch UserOp at
+`base_nonce + 1`. A Type-1 section of any length other than 4192 (e.g. a
+pre-0x0203 bare 4128-byte wrapper) MUST be rejected and not retried.
 
 ## On-chain ABI
 
@@ -264,9 +263,9 @@ it carried.
   Use `P1 = P1_V2_MORE = 0x80` on every chunk except the last, and
   `P1 = P1_V2_LAST = 0x00` on the final.
 * Response is also chunked via `GET_RESPONSE` chaining once the device
-  has the bundle ready (4148 bytes for Type 2 only, or 8276 bytes if the
-  currently-unsupported Type 1 output is also emitted). The conservative
-  protocol maximum, including initCode, is 12,556 bytes.
+  has the bundle ready (4148 bytes for Type 2 only, or 8340 bytes with a
+  rotation Type-1 section). The conservative protocol maximum, including
+  initCode, is 12,620 bytes.
 * Status word mapping is unchanged — `SW_OK (0x9000)` on success,
   `SW_INTERNAL_ERROR (0x6F00)` for `CryptoError` / `InvalidPointer`,
   `SW_SECURITY_NOT_SATISFIED` for `UserRejected` (cancel anywhere in

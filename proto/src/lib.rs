@@ -191,15 +191,8 @@ pub const PIN_ATTEMPT_LOG_LEN: usize = 36;
 ///
 /// ## Response format
 ///
-/// On success the secure world writes a structured UserOp response:
-///
-/// ```text
-///   [0..4)           init_code_len   u32 BE  (0 when deployed)
-///   [4..4+N)         initCode        N bytes (absent when deployed)
-///   [4+N..8+N)       call_data_len   u32 BE
-///   [8+N..8+N+M)     callData        M bytes (reconstructed execute(...))
-///   [8+N+M..)        PQSignatureWrapper (WRAPPER_TOTAL_LEN bytes)
-/// ```
+/// See [`MAX_SIGN_RESPONSE_LEN`] for the exact layout (new off-chain count,
+/// optional initCode, optional Type-1 rotation section, Type-2 wrapper).
 pub const CMD_SIGN_USEROP: u32 = 7;
 
 /// CMD_GET_BOOTSTRAP_PUBKEY — return the 32-byte bootstrap signer's
@@ -437,8 +430,10 @@ pub const CMD_SIGN_OFFCHAIN: u32 = 16;
 ///      address[], uint256[], bytes[])` calldata.
 ///   3. Hashes the resulting UserOp under SHA-256 and signs as today.
 ///
-/// Output bundle layout is byte-identical to [`CMD_SIGN_USEROP`]'s,
-/// so the companion's transport / parser stays the same. Only the
+/// Output bundle layout is byte-identical to [`CMD_SIGN_USEROP`]'s
+/// (including the 0x0203 Type-1 rotation section, see
+/// [`TYPE1_ROTATION_SECTION_LEN`]), so the companion's transport / parser
+/// stays the same. Only the
 /// resulting `callData` it submits via the EntryPoint is different
 /// (`executeBatchWithOffchainCount` instead of
 /// `executeWithOffchainCount`).
@@ -1528,6 +1523,25 @@ pub const PQ_ADD_OWNER_BYTES_SELECTOR: [u8; 4] = [0x10, 0x14, 0x90, 0xcb];
 /// = 20 + 4 + (5 × 32) + 32 + 32 + 4032 = 4280 bytes.
 pub const PQ_INIT_CODE_LEN: usize = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 
+/// Length of the Type-1 section of a `CMD_SIGN_USEROP` /
+/// `CMD_SIGN_USEROP_BATCH` response when `FLAG_REGISTER_SLOT` is set
+/// (protocol 0x0203+):
+///
+/// ```text
+///   [new_owner_bytes(OWNER_BYTES_LEN = 64)]   pkSeed(32) || pkRoot(32) of the
+///                                             new slot — byte-identical to the
+///                                             `addOwnerBytes(bytes)` argument
+///                                             the bootstrap key signed
+///   [type1_wrapper(SIG_WRAPPER_LEN = 4128)]   abi.encode(0, bootstrapC10Sig)
+/// ```
+///
+/// = 4192 bytes. The firmware copies `new_owner_bytes` out of the exact
+/// calldata preimage it signed, so a companion can rebuild the Type-1 UserOp
+/// (`callData = addOwnerBytes(new_owner_bytes)`) without the seed. The length
+/// deliberately differs from [`SIG_WRAPPER_LEN`] so a pre-0x0203 companion,
+/// which rejects any `type1_len != 0` / `!= 4128`, fails closed.
+pub const TYPE1_ROTATION_SECTION_LEN: usize = OWNER_BYTES_LEN + SIG_WRAPPER_LEN;
+
 /// Maximum unified response from `CMD_SIGN_USEROP`:
 ///
 /// ```text
@@ -1536,11 +1550,21 @@ pub const PQ_INIT_CODE_LEN: usize = 20 + 4 + 5 * 32 + 32 + 32 + 4032; // 4280
 ///                                  is about to submit in the
 ///                                  `executeWithOffchainCount` calldata)
 ///   [init_code_len(4 BE)][init_code(0 or PQ_INIT_CODE_LEN)]
-///   [type1_len(4 BE)][type1_wrapper(0 or SIG_WRAPPER_LEN)]
+///   [type1_len(4 BE)][type1_section(0 or TYPE1_ROTATION_SECTION_LEN)]
 ///   [type2_len(4 BE)][type2_wrapper(SIG_WRAPPER_LEN)]
 /// ```
+///
+/// Sized for the impossible-by-policy worst case where initCode AND the
+/// Type-1 section are both present, so a fault that sets both emit flags
+/// still cannot write past the NS buffer.
 pub const MAX_SIGN_RESPONSE_LEN: usize =
-    8 + 4 + PQ_INIT_CODE_LEN + 4 + SIG_TYPE1_LEN + 4 + SIG_TYPE2_LEN;
+    8 + 4 + PQ_INIT_CODE_LEN + 4 + TYPE1_ROTATION_SECTION_LEN + 4 + SIG_TYPE2_LEN;
+
+const _: () = {
+    assert!(TYPE1_ROTATION_SECTION_LEN == 4192);
+    assert!(SIG_TYPE1_LEN == SIG_WRAPPER_LEN);
+    assert!(MAX_SIGN_RESPONSE_LEN == 12_620);
+};
 
 /// Flags bit 31 — set by the companion when the wallet has not yet been
 /// deployed on this chain. Firmware synthesises `initCode` from its master
@@ -1556,16 +1580,19 @@ pub const FLAG_INCLUDE_INIT_CODE: u32 = 0x8000_0000;
 ///
 /// The firmware is stateless with respect to slot selection: it does not
 /// track whether `(chain_id, slot_index)` has been registered on-chain. The
-/// companion app keeps that bookkeeping. After the reviewed wire-version bump
-/// described below, this flag is intended for the first sign with a new
-/// `(chain_id, slot_index)` pair or rotation after the current slot approaches
-/// the on-chain `MAX_SLOT_USES` cap.
+/// companion app keeps that bookkeeping. Use this flag to rotate to slot
+/// `slot_index` when the current slot approaches the on-chain
+/// `MAX_SLOT_USES` cap (or is exhausted). The contract appends the new owner
+/// at `nextOwnerIndex`, so the companion MUST request
+/// `slot_index == nextOwnerIndex - 1`.
 ///
-/// Wire-v2 caveat: the response does not yet expose the 64-byte new slot public
-/// key required to reconstruct the signed `addOwnerBytes(bytes)` calldata.
-/// Seedless production companions must therefore refuse this flag until a
-/// reviewed protocol bump supplies that binding material; they must not submit
-/// a no-op Type-1 UserOp or repeatedly harvest fresh bootstrap signatures.
+/// Protocol 0x0203+: the response's Type-1 section is
+/// [`TYPE1_ROTATION_SECTION_LEN`] bytes and starts with the exact 64-byte
+/// new owner bytes the bootstrap key signed into `addOwnerBytes(bytes)`, so a
+/// seedless companion can rebuild and submit the Type-1 UserOp (nonce = base)
+/// and then, after it is included, the Type-2 UserOp (nonce = base + 1).
+/// Pre-0x0203 firmware omits the owner bytes; companions must not set this
+/// flag against a device reporting `< 0x0203`.
 ///
 /// When clear, firmware emits Type 2 only. A companion may submit that UserOp
 /// only for slot 0 in the factory-deploy flow or a slot it has independently
@@ -2080,7 +2107,13 @@ pub const MAX_EXECUTE_BATCH_CALLDATA_LEN: usize = 18 * 1024; // 18,432
 /// the trusted-OLED confirm before it is returned. Older firmware
 /// rejects the 5-byte body with SW_WRONG_LENGTH, so companions must
 /// gate the flag on a >= 0x0202 report.
-pub const PROTOCOL_VERSION: u16 = 0x0202;
+/// 0x0203: bumped for the slot-rotation response (#353): when
+/// `FLAG_REGISTER_SLOT` is set the Type-1 section is
+/// [`TYPE1_ROTATION_SECTION_LEN`] (4192) bytes, `new_owner_bytes(64) ||
+/// type1_wrapper(4128)`, instead of the bare 4128-byte wrapper. Responses
+/// without a Type-1 are byte-identical to 0x0202. Companions must gate
+/// `FLAG_REGISTER_SLOT` on a >= 0x0203 report.
+pub const PROTOCOL_VERSION: u16 = 0x0203;
 
 /// ISO 7816-4 status words
 pub const SW_OK: u16 = 0x9000;

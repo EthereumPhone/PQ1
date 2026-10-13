@@ -12,9 +12,235 @@
 //! through the on-chain monotonic cap. We just need the trusted display
 //! to surface the rotation as its own affirmative-consent step before
 //! the inner-tx render runs.
+//!
+//! ## Consent receipt (sweep 2026-10-13 finding #1)
+//!
+//! The whole rotation dialog sits under one `if register_slot` branch in
+//! each handler. A single fault that sends that branch the false way would
+//! skip the dialog while later code (which re-reads the honest flag) still
+//! derives the bootstrap key and releases a Type-1. [`RotationConfirmReceipt`]
+//! closes that: it is fail-initialised before the dialog, published only in
+//! the dialog's affirmative arm (or, when rotation was not requested, as an
+//! explicit `requested = false` skip record), and its
+//! [`RotationConfirmReceipt::completion_proof`] against the context built
+//! from the real flag is checked twice before the bootstrap key is used. A
+//! skipped dialog leaves either no record or a skip record whose digest
+//! cannot match a `requested = true` context.
+//!
+//! ## Output binding (#353)
+//!
+//! Protocol 0x0203 returns the new slot's 64-byte owner bytes ahead of the
+//! Type-1 wrapper. [`rotation_output_binding_proof`] proves, immediately
+//! before release, that the emitted owner bytes are the new slot's key AND
+//! that `addOwnerBytes(emitted)` hashes to the calldata digest the bootstrap
+//! key actually signed — so a companion rebuilding the Type-1 UserOp from the
+//! response submits exactly the signed preimage.
 
 use super::Pages;
 use crate::ui::DISPLAY_COLS;
+use sha2::{Digest, Sha256};
+
+const ROTATION_CONFIRM_CFI_STEP: u32 = 0x5107_C0F1;
+const ROTATION_CONFIRM_FAIL_DIGEST: [u8; 32] = [0x5A; 32];
+const ROTATION_CONFIRM_DOMAIN: &[u8] = b"PQSigner/rotation-confirm/v1";
+
+/// Exact public rotation context authorised by one trusted confirmation.
+///
+/// Built from the handler's real (FI-rechecked) `register_slot` flag and the
+/// exact Type-1 UserOp fields the bootstrap key will sign.
+#[derive(Clone, Copy)]
+pub(crate) struct RotationConfirmContext {
+    requested: bool,
+    chain_id: u64,
+    account_index: u32,
+    slot_index: u32,
+    sender: [u8; 20],
+    base_nonce: [u8; 32],
+    gas: [[u8; 32]; 5],
+}
+
+impl RotationConfirmContext {
+    /// `gas` = `[call_gas_limit, verification_gas_limit, pre_verification_gas,
+    /// max_fee_per_gas, max_priority_fee_per_gas]`, as signed into Type 1.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) const fn new(
+        requested: bool,
+        chain_id: u64,
+        account_index: u32,
+        slot_index: u32,
+        sender: [u8; 20],
+        base_nonce: [u8; 32],
+        gas: [[u8; 32]; 5],
+    ) -> Self {
+        Self {
+            requested,
+            chain_id,
+            account_index,
+            slot_index,
+            sender,
+            base_nonce,
+            gas,
+        }
+    }
+
+    /// Whether this context covers a requested rotation.
+    pub(crate) fn requested(&self) -> bool {
+        self.requested
+    }
+
+    /// The same context with `requested` forced to a literal `false`: the
+    /// only shape a "rotation not requested" record may carry.
+    const fn as_not_requested(&self) -> Self {
+        let mut c = *self;
+        c.requested = false;
+        c
+    }
+
+    fn receipt_digest(&self) -> [u8; 32] {
+        let mut h = Sha256::new();
+        h.update(ROTATION_CONFIRM_DOMAIN);
+        h.update([u8::from(self.requested)]);
+        h.update(self.chain_id.to_be_bytes());
+        h.update(self.account_index.to_be_bytes());
+        h.update(self.slot_index.to_be_bytes());
+        h.update(self.sender);
+        h.update(self.base_nonce);
+        for word in &self.gas {
+            h.update(word);
+        }
+        h.finalize().into()
+    }
+}
+
+/// Fail-initialised authority receipt carried from the rotation dialog's
+/// affirmative branch to both bootstrap-key boundaries.
+pub(crate) struct RotationConfirmReceipt {
+    recorded: u32,
+    context_digest: [u8; 32],
+    cfi: crate::fi::CfiCounter,
+}
+
+impl RotationConfirmReceipt {
+    pub(crate) const fn new() -> Self {
+        Self {
+            recorded: 0,
+            context_digest: ROTATION_CONFIRM_FAIL_DIGEST,
+            cfi: crate::fi::CfiCounter::new(),
+        }
+    }
+
+    #[inline(never)]
+    pub(crate) fn fail_initialize(&mut self) {
+        // SAFETY: every field is uniquely borrowed and has no destructor.
+        unsafe {
+            core::ptr::write_volatile(&mut self.recorded, 0);
+            core::ptr::write_volatile(&mut self.context_digest, ROTATION_CONFIRM_FAIL_DIGEST);
+            core::ptr::write_volatile(&mut self.cfi, crate::fi::CfiCounter::new());
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Publish the receipt from the rotation dialog's affirmative arm, after
+    /// the caller has checked both `Confirmed` and its FI sentinel.
+    #[inline(never)]
+    pub(crate) fn record_confirmed(&mut self, context: &RotationConfirmContext) -> Result<(), ()> {
+        if !context.requested {
+            return Err(());
+        }
+        self.publish(context.receipt_digest())
+    }
+
+    /// Publish the "rotation not requested" record. Its digest is always
+    /// computed over a literal `requested = false` context, so it can never
+    /// satisfy [`Self::completion_proof`] for a requested rotation — a fault
+    /// that diverts a `register_slot == true` flow into this path fails
+    /// closed at both bootstrap boundaries.
+    #[inline(never)]
+    pub(crate) fn record_not_requested(&mut self, context: &RotationConfirmContext) -> Result<(), ()> {
+        self.publish(context.as_not_requested().receipt_digest())
+    }
+
+    fn publish(&mut self, digest: [u8; 32]) -> Result<(), ()> {
+        // SAFETY: unique live receipt; volatile state stays observable under
+        // LTO independently of the CFI accumulator.
+        let current = unsafe { core::ptr::read_volatile(&self.recorded) };
+        if current != 0 {
+            return Err(());
+        }
+        unsafe {
+            core::ptr::write_volatile(&mut self.context_digest, digest);
+            core::ptr::write_volatile(&mut self.recorded, 1);
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        self.cfi.bump(ROTATION_CONFIRM_CFI_STEP);
+        Ok(())
+    }
+
+    /// Prove exactly one publication for exactly `context` (built from the
+    /// handler's real `register_slot`). Callers check it before deriving the
+    /// bootstrap key and again immediately before the bootstrap sign.
+    #[inline(never)]
+    pub(crate) fn completion_proof(&self, context: &RotationConfirmContext) -> u32 {
+        // SAFETY: immutable live receipt, sampled twice around a randomized
+        // gap so one corrupt load cannot forge the authority state.
+        let recorded_a = unsafe { core::ptr::read_volatile(&self.recorded) };
+        let digest_a = unsafe { core::ptr::read_volatile(&self.context_digest) };
+        crate::fi::wait_random();
+        let recorded_b = unsafe { core::ptr::read_volatile(&self.recorded) };
+        let digest_b = unsafe { core::ptr::read_volatile(&self.context_digest) };
+
+        let expected = context.receipt_digest();
+        let mut diff_a = 0u8;
+        let mut diff_b = 0u8;
+        for i in 0..expected.len() {
+            diff_a |= digest_a[i] ^ expected[i];
+            diff_b |= digest_b[i] ^ expected[i];
+        }
+        let expected_cfi = crate::fi::CfiCounter::INIT_VALUE.wrapping_add(ROTATION_CONFIRM_CFI_STEP);
+        crate::fi::scrub_sentinel_register();
+        let cfi_verdict = self.cfi.check_into_sentinel(expected_cfi);
+        let all_ok = recorded_a == 1
+            && recorded_b == 1
+            && diff_a == 0
+            && diff_b == 0
+            && cfi_verdict == crate::fi::OK_SENTINEL;
+        crate::fi::scrub_sentinel_register();
+        crate::fi::check_true_into_sentinel(|| core::hint::black_box(all_ok))
+    }
+}
+
+/// Bind the released Type-1 section to the exact signed preimage (#353).
+///
+/// * Requested: `emit_type1` must be set, `owner_out` must equal the new
+///   slot's `slot_owner_bytes` (the key the Type-2 is signed with), and
+///   SHA-256 of `addOwnerBytes(owner_out)` must equal `signed_call_digest`,
+///   the calldata digest folded into the bootstrap-signed sphincs digest.
+/// * Not requested: `emit_type1` must be clear.
+#[inline(never)]
+pub(crate) fn rotation_output_binding_proof(
+    context: &RotationConfirmContext,
+    emit_type1: bool,
+    owner_out: &[u8; 64],
+    slot_owner_bytes: &[u8; 64],
+    signed_call_digest: &[u8; 32],
+) -> u32 {
+    let rebuilt: [u8; 32] =
+        Sha256::digest(pqsigner_aa::userop::add_owner_bytes_calldata(owner_out)).into();
+    crate::fi::check_true_into_sentinel(|| {
+        if core::hint::black_box(context.requested) {
+            let mut diff = 0u8;
+            for i in 0..64 {
+                diff |= owner_out[i] ^ slot_owner_bytes[i];
+            }
+            for i in 0..32 {
+                diff |= rebuilt[i] ^ signed_call_digest[i];
+            }
+            core::hint::black_box(emit_type1) && core::hint::black_box(diff) == 0
+        } else {
+            !core::hint::black_box(emit_type1)
+        }
+    })
+}
 
 /// Build the one-page "ROTATE SLOT?" confirm shown before the inner-tx
 /// confirm whenever `FLAG_REGISTER_SLOT` is set.
@@ -87,4 +313,114 @@ fn write_dec(buf: &mut [u8; DISPLAY_COLS], pos: usize, value: u32) -> usize {
         buf[pos + i] = tmp[n - 1 - i];
     }
     n
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ctx(requested: bool) -> RotationConfirmContext {
+        RotationConfirmContext::new(requested, 8453, 0, 3, [0x11; 20], [0x22; 32], [[0x33; 32]; 5])
+    }
+
+    #[test]
+    fn unrecorded_receipt_fails_closed() {
+        let mut r = RotationConfirmReceipt::new();
+        r.fail_initialize();
+        assert_ne!(r.completion_proof(&ctx(true)), crate::fi::OK_SENTINEL);
+        assert_ne!(r.completion_proof(&ctx(false)), crate::fi::OK_SENTINEL);
+    }
+
+    #[test]
+    fn confirmed_receipt_is_context_specific() {
+        let c = ctx(true);
+        let mut r = RotationConfirmReceipt::new();
+        r.fail_initialize();
+        r.record_confirmed(&c).unwrap();
+        assert_eq!(r.completion_proof(&c), crate::fi::OK_SENTINEL);
+        let mut gas = [[0x33; 32]; 5];
+        gas[3][31] ^= 1;
+        for other in [
+            RotationConfirmContext::new(true, 8453, 0, 4, [0x11; 20], [0x22; 32], [[0x33; 32]; 5]),
+            RotationConfirmContext::new(true, 1, 0, 3, [0x11; 20], [0x22; 32], [[0x33; 32]; 5]),
+            RotationConfirmContext::new(true, 8453, 1, 3, [0x11; 20], [0x22; 32], [[0x33; 32]; 5]),
+            RotationConfirmContext::new(true, 8453, 0, 3, [0x12; 20], [0x22; 32], [[0x33; 32]; 5]),
+            RotationConfirmContext::new(true, 8453, 0, 3, [0x11; 20], [0x23; 32], [[0x33; 32]; 5]),
+            RotationConfirmContext::new(true, 8453, 0, 3, [0x11; 20], [0x22; 32], gas),
+            ctx(false),
+        ] {
+            assert_ne!(r.completion_proof(&other), crate::fi::OK_SENTINEL);
+        }
+        // Exactly one publication.
+        assert!(r.record_confirmed(&c).is_err());
+        assert!(r.record_not_requested(&c).is_err());
+    }
+
+    #[test]
+    fn skip_record_cannot_authorise_a_requested_rotation() {
+        // The FI scenario of sweep finding #1: the dialog branch is skipped
+        // while the honest flag is still `true`, and control lands on the
+        // not-requested record. The proof against the real context must fail.
+        let requested = ctx(true);
+        let mut r = RotationConfirmReceipt::new();
+        r.fail_initialize();
+        r.record_not_requested(&requested).unwrap();
+        assert_ne!(r.completion_proof(&requested), crate::fi::OK_SENTINEL);
+        // ...while the genuine disabled mode proves cleanly.
+        let disabled = ctx(false);
+        let mut r2 = RotationConfirmReceipt::new();
+        r2.fail_initialize();
+        r2.record_not_requested(&disabled).unwrap();
+        assert_eq!(r2.completion_proof(&disabled), crate::fi::OK_SENTINEL);
+    }
+
+    #[test]
+    fn confirmed_record_refuses_a_not_requested_context() {
+        let mut r = RotationConfirmReceipt::new();
+        r.fail_initialize();
+        assert!(r.record_confirmed(&ctx(false)).is_err());
+        assert_ne!(r.completion_proof(&ctx(false)), crate::fi::OK_SENTINEL);
+    }
+
+    #[test]
+    fn output_proof_binds_owner_bytes_to_signed_calldata() {
+        let mut owner = [0u8; 64];
+        for (i, b) in owner.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        let signed: [u8; 32] =
+            Sha256::digest(pqsigner_aa::userop::add_owner_bytes_calldata(&owner)).into();
+        let on = ctx(true);
+        assert_eq!(
+            rotation_output_binding_proof(&on, true, &owner, &owner, &signed),
+            crate::fi::OK_SENTINEL
+        );
+        // Type-1 not emitted although requested.
+        assert_ne!(
+            rotation_output_binding_proof(&on, false, &owner, &owner, &signed),
+            crate::fi::OK_SENTINEL
+        );
+        // Emitted owner differs from the slot key.
+        let mut wrong = owner;
+        wrong[40] ^= 1;
+        assert_ne!(
+            rotation_output_binding_proof(&on, true, &wrong, &owner, &signed),
+            crate::fi::OK_SENTINEL
+        );
+        // Emitted owner is the slot key but not what was signed.
+        assert_ne!(
+            rotation_output_binding_proof(&on, true, &wrong, &wrong, &signed),
+            crate::fi::OK_SENTINEL
+        );
+        // Disabled mode: no Type-1 may be emitted.
+        let off = ctx(false);
+        assert_eq!(
+            rotation_output_binding_proof(&off, false, &[0; 64], &owner, &[0; 32]),
+            crate::fi::OK_SENTINEL
+        );
+        assert_ne!(
+            rotation_output_binding_proof(&off, true, &owner, &owner, &signed),
+            crate::fi::OK_SENTINEL
+        );
+    }
 }

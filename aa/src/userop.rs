@@ -890,6 +890,34 @@ pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
     Sha256::digest(data).into()
 }
 
+/// Length of the Type-1 slot-rotation calldata `addOwnerBytes(bytes)` with a
+/// 64-byte owner: `selector(4) || offset(32) || length(32) || owner(64)`.
+pub const ADD_OWNER_BYTES_CALLDATA_LEN: usize = 4 + 32 + 32 + pqsigner_proto::OWNER_BYTES_LEN;
+
+/// Offset of the 64-byte owner argument inside [`add_owner_bytes_calldata`].
+pub const ADD_OWNER_BYTES_ARG_OFFSET: usize = 4 + 32 + 32;
+
+/// The exact Type-1 slot-rotation calldata the bootstrap key signs:
+/// `addOwnerBytes(bytes newOwner)` with `newOwner = pkSeed || pkRoot` of the
+/// new slot. The owner is already 32-byte aligned, so there is no padding.
+///
+/// Shared by the firmware (`cmd_sign_userop{,_batch}`) and host-side
+/// companions/verifiers, so a companion rebuilding the Type-1 UserOp from the
+/// 0x0203 response's `new_owner_bytes` hashes byte-identical calldata (#353).
+#[must_use]
+pub fn add_owner_bytes_calldata(
+    owner: &[u8; pqsigner_proto::OWNER_BYTES_LEN],
+) -> [u8; ADD_OWNER_BYTES_CALLDATA_LEN] {
+    let mut call = [0u8; ADD_OWNER_BYTES_CALLDATA_LEN];
+    call[..4].copy_from_slice(&pqsigner_proto::PQ_ADD_OWNER_BYTES_SELECTOR);
+    // ABI head: offset to the dynamic `bytes` = 0x20.
+    call[4 + 31] = 0x20;
+    // `bytes` length = 64 = 0x40.
+    call[4 + 32 + 31] = pqsigner_proto::OWNER_BYTES_LEN as u8;
+    call[ADD_OWNER_BYTES_ARG_OFFSET..].copy_from_slice(owner);
+    call
+}
+
 // ---------------------------------------------------------------------------
 // Unified sign-input header arithmetic kernels (extracted for Kani).
 //
@@ -1120,6 +1148,29 @@ mod tests {
     use super::*;
     use std::vec;
     use std::vec::Vec;
+
+    #[test]
+    fn add_owner_bytes_calldata_is_exact_abi_encoding() {
+        // #353: the companion rebuilds the Type-1 calldata from the response's
+        // owner bytes with this function, so it must equal the Solidity ABI
+        // encoding of `addOwnerBytes(bytes)` with a 64-byte argument.
+        let mut owner = [0u8; 64];
+        for (i, b) in owner.iter_mut().enumerate() {
+            *b = i as u8 ^ 0xA5;
+        }
+        let call = add_owner_bytes_calldata(&owner);
+        assert_eq!(call.len(), 132);
+        assert_eq!(&call[..4], &[0x10, 0x14, 0x90, 0xcb]);
+        let mut word = [0u8; 32];
+        word[31] = 0x20;
+        assert_eq!(&call[4..36], &word);
+        word[31] = 0x40;
+        assert_eq!(&call[36..68], &word);
+        assert_eq!(&call[ADD_OWNER_BYTES_ARG_OFFSET..], &owner);
+        // Negative control: a different owner changes the calldata.
+        owner[63] ^= 1;
+        assert_ne!(add_owner_bytes_calldata(&owner), call);
+    }
 
     // -- helpers ----------------------------------------------------------
 
