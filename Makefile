@@ -924,6 +924,11 @@ e2e-hw-display:
 #   * otp-hardcoded-master-key — avoids burning real OTP each run
 #                                (same choice as dual-se-admin-wipe-e2e)
 #
+# NOT `e2e-skip-admin-wipe` any more (#912). Without the admin object the
+# SE050 UserID has no admin-delete entry, and the only thing that removed
+# it between runs was a clean-up that guessed its value. With the admin
+# object, the pre-clean's admin wipe removes everything this flow writes.
+#
 # Requires: ST-LINK, $(STM32_PROG), OPTIGA Trust M + SE050 on
 # the I2C bus, SSD1306 OLED wired to PB8/PB9/3V3/GND.
 #
@@ -936,7 +941,7 @@ e2e-hw-dual-se:
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features dual-se,ui-lcd,debug-log,e2e-test,e2e-skip-admin-wipe,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)
+			--features dual-se,ui-lcd,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
@@ -1291,11 +1296,18 @@ stsafe-probe:
 
 # SE050 factory reset: wipe all objects, then halt.
 # Run this once to clear stale SE050 state, then flash normal firmware.
-# The firmware sweeps UserIDs 0x7B10_0000 (current v6 range), 0x7B0E_0000,
-# 0x7B06_0000, 0x7B00_2000 (legacy) against PINs {00000000, 12345678,
-# 11111111}. Each wrong attempt consumes one of the SE050's 10 PIN tries
-# against that UserID; a correct PIN auto-resets the counter. Status
-# reported on LCD + semihosting: clean / wrong-PIN / blocked.
+# It always runs the admin wipe and the unauthenticated sweep, which present
+# no user value and remove everything a bench image from #912 on creates.
+# A UserID written before #912 can only be deleted by presenting its own
+# value, and a wrong value costs one of its ten attempts for good, so the
+# tool guesses nothing (#912): name the value at build time,
+#   make se050-reset SE050_RESET_PIN=00000000 SE050_RESET_FORMAT=raw
+# (`raw` = firmware older than #855, `derived` = #855 firmware before #912),
+# and it is presented once per UserID range (0x7B10_0000 current,
+# 0x7B0E_0000, 0x7B06_0000, 0x7B00_2000 retired). Status on LCD +
+# semihosting: clean / nothing-presented / wrong-value / blocked.
+SE050_RESET_PIN ?=
+SE050_RESET_FORMAT ?=
 #
 # Feature notes: this is a hardware (stm32u585) release image, so it MUST
 # carry `dev-testkey` to clear the `nsc/mod.rs` ship-blocker fences
@@ -1307,21 +1319,28 @@ stsafe-probe:
 # the provisioned chip. The wipe itself only needs the user PIN, not admin.
 se050-reset:
 	@echo "==> Building SE050 factory-reset firmware..."
-	@echo "    Sweeps UserIDs {0x7B10_0000, 0x7B0E_0000, 0x7B06_0000, 0x7B00_2000}"
-	@echo "    against dev PINs {00000000, 12345678, 11111111}."
+	@echo "    Always: admin wipe + unauthenticated sweep (no user value presented)."
+	@echo "    A UserID written before #912 needs its own value. Name it; nothing is guessed:"
+	@echo "      make se050-reset SE050_RESET_PIN=<8 bytes> SE050_RESET_FORMAT=<raw|derived>"
+	@echo "    raw = firmware older than #855; derived = #855 firmware before #912."
+	@echo "    ONE attempt per UserID range. A wrong value costs one of that UserID's ten attempts."
+	@echo "    The image presents its value again at EVERY boot: flash another image when it"
+	@echo "    reports its result, and do not power-cycle it."
+	@echo "    This run: PIN='$(SE050_RESET_PIN)' format='$(SE050_RESET_FORMAT)'"
 	@# Redirect the CMSE import-library to a reset-specific path so this
 	@# secure relink does NOT clobber the shared $(VENEERS). Otherwise a
 	@# later cache-HIT `flash-hw-*` (secure not rebuilt → veneers.o NOT
 	@# regenerated) would link the NS image against THIS build's veneer
 	@# addresses → NS calls land on non-SG addresses → SecureFault INVEP
 	@# at the first gateway call. (Hit on bench board #1, 2026-06-29.)
+	PQ_SE050_RESET_PIN="$(SE050_RESET_PIN)" PQ_SE050_RESET_FORMAT="$(SE050_RESET_FORMAT)" \
 	$(RUSTFLAGS_VAR)="$(subst $(VENEERS),$(CURDIR)/target/veneers-se050-reset.o,$(RUSTFLAGS_SECURE_HW))" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
 		--features se050-factory-reset,dev-testkey,ui-lcd,stm32u585,usb,debug-log,$(BOARD_FEATURE)
 	@echo "==> Flashing reset firmware..."
 	probe-rs download --chip $(CHIP) $(SECURE_ELF)
-	@echo "==> Running factory reset (150s timeout; watch LCD + semihosting for clean/wrong-PIN/blocked)..."
+	@echo "==> Running factory reset (150s timeout; watch LCD + semihosting for clean / nothing-presented / wrong-value / blocked)..."
 	@echo "    (heavily-reused bench chips hold many objects; the authenticated"
 	@echo "     pass + UserID self-delete can take a while across all UserID/PIN combos)"
 	-@timeout 150 probe-rs run --chip $(CHIP) $(SECURE_ELF) || true
@@ -3288,9 +3307,9 @@ optiga-admin-wipe-e2e:
 
 # Dual-SE (OPTIGA + SE050) admin-wipe roundtrip e2e. Exercises
 # `DualSecureElement::provision` + `DualSecureElement::unlock` end-to-end:
-# pre-clean both chips (tolerates prior test contamination via a
-# three-stage cascade: admin-PIN → user-PIN candidates → unauthenticated
-# sweep), provision fresh test entropy XOR-split across the two,
+# pre-clean both chips (admin wipe, then the unauthenticated sweep; no
+# user value is ever guessed, #912), provision fresh test entropy
+# XOR-split across the two,
 # unlock and verify the master_secret reconstructs byte-exact.
 #
 # !!! WARNING: this target DESTROYS wallet state on BOTH chips !!!

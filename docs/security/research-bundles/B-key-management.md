@@ -3061,6 +3061,62 @@ pub fn is_duress_wipe_mode() -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// The multi-unlock test's fixture marker — page 125, quad-word 3 (#912)
+// ---------------------------------------------------------------------------
+//
+// `dual-se-multi-unlock-e2e` runs over three boots and has to know, on boots
+// two and three, that the wallet on the chips is the one it provisioned on
+// boot one. It used to find out by unlocking with its own test PIN, which
+// presents a credential to whatever wallet is there; against someone else's
+// wallet that is a wrong value, and a wrong value costs one of the SE050
+// UserID's ten attempts for good. "Some wallet was provisioned by this
+// microcontroller" (a salt record) is not enough either: every flow writes
+// one. So the test leaves its own mark after it has provisioned, and probes
+// only when the mark is there. The mark goes with page 125, which every
+// completed wipe erases.
+#[cfg(feature = "dual-se-multi-unlock-e2e")]
+const MULTI_UNLOCK_FIXTURE_OFFSET: u32 = 48;
+#[cfg(feature = "dual-se-multi-unlock-e2e")]
+const MULTI_UNLOCK_FIXTURE_MARK: [u8; 16] = *b"MULTIUNLOCK-FIXT";
+#[cfg(feature = "dual-se-multi-unlock-e2e")]
+const _: () = assert!(
+    MULTI_UNLOCK_FIXTURE_OFFSET >= DURESS_WIPE_MODE_OFFSET + 16
+        && MULTI_UNLOCK_FIXTURE_OFFSET + 16 <= PIN_SALT_FIRST_QW * 16
+);
+
+/// Whether the multi-unlock test's mark is on page 125.
+#[cfg(feature = "dual-se-multi-unlock-e2e")]
+#[must_use]
+pub fn multi_unlock_fixture_present() -> bool {
+    let src = (ADMIN_PAGE_ADDR + MULTI_UNLOCK_FIXTURE_OFFSET) as *const u8;
+    let mut same = true;
+    for (i, expected) in MULTI_UNLOCK_FIXTURE_MARK.iter().enumerate() {
+        // SAFETY: fixed in-flash address inside page 125; memory-mapped read.
+        same &= unsafe { read_volatile(src.add(i)) } == *expected;
+    }
+    same
+}
+
+/// Leave the multi-unlock test's mark. A no-op when it is already there
+/// (a programmed quad-word must not be programmed again).
+///
+/// # Safety
+/// Programs a flash quad-word at `ADMIN_PAGE_ADDR + MULTI_UNLOCK_FIXTURE_OFFSET`.
+#[cfg(feature = "dual-se-multi-unlock-e2e")]
+pub unsafe fn mark_multi_unlock_fixture() -> Result<(), ()> {
+    if multi_unlock_fixture_present() {
+        return Ok(());
+    }
+    // SAFETY: forwarded contract; dedicated quad-word in page 125.
+    unsafe {
+        write_quadword_verified(
+            ADMIN_PAGE_ADDR + MULTI_UNLOCK_FIXTURE_OFFSET,
+            &MULTI_UNLOCK_FIXTURE_MARK,
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
 // PIN-credential salt log — page 125, quad-words 16..512 (#855)
 // ---------------------------------------------------------------------------
 //

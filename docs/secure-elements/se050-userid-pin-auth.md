@@ -11,52 +11,61 @@
 > from the same PRF. The SE050 still does the comparison and the counting
 > itself, exactly as described below.
 >
-> One consequence for bench work: the UserID can only be deleted by a session
-> that presents its own value (S-6). After a wipe the salt is gone, so on a
-> shippable build that value can no longer be recomputed and the object stays
-> on the chip. Bench builds (`e2e-test` / `otp-hardcoded-master-key`) use a
-> fixed public salt **and a fixed public PRF key**, so the credential of a
-> known test PIN is the same on every bench build whatever key root that
-> build uses. `make se050-reset` and the e2e pre-clean decide the format once
-> (a salt record on page 125 means "written by this scheme") and try every
-> test PIN in that format, then the default PIN in the other: at most one
-> attempt more than before.
+> **Shipping images:** the UserID can only be deleted by a session that
+> presents its own value (S-6). After a wipe the salt is gone, so that value
+> can no longer be recomputed and the object stays on the chip.
 >
-> **Boards that hold a wallet written by firmware older than this change.**
-> This firmware cannot open such a wallet, and there is deliberately no
-> migration path (one would have to present the old raw PIN to a chip, and an
-> emulated chip could then ask for it). What happens depends on the build:
+> **Bench images (`e2e-test` / `otp-hardcoded-master-key`, which
+> `dev-testkey` implies) are different on purpose (#912):** they use a fixed
+> public salt and PRF key, and they create the user and duress UserID *with*
+> an admin-delete entry (`se050::USERID_ADMIN_DELETE`). On a bench image the
+> admin credential derives from a public constant, so S-6 protects nothing
+> there, while a UserID that nobody can delete costs a board: each wrong
+> value spends one of its ten attempts for good, and a locked UserID blocks
+> provisioning at its OID. With the entry the admin wipe removes the UserID
+> and no clean-up has to know a PIN. A production build asserts the entry is
+> absent. Not covered: an image built with the `e2e-skip-admin-wipe` feature
+> provisions no admin object, so its UserID has no admin entry either. No
+> Makefile target enables that feature any more (`make e2e-hw-dual-se` did
+> until #912); a second run of such an image fails its unlock check.
 >
-> - **`e2e-test` images on dual-SE hardware** are not affected: at every boot
->   they wipe both chips, delete the SE050 user objects with the known test
->   PINs (old raw format first when page 125 holds no salt record), provision
->   afresh and unlock directly, without `gated_unlock` (`main.rs`, the
->   "dual-se pre-clean" block; not built under `e2e-skip-provision`).
-> - **A bench image without `e2e-test`** (for example the EVT dev flow, where
->   `dev-testkey` implies `otp-hardcoded-master-key`): nothing is wiped at
->   boot. A PIN typed at the prompt derives a credential the chips never
->   stored, so the correct PIN is charged as a wrong one on page 124, OPTIGA
->   E120 and the SE050 UserID, and ten such tries end in the lockout wipe.
-> - **An image with none of the bench features:** on SE050 and dual-SE
->   hardware the first boot finds a provisioned wallet with no salt and wipes
->   it. The boot wipe block is not compiled for an OPTIGA-only bench build
->   (`main.rs`, `any(feature = "se050", feature = "dual-se")`); there the
->   wallet is refused, without charging an attempt, until a reset tool
->   removes it.
+> **Nothing guesses a PIN at a chip.** The e2e pre-clean and the dual-SE
+> test cascades run the admin wipe and stop, and the multi-unlock test only
+> presents its own credential when its own mark is on page 125 (it leaves
+> the mark after it has provisioned; every completed wipe erases it). If the
+> user UserID survives the admin wipe, provisioning of the real wallet fails
+> loudly (`Status(0x6986)`), and the log says which of two cases it is,
+> judged from whether the admin wipe itself completed: it did not (if the
+> admin authentication failed, the admin object was written under another
+> key root; fix that, do not spend an attempt), or it did (the UserID has no
+> admin-delete entry: written before #912, or by an `e2e-skip-admin-wipe`
+> image; remove it as below). A bench wipe also removes the decoy's three
+> data objects and the duress UserID; a duress UserID written before #912
+> survives, and a bench provisioning then refuses to write a decoy under it.
+> No tool removes that one yet (it has unlimited attempts, so doing so is
+> safe).
 >
-> Where a wipe runs, the old user UserID object survives it (S-6),
-> and `store_objects` refuses to provision while it exists
-> (`Status(0x6986)`), so that SE050 cannot take a new wallet until the object
-> is deleted by a session that presents the old PIN, or the OID range is
-> bumped. That is the end state ten wrong PINs always had; what is new is
-> reaching it with the right one.
+> **Removing a UserID written before #912** (by firmware older than #855, or
+> by #855 firmware before #912). It needs its own value, presented once:
 >
-> Bench boards are re-flashed and re-provisioned as a matter of routine
-> (owner, 2026-10-13), so no data depends on this. The practical rule: remove
-> an old wallet with something that knows its PIN (`make se050-reset`, or any
-> `e2e-test` image, both of which cover the test PINs) rather than by typing
-> the PIN into this firmware. Derived from the source; not exercised on a
-> board.
+> ```
+> make se050-reset SE050_RESET_PIN=<the 8-byte PIN> SE050_RESET_FORMAT=<raw|derived>
+> ```
+>
+> `raw` for firmware older than #855 (the eight PIN bytes), `derived` for
+> #855 firmware (the bench credential of that PIN). The tool runs the admin
+> wipe, recovers the session, presents that one value once per UserID range
+> and halts. It presents the value again at every boot, so flash another
+> image when it has reported and do not power-cycle it. A wrong value costs
+> one of the ten attempts, so do not run it with a guess, and do not type an old
+> wallet's PIN into this firmware either: on a bench image without
+> `e2e-test` a PIN typed at the prompt derives a credential the old object
+> never held and is charged as wrong on page 124, OPTIGA E120 and the SE050
+> UserID. An image with none of the bench features wipes a wallet it cannot
+> recompute at first boot (SE050 and dual-SE builds; an OPTIGA-only bench
+> build has no boot wipe block and refuses the wallet, uncharged, instead),
+> and the old UserID survives that wipe too. Derived from the source; not
+> exercised on a board.
 >
 > The builders in `se050/apdu.rs` no longer take `&[u8]`: they take
 > `UserIdValue`, which is a typed credential, a 16-byte device secret, or a

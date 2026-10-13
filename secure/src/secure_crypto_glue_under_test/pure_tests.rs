@@ -2317,9 +2317,10 @@ fn negative_dual_se_never_passes_a_pin_to_a_backend() {
     // Every entry that takes a PIN derives before it touches a chip.
     assert_eq!(
         DUAL_SE_SRC.matches("crate::pin_gate::unlock_credentials(").count(),
-        4,
-        "unlock_duress, duress_pad, unlock and the e2e pre-clean helper each derive through \
-         pin_gate::unlock_credentials"
+        3,
+        "unlock_duress, duress_pad and unlock each derive through \
+         pin_gate::unlock_credentials, and nothing else in this file derives (#912 \
+         removed the clean-up helper that did)"
     );
     // The decoy is provisioned only under a salt minted in the same boot.
     assert_eq!(
@@ -2331,36 +2332,166 @@ fn negative_dual_se_never_passes_a_pin_to_a_backend() {
 }
 
 #[test]
-fn negative_dual_se_raw_pin_reaches_a_chip_only_in_the_e2e_legacy_cleanup() {
-    // #855: exactly one place in the tree still presents raw PIN bytes to a
-    // secure element: the bench pre-clean, which has to delete UserID
-    // objects written by pre-#855 firmware. It must stay (a) unique and
-    // (b) inside the e2e-only impl block, so no shippable image contains it.
-    const RAW: &str = ".user_factory_reset(UserIdValue::Fixed(test_pin))";
-    assert_eq!(
-        DUAL_SE_SRC.matches(RAW).count(),
-        1,
-        "the legacy raw-PIN clean-up must appear exactly once"
-    );
-    let gate = "#[cfg(any(\n    feature = \"e2e-test\",\n    feature = \"dual-se-admin-wipe-e2e\",\n    feature = \"dual-se-multi-unlock-e2e\"\n))]\nimpl DualSecureElement {";
-    let block_start = DUAL_SE_SRC.find(gate).expect("e2e-only helper block present");
-    let after_gate = block_start + gate.len();
-    let block_len = DUAL_SE_SRC[after_gate..]
-        .find("\nimpl DualSecureElement {")
-        .expect("the helper block is followed by the unconditional impl");
-    let raw_at = DUAL_SE_SRC.find(RAW).expect("counted above");
-    assert!(
-        raw_at > after_gate && raw_at < after_gate + block_len,
-        "the legacy raw-PIN clean-up has moved outside the e2e-only block"
-    );
-    // The raw variant of the other single-chip helpers is never called.
-    // It takes a compile-time constant, so a PIN typed in at run time
-    // cannot be routed through it.
-    assert!(DUAL_SE_SRC.contains(
-        "fn legacy_raw(this: &mut DualSecureElement, test_pin: &'static [u8; 8]) -> bool {"
+fn negative_nothing_guesses_a_pin_at_a_secure_element() {
+    // #912. A UserID without an admin-delete entry can only be deleted by a
+    // session that presents its own value, and every wrong value spends one
+    // of its ten attempts for good. The clean-up that landed with #855
+    // guessed: up to five values per run, in a format chosen from a flash
+    // record that every EVT flash erases. Two runs could lock a board's
+    // UserID permanently.
+    //
+    // Now nothing guesses. Bench images create the UserID so that the admin
+    // wipe removes it (`se050::USERID_ADMIN_DELETE`), and the one tool that
+    // presents a user value presents ONE, named by the operator at build
+    // time.
+    const MAIN_SRC: &str = include_str!("../main.rs");
+    for (name, src) in [("dual_se.rs", DUAL_SE_SRC), ("main.rs", MAIN_SRC)] {
+        assert!(!src.contains("PIN_CANDIDATES"), "{name}: a PIN candidate list is back");
+        assert!(
+            !src.contains("e2e_delete_se050_user_objects"),
+            "{name}: the guessing clean-up helper is back"
+        );
+    }
+    // The dual-SE layer presents no raw value to a chip at all any more ...
+    assert_eq!(DUAL_SE_SRC.matches("UserIdValue::Fixed(").count(), 0);
+    assert_eq!(DUAL_SE_SRC.matches("user_factory_reset(").count(), 0);
+    // ... and main.rs does so in exactly one place, the reset tool, with a
+    // value that comes from the build environment, once per UserID range.
+    let tool_start = MAIN_SRC
+        .find("    #[cfg(feature = \"se050-factory-reset\")]\n    unsafe {")
+        .expect("the reset tool block");
+    let tool_len = MAIN_SRC[tool_start..]
+        .find("        // Tri-state outcome:")
+        .expect("end of the reset tool's wipe logic");
+    let tool = &MAIN_SRC[tool_start..tool_start + tool_len];
+    assert!(tool.contains("option_env!(\"PQ_SE050_RESET_PIN\")"));
+    assert!(tool.contains("option_env!(\"PQ_SE050_RESET_FORMAT\")"));
+    assert_eq!(tool.matches("UserIdValue::Fixed(pin)").count(), 1);
+    assert_eq!(tool.matches("iterative_wipe(Some(uid), Some(userid_value))").count(), 1);
+    // The admin wipe runs first and unconditionally; it presents no user
+    // value.
+    let admin_at = tool.find("se.factory_reset_admin()").expect("admin wipe first");
+    let user_at = tool.find("iterative_wipe(Some(uid)").expect("counted above");
+    assert!(admin_at < user_at);
+    // Outside the tool, main.rs presents a raw value only where it did
+    // before #912 (fixed probe constants; no PIN).
+    let rest_before = &MAIN_SRC[..tool_start];
+    let rest_after = &MAIN_SRC[tool_start + tool_len..];
+    for part in [rest_before, rest_after] {
+        assert!(!part.contains("UserIdValue::Fixed(pin)"));
+    }
+
+    // The tool's input guards (pre-landing review of #912: counting the call
+    // line alone left these free to change).
+    // 1. A derived credential exists only on the current range; it is never
+    //    presented to a retired one, where it could only be wrong.
+    assert!(tool.contains(
+        "                    if use_derived && uid != crate::se050::USERID_OBJ {\n                        continue;\n                    }\n"
     ));
-    assert!(DUAL_SE_SRC.contains("candidates: &'static [[u8; 8]],"));
-    assert_eq!(DUAL_SE_SRC.matches("UserIdValue::Fixed(").count(), 1);
+    // 2. Anything but `raw` / `derived` presents nothing.
+    assert!(tool.contains(
+        "            Some(\"raw\") => Some(false),\n            Some(\"derived\") => Some(true),\n            _ => None,\n"
+    ));
+    // 3. So does a missing, empty or wrong-length PIN.
+    assert!(tool.contains("            None | Some(\"\") => None,\n"));
+    assert!(tool.contains("<&[u8; 8]>::try_from(text.as_bytes())"));
+    // 4. One pass over the ranges: the only loop in the tool.
+    assert_eq!(tool.matches("for &uid in USERIDS").count(), 1);
+    assert_eq!(tool.matches("for ").count(), 1, "a second loop in the reset tool");
+    assert_eq!(tool.matches("while ").count(), 0);
+    assert_eq!(tool.matches("loop {").count(), 0);
+    // 5. After the admin wipe the session is re-initialised, and if that
+    //    fails nothing is presented (a failed admin VERIFY leaves the
+    //    session pending, and the operator's value would be reported as
+    //    wrong without having been compared). The whole block is pinned:
+    //    the second review wave turned the `Err` arm's `false` into `true`
+    //    and the position check alone stayed green.
+    let reinit_at = tool.find("match se.reinit() {").expect("session recovery after the admin wipe");
+    assert!(admin_at < reinit_at && reinit_at < user_at);
+    let session_block = "        let session_ok = {\n            \
+use secure_element::WalletStore;\n            \
+let admin_wipe = se.factory_reset_admin();\n            \
+secure_log!(\"[S] admin wipe: {:?}\", admin_wipe.as_ref().err());\n            \
+match se.reinit() {\n                \
+Ok(()) => {\n                    \
+if se.is_provisioned() {\n                        \
+secure_log!(\n                            \
+\"[S] {}\",\n                            \
+crate::se050::userid_survivor_help(admin_wipe.is_ok())\n                        \
+);\n                    \
+}\n                    \
+true\n                \
+}\n                \
+Err(_e) => {\n                    \
+secure_log!(\n                        \
+\"[S] SE050 session recovery after the admin wipe FAILED: {:?}; \\\n                         \
+presenting nothing\",\n                        \
+_e\n                    \
+);\n                    \
+false\n                \
+}\n            \
+}\n        \
+};\n";
+    assert!(tool.contains(session_block), "the reset tool's session-recovery block changed");
+    assert!(tool.contains(
+        "        match (pin, derived) {\n            _ if !session_ok => {}\n            (Some(pin), Some(use_derived)) => {\n"
+    ));
+
+    // A UserID that survives the admin wipe is diagnosed from the wipe's
+    // RESULT, after the session has been re-initialised; never from whether
+    // the admin object "exists" (unreliable on a pending session).
+    assert_eq!(DUAL_SE_SRC.matches("crate::se050::userid_survivor_help(").count(), 2);
+    assert_eq!(MAIN_SRC.matches("crate::se050::userid_survivor_help(").count(), 2);
+    for (name, src, wipe, reinit) in [
+        ("dual_se.rs admin-wipe cascade", DUAL_SE_SRC,
+         "let r = self.se050.factory_reset_admin();", "let _ = self.se050.reinit();"),
+        ("dual_se.rs multi-unlock cascade", DUAL_SE_SRC,
+         "let admin_wipe = self.se050.factory_reset_admin();", "let _ = self.se050.reinit();"),
+        ("main.rs boot pre-clean", MAIN_SRC,
+         "let r = se.se050.factory_reset_admin();", "let _ = se.se050.reinit();"),
+    ] {
+        let wipe_at = src.find(wipe).unwrap_or_else(|| panic!("{name}: admin wipe"));
+        let after = &src[wipe_at..];
+        let reinit_at = after.find(reinit).unwrap_or_else(|| panic!("{name}: reinit after the wipe"));
+        let provisioned_at = after.find("is_provisioned()").unwrap_or_else(|| panic!("{name}: survivor check"));
+        assert!(reinit_at < provisioned_at, "{name}: existence is read before the session is recovered");
+    }
+    for src in [DUAL_SE_SRC, MAIN_SRC] {
+        assert!(!src.contains("admin object present"));
+    }
+
+    // The multi-unlock test's opening probe is the one other place a
+    // credential is presented to a wallet this run did not provision. It
+    // runs only when this board's flash says the wallet is its own.
+    let multi_start = DUAL_SE_SRC
+        .find("    pub fn run_multi_unlock_roundtrip(&mut self, iterations: u32) -> Result<(), SeError> {")
+        .expect("the multi-unlock cascade");
+    let probe_at = DUAL_SE_SRC[multi_start..]
+        .find("        let probe = if wallet_is_ours {\n")
+        .expect("the probe is gated");
+    let before_probe = &DUAL_SE_SRC[multi_start..multi_start + probe_at];
+    // The gate is the test's OWN mark, not "some wallet was provisioned
+    // here" (second review wave: every flow leaves a salt record, so that
+    // gate let the probe hit another flow's wallet).
+    assert!(before_probe
+        .contains("let wallet_is_ours = crate::hw::flash::multi_unlock_fixture_present();"));
+    assert!(!DUAL_SE_SRC.contains("salt_record_present"));
+    // The mark is left only after this test's own provisioning succeeded.
+    let provisioned_at = DUAL_SE_SRC[multi_start..]
+        .find("secure_log!(\"[DUAL-MULTI] phase A: provision OK\");")
+        .expect("the provisioning step");
+    let mark_at = DUAL_SE_SRC[multi_start..]
+        .find("crate::hw::flash::mark_multi_unlock_fixture()")
+        .expect("the test leaves its mark");
+    assert!(provisioned_at < mark_at);
+    assert_eq!(DUAL_SE_SRC.matches("mark_multi_unlock_fixture()").count(), 1);
+    assert!(
+        !before_probe.contains(".unlock("),
+        "something unlocks before the gate in the multi-unlock cascade"
+    );
+    assert!(DUAL_SE_SRC[multi_start + probe_at..].contains(
+        "            self.unlock(&test_pin)\n        } else {\n"
+    ));
 }
 
 #[test]

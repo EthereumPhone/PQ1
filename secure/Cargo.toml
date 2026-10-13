@@ -772,8 +772,10 @@ e2e-skip-provision = []
 # Under `e2e-test`, route the SE050 `WalletStore::provision` impl through the
 # simpler single-policy path (the one already used on non-stm32u585 targets).
 # Skips `provision_admin` + `policy_roundtrip_selftest` + the two-entry
-# `TAG_POLICY` with admin-delete references. Used by the dual-SE hardware e2e
-# target (`e2e-hw-dual-se`) so the test does not depend on mutable chip state
+# `TAG_POLICY` with admin-delete references. No Makefile target enables it any
+# more (#912): an image built with it creates a UserID that only its own value
+# can delete, and nothing presents that value automatically. It was used by
+# the dual-SE hardware e2e target (`e2e-hw-dual-se`) so the test did not depend on mutable chip state
 # around `ADMIN_WIPE_OBJ` — which can get stuck across firmware revisions
 # when the on-chip admin UserID was created by a previous build whose admin
 # PIN is no longer in flash (unauthenticated `iterative_wipe` can't delete
