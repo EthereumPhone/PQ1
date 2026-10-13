@@ -53,6 +53,8 @@ pub mod shield;
 pub mod reset;
 #[cfg(feature = "stm32u585")]
 pub mod reset_pin;
+#[cfg(all(feature = "optiga-ac-probe", feature = "stm32u585"))]
+pub mod ac_probe;
 
 use apdu::OptigaError;
 use ifx_i2c::IfxState;
@@ -1062,9 +1064,11 @@ impl OptigaTrustM {
     /// the PIN-HMAC secret. This helper refuses to lock unless the exact bytes
     /// we intended are confirmed present on-chip.
     ///
-    /// Idempotent: an already-Operational OID is trusted from the prior
-    /// provisioning run and skipped (its frozen metadata can't be rewritten,
-    /// and re-verifying buys nothing).
+    /// Idempotent, but NOT blind: an already-Operational OID is accepted only
+    /// if its frozen metadata still matches `expected_meta`. A chip locked
+    /// under an older, weaker AC (e.g. the pre-#116 `Read = Auto(F1D0)` on
+    /// F1D1..F1D4) can never be rewritten, so trusting it would silently
+    /// keep the weak AC forever; it is refused with `Status(0xED)` instead.
     ///
     /// Without `optiga-lock-operational` this delegates to `lock_oid` (a
     /// no-op), so dev/bench builds are byte-for-byte unchanged.
@@ -1086,8 +1090,18 @@ impl OptigaTrustM {
             let mut stored = [0u8; 128];
             let n = apdu::get_metadata(&mut self.ifx, &mut self.shield, oid, &mut stored)?;
             if apdu::is_metadata_operational(&stored, n) {
+                if !apdu::metadata_matches_expected(&stored, n, expected_meta, expected_meta.len()) {
+                    secure_log!(
+                        "[OPTIGA/lock] OID 0x{:04x} already Operational with a NON-expected AC \
+                         (frozen; cannot be fixed) stored={:02x?} expected={:02x?}",
+                        oid, &stored[..n.min(48)], &expected_meta[..expected_meta.len().min(48)]
+                    );
+                    // 0xED == "locked with a non-expected AC": unrecoverable
+                    // for this OID. Fail closed rather than trust it.
+                    return Err(OptigaError::Status(0xED));
+                }
                 secure_log!(
-                    "[OPTIGA/lock] OID 0x{:04x} already Operational — skip verify+lock (idempotent)",
+                    "[OPTIGA/lock] OID 0x{:04x} already Operational with expected AC — skip lock (idempotent)",
                     oid
                 );
                 return Ok(());
@@ -1247,54 +1261,108 @@ impl OptigaTrustM {
         Ok(())
     }
 
-    /// Provision one user data OID: write payload (while LcsO=Creation
-    /// allows it), then install AC, then lock LcsO.
+    /// Provision one user data OID: check the stored AC, write payload,
+    /// install AC, read it back, then lock LcsO.
     ///
-    /// Order matters: if we install `Change = Auto(F1DC) OR Conf(E140)`
+    /// Order matters: if we install `Change = Auto(F1D0) OR Conf(E140)`
     /// BEFORE writing the data, the chip immediately enforces that AC on
     /// the subsequent write (even in Creation state, in practice) and we
     /// get Status=0xff. Writing the data first, while default "allow-all"
     /// Creation-state ACs apply, succeeds.
+    ///
+    /// The stored metadata is inspected BEFORE the secret is written (#116):
+    /// an OID frozen at `LcsO=Operational` under any AC other than the one
+    /// [`apdu::build_metadata_protected`] produces (e.g. the pre-#116
+    /// `Read = Auto(F1D0)`) can never be fixed, so it is refused with
+    /// `Status(0xED)` and never receives the secret. A metadata read
+    /// failure is also fatal: the post-write read-back needs the same
+    /// command, and guessing "Creation" could write the secret into an
+    /// OID whose AC we have not seen.
     unsafe fn provision_user_oid(
         &mut self,
         oid: u16,
         data: &[u8],
-        require_shielded_read: bool,
     ) -> Result<(), OptigaError> {
+        let (meta, meta_len) = apdu::build_metadata_protected(apdu::OID_AUTH_REF);
+        let expected = &meta[..meta_len];
+
+        let mut cur_meta = [0u8; 128];
+        let cur_len = match apdu::get_metadata(
+            &mut self.ifx, &mut self.shield, oid, &mut cur_meta,
+        ) {
+            Ok(n) => n,
+            Err(e) => {
+                secure_log!("[OPTIGA/prov] OID 0x{:04x}: get_metadata FAILED: {:?}", oid, e);
+                return Err(e);
+            }
+        };
+        let operational = apdu::is_metadata_operational(&cur_meta, cur_len);
+        if operational && !apdu::secret_oid_metadata_ok(&cur_meta, cur_len, expected, meta_len) {
+            secure_log!(
+                "[OPTIGA/prov] OID 0x{:04x} at LcsO=Operational with a NON-expected AC \
+                 (frozen; refusing to store a secret) stored={:02x?}",
+                oid, &cur_meta[..cur_len.min(48)]
+            );
+            return Err(OptigaError::Status(0xED));
+        }
+
         secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_data ({} bytes)", oid, data.len());
         if let Err(e) = apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data) {
             secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_data FAILED: {:?}", oid, e);
             return Err(e);
         }
 
-        // Same LcsO-ratchet guard as provision_auth_ref: if the OID was
-        // bumped to Operational by a pre-0b412b4 run, re-writing the
-        // metadata is forever blocked. The already-installed AC
-        // (Change=Auto(F1D0) OR Conf(E140), Read depending on
-        // `require_shielded_read`, Execute=NEV) is identical to what we
-        // would write, so skipping is functionally equivalent.
-        let mut cur_meta = [0u8; 128];
-        let cur_len = apdu::get_metadata(
-            &mut self.ifx, &mut self.shield, oid, &mut cur_meta,
-        ).unwrap_or(0);
-        if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+        if operational {
+            // Frozen with exactly the AC we would install: nothing to write.
             secure_log!(
-                "[OPTIGA/prov] OID 0x{:04x} at LcsO=Operational — \
+                "[OPTIGA/prov] OID 0x{:04x} at LcsO=Operational with expected AC — \
                  skipping set_metadata + lock_oid",
                 oid
             );
             return Ok(());
         }
 
-        let (meta, meta_len) =
-            apdu::build_metadata_protected(apdu::OID_AUTH_REF, require_shielded_read);
-        if let Err(e) = apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len]) {
+        if let Err(e) = apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, expected) {
             secure_log!("[OPTIGA/prov] OID 0x{:04x}: set_metadata FAILED: {:?}", oid, e);
             return Err(e);
         }
-        if let Err(e) = self.verify_and_lock(oid, &meta[..meta_len]) {
+        self.confirm_installed_metadata(oid, expected)?;
+        if let Err(e) = self.verify_and_lock(oid, expected) {
             secure_log!("[OPTIGA/prov] OID 0x{:04x}: verify_and_lock FAILED: {:?}", oid, e);
             return Err(e);
+        }
+        Ok(())
+    }
+
+    /// Read back `oid`'s metadata right after `set_metadata` and require
+    /// the protected-secret AC to have landed byte-for-byte. Runs in EVERY
+    /// build (not only under `optiga-lock-operational`): the chip can
+    /// answer OK to a SetMetadata it did not apply (see
+    /// [`Self::verify_and_lock`]), and a silently-dropped Read AC on a
+    /// secret OID is exactly the #116 failure. `Status(0xEB)` on mismatch.
+    ///
+    /// # Safety
+    /// Touches the OPTIGA APDU stack; caller holds `&mut self`.
+    unsafe fn confirm_installed_metadata(
+        &mut self,
+        oid: u16,
+        expected: &[u8],
+    ) -> Result<(), OptigaError> {
+        let mut stored = [0u8; 128];
+        let n = match apdu::get_metadata(&mut self.ifx, &mut self.shield, oid, &mut stored) {
+            Ok(n) => n,
+            Err(e) => {
+                secure_log!("[OPTIGA/prov] OID 0x{:04x}: metadata read-back FAILED: {:?}", oid, e);
+                return Err(e);
+            }
+        };
+        if !apdu::secret_oid_metadata_ok(&stored, n, expected, expected.len()) {
+            secure_log!(
+                "[OPTIGA/prov] OID 0x{:04x}: installed AC does NOT match intent \
+                 stored={:02x?} expected={:02x?}",
+                oid, &stored[..n.min(48)], &expected[..expected.len().min(48)]
+            );
+            return Err(OptigaError::Status(0xEB));
         }
         Ok(())
     }
@@ -1304,31 +1372,47 @@ impl OptigaTrustM {
     /// real F1D0, and NEVER lock (the duress OIDs must stay LcsO=Creation
     /// so re-provisioning / recovery is always possible — same constraint
     /// as the real OIDs under the default feature set, made explicit here).
+    ///
+    /// Same #116 discipline as [`provision_user_oid`]: stored AC inspected
+    /// before the secret is written, a frozen non-expected AC is refused
+    /// (`Status(0xED)`), and the installed AC is read back.
     #[cfg(feature = "duress-pin")]
     unsafe fn provision_user_oid_authref(
         &mut self,
         oid: u16,
         data: &[u8],
         authref_oid: u16,
-        require_shielded_read: bool,
     ) -> Result<(), OptigaError> {
-        secure_log!("[OPTIGA/duress] OID 0x{:04x}: set_data ({} bytes)", oid, data.len());
-        apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data)?;
+        let (meta, meta_len) = apdu::build_metadata_protected(authref_oid);
+        let expected = &meta[..meta_len];
 
         let mut cur_meta = [0u8; 128];
         let cur_len = apdu::get_metadata(
             &mut self.ifx, &mut self.shield, oid, &mut cur_meta,
-        ).unwrap_or(0);
-        if cur_len > 0 && apdu::is_metadata_operational(&cur_meta, cur_len) {
+        )?;
+        let operational = apdu::is_metadata_operational(&cur_meta, cur_len);
+        if operational && !apdu::secret_oid_metadata_ok(&cur_meta, cur_len, expected, meta_len) {
             secure_log!(
-                "[OPTIGA/duress] OID 0x{:04x} at LcsO=Operational — skipping set_metadata",
+                "[OPTIGA/duress] OID 0x{:04x} at LcsO=Operational with a NON-expected AC \
+                 (frozen; refusing to store a secret)",
+                oid
+            );
+            return Err(OptigaError::Status(0xED));
+        }
+
+        secure_log!("[OPTIGA/duress] OID 0x{:04x}: set_data ({} bytes)", oid, data.len());
+        apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, data)?;
+
+        if operational {
+            secure_log!(
+                "[OPTIGA/duress] OID 0x{:04x} at LcsO=Operational with expected AC — skipping set_metadata",
                 oid
             );
             return Ok(());
         }
 
-        let (meta, meta_len) = apdu::build_metadata_protected(authref_oid, require_shielded_read);
-        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, &meta[..meta_len])?;
+        apdu::set_metadata(&mut self.ifx, &mut self.shield, oid, expected)?;
+        self.confirm_installed_metadata(oid, expected)?;
         // Deliberately NO lock_oid — stay LcsO=Creation.
         Ok(())
     }
@@ -2176,9 +2260,10 @@ impl OptigaTrustM {
             }
         }
 
-        // 3. User data. While shielded is disabled we drop the Conf(E140)
-        // arm from Read AC — entropy/master_secret become Auto(F1D0) only,
-        // same protection level as VK. I²C traffic is plaintext for now.
+        // 3. User data. All four OIDs get Read = Auto(F1D0) AND Conf(E140)
+        // (#116 / OP17-1): a read needs the PIN verify AND a shielded
+        // response, so neither a desoldered chip + PIN nor a plaintext
+        // GetData injected after a legitimate unlock yields the secret.
         // Cycle Close/Open between OIDs: on this chip, after ~3 consecutive
         // SetData operations the chip starts returning Status=0xff. The
         // pattern goes away if we release + reacquire the application
@@ -2207,10 +2292,10 @@ impl OptigaTrustM {
         }
 
         unsafe {
-            prov_with_reset!("entropy", self.provision_user_oid(apdu::OID_ENTROPY, entropy, false));
-            prov_with_reset!("master_secret", self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret, false));
-            prov_with_reset!("vk", self.provision_user_oid(apdu::OID_VK, vk, false));
-            prov_with_reset!("bootstrap_vk", self.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk, false));
+            prov_with_reset!("entropy", self.provision_user_oid(apdu::OID_ENTROPY, entropy));
+            prov_with_reset!("master_secret", self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret));
+            prov_with_reset!("vk", self.provision_user_oid(apdu::OID_VK, vk));
+            prov_with_reset!("bootstrap_vk", self.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk));
             prov_with_reset!("counter", self.provision_counter());
         }
 
@@ -2333,14 +2418,15 @@ impl OptigaTrustM {
             { self.hard_reset_and_reinit()?; self.ensure_shield()?; }
         }
 
-        // 3. Decoy data OIDs, each gated on F1D8 (mirror the real layout's
-        //    require_shielded_read=false). Hard-reset between each.
+        // 3. Decoy data OIDs, each gated on F1D8 with the same
+        //    Read = Auto AND Conf(E140) AC as the real layout (#116).
+        //    Hard-reset between each.
         macro_rules! duress_oid {
             ($name:literal, $oid:expr, $data:expr) => {{
                 secure_log!("[OPTIGA/duress] write {}", $name);
                 unsafe {
                     self.provision_user_oid_authref(
-                        $oid, $data, apdu::OID_DURESS_AUTH_REF, false,
+                        $oid, $data, apdu::OID_DURESS_AUTH_REF,
                     )
                 }?;
                 #[cfg(feature = "stm32u585")]

@@ -673,6 +673,14 @@ authenticates the channel but does not satisfy the read AC) is a
 different mechanism with the same property and is not yet covered
 by an analogous E2E.
 
+**UPDATE 2026-10-13 (#116 / OP17-1):** the OPTIGA read AC is now
+`Auto(F1D0) AND Conf(E140)` on every secret OID (F1D1–F1D4 and the
+duress twins), so the PBS-shielded channel IS now part of the read
+authority: a desoldered chip plus the PIN, or a plaintext GetData
+injected on the bus after a legitimate unlock, no longer yields
+`half_O`. Silicon evidence for the AC semantics is the
+`optiga-ac-probe` run (spare OIDs; `docs/hardware/evt-silicon-validation.md`).
+
 ## 3. Hallucination + verification log
 
 The research-round prompts told the AI to cite primary sources and

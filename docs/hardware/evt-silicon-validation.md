@@ -830,6 +830,28 @@ on silicon (5.5), which blocks the first real on-silicon C10 sign (5.6).
 | 5.8 | **OPTIGA PBS rotation (first-boot Phase B):** transport-shield handshake (#443), SetData(E140) wedge timing, E140 rewrite, re-shield-under-FINAL, page-126 program-hostility | DESTRUCTIVE (E140 rewrite = brick-risk) | `first-boot-hardware-bringup.md:122-132`; `optiga/mod.rs::rotate_pbs_to_salted`; `optiga-brick-postmortem.md` |
 | 5.9 | **E140 LcsO ratchet ordering** — sacrificial part: Operational E140 authenticates with transport PBS, accepts new PBS via Conf(E140), re-establishes after a cut (ratchet stays factory-side) | DESTRUCTIVE | `first-boot-hardware-bringup.md:161-165`; issue **#73** |
 | 5.10 | **OP17 residuals** — no PRL self-heal on unlock (wedge burns page-124), E120 wipe gate, boot-reconcile init, DL-frame validation, verdict-confusion in PIN verify | MIXED | issues **#119, #122, #125, #127**; `optiga-bringup-status.md:57,104` |
+| 5.11 | **#116 secret-OID Read AC `Auto AND Conf(E140)` — DONE on silicon 2026-10-13** (EVT #1, pq1). See the UPDATE below. | NON-DEST (spare OIDs only) | `optiga/ac_probe.rs`; issue **#116** |
+
+### UPDATE 2026-10-13 — #116 Read-AC probe PASS on EVT #1
+
+Image: `FEAT_S=dual-se,dev-testkey,ui-lcd,dev-dfu,stm32u585,usb,board-pq1,optiga-ac-probe tools/evt-dev-flash.sh`
+(`optiga-ac-probe` is production-fenced; terminal; touches only spare OIDs F1D5/F1D7/F1E0,
+never locks, wallet OIDs/E120/F1E1 untouched; the board's wallet unlocked normally afterwards).
+LCD: `AC-PROBE PASS` / `plain read ->` / `23F1D5FD20E140` / `Status(255)`. Established:
+
+1. The chip **stores** the AND compound byte-exact (`D1 07 23 F1 D5 FD 20 E1 40`), so the
+   always-on `confirm_installed_metadata` read-back will not false-fail provisioning.
+2. Shielded GetData **without** auth → refused.
+3. Auth (HMAC verify against the AuthRef) then **shielded** GetData → served (the unlock path works under the new AC).
+4. **No shielded session at all** (the desoldered-chip / no-PBS case), plaintext auth, then:
+   a control object with the **pre-#116 weak AC** (`Read = Auto` only) is **served in plaintext**
+   — the #116 leak reproduced on silicon — while the strict object is **refused by the chip**
+   (`Status(0xFF)`, not a transport fault).
+
+Probe-design note (first run, same day): a plaintext GetData sent *inside* an established
+Shielded Connection is dropped at the link layer (`Transport`), never reaching AC evaluation —
+so that shape cannot attribute anything to the AC; the probe now tears the session down by RST
+and runs the negative case with no session.
 
 ---
 

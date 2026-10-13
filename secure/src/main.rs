@@ -1912,6 +1912,60 @@ fn main() -> ! {
         }
     }
 
+    // ---- #116 / OP17-1 secret-OID Read-AC silicon probe ----
+    // Terminal, bench-only (`optiga-ac-probe`, production-fenced). Runs
+    // BEFORE the wipe-resume / unlock / wizard paths and touches only the
+    // spare OIDs F1D5/F1D7/F1E0 (see `optiga::ac_probe`), so the wallet on
+    // the board is left as it was. Result on the LCD:
+    //   row 0  AC-PROBE PASS | AC-PROBE FAIL
+    //   row 1  failing step | PASS: "plain read ->"
+    //   row 2  stored F1D7 Read AC hex (expect 23F1D5FD20E140)
+    //   row 3  driver error | PASS: the chip's Status for the no-shield read
+    #[cfg(all(feature = "optiga-ac-probe", feature = "stm32u585"))]
+    unsafe {
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        ui::show_status("AC-PROBE", "running");
+        let (ok, step, err, ac, ac_len) = match se.optiga.ac_probe() {
+            // PASS row 1/3: what the chip answered to the no-shield read.
+            Ok(r) => (true, "plain read ->", r.neg_b, r.read_ac, r.read_ac_len),
+            Err(f) => (false, f.step, f.err, f.read_ac, f.read_ac_len),
+        };
+        let mut hex = [b' '; 16];
+        const HX: &[u8; 16] = b"0123456789ABCDEF";
+        for (i, b) in ac[..ac_len.min(8)].iter().enumerate() {
+            hex[2 * i] = HX[(b >> 4) as usize];
+            hex[2 * i + 1] = HX[(b & 0x0F) as usize];
+        }
+        let mut errs = [b' '; 16];
+        let elen = {
+            use core::fmt::Write as _;
+            struct W<'a>(&'a mut [u8; 16], usize);
+            impl core::fmt::Write for W<'_> {
+                fn write_str(&mut self, s: &str) -> core::fmt::Result {
+                    for &c in s.as_bytes() {
+                        if self.1 < 16 { self.0[self.1] = c; self.1 += 1; }
+                    }
+                    Ok(())
+                }
+            }
+            let mut w = W(&mut errs, 0);
+            if let Some(e) = err { let _ = write!(w, "{:?}", e); }
+            w.1
+        };
+        secure_log!(
+            "[AC-PROBE] {} step={} err={:?} readAC={:02x?}",
+            if ok { "PASS" } else { "FAIL" }, step, err, &ac[..ac_len]
+        );
+        let d = ui::display();
+        d.clear();
+        d.draw_line(0, if ok { "AC-PROBE PASS" } else { "AC-PROBE FAIL" });
+        d.draw_line(1, step);
+        d.draw_line(2, ui::ascii_str(&hex));
+        d.draw_line(3, ui::ascii_str(&errs[..elen]));
+        d.flush();
+        loop { cortex_m::asm::wfi(); }
+    }
+
     // ---- Boot-time wipe resume ----
     // If a factory reset was armed but interrupted (power loss mid-wipe),
     // the wipe flag in page 125 QW 1 survives the reboot. Finish the wipe

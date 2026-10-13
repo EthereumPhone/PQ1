@@ -251,7 +251,7 @@ Cost: one extra I²C peripheral, ~$3 BOM, ~50 ms unlock latency.
 
 | Layer | Protection |
 |---|---|
-| **Seed at rest (OPTIGA)** | `half_O` in object `0xF1D1`, `Read = Auto(0xF1D0) + Conf(0xE140)` — readable only after an AuthRef HMAC-SHA-256 challenge against the PIN-derived `0xF1D0` *and* through the AES-128-CCM-8 Shielded Connection |
+| **Seed at rest (OPTIGA)** | `half_O` in object `0xF1D1`, `Read = Auto(0xF1D0) AND Conf(0xE140)` (enforced since #116 — provisioning checks and reads back the installed AC) — readable only after an AuthRef HMAC-SHA-256 challenge against the PIN-derived `0xF1D0` *and* through the AES-128-CCM-8 Shielded Connection |
 | **Seed at rest (SE050)** | `half_E = E ⊕ half_O` in an SE050 binary object whose read policy is bound to a UserID opened only inside SCP03. Current bring-up admin/SCP03 material uses the BHK axis; DHUK is the non-BHK fallback and OTP is dev/legacy only. The production-final fresh-TRNG rotation remains OPEN as described below |
 | **Seed reconstruction** | `E = HKDF(half_O ⊕ half_E)` only in S-SRAM, for microseconds, then zeroized. Mnemonic / seed / master / slot keys recomputed on demand, dropped on lock / idle / panic |
 | **Key transport** | OPTIGA Shielded Connection (TLS-PRF + AES-128-CCM-8) and SE050 SCP03. Current bring-up material comes from deterministic `hw::secret_keys` helpers (DHUK-derived OPTIGA PBS, BHK-axis SE050 credentials); legacy dev fallback is quarantined. These helpers are not production-final. The required fresh-TRNG final rotation, durable public salt/state, cut recovery, and exact E140 ordering remain OPEN and production-blocking. Flash page 126 is reserved for the wrapped SE050 BHK when enabled; it is not PBS storage |

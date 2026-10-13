@@ -2774,7 +2774,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  se050-factory-reset se050-reset-e2e se050-admin-wipe-e2e \
                  se050-crash-safety-e2e se050-admin-extract-attempt-e2e se050-stress \
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
-                 optiga-hw-counter-e2e duress-probe-e2e duress-provision-e2e \
+                 optiga-hw-counter-e2e duress-probe-e2e optiga-ac-probe duress-provision-e2e \
                  pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime \
                  ui-px-bench ui-px-te-probe gateway-gate-off
 
