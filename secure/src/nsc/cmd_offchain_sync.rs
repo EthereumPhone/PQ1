@@ -306,5 +306,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InternalError as u32;
     }
 
+    // Leave the confirmed dialog: without this the last consent screen stayed
+    // painted after the user's chord, which read as a frozen UI (EVT,
+    // 2026-10-13). Same resting screen as the wallet-address consent.
+    if !skip_dialog {
+        crate::ui::show_status("PQSigner OS", "Ready");
+    }
+
     NscStatus::Ok as u32
 }
