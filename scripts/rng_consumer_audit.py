@@ -58,6 +58,18 @@ EXPECTED = {
     "secure/src/hw/bhk.rs": Counter(
         {"if crate::rng::fill(&mut bhk).is_err() {": 1}
     ),
+    # #116 bench silicon probe (`optiga-ac-probe`, production-fenced in
+    # nsc/mod.rs + PROD_FORBIDDEN): a throwaway AuthRef secret on spare OID
+    # F1D5 that never leaves RAM, the auth-code host nonce/tag, and the
+    # cleanup scramble. Explicitly nonshipping code.
+    "secure/src/optiga/ac_probe.rs": Counter(
+        {
+            'crate::rng::fill(&mut secret).map_err(|_| ("rng", None))?;': 1,
+            'crate::rng::fill(&mut host_nonce).map_err(|_| ("rng", None))?;': 1,
+            'crate::rng::fill(&mut host_tag).map_err(|_| ("rng", None))?;': 1,
+            'crate::rng::fill(&mut junk).map_err(|_| ("rng", None))?;': 1,
+        }
+    ),
     "secure/src/hw/consumption_mask.rs": Counter(
         {
             "crate::rng::fill(&mut seed_bytes)?;": 1,

@@ -57,8 +57,11 @@ side:
 | `positive_build_metadata_relaxed_change_and_read_always` | byte-exact relaxed (nuclear-reset) metadata | `apdu::build_metadata_relaxed` |
 | `positive_build_metadata_lock_emits_lcs_operational` | byte-exact 5-byte LcsO=Operational TLV | `apdu::build_metadata_lock` |
 | `positive_build_metadata_pbs_final_canonical_layout` | byte-exact 22-byte PBS metadata (LcsO<Op OR Conf, Read=LcsO<Op, Exec=ALW, DType=PBS) | `apdu::build_metadata_pbs_final` |
-| `positive_build_metadata_protected_change_is_auto_or_conf` | byte-exact metadata for protected user OIDs | `apdu::build_metadata_protected` |
-| `positive_build_metadata_protected_require_shielded_uses_and` | `require_shielded=true` flips Read from Auto-only to `Auto AND Conf` | same |
+| `positive_build_metadata_protected_is_auto_and_conf_wire_exact` | byte-exact 23-byte metadata for protected user OIDs: Change=`Auto OR Conf(E140)`, Read=`Auto AND Conf(E140)`, Exec=NEV (#116); duress AuthRef variant | `apdu::build_metadata_protected` |
+| `negative_weak_pre_116_secret_metadata_is_rejected` | the pre-#116 `Read = Auto(F1D0)` shape is rejected, also when frozen at LcsO=Operational; strict form + chip tag accepted (control) | `apdu::secret_oid_metadata_ok` |
+| `negative_secret_oid_predicate_requires_read_tag_in_expectation` | an expectation without a Read tag accepts nothing | same |
+| `negative_no_weak_secret_read_ac_is_buildable` | no `require_shielded` toggle anywhere; builder's Read line is the AND compound | source pin (`apdu.rs`, `mod.rs`) |
+| `negative_secret_provisioning_checks_ac_before_write_and_reads_back` | both provision paths check the stored AC before writing the secret, refuse a frozen weak AC (`0xED`), read the installed AC back; `verify_and_lock` compares before trusting an Operational OID | source pin (`mod.rs`) |
 | `positive_is_metadata_operational_detects_lcs_07` | recognises `LCSO=0x07` and refuses metadata without it | `apdu::is_metadata_operational` |
 | `positive_shield_new_starts_inactive_and_unloaded` | default-constructed `ShieldedConnection` has `active=false`, `pbs_loaded=false` | `shield::ShieldedConnection::new` |
 | `positive_shield_load_pbs_marks_pbs_loaded` | `load_pbs` flips `pbs_loaded` but never `active` | `ShieldedConnection::load_pbs` |

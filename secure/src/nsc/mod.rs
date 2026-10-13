@@ -386,6 +386,7 @@ compile_error!(
         feature = "dual-se-admin-wipe-e2e",
         feature = "optiga-hw-counter-e2e",
         feature = "duress-probe-e2e",
+        feature = "optiga-ac-probe",
         feature = "duress-provision-e2e",
         feature = "pin-gate-e2e",
         feature = "dual-se-multi-unlock-e2e",

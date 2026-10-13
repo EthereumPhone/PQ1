@@ -1124,6 +1124,9 @@ fn push_ac_auto_or_conf(
     *c += 9;
 }
 
+/// Bare `Auto(auth_oid)` AC. Since #116 it is used ONLY for Change ACs of
+/// the `optiga-hw-counter` objects — never for a secret OID's Read AC.
+#[cfg(feature = "optiga-hw-counter")]
 fn push_ac_auto(buf: &mut MetaBuf, c: &mut usize, tag: u8, auth_oid: u16) {
     buf[*c] = tag;
     buf[*c + 1] = 0x03;
@@ -1171,29 +1174,28 @@ fn wrap_meta(buf: MetaBuf, inner_len: usize) -> (MetaBuf, usize) {
     (out, 2 + inner_len)
 }
 
-/// Metadata for a protected user OID (entropy, VK, master_secret, etc).
+/// Metadata for a protected user OID (entropy, master_secret, VK,
+/// bootstrap VK and their duress twins).
 ///
 /// - **Change**: `Auto(auth_oid) OR Conf(0xE140)` — PIN auth unlocks normal
 ///   writes; shielded connection provides the admin-recovery path.
-/// - **Read**: `Auto(auth_oid) AND Conf(0xE140)` for `require_shielded=true`
-///   (entropy + master_secret); just `Auto(auth_oid)` otherwise (VK objects
-///   that need to be readable by the NSC gateway before unlock).
+/// - **Read**: `Auto(auth_oid) AND Conf(0xE140)` — ALWAYS. A read needs both
+///   a successful PIN HMAC verify against `auth_oid` AND a shielded (PBS)
+///   response. `Auto` alone is not enough: the AuthRef secret is
+///   `SHA-256(tag ‖ PIN)` with no device secret, so a desoldered chip plus
+///   the PIN would yield the half in the clear, and the chip's auto-state
+///   outlives the unlock, so a bus interposer could inject a plaintext
+///   GetData after a legitimate unlock (#116 / OP17-1, invariant #3).
+///   There is deliberately no weaker variant: every firmware read of these
+///   OIDs happens after `ensure_shield()` + a successful verify, and the VK
+///   getters serve host-side caches, so no path needs `Auto` alone.
 /// - **Execute**: Never.
-pub fn build_metadata_protected(
-    auth_oid: u16,
-    require_shielded: bool,
-) -> (MetaBuf, usize) {
+pub fn build_metadata_protected(auth_oid: u16) -> (MetaBuf, usize) {
     let mut inner = [0u8; 64];
     let mut c = 0usize;
 
     push_ac_auto_or_conf(&mut inner, &mut c, META_CHANGE, auth_oid, AC_OR);
-
-    if require_shielded {
-        push_ac_auto_or_conf(&mut inner, &mut c, META_READ, auth_oid, AC_AND);
-    } else {
-        push_ac_auto(&mut inner, &mut c, META_READ, auth_oid);
-    }
-
+    push_ac_auto_or_conf(&mut inner, &mut c, META_READ, auth_oid, AC_AND);
     push_ac_simple(&mut inner, &mut c, META_EXECUTE, AC_NEV);
 
     wrap_meta(inner, c)
@@ -1556,6 +1558,24 @@ pub fn metadata_matches_expected(
         }
     }
     true
+}
+
+/// Gate for every "already stored" decision on a protected secret OID
+/// (post-`set_metadata` read-back, and the skip-if-Operational paths).
+///
+/// Stricter than [`metadata_matches_expected`] in one respect: `expected`
+/// MUST carry a Read tag, so a caller can never accept an OID by passing
+/// an expectation that omits the Read AC. A stored Read AC of the
+/// pre-#116 weak shape `Auto(F1D0)` (`D1 03 23 F1 D0`) does not match the
+/// `Auto AND Conf(E140)` expectation and is rejected.
+pub fn secret_oid_metadata_ok(
+    stored: &[u8],
+    stored_len: usize,
+    expected: &[u8],
+    expected_len: usize,
+) -> bool {
+    find_metadata_tag(expected, expected_len, META_READ).is_some()
+        && metadata_matches_expected(stored, stored_len, expected, expected_len)
 }
 
 /// Returns true if the metadata's Change AC operand is `Auto(OID_AUTH_REF)`.

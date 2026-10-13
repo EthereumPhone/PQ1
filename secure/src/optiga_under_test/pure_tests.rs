@@ -271,53 +271,122 @@ fn positive_build_metadata_pbs_final_canonical_layout() {
     assert_eq!(&buf[..len], &expected, "PBS metadata layout is wire-frozen");
 }
 
+/// The pre-#116 weak secret-OID metadata, byte-for-byte as it was
+/// installed on F1D1..F1D4 (Read = `Auto(F1D0)` only). Kept here as the
+/// negative control: nothing in firmware can build it any more.
+const WEAK_PRE_116_SECRET_META: [u8; 19] = [
+    0x20, 0x11, 0xD0, 0x07, 0x23, 0xF1, 0xD0, 0xFE, 0x20, 0xE1, 0x40, 0xD1, 0x03, 0x23, 0xF1,
+    0xD0, 0xD3, 0x01, 0xFF,
+];
+
 #[test]
-fn positive_build_metadata_protected_change_is_auto_or_conf() {
-    let (buf, len) = apdu::build_metadata_protected(0xF1D0, false);
-    // Change: D0 07 23 F1 D0 FE 20 E1 40
-    // Read:   D1 03 23 F1 D0     (Auto only — require_shielded=false)
-    // Exec:   D3 01 FF
-    let expected: [u8; 19] = [
-        0x20, 0x11, 0xD0, 0x07, 0x23, 0xF1, 0xD0, 0xFE, 0x20, 0xE1, 0x40, 0xD1, 0x03, 0x23, 0xF1,
-        0xD0, 0xD3, 0x01, 0xFF,
+fn positive_build_metadata_protected_is_auto_and_conf_wire_exact() {
+    let (buf, len) = apdu::build_metadata_protected(0xF1D0);
+    // Change: D0 07 23 F1 D0 FE 20 E1 40   Auto(F1D0) OR  Conf(E140)
+    // Read:   D1 07 23 F1 D0 FD 20 E1 40   Auto(F1D0) AND Conf(E140)  (#116)
+    // Exec:   D3 01 FF                     NEV
+    let expected: [u8; 23] = [
+        0x20, 0x15, 0xD0, 0x07, 0x23, 0xF1, 0xD0, 0xFE, 0x20, 0xE1, 0x40, 0xD1, 0x07, 0x23, 0xF1,
+        0xD0, 0xFD, 0x20, 0xE1, 0x40, 0xD3, 0x01, 0xFF,
     ];
     assert_eq!(len, expected.len());
-    assert_eq!(&buf[..len], &expected);
+    assert_eq!(&buf[..len], &expected, "secret-OID metadata is wire-frozen");
+
+    // The duress twins use the same builder with the duress AuthRef.
+    let (d, dlen) = apdu::build_metadata_protected(0xF1D8);
+    assert_eq!(dlen, 23);
+    assert_eq!(&d[11..20], &[0xD1, 0x07, 0x23, 0xF1, 0xD8, 0xFD, 0x20, 0xE1, 0x40]);
 }
 
 #[test]
-fn positive_build_metadata_protected_require_shielded_uses_and() {
-    let (buf_yes, len_yes) = apdu::build_metadata_protected(0xF1D0, true);
-    // With require_shielded=true the Read AC is the same 9-byte compound
-    // form as Change but with AC_AND in the middle slot. Layout:
-    //   [0]=META_ROOT, [1]=inner_len, [2..11]=Change(9), [11..20]=Read(9),
-    //   [20..23]=Execute(3). Inside the Read compound the AND/OR operand
-    //   sits at byte 6 of the 9-byte block → buffer index 11+5 = 16.
-    assert_eq!(len_yes, 23, "shielded variant has 23-byte metadata");
-    assert_eq!(buf_yes[2], 0xD0, "Change tag at byte 2");
-    assert_eq!(
-        buf_yes[7], 0xFE,
-        "Change uses OR (Auto OR Conf) in both variants"
+fn negative_weak_pre_116_secret_metadata_is_rejected() {
+    let (exp, exp_len) = apdu::build_metadata_protected(0xF1D0);
+    assert!(
+        !apdu::secret_oid_metadata_ok(
+            &WEAK_PRE_116_SECRET_META,
+            WEAK_PRE_116_SECRET_META.len(),
+            &exp[..exp_len],
+            exp_len
+        ),
+        "a stored Read = Auto(F1D0)-only AC MUST be rejected"
     );
-    assert_eq!(
-        buf_yes[11], 0xD1,
-        "Read tag at byte 11 (after Change's 9 bytes)"
-    );
-    assert_eq!(
-        buf_yes[16], 0xFD,
-        "shielded Read uses AC_AND (Auto AND Conf)"
-    );
+    // ...including when the chip has frozen it at LcsO=Operational
+    // (the case the skip paths used to trust blindly).
+    let mut locked = [0u8; 64];
+    let n = WEAK_PRE_116_SECRET_META.len();
+    locked[..n].copy_from_slice(&WEAK_PRE_116_SECRET_META);
+    locked[n..n + 3].copy_from_slice(&[0xC0, 0x01, 0x07]);
+    locked[1] += 3;
+    assert!(apdu::is_metadata_operational(&locked, n + 3));
+    assert!(!apdu::secret_oid_metadata_ok(&locked, n + 3, &exp[..exp_len], exp_len));
 
-    let (buf_no, len_no) = apdu::build_metadata_protected(0xF1D0, false);
-    // Non-shielded Read is the simpler 5-byte form: D1 03 23 F1 D0.
-    // No AC_AND/AC_OR slot exists, and the total metadata is 4 bytes shorter.
-    assert_eq!(
-        len_no + 4,
-        len_yes,
-        "non-shielded saves the 4 bytes of the compound operand"
+    // Positive control: the strict form, frozen and with a chip-appended
+    // tag, IS accepted — so the rejection above is about the Read AC.
+    let mut good = [0u8; 64];
+    good[..exp_len].copy_from_slice(&exp[..exp_len]);
+    good[exp_len..exp_len + 3].copy_from_slice(&[0xC0, 0x01, 0x07]);
+    good[1] += 3;
+    assert!(apdu::secret_oid_metadata_ok(&good, exp_len + 3, &exp[..exp_len], exp_len));
+}
+
+#[test]
+fn negative_secret_oid_predicate_requires_read_tag_in_expectation() {
+    // An expectation without a Read tag must never accept anything, so a
+    // caller cannot "pass" an OID by omitting the Read AC from the intent.
+    let (want, want_len) = apdu::build_metadata_lock();
+    let (exp, exp_len) = apdu::build_metadata_protected(0xF1D0);
+    assert!(!apdu::secret_oid_metadata_ok(&exp, exp_len, &want, want_len));
+}
+
+#[test]
+fn negative_no_weak_secret_read_ac_is_buildable() {
+    // Source pins for #116: the bool that selected the weak form is gone
+    // everywhere, and the builder's Read line is the AND compound.
+    assert!(!MOD_SRC.contains("require_shielded"), "mod.rs must not reintroduce the weak-read toggle");
+    assert!(!APDU_SRC.contains("require_shielded"), "apdu.rs must not reintroduce the weak-read toggle");
+    let start = APDU_SRC
+        .find("pub fn build_metadata_protected(")
+        .expect("builder exists");
+    let end = start + APDU_SRC[start..].find("\n}\n").expect("builder ends");
+    let body = &APDU_SRC[start..end];
+    assert!(body.contains("push_ac_auto_or_conf(&mut inner, &mut c, META_READ, auth_oid, AC_AND);"));
+    assert!(!body.contains("push_ac_auto(&mut inner, &mut c, META_READ"));
+}
+
+/// Body of `fn name` in mod.rs, up to the next `unsafe fn` / `fn` item.
+fn mod_fn_body(name: &str) -> &'static str {
+    let start = MOD_SRC.find(name).unwrap_or_else(|| panic!("{name} exists"));
+    let rest = &MOD_SRC[start + name.len()..];
+    let end = rest
+        .find("\n    unsafe fn ")
+        .into_iter()
+        .chain(rest.find("\n    fn "))
+        .chain(rest.find("\n    pub fn "))
+        .chain(rest.find("\n    pub(crate) fn "))
+        .min()
+        .expect("a following item exists");
+    &rest[..end]
+}
+
+#[test]
+fn negative_secret_provisioning_checks_ac_before_write_and_reads_back() {
+    for name in ["unsafe fn provision_user_oid(", "unsafe fn provision_user_oid_authref("] {
+        let body = mod_fn_body(name);
+        let check = body.find("secret_oid_metadata_ok(").unwrap_or_else(|| panic!("{name}: AC check"));
+        let refuse = body.find("Status(0xED)").unwrap_or_else(|| panic!("{name}: refuses frozen weak AC"));
+        let write = body.find("set_data_object(").unwrap_or_else(|| panic!("{name}: writes data"));
+        assert!(check < write && refuse < write, "{name}: the stored AC must be checked BEFORE the secret is written");
+        assert!(body.contains("confirm_installed_metadata("), "{name}: installed AC must be read back");
+        assert!(!body.contains(".unwrap_or(0)"), "{name}: a metadata read failure must not be guessed as Creation");
+    }
+    let lock = mod_fn_body("unsafe fn verify_and_lock(");
+    let op = lock.find("is_metadata_operational(").expect("operational branch");
+    let tail = &lock[op..];
+    assert!(
+        tail.find("metadata_matches_expected(").expect("operational branch compares")
+            < tail.find("return Ok(())").expect("operational branch returns"),
+        "verify_and_lock must not trust an Operational OID without comparing its AC"
     );
-    assert_eq!(buf_no[11], 0xD1, "Read tag still at byte 11");
-    assert_eq!(buf_no[12], 0x03, "Read AC is 3 bytes long (just Auto-Ref)");
 }
 
 #[test]
@@ -409,8 +478,8 @@ fn negative_ta_pool_lockdown_is_exact_and_emits_no_apdu() {
 #[test]
 fn positive_metadata_matches_expected_tolerates_reorder_rejects_flip() {
     // The verify-before-lock gate's core. Built against build_metadata_protected
-    // (Change=Auto(F1D0) OR Conf(E140), Read=Auto(F1D0), Exec=NEV).
-    let (exp, exp_len) = apdu::build_metadata_protected(0xF1D0, false);
+    // (Change=Auto(F1D0) OR Conf(E140), Read=Auto(F1D0) AND Conf(E140), Exec=NEV).
+    let (exp, exp_len) = apdu::build_metadata_protected(0xF1D0);
 
     // Reflexive: a buffer with the same AC tags PLUS a trailing chip-internal
     // tag (the chip is known to append size/version tags) must still match.
