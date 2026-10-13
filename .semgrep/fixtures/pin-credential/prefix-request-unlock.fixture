@@ -1,0 +1,20 @@
+// VIRTUAL-PATH: secure/src/nsc/cmd_request_unlock.rs
+// The lockout-wipe tail before #855: the counter was reset whatever the
+// wipe had achieved. Also the two other resets that must never be used
+// here. Fixture text, not compiled.
+
+unsafe fn trigger_lockout_wipe() -> u32 {
+    let se = &mut *core::ptr::addr_of_mut!(crate::SE);
+    let _ = se.factory_reset_admin();
+    let _ = crate::hw::flash::pin_attempts_reset(); // MUST-FIRE: post-wipe-counter-reset-is-gated
+    NscStatus::PinLocked as u32
+}
+
+unsafe fn wrong_reset_after_a_wipe() {
+    let _ = crate::hw::flash::pin_attempts_reset_after_correct_pin(); // MUST-FIRE: post-wipe-counter-reset-is-gated
+    let _ = crate::hw::flash::pin_attempts_reset_bench(); // MUST-FIRE: post-wipe-counter-reset-is-gated
+}
+
+unsafe fn the_right_one() {
+    let _ = crate::hw::flash::pin_attempts_reset_after_wipe();
+}

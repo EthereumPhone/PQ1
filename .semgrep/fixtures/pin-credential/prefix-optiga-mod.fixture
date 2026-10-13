@@ -1,0 +1,19 @@
+// VIRTUAL-PATH: secure/src/optiga/pre_855_shapes.rs
+// The shapes the OPTIGA driver had before #855 (base b6948e6b). Fixture
+// text, not compiled.
+
+/// Domain tag for deriving the PIN authorization secret.
+const PIN_AUTH_DOMAIN: &[u8] = b"optiga-pin-auth-v1"; // MUST-FIRE: no-unkeyed-pin-derivation-in-se-path
+
+/// Derive the 32-byte PIN authorization secret from the 8-digit PIN.
+fn derive_pin_secret(pin: &[u8; 8]) -> [u8; 32] { // MUST-FIRE: no-unkeyed-pin-derivation-in-se-path
+    crate::crypto::kdf(PIN_AUTH_DOMAIN, pin, 0) // MUST-FIRE: no-unkeyed-pin-derivation-in-se-path
+}
+
+fn a_new_unkeyed_hash_of_the_pin(pin: &[u8; 8]) -> [u8; 32] {
+    crate::crypto::kdf_sha256(b"some-new-tag", duress_pin, 1) // MUST-FIRE: no-unkeyed-pin-derivation-in-se-path
+}
+
+fn unrelated_kdf_is_fine(entropy: &[u8; 32]) -> [u8; 32] {
+    crate::crypto::kdf(b"sphincs-master", entropy, 0)
+}

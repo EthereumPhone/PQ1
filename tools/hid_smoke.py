@@ -43,7 +43,7 @@ INS_GET_DEVICE_INFO = 0x01
 INS_GET_STATUS = 0x02
 
 # --- expected values (proto/src/lib.rs, nonsecure/src/usb/commands.rs) ----
-PROTOCOL_VERSION = 0x0202          # :1833
+PROTOCOL_VERSION = 0x0203          # proto PROTOCOL_VERSION (#353 rotation section)
 CAP_SIGN_USEROP = 1 << 0           # :798
 CAP_ERC7730_PROOF_SET = 1 << 2     # :803
 DEVICE_CAPABILITIES = CAP_SIGN_USEROP | CAP_ERC7730_PROOF_SET  # :805 -> 0x5

@@ -271,6 +271,30 @@
       "harness_path": "offchain_gate::verification::offchain_gate_accept_is_sound"
     },
     {
+      "id": "offchain_sync_refuse_bypass",
+      "tier": "quick",
+      "crate": "pqsigner-aa",
+      "harness": "sync_verdict_is_sound",
+      "file": "aa/src/offchain_gate.rs",
+      "find": "    if left == 0 {\n        SyncVerdict::Refuse",
+      "replace": "    if false {\n        SyncVerdict::Refuse",
+      "expect": "kani_fails",
+      "note": "[sweep 2026-10-13 finding #2] Disable the CMD_OFFCHAIN_SYNC refusal -> a sync that leaves the slot 0 signatures is admitted, so sync_verdict_is_sound's Refuse<->left==0 and post-sync-signable assertions MUST break. Guards the harness against vacuity.",
+      "harness_path": "offchain_gate::verification::sync_verdict_is_sound"
+    },
+    {
+      "id": "offchain_sync_low_left_warning_dropped",
+      "tier": "quick",
+      "crate": "pqsigner-aa",
+      "harness": "sync_verdict_is_sound",
+      "file": "aa/src/offchain_gate.rs",
+      "find": "> SYNC_WARN_JUMP || left < SYNC_WARN_LEFT {",
+      "replace": "> SYNC_WARN_JUMP {",
+      "expect": "kani_fails",
+      "note": "[sweep 2026-10-13 finding #2] Drop the low-remaining-budget arm of the sync warning -> a sync leaving < SYNC_WARN_LEFT signatures is shown as a plain confirm, so sync_verdict_is_sound's Plain => left >= SYNC_WARN_LEFT assertion MUST break.",
+      "harness_path": "offchain_gate::verification::sync_verdict_is_sound"
+    },
+    {
       "id": "offchain_distinct_slot_wedge",
       "tier": "quick",
       "crate": "pqsigner-aa",

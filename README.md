@@ -286,7 +286,7 @@ Every step runs in the **secure world**; NS drives nothing more sensitive than "
 6. ACTIVE WINDOW    ≤ 120 s inactivity (Secure-only TIM; NS pings ignored). Per CMD_SIGN_USEROP:
                     parse → draw decoded fields → (re)keygen slot if uncached → user CONFIRM →
                     C10.sign (Type 1 if FLAG_REGISTER_SLOT, always Type 2) → verify-before-release
-                    → emit [type1_len|t1|type2_len|t2] bundle → reset timer
+                    → emit [count|ic_len|ic|type1_len|owner‖t1|type2_len|t2] bundle → reset timer
 7. LOCK / WIPE      120 s idle, TAMP, BOR, any NSC panic, or a sign-verify mismatch → zeroize all
                     cached secrets + stack + registers, loop-twice + verify → "Locked" screen
 ```

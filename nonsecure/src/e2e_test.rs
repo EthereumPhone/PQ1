@@ -24,6 +24,7 @@ use sphincs_tz_shared::{
     SAFE_OFF_DATA_HASH, SAFE_OFF_NONCE, SAFE_OFF_OPERATION, SAFE_OFF_SAFE_ADDRESS, SAFE_OFF_TO,
     SAFE_TX_TYPEHASH, SAFE_V1_CANONICAL_LEN, SIGN_USEROP_BATCH_HEADER_LEN, SIGN_USEROP_HEADER_LEN,
     SIG_TYPE1_LEN, SIG_TYPE2_LEN, TRAILER_KIND_ERC20, TRAILER_KIND_ERC7730, TRAILER_KIND_SAFE_V1,
+    OWNER_BYTES_LEN, TYPE1_ROTATION_SECTION_LEN,
 };
 
 // === Scratch buffers =======================================================
@@ -891,7 +892,10 @@ fn append_batch_trailers(
 }
 
 /// Parse a `[count(8)][ic_len|ic][type1_len|t1][type2_len|t2]` bundle and
-/// assert basic shape.
+/// assert basic shape. A present Type-1 section is the 0x0203 rotation
+/// section `new_owner_bytes(64) || type1_wrapper(4128)` (#353): the owner's
+/// pkSeed must carry the N_MASK shape (low 16 bytes zero) and the wrapper
+/// must be a bootstrap (`ownerIndex == 0`) C10 wrapper.
 ///
 /// Returns `(type1_present, type2_len)`.
 fn parse_response(resp: &[u8]) -> (bool, usize) {
@@ -910,7 +914,17 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
         resp[t1_len_off + 2],
         resp[t1_len_off + 3],
     ]) as usize;
-    assert!(t1_len == 0 || t1_len == SIG_TYPE1_LEN);
+    assert!(t1_len == 0 || t1_len == TYPE1_ROTATION_SECTION_LEN);
+    if t1_len != 0 {
+        let owner = &resp[t1_len_off + 4..t1_len_off + 4 + OWNER_BYTES_LEN];
+        assert!(owner[16..32].iter().all(|&b| b == 0), "owner pkSeed must be N_MASKed");
+        assert!(owner[..16].iter().any(|&b| b != 0), "owner pkSeed must be non-degenerate");
+        assert!(owner[32..].iter().any(|&b| b != 0), "owner pkRoot must be non-degenerate");
+        let wrap = &resp[t1_len_off + 4 + OWNER_BYTES_LEN..t1_len_off + 4 + t1_len];
+        assert_eq!(wrap.len(), SIG_TYPE1_LEN);
+        assert!(wrap[..32].iter().all(|&b| b == 0), "Type-1 wrapper ownerIndex must be 0");
+        assert_eq!(wrap[63], 0x40, "Type-1 wrapper bytes offset");
+    }
     let t2_off = t1_len_off + 4 + t1_len;
     let t2_len = u32::from_be_bytes([
         resp[t2_off],
@@ -920,6 +934,25 @@ fn parse_response(resp: &[u8]) -> (bool, usize) {
     ]) as usize;
     assert_eq!(t2_len, SIG_TYPE2_LEN, "Type 2 is a fixed-length C10 sig");
     (t1_len != 0, t2_len)
+}
+
+/// Print bytes as hex, 64 bytes per line, for host-side scraping
+/// (`scripts/extract_semihosting_hex_block.py`).
+fn print_hex(bytes: &[u8]) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut line = [0u8; 128];
+    for chunk in bytes.chunks(64) {
+        let mut n = 0;
+        for &b in chunk {
+            line[n] = HEX[(b >> 4) as usize];
+            line[n + 1] = HEX[(b & 0x0F) as usize];
+            n += 2;
+        }
+        // ASCII hex by construction, so the checked conversion never fails.
+        if let Ok(s) = core::str::from_utf8(&line[..n]) {
+            hprintln!("{}", s);
+        }
+    }
 }
 
 #[cortex_m_rt::entry]
@@ -1189,6 +1222,23 @@ fn main() -> ! {
         let (t1_present, t2_len) = parse_response(&SIG_BUF);
         assert!(t1_present, "scenario 1 must emit a Type 1");
         hprintln!("[NS][e2e]   → t1_present={}, t2_len={}", t1_present, t2_len);
+        // #353: dump the rotation response so the host can rebuild the
+        // Type-1 UserOp from the returned owner bytes and verify both
+        // signatures offline (`tools/verify-c10-sig rotation`, run by
+        // `make e2e`).
+        let end = 8 + 4 + 4 + TYPE1_ROTATION_SECTION_LEN + 4 + t2_len;
+        let mut sender_hex = [0u8; 40];
+        for (i, b) in wallet_sender.iter().enumerate() {
+            const HEX: &[u8; 16] = b"0123456789abcdef";
+            sender_hex[2 * i] = HEX[(b >> 4) as usize];
+            sender_hex[2 * i + 1] = HEX[(b & 0x0F) as usize];
+        }
+        if let Ok(s) = core::str::from_utf8(&sender_hex) {
+            hprintln!("[NS][e2e] ROT-SENDER {}", s);
+        }
+        hprintln!("--ROT-RESP-BEGIN--");
+        print_hex(&SIG_BUF[..end]);
+        hprintln!("--ROT-RESP-END--");
     }
 
     // Scenario 2: repeat sign on same chain/slot, no flag — expect Type 2 only.

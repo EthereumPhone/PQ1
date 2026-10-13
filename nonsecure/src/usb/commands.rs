@@ -581,14 +581,16 @@ impl CommandRouter {
     /// ```text
     ///   [new_offchain_count u64 BE]
     ///   [init_code_len u32 BE] [init_code_bytes...]
-    ///   [type1_len     u32 BE] [type1_bytes...]
+    ///   [type1_len     u32 BE] [new_owner_bytes(64)] [type1_wrapper(4128)]
     ///   [type2_len     u32 BE] [type2_bytes...]
     /// ```
     ///
     /// `init_code_len` is non-zero only when the companion set
     /// `FLAG_INCLUDE_INIT_CODE` on the request (fresh wallet, first deploy
     /// on this chain). Similarly `type1_len == 0` means slot registration
-    /// was not needed and the companion should submit only Type 2.
+    /// was not needed and the companion should submit only Type 2; when
+    /// `FLAG_REGISTER_SLOT` was set, `type1_len == TYPE1_ROTATION_SECTION_LEN`
+    /// and the section starts with the new slot's owner bytes (0x0203, #353).
     unsafe fn cmd_sign_userop(&self, data_len: usize) -> Response {
         if data_len < SIGN_USEROP_HEADER_LEN {
             return self.sw_response(SW_WRONG_LENGTH);
@@ -662,20 +664,33 @@ impl CommandRouter {
     /// ```text
     ///   [new_offchain_count(8 BE)]
     ///   [init_code_len(4 BE)] [init_code...]
-    ///   [type1_len(4 BE)]    [type1...]
+    ///   [type1_len(4 BE)]    [new_owner_bytes(64) || type1_wrapper(4128)]
     ///   [type2_len(4 BE)]    [type2...]
     /// ```
+    ///
+    /// Each section length must be one of the exact shapes the firmware can
+    /// emit; anything else is a firmware bug and is refused rather than
+    /// shipped to the host as a malformed bundle.
     unsafe fn total_sign_response_len() -> Option<usize> {
         const COUNT_LEN: usize = 8;
 
         let ic_len_off = COUNT_LEN;
         let ic_len = read_be_u32(&SIG_BUF, ic_len_off)? as usize;
+        if ic_len != 0 && ic_len != PQ_INIT_CODE_LEN {
+            return None;
+        }
 
         let t1_len_off = ic_len_off + 4 + ic_len;
         let t1_len = read_be_u32(&SIG_BUF, t1_len_off)? as usize;
+        if t1_len != 0 && t1_len != TYPE1_ROTATION_SECTION_LEN {
+            return None;
+        }
 
         let t2_len_off = t1_len_off + 4 + t1_len;
         let t2_len = read_be_u32(&SIG_BUF, t2_len_off)? as usize;
+        if t2_len != SIG_WRAPPER_LEN {
+            return None;
+        }
 
         let total = t2_len_off + 4 + t2_len;
         if total > MAX_SIGN_RESPONSE_LEN {

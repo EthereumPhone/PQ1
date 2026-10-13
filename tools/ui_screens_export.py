@@ -565,16 +565,21 @@ def build_info():
           when="CMD_GET_WALLET_ADDRESS with the show-on-device flag: the CREATE2 address must be confirmed "
                "(long-R) before it is released to the companion. Single page, ` 1/1` overlay on the address tail.")
     pages = confirm_pages([
-        ["", centered("SYNC COUNTER?"), centered("Off-chain floor"), ""],
+        ["", centered("Update signature"), centered("count from app?"), ""],
         ["Chain: 1", "(Mainnet)", "Account: 0", "Slot: 1"],
-        ["Current: 12", centered("L=Cancel"), "Target: 40", centered("R=Confirm")],
+        ["On device: 12", "From app: 40", "Sigs left: 65484", ""],
+        [centered("!! CAREFUL !!"), "Jump: +28", "Left: 65484", ""],
+        ["Only if you", "restored or use", "a 2nd device.", "L=No  R=Yes"],
     ])
     for i, pg in enumerate(pages):
         f.add(f"offchain_sync_p{i}", pg,
-              source="`secure/src/tx/display/offchain_sync.rs:43` (`build_offchain_sync_pages`)",
-              when=["CMD_OFFCHAIN_SYNC page 1: intent banner.",
-                    "Page 2: chain / account / slot being synced.",
-                    "Page 3: the exact counter transition (current → target) to authorise."][i])
+              source="`secure/src/tx/display/offchain_sync.rs` (`build_offchain_sync_pages`)",
+              when=["CMD_OFFCHAIN_SYNC page 1: the question, in plain words.",
+                    "Page 2: chain / account / slot being updated.",
+                    "Page 3: the device's count, the app's count and the signatures left after the update.",
+                    "Warning page, ONLY when the jump is > 1,000 or < 1,000 would be left "
+                    "(sample values here are illustrative). A sync that would leave 0 is refused with no dialog.",
+                    "Last page: when an honest update happens, and the buttons."][i])
     f.add("wallet_check_progress", progress("Wallet check", 30),
           source="`secure/src/nsc/cmd_get_wallet_address.rs:94` (`progress_title`)",
           when="Bootstrap C10 keygen while deriving the wallet address (<1 s).")

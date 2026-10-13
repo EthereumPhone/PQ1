@@ -1,0 +1,26 @@
+// VIRTUAL-PATH: secure/src/se050/mod.rs
+// The post-#855 shapes. Nothing in this file may be reported. Fixture text,
+// not compiled.
+
+fn authenticate_and_read(&mut self, user_cred: &Se050PinCredential) {
+    if let Err(e) = apdu::verify_session(
+        &mut self.t1, &mut self.scp03, &session_id, apdu::UserIdValue::Credential(user_cred),
+    ) {
+        return Err(e);
+    }
+    apdu::write_userid(
+        &mut self.t1, &mut self.scp03,
+        USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts, None,
+    )?;
+    apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(admin_pin))?;
+}
+
+// A statement about a pin, then an unrelated sink call in the next statement.
+fn two_statements(&mut self, pin: &[u8; 8], cred: &Se050PinCredential) {
+    let _len = pin.len();
+    apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Credential(cred))?;
+}
+
+fn wipe_path(&mut self) {
+    let _ = crate::hw::flash::pin_attempts_reset_after_wipe();
+}

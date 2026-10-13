@@ -103,7 +103,7 @@ pub fn admin_sweep_all(se: &mut Se050) -> SweepReport {
                 .unwrap_or(false);
             if !exists {
                 if let Err(e) = apdu::write_userid_unlimited(
-                    t1, scp03, STRESS_ADMIN_USERID, &pin, None,
+                    t1, scp03, STRESS_ADMIN_USERID, apdu::UserIdValue::Bench(&pin), None,
                 ) {
                     secure_log!("[S][stress] sweep: provision STRESS_ADMIN failed: {:?}", e);
                     return rep;
@@ -124,7 +124,7 @@ pub fn admin_sweep_all(se: &mut Se050) -> SweepReport {
         };
         {
             let (t1, scp03) = se.t1_scp03_mut();
-            if let Err(e) = apdu::verify_session(t1, scp03, &sid, &pin) {
+            if let Err(e) = apdu::verify_session(t1, scp03, &sid, apdu::UserIdValue::Bench(&pin)) {
                 secure_log!("[S][stress] sweep: verify_session failed: {:?}", e);
                 let _ = apdu::close_session(t1, scp03, &sid);
                 return rep;
@@ -194,7 +194,7 @@ pub fn admin_sweep_test_range(se: &mut Se050, test_id: u16) -> SweepReport {
         };
         {
             let (t1, scp03) = se.t1_scp03_mut();
-            if apdu::verify_session(t1, scp03, &sid, &pin).is_err() {
+            if apdu::verify_session(t1, scp03, &sid, apdu::UserIdValue::Bench(&pin)).is_err() {
                 let _ = apdu::close_session(t1, scp03, &sid);
                 return rep;
             }

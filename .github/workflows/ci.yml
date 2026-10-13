@@ -86,6 +86,23 @@ jobs:
         run: |
           python3 -m pip install --quiet semgrep==1.167.0
           semgrep --config .semgrep/pqsigner-invariants.yml --severity ERROR --error --metrics off
+      # #855 (Ledger Donjon report): the four "no secure element is shown a
+      # PIN" rules are path-scoped regexes, and a regex that has quietly
+      # stopped matching looks exactly like a clean tree. Feed each rule the
+      # pre-#855 shapes and fail unless every one fires.
+      - name: 'semgrep #855 rules fire on the pre-fix shapes (fixture test)'
+        run: python3 .semgrep/check_pin_credential_rules.py
+      # The mutation run behind `make verify-pin-credential-gates` is local,
+      # and while it runs the tree carries the defect it is testing for. A
+      # host crash on 2026-10-13 left one applied (the half mask turned into
+      # a no-op) in an uncommitted tree. This is the per-PR part: every
+      # manifest anchor still matches exactly once -- so no mutation is
+      # applied and no anchor has rotted -- and the runner's crash recovery
+      # passes its self-test. No cargo; a second or two.
+      - name: '#855 mutation manifest applies cleanly (no mutation left in the tree)'
+        run: |
+          python3 scripts/check_pin_credential_mutations.py --self-test
+          python3 scripts/check_pin_credential_mutations.py --check
       # A3.1 transcription-fidelity gate: the deployed verifier SOURCE
       # (SPHINCsC10Asm.sol) and its Lean hand transcription (c10Program) must not
       # drift. Positional constant cross-check (per `-- L<n>` anchors) + global set

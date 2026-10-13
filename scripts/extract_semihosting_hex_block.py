@@ -14,7 +14,10 @@ Exit status: 0 = written and the response's off-chain count (first 8 bytes,
 big-endian) is 0; 3 = written but the count is non-zero (the verifier
 assumes 0, so the caller should skip it); 1 = no block or a malformed one.
 
-Usage: extract_semihosting_hex_block.py <log> <out.bin>
+`make e2e` reuses it with custom markers (`--ROT-RESP-BEGIN--` /
+`--ROT-RESP-END--`) for the #353 slot-rotation response.
+
+Usage: extract_semihosting_hex_block.py <log> <out.bin> [BEGIN END]
 """
 
 import re
@@ -25,10 +28,13 @@ HEX = re.compile(r"^(?:[0-9a-f]{2})+$")
 
 
 def main():
-    if len(sys.argv) != 3:
+    global BEGIN, END
+    if len(sys.argv) not in (3, 5):
         print(__doc__.strip().splitlines()[-1], file=sys.stderr)
         return 1
     log, out = sys.argv[1], sys.argv[2]
+    if len(sys.argv) == 5:
+        BEGIN, END = sys.argv[3], sys.argv[4]
     lines = open(log, encoding="utf-8", errors="replace").read().splitlines()
     starts = [i for i, l in enumerate(lines) if BEGIN in l]
     ends = [i for i, l in enumerate(lines) if END in l]

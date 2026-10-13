@@ -451,7 +451,7 @@ fn positive_pre_commit_pattern_in_gated_unlock() {
     // cheap.
     assert!(NSC_MOD_SRC.contains("pin_attempts_bump()"),
         "gated_unlock must pre-commit the page-124 bump before the SE call");
-    assert!(NSC_MOD_SRC.contains("pin_attempts_reset()"),
+    assert!(NSC_MOD_SRC.contains("pin_attempts_reset_after_correct_pin()"),
         "gated_unlock must reset the page-124 counter on Ok");
 }
 
@@ -474,7 +474,9 @@ fn negative_gated_unlock_reset_failure_fails_closed() {
         .expect("gated_unlock body window must close before reconcile");
     let body = &NSC_MOD_SRC[start..end];
     assert!(
-        body.contains("let reset_result = crate::hw::flash::pin_attempts_reset();"),
+        body.contains(
+            "let reset_result = crate::hw::flash::pin_attempts_reset_after_correct_pin();"
+        ),
         "the success arm must bind the reset result, not discard it",
     );
     assert!(
@@ -486,7 +488,7 @@ fn negative_gated_unlock_reset_failure_fails_closed() {
         "a failed reset must refuse the unlock (fail-closed)",
     );
     assert!(
-        !body.contains("let _ = crate::hw::flash::pin_attempts_reset();"),
+        !body.contains("let _ = crate::hw::flash::pin_attempts_reset"),
         "F17/SCAFI-5: the success arm must not swallow pin_attempts_reset failure",
     );
 }

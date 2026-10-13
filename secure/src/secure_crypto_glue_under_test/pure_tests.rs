@@ -2272,14 +2272,148 @@ fn positive_dual_se_provision_passes_same_master_secret_to_both_chips() {
     // derivative).
     // The SE-facing halves are Zeroizing wrappers under both the direct and
     // ML-KEM arms; both calls must still receive the same master secret.
+    //
+    // #855: the calls are now the credential-typed entry points. The OPTIGA
+    // receives the shared master_secret (it stores it in F1D2); the SE050
+    // entry point takes none, because the SE050 backend never stored it
+    // (its old `provision` ignored the argument).
+    let src = squash(DUAL_SE_SRC);
     assert!(
-        DUAL_SE_SRC.contains(".provision(&se_half_o, master_secret, vk, bootstrap_vk, pin)"),
-        "optiga.provision must receive the shared master_secret",
+        src.contains("self.optiga.provision_image(&optiga_image,master_secret,vk,bootstrap_vk)"),
+        "optiga.provision_image must receive the shared master_secret",
     );
     assert!(
-        DUAL_SE_SRC.contains(".provision(&se_half_e, master_secret, vk, bootstrap_vk, pin)"),
-        "se050.provision must receive the same shared master_secret",
+        src.contains("self.se050.provision_image(&se050_image,vk,bootstrap_vk)"),
+        "se050.provision_image must receive the SE050's own image",
     );
+}
+
+/// Source text with all whitespace removed, so a pin survives rustfmt
+/// re-wrapping a call across lines.
+fn squash(src: &str) -> std::string::String {
+    src.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+#[test]
+fn negative_dual_se_never_passes_a_pin_to_a_backend() {
+    // #855 (Ledger Donjon report). The dual-SE layer is where a PIN turns
+    // into what the chips are shown. It must derive through `pin_gate` and
+    // call only the credential-typed backend entry points. The PIN-taking
+    // `WalletStore` shims on the backends bypass the half masks and must
+    // never be called from here.
+    let src = squash(DUAL_SE_SRC);
+    for banned in [
+        "self.optiga.provision(",
+        "self.se050.provision(",
+        "self.optiga.provision_duress(",
+        "self.se050.provision_duress(",
+        "self.optiga.unlock(",
+        "self.se050.unlock(",
+        "duress_read_half(pin)",
+        "duress_verify(pin)",
+    ] {
+        assert!(!src.contains(banned), "dual_se.rs calls a PIN-taking backend path: {banned}");
+    }
+    // Every entry that takes a PIN derives before it touches a chip.
+    assert_eq!(
+        DUAL_SE_SRC.matches("crate::pin_gate::unlock_credentials(").count(),
+        4,
+        "unlock_duress, duress_pad, unlock and the e2e pre-clean helper each derive through \
+         pin_gate::unlock_credentials"
+    );
+    // The decoy is provisioned only under a salt minted in the same boot.
+    assert_eq!(
+        DUAL_SE_SRC.matches("crate::pin_gate::decoy_provisioning_credentials(").count(),
+        1
+    );
+    assert_eq!(DUAL_SE_SRC.matches("crate::pin_gate::load_or_create_salt(").count(), 1);
+    assert_eq!(DUAL_SE_SRC.matches("crate::pin_gate::credentials(").count(), 1);
+}
+
+#[test]
+fn negative_dual_se_raw_pin_reaches_a_chip_only_in_the_e2e_legacy_cleanup() {
+    // #855: exactly one place in the tree still presents raw PIN bytes to a
+    // secure element: the bench pre-clean, which has to delete UserID
+    // objects written by pre-#855 firmware. It must stay (a) unique and
+    // (b) inside the e2e-only impl block, so no shippable image contains it.
+    const RAW: &str = ".user_factory_reset(UserIdValue::Fixed(test_pin))";
+    assert_eq!(
+        DUAL_SE_SRC.matches(RAW).count(),
+        1,
+        "the legacy raw-PIN clean-up must appear exactly once"
+    );
+    let gate = "#[cfg(any(\n    feature = \"e2e-test\",\n    feature = \"dual-se-admin-wipe-e2e\",\n    feature = \"dual-se-multi-unlock-e2e\"\n))]\nimpl DualSecureElement {";
+    let block_start = DUAL_SE_SRC.find(gate).expect("e2e-only helper block present");
+    let after_gate = block_start + gate.len();
+    let block_len = DUAL_SE_SRC[after_gate..]
+        .find("\nimpl DualSecureElement {")
+        .expect("the helper block is followed by the unconditional impl");
+    let raw_at = DUAL_SE_SRC.find(RAW).expect("counted above");
+    assert!(
+        raw_at > after_gate && raw_at < after_gate + block_len,
+        "the legacy raw-PIN clean-up has moved outside the e2e-only block"
+    );
+    // The raw variant of the other single-chip helpers is never called.
+    // It takes a compile-time constant, so a PIN typed in at run time
+    // cannot be routed through it.
+    assert!(DUAL_SE_SRC.contains(
+        "fn legacy_raw(this: &mut DualSecureElement, test_pin: &'static [u8; 8]) -> bool {"
+    ));
+    assert!(DUAL_SE_SRC.contains("candidates: &'static [[u8; 8]],"));
+    assert_eq!(DUAL_SE_SRC.matches("UserIdValue::Fixed(").count(), 1);
+}
+
+#[test]
+fn negative_dual_se_each_chip_stores_a_masked_half() {
+    // #855: each chip stores `half XOR mask`, so the two stored values do
+    // not XOR to the entropy without the device key and the PIN.
+    //
+    // The masking itself is decided, and tested, in
+    // `pin_credential::chip_images`. What is pinned here is that the
+    // dual-SE layer goes through it and has no other way to reach a chip.
+    let src = squash(DUAL_SE_SRC);
+    // Provisioning builds the two images from the (possibly ML-KEM-sealed)
+    // halves, mask outermost ...
+    assert!(src.contains(
+        "let(optiga_image,se050_image)=crate::pin_credential::chip_images(creds,&se_half_o,&se_half_e);"
+    ));
+    // ... the decoy too ...
+    assert!(src.contains(
+        "let(optiga_image,se050_image)=crate::pin_credential::chip_images(creds,&half_o,&half_e);"
+    ));
+    assert_eq!(DUAL_SE_SRC.matches("crate::pin_credential::chip_images(").count(), 2);
+    // ... and unlock unmasks first.
+    assert!(src.contains("letmuthalf_o=*creds.mask_optiga.apply(&stored_o);"));
+    assert!(src.contains("letmuthalf_e=*creds.mask_se050.apply(&stored_e);"));
+    // The dual-SE layer never calls the entry points that accept a bare
+    // 32-byte value next to a credential: those exist for the single-chip
+    // shims only. An image cannot be built from an unmasked half.
+    for banned in [
+        "provision_with_credential(",
+        "provision_duress_with_credential(",
+        "mask_optiga.apply(&se_half_o)",
+        "mask_se050.apply(&se_half_e)",
+    ] {
+        assert!(!src.contains(banned), "dual_se.rs bypasses chip_images: {banned}");
+    }
+}
+
+#[test]
+fn negative_dual_se_wipe_destroys_the_salt_before_any_chip_command() {
+    // #855: `factory_reset_admin` must arm the wipe flag and destroy the
+    // salt before the first command to either chip, and must report a
+    // surviving salt as a failed wipe.
+    let start = DUAL_SE_SRC
+        .find("fn factory_reset_admin(&mut self) -> Result<(), SeError> {")
+        .expect("DualSecureElement::factory_reset_admin present");
+    let body = &DUAL_SE_SRC[start..];
+    let begin = body
+        .find("crate::pin_gate::begin_wipe()")
+        .expect("factory_reset_admin must call pin_gate::begin_wipe");
+    let optiga = body.find("self.reset_optiga_for_admin()").expect("OPTIGA leg present");
+    let se050 = body.find("self.se050.factory_reset_admin()").expect("SE050 leg present");
+    assert!(begin < optiga && begin < se050, "a chip is commanded before the salt is destroyed");
+    assert!(body.contains("salt_gone.map_err(|()| SeError::InternalError)?;"));
 }
 
 #[test]
@@ -2290,9 +2424,9 @@ fn positive_dual_se_unlock_calls_se050_on_pin_incorrect_too() {
     assert!(
         DUAL_SE_SRC
             .contains("Ok(_) | Err(UnlockError::PinIncorrect) => {")
-            && DUAL_SE_SRC.contains("Some(self.se050.unlock(pin))"),
-        "dual_se.rs must call SE050.unlock even on OPTIGA PinIncorrect \
-         (three-counter lockstep)",
+            && DUAL_SE_SRC.contains("Some(self.se050.unlock_with_credential(&creds.se050))"),
+        "dual_se.rs must call SE050.unlock_with_credential even on OPTIGA \
+         PinIncorrect (three-counter lockstep)",
     );
 }
 
@@ -2341,6 +2475,25 @@ fn negative_dual_se_no_full_entropy_handed_to_a_single_chip() {
         !DUAL_SE_SRC.contains("self.se050.provision(&entropy"),
         "SE050.provision must never receive the full entropy (invariant #1)",
     );
+    // #855 replaced the backend entry points; keep this pin on the calls
+    // that exist now so the change did not make it vacuous. The halves reach
+    // the chips only inside the images `chip_images` builds, and that
+    // function must be given the two halves, never the entropy.
+    let src = squash(DUAL_SE_SRC);
+    for banned in [
+        "chip_images(creds,entropy",
+        "chip_images(creds,&entropy",
+        "chip_images(creds,&*entropy",
+        ",entropy)",
+        ",&entropy)",
+    ] {
+        assert!(
+            !src.contains(banned),
+            "a backend must never receive the full entropy (invariant #1): {banned}"
+        );
+    }
+    assert!(src.contains("self.optiga.provision_image(&optiga_image,"));
+    assert!(src.contains("self.se050.provision_image(&se050_image,"));
 }
 
 #[test]
@@ -2349,22 +2502,21 @@ fn negative_dual_se_duress_no_full_entropy_to_a_single_chip() {
     // must hand each chip a half (half_o / half_e), never the full decoy
     // entropy. A refactor passing `entropy` directly to one chip's
     // provision_duress would collapse the decoy's dual-SE security.
+    let src = squash(DUAL_SE_SRC);
+    // The decoy halves reach the chips only inside the images built from
+    // `half_o` / `half_e` (#855), never from the decoy entropy itself.
+    assert!(src.contains(
+        "let(optiga_image,se050_image)=crate::pin_credential::chip_images(creds,&half_o,&half_e);"
+    ));
     assert!(
-        !DUAL_SE_SRC.contains("self.optiga.provision_duress(&entropy"),
-        "OPTIGA.provision_duress must never receive the full decoy entropy (invariant #1)",
+        src.contains(
+            "self.optiga.provision_duress_image(&optiga_image,master_secret,vk,bootstrap_vk)"
+        ),
+        "OPTIGA.provision_duress_image must receive the OPTIGA's own decoy image",
     );
     assert!(
-        !DUAL_SE_SRC.contains("self.se050.provision_duress(&entropy"),
-        "SE050.provision_duress must never receive the full decoy entropy (invariant #1)",
-    );
-    // And it must positively pass the halves.
-    assert!(
-        DUAL_SE_SRC.contains("self.optiga.provision_duress(&half_o, master_secret, vk, bootstrap_vk, duress_pin)"),
-        "OPTIGA.provision_duress must receive the OPTIGA half",
-    );
-    assert!(
-        DUAL_SE_SRC.contains("self.se050.provision_duress(&half_e, master_secret, vk, bootstrap_vk, duress_pin)"),
-        "SE050.provision_duress must receive the SE050 half",
+        src.contains("self.se050.provision_duress_image(&se050_image,vk,bootstrap_vk)"),
+        "SE050.provision_duress_image must receive the SE050's own decoy image",
     );
 }
 
@@ -2376,18 +2528,21 @@ fn positive_dual_se_unlock_duress_no_short_circuit_and_xor_reconstruct() {
     // timing-uniformity property. And it must reconstruct the decoy
     // entropy by XOR of the two halves (invariant #1 for the decoy).
     assert!(
-        DUAL_SE_SRC.contains("let ro = unsafe { self.optiga.duress_read_half(pin) };")
-            && DUAL_SE_SRC.contains("let re = self.se050.duress_read_half(pin);"),
+        DUAL_SE_SRC.contains("let ro = unsafe { self.optiga.duress_read_half(&creds.optiga) };")
+            && DUAL_SE_SRC.contains("let re = self.se050.duress_read_half(&creds.se050);"),
         "unlock_duress must read both halves into bindings (no `?` short-circuit) for timing uniformity",
     );
+    // #855: each chip returns `half XOR mask`; the join removes both masks.
     assert!(
-        DUAL_SE_SRC.contains("let mut full = xor_32(&half_o, &half_e);"),
-        "unlock_duress must reconstruct the decoy entropy by XOR of both halves",
+        squash(DUAL_SE_SRC).contains(
+            "letmutfull=xor_32(&creds.mask_optiga.apply(&half_o),&creds.mask_se050.apply(&half_e),);"
+        ),
+        "unlock_duress must reconstruct the decoy entropy by XOR of both unmasked halves",
     );
     // The pad must hit BOTH chips so it twins the real unlock's two verifies.
     assert!(
-        DUAL_SE_SRC.contains("self.optiga.duress_verify(pin)")
-            && DUAL_SE_SRC.contains("self.se050.duress_verify(pin)"),
+        DUAL_SE_SRC.contains("self.optiga.duress_verify(&creds.optiga)")
+            && DUAL_SE_SRC.contains("self.se050.duress_verify(&creds.se050)"),
         "duress_pad must verify on both chips to match the real unlock's op-count",
     );
 }

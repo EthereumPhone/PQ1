@@ -6,10 +6,10 @@
 > companion. Implement transport and response parsing from
 > [`usb-protocol-v2.md`](usb-protocol-v2.md), and ERC-7730 lookup/framing from
 > [`companion-erc7730-implementation-guide.md`](companion-erc7730-implementation-guide.md).
-> In particular, seedless slot rotation is not executable on wire v2: keep
-> `FLAG_REGISTER_SLOT` clear, reject a nonzero Type-1 response, and do not retry
-> until the reviewed public-key/calldata protocol bump tracked on
-> `EthereumPhone/PQ1` (label `source:work-todo`) lands.
+> Seedless slot rotation is executable from protocol **0x0203** (#353): the
+> rotation response carries the new slot's 64-byte owner bytes. Against a device
+> reporting `< 0x0203`, keep `FLAG_REGISTER_SLOT` clear and reject a nonzero
+> Type-1 response. See §11.4 for the procedure.
 
 This is retained as historical architecture context for companion apps. It is
 not self-contained, and its detailed byte layouts and worked workflows have not
@@ -238,7 +238,7 @@ Capability discovery. **Always call first.**
 
 | Offset | Size | Field             | Notes                                  |
 |--------|------|-------------------|----------------------------------------|
-| 0      | 2    | protocol_version  | u16 BE, currently `0x0202`             |
+| 0      | 2    | protocol_version  | u16 BE, currently `0x0203`             |
 | 2      | 3    | fw_version        | placeholder bytes; do not gate features |
 | 5      | 16   | device_uid        | STM32 UID96; zeros on dev builds       |
 | 21     | 4    | capabilities      | u32 BE bitmap (see below)              |
@@ -368,7 +368,7 @@ Sub-flows selected by flag bits:
 |------------------------------------------|------------------------------------|
 | none (normal signing)                    | Type 2 wrapper only                |
 | `FLAG_INCLUDE_INIT_CODE` + slot_index=0  | initCode + Type 2 (first deploy)   |
-| `FLAG_REGISTER_SLOT` + slot_index ≥ 1    | Type 1 + Type 2 wire output; current companions MUST reject it |
+| `FLAG_REGISTER_SLOT` + slot_index ≥ 1    | new owner bytes + Type 1 + Type 2 (rotation, protocol 0x0203+; §11.4) |
 
 `FLAG_INCLUDE_INIT_CODE` and `FLAG_REGISTER_SLOT` are **mutually
 exclusive**. Firmware rejects both set.
@@ -379,7 +379,7 @@ exclusive**. Firmware rejects both set.
 ```
 [new_offchain_count (8 BE)]
 [init_code_len (4 BE)][init_code    (0 or 4280 B)]
-[type1_len     (4 BE)][type1_wrapper(0 or 4128 B)]   — abi.encode(uint256,bytes)
+[type1_len     (4 BE)][new_owner_bytes(64 B) || type1_wrapper(4128 B)]  — 0 or 4192 B
 [type2_len     (4 BE)][type2_wrapper(4128 B)]        — abi.encode(uint256,bytes)
 ```
 
@@ -476,14 +476,17 @@ const icLen = readU32BE(resp, off); off += 4;
 const initCode = icLen > 0 ? resp.slice(off, off + icLen) : null; off += icLen;
 
 const t1Len = readU32BE(resp, off); off += 4;
-const type1 = t1Len > 0 ? resp.slice(off, off + t1Len) : null; off += t1Len;
+if (t1Len !== 0 && t1Len !== 4192) throw new Error('bad Type-1 section');
+const newOwnerBytes = t1Len > 0 ? resp.slice(off, off + 64) : null;
+const type1 = t1Len > 0 ? resp.slice(off + 64, off + t1Len) : null; off += t1Len;
 
 const t2Len = readU32BE(resp, off); off += 4;
 const type2 = resp.slice(off, off + t2Len);  // always present
 ```
 
-Chunk sizes are fixed when present: `initCode` is exactly **4280 B**,
-Type 1 and Type 2 wrappers are each exactly **4128 B**.
+Chunk sizes are fixed when present: `initCode` is exactly **4280 B**, the
+Type-1 section is exactly **4192 B** (64 B new owner bytes + 4128 B wrapper,
+protocol 0x0203+), and the Type-2 wrapper is exactly **4128 B**.
 
 ---
 
@@ -732,10 +735,9 @@ uint256 constant MAX_SLOT_USES      = 65_536;   // Type 2 cap per owner
 - Always read on-chain state before choosing which slot to sign with.
   The firmware will happily keygen any requested slot; it is the
   companion's job to avoid a slot index whose `slotUses` is already at cap.
-- When `slotUses[currentSlot]` approaches `MAX_SLOT_USES`, warn that seedless
-  rotation is currently blocked. Keep `FLAG_REGISTER_SLOT` clear and reject a
-  nonzero Type-1 response until the reviewed wire-v2 extension returns the exact
-  public key or complete bound calldata.
+- When `slotUses[currentSlot] + offchainSigCount[currentSlot]` approaches
+  `MAX_SLOT_USES`, rotate to the next slot (§11.4). Each rotation spends one
+  of the chain's `MAX_BOOTSTRAP_USES`.
 - When `bootstrapUses` approaches `MAX_BOOTSTRAP_USES`, warn the user:
   once all currently-registered slots are also exhausted, the chain is
   permanently frozen for that wallet. There is no reset path by design.
@@ -876,21 +878,67 @@ maxFeePerGas         = 1   gwei
 
 ### 11.4 Slot Rotation (current slot nearing cap)
 
-**Blocked on wire v2.** The response omits the exact 64-byte
-`newOwnerBytes = pkSeed‖pkRoot` that the bootstrap signature commits to in
-`addOwnerBytes(newOwnerBytes)`. A companion cannot reconstruct that UserOp from
-the response and must not substitute a no-op, guessed key, or locally derived
-secret. Keep `FLAG_REGISTER_SLOT` clear, reject any nonzero Type-1 response, and
-do not retry it. Rotation becomes executable only after the reviewed,
-versioned protocol extension returns the exact public key or complete bound
-Type-1 calldata.
+Requires a device reporting protocol **0x0203+** (GET_DEVICE_INFO bytes 0–1),
+and a deployed wallet on this chain. Each slot has its own 65,536-signature
+budget (`slotUses + offchainSigCount`); rotating moves the wallet to a fresh
+slot whose budget starts at zero. Each rotation spends one bootstrap use.
 
-The firmware nevertheless binds the future reviewed rotation flow correctly:
-the Type-1 rotation confirmation/signature uses `base`, while the Type-2
-transaction confirmation/signature uses `base+1`. Both display the same exact
-high-192 nonce lane when nonzero, and sequence overflow is refused before it
-can change lanes. This does not make wire v2 executable; companions must keep
-`FLAG_REGISTER_SLOT` clear until the versioned response extension is reviewed.
+```
+1. nextOwner ← wallet.nextOwnerIndex()
+   newSlot   = nextOwner - 1          // the contract appends the new owner at
+                                      // nextOwnerIndex, which is slot newSlot
+                                      // (ownerIndex = slot + 1)
+2. base ← entryPoint.getNonce(sender, nonceKey)
+3. flags = (accountIndex << 22) | FLAG_REGISTER_SLOT | newSlot
+   SIGN_USEROP(…, nonce = base, the user's tx) — the device shows a
+   "rotate slot" consent, then the user's transaction (nonce base+1)
+4. Parse: type1_len MUST be 4192.
+     newOwnerBytes = section[0..64]   (pkSeed(32) || pkRoot(32))
+     type1         = section[64..4192]
+5. Verify before submitting (recommended; `tools/verify-c10-sig rotation`
+   is a reference implementation):
+     - pkSeed[16..32] == 0 (N-masked);
+     - the bootstrap signature in type1 verifies, under the wallet's
+       bootstrap key (ownerAtIndex(0), or GET_INIT_CODE bytes 24..88), over
+       sphincsDigest(Type-1 UserOp from step 6);
+     - the Type-2 signature verifies under newOwnerBytes.
+     At minimum, simulate both UserOps (eth_call / bundler simulation).
+6. Type-1 UserOp:
+     nonce = base, initCode = 0x, paymasterAndData = 0x,
+     callData = addOwnerBytes(newOwnerBytes)
+              = 0x101490cb || uint256(0x20) || uint256(0x40) || newOwnerBytes
+     the five gas words exactly as sent in the request,
+     signature = type1
+   Submit it ALONE and wait for inclusion.
+7. Type-2 UserOp: nonce = base + 1, ownerIndex = newSlot + 1,
+     callData = executeWithOffchainCount(newSlot + 1, new_offchain_count, …),
+     signature = type2. Submit after step 6 is mined.
+```
+
+The two UserOps cannot share a bundle: EntryPoint v0.6 runs every op's
+validation before any execution, and the new slot's key is installed only when
+`addOwnerBytes` executes. If the Type-1 fails to land, do not blindly re-request
+— each request releases another bootstrap signature. Check `nextOwnerIndex`
+first; if the slot was installed, sign the Type 2 again with no flag.
+
+The firmware binds both halves: the rotation confirmation and Type-1 signature
+use `base`, the transaction confirmation and Type-2 signature use `base+1`; both
+display the same exact high-192 nonce lane when nonzero, and sequence overflow
+is refused before it can change lanes. The returned owner bytes are copied out
+of the exact signed `addOwnerBytes` calldata and FI-checked against the new
+slot's key before release; a fail-initialised consent receipt proves the
+rotation dialog was confirmed before the bootstrap key is derived and again
+before it signs.
+
+### 11.4a Signature-count sync (`INS 0x64 OFFCHAIN_SYNC`)
+
+After a restore, or when the same seed runs on a second device, the device's
+per-slot off-chain count can be behind the chain's `offchainSigCount[i]`.
+Send the true on-chain value; the device shows *Update signature count?* with
+its own count, the app's count and the signatures left. A jump of more than
+1,000, or fewer than 1,000 left, adds a **! CAREFUL** page. A target that
+would leave the slot 0 signatures is refused (`SW 0x6985`) with no dialog and
+no write — rotate (§11.4) instead.
 
 ### 11.5 Receive Address Verification
 
@@ -917,8 +965,8 @@ without the flag the address is returned silently.
      nextOwner = wallet.nextOwnerIndex()
      recover the active slot_index from persisted companion state or historical
      registration records; the companion must not derive wallet secrets.
-5. If the active slot mapping cannot be recovered, stop. Wire v2 cannot rotate
-   into a fresh slot because it omits the exact Type-1 public-key calldata.
+5. If the active slot mapping cannot be recovered, rotate into a fresh slot
+   (§11.4): `slot_index = nextOwner - 1` has never been registered on-chain.
 ```
 
 ### 11.7 Contract Interactions (DeFi, ERC-20, etc.)
@@ -1178,6 +1226,8 @@ issue.
 |----------------------------------|--------|
 | SPHINCS+C10 raw signature        | 4,008  |
 | Type 1 / Type 2 wrapper (ABI-encoded) | 4,128  |
+| Type-1 rotation section (owner ‖ wrapper, 0x0203) | 4,192 |
+| Max SIGN_USEROP response         | 12,620 |
 | initCode (first deploy)          | 4,280  |
 | SIGN_USEROP request header       | 330    |
 | Max inner tx `data`              | 4,096  |

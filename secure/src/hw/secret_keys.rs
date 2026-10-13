@@ -410,6 +410,67 @@ pub fn se050_admin_pin() -> Result<[u8; 16], OtpError> {
     Ok(out)
 }
 
+/// The PRF behind the die-bound PIN credentials and seed-half masks (#855).
+///
+/// `info` is `label || salt || PIN` (62 bytes), assembled and wiped by
+/// `crate::pin_credential`; `out` receives the PRF output. This is the only
+/// place a PIN-derived byte string is ever combined with the device key.
+///
+/// The key is whatever `derive_into` roots in for this build:
+///
+/// - **`saes-dhuk`** (every ship-shaped build): the silicon DHUK, through
+///   the SAES peripheral. The key never appears in CPU-visible memory, so a
+///   value read out of a secure element cannot be searched off the device.
+///   At RDP-0 the DHUK is a constant shared by every part, which is why
+///   `crate::pin_gate` refuses to derive below RDP-2 in a production build.
+/// - **`otp-hardcoded-master-key`** (bench only): a compile-time constant.
+///   The outputs are then the same on every board. This keeps bench boards
+///   interchangeable; it is **not** die-bound and must never ship (the
+///   feature is on the production-forbidden list).
+/// - **neither**: the per-board OTP master through HKDF.
+///
+/// The BHK is deliberately not folded in: its lifecycle has open defects
+/// (#707, #712), and a credential that depended on it would be lost with it.
+///
+/// Unlike every other label in this module, `info` here is secret. The SAES
+/// path copies it into a stack buffer that is wiped before return
+/// (`derive_into_saes_kdf`); the HKDF paths feed it straight to HMAC.
+///
+/// # Errors
+/// Propagates the root-key backend's error. `pin_credential` additionally
+/// rejects output that is all `0x00` / `0xFF` or identical across labels.
+pub fn pin_credential_prf(info: &[u8], out: &mut [u8]) -> Result<(), OtpError> {
+    derive_into(info, out)
+}
+
+/// The public, fixed PRF key of bench builds (#855). Not a secret; a build
+/// that uses it must never ship.
+#[cfg(any(feature = "e2e-test", feature = "otp-hardcoded-master-key"))]
+const BENCH_PIN_PRF_KEY: [u8; 32] = *b"PQSIGNER-BENCH-PIN-PRF-NOT-SHIP!";
+
+/// PRF for the PIN credentials on **bench builds only** (`e2e-test` /
+/// `otp-hardcoded-master-key`, both production-forbidden): HKDF-Expand over a
+/// public constant, whatever root the rest of the build uses.
+///
+/// Why bench builds do not use [`pin_credential_prf`]: the SE050 user UserID
+/// can only be deleted by a session that presents its own value. Bench
+/// boards are flashed with many build flavours, whose `derive_into` roots
+/// differ (a constant, the DHUK, the per-board OTP master). If the bench
+/// credential depended on the root, a chip provisioned by one flavour could
+/// not be cleaned by a tool built as another, and each failed try costs one
+/// of the UserID's ten attempts. With this key, and the fixed bench salt in
+/// `pin_gate`, the credential of a known test PIN is the same on every bench
+/// build, as it was before #855 when the chip simply held the PIN. It gives
+/// no protection, and is not meant to.
+///
+/// # Errors
+/// None today; the signature matches [`pin_credential_prf`].
+#[cfg(any(feature = "e2e-test", feature = "otp-hardcoded-master-key"))]
+pub fn pin_credential_bench_prf(info: &[u8], out: &mut [u8]) -> Result<(), OtpError> {
+    hkdf_expand(&BENCH_PIN_PRF_KEY, info, out);
+    Ok(())
+}
+
 // ===========================================================================
 // work-todo #36 — first-boot self-provisioning key material.
 //

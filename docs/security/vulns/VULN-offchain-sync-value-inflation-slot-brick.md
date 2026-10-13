@@ -114,6 +114,37 @@ is structurally unreachable (Layer A) and consent-free near-exhaustion is denied
 floor, but that is user-consented and recoverable by slot rotation — the same
 posture as any other confirmed slot use.
 
+> **UPDATE 2026-10-13 — the residual above was wrong when written; corrected.**
+> The 2026-10-13 security sweep (finding #2) showed two gaps:
+>
+> 1. **"Recoverable by slot rotation" was false.** Wire v2 returned the
+>    bootstrap Type-1 signature over `addOwnerBytes(newOwnerBytes)` without the
+>    64-byte `newOwnerBytes`, so a seedless companion could not rebuild the
+>    signed UserOp (#353). A slot exhausted on-chain froze the wallet's funds
+>    on that chain. Fixed by protocol **0x0203**: the Type-1 section is now
+>    `new_owner_bytes(64) || wrapper(4128)`, copied out of the exact signed
+>    calldata and FI-bound before release.
+> 2. **The clamp did not stop a confirmed sync from exhausting a used slot.**
+>    The ceiling is `MAX_SLOT_USES - 1` regardless of the slot's Type-2 tally,
+>    and the device cannot see on-chain `slotUses`. A hostile companion could
+>    pick `target = 65,535 - slotUses` so the owner's next ordinary Type-2 fills
+>    the on-chain combined cap exactly, behind a screen that showed only bare
+>    "Current / Target" numbers. Fixed by **Layer C** (owner decision: refuse +
+>    warn): `pqsigner_aa::offchain_gate::sync_verdict` refuses a sync that would
+>    leave the slot 0 signatures (no dialog, no write); a jump > 1,000 or
+>    < 1,000 left adds a `! CAREFUL` page; and the dialog is reworded for users
+>    ("Update signature count?", "On device / From app / Sigs left"). Kani
+>    `sync_verdict_is_sound` proves that every sync the policy admits leaves
+>    the slot signable for **any** prior Type-2 tally, which lifts the
+>    `userop_sigs == 0` assumption of `offchain_sync_never_bricks`.
+>
+> **Residual now:** the device cannot see on-chain `slotUses`, so a restored
+> device (tally 0) can still be steered to a confirmed sync that exhausts a
+> heavily used slot *without* tripping the refusal; it trips the `! CAREFUL`
+> page unless the jump is ≤ 1,000, i.e. unless the slot already had fewer than
+> about 1,000 signatures left on-chain. Either way the slot is now recoverable:
+> rotate to the next slot (one bootstrap use).
+
 **Tests / build.** Regression coverage added:
 - `secure/src/secure_crypto_glue_under_test/pure_tests.rs` — pure clamp
   boundaries (incl. the exact attack value `MAX_SLOT_USES` and `u64::MAX`), the

@@ -20,7 +20,9 @@ Flows (name -> what the device should show):
   unknown       transfer of a token with no proof           UNKNOWN (placeholder ramp)
   blind         opaque calldata + ETH value                 BLIND
   typed-call    self-attested `stake(address,uint256)`      typed args, ! UNVERIFIED
-  rotate        register a new slot (Type 1 + Type 2)       ROTATE consent
+  rotate        register a new slot (Type 1 + Type 2)       ROTATE consent; with --save-dir,
+                                                            writes rotate_resp.bin + init_code.bin
+                                                            for `verify-c10-sig rotation` (#353)
   deploy        first UserOp with initCode (slot 0)         ! DEPLOY trailer
   safe          Safe approveHash, USDC transfer             APPROVE SAFE TX (pilot flow)
   cow           direct CoW order WETH->USDC, mainnet        CoW hero, decoded legs
@@ -30,7 +32,16 @@ Flows (name -> what the device should show):
   typed         EIP-712 Lombard feeApproval, mainnet        SIGN ... (7730 typed)
   batch         3-tx atomic batch (ETH, USDC, blind)        3 member asks + SIGN 3 TXS?
   address       show the wallet address on the device       address consent
+  sync          raise a demo slot's count by a little        UPDATE SIGNATURE COUNT? (plain)
+  sync-warn     raise it by > 1,000                         same, plus the ! CAREFUL screen
+  sync-refuse   ask to use up the rotated slot              no dialog; refused (Can't update)
   lock          lock the device                             LOCKED padlock -> PIN row
+
+The sync flows write a durable floor (monotonic) for --sync-slot on Base;
+they default to slot 9 so the wallet's real slots are never touched.
+`sync-refuse` targets --rotate-slot and only refuses once that slot has
+signed something (run `rotate` first); otherwise the device shows the
+! CAREFUL warning instead, and you should DECLINE it.
 
 Start the script BEFORE unlocking; it waits. Between flows it pauses for
 --pause seconds (or waits for Enter with --step). If the device relocks
@@ -84,7 +95,12 @@ from hid_sign_safe import (  # noqa: E402
 from hid_smoke import SW_OK, HidRaw, send  # noqa: E402
 
 INS_SIGN_USEROP_BATCH = 0x32
+INS_GET_INIT_CODE = 0x61
 INS_SIGN_OFFCHAIN = 0x62
+INS_OFFCHAIN_SYNC = 0x64
+# Protocol 0x0203 (#353): the Type-1 section is new_owner_bytes(64) || wrapper.
+OWNER_BYTES_LEN = 64
+TYPE1_ROTATION_SECTION_LEN = OWNER_BYTES_LEN + SIG_WRAPPER_LEN
 INS_LOCK = 0x11
 FLAG_REGISTER_SLOT = 0x4000_0000
 BATCH_WIRE_VERSION = 2
@@ -204,7 +220,7 @@ def erc7730_leaf(chain_id: int, contract: bytes, context: str = "contract",
 class Request:
     ins: int
     payload: bytes
-    kind: str                 # userop | batch | offchain | address | lock
+    kind: str                 # userop | batch | offchain | address | lock | sync
     lines: list[str]
     want_init: bool = False
     want_t1: bool = False
@@ -395,6 +411,28 @@ def f_batch(c: Ctx) -> Request:
                     "3 member asks, then the final SIGN 3 TXS? ask"])
 
 
+def sync_body(slot: int, target: int) -> bytes:
+    return bytes([0]) + u64(BASE) + u32(slot) + u64(target)
+
+
+def f_sync(c: Ctx) -> Request:
+    t = c.args.sync_target
+    return Request(INS_OFFCHAIN_SYNC, sync_body(c.args.sync_slot, t), "sync",
+                   [f"sync: slot {c.args.sync_slot} on Base -> {t} (plain-language confirm)"])
+
+
+def f_sync_warn(c: Ctx) -> Request:
+    t = c.args.sync_target + 5_000
+    return Request(INS_OFFCHAIN_SYNC, sync_body(c.args.sync_slot, t), "sync",
+                   [f"sync: slot {c.args.sync_slot} on Base -> {t}: a jump > 1,000, expect ! CAREFUL"])
+
+
+def f_sync_refuse(c: Ctx) -> Request:
+    return Request(INS_OFFCHAIN_SYNC, sync_body(c.args.rotate_slot, 65_535), "sync",
+                   [f"sync: slot {c.args.rotate_slot} on Base -> 65535 (would use up the slot)",
+                    "expect NO dialog and 'Can't update' (if ! CAREFUL appears: DECLINE, run rotate first)"])
+
+
 def f_address(c: Ctx) -> Request:
     return Request(INS_GET_WALLET_ADDRESS, u32(0) + b"\x01", "address",
                    [f"show wallet address (expect 0x{c.sender.hex()})"])
@@ -409,9 +447,11 @@ FLOWS: dict[str, Callable[[Ctx], Request]] = {
     "unknown": f_unknown, "blind": f_blind, "typed-call": f_typed_call,
     "rotate": f_rotate, "deploy": f_deploy, "safe": f_safe, "cow": f_cow,
     "erc7730": f_erc7730, "personal": f_personal, "raw32": f_raw32, "typed": f_typed,
-    "batch": f_batch, "address": f_address, "lock": f_lock,
+    "batch": f_batch, "address": f_address,
+    "sync": f_sync, "sync-warn": f_sync_warn, "sync-refuse": f_sync_refuse,
+    "lock": f_lock,
 }
-DEFAULT = [n for n in FLOWS if n != "lock"]
+DEFAULT = [n for n in FLOWS if n != "lock" and not n.startswith("sync")]
 
 
 # ── running ──────────────────────────────────────────────────────────────
@@ -429,8 +469,16 @@ def check_userop(resp: bytes, r: Request) -> str | None:
         return f"length mismatch ({len(resp)} B)"
     if ic != (INIT_CODE_LEN if r.want_init else 0):
         return f"init_code_len={ic}"
-    if t1 != (SIG_WRAPPER_LEN if r.want_t1 else 0):
-        return f"type1_len={t1}"
+    if t1 != (TYPE1_ROTATION_SECTION_LEN if r.want_t1 else 0):
+        return f"type1_len={t1} (a 0x0203 rotation section is {TYPE1_ROTATION_SECTION_LEN})"
+    if t1:
+        t1_off = 8 + 4 + ic + 4
+        owner = resp[t1_off:t1_off + OWNER_BYTES_LEN]
+        t1_wrap = resp[t1_off + OWNER_BYTES_LEN:t1_off + t1]
+        if any(owner[16:32]) or int.from_bytes(t1_wrap[0:32], "big") != 0:
+            return "Type-1 section malformed (owner pkSeed not N-masked or ownerIndex != 0)"
+        print(f"    NEW SLOT KEY: pkSeed=0x{owner[:32].hex()}")
+        print(f"                  pkRoot=0x{owner[32:].hex()}")
     if t2 != SIG_WRAPPER_LEN or int.from_bytes(wrap[64:96], "big") != C10_SIG_LEN:
         return f"type2_len={t2}"
     owner = int.from_bytes(wrap[0:32], "big")
@@ -447,6 +495,29 @@ def check_offchain(resp: bytes, r: Request) -> str | None:
         return "ERC-6492 magic missing"
     print(f"    SIGNED: local_offchain_count={int.from_bytes(resp[:8], 'big')} ({len(resp)} B)")
     return None
+
+
+def save_rotation(hid: HidRaw, args: argparse.Namespace, sender: bytes, nonce: int,
+                  resp: bytes) -> None:
+    """Write the rotation response + this chain's initCode (bootstrap key)
+    and print the offline check a seedless companion would run (#353)."""
+    os.makedirs(args.save_dir, exist_ok=True)
+    rp = os.path.join(args.save_dir, "rotate_resp.bin")
+    with open(rp, "wb") as fh:
+        fh.write(resp)
+    sw, ic = send(hid, INS_GET_INIT_CODE, u32(0) + u64(BASE))
+    sw, ic = drain_response(hid, sw, ic)
+    if sw != SW_OK or len(ic) != INIT_CODE_LEN:
+        print(f"!! GET_INIT_CODE failed (SW=0x{sw:04x}); response saved to {rp}")
+        return
+    ip = os.path.join(args.save_dir, "init_code.bin")
+    with open(ip, "wb") as fh:
+        fh.write(ic)
+    gas = ",".join(str(GAS[k]) for k in ("call", "ver", "pre", "max_fee", "prio"))
+    print("    verify offline (no seed needed):")
+    print("      env -u RUSTFLAGS cargo run --release --manifest-path tools/verify-c10-sig/Cargo.toml --"
+          f" rotation {rp} chain={BASE} slot={args.rotate_slot} sender={sender.hex()} nonce={nonce}"
+          f" to={ALICE.hex()} value=1000000000000000 gas={gas} initcode={ip}")
 
 
 def run_flow(hid: HidRaw, name: str, args: argparse.Namespace, nonce: int) -> str:
@@ -473,12 +544,24 @@ def run_flow(hid: HidRaw, name: str, args: argparse.Namespace, nonce: int) -> st
         print("!! no answer before the timeout")
         return "timeout"
     if sw != SW_OK:
+        if name == "sync-refuse" and sw == 0x6985:
+            print("    REFUSED as intended (SW=0x6985 conditions not satisfied): the sync would "
+                  "have left the slot 0 signatures")
+            return "refused"
         print(f"    device refused (SW=0x{sw:04x}): declined on screen, or a gate fired "
               "(the screen says which)")
         return "declined"
     err = None
+    if r.kind == "sync":
+        if name == "sync-refuse":
+            print("!! sync-refuse was ACCEPTED: the device wrote the floor (expected a refusal)")
+            return "error"
+        print("    UPDATED: the device recorded the new count")
+        return "confirmed"
     if r.kind in ("userop", "batch"):
         err = check_userop(resp, r)
+        if not err and r.want_t1 and args.save_dir:
+            save_rotation(hid, args, data, nonce, resp)
     elif r.kind == "offchain":
         err = check_offchain(resp, r)
     elif r.kind == "address":
@@ -501,6 +584,10 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="list the flows and exit")
     ap.add_argument("--slot", type=int, default=0, help="slot for normal-mode UserOps")
     ap.add_argument("--rotate-slot", type=int, default=1, help="slot the rotate flow registers")
+    ap.add_argument("--save-dir", default="",
+                    help="rotate: save the response + initCode here and print the offline check")
+    ap.add_argument("--sync-slot", type=int, default=9, help="slot the sync / sync-warn flows update")
+    ap.add_argument("--sync-target", type=int, default=40, help="count the plain sync flow sends")
     ap.add_argument("--nonce", type=int, default=0, help="first UserOp nonce (bumped per flow)")
     ap.add_argument("--deployed", action="store_true",
                     help="off-chain flows as deployed (needs a registered --slot) instead of ERC-6492")

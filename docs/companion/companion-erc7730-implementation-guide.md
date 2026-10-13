@@ -954,15 +954,16 @@ emits only the slot-0 Type 2 signature. Before signing, the final trusted
 confirmation includes `DEPLOY FACTORY:` and the complete factory address; a
 companion must treat that page as mandatory deployment consent.
 
-Rotation to slot N≥1 is currently blocked for seedless companions. Firmware
-can emit a Type 1 signature over `addOwnerBytes(newSlotPk)`, but wire v2 does
-not return the 64-byte `newSlotPk = pkSeed || pkRoot` needed to reconstruct that
-exact signed calldata. A no-op `execute(sender,0,"")` is invalid and hashes to
-a different UserOp. Until a reviewed wire bump exposes the public key (or the
-complete Type-1 calldata), production companions MUST keep
-`FLAG_REGISTER_SLOT` clear, treat any nonzero `type1_len` as unsupported, and
-must not retry the request: every retry releases another fresh bootstrap C10
-signature without a successful on-chain counter increment.
+Rotation to slot N≥1 (`FLAG_REGISTER_SLOT`) needs a device reporting protocol
+0x0203+. Its response's Type-1 section is 4192 bytes: the 64-byte
+`newSlotPk = pkSeed || pkRoot` (copied by the firmware out of the exact signed
+`addOwnerBytes(newSlotPk)` calldata) followed by the 4128-byte bootstrap
+wrapper. Build the Type-1 UserOp from it exactly as in
+`companion-app-integration.md` §11.4; a no-op `execute(sender,0,"")` is invalid
+and hashes to a different UserOp. Against a `< 0x0203` device keep
+`FLAG_REGISTER_SLOT` clear and treat any nonzero `type1_len` as unsupported. Do
+not blindly retry a failed rotation: every request releases another fresh
+bootstrap C10 signature.
 
 ### 7.6 UniswapX orders (currently refused)
 
@@ -994,7 +995,7 @@ whether a trailer was attached:
 ```
 [new_offchain_count u64 BE]
 [init_code_len u32 BE] [init_code]      // 4280 B if FLAG_INCLUDE_INIT_CODE
-[type1_len u32 BE]     [type1_wrapper]  // 4128 B if FLAG_REGISTER_SLOT
+[type1_len u32 BE]     [new_owner_bytes || type1_wrapper]  // 64 + 4128 = 4192 B if FLAG_REGISTER_SLOT (0x0203+)
 [type2_len u32 BE]     [type2_wrapper]  // always 4128 B
 ```
 
@@ -1002,11 +1003,9 @@ Both signature wrappers are already `abi.encode(uint256 ownerIndex, bytes
 c10Sig)`. Use `type2_wrapper` directly as `UserOperation.signature`; do not
 ABI-encode it a second time.
 
-Wire v2 does not return the new slot public key needed to reconstruct a
-rotation Type-1 `addOwnerBytes(bytes)` call. A production companion must
-therefore request first deployment with `FLAG_INCLUDE_INIT_CODE` on slot 0 and
-no Type 1, and must reject a nonzero `type1_len` until the rotation wire is
-reviewedly extended (see §7.5).
+First deployment uses `FLAG_INCLUDE_INIT_CODE` on slot 0 and no Type 1. A
+rotation Type-1 section (0x0203+) starts with the new slot's owner bytes; any
+other nonzero `type1_len` must be rejected (see §7.5).
 
 The `new_offchain_count` is what `executeWithOffchainCount(...)` will
 write to `offchainSigCount[i]` on-chain — bake it into the Type 2

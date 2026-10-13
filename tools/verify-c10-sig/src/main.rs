@@ -21,6 +21,8 @@
 //! the other capture's key material; those MUST fail. If a tampered input
 //! verifies, the harness is broken and the PASS is void.
 
+mod rotation;
+
 use pqsigner_aa::userop::{
     compute_sphincs_digest_v06, reconstruct_execute_calldata, sha256_bytes,
     AaUserOpParamsV06Sha256, ENTRY_POINT_V06, SHA256_EMPTY,
@@ -124,6 +126,12 @@ fn extract_sig(resp: &[u8]) -> [u8; SIGNATURE_LEN] {
 }
 
 fn main() {
+    // `verify-c10-sig rotation …` — the #353 slot-rotation check.
+    let argv: Vec<String> = std::env::args().skip(1).collect();
+    if argv.first().map(String::as_str) == Some("rotation") {
+        rotation::run(&argv[1..]);
+    }
+
     let mut sender = [0u8; 20];
     hex::decode_to_slice(SENDER_HEX, &mut sender).expect("bad sender hex");
 

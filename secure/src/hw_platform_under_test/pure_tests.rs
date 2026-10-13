@@ -1360,14 +1360,40 @@ fn negative_flash_erase_ns_page_inside_interrupt_free() {
 
 #[test]
 fn negative_flash_pin_attempts_reset_inside_interrupt_free() {
+    // #855: the erase itself is now the private `pin_attempts_erase`; the
+    // public surface is one entry point per legitimate reason.
     let body = extract_body(
         FLASH_SRC,
-        "pub unsafe fn pin_attempts_reset() -> Result<(), ()> {",
+        "unsafe fn pin_attempts_erase() -> Result<(), ()> {",
     );
     assert!(
         body.contains("cortex_m::interrupt::free"),
-        "pin_attempts_reset MUST run inside cortex_m::interrupt::free"
+        "pin_attempts_erase MUST run inside cortex_m::interrupt::free"
     );
+}
+
+#[test]
+fn negative_flash_has_no_general_purpose_attempt_counter_reset() {
+    // #855 (review): "reset the page-124 counter" used to be one public
+    // function that any caller could reach for. A reset on a wipe path that
+    // does not first check the PIN-credential salt hands an attacker who
+    // emulates an extracted chip ten more guesses per wipe. The erase is
+    // therefore private, and what is exported names its reason.
+    assert!(
+        !FLASH_SRC.contains("pub unsafe fn pin_attempts_reset()"),
+        "there must be no bare public pin_attempts_reset()"
+    );
+    assert!(!FLASH_SRC.contains("pub unsafe fn pin_attempts_erase"));
+    assert!(FLASH_SRC.contains("\nunsafe fn pin_attempts_erase() -> Result<(), ()> {"));
+    for exported in [
+        "pub unsafe fn pin_attempts_reset_after_correct_pin() -> Result<(), ()> {",
+        "pub unsafe fn pin_attempts_reset_after_wipe() -> Result<(), ()> {",
+        "#[cfg(not(feature = \"mode-production\"))]\npub unsafe fn pin_attempts_reset_bench() -> Result<(), ()> {",
+    ] {
+        assert!(FLASH_SRC.contains(exported), "missing: {exported}");
+    }
+    // Exactly those three call the private erase.
+    assert_eq!(FLASH_SRC.matches("unsafe { pin_attempts_erase() }").count(), 3);
 }
 
 #[test]
@@ -1836,7 +1862,8 @@ fn negative_flash_mutating_apis_stay_unsafe() {
         "pub unsafe fn arm_wipe_flag",
         "pub unsafe fn pin_attempts_read",
         "pub unsafe fn pin_attempts_bump",
-        "pub unsafe fn pin_attempts_reset",
+        "pub unsafe fn pin_attempts_reset_after_correct_pin",
+        "pub unsafe fn pin_attempts_reset_after_wipe",
         "pub unsafe fn erase_ns_page",
         "pub unsafe fn write_ns_quadword_verified",
         "pub unsafe fn erase_secure_page",

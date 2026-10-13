@@ -555,26 +555,51 @@ pub fn wallet_address_screens(account_index: u32, page: &[[u8; 16]; 4], out: &mu
     Ok(())
 }
 
-/// The off-chain counter sync consent (`CMD_OFFCHAIN_SYNC`) from its proven
-/// pages (`build_offchain_sync_pages`): the banner becomes the ask; every
-/// fact row — the chain, the account and slot, the current and target
-/// counts — becomes a docked detail line, verbatim; the page's button hints
-/// (`L=Cancel` / `R=Confirm`) are the dialog's own gestures and are dropped.
+/// The signature-count sync consent (`CMD_OFFCHAIN_SYNC`) from its proven
+/// pages (`build_offchain_sync_pages`): the question becomes the ask; every
+/// fact row — the chain, the account and slot, the device and app counts, the
+/// signatures left, the warning (pulsing, when present) and the "only if"
+/// guidance — becomes a docked detail line, verbatim; the page's button hint
+/// (`L=No  R=Yes`) is the dialog's own gesture and is dropped.
 pub fn offchain_sync_screens(pages: &[[[u8; 16]; 4]], out: &mut pqsigner_ui_px::Screens) -> Result<(), ()> {
     out.set_len(0);
-    if pages.len() != 3 {
+    // Mirrors `tx::display::OFFCHAIN_SYNC_PAGES{,_WARN}` (pinned equal by
+    // the host test below; this file is also mounted host-side, where the
+    // production `tx` tree does not exist).
+    let warn = match pages.len() {
+        4 => false,
+        5 => true,
+        _ => return Err(()),
+    };
+    // The warning page is recognised by its exact title, never by position
+    // alone, so a mis-shaped page set cannot be lifted as a warning (or a
+    // warning lifted as something else).
+    if warn != (row_text(&pages[3][0]) == &b"!! CAREFUL !!"[..]) {
         return Err(());
     }
-    let hero = ScreenBuilder::hero(b"SYNC", Icon::Rotate, b"SYNC OFF-CHAIN FLOOR?").finish().map_err(|_| ())?;
+    let last = pages.len() - 1;
+    let hero = ScreenBuilder::hero(b"SYNC", Icon::Rotate, b"UPDATE SIGNATURE COUNT?").finish().map_err(|_| ())?;
     out.push(&hero)?;
-    let groups: [(&[u8], &[u8], usize, &[usize]); 3] = [
-        (b"SYNCNET", b"NETWORK", 1, &[0, 1]),
-        (b"SLOT", b"WALLET", 1, &[2, 3]),
-        (b"COUNT", b"COUNTER", 2, &[0, 2]),
+    let mut groups: [(&[u8], &[u8], usize, &[usize], bool); 6] = [
+        (b"SYNCNET", b"NETWORK", 1, &[0, 1], false),
+        (b"SLOT", b"WALLET", 1, &[2, 3], false),
+        (b"COUNT", b"COUNT", 2, &[0, 1], false),
+        (b"LEFT", b"SIGS LEFT", 2, &[2], false),
+        (b"CAREFUL", b"! CAREFUL", 3, &[1, 2], true),
+        (b"WHEN", b"ONLY IF", last, &[0, 1, 2], false),
     ];
-    for (i, (id, label, p, rows)) in groups.iter().enumerate() {
+    if !warn {
+        groups[4] = groups[5];
+    }
+    let n = if warn { 6 } else { 5 };
+    for (i, (id, label, p, rows, pulse)) in groups[..n].iter().enumerate() {
         let side = if i % 2 == 0 { Side::Left } else { Side::Right };
+        // Warning convention (cf. `! UNDEPLOYED`): the flow's own icon, a
+        // `!`-prefixed label and the pulsing warning rings.
         let mut d = ScreenBuilder::detail(id, Icon::Rotate, side, label).tier(Tier::T22);
+        if *pulse {
+            d = d.pulse();
+        }
         let mut any = false;
         for &r in *rows {
             let t = row_text(&pages[*p][r]);
@@ -754,15 +779,14 @@ mod tests {
         let mut wal = std::boxed::Box::new(pqsigner_ui_px::Screens::blank());
         wallet_address_screens(0, &[prow(b"Wallet addr #0"), prow(b"0x1CDD2EaB611126"), prow(b"97626F7b4bB0e23D"), prow(b"a4FeBF7B7C")], &mut wal).unwrap();
         let mut sync = std::boxed::Box::new(pqsigner_ui_px::Screens::blank());
-        offchain_sync_screens(
-            &[
-                [prow(b""), prow(b"SYNC COUNTER?"), prow(b"Off-chain floor"), prow(b"")],
-                [prow(b"Chain: 8453"), prow(b"Base"), prow(b"Account: 0"), prow(b"Slot: 3")],
-                [prow(b"Current: 12"), prow(b"L=Cancel"), prow(b"Target: 40"), prow(b"R=Confirm")],
-            ],
-            &mut sync,
-        )
-        .unwrap();
+        // Built by the real page builder, so the fixture cannot drift from it.
+        let sync_pages = crate::display_under_test::offchain_sync::build_offchain_sync_pages(0, 8453, 3, 12, 40, 65_484, false);
+        offchain_sync_screens(sync_pages.as_slice(), &mut sync).unwrap();
+        // The loud variant: a restored device asked to jump 64,000 with
+        // 1,536 signatures left (sweep 2026-10-13 finding #2).
+        let mut sync_warn = std::boxed::Box::new(pqsigner_ui_px::Screens::blank());
+        let warn_pages = crate::display_under_test::offchain_sync::build_offchain_sync_pages(0, 8453, 3, 0, 64_000, 1_536, true);
+        offchain_sync_screens(warn_pages.as_slice(), &mut sync_warn).unwrap();
         let scenarios: std::vec::Vec<(&str, std::vec::Vec<Screen>)> = std::vec![
             ("boot", std::vec![splash(), st("OS Fingerprint", ""), fingerprint_grid(&fw), st("PQSigner OS", "Ready")]),
             (
@@ -814,6 +838,7 @@ mod tests {
             ("fw_verify", fwv.as_slice().to_vec()),
             ("wallet_address", wal.as_slice().to_vec()),
             ("offchain_sync", sync.as_slice().to_vec()),
+            ("offchain_sync_warn", sync_warn.as_slice().to_vec()),
         ];
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../pqsigner-ui-px/tests/fixtures/lifecycle");
         let export = std::env::var_os("UI_PX_EXPORT").is_some();
@@ -861,23 +886,43 @@ mod tests {
         assert_eq!(d.label(), b"ACCOUNT 7");
         assert_eq!(t.as_slice()[0].caption(), b"CONFIRM ACCOUNT 7 ADDRESS?");
 
-        let pages = [
-            [row(b""), row(b"SYNC COUNTER?"), row(b"Off-chain floor"), row(b"")],
-            [row(b"Chain: 8453"), row(b"Base"), row(b"Account: 0"), row(b"Slot: 3")],
-            [row(b"Current: 12"), row(b"L=Cancel"), row(b"Target: 40"), row(b"R=Confirm")],
-        ];
-        wallet_address_screens(7, &page, &mut t).unwrap();
-        offchain_sync_screens(&pages, &mut t).unwrap();
-        assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
-        let mut lines = std::vec::Vec::new();
-        for s in t.as_slice() {
-            for i in 0..s.nlines(0) {
-                lines.push(s.line(0, i).unwrap().1.to_vec());
+        for (warn, target, left) in [(false, 40u64, 65_484u64), (true, 64_000, 1_536)] {
+            let pages = crate::display_under_test::offchain_sync::build_offchain_sync_pages(0, 8453, 3, 12, target, left, warn);
+            wallet_address_screens(7, &page, &mut t).unwrap();
+            offchain_sync_screens(pages.as_slice(), &mut t).unwrap();
+            assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
+            assert_eq!(t.as_slice()[0].caption(), b"UPDATE SIGNATURE COUNT?");
+            let mut lines = std::vec::Vec::new();
+            for s in t.as_slice() {
+                for i in 0..s.nlines(0) {
+                    lines.push(s.line(0, i).unwrap().1.to_vec());
+                }
             }
+            // Every non-hint page row reaches the transcript verbatim.
+            for p in pages.as_slice() {
+                for r in p {
+                    let txt = core::str::from_utf8(r).unwrap().trim();
+                    if txt.is_empty() || txt == "L=No  R=Yes" || txt == "!! CAREFUL !!"
+                        || txt == "Update signature" || txt == "count from app?"
+                    {
+                        continue;
+                    }
+                    assert!(lines.iter().any(|l| l == txt.as_bytes()), "{txt}");
+                }
+            }
+            let pulsing = t.as_slice().iter().any(|s| s.label() == b"! CAREFUL" && s.pulse());
+            assert_eq!(pulsing, warn, "the warning screen pulses exactly when flagged");
         }
-        for want in [&b"Chain: 8453"[..], b"Base", b"Account: 0", b"Slot: 3", b"Current: 12", b"Target: 40"] {
-            assert!(lines.iter().any(|l| l == want), "{}", String::from_utf8_lossy(want));
-        }
+        // A plain page set with a forged warning title, or a warning set
+        // without it, is refused rather than lifted.
+        let mut forged = crate::display_under_test::offchain_sync::build_offchain_sync_pages(0, 8453, 3, 12, 40, 65_484, false);
+        forged.buf[3][0] = row(b"!! CAREFUL !!");
+        assert!(offchain_sync_screens(forged.as_slice(), &mut t).is_err());
+        let mut stripped = crate::display_under_test::offchain_sync::build_offchain_sync_pages(0, 1, 3, 0, 64_000, 1_536, true);
+        stripped.buf[3][0] = row(b"");
+        assert!(offchain_sync_screens(stripped.as_slice(), &mut t).is_err());
+        assert_eq!(crate::display_under_test::offchain_sync::OFFCHAIN_SYNC_PAGES, 4);
+        assert_eq!(crate::display_under_test::offchain_sync::OFFCHAIN_SYNC_PAGES_WARN, 5);
     }
 
     #[test]

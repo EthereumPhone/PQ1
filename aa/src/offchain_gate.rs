@@ -190,6 +190,71 @@ pub fn userop_cap_ok_with_floor(offchain: u64, last_userop: u64, userop_sigs: u6
     userop_cap_ok(effective_offchain_count(offchain, last_userop), userop_sigs)
 }
 
+/// A floor-raising `CMD_OFFCHAIN_SYNC` that skips more than this many
+/// signatures past the device's own count gets the loud warning page.
+///
+/// An honest sync mirrors the on-chain `offchainSigCount` after a restore or
+/// when the same seed is used on a second device, which is normally a small
+/// number of message signatures. A large jump is what the slot-exhaustion
+/// attack (sweep 2026-10-13 finding #2) needs.
+pub const SYNC_WARN_JUMP: u64 = 1_000;
+
+/// A sync that would leave fewer than this many signatures on the slot gets
+/// the loud warning page.
+pub const SYNC_WARN_LEFT: u64 = 1_000;
+
+/// Signatures (of either kind) the slot still allows after a sync to
+/// `target`, as the device sees it:
+/// `MAX_SLOT_USES - (userop_sigs + max(offchain, last_userop, clamp(target)))`,
+/// saturating at 0. This is exactly the headroom the Type-2 and off-chain
+/// gates will compute on the next sign.
+#[inline]
+#[must_use]
+pub const fn sync_left_after(offchain: u64, last_userop: u64, userop_sigs: u64, target: u64) -> u64 {
+    let eff = effective_offchain_count(
+        effective_offchain_count(offchain, last_userop),
+        clamp_offchain_count(target),
+    );
+    MAX_SLOT_USES.saturating_sub(userop_sigs.saturating_add(eff))
+}
+
+/// How far a sync raises the device's effective off-chain count
+/// (`clamp(target) - max(offchain, last_userop)`, saturating at 0).
+#[inline]
+#[must_use]
+pub const fn sync_jump(offchain: u64, last_userop: u64, target: u64) -> u64 {
+    clamp_offchain_count(target).saturating_sub(effective_offchain_count(offchain, last_userop))
+}
+
+/// What the device does with a `CMD_OFFCHAIN_SYNC` request.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SyncVerdict {
+    /// The write would leave the slot with no signatures at all: the device
+    /// could never sign with it again, so the request has no honest use.
+    /// Refused without a dialog and without a write.
+    Refuse,
+    /// Allowed only after the loud warning page: the jump exceeds
+    /// [`SYNC_WARN_JUMP`] or fewer than [`SYNC_WARN_LEFT`] signatures remain.
+    Warn,
+    /// Ordinary plain-language confirmation.
+    Plain,
+}
+
+/// The sync policy (owner decision 2026-10-13: refuse + warn). Pure and
+/// total; the handler evaluates it twice through the FI sentinel.
+#[inline]
+#[must_use]
+pub const fn sync_verdict(offchain: u64, last_userop: u64, userop_sigs: u64, target: u64) -> SyncVerdict {
+    let left = sync_left_after(offchain, last_userop, userop_sigs, target);
+    if left == 0 {
+        SyncVerdict::Refuse
+    } else if sync_jump(offchain, last_userop, target) > SYNC_WARN_JUMP || left < SYNC_WARN_LEFT {
+        SyncVerdict::Warn
+    } else {
+        SyncVerdict::Plain
+    }
+}
+
 /// One slot's durable counters — a pure mirror of the
 /// `offchain_state` backend's per-entry state (`offchain`, `last_userop`,
 /// `userop_sigs`, existence==`registered`). The `apply_*` methods reproduce
@@ -384,6 +449,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn sync_refuses_a_target_that_exhausts_a_used_slot() {
+        // Sweep 2026-10-13 finding #2, device view: 1 Type-2 already signed,
+        // companion asks for the clamp ceiling. The write would leave 0.
+        assert_eq!(sync_left_after(0, 0, 1, OFFCHAIN_COUNT_CEILING), 0);
+        assert_eq!(sync_verdict(0, 0, 1, OFFCHAIN_COUNT_CEILING), SyncVerdict::Refuse);
+        assert_eq!(sync_verdict(0, 0, 1, u64::MAX), SyncVerdict::Refuse);
+        // One below: one signature left -> allowed, but only with the warning.
+        assert_eq!(sync_left_after(0, 0, 1, OFFCHAIN_COUNT_CEILING - 1), 1);
+        assert_eq!(sync_verdict(0, 0, 1, OFFCHAIN_COUNT_CEILING - 1), SyncVerdict::Warn);
+    }
+
+    #[test]
+    fn sync_warns_on_a_big_jump_even_with_plenty_left() {
+        // Restored device (all zero) asked to jump 1_001: plenty left, but
+        // a jump that large is the attack shape on a used on-chain slot.
+        assert_eq!(sync_verdict(0, 0, 0, SYNC_WARN_JUMP + 1), SyncVerdict::Warn);
+        assert_eq!(sync_verdict(0, 0, 0, SYNC_WARN_JUMP), SyncVerdict::Plain);
+        // The jump is measured from the effective count, not the bare floor.
+        assert_eq!(sync_jump(500, 0, 1_400), 900);
+        assert_eq!(sync_verdict(500, 0, 0, 1_400), SyncVerdict::Plain);
+    }
+
+    #[test]
+    fn sync_warns_when_little_is_left() {
+        let used = MAX_SLOT_USES - SYNC_WARN_LEFT - 10;
+        // Small jump, but the slot is nearly spent.
+        assert_eq!(sync_verdict(0, 0, used, 20), SyncVerdict::Warn);
+        assert_eq!(sync_verdict(0, 0, used, 10), SyncVerdict::Plain);
+    }
+
+    #[test]
+    fn honest_restore_sync_is_plain() {
+        assert_eq!(sync_verdict(0, 0, 0, 40), SyncVerdict::Plain);
+        assert_eq!(sync_left_after(0, 0, 0, 40), MAX_SLOT_USES - 40);
+        // A stale (lower) target changes nothing and is plain.
+        assert_eq!(sync_jump(0, 40, 12), 0);
+        assert_eq!(sync_verdict(0, 40, 3, 12), SyncVerdict::Plain);
+        assert_eq!(sync_left_after(0, 40, 3, 12), MAX_SLOT_USES - 43);
+    }
+
+    #[test]
     fn gate_repair_folds_max_plus_one() {
         // last_userop > offchain: repair promotes to last_userop, then +1.
         match check_offchain_gate(5, 40, 0) {
@@ -549,6 +655,37 @@ mod tests {
 #[cfg(kani)]
 mod verification {
     use super::*;
+
+    /// **Sync policy soundness** (sweep 2026-10-13 finding #2). Over all
+    /// symbolic device states and companion targets:
+    /// * `Refuse` exactly when the write would leave the slot 0 signatures;
+    /// * every sync the policy admits leaves the slot signable — the
+    ///   Type-2 cap gate over the post-sync state accepts — for ANY prior
+    ///   `userop_sigs` (this lifts `offchain_sync_never_bricks`' fresh-slot
+    ///   assumption for every sync the handler will actually write);
+    /// * `Plain` is only ever returned for a small jump with plenty left.
+    #[kani::proof]
+    fn sync_verdict_is_sound() {
+        let offchain: u64 = kani::any();
+        let last_userop: u64 = kani::any();
+        let userop_sigs: u64 = kani::any();
+        let target: u64 = kani::any();
+        kani::assume(offchain <= OFFCHAIN_COUNT_CEILING);
+        kani::assume(last_userop <= OFFCHAIN_COUNT_CEILING);
+        kani::assume(userop_sigs <= MAX_SLOT_USES);
+        let left = sync_left_after(offchain, last_userop, userop_sigs, target);
+        let verdict = sync_verdict(offchain, last_userop, userop_sigs, target);
+        assert_eq!(verdict == SyncVerdict::Refuse, left == 0);
+        if verdict != SyncVerdict::Refuse {
+            let mut s = SlotLedger { offchain, last_userop, userop_sigs, registered: true };
+            s.apply_offchain_sync(target);
+            assert!(userop_cap_ok_with_floor(s.offchain, s.last_userop, s.userop_sigs));
+        }
+        if verdict == SyncVerdict::Plain {
+            assert!(sync_jump(offchain, last_userop, target) <= SYNC_WARN_JUMP);
+            assert!(left >= SYNC_WARN_LEFT);
+        }
+    }
 
     /// **Single-gate soundness** (the doc baseline, `firmware-bounded-
     /// verification-sota-2026-06.md:81`). Over ALL symbolic `(offchain,

@@ -105,6 +105,20 @@ pub trait WalletStore {
     /// real unlock. Default no-op (no duress credential to verify).
     fn duress_pad(&mut self, _pin: &[u8; 8]) {}
 
+    /// Whether the credentials this store presents to its secure element(s)
+    /// can be recomputed at all (#855). `nsc::gated_unlock` asks this before
+    /// it charges an attempt or lets any command reach a chip.
+    ///
+    /// The OPTIGA / SE050 backends derive what the chips see from the PIN,
+    /// the device key and a salt in secure flash. With no usable salt (a
+    /// wiped wallet, or one provisioned by firmware from before that
+    /// scheme) no PIN can ever produce the stored credentials, so an
+    /// attempt would only burn the chips' own counters. Default `true`:
+    /// the mock backend has no such dependency.
+    fn pin_credentials_recomputable(&mut self) -> bool {
+        true
+    }
+
     /// Verify PIN and return the 32-byte master secret on success.
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError>;
 

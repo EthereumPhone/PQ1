@@ -519,8 +519,46 @@ fn build_policy(primary_auth: u32, primary_ar: u32, admin_auth: Option<u32>) -> 
     (out, len)
 }
 
-/// Create a UserID authentication object with a PIN and a policy allowing
-/// self-delete plus optional admin-delete.
+/// The value a UserID object holds, and that is presented to open it.
+///
+/// The chip stores this value exactly as given, so what may be put here is
+/// restricted by type (#855: the user UserID used to hold the raw PIN, and
+/// reading the chip gave it away). There are three things it can be, and a
+/// PIN typed in at runtime is none of them: it is not a credential type, it
+/// is not sixteen bytes, and it does not live for `'static`.
+#[derive(Clone, Copy)]
+pub enum UserIdValue<'a> {
+    /// The user's or the decoy's die-bound credential, from
+    /// `pin_credential::derive_set` by way of `pin_gate`.
+    Credential(&'a crate::pin_credential::Se050PinCredential),
+    /// A 16-byte device secret from `hw::secret_keys` (the admin and
+    /// transport UserIDs), or a 16-byte test stand-in for one.
+    DeviceSecret(&'a [u8; 16]),
+    /// A compile-time constant: the policy self-test canary, bench test
+    /// objects, and the known test PINs the bench clean-up tries against a
+    /// chip provisioned by pre-#855 firmware.
+    Fixed(&'static [u8]),
+    /// The on-silicon stress harness only, which generates its values at
+    /// run time. Not compiled into any other build.
+    #[cfg(feature = "se050-stress")]
+    Bench(&'a [u8]),
+}
+
+impl UserIdValue<'_> {
+    /// The bytes that go on the wire, inside SCP03.
+    fn bytes(&self) -> &[u8] {
+        match self {
+            UserIdValue::Credential(c) => c.expose_for_se050(),
+            UserIdValue::DeviceSecret(s) => &s[..],
+            UserIdValue::Fixed(f) => f,
+            #[cfg(feature = "se050-stress")]
+            UserIdValue::Bench(b) => b,
+        }
+    }
+}
+
+/// Create a UserID authentication object holding `userid_value`, with a
+/// policy allowing self-delete plus optional admin-delete.
 ///
 /// The SE050 verifies PINs internally and enforces an attempt counter.
 /// After `max_attempts` failures the UserID locks permanently.
@@ -552,7 +590,7 @@ pub unsafe fn write_userid(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     obj_id: u32,
-    pin: &[u8],
+    userid_value: UserIdValue<'_>,
     max_attempts: u16,
     admin_auth_obj_id: Option<u32>,
 ) -> Result<(), Se050Error> {
@@ -569,7 +607,7 @@ pub unsafe fn write_userid(
 
     apdu.tlv(TAG_MAX_ATTEMPTS, &max_attempts.to_be_bytes());
     apdu.tlv_u32(TAG_1, obj_id);
-    apdu.tlv(TAG_2, pin);
+    apdu.tlv(TAG_2, userid_value.bytes());
     let cmd = apdu.finish(false);
 
     let mut resp = [0u8; 64];
@@ -601,7 +639,7 @@ pub unsafe fn write_userid_unlimited(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     obj_id: u32,
-    pin: &[u8],
+    userid_value: UserIdValue<'_>,
     admin_auth_obj_id: Option<u32>,
 ) -> Result<(), Se050Error> {
     let mut apdu = ApduBuf::new(0x80, INS_WRITE | INS_AUTH_OBJECT, P1_USERID, P2_DEFAULT);
@@ -615,7 +653,7 @@ pub unsafe fn write_userid_unlimited(
     // `se05x_tlv.c:351-358 tlvSet_MaxAttemps`, which also omits the
     // TLV when its argument is 0).
     apdu.tlv_u32(TAG_1, obj_id);
-    apdu.tlv(TAG_2, pin);
+    apdu.tlv(TAG_2, userid_value.bytes());
     let cmd = apdu.finish(false);
 
     let mut resp = [0u8; 64];
@@ -784,10 +822,11 @@ pub unsafe fn create_session(
     }
 }
 
-/// Verify a PIN against a UserID via an authenticated session.
+/// Present `userid_value` to a UserID via an authenticated session.
 ///
-/// The SE050 performs the PIN comparison internally. On failure it
-/// decrements its hardware attempt counter.
+/// The SE050 performs the comparison internally. On failure it decrements
+/// its hardware attempt counter. `userid_value` is the value the object
+/// holds (see [`UserIdValue`]) — since #855 never a PIN.
 ///
 /// All session commands use INS_PROCESS (0x05) wrapping:
 ///   outer: TAG_SESSION_ID(8) + TAG_1(inner_command)
@@ -795,7 +834,7 @@ pub unsafe fn verify_session(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     session_id: &[u8; 8],
-    pin: &[u8],
+    userid_value: UserIdValue<'_>,
 ) -> Result<(), Se050Error> {
     // Build inner command: MGMT / VerifySessionUserID / TAG_1(PIN)
     let mut inner = [0u8; 64];
@@ -804,7 +843,7 @@ pub unsafe fn verify_session(
     inner[2] = P1_DEFAULT;
     inner[3] = P2_VERIFY_SESSION_USERID;
     let mut io = 5;
-    io = tlv_put(&mut inner, io, TAG_1, pin);
+    io = tlv_put(&mut inner, io, TAG_1, userid_value.bytes());
     let inner_lc = io - 5;
     inner[4] = inner_lc as u8;
 
@@ -1065,7 +1104,7 @@ pub unsafe fn read_object_attributes(
 /// the NXP SDK's `Se05x_API_DeleteAll_Iterative`.
 ///
 /// Two-pass: first tries plain SCP03 delete (handles default-policy
-/// objects), then if `auth_obj_id`/`pin` are provided, creates a UserID
+/// objects), then if `auth_obj_id`/`userid_value` are provided, creates a UserID
 /// session and retries through `delete_object_authed`. Self-deletes
 /// the UserID object at the end.
 ///
@@ -1081,7 +1120,7 @@ pub unsafe fn iterative_delete_all(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     auth_obj_id: Option<u32>,
-    pin: Option<&[u8]>,
+    userid_value: Option<UserIdValue<'_>>,
 ) -> Result<(u16, u16, bool), Se050Error> {
     #[cfg(feature = "debug-log")]
     secure_log!("[SE050][erase] Pass 1: unauthenticated");
@@ -1099,7 +1138,7 @@ pub unsafe fn iterative_delete_all(
         return Ok((deleted, 0, true));
     }
 
-    let (uid, pin_bytes) = match (auth_obj_id, pin) {
+    let (uid, value_bytes) = match (auth_obj_id, userid_value) {
         (Some(u), Some(p)) => (u, p),
         _ => return Ok((deleted, failed, false)),
     };
@@ -1113,7 +1152,7 @@ pub unsafe fn iterative_delete_all(
         Err(_) => return Ok((deleted, failed, false)),
     };
 
-    if verify_session(t1, scp03, &session_id, pin_bytes).is_err() {
+    if verify_session(t1, scp03, &session_id, value_bytes).is_err() {
         let _ = close_session(t1, scp03, &session_id);
         return Ok((deleted, failed, false));
     }

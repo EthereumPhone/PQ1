@@ -557,7 +557,7 @@ impl Se050 {
             match apdu::check_exists(&mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ) {
                 Ok(false) => {
                     apdu::write_userid_unlimited(
-                        &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ, &final_pin, None,
+                        &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ, apdu::UserIdValue::DeviceSecret(&final_pin), None,
                     )?;
                     return Ok(());
                 }
@@ -567,7 +567,7 @@ impl Se050 {
 
             // (b) Already re-keyed? Verify under FINAL.
             if let Ok(sid) = apdu::create_session(&mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ) {
-                let ok = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, &final_pin).is_ok();
+                let ok = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&final_pin)).is_ok();
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                 if ok {
                     return Ok(());
@@ -583,7 +583,7 @@ impl Se050 {
             let mut proof = scp03::TransportAuthProof::pending(scp03::AUTH_CTX_ADMIN_TRANSPORT);
             let sid = apdu::create_session(&mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ)?;
             let auth_ok =
-                apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, &tr_pin).is_ok();
+                apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&tr_pin)).is_ok();
             proof.record(scp03::AUTH_CTX_ADMIN_TRANSPORT, || auth_ok);
             if proof.authorize_write(scp03::AUTH_CTX_ADMIN_TRANSPORT) != crate::fi::OK_SENTINEL {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
@@ -592,7 +592,7 @@ impl Se050 {
             apdu::delete_object_authed(&mut self.t1, &mut self.scp03, &sid, ADMIN_WIPE_OBJ)?;
             let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
             apdu::write_userid_unlimited(
-                &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ, &final_pin, None,
+                &mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ, apdu::UserIdValue::DeviceSecret(&final_pin), None,
             )?;
             Ok(())
         })();
@@ -724,7 +724,7 @@ impl Se050 {
     pub fn probe_provision_and_auth_duress_userid(
         &mut self,
         obj_id: u32,
-        pin: &[u8],
+        userid_value: &'static [u8],
     ) -> Result<(), Se050Error> {
         self.init()?;
         unsafe {
@@ -732,7 +732,7 @@ impl Se050 {
             // auth with the same pin and self-delete it (best-effort).
             if apdu::check_exists(&mut self.t1, &mut self.scp03, obj_id).unwrap_or(false) {
                 if let Ok(sid) = apdu::create_session(&mut self.t1, &mut self.scp03, obj_id) {
-                    if apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, pin).is_ok() {
+                    if apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Fixed(userid_value)).is_ok() {
                         let _ = apdu::delete_object_authed(
                             &mut self.t1, &mut self.scp03, &sid, obj_id,
                         );
@@ -743,11 +743,11 @@ impl Se050 {
             // Unlimited-attempts UserID, no admin binding — the duress
             // credential never locks out at the SE level (the MCU
             // page-124 counter does).  Explicit-unlimited per S-7a.
-            apdu::write_userid_unlimited(&mut self.t1, &mut self.scp03, obj_id, pin, None)?;
+            apdu::write_userid_unlimited(&mut self.t1, &mut self.scp03, obj_id, apdu::UserIdValue::Fixed(userid_value), None)?;
 
             // Auth against it.
             let session_id = apdu::create_session(&mut self.t1, &mut self.scp03, obj_id)?;
-            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &session_id, pin);
+            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &session_id, apdu::UserIdValue::Fixed(userid_value));
             let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
             r?;
         }
@@ -763,28 +763,33 @@ impl Se050 {
     pub fn probe_auth_existing_userid(
         &mut self,
         obj_id: u32,
-        pin: &[u8],
+        userid_value: &'static [u8],
     ) -> Result<(), Se050Error> {
         self.init()?;
         unsafe {
             let sid = apdu::create_session(&mut self.t1, &mut self.scp03, obj_id)?;
-            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, pin);
+            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Fixed(userid_value));
             let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
             r
         }
     }
 
-    /// Authenticate the duress UserID with `duress_pin` and read back the
+    /// Authenticate the duress UserID with the decoy credential and read back the
     /// decoy SE050 half (`DURESS_ENTROPY_OBJ`). Mirrors
     /// `authenticate_and_read` for the duress credential. Returns `Err`
     /// (before the read, session closed) if the verify fails. Used by
     /// `DualSecureElement::unlock_duress` (P3) + the P2 validation recipe.
     #[cfg(feature = "duress-pin")]
-    pub fn duress_read_half(&mut self, duress_pin: &[u8]) -> Result<[u8; 32], Se050Error> {
+    pub fn duress_read_half(
+        &mut self,
+        duress_cred: &crate::pin_credential::Se050PinCredential,
+    ) -> Result<[u8; 32], Se050Error> {
         self.init()?;
         unsafe {
             let sid = apdu::create_session(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ)?;
-            if let Err(e) = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, duress_pin) {
+            if let Err(e) = apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Credential(duress_cred),
+            ) {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                 // A3 recovery — see authenticate_and_read failed-verify
                 // path. Critical for the duress-pin chain in
@@ -813,11 +818,13 @@ impl Se050 {
     /// in for the skipped real-UserID verify on a duress-correct unlock so
     /// the total op-count matches a real unlock.
     #[cfg(feature = "duress-pin")]
-    pub fn duress_verify(&mut self, duress_pin: &[u8]) -> Result<(), Se050Error> {
+    pub fn duress_verify(&mut self, duress_cred: &crate::pin_credential::Se050PinCredential) -> Result<(), Se050Error> {
         self.init()?;
         let r = unsafe {
             let sid = apdu::create_session(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ)?;
-            let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, duress_pin);
+            let r = apdu::verify_session(
+                &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Credential(duress_cred),
+            );
             let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
             r
         };
@@ -928,22 +935,43 @@ impl Se050 {
     pub fn iterative_wipe(
         &mut self,
         auth_obj_id: Option<u32>,
-        pin: Option<&[u8]>,
+        userid_value: Option<apdu::UserIdValue<'_>>,
     ) -> Result<(u16, u16, bool), Se050Error> {
         self.init()?;
-        unsafe {
-            apdu::iterative_delete_all(&mut self.t1, &mut self.scp03, auth_obj_id, pin)
+        let result = unsafe {
+            apdu::iterative_delete_all(&mut self.t1, &mut self.scp03, auth_obj_id, userid_value)
+        };
+        // A3 recovery (see `authenticate_and_read`): a failed verify leaves
+        // the chip's session-pending state behind, and the next
+        // `create_session` would answer 0x6982. Callers try several values
+        // in a row, so flush that state whenever an authenticated sweep did
+        // not authenticate. The UserID attempt counter is in NVM and is not
+        // affected.
+        if auth_obj_id.is_some() && !matches!(result, Ok((_, _, true))) {
+            let _ = self.reinit();
         }
+        result
     }
 
-    /// User-initiated factory reset: verify PIN, delete every UserID-gated
-    /// data object, then self-delete the UserID itself. Leaves the SE050
-    /// side blank and ready for re-provisioning.
+    /// Bench clean-up: verify against the user UserID, delete every
+    /// UserID-gated data object, then self-delete the UserID itself. Leaves
+    /// the SE050 side blank and ready for re-provisioning.
+    ///
+    /// `userid_value` is the value of the UserID object, typed so that it
+    /// cannot be a PIN typed in at run time (see `apdu::UserIdValue`). On a
+    /// wallet provisioned by this firmware it is a die-bound
+    /// `Se050PinCredential` (#855). The e2e pre-clean also tries the known
+    /// test PINs as compile-time constants, which only ever match a chip
+    /// that was provisioned by pre-#855 firmware. No product path calls
+    /// this.
     ///
     /// The UserID deletion only succeeds if it was created with the
     /// self-deletable policy (new UserIDs have it; legacy ones don't).
     /// Zeroizes cached blobs in RAM on success.
-    pub fn user_factory_reset(&mut self, pin: &[u8]) -> Result<(), Se050Error> {
+    pub fn user_factory_reset(
+        &mut self,
+        userid_value: apdu::UserIdValue<'_>,
+    ) -> Result<(), Se050Error> {
         use zeroize::Zeroize;
         self.init()?;
 
@@ -951,7 +979,7 @@ impl Se050 {
             let session_id =
                 apdu::create_session(&mut self.t1, &mut self.scp03, USERID_OBJ)?;
             if let Err(e) = apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &session_id, pin,
+                &mut self.t1, &mut self.scp03, &session_id, userid_value,
             ) {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
                 // A3 recovery — see `authenticate_and_read` doc.
@@ -1006,7 +1034,10 @@ impl Se050 {
     /// dual-SE provisioning at `0x7B06_xxxx`. Repeatable on the same
     /// chip — step 1 cleans up after itself.
     #[cfg(feature = "se050-reset-e2e")]
-    pub fn run_factory_reset_roundtrip(&mut self, pin: &[u8]) -> Result<(), Se050Error> {
+    pub fn run_factory_reset_roundtrip(
+        &mut self,
+        test_userid_value: &'static [u8],
+    ) -> Result<(), Se050Error> {
         self.init()?;
 
         // ---- 1. Cleanup any prior test residue ----
@@ -1023,8 +1054,7 @@ impl Se050 {
                     &mut self.t1, &mut self.scp03, TEST_USERID_OBJ
                 ) {
                     if apdu::verify_session(
-                        &mut self.t1, &mut self.scp03, &sid, pin
-                    ).is_ok() {
+                        &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Fixed(test_userid_value)).is_ok() {
                         let _ = apdu::delete_object_authed(
                             &mut self.t1, &mut self.scp03, &sid, TEST_DATA_OBJ_A
                         );
@@ -1054,7 +1084,7 @@ impl Se050 {
         // ---- 2. Provision fresh UserID + 2 gated data objects ----
         unsafe {
             apdu::write_userid(
-                &mut self.t1, &mut self.scp03, TEST_USERID_OBJ, pin, 9, None,
+                &mut self.t1, &mut self.scp03, TEST_USERID_OBJ, apdu::UserIdValue::Fixed(test_userid_value), 9, None,
             )?;
 
             let payload_a = [0xA0u8; 32];
@@ -1095,7 +1125,7 @@ impl Se050 {
             let sid = apdu::create_session(
                 &mut self.t1, &mut self.scp03, TEST_USERID_OBJ,
             )?;
-            apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, pin)
+            apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Fixed(test_userid_value))
                 .map_err(|e| {
                     let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                     e
@@ -1161,7 +1191,7 @@ impl Se050 {
         const TEST_USER: u32 = 0x7B09_0000;
         const TEST_DATA: u32 = 0x7B09_0001;
         const TEST_ADMIN: u32 = 0x7B09_00A0;
-        let user_pin: [u8; 8] = *b"testuser";
+        let test_user_value: &'static [u8] = b"testuser";
         let admin_pin: [u8; 16] = *b"testadminpin1234";
         let payload: [u8; 8] = [0xC0, 0xFF, 0xEE, 0x01, 0x02, 0x03, 0x04, 0x05];
 
@@ -1177,7 +1207,7 @@ impl Se050 {
                     &mut self.t1, &mut self.scp03, TEST_ADMIN,
                 ) {
                     if apdu::verify_session(
-                        &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                        &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&admin_pin),
                     ).is_ok() {
                         let _ = apdu::delete_object_authed(
                             &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
@@ -1208,13 +1238,13 @@ impl Se050 {
 
             // ---- 2. Provision admin UserID first (so user objects can ref it) ----
             apdu::write_userid_unlimited(
-                &mut self.t1, &mut self.scp03, TEST_ADMIN, &admin_pin, None,
+                &mut self.t1, &mut self.scp03, TEST_ADMIN, apdu::UserIdValue::DeviceSecret(&admin_pin), None,
             )?;
 
             // User UserID with two-entry policy: self + admin
             apdu::write_userid(
                 &mut self.t1, &mut self.scp03,
-                TEST_USER, &user_pin, 5, Some(TEST_ADMIN),
+                TEST_USER, apdu::UserIdValue::Fixed(test_user_value), 5, Some(TEST_ADMIN),
             )?;
 
             // Data object with two-entry policy: user + admin
@@ -1249,7 +1279,7 @@ impl Se050 {
                 &mut self.t1, &mut self.scp03, TEST_ADMIN,
             )?;
             apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&admin_pin),
             ).map_err(|e| {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                 e
@@ -1328,7 +1358,7 @@ impl Se050 {
         const TEST_USER:  u32 = 0x7B0B_0000;
         const TEST_DATA:  u32 = 0x7B0B_0001;
         const TEST_ADMIN: u32 = 0x7B0B_00A0;
-        let user_pin:  [u8; 8]  = *b"testuser";
+        let test_user_value: &'static [u8] = b"testuser";
         let admin_pin: [u8; 16] = *b"testadminpin1234";
         // 32-B sentinel: distinct, non-zero, unmistakable in a hex dump.
         let payload: [u8; 32] = [
@@ -1347,7 +1377,7 @@ impl Se050 {
                     &mut self.t1, &mut self.scp03, TEST_ADMIN,
                 ) {
                     if apdu::verify_session(
-                        &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                        &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&admin_pin),
                     ).is_ok() {
                         let _ = apdu::delete_object_authed(
                             &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
@@ -1378,11 +1408,11 @@ impl Se050 {
 
             // ---- 2. Provision admin + user UserIDs + secret data object ----
             apdu::write_userid_unlimited(
-                &mut self.t1, &mut self.scp03, TEST_ADMIN, &admin_pin, None,
+                &mut self.t1, &mut self.scp03, TEST_ADMIN, apdu::UserIdValue::DeviceSecret(&admin_pin), None,
             )?;
             apdu::write_userid(
                 &mut self.t1, &mut self.scp03,
-                TEST_USER, &user_pin, 5, Some(TEST_ADMIN),
+                TEST_USER, apdu::UserIdValue::Fixed(test_user_value), 5, Some(TEST_ADMIN),
             )?;
             apdu::write_binary_gated(
                 &mut self.t1, &mut self.scp03,
@@ -1404,7 +1434,7 @@ impl Se050 {
                     &mut self.t1, &mut self.scp03, TEST_USER,
                 )?;
                 if apdu::verify_session(
-                    &mut self.t1, &mut self.scp03, &sid, &user_pin,
+                    &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::Fixed(test_user_value),
                 ).is_err() {
                     let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                     #[cfg(feature = "debug-log")]
@@ -1452,7 +1482,7 @@ impl Se050 {
                 &mut self.t1, &mut self.scp03, TEST_ADMIN,
             )?;
             apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &admin_sid, &admin_pin,
+                &mut self.t1, &mut self.scp03, &admin_sid, apdu::UserIdValue::DeviceSecret(&admin_pin),
             ).map_err(|e| {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &admin_sid);
                 e
@@ -1585,7 +1615,7 @@ impl Se050 {
         const TEST_DATA: u32 = 0x7B0A_0001;
         const TEST_ADMIN: u32 = 0x7B0A_00A0;
         let admin_pin: [u8; 16] = *b"crashsafetypin00";
-        let user_pin: [u8; 8] = *b"crashsim";
+        let test_user_value: &'static [u8] = b"crashsim";
         let payload: [u8; 4] = [0xCA, 0xFE, 0xBA, 0xBE];
 
         unsafe {
@@ -1597,7 +1627,7 @@ impl Se050 {
                     &mut self.t1, &mut self.scp03, TEST_ADMIN,
                 ) {
                     if apdu::verify_session(
-                        &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                        &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&admin_pin),
                     ).is_ok() {
                         let _ = apdu::delete_object_authed(
                             &mut self.t1, &mut self.scp03, &sid, TEST_DATA,
@@ -1620,11 +1650,11 @@ impl Se050 {
 
             // ---- b. Provision admin + user + data with 2-entry policy ----
             apdu::write_userid_unlimited(
-                &mut self.t1, &mut self.scp03, TEST_ADMIN, &admin_pin, None,
+                &mut self.t1, &mut self.scp03, TEST_ADMIN, apdu::UserIdValue::DeviceSecret(&admin_pin), None,
             )?;
             apdu::write_userid(
                 &mut self.t1, &mut self.scp03,
-                TEST_USER, &user_pin, 5, Some(TEST_ADMIN),
+                TEST_USER, apdu::UserIdValue::Fixed(test_user_value), 5, Some(TEST_ADMIN),
             )?;
             apdu::write_binary_gated(
                 &mut self.t1, &mut self.scp03,
@@ -1659,7 +1689,7 @@ impl Se050 {
                 &mut self.t1, &mut self.scp03, TEST_ADMIN,
             )?;
             apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&admin_pin),
             ).map_err(|e| {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                 e
@@ -1728,7 +1758,7 @@ impl Se050 {
                 &mut self.t1, &mut self.scp03, TEST_ADMIN,
             )?;
             apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &sid, &admin_pin,
+                &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(&admin_pin),
             ).map_err(|e| {
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                 e
@@ -1816,7 +1846,7 @@ impl Se050 {
     /// practice).
     fn store_objects(
         &mut self,
-        pin: &[u8],
+        user_cred: &crate::pin_credential::Se050PinCredential,
         max_attempts: u16,
         entropy: &[u8; 32],
         vk: &[u8; 32],
@@ -1854,7 +1884,7 @@ impl Se050 {
                     // brute force.
                     apdu::write_userid_unlimited(
                         &mut self.t1, &mut self.scp03,
-                        ADMIN_WIPE_OBJ, admin, None,
+                        ADMIN_WIPE_OBJ, apdu::UserIdValue::DeviceSecret(admin), None,
                     ).map_err(|e| {
                         secure_log!("[SE050/store] write admin UserID FAILED: {:?}", e);
                         e
@@ -1914,7 +1944,7 @@ impl Se050 {
                     })?;
 
                     if let Err(e) = apdu::verify_session(
-                        &mut self.t1, &mut self.scp03, &session_id, admin,
+                        &mut self.t1, &mut self.scp03, &session_id, apdu::UserIdValue::DeviceSecret(admin),
                     ) {
                         secure_log!(
                             "[SE050/store] stale sweep: verify_session FAILED: {:?}", e
@@ -2002,8 +2032,8 @@ impl Se050 {
 
             if !userid_exists {
                 secure_log!(
-                    "[SE050/store] writing USERID_OBJ (pin_len={} max_attempts={}, no admin_ref — S-6)",
-                    pin.len(), max_attempts
+                    "[SE050/store] writing USERID_OBJ (value_len={} max_attempts={}, no admin_ref — S-6)",
+                    crate::pin_credential::SE050_CRED_LEN, max_attempts
                 );
                 // S-6 fix (docs/security/security-review-2026-05.md §C-8): the
                 // user UserID's policy is created WITHOUT an admin
@@ -2019,9 +2049,11 @@ impl Se050 {
                 // chip; the OID range must be bumped to reuse the
                 // chip — see the v6 → vN comment at the top of this
                 // module.
+                // #855: the object value is the die-bound credential, never
+                // the PIN.
                 apdu::write_userid(
                     &mut self.t1, &mut self.scp03,
-                    USERID_OBJ, pin, max_attempts, None,
+                    USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts, None,
                 ).map_err(|e| {
                     secure_log!("[SE050/store] write USERID_OBJ FAILED: {:?}", e);
                     e
@@ -2107,7 +2139,7 @@ impl Se050 {
         half_e: &[u8; 32],
         vk: &[u8; 32],
         bootstrap_vk: &[u8; 32],
-        duress_pin: &[u8],
+        duress_cred: &crate::pin_credential::Se050PinCredential,
         admin_pin: Option<&[u8; 16]>,
     ) -> Result<(), Se050Error> {
         self.init()?;
@@ -2130,7 +2162,7 @@ impl Se050 {
                 if any {
                     secure_log!("[SE050/duress] stale duress objects — sweeping via admin");
                     let sid = apdu::create_session(&mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ)?;
-                    if let Err(e) = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, admin) {
+                    if let Err(e) = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(admin)) {
                         let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
                         return Err(e);
                     }
@@ -2163,7 +2195,7 @@ impl Se050 {
                 secure_log!("[SE050/duress] writing DURESS_USERID_OBJ (unlimited, no admin_ref — S-6)");
                 apdu::write_userid_unlimited(
                     &mut self.t1, &mut self.scp03,
-                    DURESS_USERID_OBJ, duress_pin, None,
+                    DURESS_USERID_OBJ, apdu::UserIdValue::Credential(duress_cred), None,
                 )?;
             }
 
@@ -2224,7 +2256,7 @@ impl Se050 {
                 // HW-root-derived; SE-side lockout is unnecessary.
                 apdu::write_userid_unlimited(
                     &mut self.t1, &mut self.scp03,
-                    ADMIN_WIPE_OBJ, admin_pin, None,
+                    ADMIN_WIPE_OBJ, apdu::UserIdValue::DeviceSecret(admin_pin), None,
                 ).map_err(|e| {
                     secure_log!("[SE050/admin] write_userid FAILED: {:?}", e);
                     e
@@ -2307,7 +2339,7 @@ impl Se050 {
                 )?;
 
                 if let Err(e) = apdu::verify_session(
-                    &mut self.t1, &mut self.scp03, &session_id, admin_pin,
+                    &mut self.t1, &mut self.scp03, &session_id, apdu::UserIdValue::DeviceSecret(admin_pin),
                 ) {
                     secure_log!("[SE050/admin-wipe] verify_session FAILED: {:?}", e);
                     let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &session_id);
@@ -2505,7 +2537,7 @@ impl Se050 {
             (0x7B10_00B4, "CANARY_DATA_4"),
             (0x7B10_00B5, "CANARY_DATA_5"),
         ];
-        let canary_pin: [u8; 8] = *b"00000000";
+        let canary_value: &'static [u8] = b"00000000";
 
         unsafe {
             let admin_exists = match apdu::check_exists(
@@ -2537,7 +2569,7 @@ impl Se050 {
                 e
             })?;
             if let Err(e) = apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &cleanup_sid, admin_pin,
+                &mut self.t1, &mut self.scp03, &cleanup_sid, apdu::UserIdValue::DeviceSecret(admin_pin),
             ) {
                 secure_log!("[SE050/selftest] cleanup verify_session FAILED: {:?}", e);
                 let _ = apdu::close_session(
@@ -2575,7 +2607,7 @@ impl Se050 {
                     &mut self.t1, &mut self.scp03, CANARY_USERID,
                 ) {
                     if apdu::verify_session(
-                        &mut self.t1, &mut self.scp03, &self_sid, &canary_pin,
+                        &mut self.t1, &mut self.scp03, &self_sid, apdu::UserIdValue::Fixed(canary_value),
                     ).is_ok() {
                         let _ = apdu::delete_object_authed(
                             &mut self.t1, &mut self.scp03, &self_sid, CANARY_USERID,
@@ -2594,7 +2626,7 @@ impl Se050 {
             secure_log!("[SE050/selftest] write CANARY_USERID (no admin_ref — S-6 production shape)");
             apdu::write_userid(
                 &mut self.t1, &mut self.scp03,
-                CANARY_USERID, &canary_pin, 5, None,
+                CANARY_USERID, apdu::UserIdValue::Fixed(canary_value), 5, None,
             ).map_err(|e| {
                 secure_log!("[SE050/selftest] write CANARY_USERID FAILED: {:?}", e);
                 e
@@ -2629,7 +2661,7 @@ impl Se050 {
                 e
             })?;
             if let Err(e) = apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &sid, admin_pin,
+                &mut self.t1, &mut self.scp03, &sid, apdu::UserIdValue::DeviceSecret(admin_pin),
             ) {
                 secure_log!("[SE050/selftest] verify_session FAILED: {:?}", e);
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
@@ -2688,7 +2720,7 @@ impl Se050 {
                 &mut self.t1, &mut self.scp03, CANARY_USERID,
             ) {
                 if apdu::verify_session(
-                    &mut self.t1, &mut self.scp03, &self_sid, &canary_pin,
+                    &mut self.t1, &mut self.scp03, &self_sid, apdu::UserIdValue::Fixed(canary_value),
                 ).is_ok() {
                     let _ = apdu::delete_object_authed(
                         &mut self.t1, &mut self.scp03, &self_sid, CANARY_USERID,
@@ -2762,7 +2794,7 @@ impl Se050 {
     /// so the security gate is unaffected.
     fn authenticate_and_read(
         &mut self,
-        pin: &[u8],
+        user_cred: &crate::pin_credential::Se050PinCredential,
     ) -> Result<([u8; 32], [u8; 32], [u8; 32]), Se050Error> {
         self.init()?;
 
@@ -2772,9 +2804,11 @@ impl Se050 {
                 &mut self.t1, &mut self.scp03, USERID_OBJ,
             )?;
 
-            // Verify PIN (SE050 hardware does the comparison)
+            // Verify the credential (SE050 hardware does the comparison).
+            // #855: what is presented is the die-bound credential, never
+            // the PIN.
             if let Err(e) = apdu::verify_session(
-                &mut self.t1, &mut self.scp03, &session_id, pin,
+                &mut self.t1, &mut self.scp03, &session_id, apdu::UserIdValue::Credential(user_cred),
             ) {
                 let _ = apdu::close_session(
                     &mut self.t1, &mut self.scp03, &session_id,
@@ -2870,18 +2904,56 @@ fn classify_se050_unlock_error(e: &Se050Error) -> UnlockError {
     }
 }
 
-impl WalletStore for Se050 {
-    fn is_provisioned(&mut self) -> bool {
-        self.check_provisioned()
-    }
+// ---------------------------------------------------------------------------
+// Credential-typed entry points (#855)
+// ---------------------------------------------------------------------------
+//
+// These are what `DualSecureElement` calls. They take an
+// `Se050PinCredential` — a PRF output under the device hardware key — and
+// never a PIN. The `WalletStore` methods further down that still take a PIN
+// are thin single-chip shims: they turn the PIN into a credential through
+// `crate::pin_gate` on their first line and then call these.
 
-    fn provision(
+impl Se050 {
+    /// Dual-SE entry point: store the wallet objects from a
+    /// [`Se050Image`](crate::pin_credential::Se050Image), which can only be
+    /// built by `pin_credential::chip_images` and therefore always pairs
+    /// this chip's own credential with its own masked half.
+    pub(crate) fn provision_image(
         &mut self,
-        entropy: &[u8; 32],
-        _master_secret: &[u8; 32],
+        image: &crate::pin_credential::Se050Image,
         vk: &[u8; 32],
         bootstrap_vk: &[u8; 32],
-        pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        self.provision_with_credential(image.stored_half(), vk, bootstrap_vk, image.credential())
+    }
+
+    /// Dual-SE entry point for the decoy wallet; see [`provision_image`](Self::provision_image).
+    #[cfg(feature = "duress-pin")]
+    pub(crate) fn provision_duress_image(
+        &mut self,
+        image: &crate::pin_credential::Se050Image,
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+    ) -> Result<(), SeError> {
+        self.provision_duress_with_credential(
+            image.stored_half(),
+            vk,
+            bootstrap_vk,
+            image.credential(),
+        )
+    }
+
+    /// Store the wallet objects, with the user UserID holding `user_cred`.
+    /// Called by [`provision_image`](Self::provision_image) and by the
+    /// single-chip shim, which on a bench single-SE050 build stores an
+    /// unmasked value.
+    pub(crate) fn provision_with_credential(
+        &mut self,
+        entropy: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        user_cred: &crate::pin_credential::Se050PinCredential,
     ) -> Result<(), SeError> {
         // Admin-wipe flow (STM32 target only — QEMU has no flash):
         //   1. Derive the per-device admin PIN via
@@ -2937,7 +3009,7 @@ impl WalletStore for Se050 {
 
             secure_log!("[SE050/prov] -> store_objects");
             self.store_objects(
-                pin,
+                user_cred,
                 sphincs_tz_shared::MAX_ATTEMPTS as u16,
                 entropy, vk, bootstrap_vk,
                 Some(&admin_pin),
@@ -2961,7 +3033,7 @@ impl WalletStore for Se050 {
         #[cfg(any(not(feature = "stm32u585"), feature = "e2e-skip-admin-wipe"))]
         {
             self.store_objects(
-                pin,
+                user_cred,
                 sphincs_tz_shared::MAX_ATTEMPTS as u16,
                 entropy, vk, bootstrap_vk,
                 None,
@@ -2979,14 +3051,15 @@ impl WalletStore for Se050 {
         Ok(())
     }
 
+    /// Store the decoy wallet objects, with the duress UserID holding
+    /// `duress_cred`. `entropy` is the SE050's decoy half.
     #[cfg(feature = "duress-pin")]
-    fn provision_duress(
+    pub(crate) fn provision_duress_with_credential(
         &mut self,
         entropy: &[u8; 32],
-        _master_secret: &[u8; 32],
         vk: &[u8; 32],
         bootstrap_vk: &[u8; 32],
-        duress_pin: &[u8; 8],
+        duress_cred: &crate::pin_credential::Se050PinCredential,
     ) -> Result<(), SeError> {
         // `entropy` here is SE050's decoy half_E (DualSE pre-split it).
         // Derive the admin PIN exactly as `provision` does so the duress
@@ -2998,35 +3071,30 @@ impl WalletStore for Se050 {
             let mut admin_pin = crate::hw::secret_keys::se050_admin_pin()
                 .map_err(|_| SeError::InternalError)?;
             let r = self.store_duress_objects(
-                entropy, vk, bootstrap_vk, duress_pin, Some(&admin_pin),
+                entropy, vk, bootstrap_vk, duress_cred, Some(&admin_pin),
             );
             admin_pin.zeroize();
             r.map_err(|_| SeError::InternalError)?;
         }
         #[cfg(any(not(feature = "stm32u585"), feature = "e2e-skip-admin-wipe"))]
         {
-            self.store_duress_objects(entropy, vk, bootstrap_vk, duress_pin, None)
+            self.store_duress_objects(entropy, vk, bootstrap_vk, duress_cred, None)
                 .map_err(|_| SeError::InternalError)?;
         }
         Ok(())
     }
+}
 
-    #[cfg(feature = "duress-pin")]
-    fn duress_is_provisioned(&mut self) -> bool {
-        if self.init().is_err() {
-            return false;
-        }
-        unsafe {
-            apdu::check_exists(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ)
-                .unwrap_or(false)
-        }
-    }
-
-    fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+impl Se050 {
+    /// Present `user_cred` to the user UserID and read the wallet objects.
+    pub(crate) fn unlock_with_credential(
+        &mut self,
+        user_cred: &crate::pin_credential::Se050PinCredential,
+    ) -> Result<[u8; 32], UnlockError> {
         use zeroize::Zeroize;
 
         let (mut entropy, vk_from_se, bvk_from_se) =
-            self.authenticate_and_read(pin).map_err(|e| {
+            self.authenticate_and_read(user_cred).map_err(|e| {
                 // Side-effects (attempt-counter bookkeeping) live
                 // here because they need `&mut self`; the pure
                 // variant translation is in
@@ -3088,6 +3156,79 @@ impl WalletStore for Se050 {
         crate::fi::zeroize_barrier();
 
         Ok(master_secret)
+    }
+}
+
+impl WalletStore for Se050 {
+    fn is_provisioned(&mut self) -> bool {
+        self.check_provisioned()
+    }
+
+    /// Single-chip shim (the bench `se050` backend, and e2e flows that drive
+    /// this chip on its own). Derives the die-bound credential first; the
+    /// PIN goes no further than this function.
+    fn provision(
+        &mut self,
+        entropy: &[u8; 32],
+        _master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        // SAFETY: `&mut self` on the SE driver implies the single-threaded
+        // secure-world context the page-125 salt write requires.
+        let set = unsafe {
+            crate::pin_gate::provisioning_credentials(
+                crate::pin_credential::WalletRole::Real,
+                pin,
+            )
+        }
+        .map_err(|_| SeError::InternalError)?;
+        self.provision_with_credential(entropy, vk, bootstrap_vk, &set.se050)
+    }
+
+    /// Single-chip shim; see [`provision`](Self::provision).
+    #[cfg(feature = "duress-pin")]
+    fn provision_duress(
+        &mut self,
+        entropy: &[u8; 32],
+        _master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        duress_pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        // The decoy is provisioned right after the real wallet, under the
+        // salt that provisioning has just minted; refused otherwise.
+        let set = crate::pin_gate::decoy_provisioning_credentials(duress_pin)
+            .map_err(|_| SeError::InternalError)?;
+        self.provision_duress_with_credential(entropy, vk, bootstrap_vk, &set.se050)
+    }
+
+    #[cfg(feature = "duress-pin")]
+    fn duress_is_provisioned(&mut self) -> bool {
+        if self.init().is_err() {
+            return false;
+        }
+        unsafe {
+            apdu::check_exists(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ)
+                .unwrap_or(false)
+        }
+    }
+
+    fn pin_credentials_recomputable(&mut self) -> bool {
+        crate::pin_gate::credentials_recomputable()
+    }
+
+    /// Single-chip shim; see [`provision`](Self::provision). With no usable
+    /// salt on page 125 the credential cannot be recomputed, so this fails
+    /// with `InternalError` before any APDU is sent.
+    fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+        let set = crate::pin_gate::unlock_credentials(
+            crate::pin_credential::WalletRole::Real,
+            pin,
+        )
+        .map_err(|_| UnlockError::InternalError)?;
+        self.unlock_with_credential(&set.se050)
     }
 
     fn read_entropy_blob(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
@@ -3189,6 +3330,16 @@ impl WalletStore for Se050 {
         // slot from the dead QW0, so flag operations don't touch it.
         use zeroize::Zeroize;
 
+        // #855: arm the wipe flag and destroy the PIN-credential salt before
+        // the first APDU. From here on the value in the user UserID can
+        // never be recomputed by this device, whatever happens to the
+        // chip-side wipe below — including the early return just after
+        // this, which used to report success having wiped nothing.
+        //
+        // SAFETY: `&mut self` on the SE driver implies the single-threaded
+        // secure-world context the page-125 writes require.
+        let salt_gone = unsafe { crate::pin_gate::begin_wipe() };
+
         let mut admin_pin = match crate::hw::secret_keys::se050_admin_pin() {
             Ok(p) => p,
             Err(e) => {
@@ -3201,12 +3352,16 @@ impl WalletStore for Se050 {
                     let _ = self.iterative_wipe(None, None);
                 }
                 self.zeroize_caches();
-                return Ok(());
+                return salt_gone.map_err(|_| SeError::InternalError);
             }
         };
 
         unsafe {
-            let _ = crate::hw::flash::arm_wipe_flag();
+            // Already armed by `begin_wipe` above in the normal case; kept
+            // as a second attempt if that program failed.
+            if !crate::hw::flash::is_wipe_armed() {
+                let _ = crate::hw::flash::arm_wipe_flag();
+            }
 
             // Propagate any error from admin_factory_reset — now that
             // it returns Err when user objects survive, the trait-
@@ -3217,9 +3372,10 @@ impl WalletStore for Se050 {
             admin_pin.zeroize();
 
             // Conditional erase: only burn the flash state if the chip
-            // confirms the admin UserID is actually gone. Otherwise
-            // leave page 125 intact so the next resume retries.
-            if !self.admin_exists() {
+            // confirms the admin UserID is actually gone AND the salt was
+            // destroyed. Otherwise leave page 125 intact so the next resume
+            // retries. (The erase also returns the salt log to blank.)
+            if salt_gone.is_ok() && !self.admin_exists() {
                 let _ = crate::hw::flash::erase_admin_page();
             }
 
@@ -3234,7 +3390,7 @@ impl WalletStore for Se050 {
         }
 
         self.zeroize_caches();
-        Ok(())
+        salt_gone.map_err(|_| SeError::InternalError)
     }
 }
 

@@ -125,6 +125,114 @@ rules:
     patterns:
       - pattern-regex: '\bunsafe\s*(\{|fn\b|impl\b|trait\b|extern\b)'
 
+  # ── Invariants #1 / #2: no secure element is shown a PIN (#855) ─────────────
+  # Ledger Donjon reported that each secure element held the PIN in a form
+  # that needed nothing from the microcontroller: the SE050 user UserID was
+  # the raw digits and OPTIGA F1D0 an unkeyed SHA-256 of them. Since #855 a
+  # chip is shown only `PRF(device_key, label || salt || PIN)`, produced by
+  # `secure/src/pin_credential.rs` and reachable only through `pin_gate`.
+  #
+  # These four rules are tripwires for the honest mistake. They match names
+  # and call shapes, so they do not prove the property. What makes the
+  # mistake a compile error is the types: the SE050 builders take
+  # `apdu::UserIdValue`, which cannot be built from a PIN typed in at run
+  # time, and the drivers take `pin_credential` images. What tests it is
+  # `pin_credential` / `pin_salt` on the host. These rules catch what is
+  # left: a new sink, a new unkeyed hash, credential bytes read somewhere
+  # new. `.semgrep/check_pin_credential_rules.py` (run by `make
+  # invariant-gates` and CI) feeds each rule the pre-#855 shapes and fails
+  # unless every one of them fires; on the unmodified pre-#855 tree the
+  # first two fire on the original vulnerable lines.
+  - id: no-pin-named-value-to-secure-element-sink
+    languages: [generic]
+    severity: ERROR
+    message: >
+      Invariants #1/#2 (#855): a PIN must never be presented to, or written
+      into, a secure element. This call hands a `*pin` value to an SE050
+      UserID sink. Derive through `crate::pin_gate` and pass
+      `UserIdValue::Credential`. (`admin_pin` / `tr_pin` / `final_pin` are
+      device secrets from `hw::secret_keys`, not PINs, and are exempt.)
+    paths:
+      include: ['secure/src/']
+      exclude:
+        - 'secure/src/se050_stress/'
+        - '*_under_test/*'
+        - '*pure_tests*.rs'
+    patterns:
+      - pattern-regex: '\b(verify_session|write_userid|write_userid_unlimited|iterative_delete_all|user_factory_reset|iterative_wipe)\s*\([^;{}]{0,400}?(?<![A-Za-z0-9_])(?!admin_pin\b|tr_pin\b|final_pin\b)[A-Za-z0-9_]*pin\b'
+
+  - id: no-unkeyed-pin-derivation-in-se-path
+    languages: [generic]
+    severity: ERROR
+    message: >
+      Invariants #1/#2 (#855): what a secure element is shown must be keyed by
+      the device hardware key. The pre-#855 OPTIGA secret was
+      `kdf(PIN_AUTH_DOMAIN, pin, 0)`, an unkeyed SHA-256 anyone holding the
+      chip could search offline. Do not derive from a PIN anywhere on the
+      secure-element path; `pin_credential::derive_set` is the only
+      derivation.
+    paths:
+      include:
+        - 'secure/src/se050/'
+        - 'secure/src/optiga/'
+        - 'secure/src/dual_se.rs'
+        - 'secure/src/pin_gate.rs'
+        - 'secure/src/hw/secret_keys.rs'
+    patterns:
+      - pattern-regex: '(\bPIN_AUTH_DOMAIN\b|\bderive_pin_secret\b|optiga-pin-auth-v1|\bkdf(_sha256)?\s*\([^;{}]{0,200}?(?<![A-Za-z0-9_])[A-Za-z0-9_]*pin\b)'
+
+  - id: pin-credential-bytes-confined
+    languages: [generic]
+    severity: ERROR
+    message: >
+      #855: the bytes of a PIN credential may be read only where they go on
+      the wire: in the OPTIGA driver, and in `UserIdValue::bytes` in the
+      SE050 APDU layer. Reading them anywhere else (`expose_for_optiga` /
+      `expose_for_se050`) lets the value one chip holds travel to places
+      nothing reviews. The one bench use carries an explicit `nosemgrep`
+      waiver; do not add another without one.
+    paths:
+      include: ['secure/src/']
+      exclude:
+        - 'secure/src/optiga/mod.rs'
+        - 'secure/src/se050/apdu.rs'
+        - 'secure/src/pin_credential.rs'
+        - '*_under_test/*'
+        - '*pure_tests*.rs'
+    patterns:
+      - pattern-regex: '\.expose_for_(optiga|se050)\s*\('
+
+  - id: post-wipe-counter-reset-is-gated
+    languages: [generic]
+    severity: ERROR
+    message: >
+      #855: after a wipe the page-124 attempt counter may be reset only once
+      the PIN-credential salt is verified gone, or an attacker emulating an
+      extracted chip gets ten more guesses per wipe. On a wipe path use
+      `hw::flash::pin_attempts_reset_after_wipe()`. A bare reset, the bench
+      reset, or the correct-PIN reset has no business in these files.
+
+      Scope: every file under secure/src except the five that legitimately
+      name another reset. Those five are covered by the source pin
+      `negative_post_wipe_counter_reset_is_gated_on_the_salt` instead
+      (main.rs and dual_se.rs: bench flows call the bench reset, call sites
+      counted; nsc/mod.rs: the correct-PIN reset in gated_unlock, exactly
+      once; nsc/cmd_test_pin_lockout.rs: the e2e-only lockout command;
+      hw/flash.rs: the definitions).
+    paths:
+      include:
+        - 'secure/src/'
+      exclude:
+        - 'secure/src/main.rs'
+        - 'secure/src/dual_se.rs'
+        - 'secure/src/nsc/mod.rs'
+        - 'secure/src/nsc/cmd_test_pin_lockout.rs'
+        - 'secure/src/hw/flash.rs'
+        - '*_under_test/*'
+        - '*pure_tests*.rs'
+    patterns:
+      - pattern-regex: '\bpin_attempts_reset(_bench|_after_correct_pin)?\s*\(\s*\)'
+
   # ── Convention (WARNING): ASCII materialisation via ui::ascii_str ──────────
   - id: from-utf8-unchecked-prefer-ascii-str
     languages: [generic]

@@ -1425,8 +1425,10 @@ fn negative_admin_userid_unlimited_via_explicit_api() {
     // "never lock".  Now `write_userid` rejects 0 with InvalidParam;
     // callers that need unlimited must say so explicitly.
     assert!(MOD_SRC.contains("write_userid_unlimited("));
-    assert!(MOD_SRC.contains("ADMIN_WIPE_OBJ, admin_pin, None,"));
-    assert!(MOD_SRC.contains("ADMIN_WIPE_OBJ, admin, None,"));
+    // #855: the value is typed. The admin UserID holds a 16-byte device
+    // secret, never a credential derived from a PIN.
+    assert!(MOD_SRC.contains("ADMIN_WIPE_OBJ, apdu::UserIdValue::DeviceSecret(admin_pin), None,"));
+    assert!(MOD_SRC.contains("ADMIN_WIPE_OBJ, apdu::UserIdValue::DeviceSecret(admin), None,"));
 }
 
 #[test]
@@ -1440,7 +1442,7 @@ fn negative_admin_userid_provisioning_uses_no_admin_ref() {
     // `write_userid_unlimited` (the signature has no
     // `max_attempts` field; the admin entry is the trailing
     // argument).  Pin `None` as that trailing arg.
-    assert!(MOD_SRC.contains("ADMIN_WIPE_OBJ, admin_pin, None,"));
+    assert!(MOD_SRC.contains("ADMIN_WIPE_OBJ, apdu::UserIdValue::DeviceSecret(admin_pin), None,"));
 }
 
 #[test]
@@ -1452,17 +1454,132 @@ fn negative_user_userid_has_no_admin_ref_post_s6() {
     // OID with attacker PIN → read ENTROPY_OBJ (whose policy
     // gates on USERID_OBJ by OID, not by instance).
     //
-    // Pin the literal `USERID_OBJ, pin, max_attempts, None,`
+    // Pin the literal `USERID_OBJ, <value>, max_attempts, None,`
     // — the trailing `None` is what closes the substitution
     // attack.  A future refactor that flips this back to
     // `admin_ref` (or `Some(...)`) re-opens the vulnerability
     // and must trip this test.
-    assert!(MOD_SRC.contains("USERID_OBJ, pin, max_attempts, None,"));
+    //
+    // #855: the value is the die-bound credential. The pre-fix literal
+    // `USERID_OBJ, pin, max_attempts, None,` wrote the raw PIN into the
+    // chip and must never come back.
+    assert!(MOD_SRC
+        .contains("USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts, None,"));
+    assert!(!MOD_SRC.contains("USERID_OBJ, pin, max_attempts"));
     // Data objects KEEP admin-delete (DoS-wipe is acceptable —
     // the safety contract is data destruction, which the admin
     // path must be able to effect).  Pin that the data write
     // still passes `admin_ref`.
     assert!(MOD_SRC.contains("USERID_OBJ, admin_ref,"));
+}
+
+#[test]
+fn negative_user_and_duress_userid_never_carry_a_raw_pin() {
+    // #855 (Ledger Donjon report, scenario A). The SE050 user UserID used to
+    // hold the raw eight PIN digits and every unlock presented them. Reading
+    // the chip gave the PIN outright.
+    //
+    // ASSUMPTION ATTACKED: a later change passes a PIN (or any byte slice
+    // that is not a `Se050PinCredential`) into a user-wallet UserID write or
+    // verify.
+    for typed in [
+        "fn authenticate_and_read(\n        &mut self,\n        user_cred: &crate::pin_credential::Se050PinCredential,",
+        "        user_cred: &crate::pin_credential::Se050PinCredential,\n        max_attempts: u16,",
+        "        duress_cred: &crate::pin_credential::Se050PinCredential,\n        admin_pin: Option<&[u8; 16]>,",
+        "pub fn duress_verify(&mut self, duress_cred: &crate::pin_credential::Se050PinCredential)",
+        "        duress_cred: &crate::pin_credential::Se050PinCredential,\n    ) -> Result<[u8; 32], Se050Error> {",
+    ] {
+        assert!(MOD_SRC.contains(typed), "missing credential-typed signature: {typed}");
+    }
+    // The four product-path sinks present the typed credential.
+    for sink in [
+        "USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts, None,",
+        "DURESS_USERID_OBJ, apdu::UserIdValue::Credential(duress_cred), None,",
+        "&session_id, apdu::UserIdValue::Credential(user_cred),",
+        "&sid, apdu::UserIdValue::Credential(duress_cred),",
+    ] {
+        assert!(MOD_SRC.contains(sink), "missing credential sink: {sink}");
+    }
+    // The driver never reads a credential's bytes itself: that happens in
+    // exactly one place, `UserIdValue::bytes` in apdu.rs.
+    assert!(!MOD_SRC.contains(".expose_for_se050()"));
+    assert_eq!(APDU_SRC.matches(".expose_for_se050()").count(), 1);
+    // The pre-fix shapes are gone.
+    for banned in [
+        "&session_id, pin,",
+        "&sid, duress_pin)",
+        "DURESS_USERID_OBJ, duress_pin,",
+        "self.authenticate_and_read(pin)",
+    ] {
+        assert!(!MOD_SRC.contains(banned), "pre-#855 raw-PIN shape is back: {banned}");
+    }
+    // Only the three `WalletStore` shims may name a PIN parameter.
+    assert_eq!(
+        MOD_SRC.matches("pin: &[u8; 8]").count(),
+        3,
+        "exactly the three WalletStore shims (provision, provision_duress, unlock) may take a PIN"
+    );
+}
+
+#[test]
+fn negative_userid_value_cannot_be_a_runtime_pin() {
+    // #855 (both reviewers): renaming a `pin: &[u8]` parameter is not a
+    // guard. The three builders that put a value into, or present a value
+    // to, a UserID object take `UserIdValue`, which can only be a typed
+    // credential, a 16-byte device secret, or a `&'static` constant. A PIN
+    // typed in at run time is none of those, so passing one is a compile
+    // error rather than a review catch.
+    assert!(APDU_SRC.contains("pub enum UserIdValue<'a> {"));
+    for variant in [
+        "    Credential(&'a crate::pin_credential::Se050PinCredential),",
+        "    DeviceSecret(&'a [u8; 16]),",
+        "    Fixed(&'static [u8]),",
+        "    #[cfg(feature = \"se050-stress\")]\n    Bench(&'a [u8]),",
+    ] {
+        assert!(APDU_SRC.contains(variant), "UserIdValue variant changed: {variant}");
+    }
+    // No variant other than the stress-harness one takes a plain borrowed
+    // slice.
+    assert_eq!(APDU_SRC.matches("(&'a [u8]),").count(), 1);
+
+    for typed in [
+        "    obj_id: u32,\n    userid_value: UserIdValue<'_>,\n    max_attempts: u16,",
+        "    obj_id: u32,\n    userid_value: UserIdValue<'_>,\n    admin_auth_obj_id: Option<u32>,",
+        "    session_id: &[u8; 8],\n    userid_value: UserIdValue<'_>,\n) -> Result<(), Se050Error> {",
+        "    auth_obj_id: Option<u32>,\n    userid_value: Option<UserIdValue<'_>>,",
+    ] {
+        assert!(APDU_SRC.contains(typed), "builder signature is no longer typed: {typed}");
+    }
+    // And no builder in the file still takes the old untyped parameter.
+    assert!(!APDU_SRC.contains("    pin: &[u8],"));
+    assert!(!APDU_SRC.contains("    userid_value: &[u8],"));
+}
+
+#[test]
+fn negative_factory_reset_destroys_the_salt_before_any_apdu() {
+    // #855: the salt must be gone before the SE050 sees the first wipe
+    // command, including on the early return taken when the admin PIN
+    // cannot be derived.
+    let start = MOD_SRC
+        .find("fn factory_reset_admin(&mut self) -> Result<(), SeError> {")
+        .expect("Se050::factory_reset_admin present");
+    let body = &MOD_SRC[start..];
+    let begin = body
+        .find("crate::pin_gate::begin_wipe()")
+        .expect("factory_reset_admin must call pin_gate::begin_wipe");
+    // (The full path keeps the doc comment's mention of the helper out of
+    // the match.)
+    for later in [
+        "crate::hw::secret_keys::se050_admin_pin()",
+        "self.iterative_wipe(",
+        "self.admin_factory_reset(",
+    ] {
+        let at = body.find(later).expect("wipe step present");
+        assert!(begin < at, "`{later}` runs before the salt is destroyed");
+    }
+    // A surviving salt is reported, and page 125 is not erased over it.
+    assert!(body.contains("return salt_gone.map_err(|_| SeError::InternalError);"));
+    assert!(body.contains("if salt_gone.is_ok() && !self.admin_exists() {"));
 }
 
 // ═════════════════════════════════════════════════════════════════════

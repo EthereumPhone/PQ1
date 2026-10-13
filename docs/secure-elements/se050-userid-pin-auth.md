@@ -1,5 +1,67 @@
 # SE050 Native UserID PIN Authentication
 
+> **UPDATE 2026-10-13 (#855, Ledger Donjon report).** Everywhere this document
+> says the UserID object holds, or is verified against, "the PIN", read **"the
+> die-bound PIN credential"**. Until this date the firmware wrote the raw eight
+> PIN digits into the UserID and presented them on every unlock, so reading the
+> chip gave the PIN. The UserID value is now a 16-byte
+> `PRF(DHUK, "pqsigner/pin-cred-E-v1" ‖ salt ‖ PIN)`
+> (`secure/src/pin_credential.rs`), derived in the microcontroller before the
+> SE050 driver is called; `ENTROPY_OBJ` holds `half_E` XOR a PIN-keyed mask
+> from the same PRF. The SE050 still does the comparison and the counting
+> itself, exactly as described below.
+>
+> One consequence for bench work: the UserID can only be deleted by a session
+> that presents its own value (S-6). After a wipe the salt is gone, so on a
+> shippable build that value can no longer be recomputed and the object stays
+> on the chip. Bench builds (`e2e-test` / `otp-hardcoded-master-key`) use a
+> fixed public salt **and a fixed public PRF key**, so the credential of a
+> known test PIN is the same on every bench build whatever key root that
+> build uses. `make se050-reset` and the e2e pre-clean decide the format once
+> (a salt record on page 125 means "written by this scheme") and try every
+> test PIN in that format, then the default PIN in the other: at most one
+> attempt more than before.
+>
+> **Boards that hold a wallet written by firmware older than this change.**
+> This firmware cannot open such a wallet, and there is deliberately no
+> migration path (one would have to present the old raw PIN to a chip, and an
+> emulated chip could then ask for it). What happens depends on the build:
+>
+> - **`e2e-test` images on dual-SE hardware** are not affected: at every boot
+>   they wipe both chips, delete the SE050 user objects with the known test
+>   PINs (old raw format first when page 125 holds no salt record), provision
+>   afresh and unlock directly, without `gated_unlock` (`main.rs`, the
+>   "dual-se pre-clean" block; not built under `e2e-skip-provision`).
+> - **A bench image without `e2e-test`** (for example the EVT dev flow, where
+>   `dev-testkey` implies `otp-hardcoded-master-key`): nothing is wiped at
+>   boot. A PIN typed at the prompt derives a credential the chips never
+>   stored, so the correct PIN is charged as a wrong one on page 124, OPTIGA
+>   E120 and the SE050 UserID, and ten such tries end in the lockout wipe.
+> - **An image with none of the bench features:** on SE050 and dual-SE
+>   hardware the first boot finds a provisioned wallet with no salt and wipes
+>   it. The boot wipe block is not compiled for an OPTIGA-only bench build
+>   (`main.rs`, `any(feature = "se050", feature = "dual-se")`); there the
+>   wallet is refused, without charging an attempt, until a reset tool
+>   removes it.
+>
+> Where a wipe runs, the old user UserID object survives it (S-6),
+> and `store_objects` refuses to provision while it exists
+> (`Status(0x6986)`), so that SE050 cannot take a new wallet until the object
+> is deleted by a session that presents the old PIN, or the OID range is
+> bumped. That is the end state ten wrong PINs always had; what is new is
+> reaching it with the right one.
+>
+> Bench boards are re-flashed and re-provisioned as a matter of routine
+> (owner, 2026-10-13), so no data depends on this. The practical rule: remove
+> an old wallet with something that knows its PIN (`make se050-reset`, or any
+> `e2e-test` image, both of which cover the test PINs) rather than by typing
+> the PIN into this firmware. Derived from the source; not exercised on a
+> board.
+>
+> The builders in `se050/apdu.rs` no longer take `&[u8]`: they take
+> `UserIdValue`, which is a typed credential, a 16-byte device secret, or a
+> `&'static` constant. A PIN typed in at run time is none of those.
+
 > **OID range note (2026-04-30 audit).** The OID values shown throughout this doc
 > (`0x7B00_2000`, `0x7B04_xxxx`) are from the **v1/v2 era** and are no longer
 > the live constants. The shipping range is **v6 = `0x7B10_xxxx`**:

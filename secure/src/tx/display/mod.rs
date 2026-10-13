@@ -129,8 +129,11 @@ pub use erc20_unknown::render_erc20_unknown_pages;
 pub use safe_display::{
     multisend_sign_gate, render_safe_exec_pages, render_safe_v1_pages, MultisendGate,
 };
-pub use offchain_sync::build_offchain_sync_pages;
+pub use offchain_sync::{build_offchain_sync_pages, OFFCHAIN_SYNC_PAGES, OFFCHAIN_SYNC_PAGES_WARN};
 pub use slot_rotation::build_slot_rotation_pages;
+pub(crate) use slot_rotation::{
+    rotation_output_binding_proof, RotationConfirmContext, RotationConfirmReceipt,
+};
 pub use value_transfer::render_pages;
 pub use wallet_address::build_wallet_address_page;
 
