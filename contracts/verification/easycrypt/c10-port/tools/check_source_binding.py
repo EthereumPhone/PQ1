@@ -535,6 +535,33 @@ SOURCES = (
     'contracts/verification/easycrypt/c10-port/scratch/c10_caller_recover_sentinel_typed.ec',
     'contracts/verification/easycrypt/c10-port/tools/c10_caller_controls.py',
 
+    # Actual WOTS keygen/sign callers using common private inputs.
+    'contracts/verification/easycrypt/c10-port/cdrafts-split/C10PrivateCallerBridge.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_chain_stop_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_chain_stop_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_compression_kind_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_compression_kind_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_keypair_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_keypair_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_order_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_order_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_tree_high_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_leaf_tree_high_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_count_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_count_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_digit_stop_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_digit_stop_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_exhaustion_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_exhaustion_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_placement_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_placement_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_private_index_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_private_index_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_shuffle_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_private_caller_sign_shuffle_typed.ec',
+    'contracts/verification/easycrypt/c10-port/tools/c10_private_caller_controls.py',
+
 )
 
 

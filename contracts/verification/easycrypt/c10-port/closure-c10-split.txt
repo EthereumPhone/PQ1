@@ -461,3 +461,4 @@ C10RepresentationBridge
 C10HashInputBridge
 C10AddressInputBridge
 C10CallerInputBridge
+C10PrivateCallerBridge

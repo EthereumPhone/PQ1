@@ -12,6 +12,7 @@ import argparse
 from pathlib import Path
 from c10_representation import source, check_outputs
 from c10_caller_controls import caller_outputs, caller_rows
+from c10_private_caller_controls import private_caller_outputs, private_caller_rows
 
 CHANGES = [
     ("word-endian", "byte_word", "List.reverse bs", "bs", "rev bs", "bs"),
@@ -80,6 +81,7 @@ def control_outputs(port):
         result[port/"scratch"/(stem+"_typed.ec")]=changed_defs
         result[port/"scratch"/(stem+"_reject.ec")]=proof.replace(anchor,changed_defs)
     result.update(caller_outputs(port))
+    result.update(private_caller_outputs(port))
     return result
 
 def control_rows():
@@ -88,11 +90,11 @@ def control_rows():
         stem="scratch/c10_rep_"+name.replace("-","_")
         rows.extend([stem+"_typed.ec\tMUST-PASS\t-",
                      stem+"_reject.ec\tMUST-FAIL\t"+REASONS[name]])
-    return rows + caller_rows()
+    return rows + caller_rows() + private_caller_rows()
 
 def check_manifest_rows(rows):
     expected=control_rows()
-    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_"))]
+    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_"))]
     if sorted(live)!=sorted(expected):
         raise ValueError("paired representation control enrollment changed")
 

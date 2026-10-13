@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	0ca9eefebedd75613b1d8f546be0576e
+split	55f120b683dbcf0c6a0747f8c6593e68
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1601,3 +1601,10 @@ fork	9c2d21280c84d52c30b22111151f1135
 # mutations. 667 targets / 4133 pins / 3590 statements / 764 controls.
 # Split identity 8bcd0fdf3d3fc114346da89c45cbd0f8 -> 0ca9eefebedd75613b1d8f546be0576e.
 # No new assumptions; fresh full pinned-image replay required.
+
+# 2026-10-14: actual WOTS leaf/sign callers consume common private inputs.
+# Nine lemmas, two headlines, eleven typed procedural mutations and a source-
+# exact non-policy shuffle arithmetic exception with negative controls.
+# 668 targets / 4142 pins / 3599 statements / 788 controls / 787 bindings.
+# Split identity 0ca9eefebedd75613b1d8f546be0576e -> 55f120b683dbcf0c6a0747f8c6593e68.
+# No new cryptographic assumptions; fresh full pinned-image replay required.

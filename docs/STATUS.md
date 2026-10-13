@@ -129,6 +129,10 @@ The actual EasyCrypt WOTS count, chain, recovery and nonce-grind procedures now
 also consume these forms through proved equivalent views, preserving returned
 values and the complete state of an arbitrary shared oracle. Search exhaustion,
 full-width recovery counters and the verifier's zero-node rejection are retained.
+The WOTS key-generation leaf and signing procedure also compose the private
+preimages with those count/chain views. Their equivalences retain ordered
+compression, the actual shuffle's query/visit order, digit-dependent stops,
+signature positions and count exhaustion, with no oracle-losslessness premise.
 Hash-backend/oracle interpretation, the remaining callers, shuffle derivation
 and the cross-language stateful session relation remain open.
 

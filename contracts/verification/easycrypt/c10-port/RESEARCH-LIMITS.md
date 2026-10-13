@@ -1147,6 +1147,37 @@ control-flow/error relations, callbacks, full stateful sessions and secure-wrapp
 query-cost composition remain open. No production source or hash assumption
 changes, and no whole-session or hardware claim, follow from this batch.
 
+WOTS private caller composition (2026-10-14): `C10PrivateCallerBridge.ec`
+connects the actual `RawKeygen(PreparationView(O)).leaf` and
+`RawWots(PreparationView(O)).sign` procedures to the existing common private,
+count, chain and multi-node inputs. The same arbitrary `PrefixOracle` runs on
+both sides; the returned value and its entire global state agree. All u32/u64
+address fields remain available. There is no fresh-history, successful-count,
+desired-output or oracle-losslessness premise.
+
+The leaf retains 43 private derivations, seven public steps per chain, ordered
+padded endpoints and the type-1 compression address. Signing retains `None` on
+count exhaustion, then the exact shared shuffle procedure, private derivations
+in its visit order, each accepted digit's chain length, writes at the shuffled
+signature index, and the returned count. A partial-correctness shuffle lemma
+proves index bounds for both its zero-seed identity and nonzero-seed branches
+without asserting uniformity or termination of an arbitrary oracle.
+
+Eleven typed procedural mutations exercise private keypair/tree/index binding,
+chain stops, compression order/type, shuffle inputs, signature positions,
+exhaustion and the returned count. Each changed definition compiles, and the
+unchanged proof rejects at the intended theorem without syntax/resource credit.
+Nine lemmas and two additional headlines enter the complete proof, statement,
+module-body, scope, source-binding and replay inventories. Lean headlines and
+the cryptographic axiom inventory are unchanged.
+
+This closes common-input composition for these two EasyCrypt callers. The
+shuffle remains an identical shared procedure, not a paired cross-language
+shuffle-derivation proof. Remaining FORS/tree/forest/layer/signer callers,
+cross-language control-flow/error and session relations, hash/backend/callback
+interpretations and secure-wrapper query costs remain open. No production
+source, signature format, concrete-SHA or hardware claim changes.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 the remaining fixed-width operations, primitive/caller computations, bounded

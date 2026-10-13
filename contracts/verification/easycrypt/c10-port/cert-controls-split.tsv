@@ -840,6 +840,7 @@ scratch/_scope_neg_op_C10RepresentationBridge.ec	MUST-FAIL	unknown variable or c
 scratch/_scope_neg_op_C10HashInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10AddressInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10CallerInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_C10PrivateCallerBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/c10_rep_positive.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_typed.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_reject.ec	MUST-FAIL	nothing to rewrite
@@ -926,3 +927,26 @@ scratch/c10_caller_nonce_accept_typed.ec	MUST-PASS	-
 scratch/c10_caller_nonce_accept_reject.ec	MUST-FAIL	nothing to introduce
 scratch/c10_caller_nonce_exhaustion_typed.ec	MUST-PASS	-
 scratch/c10_caller_nonce_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_private_caller_positive.ec	MUST-PASS	-
+scratch/c10_private_caller_leaf_keypair_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_leaf_keypair_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_private_caller_leaf_tree_high_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_leaf_tree_high_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_private_caller_leaf_chain_stop_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_leaf_chain_stop_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
+scratch/c10_private_caller_leaf_order_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_leaf_order_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_private_caller_leaf_compression_kind_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_leaf_compression_kind_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_private_caller_sign_shuffle_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_sign_shuffle_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_private_caller_sign_private_index_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_sign_private_index_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_private_caller_sign_digit_stop_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_sign_digit_stop_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
+scratch/c10_private_caller_sign_placement_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_sign_placement_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
+scratch/c10_private_caller_sign_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_sign_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_private_caller_sign_count_typed.ec	MUST-PASS	-
+scratch/c10_private_caller_sign_count_reject.ec	MUST-FAIL	[by]: cannot close goals

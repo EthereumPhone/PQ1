@@ -2514,3 +2514,4 @@ cdrafts-split/C10Representation.ec	defined-op:a36253b27d83	address_words	# line 
 cdrafts-split/C10CallerInputBridge.ec	defined-op:48f53e6a38e1	caller_fields	# line 10
 cdrafts-split/C10CallerInputBridge.ec	module:75efb257814a	CommonInputWots	# line 57
 cdrafts-split/C10CallerInputBridge.ec	module:a219cdf5d545	CommonInputGrind	# line 163
+cdrafts-split/C10PrivateCallerBridge.ec	module:b34c5561e9da	CommonPrivateWots	# line 43

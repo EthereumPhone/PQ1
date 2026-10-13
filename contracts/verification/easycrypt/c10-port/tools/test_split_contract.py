@@ -174,7 +174,8 @@ class ContractTests(unittest.TestCase):
         checker = port / 'tools/policy_cap_fence.py'
         fenced = (port / 'cdrafts-split/C10DeployedScope.ec').read_text()
         manifest = (port / 'cert-quarantine-split.tsv').read_text()
-        for source_name in ('RawShuffle.ec', 'RawShufflePermutation.ec', 'ShuffleBytes.ec'):
+        for source_name in ('RawShuffle.ec', 'RawShufflePermutation.ec', 'ShuffleBytes.ec',
+                            'C10PrivateCallerBridge.ec'):
             original = (port / 'cdrafts-split' / source_name).read_text()
             variants = {
                 'unmodified arithmetic': (source_name, original, True),
@@ -204,7 +205,7 @@ class ContractTests(unittest.TestCase):
 
     def test_targets_cover_pinned_dependencies_in_order(self):
         targets = gate.targets()
-        self.assertEqual(len(targets), 667)
+        self.assertEqual(len(targets), 668)
         self.assertEqual(set(targets), set(gate.rows('cert-cone-files-split.tsv')))
         self.assertIn('base-c10-split/HashAddresses.eca', targets)
         for i, p in enumerate(targets):
