@@ -833,8 +833,8 @@ use sphincs_tz_shared::{
     NscStatus, C10_SIG_LEN, COW_ORDER_TRAILER_MAX_LEN, ERC7730_MAX_TRAILER_LEN,
     FLAG_INCLUDE_INIT_CODE, FLAG_REGISTER_SLOT, GPV2_SETTLEMENT_ADDRESS, MAX_SIGN_RESPONSE_LEN,
     MAX_TX_LEN, PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR, PQ_INIT_CODE_LEN,
-    PQ_SMART_WALLET_FACTORY, SAFE_V1_PAYLOAD_MAX, SET_PRE_SIGNATURE_SELECTOR,
-    SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN,
+    OWNER_BYTES_LEN, PQ_SMART_WALLET_FACTORY, SAFE_V1_PAYLOAD_MAX, SET_PRE_SIGNATURE_SELECTOR,
+    SIGN_USEROP_HEADER_LEN, SIG_WRAPPER_LEN, TYPE1_ROTATION_SECTION_LEN,
 };
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
@@ -2172,6 +2172,30 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // the user thinks they're authorising. The Type 1 sig is gated by
     // the on-chain monotonic cap regardless; this gate just makes the
     // cost visible to the user.
+    //
+    // Sweep 2026-10-13 finding #1: the rotation consent is carried to the
+    // bootstrap-key boundaries by a fail-initialised receipt. It is published
+    // ONLY from the dialog's affirmative arm (or as a literal
+    // `requested = false` skip record when rotation was not requested), so a
+    // fault that skips this whole block with `register_slot == true` cannot
+    // satisfy either `completion_proof` check below.
+    let rotation_context = crate::tx::display::RotationConfirmContext::new(
+        register_slot,
+        chain_id,
+        account_index,
+        slot_index,
+        sender,
+        nonce,
+        [
+            call_gas_limit,
+            verification_gas_limit,
+            pre_verification_gas,
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+        ],
+    );
+    let mut rotation_confirm_receipt = crate::tx::display::RotationConfirmReceipt::new();
+    rotation_confirm_receipt.fail_initialize();
     if register_slot {
         let mut rotate_pages = crate::tx::display::build_slot_rotation_pages(slot_index);
         let signer_pages_before = rotate_pages.len;
@@ -2349,6 +2373,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             super::zeroize_sensitive_state();
             return NscStatus::UserRejected as u32;
         }
+        if rotation_confirm_receipt
+            .record_confirmed(&rotation_context)
+            .is_err()
+        {
+            super::zeroize_sensitive_state();
+            return NscStatus::InternalError as u32;
+        }
+    }
+    if !core::hint::black_box(rotation_context.requested())
+        && rotation_confirm_receipt
+            .record_not_requested(&rotation_context)
+            .is_err()
+    {
+        super::zeroize_sensitive_state();
+        return NscStatus::InternalError as u32;
     }
     // `include_init_code` changes the released response, the Type-2 digest,
     // and whether the bootstrap key signs a factory authorization. Bind that
@@ -3148,6 +3187,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign refused", "deploy consent");
         return NscStatus::InternalError as u32;
     }
+    // Same discipline for rotation (sweep finding #1): no bootstrap key is
+    // derived for a Type-1 unless the exact rotation context crossed the
+    // rotation dialog's affirmative branch; disabled mode must carry the
+    // explicit skip record.
+    crate::fi::scrub_sentinel_register();
+    if rotation_confirm_receipt.completion_proof(&rotation_context) != crate::fi::OK_SENTINEL {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        ui::show_status("Sign refused", "rotate consent");
+        return NscStatus::InternalError as u32;
+    }
 
     // ── 13. Build Type 1 (optional) + initCode (optional) ──────────
     //
@@ -3159,10 +3209,15 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Non-secret outputs:
     //   * `init_code_out` / `emit_init_code` — 4280-byte factory call.
     //   * `type1_wrapper_out` / `emit_type1` — 4128-byte SignatureWrapper.
+    //   * `type1_owner_out` / `t1_call_digest_out` — the 64-byte owner
+    //     argument copied OUT of the exact signed `addOwnerBytes` calldata,
+    //     and that calldata's digest (#353 output binding).
     let mut init_code_out: Zeroizing<[u8; PQ_INIT_CODE_LEN]> =
         Zeroizing::new([0u8; PQ_INIT_CODE_LEN]);
     let mut type1_wrapper_out: Zeroizing<[u8; SIG_WRAPPER_LEN]> =
         Zeroizing::new([0u8; SIG_WRAPPER_LEN]);
+    let mut type1_owner_out = [0u8; OWNER_BYTES_LEN];
+    let mut t1_call_digest_out = [0u8; 32];
     let mut emit_init_code = false;
     let mut emit_type1 = false;
     let mut t1_init_code_digest = SHA256_EMPTY;
@@ -3297,12 +3352,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
             // addOwnerBytes(bytes) calldata:
             //   selector(4) || offset(32 = 0x20) || length(32 = 0x40)
-            //     || data(64 = slot_N_owner_bytes) — already 32-aligned
-            let mut t1_call = [0u8; 4 + 32 + 32 + 64];
-            t1_call[..4].copy_from_slice(&PQ_ADD_OWNER_BYTES_SELECTOR);
-            t1_call[4 + 28..4 + 32].copy_from_slice(&0x20u32.to_be_bytes());
-            t1_call[4 + 32 + 28..4 + 32 + 32].copy_from_slice(&64u32.to_be_bytes());
-            t1_call[4 + 64..4 + 64 + 64].copy_from_slice(&slot_owner_bytes);
+            //     || data(64 = slot_N_owner_bytes) — already 32-aligned.
+            // Built by the shared `pqsigner-aa` encoder so a companion that
+            // rebuilds it from the 0x0203 response hashes identical bytes.
+            let t1_call = crate::aa::userop::add_owner_bytes_calldata(&slot_owner_bytes);
+            debug_assert_eq!(t1_call[..4], PQ_ADD_OWNER_BYTES_SELECTOR);
             let t1_call_digest = sha256_bytes(&t1_call);
 
             // Sphincs digest for the Type 1 UserOp.
@@ -3320,6 +3374,18 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 paymaster_and_data_digest: SHA256_EMPTY,
             };
             let t1_digest = compute_sphincs_digest_v06(&t1_params, &t1_call_digest);
+
+            // Second, spatially separate rotation-consent check, immediately
+            // before the bootstrap key signs the Type-1 (sweep finding #1).
+            crate::fi::scrub_sentinel_register();
+            if rotation_confirm_receipt.completion_proof(&rotation_context)
+                != crate::fi::OK_SENTINEL
+            {
+                entropy.zeroize();
+                crate::fi::zeroize_barrier();
+                ui::show_status("Sign refused", "rotate consent");
+                return NscStatus::InternalError as u32;
+            }
 
             let bootstrap_sig = match crate::crypto::c10_sign_verified_with_progress(
                 &c10_sk,
@@ -3366,6 +3432,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 0,
                 &bootstrap_sig,
             );
+            // #353: release the owner bytes copied out of the exact signed
+            // preimage (not a re-read of `slot_owner_bytes`), plus the digest
+            // the output binding proof re-derives before release.
+            type1_owner_out.copy_from_slice(
+                &t1_call[crate::aa::userop::ADD_OWNER_BYTES_ARG_OFFSET..],
+            );
+            t1_call_digest_out = t1_call_digest;
             emit_type1 = true;
         }
 
@@ -3566,7 +3639,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     //                                have to ABI-decode `executeWith
     //                                OffchainCount(...)` to find it.
     //   [init_code_len(4 BE)][init_code(0 or 4280)]
-    //   [type1_len(4 BE)][type1_wrapper(0 or 4128)]
+    //   [type1_len(4 BE)][type1_section(0 or 4192)]
+    //        type1_section = new_owner_bytes(64) || type1_wrapper(4128)
+    //        (protocol 0x0203, #353)
     //   [type2_len(4 BE)][type2_wrapper(4128)]
     //
     // FI deref-site re-validation (finding F5). The top-of-handler write gate
@@ -3584,6 +3659,25 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign", "bad out");
         return NscStatus::InvalidPointer as u32;
     }
+    // #353 output binding: the released owner bytes are the new slot's key
+    // and rebuild exactly the calldata the bootstrap key signed; disabled
+    // mode releases no Type-1 at all. Checked against the rotation context
+    // built from the real flag, after the Type-2 commit and before any byte
+    // reaches NS.
+    crate::fi::scrub_sentinel_register();
+    if crate::tx::display::rotation_output_binding_proof(
+        &rotation_context,
+        emit_type1,
+        &type1_owner_out,
+        &slot_owner_bytes,
+        &t1_call_digest_out,
+    ) != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        ui::show_status("Sign refused", "rotate binding");
+        return NscStatus::CryptoError as u32;
+    }
     let mut write_pos: usize = 0;
     write_be_u64(out_ptr, &mut write_pos, new_offchain_count);
     let init_code_len = if emit_init_code { PQ_INIT_CODE_LEN } else { 0 };
@@ -3595,9 +3689,13 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         write_pos += PQ_INIT_CODE_LEN;
     }
 
-    let type1_len = if emit_type1 { SIG_WRAPPER_LEN } else { 0 };
+    let type1_len = if emit_type1 { TYPE1_ROTATION_SECTION_LEN } else { 0 };
     write_be_u32(out_ptr, &mut write_pos, type1_len as u32);
     if emit_type1 {
+        for i in 0..OWNER_BYTES_LEN {
+            core::ptr::write_volatile(out_ptr.add(write_pos + i), type1_owner_out[i]);
+        }
+        write_pos += OWNER_BYTES_LEN;
         for i in 0..SIG_WRAPPER_LEN {
             core::ptr::write_volatile(out_ptr.add(write_pos + i), type1_wrapper_out[i]);
         }
@@ -4616,8 +4714,10 @@ e2e-skip-provision = []
 # Under `e2e-test`, route the SE050 `WalletStore::provision` impl through the
 # simpler single-policy path (the one already used on non-stm32u585 targets).
 # Skips `provision_admin` + `policy_roundtrip_selftest` + the two-entry
-# `TAG_POLICY` with admin-delete references. Used by the dual-SE hardware e2e
-# target (`e2e-hw-dual-se`) so the test does not depend on mutable chip state
+# `TAG_POLICY` with admin-delete references. No Makefile target enables it any
+# more (#912): an image built with it creates a UserID that only its own value
+# can delete, and nothing presents that value automatically. It was used by
+# the dual-SE hardware e2e target (`e2e-hw-dual-se`) so the test did not depend on mutable chip state
 # around `ADMIN_WIPE_OBJ` — which can get stuck across firmware revisions
 # when the on-chip admin UserID was created by a previous build whose admin
 # PIN is no longer in flash (unauthenticated `iterative_wipe` can't delete

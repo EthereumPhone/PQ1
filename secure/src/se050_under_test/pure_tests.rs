@@ -1447,30 +1447,109 @@ fn negative_admin_userid_provisioning_uses_no_admin_ref() {
 
 #[test]
 fn negative_user_userid_has_no_admin_ref_post_s6() {
-    // S-6 fix (docs/security/security-review-2026-05.md §C-8): the user
-    // UserID's policy MUST NOT contain an admin-delete entry.
-    // If admin had DELETE on the user UserID, an admin
-    // compromise could delete USERID_OBJ → recreate at the same
-    // OID with attacker PIN → read ENTROPY_OBJ (whose policy
-    // gates on USERID_OBJ by OID, not by instance).
+    // S-6 fix (docs/security/security-review-2026-05.md §C-8): in a shipping
+    // image the user UserID's policy MUST NOT contain an admin-delete entry.
+    // If admin had DELETE on the user UserID, an admin compromise could
+    // delete USERID_OBJ → recreate at the same OID with attacker PIN → read
+    // ENTROPY_OBJ (whose policy gates on USERID_OBJ by OID, not by instance).
     //
-    // Pin the literal `USERID_OBJ, <value>, max_attempts, None,`
-    // — the trailing `None` is what closes the substitution
-    // attack.  A future refactor that flips this back to
-    // `admin_ref` (or `Some(...)`) re-opens the vulnerability
-    // and must trip this test.
+    // #912: bench images are the one exception, and only through one
+    // constant. This test pins that constant whole: its value in a
+    // non-bench build is `None`, its bench predicate is the two bench
+    // features and nothing else, and a production build asserts it.
+    let konst = "pub(crate) const USERID_ADMIN_DELETE: Option<u32> =\n    \
+if cfg!(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\")) {\n        \
+Some(ADMIN_WIPE_OBJ)\n    } else {\n        None\n    };\n";
+    assert_eq!(MOD_SRC.matches(konst).count(), 1, "USERID_ADMIN_DELETE changed");
+    assert_eq!(MOD_SRC.matches("const USERID_ADMIN_DELETE").count(), 1);
+    assert!(MOD_SRC.contains(
+        "#[cfg(feature = \"mode-production\")]\nconst _: () = assert!(\n    USERID_ADMIN_DELETE.is_none(),"
+    ));
+    // The bench predicate is the one that selects the fixed public salt and
+    // PRF key (`pin_gate::salt_policy`): a build that is "bench" for one is
+    // "bench" for the other.
+    const PIN_GATE_SRC: &str = include_str!("../pin_gate.rs");
+    assert!(PIN_GATE_SRC.contains(
+        "    #[cfg(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\"))]\n    {\n        SaltPolicy::FixedBench(&BENCH_FIXED_SALT)"
+    ));
+
+    // The two UserID creation sites take the entry from that constant and
+    // from nowhere else. `admin_ref.and(..)` is `None` whenever the constant
+    // is. A refactor that passes `admin_ref` or `Some(..)` directly re-opens
+    // the substitution attack in shipping images and must trip this test.
     //
     // #855: the value is the die-bound credential. The pre-fix literal
     // `USERID_OBJ, pin, max_attempts, None,` wrote the raw PIN into the
     // chip and must never come back.
-    assert!(MOD_SRC
-        .contains("USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts, None,"));
+    assert!(MOD_SRC.contains(
+        "USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts,\n                    admin_ref.and(USERID_ADMIN_DELETE),"
+    ));
+    assert!(MOD_SRC.contains(
+        "DURESS_USERID_OBJ, apdu::UserIdValue::Credential(duress_cred),\n                    admin_ref.and(USERID_ADMIN_DELETE),"
+    ));
+    assert_eq!(MOD_SRC.matches("admin_ref.and(USERID_ADMIN_DELETE)").count(), 4);
+    for banned in [
+        "UserIdValue::Credential(user_cred), max_attempts, admin_ref,",
+        "UserIdValue::Credential(user_cred), max_attempts, Some(",
+        "UserIdValue::Credential(duress_cred), admin_ref,",
+        "UserIdValue::Credential(duress_cred), Some(",
+    ] {
+        assert!(!MOD_SRC.contains(banned), "a UserID is given an admin entry directly: {banned}");
+    }
     assert!(!MOD_SRC.contains("USERID_OBJ, pin, max_attempts"));
     // Data objects KEEP admin-delete (DoS-wipe is acceptable —
     // the safety contract is data destruction, which the admin
     // path must be able to effect).  Pin that the data write
     // still passes `admin_ref`.
     assert!(MOD_SRC.contains("USERID_OBJ, admin_ref,"));
+
+    // The shipping wipe's DATA list is unchanged too; the bench list is the
+    // same list plus the decoy's three data objects, which a bench wipe has
+    // to remove BEFORE the duress UserID that gates them (second review
+    // wave: otherwise they are left with nothing able to delete them).
+    let shipping_data = "#[cfg(not(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\")))]\n        \
+const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[\n            \
+(ENTROPY_OBJ, \"ENTROPY_OBJ\"),\n            \
+(VK_OBJ, \"VK_OBJ\"),\n            \
+(BOOTSTRAP_VK_OBJ, \"BOOTSTRAP_VK_OBJ\"),\n            \
+(0x7B10_00B0, \"CANARY_USERID\"),";
+    assert!(MOD_SRC.contains(shipping_data), "the shipping wipe's data list changed");
+    let bench_data = "#[cfg(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\"))]\n        \
+const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[\n            \
+(ENTROPY_OBJ, \"ENTROPY_OBJ\"),\n            \
+(VK_OBJ, \"VK_OBJ\"),\n            \
+(BOOTSTRAP_VK_OBJ, \"BOOTSTRAP_VK_OBJ\"),\n            \
+(DURESS_ENTROPY_OBJ, \"DURESS_ENTROPY_OBJ\"),\n            \
+(DURESS_VK_OBJ, \"DURESS_VK_OBJ\"),\n            \
+(DURESS_BOOTSTRAP_VK_OBJ, \"DURESS_BOOTSTRAP_VK_OBJ\"),";
+    assert!(MOD_SRC.contains(bench_data), "a bench wipe no longer removes the decoy's data objects");
+    // In the wipe, the data loop runs before the UserID loop.
+    let data_loop = MOD_SRC
+        .find("                for (obj_id, name) in DATA_AND_CANARY_OBJS {")
+        .expect("the data delete loop");
+    let auth_loop = MOD_SRC
+        .find("                for (obj_id, name) in AUTH_OBJS_BEST_EFFORT {")
+        .expect("the UserID delete loop");
+    assert!(data_loop < auth_loop);
+
+    // A bench provisioning refuses a duress UserID the sweep could not
+    // remove, instead of writing a decoy nobody can open under it.
+    assert!(MOD_SRC.contains(
+        "            if USERID_ADMIN_DELETE.is_some() && admin_pin.is_some() && duress_userid_exists {\n"
+    ));
+    assert!(MOD_SRC.contains("            if !duress_userid_exists {\n"));
+
+    // The diagnosis for a surviving UserID is keyed on the wipe's result.
+    assert!(MOD_SRC.contains(
+        "pub(crate) const fn userid_survivor_help(admin_wipe_ok: bool) -> &'static str {"
+    ));
+    assert!(!MOD_SRC.contains("USERID_SURVIVED_HELP"));
+
+    // The admin wipe's shipping list is unchanged: the duress UserID is
+    // only in the bench list.
+    assert!(MOD_SRC.contains(
+        "#[cfg(not(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\")))]\n        const AUTH_OBJS_BEST_EFFORT: &[(u32, &str)] = &[\n            (USERID_OBJ, \"USERID_OBJ\"),\n        ];"
+    ));
 }
 
 #[test]
@@ -1493,8 +1572,8 @@ fn negative_user_and_duress_userid_never_carry_a_raw_pin() {
     }
     // The four product-path sinks present the typed credential.
     for sink in [
-        "USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts, None,",
-        "DURESS_USERID_OBJ, apdu::UserIdValue::Credential(duress_cred), None,",
+        "USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts,",
+        "DURESS_USERID_OBJ, apdu::UserIdValue::Credential(duress_cred),",
         "&session_id, apdu::UserIdValue::Credential(user_cred),",
         "&sid, apdu::UserIdValue::Credential(duress_cred),",
     ] {

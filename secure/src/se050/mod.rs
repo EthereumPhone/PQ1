@@ -111,6 +111,71 @@ pub const DURESS_BOOTSTRAP_VK_OBJ: u32 = 0x7B10_0013;
 /// conditionally after a successful wipe to clear the flag.
 pub const ADMIN_WIPE_OBJ: u32 = 0x7B10_00A0;
 
+/// The admin-delete policy entry of the user and duress UserID objects.
+///
+/// Shipping images: `None`. That is S-6
+/// (`docs/security/security-review-2026-05.md` §C-8): with an admin entry,
+/// whoever holds the admin credential could delete the UserID, recreate it
+/// with a value of their own, and read the half it gates.
+///
+/// Bench images (`e2e-test` / `otp-hardcoded-master-key`): the admin wipe
+/// object (#912). On those builds the admin credential derives from a
+/// public constant, so S-6 protects nothing; and a UserID that only its own
+/// value can delete strands the chip, because every wrong value spends one
+/// of its ten attempts for good and a locked UserID blocks provisioning at
+/// its OID. With the entry, the admin wipe removes it and no clean-up has to
+/// guess a PIN.
+///
+/// The predicate is the bench predicate of `pin_gate::salt_policy` (pinned
+/// together in `se050_under_test`). `mode-production` forbids both
+/// features; the assertion below fails the build if that ever stops being
+/// true.
+///
+/// Not covered: an image built with `e2e-skip-admin-wipe` provisions no
+/// admin object, so `store_objects` has no admin entry to give (`admin_ref`
+/// is `None`) and its UserID is again deletable only by its own value. No
+/// Makefile target enables that feature any more. A second run of such an
+/// image does NOT work: the OPTIGA half is rewritten and the SE050 half is
+/// kept, so the unlock check fails.
+pub(crate) const USERID_ADMIN_DELETE: Option<u32> =
+    if cfg!(any(feature = "e2e-test", feature = "otp-hardcoded-master-key")) {
+        Some(ADMIN_WIPE_OBJ)
+    } else {
+        None
+    };
+
+#[cfg(feature = "mode-production")]
+const _: () = assert!(
+    USERID_ADMIN_DELETE.is_none(),
+    "S-6: a production image must not give the admin delete authority over a UserID"
+);
+
+/// What to tell a bench operator when the user UserID is still on the chip
+/// after an admin wipe. There are two different causes and only one of them
+/// is a reason to present a value. They are told apart by whether the admin
+/// wipe itself completed (`admin_wipe_ok`), NOT by whether the admin object
+/// is still there: after a failed admin VERIFY or a refused delete the
+/// session is pending (A3) and an existence check cannot be trusted, and a
+/// refused UserID delete also makes the admin object's own delete fail
+/// (pre-landing review of #912).
+#[must_use]
+pub(crate) const fn userid_survivor_help(admin_wipe_ok: bool) -> &'static str {
+    if admin_wipe_ok {
+        "the admin wipe ran and the SE050 user UserID is still on the chip, so that \
+         UserID has no admin-delete entry (written before #912, or by an \
+         `e2e-skip-admin-wipe` image). Only its own value deletes it. Nothing is \
+         guessed here: a wrong value costs one of its ten attempts for good. Run \
+         `make se050-reset SE050_RESET_PIN=<its PIN> SE050_RESET_FORMAT=<raw|derived>` once"
+    } else {
+        "the admin wipe did NOT complete (its error is in the line above) and the \
+         SE050 user UserID is still on the chip. If the admin authentication failed, \
+         the admin object on this chip was written under another key root (a `bhk` \
+         or `saes-dhuk` image, or another master) and nothing in this image can \
+         delete anything: flash the image flavour that provisioned the chip. Do NOT \
+         spend a UserID attempt on this"
+    }
+}
+
 // -- Factory-reset self-test object IDs --
 // Distinct from production IDs so the test never collides with a real
 // provisioning, and is repeatable on a chip that already has prod
@@ -1982,9 +2047,32 @@ impl Se050 {
                         }
                     }
 
+                    // #912: a UserID written by a bench image carries an
+                    // admin-delete entry, so it goes here too. One written
+                    // before #912, or by a shipping image, refuses
+                    // (SW=0x6986); the `userid_exists` check below then
+                    // fails loudly. Last in the session and best-effort: a
+                    // refused delete leaves the session pending (A3), which
+                    // the reinit clears.
+                    let mut userid_delete_refused = false;
+                    if USERID_ADMIN_DELETE.is_some() && present[0] {
+                        if let Err(_e) = apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &session_id, STALE_OBJS[0],
+                        ) {
+                            secure_log!(
+                                "[SE050/store] stale sweep: admin delete of USERID_OBJ refused: {:?}",
+                                _e
+                            );
+                            userid_delete_refused = true;
+                        }
+                    }
+
                     let _ = apdu::close_session(
                         &mut self.t1, &mut self.scp03, &session_id,
                     );
+                    if userid_delete_refused {
+                        self.reinit()?;
+                    }
                     secure_log!("[SE050/store] stale sweep complete");
                 }
             }
@@ -2025,15 +2113,17 @@ impl Se050 {
                     "[SE050/store] FAILED: USERID_OBJ exists after stale sweep \
                      (Bug #28 — prior firmware's admin-delete policy doesn't \
                      match current ADMIN_WIPE_OBJ; re-provisioning would \
-                     inherit the stale policy)"
+                     inherit the stale policy). On a bench board: {}",
+                    userid_survivor_help(true)
                 );
                 return Err(Se050Error::Status(0x6986));
             }
 
             if !userid_exists {
                 secure_log!(
-                    "[SE050/store] writing USERID_OBJ (value_len={} max_attempts={}, no admin_ref — S-6)",
-                    crate::pin_credential::SE050_CRED_LEN, max_attempts
+                    "[SE050/store] writing USERID_OBJ (value_len={} max_attempts={}, admin-delete={})",
+                    crate::pin_credential::SE050_CRED_LEN, max_attempts,
+                    admin_ref.and(USERID_ADMIN_DELETE).is_some()
                 );
                 // S-6 fix (docs/security/security-review-2026-05.md §C-8): the
                 // user UserID's policy is created WITHOUT an admin
@@ -2048,12 +2138,14 @@ impl Se050 {
                 // admin_factory_reset, USERID_OBJ is orphaned on
                 // chip; the OID range must be bumped to reuse the
                 // chip — see the v6 → vN comment at the top of this
-                // module.
+                // module. Bench images are the exception (#912): there
+                // `USERID_ADMIN_DELETE` names the admin object.
                 // #855: the object value is the die-bound credential, never
                 // the PIN.
                 apdu::write_userid(
                     &mut self.t1, &mut self.scp03,
-                    USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts, None,
+                    USERID_OBJ, apdu::UserIdValue::Credential(user_cred), max_attempts,
+                    admin_ref.and(USERID_ADMIN_DELETE),
                 ).map_err(|e| {
                     secure_log!("[SE050/store] write USERID_OBJ FAILED: {:?}", e);
                     e
@@ -2182,7 +2274,21 @@ impl Se050 {
                             }
                         }
                     }
+                    // #912: on a bench build the duress UserID carries an
+                    // admin-delete entry; remove it as well (last, and
+                    // best-effort, as in `store_objects`).
+                    let mut userid_delete_refused = false;
+                    if USERID_ADMIN_DELETE.is_some() && present[0] {
+                        if apdu::delete_object_authed(
+                            &mut self.t1, &mut self.scp03, &sid, STALE[0],
+                        ).is_err() {
+                            userid_delete_refused = true;
+                        }
+                    }
                     let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                    if userid_delete_refused {
+                        self.reinit()?;
+                    }
                 }
             }
 
@@ -2191,11 +2297,30 @@ impl Se050 {
             // the admin policy entry (same rationale as USERID_OBJ in
             // `store_objects`); admin-delete on data objects below
             // remains.  Explicit-unlimited per S-7a.
-            if !apdu::check_exists(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ).unwrap_or(false) {
-                secure_log!("[SE050/duress] writing DURESS_USERID_OBJ (unlimited, no admin_ref — S-6)");
+            let duress_userid_exists =
+                apdu::check_exists(&mut self.t1, &mut self.scp03, DURESS_USERID_OBJ).unwrap_or(false);
+            // #912: on a bench build the sweep above removes a duress
+            // UserID that has the admin-delete entry. One that is still
+            // here was written before #912. Writing fresh decoy data under
+            // it would report success and leave a decoy the new duress PIN
+            // cannot open, so refuse instead. (It has unlimited attempts, so
+            // removing it with its own value is safe; no tool does it yet.)
+            if USERID_ADMIN_DELETE.is_some() && admin_pin.is_some() && duress_userid_exists {
+                secure_log!(
+                    "[SE050/duress] FAILED: DURESS_USERID_OBJ survives the admin sweep (written \
+                     before #912, no admin-delete entry); refusing to provision a decoy under it"
+                );
+                return Err(Se050Error::Status(0x6986));
+            }
+            if !duress_userid_exists {
+                secure_log!(
+                    "[SE050/duress] writing DURESS_USERID_OBJ (unlimited, admin-delete={})",
+                    admin_ref.and(USERID_ADMIN_DELETE).is_some()
+                );
                 apdu::write_userid_unlimited(
                     &mut self.t1, &mut self.scp03,
-                    DURESS_USERID_OBJ, apdu::UserIdValue::Credential(duress_cred), None,
+                    DURESS_USERID_OBJ, apdu::UserIdValue::Credential(duress_cred),
+                    admin_ref.and(USERID_ADMIN_DELETE),
                 )?;
             }
 
@@ -2295,10 +2420,32 @@ impl Se050 {
         // what `policy_roundtrip_selftest` writes (Bug 3 / work-todo
         // #29). If the selftest crashed between write and its own
         // cleanup, admin_factory_reset sweeps the stragglers.
+        #[cfg(not(any(feature = "e2e-test", feature = "otp-hardcoded-master-key")))]
         const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[
             (ENTROPY_OBJ, "ENTROPY_OBJ"),
             (VK_OBJ, "VK_OBJ"),
             (BOOTSTRAP_VK_OBJ, "BOOTSTRAP_VK_OBJ"),
+            (0x7B10_00B0, "CANARY_USERID"),
+            (0x7B10_00B1, "CANARY_DATA_1"),
+            (0x7B10_00B2, "CANARY_DATA_2"),
+            (0x7B10_00B3, "CANARY_DATA_3"),
+            (0x7B10_00B4, "CANARY_DATA_4"),
+            (0x7B10_00B5, "CANARY_DATA_5"),
+        ];
+        // #912: a bench wipe also removes the duress UserID (below). Its
+        // three data objects have to go first, while both authorities
+        // still exist, or they would be left on the chip with nothing able
+        // to delete them. They carry the admin-delete entry in every build.
+        // (A shipping wipe has never deleted them, and still does not: this
+        // list is the shipping list plus the three.)
+        #[cfg(any(feature = "e2e-test", feature = "otp-hardcoded-master-key"))]
+        const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[
+            (ENTROPY_OBJ, "ENTROPY_OBJ"),
+            (VK_OBJ, "VK_OBJ"),
+            (BOOTSTRAP_VK_OBJ, "BOOTSTRAP_VK_OBJ"),
+            (DURESS_ENTROPY_OBJ, "DURESS_ENTROPY_OBJ"),
+            (DURESS_VK_OBJ, "DURESS_VK_OBJ"),
+            (DURESS_BOOTSTRAP_VK_OBJ, "DURESS_BOOTSTRAP_VK_OBJ"),
             (0x7B10_00B0, "CANARY_USERID"),
             (0x7B10_00B1, "CANARY_DATA_1"),
             (0x7B10_00B2, "CANARY_DATA_2"),
@@ -2315,8 +2462,17 @@ impl Se050 {
         // survival is acceptable and does NOT fail the wipe. The user
         // data wipe — what the safety contract guarantees — is gated on
         // `DATA_AND_CANARY_OBJS` alone.
+        #[cfg(not(any(feature = "e2e-test", feature = "otp-hardcoded-master-key")))]
         const AUTH_OBJS_BEST_EFFORT: &[(u32, &str)] = &[
             (USERID_OBJ, "USERID_OBJ"),
+        ];
+        // #912: a bench image creates both UserIDs with an admin-delete
+        // entry (`USERID_ADMIN_DELETE`), so on a bench build this loop is
+        // what removes them and leaves the chip re-provisionable.
+        #[cfg(any(feature = "e2e-test", feature = "otp-hardcoded-master-key"))]
+        const AUTH_OBJS_BEST_EFFORT: &[(u32, &str)] = &[
+            (USERID_OBJ, "USERID_OBJ"),
+            (DURESS_USERID_OBJ, "DURESS_USERID_OBJ"),
         ];
 
         unsafe {

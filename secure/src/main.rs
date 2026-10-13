@@ -2111,112 +2111,175 @@ fn main() -> ! {
         ui::show_status("SE050 wipe", "...");
         let se = &mut *core::ptr::addr_of_mut!(SE);
 
-        // Try the known dev UserIDs against the dev PIN candidates. Each
-        // wrong PIN consumes one SE050 attempt against that UserID
-        // (10-attempt budget); a correct PIN auto-resets the counter.
-        // PIN order is best-guess to minimise consumed attempts.
+        // #912: this tool guesses nothing. A wrong value costs one of a
+        // UserID's ten attempts and a locked UserID can never be deleted, so
+        // the value to present is named by the person running the tool, at
+        // build time:
+        //
+        //   make se050-reset SE050_RESET_PIN=00000000 SE050_RESET_FORMAT=raw
+        //
+        // `raw`: the eight PIN bytes (objects written by firmware older than
+        // #855, and every retired range). `derived`: the bench credential for
+        // that PIN (objects written by #855 firmware before #912; current
+        // range only). With no PIN the tool presents nothing: it runs the
+        // admin wipe, which removes everything a bench image from #912 on
+        // creates, and the unauthenticated sweep. One value, one attempt per
+        // UserID range, then it halts.
         const USERIDS: &[u32] = &[0x7B10_0000, 0x7B0E_0000, 0x7B06_0000, 0x7B00_2000];
-        const PIN_CANDIDATES: &[[u8; 8]] = &[
-            *b"00000000", // e2e default + most common dev PIN
-            *b"12345678",
-            *b"11111111",
-        ];
+        const RESET_PIN: Option<&'static str> = option_env!("PQ_SE050_RESET_PIN");
+        const RESET_FORMAT: Option<&'static str> = option_env!("PQ_SE050_RESET_FORMAT");
 
         let mut total_deleted: u32 = 0;
         let mut last_failed: u16 = u16::MAX;
         let mut any_auth_ok = false;
+        let mut presented = false;
 
-        // #855: on the current range, a UserID written by this firmware
-        // holds the die-bound credential for the PIN; one written by older
-        // firmware (and every retired range) holds the raw PIN bytes. A
-        // wrong value costs one of the UserID's ten attempts, so the format
-        // is decided once, from whether page 125 holds a salt record, and
-        // not tried both ways for every PIN: every candidate in the likely
-        // format, then the first (default) candidate in the other. This
-        // reset tool is, with the e2e pre-clean, the only place raw PIN
-        // bytes are still presented to a chip; it is a bench image that
-        // halts when done.
-        let this_scheme = crate::pin_gate::salt_record_present();
-
-        'outer: for &uid in USERIDS {
-            // (candidate index, derived?) in the order to try.
-            let mut order: [(usize, bool); 4] = [(0, false); 4];
-            let mut n = 0;
-            let current_range = uid == crate::se050::USERID_OBJ;
-            let likely_derived = current_range && this_scheme;
-            for i in 0..PIN_CANDIDATES.len() {
-                order[n] = (i, likely_derived);
-                n += 1;
-            }
-            if current_range {
-                order[n] = (0, !likely_derived);
-                n += 1;
-            }
-
-            for &(i, use_derived) in &order[..n] {
-                let pin = &PIN_CANDIDATES[i];
-                let derived = if use_derived {
-                    match crate::pin_gate::unlock_credentials(
-                        crate::pin_credential::WalletRole::Real,
-                        pin,
-                    ) {
-                        Ok(set) => Some(set),
-                        // Not derivable on this build: skip, no attempt spent.
-                        Err(_) => continue,
-                    }
-                } else {
-                    None
-                };
-                // Typed (`se050::apdu::UserIdValue`): the derived credential,
-                // or a known test PIN as a compile-time constant.
-                let userid_value = match &derived {
-                    Some(set) => crate::se050::apdu::UserIdValue::Credential(&set.se050),
-                    None => crate::se050::apdu::UserIdValue::Fixed(pin),
-                };
-
-                // `iterative_wipe` re-initialises the SE050 session itself
-                // after a failed authentication, so the next value starts
-                // from a clean state.
-                let (d, f, auth_ok) = match se.iterative_wipe(Some(uid), Some(userid_value)) {
-                    Ok(r) => r,
-                    Err(_e) => {
+        // Step 1, always: the admin wipe. No user value is presented.
+        //
+        // If it does not authenticate (the admin object on this chip was
+        // written under another key root) it returns straight after the
+        // failed VERIFY and leaves the session pending (A3); every later
+        // APDU would then fail, including the operator's one value, which
+        // would be reported as "wrong" without ever having been compared.
+        // So: re-initialise, and present nothing at all if that fails.
+        let session_ok = {
+            use secure_element::WalletStore;
+            let admin_wipe = se.factory_reset_admin();
+            secure_log!("[S] admin wipe: {:?}", admin_wipe.as_ref().err());
+            match se.reinit() {
+                Ok(()) => {
+                    if se.is_provisioned() {
                         secure_log!(
-                            "[S] iterative_wipe(UID=0x{:08x}) ERROR: {:?}",
-                            uid, _e
+                            "[S] {}",
+                            crate::se050::userid_survivor_help(admin_wipe.is_ok())
                         );
-                        (0, u16::MAX, false)
                     }
-                };
-                secure_log!(
-                    "[S] wipe UID=0x{:08x} pin={:?} (derived={}): deleted={}, left={}, auth_ok={}",
-                    uid,
-                    core::str::from_utf8(pin).unwrap_or("?"),
-                    use_derived,
-                    d, f, auth_ok
-                );
-                total_deleted = total_deleted.saturating_add(d as u32);
-                last_failed = f;
-                if auth_ok {
-                    any_auth_ok = true;
+                    true
                 }
-                if f == 0 {
-                    break 'outer;
+                Err(_e) => {
+                    secure_log!(
+                        "[S] SE050 session recovery after the admin wipe FAILED: {:?}; \
+                         presenting nothing",
+                        _e
+                    );
+                    false
+                }
+            }
+        };
+
+        // What, if anything, to present. An empty variable is "nothing".
+        let pin: Option<&'static [u8; 8]> = match RESET_PIN {
+            None | Some("") => None,
+            Some(text) => match <&[u8; 8]>::try_from(text.as_bytes()) {
+                Ok(bytes) => Some(bytes),
+                Err(_) => {
+                    secure_log!("[S] SE050_RESET_PIN must be exactly 8 bytes; presenting nothing");
+                    None
+                }
+            },
+        };
+        let derived: Option<bool> = match RESET_FORMAT {
+            Some("raw") => Some(false),
+            Some("derived") => Some(true),
+            _ => None,
+        };
+
+        match (pin, derived) {
+            _ if !session_ok => {}
+            (Some(pin), Some(use_derived)) => {
+                'outer: for &uid in USERIDS {
+                    // Derived credentials exist only on the current range.
+                    if use_derived && uid != crate::se050::USERID_OBJ {
+                        continue;
+                    }
+                    let set = if use_derived {
+                        match crate::pin_gate::unlock_credentials(
+                            crate::pin_credential::WalletRole::Real,
+                            pin,
+                        ) {
+                            Ok(set) => Some(set),
+                            // Not derivable on this build: no attempt spent.
+                            Err(_) => continue,
+                        }
+                    } else {
+                        None
+                    };
+                    // Typed (`se050::apdu::UserIdValue`): the derived
+                    // credential, or the PIN the operator baked into this
+                    // image as a compile-time constant.
+                    let userid_value = match &set {
+                        Some(set) => crate::se050::apdu::UserIdValue::Credential(&set.se050),
+                        None => crate::se050::apdu::UserIdValue::Fixed(pin),
+                    };
+
+                    // `iterative_wipe` re-initialises the SE050 session
+                    // itself after a failed authentication.
+                    presented = true;
+                    let (d, f, auth_ok) = match se.iterative_wipe(Some(uid), Some(userid_value)) {
+                        Ok(r) => r,
+                        Err(_e) => {
+                            secure_log!(
+                                "[S] iterative_wipe(UID=0x{:08x}) ERROR: {:?}",
+                                uid, _e
+                            );
+                            (0, u16::MAX, false)
+                        }
+                    };
+                    secure_log!(
+                        "[S] wipe UID=0x{:08x} pin={:?} (derived={}): deleted={}, left={}, auth_ok={}",
+                        uid,
+                        core::str::from_utf8(pin).unwrap_or("?"),
+                        use_derived,
+                        d, f, auth_ok
+                    );
+                    total_deleted = total_deleted.saturating_add(d as u32);
+                    last_failed = f;
+                    if auth_ok {
+                        any_auth_ok = true;
+                    }
+                    if f == 0 {
+                        break 'outer;
+                    }
+                }
+            }
+            _ => {
+                if pin.is_some() {
+                    secure_log!(
+                        "[S] SE050_RESET_FORMAT must be `raw` or `derived`; presenting nothing"
+                    );
+                } else {
+                    secure_log!("[S] no SE050_RESET_PIN given: presenting nothing (admin wipe + sweep only)");
+                }
+                match se.iterative_wipe(None, None) {
+                    Ok((d, f, _)) => {
+                        total_deleted = total_deleted.saturating_add(d as u32);
+                        last_failed = f;
+                    }
+                    Err(_e) => {
+                        secure_log!("[S] iterative_wipe(None) ERROR: {:?}", _e);
+                    }
                 }
             }
         }
 
         // Tri-state outcome:
-        //   clean      — no survivors
-        //   wrong-PIN  — survivors AND no PIN ever authed (UserID likely
-        //                provisioned with a different PIN, or UserID OID
-        //                guess is wrong)
-        //   blocked    — survivors AND some PIN did auth, so the leftover
-        //                objects were created with a non-self-deletable
-        //                policy (older firmware) and are stuck on-chip
+        //   clean              — no survivors
+        //   nothing-presented  — survivors, and this run presented no value
+        //                        (none named, a malformed one, or the session
+        //                        could not be recovered after the admin wipe)
+        //   wrong-value        — survivors AND the named value did not
+        //                        authenticate: it cost one attempt on each
+        //                        UserID range it was presented to
+        //   blocked            — survivors AND the value did auth, so the
+        //                        leftover objects were created with a
+        //                        non-self-deletable policy (older firmware)
+        //                        and are stuck on-chip
         let status = if last_failed == 0 {
             "clean"
+        } else if !presented {
+            "nothing-presented"
         } else if !any_auth_ok {
-            "wrong-PIN"
+            "wrong-value"
         } else {
             "blocked"
         };
@@ -2224,6 +2287,14 @@ fn main() -> ! {
             "[S] SE050 wipe DONE: {} deleted total, {} survivors, status={}",
             total_deleted, last_failed, status
         );
+        if presented {
+            // The image presents its value again at EVERY boot. A wrong
+            // value left on the board costs one more attempt per power-up.
+            secure_log!(
+                "[S] This image presents its value again at every boot. Flash another image \
+                 now; do not power-cycle this one."
+            );
+        }
         ui::show_status("SE050 wipe", status);
         loop { cortex_m::asm::wfi(); }
     }
@@ -4074,10 +4145,6 @@ fn main() -> ! {
             secure_log!("[S][e2e] dual-se pre-clean: cascade start");
             let se = &mut *core::ptr::addr_of_mut!(SE);
 
-            // #855: which credential format the SE050 user UserID holds,
-            // sampled before anything below destroys the salt record.
-            let provisioned_by_this_scheme = crate::pin_gate::salt_record_present();
-
             let _ = se.reset_optiga_for_admin();
 
             // Admin-auth wipe via the v6 HUK-derived admin PIN
@@ -4087,25 +4154,17 @@ fn main() -> ! {
             // `write_admin_pin`).
             let r = se.se050.factory_reset_admin();
             secure_log!("[S][e2e] dual-se pre-clean: factory_reset_admin → {:?}", r.as_ref().err());
+            // A failed admin VERIFY leaves the session pending (A3) and
+            // every existence check after it would read "absent".
+            let _ = se.se050.reinit();
 
+            // #912: nothing is guessed. A UserID written by a bench image
+            // from #912 on has an admin-delete entry and the wipe above
+            // removed it. One that is still here was written earlier.
             if se.se050.is_provisioned() {
-                const PIN_CANDIDATES: &[[u8; 8]] = &[
-                    *b"00000000", // e2e-test fast-path default
-                    *b"dualwipe", // dual-se-admin-wipe-e2e
-                    *b"12345678",
-                    *b"11111111",
-                ];
-                // #855: the user UserID holds a die-bound credential on a
-                // chip provisioned by this firmware and raw PIN bytes on an
-                // older one; the helper tries the likely format for every
-                // candidate and the other for the first only (see
-                // `e2e_delete_se050_user_objects`).
-                let deleted =
-                    se.e2e_delete_se050_user_objects(PIN_CANDIDATES, provisioned_by_this_scheme);
                 secure_log!(
-                    "[S][e2e] dual-se pre-clean: user delete (this-scheme={}) → {}",
-                    provisioned_by_this_scheme,
-                    deleted,
+                    "[S][e2e] dual-se pre-clean: {}",
+                    crate::se050::userid_survivor_help(r.is_ok())
                 );
             }
 

@@ -12,9 +12,9 @@
 //! PIN into something a chip may see. No product path hands a PIN to an
 //! OPTIGA or SE050 APDU builder, and the SE050 builders cannot be handed one
 //! typed in at run time (`se050::apdu::UserIdValue`). The one exception is
-//! bench clean-up (`DualSecureElement::e2e_delete_se050_user_objects` and
-//! the `se050-factory-reset` tool), which presents known test PINs, as
-//! compile-time constants, to delete objects written by pre-#855 firmware.
+//! the `se050-factory-reset` bench tool, which presents ONE value the
+//! operator bakes into that image at build time, to delete an object
+//! written by firmware older than #912. Nothing guesses a PIN (#912).
 //!
 //! Every decision here (which salt, whether to derive, what a wipe does) is
 //! made by a pure function in one of those two modules and is host-tested
@@ -160,16 +160,6 @@ pub fn credentials(
 #[inline(never)]
 pub fn credentials_recomputable() -> bool {
     pin_salt::credentials_recomputable(salt_policy(), &crate::hw::flash::pin_salt_load())
-}
-
-/// Whether page 125 holds a salt record, whatever the build's policy does
-/// with it. Firmware from #855 on writes one at every provisioning (bench
-/// builds too), so a provisioned chip with no record was provisioned by
-/// older firmware — or the microcontroller's flash was erased since. Bench
-/// clean-up uses this to decide which credential format to try first.
-#[must_use]
-pub fn salt_record_present() -> bool {
-    !crate::hw::flash::pin_salt_is_absent()
 }
 
 /// The salt to unlock with.

@@ -189,8 +189,8 @@ rules:
       the wire: in the OPTIGA driver, and in `UserIdValue::bytes` in the
       SE050 APDU layer. Reading them anywhere else (`expose_for_optiga` /
       `expose_for_se050`) lets the value one chip holds travel to places
-      nothing reviews. The one bench use carries an explicit `nosemgrep`
-      waiver; do not add another without one.
+      nothing reviews. The one bench use (the duress probe in main.rs)
+      carries an explicit `nosemgrep` waiver; do not add another without one.
     paths:
       include: ['secure/src/']
       exclude:

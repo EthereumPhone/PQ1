@@ -783,86 +783,6 @@ impl WalletStore for DualSecureElement {
     }
 }
 
-#[cfg(any(
-    feature = "e2e-test",
-    feature = "dual-se-admin-wipe-e2e",
-    feature = "dual-se-multi-unlock-e2e"
-))]
-impl DualSecureElement {
-    /// Bench pre-clean: delete the SE050 user UserID (and the data objects
-    /// it gates) through a session authenticated with the UserID's own
-    /// value, trying the known test PINs. Returns `true` when that worked.
-    ///
-    /// The user UserID can be deleted no other way: since S-6 its policy has
-    /// no admin entry. The value it holds is one of two things:
-    ///
-    /// - the die-bound credential (#855), on a chip provisioned by firmware
-    ///   from this change on. Reproducible here because bench builds use the
-    ///   fixed bench salt (`pin_salt::SaltPolicy::FixedBench`);
-    /// - the eight raw PIN bytes, on a chip provisioned by older firmware.
-    ///   Presenting them is clean-up of legacy bench state only: it is
-    ///   compiled only into e2e builds, and it can be deleted once no bench
-    ///   board carries a pre-#855 wallet.
-    ///
-    /// Every wrong value costs one of the UserID's ten attempts, and a
-    /// locked UserID can never be deleted. So the format is decided up
-    /// front rather than trying both for every PIN: `provisioned_by_this_scheme`
-    /// must be sampled with [`pin_gate::salt_record_present`] **before** any
-    /// wipe step runs (the wipe destroys the record). All candidates are
-    /// tried in the likely format; the other format gets one try, with the
-    /// first (default) PIN only. At most `candidates.len() + 1` attempts,
-    /// one more than before this change.
-    ///
-    /// [`pin_gate::salt_record_present`]: crate::pin_gate::salt_record_present
-    pub(crate) fn e2e_delete_se050_user_objects(
-        &mut self,
-        candidates: &'static [[u8; 8]],
-        provisioned_by_this_scheme: bool,
-    ) -> bool {
-        use crate::se050::apdu::UserIdValue;
-
-        // A value that cannot be derived (no salt on a non-bench build) is
-        // skipped without touching the chip.
-        fn derived(this: &mut DualSecureElement, test_pin: &'static [u8; 8]) -> bool {
-            match crate::pin_gate::unlock_credentials(WalletRole::Real, test_pin) {
-                Ok(set) => this
-                    .se050
-                    .user_factory_reset(UserIdValue::Credential(&set.se050))
-                    .is_ok(),
-                Err(_) => false,
-            }
-        }
-        // The ONE place raw PIN bytes are still presented to a chip: a known
-        // test PIN, as a compile-time constant, to delete a UserID written
-        // by pre-#855 firmware. `UserIdValue::Fixed` takes `&'static`, so a
-        // PIN typed in at run time could not be passed here.
-        fn legacy_raw(this: &mut DualSecureElement, test_pin: &'static [u8; 8]) -> bool {
-            // Bench waiver for the tripwire rule; see the comment above.
-            // nosemgrep: no-pin-named-value-to-secure-element-sink
-            this.se050.user_factory_reset(UserIdValue::Fixed(test_pin)).is_ok()
-        }
-
-        let (likely, other): (
-            fn(&mut DualSecureElement, &'static [u8; 8]) -> bool,
-            fn(&mut DualSecureElement, &'static [u8; 8]) -> bool,
-        ) = if provisioned_by_this_scheme {
-            (derived, legacy_raw)
-        } else {
-            (legacy_raw, derived)
-        };
-
-        for pin in candidates {
-            if likely(self, pin) {
-                return true;
-            }
-        }
-        match candidates.first() {
-            Some(pin) => other(self, pin),
-            None => false,
-        }
-    }
-}
-
 impl DualSecureElement {
     /// End-to-end roundtrip test of the full dual-SE admin-wipe
     /// integration. Covers both: the XOR-split entropy reconstruction
@@ -936,11 +856,6 @@ impl DualSecureElement {
         //    fresh admin PIN.
         secure_log!("[DUAL-E2E-ADMIN] step 1: pre-clean");
 
-        // #855: which credential format the SE050 user UserID holds, sampled
-        // before anything below destroys the salt record that tells us.
-        #[cfg(feature = "stm32u585")]
-        let provisioned_by_this_scheme = crate::pin_gate::salt_record_present();
-
         // OPTIGA: Conf(E140) wipe. Idempotent on blank chips.
         if let Err(e) = self.reset_optiga_for_admin() {
             secure_log!("[DUAL-E2E-ADMIN] step 1: OPTIGA factory_reset error {:?} (continuing)", e);
@@ -981,23 +896,17 @@ impl DualSecureElement {
             // (no `write_admin_pin`).
             let r = self.se050.factory_reset_admin();
             secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (a): factory_reset_admin → {:?}", r.as_ref().err());
+            // A failed admin VERIFY leaves the session pending (A3) and
+            // every existence check after it would read "absent".
+            let _ = self.se050.reinit();
 
-            // Stage (b): user-PIN cascade if USERID_OBJ survived.
-            let se_prov_before = self.se050.is_provisioned();
-            secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (b): se050.is_provisioned()={}", se_prov_before);
-            if se_prov_before {
-                const PIN_CANDIDATES: &[[u8; 8]] = &[
-                    *b"00000000", // e2e-test fast-path default (most common)
-                    *b"dualwipe", // our own test PIN (prior run)
-                    *b"12345678",
-                    *b"11111111",
-                ];
-                let deleted = self
-                    .e2e_delete_se050_user_objects(PIN_CANDIDATES, provisioned_by_this_scheme);
+            // Stage (b): nothing to guess (#912). A UserID written by a
+            // bench image from #912 on has an admin-delete entry and stage
+            // (a) removed it. One that is still here was written earlier.
+            if self.se050.is_provisioned() {
                 secure_log!(
-                    "[DUAL-E2E-ADMIN] pre-clean stage (b): user delete (this-scheme={}) → {}",
-                    provisioned_by_this_scheme,
-                    deleted,
+                    "[DUAL-E2E-ADMIN] pre-clean stage (b): {}",
+                    crate::se050::userid_survivor_help(r.is_ok())
                 );
             }
 
@@ -1139,8 +1048,30 @@ impl DualSecureElement {
         // `optiga.is_provisioned()` can't be used as the discriminator
         // because it needs the shielded connection up, which cold boot
         // hasn't established yet → false negative.
-        secure_log!("[DUAL-MULTI] probing unlock() to detect prior provisioning...");
-        let probe = self.unlock(&test_pin);
+        //
+        // #912: the probe presents this test's credential to whatever
+        // wallet is on the chips. If that wallet is not ours it is a wrong
+        // value, and a wrong value costs one of the SE050 UserID's ten
+        // attempts for good. So probe only when this test's own mark is on
+        // page 125 (`hw::flash::mark_multi_unlock_fixture`, left below after
+        // a successful provisioning; a reboot keeps it, every completed wipe
+        // erases it). A salt record would not do: every flow that provisions
+        // writes one. Without the mark, skip straight to the pre-clean,
+        // which presents nothing.
+        #[cfg(feature = "stm32u585")]
+        let wallet_is_ours = crate::hw::flash::multi_unlock_fixture_present();
+        #[cfg(not(feature = "stm32u585"))]
+        let wallet_is_ours = true;
+        let probe = if wallet_is_ours {
+            secure_log!("[DUAL-MULTI] probing unlock() to detect prior provisioning...");
+            self.unlock(&test_pin)
+        } else {
+            secure_log!(
+                "[DUAL-MULTI] no fixture mark on page 125: not probing (the wallet on the chips, \
+                 if any, is not this test's); going to pre-clean"
+            );
+            Err(UnlockError::InternalError)
+        };
         match &probe {
             Ok(m) if m == &test_master => {
                 secure_log!("[DUAL-MULTI] probe: Ok(master matches)");
@@ -1182,10 +1113,6 @@ impl DualSecureElement {
                 secure_log!("[DUAL-MULTI] boot state: probe unlock FAILED → fresh provisioning");
             }
 
-            // #855: sampled before any wipe step destroys the salt record.
-            #[cfg(feature = "stm32u585")]
-            let provisioned_by_this_scheme = crate::pin_gate::salt_record_present();
-
             if let Err(e) = self.reset_optiga_for_admin() {
                 secure_log!("[DUAL-MULTI] pre-clean: OPTIGA factory_reset error {:?} (continuing)", e);
             }
@@ -1195,13 +1122,16 @@ impl DualSecureElement {
                 // Admin-auth wipe via the v6 HUK-derived admin PIN
                 // (`secret_keys::se050_admin_pin` → `derive_into_bhk`,
                 // i.e. BHK in a `bhk` build / DHUK / OTP-legacy).
-                let _ = self.se050.factory_reset_admin();
+                let admin_wipe = self.se050.factory_reset_admin();
+                secure_log!("[DUAL-MULTI] pre-clean: factory_reset_admin → {:?}", admin_wipe.as_ref().err());
+                // A failed admin VERIFY leaves the session pending (A3).
+                let _ = self.se050.reinit();
+                // #912: nothing is guessed. See the admin-wipe cascade.
                 if self.se050.is_provisioned() {
-                    const PIN_CANDIDATES: &[[u8; 8]] = &[
-                        *b"00000000", *b"dualwipe", *b"12345678", *b"11111111",
-                    ];
-                    let _ = self
-                        .e2e_delete_se050_user_objects(PIN_CANDIDATES, provisioned_by_this_scheme);
+                    secure_log!(
+                        "[DUAL-MULTI] pre-clean: {}",
+                        crate::se050::userid_survivor_help(admin_wipe.is_ok())
+                    );
                 }
                 let _ = self.se050.iterative_wipe(None, None);
             }
@@ -1232,6 +1162,14 @@ impl DualSecureElement {
             secure_log!("[DUAL-MULTI] pre-clean OK; provisioning fresh");
             self.provision(&test_entropy, &test_master, &test_vk, &test_bvk, &test_pin)?;
             secure_log!("[DUAL-MULTI] phase A: provision OK");
+            // #912: from here on the wallet on the chips is this test's.
+            // Leave the mark the next boot's probe is gated on.
+            #[cfg(feature = "stm32u585")]
+            // SAFETY: single-threaded secure world; programs one quad-word
+            // of page 125.
+            if unsafe { crate::hw::flash::mark_multi_unlock_fixture() }.is_err() {
+                secure_log!("[DUAL-MULTI] could not leave the fixture mark; the next boot will re-provision");
+            }
 
             for i in 1..=iterations {
                 let recovered = match self.unlock(&test_pin) {
