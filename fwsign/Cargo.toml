@@ -33,7 +33,8 @@ anyhow       = "1"
 rpassword    = "7.5"
 
 # ELF trust-root extraction (flattening itself is shared via fwmeasure).
-object       = { version = "0.36", features = ["read_core", "elf", "std"] }
+# Keep raw readers; section/load bytes are never decompressed by this tool.
+object       = { version = "0.36", default-features = false, features = ["read", "elf", "std"] }
 
 # .pqfw bundle packing
 tar          = "0.4"
