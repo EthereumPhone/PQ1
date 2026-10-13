@@ -4301,6 +4301,16 @@ optiga-hw-counter-e2e = ["optiga-hw-counter"]
 # Needs the full dual-SE + hw-counter path. Stays LcsO=Creation (never
 # locks). Use `make duress-probe-hw`.
 duress-probe-e2e = ["dual-se", "optiga-hw-counter"]
+# #116 / OP17-1 silicon probe for the secret-OID Read AC
+# `Auto(F1D0) AND Conf(E140)`. Bench-only, terminal (shows PASS/FAIL on the
+# LCD, then halts before PIN entry / wizard). Uses ONLY the spare type-3
+# OIDs F1D5 (throwaway AuthRef, Execute=ALW, no LUC) and F1D7 (test data);
+# never touches the wallet (F1D0..F1D4, E120, F1E1) or duress OIDs, never
+# locks, and leaves both spares at LcsO=Creation with no known secret.
+# Proves: the chip stores the AND form byte-exact, refuses a shielded read
+# without auth, serves a shielded read after auth, refuses a plaintext read
+# even after auth. Production-fenced (nsc/mod.rs + PROD_FORBIDDEN).
+optiga-ac-probe = ["dual-se"]
 # §32 PRODUCTION duress (decoy) wallet. Provisions a second, fully
 # independent decoy wallet behind a second PIN credential (OPTIGA F1D8 +
 # E121 matched-LUC, SE050 DURESS_USERID_OBJ unlimited). When ON, the
@@ -4538,7 +4548,7 @@ boot-pulse = ["stm32u585"]
 # low on exit. Implies `stm32u585` because the trigger pin is a real GPIO.
 sca-trigger = ["stm32u585"]
 optiga-reset-oids = ["optiga-trust-m"]  # RETIRED evidence-only feature. Unconditionally compile-fenced: it mis-targets the observed type-0x12 E0E3 device-certificate object as a type-0x11 anchor. No runnable profile may enable it.
-optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + entropy read/write still work via plaintext APDUs. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/secure-elements/optiga-brick-postmortem.md §7.
+optiga-no-shield = []  # Dev mode: skip Shielded Connection (PRL) entirely — no setup_pbs_no_handshake, no ensure_shield, no encrypted I2C. PIN HMAC + data WRITES still work via plaintext APDUs, but since #116 the secret OIDs (F1D1..F1D4 + duress twins) are Read = Auto(F1D0) AND Conf(E140), so an image with this feature can NEVER read them back (unlock fails), nor rewrite them once that AC is installed (Change = Auto OR Conf, and nothing has authenticated) — by design. Use when E140 is unreachable (current bricked test chip). NOT production-safe. See docs/secure-elements/optiga-brick-postmortem.md §7.
 optiga-lock-operational = []  # Controlled irreversible-validation primitive for non-E140 OPTIGA object locks (F1D0..F1D4 + F1E1) and separately gated S-2 experiments. Irreversible per OPTIGA SRM §"Life Cycle Status" — LcsO is monotonic, no reverse path exists. Ordinary `pair_for_first_boot` / `setup_pbs_no_handshake` NEVER ratchets E140, even when this feature is present. Work-todo #36 fixes the E140 actor as factory-side but leaves exact timing/order relative to the first-field final PBS rotation OPEN; the E140 ratchet primitive remains intentionally unwired. This feature grants no production authority and is unconditionally incompatible with prodtest. Enable only under an exact owner-authorized sacrificial plan until a reviewed lifecycle flow exists. See docs/archive/production-todo-retired-2026-07-19.md and docs/secure-elements/optiga-brick-postmortem.md §5 + §7.
 # Dev/bring-up ONLY: swap the STM32U585 OTP-stored device master key for a
 # compile-time fixed 32-byte constant. Lets us exercise the whole hw/otp.rs

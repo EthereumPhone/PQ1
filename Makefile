@@ -4603,9 +4603,46 @@ invariant-gates: ## Local invariant gates (cargo-deny + semgrep + transcription)
 	"$(SEMGREP)" --config .semgrep/pqsigner-invariants.yml --severity ERROR --error --metrics off --quiet
 	@echo "    guard: unsafe-ban exclude allowlist is exactly the 3 documented files:"
 	@python3 .semgrep/check_unsafe_exclude_allowlist.py
+	@echo "    guard: the #855 rules fire on the pre-fix shapes (fixture test):"
+	@SEMGREP="$(SEMGREP)" python3 .semgrep/check_pin_credential_rules.py
+	@echo "    guard: the #855 mutation manifest applies cleanly, none is applied:"
+	@python3 scripts/check_pin_credential_mutations.py --self-test
+	@python3 scripts/check_pin_credential_mutations.py --check
 	@echo "==> [5/5] advisory warnings (non-blocking):"
 	-@"$(SEMGREP)" --config .semgrep/pqsigner-invariants.yml --severity WARNING --metrics off --quiet
 	@echo "==> invariant-gates: PASS"
+
+# #855 (Ledger Donjon report) — the "no secure element is shown a PIN" guards.
+#
+# `check-pin-credential-rules` feeds the four semgrep rules the pre-#855 shapes
+# and fails unless every one fires (also run by `invariant-gates` and CI).
+#
+# `verify-pin-credential-gates` is the anti-vacuity check for the host tests and
+# source pins: it re-introduces each form of the defect, one at a time
+# (scripts/pin_credential_mutations.json), and requires the guard that claims
+# to police it to fail. It rebuilds the secure host suite once per mutation
+# (one run per manifest entry), so it is a LOCAL gate: run it when you touch
+# secure/src/pin_*.rs, the OPTIGA / SE050 / dual-SE PIN paths, or the guards
+# themselves. The guards it validates run per-PR (CI `secure-tests`, and the
+# semgrep step of `invariant-gates`).
+#
+# While it runs, the working tree carries the defect it is testing for. A
+# signal restores the file; a power loss or host crash cannot (2026-10-13: the
+# half mask was left a no-op). The runner therefore journals each mutation
+# under target/ and the next run restores it, and
+# `check-pin-credential-mutations` (per-PR in CI, and in `invariant-gates`)
+# fails while any mutation is applied or any manifest anchor has rotted.
+.PHONY: check-pin-credential-rules check-pin-credential-mutations verify-pin-credential-gates
+check-pin-credential-rules: ## #855: the no-PIN-to-SE semgrep rules fire on the pre-fix shapes
+	@command -v "$(SEMGREP)" >/dev/null 2>&1 || { echo "ERROR: semgrep not found ($(SEMGREP))"; exit 1; }
+	@SEMGREP="$(SEMGREP)" python3 .semgrep/check_pin_credential_rules.py
+
+check-pin-credential-mutations: ## #855: the mutation manifest applies cleanly and no mutation is left in the tree (fast)
+	@python3 scripts/check_pin_credential_mutations.py --self-test
+	@python3 scripts/check_pin_credential_mutations.py --check
+
+verify-pin-credential-gates: ## #855 anti-vacuity: re-introduce each defect form, expect its guard to turn red (local, one run per entry)
+	@python3 scripts/check_pin_credential_mutations.py
 
 # cargo-vet: dependency audit-ATTESTATION gate (SOTA §8 — complements cargo-deny's
 # bans/advisories/sources). Every dep must be either trusted-audited (we import

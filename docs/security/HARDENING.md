@@ -157,6 +157,10 @@ note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
 
 ### 3.1 Authentication Object
 
+> **UPDATE 2026-10-13 (#855).** The four bullets below describe a design that was never built, and until this date the firmware did the opposite of the third one: the SE050 authentication object was a **UserID** holding the **raw eight PIN digits**. (They travelled inside SCP03, so not in plaintext on the bus, but the chip stored them as they were typed.) Ledger Donjon reported the consequence: reading the chip gave the PIN.
+>
+> What is implemented now: the object is still a UserID with `max_attempts = 10`, and its value is a 16-byte `Se050PinCredential` = `PRF(DHUK, "pqsigner/pin-cred-E-v1" ‖ salt ‖ PIN)`. The OPTIGA holds a different 32-byte credential from the same PRF under its own label. Neither chip ever receives the PIN or anything computable from it without the microcontroller. Source: `secure/src/pin_credential.rs` (derivation, host-tested), `secure/src/pin_salt.rs` (the salt), `secure/src/pin_gate.rs` (firmware glue). The bullets are kept as written for the record; read them through this note.
+
 - Type: **AESKey** (not UserID — UserID is plaintext on the I²C bus).
 - `TAG_MAX_ATTEMPTS = 10`. Must be non-zero; zero means infinite.
 - Credential is the *stretched* PIN output, never the raw PIN.
@@ -256,6 +260,19 @@ On every boot, before trusting the SE050:
 ---
 
 ## 5. PIN Handling
+
+> **UPDATE 2026-10-13 (#855).** §5.1 and §5.2 describe a design that does not exist in the firmware: the PIN is collected by the **secure-world** trusted UI (never by the non-secure world), there is no PBKDF2 stretch, there is no `device_salt` object on the SE050, and no AESKey credential. The implemented flow is:
+>
+> 1. The secure-world trusted UI collects the eight digits.
+> 2. `nsc::gated_unlock` refuses up front if the stored credentials cannot be recomputed (no salt in secure flash), then charges MCU page 124.
+> 3. `pin_gate` derives, from `PRF(DHUK, label ‖ salt ‖ PIN)`, one credential per chip and one mask per seed half. `salt` is 32 random bytes in secure flash page 125, created at provisioning.
+> 4. Each chip compares its own credential internally and releases `half XOR mask`; the masks are removed and the halves joined in secure SRAM.
+> 5. Every wipe arms the wipe flag and then destroys the salt before it sends anything to a chip. If the salt cannot be destroyed the chips are still wiped, the wipe reports failure, and page 124 is not reset; it is reset only once the salt is verified gone.
+> 6. Every provisioning first retires any salt already on flash and draws a new one; a salt is never reused.
+>
+> Bench builds (`e2e-test` / `otp-hardcoded-master-key`, both production-forbidden) replace the salt and the PRF key with fixed public constants, so that any bench tool can delete a UserID object any bench build wrote. On those builds the credential is a public function of the PIN, as it was before #855.
+>
+> Stretching was considered and left out on purpose: against an attacker who can already query the device key it adds under 15 bits, and a long software hash over the PIN is a side-channel exposure the hardware PRF avoids (#855, design constraints). The text below is kept for the record.
 
 ### 5.1 Flow
 

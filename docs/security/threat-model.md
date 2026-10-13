@@ -1,6 +1,6 @@
 # PQSigner OS — Threat Model
 
-**Status:** living document. Updated 2026-05-12; 2026-07-07 (ML-KEM inner wrap descoped — §9.1 residual ACCEPTED by owner; Claim 7 + T7 table reworded accordingly).
+**Status:** living document. Updated 2026-05-12; 2026-07-07 (ML-KEM inner wrap descoped — §9.1 residual ACCEPTED by owner; Claim 7 + T7 table reworded accordingly); 2026-10-13 (#855, Ledger Donjon report — PIN credentials made die-bound, salted and per-chip; Claims 1–3, §7.1, §7.4 and one §8 row corrected, each with a dated note saying what was false before).
 **Scope:** the full firmware + hardware product. STM32U585 (Cortex-M33, TrustZone) host MCU, Infineon OPTIGA Trust M V3 + NXP EdgeLock SE050 secure elements, on-chain ERC-4337 v0.6 smart wallet (`PQSmartWallet`).
 **Companion documents:** `docs/security/HARDENING.md` (hardening requirements — *what* we do), `docs/security/production-security.md` (research synthesis — *which mitigations* we landed and why), `CLAUDE.md` invariants (the non-negotiable contracts), this doc (*who* attacks *what*, with *what capability*, and how each attack is stopped or accepted).
 
@@ -115,10 +115,37 @@ Each claim is the conjunction of all attacks an attacker must execute to violate
 **Claim 1 — Single-chip break is harmless.**
 > An attacker who fully owns *one* of {OPTIGA, SE050} but not the other and not the MCU recovers **zero** bits of `bip39_seed`.
 
-Mechanism: XOR entropy split. `half_O` and `half_E` are independent random; `entropy = HKDF(half_O XOR half_E)`. A break on either chip yields one uniformly-random 32-byte string. Falsifiable by extracting one chip's plaintext and confirming statistical independence from the seed.
+Mechanism: XOR entropy split. `half_O` and `half_E` are independent random and `entropy = half_O XOR half_E` (`secure/src/dual_se.rs`). A break on either chip yields one uniformly-random 32-byte string. Falsifiable by extracting one chip's plaintext and confirming statistical independence from the seed.
+
+> **UPDATE 2026-10-13 (#855, Ledger Donjon report) — this claim was false as built until this date.** The split itself was sound, but each chip also held the PIN in a form that needed nothing from the microcontroller: the SE050 user UserID was the raw eight digits, and OPTIGA F1D0 was one unsalted, unkeyed `SHA-256("optiga-pin-auth-v1" ‖ PIN ‖ 0)`. Reading either chip gave the PIN (directly, or by an offline search of 10^8 values in about a minute, with no counter involved), and the PIN opened the other chip on the first try. A single-chip break was therefore a full break for an attacker holding the device.
+>
+> What a chip holds now (`secure/src/pin_credential.rs`, `secure/src/pin_gate.rs`):
+>
+> | Chip | Stored | What it gives an attacker who has no device key |
+> |---|---|---|
+> | OPTIGA | F1D0 = `PRF(device_key, "…pin-cred-O…" ‖ salt ‖ PIN)`; `half_O XOR PRF(device_key, "…pin-mask-O…" ‖ salt ‖ PIN)`; `master_secret = SHA-256("sphincs-master" ‖ entropy ‖ 0)`; the two verifying keys | No way to test a PIN guess offline; nothing that the SE050 accepts |
+> | SE050 | user UserID = `PRF(device_key, "…pin-cred-E…" ‖ salt ‖ PIN)`; `half_E XOR PRF(device_key, "…pin-mask-E…" ‖ salt ‖ PIN)`; the two verifying keys | No way to test a PIN guess offline; nothing that the OPTIGA accepts |
+>
+> `device_key` is the silicon DHUK, reachable only through the SAES peripheral; `salt` is 32 random bytes in secure flash page 125. The PIN comparison still happens inside each chip (invariant #2); only the value presented changed.
+>
+> **What remains for a single-chip attacker.** Emulate the extracted chip and let the genuine device compute the credential for each PIN typed in. Page 124 allows ten such guesses, then the device wipes. Three rules keep that at **ten guesses in total, not ten per wipe**:
+>
+> 1. Every wipe arms the wipe-in-progress flag and then destroys the salt before it sends anything to a chip.
+> 2. Page 124 is reset after a wipe only once the salt is verified gone (`hw::flash::pin_attempts_reset_after_wipe`). If the salt could not be destroyed, the chips are still wiped, the wipe reports failure, and the counter stays at its limit, so the next boot wipes again.
+> 3. Every provisioning first retires any salt already on flash and draws a new one. Without this an attacker emulating both chips could provision a throwaway wallet with a PIN they know under the old salt, unlock it to reset the counter, and carry on guessing.
+>
+> **Exception: the duress PIN.** A decoy unlock resets page 124 by design, so that the counter does not give the decoy away. An attacker who holds a chip's contents *and* knows the duress PIN can therefore alternate nine guesses with one decoy unlock for as long as they like; page 124 no longer bounds them. What is left is the attempt counter of whichever chip is still genuine, and only when the emulator lets a guess reach it. This is a property of the duress design, not of #855, and is open.
+>
+> **What this does not cover.** (a) Code execution in the secure world, or extraction of the DHUK, *plus* one chip's contents: the attacker can then compute the PRF and search the PIN offline (Ledger Donjon scenario C; see Claim 2). (b) `master_secret` on the OPTIGA is a hash of the full entropy — it reveals no bit of it, but it lets someone who already has a candidate seed confirm it. (c) Bench builds: `e2e-test` / `otp-hardcoded-master-key` use a fixed public salt and (for the latter) a constant PRF key, and at RDP-0 the DHUK is a constant shared by every part; none of those is die-bound. Production refuses to derive below RDP-2.
+>
+> **Evidence level.** The derivation, the per-chip images, the salt lifecycle (including torn writes and power loss mid-destroy), and replays of report scenarios A and B run as host tests (`pin_credential::tests`, `pin_salt::tests`); the firmware wiring is type-checked across every secure-element feature combination and pinned as source text (`pin_gate_wiring_pure_tests`). **Nothing here has been run on silicon yet.** Unmeasured on this project's parts: the 16-byte SE050 user UserID with `max_attempts = 10`; programming zeros over a programmed flash quad-word (RM0456 Rev 7 §7.3.7); how a torn quad-word reads back (if it raises an ECC NMI rather than reading as data, every scan of the salt log would reset); and the device-key PRF itself producing different credentials on two boards. The host tests pass their own PRF, so they say nothing about which key the firmware uses; that rests on the source pins and on silicon. The production mint check (refuse below RDP-2) has never executed in any buildable image, and with #268 open a production image could not reach RDP-2 at all, so it would refuse to provision: fail-closed, but unproven.
+>
+> **What falsifies this claim (run these).** `cargo test -p sphincs-tz-secure … pin_credential:: pin_salt:: pin_gate_wiring` for the properties; `make check-pin-credential-rules` for the semgrep tripwires; `make verify-pin-credential-gates` to confirm each guard goes red when its defect is put back (scripts/pin_credential_mutations.json lists them). On silicon, still to be written: provision, dump what each chip was given over a logic analyser inside the tunnels' plaintext view, and confirm two boards differ.
 
 **Claim 2 — DHUK / BHK leak is not fund-extracting.**
 > An attacker with a Tier-1 DHUK extraction (or future BHK extraction) gains the SE050 admin UserID and the OPTIGA PBS for *this device only*. They can **brick** the device by issuing admin `DELETE` against `half_E`. They **cannot READ** `half_E` — the user-PIN gate is enforced in SE silicon, not by the encrypted channel.
+
+> **UPDATE 2026-10-13 (#855) — narrower than it reads.** The PIN credentials are now PRF outputs under the DHUK. An attacker who has extracted the DHUK (or runs code in the secure world) can therefore compute the credential for any PIN guess. Presented to a chip online, guesses are still capped by that chip's own counter, so the sentence above holds for a DHUK extraction *alone*. Combined with the contents of **one** secure element — which include that chip's credential — the same attacker can search all 10^8 PINs offline, then derive the other chip's credential and both half masks. "DHUK leak is not fund-extracting" is therefore true only while both secure elements are intact. Before #855 one chip's contents gave the PIN with no DHUK at all, so this is strictly better than what shipped in the tree, but it is a real limit on this claim.
 
 Mechanism: SE050 PIN policy template (`apdu::build_policy`, `se050/apdu.rs:339-365`) splits ACs across two entries — user has `READ|WRITE|DELETE|REQUIRE_SM`, admin has only `DELETE|REQUIRE_SM`. Falsifiable by `make se050-admin-extract-attempt-e2e` — already validated 2026-05-11 on B-U585I-IOT02A board #1, ST-LINK SN `0029…3838` (see `docs/security/production-security.md §2.6 "Empirically validated"`). On OPTIGA, `half_O` sits under `Auto(F1D0)` AuthRef with E140 (PBS) authenticating only the channel — the read AC is a different mechanism with the same property; an analogous E2E for OPTIGA is on the list.
 
@@ -128,8 +155,11 @@ Mechanism: SE050 PIN policy template (`apdu::build_policy`, `se050/apdu.rs:339-3
 > max-10 bound; E120 is a separate silicon-monotonic backstop. At boot,
 > firmware reads page 124 and E120 and wipes only if E120 is ahead. The SE050
 > remaining-attempt attribute is policy-denied (`0x6986`) and is not a boot
-> reconciliation input. Offline brute force against persisted PIN material is
-> structurally impossible because the PIN never leaves SE silicon.
+> reconciliation input. Offline brute force against the PIN material persisted
+> in a secure element requires the microcontroller's device key (corrected
+> 2026-10-13, see the note below).
+
+> **UPDATE 2026-10-13 (#855, Ledger Donjon report).** This claim used to end "Offline brute force against persisted PIN material is structurally impossible because the PIN never leaves SE silicon." Both halves were wrong: the SE050 held the raw PIN and the OPTIGA an unkeyed hash of it, so anyone who read either chip could recover the PIN offline with no attempt consumed. Each chip now holds only `PRF(device_key, label ‖ salt ‖ PIN)` with a different label per chip, so the stored value cannot be searched without the DHUK. The ten-attempt bound also now covers an attacker who emulates an extracted chip: every wipe destroys the salt before it sends anything to a chip, page 124 is reset only once the salt is verified gone, and every provisioning draws a new salt, so the bound is ten guesses in total (with one exception, an attacker who also knows the duress PIN; see Claim 1). Details, residuals and the evidence level are in the note under Claim 1.
 
 Mechanism: three-way per-attempt enforcement, `nsc::gated_unlock` pre-commit,
 and `factory_reset_admin` on strike #10, with the directional MCU/E120 boot
@@ -221,9 +251,9 @@ These three patterns mean: every named attacker tier must beat *both* a silicon 
 | Attack | Tier | Mitigation | Residual |
 |---|---|---|---|
 | Flash dump of MCU | T2 | The seed never persists on MCU flash. `entropy` is reconstructed in S-SRAM at unlock and zeroized on lock/timeout/tamper/brownout. | Nothing recoverable from MCU flash dump |
-| Flash dump of OPTIGA (decap) | T4 | Yields only `half_O` — XOR-independent of `half_E` (Claim 1) | `half_O` alone is uniformly random |
-| Flash dump of SE050 (decap) | T4 | Yields only `half_E` — same | `half_E` alone is uniformly random |
-| Both chips decapped | T4 + T4 | XOR halves recoverable; user PIN gate still applies. SE050 user-UserID read AC blocks `half_E` even with admin auth (validated, Claim 2). OPTIGA F1D0 AuthRef gate blocks `half_O` similarly. So even decapping both chips, the attacker still needs to *use* the chip with its silicon-enforced PIN gate. | Realistic state-actor capability; cost dominated by getting past two different silicon PIN gates each capped at 10 attempts |
+| Flash dump of OPTIGA (decap) | T4 | Yields `half_O XOR mask_O`, the F1D0 credential, a SHA-256 of the entropy and the verifying keys. The credential and mask are `PRF(DHUK, label ‖ salt ‖ PIN)` (#855), so none of it yields the PIN or anything the SE050 accepts without the microcontroller (Claim 1) | Ten PIN guesses in total against the genuine device with the chip emulated. **Before 2026-10-13 this row said "yields only `half_O`"; the dump also held an unkeyed hash of the PIN, searchable offline in about a minute** |
+| Flash dump of SE050 (decap) | T4 | Yields `half_E XOR mask_E`, the user UserID credential and the verifying keys — same construction, different labels | Same. **Before 2026-10-13 the dump held the raw PIN** |
+| Both chips decapped | T4 + T4 | The two stored halves do not XOR to the entropy: each is masked with a PIN-keyed PRF output under the DHUK (#855). Recovering the seed additionally needs the device key and the PIN | With the chips' contents the attacker still needs the microcontroller: ten PIN guesses in total against the genuine device with both chips emulated. With the microcontroller's DHUK as well, an offline search of 10^8 PINs. **Before 2026-10-13 this row claimed the attacker "still needs to use the chip with its silicon-enforced PIN gate"; in fact the two dumps XORed straight to the entropy** |
 
 ### 7.2 Seed in transit (SE channels)
 
@@ -250,7 +280,8 @@ These three patterns mean: every named attacker tier must beat *both* a silicon 
 | Attack | Tier | Mitigation | Residual |
 |---|---|---|---|
 | Online brute force (USB-driven) | T0 / T1 | Three-way per-attempt consumption; page-124 + SE050 max-10 policy → factory wipe; E120 adds a 32-use backstop | At most 10 ordinary wrong attempts before destructive lockout; boot cross-check remains directional page124/E120 |
-| Offline brute force against stored representation | — | No stored PIN representation exists outside SE silicon; the SE silicon compares constant-time + decrements its own counter | Structurally impossible |
+| Offline brute force against stored representation | T4 (one SE read out) | Each chip stores only `PRF(DHUK, label ‖ salt ‖ PIN)` with its own label (#855, `secure/src/pin_credential.rs`). The DHUK is reachable only through the SAES peripheral of this microcontroller, so the stored value cannot be searched off the device. Host tests replay the search with and without the device key | Possible for an attacker who has the DHUK or runs code in the secure world *and* has one chip's contents (Claim 2). **Before 2026-10-13 this row said "structurally impossible"; it was a one-minute search for anyone who read either chip** |
+| Online guessing with an extracted chip emulated | T4 | Each PIN typed makes the device compute and present that PIN's credential to the emulator, which compares. Page 124 is charged before every attempt. Every wipe destroys the salt before it sends anything to a chip; page 124 is reset after a wipe only once the salt is verified gone; every provisioning draws a new salt | Ten guesses in total, unless the attacker also knows the duress PIN (a decoy unlock resets page 124 by design; Claim 1). Untested on silicon |
 | Power-glitch mid-verify to skip the counter bump | T3 | `gated_unlock` pre-commits the counter bump to MCU page 124 *before* the SE driver call; fail-in pattern (`if remaining != 0, continue; else wipe`); FI-hardened complement-storage on the success flag | Untested against state-actor FI; ITAMP9 (crypto-peripheral fault) wired (planned) catches SAES/PKA glitches |
 | Shoulder-surf + force device unlock | T5 | Architecturally out of scope (§10.1) | Coercion defeats every PIN-gated system |
 | Replay a captured authenticated channel | T2 | Each SCP03 / Shielded Connection session has fresh handshake; no replay window | None |
@@ -598,7 +629,7 @@ round citation audit". Cite through that table, not through this one.
 
 | Historical attack | Class | Our status | The specific missing piece |
 |---|---|---|---|
-| Rashid vs Ledger Nano S (2018) — MCU↔SE isolation bypass | Architecture | Dual-SE XOR split; no single chip holds the seed | **Do not state this as "keys never on the MCU"**: unlock reconstructs full entropy in Secure SRAM and caches slot secrets there for the signing window (`dual_se.rs`, `nsc/state.rs`). The split defeats single-chip extraction and at-rest compromise, *not* a compromised secure-world image — measured boot + RDP-2 + TrustZone are what answer that |
+| Rashid vs Ledger Nano S (2018) — MCU↔SE isolation bypass | Architecture | Dual-SE XOR split; no single chip holds the seed | **Do not state this as "keys never on the MCU"**: unlock reconstructs full entropy in Secure SRAM and caches slot secrets there for the signing window (`dual_se.rs`, `nsc/state.rs`). The split defeats single-chip extraction and at-rest compromise (single-chip extraction only since 2026-10-13: until #855 either chip also held the PIN — see Claim 1), *not* a compromised secure-world image — measured boot + RDP-2 + TrustZone are what answer that |
 | wallet.fail vs Trezor (35C3, 2018) — FI during FW-update RAM staging | Fault + update flow | Sentinel FI gates in `fw_update`, measured boot, panic/reset zeroization | **No sweep injects during the staging window.** `tools/sca/` has 13 `fault_sweep_*.py` and none targets the CHUNK-accumulate → COMMIT-verify transition — filed as its own issue |
 | Kraken Security Labs vs Trezor One / Model T (2020) — RDP-downgrade glitch, ~$75, 15 min | Fault + config | `rdp2-self-lock`, TAMP wipe, PIN-in-SE, no seed in MCU flash | Per-unit option-byte attestation (the bench unit is not unit #4,312); U585 glitch replication |
 | Castelnovi/Genêt grafting trees vs SPHINCS signing (2018–2023) | Algorithmic fault | Double-compute + CT compare + verify-before-release + relock (`crypto.rs`), RFC 9814 §5 cited in §6.3 | Bench quantification of the *correlated*-fault residual (same fault in both passes) |

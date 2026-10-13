@@ -60,7 +60,7 @@ pub(super) unsafe fn run() -> u32 {
     // value would shift the "MAX_ATTEMPTS - 1 wrong attempts" window.
     #[cfg(feature = "stm32u585")]
     {
-        if crate::hw::flash::pin_attempts_reset().is_err() {
+        if crate::hw::flash::pin_attempts_reset_bench().is_err() {
             secure_log!("[PIN-LOCKOUT] setup: pin_attempts_reset FAILED");
             return NscStatus::InternalError as u32;
         }
@@ -150,7 +150,7 @@ pub(super) unsafe fn run() -> u32 {
         // Drive MCU counter to MAX without touching the SE pair. The MCU
         // gate must still refuse a correct PIN — proves the gate alone
         // blocks brute force, independent of the SE's own counter.
-        if crate::hw::flash::pin_attempts_reset().is_err() {
+        if crate::hw::flash::pin_attempts_reset_bench().is_err() {
             secure_log!("[PIN-LOCKOUT] passB setup: pin_attempts_reset FAILED");
             return NscStatus::InternalError as u32;
         }
@@ -208,7 +208,7 @@ pub(super) unsafe fn run() -> u32 {
     // the handler was invoked in.
     #[cfg(feature = "stm32u585")]
     {
-        if crate::hw::flash::pin_attempts_reset().is_err() {
+        if crate::hw::flash::pin_attempts_reset_bench().is_err() {
             secure_log!("[PIN-LOCKOUT] cleanup: pin_attempts_reset FAILED");
             return NscStatus::InternalError as u32;
         }

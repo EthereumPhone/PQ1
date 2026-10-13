@@ -132,6 +132,25 @@ order, and silicon receipts remain OPEN.
 //! the halves are fetched, and the full entropy is reconstructed:
 //!   `entropy = half_O XOR half_E`
 //!
+//! ## What the chips are shown (#855)
+//!
+//! Neither chip ever receives the PIN, nor anything computable from the PIN
+//! without this microcontroller. For each wallet this module derives, from
+//! `PRF(device_key, label || salt || PIN)`:
+//!
+//!   - a credential for the OPTIGA and a *different* one for the SE050, so
+//!     what one chip stores does not open the other;
+//!   - a mask for each half, so each chip stores `half XOR mask` and the two
+//!     stored values do not XOR to the entropy.
+//!
+//! A new salt is minted before the first SE write of every provisioning
+//! (any older one is retired first), and every wipe destroys the salt
+//! before it sends anything to a chip. The backends are called through
+//! `provision_image` / `unlock_with_credential`, never with a PIN. (The one
+//! exception is the e2e-only clean-up helper below, which presents known
+//! test PINs as compile-time constants to delete UserID objects written by
+//! pre-#855 firmware.)
+//!
 //! The master_secret is derived from the full entropy:
 //!   `master_secret = KDF("sphincs-master", entropy, 0)`
 //!
@@ -141,6 +160,7 @@ order, and silicon receipts remain OPEN.
 
 use crate::crypto;
 use crate::optiga::OptigaTrustM;
+use crate::pin_credential::WalletRole;
 use crate::se050::Se050;
 use crate::secure_element::{SeError, UnlockError, WalletStore};
 use subtle::ConstantTimeEq;
@@ -230,6 +250,12 @@ impl DualSecureElement {
         Ok(half_o)
     }
 
+    /// Draw the bytes of a new PIN-credential salt from the same strict
+    /// three-source generator as the split half.
+    fn draw_pin_salt(&mut self, out: &mut [u8; crate::pin_credential::SALT_LEN]) -> Result<(), ()> {
+        crate::rng_strong::fill_with_store(&mut out[..], self)
+    }
+
     /// Wipe the OPTIGA side of a dual-SE store, supplying the legacy E120
     /// reset path with a strict three-source transient authorization value.
     /// A failed source skips only that optional counter reset; the underlying
@@ -282,6 +308,24 @@ impl WalletStore for DualSecureElement {
         // optional ML-KEM sealing error. Returning directly from one of those
         // branches must never leave a raw half live on the stack.
         let provision_result = (|| -> Result<(), SeError> {
+            // #855: the salt is persisted before anything is written to
+            // either chip, then the credentials and half masks are derived
+            // from it. A failure here leaves both chips untouched.
+            //
+            // SAFETY: `&mut self` on the SE store implies the single-threaded
+            // secure-world context the page-125 salt write requires.
+            let salt = unsafe {
+                crate::pin_gate::load_or_create_salt(|bytes| self.draw_pin_salt(bytes))
+            }
+            .map_err(|_e| {
+                secure_log!("[DUAL/prov] PIN-credential salt unavailable: {:?}", _e);
+                SeError::InternalError
+            })?;
+            let creds = crate::pin_gate::credentials(WalletRole::Real, &salt, pin).map_err(|_e| {
+                secure_log!("[DUAL/prov] PIN-credential derivation FAILED: {:?}", _e);
+                SeError::InternalError
+            })?;
+
             let half_o = Zeroizing::new(self.generate_split_half()?);
             secure_log!("[DUAL/prov] rng OK (3-source XOR mix), calling optiga.provision");
             let half_e = Zeroizing::new(xor_32(entropy, &half_o));
@@ -314,25 +358,28 @@ impl WalletStore for DualSecureElement {
             let (se_half_o, se_half_e) =
                 (Zeroizing::new(*half_o), Zeroizing::new(*half_e));
 
-            // Both SEs get the same master_secret (derived from full entropy).
-            // This lets us cross-verify on unlock.
-            //
+            // #855: what each chip is given is decided in one host-tested
+            // place, `pin_credential::chip_images`: each chip's own
+            // credential, and its half XOR its own PIN-keyed mask, so the
+            // values read out of both chips do not XOR to the entropy
+            // without the device key and the PIN. The mask is the outermost
+            // layer: applied last here, removed first in `unlock`.
+            let (optiga_image, se050_image) =
+                crate::pin_credential::chip_images(creds, &se_half_o, &se_half_e);
+
             // OPTIGA Trust M stores its half-object + master_secret behind the
-            // HMAC auth reference PIN gate; SE050 stores its half-object behind
-            // hardware UserID PIN gating. The VK and bootstrap VK are identical
-            // on both chips.
+            // HMAC auth reference gate; SE050 stores its half-object behind
+            // hardware UserID gating. Each gate holds a different die-bound
+            // credential. The VK and bootstrap VK are identical on both chips.
             if let Err(e) =
                 self.optiga
-                    .provision(&se_half_o, master_secret, vk, bootstrap_vk, pin)
+                    .provision_image(&optiga_image, master_secret, vk, bootstrap_vk)
             {
                 secure_log!("[DUAL/prov] optiga.provision FAILED: {:?}", e);
                 return Err(e);
             }
             secure_log!("[DUAL/prov] optiga OK, calling se050.provision");
-            if let Err(e) =
-                self.se050
-                    .provision(&se_half_e, master_secret, vk, bootstrap_vk, pin)
-            {
+            if let Err(e) = self.se050.provision_image(&se050_image, vk, bootstrap_vk) {
                 secure_log!("[DUAL/prov] se050.provision FAILED: {:?}", e);
                 return Err(e);
             }
@@ -364,17 +411,33 @@ impl WalletStore for DualSecureElement {
         // 3-source half is drawn so the decoy split is independent of the
         // real one.
         secure_log!("[DUAL/duress] start");
+
+        // #855: the decoy uses the salt of the real wallet provisioned just
+        // before it (one salt per provisioning; a wipe kills both wallets),
+        // with its own labels, so its credentials and masks are unrelated to
+        // the real ones even for the same PIN.
+        let creds = crate::pin_gate::decoy_provisioning_credentials(duress_pin)
+            .map_err(|_e| {
+                secure_log!("[DUAL/duress] PIN-credential derivation FAILED: {:?}", _e);
+                SeError::InternalError
+            })?;
+
         let mut half_o = self.generate_split_half()?;
         let mut half_e = xor_32(entropy, &half_o);
+        let (optiga_image, se050_image) =
+            crate::pin_credential::chip_images(creds, &half_o, &half_e);
 
-        if let Err(e) = self.optiga.provision_duress(&half_o, master_secret, vk, bootstrap_vk, duress_pin) {
+        if let Err(e) =
+            self.optiga
+                .provision_duress_image(&optiga_image, master_secret, vk, bootstrap_vk)
+        {
             secure_log!("[DUAL/duress] optiga.provision_duress FAILED: {:?}", e);
             half_o.zeroize();
             crate::fi::zeroize_barrier();
             half_e.zeroize();
             return Err(e);
         }
-        if let Err(e) = self.se050.provision_duress(&half_e, master_secret, vk, bootstrap_vk, duress_pin) {
+        if let Err(e) = self.se050.provision_duress_image(&se050_image, vk, bootstrap_vk) {
             secure_log!("[DUAL/duress] se050.provision_duress FAILED: {:?}", e);
             half_o.zeroize();
             crate::fi::zeroize_barrier();
@@ -409,14 +472,26 @@ impl WalletStore for DualSecureElement {
     /// never touched on a duress entry, so no lockout drift.
     #[cfg(feature = "duress-pin")]
     fn unlock_duress(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
+        // #855: derive the decoy credentials for this PIN. With no usable
+        // salt nothing can match, so report "not the duress PIN" and let the
+        // caller fall through to the real unlock (which then refuses).
+        let creds = match crate::pin_gate::unlock_credentials(WalletRole::Duress, pin) {
+            Ok(c) => c,
+            Err(_) => return Err(UnlockError::PinIncorrect),
+        };
+
         // OPTIGA returns (half_o, stored_decoy_master_from_F1DA); SE050
         // returns half_e. Both chips are ALWAYS verified (no `?` short-
         // circuit) so the op-count is uniform across real/duress entries.
-        let ro = unsafe { self.optiga.duress_read_half(pin) };
-        let re = self.se050.duress_read_half(pin);
+        let ro = unsafe { self.optiga.duress_read_half(&creds.optiga) };
+        let re = self.se050.duress_read_half(&creds.se050);
         match (ro, re) {
             (Ok((mut half_o, mut stored_master)), Ok(mut half_e)) => {
-                let mut full = xor_32(&half_o, &half_e);
+                // Each chip returned `half XOR mask`; remove the masks.
+                let mut full = xor_32(
+                    &creds.mask_optiga.apply(&half_o),
+                    &creds.mask_se050.apply(&half_e),
+                );
                 half_o.zeroize();
                 crate::fi::zeroize_barrier();
                 half_e.zeroize();
@@ -473,8 +548,18 @@ impl WalletStore for DualSecureElement {
     /// already-successful unlock; it only perturbs the timing pad.
     #[cfg(feature = "duress-pin")]
     fn duress_pad(&mut self, pin: &[u8; 8]) {
-        let _ = unsafe { self.optiga.duress_verify(pin) };
-        let _ = self.se050.duress_verify(pin);
+        // #855: same derivation as `unlock_duress`, so a duress-correct
+        // unlock still runs two derivations and four verifies — the same
+        // count as a real one.
+        let Ok(creds) = crate::pin_gate::unlock_credentials(WalletRole::Duress, pin) else {
+            return;
+        };
+        let _ = unsafe { self.optiga.duress_verify(&creds.optiga) };
+        let _ = self.se050.duress_verify(&creds.se050);
+    }
+
+    fn pin_credentials_recomputable(&mut self) -> bool {
+        crate::pin_gate::credentials_recomputable()
     }
 
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
@@ -491,11 +576,24 @@ impl WalletStore for DualSecureElement {
         // SE050's `unlock` returns `kdf("sphincs-master", half_e, 0)`
         // which is meaningful here as the decrypt key for SE050's own
         // entropy_blob cache (different from OPTIGA's master).
-        let optiga_result = self.optiga.unlock(pin);
+        //
+        // #855: neither chip is shown the PIN. Derive this PIN's die-bound
+        // credentials and half masks first. With no usable salt on page 125
+        // (wiped, never provisioned, or provisioned by pre-#855 firmware)
+        // they cannot be recomputed: refuse before any SE traffic.
+        // `gated_unlock` already refuses such a wallet before it charges an
+        // attempt; this is the backstop for a caller that reaches `unlock`
+        // directly or a fault that skipped that check.
+        let creds = crate::pin_gate::unlock_credentials(WalletRole::Real, pin).map_err(|_e| {
+            secure_log!("[DUAL] PIN credentials unavailable: {:?}", _e);
+            UnlockError::InternalError
+        })?;
+
+        let optiga_result = self.optiga.unlock_with_credential(&creds.optiga);
 
         let se050_result = match &optiga_result {
             Ok(_) | Err(UnlockError::PinIncorrect) => {
-                Some(self.se050.unlock(pin))
+                Some(self.se050.unlock_with_credential(&creds.se050))
             }
             Err(_) => None,
         };
@@ -537,10 +635,14 @@ impl WalletStore for DualSecureElement {
         let mut blob_o = [0u8; 64];
         let blob_o_len = self.optiga.read_entropy_blob(&mut blob_o)
             .map_err(|_| UnlockError::InternalError)?;
-        let mut half_o = crypto::decrypt_entropy_blob(
+        let mut stored_o = crypto::decrypt_entropy_blob(
             &blob_o[..blob_o_len], &master_o
         ).map_err(|_| UnlockError::InternalError)?;
         blob_o.zeroize();
+        // #855: the chip stored `half XOR mask`; remove the PIN-keyed mask
+        // (outermost layer, so before the optional ML-KEM open below).
+        let mut half_o = *creds.mask_optiga.apply(&stored_o);
+        stored_o.zeroize();
         // Under the inner wrap, what the SE stored (and we just decrypted) is
         // the 32-byte AES-GCM ciphertext; open it (ct + tag from the ct-store)
         // to recover the real half_O. The borrow in `&half_o` ends before the
@@ -560,10 +662,13 @@ impl WalletStore for DualSecureElement {
         // (`kdf("sphincs-master", half_e, 0)`), not OPTIGA's. The
         // two chips encrypt their caches independently; each must
         // be decrypted with the matching key.
-        let mut half_e = crypto::decrypt_entropy_blob(
+        let mut stored_e = crypto::decrypt_entropy_blob(
             &blob_e[..blob_e_len], &master_e
         ).map_err(|_| UnlockError::InternalError)?;
         blob_e.zeroize();
+        // #855: same for the SE050 half.
+        let mut half_e = *creds.mask_se050.apply(&stored_e);
+        stored_e.zeroize();
         // Same for half_E on the SE050.
         #[cfg(feature = "mlkem-inner-wrap")]
         {
@@ -753,16 +858,132 @@ impl WalletStore for DualSecureElement {
     /// A best-effort attempt is made on each backend — if one fails we
     /// still try the other and wipe SRAM state.
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
+        // #855: before the first command to either chip, arm the
+        // wipe-in-progress flag and destroy the PIN-credential salt. From
+        // this point the credentials and masks of this wallet can never be
+        // recomputed by this device: a value read out of a chip beforehand
+        // cannot be tested against it again, and the halves left on the
+        // chips are undecryptable even if a chip-side wipe below fails or is
+        // blocked. Callers reset the page-124 counter only through
+        // `pin_attempts_reset_after_wipe`, which re-checks that the salt is
+        // gone.
+        //
+        // If the salt could NOT be destroyed (a flash fault), the chip wipes
+        // below still run: destroying the halves is the point of a wipe and
+        // costs the attacker more, not less. The failure is returned after
+        // them, and the counter reset is refused, so the device stays locked
+        // out and the next boot wipes again.
+        //
+        // SAFETY: `&mut self` on the SE store implies the single-threaded
+        // secure-world context the page-125 writes require.
+        let salt_gone = unsafe { crate::pin_gate::begin_wipe() };
+
         let optiga_result = self.reset_optiga_for_admin();
         let se050_result = self.se050.factory_reset_admin();
 
         self.zeroize_caches();
 
+        // The SE050 leg erases page 125 (and with it the wipe-in-progress
+        // flag) once *its* wipe is confirmed, whatever happened to the
+        // OPTIGA leg. If any part of this wipe failed, put the flag back so
+        // the next boot resumes it; otherwise a chip could be left holding
+        // a wallet that nothing will ever wipe or open. (Found in review.)
+        if salt_gone.is_err() || optiga_result.is_err() || se050_result.is_err() {
+            // SAFETY: same single-threaded secure-world context as above;
+            // one quad-word program in page 125.
+            unsafe {
+                if !crate::hw::flash::is_wipe_armed() {
+                    let _ = crate::hw::flash::arm_wipe_flag();
+                }
+            }
+        }
+
         // Surface the first error we saw, but SRAM is zeroized regardless.
+        salt_gone.map_err(|()| SeError::InternalError)?;
         optiga_result.and(se050_result)?;
 
         secure_log!("[DUAL] Factory reset complete — OPTIGA user data wiped, SE050 wiped");
         Ok(())
+    }
+}
+
+#[cfg(any(
+    feature = "e2e-test",
+    feature = "dual-se-admin-wipe-e2e",
+    feature = "dual-se-multi-unlock-e2e"
+))]
+impl DualSecureElement {
+    /// Bench pre-clean: delete the SE050 user UserID (and the data objects
+    /// it gates) through a session authenticated with the UserID's own
+    /// value, trying the known test PINs. Returns `true` when that worked.
+    ///
+    /// The user UserID can be deleted no other way: since S-6 its policy has
+    /// no admin entry. The value it holds is one of two things:
+    ///
+    /// - the die-bound credential (#855), on a chip provisioned by firmware
+    ///   from this change on. Reproducible here because bench builds use the
+    ///   fixed bench salt (`pin_salt::SaltPolicy::FixedBench`);
+    /// - the eight raw PIN bytes, on a chip provisioned by older firmware.
+    ///   Presenting them is clean-up of legacy bench state only: it is
+    ///   compiled only into e2e builds, and it can be deleted once no bench
+    ///   board carries a pre-#855 wallet.
+    ///
+    /// Every wrong value costs one of the UserID's ten attempts, and a
+    /// locked UserID can never be deleted. So the format is decided up
+    /// front rather than trying both for every PIN: `provisioned_by_this_scheme`
+    /// must be sampled with [`pin_gate::salt_record_present`] **before** any
+    /// wipe step runs (the wipe destroys the record). All candidates are
+    /// tried in the likely format; the other format gets one try, with the
+    /// first (default) PIN only. At most `candidates.len() + 1` attempts,
+    /// one more than before this change.
+    ///
+    /// [`pin_gate::salt_record_present`]: crate::pin_gate::salt_record_present
+    pub(crate) fn e2e_delete_se050_user_objects(
+        &mut self,
+        candidates: &'static [[u8; 8]],
+        provisioned_by_this_scheme: bool,
+    ) -> bool {
+        use crate::se050::apdu::UserIdValue;
+
+        // A value that cannot be derived (no salt on a non-bench build) is
+        // skipped without touching the chip.
+        fn derived(this: &mut DualSecureElement, test_pin: &'static [u8; 8]) -> bool {
+            match crate::pin_gate::unlock_credentials(WalletRole::Real, test_pin) {
+                Ok(set) => this
+                    .se050
+                    .user_factory_reset(UserIdValue::Credential(&set.se050))
+                    .is_ok(),
+                Err(_) => false,
+            }
+        }
+        // The ONE place raw PIN bytes are still presented to a chip: a known
+        // test PIN, as a compile-time constant, to delete a UserID written
+        // by pre-#855 firmware. `UserIdValue::Fixed` takes `&'static`, so a
+        // PIN typed in at run time could not be passed here.
+        fn legacy_raw(this: &mut DualSecureElement, test_pin: &'static [u8; 8]) -> bool {
+            // Bench waiver for the tripwire rule; see the comment above.
+            // nosemgrep: no-pin-named-value-to-secure-element-sink
+            this.se050.user_factory_reset(UserIdValue::Fixed(test_pin)).is_ok()
+        }
+
+        let (likely, other): (
+            fn(&mut DualSecureElement, &'static [u8; 8]) -> bool,
+            fn(&mut DualSecureElement, &'static [u8; 8]) -> bool,
+        ) = if provisioned_by_this_scheme {
+            (derived, legacy_raw)
+        } else {
+            (legacy_raw, derived)
+        };
+
+        for pin in candidates {
+            if likely(self, pin) {
+                return true;
+            }
+        }
+        match candidates.first() {
+            Some(pin) => other(self, pin),
+            None => false,
+        }
     }
 }
 
@@ -781,9 +1002,9 @@ impl DualSecureElement {
     ///    prior test contamination.
     /// 2. Verify both chips report `!is_provisioned()` after step 1.
     /// 3. Provision fresh test data: entropy=0x55 pattern, master_secret
-    ///    derived via the same `kdf("sphincs-master", entropy, 0)` the
-    ///    DualSE unlock path uses (so the consistency check passes),
-    ///    vk=0xAA, bootstrap_vk=0xBB, pin=`b"dualwipe"`.
+    ///    derived the way the DualSE unlock path derives it, the unkeyed
+    ///    SHA-256 "sphincs-master" hash of the entropy (so the consistency
+    ///    check passes); vk=0xAA, bootstrap_vk=0xBB; test PIN `b"dualwipe"`.
     /// 4. Verify both chips now report `is_provisioned()`.
     /// 5. Call `unlock(test_pin)` and verify the returned master_secret
     ///    byte-exactly matches what we provisioned. Proves both chips
@@ -839,6 +1060,11 @@ impl DualSecureElement {
         //    fresh admin PIN.
         secure_log!("[DUAL-E2E-ADMIN] step 1: pre-clean");
 
+        // #855: which credential format the SE050 user UserID holds, sampled
+        // before anything below destroys the salt record that tells us.
+        #[cfg(feature = "stm32u585")]
+        let provisioned_by_this_scheme = crate::pin_gate::salt_record_present();
+
         // OPTIGA: Conf(E140) wipe. Idempotent on blank chips.
         if let Err(e) = self.reset_optiga_for_admin() {
             secure_log!("[DUAL-E2E-ADMIN] step 1: OPTIGA factory_reset error {:?} (continuing)", e);
@@ -850,12 +1076,12 @@ impl DualSecureElement {
         //   (a) Admin-auth factory reset (page 125 has admin PIN).
         //       Deletes user UserID + gated data + self-deletes admin
         //       UserID. The production PIN-lockout path.
-        //   (b) User-auth factory reset with dev-PIN candidates. Tries
-        //       `user_factory_reset(pin)` which verifies PIN, deletes
-        //       user-gated data, AND self-deletes the user UserID in
-        //       the same authenticated session. Plain
-        //       `iterative_wipe(Some(USERID), Some(pin))` (which we
-        //       tried first iteration) deletes the data objects but
+        //   (b) User-auth factory reset with dev-PIN candidates. Runs
+        //       the SE050 user-auth reset, which verifies the UserID
+        //       value, deletes user-gated data, AND self-deletes the
+        //       user UserID in the same authenticated session. The plain
+        //       authenticated iterative sweep (which we tried first
+        //       iteration) deletes the data objects but
         //       cannot self-delete the UserID itself — that's the
         //       exact gap the first hardware run surfaced.
         //   (c) Unauthenticated iterative sweep as a last-ditch
@@ -884,23 +1110,19 @@ impl DualSecureElement {
             let se_prov_before = self.se050.is_provisioned();
             secure_log!("[DUAL-E2E-ADMIN] pre-clean stage (b): se050.is_provisioned()={}", se_prov_before);
             if se_prov_before {
-                const PIN_CANDIDATES: &[&[u8]] = &[
-                    b"00000000", // e2e-test fast-path default (most common)
-                    b"dualwipe", // our own test PIN (prior run)
-                    b"12345678",
-                    b"11111111",
+                const PIN_CANDIDATES: &[[u8; 8]] = &[
+                    *b"00000000", // e2e-test fast-path default (most common)
+                    *b"dualwipe", // our own test PIN (prior run)
+                    *b"12345678",
+                    *b"11111111",
                 ];
-                for &pin in PIN_CANDIDATES {
-                    let r = self.se050.user_factory_reset(pin);
-                    secure_log!(
-                        "[DUAL-E2E-ADMIN] pre-clean stage (b): user_factory_reset({:?}) → {:?}",
-                        core::str::from_utf8(pin).unwrap_or("?"),
-                        r.as_ref().err(),
-                    );
-                    if r.is_ok() {
-                        break;
-                    }
-                }
+                let deleted = self
+                    .e2e_delete_se050_user_objects(PIN_CANDIDATES, provisioned_by_this_scheme);
+                secure_log!(
+                    "[DUAL-E2E-ADMIN] pre-clean stage (b): user delete (this-scheme={}) → {}",
+                    provisioned_by_this_scheme,
+                    deleted,
+                );
             }
 
             // Stage (c): unauthenticated sweep as final catch-all.
@@ -1084,6 +1306,10 @@ impl DualSecureElement {
                 secure_log!("[DUAL-MULTI] boot state: probe unlock FAILED → fresh provisioning");
             }
 
+            // #855: sampled before any wipe step destroys the salt record.
+            #[cfg(feature = "stm32u585")]
+            let provisioned_by_this_scheme = crate::pin_gate::salt_record_present();
+
             if let Err(e) = self.reset_optiga_for_admin() {
                 secure_log!("[DUAL-MULTI] pre-clean: OPTIGA factory_reset error {:?} (continuing)", e);
             }
@@ -1095,14 +1321,11 @@ impl DualSecureElement {
                 // i.e. BHK in a `bhk` build / DHUK / OTP-legacy).
                 let _ = self.se050.factory_reset_admin();
                 if self.se050.is_provisioned() {
-                    const PIN_CANDIDATES: &[&[u8]] = &[
-                        b"00000000", b"dualwipe", b"12345678", b"11111111",
+                    const PIN_CANDIDATES: &[[u8; 8]] = &[
+                        *b"00000000", *b"dualwipe", *b"12345678", *b"11111111",
                     ];
-                    for &pin in PIN_CANDIDATES {
-                        if self.se050.user_factory_reset(pin).is_ok() {
-                            break;
-                        }
-                    }
+                    let _ = self
+                        .e2e_delete_se050_user_objects(PIN_CANDIDATES, provisioned_by_this_scheme);
                 }
                 let _ = self.se050.iterative_wipe(None, None);
             }
@@ -1114,6 +1337,20 @@ impl DualSecureElement {
             if self.se050.is_provisioned() {
                 secure_log!("[DUAL-MULTI] pre-clean FAILED: SE050 still provisioned");
                 return Err(SeError::InternalError);
+            }
+
+            // Clear a stale wipe flag left by the pre-clean (or by an
+            // earlier failed run) BEFORE provisioning. `provision` writes
+            // the PIN-credential salt into page 125 (#855); erasing that
+            // page afterwards, as this test used to, would destroy the salt
+            // of the wallet it just created.
+            #[cfg(feature = "stm32u585")]
+            unsafe {
+                if crate::hw::flash::is_wipe_armed()
+                    && crate::hw::flash::erase_admin_page().is_ok()
+                {
+                    secure_log!("[DUAL-MULTI] cleared stale wipe flag (page 125 erased)");
+                }
             }
 
             secure_log!("[DUAL-MULTI] pre-clean OK; provisioning fresh");
@@ -1138,22 +1375,18 @@ impl DualSecureElement {
 
         secure_log!("[DUAL-MULTI] all {} unlocks verified; state preserved for next cold boot", iterations);
 
-        // Clear stale MCU wipe-flag + PIN attempts left over from prior
-        // failed `dual-se-admin-wipe-e2e` runs or from our own pre-clean.
-        // Without this, the boot-time wipe trigger in `main.rs`
-        // re-fires on every reboot, wiping both chips and defeating the
-        // "cross-boot already-provisioned" branch this test is meant to
-        // exercise. Safe because the chips are now provisioned cleanly
-        // and SE050's admin UserID lifecycle is the pre-existing bug
-        // tracked in `project_se050_admin_wipe.md`, not our concern.
+        // Clear stale MCU PIN attempts left over from prior failed
+        // `dual-se-admin-wipe-e2e` runs or from our own pre-clean. Without
+        // this, the boot-time wipe trigger in `main.rs` re-fires on every
+        // reboot, wiping both chips and defeating the "cross-boot
+        // already-provisioned" branch this test is meant to exercise.
+        //
+        // The stale wipe FLAG is cleared before provisioning (above), never
+        // here: page 125 now also holds the PIN-credential salt of the
+        // wallet this test leaves provisioned (#855).
         #[cfg(feature = "stm32u585")]
         unsafe {
-            if crate::hw::flash::is_wipe_armed() {
-                if crate::hw::flash::erase_admin_page().is_ok() {
-                    secure_log!("[DUAL-MULTI] cleared stale wipe flag (page 125 erased)");
-                }
-            }
-            let _ = crate::hw::flash::pin_attempts_reset();
+            let _ = crate::hw::flash::pin_attempts_reset_bench();
         }
 
         Ok(())
@@ -1368,8 +1601,14 @@ unsafe fn trigger_lockout_wipe() -> u32 {
     // unprovisioned chip, trigger the boot-time lockout check, and
     // loop. Erasing here makes the device ready for a fresh first-
     // boot wizard.
+    //
+    // #855: the reset happens only if the PIN-credential salt is
+    // verifiably gone (`factory_reset_admin` destroys it before its first
+    // SE command). If it survived, the counter stays at MAX and the next
+    // boot retries the wipe — ten fresh guesses are never handed out
+    // against a credential that is still valid.
     #[cfg(feature = "stm32u585")]
-    let _ = crate::hw::flash::pin_attempts_reset();
+    let _ = crate::hw::flash::pin_attempts_reset_after_wipe();
 
     // Zeroize every TrustZone-side secret.
     super::zeroize_sensitive_state();

@@ -3061,6 +3061,193 @@ pub fn is_duress_wipe_mode() -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// PIN-credential salt log — page 125, quad-words 16..512 (#855)
+// ---------------------------------------------------------------------------
+//
+// Page 125 after this change:
+//   QW 0        unused (former admin-PIN slot)
+//   QW 1        wipe-in-progress flag
+//   QW 2        duress wipe mode
+//   QW 3..16    reserved, blank
+//   QW 16..512  salt log (`crate::pin_salt`)
+//
+// The salt shares the page with the wipe flag on purpose: destroying the
+// salt is the first step of every wipe, and the flag that makes an
+// interrupted wipe resume must stay armed while that happens. So the salt is
+// destroyed by programming zeros over its quad-words, not by erasing the
+// page. `erase_admin_page` at the end of a completed wipe returns the whole
+// page, log included, to blank.
+//
+// All record logic (scan, create, destroy, the torn-write cases, the erase
+// fallback) lives in `crate::pin_salt` and is host-tested. This block only
+// maps quad-word indices to addresses and performs the programs.
+
+/// First quad-word of the salt log within page 125.
+const PIN_SALT_FIRST_QW: u32 = 16;
+/// Quad-words in the salt log (the rest of the 8 KB page).
+const PIN_SALT_QW_COUNT: usize = 512 - PIN_SALT_FIRST_QW as usize;
+
+// The log must start after the last flag quad-word and end exactly at the
+// page boundary.
+const _: () = assert!(DURESS_WIPE_MODE_OFFSET + 16 <= PIN_SALT_FIRST_QW * 16);
+const _: () = assert!(
+    (PIN_SALT_FIRST_QW as usize + PIN_SALT_QW_COUNT) * 16 == pqsigner_geometry::PAGE_SIZE as usize
+);
+
+/// Handle on the page-125 salt log. Reading through it is always safe; the
+/// program and erase methods are reachable only through the handle returned
+/// by the `unsafe` [`PinSaltRegion::new`].
+pub struct PinSaltRegion {
+    _exclusive: (),
+}
+
+impl PinSaltRegion {
+    /// # Safety
+    /// The caller must hold exclusive access to the secure flash controller
+    /// (the single-threaded secure world outside an interrupt handler) for
+    /// as long as the handle is used to program or erase.
+    #[must_use]
+    pub unsafe fn new() -> Self {
+        Self { _exclusive: () }
+    }
+
+    const fn addr(index: usize) -> u32 {
+        ADMIN_PAGE_ADDR + (PIN_SALT_FIRST_QW + index as u32) * 16
+    }
+}
+
+impl crate::pin_salt::SaltFlash for PinSaltRegion {
+    fn qw_count(&self) -> usize {
+        PIN_SALT_QW_COUNT
+    }
+
+    fn read_qw(&self, index: usize) -> [u8; 16] {
+        let mut out = [0xFFu8; 16];
+        if index >= PIN_SALT_QW_COUNT {
+            return out;
+        }
+        let src = Self::addr(index) as *const u8;
+        for (i, b) in out.iter_mut().enumerate() {
+            // SAFETY: `index` is bounds-checked, so the 16 bytes lie inside
+            // page 125; memory-mapped flash read.
+            *b = unsafe { read_volatile(src.add(i)) };
+        }
+        out
+    }
+
+    fn program_qw(&mut self, index: usize, data: &[u8; 16]) -> Result<(), ()> {
+        if index >= PIN_SALT_QW_COUNT {
+            return Err(());
+        }
+        // SAFETY: bounds-checked quad-word inside page 125; `pin_salt::create`
+        // only programs quad-words at or past the log's blank frontier, and
+        // `Self::new`'s contract gives exclusive controller access.
+        unsafe { write_quadword_verified(Self::addr(index), data) }
+    }
+
+    fn zero_qw(&mut self, index: usize) -> Result<(), ()> {
+        if index >= PIN_SALT_QW_COUNT {
+            return Err(());
+        }
+        // Deliberately programs over a quad-word that is NOT erased. The
+        // data is all zeros, the one case the reference manual allows
+        // (RM0456 Rev 7 section 7.3.7). Not yet exercised on this project's
+        // silicon; `pin_salt::destroy` falls back to `erase_region` when
+        // this returns `Err`.
+        //
+        // SAFETY: bounds-checked quad-word inside page 125; exclusive
+        // controller access per `Self::new`.
+        unsafe { write_quadword_verified(Self::addr(index), &[0u8; 16]) }
+    }
+
+    fn erase_region(&mut self) -> Result<(), ()> {
+        // Only reached from `pin_salt::destroy`, i.e. inside a wipe: the
+        // other state on the page (the duress mode) belongs to the wallet
+        // being wiped. The wipe-in-progress flag is put straight back so a
+        // power loss after this point still resumes the wipe.
+        //
+        // SAFETY: exclusive controller access per `Self::new`; both calls
+        // target page 125 only.
+        unsafe {
+            erase_admin_page()?;
+            arm_wipe_flag()
+        }
+    }
+}
+
+/// Read the current PIN-credential salt from page 125.
+#[must_use]
+pub fn pin_salt_load() -> crate::pin_salt::SaltState {
+    // SAFETY: only the read method of the handle is used.
+    crate::pin_salt::load(&unsafe { PinSaltRegion::new() })
+}
+
+/// `true` when page 125 holds no valid PIN-credential salt.
+///
+/// A wipe may reset the page-124 attempt counter only when this is true: it
+/// is what guarantees a credential read out of a secure element before the
+/// wipe can never be tested against this device again.
+#[must_use]
+#[inline(never)]
+pub fn pin_salt_is_absent() -> bool {
+    // SAFETY: only the read method of the handle is used.
+    crate::pin_salt::is_absent(&unsafe { PinSaltRegion::new() })
+}
+
+// There is no general-purpose "reset the attempt counter" in this module's
+// public surface (#855, review). The erase itself is the private
+// `pin_attempts_erase`; what is exported is one entry point per legitimate
+// reason, so a new caller has to say which reason it has.
+
+/// Reset the page-124 attempt counter after a **correct PIN**.
+///
+/// The one caller is the verified-success arm of `nsc::gated_unlock`. It
+/// must not be used on a wipe path: see [`pin_attempts_reset_after_wipe`].
+///
+/// # Safety
+/// Erases secure flash page 124. The caller must hold exclusive access to
+/// the secure flash controller (single-threaded secure world, not inside an
+/// interrupt handler).
+pub unsafe fn pin_attempts_reset_after_correct_pin() -> Result<(), ()> {
+    // SAFETY: forwarded contract.
+    unsafe { pin_attempts_erase() }
+}
+
+/// Bench and e2e flows only: reset the page-124 attempt counter to set up or
+/// tear down a test. Not compiled into a production build.
+///
+/// # Safety
+/// Same contract as [`pin_attempts_reset_after_correct_pin`].
+#[cfg(not(feature = "mode-production"))]
+pub unsafe fn pin_attempts_reset_bench() -> Result<(), ()> {
+    // SAFETY: forwarded contract.
+    unsafe { pin_attempts_erase() }
+}
+
+/// Reset the page-124 attempt counter after a wipe — only if the
+/// PIN-credential salt is verifiably gone.
+///
+/// Every wipe entry point calls `factory_reset_admin`, which destroys the
+/// salt before it sends any secure-element command. If that destroy did not
+/// succeed the attempt counter stays where it is: the device remains locked
+/// out and retries the wipe at the next boot, instead of handing out ten
+/// fresh guesses against a credential that is still valid.
+///
+/// The check is evaluated twice through the Hamming-distant sentinel, so a
+/// single fault cannot turn "salt still present" into a reset.
+///
+/// # Safety
+/// Same contract as [`pin_attempts_reset_after_correct_pin`].
+pub unsafe fn pin_attempts_reset_after_wipe() -> Result<(), ()> {
+    let salt_gone = crate::fi::check_true_into_sentinel(pin_salt_is_absent);
+    if salt_gone != crate::fi::OK_SENTINEL {
+        return Err(());
+    }
+    // SAFETY: forwarded contract.
+    unsafe { pin_attempts_erase() }
+}
+
+// ---------------------------------------------------------------------------
 // MCU-side PIN attempt counter — page 124
 // ---------------------------------------------------------------------------
 //
@@ -3100,7 +3287,7 @@ pub fn is_duress_wipe_mode() -> bool {
 //   - Wrong PIN attempt N: `pin_attempts_bump()` programs QW N-1
 //     with `[0x00; 16]`. Post-bump read returns N.
 //   - Reach `MAX_ATTEMPTS`: wallet locks out. `trigger_lockout_wipe`
-//     wipes SEs + erases page 124 via `pin_attempts_reset()`.
+//     wipes SEs + erases page 124 via `pin_attempts_reset_after_wipe()`.
 //
 // Page choice: 124 over 126. Page 126 (the former OPTIGA PBS seal
 // page, now owned by the wrapped BHK store) turned out to be in a "freed-but-
@@ -3271,7 +3458,7 @@ pub unsafe fn pin_attempts_bump() -> Result<u8, ()> {
 /// Erases the PIN-attempt counter page. Must only be called after a
 /// successful PIN verify on both SEs; an out-of-order call would
 /// silently reset the lockout state.
-pub unsafe fn pin_attempts_reset() -> Result<(), ()> {
+unsafe fn pin_attempts_erase() -> Result<(), ()> {
     cortex_m::interrupt::free(|_| {
         wait_bsy();
         clear_errors();

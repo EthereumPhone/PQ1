@@ -68,8 +68,10 @@ use zeroize::Zeroize;
 /// Maximum PIN attempts before lockout — shared with the rest of the wallet.
 const MAX_ATTEMPTS: u8 = sphincs_tz_shared::MAX_ATTEMPTS;
 
-/// Domain tag for deriving the PIN authorization secret.
-const PIN_AUTH_DOMAIN: &[u8] = b"optiga-pin-auth-v1";
+// #855: there is no PIN-derivation domain tag here any more. The value written
+// to F1D0 / F1D8 is a `pin_credential::OptigaPinCredential`: a PRF output under
+// the device hardware key, derived by `crate::pin_gate` before this driver is
+// called. This driver never sees a PIN.
 
 /// Counter sentinel written by `factory_reset()` so `is_provisioned()` can
 /// distinguish a wiped chip from an in-use one after LcsO has been locked.
@@ -912,11 +914,6 @@ impl OptigaTrustM {
             apdu::OID_PBS, &lock_meta[..lock_len],
         )?;
         Ok(())
-    }
-
-    /// Derive the 32-byte PIN authorization secret from the 8-digit PIN.
-    fn derive_pin_secret(pin: &[u8; 8]) -> [u8; 32] {
-        crate::crypto::kdf(PIN_AUTH_DOMAIN, pin, 0)
     }
 
     /// HMAC-SHA256(key, data) — 32-byte output.
@@ -1849,14 +1846,10 @@ impl OptigaTrustM {
     pub unsafe fn probe_provision_duress_authref(
         &mut self,
         oid: u16,
-        pin: &[u8; 8],
+        probe_secret: &[u8; 32],
     ) -> Result<(), OptigaError> {
-        use zeroize::Zeroize;
         self.ensure_shield()?;
-        let mut secret = Self::derive_pin_secret(pin);
-        let r = apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, &secret);
-        secret.zeroize();
-        r?;
+        apdu::set_data_object(&mut self.ifx, &mut self.shield, oid, probe_secret)?;
         // Non-LUC AuthRef metadata: Change=ALW / Read=NEV / Execute=ALW
         // / DataType=AUTHREF. Change=ALW keeps the OID at LcsO=Creation.
         let (meta, meta_len) = apdu::build_metadata_auth_ref();
@@ -1880,9 +1873,8 @@ impl OptigaTrustM {
         authref_oid: u16,
         ctr_oid: u16,
         limit: u32,
-        pin: &[u8; 8],
+        probe_secret: &[u8; 32],
     ) -> Result<(), OptigaError> {
-        use zeroize::Zeroize;
         self.ensure_shield()?;
 
         // 1. Counter data: [current=0, limit] (allowed at Creation ALW).
@@ -1892,11 +1884,8 @@ impl OptigaTrustM {
         let (cmeta, clen) = apdu::build_metadata_pin_ctr_oid(authref_oid);
         apdu::set_metadata(&mut self.ifx, &mut self.shield, ctr_oid, &cmeta[..clen])?;
 
-        // 3. AuthRef secret (PIN-derived HMAC key).
-        let mut secret = Self::derive_pin_secret(pin);
-        let r = apdu::set_data_object(&mut self.ifx, &mut self.shield, authref_oid, &secret);
-        secret.zeroize();
-        r?;
+        // 3. AuthRef secret (the probe's own HMAC key — not a user PIN).
+        apdu::set_data_object(&mut self.ifx, &mut self.shield, authref_oid, probe_secret)?;
         // 4. AuthRef metadata: Change=ALW / Read=NEV / Execute=LUC(ctr_oid).
         //    The duress F1D8 twin is deliberately NEVER locked and is blanked
         //    via the ALW Change arm on the reset path, so it keeps `Change=ALW`
@@ -1908,7 +1897,7 @@ impl OptigaTrustM {
     }
 
     /// Authenticate the DURESS AuthRef (F1D8, auto-state path firing
-    /// LUC(E121)) with `duress_pin` and read back the decoy OPTIGA half
+    /// LUC(E121)) with the decoy credential and read back the decoy OPTIGA half
     /// (F1D9) AND the stored decoy master (F1DA). Mirrors the hw-counter
     /// arm of `authenticate_and_read` but for the duress credential set.
     /// Returns `(half_o, stored_decoy_master)`; `Err` (before any read)
@@ -1925,7 +1914,7 @@ impl OptigaTrustM {
     #[cfg(feature = "duress-pin")]
     pub unsafe fn duress_read_half(
         &mut self,
-        duress_pin: &[u8; 8],
+        duress_cred: &crate::pin_credential::OptigaPinCredential,
     ) -> Result<([u8; 32], [u8; 32]), OptigaError> {
         use zeroize::Zeroize;
         self.ensure_shield()?;
@@ -1933,9 +1922,7 @@ impl OptigaTrustM {
         apdu::get_random_auto_state(
             &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &mut nonce,
         )?;
-        let mut pin_secret = Self::derive_pin_secret(duress_pin);
-        let mut hmac = Self::hmac_sha256(&pin_secret, &nonce);
-        pin_secret.zeroize();
+        let mut hmac = Self::hmac_sha256(duress_cred.expose_for_optiga(), &nonce);
         let vr = apdu::hmac_verify_auto_state(
             &mut self.ifx, &mut self.shield,
             apdu::OID_DURESS_AUTH_REF, apdu::OID_SESSION, &nonce, &hmac,
@@ -1969,16 +1956,17 @@ impl OptigaTrustM {
     /// this matched-LUC verify stands in for it as a byte-for-byte timing
     /// twin (validated on silicon 2026-05-20). `Ok(())` on success.
     #[cfg(feature = "duress-pin")]
-    pub unsafe fn duress_verify(&mut self, duress_pin: &[u8; 8]) -> Result<(), OptigaError> {
+    pub unsafe fn duress_verify(
+        &mut self,
+        duress_cred: &crate::pin_credential::OptigaPinCredential,
+    ) -> Result<(), OptigaError> {
         use zeroize::Zeroize;
         self.ensure_shield()?;
         let mut nonce = [0u8; 16];
         apdu::get_random_auto_state(
             &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &mut nonce,
         )?;
-        let mut pin_secret = Self::derive_pin_secret(duress_pin);
-        let mut hmac = Self::hmac_sha256(&pin_secret, &nonce);
-        pin_secret.zeroize();
+        let mut hmac = Self::hmac_sha256(duress_cred.expose_for_optiga(), &nonce);
         let vr = apdu::hmac_verify_auto_state(
             &mut self.ifx, &mut self.shield,
             apdu::OID_DURESS_AUTH_REF, apdu::OID_SESSION, &nonce, &hmac,
@@ -2012,7 +2000,7 @@ impl OptigaTrustM {
     pub unsafe fn probe_hmac_auth_luc_at(
         &mut self,
         oid: u16,
-        pin: &[u8; 8],
+        probe_secret: &[u8; 32],
     ) -> Result<(), OptigaError> {
         use zeroize::Zeroize;
         self.ensure_shield()?;
@@ -2020,9 +2008,7 @@ impl OptigaTrustM {
         apdu::get_random_auto_state(
             &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &mut nonce,
         )?;
-        let mut pin_secret = Self::derive_pin_secret(pin);
-        let hmac = Self::hmac_sha256(&pin_secret, &nonce);
-        pin_secret.zeroize();
+        let hmac = Self::hmac_sha256(probe_secret, &nonce);
         let r = apdu::hmac_verify_auto_state(
             &mut self.ifx, &mut self.shield, oid, apdu::OID_SESSION, &nonce, &hmac,
         );
@@ -2038,7 +2024,7 @@ impl OptigaTrustM {
     pub unsafe fn probe_hmac_auth_at(
         &mut self,
         oid: u16,
-        pin: &[u8; 8],
+        probe_secret: &[u8; 32],
     ) -> Result<(), OptigaError> {
         use zeroize::Zeroize;
         self.ensure_shield()?;
@@ -2060,9 +2046,7 @@ impl OptigaTrustM {
         hmac_input[16..48].copy_from_slice(&chip_random);
         hmac_input[48..].copy_from_slice(&host_tag);
 
-        let mut secret = Self::derive_pin_secret(pin);
-        let hmac = Self::hmac_sha256(&secret, &hmac_input);
-        secret.zeroize();
+        let hmac = Self::hmac_sha256(probe_secret, &hmac_input);
 
         let r = apdu::hmac_verify(
             &mut self.ifx, &mut self.shield,
@@ -2159,7 +2143,7 @@ impl OptigaTrustM {
         master_secret: &[u8; 32],
         vk: &[u8; 32],
         bootstrap_vk: &[u8; 32],
-        pin: &[u8; 8],
+        cred: &crate::pin_credential::OptigaPinCredential,
     ) -> Result<(), OptigaError> {
         self.init()?;
         secure_log!("[OPTIGA/prov] init OK");
@@ -2225,11 +2209,9 @@ impl OptigaTrustM {
         #[cfg(feature = "optiga-hw-counter")]
         {
             secure_log!("[OPTIGA/prov] step 1c: provision_hw_pin_counter (E120)");
-            let mut pin_secret = Self::derive_pin_secret(pin);
             let result = unsafe {
-                self.provision_hw_pin_counter(Self::HW_PIN_CTR_LIMIT, &pin_secret)
+                self.provision_hw_pin_counter(Self::HW_PIN_CTR_LIMIT, cred.expose_for_optiga())
             };
-            pin_secret.zeroize();
             if let Err(e) = result {
                 secure_log!("[OPTIGA/prov] provision_hw_pin_counter FAILED: {:?}", e);
                 return Err(e);
@@ -2245,9 +2227,7 @@ impl OptigaTrustM {
         // 2. Auth reference
         secure_log!("[OPTIGA/prov] step 2: provision_auth_ref");
         {
-            let mut pin_secret = Self::derive_pin_secret(pin);
-            let result = unsafe { self.provision_auth_ref(&pin_secret) };
-            pin_secret.zeroize();
+            let result = unsafe { self.provision_auth_ref(cred.expose_for_optiga()) };
             if let Err(e) = result {
                 secure_log!("[OPTIGA/prov] provision_auth_ref FAILED: {:?}", e);
                 return Err(e);
@@ -2333,7 +2313,7 @@ impl OptigaTrustM {
     /// portion of [`store_objects`] for the SECOND credential set:
     ///   - E121 LUC counter (`Change=Auto(F1D8)`, `Exec=ALW`)
     ///   - F1D8 AuthRef (`Execute=LUC(E121)` — matched-LUC, validated on
-    ///     silicon 2026-05-20) keyed by `duress_pin`
+    ///     silicon 2026-05-20) keyed by the decoy credential
     ///   - 4 decoy data OIDs (half_O / master / vk / bvk) gated on F1D8
     ///
     /// Assumes the REAL wallet is already provisioned (PBS + shield up):
@@ -2350,10 +2330,8 @@ impl OptigaTrustM {
         master_secret: &[u8; 32],
         vk: &[u8; 32],
         bootstrap_vk: &[u8; 32],
-        duress_pin: &[u8; 8],
+        duress_cred: &crate::pin_credential::OptigaPinCredential,
     ) -> Result<(), OptigaError> {
-        use zeroize::Zeroize;
-
         secure_log!("[OPTIGA/duress] store_duress_objects start");
         self.ensure_shield()?;
 
@@ -2396,14 +2374,14 @@ impl OptigaTrustM {
 
         // 2. F1D8 duress AuthRef — Execute=LUC(E121).
         {
-            let mut secret = Self::derive_pin_secret(duress_pin);
-            let r = unsafe {
+            unsafe {
                 apdu::set_data_object(
-                    &mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &secret,
+                    &mut self.ifx,
+                    &mut self.shield,
+                    apdu::OID_DURESS_AUTH_REF,
+                    duress_cred.expose_for_optiga(),
                 )
-            };
-            secret.zeroize();
-            r?;
+            }?;
             // Duress F1D8 keeps Change=ALW (change_is_auto=false): never locked,
             // blanked via ALW on reset. S-1 Auto hardening is real-F1D0 only.
             let (ameta, alen) =
@@ -2467,7 +2445,10 @@ impl OptigaTrustM {
     /// 7. On success: read entropy, master_secret, VK, bootstrap_vk
     /// 8. Reset counter to 0
     /// 9. Cache everything, return master_secret
-    fn authenticate_and_read(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], OptigaError> {
+    fn authenticate_and_read(
+        &mut self,
+        cred: &crate::pin_credential::OptigaPinCredential,
+    ) -> Result<[u8; 32], OptigaError> {
         secure_log!("[OPTIGA/auth] authenticate_and_read: start");
         self.init()?;
         // CRIT-8 requires every PIN-auth APDU to traverse the shielded
@@ -2585,21 +2566,17 @@ impl OptigaTrustM {
             // Non-hw-counter builds keep the original shape unchanged.
             #[cfg(feature = "optiga-hw-counter")]
             let (mut hmac, verify_result) = {
-                let mut pin_secret = Self::derive_pin_secret(pin);
-
                 let mut nonce = [0u8; 16];
                 secure_log!("[OPTIGA/auth] GetRandom auto-state (nonce_oid=0xE100, 16B)");
                 if let Err(e) = apdu::get_random_auto_state(
                     &mut self.ifx, &mut self.shield,
                     apdu::OID_SESSION, &mut nonce,
                 ) {
-                    pin_secret.zeroize();
                     secure_log!("[OPTIGA/auth] GetRandom auto-state FAILED: {:?}", e);
                     return Err(e);
                 }
 
-                let mut hmac = Self::hmac_sha256(&pin_secret, &nonce);
-                pin_secret.zeroize();
+                let mut hmac = Self::hmac_sha256(cred.expose_for_optiga(), &nonce);
 
                 secure_log!(
                     "[OPTIGA/auth] DecryptSym auto-state verify (key=0xF1D0, data=18B, trezor shape)"
@@ -2644,9 +2621,7 @@ impl OptigaTrustM {
                     hmac_input[48], hmac_input[49], hmac_input[50], hmac_input[51]
                 );
 
-                let mut pin_secret = Self::derive_pin_secret(pin);
-                let hmac = Self::hmac_sha256(&pin_secret, &hmac_input);
-                pin_secret.zeroize();
+                let hmac = Self::hmac_sha256(cred.expose_for_optiga(), &hmac_input);
 
                 secure_log!("[OPTIGA/auth] hmac_verify via DecryptSym (input=64B)");
                 let r = apdu::hmac_verify(
@@ -3080,14 +3055,31 @@ impl OptigaTrustM {
         let bootstrap_vk: [u8; 32] = [0x44; 32];
         let test_pin: [u8; 8] = *b"testopt!";
 
+        // #855: this round-trip drives the OPTIGA on its own, so it derives
+        // the F1D0 credential the way the single-chip `provision` shim does
+        // (creating the page-125 salt if the bench board has none). The
+        // wipe in step 3 is the inherent `factory_reset`, which leaves the
+        // salt alone, so the same credential is presented again in step 5.
+        //
+        // SAFETY: `&mut self` on the SE driver implies the single-threaded
+        // secure-world context the page-125 salt write requires.
+        let test_cred = unsafe {
+            crate::pin_gate::provisioning_credentials(
+                crate::pin_credential::WalletRole::Real,
+                &test_pin,
+            )
+        }
+        .map_err(|_| OptigaError::Transport)?
+        .optiga;
+
         // ---- 1. Provision with known test data ----
         secure_log!("[OPTIGA-E2E-ADMIN] step 1: provision via store_objects");
-        self.store_objects(&entropy, &master_secret, &vk, &bootstrap_vk, &test_pin)?;
+        self.store_objects(&entropy, &master_secret, &vk, &bootstrap_vk, &test_cred)?;
         secure_log!("[OPTIGA-E2E-ADMIN] step 1: provision OK");
 
         // ---- 2. Pre-wipe unlock must succeed AND return the right master_secret ----
         secure_log!("[OPTIGA-E2E-ADMIN] step 2: pre-wipe authenticate_and_read");
-        let recovered = match self.authenticate_and_read(&test_pin) {
+        let recovered = match self.authenticate_and_read(&test_cred) {
             Ok(ms) => ms,
             Err(e) => {
                 secure_log!("[OPTIGA-E2E-ADMIN] step 2 FAILED: unlock pre-wipe returned {:?}", e);
@@ -3127,7 +3119,7 @@ impl OptigaTrustM {
         //    counter, so a wiped chip cannot have its lockout counter
         //    re-exhausted by an attacker spamming unlock attempts.
         secure_log!("[OPTIGA-E2E-ADMIN] step 5: post-wipe authenticate_and_read");
-        match self.authenticate_and_read(&test_pin) {
+        match self.authenticate_and_read(&test_cred) {
             Err(OptigaError::NotProvisioned) => {
                 secure_log!("[OPTIGA-E2E-ADMIN] step 5: unlock returned NotProvisioned OK");
             }
@@ -3204,20 +3196,67 @@ impl OptigaTrustM {
 
 use crate::secure_element::{SeError, UnlockError, WalletStore};
 
-impl WalletStore for OptigaTrustM {
-    fn is_provisioned(&mut self) -> bool {
-        self.check_provisioned()
+// ---------------------------------------------------------------------------
+// Credential-typed entry points (#855)
+// ---------------------------------------------------------------------------
+//
+// These are what `DualSecureElement` calls. They take an
+// `OptigaPinCredential` — a PRF output under the device hardware key — and
+// never a PIN. The `WalletStore` methods further down that still take a PIN
+// are thin single-chip shims: they turn the PIN into a credential through
+// `crate::pin_gate` on their first line and then call these.
+
+impl OptigaTrustM {
+    /// Dual-SE entry point: store the wallet objects from an
+    /// [`OptigaImage`](crate::pin_credential::OptigaImage), which can only
+    /// be built by `pin_credential::chip_images` and therefore always pairs
+    /// this chip's own credential with its own masked half.
+    pub(crate) fn provision_image(
+        &mut self,
+        image: &crate::pin_credential::OptigaImage,
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+    ) -> Result<(), SeError> {
+        self.provision_with_credential(
+            image.stored_half(),
+            master_secret,
+            vk,
+            bootstrap_vk,
+            image.credential(),
+        )
     }
 
-    fn provision(
+    /// Dual-SE entry point for the decoy wallet; see [`provision_image`](Self::provision_image).
+    #[cfg(feature = "duress-pin")]
+    pub(crate) fn provision_duress_image(
+        &mut self,
+        image: &crate::pin_credential::OptigaImage,
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+    ) -> Result<(), SeError> {
+        self.provision_duress_with_credential(
+            image.stored_half(),
+            master_secret,
+            vk,
+            bootstrap_vk,
+            image.credential(),
+        )
+    }
+
+    /// Store the wallet objects, with F1D0 holding `cred`. Called by
+    /// [`provision_image`](Self::provision_image) and by the single-chip
+    /// shim, which on a bench single-OPTIGA build stores an unmasked value.
+    pub(crate) fn provision_with_credential(
         &mut self,
         entropy: &[u8; 32],
         master_secret: &[u8; 32],
         vk: &[u8; 32],
         bootstrap_vk: &[u8; 32],
-        pin: &[u8; 8],
+        cred: &crate::pin_credential::OptigaPinCredential,
     ) -> Result<(), SeError> {
-        self.store_objects(entropy, master_secret, vk, bootstrap_vk, pin)
+        self.store_objects(entropy, master_secret, vk, bootstrap_vk, cred)
             .map_err(|_| SeError::InternalError)?;
 
         self.vk_cache.copy_from_slice(vk);
@@ -3229,6 +3268,68 @@ impl WalletStore for OptigaTrustM {
         Ok(())
     }
 
+    /// Store the decoy wallet objects, with F1D8 holding `duress_cred`.
+    /// `entropy` is the OPTIGA's decoy half.
+    #[cfg(feature = "duress-pin")]
+    pub(crate) fn provision_duress_with_credential(
+        &mut self,
+        entropy: &[u8; 32],
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        duress_cred: &crate::pin_credential::OptigaPinCredential,
+    ) -> Result<(), SeError> {
+        self.store_duress_objects(entropy, master_secret, vk, bootstrap_vk, duress_cred)
+            .map_err(|_| SeError::InternalError)
+    }
+
+    /// Answer the F1D0 challenge with `cred` and read the wallet objects.
+    pub(crate) fn unlock_with_credential(
+        &mut self,
+        cred: &crate::pin_credential::OptigaPinCredential,
+    ) -> Result<[u8; 32], UnlockError> {
+        self.authenticate_and_read(cred).map_err(|e| match e {
+            OptigaError::PinIncorrect => {
+                if self.remaining > 0 {
+                    self.remaining -= 1;
+                }
+                UnlockError::PinIncorrect
+            }
+            OptigaError::PinLocked => UnlockError::PinLocked,
+            _ => UnlockError::InternalError,
+        })
+    }
+}
+
+impl WalletStore for OptigaTrustM {
+    fn is_provisioned(&mut self) -> bool {
+        self.check_provisioned()
+    }
+
+    /// Single-chip shim (the bench `optiga-trust-m` backend, and e2e flows
+    /// that drive this chip on its own). Derives the die-bound credential
+    /// first; the PIN goes no further than this function.
+    fn provision(
+        &mut self,
+        entropy: &[u8; 32],
+        master_secret: &[u8; 32],
+        vk: &[u8; 32],
+        bootstrap_vk: &[u8; 32],
+        pin: &[u8; 8],
+    ) -> Result<(), SeError> {
+        // SAFETY: `&mut self` on the SE driver implies the single-threaded
+        // secure-world context the page-125 salt write requires.
+        let set = unsafe {
+            crate::pin_gate::provisioning_credentials(
+                crate::pin_credential::WalletRole::Real,
+                pin,
+            )
+        }
+        .map_err(|_| SeError::InternalError)?;
+        self.provision_with_credential(entropy, master_secret, vk, bootstrap_vk, &set.optiga)
+    }
+
+    /// Single-chip shim; see [`provision`](Self::provision).
     #[cfg(feature = "duress-pin")]
     fn provision_duress(
         &mut self,
@@ -3238,9 +3339,17 @@ impl WalletStore for OptigaTrustM {
         bootstrap_vk: &[u8; 32],
         duress_pin: &[u8; 8],
     ) -> Result<(), SeError> {
-        // `entropy` here is OPTIGA's decoy half_O (DualSE pre-split it).
-        self.store_duress_objects(entropy, master_secret, vk, bootstrap_vk, duress_pin)
-            .map_err(|_| SeError::InternalError)
+        // The decoy is provisioned right after the real wallet, under the
+        // salt that provisioning has just minted; refused otherwise.
+        let set = crate::pin_gate::decoy_provisioning_credentials(duress_pin)
+            .map_err(|_| SeError::InternalError)?;
+        self.provision_duress_with_credential(
+            entropy,
+            master_secret,
+            vk,
+            bootstrap_vk,
+            &set.optiga,
+        )
     }
 
     #[cfg(feature = "duress-pin")]
@@ -3265,17 +3374,20 @@ impl WalletStore for OptigaTrustM {
         )
     }
 
+    fn pin_credentials_recomputable(&mut self) -> bool {
+        crate::pin_gate::credentials_recomputable()
+    }
+
+    /// Single-chip shim; see [`provision`](Self::provision). With no usable
+    /// salt on page 125 the credential cannot be recomputed, so this fails
+    /// with `InternalError` before any APDU is sent.
     fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {
-        self.authenticate_and_read(pin).map_err(|e| match e {
-            OptigaError::PinIncorrect => {
-                if self.remaining > 0 {
-                    self.remaining -= 1;
-                }
-                UnlockError::PinIncorrect
-            }
-            OptigaError::PinLocked => UnlockError::PinLocked,
-            _ => UnlockError::InternalError,
-        })
+        let set = crate::pin_gate::unlock_credentials(
+            crate::pin_credential::WalletRole::Real,
+            pin,
+        )
+        .map_err(|_| UnlockError::InternalError)?;
+        self.unlock_with_credential(&set.optiga)
     }
 
     fn read_entropy_blob(&mut self, buf: &mut [u8]) -> Result<usize, SeError> {
@@ -3366,7 +3478,33 @@ impl WalletStore for OptigaTrustM {
     }
 
     fn factory_reset_admin(&mut self) -> Result<(), SeError> {
-        self.factory_reset().map_err(|_| SeError::InternalError)
+        // #855: destroy the PIN-credential salt before the first APDU. From
+        // here on the value in F1D0 can never be recomputed by this device,
+        // whatever happens to the chip-side wipe below.
+        //
+        // `destroy_salt`, not `begin_wipe`: the wipe-in-progress flag is
+        // armed a few lines into `factory_reset_body` (HIGH-18), and in the
+        // dual-SE product `DualSecureElement::factory_reset_admin` has armed
+        // it already.
+        //
+        // SAFETY: `&mut self` on the SE driver implies the single-threaded
+        // secure-world context the page-125 write requires.
+        let salt_gone = unsafe { crate::pin_gate::destroy_salt() };
+        let wiped = self.factory_reset().map_err(|_| SeError::InternalError);
+
+        // Single-OPTIGA bench build only: no SE050 leg exists to erase page
+        // 125 at the end of a completed wipe, so do it here. That clears the
+        // wipe flag `factory_reset_body` armed (otherwise every later boot
+        // would resume a wipe that is finished) and returns the salt log to
+        // blank.
+        #[cfg(not(feature = "se050"))]
+        if salt_gone.is_ok() && wiped.is_ok() {
+            // SAFETY: same context as above; erases page 125 only.
+            let _ = unsafe { crate::hw::flash::erase_admin_page() };
+        }
+
+        salt_gone.map_err(|_| SeError::InternalError)?;
+        wiped
     }
 }
 

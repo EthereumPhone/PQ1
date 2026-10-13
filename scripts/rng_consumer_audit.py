@@ -88,6 +88,17 @@ EXPECTED = {
     # carries a mode-production compile fence, so it cannot reach a shipping
     # image. Reviewed 2026-09-24 on the ui-px-evt merge.
     "secure/src/main.rs": Counter({"let r = rng::fill(&mut b);": 1}),
+    # #855: the PIN-credential salt of a store that drives ONE secure element
+    # (`pin_gate::single_chip_salt_draw`). The product store is
+    # `DualSecureElement`, whose salt is a mandatory three-source draw (see
+    # REQUIRED_THREE_SOURCE below); the three-source generator needs both
+    # chips, so a single-chip bench build has only the platform TRNG. The
+    # salt is not a secret (it sits in secure flash next to the wipe flag; the
+    # secret is the device key the PRF runs under), but it does reach a KDF,
+    # so the helper refuses outright in a shipping build (`mode-production`
+    # or `rdp2-self-lock`, the predicate of the RDP-2 mint rule) -- the fence
+    # below pins that refusal directly in front of this call.
+    "secure/src/pin_gate.rs": Counter({"crate::rng::fill(out)": 1}),
 }
 
 REQUIRED_THREE_SOURCE = {
@@ -101,6 +112,9 @@ REQUIRED_THREE_SOURCE = {
     "secure/src/dual_se.rs": [
         "rng_strong::fill_with_store(&mut half_o, self)",
         "rng_strong::fill_with_store(&mut *transient_secret, self)",
+        # #855: the product-path PIN-credential salt.
+        "rng_strong::fill_with_store(&mut out[..], self)",
+        "load_or_create_salt(|bytes| self.draw_pin_salt(bytes))",
     ],
     "secure/src/hw/otp.rs": ["rng_strong::fill(&mut key)"],
     "secure/src/first_boot/mod.rs": [
@@ -155,6 +169,11 @@ def require_snippets(errors: list[str]) -> None:
         ],
         "secure/src/main.rs": [
             "BHK missing after first-boot ALL_DONE; refusing reprovision",
+        ],
+        "secure/src/pin_gate.rs": [
+            "if matches!(mint_policy(), MintPolicy::RequireRdp2) {\n        return Err(());\n    }\n    crate::rng::fill(out)",
+            'if cfg!(any(feature = "mode-production", feature = "rdp2-self-lock")) {\n        MintPolicy::RequireRdp2',
+            "load_or_create_salt(single_chip_salt_draw)",
         ],
     }
     for rel, snippets in fences.items():

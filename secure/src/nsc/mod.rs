@@ -1448,6 +1448,12 @@ pub(crate) fn unlock_after_verified_pin(master: [u8; 32]) -> u32 {
 /// Wraps the raw `WalletStore::unlock` with the MCU-side attempt
 /// counter at secure-flash page 124:
 ///
+///   0. (#855) If the store reports that its PIN credentials cannot be
+///      recomputed — no usable salt in secure flash — refuse with
+///      `InternalError` before anything is charged or sent. No PIN can
+///      open such a wallet, so an attempt would only burn the chips' own
+///      counters, and nothing about a guess is computed, so the refusal
+///      is not an oracle.
 ///   1. Check the counter. If ≥ MAX_ATTEMPTS, refuse — return
 ///      `PinLocked`. Caller is responsible for running
 ///      `trigger_lockout_wipe` on that signal.
@@ -1502,6 +1508,15 @@ pub unsafe fn gated_unlock(
     // `wait_random_loop` keeps this a real `bl` (a glitch that skips
     // the call skips only the jitter, not the gate that follows).
     crate::fi::wait_random();
+
+    // #855 — step 0. A wallet whose credentials cannot be recomputed (wiped,
+    // or provisioned before the die-bound scheme) is refused here, uncharged
+    // and without SE traffic. A fault that skips this check is harmless: the
+    // attempt is then charged below and `unlock` refuses at its own salt
+    // read, before any APDU.
+    if !se.pin_credentials_recomputable() {
+        return Err(UnlockError::InternalError);
+    }
 
     #[cfg(feature = "stm32u585")]
     {
@@ -1680,7 +1695,7 @@ pub unsafe fn gated_unlock(
             // failing closed here costs only a retry.
             #[cfg(feature = "stm32u585")]
             {
-                let reset_result = crate::hw::flash::pin_attempts_reset();
+                let reset_result = crate::hw::flash::pin_attempts_reset_after_correct_pin();
                 let reset_ok =
                     crate::fi::check_true_into_sentinel(|| reset_result.is_ok());
                 if reset_ok != crate::fi::OK_SENTINEL {
@@ -1801,7 +1816,8 @@ where
         mcu, se_used, se_split
     );
     let _ = se.factory_reset_admin();
-    let _ = crate::hw::flash::pin_attempts_reset();
+    // #855: only once the PIN-credential salt is verifiably gone.
+    let _ = crate::hw::flash::pin_attempts_reset_after_wipe();
     crate::ui::show_status("WIPED", "tamper signal");
 }
 

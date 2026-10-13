@@ -1466,16 +1466,24 @@ fn negative_shield_zeroize_on_drop_for_secret_material() {
 
 #[test]
 fn negative_provision_hw_pin_counter_zeroizes_original_pin_secret() {
-    // X17-TUI2 family (playbook UI9): step 1c must zeroize the
-    // ORIGINAL `pin_secret` binding. Zeroizing a moved copy leaves
-    // the KDF-derived PIN secret live on the stack.
+    // X17-TUI2 family (playbook UI9): step 1c must not leave a copy of the
+    // F1D0 secret live on the stack. Since #855 the secret is an
+    // `OptigaPinCredential` owned by the caller and wiped when it drops;
+    // step 1c borrows it and must never copy the bytes out.
     assert!(
-        MOD_SRC.contains("self.provision_hw_pin_counter(Self::HW_PIN_CTR_LIMIT, &pin_secret)"),
-        "step 1c must pass the pin_secret into provision_hw_pin_counter"
+        MOD_SRC.contains(
+            "self.provision_hw_pin_counter(Self::HW_PIN_CTR_LIMIT, cred.expose_for_optiga())"
+        ),
+        "step 1c must borrow the credential into provision_hw_pin_counter"
     );
     assert!(
         !MOD_SRC.contains("let mut ps = pin_secret;"),
-        "step 1c must zeroize the original pin_secret binding, not a copy (X17-TUI2 family)"
+        "step 1c must not copy the F1D0 secret (X17-TUI2 family)"
+    );
+    assert!(
+        !MOD_SRC.contains("*cred.expose_for_optiga()")
+            && !MOD_SRC.contains("*duress_cred.expose_for_optiga()"),
+        "the driver must borrow the credential, never copy its bytes into a bare array"
     );
 }
 
@@ -1630,13 +1638,70 @@ fn negative_mod_max_attempts_matches_shared_invariant() {
 }
 
 #[test]
-fn negative_mod_pin_auth_domain_tag_unchanged() {
-    // ASSUMPTION ATTACKED: renaming the KDF domain tag would silently
-    // brick every paired chip (CLAUDE.md "no casual KDF tag changes").
+fn negative_mod_has_no_unkeyed_pin_derivation() {
+    // #855 (Ledger Donjon report, scenarios B and C). This test used to pin
+    // `PIN_AUTH_DOMAIN = "optiga-pin-auth-v1"`: F1D0 held one unsalted,
+    // unkeyed SHA-256 of the PIN, which anyone who read the chip could
+    // search offline in about a minute. The derivation now lives in
+    // `pin_credential` and is keyed by the device hardware key.
+    //
+    // ASSUMPTION ATTACKED: a later change re-introduces a PIN-to-secret
+    // derivation inside the OPTIGA driver that needs nothing from the
+    // microcontroller.
+    for banned in ["PIN_AUTH_DOMAIN", "derive_pin_secret", "optiga-pin-auth-v1"] {
+        assert!(
+            !MOD_SRC.contains(banned),
+            "optiga/mod.rs must not contain `{banned}`: the driver never derives from a PIN (#855)"
+        );
+    }
+    // No unkeyed hash helper is called from the driver at all.
     assert!(
-        MOD_SRC.contains(r#"const PIN_AUTH_DOMAIN: &[u8] = b"optiga-pin-auth-v1";"#),
-        "OPTIGA PIN-auth KDF domain tag must remain 'optiga-pin-auth-v1'"
+        !MOD_SRC.contains("crypto::kdf("),
+        "optiga/mod.rs must not call the unkeyed SHA-256 `crypto::kdf` (#855)"
     );
+    // What F1D0 receives is the typed, die-bound credential.
+    assert!(
+        MOD_SRC.contains("self.provision_auth_ref(cred.expose_for_optiga())"),
+        "F1D0 must be written from an OptigaPinCredential"
+    );
+}
+
+#[test]
+fn negative_mod_driver_internals_take_no_pin() {
+    // #855: inside the driver only the three `WalletStore` shims may name a
+    // PIN parameter, and each must hand it to `pin_gate` on its first
+    // statement. Everything below them is typed on the credential.
+    let pin_params = MOD_SRC.matches("pin: &[u8; 8]").count();
+    assert_eq!(
+        pin_params, 3,
+        "exactly the three WalletStore shims (provision, provision_duress, unlock) may take a PIN"
+    );
+    for (signature, first_call) in [
+        ("    fn unlock(&mut self, pin: &[u8; 8]) -> Result<[u8; 32], UnlockError> {",
+         "crate::pin_gate::unlock_credentials("),
+        ("        duress_pin: &[u8; 8],\n    ) -> Result<(), SeError> {",
+         "crate::pin_gate::decoy_provisioning_credentials("),
+        ("        pin: &[u8; 8],\n    ) -> Result<(), SeError> {",
+         "crate::pin_gate::provisioning_credentials("),
+    ] {
+        let at = MOD_SRC.find(signature).expect("WalletStore shim signature present");
+        let body = &MOD_SRC[at + signature.len()..];
+        let call = body.find(first_call).expect("shim derives through pin_gate");
+        // Nothing may reach the driver or the chip before the derivation.
+        let before = &body[..call];
+        assert!(
+            !before.contains("self.") && !before.contains("apdu::"),
+            "the shim must derive through pin_gate before it touches the driver"
+        );
+    }
+    // The credential-typed internals.
+    for typed in [
+        "fn authenticate_and_read(\n        &mut self,\n        cred: &crate::pin_credential::OptigaPinCredential,",
+        "bootstrap_vk: &[u8; 32],\n        cred: &crate::pin_credential::OptigaPinCredential,\n    ) -> Result<(), OptigaError> {",
+        "bootstrap_vk: &[u8; 32],\n        duress_cred: &crate::pin_credential::OptigaPinCredential,\n    ) -> Result<(), OptigaError> {",
+    ] {
+        assert!(MOD_SRC.contains(typed), "missing credential-typed signature: {typed}");
+    }
 }
 
 #[test]

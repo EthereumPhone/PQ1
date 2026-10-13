@@ -88,7 +88,7 @@ impl<'a> StressCtx<'a> {
             };
             {
                 let (t1, scp03) = self.se.t1_scp03_mut();
-                if let Err(e) = apdu::verify_session(t1, scp03, &sid, &pin) {
+                if let Err(e) = apdu::verify_session(t1, scp03, &sid, apdu::UserIdValue::Bench(&pin)) {
                     let _ = apdu::close_session(t1, scp03, &sid);
                     return Err(e.into());
                 }
@@ -141,7 +141,7 @@ impl<'a> StressCtx<'a> {
             };
             {
                 let (t1, scp03) = self.se.t1_scp03_mut();
-                if apdu::verify_session(t1, scp03, &sid, &pin).is_err() {
+                if apdu::verify_session(t1, scp03, &sid, apdu::UserIdValue::Bench(&pin)).is_err() {
                     let _ = apdu::close_session(t1, scp03, &sid);
                     // Verify failure on the admin session itself leaves
                     // the chip session-pending — flush it.
@@ -183,7 +183,7 @@ impl<'a> StressCtx<'a> {
         };
         unsafe {
             let (t1, scp03) = self.se.t1_scp03_mut();
-            apdu::write_userid(t1, scp03, target, pin, max_attempts, admin_entry)?;
+            apdu::write_userid(t1, scp03, target, apdu::UserIdValue::Bench(pin), max_attempts, admin_entry)?;
         }
         Ok(())
     }
@@ -214,7 +214,7 @@ impl<'a> StressCtx<'a> {
             };
             let verify_err = {
                 let (t1, scp03) = self.se.t1_scp03_mut();
-                apdu::verify_session(t1, scp03, &sid, pin).err()
+                apdu::verify_session(t1, scp03, &sid, apdu::UserIdValue::Bench(pin)).err()
             };
             if let Some(e) = verify_err {
                 {
@@ -405,7 +405,7 @@ impl<'a> StressCtx<'a> {
         };
         unsafe {
             let (t1, scp03) = self.se.t1_scp03_mut();
-            apdu::write_userid_unlimited(t1, scp03, target, pin, admin_entry)?;
+            apdu::write_userid_unlimited(t1, scp03, target, apdu::UserIdValue::Bench(pin), admin_entry)?;
         }
         Ok(())
     }
@@ -522,7 +522,7 @@ impl<'a> StressCtx<'a> {
     ) -> Result<(), Se050Error> {
         unsafe {
             let (t1, scp03) = self.se.t1_scp03_mut();
-            apdu::write_userid(t1, scp03, target, pin, max_attempts, admin)
+            apdu::write_userid(t1, scp03, target, apdu::UserIdValue::Bench(pin), max_attempts, admin)
         }
     }
 

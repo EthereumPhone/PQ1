@@ -200,8 +200,14 @@ unsafe fn trigger_lockout_wipe() -> u32 {
     // unprovisioned chip, trigger the boot-time lockout check, and
     // loop. Erasing here makes the device ready for a fresh first-
     // boot wizard.
+    //
+    // #855: the reset happens only if the PIN-credential salt is
+    // verifiably gone (`factory_reset_admin` destroys it before its first
+    // SE command). If it survived, the counter stays at MAX and the next
+    // boot retries the wipe — ten fresh guesses are never handed out
+    // against a credential that is still valid.
     #[cfg(feature = "stm32u585")]
-    let _ = crate::hw::flash::pin_attempts_reset();
+    let _ = crate::hw::flash::pin_attempts_reset_after_wipe();
 
     // Zeroize every TrustZone-side secret.
     super::zeroize_sensitive_state();

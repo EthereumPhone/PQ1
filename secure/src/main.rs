@@ -101,6 +101,15 @@ mod flash_policy;
 /// Why each PIN attempt was consumed (#715). RAM-resident, read-only over the
 /// gateway; no secret material. Pure ring logic, host-tested.
 mod pin_attempt_log;
+// Die-bound PIN credentials and seed-half masks (#855): every PIN-dependent
+// value that reaches a secure element is a PRF output under the device key.
+// Pure derivation + the attack-replay tests; `hw::secret_keys` supplies the
+// PRF and the OPTIGA / SE050 drivers consume the typed outputs.
+mod pin_credential;
+// The per-provisioning salt those credentials depend on (#855): page-125 log
+// codec and create / destroy lifecycle behind a flash trait, host-tested
+// including torn writes. `hw::flash` supplies the real page.
+mod pin_salt;
 
 // Pure classification of the device-master-key OTP region (Virgin / Partial /
 // Complete, per quad-word). Free of MMIO so the D4 rule — an interrupted
@@ -238,6 +247,15 @@ compile_error!(
 #[cfg(not(test))]
 mod sau;
 mod secure_element;
+// Firmware glue for the die-bound PIN credentials (#855): device-key PRF +
+// page-125 salt. The only path from a PIN to anything a secure element sees.
+// Needs the SAES / flash drivers, so it exists only where an SE backend does.
+#[cfg(all(
+    feature = "stm32u585",
+    any(feature = "se050", feature = "optiga-trust-m"),
+    not(test)
+))]
+mod pin_gate;
 #[cfg(all(feature = "se050", not(test)))]
 mod se050;
 // SE050 stress-test harness. Only present when the `se050-stress`
@@ -383,6 +401,16 @@ mod nsc_erc7730_binding_fi_pure_tests;
 // `reports/tests/secure-fw-update-boot.md` for the inventory.
 #[cfg(test)]
 mod fw_update_boot_pure_tests;
+
+// ── Wiring pins for the die-bound PIN credential path (#855) ──
+//
+// `pin_gate`, `hw::secret_keys`, `hw::flash` and `nsc` never compile on the
+// host, so the facts the #855 argument rests on there (which PRF the device
+// uses, which salt policy a build gets, when the attempt counter is reset)
+// are pinned as source text. The executable tests are in `pin_credential`
+// and `pin_salt`.
+#[cfg(test)]
+mod pin_gate_wiring_pure_tests;
 
 // ── Host-side test suite for the `secure-main-sau` slice ──
 //
@@ -1997,16 +2025,41 @@ fn main() -> ! {
         //       before `trigger_lockout_wipe` could complete. Without
         //       this check, the device would boot and let the user
         //       try a PIN they've already been locked out of.
+        //   (c) #855: the secure elements hold a wallet whose PIN
+        //       credentials can no longer be recomputed — both chips
+        //       report provisioned, but page 125 has no salt. That is a
+        //       wipe that destroyed the salt and then did not finish on a
+        //       chip (and lost its flag), or a wallet provisioned by
+        //       firmware from before the die-bound scheme. No PIN can open
+        //       it and `gated_unlock` refuses it without charging an
+        //       attempt, so without this trigger nothing would ever wipe
+        //       it. (Found in review.) A bench build's salt is fixed, so
+        //       this never fires there.
         let wipe_armed = hw::flash::is_wipe_armed();
         let attempts_exhausted =
             hw::flash::pin_attempts_read() >= sphincs_tz_shared::MAX_ATTEMPTS;
+        let dead_wallet = {
+            let se = &mut *core::ptr::addr_of_mut!(SE);
+            // A wipe is destructive, so "cannot be recomputed" has to be
+            // affirmed twice through the FI sentinel: a single fault on the
+            // salt read must not be able to start one. Checked first, and
+            // false on every healthy boot, so the chips are only asked
+            // whether they are provisioned when the salt really is missing.
+            let unrecomputable = crate::fi::check_true_into_sentinel(|| {
+                !se.pin_credentials_recomputable()
+            }) == crate::fi::OK_SENTINEL;
+            unrecomputable && se.is_provisioned()
+        };
 
-        if wipe_armed || attempts_exhausted {
+        if wipe_armed || attempts_exhausted || dead_wallet {
             if wipe_armed {
                 secure_log!("[S] Wipe-in-progress flag set — resuming factory reset");
             }
             if attempts_exhausted {
                 secure_log!("[S] MCU attempt counter at MAX — triggering wipe");
+            }
+            if dead_wallet {
+                secure_log!("[S] Provisioned wallet with no PIN-credential salt — wiping");
             }
             ui::show_status("WIPING", "resuming from interrupt");
             let _ = (&mut *core::ptr::addr_of_mut!(SE)).factory_reset_admin();
@@ -2014,7 +2067,12 @@ fn main() -> ! {
             // both the page-125 PIN and the wipe flag. Also reset page 124
             // (MCU attempt counter) so next boot sees unprovisioned state +
             // blank counter → first-boot wizard, not another lockout loop.
-            let _ = hw::flash::pin_attempts_reset();
+            //
+            // #855: the reset happens only if the PIN-credential salt is
+            // verifiably gone. `factory_reset_admin` destroys it first; if
+            // that failed, the counter stays at MAX and this block runs
+            // again at the next boot.
+            let _ = hw::flash::pin_attempts_reset_after_wipe();
             ui::show_status("WALLET WIPED", "restore from seed");
         }
 
@@ -2058,19 +2116,68 @@ fn main() -> ! {
         // (10-attempt budget); a correct PIN auto-resets the counter.
         // PIN order is best-guess to minimise consumed attempts.
         const USERIDS: &[u32] = &[0x7B10_0000, 0x7B0E_0000, 0x7B06_0000, 0x7B00_2000];
-        const PIN_CANDIDATES: &[&[u8]] = &[
-            b"00000000", // e2e default + most common dev PIN
-            b"12345678",
-            b"11111111",
+        const PIN_CANDIDATES: &[[u8; 8]] = &[
+            *b"00000000", // e2e default + most common dev PIN
+            *b"12345678",
+            *b"11111111",
         ];
 
         let mut total_deleted: u32 = 0;
         let mut last_failed: u16 = u16::MAX;
         let mut any_auth_ok = false;
 
+        // #855: on the current range, a UserID written by this firmware
+        // holds the die-bound credential for the PIN; one written by older
+        // firmware (and every retired range) holds the raw PIN bytes. A
+        // wrong value costs one of the UserID's ten attempts, so the format
+        // is decided once, from whether page 125 holds a salt record, and
+        // not tried both ways for every PIN: every candidate in the likely
+        // format, then the first (default) candidate in the other. This
+        // reset tool is, with the e2e pre-clean, the only place raw PIN
+        // bytes are still presented to a chip; it is a bench image that
+        // halts when done.
+        let this_scheme = crate::pin_gate::salt_record_present();
+
         'outer: for &uid in USERIDS {
-            for &pin in PIN_CANDIDATES {
-                let (d, f, auth_ok) = match se.iterative_wipe(Some(uid), Some(pin)) {
+            // (candidate index, derived?) in the order to try.
+            let mut order: [(usize, bool); 4] = [(0, false); 4];
+            let mut n = 0;
+            let current_range = uid == crate::se050::USERID_OBJ;
+            let likely_derived = current_range && this_scheme;
+            for i in 0..PIN_CANDIDATES.len() {
+                order[n] = (i, likely_derived);
+                n += 1;
+            }
+            if current_range {
+                order[n] = (0, !likely_derived);
+                n += 1;
+            }
+
+            for &(i, use_derived) in &order[..n] {
+                let pin = &PIN_CANDIDATES[i];
+                let derived = if use_derived {
+                    match crate::pin_gate::unlock_credentials(
+                        crate::pin_credential::WalletRole::Real,
+                        pin,
+                    ) {
+                        Ok(set) => Some(set),
+                        // Not derivable on this build: skip, no attempt spent.
+                        Err(_) => continue,
+                    }
+                } else {
+                    None
+                };
+                // Typed (`se050::apdu::UserIdValue`): the derived credential,
+                // or a known test PIN as a compile-time constant.
+                let userid_value = match &derived {
+                    Some(set) => crate::se050::apdu::UserIdValue::Credential(&set.se050),
+                    None => crate::se050::apdu::UserIdValue::Fixed(pin),
+                };
+
+                // `iterative_wipe` re-initialises the SE050 session itself
+                // after a failed authentication, so the next value starts
+                // from a clean state.
+                let (d, f, auth_ok) = match se.iterative_wipe(Some(uid), Some(userid_value)) {
                     Ok(r) => r,
                     Err(_e) => {
                         secure_log!(
@@ -2081,9 +2188,10 @@ fn main() -> ! {
                     }
                 };
                 secure_log!(
-                    "[S] wipe UID=0x{:08x} pin={:?}: deleted={}, left={}, auth_ok={}",
+                    "[S] wipe UID=0x{:08x} pin={:?} (derived={}): deleted={}, left={}, auth_ok={}",
                     uid,
                     core::str::from_utf8(pin).unwrap_or("?"),
+                    use_derived,
                     d, f, auth_ok
                 );
                 total_deleted = total_deleted.saturating_add(d as u32);
@@ -2358,7 +2466,7 @@ fn main() -> ! {
         // timing window on this bench chip where a subsequent program
         // to page 125 QW0 returned PROGERR silently. The test just needs
         // the MCU counter cleared; SE cleanup is the provision path's job.
-        let _ = hw::flash::pin_attempts_reset();
+        let _ = hw::flash::pin_attempts_reset_bench();
         let count0 = hw::flash::pin_attempts_read();
         if count0 != 0 {
             secure_log!("[PIN-GATE] step 0 FAILED: count after reset = {} (expected 0)", count0);
@@ -2612,7 +2720,12 @@ fn main() -> ! {
         let test_bvk: [u8; 32] = [0xDD; 32];
         let real_pin: [u8; 8] = *b"00000000";
         let wrong_pin: [u8; 8] = *b"99999999";
-        let duress_pin: [u8; 8] = *b"11111111";
+        // The probe's own second credential. These are fixed test values
+        // written straight into probe objects (F1D8 / a scratch UserID) to
+        // measure chip behaviour; they are not derived from a PIN and are
+        // not the product's duress credential (see `pin_credential`, #855).
+        const DURESS_PROBE_SECRET: [u8; 32] = [0x5D; 32];
+        const DURESS_PROBE_USERID: [u8; 8] = *b"11111111";
 
         // F1D8: free type-3 OID (F1D0..F1D5 used, F1D6..F1DB free) —
         // mirrors apdu::OID_DURESS_AUTH_REF_PROBE.
@@ -2651,7 +2764,7 @@ fn main() -> ! {
 
         if se
             .optiga
-            .probe_provision_duress_authref(DURESS_AUTHREF_OID, &duress_pin)
+            .probe_provision_duress_authref(DURESS_AUTHREF_OID, &DURESS_PROBE_SECRET)
             .is_err()
         {
             fail!("OPTIGA duress AuthRef provision at F1D8 failed (F1D8 may be locked)");
@@ -2667,7 +2780,7 @@ fn main() -> ! {
 
         if se
             .optiga
-            .probe_hmac_auth_at(DURESS_AUTHREF_OID, &duress_pin)
+            .probe_hmac_auth_at(DURESS_AUTHREF_OID, &DURESS_PROBE_SECRET)
             .is_err()
         {
             fail!("OPTIGA F1D8 duress HMAC auth failed");
@@ -2709,7 +2822,7 @@ fn main() -> ! {
         // ===== SE050: second unlimited UserID =====
         if se
             .se050
-            .probe_provision_and_auth_duress_userid(DURESS_USERID_OBJ, &duress_pin)
+            .probe_provision_and_auth_duress_userid(DURESS_USERID_OBJ, &DURESS_PROBE_USERID)
             .is_err()
         {
             fail!("SE050 duress UserID (unlimited) provision+auth failed");
@@ -2752,7 +2865,7 @@ fn main() -> ! {
             let (mut o_sum, mut o_min, mut o_max) = (0u32, u32::MAX, 0u32);
             for _ in 0..NT {
                 let t0 = cyc();
-                let _ = se.optiga.probe_hmac_auth_at(DURESS_AUTHREF_OID, &duress_pin);
+                let _ = se.optiga.probe_hmac_auth_at(DURESS_AUTHREF_OID, &DURESS_PROBE_SECRET);
                 let d = cyc().wrapping_sub(t0);
                 o_sum += d;
                 if d < o_min { o_min = d; }
@@ -2771,12 +2884,27 @@ fn main() -> ! {
             // if they differ materially, the duress credential needs its
             // own LUC counter so its verify uses the same auto-state path.
             // (Each call fires the E120 LUC; NT=15 < HW_PIN_CTR_LIMIT=32.)
+            //
+            // #855: F1D0 holds the real wallet's die-bound credential, so the
+            // probe answers the challenge with that, derived once up front
+            // (outside the timed loop) exactly as an unlock derives it.
+            let real_cred = match crate::pin_gate::unlock_credentials(
+                crate::pin_credential::WalletRole::Real,
+                &real_pin,
+            ) {
+                Ok(set) => set.optiga,
+                Err(_) => fail!("could not derive the real F1D0 credential for the timing probe"),
+            };
             let (mut a_sum, mut a_min, mut a_max) = (0u32, u32::MAX, 0u32);
             for _ in 0..NT {
                 let t0 = cyc();
-                let _ = se
-                    .optiga
-                    .probe_hmac_auth_luc_at(optiga::apdu::OID_AUTH_REF, &real_pin);
+                let _ = se.optiga.probe_hmac_auth_luc_at(
+                    optiga::apdu::OID_AUTH_REF,
+                    // Bench waiver: read outside the OPTIGA driver only to
+                    // feed this timing probe.
+                    // nosemgrep: pin-credential-bytes-confined
+                    real_cred.expose_for_optiga(),
+                );
                 let d = cyc().wrapping_sub(t0);
                 a_sum += d;
                 if d < a_min { a_min = d; }
@@ -2799,7 +2927,7 @@ fn main() -> ! {
                 let t0 = cyc();
                 let _ = se
                     .se050
-                    .probe_auth_existing_userid(DURESS_USERID_OBJ, &duress_pin);
+                    .probe_auth_existing_userid(DURESS_USERID_OBJ, &DURESS_PROBE_USERID);
                 let d = cyc().wrapping_sub(t0);
                 s_sum += d;
                 if d < s_min { s_min = d; }
@@ -2841,7 +2969,7 @@ fn main() -> ! {
         if se
             .optiga
             .probe_provision_duress_authref_luc(
-                DURESS_AUTHREF_OID, DURESS_CTR_OID, DURESS_CTR_LIMIT, &duress_pin,
+                DURESS_AUTHREF_OID, DURESS_CTR_OID, DURESS_CTR_LIMIT, &DURESS_PROBE_SECRET,
             )
             .is_err()
         {
@@ -2861,7 +2989,7 @@ fn main() -> ! {
         // One auto-state verify against the matched-LUC duress credential.
         if se
             .optiga
-            .probe_hmac_auth_luc_at(DURESS_AUTHREF_OID, &duress_pin)
+            .probe_hmac_auth_luc_at(DURESS_AUTHREF_OID, &DURESS_PROBE_SECRET)
             .is_err()
         {
             fail!("matched-LUC duress auto-state verify (F1D8) failed");
@@ -2892,7 +3020,7 @@ fn main() -> ! {
             let (mut d_sum, mut d_min, mut d_max) = (0u32, u32::MAX, 0u32);
             for _ in 0..NT {
                 let t0 = cyc();
-                let _ = se.optiga.probe_hmac_auth_luc_at(DURESS_AUTHREF_OID, &duress_pin);
+                let _ = se.optiga.probe_hmac_auth_luc_at(DURESS_AUTHREF_OID, &DURESS_PROBE_SECRET);
                 let d = cyc().wrapping_sub(t0);
                 d_sum += d;
                 if d < d_min { d_min = d; }
@@ -2979,8 +3107,18 @@ fn main() -> ! {
         if e120_pre == u32::MAX || e121_pre == u32::MAX { fail!("counter read failed pre decoy-read"); }
         secure_log!("[S] [DURESS-PROV] step 4: pre-read E120={} E121={}", e120_pre, e121_pre);
 
+        // #855: the chips hold die-bound decoy credentials and masked decoy
+        // halves. Derive this PIN's decoy set the way `unlock_duress` does.
+        let decoy = match crate::pin_gate::unlock_credentials(
+            crate::pin_credential::WalletRole::Duress,
+            &duress_pin,
+        ) {
+            Ok(set) => set,
+            Err(_) => fail!("could not derive the decoy credential set"),
+        };
+
         // 5. Read the OPTIGA decoy half (auths F1D8, fires LUC(E121)).
-        let half_o = match se.optiga.duress_read_half(&duress_pin) {
+        let half_o = match se.optiga.duress_read_half(&decoy.optiga) {
             Ok((h, _stored_master)) => h,
             Err(e) => { secure_log!("[S] [DURESS-PROV] optiga.duress_read_half err {:?}", e); fail!("OPTIGA decoy read/auth failed"); }
         };
@@ -2998,16 +3136,22 @@ fn main() -> ! {
         secure_log!("[S] [DURESS-PROV] step 6: isolation OK (E121 reset to 0, E120 untouched)");
 
         // 7. Read the SE050 decoy half.
-        let half_e = match se.se050.duress_read_half(&duress_pin) {
+        let half_e = match se.se050.duress_read_half(&decoy.se050) {
             Ok(h) => h,
             Err(e) => { secure_log!("[S] [DURESS-PROV] se050.duress_read_half err {:?}", e); fail!("SE050 decoy read/auth failed"); }
         };
 
-        // 8. Reconstruct: half_o XOR half_e == known decoy entropy.
+        // 8. Reconstruct. #855: what the chips store must NOT XOR to the
+        //    entropy on its own; only after the PIN-keyed masks are removed.
+        let mut raw_join = [0u8; 32];
+        for i in 0..32 { raw_join[i] = half_o[i] ^ half_e[i]; }
+        if raw_join == decoy_entropy { fail!("stored decoy halves XOR to the entropy without unmasking"); }
+        let plain_o = decoy.mask_optiga.apply(&half_o);
+        let plain_e = decoy.mask_se050.apply(&half_e);
         let mut recon = [0u8; 32];
-        for i in 0..32 { recon[i] = half_o[i] ^ half_e[i]; }
-        if recon != decoy_entropy { fail!("decoy half_o XOR half_e != known decoy entropy"); }
-        secure_log!("[S] [DURESS-PROV] step 8: decoy entropy reconstructs from both halves OK");
+        for i in 0..32 { recon[i] = plain_o[i] ^ plain_e[i]; }
+        if recon != decoy_entropy { fail!("unmasked decoy half_o XOR half_e != known decoy entropy"); }
+        secure_log!("[S] [DURESS-PROV] step 8: decoy entropy reconstructs from both unmasked halves OK");
 
         // 9. Coexistence: the real wallet still unlocks with the real PIN.
         match se.unlock(&real_pin) {
@@ -3021,7 +3165,7 @@ fn main() -> ! {
         // ===== P3: gated_unlock dispatch validation (real / duress / wrong) =====
         // Exercises the production timing-uniform dispatch end-to-end.
         // Reset page-124 first so the MCU lockout gate starts clean.
-        let _ = crate::hw::flash::pin_attempts_reset();
+        let _ = crate::hw::flash::pin_attempts_reset_bench();
 
         // 10. Duress PIN through the dispatch → decoy master, E120 untouched.
         let e120_before_duress = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
@@ -3056,7 +3200,7 @@ fn main() -> ! {
         }
 
         // 14. Recovery: real PIN still works after a wrong + a duress unlock.
-        let _ = crate::hw::flash::pin_attempts_reset();
+        let _ = crate::hw::flash::pin_attempts_reset_bench();
         match crate::nsc::gated_unlock(se, &real_pin) {
             Ok(m) if m == real_master => { secure_log!("[S] [DURESS-PROV] step 14: real unlock recovers after wrong+duress OK"); }
             Ok(_) => fail!("step 14 real unlock wrong master"),
@@ -3099,21 +3243,31 @@ fn main() -> ! {
         secure_log!("[S] [DURESS-PROV] step 17: both provisioned again OK");
 
         // 18. Decoy recoverable with the NEW duress PIN → reconstructs to NEW entropy.
-        let half_o2 = match se.optiga.duress_read_half(&duress_pin2) {
+        //     (New salt after the wipe, so a fresh derivation.)
+        let decoy2 = match crate::pin_gate::unlock_credentials(
+            crate::pin_credential::WalletRole::Duress,
+            &duress_pin2,
+        ) {
+            Ok(set) => set,
+            Err(_) => fail!("could not derive the re-provisioned decoy credential set"),
+        };
+        let half_o2 = match se.optiga.duress_read_half(&decoy2.optiga) {
             Ok((h, _)) => h,
             Err(e) => { secure_log!("[S] [DURESS-PROV] re-read optiga err {:?}", e); fail!("OPTIGA decoy re-read after wipe failed"); }
         };
-        let half_e2 = match se.se050.duress_read_half(&duress_pin2) {
+        let half_e2 = match se.se050.duress_read_half(&decoy2.se050) {
             Ok(h) => h,
             Err(e) => { secure_log!("[S] [DURESS-PROV] re-read se050 err {:?}", e); fail!("SE050 decoy re-read after wipe failed"); }
         };
+        let plain_o2 = decoy2.mask_optiga.apply(&half_o2);
+        let plain_e2 = decoy2.mask_se050.apply(&half_e2);
         let mut recon2 = [0u8; 32];
-        for i in 0..32 { recon2[i] = half_o2[i] ^ half_e2[i]; }
+        for i in 0..32 { recon2[i] = plain_o2[i] ^ plain_e2[i]; }
         if recon2 != decoy_entropy2 { fail!("re-provisioned decoy reconstructs to wrong entropy"); }
         secure_log!("[S] [DURESS-PROV] step 18: re-provisioned decoy reconstructs (NEW entropy) OK");
 
         // 19. gated_unlock dispatch works on the re-provisioned wallets.
-        let _ = crate::hw::flash::pin_attempts_reset();
+        let _ = crate::hw::flash::pin_attempts_reset_bench();
         match crate::nsc::gated_unlock(se, &duress_pin2) {
             Ok(m) if m == decoy_master2 => { secure_log!("[S] [DURESS-PROV] step 19: gated_unlock(new duress) → new decoy OK"); }
             Ok(_) => fail!("step 19 duress wrong master"),
@@ -3135,7 +3289,7 @@ fn main() -> ! {
         if !hw::flash::is_duress_wipe_mode() { fail!("is_duress_wipe_mode false after arm"); }
         secure_log!("[S] [DURESS-PROV] step 20: wipe-on-duress flag armed OK");
 
-        let _ = crate::hw::flash::pin_attempts_reset();
+        let _ = crate::hw::flash::pin_attempts_reset_bench();
         match crate::nsc::gated_unlock(se, &duress_pin2) {
             Err(crate::secure_element::UnlockError::PinLocked) => {
                 secure_log!("[S] [DURESS-PROV] step 21: gated_unlock(duress) in wipe mode → PinLocked OK");
@@ -3237,7 +3391,7 @@ fn main() -> ! {
         // DON'T call `check_sync!` pre-provision because
         // `read_hw_pin_counter` needs an initialised OPTIGA app
         // session, which `provision` installs via `store_objects`.
-        let _ = hw::flash::pin_attempts_reset();
+        let _ = hw::flash::pin_attempts_reset_bench();
         let pre = hw::flash::pin_attempts_read();
         if pre != 0 {
             secure_log!("[S] [E2E-SYNC] phase-0 pre-provision: MCU={} expected 0", pre);
@@ -3540,7 +3694,7 @@ fn main() -> ! {
         // (c) post-wipe re-provision + clean-unlock works on a truly
         // clean chip. (c) is where the XOR check must pass, and the
         // post-wipe state guarantees it.
-        let _ = hw::flash::pin_attempts_reset();
+        let _ = hw::flash::pin_attempts_reset_bench();
         secure_log!("[S] [E2E-WIPE] setup: pre-cleaning SE050 user objects");
         let _ = se.factory_reset_admin();
 
@@ -3632,7 +3786,7 @@ fn main() -> ! {
             secure_log!("[S] [E2E-WIPE] factory_reset_admin FAILED: {:?}", e);
             wfail!("factory_reset_admin error");
         }
-        let _ = hw::flash::pin_attempts_reset();
+        let _ = hw::flash::pin_attempts_reset_bench();
         nsc::zeroize_sensitive_state();
 
         // ── Verify wiped state ──
@@ -3703,7 +3857,7 @@ fn main() -> ! {
     //     a partial wipe leaves the flash PIN intact for the next
     //     boot's resume retry.
     //   - MCU page 124 (PIN-attempt counter) via
-    //     `hw::flash::pin_attempts_reset()`.
+    //     `hw::flash::pin_attempts_reset_bench()`.
     //   - SRAM secret caches via `nsc::zeroize_sensitive_state()`.
     //
     // What this deliberately preserves (required for re-provisioning):
@@ -3792,7 +3946,7 @@ fn main() -> ! {
         // correct here, and erasing already-blank flash is idempotent.
         #[cfg(feature = "stm32u585")]
         {
-            if let Err(e) = hw::flash::pin_attempts_reset() {
+            if let Err(e) = hw::flash::pin_attempts_reset_bench() {
                 secure_log!("[S] [WIPE] pin_attempts_reset FAILED: {:?}", e);
                 ui::show_status("WIPE FAIL", "MCU page 124");
                 loop { cortex_m::asm::wfi(); }
@@ -3920,6 +4074,10 @@ fn main() -> ! {
             secure_log!("[S][e2e] dual-se pre-clean: cascade start");
             let se = &mut *core::ptr::addr_of_mut!(SE);
 
+            // #855: which credential format the SE050 user UserID holds,
+            // sampled before anything below destroys the salt record.
+            let provisioned_by_this_scheme = crate::pin_gate::salt_record_present();
+
             let _ = se.reset_optiga_for_admin();
 
             // Admin-auth wipe via the v6 HUK-derived admin PIN
@@ -3931,23 +4089,24 @@ fn main() -> ! {
             secure_log!("[S][e2e] dual-se pre-clean: factory_reset_admin → {:?}", r.as_ref().err());
 
             if se.se050.is_provisioned() {
-                const PIN_CANDIDATES: &[&[u8]] = &[
-                    b"00000000", // e2e-test fast-path default
-                    b"dualwipe", // dual-se-admin-wipe-e2e
-                    b"12345678",
-                    b"11111111",
+                const PIN_CANDIDATES: &[[u8; 8]] = &[
+                    *b"00000000", // e2e-test fast-path default
+                    *b"dualwipe", // dual-se-admin-wipe-e2e
+                    *b"12345678",
+                    *b"11111111",
                 ];
-                for &pin in PIN_CANDIDATES {
-                    let r = se.se050.user_factory_reset(pin);
-                    secure_log!(
-                        "[S][e2e] dual-se pre-clean: user_factory_reset({:?}) → {:?}",
-                        core::str::from_utf8(pin).unwrap_or("?"),
-                        r.as_ref().err(),
-                    );
-                    if r.is_ok() {
-                        break;
-                    }
-                }
+                // #855: the user UserID holds a die-bound credential on a
+                // chip provisioned by this firmware and raw PIN bytes on an
+                // older one; the helper tries the likely format for every
+                // candidate and the other for the first only (see
+                // `e2e_delete_se050_user_objects`).
+                let deleted =
+                    se.e2e_delete_se050_user_objects(PIN_CANDIDATES, provisioned_by_this_scheme);
+                secure_log!(
+                    "[S][e2e] dual-se pre-clean: user delete (this-scheme={}) → {}",
+                    provisioned_by_this_scheme,
+                    deleted,
+                );
             }
 
             let _ = se.se050.iterative_wipe(None, None);

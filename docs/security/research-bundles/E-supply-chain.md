@@ -146,8 +146,8 @@ Post-quantum ERC-4337 hardware wallet on **STM32U585 (Cortex-M33, TrustZone) + O
 
 Production contract — every shipping build must respect ALL. Pre-production may temporarily violate one (note in next section).
 
-1. **Dual-chip seed split.** BIP-39 entropy is XOR-split: `half_O` on OPTIGA, `half_E` on SE050. Neither chip alone reveals any bit. Never store full entropy on one chip or transmit a half across.
-2. **Hardware PIN gating; three-way per-attempt consumption, directional boot cross-check.** PIN comparison stays in SE silicon. `gated_unlock` precharges MCU page 124; an ordinary wrong-PIN attempt then advances OPTIGA E120 and the SE050 UserID. Page 124 and SE050 enforce the user-facing 10-attempt bound; E120 is a separate 32-lifetime-attempt anti-extraction backstop. At boot firmware can read page 124 and E120 and wipes when `E120_used > page124_used`; an MCU lead is a conservatively charged power-cut/transport-error state. The production SE050 UserID policy denies attempt-attribute reads (`SW=0x6986`), so SE050 is not a boot-reconciliation input; `AuthMethodBlocked` still maps to `PinLocked` and the wipe path. Do not claim three-way boot reconciliation. Making that property genuinely three-way requires a separately reviewed SE050 policy/backend and silicon decision.
+1. **Dual-chip seed split.** BIP-39 entropy is XOR-split: `half_O` on OPTIGA, `half_E` on SE050. Neither chip alone reveals any bit. Never store full entropy on one chip or transmit a half across. **What a chip may be shown (2026-10-13, #855, Ledger Donjon report).** Until this date each chip also held the PIN in a form that needed nothing from the microcontroller (SE050: the raw digits; OPTIGA: an unkeyed SHA-256 of them), so reading either chip gave the PIN and the PIN opened the other. The rule now: **no secure element is ever shown the PIN, or any value computable from the PIN without the microcontroller.** Every PIN-dependent value that reaches a chip is `PRF(device_key, label ‖ salt ‖ PIN)` from `secure/src/pin_credential.rs`, reached only through `secure/src/pin_gate.rs`: a different credential per chip (what one stores the other does not accept), and each stored half XORed with its own PIN-keyed mask (the two chips' contents do not XOR to the entropy). `device_key` is the DHUK via SAES in every shipping image (the `nsc/mod.rs` fence forces `saes-dhuk`); a hardware build with neither `saes-dhuk` nor a bench feature (bring-up only) keys the PRF from the OTP device master through HKDF instead, which is per-device but software-visible; `salt` is 32 random bytes (a three-source `rng_strong` draw on the dual-SE store) in secure flash page 125, minted fresh at every provisioning and destroyed before any chip command of every wipe; page 124 is reset after a wipe only once the salt is verified gone. A derivation under a salt that existed before this boot is one guess against whatever was read out of a chip, so it may happen only inside an attempt `gated_unlock` has charged. Bench builds (`e2e-test` / `otp-hardcoded-master-key`, which `dev-testkey` implies) use a fixed public salt and PRF key and have none of this protection. **A wallet written by pre-#855 firmware cannot be opened by this firmware and there is no migration path:** an `e2e-test` image wipes and re-provisions at boot anyway; on a bench image without `e2e-test` a correct PIN typed at the prompt is charged as a wrong one; on any other SE050 or dual-SE build the first boot wipes it (an OPTIGA-only bench build has no boot wipe block, so there the wallet is refused, uncharged, until a reset tool removes it). In the charged and wiped cases the old SE050 UserID is left behind and blocks re-provisioning, so remove an old wallet with a tool that knows its PIN (`docs/secure-elements/se050-userid-pin-auth.md`, top note). Residuals: secure-world code execution or DHUK extraction *plus* one chip's contents still allows an offline PIN search; an attacker who holds a chip's contents and knows the duress PIN is not held to ten guesses (a decoy unlock resets page 124 by design). Evidence: host tests, a 30-configuration type-check, QEMU e2e. **Not yet run on silicon**; the production RDP-2 mint check has never executed in any buildable image (#268).
+2. **Hardware PIN gating; three-way per-attempt consumption, directional boot cross-check.** PIN comparison stays in SE silicon; what each chip compares is its own die-bound credential, never the PIN (invariant #1, #855). `gated_unlock` precharges MCU page 124; an ordinary wrong-PIN attempt then advances OPTIGA E120 and the SE050 UserID. Page 124 and SE050 enforce the user-facing 10-attempt bound; E120 is a separate 32-lifetime-attempt anti-extraction backstop. At boot firmware can read page 124 and E120 and wipes when `E120_used > page124_used`; an MCU lead is a conservatively charged power-cut/transport-error state. The production SE050 UserID policy denies attempt-attribute reads (`SW=0x6986`), so SE050 is not a boot-reconciliation input; `AuthMethodBlocked` still maps to `PinLocked` and the wipe path. Do not claim three-way boot reconciliation. Making that property genuinely three-way requires a separately reviewed SE050 policy/backend and silicon decision.
 3. **E2E encrypted SE tunnels.** OPTIGA Shielded Connection uses TLS-PRF + AES-128-CCM-8; SE050 SCP03 uses AES-CMAC + AES-CBC. No plaintext secret crosses I2C. The `rdp2-self-lock` candidate contains the journaled transport→final device-side rotation: SE050 SCP03/admin move to the BHK axis, while OPTIGA PBS moves to a DHUK derivation bound to a persisted fresh-TRNG salt. Page 126 is exclusively the DHUK-wrapped SE050 BHK; page 127 owns the first-boot journal and salt. Production remains blocked until the authenticated per-unit factory handoff/receipt, authenticate-before-rotate rule, atomic durable old/new/KVN recovery adequacy, E140 ordering, and silicon evidence are reviewed and closed. The ML-KEM-1024 inner wrap was DESCOPED 2026-07-07 (owner decision, do not re-raise — see work-todo #9): both tunnels are symmetric-rooted (no Shor material on the bus), so the accepted residual is Grover-2⁶⁴ (Cat-1) key search against physically-tapped sessions; consequence: per-device final rotation is load-bearing for this acceptance.
 4. **All secrets only in TrustZone secure world.** NS never sees PIN, entropy, signing key, or derived secret. NSC gateway returns opaque non-secret data. Validate NS pointers and copy NS buffers to S-stack before parse (TOCTOU).
 5. **One signing primitive: SPHINCS+C10.** Both Type 1 (bootstrap → slot registration) and Type 2 (slot → user tx). No FORS+C, no classical signer (secp256k1, P-256, Ed25519). Wallet has a single `c10Verifier`. Host-only `dbgen` may verify externally mandated ERC-8176 EAS/secp256k1 signatures solely to admit catalogue inputs; its production verifier holds no signing key, creates no wallet/FW-update/on-chain authority, and is fenced by `make classical-crypto-boundary`.
@@ -325,6 +325,18 @@ cd contracts/smart-wallet && forge test -vv
 cargo test -p sphincs-tz-secure --tests --release
 ```
 
+**CI checks added with #855, and what a red one means.** They guard invariant #1's "no secure element is shown a PIN" rule. All run per-PR; none needs hardware.
+
+| CI step | It is red when | What to do |
+|---|---|---|
+| `semgrep invariant rules` (rules `no-pin-named-value-to-secure-element-sink`, `no-unkeyed-pin-derivation-in-se-path`, `pin-credential-bytes-confined`, `post-wipe-counter-reset-is-gated`) | code passes a PIN-named value or raw credential bytes toward a chip, hashes a PIN without the device key on the SE path, or uses any page-124 reset other than `pin_attempts_reset_after_wipe()` anywhere under `secure/src` except five files (`main.rs`, `dual_se.rs`, `nsc/mod.rs`, `nsc/cmd_test_pin_lockout.rs`, `hw/flash.rs`: they legitimately name another reset, so the source pin `negative_post_wipe_counter_reset_is_gated_on_the_salt` covers them instead and counts their call sites) | fix the code. These are name- and path-based regexes, so a false positive is possible: waive with `// nosemgrep: <rule>` and a comment saying why (two waivers exist, both bench-only) |
+| `semgrep #855 rules fire on the pre-fix shapes` | a rule or fixture was edited and a rule no longer fires on the old defect | fix the rule; `make check-pin-credential-rules` |
+| `#855 mutation manifest applies cleanly` | you edited one of the source passages `scripts/pin_credential_mutations.json` anchors on by exact text (one per mutation; `--list` prints them), or an interrupted mutation run left a defect in the tree | the failure message says which; usually update that entry's `find`/`replace` and run `python3 scripts/check_pin_credential_mutations.py --only <id>` (expect `CAUGHT`). `make check-pin-credential-mutations` |
+| `prove prod-check-ship is quarantined` (its `rng-consumer-audit` prerequisite) | a new direct `rng::fill` / `rng::byte` call anywhere under `secure/src` | use `rng_strong`, or add a reviewed entry with its fence to `scripts/rng_consumer_audit.py` |
+| `cargo test (sphincs-tz-secure, host)`, tests in `pin_gate_wiring_pure_tests` and `negative_*` in the `*_under_test` suites | reviewed wiring text changed (which PRF, where the salt comes from, when page 124 is reset, wipe order). These pin source text because the firmware modules do not compile on the host | change the pin only together with the security argument for the new wiring |
+
+Expect to touch the manifest or a pin when editing `secure/src/pin_*.rs`, `optiga/mod.rs`, `se050/{mod,apdu}.rs`, `dual_se.rs`, `hw/flash.rs`, `hw/secret_keys.rs`, `nsc/mod.rs` or the boot wipe block in `main.rs`. The full mutation run (`make verify-pin-credential-gates`, one host-suite run per manifest entry, a few minutes) is local, not CI: run it after such an edit.
+
 **Board targets (`BOARD=`).** Every hardware target builds for one of two physical boards. `BOARD=iota2` (**default**) is the ST B-U585I-IOT02A dev kit, STM32U585AII6 / 169-pin — what every bench flow has always assumed. `BOARD=pq1` is the AL_A66_MB_V10 production board, STM32U585CIU6 / 48-pin UFQFPN, which **bonds only PA0–15, PB0–15 and PC13** (no port D/E/…, and no PB11). `BOARD` sets both the cargo feature and the probe-rs chip name (`STM32U585AIIx` / `STM32U585CIUx`) — e.g. `make test-key-speed BOARD=pq1`. The pin maps live one-per-board in `secure/src/board/{iota2,pq1}.rs` and drivers read constants from there rather than hard-coding a port base.
 
 **Naming a board is MANDATORY on every `stm32u585` build** — `secure/src/board/mod.rs` hard-errors when neither feature is set, and when both are. The earlier "opt-in to pq1, `board-iota2` is inert" model was retracted 2026-08-31: `#[cfg(feature = "board-pq1")] compile_error!` fences are *silent* when the feature is absent, so a recipe that omitted the board compiled the iota2 pin map with every pq1 fence quiet — which is how `build-hw-prodtest BOARD=pq1` came to put iota2 pins on pq1 silicon. `BOARD_FEATURE`/`CHIP` are `override`-derived from `BOARD` so they cannot be detached from each other, and a `FEATURES` board that disagrees with `BOARD` is a hard error.
@@ -411,6 +423,10 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 | `secure/src/{erc20,names,selectors}/mod.rs` | Re-export shims over `pqsigner-tx`; pass `crate::db_roots::*`. |
 | `secure/src/db_roots.rs` | Compiled-in Merkle roots for trust-bundles. |
 | `secure/src/fi.rs` | FI helpers: sentinel patterns + double-checked verify. |
+| `secure/src/pin_credential.rs` | **#855.** Pure, host-tested: die-bound PIN credentials + seed-half masks from `PRF(device_key, label‖salt‖PIN)`, the per-chip images (`chip_images`), the RDP-2 mint rule, and replays of the Ledger Donjon scenarios. |
+| `secure/src/pin_salt.rs` | **#855.** Pure, host-tested: the page-125 salt log (create / destroy / torn writes / power loss) and the shippable-vs-bench salt policy. |
+| `secure/src/pin_gate.rs` | **#855.** Firmware glue and the ONLY path from a PIN to a chip-visible value: device-key PRF + salt store, `begin_wipe`, the decoy-provisioning latch. |
+| `secure/src/pin_gate_wiring_pure_tests.rs` | **#855.** Source-text pins for the wiring no host test compiles (which PRF, which salt policy, when page 124 is reset). |
 | `secure/src/timeout.rs` | S-only TIM-driven inactivity timeout (NS pings do NOT reset). |
 | `secure/src/offchain_state.rs` | Page-123 log-structured per-slot off-chain counter store + compaction. |
 | `secure/src/dual_se.rs` | XOR entropy split; admin-wipe coordination. |
@@ -449,7 +465,7 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 | `secure/src/hw/saes_cmac.rs` | `cmac_dhuk(msg) -> tag` thin SAES adaptor. |
 | `secure/src/hw/secret_keys.rs` | Current per-purpose key API. Factory transport SCP03/admin/PBS credentials derive from the factory-burned per-device OTP master. The candidate final OPTIGA PBS derives from DHUK plus the persisted TRNG salt; final SE050 SCP03/admin credentials derive from BHK. Explicit dev/legacy configurations use hardcoded or deterministic fallback roots. The first-boot implementation remains production-quarantined pending its named handoff, recovery, silicon, and ordering gates. |
 | `secure/src/hw/otp.rs` | Rejected legacy unary rollback tally (bench-only, production-fenced) + device-master/factory legacy OTP regions. Draft 1.1 is a research candidate for the replacement typed floor API; its implementation, physical codec, ECC, interruption, and durability gates remain open. |
-| `secure/src/hw/flash.rs` | Bank-2 writes, ICACHE invalidate, `pin_attempts_{read,bump,reset}` on page 124, admin-page (125) wipe-flag. |
+| `secure/src/hw/flash.rs` | Bank-2 writes, ICACHE invalidate, page-124 attempt counter (`pin_attempts_{read,bump}`, and one reset per reason: `_reset_after_correct_pin`, `_reset_after_wipe`, bench-only `_reset_bench` — there is no bare reset), admin page 125: wipe flag (QW1), duress mode (QW2), PIN-credential salt log (QW16..512, #855). |
 | `secure/src/hw/tamp.rs` | TAMP (Trezor-port). Log-only by default; under `tamp-wipe` (production) escalates to `tzic::trigger_intrusion_wipe`. |
 | `secure/src/hw/consumption_mask.rs` | TIM2 CH1 PWM on PA5, randomised duty cycle. |
 | `secure/src/hw/uart.rs` | USART1 VCP (GPIOA AF7), used by SAES RDP1 self-test + dev logging. |
@@ -485,6 +501,7 @@ Pure-logic primitives live in standalone workspace crates so host signers / benc
 - **No classical signer** anywhere — firmware, contract, FW-update path. One algorithm in the wallet, one in the FSBL. No "just-in-case" fallback.
 - **No secrets in NS world.** Not even temporarily.
 - **No software PIN compare** — SE silicon only.
+- **No PIN to a secure element, and nothing derived from a PIN without the device key** (#855). The only derivation is `pin_credential::derive_set`, reached only through `pin_gate`. Do not add: a PIN parameter below the `WalletStore` shims; an unkeyed hash of a PIN anywhere on the SE path; a `&[u8]` way into the SE050 UserID builders (they take `apdu::UserIdValue`: a typed credential, a 16-byte device secret, or a `&'static` constant); a way to hand a backend a half that `pin_credential::chip_images` did not mask; a derivation under the salt on flash outside a charged attempt (a change-PIN feature would be exactly that — make the argument first); a reuse of a salt at provisioning; or a page-124 reset on a wipe path other than `pin_attempts_reset_after_wipe`. Guards that run per-PR: the host tests in `pin_credential` / `pin_salt`, the source pins in `pin_gate_wiring_pure_tests` and the `*_under_test` suites, and four ERROR semgrep rules (`make check-pin-credential-rules` proves they fire). `make verify-pin-credential-gates` (local) re-introduces each defect form and requires its guard to turn red; while it runs the tree carries that defect, so it journals each mutation and `make check-pin-credential-mutations` (per-PR) fails if one is left applied.
 - **No plaintext secrets on I2C / SPI** — always Shielded Connection / SCP03 / Noise_KK1.
 - **No full entropy on a single chip** — each SE gets one XOR half.
 - **No heap.** Stack only. No `Vec` / `Box` / `String`.
@@ -712,6 +729,10 @@ note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
 
 ### 3.1 Authentication Object
 
+> **UPDATE 2026-10-13 (#855).** The four bullets below describe a design that was never built, and until this date the firmware did the opposite of the third one: the SE050 authentication object was a **UserID** holding the **raw eight PIN digits**. (They travelled inside SCP03, so not in plaintext on the bus, but the chip stored them as they were typed.) Ledger Donjon reported the consequence: reading the chip gave the PIN.
+>
+> What is implemented now: the object is still a UserID with `max_attempts = 10`, and its value is a 16-byte `Se050PinCredential` = `PRF(DHUK, "pqsigner/pin-cred-E-v1" ‖ salt ‖ PIN)`. The OPTIGA holds a different 32-byte credential from the same PRF under its own label. Neither chip ever receives the PIN or anything computable from it without the microcontroller. Source: `secure/src/pin_credential.rs` (derivation, host-tested), `secure/src/pin_salt.rs` (the salt), `secure/src/pin_gate.rs` (firmware glue). The bullets are kept as written for the record; read them through this note.
+
 - Type: **AESKey** (not UserID — UserID is plaintext on the I²C bus).
 - `TAG_MAX_ATTEMPTS = 10`. Must be non-zero; zero means infinite.
 - Credential is the *stretched* PIN output, never the raw PIN.
@@ -811,6 +832,19 @@ On every boot, before trusting the SE050:
 ---
 
 ## 5. PIN Handling
+
+> **UPDATE 2026-10-13 (#855).** §5.1 and §5.2 describe a design that does not exist in the firmware: the PIN is collected by the **secure-world** trusted UI (never by the non-secure world), there is no PBKDF2 stretch, there is no `device_salt` object on the SE050, and no AESKey credential. The implemented flow is:
+>
+> 1. The secure-world trusted UI collects the eight digits.
+> 2. `nsc::gated_unlock` refuses up front if the stored credentials cannot be recomputed (no salt in secure flash), then charges MCU page 124.
+> 3. `pin_gate` derives, from `PRF(DHUK, label ‖ salt ‖ PIN)`, one credential per chip and one mask per seed half. `salt` is 32 random bytes in secure flash page 125, created at provisioning.
+> 4. Each chip compares its own credential internally and releases `half XOR mask`; the masks are removed and the halves joined in secure SRAM.
+> 5. Every wipe arms the wipe flag and then destroys the salt before it sends anything to a chip. If the salt cannot be destroyed the chips are still wiped, the wipe reports failure, and page 124 is not reset; it is reset only once the salt is verified gone.
+> 6. Every provisioning first retires any salt already on flash and draws a new one; a salt is never reused.
+>
+> Bench builds (`e2e-test` / `otp-hardcoded-master-key`, both production-forbidden) replace the salt and the PRF key with fixed public constants, so that any bench tool can delete a UserID object any bench build wrote. On those builds the credential is a public function of the PIN, as it was before #855.
+>
+> Stretching was considered and left out on purpose: against an attacker who can already query the device key it adds under 15 bits, and a long software hash over the PIN is a side-channel exposure the hardware PRF avoids (#855, design constraints). The text below is kept for the record.
 
 ### 5.1 Flow
 
@@ -1761,6 +1795,14 @@ OPTIGA side (`half_O` gated by `Auto(F1D0)` AuthRef, where E140/PBS
 authenticates the channel but does not satisfy the read AC) is a
 different mechanism with the same property and is not yet covered
 by an analogous E2E.
+
+**UPDATE 2026-10-13 (#116 / OP17-1):** the OPTIGA read AC is now
+`Auto(F1D0) AND Conf(E140)` on every secret OID (F1D1–F1D4 and the
+duress twins), so the PBS-shielded channel IS now part of the read
+authority: a desoldered chip plus the PIN, or a plaintext GetData
+injected on the bus after a legitimate unlock, no longer yields
+`half_O`. Silicon evidence for the AC semantics is the
+`optiga-ac-probe` run (spare OIDs; `docs/hardware/evt-silicon-validation.md`).
 
 ## 3. Hallucination + verification log
 

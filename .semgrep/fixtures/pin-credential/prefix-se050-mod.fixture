@@ -1,0 +1,37 @@
+// VIRTUAL-PATH: secure/src/se050/pre_855_shapes.rs
+// The shapes the SE050 driver had before #855 (base b6948e6b). Fixture text,
+// not compiled.
+
+fn authenticate_and_read(&mut self, pin: &[u8]) {
+    // The user UserID was verified against the raw PIN.
+    if let Err(e) = apdu::verify_session( // MUST-FIRE: no-pin-named-value-to-secure-element-sink
+        &mut self.t1, &mut self.scp03, &session_id, pin,
+    ) {
+        return Err(e);
+    }
+}
+
+fn store_objects(&mut self, pin: &[u8], max_attempts: u16) {
+    // ... and written with it.
+    apdu::write_userid( // MUST-FIRE: no-pin-named-value-to-secure-element-sink
+        &mut self.t1, &mut self.scp03,
+        USERID_OBJ, pin, max_attempts, None,
+    )?;
+}
+
+fn store_duress_objects(&mut self, duress_pin: &[u8]) {
+    apdu::write_userid_unlimited( // MUST-FIRE: no-pin-named-value-to-secure-element-sink
+        &mut self.t1, &mut self.scp03,
+        DURESS_USERID_OBJ, duress_pin, None,
+    )?;
+}
+
+fn duress_verify(&mut self, duress_pin: &[u8]) {
+    let r = apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, duress_pin); // MUST-FIRE: no-pin-named-value-to-secure-element-sink
+}
+
+fn admin_paths_are_exempt(&mut self, admin_pin: &[u8; 16], tr_pin: &[u8; 16], final_pin: &[u8; 16]) {
+    apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, admin_pin)?;
+    apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, &tr_pin)?;
+    apdu::write_userid_unlimited(&mut self.t1, &mut self.scp03, ADMIN_WIPE_OBJ, &final_pin, None)?;
+}
