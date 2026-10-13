@@ -13,14 +13,14 @@ the lid open. The script holds a systemd sleep inhibitor, but closing the lid
 can still suspend the machine. If a run is interrupted, finish it with
 `sweep.py run --resume <run dir>`. Agents that already finished are not re-run.
 
-**Usage limits.** Kimi's plan has a 5-hour usage window. A single hunter plus
-two verifiers used up the remaining window in testing, so expect Kimi to run
-out partway through most runs. When either CLI reports a spent window, the
-script stops starting tasks on it for the rest of the run. Pending
-verifications fall back to the other model, and skipped hunters show as failed
-in the report. Once the window resets, `--resume` runs only those skipped
-hunters. Where Claude counts against a subscription, the same applies to it.
-The report's "cost" is Claude's API-equivalent figure.
+It uses only Claude by default. Kimi is supported (`--backends claude kimi`)
+for a cross-model check, but its plan's 5-hour usage window runs out within
+the first few agents. When a CLI reports a spent usage window, the script
+stops starting tasks on it for the rest of the run. Verifications fall back to
+the other model if there is one. Skipped hunters show as failed in the report,
+and `--resume` runs them once the window resets. The same applies to Claude
+when it runs on a subscription. The report's "cost" is Claude's
+API-equivalent figure.
 
 ## What it does
 
@@ -28,7 +28,7 @@ The report's "cost" is Claude's API-equivalent figure.
    read-only directory with no `.git`. The agents never see your working
    tree, so uncommitted changes aren't swept.
 2. **Hunt.** One agent per attacker goal in `goals.toml`, per agent CLI
-   (Claude and Kimi by default, so 18 hunters). Goals are attacker outcomes
+   (Claude only by default, so 9 hunters). Goals are attacker outcomes
    such as "recover the seed", "defeat the PIN limit" or "get a signature for
    something the screen didn't show". They aren't one goal per invariant
    because real breaks combine weaknesses across invariants: #855 (one
@@ -36,8 +36,8 @@ The report's "cost" is Claude's API-equivalent figure.
    wording in isolation. Hunters get the commits since the last sweep as a
    hint about where to look first.
 3. **Verify.** Each finding of MEDIUM or above goes to a verifier whose job is
-   to refute it. The verifier is the *other* model where possible: Kimi checks
-   Claude's findings and Claude checks Kimi's. The verifier also checks the
+   to refute it. It runs in a fresh context. With `--backends claude kimi`,
+   each model verifies the other's findings. The verifier also checks the
    finding against every GitHub issue, open and closed, and against the
    owner-accepted risks in CLAUDE.md. A match with a closed issue is reported
    as a regression.
@@ -89,7 +89,7 @@ some agents failed (coverage incomplete) · `130` interrupted.
 ## Options worth knowing
 
 ```
---backends claude        only Claude (faster; loses the cross-model check)
+--backends claude kimi   add Kimi hunters and cross-model verification
 --goals seed-extraction pin-bypass
 --claude-model opus      default: your claude CLI default
 --claude-effort high     low|medium|high|xhigh|max
@@ -113,8 +113,8 @@ and docs. They are confined as follows:
 - **Kimi** runs every tool call without asking in `-p` mode, edits included.
   It is confined by the environment instead: the snapshot is `chmod a-w` and
   has no `.git`, and `gh` runs with an empty config, so it is logged out.
-  Kimi can still reach the network and write outside the snapshot. If that's
-  unacceptable, use `--backends claude`.
+  Kimi can still reach the network and write outside the snapshot, which is
+  one reason it is opt-in.
 
 ## Changing the goals
 

@@ -270,10 +270,20 @@ def kill_group(proc: subprocess.Popen) -> None:
 
 
 def kill_all_agents() -> None:
+    """Stop every running agent: SIGTERM all at once, SIGKILL whatever is left after 5 s."""
     with _live_lock:
         procs = list(_live_procs)
-    for proc in procs:
-        kill_group(proc)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for proc in procs:
+            try:
+                os.killpg(proc.pid, sig)
+            except ProcessLookupError:
+                pass
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and any(p.poll() is None for p in procs):
+            time.sleep(0.2)
+        if all(p.poll() is not None for p in procs):
+            return
 
 
 def run_process(cmd, cwd, env, stdin_text, timeout, out_path: Path, err_path: Path):
@@ -671,6 +681,8 @@ class Sweep:
         except KeyboardInterrupt:
             # Stop queued agents and kill running ones; otherwise the pool would
             # wait for hour-long agents to finish before the interrupt lands.
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            log("stopping agents...")
             pool.shutdown(wait=False, cancel_futures=True)
             kill_all_agents()
             raise
@@ -1047,6 +1059,7 @@ def cmd_run(args) -> int:
                f"{n_new} new finding(s){' - coverage incomplete' if incomplete else ''}. {run_dir / 'report.md'}")
         return 1 if n_new else (2 if incomplete else 0)
     except KeyboardInterrupt:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         kill_all_agents()
         log(f"interrupted. Finish later with: {sys.argv[0]} run --resume {run_dir}")
         append_history(run_dir.parent, run_dir, meta, "interrupted", None)
@@ -1113,8 +1126,8 @@ def main(argv=None) -> int:
     run = sub.add_parser("run", help="run a sweep")
     run.add_argument("--ref", default="master", help="commit or branch to sweep (default: master)")
     run.add_argument("--goals", nargs="+", metavar="ID", help="only these goal ids from goals.toml")
-    run.add_argument("--backends", nargs="+", default=["claude", "kimi"], metavar="NAME",
-                     help="agent CLIs to hunt with (default: claude kimi)")
+    run.add_argument("--backends", nargs="+", default=["claude"], metavar="NAME",
+                     help="agent CLIs to hunt with: claude, kimi (default: claude)")
     run.add_argument("--jobs", type=int, default=4, help="agents running at once (default: 4)")
     run.add_argument("--hunt-timeout", type=int, default=60, metavar="MIN", help="per hunter (default: 60)")
     run.add_argument("--verify-timeout", type=int, default=30, metavar="MIN", help="per verifier (default: 30)")

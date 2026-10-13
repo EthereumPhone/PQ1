@@ -215,7 +215,7 @@ all: verify-pins secure nonsecure
 
 # Weekly AI attacker-goal sweep (hours; read-only snapshot of master). Writes a
 # report + issue drafts under ~/pq1-security-sweeps; files nothing. Extra flags:
-# make security-sweep SWEEP_ARGS="--backends claude". See tools/security-sweep/README.md.
+# make security-sweep SWEEP_ARGS="--goals pin-bypass". See tools/security-sweep/README.md.
 .PHONY: security-sweep
 security-sweep: ## Weekly AI security sweep (report + issue drafts, files nothing)
 	@tools/security-sweep/sweep.py run $(SWEEP_ARGS)
