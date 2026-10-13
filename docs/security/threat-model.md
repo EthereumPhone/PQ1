@@ -630,6 +630,15 @@ bucket; corrected 2026-07-31). To make that harder:
    pinned to a stated EMB3D version, because they move between revisions.
 4. **Feed post-launch detections back in**, upgrading theoretical leaves to
    evidenced ones rather than leaving them at "designed against".
+5. **Weekly AI sweep (UPDATE 2026-10-13).** `make security-sweep`
+   (`tools/security-sweep/`) runs attacker-goal hunters (seed, PIN, NS leak,
+   sign-unseen, signing oracle, on-chain, state, persistent code, production
+   config) across two models, verifies every finding adversarially across
+   models, deduplicates it against the issue tracker, and writes issue drafts.
+   It is organised by attacker goal rather than per claim, because the #855
+   break (one dumped SE → PIN → seed) falsified Claim 1 *and* Claim 3 together
+   and was missed by checks of each claim's wording. It is a lead generator,
+   not evidence: an empty week means "nothing new found", not "claims hold".
 
 ## 12. Roadmap to Production Posture
 

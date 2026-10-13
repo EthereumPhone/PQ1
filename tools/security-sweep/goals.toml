@@ -1,0 +1,187 @@
+# Attacker goals for the weekly security sweep (tools/security-sweep/sweep.py).
+#
+# One hunter agent runs per goal per backend. Goals are attacker outcomes, not
+# invariants: a real break usually composes weaknesses across several
+# invariants, and an agent checking one invariant's wording in isolation misses
+# that (the one-chip-dump -> PIN -> seed break, #855, survived several
+# per-property sweeps exactly that way).
+#
+# `start` lists entry points only. Hunters are told to follow the code wherever
+# it leads; keep these short and don't turn them into a catalogue of known
+# findings (AGENTS.md: prior verdicts are not initial prompt material).
+
+[[goal]]
+id = "seed-extraction"
+title = "Recover the seed"
+objective = """
+Recover the BIP-39 entropy, the BIP-39 seed, or any secret from which a signing
+key can be derived, from a device or its parts. Consider an attacker who can
+dump one secure element completely, tap or drive the I2C buses, replace or
+desolder a chip, or run code on the MCU, alone and in combination. For each
+secure element, enumerate every object the firmware writes, its exact contents
+and access conditions, and what a full dump of that one chip yields while the
+other chip is still reachable through its live interface."""
+success = "the attacker holds enough secret material to sign for the wallet off-device, or to sign on-device without the owner."
+refs = "invariants #1, #3, #4; threat-model claims 1, 2, 7"
+start = [
+  "secure/src/dual_se.rs (XOR split, provisioning, unlock)",
+  "secure/src/se050/{mod,apdu,scp03}.rs (object writes, policies, UserID)",
+  "secure/src/optiga/{mod,apdu,shield}.rs (object metadata, access conditions, Shielded Connection)",
+  "domain/src/lib.rs (PIN- and seed-derived values)",
+  "secure/src/hw/secret_keys.rs, secure/src/first_boot/ (transport/final credentials)",
+]
+
+[[goal]]
+id = "pin-bypass"
+title = "Defeat the PIN limit"
+objective = """
+Get more than 10 PIN guesses, guess the PIN offline, learn the PIN, reset or
+desynchronise any attempt counter (MCU page 124, OPTIGA E120, SE050 UserID),
+or avoid the wipe after the 10th wrong PIN. Include power cuts between counter
+updates, fault injection on the comparison and on the counter writes, the idle
+re-unlock path, and anything stored on a chip that lets the PIN be tested
+without that chip counting the attempt."""
+success = "the attacker can test PIN candidates at a rate or count the design says is impossible, or obtains the PIN without guessing."
+refs = "invariant #2; threat-model claim 3, §7.4"
+start = [
+  "secure/src/nsc/mod.rs (gated_unlock)",
+  "secure/src/nsc/cmd_request_unlock.rs, secure/src/ui/pin_entry.rs",
+  "secure/src/hw/flash.rs (page 124)",
+  "secure/src/main.rs (boot reconciliation, wipe)",
+  "secure/src/optiga/ (E120 LUC, F1D0), secure/src/se050/ (UserID policy, write_userid)",
+]
+
+[[goal]]
+id = "secret-to-nonsecure"
+title = "Leak a secret to the non-secure world"
+objective = """
+Get a PIN, entropy half, seed, signing key, derived secret, or session key into
+memory, registers, peripherals, or output that non-secure code can read. Cover
+the NSC gateway (pointer validation, TOCTOU, length checks, nested entry),
+GTZC/SAU/MPC attribution, peripherals left non-secure, DMA, stack and register
+residue across the world switch, zeroisation on lock/timeout/tamper/error
+paths, debug/log/capture output, and USB."""
+success = "non-secure code (or a USB host driving it) observes any bit of a secret."
+refs = "invariant #4; threat-model §7.3, §7.5, §7.13"
+start = [
+  "secure/src/nsc/ (dispatcher, every cmd_*.rs, ns_ptr.rs, ptr_validate.rs)",
+  "shared/src/ns_ptr_validate.rs",
+  "secure/src/sau.rs",
+  "secure/src/nsc/state.rs, secure/src/timeout.rs (zeroisation)",
+  "nonsecure/src/ (what NS can reach)",
+]
+
+[[goal]]
+id = "sign-unseen"
+title = "Get a signature for something the screen didn't show"
+objective = """
+Make the device release a signature whose on-chain or off-chain effect differs
+from what the trusted display showed, or that the user never saw at all:
+hidden recipients, amounts, tokens, native value, approvals, delegatecalls,
+fee/refund fields, batch members, truncated or rounded numbers, wrong token
+metadata, descriptor or ABI confusion, confirm before the last page, a
+substituted glyph atlas, or a blind path reachable for a known shape. Every
+signed byte must be bound to what was rendered."""
+success = "a signature the user approved on screen authorises an effect they could not have read on screen."
+refs = "trusted-display clear-signing contract in CLAUDE.md; threat-model claim 9, §7.6"
+start = [
+  "secure/src/nsc/cmd_sign_userop.rs, cmd_sign_userop_batch.rs, cmd_sign_offchain.rs",
+  "secure/src/tx/display/, secure/src/tx/eip712/{safe,cowswap}/, secure/src/tx/typed_call/",
+  "pqsigner-erc7730/src/ (walker, binding, render)",
+  "secure/src/ui/confirm.rs, secure/src/ui/px/ (commit gesture, atlas hash)",
+  "secure/src/db_roots.rs, tx/src/ (ERC-20/names/selectors bundles)",
+]
+
+[[goal]]
+id = "signature-oracle"
+title = "Turn the device into a signing oracle"
+objective = """
+Obtain a valid C10 signature on a value the user never approved in that
+domain: an off-chain signature that verifies as a UserOp, a Type-1 bootstrap
+signature where only Type-2 was approved, the bootstrap key reaching EIP-1271,
+a signature under the wrong account/chain/slot key, an ERC-6492 wrapper that
+deploys something else, or a faulted signature released because the
+double-compute / verify-before-release chain can be skipped by a single
+glitch. Also check that no classical signing path exists."""
+success = "the attacker holds a signature that the wallet contract or a dapp accepts for an action the user did not approve."
+refs = "invariants #5, #9; threat-model claims 4, 5"
+start = [
+  "secure/src/crypto.rs (c10_sign_verified*), secure/src/fi.rs",
+  "aa/src/ (userOpHash, eip1271 replay_safe_hash), secure/src/nsc/cmd_sign_offchain.rs",
+  "domain/src/lib.rs (key and slot derivation)",
+  "sphincs-c10/ (sign, verify, address domain separation)",
+  "contracts/smart-wallet/src/ (digests the verifier checks)",
+]
+
+[[goal]]
+id = "onchain-takeover"
+title = "Take over or freeze a wallet on-chain"
+objective = """
+Drain, take over, or permanently freeze a deployed or counterfactual
+PQSmartWallet without the owner's device: forge or replay a signature, squat
+or front-run the CREATE2 address, change owners, reset or inflate a use
+counter, upgrade the proxy, abuse EIP-1271/ERC-6492, or exploit a mismatch
+between firmware constants (factory, init-code hash, EntryPoint) and what is
+actually deployed on each chain."""
+success = "funds move or the wallet becomes unusable without the owner's consent."
+refs = "invariants #6, #7; threat-model claims 4, 5, 6, §7.12"
+start = [
+  "contracts/smart-wallet/src/ (PQSmartWallet, PQSmartWalletFactory, PQMultiOwnable, verifiers/)",
+  "contracts/smart-wallet/deployments/ vs proto/src/lib.rs and firmware address constants",
+  "secure/src/nsc/cmd_get_wallet_address.rs, cmd_get_init_code.rs",
+]
+
+[[goal]]
+id = "state-corruption"
+title = "Corrupt persistent state"
+objective = """
+Use power cuts, torn writes, compaction, malformed companion input, or fault
+injection against persistent state (flash pages 123-127, OTP, option bytes,
+SE objects, the first-boot journal) to: reuse or roll back an off-chain or
+UserOp counter, exceed MAX_OFFCHAIN_GAP or the combined cap, sign for an
+unregistered slot, force the seed wizard on a provisioned device (seed
+overwrite), lose a seed half, or brick the device."""
+success = "a counter or registration rule the firmware relies on stops holding, or the device loses or overwrites wallet state."
+refs = "invariants #7, #8, #9; threat-model §7.1"
+start = [
+  "secure/src/offchain_state.rs (page 123)",
+  "secure/src/hw/flash.rs (pages 124-126), secure/src/hw/otp.rs",
+  "secure/src/first_boot/ (page 127 journal)",
+  "secure/src/dual_se.rs, secure/src/main.rs (provisioning and wizard entry)",
+]
+
+[[goal]]
+id = "persistent-code"
+title = "Run code the boot fingerprint doesn't cover"
+objective = """
+Get code to run on the device that is not the measured, user-verified image,
+or change what the FSBL measures or displays: bypass or fault the FSBL
+verify, write to the FSBL range at runtime, roll back firmware, get an
+unsigned or wrongly signed update committed, exploit WRP/RDP ordering, or make
+the 8-word fingerprint show the expected words for a different image."""
+success = "the device runs attacker-chosen or outdated code while showing a fingerprint the user accepts."
+refs = "invariant #10; threat-model claim 8, §7.7, §7.8"
+start = [
+  "fsbl/ (verify, optbytes.rs, display)",
+  "secure/src/fw_update/, secure/src/nsc/cmd_fw_*.rs",
+  "fw-manifest/, geometry/ (pqsigner-geometry, frozen FSBL range)",
+  "secure/src/measured_boot.rs, secure/src/first_boot/",
+]
+
+[[goal]]
+id = "production-config"
+title = "Ship a weakened build"
+objective = """
+Find a way for a build that claims to be production/shipping to include a
+dev or test behaviour (debug-log, e2e-test, mock-se, fixed keys, ui-capture,
+test commands, semihosting), to have a compile-time fence that is silently
+inert (cfg on a feature that is never set, wrong board, feature unification
+across the workspace), or for release packaging to produce an artifact that
+doesn't match the reviewed source."""
+success = "a build path that passes the project's release gates yields firmware with a weaker security posture than a production build is supposed to have."
+refs = "CLAUDE.md feature-flag rules and 'What NOT to do'; threat-model §9"
+start = [
+  "secure/Cargo.toml (features), secure/src/nsc/mod.rs (compile_error! fences)",
+  "Makefile (release and build-hw targets), xtask/, tools/ship-profiles/",
+  "secure/src/board/mod.rs",
+]
