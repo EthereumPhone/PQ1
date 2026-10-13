@@ -3052,6 +3052,13 @@ PX_HEADROOM_MIN := 40960
 .PHONY: size-report-px
 size-report-px: VENEERS := $(CURDIR)/target/secure-px/veneers.o
 size-report-px: dev-pubkey-fixture
+# The three checks below each print FAIL and must fail the target. Until
+# 2026-10-13 they did not: each `exit 1` was inside an `awk` whose status was
+# thrown away by a `;`, and the recipe ended in an `echo`, so only a link
+# overflow could fail it (#908: it printed "FAIL — under 40960 B headroom"
+# and exited 0). `rc` collects them so both the secure and the NS line are
+# still printed. Control: with a linking image, `make size-report-px` must
+# exit non-zero and `make size-report-px PX_HEADROOM_MIN=1` must exit 0.
 size-report-px: ## Ship-shaped dual-SE + ui-px image at slot A vs the v6 slot; fails under 40 KB headroom
 	$(if $(findstring i,$(filter-out --%,$(firstword $(MAKEFLAGS)) $(firstword $(MFLAGS)))),$(error size-report-px refuses make --ignore-errors; a capacity failure must propagate))
 	@grep -q 'pub const SECURE_SLOT_SPAN: u32 = 0x72000;' geometry/src/lib.rs || { echo "size-report-px: PX_SECURE_CAP drifted from geometry::SECURE_SLOT_SPAN"; exit 1; }
@@ -3064,7 +3071,7 @@ size-report-px: ## Ship-shaped dual-SE + ui-px image at slot A vs the v6 slot; f
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure-px \
 			-p sphincs-tz-nonsecure --features $(PX_NS_FEATURES)
-	@report=$$(cargo run --locked --quiet -p fwmeasure -- \
+	@rc=0; report=$$(cargo run --locked --quiet -p fwmeasure -- \
 	  target/secure-px/$(TARGET)/release/sphincs-tz-secure --require-secure-slot 2>&1 >/dev/null) || { \
 	    echo "    secure : FAIL — strict fwmeasure/capacity check rejected the ELF"; printf '%s\n' "$$report" >&2; exit 1; }; \
 	used=$$(printf '%s\n' "$$report" | sed -n 's/^Flash end:.*(\([0-9][0-9]*\) bytes)$$/\1/p'); \
@@ -3073,13 +3080,14 @@ size-report-px: ## Ship-shaped dual-SE + ui-px image at slot A vs the v6 slot; f
 	awk -v used="$$used" -v cap="$(PX_SECURE_CAP)" -v min="$(PX_HEADROOM_MIN)" 'BEGIN { \
 	  free=cap-used; \
 	  printf "    secure : %d B physical span of %d B v6 slot (%.1f%%), headroom %d B (gate >= %d B)\n", used, cap, used*100.0/cap, free, min; \
-	  if (free<min) { printf "    secure : FAIL — under %d B headroom for Phases 2-4 of the pixel-UI port\n", min; exit 1 } }'; \
+	  if (free<min) { printf "    secure : FAIL — under %d B headroom for Phases 2-4 of the pixel-UI port\n", min; exit 1 } }' || rc=1; \
 	arm-none-eabi-size -B target/nonsecure-px/$(TARGET)/release/sphincs-tz-nonsecure | awk -v cap="$(PX_NS_CAP)" -v sram=$(NS_SRAM_CAP) -v min=$(NS_STACK_MIN) 'NR==2 { \
 	  fl=$$1+$$2; st=$$2+$$3; \
 	  printf "    ns     : %d B flash (text+data) of %d B v6 NS slot (%.1f%%); %d B static of %d B SRAM2, %d B left for stack\n", fl, cap, fl*100.0/cap, st, sram, sram-st; \
 	  if (fl>cap) { print "    ns     : FAIL — NS image exceeds the v6 NS slot"; exit 1 } \
-	  if (sram-st<min) { printf "    ns     : FAIL — under %d B stack reserve\n", min; exit 1 } }'; \
-	echo "    note   : mode-production + rdp2-self-lock are not in the measured set (S-2 fence); budget their code separately"
+	  if (sram-st<min) { printf "    ns     : FAIL — under %d B stack reserve\n", min; exit 1 } }' || rc=1; \
+	echo "    note   : mode-production + rdp2-self-lock are not in the measured set (S-2 fence); budget their code separately"; \
+	exit $$rc
 
 .PHONY: release _release
 # Refusal-only while the rollback implementation is quarantined. Keeping the
