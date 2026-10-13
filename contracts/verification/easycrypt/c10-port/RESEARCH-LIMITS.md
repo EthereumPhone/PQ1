@@ -1113,6 +1113,40 @@ stateful oracle/session histories, and secure-wrapper query costs remain
 open. No production Rust, hash assumption, signature format or hardware
 claim changes.
 
+EasyCrypt caller-input composition (2026-10-13): `C10CallerInputBridge.ec`
+connects the actual `RawWots.count`, `RawWots.chain`, `RawWots.recover` and
+`RoleGrind.run` procedures to views that consume the existing generated common
+preimages. Four relational theorems preserve both the returned value and the
+entire global state of the same arbitrary oracle module. They require no
+fresh table, successful search, accepted digest or hash-output equality premise.
+Thus cached calls and oracle effects are retained as well as results.
+
+WOTS counting retains the exact ten-million-attempt search and `None` on
+exhaustion. Recovery permits every u32 wire counter, including those outside
+the signing search, and preserves its zero-node result on a rejected sum.
+Its ordered chain results feed the common multi-node preimage. Address fields
+retain their full u32/u64 ranges. The chain theorem requires a nonnegative
+starting position and an exclusive stop at most `2^32`; it also covers
+zero-iteration calls. Nonce grinding retains both randomizer modes, the
+R-then-H_msg call order, first-success stopping and bounded exhaustion.
+
+Ten typed procedural mutations check the search bound, returned count, chain
+position/result, full counter, rejection sentinel, node order, caller randomness,
+acceptance test and exhaustion result. The changed definitions must compile
+before their unchanged caller proofs reject. Solver/resource failures do not
+count; the focused audit checks the intended theorem. The new procedures,
+ten lemmas and four headlines enter the exact source, statement, module-body,
+scope and full-replay inventories. The Lean headline and axiom inventories are
+unchanged; the already paired Lean endpoints remain their source-side evidence.
+
+This closes these four EasyCrypt callers' common-input composition component.
+The common views still call the same EasyCrypt oracle: they do not identify
+its sampled results with the supplied Lean SHA model or physical SHA-256.
+Remaining key-generation/signing callers, shuffle derivation, cross-language
+control-flow/error relations, callbacks, full stateful sessions and secure-wrapper
+query-cost composition remain open. No production source or hash assumption
+changes, and no whole-session or hardware claim, follow from this batch.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 the remaining fixed-width operations, primitive/caller computations, bounded

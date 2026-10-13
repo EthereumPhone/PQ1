@@ -839,6 +839,7 @@ scratch/CanonicalAssignmentWitness.ec	MUST-PASS	-
 scratch/_scope_neg_op_C10RepresentationBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10HashInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10AddressInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_C10CallerInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/c10_rep_positive.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_typed.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_reject.ec	MUST-FAIL	nothing to rewrite
@@ -904,3 +905,24 @@ scratch/c10_rep_fors_private_tag_typed.ec	MUST-PASS	-
 scratch/c10_rep_fors_private_tag_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_rep_fors_private_ht_typed.ec	MUST-PASS	-
 scratch/c10_rep_fors_private_ht_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_positive.ec	MUST-PASS	-
+scratch/c10_caller_count_budget_typed.ec	MUST-PASS	-
+scratch/c10_caller_count_budget_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
+scratch/c10_caller_count_result_typed.ec	MUST-PASS	-
+scratch/c10_caller_count_result_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_chain_position_typed.ec	MUST-PASS	-
+scratch/c10_caller_chain_position_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_caller_chain_result_typed.ec	MUST-PASS	-
+scratch/c10_caller_chain_result_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_recover_counter_typed.ec	MUST-PASS	-
+scratch/c10_caller_recover_counter_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_caller_recover_sentinel_typed.ec	MUST-PASS	-
+scratch/c10_caller_recover_sentinel_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_recover_order_typed.ec	MUST-PASS	-
+scratch/c10_caller_recover_order_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_caller_nonce_random_typed.ec	MUST-PASS	-
+scratch/c10_caller_nonce_random_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_caller_nonce_accept_typed.ec	MUST-PASS	-
+scratch/c10_caller_nonce_accept_reject.ec	MUST-FAIL	nothing to introduce
+scratch/c10_caller_nonce_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_caller_nonce_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals

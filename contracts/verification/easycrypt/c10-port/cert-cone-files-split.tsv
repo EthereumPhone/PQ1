@@ -64,6 +64,7 @@ cdrafts-split/ByteSession.ec
 cdrafts-split/ByteSubtreeOpeningHop.ec
 cdrafts-split/ByteTopOpeningHop.ec
 cdrafts-split/C10AcceptedReduction.ec
+cdrafts-split/C10AddressInputBridge.ec
 cdrafts-split/C10BoundedGame.ec
 cdrafts-split/C10BoundedGrind.ec
 cdrafts-split/C10BoundedHypertree.ec
@@ -73,6 +74,7 @@ cdrafts-split/C10BoundedMA.ec
 cdrafts-split/C10BoundedReduction.ec
 cdrafts-split/C10BoundedSigning.ec
 cdrafts-split/C10Bytes.ec
+cdrafts-split/C10CallerInputBridge.ec
 cdrafts-split/C10Counter.ec
 cdrafts-split/C10CubeConstruction.ec
 cdrafts-split/C10CubeCorrect.ec
@@ -83,6 +85,7 @@ cdrafts-split/C10DeployedScope.ec
 cdrafts-split/C10DigitUniform.ec
 cdrafts-split/C10Encoding.ec
 cdrafts-split/C10HashDomains.ec
+cdrafts-split/C10HashInputBridge.ec
 cdrafts-split/C10HypertreeAccepted.ec
 cdrafts-split/C10HypertreeCharged.ec
 cdrafts-split/C10HypertreeCorrect.ec
@@ -663,5 +666,3 @@ cdrafts-split/WotsZeroSentinel.ec
 cdrafts-split/XMSSMT_C_Scheme.ec
 cdrafts-split/XmssmtCCCharged.ec
 cdrafts-split/XmssmtCC_All.ec
-cdrafts-split/C10HashInputBridge.ec
-cdrafts-split/C10AddressInputBridge.ec

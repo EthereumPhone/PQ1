@@ -125,8 +125,12 @@ bounded grinder body consume these forms. These equalities concern the input
 bytes before hashing. The paired endpoints now also cover every full-width
 address field, chain-index/position updates, and the actual WOTS/FORS secret
 derivation inputs, including all 64 WOTS tree bits and the FORS hypertree field.
-Hash-backend/oracle interpretation, shuffle derivation and stateful caller
-composition remain open.
+The actual EasyCrypt WOTS count, chain, recovery and nonce-grind procedures now
+also consume these forms through proved equivalent views, preserving returned
+values and the complete state of an arbitrary shared oracle. Search exhaustion,
+full-width recovery counters and the verifier's zero-node rejection are retained.
+Hash-backend/oracle interpretation, the remaining callers, shuffle derivation
+and the cross-language stateful session relation remain open.
 
 The ordinary secure-wrapper entry now has a sequential, source-linked model
 (2026-10-11). Its release theorem requires an accepted rate charge and exact

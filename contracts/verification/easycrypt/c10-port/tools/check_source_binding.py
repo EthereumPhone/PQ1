@@ -510,6 +510,31 @@ SOURCES = (
     'contracts/verification/extracted/Extracted/WotsSecret/Types.lean',
     'contracts/verification/extracted/Extracted/WotsSecretSpec.lean',
 
+    # Common-input procedural equivalences and typed caller mutations.
+    'contracts/verification/easycrypt/c10-port/cdrafts-split/C10CallerInputBridge.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_chain_position_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_chain_position_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_chain_result_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_chain_result_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_count_budget_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_count_budget_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_count_result_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_count_result_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_nonce_accept_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_nonce_accept_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_nonce_exhaustion_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_nonce_exhaustion_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_nonce_random_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_nonce_random_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_recover_counter_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_recover_counter_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_recover_order_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_recover_order_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_recover_sentinel_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_caller_recover_sentinel_typed.ec',
+    'contracts/verification/easycrypt/c10-port/tools/c10_caller_controls.py',
+
 )
 
 

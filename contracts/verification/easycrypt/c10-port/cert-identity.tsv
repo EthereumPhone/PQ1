@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	8bcd0fdf3d3fc114346da89c45cbd0f8
+split	0ca9eefebedd75613b1d8f546be0576e
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1595,3 +1595,9 @@ fork	9c2d21280c84d52c30b22111151f1135
 # updates compose with the existing field-based EasyCrypt address constructor.
 # 666 targets / 4122 pins / 3580 statements / 742 controls; no new assumptions.
 # Split identity f01d62adff81c749517322b623745067 -> 8bcd0fdf3d3fc114346da89c45cbd0f8. Fresh full replay required.
+
+# 2026-10-13: common-input WOTS count/chain/recovery and nonce-grind callers.
+# Ten lemmas, four state-preserving equivalences and ten typed procedural
+# mutations. 667 targets / 4133 pins / 3590 statements / 764 controls.
+# Split identity 8bcd0fdf3d3fc114346da89c45cbd0f8 -> 0ca9eefebedd75613b1d8f546be0576e.
+# No new assumptions; fresh full pinned-image replay required.
