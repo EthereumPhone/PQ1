@@ -626,6 +626,17 @@ Two consent policies coexist, by path, since 2026-09-22:
 | Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right / chord is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
 | Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`; every sign dialog since port step 3, 2026-09-23 — `forced_blind` excepted) | **only after the LAST screen has been painted** (scroll-to-end, `PX_COMMIT_REQUIRES_SEEN_LAST = true`), and then only on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) or the returning ask; **never on a detail** | owner decision **2026-09-24** (see the UPDATE below), superseding 2026-09-22 |
 
+**UPDATE 2026-10-13 (security sweep finding #1 / F04):** the slot-rotation
+consent is now also an *authority* boundary, not only a display one. Its
+affirmative arm publishes a `RotationConfirmReceipt` bound to the exact public
+Type-1 inputs; the bootstrap keygen, the Type-1 signature, the durable slot
+registration and the release each re-prove it or the output binding (single and
+batch handlers alike), so skipping the dialog block with one fault no longer
+releases a bootstrap signature. See the UI1 row of
+`docs/security/adversarial-review/trusted-ui-adversarial-review.md`. The rotation
+dialog still does not display the fee words the Type-1 signs (the separate
+two-op fee question).
+
 **UPDATE 2026-09-23 (port plan step 3):** the pixel path now carries every
 sign dialog — Safe, every single-UserOp route, the slot-rotation consent,
 direct CoW, ERC-7730, the off-chain kinds (typed, `personal_sign`, RAW32) and
