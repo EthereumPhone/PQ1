@@ -22,7 +22,7 @@ use pqsigner_ui_px::fit::{
     fit_tier, layout_amount_or_wrap, layout_name_over_address, measure_q6, split_hash_full, AddrLines, Line,
     Region,
 };
-use pqsigner_ui_px::screen::LINES_PER_PAGE;
+use pqsigner_ui_px::screen::{detail_pages, detail_screen, LINES_PER_PAGE};
 use pqsigner_ui_px::{Icon, Look, Screen, ScreenBuilder, Screens, Side, Tier, Weight};
 
 /// What a body emitter produced, for the lift's cross-checks.
@@ -122,41 +122,18 @@ impl<'s> Emit<'s> {
         lines: &[(&[u8], Weight)],
         pulse: bool,
     ) -> Result<(), ()> {
-        let tier = fit_tier(lines, Region::Docked).ok_or(())?;
         let side = self.next_side();
-        let mut b = ScreenBuilder::detail(id, look.icon, side, label).look_tint(look).tier(tier);
-        for &(text, w) in lines {
-            b = b.line(text, w);
-        }
-        if pulse {
-            b = b.pulse();
-        }
-        self.push(b.finish().map_err(|_| ())?)
+        self.push(detail_pages(id, look, side, label, lines, &[], pulse)?)
     }
 
     /// A docked detail over 1–6 lines, paged by three; both pages share the
     /// smaller of their fitted tiers.
     pub(crate) fn detail_multi(&mut self, id: &[u8], label: &[u8], lines: &[(&[u8], Weight)], pulse: bool) -> Result<(), ()> {
-        if lines.is_empty() || lines.len() > 2 * LINES_PER_PAGE {
+        if lines.len() > 2 * LINES_PER_PAGE {
             return Err(());
         }
-        if lines.len() <= LINES_PER_PAGE {
-            return self.detail(id, label, lines, pulse);
-        }
-        let (p0, p1) = lines.split_at(LINES_PER_PAGE);
-        let tier = fit_tier(p0, Region::Docked).ok_or(())?.min(fit_tier(p1, Region::Docked).ok_or(())?);
         let side = self.next_side();
-        let mut b = ScreenBuilder::detail(id, self.look.icon, side, label).look_tint(self.look).tier(tier);
-        for (i, &(text, w)) in lines.iter().enumerate() {
-            if i == LINES_PER_PAGE {
-                b = b.next_page();
-            }
-            b = b.line(text, w);
-        }
-        if pulse {
-            b = b.pulse();
-        }
-        self.push(b.finish().map_err(|_| ())?)
+        self.push(detail_screen(id, self.look, side, label, lines, pulse)?)
     }
 
     /// A docked detail over two explicit pages (1–3 lines each); both
@@ -172,41 +149,16 @@ impl<'s> Emit<'s> {
         if p0.is_empty() || p1.is_empty() || p0.len() > LINES_PER_PAGE || p1.len() > LINES_PER_PAGE {
             return Err(());
         }
-        let tier = fit_tier(p0, Region::Docked).ok_or(())?.min(fit_tier(p1, Region::Docked).ok_or(())?);
         let side = self.next_side();
-        let mut b = ScreenBuilder::detail(id, self.look.icon, side, label).look_tint(self.look).tier(tier);
-        for &(text, w) in p0 {
-            b = b.line(text, w);
-        }
-        b = b.next_page();
-        for &(text, w) in p1 {
-            b = b.line(text, w);
-        }
-        if pulse {
-            b = b.pulse();
-        }
-        self.push(b.finish().map_err(|_| ())?)
+        self.push(detail_pages(id, self.look, side, label, p0, p1, pulse)?)
     }
 
     /// A docked detail whose one value turns two pages (a 32-byte word).
     pub(crate) fn detail_paged(&mut self, id: &[u8], label: &[u8], pages: &[[Line; 2]; 2]) -> Result<(), ()> {
         let p0 = [(pages[0][0].as_bytes(), Weight::Regular), (pages[0][1].as_bytes(), Weight::Regular)];
         let p1 = [(pages[1][0].as_bytes(), Weight::Regular), (pages[1][1].as_bytes(), Weight::Regular)];
-        let t0 = fit_tier(&p0, Region::Docked).ok_or(())?;
-        let t1 = fit_tier(&p1, Region::Docked).ok_or(())?;
-        let tier = t0.min(t1);
         let side = self.next_side();
-        let s = ScreenBuilder::detail(id, self.look.icon, side, label)
-            .look_tint(self.look)
-            .tier(tier)
-            .line(p0[0].0, Weight::Regular)
-            .line(p0[1].0, Weight::Regular)
-            .next_page()
-            .line(p1[0].0, Weight::Regular)
-            .line(p1[1].0, Weight::Regular)
-            .finish()
-            .map_err(|_| ())?;
-        self.push(s)
+        self.push(detail_pages(id, self.look, side, label, &p0, &p1, false)?)
     }
 
     /// Full-width value screen (disc parked off-panel).
@@ -257,30 +209,20 @@ impl<'s> Emit<'s> {
     /// `SemiBold` label line (only when the address takes two lines).
     pub(crate) fn addr_lines(&mut self, id: &[u8], label: &[u8], a: &AddrLines, head: Option<&[u8]>) -> Result<(), ()> {
         let l = a.as_slice();
-        match (head, l.len()) {
-            (Some(h), 2) => self.detail(
-                id,
-                label,
-                &[(h, Weight::SemiBold), (l[0].as_bytes(), Weight::Regular), (l[1].as_bytes(), Weight::Regular)],
-                false,
-            ),
-            (_, 2) => self.detail(
-                id,
-                label,
-                &[(l[0].as_bytes(), Weight::Regular), (l[1].as_bytes(), Weight::Regular)],
-                false,
-            ),
-            _ => self.detail(
-                id,
-                label,
-                &[
-                    (l[0].as_bytes(), Weight::Regular),
-                    (l[1].as_bytes(), Weight::Regular),
-                    (l[2].as_bytes(), Weight::Regular),
-                ],
-                false,
-            ),
+        if !(2..=3).contains(&l.len()) {
+            return Err(());
         }
+        let mut lines: [(&[u8], Weight); 3] = [(&[], Weight::Regular); 3];
+        let mut n = 0;
+        if let (Some(h), 2) = (head, l.len()) {
+            lines[0] = (h, Weight::SemiBold);
+            n = 1;
+        }
+        for line in l {
+            lines[n] = (line.as_bytes(), Weight::Regular);
+            n += 1;
+        }
+        self.detail(id, label, &lines[..n], false)
     }
 
     /// An amount detail: number + unit on one line when a one-line tier
