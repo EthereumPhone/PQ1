@@ -2201,16 +2201,14 @@ pub(super) fn peek_state<R>(f: impl FnOnce(&SecureState) -> R) -> R {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::MutexGuard;
 
     /// Process-wide lock for every test that touches the static `STATE`.
-    /// Exposed `pub(super)` so the sibling-mod tests in the crate-root
-    /// `nsc_core_pure_tests` scaffold can acquire it from outside the
-    /// state module.
+    /// Unlock and zeroize also reset the signing counters, so state and rate
+    /// tests share one lock for the whole scenario. Sibling scaffold tests
+    /// acquire it through this same entry point.
     pub(crate) fn state_test_lock() -> MutexGuard<'static, ()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        let m = LOCK.get_or_init(|| Mutex::new(()));
-        m.lock().unwrap_or_else(|p| p.into_inner())
+        crate::sign_rate::tests::counter_test_lock()
     }
 
     /// Reset STATE to a clean initial value between tests so ordering
