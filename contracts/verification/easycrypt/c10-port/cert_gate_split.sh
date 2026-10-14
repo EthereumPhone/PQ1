@@ -473,12 +473,19 @@ judge_control() { # $1 path  $2 polarity  $3 declared reason.  PHASE 3's verdict
   local path="$1" kind="$2" reason="$3" out rc msg
   if ! job_result "control:$path"; then echo "FAIL control $path: $JR_WHY"; fail=$((fail+1)); return; fi
   out=$(cat "$JR_OUT"); rc=$JR_RC
+  # A declared proof diagnostic does not cancel a later solver/process failure.
+  # Inspect the complete output before granting either control polarity credit.
+  if printf '%s' "$out" | tr '\r' '\n' | grep -aiE 'prover timeout|solver timeout|timed out|out of memory|memory exhausted|stack overflow|segmentation fault|fatal error|resource limit|^[[:space:]]*(timeout|killed)([[:space:]:]|$)' >/dev/null; then
+    echo "FAIL control $path: resource/process diagnostic"; fail=$((fail+1)); return
+  fi
   msg=$(printf '%s' "$out" | tr '\r' '\n' | grep -a '^\[critical\]' | head -1)
   if [ $rc -eq 0 ]; then
     if [ "$kind" = MUST-PASS ]; then echo "OK   control $path (MUST-PASS)"
     else echo "FAIL control $path: MUST-FAIL but COMPILED"; fail=$((fail+1)); fi
   else
     if [ "$kind" = MUST-PASS ]; then echo "FAIL control $path: MUST-PASS but failed -- $msg"; fail=$((fail+1))
+    elif [ "$rc" -ne 1 ]; then
+      echo "FAIL control $path: unexpected rejection exit $rc"; fail=$((fail+1))
     elif printf '%s' "$msg" | grep -qF "$reason"; then
       echo "OK   control $path (MUST-FAIL, rejected for the DECLARED reason)"
     else

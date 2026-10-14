@@ -1068,10 +1068,10 @@ scratch/c10_shuffle_permutation_zero_reject.ec	MUST-FAIL	[by]: cannot close goal
 scratch/c10_shuffle_permutation_short_typed.ec	MUST-PASS	-
 scratch/c10_shuffle_permutation_short_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_shuffle_block_count_typed.ec	MUST-PASS	-
-scratch/c10_shuffle_block_count_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_shuffle_block_count_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_shuffle_block_order_typed.ec	MUST-PASS	-
-scratch/c10_shuffle_block_order_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_shuffle_block_order_reject.ec	MUST-FAIL	nothing to introduce
 scratch/c10_shuffle_block_stream_typed.ec	MUST-PASS	-
-scratch/c10_shuffle_block_stream_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_shuffle_block_stream_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_shuffle_permutation_result_typed.ec	MUST-PASS	-
-scratch/c10_shuffle_permutation_result_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_shuffle_permutation_result_reject.ec	MUST-FAIL	[by]: cannot close goals

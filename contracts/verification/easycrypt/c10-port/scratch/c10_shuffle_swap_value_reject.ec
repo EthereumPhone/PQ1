@@ -179,7 +179,11 @@ proof.
         auto; move=> &1 &2 h.
         have hb : 0 <= blk{1} < 2^32 by rewrite caller_u32_size; smt().
         have hq := shuffle_block_common seed{1} blk{1} hb.
-        smt().
+        have hnext : 0 <= blk{1}+1 <= 4 by smt().
+        move: h => [#] hs hn hst hblk ho hb0 hb4 hn1 horder1 horder2 hg1 hg2.
+        rewrite -hs -hn -hst -hblk -ho hq /=.
+        rewrite hnext hn1 horder1 horder2 -hn /=.
+        by move=> result_L result_R O_L O_R [-> ->].
       by auto; smt().
     wp 3 0.
     while{1} (={n, stream, glob O} /\ 1 < n{1} /\
@@ -192,6 +196,14 @@ proof.
       have hs := shuffle_finish_step n{hr} stream{hr} i{hr} order{hr} hi.
       rewrite /shuffle_swap /shuffle_choice hp in hs.
       rewrite /= -hs; smt().
-    by auto; smt(shuffle_finish_initial shuffle_finish_zero).
+    auto; move=> &1 &2 [#] hn hstream hO hn1 ho1 ho2.
+    have hnpos : 1 <= n{1} by smt().
+    have hrange : 0 <= n{1}-1 < n{1} by smt().
+    rewrite /= -hn -hstream -hO ho1 (shuffle_finish_initial n{1} stream{1} hnpos) hrange /=.
+    rewrite hn1 /=; move=> i order pos; split.
+    + smt().
+    move=> hexit [#] hi0 hilt hpos hf.
+    have hi : i = 0 by smt().
+    by move: hf; rewrite hi shuffle_finish_zero => ->.
   by auto.
 qed.

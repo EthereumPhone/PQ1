@@ -342,6 +342,35 @@ class GateJudgeTests(unittest.TestCase):
             r = self.bash(base + 'RECHECKED[k]=1; job_result k || echo "NO $JR_WHY"\n')
             self.assertIn('NO no result', r.stdout)
 
+    def test_control_judge_rejects_mixed_resource_failures_and_abnormal_exits(self):
+        reason = '[by]: cannot close goals'
+        critical = '[critical] [fixture: line 1] ' + reason + '\n'
+        cases = [(critical, 1, 'MUST-FAIL', 0),
+                 ('checked\n', 0, 'MUST-PASS', 0),
+                 (critical, 2, 'MUST-FAIL', 1),
+                 (critical, 137, 'MUST-FAIL', 1)]
+        for diagnostic in ('prover timeout', 'Fatal error: out of memory',
+                           'solver timed out', 'Stack overflow', 'Killed',
+                           'Segmentation fault', 'resource limit exceeded'):
+            for output in (critical + diagnostic + '\n', diagnostic + '\r' + critical):
+                cases.append((output, 1, 'MUST-FAIL', 1))
+                cases.append((output, 0, 'MUST-PASS', 1))
+        cases.append((critical + 'prover timeout\n' + ('progress\n' * 20000), 1, 'MUST-FAIL', 1))
+        with tempfile.TemporaryDirectory() as directory:
+            out = Path(directory) / 'control.out'
+            for output, rc, polarity, failures in cases:
+                for tested_reason in (reason, 'cannot prove goal (strict)'):
+                    with self.subTest(reason=tested_reason, rc=rc, polarity=polarity):
+                        out.write_text(output.replace(reason, tested_reason))
+                        script = (block('judges') +
+                                  f'\njob_result() {{ JR_OUT={out}; JR_RC={rc}; return 0; }}\n' +
+                                  f'fail=0; judge_control fixture {polarity} "{tested_reason}"; echo failures=$fail\n')
+                        result = self.bash(script)
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertIn(f'failures={failures}', result.stdout)
+                        if failures:
+                            self.assertNotIn('OK   control', result.stdout)
+
     def test_solo_select_takes_every_control_a_budget_miss_could_fake(self):
         cases = {   # file text, polarity, declared reason -> selected?
             'plain smt reason': ('lemma l : true. proof. smt(). qed.', 'MUST-FAIL', 'cannot prove goal (strict)', True),
