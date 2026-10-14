@@ -171,14 +171,17 @@ pub fn splash() -> Screen {
 }
 
 fn eq(a: &str, b: &str) -> bool {
-    a.trim() == b
+    a.trim_ascii() == b
 }
 
 /// Map a legacy `show_status(title, sub)` to its screen.
 #[must_use]
 pub fn classify(title: &str, sub: &str) -> Status {
-    let t = title.trim();
-    let s = sub.trim();
+    // `trim_ascii`, not `trim`: every status string is ASCII (the 16x4
+    // fallback can draw nothing else), and the Unicode `trim` alone linked
+    // 506 B of whitespace tables and code into the image (2026-10-14).
+    let t = title.trim_ascii();
+    let s = sub.trim_ascii();
     let tb = t.as_bytes();
     let sb = s.as_bytes();
     let v = |id: &[u8], icon, state, result, parts: &[&[u8]]| Status::Show(verdict(id, icon, state, result, parts));
@@ -264,7 +267,7 @@ pub fn classify(title: &str, sub: &str) -> Status {
 /// A `show_progress(title, pct)` call: the busy look captioned by the work.
 #[must_use]
 pub fn progress(title: &str) -> Screen {
-    let cap: &[u8] = match title.trim() {
+    let cap: &[u8] = match title.trim_ascii() {
         "C10 keygen" | "Slot keygen" => b"GENERATING KEYS",
         "C10 sign" | "Slot C10 sign" | "EIP-1271 sign" => b"SIGNING",
         other => other.as_bytes(),

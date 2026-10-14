@@ -128,21 +128,18 @@ impl<'a> Atlas<'a> {
     /// `None` and draws no mark).
     #[must_use]
     pub fn marks(&self) -> crate::scene::Marks<'a> {
-        use crate::scene::parse_mark;
-        let m = |n: &[u8; 8]| self.entry(n).and_then(parse_mark);
-        crate::scene::Marks {
-            safe: m(NAME_SAFE),
-            mainnet: m(NAME_MAINNET),
-            base: m(NAME_BASE),
-            fingerprint: m(NAME_FPRINT),
-            eth: m(NAME_ETH),
-            usdc: m(NAME_USDC),
-            usdt: m(NAME_USDT),
-            dai: m(NAME_DAI),
-            blind: m(NAME_BLIND),
-            rotate: m(NAME_ROTATE),
-            cowswap: m(NAME_COWSWAP),
+        // One loop over a name table, not eleven inlined lookups: the
+        // unrolled form compiled to ~1 KB of flash (2026-10-14).
+        const NAMES: [&[u8; 8]; 11] = [
+            NAME_SAFE, NAME_MAINNET, NAME_BASE, NAME_FPRINT, NAME_ETH, NAME_USDC, NAME_USDT, NAME_DAI, NAME_BLIND,
+            NAME_ROTATE, NAME_COWSWAP,
+        ];
+        let mut m = [None; NAMES.len()];
+        for (slot, name) in m.iter_mut().zip(NAMES) {
+            *slot = self.entry(name).and_then(crate::scene::parse_mark);
         }
+        let [safe, mainnet, base, fingerprint, eth, usdc, usdt, dai, blind, rotate, cowswap] = m;
+        crate::scene::Marks { safe, mainnet, base, fingerprint, eth, usdc, usdt, dai, blind, rotate, cowswap }
     }
 
     /// The bytes of the entry called `name` (exact 8-byte match), if present.
