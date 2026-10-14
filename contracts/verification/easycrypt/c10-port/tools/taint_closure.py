@@ -74,6 +74,8 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    "shuffle_seed_common", "shuffle_block_common",
+    "shuffle_derive_common", "shuffle_permutation_common",
     "caller_forest_one", "caller_forest_sign", "caller_forest_recover",
     "caller_layer_recover", "caller_layer_sign", "caller_signer_finish",
     "caller_signer_sign", "caller_signer_verify", "caller_signer_verify_decoded",

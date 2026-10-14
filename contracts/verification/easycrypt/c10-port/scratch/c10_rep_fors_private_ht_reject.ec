@@ -77,6 +77,21 @@ op wots_private_preimage (secret : (int list)) (layer : int) (tree : int) (kp : 
 op fors_private_preimage (secret : (int list)) (ht : int) (tree : int) (leaf : int) : (int list) =
   (secret ++ [102; 111; 114; 115] ++ (u32_bytes tree) ++ (u32_bytes tree) ++ (u32_bytes leaf)).
 
+op shuffle_seed_preimage (seed : (int list)) (label : (int list)) : (int list) =
+  ([115; 112; 104; 105; 110; 99; 115; 45; 99; 49; 48; 45; 115; 104; 117; 102; 102; 108; 101; 45; 118; 49] ++ seed ++ label).
+
+op shuffle_block_preimage (seed : (int list)) (nonce : int) : (int list) =
+  ([115; 112; 104; 105; 110; 99; 115; 45; 99; 49; 48; 45; 102; 105; 115; 104; 101; 114; 45; 121; 97; 116; 101; 115; 45; 118; 49] ++ seed ++ (u32_bytes nonce)).
+
+op shuffle_choice (lo : int) (hi : int) (bound : int) : int =
+  ((((hi * 256) + lo) * bound) %/ 65536).
+
+op shuffle_swap (order : (int list)) (i : int) (j : int) : (int list) =
+  (put (put order i (nth 0 order j)) j (nth 0 order i)).
+
+op shuffle_order (n : int) (stream : (int list)) : (int list) =
+  (foldr (fun i order => (shuffle_swap order i (shuffle_choice (nth 0 stream (2 * (max 0 ((max 0 (n - 1)) - i)))) (nth 0 stream ((2 * (max 0 ((max 0 (n - 1)) - i))) + 1)) (i + 1)))) (mkseq (fun i => i) n) (mkseq (fun i => (i + 1)) (max 0 (n - 1)))).
+
 import BS2Int.
 
 lemma byte_word_le_value bs :

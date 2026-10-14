@@ -843,6 +843,7 @@ scratch/_scope_neg_op_C10CallerInputBridge.ec	MUST-FAIL	unknown variable or cons
 scratch/_scope_neg_op_C10PrivateCallerBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10TreeCallerBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10OuterCallerBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_C10ShuffleBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/c10_rep_positive.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_typed.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_reject.ec	MUST-FAIL	nothing to rewrite
@@ -1036,3 +1037,41 @@ scratch/c10_outer_caller_verify_root_result_typed.ec	MUST-PASS	-
 scratch/c10_outer_caller_verify_root_result_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_outer_caller_verify_default_counter_typed.ec	MUST-PASS	-
 scratch/c10_outer_caller_verify_default_counter_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_positive.ec	MUST-PASS	-
+scratch/c10_shuffle_fixtures.ec	MUST-PASS	-
+scratch/c10_shuffle_seed_tag_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_seed_tag_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_label_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_label_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_block_tag_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_block_tag_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_block_counter_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_block_counter_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_byte_order_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_byte_order_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_shuffle_reduction_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_reduction_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_shuffle_swap_value_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_swap_value_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_shuffle_initial_size_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_initial_size_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_direction_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_direction_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_stream_index_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_stream_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_derive_zero_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_derive_zero_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_derive_result_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_derive_result_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_shuffle_permutation_zero_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_permutation_zero_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_permutation_short_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_permutation_short_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_block_count_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_block_count_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_shuffle_block_order_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_block_order_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_shuffle_block_stream_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_block_stream_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_shuffle_permutation_result_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_permutation_result_reject.ec	MUST-FAIL	cannot prove goal (strict)

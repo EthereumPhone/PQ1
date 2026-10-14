@@ -5,7 +5,8 @@ Counts are nonnegative integers (Lean Nat / EasyCrypt int restricted to >= 0).
 This generator and the cross-tool interpretation of arithmetic, lists and ordered
 tuples remain a disclosed TCB. The endpoint proofs are independently checked; this
 is not a cross-kernel proof exporter. Default operation checks existing outputs.
-Words use mathematical signed integers. No subtraction, machine arithmetic,
+Words use mathematical signed integers. Count subtraction is saturated at zero;
+count division accepts only a positive constant divisor. No machine arithmetic,
 oracle, probability, arbitrary source injection, or cross-kernel export.
 """
 from dataclasses import dataclass
@@ -65,6 +66,18 @@ def cat(*xs):
 def repeat(n, x):
     assert n.ty == COUNT
     return Expr("repeat",(n,x),LIST(x.ty))
+def count_sub(a, b):
+    assert a.ty == b.ty == COUNT
+    return Expr("count_sub", (a,b), COUNT)
+def count_div(a, divisor):
+    assert a.ty == COUNT and type(divisor) is int and divisor > 0
+    return Expr("count_div", (a,literal(divisor)), COUNT)
+def index(bs, i, default):
+    assert bs.ty == LIST(default.ty) and i.ty == COUNT
+    return Expr("index", (bs,i,default), default.ty)
+def update(bs, i, value):
+    assert bs.ty == LIST(value.ty) and i.ty == COUNT
+    return Expr("update", (bs,i,value), bs.ty)
 
 DEFS = []
 def define(name, params, body):
@@ -152,6 +165,28 @@ fors_private_preimage = define("fors_private_preimage",(secret,ht,tree,leaf),
     cat(secret,items(INT,*(literal(x,INT) for x in [102,111,114,115])),
         u32_bytes(ht),u32_bytes(tree),u32_bytes(leaf)))
 
+# Shuffle inputs and exact descending Fisher-Yates schedule. Stream/order values
+# are counts here: the endpoint proofs establish that actual bytes are in range.
+label = var("label", BYTES)
+shuffle_seed_preimage = define("shuffle_seed_preimage", (seed,label),
+    cat(items(INT,*(literal(x,INT) for x in b"sphincs-c10-shuffle-v1")),seed,label))
+shuffle_block_preimage = define("shuffle_block_preimage", (seed,nonce),
+    cat(items(INT,*(literal(x,INT) for x in b"sphincs-c10-fisher-yates-v1")),seed,u32_bytes(nonce)))
+lo, hi, bound = (var(x,COUNT) for x in ("lo","hi","bound"))
+shuffle_choice = define("shuffle_choice", (lo,hi,bound),
+    count_div(mul(add(mul(hi,literal(256)),lo),bound),65536))
+order, stream = var("order",LIST(COUNT)), var("stream",LIST(COUNT))
+j = var("j",COUNT)
+shuffle_swap = define("shuffle_swap", (order,i,j),
+    update(update(order,i,index(order,j,literal(0))),j,index(order,i,literal(0))))
+pos = mul(literal(2),count_sub(count_sub(n,literal(1)),i))
+choice = shuffle_choice(index(stream,pos,literal(0)),
+                        index(stream,add(pos,literal(1)),literal(0)),add(i,literal(1)))
+# foldr on [1,...,n-1] executes n-1 first and 1 last.
+shuffle_order = define("shuffle_order", (n,stream),
+    fold(seq(count_sub(n,literal(1)),i,add(i,literal(1))),i,order,
+         shuffle_swap(order,i,choice),seq(n,i,i)))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"
@@ -183,6 +218,15 @@ def render(e, lean):
     if op == "cat": return "(" + " ++ ".join(r(x) for x in a) + ")"
     if op == "repeat":
         return f"({'List.replicate' if lean else 'nseq'} {r(a[0])} {r(a[1])})"
+    if op == "count_sub":
+        return f"({r(a[0])} - {r(a[1])})" if lean else f"(max 0 ({r(a[0])} - {r(a[1])}))"
+    if op == "count_div":
+        return f"({r(a[0])} {'/' if lean else '%/'} {r(a[1])})"
+    if op == "index":
+        bs,i,default = a
+        return f"(List.getD {r(bs)} {r(i)} {r(default)})" if lean else f"(nth {r(default)} {r(bs)} {r(i)})"
+    if op == "update":
+        return f"({'List.set' if lean else 'put'} {r(a[0])} {r(a[1])} {r(a[2])})"
     if op == "call": return "(" + a[0] + " " + " ".join(r(x) for x in a[1:]) + ")"
     raise ValueError(op)
 

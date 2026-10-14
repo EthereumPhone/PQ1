@@ -73,4 +73,19 @@ def wots_private_preimage (secret : (List Int)) (layer : Int) (tree : Int) (kp :
 def fors_private_preimage (secret : (List Int)) (ht : Int) (tree : Int) (leaf : Int) : (List Int)  :=
   (secret ++ [102, 111, 114, 115] ++ (u32_bytes ht) ++ (u32_bytes tree) ++ (u32_bytes leaf))
 
+def shuffle_seed_preimage (seed : (List Int)) (label : (List Int)) : (List Int)  :=
+  ([115, 112, 104, 105, 110, 99, 115, 45, 99, 49, 48, 45, 115, 104, 117, 102, 102, 108, 101, 45, 118, 49] ++ seed ++ label)
+
+def shuffle_block_preimage (seed : (List Int)) (nonce : Int) : (List Int)  :=
+  ([115, 112, 104, 105, 110, 99, 115, 45, 99, 49, 48, 45, 102, 105, 115, 104, 101, 114, 45, 121, 97, 116, 101, 115, 45, 118, 49] ++ seed ++ (u32_bytes nonce))
+
+def shuffle_choice (lo : Nat) (hi : Nat) (bound : Nat) : Nat  :=
+  ((((hi * 256) + lo) * bound) / 65536)
+
+def shuffle_swap (order : (List Nat)) (i : Nat) (j : Nat) : (List Nat)  :=
+  (List.set (List.set order i (List.getD order j 0)) j (List.getD order i 0))
+
+def shuffle_order (n : Nat) (stream : (List Nat)) : (List Nat)  :=
+  (List.foldr (fun i order => (shuffle_swap order i (shuffle_choice (List.getD stream (2 * ((n - 1) - i)) 0) (List.getD stream ((2 * ((n - 1) - i)) + 1) 0) (i + 1)))) ((List.range n).map (fun i => i)) ((List.range (n - 1)).map (fun i => (i + 1))))
+
 end C10Representation

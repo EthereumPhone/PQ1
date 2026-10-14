@@ -1,3 +1,4 @@
+import Extracted.C10ShuffleBridge
 import Extracted.C10AddressInputBridge
 import Extracted.C10HashInputBridge
 import Extracted.C10RepresentationBridge
@@ -413,3 +414,24 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10AddressInputBridge.fors_private_input_value
 #print axioms Extracted.C10AddressInputBridge.extracted_wots_private_input
 #print axioms Extracted.C10AddressInputBridge.extracted_fors_private_input
+
+-- Paired shuffle exact order and actual extracted loops.
+#print axioms Extracted.C10ShuffleBridge.shuffle_seed_input
+#print axioms Extracted.C10ShuffleBridge.shuffle_block_input
+#print axioms Extracted.C10ShuffleBridge.modeled_shuffle_derive
+#print axioms Extracted.C10ShuffleBridge.modeled_shuffle_block
+#print axioms Extracted.C10ShuffleBridge.u8_or_zero
+#print axioms Extracted.C10ShuffleBridge.shuffle_nonzero_exact
+#print axioms Extracted.C10ShuffleBridge.shuffle_copy_exact
+#print axioms Extracted.C10ShuffleBridge.shuffle_stream_exact
+#print axioms Extracted.C10ShuffleBridge.finishOrder_zero
+#print axioms Extracted.C10ShuffleBridge.finishOrder_succ
+#print axioms Extracted.C10ShuffleBridge.finishOrder_initial
+#print axioms Extracted.C10ShuffleBridge.shuffle_swap_prefix
+#print axioms Extracted.C10ShuffleBridge.little_endian_or
+#print axioms Extracted.C10ShuffleBridge.shuffle_swap_loop_exact
+#print axioms Extracted.C10ShuffleBridge.initialized_prefix
+#print axioms Extracted.C10ShuffleBridge.seed_zero_iff
+#print axioms Extracted.C10ShuffleBridge.stream_counts_exact
+#print axioms Extracted.C10ShuffleBridge.shuffle_prefix_exact
+#print axioms Extracted.C10ShuffleBridge.shuffle_exact

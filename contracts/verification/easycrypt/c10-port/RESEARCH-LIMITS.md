@@ -1242,11 +1242,46 @@ The seventeen lemmas, three common modules, nine headlines, source bindings,
 scope probe and generated controls enter the exact certificate inventories.
 
 This closes the listed EasyCrypt outer callers' common-input composition.
-The shuffle is still the identical shared procedure. Paired shuffle derivation,
-cross-language control-flow/error and session relations, hash/backend/callback
+These caller proofs reuse the identical shuffle procedure; the separate
+component relation below now connects that procedure to paired expressions.
+Cross-language control-flow/error and session relations, hash/backend/callback
 interpretation and secure-wrapper query costs remain open. The shared oracle
 is not identified with Lean's hash interpretation or physical SHA-256. No
 cryptographic axiom, production source, wire format or hardware claim changes.
+
+Paired shuffle component correspondence (2026-10-14):
+`C10ShuffleBridge.lean` proves the actual extracted zero detection, block copy,
+four-block stream and descending swap loops. For every 32-byte seed and length
+from 0 through 64, the complete extracted function successfully returns the
+paired expression's exact prefix order and a zero unused tail. This strengthens
+the existing permutation theorem: visiting the same indices in a different
+order does not satisfy the new result. All nineteen theorem closures are
+kernel-only. Separate input theorems retain arbitrary label bytes and every
+u32 block counter.
+
+`C10ShuffleBridge.ec` relates `RawShuffle.derive` and `permutation` to
+`PairedShuffle`, preserving returned values and the complete state of the same
+arbitrary `PreparationOracle`. The nontrivial path retains exactly four ordered
+block queries; zero seeds and lengths 0/1 retain their fast paths. The relation
+needs neither a fresh oracle history nor oracle losslessness. The descending
+loop is related to the same generated pure order expression used by Lean.
+
+The shared generator adds only saturated count subtraction, division by a
+positive constant, list indexing with a default and list update. Its printers
+and the interpretation of nonnegative counts and byte lists remain TCB.
+Thirty independent fixtures exercise order, labels, full-width counters,
+index/update behavior and multiply-high reduction in both languages; twelve
+orders also match the existing actual-Rust/independent-Rust corpus. Eighteen
+EasyCrypt and fifteen Lean typed mutations exercise the consuming proofs,
+including five mutations to the actual extracted loops. Definition checks
+precede proof rejection; abnormal/resource exits receive no rejection credit.
+
+This closes the bounded shuffle component's exact-order gap. It does not
+extract `ShuffleSeed.derive`: that supplied function and the SHA block model
+remain explicit backend boundaries. Nor does it identify EasyCrypt's arbitrary
+oracle with Lean's concrete SHA interpretation, prove physical erasure or
+side-channel behavior, or supply the complete signer/session relation. No new
+cryptographic axiom or production behavior is introduced.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

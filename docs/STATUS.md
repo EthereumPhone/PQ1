@@ -144,7 +144,12 @@ Nine relations preserve returned values and the entire shared oracle state.
 Partial-correctness bounds avoid a new oracle-losslessness premise; the actual
 decoder discharges the verifier's two u32 counter bounds for every 4,008-byte
 signature. Twenty-five typed mutations check the intended caller proofs.
-Hash-backend/oracle interpretation, paired shuffle derivation, cross-language
+The paired shuffle component now proves exact prefix order and a zero unused
+tail for every 32-byte seed and length 0–64 in the actual extracted loops. Its
+EasyCrypt relation preserves the complete arbitrary oracle state, four ordered
+block queries and fast paths. The seed-derivation and SHA block models remain
+supplied boundaries; this is not the complete signer/session relation.
+Hash-backend/oracle interpretation, extraction of shuffle derivation, cross-language
 control-flow/errors and the stateful session relation remain open.
 
 The ordinary secure-wrapper entry now has a sequential, source-linked model

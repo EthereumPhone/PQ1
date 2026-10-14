@@ -101,6 +101,7 @@ cdrafts-split/C10Representation.ec
 cdrafts-split/C10RepresentationBridge.ec
 cdrafts-split/C10SearchBounds.ec
 cdrafts-split/C10SharedSearch.ec
+cdrafts-split/C10ShuffleBridge.ec
 cdrafts-split/C10SpecControls.ec
 cdrafts-split/C10StatefulSearch.ec
 cdrafts-split/C10Surface.ec

@@ -15,6 +15,7 @@ from c10_caller_controls import caller_outputs, caller_rows
 from c10_private_caller_controls import private_caller_outputs, private_caller_rows
 from c10_tree_caller_controls import tree_caller_outputs, tree_caller_rows
 from c10_outer_caller_controls import outer_caller_outputs, outer_caller_rows
+from c10_shuffle_controls import shuffle_outputs, shuffle_rows
 
 CHANGES = [
     ("word-endian", "byte_word", "List.reverse bs", "bs", "rev bs", "bs"),
@@ -86,6 +87,7 @@ def control_outputs(port):
     result.update(private_caller_outputs(port))
     result.update(tree_caller_outputs(port))
     result.update(outer_caller_outputs(port))
+    result.update(shuffle_outputs(port))
     return result
 
 def control_rows():
@@ -94,11 +96,11 @@ def control_rows():
         stem="scratch/c10_rep_"+name.replace("-","_")
         rows.extend([stem+"_typed.ec\tMUST-PASS\t-",
                      stem+"_reject.ec\tMUST-FAIL\t"+REASONS[name]])
-    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows()
+    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows()
 
 def check_manifest_rows(rows):
     expected=control_rows()
-    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_"))]
+    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_"))]
     if sorted(live)!=sorted(expected):
         raise ValueError("paired representation control enrollment changed")
 

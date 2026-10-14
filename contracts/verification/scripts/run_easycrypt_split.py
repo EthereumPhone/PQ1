@@ -61,6 +61,7 @@ if profile not in ('n/a', 'performance'):
 subprocess.run([sys.executable, '-B', str(root / 'tools/check_source_binding.py')], check=True)
 subprocess.run([sys.executable, '-B', str(root / 'tools/c10_representation.py')], check=True)
 subprocess.run([sys.executable, '-B', str(root / 'tools/c10_representation_controls.py')], check=True)
+subprocess.run([sys.executable, '-B', str(root / 'tools/c10_shuffle_fixtures.py')], check=True)
 if not sys.argv[1:]:
     subprocess.run(['cargo', 'test', '--locked', '-p', 'sphincs-c10',
                     '--target', 'x86_64-unknown-linux-gnu', '--features', 'sim-internals',

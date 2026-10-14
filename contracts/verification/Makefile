@@ -1959,6 +1959,10 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignSerializationDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_sign_serialization_proof_controls.py
 	@$(_FV_PYTHON3) scripts/test_c10_representation_controls.py
+	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_shuffle_fixtures.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.C10ShuffleBridge 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/C10ShuffleFixtures.lean
+	@$(_FV_PYTHON3) scripts/test_c10_shuffle_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignHypertreeCaller Extracted.SignHypertreeDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignHypertreeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_sign_hypertree_proof_controls.py
@@ -2142,6 +2146,7 @@ _extract-fors-index-impl:
 verify-spec-vendored-fidelity: ## Vendored-spec fidelity check
 	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_representation.py --self-test
 	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_representation_controls.py --self-test
+	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_shuffle_fixtures.py
 	@$(_FV_PYTHON3) scripts/check_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_fors_vendored_spec.py
 	@$(_FV_PYTHON3) scripts/test_hmsg_vendored_spec.py
@@ -2573,6 +2578,7 @@ _extract-slotkdf-impl:
 verify-easycrypt-split-pins: ## Current split identity, unique pins, dependency/assumption census and controls
 	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/c10_representation.py --self-test
 	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/c10_representation_controls.py --self-test
+	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/c10_shuffle_fixtures.py
 	$(_FV_PYTHON3) -B easycrypt/c10-port/tools/check_source_binding.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_split_contract.py
 	cd easycrypt/c10-port && $(_FV_PYTHON3) -B -W ignore::ResourceWarning tools/test_proof_jobs.py

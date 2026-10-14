@@ -2523,3 +2523,10 @@ cdrafts-split/C10OuterCallerBridge.ec	defined-op:3e453665a4d9	outer_counters	# l
 cdrafts-split/C10OuterCallerBridge.ec	module:047a8c495606	CommonInputForest	# line 66
 cdrafts-split/C10OuterCallerBridge.ec	module:7ffbefc5eaca	CommonInputLayer	# line 108
 cdrafts-split/C10OuterCallerBridge.ec	module:f0ef04371045	CommonInputSigner	# line 130
+cdrafts-split/C10Representation.ec	defined-op:8b52c0b1f0b4	shuffle_seed_preimage	# line 74
+cdrafts-split/C10Representation.ec	defined-op:1f16e9e3b017	shuffle_block_preimage	# line 77
+cdrafts-split/C10Representation.ec	defined-op:9ad413317d04	shuffle_choice	# line 80
+cdrafts-split/C10Representation.ec	defined-op:93526f7afab4	shuffle_swap	# line 83
+cdrafts-split/C10Representation.ec	defined-op:507686ca8c0b	shuffle_order	# line 86
+cdrafts-split/C10ShuffleBridge.ec	defined-op:db88023b3f56	shuffle_finish	# line 19
+cdrafts-split/C10ShuffleBridge.ec	module:57516d53c2ff	PairedShuffle	# line 47
