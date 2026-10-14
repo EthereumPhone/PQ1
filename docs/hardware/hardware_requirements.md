@@ -33,7 +33,12 @@ Entropy of the seed phrase is split across two independent secure elements to el
 ### Infineon OPTIGA Trust M V3
 
 - Holds one share of the seed entropy (XOR-split half)
-- Common Criteria EAL6+ certified (SLS32AIA)
+- **Exact PCB component (pinned 2026-07-20): `SLS32AIA010MKUSON10XTMA2`** — Trust M V3,
+  Standard Temperature Range (−25…+85 °C), PG-USON-10-2,-4, tape & reel. Vendor-doc
+  pack (datasheet/SRM v3.70, IFX I2C v2.03, Keys & Certs, ConfigGuide, factory object
+  dump) is kept locally at `docs/SLS32AIA010MKUSON10XTMA2/` — gitignored, not
+  redistributable; see `docs/secure-elements/OPTIGATRUSTM/README.md` for upstream links
+- Common Criteria EAL6+ certified (SLS32AIA; PSA Certified Level 3 for the MK variant)
 - IFX I2C protocol (4-layer stack) at address 0x30
 - Shielded Connection (TLS-PRF + AES-128-CCM-8) for encrypted I2C
 - Authorization reference PIN protection (hardware-enforced access conditions),

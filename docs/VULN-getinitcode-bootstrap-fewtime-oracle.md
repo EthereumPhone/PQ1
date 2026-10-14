@@ -1,9 +1,18 @@
 # VULN — `CMD_GET_INIT_CODE` is an uncapped, unconfirmed bootstrap few-time-signature oracle
 
-**Severity:** HIGH (master-key few-time-cap bypass; impact-if-exploited = full wallet takeover).
-Practical-forgery reachability is bounded by the C10 FORS few-time margin + a keygen-bound
-rate limit — see *Exploitation & honest caveat* below. The **invariant violation and the
-missing controls are unambiguous**; the residual question is purely the crypto margin.
+**Severity: LOW** (downgraded from HIGH on 2026-07-24 — see
+[`UPDATE 2026-07-24 (b)`](#update-2026-07-24-b--severity-downgraded-to-low-firmware-cap-intentionally-absent)).
+**This is not a path to steal funds.** No attacker in any reachable position can turn it into a
+signature forgery, a key extraction, or a transaction the user did not confirm; every actor who can
+reach the oracle already holds a faster, more direct route to the funds (see §2 of
+`UPDATE 2026-07-10`). What remains is a **security-margin bookkeeping defect**: the firmware
+produces bootstrap signatures on paths no counter observes, so the 65,536 figure the design's
+security rationale rests on is not enforced anywhere. The absence of that enforcement is
+[**deliberate**](#update-2026-07-24-b--severity-downgraded-to-low-firmware-cap-intentionally-absent)
+— a hard firmware cap would risk a device that refuses to sign.
+Historical note: the *original* HIGH rating (2026-06-30) was assigned on the theft-takeover
+scenario in *Exploit chain* below, which the two quantification passes since have shown is not
+reachable. Read that section as the mechanism, not as the risk.
 
 > **STATUS: ACCEPTED / KNOWN TRADEOFF (per user/owner decision, 2026-06-30). WON'T-FIX — do not
 > re-raise.** The owner accepts this as a deliberate tradeoff: `GET_INIT_CODE` stays silent (no
@@ -14,8 +23,21 @@ missing controls are unambiguous**; the residual question is purely the crypto m
 > The fixes below are recorded for completeness only; they are NOT scheduled. Documented so future
 > vuln sweeps skip it (same disposition class as the paymaster-unshown WON'T-FIX).
 
-**Status:** ACCEPTED KNOWN TRADEOFF (found 2026-06-30; owner-classified WON'T-FIX same day).
+**Status:** ACCEPTED KNOWN TRADEOFF (found 2026-06-30; owner-classified WON'T-FIX same day;
+severity corrected HIGH → **LOW** and the uncapped design confirmed **intentional** 2026-07-24).
 Novel — not in the prior finding ledger.
+
+> ⚠️ **READ [`UPDATE 2026-07-24`](#update-2026-07-24--the-threshold-in-the-2026-07-10-quantification-is-wrong-by-2700x-in-q-100-bits-of-margin) BEFORE ACTING ON ANYTHING ABOVE.** The
+> "~2^28–2^32 signatures" threshold quoted in the STATUS block and in `UPDATE 2026-07-10` is
+> **wrong** — it is the FORS *saturation* point, not the point where forgery work drops below the
+> claimed 128-bit level. The real crossover is **99,375 signatures (1.52× the cap)**; at 2^28 the
+> forgery costs 2^27. The won't-fix on *practical theft* still holds; its stated reasoning does not.
+> A second path (the per-chain cap on a chain-independent key) was not considered by either pass.
+>
+> ⚠️ **AND THEN READ [`UPDATE 2026-07-24 (b)`](#update-2026-07-24-b--severity-downgraded-to-low-firmware-cap-intentionally-absent).**
+> That update's "severity HIGH is unchanged" line is **superseded**: severity is **LOW**, this is
+> **not a theft path**, and the missing firmware cap is a **deliberate availability choice**, not an
+> oversight. Fix (B) (a hard firmware bootstrap cap) is **rejected** — do not implement it.
 
 **Component:** `secure/src/nsc/cmd_get_init_code.rs` (CMD 15) + `secure/src/nsc/factory_calldata.rs`
 + `secure/src/crypto.rs` (`c10_sign_verified_with_progress`).
@@ -23,6 +45,12 @@ Novel — not in the prior finding ledger.
 ---
 
 ## Invariant violated
+
+> **Scoping note added 2026-07-24 (b):** invariant #7 names the *on-chain* counters, and that is how
+> it is now read. The bootstrap key's few-time budget is deliberately bounded by physical unlock
+> cadence rather than a firmware counter — see
+> [`UPDATE 2026-07-24 (b)` §2](#2-the-bootstrap-key-is-uncapped-on-purpose--do-not-add-a-firmware-cap).
+> The gap described below is real as a description of the mechanism; it is not an action item.
 
 CLAUDE.md **Non-Negotiable Invariant #7**: *"Per-chain caps monotonic, unresettable.
 `bootstrapUses < 65,536` … No `reset*` or `increaseMax*` path. Exhausted chains stay frozen."*
@@ -105,6 +133,13 @@ thousands–millions of oracle signatures in step 2 never touched the chain.
   is provably false in the current code.
 
 ## Fix (any one closes it; do (A) regardless)
+
+> **Dispositions as of 2026-07-24:** (A) is the only one still on the table (optional, pre-launch,
+> availability-neutral). **(B) is REJECTED** — a hard firmware cap is the one change that can make
+> the device stop signing; see
+> [`UPDATE 2026-07-24 (b)`](#update-2026-07-24-b--severity-downgraded-to-low-firmware-cap-intentionally-absent).
+> (C) was declined by the original owner decision (silent `GET_INIT_CODE` is required for the
+> companion's gas-estimation flow).
 
 - **(A) Deterministic factory signature.** Sign `factory_digest` with `opt_rand = None`
   (the R-grind already derives R deterministically from `sk_seed ‖ message ‖ nonce` when
@@ -193,3 +228,166 @@ tidying **before mainnet value is on-chain**, and fix **(A) deterministic factor
 (every harvested signature collapses to the single one already published on-chain at deploy), so
 the safety margin no longer rests **solely** on the idle-lock throttle. Not scheduled; not a
 blocker.
+
+---
+
+## UPDATE 2026-07-24 — the threshold in the 2026-07-10 quantification is wrong by ~2700x in q (~100 bits of margin)
+
+**What changes:** the *practical-theft* conclusion of §2/§3 above **stands** — this is still not a
+realistic route to stealing funds, for the reasons given there. What does not stand is the number
+underneath it, and a second exposure path that no prior pass examined. Net effect: the wallet does
+**not** meet its claimed NIST Cat-1 (128-bit) level in ordinary multi-chain use, with no attacker
+involved at all.
+
+### The methodological error
+
+§1 estimated the forgery target as *"~2^18 hypertree instances x ~2^11 leaves ~= 2^29"*. That is the
+**FORS saturation** point — where essentially every leaf of every tree has been revealed and forgery
+becomes a certainty. It is not the point at which forgery becomes *cheaper than the claimed security
+level*, which is what a Cat-1 claim requires and which arrives far earlier. Forgery work is
+
+```
+Work = 2^143 / E[gamma^12],    gamma ~ Poisson(q / 2^18)
+```
+
+(2^-11 for the FORS+C forced-zero R-grind x 2^-132 for the 12 binding FORS trees; the 13th tree is
+forced to index 0, so its revealed secret is a per-position constant and contributes nothing.)
+
+| q (sigs under ONE keypair) | forgery work |
+|---|---|
+| 65,536 = `MAX_BOOTSTRAP_USES`, one chain | 2^130.6 |
+| **99,375 -- 128-bit crossover (1.52x the cap)** | **2^128** |
+| 262,144 (4 chains at cap) | 2^121 |
+| 1,048,576 (16 chains at cap) | 2^108 |
+| 2^24 | 2^70 |
+| 2^28 -- *the figure §1 assumed was the target* | **2^27.1** |
+
+At the assumed-safe 2^28 the forgery is a laptop-seconds computation, not a wall. The margin at the
+nominal cap is **2.6 bits**, and it decays as the *12th power* of q -- so q is the entire ballgame.
+
+**Confidence.** Derived three independent ways that agree to the decimal: closed-form Poisson,
+Monte-Carlo over sampled position multiplicities, and an independent transliteration of *both*
+verifiers (Rust + the Yul `SPHINCsC10Asm`). The same model reproduces the official SPHINCS+-128s
+(2^134) and -128f (2^131) parameter sets at their stated q_max = 2^64, i.e. it agrees with the
+published sets that they meet 128-bit. It also agrees with this repo's own
+`sphincs-c10/tests/fors_forgery_resistance.rs`, which asserts >= 2^128 **at exactly the cap** and
+prints ~2^131 -- the test is correct; what is missing is anything that holds q at the cap.
+
+Structural facts verified empirically (host-side, repo unmodified):
+- At a repeated hypertree position the whole **1672-byte hypertree section is byte-identical**
+  across signatures, so a forger reuses bytes 2336..4008 verbatim and needs only FORS leaves.
+- `fors_secret(sk_seed, ht_idx, tree_idx, leaf_idx)` is position-bound, so per-position leaf sets
+  are exactly what the model assumes.
+
+### The path nobody analysed: the cap is per-chain, the key is not
+
+Prior passes treated cmd 15 as the only way past `MAX_BOOTSTRAP_USES`. It is not the only one, and
+the other needs no attacker:
+
+`master = HMAC-SHA512("sphincs-c6-v1", bip39_seed)` carries **no `chain_id`** (slot keys do:
+`slot_entropy = sha256(slot_master || "slot_entropy" || chain_id_be8 || slot_index_be4)`), while
+`bootstrapUses` is per-proxy-per-chain storage in `PQMultiOwnable`. So the ceiling is
+`N_chains x 65,536` on a **single** keypair. Four chains at cap = 2^121, below the claimed 128.
+Cross-chain address identity (invariant #6, "same 24 words -> same address on every chain") is the
+product's flagship feature, so this is the *intended* usage pattern eroding the *stated* security
+level.
+
+Second, the enforcement asymmetry is now explicit: `secure/src/offchain_state.rs` durably tallies
+**slot** keys (`offchain_count` / `last_userop_count` / `userop_sigs`, checked *before* signing),
+and there is **no bootstrap counterpart anywhere in the firmware**. On-chain `bootstrapUses` counts
+only *submitted* Type-1 UserOps and structurally cannot see cmd-15 or ERC-6492 factory signatures.
+
+### Exposure, stated honestly
+
+- Harvest rate via cmd 15 is ~110 sigs per 120 s unlock window. The idle timer is **not** remotely
+  resettable: the only `timeout::reset_activity()` reachable without a physical button press is in
+  `cmd_fw_begin.rs:224`, which sits behind **two** trusted-display confirms. So §1's throttle
+  argument holds.
+- Reaching the 2^128 crossover: ~900 unlocks. Reaching a practical (<= 2^80) break: q ~ 2^23,
+  ~76,000 unlocks -- out of reach. **Theft via this oracle remains impractical.**
+- But the Cat-1 *claim* is breached at 4 chains with zero attacker effort, and §"Exploitation &
+  honest caveat" above set its own bar at *"if it is closer to ~2^20 it is plausible over a
+  device's multi-year life"* -- q = 2^20 gives 2^108.
+
+### Disposition ~~(superseded by `UPDATE 2026-07-24 (b)` below)~~
+
+> ⚠️ **SUPERSEDED same day.** The severity call and the fix-(B) recommendation in this paragraph
+> were revised hours later; the *arithmetic* above stands unchanged. Kept verbatim for the honest
+> history. Read the next section for the live disposition.
+
+~~Severity **HIGH** is unchanged and correctly assigned.~~ The won't-fix on *theft risk* survives; the
+**rationale must not** -- any future sweep that re-derives "~2^28 is safe" will reach the wrong
+conclusion, since 2^28 is 2^27 work. Fix **(A)** (`opt_rand = None` on this path only) still closes
+the oracle cheaply. ~~Fix **(B)** (a durable *global* bootstrap tally) is what invariant #7 actually
+requires, and is now the load-bearing one, because (B) -- not (A) -- is what bounds the multi-chain
+path.~~ Pre-launch, both are still free.
+
+---
+
+## UPDATE 2026-07-24 (b) — severity downgraded to LOW; firmware cap intentionally absent
+
+Owner decision, same day, after walking the quantification above end-to-end. Two changes: the
+severity was wrong, and the missing counter is a **design choice**, not a defect to be fixed.
+
+### 1. This is not a path to steal funds — severity **HIGH → LOW**
+
+Stated plainly, so no future sweep re-escalates it:
+
+- **No theft.** There is no reachable sequence of commands by which an attacker obtains a signature
+  over a message the user did not confirm, extracts `sk_seed` (it stays behind a one-way PRF), or
+  moves funds. The forgery in *Exploit chain* is a real cryptographic mechanism at a signature
+  count nobody reaches: ~8.8M signatures for a 2^80 forgery, ~24M for 2^64 — at ~110 sigs per
+  user-initiated unlock that is **~80,000 and ~220,000 unlock sessions** respectively, i.e. decades
+  of continuous compromised-host operation on one specific device. The signatures are also
+  device-bound, so no cross-device parallelism.
+- **No new capability.** Both positions from which the oracle is reachable (attacker holds PIN +
+  device; malicious host piggybacking a legitimate unlock) already carry a faster, more direct
+  route to the funds — see §2 of `UPDATE 2026-07-10`. The oracle strictly dominates nothing.
+- **What is left** is a *bookkeeping* gap: the 65,536 figure that the C10 security rationale in
+  `sphincs-c10/src/params.rs` and the `forgery_work_at_onchain_cap_exceeds_128_bits` test both
+  assume is not enforced by any firmware counter, and the on-chain counter it *is* enforced by is
+  per-chain while the master key is chain-independent. That is worth documenting accurately — the
+  margin at the nominal cap is 2.6 bits and decays as the 12th power of q — but it is a
+  margin/claim-hygiene issue, **not an exploitable weakness**. LOW.
+
+### 2. The bootstrap key is uncapped **on purpose** — do not add a firmware cap
+
+Fix (B) (a durable global bootstrap tally that *refuses* past a threshold) is **rejected**, and the
+reason is availability, which outranks the theoretical margin here:
+
+> A cap that the firmware enforces is a cap that can **fire on a legitimate user**. If some owner
+> genuinely drives the bootstrap key past X signatures — many chains, an unusually chatty companion
+> doing per-transaction gas estimation, years of counterfactual `GET_INIT_CODE` calls, a
+> re-provisioning loop, a bug in a third-party companion — a hard cap means the device **stops
+> signing and never signs again**. The bootstrap key cannot be rotated (invariant #6: the CREATE2
+> salt is derived from it, so rotating changes the wallet address on every chain), so there is no
+> recovery: the wallet is bricked for slot registration, on every chain, permanently.
+
+Weigh that against what the cap would buy: protection against a forgery that needs ~10M signatures
+and tens of thousands of unlock sessions. **A device that refuses to sign is a certain loss of
+access; the forgery is not a realistic loss of funds.** The trade is not close. The same reasoning
+applies to any softer variant that can still refuse (per-chain firmware cap, cap-with-override,
+lockout-on-threshold) — the failure mode is the same brick.
+
+Consequences that bind future work:
+
+- **Do not implement fix (B) or any bootstrap-signing refusal path.** A future sweep that reads
+  invariant #7 literally will want to; this section is the standing answer.
+- **Non-refusing observability is acceptable** if anyone wants it: a durable *count* with no
+  enforcement, or a display/companion-visible tally, is fine — it must never gate a signature.
+- **Fix (A) remains the only mitigation on the table** (`opt_rand = None` on the factory-signature
+  path only): it makes repeated `GET_INIT_CODE` / counterfactual calls return the *identical*
+  signature, so they consume exactly one few-time position instead of a fresh one. It shrinks q at
+  the source and **cannot ever refuse to sign**, which is precisely why it survives this decision
+  while (B) does not. Optional, pre-launch, cheap; not a blocker.
+- **Invariant #7 should be read as scoped to the on-chain counters it names.** The bootstrap key's
+  few-time budget is deliberately bounded by the physical unlock cadence and the 120 s idle timer,
+  not by a firmware counter. If CLAUDE.md's invariant #7 wording is ever tightened, it must not be
+  tightened into requiring a bootstrap refusal path.
+
+### 3. What stays true from the earlier passes
+
+The arithmetic in `UPDATE 2026-07-24` is unaffected and remains the reference: forgery work is
+`2^143 / E[gamma^12]`, the 128-bit crossover is 99,375 signatures, and **2^28 signatures is 2^27
+work, not a wall**. Anyone re-deriving the risk must start from those numbers, then apply the
+disposition here — not from the retracted "~2^28-2^32 is safe" figure in the STATUS block.

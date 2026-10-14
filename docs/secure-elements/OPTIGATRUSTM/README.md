@@ -42,7 +42,8 @@ Reference documentation for the **OPTIGA Trust M V3** (SLS32AIA) secure element 
 
 | Property | Value |
 |----------|-------|
-| Chip | SLS32AIA010MS (V3, CC EAL6+) |
+| Chip | SLS32AIA010MK (V3, CC EAL6+, PSA Certified L3) — *not* MS/MH, those are V1 parts (corrected 2026-07-20) |
+| PCB part (pinned 2026-07-20) | Exact OPN `SLS32AIA010MKUSON10XTMA2` (STR −25…+85 °C, USON-10, tape & reel) — vendor docs kept locally (gitignored, not redistributable) at `docs/SLS32AIA010MKUSON10XTMA2/` |
 | Interface | I2C, slave address `0x30` |
 | Protocol | IFX I2C v2.03 (4-layer stack over standard I2C) |
 | I2C Speed | 100 KHz default, up to 1 MHz (FM+) |
@@ -97,7 +98,10 @@ Reference documentation for the **OPTIGA Trust M V3** (SLS32AIA) secure element 
 - Personalization guide: https://github.com/Infineon/personalize-optiga-trust
 - Getting started: https://github.com/Infineon/getstarted-optiga-trust-m
 
-**Essential PDFs (in `optiga-trust-m-overview/docs/pdf/`):**
+**Essential PDFs (in `optiga-trust-m-overview/docs/pdf/`)** — all five copied locally
+2026-07-20 (pinned @ upstream commit `a45b86b`, integrity via `SHA256SUMS`, SRM also as
+one grep-able `.md`) in `docs/SLS32AIA010MKUSON10XTMA2/` — gitignored, so a fresh clone
+will not have it; fetch from the upstream repo above:
 - `Infineon_I2C_Protocol_v2.03.pdf` -- IFX I2C protocol spec (essential for driver)
 - `OPTIGA_Trust_M_Solution_Reference_Manual_v3.70.pdf` -- authoritative command/OID reference
 - `OPTIGA_Trust_M_ConfigGuide_v2.2.pdf` -- configuration guide
