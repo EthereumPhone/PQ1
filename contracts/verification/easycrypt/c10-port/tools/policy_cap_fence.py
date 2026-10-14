@@ -78,7 +78,7 @@ MAGNITUDES = [r'\b65536\b', r'\b0x10000\b', r'2\s*\^\s*16', r'\b4\s*\^\s*8\b']
 NONPOLICY_MAGNITUDES = {
     # Paired expression: the same 16-bit shuffle divisor, never wallet policy.
     ('cdrafts-split/C10Representation.ec', r'\b65536\b'):
-        '09c2d11deaff25279bdce624f30bd7a54681da2c0a55f1e5eabac4a17fa6333d',
+        'b5091054dcf2099fe81b5b99b557100fc2d9025fedaef93180579bf20050649b',
     ('cdrafts-split/RawShuffle.ec', r'\b65536\b'):
         '2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639',
     ('cdrafts-split/RawShufflePermutation.ec', r'\b65536\b'):

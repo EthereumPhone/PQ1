@@ -469,3 +469,6 @@ C10ShuffleBridge
 # Sequential wrapper and adaptive query accounting, 2026-10-14.
 RawWrapperCost
 WrapperSessionCost
+
+# Exact paired search-acceptance computations, 2026-10-15.
+C10AcceptanceBridge

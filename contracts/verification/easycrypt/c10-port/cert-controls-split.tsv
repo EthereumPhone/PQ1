@@ -1121,3 +1121,18 @@ scratch/c10_wrapper_cost_sign_cap_typed.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_sign_cap_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_wrapper_cost_raw_cap_typed.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_raw_cap_reject.ec	MUST-FAIL	[by]: cannot close goals
+
+# Paired search acceptance: typed changes and intended proof rejection.
+scratch/c10_acceptance_positive.ec	MUST-PASS	-
+scratch/c10_acceptance_preserving.ec	MUST-PASS	-
+scratch/c10_acceptance_last_digit_typed.ec	MUST-PASS	-
+scratch/c10_acceptance_last_digit_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_acceptance_sum_origin_typed.ec	MUST-PASS	-
+scratch/c10_acceptance_sum_origin_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_acceptance_target_typed.ec	MUST-PASS	-
+scratch/c10_acceptance_target_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_acceptance_fors_offset_typed.ec	MUST-PASS	-
+scratch/c10_acceptance_fors_offset_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_acceptance_fors_width_typed.ec	MUST-PASS	-
+scratch/c10_acceptance_fors_width_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/_scope_neg_op_C10AcceptanceBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

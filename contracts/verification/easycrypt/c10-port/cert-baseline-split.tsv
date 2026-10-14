@@ -2541,3 +2541,6 @@ cdrafts-split/WrapperSession.ec	module:07cc0f12e405	WrapperContext
 cdrafts-split/WrapperSession.ec	module:093e89c7fc3b	WrapperLimits
 cdrafts-split/WrapperSession.ec	module:b4d2e89fe422	WrapperDriver
 cdrafts-split/WrapperSession.ec	module:cfc9bf1ae362	WrapperSession
+cdrafts-split/C10Representation.ec	defined-op:0782646cdb57	fors_zero_field
+cdrafts-split/C10Representation.ec	defined-op:16636978a466	wots_target
+cdrafts-split/C10Representation.ec	defined-op:568b5a39e1f3	wots_sum

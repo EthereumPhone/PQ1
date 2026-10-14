@@ -4351,3 +4351,9 @@ cdrafts-split/WrapperSessionCost.ec::wrapper_driver_public_cost	d2b3bebf3ab97dbb
 cdrafts-split/WrapperSessionCost.ec::wrapper_context_public_cost	882436f084e0425d8ce076896df3d39c
 op:cdrafts-split/RawWrapperCost.ec::wrapper_physical_budget	10d67cf1b69ef0f4a23822565954dc61
 op:cdrafts-split/RawWrapperCost.ec::wrapper_public_budget	1262a238731aaa758f23d4e92c4707a2
+cdrafts-split/C10AcceptanceBridge.ec::wots_sum_common	d9b2365699a78cbd6807381edc4959f1
+cdrafts-split/C10AcceptanceBridge.ec::wots_accept_common	3991c5b53cc607323994f9c7d1610f1f
+cdrafts-split/C10AcceptanceBridge.ec::fors_accept_common	5df0e9ab3c4e58e048d28fc1614eb379
+op:cdrafts-split/C10Representation.ec::wots_sum	a171a4efab15eb4fbf86f522f527953f
+op:cdrafts-split/C10Representation.ec::wots_target	26f062cd8357056599c74a953ad8a5fc
+op:cdrafts-split/C10Representation.ec::fors_zero_field	f6d68b1bfd8a72bbd817944ac9292397

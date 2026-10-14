@@ -1,3 +1,4 @@
+import Extracted.C10AcceptanceBridge
 import Extracted.C10ShuffleBridge
 import Extracted.C10AddressInputBridge
 import Extracted.C10HashInputBridge
@@ -449,3 +450,12 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms secure_wrapper_model.wrapper_entry_call_cost
 #print axioms secure_wrapper_model.wrapper_entry_call_bounds
 #print axioms secure_wrapper_model.wrapper_entry_success_call_counts
+
+-- Exact search-acceptance component; kernel-only closures.
+#print axioms Extracted.C10AcceptanceBridge.wots_sum_value
+#print axioms Extracted.C10AcceptanceBridge.wots_accept_common
+#print axioms Extracted.C10AcceptanceBridge.fors_accept_common
+#print axioms Extracted.C10AcceptanceBridge.extracted_wots_trial
+#print axioms Extracted.C10AcceptanceBridge.extracted_fors_trial
+#print axioms Extracted.C10AcceptanceBridge.extracted_wots_search
+#print axioms Extracted.C10AcceptanceBridge.extracted_fors_search

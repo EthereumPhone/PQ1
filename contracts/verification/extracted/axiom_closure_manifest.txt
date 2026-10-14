@@ -367,3 +367,12 @@ secure_wrapper_model.wrapper_inner_call_cost
 secure_wrapper_model.wrapper_entry_call_cost
 secure_wrapper_model.wrapper_entry_call_bounds
 secure_wrapper_model.wrapper_entry_success_call_counts
+
+# Paired acceptance and actual bounded searches; kernel-only.
+Extracted.C10AcceptanceBridge.wots_sum_value
+Extracted.C10AcceptanceBridge.wots_accept_common
+Extracted.C10AcceptanceBridge.fors_accept_common
+Extracted.C10AcceptanceBridge.extracted_wots_trial
+Extracted.C10AcceptanceBridge.extracted_fors_trial
+Extracted.C10AcceptanceBridge.extracted_wots_search
+Extracted.C10AcceptanceBridge.extracted_fors_search

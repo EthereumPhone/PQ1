@@ -22,6 +22,15 @@ def fors_field (bs : (List Int)) (t : Nat) : Int  :=
 def wots_field (bs : (List Int)) (i : Nat) : Int  :=
   (word_window bs (3 * i) 3)
 
+def wots_sum (bs : (List Int)) : Int  :=
+  (List.foldr (fun b acc => (b + acc)) 0 ((List.range 43).map (fun i => (wots_field bs i))))
+
+def wots_target  : Int  :=
+  205
+
+def fors_zero_field (bs : (List Int)) : Int  :=
+  (word_window bs 132 11)
+
 def word_nodes (n : Nat) (bs : (List Int)) (off : Nat) : (List (List Int))  :=
   ((List.range n).map (fun i => (List.take 16 (List.drop (off + (16 * i)) bs))))
 

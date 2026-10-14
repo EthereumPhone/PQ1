@@ -1423,3 +1423,30 @@ budget obligation, without relying on an instruction-layout error or a solver
 timeout. An intended proof rejection is sensitivity evidence, not a proof that
 every mutated specification is logically false. No production code changes or
 new signing authority are part of this result.
+
+Paired search acceptance (2026-10-15): `C10AcceptanceBridge` now connects the
+exact acceptance computations to the shared representation. WOTS sums all 43
+base-8 digits from one digest and compares with 205; FORS tests exactly the
+11-bit window beginning at bit 132 for zero. The existing typed expression
+language generates both endpoints without new primitives. EasyCrypt proves
+equivalence with `RawWots.count_accepts` and `C10RawGrind.accept_digest` on
+32-byte inputs whose elements are in `[0,256)`. Lean discharges that byte domain
+through the existing fixed-byte-array representation and proves both branches
+of the actual extracted trial bodies. Its complete bounded-search theorems
+retain the first accepted counter, returned digest/digits or randomizer, and
+exhaustion as `.fail .assertionFailure`, including both optional-randomizer
+modes. No successful-search premise is added.
+
+This closes the **exact acceptance-computation component** of bounded-search
+correspondence. It does not relate the Rust supplied pure SHA function to an
+EasyCrypt oracle, its history or its distribution. The EasyCrypt procedural
+searches still use their existing bit-valued predicates; the new endpoint
+equalities provide their interpretation on well-formed byte digests. No
+cross-kernel search/session theorem, callback behavior, physical abort-prefix
+bound or probability transfer follows. The paired printers and their primitive
+interpretation remain disclosed TCB. Seven new Lean headline closures are
+kernel-only; no project axiom is added. Five typed changes exercise an omitted
+last WOTS digit, a nonzero initial sum, an altered target and shifted/narrowed
+FORS windows. Each unchanged endpoint proof must reject at its intended
+theorem; unchanged and value-preserving fixtures must pass. These are
+sensitivity controls, not proofs that every mutated proposition is false.

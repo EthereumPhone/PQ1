@@ -117,6 +117,11 @@ word_window = define("word_window",(bs,off,width),
 ht_field = define("ht_field",(bs,),word_window(bs,literal(143),literal(18)))
 fors_field = define("fors_field",(bs,t),word_window(bs,mul(literal(11),t),literal(11)))
 wots_field = define("wots_field",(bs,i),word_window(bs,mul(literal(3),i),literal(3)))
+# Acceptance computations consume one digest, retaining its correlated fields.
+wots_sum = define("wots_sum",(bs,),
+    fold(seq(literal(43),i,wots_field(bs,i)),b,acc,add(b,acc),literal(0,INT)))
+wots_target = define("wots_target",(),literal(205,INT))
+fors_zero_field = define("fors_zero_field",(bs,),word_window(bs,literal(132),literal(11)))
 read_nodes = define("word_nodes",(n,bs,off),
     seq(n,i,take(16,drop(add(off,mul(literal(16),i)),bs))))
 word_layer = define("word_layer",(bs,off),product(

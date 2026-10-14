@@ -20,6 +20,15 @@ op fors_field (bs : (int list)) (t : int) : int =
 op wots_field (bs : (int list)) (i : int) : int =
   (word_window bs (3 * i) 3).
 
+op wots_sum (bs : (int list)) : int =
+  (foldr (fun b acc => (b + acc)) 0 (mkseq (fun i => (wots_field bs i)) 43)).
+
+op wots_target  : int =
+  205.
+
+op fors_zero_field (bs : (int list)) : int =
+  (word_window bs 132 11).
+
 op word_nodes (n : int) (bs : (int list)) (off : int) : ((int list) list) =
   (mkseq (fun i => (take 16 (drop (off + (16 * i)) bs))) n).
 

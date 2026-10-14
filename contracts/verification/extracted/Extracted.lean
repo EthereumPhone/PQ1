@@ -1,3 +1,4 @@
+import Extracted.C10AcceptanceBridge
 import Extracted.C10ShuffleBridge
 import Extracted.C10AddressInputBridge
 import Extracted.C10HashInputBridge
