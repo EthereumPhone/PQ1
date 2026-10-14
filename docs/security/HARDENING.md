@@ -50,7 +50,7 @@ Two consent policies coexist, by path, since 2026-09-22:
 | Path | The sign gesture is armed… | Since |
 |---|---|---|
 | Legacy 16×4 page dialog (`ui::confirm`, `confirm_core::seen_last`) | only after the LAST page has been displayed (scroll-to-end; a premature long-right / chord is demoted to "advance one page") | `ccfa5f61`, 2026-06-26 (WYSIWYS audit: every spliced loud page — native value, gas, Safe refund, ERC-8213 — was skippable from page 0) |
-| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`; every sign dialog since port step 3, 2026-09-23 — `forced_blind` excepted) | **only after the LAST screen has been painted** (scroll-to-end, `PX_COMMIT_REQUIRES_SEEN_LAST = true`), and then only on the opening ask, the auto-inserted `Confirm?` (6th screen when ≥ 7 details) or the returning ask; **never on a detail** | owner decision **2026-09-24** (see the UPDATE below), superseding 2026-09-22 |
+| Pixel trusted UI (`ui-px`, `ui::px::confirm_px` / `px::lcd::run_flow`; every sign dialog since port step 3, 2026-09-23 — `forced_blind` excepted) | **only on the auto-inserted `Confirm?` (from the moment it is shown) or on the LAST screen, the returning ask** (`FlowDriver::sign_point`), once that screen has reached the glass in a complete frame; **never on the opening ask, never on a detail**. Flows with fewer than 7 details have no `Confirm?` and sign on the returning ask only | decision **2026-10-13** (see the UPDATE 2026-10-14 below), superseding 2026-09-24 (scroll-to-end) and 2026-09-22 |
 
 **UPDATE 2026-10-13 (security sweep finding #1 / F04):** the slot-rotation
 consent is now also an *authority* boundary, not only a display one. Its
@@ -132,6 +132,72 @@ hardening; tracked separately.
 Do not re-litigate without new evidence; record any change here and in
 `CLAUDE.md` Pre-Production Caveats.
 
+**UPDATE 2026-10-14 — `Confirm?` signs; the opening ask still never does
+(decision 2026-10-13, Markus Haas).** New evidence from the EVT: on screens
+reading "Confirm?" the chord did nothing, and the user had to page on to the
+last screen to sign. Under the 2026-09-24 gate that was the designed
+behaviour: `Confirm?` is always inserted before the returning ask, so on a
+first pass it was drawn armed but could never sign (EVT bug hunt
+2026-10-13, finding C-1). Decision: on
+the `Confirm?` page the transaction can be confirmed already, and only
+`Confirm?` or the last screen may confirm.
+
+What changed:
+
+- One predicate, `pqsigner_ui_px::driver::FlowDriver::sign_point`, decides
+  where the chord signs: a commit-armed `Confirm?`, or the commit-armed LAST
+  screen. Both arming sites consult it (`px::lcd::run_flow`,
+  `px::confirm_px::confirm_inner`). `PX_COMMIT_REQUIRES_SEEN_LAST` is removed;
+  the driver still tracks `seen_last`, but nothing arms on it.
+- The opening ask never signs, even after every screen has been seen and the
+  user has walked back to it. It does not show the recipient (screen 3 of an
+  ERC-20 transfer, before `Confirm?`), so the case that decided 2026-09-24
+  stays closed.
+- `run_flow`'s present-before-arm latch (`presented_at`) now latches only on a
+  frame that fully reached the glass (`FrameCost::complete`). The
+  scroll-to-end gate used to demand one complete frame of the last screen;
+  without that, a garbled `Confirm?` frame (#790's bounded "one dropped
+  frame") would otherwise have counted as shown.
+- Unchanged: the chord gesture, hold-left declines everywhere, the `FihBool`
+  arming flag re-derived every iteration, the single `OK_SENTINEL` site, the
+  deadline and idle checks, and the legacy 16×4 path's scroll-to-end gate.
+
+**Accepted residual — this re-opens part of what 2026-09-24 closed.**
+Signing from `Confirm?` skips every screen after it. Its position is
+`pqsigner_ui_px::screen::confirm_index`: index 5, or just after the buy leg
+for a Safe or CoW hero (2026-10-09). What that leaves unseen, from the host
+goldens `pqsigner-ui-px/tests/fixtures/*/*.hex` (spot-checked against the
+screen-golden hashes in `secure/src/display_under_test/` on 2026-10-14):
+
+| Flow (fixture) | Shown before `Confirm?` | Skipped when signing from it |
+|---|---|---|
+| ERC-20 send / approve (`erc20/send_usdc`, `erc20/approve_usdc_unlimited`) | network, recipient or spender, amount, contract | max fee, worst-case fee, nonce, signer, target, gas lane, ERC-8213 fingerprint + digest |
+| ETH send (`value_transfer/*`) | network, recipient, value, max fee | worst-case fee, nonce, `! NATIVE ETH`, `! PAYMASTER SET`, signer, nonce lane, gas lane, ERC-8213, `! DEPLOY` |
+| Safe-wrapped ERC-20 (`safe/lifted_*`) | network, Safe account, recipient, amount | token, contract, Safe nonce + operation, **`! NATIVE ETH` (the UserOp's own value)**, fees, `! PAYMASTER SET`, signer, ERC-8213, `! DEPLOY` |
+| CoW order (`cowswap/*`) | network, order, sell and buy legs | **receiver**, expiry, CoW fee, sources, app data, fees, signer, ERC-8213 |
+| ERC-7730 (`erc7730/uniswap_*`) | dev-build warning, intent, native value, swap input | **both tokens, minimum out, beneficiary**, pool fee, price limit, network, fees, signer, ERC-8213 |
+| Named blind call (`blind_sign/unknown_call_named`) | network, blind banner, function, target | **native value**, calldata, data hash, fees, signer, ERC-8213 |
+| Typed call (`typed_call/stake`) | network, function, first two arguments | **third argument, target**, fees, signer, ERC-8213 |
+| RAW32 off-chain (`eip1271/raw32`) | network, blind banner, mode, account | **the hash being signed**, key usage, ERC-8213 digests, wallet |
+| Batch member (`batch/member_*`) | batch banner, network, recipient, amount | contract, fees, signer, ERC-8213 |
+
+The bold entries are the substance of the request, not trailers. What still
+holds: decline is armed on every screen, the user can page past `Confirm?`
+and sign on the returning ask, and a hostile companion still cannot change
+what is decoded and drawn — it can only bet that the user stops looking at
+`Confirm?`. Candidate follow-ups, not done: move `Confirm?` after each flow's
+substance (the bold entries) so that only trailers are skippable, and stop
+drawing the sign hint on the opening ask, where a chord still does nothing
+and gives no feedback.
+
+CORRECTION to the 2026-09-24 UPDATE: the pin was never in
+`fsbl-tests/tests/paired_constants.rs`, which recorded the pair as
+deliberately absent. It was `fsbl-tests/tests/source_invariants.rs`
+(`pixel_sign_gesture_requires_every_screen_to_have_been_displayed`); its
+successor there is `pixel_sign_gesture_fires_only_on_confirm_or_the_last_screen`.
+The two paths now deliberately differ again. The 2026-09-24 RESIDUAL (the
+pixel `seen_last` is a plain `bool`) no longer affects signing.
+
 **Device input model (frozen 2026-09-23, port plan step 1).** The
 device's gesture grammar on the pixel path is this table; the conformance
 oracle is the vendored PQ-UI `handoff/spec/gestures.json` (an 80-row executed
@@ -152,7 +218,8 @@ a red build).
 
 | Screen kind | tap L / R | hold-left | hold-right | chord click (both down, fires on release) |
 |---|---|---|---|---|
-| Hero (opening / returning ask), `Confirm?` | navigate | decline | **no-op** (reference: sign) | **sign** (reference: unbound) |
+| Opening ask (hero, first screen) | navigate | decline | **no-op** (reference: sign) | **ignored** (decision 2026-10-13; reference: unbound) |
+| `Confirm?`, returning ask (last screen) | navigate | decline | **no-op** (reference: sign) | **sign** (reference: unbound) |
 | Detail / Value | navigate, page-turn | decline | no-op | ignored (never armed) |
 | Status / film / ending | **input-dead**: edges are ignored while the film plays and its result holds; the inactivity deadline and idle wipe stay enforced | | | |
 

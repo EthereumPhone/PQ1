@@ -314,6 +314,15 @@ decision 2026-09-22 for parity with the legacy dialog) — hold-right is a
 no-op, hold-left declines; the disc floods while the chord is held. See
 `docs/security/HARDENING.md` § 2.4.
 
+**UPDATE 2026-10-14 — where the chord signs (decision 2026-10-13).** Only on
+`Confirm?`, from the moment it is shown, and on the returning ask (the last
+screen); the opening ask and the details never sign
+(`FlowDriver::sign_point`). This replaces the 2026-09-24 scroll-to-end switch,
+under which `Confirm?` was dead until the last screen had been painted.
+Signing from `Confirm?` skips the screens after it; HARDENING.md § 2.4 lists
+them per flow. Known gap: the opening ask still draws the design's sign hint,
+and a chord there does nothing.
+
 ## Known gaps / next steps
 
 The port of every remaining screen (single-UserOp families, structured flows,

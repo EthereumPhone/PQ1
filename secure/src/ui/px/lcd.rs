@@ -401,10 +401,11 @@ struct FrameCost {
     /// Before #790's bounded waits, those paths HUNG, and a hang is fail-safe
     /// — nothing gets signed off a frame nobody saw. Bounding them turned a
     /// hang into "one dropped frame", which is only safe if the caller
-    /// actually knows the frame was dropped: otherwise `mark_rendered` runs
-    /// and `PX_COMMIT_REQUIRES_SEEN_LAST` (owner decision 2026-09-24,
-    /// `HARDENING.md` §2.4) counts a garbled amount or recipient page as
-    /// SEEN, arming the sign chord on something never legibly displayed.
+    /// actually knows the frame was dropped: otherwise `run_flow`'s
+    /// present-before-arm latch (`presented_at`) counts a garbled `Confirm?`
+    /// or returning ask as SHOWN, and those two screens sign from the moment
+    /// they are shown (decision 2026-10-13, `HARDENING.md` §2.4) — arming the
+    /// sign chord on something never legibly displayed.
     complete: bool,
     render: u32,
     blit: u32,
@@ -817,9 +818,9 @@ fn build_and_present(
         // counter — `paint_legacy` and the sign-gesture arming both read it —
         // so a blanket `FrameCost::default()` here would make it false in
         // every build WITHOUT `ui-px-frametime`, i.e. in the shipping-shaped
-        // one: `mark_rendered` would never run, `seen_last` would never set,
-        // and the chord would never arm. The bench config would have looked
-        // perfect throughout.
+        // one: `presented_at` would never latch and `mark_rendered` would
+        // never run, so the chord would never arm. The bench config would
+        // have looked perfect throughout.
         cost = FrameCost {
             complete: cost.complete,
             ..FrameCost::default()
@@ -1508,19 +1509,19 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         if timeout::is_idle() {
             break (PxOutcome::IdleWipe, crate::fi::FAIL_SENTINEL);
         }
-        // Arming follows the screen currently shown (kind ∈ {hero, confirm},
-        // commit byte double-read, and the consent policy).
+        // The design's arming for the screen currently shown (kind ∈ {hero,
+        // confirm}, commit byte double-read); the decline fill reads it.
         let armed = driver.armed(visible);
-        // Arming also requires that THIS screen and page have already been
-        // presented. `build_and_present` sits at the BOTTOM of this loop, so
-        // without the latch an affirmative gesture drained on the first
-        // iteration returns `Signed` before the request's first frame is
-        // ever painted — consent for something the glass never showed.
+        // Signing is narrower: the consent policy (`FlowDriver::sign_point`:
+        // `Confirm?` or the last screen, never the opening ask or a detail),
+        // and only once THIS screen and page have been presented in a
+        // complete frame. `build_and_present` sits at the BOTTOM of this
+        // loop, so without the latch an affirmative gesture drained on the
+        // first iteration returns `Signed` before the request's first frame
+        // is ever painted — consent for something the glass never showed.
         // Navigating disarms for exactly one frame, until the new page lands.
         let here = (driver.index(), driver.page());
-        let sign_ok = presented_at == Some(here)
-            && armed.sign
-            && (!super::PX_COMMIT_REQUIRES_SEEN_LAST || driver.seen_last());
+        let sign_ok = presented_at == Some(here) && driver.sign_point(visible);
         if sign_ok {
             commit_armed.set_true();
         } else {
@@ -1609,7 +1610,9 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         #[cfg(not(feature = "ui-px-frametime"))]
         let wire_line = None;
         let cost = build_and_present(&anim, &marks, &font, overlay, split_line, wire_line);
-        presented_at = Some((driver.index(), driver.page()));
+        // Only a frame that reached the glass IN FULL presents the screen: a
+        // garbled `Confirm?` or returning ask must not arm the chord.
+        presented_at = cost.complete.then_some((driver.index(), driver.page()));
         #[cfg(feature = "ui-px-frametime")]
         {
             // WORST-CASE HOLD. A per-frame instantaneous readout is unreadable
@@ -1666,11 +1669,10 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
         }
         #[cfg(not(feature = "ui-px-frametime"))]
         let _ = cost;
-        // `cost.complete` FIRST. `mark_rendered` is what sets `seen_last`,
-        // which is the whole of `PX_COMMIT_REQUIRES_SEEN_LAST`: arming the
-        // sign chord off a frame that did not fully reach the glass would
-        // approve a recipient or amount the user never legibly saw. Leaving
-        // `painted_idx` unadvanced means the next good frame does the mark.
+        // `cost.complete` FIRST, as for `presented_at` above: only a frame
+        // that fully reached the glass counts as the screen having been shown
+        // (`mark_rendered`, and the text mirror). Leaving `painted_idx`
+        // unadvanced means the next good frame does the mark.
         if cost.complete && driver.index() != painted_idx {
             painted_idx = driver.index();
             driver.mark_rendered();

@@ -8,19 +8,20 @@
 //! return, and the `OK_SENTINEL` is minted at exactly one site — but the
 //! navigation is DESIGN.md § Input (`FlowDriver`), not the 16×4 page grammar.
 //!
-//! # Consent policy (owner decisions 2026-09-22)
+//! # Consent policy (decision 2026-10-13)
 //!
-//! Signing is armed on the opening ask, the auto-inserted `Confirm?` and the
-//! returning ask — never on a detail. The sign gesture on the device is the
-//! **two-button chord click** (both down together, fires on release; parity
-//! with the legacy dialog's two-button confirm); hold-right is a no-op and
-//! hold-left declines everywhere. The legacy 16×4 path keeps its 2026-06-26
-//! scroll-to-end gate (`confirm_core::seen_last`); this path follows the
-//! design's arming. [`PX_COMMIT_REQUIRES_SEEN_LAST`] is the one switch:
-//! `true` demotes a sign gesture before the returning ask has been
-//! displayed to a no-op, restoring scroll-to-end semantics on this path too.
-//! The loop maintains `seen_last` either way so the flip needs no other
-//! change. Recorded in `docs/security/HARDENING.md` § 2.4.
+//! The sign gesture on the device is the **two-button chord click** (both
+//! down together, fires on release; parity with the legacy dialog's
+//! two-button confirm, owner decision 2026-09-22); hold-right is a no-op and
+//! hold-left declines everywhere. The chord signs ONLY on the auto-inserted
+//! `Confirm?`, from the moment it is shown, or on the LAST screen, the
+//! returning ask — never on the opening ask, never on a detail
+//! ([`FlowDriver::sign_point`]). This replaces the 2026-09-24 scroll-to-end
+//! switch `PX_COMMIT_REQUIRES_SEEN_LAST`, under which `Confirm?` was drawn
+//! armed but could not sign until the last screen had been painted. Signing
+//! from `Confirm?` skips every screen after it. The legacy 16×4 path keeps its
+//! 2026-06-26 scroll-to-end gate (`confirm_core::seen_last`). Recorded in
+//! `docs/security/HARDENING.md` § 2.4.
 
 use super::text;
 use crate::timeout;
@@ -29,32 +30,6 @@ use crate::ui::input;
 use crate::ui::{Button, Press};
 use pqsigner_ui_px::driver::{Btn, FlowDriver, Gesture, NavResult};
 use pqsigner_ui_px::Screens;
-
-/// The scroll-to-end consent gate on the pixel path: the sign chord arms only
-/// after the LAST screen has actually been painted.
-///
-/// **Owner decision 2026-09-24: `true` — "all screens should be viewed before
-/// the user can sign."** This reverses the 2026-09-22 decision (`false`,
-/// "follow the design") and restores the rule the legacy path has enforced
-/// since 2026-06-26 (`ccfa5f61`, `ui::confirm_core::NavigationCore`).
-///
-/// Why it matters, concretely: an ERC-20 transfer is 8 screens. The first says
-/// "Send USDC" and little else — the RECIPIENT is screen 3 and the AMOUNT is
-/// screen 4 (`tx::display::erc20_known`). With this `false` the opening hero
-/// is commit-armed, so one chord click approves a transfer whose destination
-/// and value were never displayed.
-///
-/// This is NOT the same property as the present-before-arm latch in
-/// `lcd::run_flow`. That one only proves the CURRENT screen was painted before
-/// a gesture is accepted; it says nothing about screens 3 and 4. Both are
-/// needed.
-///
-/// The evidence is a real paint, not an index: `FlowDriver::mark_rendered` is
-/// called by the presenter immediately after `build_and_present`
-/// (`px/lcd.rs`) / `text::present` (below), and sets `seen_last` only when
-/// `cur + 1 == count` — the same "evidence of display, not merely an index
-/// assignment" rule `confirm_core.rs` states for the legacy path.
-pub const PX_COMMIT_REQUIRES_SEEN_LAST: bool = true;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum LoopResult {
@@ -135,8 +110,8 @@ fn confirm_inner(screens: &Screens, atlas: super::AtlasArg<'_>, deadline_expired
 
             // Re-derive the arming from the screen just painted: kind ∈
             // {hero, confirm} AND the record's commit byte (double-read) AND
-            // the consent policy.
-            let armed = driver.armed(visible).sign && (!PX_COMMIT_REQUIRES_SEEN_LAST || driver.seen_last());
+            // the consent policy (`Confirm?` or the last screen only).
+            let armed = driver.sign_point(visible);
             if armed {
                 commit_armed.set_true();
             } else {

@@ -165,7 +165,11 @@ fn trusted_display_grid_agrees_between_the_fsbl_and_the_secure_world() {
 //     is not listed in `tools/pq-ui/PORT_DEVIATIONS.toml`. Do not duplicate
 //     that gate here.
 //
-// One pair is deliberately ABSENT pending an owner decision:
-// `PX_COMMIT_REQUIRES_SEEN_LAST` (false, pixel path) against the legacy
-// `confirm_core.rs` scroll-to-end gate (enforced). They disagree today. Pinning
-// either way would pre-empt a decision that is the owner's to make.
+// One pair is deliberately ABSENT, because the two paths are MEANT to differ:
+// the legacy `confirm_core.rs` dialog confirms only after its last page
+// (scroll-to-end, 2026-06-26), while the pixel path signs on `Confirm?` or on
+// its last screen (`FlowDriver::sign_point`, decision 2026-10-13, which
+// replaced the 2026-09-24 `PX_COMMIT_REQUIRES_SEEN_LAST` switch). The pixel
+// policy is pinned by `source_invariants.rs`
+// (`pixel_sign_gesture_fires_only_on_confirm_or_the_last_screen`); asserting
+// the pair equal here would be asserting something false.

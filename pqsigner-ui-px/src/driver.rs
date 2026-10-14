@@ -12,16 +12,19 @@
 //!   screen. **Signing is the two-button chord click** (both sides down
 //!   together, fires when both are released — owner decision 2026-09-22,
 //!   parity with the legacy dialog), and only where the screen carries
-//!   `commit` (a hero or the `Confirm?`). Hold-right is a no-op everywhere,
-//!   as is any hold on an unarmed side — never demoted into navigation, so
-//!   a stray long press can neither sign nor skip content.
+//!   `commit` (a hero or the `Confirm?`) — on the device, only on the
+//!   `Confirm?` and the returning ask ([`FlowDriver::sign_point`]).
+//!   Hold-right is a no-op everywhere, as is any hold on an unarmed side —
+//!   never demoted into navigation, so a stray long press can neither sign
+//!   nor skip content.
 //! * Status screens are not part of a confirmation transcript; every screen
 //!   here is navigable.
 //!
 //! The driver knows nothing about time, springs or the hold fill — the
 //! presenter turns physical edges into [`Gesture`]s and animates; the driver
 //! decides what they mean. The secure world wraps [`FlowDriver::apply`] with
-//! its FI sentinel, the `seen_last` policy and the deadline / idle checks.
+//! its FI sentinel, the [`FlowDriver::sign_point`] policy and the deadline /
+//! idle checks.
 
 use crate::screen::{Kind, Screen};
 
@@ -107,8 +110,9 @@ impl FlowDriver {
         self.count
     }
 
-    /// Whether the returning hero has been displayed (the revert hook for
-    /// the scroll-to-end policy).
+    /// Whether the returning hero has been displayed. No longer a signing
+    /// input on the device: the 2026-09-24 scroll-to-end gate that read it
+    /// was replaced by [`FlowDriver::sign_point`] on 2026-10-13.
     #[must_use]
     pub fn seen_last(&self) -> bool {
         self.seen_last
@@ -151,6 +155,32 @@ impl FlowDriver {
             sign: s.kind().is_some_and(Kind::may_commit) && s.commit(),
             decline: true,
         }
+    }
+
+    /// Whether the DEVICE accepts the sign chord on the current screen.
+    ///
+    /// Narrower than [`Armed::sign`], which follows the reference design and
+    /// arms every committing hero. The device signs ONLY on the mid-flow
+    /// `Confirm?` (from the moment it is shown, whatever comes after it) or on
+    /// the LAST screen, the returning ask — never on the opening ask, never on
+    /// a detail, however much of the transcript has been seen.
+    ///
+    /// Decision 2026-10-13 (Markus Haas), superseding the 2026-09-24
+    /// scroll-to-end gate, under which `Confirm?` could not sign until the
+    /// last screen had been painted. `Confirm?` is always inserted before the
+    /// returning ask, so on a first pass it was a dead control that still read
+    /// "Confirm?". The secure world wraps this with its present-before-arm
+    /// latch, the FI-hardened arming flag and the single `OK_SENTINEL` site
+    /// (`secure/src/ui/px/{lcd,confirm_px}.rs`); `docs/security/HARDENING.md`
+    /// § 2.4 records the policy.
+    #[must_use]
+    pub fn sign_point(&self, screens: &[Screen]) -> bool {
+        let Some(s) = screens.get(self.cur) else {
+            return false;
+        };
+        let at_confirm = s.kind() == Some(Kind::Confirm);
+        let at_last = self.count == screens.len() && self.cur + 1 == self.count;
+        self.armed(screens).sign && (at_confirm || at_last)
     }
 
     /// Apply a gesture.
@@ -435,6 +465,65 @@ mod tests {
         // Sticky.
         d.apply(&f, Gesture::Tap(Btn::Left));
         assert!(d.seen_last());
+    }
+
+    /// Device policy (2026-10-13): the chord signs on `Confirm?` from the
+    /// moment it is shown and on the returning ask — never on the opening ask
+    /// or a detail, whatever has been seen before.
+    #[test]
+    fn device_signs_only_on_confirm_or_the_last_screen() {
+        // hero, d1, d2 (2 pages), confirm, d3, hero
+        let f = flow();
+        let mut d = FlowDriver::new(&f).unwrap();
+        // The opening ask is design-armed but is never a device sign point.
+        assert!(d.armed(&f).sign);
+        assert!(!d.sign_point(&f));
+        let mut points = [false; 6];
+        for _ in 0..6 {
+            d.apply(&f, Gesture::Tap(Btn::Right));
+            points[d.index()] |= d.sign_point(&f);
+        }
+        assert_eq!(d.index(), 5);
+        assert_eq!(points, [false, false, false, true, false, true]);
+
+        // `Confirm?` signs on the FIRST pass: nothing after it was seen.
+        let mut fresh = FlowDriver::new(&f).unwrap();
+        for _ in 0..4 {
+            fresh.mark_rendered();
+            fresh.apply(&f, Gesture::Tap(Btn::Right));
+        }
+        assert_eq!(fresh.index(), 3);
+        assert!(!fresh.seen_last());
+        assert!(fresh.sign_point(&f));
+
+        // Back on the opening ask after seeing everything: still not a sign
+        // point (from the returning ask RIGHT restarts the details, then LEFT
+        // returns to the ask).
+        d.mark_rendered();
+        assert!(d.seen_last());
+        assert_eq!(d.apply(&f, Gesture::Tap(Btn::Right)), NavResult::Moved);
+        assert_eq!(d.apply(&f, Gesture::Tap(Btn::Left)), NavResult::Moved);
+        assert_eq!(d.index(), 0);
+        assert!(!d.sign_point(&f));
+
+        // A flow too short for `Confirm?` signs on the returning ask only.
+        let short = [hero(), detail(1), hero()];
+        let mut s = FlowDriver::new(&short).unwrap();
+        assert!(!s.sign_point(&short));
+        s.apply(&short, Gesture::Tap(Btn::Right));
+        assert!(!s.sign_point(&short));
+        s.apply(&short, Gesture::Tap(Btn::Right));
+        assert_eq!(s.index(), 2);
+        assert!(s.sign_point(&short));
+
+        // An uncommitted last screen is not a sign point.
+        let chooser = ScreenBuilder::hero(b"ASK", Icon::Safe, b"ASK?").uncommitted().finish().unwrap();
+        let open = [hero(), detail(1), chooser];
+        let mut o = FlowDriver::new(&open).unwrap();
+        o.apply(&open, Gesture::Tap(Btn::Right));
+        o.apply(&open, Gesture::Tap(Btn::Right));
+        assert_eq!(o.index(), 2);
+        assert!(!o.sign_point(&open));
     }
 
     #[test]

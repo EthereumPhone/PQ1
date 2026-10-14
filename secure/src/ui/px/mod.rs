@@ -22,7 +22,7 @@ pub mod lcd;
 #[cfg(feature = "ui-px-bench")]
 pub mod bench;
 
-pub use confirm_px::{confirm_screens_checked, PX_COMMIT_REQUIRES_SEEN_LAST};
+pub use confirm_px::confirm_screens_checked;
 
 /// The verified atlas a dialog paints with. On the NV3007 it is the view
 /// `assets::verify_atlas` returned for THIS dialog; the text presenters

@@ -2223,13 +2223,21 @@ fn positive_an_incomplete_frame_cannot_arm_the_sign_gesture() {
     // Before #790 bounded the waits, those paths HUNG, and a hang is
     // fail-safe: nothing is signed off a frame nobody saw. Bounding them
     // turned a hang into "one dropped frame", which is only safe if the
-    // presenter knows the frame dropped. Otherwise `mark_rendered` runs,
-    // `seen_last` sets, and `PX_COMMIT_REQUIRES_SEEN_LAST` (owner decision
-    // 2026-09-24, HARDENING.md 2.4) counts a garbled amount or recipient page
-    // as SEEN -- arming the chord on something never legibly displayed.
+    // presenter knows the frame dropped. Otherwise the present-before-arm
+    // latch counts a garbled `Confirm?` or returning ask as SHOWN, and those
+    // two screens sign from the moment they are shown (decision 2026-10-13,
+    // HARDENING.md 2.4) -- arming the chord on something never legibly
+    // displayed.
+    assert!(
+        contains_in_code(
+            UI_PX_LCD_SRC,
+            "presented_at = cost.complete.then_some((driver.index(), driver.page()));"
+        ),
+        "the sign-gesture arming must require a frame that fully reached the glass"
+    );
     assert!(
         contains_in_code(UI_PX_LCD_SRC, "if cost.complete && driver.index() != painted_idx {"),
-        "the sign-gesture arming must require a frame that fully reached the glass"
+        "a frame that did not fully reach the glass must not mark the screen rendered"
     );
     assert!(
         contains_in_code(UI_PX_LCD_SRC, "cost.complete = ok && x0 >= W;"),
