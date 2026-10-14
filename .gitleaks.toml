@@ -54,6 +54,13 @@ regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/scripts/test_fors_auth_proof_controls\.py": "2b2380a9baf8bd6bf5f863f0220d10ca5df28d269518c8d6c299d6f5c3c95ed5",?\s*$''']
 
 [[rules.allowlists]]
+description = "Public OPTIGA inventory object label, not object data"
+condition = "AND"
+paths = ['''^secure/src/optiga/probe/inventory\.rs$''']
+regexTarget = "line"
+regexes = ['''^\s*o\(0xF1D1, Secret, "Arb3_D1_EntropyHalfO"\),\s*$''']
+
+[[rules.allowlists]]
 description = "Historical EasyCrypt proof-file digest receipts"
 condition = "AND"
 paths = ['''^docs/security/adversarial-review/findings/easycrypt-[^/]+/([a-z0-9-]+\.log|evidence\.json|formal-source-mapping\.json)$''']
