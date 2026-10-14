@@ -1023,6 +1023,40 @@ reasons, so re-check the current figure rather than reusing a remembered one —
 the estimates that preceded these were "~3 s" and "~17 s", both wrong, and the
 hold is a policy constant that can move again.
 
+### UPDATE 2026-10-14 — gateway gate (#896) and dual-SE PIN credential (#902) on the pq1 bench board
+
+Screen-less pq1 bench board over ST-Link, firmware from master `f0facbc7` (the
+same firmware as `77b0b911`). Nothing permanent was done: option bytes already
+matched and were not rewritten, no OTP, RDP, WRP or OPTIGA lifecycle change.
+Full results are in the issue comments.
+
+- **#896, nested gateway call: PASS both ways.**
+  - Gate present (`make nested-gate-test-hw BOARD=pq1`, run twice): the nested
+    call is refused.
+  - Gate compiled out (`make nested-gate-test-nctl-hw BOARD=pq1`): the same
+    call is admitted, in 6 µs.
+  - A non-secure SysTick handler took 342 to 376 ticks of 20 ms during a 7 s
+    sign, so a non-secure interrupt does preempt the secure world mid-sign and
+    can re-enter the gateway. That was the premise of #846; it is now observed.
+  - The outer signature verifies offline.
+- **#902, checks 1 and 2: PASS.**
+  - `dual-se-multi-unlock-e2e`: 3 boots, 15 unlocks, the master secret
+    identical each time.
+  - `dual-se-admin-wipe-e2e`: steps 1 to 8.
+  - The SE050 accepted the 16-byte UserID value, and the page-125 salt record
+    was written and read back across reboots.
+  - The pre-#912 UserID found on the chip was removed with its own value, raw
+    `00000000`, presented once at the owner's choice.
+  - Not shown: whether the wipe zeroes the salt in place or falls back to a
+    page erase (neither path is logged).
+- **Taking flash receipts.**
+  - Pages 123 to 127 are in bank 1 (secure alias `0x0C0F_6000`).
+  - Read them with the core held in reset: `STM32_Programmer_CLI --connect
+    port=SWD mode=UR -u 0x0C0F6000 0xA000 out.bin`.
+  - A `mode=HOTPLUG` read while the firmware was running returned 16-byte
+    blocks of the running image's code in place of flash contents. Two
+    `mode=UR` reads matched each other and showed no such blocks.
+
 ---
 
 ## §11 — Firmware-rollback + SCP03-rotation receipts (DESTRUCTIVE, ship-blockers)
