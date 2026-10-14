@@ -44,6 +44,8 @@ regexes = [
   '''^[A-Za-z][A-Za-z0-9_]*\.eca?": "[0-9a-f]{64}"$''',
   # Public SHA256s of the two newly pinned Lean secret-derivation specifications.
   '''^(ForsSecretSpec|WotsSecretSpec)\.lean": "[0-9a-f]{64}"$''',
+  # Exact public digest of the authentication-path proof-control source.
+  '''^test_fors_auth_proof_controls\.py": "2b2380a9baf8bd6bf5f863f0220d10ca5df28d269518c8d6c299d6f5c3c95ed5"$''',
 ]
 
 [[rules.allowlists]]
