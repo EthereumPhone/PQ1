@@ -66,15 +66,14 @@ pub fn build_entry<'a>(s: &'a Screen, frame: &mut Frame<'a>) {
             b'D' => (CIRCLE_CY, STROKE_Q8, Rgb::WHITE.scale(DIM), Rgb::WHITE),
             _ => (CIRCLE_CY, STROKE_Q8, Rgb::WHITE.scale(DIM), Rgb::BLACK),
         };
-        frame.push(Item::Ring { cx: x << 8, cy: cy << 8, r: RING_R << 8, w, color: ring });
+        frame.ring(x << 8, cy << 8, RING_R << 8, w, ring);
         match c {
             b'_' | b' ' => {}
             b'*' => {
-                frame.push(Item::Disc { cx: x << 8, cy: cy << 8, r: MASK_DOT_R << 8, color: glyph });
+                frame.disc(x << 8, cy << 8, MASK_DOT_R << 8, glyph);
             }
             _ => {
-                frame.push(Item::Text {
-                    run: TextRun {
+                frame.text(TextRun {
                         text: glyph_str(c),
                         tier: TierId::semibold(22),
                         x,
@@ -84,9 +83,7 @@ pub fn build_entry<'a>(s: &'a Screen, frame: &mut Frame<'a>) {
                         baseline: false,
                         ls_q6: 0,
                         alpha: 255,
-                    },
-                    color: glyph,
-                });
+                    }, glyph);
             }
         }
     }
@@ -96,10 +93,9 @@ pub fn build_entry<'a>(s: &'a Screen, frame: &mut Frame<'a>) {
     let lx = CHEV_LEFT_X_Q8 + SIGN_INSET_Q8;
     let rx = CHEV_RIGHT_X_Q8 - SIGN_INSET_Q8;
     for (pts, x) in [(&MINUS, lx), (&MINUS, rx), (&PLUS_UPRIGHT, rx)] {
-        frame.push(Item::Shape { pts, xf: Xform::at(x, cy), mode: ShapeMode::Stroke { hw: SIGN_HW_Q8 }, color: hint, a: 255 });
+        frame.shape(pts, Xform::at(x, cy), ShapeMode::Stroke { hw: SIGN_HW_Q8 }, hint, 255);
     }
-    frame.push(Item::Text {
-        run: TextRun {
+    frame.text(TextRun {
             text: ENTRY_HINT,
             // The 16 px caps face (the regular 16 tier is digits only).
             tier: TierId::semibold(16),
@@ -109,9 +105,7 @@ pub fn build_entry<'a>(s: &'a Screen, frame: &mut Frame<'a>) {
             baseline: false,
             ls_q6: 64,
             alpha: 255,
-        },
-        color: hint,
-    });
+        }, hint);
 }
 
 /// Words grid geometry (`pq1/layout.py` `WORDS_ROWS` / `WORDS_COLS`).
@@ -143,8 +137,7 @@ pub fn grid_cell(k: usize) -> ((i32, i32), (i32, i32)) {
 /// caller's (a public word here, the constant-time secret run for a seed).
 pub fn push_grid_number<'a>(frame: &mut Frame<'a>, first: usize, k: usize, alpha: u8) {
     let ((nx, y), _) = grid_cell(k);
-    frame.push(Item::Text {
-        run: TextRun {
+    frame.text(TextRun {
             text: grid_number(first, k),
             tier: TierId::regular(22),
             x: nx,
@@ -153,9 +146,7 @@ pub fn push_grid_number<'a>(frame: &mut Frame<'a>, first: usize, k: usize, alpha
             baseline: false,
             ls_q6: 0,
             alpha,
-        },
-        color: Rgb::WHITE.scale(NUM_ALPHA),
-    });
+        }, Rgb::WHITE.scale(NUM_ALPHA));
 }
 
 /// A grid word that is drawn elsewhere: a secret the caller paints with the
@@ -179,16 +170,25 @@ pub fn build_words<'a>(s: &'a Screen, alpha: u8, frame: &mut Frame<'a>) {
         }
         if w == SECRET_CURSOR {
             let ((nx, y), _) = grid_cell(k);
-            frame.push(Item::Chevron { cx: (nx - 4) << 8, cy: y << 8, angle: 0, color: Rgb::YELLOW.scale(alpha) });
+            frame.chevron((nx - 4) << 8, y << 8, 0, Rgb::YELLOW.scale(alpha));
         }
         if w == SECRET_PLACEHOLDER || w == SECRET_CURSOR {
             continue;
         }
         let (_, (wx, y)) = grid_cell(k);
-        frame.push(Item::Text {
-            run: TextRun { text: w, tier: TierId::regular(22), x: wx, y, align: Align::Left, baseline: false, ls_q6: 0, alpha },
-            color: Rgb::WHITE,
-        });
+        frame.text(
+            TextRun {
+                text: w,
+                tier: TierId::regular(22),
+                x: wx,
+                y,
+                align: Align::Left,
+                baseline: false,
+                ls_q6: 0,
+                alpha,
+            },
+            Rgb::WHITE,
+        );
     }
 }
 

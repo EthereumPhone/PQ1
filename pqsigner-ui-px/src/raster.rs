@@ -392,6 +392,11 @@ impl<'a> Frame<'a> {
     /// Append; silently drops past capacity (a rendering, not a security,
     /// failure — the transcript is what is proven, and the golden tests
     /// pin that every scene fits).
+    /// Out of line on purpose: inlined, every `push` site in the per-frame
+    /// scene builder carried its own capacity check and 36-byte store, ~1 KB
+    /// of flash in all (measured 2026-10-14). ~40 calls a frame cost
+    /// microseconds against a millisecond render.
+    #[inline(never)]
     pub fn push(&mut self, item: Item<'a>) -> bool {
         if self.n >= MAX_ITEMS {
             return false;
@@ -399,6 +404,55 @@ impl<'a> Frame<'a> {
         self.items[self.n] = item;
         self.n += 1;
         true
+    }
+
+    /// [`Item::Disc`] by its fields: the variant is built here once instead
+    /// of at each of the scene's call sites (flash, not speed).
+    #[inline(never)]
+    pub fn disc(&mut self, cx: Q8, cy: Q8, r: Q8, color: Rgb) -> bool {
+        self.push(Item::Disc { cx, cy, r, color })
+    }
+
+    /// [`Item::Ring`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn ring(&mut self, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) -> bool {
+        self.push(Item::Ring { cx, cy, r, w, color })
+    }
+
+    /// [`Item::Mask`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn mask(&mut self, cx: Q8, cy: Q8, mask: Mask<'a>, scale: Q8, color: Rgb, a: u8) -> bool {
+        self.push(Item::Mask { cx, cy, mask, scale, color, a })
+    }
+
+    /// [`Item::Text`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn text(&mut self, run: TextRun<'a>, color: Rgb) -> bool {
+        self.push(Item::Text { run, color })
+    }
+
+    /// [`Item::Chevron`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn chevron(&mut self, cx: Q8, cy: Q8, angle: Q16, color: Rgb) -> bool {
+        self.push(Item::Chevron { cx, cy, angle, color })
+    }
+
+    /// [`Item::Check`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn check(&mut self, cx: Q8, cy: Q8, r: Q8, color: Rgb, k: Q16) -> bool {
+        self.push(Item::Check { cx, cy, r, color, k })
+    }
+
+    /// [`Item::Cross`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn cross(&mut self, cx: Q8, cy: Q8, r: Q8, color: Rgb, k: Q16) -> bool {
+        self.push(Item::Cross { cx, cy, r, color, k })
+    }
+
+    /// [`Item::Shape`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn shape(&mut self, pts: &'static [(i16, i16)], xf: Xform, mode: ShapeMode, color: Rgb, a: u8) -> bool {
+        self.push(Item::Shape { pts, xf, mode, color, a })
     }
 
     #[must_use]

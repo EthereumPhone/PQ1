@@ -176,6 +176,20 @@ pub fn plays_forever(screen: &Screen, page: u8) -> bool {
     layout_of(screen, page).plays_forever()
 }
 
+/// The band label at `label_x` and page `page`'s lines stacked at `text_x`
+/// — what a detail, a value screen and the docked notice share. One copy
+/// rather than three inlined loops (2026-10-14).
+fn label_and_lines(s: &Screen, page: u8, label_x: i32, text_x: i32, push: &mut impl FnMut(Option<TextSpec>)) {
+    push(spec(s, Src::Label, TierId::semibold(16), label_x, BASELINE_Y, Align::Center, true, LS_LABEL_Q6));
+    let tier = s.tier().unwrap_or(Tier::T22);
+    let n = s.nlines(page);
+    for i in 0..n {
+        let w = s.line(page, i).map_or(Weight::Regular, |(w, _)| w);
+        let y = stacked_y_q8(tier, n, i) >> 8;
+        push(spec(s, Src::Line(page, i), tier_id(s, w), text_x, y, Align::Center, false, 0));
+    }
+}
+
 pub fn layout_of(s: &Screen, page: u8) -> Layout {
     let mut l = Layout {
         circle: None,
@@ -220,25 +234,11 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
             // The chain screen nudges (DESIGN.md: circle x 291 / text x 175).
             let (cx, tx) = if s.icon() == Some(Icon::Chain) { (CONFIRM_CIRCLE_X, CONFIRM_TEXT_X) } else { (cx, tx) };
             l.circle = Some((cx, CIRCLE_CY));
-            push(spec(s, Src::Label, TierId::semibold(16), cx, BASELINE_Y, Align::Center, true, LS_LABEL_Q6));
-            let tier = s.tier().unwrap_or(Tier::T22);
-            let n = s.nlines(page);
-            for i in 0..n {
-                let w = s.line(page, i).map_or(Weight::Regular, |(w, _)| w);
-                let y = stacked_y_q8(tier, n, i) >> 8;
-                push(spec(s, Src::Line(page, i), tier_id(s, w), tx, y, Align::Center, false, 0));
-            }
+            label_and_lines(s, page, cx, tx, &mut push);
         }
         Some(Kind::Value) => {
             l.circle = None;
-            push(spec(s, Src::Label, TierId::semibold(16), CENTER_X, BASELINE_Y, Align::Center, true, LS_LABEL_Q6));
-            let tier = s.tier().unwrap_or(Tier::T22);
-            let n = s.nlines(page);
-            for i in 0..n {
-                let w = s.line(page, i).map_or(Weight::Regular, |(w, _)| w);
-                let y = stacked_y_q8(tier, n, i) >> 8;
-                push(spec(s, Src::Line(page, i), tier_id(s, w), CENTER_X, y, Align::Center, false, 0));
-            }
+            label_and_lines(s, page, CENTER_X, CENTER_X, &mut push);
         }
         Some(Kind::Verdict) => {
             // Token-less: the sign owns the canvas (verdict.rs draws it).
@@ -253,14 +253,7 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
                     } else {
                         (COL_LEFT_CX, TEXT_CX_CIRCLE_LEFT)
                     };
-                    push(spec(s, Src::Label, TierId::semibold(16), cx, BASELINE_Y, Align::Center, true, LS_LABEL_Q6));
-                    let tier = s.tier().unwrap_or(Tier::T22);
-                    let n = s.nlines(0);
-                    for i in 0..n {
-                        let w = s.line(0, i).map_or(Weight::Regular, |(w, _)| w);
-                        let y = stacked_y_q8(tier, n, i) >> 8;
-                        push(spec(s, Src::Line(0, i), tier_id(s, w), tx, y, Align::Center, false, 0));
-                    }
+                    label_and_lines(s, 0, cx, tx, &mut push);
                 }
                 _ => {
                     push(spec(s, Src::Caption, TierId::regular(18), CENTER_X, BASELINE_Y, Align::Center, true, LS_QUESTION_Q6));
@@ -985,12 +978,7 @@ impl Anim {
                     }
                     _ => 0,
                 };
-                frame.push(Item::Chevron {
-                    cx: x + (nudge << 8),
-                    cy: ((CHEV_Y + bob) << 8),
-                    angle,
-                    color: Rgb::WHITE,
-                });
+                frame.chevron(x + (nudge << 8), ((CHEV_Y + bob) << 8), angle, Rgb::WHITE);
             }
         }
 
@@ -1040,8 +1028,7 @@ impl Anim {
                     (1, 2) => b"2/2",
                     _ => b"1/1",
                 };
-                frame.push(Item::Text {
-                    run: TextRun {
+                frame.text(TextRun {
                         text: pager,
                         tier: TierId::regular(16),
                         x: CENTER_X,
@@ -1050,9 +1037,7 @@ impl Anim {
                         baseline: true,
                         ls_q6: 0,
                         alpha: a_in,
-                    },
-                    color: Rgb::WHITE,
-                });
+                    }, Rgb::WHITE);
             }
             // Confirm band: OR VIEW MORE ▸ / ◂ TO GO BACK.
             if l.band {
@@ -1064,8 +1049,7 @@ impl Anim {
                 } else {
                     (b"TO GO BACK", 224, (140 << 8), ONE_Q16 / 2)
                 };
-                frame.push(Item::Text {
-                    run: TextRun {
+                frame.text(TextRun {
                         text,
                         tier: TierId::regular(18),
                         x,
@@ -1074,15 +1058,8 @@ impl Anim {
                         baseline: true,
                         ls_q6: LS_QUESTION_Q6,
                         alpha: a,
-                    },
-                    color: Rgb::WHITE,
-                });
-                frame.push(Item::Chevron {
-                    cx: chev_x,
-                    cy: (BASELINE_Y - 6) << 8,
-                    angle: turns,
-                    color: Rgb::WHITE.scale(a),
-                });
+                    }, Rgb::WHITE);
+                frame.chevron(chev_x, (BASELINE_Y - 6) << 8, turns, Rgb::WHITE.scale(a));
             }
         } else if let Some(film) = self.film {
             // The film's captions: the breathing busy line over the orbit,
@@ -1112,8 +1089,7 @@ impl Anim {
             for (text, a_q16) in [(busy, busy_a), (outcome.map_or(&b""[..], caption_of), text_a)] {
                 let a = (i64::from(a_q16.clamp(0, ONE_Q16)) * 255 >> 16) as u8;
                 if a > 0 && !text.is_empty() {
-                    frame.push(Item::Text {
-                        run: TextRun {
+                    frame.text(TextRun {
                             text,
                             tier: TierId::regular(18),
                             x: CENTER_X,
@@ -1122,9 +1098,7 @@ impl Anim {
                             baseline: true,
                             ls_q6: LS_QUESTION_Q6,
                             alpha: a,
-                        },
-                        color: Rgb::WHITE,
-                    });
+                        }, Rgb::WHITE);
                 }
             }
         }
@@ -1150,16 +1124,11 @@ impl Anim {
                 if dx.abs() + dy.abs() < ONE_Q8 {
                     continue;
                 }
-                frame.push(Item::Disc {
-                    cx: lx >> 8,
-                    cy: ly >> 8,
-                    r: visible_r,
-                    color: style.trail[i.min(4)],
-                });
+                frame.disc(lx >> 8, ly >> 8, visible_r, style.trail[i.min(4)]);
             }
             {
                 {
-                    frame.push(Item::Disc { cx: cx_q8, cy: cy_q8, r: visible_r, color: style.fill });
+                    frame.disc(cx_q8, cy_q8, visible_r, style.fill);
                     let mark = match icon {
                         // The chain mark follows the proven NETWORK text: Base
                         // gets its own mark, everything else the Ethereum one.
@@ -1176,10 +1145,10 @@ impl Anim {
                         other => marks.for_icon(other),
                     };
                     if let Some(m) = mark {
-                        frame.push(Item::Mask { cx: cx_q8, cy: cy_q8, mask: m, scale: ONE_Q8, color: style.mark, a: 255 });
+                        frame.mask(cx_q8, cy_q8, m, ONE_Q8, style.mark, 255);
                     } else if let (Some(Icon::Letter), Some(ch)) = (icon, self.cur.monogram()) {
                         if let Some((m, box_cy)) = monogram_mask(font, ch, cy_q8) {
-                            frame.push(Item::Mask { cx: cx_q8, cy: box_cy, mask: m, scale: ONE_Q8, color: style.mark, a: 255 });
+                            frame.mask(cx_q8, box_cy, m, ONE_Q8, style.mark, 255);
                         }
                     }
                     // Hold flood: liquid rising from the bottom, 30 % film.
@@ -1196,7 +1165,7 @@ impl Anim {
                             });
                         }
                     }
-                    frame.push(Item::Ring { cx: cx_q8, cy: cy_q8, r: visible_r, w: TOKEN_RING_W_Q8, color: style.ring });
+                    frame.ring(cx_q8, cy_q8, visible_r, TOKEN_RING_W_Q8, style.ring);
                 }
             }
         }
@@ -1223,8 +1192,8 @@ impl Anim {
     fn push_result(frame: &mut Frame<'_>, e: Ending, cx: Q8, cy: Q8, r: Q8, mark_c: Rgb, k: Q16) {
         if k > 0 {
             match e {
-                Ending::Signed => frame.push(Item::Check { cx, cy, r, color: mark_c, k }),
-                Ending::Declined | Ending::Failed => frame.push(Item::Cross { cx, cy, r, color: mark_c, k }),
+                Ending::Signed => frame.check(cx, cy, r, mark_c, k),
+                Ending::Declined | Ending::Failed => frame.cross(cx, cy, r, mark_c, k),
             };
         }
     }
@@ -1264,13 +1233,13 @@ impl Anim {
                     Ending::Declined | Ending::Failed => Rgb::RED,
                 };
                 let r = lerp(visible_r, CIRCLE_R << 8, p.u);
-                frame.push(Item::Disc { cx, cy, r, color: blend_rgb(style.fill, fill, p.u) });
+                frame.disc(cx, cy, r, blend_rgb(style.fill, fill, p.u));
                 if let (Some(m), true) = (mark, p.glyph_a > 0) {
-                    frame.push(Item::Mask { cx, cy: cy + mark_dy, mask: m, scale: ONE_Q8, color: style.mark, a: p.glyph_a });
+                    frame.mask(cx, cy + mark_dy, m, ONE_Q8, style.mark, p.glyph_a);
                 }
-                frame.push(Item::Ring { cx, cy, r, w: TOKEN_RING_W_Q8, color: blend_rgb(style.ring, ring, p.u) });
+                frame.ring(cx, cy, r, TOKEN_RING_W_Q8, blend_rgb(style.ring, ring, p.u));
                 if p.flash_a > 0 {
-                    frame.push(Item::Ring { cx, cy, r: p.flash_r, w: (2 << 8) + 128, color: state.scale(p.flash_a) });
+                    frame.ring(cx, cy, p.flash_r, (2 << 8) + 128, state.scale(p.flash_a));
                 }
                 Self::push_result(frame, outcome, cx, cy, r, mark_c, p.check_k);
             }
@@ -1281,14 +1250,14 @@ impl Anim {
                 match p.phase {
                     Phase::Seed => {
                         let b = p.bodies[0];
-                        frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: style.fill });
+                        frame.disc(b.x, b.y, b.r, style.fill);
                         if let (Some(m), true) = (mark, p.glyph_a > 0) {
                             let scale = ((i64::from(b.r) << 8) / i64::from(visible_r.max(1))) as Q8;
                             let dy = ((i64::from(mark_dy) * i64::from(scale)) >> 8) as Q8;
-                            frame.push(Item::Mask { cx: b.x, cy: b.y + dy, mask: m, scale, color: style.mark, a: p.glyph_a });
+                            frame.mask(b.x, b.y + dy, m, scale, style.mark, p.glyph_a);
                         }
                         if p.glyph_a > 0 {
-                            frame.push(Item::Ring { cx: b.x, cy: b.y, r: b.r, w: TOKEN_RING_W_Q8, color: style.ring.scale(p.glyph_a) });
+                            frame.ring(b.x, b.y, b.r, TOKEN_RING_W_Q8, style.ring.scale(p.glyph_a));
                         }
                     }
                     Phase::Split | Phase::Join | Phase::Orbit | Phase::Spiral => {
@@ -1305,11 +1274,11 @@ impl Anim {
                             }
                             let c = style.trail[(k as usize - 1).min(4)];
                             for b in &q.bodies[..usize::from(q.n)] {
-                                frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: c });
+                                frame.disc(b.x, b.y, b.r, c);
                             }
                         }
                         for b in &p.bodies[..usize::from(p.n)] {
-                            frame.push(Item::Disc { cx: b.x, cy: b.y, r: b.r, color: style.film });
+                            frame.disc(b.x, b.y, b.r, style.film);
                         }
                     }
                     Phase::Flash | Phase::Result => {
@@ -1321,10 +1290,10 @@ impl Anim {
                         };
                         let b = p.bodies[0];
                         let u = if p.phase == Phase::Flash { motion::ease_out(motion::phase(ft_of(&film, now), loading::T6, loading::QUBIT_T_FLASH)) } else { ONE_Q16 };
-                        frame.push(Item::Disc { cx, cy, r: b.r, color: blend_rgb(style.film, fill, u) });
-                        frame.push(Item::Ring { cx, cy, r: b.r, w: TOKEN_RING_W_Q8, color: blend_rgb(style.ring, ring, u) });
+                        frame.disc(cx, cy, b.r, blend_rgb(style.film, fill, u));
+                        frame.ring(cx, cy, b.r, TOKEN_RING_W_Q8, blend_rgb(style.ring, ring, u));
                         if p.flash_a > 0 {
-                            frame.push(Item::Ring { cx, cy, r: p.flash_r, w: (2 << 8) + 128, color: state.scale(p.flash_a) });
+                            frame.ring(cx, cy, p.flash_r, (2 << 8) + 128, state.scale(p.flash_a));
                         }
                         Self::push_result(frame, e, cx, cy, b.r, mark_c, p.check_k);
                     }
@@ -1378,8 +1347,7 @@ pub(crate) fn push_texts<'a>(frame: &mut Frame<'a>, s: &'a Screen, page: u8, alp
     let l = layout_of(s, page);
     for t in l.texts.iter().flatten() {
         let text = &s.0[t.start..t.start + t.len];
-        frame.push(Item::Text {
-            run: TextRun {
+        frame.text(TextRun {
                 text,
                 tier: t.tier,
                 x: t.x,
@@ -1388,9 +1356,7 @@ pub(crate) fn push_texts<'a>(frame: &mut Frame<'a>, s: &'a Screen, page: u8, alp
                 baseline: t.baseline,
                 ls_q6: t.ls_q6,
                 alpha,
-            },
-            color: Rgb::WHITE,
-        });
+            }, Rgb::WHITE);
     }
 }
 

@@ -217,8 +217,8 @@ pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
             }
             triangle(frame, cx, cy, k, col);
             let bx = Xform::at(cx, cy + sc(px(9), k)).scaled(k8(k));
-            frame.push(Item::Shape { pts: &g::BRUSH_BODY, xf: bx, mode: ShapeMode::Fill { grow: 0 }, color: black, a: 255 });
-            frame.push(Item::Shape { pts: &g::BRUSH_BRISTLES, xf: bx, mode: ShapeMode::Fill { grow: 0 }, color: black, a: 255 });
+            frame.shape(&g::BRUSH_BODY, bx, ShapeMode::Fill { grow: 0 }, black, 255);
+            frame.shape(&g::BRUSH_BRISTLES, bx, ShapeMode::Fill { grow: 0 }, black, 255);
         }
         Icon::Lock | Icon::Unlock => {
             let pose = if icon == Icon::Lock { lock_pose(tm) } else { unlock_pose(tm) };
@@ -234,17 +234,17 @@ pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
             }
             // 62 px tall (the design box is 63): stroke 3 px at 63.
             let kh = mul_q16(k, 64_496);
-            frame.push(Item::Shape {
-                pts: &g::SHIELD,
-                xf: Xform::at(x, y).scaled(k8(kh)),
-                mode: ShapeMode::Loop { hw: sc(tenths(15), kh) as i16 },
-                color: col,
-                a: 255,
-            });
+            frame.shape(
+                &g::SHIELD,
+                Xform::at(x, y).scaled(k8(kh)),
+                ShapeMode::Loop { hw: sc(tenths(15), kh) as i16 },
+                col,
+                255,
+            );
             let my = y - sc(px(2), k);
             match s.result() {
-                Some(ResultMark::Check) => frame.push(Item::Check { cx: x, cy: my, r: sc(px(25), k), color: col, k: ONE_Q16 }),
-                Some(ResultMark::Cross) => frame.push(Item::Cross { cx: x, cy: my, r: sc(7_253, k), color: col, k: ONE_Q16 }),
+                Some(ResultMark::Check) => frame.check(x, my, sc(px(25), k), col, ONE_Q16),
+                Some(ResultMark::Cross) => frame.cross(x, my, sc(7_253, k), col, ONE_Q16),
                 // The bare shield (WRITE DOWN 24 WORDS): the backup, no verdict yet.
                 _ => true,
             };
@@ -259,18 +259,18 @@ pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
             if !checking && m >= shake_at && m < shake_at + PILL_SHAKE {
                 x += sc(px(7), shake(phase(m, shake_at, PILL_SHAKE), 2));
             }
-            frame.push(Item::Shape {
-                pts: &g::PILL,
-                xf: Xform::at(x, cy).scaled(k8(k)),
-                mode: ShapeMode::Rim { r: sc(tenths(167), k) as i16, hw: sc(tenths(13), k) as i16 },
-                color: pc,
-                a: 255,
-            });
+            frame.shape(
+                &g::PILL,
+                Xform::at(x, cy).scaled(k8(k)),
+                ShapeMode::Rim { r: sc(tenths(167), k) as i16, hw: sc(tenths(13), k) as i16 },
+                pc,
+                255,
+            );
             let da = ((i64::from(fill) * 255) >> 16) as u8;
             if da > 0 {
                 for i in 0..4 {
                     let dx = sc(px(24), k) * (2 * i - 3) / 2;
-                    frame.push(Item::Disc { cx: x + dx, cy, r: sc(px(8), k), color: pc.scale(da) });
+                    frame.disc(x + dx, cy, sc(px(8), k), pc.scale(da));
                 }
             }
         }
@@ -281,32 +281,32 @@ pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
                 x += sc(px(6), shake(phase(m, 0, WIGGLE), 1));
             }
             let r = sc(px(CIRCLE_R), k);
-            frame.push(Item::Disc { cx: x, cy, r, color: black });
-            frame.push(Item::Ring { cx: x, cy, r: r - sc(tenths(12), k), w: TOKEN_RING_W_Q8, color: col });
+            frame.disc(x, cy, r, black);
+            frame.ring(x, cy, r - sc(tenths(12), k), TOKEN_RING_W_Q8, col);
             if cross {
-                frame.push(Item::Cross { cx: x, cy, r, color: col, k: ONE_Q16 });
+                frame.cross(x, cy, r, col, ONE_Q16);
             } else {
-                frame.push(Item::Check { cx: x, cy, r, color: col, k: ONE_Q16 });
+                frame.check(x, cy, r, col, ONE_Q16);
             }
         }
         Icon::Verified => {
             // The FIRMWARE VERIFIED look: the white disc, black flush ring,
             // black check (status.branded_resting(WHITE)).
             let r = sc(px(CIRCLE_R), k);
-            frame.push(Item::Disc { cx, cy, r, color: Rgb::WHITE.scale(a) });
-            frame.push(Item::Ring { cx, cy, r, w: TOKEN_RING_W_Q8, color: black });
-            frame.push(Item::Check { cx, cy, r, color: black, k: ONE_Q16 });
+            frame.disc(cx, cy, r, Rgb::WHITE.scale(a));
+            frame.ring(cx, cy, r, TOKEN_RING_W_Q8, black);
+            frame.check(cx, cy, r, black, ONE_Q16);
         }
         Icon::Die => {
             let xf = Xform::at(cx, cy).scaled(k8(k));
             let grow = sc(tenths(35), k) as i16;
             let hw = sc(px(1), k) as i16;
             for face in [&g::DIE_FACE_1[..], &g::DIE_FACE_2[..], &g::DIE_FACE_3[..]] {
-                frame.push(Item::Shape { pts: face, xf, mode: ShapeMode::Fill { grow }, color: col, a: 255 });
-                frame.push(Item::Shape { pts: face, xf, mode: ShapeMode::Rim { r: grow, hw }, color: black, a: 255 });
+                frame.shape(face, xf, ShapeMode::Fill { grow }, col, 255);
+                frame.shape(face, xf, ShapeMode::Rim { r: grow, hw }, black, 255);
             }
             for pip in g::DIE_PIPS {
-                frame.push(Item::Shape { pts: pip, xf, mode: ShapeMode::Fill { grow: 0 }, color: black, a: 255 });
+                frame.shape(pip, xf, ShapeMode::Fill { grow: 0 }, black, 255);
             }
         }
         Icon::Gear => {
@@ -314,26 +314,25 @@ pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
             let spin = freewheel(phase(tm, 0, ARRIVE_MS + GEAR_SPIN));
             let rot = spin as u32; // one full turn = 65536 wraps to 0
             let body = sc(tenths(256), k);
-            frame.push(Item::Disc { cx, cy, r: body, color: col });
+            frame.disc(cx, cy, body, col);
             for i in 0..8u32 {
                 let r16 = (rot.wrapping_add(i * 8192) & 0xFFFF) as u16;
-                frame.push(Item::Shape {
-                    pts: &g::GEAR_TOOTH,
-                    xf: Xform::at(cx, cy).scaled(k8(k)).turned(r16),
-                    mode: ShapeMode::Fill { grow: sc(tenths(26), k) as i16 },
-                    color: col,
-                    a: 255,
-                });
+                frame.shape(
+                    &g::GEAR_TOOTH,
+                    Xform::at(cx, cy).scaled(k8(k)).turned(r16),
+                    ShapeMode::Fill { grow: sc(tenths(26), k) as i16 },
+                    col,
+                    255,
+                );
             }
-            frame.push(Item::Disc { cx, cy, r: sc(tenths(141), k), color: black });
+            frame.disc(cx, cy, sc(tenths(141), k), black);
         }
         Icon::Heart => {
             // The counter's 1 (sign art: the 36 px face, the largest baked)
             // and the heart beside it, the pair centred on the grid; the
             // heart pumps once the count has been read.
             let beat = if m >= HEART_REST { heartbeat(phase(m, HEART_REST, HEARTBEAT)) } else { ONE_Q16 };
-            frame.push(Item::Text {
-                run: crate::font::TextRun {
+            frame.text(crate::font::TextRun {
                     text: b"1",
                     tier: crate::font::TierId::regular(36),
                     x: (cx + sc(tenths(-225), k)) >> 8,
@@ -342,16 +341,14 @@ pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
                     baseline: false,
                     ls_q6: 0,
                     alpha: 255,
-                },
-                color: col,
-            });
-            frame.push(Item::Shape {
-                pts: &g::HEART,
-                xf: Xform::at(cx + sc(tenths(115), k), cy).scaled(k8(mul_q16(k, beat))),
-                mode: ShapeMode::Fill { grow: 0 },
-                color: col,
-                a: 255,
-            });
+                }, col);
+            frame.shape(
+                &g::HEART,
+                Xform::at(cx + sc(tenths(115), k), cy).scaled(k8(mul_q16(k, beat))),
+                ShapeMode::Fill { grow: 0 },
+                col,
+                255,
+            );
         }
         _ => {}
     }
@@ -364,26 +361,20 @@ fn blend(a: Rgb, b: Rgb, t: Q16) -> Rgb {
 
 /// The rounded warning triangle, `k` = height / 64 px.
 fn triangle(frame: &mut Frame<'_>, cx: Q8, cy: Q8, k: Q16, col: Rgb) {
-    frame.push(Item::Shape {
-        pts: &g::TRIANGLE,
-        xf: Xform::at(cx, cy).scaled(k8(k)),
-        mode: ShapeMode::Fill { grow: sc(px(6), k) as i16 },
-        color: col,
-        a: 255,
-    });
+    frame.shape(&g::TRIANGLE, Xform::at(cx, cy).scaled(k8(k)), ShapeMode::Fill { grow: sc(px(6), k) as i16 }, col, 255);
 }
 
 /// The triangle carrying its black exclamation (tamper, sig_error).
 fn alert(frame: &mut Frame<'_>, cx: Q8, cy: Q8, k: Q16, col: Rgb, mark: Rgb) {
     triangle(frame, cx, cy, k, col);
-    frame.push(Item::Shape {
-        pts: &g::EXCLAMATION_BAR,
-        xf: Xform::at(cx, cy).scaled(k8(k)),
-        mode: ShapeMode::Stroke { hw: sc(px(2), k) as i16 },
-        color: mark,
-        a: 255,
-    });
-    frame.push(Item::Disc { cx, cy: cy + sc(tenths(195), k), r: sc(tenths(28), k), color: mark });
+    frame.shape(
+        &g::EXCLAMATION_BAR,
+        Xform::at(cx, cy).scaled(k8(k)),
+        ShapeMode::Stroke { hw: sc(px(2), k) as i16 },
+        mark,
+        255,
+    );
+    frame.disc(cx, cy + sc(tenths(195), k), sc(tenths(28), k), mark);
 }
 
 /// The padlock rig's pose: shackle spin (Q16 turns, 0 = seated, ½ = open
@@ -435,13 +426,13 @@ fn padlock(frame: &mut Frame<'_>, cx: Q8, cy: Q8, f: Q16, col: Rgb, p: LockPose)
     let kx = (c >> 4) as i16; // Q16 → Q12
     let pivot_x = cx + arm;
     let top = seat_y - leg_y;
-    frame.push(Item::Shape {
-        pts: &g::SHACKLE_ARCH,
-        xf: Xform::at(pivot_x, top).scaled(k8(f)).squeezed(kx),
-        mode: ShapeMode::Stroke { hw },
-        color: col,
-        a: 255,
-    });
+    frame.shape(
+        &g::SHACKLE_ARCH,
+        Xform::at(pivot_x, top).scaled(k8(f)).squeezed(kx),
+        ShapeMode::Stroke { hw },
+        col,
+        255,
+    );
     // The free leg: from the arch's left end down to the raised tip.
     let free_x = pivot_x + sc(-2 * arm, c);
     let free_len = leg_y - sc(eff.max(0), 26_214); // 0.4 · lift
@@ -449,16 +440,10 @@ fn padlock(frame: &mut Frame<'_>, cx: Q8, cy: Q8, f: Q16, col: Rgb, p: LockPose)
     // The pivot leg runs behind the body into the disc.
     leg(frame, pivot_x, top, leg_y + tail, hw, col);
     // Body: the black halo (the legs pass behind), the disc, the keyhole.
-    frame.push(Item::Disc { cx, cy: body_y, r: body_r + sc(tenths(26), f), color: Rgb::BLACK });
-    frame.push(Item::Disc { cx, cy: body_y, r: body_r, color: col });
-    frame.push(Item::Disc { cx, cy: body_y - sc(tenths(35), f), r: sc(tenths(46), f), color: Rgb::BLACK });
-    frame.push(Item::Shape {
-        pts: &g::KEYHOLE_SLOT,
-        xf: Xform::at(cx, body_y).scaled(k8(f)),
-        mode: ShapeMode::Fill { grow: 0 },
-        color: Rgb::BLACK,
-        a: 255,
-    });
+    frame.disc(cx, body_y, body_r + sc(tenths(26), f), Rgb::BLACK);
+    frame.disc(cx, body_y, body_r, col);
+    frame.disc(cx, body_y - sc(tenths(35), f), sc(tenths(46), f), Rgb::BLACK);
+    frame.shape(&g::KEYHOLE_SLOT, Xform::at(cx, body_y).scaled(k8(f)), ShapeMode::Fill { grow: 0 }, Rgb::BLACK, 255);
 }
 
 /// A vertical shackle leg of `len` (Q8) hanging from `(x, y)`.
@@ -466,13 +451,13 @@ fn leg(frame: &mut Frame<'_>, x: Q8, y: Q8, len: Q8, hw: i16, col: Rgb) {
     if len <= 0 {
         return;
     }
-    frame.push(Item::Shape {
-        pts: &g::UNIT_LEG,
-        xf: Xform::at(x, y).scaled(len.min(i32::from(i16::MAX)) as i16),
-        mode: ShapeMode::Stroke { hw },
-        color: col,
-        a: 255,
-    });
+    frame.shape(
+        &g::UNIT_LEG,
+        Xform::at(x, y).scaled(len.min(i32::from(i16::MAX)) as i16),
+        ShapeMode::Stroke { hw },
+        col,
+        255,
+    );
 }
 
 /// `ONE_Q8` is used by the tests below; keep the import honest.
