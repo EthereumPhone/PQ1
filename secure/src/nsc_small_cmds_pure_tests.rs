@@ -1820,6 +1820,45 @@ fn gateway_entries_and_first_statements(src: &str) -> Vec<(String, String)> {
     out
 }
 
+/// The complement of [`every_gateway_entry_takes_the_gate_first`] (#835/#846).
+///
+/// That test pins `gateway_enter!` as the FIRST statement, which is also what
+/// enforces the ordering between the two gateway-entry guards: the nested-entry
+/// refusal must happen before `fi_boundary` clears the FI-delay poison, or a
+/// nested call would wipe the OUTER operation's "ran with an unprotected
+/// delay" flag on its way to being refused, and a compromised operation would
+/// report success.
+///
+/// But "the gate is first" says nothing about whether the poison boundary is
+/// there at all. Deleting `fi_boundary` from a veneer leaves that test green
+/// while the operation silently stops reporting unprotected delays. These two
+/// assertions only pin the composition together.
+#[test]
+fn every_gateway_entry_also_carries_the_fi_delay_boundary() {
+    let entries = gateway_entries_and_first_statements(NSC_MOD_SRC);
+    assert_eq!(
+        entries.len(),
+        33,
+        "gateway entry count changed: review the new entry, then update this pin"
+    );
+    for (name, _) in &entries {
+        // Slice the entry's own body, so a `fi_boundary` elsewhere in the file
+        // cannot satisfy the check for a veneer that lacks one.
+        let at = NSC_MOD_SRC
+            .find(&format!("fn {name}"))
+            .unwrap_or_else(|| panic!("{name} not found"));
+        let rest = &NSC_MOD_SRC[at..];
+        let end = rest.find("\n}\n").map_or(rest.len(), |i| i + 2);
+        let body = &rest[..end];
+        assert!(
+            body.contains("fi_boundary"),
+            "{name}: no `fi_boundary` — this veneer would run a command \
+             without the FI-delay poison boundary, so an operation whose \
+             delays went unprotected would report success (#835)"
+        );
+    }
+}
+
 #[test]
 fn every_gateway_entry_takes_the_gate_first() {
     let entries = gateway_entries_and_first_statements(NSC_MOD_SRC);
@@ -1876,8 +1915,48 @@ fn the_gate_macro_refuses_and_the_emulator_dispatcher_uses_it() {
     // the e2e run exercises release-on-return for every handler.
     let poll_at = NSC_MOD_SRC.find("pub fn poll_gateway() {").expect("poll_gateway exists");
     let poll_body = &NSC_MOD_SRC[poll_at..];
-    let gated = "let result = match GATEWAY_GATE.try_enter() {\n            Some(_token) => dispatch(cmd, &args),\n            None => GATEWAY_REFUSED,\n        };";
-    assert!(poll_body.contains(gated), "poll_gateway must hold the gate across dispatch");
+    // Checked structurally rather than as one exact literal. The literal was
+    // `let result = match GATEWAY_GATE.try_enter() { Some(_token) =>
+    // dispatch(cmd, &args), None => GATEWAY_REFUSED, };`, and #835's FI-delay
+    // boundary now lives inside the `Some` arm — it cannot go in `dispatch`,
+    // because holding a value across that `match` is the very thing this test
+    // forbids below. The two properties the literal existed to protect are
+    // asserted individually, plus the ordering the boundary needs, so this is
+    // strictly stronger than the string compare it replaces.
+    let gate_at = poll_body
+        .find("match GATEWAY_GATE.try_enter() {")
+        .expect("poll_gateway must hold the gate across dispatch");
+    let gated_region = &poll_body[gate_at..];
+    assert!(
+        gated_region.contains("Some(_token) =>"),
+        "poll_gateway must bind the gate token across the dispatch call"
+    );
+    assert!(
+        gated_region.contains("dispatch(cmd, &args)"),
+        "poll_gateway must call dispatch from inside the gated arm"
+    );
+    assert!(
+        gated_region.contains("None => GATEWAY_REFUSED"),
+        "a refused nested entry must return GATEWAY_REFUSED"
+    );
+    // #835: the FI-delay poison is cleared per operation, and that clear must
+    // happen AFTER the gate has refused a nested entry — never before. If it
+    // ran first, a nested call would wipe the OUTER operation's "ran with an
+    // unprotected delay" flag on its way to being refused, and a compromised
+    // operation would then report success.
+    let clear_at = poll_body
+        .find("clear_delay_poison()")
+        .expect("poll_gateway must clear the FI-delay poison per operation (#835)");
+    assert!(
+        clear_at > gate_at,
+        "the FI-delay poison clear must come AFTER the nested-entry gate, not \
+         before it (#835/#846): clearing first lets a refused nested call wipe \
+         the outer operation's poison"
+    );
+    assert!(
+        poll_body.contains("delay_source_failed()"),
+        "poll_gateway must refuse a command whose delays went unprotected (#835)"
+    );
     // ...and NOT inside `dispatch`: a token held there turned its handler
     // calls into non-tail calls, the handlers were merged into it, and the
     // summed frames overflowed the QEMU `ui-px` stack into static data.

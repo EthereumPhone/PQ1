@@ -278,9 +278,13 @@ jobs:
           # that target (see its own comment). Keep this list and that
           # target's prerequisites in step.
           #
-          # Cost: 16 target-triple `cargo check`s. If that becomes the long
+          # Cost: 18 target-triple `cargo check`s. If that becomes the long
           # pole, trim the matrix in `UI_PX_SUFFIXES` — do not drop
-          # `ui-px-dma`, which is the whole reason this exists.
+          # `ui-px-dma`, which is the whole reason this exists, nor
+          # `rng-fault-probe`: #835 added that feature and its image is the
+          # one that produced the 255/0/2 silicon receipt, yet the set it is
+          # built with was in no make target and no CI job — the identical
+          # gap this matrix was created to close for `ui-px-bench`.
           make ui-px-configs
       # Keep the host-only fsbl-tests suites enrolled explicitly.
       # The whole fsbl-tests crate stays out of this job because its footprint
