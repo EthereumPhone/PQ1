@@ -75,8 +75,7 @@ theorem derived_wots_sign_bind {α : Type} (seed sk : Std.Array Std.U8 32#usize)
       (do let fields ← pureWotsSign seed sk layer tree leaf message
           continuation fields) := by
   have hs : sphincs_c10.shuffle.ShuffleSeed.derive shuffle label ⦃ _ => True ⦄ := by
-    unfold sphincs_c10.shuffle.ShuffleSeed.derive
-    split <;> simp only [WP.spec_ok]
+    exact shuffle_derive_total shuffle label
   obtain ⟨derived, hd, _⟩ := WP.spec_imp_exists hs
   rw [hd]
   simp only [bind_tc_ok, firmware_wots_sign_pure]

@@ -110,18 +110,7 @@ def signLayerCompute {α : Type} (sk seed : Std.Array Std.U8 32#usize)
     merkle.build_subtree_with_auth seed sk layer i8 idx_leaf progress
       pct_lo pct_hi
   hypertree.report progress pct_hi
-  let wots_label ←
-    match layer with
-    | 0#uscalar =>
-      ok
-        (Array.make 7#usize [
-           119#u8, 111#u8, 116#u8, 115#u8, 45#u8, 48#u8, 0#u8
-           ] : Array Std.U8 7#usize)
-    | _ =>
-      ok
-        (Array.make 7#usize [
-           119#u8, 111#u8, 116#u8, 115#u8, 45#u8, 49#u8, 0#u8
-           ] : Array Std.U8 7#usize)
+  let wots_label ← Result.ok (pairedLayerLabel layer)
   let s ← lift (Array.to_slice wots_label)
   let wots_shuffle_seed ← sphincs_c10.shuffle.ShuffleSeed.derive shuffle s
   let i9 ← lift (UScalar.cast .U64 idx_tree1)
@@ -218,10 +207,8 @@ private theorem sign_layer_compute_pure {α : Type}
   unfold signLeaf at hpath
   rw [hpath]
   simp only [bind_tc_ok, uncurry_apply_pair, hypertree.report]
-  split <;> simp only [bind_tc_ok]
-  all_goals
-    rw [derived_wots_sign_bind]
-    rfl
+  rw [derived_wots_sign_bind]
+  rfl
 
 private theorem sign_layer_finish_pure (seed sk : Std.Array Std.U8 32#usize)
     (sig : C10Signature) (current : Std.Array Std.U8 16#usize) (idx : Std.U32)

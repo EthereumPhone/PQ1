@@ -1276,12 +1276,12 @@ EasyCrypt and fifteen Lean typed mutations exercise the consuming proofs,
 including five mutations to the actual extracted loops. Definition checks
 precede proof rejection; abnormal/resource exits receive no rejection credit.
 
-This closes the bounded shuffle component's exact-order gap. It does not
-extract `ShuffleSeed.derive`: that supplied function and the SHA block model
-remain explicit backend boundaries. Nor does it identify EasyCrypt's arbitrary
-oracle with Lean's concrete SHA interpretation, prove physical erasure or
-side-channel behavior, or supply the complete signer/session relation. No new
-cryptographic axiom or production behavior is introduced.
+This closes the bounded shuffle component's exact-order gap. The subsequent
+derivation refinement below replaces the supplied `ShuffleSeed.derive` body
+with extraction. The SHA backend models remain explicit boundaries. These
+results do not identify EasyCrypt's arbitrary oracle with Lean's concrete SHA
+interpretation, prove physical erasure or side-channel behavior, or supply the
+complete signer/session relation. No new cryptographic axiom is introduced.
 
 Paired shuffle caller composition (2026-10-14): the WOTS fill, forest sign and
 layer sign comparison procedures now call `PairedShuffle`. The new
@@ -1305,10 +1305,40 @@ The source/module/statement pins bind the selected paired procedures.
 
 This closes the EasyCrypt callers' use of the paired shuffle component. It
 adds no oracle losslessness, fresh-history, successful-search or desired-result
-premise. The layer-label expression remains shared EasyCrypt code; this batch
-does not separately refine the Rust label formatter. The paired printers,
-backend interpretation and complete cross-language/session relation retain
-the boundaries stated above.
+premise. The subsequent derivation and label refinement below connects the
+actual extracted formatter to the paired labels. The paired printers, backend
+interpretation and complete cross-language/session relation retain the
+boundaries stated above.
+
+Extracted shuffle derivation and caller labels (2026-10-14): the Rust
+`ShuffleSeed.derive` zero comparison, early return and nonzero input construction
+are now extracted by a separate pinned Charon/Aeneas target. The kernel theorem
+`shuffle_derive_exact` proves the exact result for every 32-byte seed and arbitrary
+label slice. The zero branch performs no hash call. The nonzero branch supplies
+the literal domain tag, seed and label in order to a private software-SHA helper.
+That helper retains the existing `sha2` backend, including when `hw-sha256` is
+enabled; its supplied ordered-concatenation/SHA interpretation remains a backend
+boundary. This is not verification of the SHA library or the compiler.
+
+The paired expression adds the four-byte forest label and the seven-byte layer
+label, including its trailing zero. Lean proves the actual extracted formatter
+equals the paired expression for every u32 layer: zero selects `wots-0\0`;
+every nonzero value selects `wots-1\0`. Existing forest/layer factor proofs and
+signer proofs consume these results. EasyCrypt proves its raw labels equal the
+same paired expressions and uses them in the comparison callers, preserving
+the previous result/error and full arbitrary-oracle-state relations.
+
+Five new kernel-only headline closures cover derivation and labels. Eight typed
+mutations of the actual extracted derivation must fail at its exact-result
+theorem; five additional paired-label mutations exercise both Lean and EasyCrypt
+endpoints. The independent fixture corpus now has 36 cases, including zero,
+nonzero and maximum-u32 layers (and a negative mathematical integer on the
+EasyCrypt/common-expression side). Each changed definition must typecheck before
+its unchanged proof is rejected. The generator's typed zero-test constructor,
+paired printers and cross-tool interpretation remain disclosed TCB. Extraction
+regeneration, source/statement/module pins and the existing full signer evidence
+cover the changed dependencies; none supplies a complete cross-language session
+relation or closes the cryptographic, erasure or side-channel assumptions.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

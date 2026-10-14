@@ -8,6 +8,11 @@ from c10_caller_controls import mutate, definitions_only
 
 # name, operator, Lean before/after, EasyCrypt before/after
 SHUFFLE_CHANGES = [
+    ('shuffle-forest-label-byte', 'shuffle_forest_label', '114, 115]', '114, 116]', '114; 115]', '114; 116]'),
+    ('shuffle-layer-label-selection', 'shuffle_layer_label', 'layer = 0', 'layer = 1', 'layer = 0', 'layer = 1'),
+    ('shuffle-layer-label-zero', 'shuffle_layer_label', '45, 48, 0]', '45, 49, 0]', '45; 48; 0]', '45; 49; 0]'),
+    ('shuffle-layer-label-nonzero', 'shuffle_layer_label', '45, 49, 0]', '45, 48, 0]', '45; 49; 0]', '45; 48; 0]'),
+    ('shuffle-layer-label-terminator', 'shuffle_layer_label', '45, 48, 0]', '45, 48, 1]', '45; 48; 0]', '45; 48; 1]'),
     ('shuffle-seed-tag', 'shuffle_seed_preimage', '[115,', '[114,', '[115;', '[114;'),
     ('shuffle-label', 'shuffle_seed_preimage', ' ++ label', ' ++ []', ' ++ label', ' ++ []'),
     ('shuffle-block-tag', 'shuffle_block_preimage', '[115,', '[114,', '[115;', '[114;'),
@@ -44,6 +49,12 @@ SHUFFLE_REASONS = {'shuffle-seed-tag': '[by]: cannot close goals', 'shuffle-labe
 
 # First consuming theorem reached by each calibrated negative.
 SHUFFLE_THEOREMS = {'shuffle-seed-tag': 'shuffle_seed_common', 'shuffle-label': 'shuffle_seed_common', 'shuffle-block-tag': 'shuffle_block_common', 'shuffle-block-counter': 'shuffle_block_common', 'shuffle-byte-order': 'shuffle_permutation_common', 'shuffle-reduction': 'shuffle_permutation_common', 'shuffle-swap-value': 'shuffle_permutation_common', 'shuffle-initial-size': 'shuffle_finish_initial', 'shuffle-direction': 'shuffle_finish_initial', 'shuffle-stream-index': 'shuffle_finish_initial', 'derive-zero': 'shuffle_derive_common', 'derive-result': 'shuffle_derive_common', 'permutation-zero': 'shuffle_permutation_common', 'permutation-short': 'shuffle_permutation_common', 'block-count': 'shuffle_permutation_common', 'block-order': 'shuffle_permutation_common', 'block-stream': 'shuffle_permutation_common', 'permutation-result': 'shuffle_permutation_common'}
+
+for name in ('shuffle-forest-label-byte', 'shuffle-layer-label-selection', 'shuffle-layer-label-zero',
+             'shuffle-layer-label-nonzero', 'shuffle-layer-label-terminator'):
+    SHUFFLE_REASONS[name] = '[by]: cannot close goals'
+    SHUFFLE_THEOREMS[name] = ('shuffle_forest_label_common' if name == 'shuffle-forest-label-byte'
+                            else 'shuffle_layer_label_common')
 
 
 def shuffle_outputs(port):

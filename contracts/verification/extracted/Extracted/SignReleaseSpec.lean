@@ -46,7 +46,7 @@ theorem release_caller_factor (sk msg : Std.Array Std.U8 32#usize)
   obtain ⟨p,hp,hpv⟩ := WP.spec_imp_exists (pad16_pure_spec seed)
   rw [hpv] at hp
   simp only [hypertree.release_sign_inner, releaseCallerComposition, releaseAfterForest,
-    signerForsPhase, signerSerializeForest, hypertree.write16, hp, header_offset_add,
+    signerForsPhase, ← actual_forest_label, signerSerializeForest, hypertree.write16, hp, header_offset_add,
     header_last_sub, hypertree.report, bind_tc_ok, bind_assoc_eq, bind_eq_iff,
     Prod.forall, uncurry_apply_pair, forall_const, implies_true]
 

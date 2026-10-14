@@ -61,15 +61,23 @@ impl ShuffleSeed {
             // produce the identity permutation.
             return [0u8; 32];
         }
-        let mut h = Sha256::new();
-        h.update(b"sphincs-c10-shuffle-v1");
-        h.update(&self.0);
-        h.update(label);
-        let d = h.finalize();
-        let mut out = [0u8; 32];
-        out.copy_from_slice(&d);
-        out
+        shuffle_hash_parts(&[b"sphincs-c10-shuffle-v1", &self.0, label])
     }
+}
+
+/// The existing software SHA backend over ordered slices. Keeping this
+/// boundary separate lets extraction retain the seed branch and every input
+/// byte. Shuffle hashing stays on RustCrypto even with `hw-sha256` enabled.
+#[inline(always)]
+fn shuffle_hash_parts(parts: &[&[u8]]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    for part in parts {
+        h.update(part);
+    }
+    let d = h.finalize();
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&d);
+    out
 }
 
 /// One block of the existing RustCrypto shuffle stream. Keeping the hash

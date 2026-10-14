@@ -71,6 +71,13 @@ def fixtures(port):
                                 '  rewrite /shuffle_choice /max /=.'] + steps + ['  done.'])
         add(f'shuffle_order_fixture_{k}', lambda l: f'shuffle_order {n} {nums(stream,l)}', order, proof)
     seed = list(range(32))
+    add('shuffle_forest_label_fixture', lambda l: 'shuffle_forest_label', list(b'fors'),
+        '  by rewrite /shuffle_forest_label.')
+    for k, layer in enumerate((0, 1, 2, 4294967295, -1)):
+        add(f'shuffle_layer_label_fixture_{k}',
+            lambda l: f'shuffle_layer_label ({layer})',
+            list(b'wots-0\0' if layer == 0 else b'wots-1\0'),
+            '  by rewrite /shuffle_layer_label /=.')
     for k, label in enumerate((b'', b'wots0', b'fors', bytes([0, 255, 0, 128]))):
         add(f'shuffle_label_fixture_{k}',
             lambda l: f'shuffle_seed_preimage {nums(seed,l)} {nums(label,l)}',
@@ -98,7 +105,7 @@ def fixtures(port):
                    'proof. by rewrite /shuffle_choice /=. qed.'])
         lean.extend([f'  unless shuffle_choice {lo} {hi} {bound} == {expected} do',
                      f'    throw (IO.userError "shuffle_choice_fixture_{k} disagrees")'])
-    lean.extend(['  IO.println "OK: 30 independent paired shuffle fixtures; 12 orders agree with actual Rust corpus"',
+    lean.extend(['  IO.println "OK: 36 independent paired shuffle fixtures; 12 orders agree with actual Rust corpus"',
                  '#eval check', 'end C10ShuffleFixtures'])
     return {port / 'scratch/c10_shuffle_fixtures.ec': '\n'.join(ec)+'\n',
             root / 'Extracted/C10ShuffleFixtures.lean': '\n'.join(lean)+'\n'}

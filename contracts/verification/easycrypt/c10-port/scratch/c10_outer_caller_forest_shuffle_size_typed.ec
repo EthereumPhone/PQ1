@@ -30,7 +30,7 @@ module CommonInputForest (O : PrefixOracle) = {
     var subseed, order, step, t, sig, last, d, secrets, auths, roots;
     secrets <- nseq 13 (nseq 16 0);
     auths <- nseq 12 (nseq 11 (nseq 16 0)); roots <- nseq 13 (nseq 16 0);
-    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,[102;111;114;115]);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,shuffle_forest_label);
     order <@ PairedShuffle(PreparationView(O)).permutation(subseed,11);
     step <- 0;
     while (step < 12) {
@@ -71,7 +71,7 @@ module CommonInputLayer (O : PrefixOracle) = {
   proc sign(seed : raw_input, layer tree leaf : int, message shuffle : raw_input) : (layer_signature * raw_input) option = {
     var built, subseed, signed, sig, root, result;
     built <@ CommonInputMerkle(O).build(seed,layer,tree,leaf);
-    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,layer_label layer);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,shuffle_layer_label layer);
     signed <@ CommonPrivateWots(O).sign(seed,layer,tree,leaf,message,subseed);
     result <- None;
     if (signed <> None) {

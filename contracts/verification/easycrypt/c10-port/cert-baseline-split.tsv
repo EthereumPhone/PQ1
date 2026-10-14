@@ -2520,8 +2520,8 @@ cdrafts-split/C10TreeCallerBridge.ec	defined-op:f206f1d68df2	fors_fields	# line 
 cdrafts-split/C10TreeCallerBridge.ec	module:8392a053c3ce	CommonInputFors	# line 72
 cdrafts-split/C10TreeCallerBridge.ec	module:fcb4c61bf435	CommonInputMerkle	# line 125
 cdrafts-split/C10OuterCallerBridge.ec	defined-op:3e453665a4d9	outer_counters	# line 13
-cdrafts-split/C10OuterCallerBridge.ec	module:5d724b676877	CommonInputForest	# line 67
-cdrafts-split/C10OuterCallerBridge.ec	module:ec49c9e42a01	CommonInputLayer	# line 109
+cdrafts-split/C10OuterCallerBridge.ec	module:a2f632a40081	CommonInputForest
+cdrafts-split/C10OuterCallerBridge.ec	module:1374fb0ca290	CommonInputLayer
 cdrafts-split/C10OuterCallerBridge.ec	module:f0ef04371045	CommonInputSigner	# line 130
 cdrafts-split/C10Representation.ec	defined-op:8b52c0b1f0b4	shuffle_seed_preimage	# line 74
 cdrafts-split/C10Representation.ec	defined-op:1f16e9e3b017	shuffle_block_preimage	# line 77
@@ -2530,3 +2530,5 @@ cdrafts-split/C10Representation.ec	defined-op:93526f7afab4	shuffle_swap	# line 8
 cdrafts-split/C10Representation.ec	defined-op:507686ca8c0b	shuffle_order	# line 86
 cdrafts-split/C10ShuffleBridge.ec	defined-op:db88023b3f56	shuffle_finish	# line 19
 cdrafts-split/C10ShuffleBridge.ec	module:57516d53c2ff	PairedShuffle	# line 47
+cdrafts-split/C10Representation.ec	defined-op:4f82711b6109	shuffle_layer_label
+cdrafts-split/C10Representation.ec	defined-op:6cf7543fe27f	shuffle_forest_label

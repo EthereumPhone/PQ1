@@ -354,3 +354,10 @@ Extracted.C10ShuffleBridge.seed_zero_iff
 Extracted.C10ShuffleBridge.stream_counts_exact
 Extracted.C10ShuffleBridge.shuffle_prefix_exact
 Extracted.C10ShuffleBridge.shuffle_exact
+
+# Extracted derivation and label correspondence: kernel-only.
+Extracted.Equiv.shuffle_seed_compare
+Extracted.Equiv.shuffle_derive_exact
+Extracted.Equiv.shuffle_derive_total
+Extracted.Equiv.actual_forest_label
+Extracted.Equiv.actual_layer_label

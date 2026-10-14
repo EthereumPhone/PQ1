@@ -71,6 +71,12 @@ op wots_private_preimage (secret : (int list)) (layer : int) (tree : int) (kp : 
 op fors_private_preimage (secret : (int list)) (ht : int) (tree : int) (leaf : int) : (int list) =
   (secret ++ [103; 111; 114; 115] ++ (u32_bytes ht) ++ (u32_bytes tree) ++ (u32_bytes leaf)).
 
+op shuffle_forest_label  : (int list) =
+  [102; 111; 114; 115].
+
+op shuffle_layer_label (layer : int) : (int list) =
+  (if layer = 0 then [119; 111; 116; 115; 45; 48; 0] else [119; 111; 116; 115; 45; 49; 0]).
+
 op shuffle_seed_preimage (seed : (int list)) (label : (int list)) : (int list) =
   ([115; 112; 104; 105; 110; 99; 115; 45; 99; 49; 48; 45; 115; 104; 117; 102; 102; 108; 101; 45; 118; 49] ++ seed ++ label).
 

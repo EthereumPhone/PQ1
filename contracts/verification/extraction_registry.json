@@ -13,6 +13,7 @@
     "sphincs-c10/src/shuffle.rs": [
       "extract-sign-release",
       "extract-sign-forest",
+      "extract-shuffle-derive",
       "extract-shuffle",
       "extract-wots-sign"
     ],
@@ -129,6 +130,7 @@
     "extract-secure-wrapper",
     "extract-sign-release",
     "extract-sign-forest",
+    "extract-shuffle-derive",
     "extract-shuffle",
     "extract-wots-sign",
     "extract-xmss-auth",
@@ -232,7 +234,7 @@
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
-        "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023",
+        "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7",
         "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
@@ -240,7 +242,7 @@
       "raw_generated_sha256": {
         "Funs.lean": "ce5ef2c5d98d00f210aab79e7dfe5e2e29a9e5d11b0280b115f3f014b60f4e52",
         "Types.lean": "7427b8c6f5dde0e6ccd57964b3fc8af141f52a3b50d930783daade8d8586d533",
-        "FunsExternal_Template.lean": "5e8689480b6848564aa2942817c4623717a74ad37f2f612cb81ff39bf4f64b8c"
+        "FunsExternal_Template.lean": "f8d3f508bf82fbc5086a645457fa884d36ee45c4c18f4d17ca7ec9723356ff2b"
       },
       "generated_lean": [
         "contracts/verification/extracted/Extracted/SignRelease/Funs.lean",
@@ -276,7 +278,7 @@
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
-        "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023",
+        "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7",
         "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
@@ -284,7 +286,7 @@
       "raw_generated_sha256": {
         "Funs.lean": "13dffc08c0a5c45e625f8c8cd6b322885a075ec093ab6e022fed03c012f6e2a9",
         "Types.lean": "7427b8c6f5dde0e6ccd57964b3fc8af141f52a3b50d930783daade8d8586d533",
-        "FunsExternal_Template.lean": "8400db746be5588c491861f532d04e1f4f679916dc0b2317fd0eadf70f53f02f"
+        "FunsExternal_Template.lean": "339bfc1820b07bab87bd0eda41c33e93e222c67e3b35f5f58c16afcb8029b94f"
       },
       "generated_lean": [
         "contracts/verification/extracted/Extracted/SignForest/Funs.lean",
@@ -294,11 +296,41 @@
       "generated_lean_sha256": [
         "5a7aad96cf159de622c16c44406f42b0e1f78db876c6dd7a4f97982fcd431ae8",
         "052d99a240ec7edd55318a43d6d6fa136aedf4e8b599095580802830ac60bb9a",
-        "b774b4258d93a7765d49c53f6675765458ddd9c395b1c73b8c33de04bd122bff"
+        "1719362ae280aed8e69bc624b3a97aa9a070a89805ee487a52fc396a9da37a4d"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/SignForestPrefix.lean",
       "headline_theorem": "firmware_sign_fors_prefix",
       "fresh": true
+    },
+    {
+      "target": "extract-shuffle-derive",
+      "make_dir": "contracts/verification",
+      "crate": "sphincs-c10",
+      "rust_files": [
+        "sphincs-c10/src/shuffle.rs"
+      ],
+      "rust_files_sha256": [
+        "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "02f3f701415acab4e40d677d08642761f0c47d489c6f3ea49ddc14e6aa500413",
+        "Types.lean": "d6bb06adb1dde126d91a3754b7be26d795bf5f4527ae429c0e7989f80d99f749",
+        "FunsExternal_Template.lean": "05b7302d665deb3781b92e6af299067bfa512039542db65ce81be7fada4bade3"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/ShuffleDerive/Funs.lean",
+        "contracts/verification/extracted/Extracted/SignForest/Types.lean",
+        "contracts/verification/extracted/Extracted/ShuffleDerive/FunsExternal.lean"
+      ],
+      "generated_lean_sha256": [
+        "4a1995882fdcf6b9d912bf15a4aa82fa65094bae05f621c389b721239aa6e004",
+        "052d99a240ec7edd55318a43d6d6fa136aedf4e8b599095580802830ac60bb9a",
+        "ffee5b4a3f015e1a291905ae4bd53731d3e1e649a66910e59e6874ee5e9c782d"
+      ],
+      "theorem_file": "contracts/verification/extracted/Extracted/ShuffleDeriveSpec.lean",
+      "headline_theorem": "shuffle_derive_exact",
+      "fresh": true,
+      "note": "Actual zero branch and ordered input construction; supplied software SHA backend remains explicit. Generated seed type is shared with SignForest and compared exactly."
     },
     {
       "target": "extract-shuffle",
@@ -308,12 +340,12 @@
         "sphincs-c10/src/shuffle.rs"
       ],
       "rust_files_sha256": [
-        "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023"
+        "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "d73dad3fca2dd1718013facb86912ab00cfa85e6b028d44c085bad86730dfb70",
+        "Funs.lean": "d77ccd6f0a2608ef46d46096989fc118f1a85693c3ba779cb07fe04766265a5d",
         "Types.lean": "f76039f8a48fb9021879686236722086b4ab85aa49aa9ca60518b9ceeb4f4cf4",
-        "FunsExternal_Template.lean": "13c7d24bd20a930751d5d7f3446f177fa5fbd0fd9649956b7b5233e32f9a1c3e"
+        "FunsExternal_Template.lean": "d58fddf5a1c3b885311d442cc3880ef53d964a489736bc89e624d156563475bc"
       },
       "generated_lean": [
         "contracts/verification/extracted/Extracted/Shuffle/Funs.lean",
@@ -321,7 +353,7 @@
         "contracts/verification/extracted/Extracted/Shuffle/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "86d9a0622aeb3a947b33c356547a7e977e6604fa66f0c062307de6b78de87bad",
+        "3c66ac5b9c3c4877d1dd659d978c9de6b7559c72758e31add94a2bcb29967f72",
         "f76039f8a48fb9021879686236722086b4ab85aa49aa9ca60518b9ceeb4f4cf4",
         "8c79d778f8c7588078a112d081ff763cd9907a178c6662357029e3015dadea83"
       ],
@@ -347,13 +379,13 @@
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
-        "360ab6808e57a38e905eaa9577090ec49d2da5c3a03f6e208763a6f25b9fe023",
+        "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7",
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "e9edb20b18879750aab8af5a6e0d26e2ea1414929dfa79935c7615461f41ccc7",
         "Types.lean": "b915a476dc32b9513747ca9917f4e398b1a9e729b18ba04d69d3b09f5575b15e",
-        "FunsExternal_Template.lean": "c6553a83326e66fb79acdd65c570b3d0d0efc94761e04be1cfc60df2f28ead0d"
+        "FunsExternal_Template.lean": "41da23e1e92c07b333b9290bea4394c2ecfb3e1b0e7d1346e9972a0dc8a9f294"
       },
       "generated_lean": [
         "contracts/verification/extracted/Extracted/WotsSign/Funs.lean",

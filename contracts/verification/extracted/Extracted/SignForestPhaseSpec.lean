@@ -39,8 +39,7 @@ theorem sign_forest_array_ext {α : Type} [Inhabited α] {n : Std.Usize}
 
 private theorem derive_total (seed : shuffle.ShuffleSeed) (label : Slice Std.U8) :
     shuffle.ShuffleSeed.derive seed label ⦃ _ => True ⦄ := by
-  unfold shuffle.ShuffleSeed.derive
-  split <;> simp only [WP.spec_ok, True.intro]
+  exact shuffle_derive_total seed label
 
 /-- All output values are determined by the signing inputs, independently of
     shuffle scheduling. The final digest index is not read by this phase. -/
@@ -54,7 +53,7 @@ theorem signer_fors_phase_spec (seed sk : Std.Array Std.U8 32#usize) (ht : Std.U
   unfold signerForsPhase
   simp only [lift, core.convert.num.FromU64U32.from]
   let* ⟨derived, _⟩ ← derive_total shuffle
-    (Array.to_slice (Array.make 4#usize [102#u8, 111#u8, 114#u8, 115#u8]))
+    (Array.to_slice pairedForestLabel)
   let* ⟨order, ho⟩ ← shuffle_permutation_spec derived 12#usize (by decide)
   let* ⟨roots, secrets, paths, hlr, hls, hrows⟩ ← firmware_sign_fors_normal_loop
     seed sk ht indices progress order

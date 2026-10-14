@@ -553,6 +553,30 @@ proof.
   rewrite step_1.
   done.
 qed.
+lemma shuffle_forest_label_fixture : shuffle_forest_label = [102; 111; 114; 115].
+proof.
+  by rewrite /shuffle_forest_label.
+qed.
+lemma shuffle_layer_label_fixture_0 : shuffle_layer_label (0) = [119; 111; 116; 115; 45; 48; 0].
+proof.
+  by rewrite /shuffle_layer_label /=.
+qed.
+lemma shuffle_layer_label_fixture_1 : shuffle_layer_label (1) = [119; 111; 116; 115; 45; 49; 0].
+proof.
+  by rewrite /shuffle_layer_label /=.
+qed.
+lemma shuffle_layer_label_fixture_2 : shuffle_layer_label (2) = [119; 111; 116; 115; 45; 49; 0].
+proof.
+  by rewrite /shuffle_layer_label /=.
+qed.
+lemma shuffle_layer_label_fixture_3 : shuffle_layer_label (4294967295) = [119; 111; 116; 115; 45; 49; 0].
+proof.
+  by rewrite /shuffle_layer_label /=.
+qed.
+lemma shuffle_layer_label_fixture_4 : shuffle_layer_label (-1) = [119; 111; 116; 115; 45; 49; 0].
+proof.
+  by rewrite /shuffle_layer_label /=.
+qed.
 lemma shuffle_label_fixture_0 : shuffle_seed_preimage [0; 1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15; 16; 17; 18; 19; 20; 21; 22; 23; 24; 25; 26; 27; 28; 29; 30; 31] [] = [115; 112; 104; 105; 110; 99; 115; 45; 99; 49; 48; 45; 115; 104; 117; 102; 102; 108; 101; 45; 118; 49; 0; 1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15; 16; 17; 18; 19; 20; 21; 22; 23; 24; 25; 26; 27; 28; 29; 30; 31].
 proof.
   by rewrite /shuffle_seed_preimage /=.

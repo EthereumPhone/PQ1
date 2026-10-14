@@ -4329,3 +4329,7 @@ cdrafts-split/C10ShuffleBridge.ec::shuffle_finish_initial	0a0771d893a8440f9a4d1e
 cdrafts-split/C10ShuffleBridge.ec::shuffle_derive_common	3c1b58694fe5487198d50e252f45809f
 cdrafts-split/C10ShuffleBridge.ec::shuffle_permutation_common	531fda6fba08ac3798dc0392def60666
 op:cdrafts-split/C10ShuffleBridge.ec::shuffle_finish	366d6aeb47edbf0f9986bdeb974a3000
+cdrafts-split/C10ShuffleBridge.ec::shuffle_forest_label_common	9e0c5577d702e3eb18e6e4e4aefdc721
+cdrafts-split/C10ShuffleBridge.ec::shuffle_layer_label_common	331097e69b1bcf903dcd825b8df41520
+op:cdrafts-split/C10Representation.ec::shuffle_forest_label	0d57c45f258c037b316358c9fc6b4ee5
+op:cdrafts-split/C10Representation.ec::shuffle_layer_label	c82bd7bb978d1279555ce1b45061767a

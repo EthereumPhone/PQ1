@@ -3,8 +3,17 @@
    identify that oracle with the supplied concrete-SHA model used in Lean. *)
 require import AllCore List IntDiv.
 require import C10Bytes C10RawOracle PrefixGuess PrefixHybrid KeygenPrefixes RawKeygen RawShuffle.
+require import RawLayer.
 require import C10Representation.
 require import C10AddressInputBridge C10CallerInputBridge.
+
+lemma shuffle_forest_label_common : [102;111;114;115] = shuffle_forest_label.
+proof. by rewrite /shuffle_forest_label.
+qed.
+
+lemma shuffle_layer_label_common layer : layer_label layer = shuffle_layer_label layer.
+proof. by rewrite /layer_label /shuffle_layer_label.
+qed.
 
 lemma shuffle_seed_common seed label :
   shuffle_tag ++ seed ++ label = shuffle_seed_preimage seed label.

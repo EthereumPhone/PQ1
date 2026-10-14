@@ -75,7 +75,7 @@ module CommonInputForest (O : PrefixOracle) = {
     var subseed, order, step, t, sig, last, d, secrets, auths, roots;
     secrets <- nseq 13 (nseq 16 0);
     auths <- nseq 12 (nseq 11 (nseq 16 0)); roots <- nseq 13 (nseq 16 0);
-    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,[102;111;114;115]);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,shuffle_forest_label);
     order <@ PairedShuffle(PreparationView(O)).permutation(subseed,12);
     step <- 0;
     while (step < 12) {
@@ -116,7 +116,7 @@ module CommonInputLayer (O : PrefixOracle) = {
   proc sign(seed : raw_input, layer tree leaf : int, message shuffle : raw_input) : (layer_signature * raw_input) option = {
     var built, subseed, signed, sig, root, result;
     built <@ CommonInputMerkle(O).build(seed,layer,tree,leaf);
-    subseed <@ PairedShuffle(PreparationView(O)).derive(seed,layer_label layer);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(seed,shuffle_layer_label layer);
     signed <@ CommonPrivateWots(O).sign(seed,layer,tree,leaf,message,subseed);
     result <- None;
     if (signed <> None) {
@@ -200,7 +200,7 @@ proof.
      0 <= ht{1} < 2^32 /\ perm_eq order{1} (range 0 12)).
   + call (caller_shuffle_paired (PreparationView(O)) 12).
     call (shuffle_derive_common (PreparationView(O))).
-    by auto.
+    by auto; rewrite /shuffle_forest_label.
   wp.
   call (_ : ={arg,glob O} ==> ={res,glob O}); first by sim.
   wp; call (_ : ={arg,glob O} ==> ={res,glob O}); first by sim.
@@ -269,7 +269,8 @@ proof.
     (signed{1} <> None => 0 <= (oget signed{1}).`2 < signing_budget)).
   + call (outer_wots_sign O).
     call (shuffle_derive_common (PreparationView(O))).
-    call (caller_merkle_build O); by auto; rewrite /caller_fields /tree_fields; progress.
+    call (caller_merkle_build O); by auto;
+      rewrite /caller_fields /tree_fields /layer_label /shuffle_layer_label; progress.
   sp 1 1; if; first by auto.
   + wp; call (caller_layer_recover O); auto => /> &m hl0 hl ht0 ht hf0 hf hc hs.
     have [hc0 hcb] := hc hs.

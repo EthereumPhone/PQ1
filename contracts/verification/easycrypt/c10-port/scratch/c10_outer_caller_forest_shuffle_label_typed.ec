@@ -71,7 +71,7 @@ module CommonInputLayer (O : PrefixOracle) = {
   proc sign(seed : raw_input, layer tree leaf : int, message shuffle : raw_input) : (layer_signature * raw_input) option = {
     var built, subseed, signed, sig, root, result;
     built <@ CommonInputMerkle(O).build(seed,layer,tree,leaf);
-    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,layer_label layer);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,shuffle_layer_label layer);
     signed <@ CommonPrivateWots(O).sign(seed,layer,tree,leaf,message,subseed);
     result <- None;
     if (signed <> None) {

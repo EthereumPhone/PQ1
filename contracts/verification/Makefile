@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-secure-wrapper extract-sign-release extract-sign-forest extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-secure-wrapper extract-sign-release extract-sign-forest extract-shuffle-derive extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1963,6 +1963,7 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.C10ShuffleBridge 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/C10ShuffleFixtures.lean
 	@$(_FV_PYTHON3) scripts/test_c10_shuffle_controls.py
+	@$(_FV_PYTHON3) scripts/test_shuffle_derive_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignHypertreeCaller Extracted.SignHypertreeDiffVectors 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/SignHypertreeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_sign_hypertree_proof_controls.py
@@ -2764,6 +2765,23 @@ _extract-xmss-root-impl:
 	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
 	@diff -u $(EXTRACTED_DIR)/Extracted/XmssRoot/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-xmss-root $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Actual seed branch and ordered software-SHA input slices.
+_extract-shuffle-derive-impl:
+	@$(_begin_private_extraction)
+	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
+	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
+	  --opaque 'sphincs_c10::shuffle::shuffle_hash_parts' \
+	  --start-from 'sphincs_c10::shuffle::_::derive' --dest-file $${EXTRACTION_TMP_ROOT}/shufflederive.llbc 2>&1 | tail -1 )
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
+	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/shufflederive.llbc
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
+	  --sed-import 'Shufflederive.Types=Extracted.SignForest.Types' \
+	  --sed-import 'Shufflederive.FunsExternal=Extracted.ShuffleDerive.FunsExternal'
+	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
+	  --add-import Extracted.FindCount.Types
+	@diff -u $(EXTRACTED_DIR)/Extracted/ShuffleDerive/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-shuffle-derive $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 
 # Actual initialization, seed fold, stream assembly and Fisher-Yates swaps.
 _extract-shuffle-impl:

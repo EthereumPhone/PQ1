@@ -3,8 +3,11 @@
    identify that oracle with the supplied concrete-SHA model used in Lean. *)
 require import AllCore List IntDiv.
 require import C10Bytes C10RawOracle PrefixGuess PrefixHybrid KeygenPrefixes RawKeygen RawShuffle.
+require import RawLayer.
 require import C10Representation.
 require import C10AddressInputBridge C10CallerInputBridge.
+
+
 
 
 

@@ -38,7 +38,7 @@ def U8.Insts.ZeroizeDefaultIsZeroes : zeroize.DefaultIsZeroes Std.U8 := {
 }
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop body 0:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 115:4-118:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 123:4-126:5
     Visibility: public -/
 @[rust_loop_body]
 def shuffle.fisher_yates_loop0.body
@@ -55,7 +55,7 @@ def shuffle.fisher_yates_loop0.body
   else ok (done buf)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop 0:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 115:4-118:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 123:4-126:5
     Visibility: public -/
 @[rust_loop]
 def shuffle.fisher_yates_loop0
@@ -67,7 +67,7 @@ def shuffle.fisher_yates_loop0
     (buf, t)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop body 1:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 131:4-134:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 139:4-142:5
     Visibility: public -/
 @[rust_loop_body]
 def shuffle.fisher_yates_loop1.body
@@ -83,7 +83,7 @@ def shuffle.fisher_yates_loop1.body
   else ok (done nonzero)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop 1:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 131:4-134:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 139:4-142:5
     Visibility: public -/
 @[rust_loop]
 def shuffle.fisher_yates_loop1
@@ -95,7 +95,7 @@ def shuffle.fisher_yates_loop1
     (nonzero, s)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop body 3:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 157:8-161:9
+    Source: 'sphincs-c10/src/shuffle.rs', lines 165:8-169:9
     Visibility: public -/
 @[rust_loop_body]
 def shuffle.fisher_yates_loop2_loop0.body
@@ -114,7 +114,7 @@ def shuffle.fisher_yates_loop2_loop0.body
   else ok (done stream)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop 3:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 157:8-161:9
+    Source: 'sphincs-c10/src/shuffle.rs', lines 165:8-169:9
     Visibility: public -/
 @[rust_loop]
 def shuffle.fisher_yates_loop2_loop0
@@ -128,7 +128,7 @@ def shuffle.fisher_yates_loop2_loop0
     (stream, w, b)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop body 2:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 150:4-164:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 158:4-172:5
     Visibility: public -/
 @[rust_loop_body]
 def shuffle.fisher_yates_loop2.body
@@ -151,7 +151,7 @@ def shuffle.fisher_yates_loop2.body
   else ok (done stream)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop 2:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 150:4-164:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 158:4-172:5
     Visibility: public -/
 @[rust_loop]
 def shuffle.fisher_yates_loop2
@@ -164,7 +164,7 @@ def shuffle.fisher_yates_loop2
     (stream, blk)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop body 4:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 172:4-200:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 180:4-208:5
     Visibility: public -/
 @[rust_loop_body]
 def shuffle.fisher_yates_loop3.body
@@ -199,7 +199,7 @@ def shuffle.fisher_yates_loop3.body
   else ok (done buf)
 
 /-- [sphincs_c10::shuffle::fisher_yates]: loop 4:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 172:4-200:5
+    Source: 'sphincs-c10/src/shuffle.rs', lines 180:4-208:5
     Visibility: public -/
 @[rust_loop]
 def shuffle.fisher_yates_loop3
@@ -213,7 +213,7 @@ def shuffle.fisher_yates_loop3
     (buf, pos, i)
 
 /-- [sphincs_c10::shuffle::fisher_yates]:
-    Source: 'sphincs-c10/src/shuffle.rs', lines 108:0-205:1
+    Source: 'sphincs-c10/src/shuffle.rs', lines 116:0-213:1
     Visibility: public -/
 def shuffle.fisher_yates
   (seed : Array Std.U8 32#usize) (n : Std.Usize) :

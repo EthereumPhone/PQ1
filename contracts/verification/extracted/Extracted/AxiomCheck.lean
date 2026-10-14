@@ -435,3 +435,10 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10ShuffleBridge.stream_counts_exact
 #print axioms Extracted.C10ShuffleBridge.shuffle_prefix_exact
 #print axioms Extracted.C10ShuffleBridge.shuffle_exact
+
+-- Actual seed derivation and caller label construction.
+#print axioms Extracted.Equiv.shuffle_seed_compare
+#print axioms Extracted.Equiv.shuffle_derive_exact
+#print axioms Extracted.Equiv.shuffle_derive_total
+#print axioms Extracted.Equiv.actual_forest_label
+#print axioms Extracted.Equiv.actual_layer_label

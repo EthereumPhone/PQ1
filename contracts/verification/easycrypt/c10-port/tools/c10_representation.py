@@ -6,7 +6,8 @@ This generator and the cross-tool interpretation of arithmetic, lists and ordere
 tuples remain a disclosed TCB. The endpoint proofs are independently checked; this
 is not a cross-kernel proof exporter. Default operation checks existing outputs.
 Words use mathematical signed integers. Count subtraction is saturated at zero;
-count division accepts only a positive constant divisor. No machine arithmetic,
+count division accepts only a positive constant divisor. Zero tests select between
+branches of the same type. No machine arithmetic,
 oracle, probability, arbitrary source injection, or cross-kernel export.
 """
 from dataclasses import dataclass
@@ -78,6 +79,9 @@ def index(bs, i, default):
 def update(bs, i, value):
     assert bs.ty == LIST(value.ty) and i.ty == COUNT
     return Expr("update", (bs,i,value), bs.ty)
+def if_zero(n, zero, nonzero):
+    assert n.ty in (COUNT, INT) and zero.ty == nonzero.ty
+    return Expr("if_zero", (n,zero,nonzero), zero.ty)
 
 DEFS = []
 def define(name, params, body):
@@ -168,6 +172,11 @@ fors_private_preimage = define("fors_private_preimage",(secret,ht,tree,leaf),
 # Shuffle inputs and exact descending Fisher-Yates schedule. Stream/order values
 # are counts here: the endpoint proofs establish that actual bytes are in range.
 label = var("label", BYTES)
+shuffle_forest_label = define("shuffle_forest_label", (),
+    items(INT,*(literal(x,INT) for x in b"fors")))
+shuffle_layer_label = define("shuffle_layer_label", (layer,),
+    if_zero(layer, items(INT,*(literal(x,INT) for x in b"wots-0\0")),
+        items(INT,*(literal(x,INT) for x in b"wots-1\0"))))
 shuffle_seed_preimage = define("shuffle_seed_preimage", (seed,label),
     cat(items(INT,*(literal(x,INT) for x in b"sphincs-c10-shuffle-v1")),seed,label))
 shuffle_block_preimage = define("shuffle_block_preimage", (seed,nonce),
@@ -227,6 +236,8 @@ def render(e, lean):
         return f"(List.getD {r(bs)} {r(i)} {r(default)})" if lean else f"(nth {r(default)} {r(bs)} {r(i)})"
     if op == "update":
         return f"({'List.set' if lean else 'put'} {r(a[0])} {r(a[1])} {r(a[2])})"
+    if op == "if_zero":
+        return f"(if {r(a[0])} = 0 then {r(a[1])} else {r(a[2])})"
     if op == "call": return "(" + a[0] + " " + " ".join(r(x) for x in a[1:]) + ")"
     raise ValueError(op)
 

@@ -1,6 +1,7 @@
 /- Kernel equality connects the proven serializer to the actual signer layer.
    Cryptographic computation and all Result failures remain unchanged. -/
 import Extracted.SignLayerSerialize
+import Extracted.C10ShuffleLabels
 open Aeneas Aeneas.Std Result ControlFlow Error
 namespace Extracted.Equiv
 open sphincs_c10
@@ -65,18 +66,7 @@ def signerLayerUsingSerialization (serialize : LayerSerialization)
       merkle.build_subtree_with_auth seed sk_seed layer i8 idx_leaf progress
         pct_lo pct_hi
     hypertree.report progress pct_hi
-    let wots_label ←
-      match layer with
-      | 0#uscalar =>
-        ok
-          (Array.make 7#usize [
-             119#u8, 111#u8, 116#u8, 115#u8, 45#u8, 48#u8, 0#u8
-             ] : Array Std.U8 7#usize)
-      | _ =>
-        ok
-          (Array.make 7#usize [
-             119#u8, 111#u8, 116#u8, 115#u8, 45#u8, 49#u8, 0#u8
-             ] : Array Std.U8 7#usize)
+    let wots_label ← Result.ok (pairedLayerLabel layer)
     let s ← lift (Array.to_slice wots_label)
     let wots_shuffle_seed ← sphincs_c10.shuffle.ShuffleSeed.derive shuffle s
     let i9 ← lift (UScalar.cast .U64 idx_tree1)
@@ -144,6 +134,8 @@ theorem signer_layer_serialization_factor
       try delta hypertree.sign_inner_loop3.body.match_3
       try delta signerLayerUsingSerialization.match_1
       try delta signerLayerUsingSerialization.match_3
+      simp only [← actual_layer_label]
+      delta actual_layer_label.match_1
       with_reducible rfl
     _ = _ := by rw [layerSerialization_eq]; rfl
 

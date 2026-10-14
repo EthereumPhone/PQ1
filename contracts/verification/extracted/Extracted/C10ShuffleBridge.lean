@@ -1,8 +1,9 @@
 /- Exact shuffle endpoints and extracted control flow. The supplied SHA block
-   and seed-derivation models remain backend boundaries; the paired expression
+   and ordered-parts hash models remain backend boundaries; the paired expression
    generator and its cross-tool interpretation are not a cross-kernel exporter. -/
 import Extracted.C10Representation
 import Extracted.C10HashInputBridge
+import Extracted.C10ShuffleLabels
 import Extracted.ShuffleOrder
 import Extracted.SignForest.FunsExternal
 
@@ -48,8 +49,17 @@ theorem modeled_shuffle_derive (seed : shuffle.ShuffleSeed) (label : Slice Std.U
       if seed.val = List.replicate 32 0#u8 then .ok (Array.repeat 32#usize 0#u8)
       else .ok (sha256_pure (bytesOfInts
         (shuffle_seed_preimage (byteInts seed.val) (byteInts label.val)))) := by
-  rw [← shuffle_seed_input, bytesOfInts_byteInts]
-  rfl
+  rw [shuffle_derive_exact]
+  have input :
+      bytesOfInts (shuffle_seed_preimage (byteInts seed.val) (byteInts label.val)) =
+        [115#u8,112#u8,104#u8,105#u8,110#u8,99#u8,115#u8,45#u8,99#u8,
+         49#u8,48#u8,45#u8,115#u8,104#u8,117#u8,102#u8,102#u8,108#u8,
+         101#u8,45#u8,118#u8,49#u8] ++ seed.val ++ label.val := by
+    have app (a b : List Int) : bytesOfInts (a ++ b) = bytesOfInts a ++ bytesOfInts b :=
+      List.map_append
+    simp only [shuffle_seed_preimage, app, bytesOfInts_byteInts]
+    rfl
+  rw [input]
 
 theorem modeled_shuffle_block (seed : Std.Array Std.U8 32#usize) (counter : Std.U32) :
     shuffle.shuffle_hash_block seed counter = .ok (sha256_pure (bytesOfInts

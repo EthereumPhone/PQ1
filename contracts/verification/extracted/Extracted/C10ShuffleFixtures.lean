@@ -27,6 +27,18 @@ def check : IO Unit := do
     throw (IO.userError "shuffle_order_fixture_10 disagrees")
   unless shuffle_order 64 [100, 154, 75, 71, 187, 153, 160, 227, 82, 76, 15, 207, 155, 154, 90, 152, 19, 67, 250, 36, 241, 102, 238, 78, 33, 97, 51, 138, 184, 16, 7, 157, 52, 84, 24, 119, 200, 51, 231, 17, 79, 201, 84, 174, 23, 58, 19, 187, 5, 146, 70, 206, 118, 202, 134, 65, 21, 206, 109, 212, 146, 101, 160, 222, 4, 189, 255, 202, 211, 96, 4, 120, 212, 24, 200, 223, 182, 135, 49, 97, 49, 74, 218, 147, 234, 162, 175, 80, 79, 232, 209, 80, 136, 183, 4, 137, 117, 116, 41, 240, 84, 48, 153, 154, 160, 165, 48, 8, 48, 6, 181, 112, 106, 142, 19, 253, 245, 82, 47, 250, 35, 64, 58, 59, 169, 207, 129, 187] == [39, 8, 52, 51, 43, 1, 20, 4, 44, 10, 0, 59, 58, 50, 46, 60, 61, 12, 5, 18, 26, 55, 25, 6, 36, 32, 63, 2, 56, 11, 24, 23, 57, 13, 40, 28, 41, 48, 31, 22, 42, 45, 29, 34, 49, 9, 53, 15, 30, 3, 27, 19, 16, 21, 7, 14, 33, 35, 47, 62, 54, 37, 17, 38] do
     throw (IO.userError "shuffle_order_fixture_11 disagrees")
+  unless shuffle_forest_label == [102, 111, 114, 115] do
+    throw (IO.userError "shuffle_forest_label_fixture disagrees")
+  unless shuffle_layer_label (0) == [119, 111, 116, 115, 45, 48, 0] do
+    throw (IO.userError "shuffle_layer_label_fixture_0 disagrees")
+  unless shuffle_layer_label (1) == [119, 111, 116, 115, 45, 49, 0] do
+    throw (IO.userError "shuffle_layer_label_fixture_1 disagrees")
+  unless shuffle_layer_label (2) == [119, 111, 116, 115, 45, 49, 0] do
+    throw (IO.userError "shuffle_layer_label_fixture_2 disagrees")
+  unless shuffle_layer_label (4294967295) == [119, 111, 116, 115, 45, 49, 0] do
+    throw (IO.userError "shuffle_layer_label_fixture_3 disagrees")
+  unless shuffle_layer_label (-1) == [119, 111, 116, 115, 45, 49, 0] do
+    throw (IO.userError "shuffle_layer_label_fixture_4 disagrees")
   unless shuffle_seed_preimage [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] [] == [115, 112, 104, 105, 110, 99, 115, 45, 99, 49, 48, 45, 115, 104, 117, 102, 102, 108, 101, 45, 118, 49, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] do
     throw (IO.userError "shuffle_label_fixture_0 disagrees")
   unless shuffle_seed_preimage [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31] [119, 111, 116, 115, 48] == [115, 112, 104, 105, 110, 99, 115, 45, 99, 49, 48, 45, 115, 104, 117, 102, 102, 108, 101, 45, 118, 49, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 119, 111, 116, 115, 48] do
@@ -63,6 +75,6 @@ def check : IO Unit := do
     throw (IO.userError "shuffle_choice_fixture_2 disagrees")
   unless shuffle_choice 0 255 43 == 42 do
     throw (IO.userError "shuffle_choice_fixture_3 disagrees")
-  IO.println "OK: 30 independent paired shuffle fixtures; 12 orders agree with actual Rust corpus"
+  IO.println "OK: 36 independent paired shuffle fixtures; 12 orders agree with actual Rust corpus"
 #eval check
 end C10ShuffleFixtures

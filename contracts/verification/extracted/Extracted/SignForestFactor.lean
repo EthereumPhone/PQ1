@@ -2,6 +2,7 @@
    The remaining serialization/hypertree continuation keeps its Result,
    including failures and divergence. This file does not prove that suffix. -/
 import Extracted.SignForestSpec
+import Extracted.C10ShuffleLabels
 open Aeneas Aeneas.Std Result ControlFlow Error
 namespace Extracted.Equiv
 open sphincs_c10
@@ -20,9 +21,7 @@ def signerForsPhase (seed sk_seed : Std.Array Std.U8 32#usize)
   let a2 := Array.repeat 16#usize 0#u8
   let a3 := Array.repeat 11#usize a2
   let fors_auth_paths := Array.repeat 12#usize a3
-  let s3 ←
-    lift (Array.to_slice
-      (Array.make 4#usize [ 102#u8, 111#u8, 114#u8, 115#u8 ]))
+  let s3 ← lift (Array.to_slice pairedForestLabel)
   let fors_shuffle_seed ← sphincs_c10.shuffle.ShuffleSeed.derive shuffle s3
   let fors_order ← sphincs_c10.shuffle.fisher_yates fors_shuffle_seed i1
   let (fors_roots1, fors_secrets1, fors_auth_paths1) ←
@@ -117,7 +116,7 @@ theorem signer_forest_factor (sk : Std.Array Std.U8 32#usize)
       let (s, sig, indices, ht, offset, last, left) ← signerHead sk seed root msg opt progress
       signerAfterHead sk s root progress shuffle sig indices ht offset last left) := by
   simp only [hypertree.sign_inner, signerHead, signerAfterHead, signerForsPhase, signerAfterForest,
-    bind_assoc_eq, bind_eq_iff]
+    ← actual_forest_label, bind_assoc_eq, bind_eq_iff]
   intro s hs u hu rg hrg
   rcases rg with ⟨r, digest⟩
   simp only [uncurry_apply_pair, bind_assoc_eq, bind_tc_ok, bind_eq_iff]

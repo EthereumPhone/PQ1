@@ -22,11 +22,14 @@ ACTUAL_CHANGES = [
 
 def fixture(definitions):
     base = representation_fixture(definitions)
+    labels = (ROOT / 'Extracted/C10ShuffleLabels.lean').read_text()
+    base += '\n' + labels.replace('import Extracted.C10HashInputBridge\n', '')
     proof = (ROOT / 'Extracted/C10ShuffleBridge.lean').read_text()
     imports, body = [], []
     for line in proof.splitlines():
         if line.startswith('import '):
-            if line in ('import Extracted.C10Representation', 'import Extracted.C10HashInputBridge'):
+            if line in ('import Extracted.C10Representation', 'import Extracted.C10HashInputBridge',
+                        'import Extracted.C10ShuffleLabels'):
                 continue
             if line not in base.splitlines():
                 imports.append(line)
@@ -64,7 +67,7 @@ def actual_fixture(before=None, after=None):
     first, rest = proof.split(opaque, 1)
     proof = first + opaque + rest.replace(opaque, '')
     proof = proof.replace('Extracted.C10ShuffleBridge', 'Extracted.C10ShuffleBridgeProbe')
-    proof = proof.replace('C10HashInputBridge Equiv', 'C10HashInputBridge ShuffleControl')
+    proof = proof.replace('C10HashInputBridge Equiv', 'C10HashInputBridge Equiv ShuffleControl')
     names = ['shuffle.fisher_yates_loop2_loop0', 'shuffle.fisher_yates_loop0',
              'shuffle.fisher_yates_loop1', 'shuffle.fisher_yates_loop2',
              'shuffle.fisher_yates_loop3', 'shuffle.fisher_yates']

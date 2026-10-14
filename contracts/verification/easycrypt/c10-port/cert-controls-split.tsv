@@ -1047,6 +1047,16 @@ scratch/c10_outer_caller_verify_default_counter_typed.ec	MUST-PASS	-
 scratch/c10_outer_caller_verify_default_counter_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_shuffle_positive.ec	MUST-PASS	-
 scratch/c10_shuffle_fixtures.ec	MUST-PASS	-
+scratch/c10_shuffle_forest_label_byte_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_forest_label_byte_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_layer_label_selection_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_layer_label_selection_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_layer_label_zero_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_layer_label_zero_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_layer_label_nonzero_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_layer_label_nonzero_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_shuffle_layer_label_terminator_typed.ec	MUST-PASS	-
+scratch/c10_shuffle_layer_label_terminator_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_shuffle_seed_tag_typed.ec	MUST-PASS	-
 scratch/c10_shuffle_seed_tag_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_shuffle_label_typed.ec	MUST-PASS	-

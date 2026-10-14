@@ -95,6 +95,10 @@ REQUIRED_ENTRY_PATHS = {
         ('sphincs-c10/src/hypertree.rs', 'sphincs-c10/src/fors.rs', 'sphincs-c10/src/wots.rs', 'sphincs-c10/src/merkle.rs', 'sphincs-c10/src/shuffle.rs', 'sphincs-c10/src/hash.rs', 'sphincs-c10/src/address.rs', 'sphincs-c10/src/params.rs'),
         ('contracts/verification/extracted/Extracted/SignForest/Funs.lean', 'contracts/verification/extracted/Extracted/SignForest/Types.lean', 'contracts/verification/extracted/Extracted/SignForest/FunsExternal.lean'),
     ),
+    'extract-shuffle-derive': (
+        ('sphincs-c10/src/shuffle.rs',),
+        ('contracts/verification/extracted/Extracted/ShuffleDerive/Funs.lean', 'contracts/verification/extracted/Extracted/SignForest/Types.lean', 'contracts/verification/extracted/Extracted/ShuffleDerive/FunsExternal.lean'),
+    ),
     'extract-shuffle': (
         ('sphincs-c10/src/shuffle.rs',),
         ('contracts/verification/extracted/Extracted/Shuffle/Funs.lean', 'contracts/verification/extracted/Extracted/Shuffle/Types.lean', 'contracts/verification/extracted/Extracted/Shuffle/FunsExternal.lean'),
@@ -254,7 +258,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "7ff21f25a56b2495c81cd3340290b2e5cb2d35f7dc1cc7762ab83cda0b29fa97"
+REGISTRY_BINDING_SHA256 = "aaac159743c578f8ec09d393225cd6a9b9367d206ccc91b117defc1daafd6a6a"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")

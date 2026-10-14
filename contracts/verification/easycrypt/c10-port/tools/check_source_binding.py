@@ -759,6 +759,30 @@ SOURCES = (
     'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_layer_shuffle_seed_reject.ec',
     'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_layer_shuffle_seed_typed.ec',
 
+    # Actual derivation and paired caller labels.
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_forest_label_byte_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_forest_label_byte_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_nonzero_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_nonzero_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_selection_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_selection_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_terminator_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_terminator_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_zero_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_layer_label_zero_typed.ec',
+    'contracts/verification/extracted/Extracted/C10ShuffleLabels.lean',
+    'contracts/verification/extracted/Extracted/ShuffleDerive/Funs.lean',
+    'contracts/verification/extracted/Extracted/ShuffleDerive/FunsExternal.lean',
+    'contracts/verification/extracted/Extracted/ShuffleDeriveSpec.lean',
+    'contracts/verification/extracted/Extracted/SignForestFactor.lean',
+    'contracts/verification/extracted/Extracted/SignForestPhaseSpec.lean',
+    'contracts/verification/extracted/Extracted/SignHypertreeLayer.lean',
+    'contracts/verification/extracted/Extracted/SignLayerCrypto.lean',
+    'contracts/verification/extracted/Extracted/SignLayerSerializeCaller.lean',
+    'contracts/verification/extracted/Extracted/SignReleaseSpec.lean',
+    'contracts/verification/scripts/test_shuffle_derive_controls.py',
+
+    'sphincs-c10/tests/shuffle_reference.rs',
 )
 
 
