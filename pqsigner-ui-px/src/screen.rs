@@ -1285,6 +1285,24 @@ pub fn confirm_index(visible: &[Screen]) -> usize {
         .map_or(CONFIRM_INDEX, |i| (i + 1).max(CONFIRM_INDEX))
 }
 
+/// Move `buf[from..n - 1]` up one slot to `buf[from + 1..n]` (`n` =
+/// `buf.len()`), leaving `buf[from]` for the caller to overwrite — the
+/// `copy_within(from..n - 1, from + 1)` the two inserts need.
+///
+/// An element loop rather than `copy_within` on purpose: those two calls
+/// were the only users of `memmove` in the secure image, and linking it cost
+/// 1,600 B of flash (measured 2026-10-14, ship-shaped pq1 image). The
+/// `split_at_mut` makes source and destination disjoint, so each step is a
+/// record copy, not an overlapping move.
+fn shift_up(buf: &mut [Screen], from: usize) {
+    let mut i = buf.len().saturating_sub(1);
+    while i > from {
+        let (lo, hi) = buf.split_at_mut(i);
+        hi[0] = lo[i - 1];
+        i -= 1;
+    }
+}
+
 /// A fixed-capacity transcript of up to [`MAX_SCREENS`] screens.
 ///
 /// Same ownership rules as `Pages`: the buffer is always fully allocated,
@@ -1386,7 +1404,7 @@ impl Screens {
             return Err(());
         }
         let c = ScreenBuilder::confirm(icon).look_tint(look).finish().map_err(|_| ())?;
-        self.buf.copy_within(at..len, at + 1);
+        shift_up(&mut self.buf[..=len], at);
         self.buf[at] = c;
         self.set_len(len + 1);
         Ok(Some(at))
@@ -1402,7 +1420,7 @@ impl Screens {
         if len == 0 || len >= MAX_SCREENS || self.buf[0].kind() != Some(Kind::Hero) {
             return Err(());
         }
-        self.buf.copy_within(1..len, 2);
+        shift_up(&mut self.buf[..=len], 1);
         self.buf[1] = *s;
         for moved in &mut self.buf[2..=len] {
             let flipped = match moved.side() {
