@@ -29,6 +29,7 @@
 //! Nothing here touches the transcript's bytes: it reads the proven
 //! `Screens` and paints.
 
+use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 
 use super::assets;
@@ -885,10 +886,22 @@ pub fn show_ending(e: Ending) {
 
 /// A film is running (started and not yet resolved).
 static FILM_LIVE: AtomicBool = AtomicBool::new(false);
-/// The film's runtime + the wall-clock ms of its last presented frame.
-/// Single-threaded driver state: touched only from the sign handler's
-/// thread of execution, never from an ISR.
-static mut FILM: Option<(Anim, u32)> = None;
+/// The film's runtime + the wall-clock ms of its last presented frame,
+/// valid only while `FILM_SET` is true. Single-threaded driver state:
+/// touched only from the sign handler's thread of execution, never from an
+/// ISR.
+///
+/// Zeroed `MaybeUninit` plus a flag rather than `Option<(Anim, u32)>`: the
+/// `Option`'s `None` is not all-zero bits, so it was stored as a 736-byte
+/// initialiser in flash (`.data`); a zeroed static lands in `.bss` (measured
+/// 2026-10-14).
+static mut FILM: MaybeUninit<(Anim, u32)> = MaybeUninit::zeroed();
+/// `FILM` holds a film: set by `film_start_with` after the write, cleared by
+/// `film_resolve` (which moves it out) and `film_abort`.
+static FILM_SET: AtomicBool = AtomicBool::new(false);
+// `film_abort` forgets the film by clearing `FILM_SET`; that is only sound
+// while the film owns nothing that needs dropping.
+const _: () = assert!(!core::mem::needs_drop::<(Anim, u32)>());
 
 /// The family the next film / ending dresses in: its disc and its two ending
 /// captions. Single-threaded driver state (set by the sign handler's pixel
@@ -972,8 +985,9 @@ pub fn film_start_with(s: &Screen) {
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
     // this is the only writer while `FILM_LIVE` is false.
     unsafe {
-        *core::ptr::addr_of_mut!(FILM) = Some((anim, now));
+        (*core::ptr::addr_of_mut!(FILM)).write((anim, now));
     }
+    FILM_SET.store(true, Ordering::Relaxed);
     FILM_LIVE.store(true, Ordering::Relaxed);
 }
 
@@ -987,11 +1001,12 @@ pub fn film_tick(_percent: u8) {
         return;
     }
     let now = timeout::now();
-    // SAFETY: single-threaded driver state; `film_start` published it and
-    // no other reference is live during this call.
-    let Some((anim, last)) = (unsafe { &mut *core::ptr::addr_of_mut!(FILM) }).as_mut() else {
+    if !FILM_SET.load(Ordering::Relaxed) {
         return;
-    };
+    }
+    // SAFETY: single-threaded driver state; `FILM_SET` says `film_start`
+    // wrote it, and no other reference is live during this call.
+    let (anim, last) = unsafe { (*core::ptr::addr_of_mut!(FILM)).assume_init_mut() };
     if now.wrapping_sub(*last) < FRAME_PERIOD_MS {
         return;
     }
@@ -1016,9 +1031,14 @@ pub fn film_resolve(e: Ending) {
     };
     let now = timeout::now();
     FILM_LIVE.store(false, Ordering::Relaxed);
-    // SAFETY: single-threaded driver state; taking it leaves `None` behind
-    // so a later tick is a no-op.
-    let taken = unsafe { core::ptr::replace(core::ptr::addr_of_mut!(FILM), None) };
+    // SAFETY: single-threaded driver state; `FILM_SET` says it was written,
+    // and clearing it first makes the move-out the last read, so a later
+    // tick is a no-op.
+    let taken = if FILM_SET.swap(false, Ordering::Relaxed) {
+        Some(unsafe { (*core::ptr::addr_of_mut!(FILM)).assume_init_read() })
+    } else {
+        None
+    };
     let mut anim = match taken {
         Some((anim, _)) => anim,
         None => {
@@ -1095,10 +1115,8 @@ impl Drop for FilmLanding {
 /// Drop a running film without landing it (error paths).
 pub fn film_abort() {
     FILM_LIVE.store(false, Ordering::Relaxed);
-    // SAFETY: single-threaded driver state.
-    unsafe {
-        *core::ptr::addr_of_mut!(FILM) = None;
-    }
+    // Forget the film; it needs no drop (asserted at `FILM`).
+    FILM_SET.store(false, Ordering::Relaxed);
 }
 
 /// The busy look while the device computes (split/join film pending: a
