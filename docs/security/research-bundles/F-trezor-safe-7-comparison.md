@@ -1040,7 +1040,18 @@ make pin-gate-hw-counter-e2e # three-way per-attempt + in-run recovery; no reboo
 make pin-gate-wipe-e2e       # 10 wrong PINs → assert factory-reset on both SEs
 make wipe-for-wizard         # dev-only: wipe both SEs + page 124, halt; cold boot enters wizard
 cd contracts/smart-wallet && forge test -vv
-cargo test -p sphincs-tz-secure --tests --release
+
+# The secure suite. USE THE FEATURE SET, not `--tests --release` with the
+# defaults: the pixel-UI screen goldens are authored under CI's set, where
+# `debug-log` paints `! DEV BUILD` as screen 1. Drop `debug-log` and every
+# screen index shifts, so three tests go red for a reason that has nothing to
+# do with the code — `erc7730_uniswap_exact_input_screens`,
+# `erc7730_userop_envelope_screens`, `offchain_eip712_typed_screens`. That
+# false red has now been diagnosed as "master is red" twice (2026-10-05,
+# 2026-10-14) and once nearly got correct goldens re-blessed away. This line
+# is the command `.github/workflows/ci.yml` runs.
+cargo test --locked -p sphincs-tz-secure \
+    --no-default-features --features mock-se,debug-log,ui-semihosting
 ```
 
 **CI checks added with #855, and what a red one means.** They guard invariant #1's "no secure element is shown a PIN" rule. All run per-PR; none needs hardware.
