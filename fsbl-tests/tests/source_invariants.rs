@@ -968,3 +968,80 @@ fn the_px_atlas_base_tracks_the_ns_boot_base() {
         "the NS linker script must place .pq1a at the offset assets.rs assumes"
     );
 }
+
+// ---------------------------------------------------------------------------
+// OPTIGA probe: the read-only code path never names a write path
+// ---------------------------------------------------------------------------
+
+/// `make optiga-probe-hw` is sold as safe on a board you cannot replace. That
+/// holds only while the read-only sources (`optiga/probe/{mod,readonly,
+/// inventory}.rs`) reach the chip through GetDataObject, the Last Error Code
+/// read, OpenApplication, the handshake and a shielded GetRandom — nothing
+/// else. Any write, key, counter, auth or protected-update entry point named
+/// in those files fails here; the destructive tiers live in
+/// `optiga/probe/destructive/`, compiled only under `optiga-probe-destructive`.
+#[test]
+fn optiga_probe_readonly_names_no_write_path() {
+    const FORBIDDEN: &[&str] = &[
+        "set_data_object",
+        "set_metadata",
+        "protected_update",
+        "send_protected_manifest",
+        "hmac_verify",
+        "generate_auth_code",
+        "get_random_auto_state",
+        "send_raw",
+        "ApduBuf",
+        "transceive",
+        "pair_for_first_boot",
+        "setup_pbs",
+        "rotate_pbs",
+        "provision",
+        "lock_oid",
+        "verify_and_lock",
+        "factory_reset",
+        "nuclear",
+        "reset_hw_pin_counter",
+        "reset_e120",
+        "recover_",
+        "store_objects",
+        "store_duress",
+        "authenticate_and_read",
+        "duress_verify",
+        "duress_read_half",
+        "probe_hmac",
+        ".unlock(",
+    ];
+    let mut checked = 0;
+    for rel in [
+        "secure/src/optiga/probe/mod.rs",
+        "secure/src/optiga/probe/readonly.rs",
+        "secure/src/optiga/probe/inventory.rs",
+    ] {
+        let src = code_only(&read_workspace_file(rel));
+        for f in FORBIDDEN {
+            assert!(
+                !src.contains(f),
+                "{rel} names `{f}`: the read-only OPTIGA probe must not reach a write path. \
+                 Put destructive code under optiga/probe/destructive/."
+            );
+        }
+        checked += 1;
+    }
+    assert_eq!(checked, 3);
+    // Non-vacuous: the read-only path does exist and reads.
+    let ro = code_only(&read_workspace_file("secure/src/optiga/probe/readonly.rs"));
+    assert!(ro.contains("dump_metadata") && ro.contains("read_object"));
+    // The destructive module is only reachable behind its feature.
+    let m = code_only(&read_workspace_file("secure/src/optiga/probe/mod.rs"));
+    for l in m.lines().filter(|l| l.contains("mod destructive") || l.contains("destructive::run")) {
+        let idx = m.find(l).unwrap();
+        let before = &m[..idx];
+        let last_cfg = before.rfind("#[cfg").expect("destructive item without cfg");
+        assert!(
+            before[last_cfg..].contains("optiga-probe-destructive"),
+            "`{}` must sit behind cfg(feature = \"optiga-probe-destructive\")",
+            l.trim()
+        );
+    }
+}

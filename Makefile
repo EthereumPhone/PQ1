@@ -1062,6 +1062,67 @@ se-i2c-probe-hw: ## Non-destructive SE I2C address probe: does each chip ACK? (H
 		exit 1; \
 	fi
 
+# OPTIGA Trust M configuration probe (`secure/src/optiga/probe/`).
+#
+# Read-only (default): power-cycles the SEs, then reads the metadata and data
+# of every SRM-documented object (secret objects are logged only as SHA-256
+# fingerprints), checks the plaintext Read rules, compares E140 with this
+# build's PBS and, only on a match, runs three shielded handshakes plus
+# shielded no-auth reads. It sends no write, key, counter or protected-update
+# command; the handshakes raise the security event counter by one each (it
+# decays by one every 5 s). Ends by re-reading all metadata: any difference is
+# reported as CRITICAL. tools/optiga_probe/report.py turns the log into a
+# verdict + target/optiga-probe/<uid>-*.{md,json,log}.
+#
+#   make optiga-probe-hw BOARD=pq1                 # ~1-2 min
+#   make optiga-probe-hw BOARD=pq1 SWEEP=1         # + 0x0000-0xFFFF OID sweep
+#   make optiga-probe-hw BOARD=pq1 FORCE_SHIELD=1  # handshake even if E140 can't be compared
+#   make optiga-probe-report LOG=path/to.log       # re-analyse a saved log
+#
+# Exit status: 0 clean, 1 findings, 2 inconclusive.
+OPROBE_FEATURES = dual-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)
+SWEEP ?= 0
+FORCE_SHIELD ?= 0
+
+optiga-probe-hw: ## Read-only OPTIGA config probe + report (HW; SWEEP=1 adds OID sweep)
+	@$(MAKE) --no-print-directory _optiga-probe-run OPROBE_EXTRA=optiga-probe \
+		OPROBE_ENV="OPTIGA_PROBE_SWEEP=$(SWEEP) OPTIGA_PROBE_FORCE_SHIELD=$(FORCE_SHIELD)" \
+		OPROBE_TIMEOUT=$(if $(filter 1,$(SWEEP)),3600,600)
+
+_optiga-probe-run:
+	@echo "==> Building OPTIGA probe ($(OPROBE_EXTRA); $(OPROBE_ENV); $(BOARD_FEATURE))"
+	@# option_env! inputs: touch so cargo recompiles the secure crate (only).
+	@touch secure/src/optiga/probe/mod.rs
+	@env $(OPROBE_ENV) FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) \
+		$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features \
+			--features $(OPROBE_FEATURES),$(OPROBE_EXTRA)
+	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
+	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
+			-p sphincs-tz-nonsecure --features e2e-test,stm32u585,$(BOARD_FEATURE)
+	@echo "==> Flashing..."
+	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@echo "==> Configuring TrustZone option bytes..."
+	@$(STM32_PROG) --connect port=SWD \
+		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
+		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
+	@mkdir -p target/optiga-probe
+	@echo "==> Running probe (timeout $(OPROBE_TIMEOUT) s)..."
+	@log=target/optiga-probe/last-run.log; \
+	timeout $(OPROBE_TIMEOUT) probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log"; \
+	echo "===================================="; \
+	python3 -I tools/optiga_probe/report.py "$$log" --out target/optiga-probe
+
+optiga-probe-report: ## Re-analyse a saved OPTIGA probe log (LOG=path)
+	@test -n "$(LOG)" || { echo "usage: make optiga-probe-report LOG=path/to.log"; exit 1; }
+	@python3 -I tools/optiga_probe/report.py "$(LOG)" --out target/optiga-probe
+
+test-optiga-probe: ## Host tests for the OPTIGA probe report tool
+	@python3 -I -m unittest discover -s tools/optiga_probe -v
+
 gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 	@echo "==> Building GTZC1 enforcement test (secure + stm32u585 + e2e-test + mock-se)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
@@ -2810,7 +2871,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e optiga-ac-probe duress-provision-e2e \
                  pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime \
-                 ui-px-bench ui-px-te-probe gateway-gate-off
+                 ui-px-bench ui-px-te-probe gateway-gate-off optiga-probe
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required

@@ -409,6 +409,9 @@ compile_error!(
         // from the veneer path. Never ship — a shipping image with this on
         // reinstates the re-entrancy #846 fixed.
         feature = "gateway-gate-off",
+        // OPTIGA configuration probe: terminal bench image that replaces
+        // normal boot.
+        feature = "optiga-probe",
     )
 ))]
 compile_error!(

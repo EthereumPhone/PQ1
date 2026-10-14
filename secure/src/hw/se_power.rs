@@ -149,6 +149,68 @@ fn drive_high(port: u32, pin: u32) {
     bsrr.write(1 << pin); // and again, now that it is an output
 }
 
+/// Drive `(port, pin)` low as a push-pull output. Mirror of [`drive_high`]
+/// (level first, then mode), used only by the probe's power cycle.
+#[cfg(feature = "optiga-probe")]
+fn drive_low(port: u32, pin: u32) {
+    // SAFETY: as `drive_high` — real GPIO registers in the secure alias,
+    // disjoint-bit RMW on a single-threaded secure-world path.
+    let (moder, otyper, pupdr, bsrr) = unsafe {
+        (
+            Reg32::new(port + MODER_OFF),
+            Reg32::new(port + OTYPER_OFF),
+            Reg32::new(port + PUPDR_OFF),
+            Reg32::new(port + BSRR_OFF),
+        )
+    };
+    let pin2 = pin * 2;
+    let field = 0b11u32 << pin2;
+    bsrr.write(1 << (pin + 16));
+    moder.modify(|v| (v & !field) | (0b01 << pin2));
+    otyper.clear_bits(1 << pin);
+    pupdr.clear_bits(field);
+    bsrr.write(1 << (pin + 16));
+}
+
+/// Remove power from both secure elements and bring it back (bench probe
+/// only, feature `optiga-probe`).
+///
+/// A probe-rs reset does not power-cycle the SEs, and an OPTIGA left in the
+/// PRL alert state (`08 40`) by a failed handshake stays wedged across MCU
+/// resets. Dropping `LDO2_EN` is the only firmware-reachable cure on `pq1`.
+///
+/// While the rail is off, every line into the SEs (reset, SE050 enable and
+/// both I2C buses' SCL/SDA) is driven low so neither part is back-powered
+/// through its ESD diodes. The caller must run `i2c_hw::init()` afterwards
+/// to hand SCL/SDA back to the I2C peripherals.
+///
+/// Returns `false` on a board without a rail enable (`iota2`), where no
+/// power cycle happened and only the reset pulse remains.
+#[cfg(feature = "optiga-probe")]
+pub fn power_cycle(off_ms: u32) -> bool {
+    let Some((rail_port, rail_pin)) = board::SE_RAIL_EN else {
+        return false;
+    };
+    if let Some((port, pin)) = board::OPTIGA_RST {
+        enable_port_clock(port);
+        drive_low(port, pin);
+    }
+    if let Some((port, pin)) = board::SE050_EN {
+        enable_port_clock(port);
+        drive_low(port, pin);
+    }
+    for bus in board::SE_I2C_BUSES {
+        enable_port_clock(bus.port);
+        drive_low(bus.port, bus.scl_pin);
+        drive_low(bus.port, bus.sda_pin);
+    }
+    enable_port_clock(rail_port);
+    drive_low(rail_port, rail_pin);
+    delay_ms(off_ms);
+    let _ = init();
+    true
+}
+
 /// Read a pin's actual pad level (`IDR`).
 ///
 /// Unlike `ODR` this reflects the pin, not the output latch, and is valid in

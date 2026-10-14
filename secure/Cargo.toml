@@ -270,6 +270,15 @@ board-pq1 = []
 # listed in the Makefile's PROD_FORBIDDEN.
 se-i2c-probe = []
 
+# Bench-only OPTIGA Trust M configuration probe (`optiga::probe`, terminal).
+# Read-only by default: dumps metadata/data of every documented object (secret
+# objects as fingerprints only), checks the plaintext Read ACs, compares E140
+# against this build's PBS, and with OPTIGA_PROBE_SWEEP=1 sweeps all 65,536
+# OIDs. Never sends a write/key/counter/protected-update command. Requires the
+# dev OTP root so deriving the comparison PBS can never burn OTP. Run it as
+# `make optiga-probe-hw BOARD=pq1`. NEVER SHIP — listed in PROD_FORBIDDEN.
+optiga-probe = ["optiga-trust-m"]
+
 # LCD-only secure-element diagnostic for a probe-less board (EVT over DFU):
 # after the panel is up, runs TRNG / SE050 init+random / OPTIGA init+pair+
 # shield+random / rng_strong one step at a time, shows each result on the

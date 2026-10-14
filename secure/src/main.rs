@@ -33,7 +33,8 @@ macro_rules! secure_log {
         // DHCSR, so always emit.
         #[cfg(feature = "stm32u585")]
         {
-            if $crate::ARCH.dhcsr.read() & 1 != 0 {
+            // `log_muted` is a probe-only switch; `false` in every other build.
+            if !$crate::log_muted() && $crate::ARCH.dhcsr.read() & 1 != 0 {
                 cortex_m_semihosting::hprintln!($($arg)*);
             }
             // Additionally mirror to the debug USART when `uart-console` is
@@ -61,6 +62,25 @@ macro_rules! secure_log {
 #[cfg(any(not(feature = "debug-log"), test))]
 macro_rules! secure_log {
     ($($arg:tt)*) => {};
+}
+
+/// Probe-only switch that silences `secure_log!` (the OPTIGA probe mutes the
+/// driver's per-frame logging during its 65,536-OID sweep, where semihosting
+/// would otherwise dominate the run time). Always `false` in every other build.
+#[cfg(all(feature = "optiga-probe", not(test)))]
+pub(crate) static LOG_MUTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+#[cfg(all(feature = "debug-log", feature = "stm32u585", not(test)))]
+#[inline(always)]
+pub(crate) fn log_muted() -> bool {
+    #[cfg(feature = "optiga-probe")]
+    {
+        LOG_MUTED.load(core::sync::atomic::Ordering::Relaxed)
+    }
+    #[cfg(not(feature = "optiga-probe"))]
+    {
+        false
+    }
 }
 
 // Pure-logic modules: no hardware dependencies, testable on the host.
@@ -268,6 +288,21 @@ mod se050_stress;
 #[cfg(all(feature = "se050-stress", feature = "mock-se"))]
 compile_error!(
     "`se050-stress` requires real SE050 silicon — drop `mock-se` from the feature set"
+);
+// OPTIGA probe preconditions. Real silicon only; output only exists under
+// `debug-log`; and the comparison PBS must come from the dev OTP root, because
+// the legacy root path's `ensure_device_master` BURNS OTP on a blank die — a
+// "read-only" probe must not be able to do that.
+#[cfg(all(feature = "optiga-probe", feature = "mock-se"))]
+compile_error!("`optiga-probe` requires real OPTIGA silicon — drop `mock-se`");
+#[cfg(all(feature = "optiga-probe", not(feature = "stm32u585")))]
+compile_error!("`optiga-probe` is a hardware probe — build with `stm32u585`");
+#[cfg(all(feature = "optiga-probe", not(feature = "debug-log")))]
+compile_error!("`optiga-probe` reports over semihosting — build with `debug-log`");
+#[cfg(all(feature = "optiga-probe", not(feature = "otp-hardcoded-master-key")))]
+compile_error!(
+    "`optiga-probe` requires `otp-hardcoded-master-key`: any other PBS root can \
+     burn OTP or touch SAES state on a blank die"
 );
 #[cfg(not(test))]
 mod timeout;
@@ -1637,6 +1672,26 @@ fn main() -> ! {
         {
             let ok = hw::se_i2c_probe::run();
             secure_log!("[S][se-probe] halting — this build never touches the SEs again");
+            cortex_m_semihosting::debug::exit(if ok {
+                cortex_m_semihosting::debug::EXIT_SUCCESS
+            } else {
+                cortex_m_semihosting::debug::EXIT_FAILURE
+            });
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
+
+        // Bench OPTIGA configuration probe (`optiga::probe`). TERMINAL for
+        // the same reason as `se-i2c-probe` above: everything after this
+        // point writes to the secure elements. Read-only unless built with
+        // `optiga-probe-destructive`, which is bound to one chip UID.
+        #[cfg(feature = "optiga-probe")]
+        {
+            // SAFETY: single-threaded boot path; nothing else has touched the
+            // OPTIGA, and nothing will after this block (SYS_EXIT / wfe).
+            let ok = unsafe { optiga::probe::run() };
+            secure_log!("[OPROBE] halting — this build never touches the SEs again");
             cortex_m_semihosting::debug::exit(if ok {
                 cortex_m_semihosting::debug::EXIT_SUCCESS
             } else {

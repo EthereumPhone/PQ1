@@ -55,6 +55,8 @@ pub mod reset;
 pub mod reset_pin;
 #[cfg(all(feature = "optiga-ac-probe", feature = "stm32u585"))]
 pub mod ac_probe;
+#[cfg(all(feature = "optiga-probe", feature = "stm32u585"))]
+pub(crate) mod probe;
 
 use apdu::OptigaError;
 use ifx_i2c::IfxState;
