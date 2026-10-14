@@ -463,3 +463,4 @@ C10AddressInputBridge
 C10CallerInputBridge
 C10PrivateCallerBridge
 C10TreeCallerBridge
+C10OuterCallerBridge

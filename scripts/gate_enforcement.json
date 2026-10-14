@@ -518,6 +518,7 @@
         "contracts/verification/easycrypt/c10-port/tools/c10_caller_controls.py",
         "contracts/verification/easycrypt/c10-port/tools/c10_private_caller_controls.py",
         "contracts/verification/easycrypt/c10-port/tools/c10_tree_caller_controls.py",
+        "contracts/verification/easycrypt/c10-port/tools/c10_outer_caller_controls.py",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Representation.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RepresentationBridge.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HashInputBridge.ec",
@@ -525,6 +526,7 @@
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10CallerInputBridge.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10PrivateCallerBridge.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10TreeCallerBridge.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10OuterCallerBridge.ec",
         "contracts/verification/easycrypt/c10-port/scratch/c10_rep_*.ec",
         "contracts/verification/scripts/test_c10_representation_controls.py"
       ],
@@ -628,6 +630,7 @@
         "contracts/verification/easycrypt/c10-port/tools/c10_caller_controls.py",
         "contracts/verification/easycrypt/c10-port/tools/c10_private_caller_controls.py",
         "contracts/verification/easycrypt/c10-port/tools/c10_tree_caller_controls.py",
+        "contracts/verification/easycrypt/c10-port/tools/c10_outer_caller_controls.py",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Representation.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RepresentationBridge.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HashInputBridge.ec",
@@ -635,6 +638,7 @@
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10CallerInputBridge.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10PrivateCallerBridge.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10TreeCallerBridge.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10OuterCallerBridge.ec",
         "contracts/verification/easycrypt/c10-port/scratch/c10_rep_*.ec",
         "contracts/verification/scripts/test_c10_representation_controls.py"
       ],

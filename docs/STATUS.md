@@ -137,8 +137,15 @@ FORS tree/root/sign/recovery and Merkle root/build/recovery now also compose
 the private, single-node and ordered-pair preimages. Their seven relations
 preserve all shared oracle state, derive treehash address bounds from the
 stack invariant, and retain authentication-path updates and defaults.
-Hash-backend/oracle interpretation, forest/layer/signer outer composition,
-shuffle derivation and the cross-language stateful session relation remain open.
+The forest, layer and signer outer callers now compose these component views,
+including shuffled forest placement, the final root-as-secret, layer search
+exhaustion, both coordinate updates and verifier rejection/default behavior.
+Nine relations preserve returned values and the entire shared oracle state.
+Partial-correctness bounds avoid a new oracle-losslessness premise; the actual
+decoder discharges the verifier's two u32 counter bounds for every 4,008-byte
+signature. Twenty-five typed mutations check the intended caller proofs.
+Hash-backend/oracle interpretation, paired shuffle derivation, cross-language
+control-flow/errors and the stateful session relation remain open.
 
 The ordinary secure-wrapper entry now has a sequential, source-linked model
 (2026-10-11). Its release theorem requires an accepted rate charge and exact

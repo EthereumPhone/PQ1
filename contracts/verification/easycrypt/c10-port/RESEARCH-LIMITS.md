@@ -1214,6 +1214,40 @@ control-flow/errors, hash/backend/callback interpretations and secure-wrapper
 query costs remain open. No fresh-history, successful-output or oracle-losslessness
 premise, and no whole-scheme cryptographic or hardware claim, is introduced.
 
+Forest/layer/signer caller composition (2026-10-14):
+`C10OuterCallerBridge.ec` composes the actual `RawForest.one`, `sign` and
+`recover`, `RawLayer.sign` and `recover`, and `RawSigner.finish`, `sign` and
+`verify` with the existing common-input component views. A ninth relation
+specializes verification to every signature produced by decoding a 4,008-byte
+input. Returned values and the complete state of the same arbitrary
+`PrefixOracle` agree, including failed searches and rejected signatures.
+
+The forest retains shuffled secret/path placement, the thirteenth
+root-as-secret, its distinct leaf address and ordered root compression.
+Layers retain construction before WOTS search, the exact shared shuffle
+derivation, count exhaustion and recovery of the returned signature. Local
+partial-correctness lemmas derive successful signing counters' bounds without
+assuming oracle losslessness. The signer retains the two 9-bit coordinate
+updates, early layer failure, both randomizer modes, H_msg root binding,
+digest rejection, path defaults and final root comparison.
+
+Structured verification requires only the u32 range of the two counters it
+actually consumes. The real decoder establishes that premise for every
+4,008-byte input; neither valid authentication paths nor an accepted signature
+is assumed. Forest and layer interfaces retain their full u32/u64 field ranges,
+and forest-index bounds also cover short digests. Twenty-five typed mutations
+exercise these distinctions: changed definitions compile, then the unchanged
+intended proof rejects promptly without syntax or resource-failure credit.
+The seventeen lemmas, three common modules, nine headlines, source bindings,
+scope probe and generated controls enter the exact certificate inventories.
+
+This closes the listed EasyCrypt outer callers' common-input composition.
+The shuffle is still the identical shared procedure. Paired shuffle derivation,
+cross-language control-flow/error and session relations, hash/backend/callback
+interpretation and secure-wrapper query costs remain open. The shared oracle
+is not identified with Lean's hash interpretation or physical SHA-256. No
+cryptographic axiom, production source, wire format or hardware claim changes.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 the remaining fixed-width operations, primitive/caller computations, bounded

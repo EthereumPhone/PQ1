@@ -90,6 +90,7 @@ cdrafts-split/C10HypertreeAccepted.ec
 cdrafts-split/C10HypertreeCharged.ec
 cdrafts-split/C10HypertreeCorrect.ec
 cdrafts-split/C10HypertreeCoverage.ec
+cdrafts-split/C10OuterCallerBridge.ec
 cdrafts-split/C10PrivateCallerBridge.ec
 cdrafts-split/C10Randomizer.ec
 cdrafts-split/C10RawGrind.ec
