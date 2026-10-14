@@ -1414,6 +1414,12 @@ cross-language signer/session relation, physical abort prefixes, concrete hash,
 RNG/delay/callback interpretations, QROM assumptions and hardware claims remain
 open. Typed mutations check sensitivity to missing/extra calls, a reset prior
 trace/count, omitted verification or second-sign charges, uncharged refusals and
-removed caps. An intended proof rejection is sensitivity evidence, not a proof
-that every mutated specification is logically false. No production code changes
-or new signing authority are part of this result.
+removed caps. EasyCrypt budget controls change both the definition and its
+derived identity, so rejection reaches a consuming cost inequality. A tuple
+assignment preserves the reset control's instruction layout. Paired variants
+that preserve history or increase either budget must pass. An actual third-sign
+mutation derives its extra charge from the callee contract and fails a numerical
+budget obligation, without relying on an instruction-layout error or a solver
+timeout. An intended proof rejection is sensitivity evidence, not a proof that
+every mutated specification is logically false. No production code changes or
+new signing authority are part of this result.

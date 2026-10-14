@@ -1095,8 +1095,14 @@ scratch/c10_shuffle_permutation_result_typed.ec	MUST-PASS	-
 scratch/c10_shuffle_permutation_result_reject.ec	MUST-FAIL	[by]: cannot close goals
 
 # Wrapper query accounting: positive, typed, intended-proof and scope controls.
+scratch/_scope_neg_op_RawWrapperCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_WrapperSession.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_WrapperSessionCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/c10_wrapper_cost_positive.ec	MUST-PASS	-
 scratch/c10_wrapper_session_cost_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_cost_preserve_history_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_cost_physical_overcount_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_cost_public_overcount_positive.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_physical_second_sign_typed.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_physical_second_sign_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_wrapper_cost_physical_internal_verify_typed.ec	MUST-PASS	-
@@ -1106,13 +1112,12 @@ scratch/c10_wrapper_cost_public_second_sign_reject.ec	MUST-FAIL	[by]: cannot clo
 scratch/c10_wrapper_cost_public_internal_verify_typed.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_public_internal_verify_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_wrapper_cost_prior_history_reset_typed.ec	MUST-PASS	-
-scratch/c10_wrapper_cost_prior_history_reset_reject.ec	MUST-FAIL	invalid first instruction
+scratch/c10_wrapper_cost_prior_history_reset_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_wrapper_cost_third_sign_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_cost_third_sign_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_wrapper_cost_refusal_charge_typed.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_refusal_charge_reject.ec	MUST-FAIL	cannot save an incomplete proof
 scratch/c10_wrapper_cost_sign_cap_typed.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_sign_cap_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_wrapper_cost_raw_cap_typed.ec	MUST-PASS	-
 scratch/c10_wrapper_cost_raw_cap_reject.ec	MUST-FAIL	[by]: cannot close goals
-scratch/_scope_neg_op_RawWrapperCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
-scratch/_scope_neg_op_WrapperSession.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
-scratch/_scope_neg_op_WrapperSessionCost.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

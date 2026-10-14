@@ -818,6 +818,13 @@ SOURCES = (
     'contracts/verification/extracted/Extracted/SecureWrapperSpec.lean',
     'contracts/verification/scripts/test_secure_wrapper_proof_controls.py',
 
+    # Paired benign variants and an additional signing call.
+    'contracts/verification/easycrypt/c10-port/scratch/c10_wrapper_cost_physical_overcount_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_wrapper_cost_preserve_history_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_wrapper_cost_public_overcount_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_wrapper_cost_third_sign_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_wrapper_cost_third_sign_typed.ec',
+
 )
 
 
