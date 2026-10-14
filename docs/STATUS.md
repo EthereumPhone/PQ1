@@ -133,8 +133,12 @@ The WOTS key-generation leaf and signing procedure also compose the private
 preimages with those count/chain views. Their equivalences retain ordered
 compression, the actual shuffle's query/visit order, digit-dependent stops,
 signature positions and count exhaustion, with no oracle-losslessness premise.
-Hash-backend/oracle interpretation, the remaining callers, shuffle derivation
-and the cross-language stateful session relation remain open.
+FORS tree/root/sign/recovery and Merkle root/build/recovery now also compose
+the private, single-node and ordered-pair preimages. Their seven relations
+preserve all shared oracle state, derive treehash address bounds from the
+stack invariant, and retain authentication-path updates and defaults.
+Hash-backend/oracle interpretation, forest/layer/signer outer composition,
+shuffle derivation and the cross-language stateful session relation remain open.
 
 The ordinary secure-wrapper entry now has a sequential, source-linked model
 (2026-10-11). Its release theorem requires an accepted rate charge and exact

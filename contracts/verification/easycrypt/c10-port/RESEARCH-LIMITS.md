@@ -1178,6 +1178,42 @@ cross-language control-flow/error and session relations, hash/backend/callback
 interpretations and secure-wrapper query costs remain open. No production
 source, signature format, concrete-SHA or hardware claim changes.
 
+FORS and Merkle caller composition (2026-10-14): `C10TreeCallerBridge.ec`
+connects the actual `RawFors.tree`, `root`, `sign` and `recover`,
+`RawKeygen.root`, and `RawMerkle.build` and `recover` procedures through
+`PreparationView(O)` to common-input views. Seven relational theorems preserve
+the returned value and the complete state of the same arbitrary `PrefixOracle`.
+The private FORS tag is supplied once, and public leaf and ordered-pair calls
+use the existing generated preimages. Merkle construction consumes the already
+checked common WOTS leaf view.
+
+The treehash loops retain every leaf derivation, carry, ordered child pair and
+authentication-path update. The increasing-stack and mass invariants establish
+height and parent-address bounds inside the loops; these are proved facts,
+not new caller premises. Layer/tree fields retain their full u32/u64 ranges;
+FORS hypertree/tree identifiers retain the full u32 range. Builder targets are
+unrestricted integers. Signing/recovery indices retain the full u32 range,
+including values outside the honest tree's leaf range. Recovery retains
+parity-dependent sibling order, all nine or eleven levels and the existing
+out-of-range path defaults, without a well-formed-path premise.
+
+Sixteen typed procedural mutations exercise FORS private/leaf address binding,
+child order, path placement, root/secret/path results, full-width recovery
+targets, loop lengths, Merkle leaf arguments and parent indices. Each changed
+definition must compile before its unchanged intended proof rejects; a solver
+or resource failure is not semantic evidence. The source, thirteen lemmas,
+two common modules, seven headlines, scope probe and all control fixtures enter
+the exact inventories. Production Rust, Lean headlines and cryptographic axioms
+are unchanged.
+
+This closes the listed EasyCrypt callers' common-input composition component.
+It does not identify the shared oracle with the Lean hash interpretation or
+physical SHA-256, nor prove a cross-kernel or stateful session relation.
+Forest/layer/signer outer composition, paired shuffle derivation, cross-language
+control-flow/errors, hash/backend/callback interpretations and secure-wrapper
+query costs remain open. No fresh-history, successful-output or oracle-losslessness
+premise, and no whole-scheme cryptographic or hardware claim, is introduced.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 the remaining fixed-width operations, primitive/caller computations, bounded

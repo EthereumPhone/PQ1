@@ -104,6 +104,7 @@ cdrafts-split/C10SpecControls.ec
 cdrafts-split/C10StatefulSearch.ec
 cdrafts-split/C10Surface.ec
 cdrafts-split/C10SurfaceKernel.ec
+cdrafts-split/C10TreeCallerBridge.ec
 cdrafts-split/C10WOTSCorrect.ec
 cdrafts-split/CacheConcreteCoupling.ec
 cdrafts-split/CacheMemoCoupling.ec

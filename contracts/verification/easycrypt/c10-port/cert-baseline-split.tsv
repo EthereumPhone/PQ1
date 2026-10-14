@@ -2515,3 +2515,7 @@ cdrafts-split/C10CallerInputBridge.ec	defined-op:48f53e6a38e1	caller_fields	# li
 cdrafts-split/C10CallerInputBridge.ec	module:75efb257814a	CommonInputWots	# line 57
 cdrafts-split/C10CallerInputBridge.ec	module:a219cdf5d545	CommonInputGrind	# line 163
 cdrafts-split/C10PrivateCallerBridge.ec	module:b34c5561e9da	CommonPrivateWots	# line 43
+cdrafts-split/C10TreeCallerBridge.ec	defined-op:5f713dbeb93a	tree_fields	# line 10
+cdrafts-split/C10TreeCallerBridge.ec	defined-op:f206f1d68df2	fors_fields	# line 11
+cdrafts-split/C10TreeCallerBridge.ec	module:8392a053c3ce	CommonInputFors	# line 72
+cdrafts-split/C10TreeCallerBridge.ec	module:fcb4c61bf435	CommonInputMerkle	# line 125

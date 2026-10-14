@@ -841,6 +841,7 @@ scratch/_scope_neg_op_C10HashInputBridge.ec	MUST-FAIL	unknown variable or consta
 scratch/_scope_neg_op_C10AddressInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10CallerInputBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/_scope_neg_op_C10PrivateCallerBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+scratch/_scope_neg_op_C10TreeCallerBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
 scratch/c10_rep_positive.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_typed.ec	MUST-PASS	-
 scratch/c10_rep_word_endian_reject.ec	MUST-FAIL	nothing to rewrite
@@ -950,3 +951,36 @@ scratch/c10_private_caller_sign_exhaustion_typed.ec	MUST-PASS	-
 scratch/c10_private_caller_sign_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_private_caller_sign_count_typed.ec	MUST-PASS	-
 scratch/c10_private_caller_sign_count_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_caller_positive.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_private_ht_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_private_ht_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_tree_caller_fors_private_index_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_private_index_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_tree_caller_fors_leaf_address_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_leaf_address_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_tree_caller_fors_pair_order_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_pair_order_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_caller_fors_auth_position_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_auth_position_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_caller_fors_root_result_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_root_result_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_tree_caller_fors_sign_secret_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_sign_secret_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_tree_caller_fors_sign_path_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_sign_path_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_tree_caller_fors_recover_count_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_recover_count_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
+scratch/c10_tree_caller_fors_recover_target_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_fors_recover_target_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_tree_caller_merkle_root_leaf_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_merkle_root_leaf_reject.ec	MUST-FAIL	nothing to introduce
+scratch/c10_tree_caller_merkle_root_order_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_merkle_root_order_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_caller_merkle_build_path_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_merkle_build_path_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_caller_merkle_build_parent_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_merkle_build_parent_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_caller_merkle_recover_order_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_merkle_recover_order_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_tree_caller_merkle_recover_count_typed.ec	MUST-PASS	-
+scratch/c10_tree_caller_merkle_recover_count_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
