@@ -582,10 +582,19 @@ fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
 #[cfg(any(test, feature = "render-split"))]
 pub(crate) static WORK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
+// Rust runs rendering tests concurrently. A cull test must measure only its
+// own render calls, while the production profiler retains the global count.
+#[cfg(test)]
+std::thread_local! {
+    static TEST_WORK: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
 #[cfg(any(test, feature = "render-split"))]
 #[inline]
 fn note_work() {
     WORK.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    TEST_WORK.with(|count| count.set(count.get().wrapping_add(1)));
 }
 
 #[cfg(not(any(test, feature = "render-split")))]
@@ -1244,8 +1253,6 @@ mod span_equivalence {
     /// positive leg a cull that rejects everything would pass.
     #[test]
     fn cull_rejects_items_outside_the_band() {
-        use core::sync::atomic::Ordering;
-
         // Every item kind that has a cull, all parked in x = [0, 60).
         let mut f = Frame::new();
         f.push(Item::Disc { cx: 30 << 8, cy: 72 << 8, r: 20 << 8, color: Rgb::WHITE });
@@ -1259,23 +1266,32 @@ mod span_equivalence {
 
         // NEGATIVE: a band far to the right holds none of them.
         let mut buf = [0u16; (48 * H) as usize];
-        WORK.store(0, Ordering::Relaxed);
+        TEST_WORK.with(|count| count.set(0));
+        // A parallel test may render after this test resets its measurement.
+        // Joining makes that interference deterministic for this regression.
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let mut other_buf = [0u16; (48 * H) as usize];
+                let mut other = Strip::new(0, 48, &mut other_buf).unwrap();
+                render_strip(&f, &font, &mut other);
+            }).join().unwrap();
+        });
         {
             let mut st = Strip::new(336, 48, &mut buf).unwrap();
             render_strip(&f, &font, &mut st);
         }
-        let rejected = WORK.load(Ordering::Relaxed);
+        let rejected = TEST_WORK.with(core::cell::Cell::get);
         assert_eq!(rejected, 0, "every item should have been culled by the x = [336, 384) band");
         assert!(buf.iter().all(|&p| p == 0), "a culled band must also be blank");
 
         // POSITIVE control: the band that DOES hold them must do work, or the
         // assertion above would pass for a cull that rejects everything.
-        WORK.store(0, Ordering::Relaxed);
+        TEST_WORK.with(|count| count.set(0));
         {
             let mut st = Strip::new(0, 48, &mut buf).unwrap();
             render_strip(&f, &font, &mut st);
         }
-        let accepted = WORK.load(Ordering::Relaxed);
+        let accepted = TEST_WORK.with(core::cell::Cell::get);
         assert!(accepted >= 7, "the x = [0, 48) band holds all 7 items, got {accepted}");
         assert!(buf.iter().any(|&p| p != 0), "the holding band must have drawn something");
     }
