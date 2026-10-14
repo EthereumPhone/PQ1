@@ -4922,6 +4922,25 @@ compile_error!(
      satisfy this gate."
 );
 
+// #903: the duress (decoy) PIN does not yet keep the ten-guess limit. A decoy
+// unlock resets page 124 like a real one, so whoever knows the decoy PIN can
+// guess the real PIN ten at a time, indefinitely. On 2026-10-14 the owner
+// accepted the replacement guarantee: a count shown to the user that resets on
+// either unlock, a hidden count that only a real unlock resets, and the real
+// wallet retired silently at ten. Remove this fence in the change that lands
+// that design, not before. The OPTIGA S-2 fence above also blocks these images
+// today; this one stays when S-2 closes. Pinned by
+// `fsbl-tests/tests/rollback_ship_fences.rs::production_duress_cannot_build_while_903_is_open`.
+#[cfg(all(feature = "mode-production", feature = "duress-pin"))]
+compile_error!(
+    "DURESS_903_PRODUCTION_BLOCKED: a decoy unlock resets the page-124 attempt \
+     counter, so the decoy PIN lifts the ten-guess limit on the real PIN \
+     (#903). No production image may carry `duress-pin` until the two-count \
+     design (shown count resets on either unlock, hidden count only on a real \
+     unlock, real wallet retired at ten) is implemented, reviewed and \
+     silicon-tested."
+);
+
 #[cfg(all(
     feature = "optiga-lock-operational",
     feature = "factory-production-irreversible-im-sure"

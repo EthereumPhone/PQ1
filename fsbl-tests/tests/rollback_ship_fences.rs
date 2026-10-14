@@ -427,6 +427,23 @@ fn production_optiga_cannot_build_while_s2_is_open() {
 }
 
 #[test]
+fn production_duress_cannot_build_while_903_is_open() {
+    let workspace = workspace_root();
+    let target_dir = workspace.join("target/duress-903-production-fence-tests");
+
+    // `duress-pin` implies `dual-se`, so the OPTIGA S-2 fence fires on this
+    // feature set too. Matching the #903 diagnostic by name is what shows this
+    // fence fired, and it keeps the test meaningful after S-2 closes.
+    assert_host_cargo_rejected(
+        &workspace,
+        &target_dir,
+        "sphincs-tz-secure",
+        "ui-noop,duress-pin,mode-production",
+        "DURESS_903_PRODUCTION_BLOCKED",
+    );
+}
+
+#[test]
 fn advertised_ship_and_irreversible_factory_gates_fail_loudly() {
     let workspace = workspace_root();
 
