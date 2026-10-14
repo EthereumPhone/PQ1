@@ -174,6 +174,36 @@ fn eq(a: &str, b: &str) -> bool {
     a.trim_ascii() == b
 }
 
+/// The plain verdicts: a fixed title maps to one record whose caption is a
+/// constant (`verdict` with a single part). One table walked by one loop
+/// instead of a `match` arm per title — each arm compiled to its own string
+/// compare and record build (2026-10-14). Titles with a guard, a busy look, a
+/// caption that carries `sub`, or a non-verdict screen stay in `classify`'s
+/// `match`.
+const PLAIN_VERDICTS: &[(&str, &[u8], Icon, State, ResultMark, &[u8])] = &[
+    ("Verifying...", b"CHECKPIN", Icon::Pill, State::Awaiting, ResultMark::None, b"CHECKING PIN"),
+    ("Wrong PIN", b"WRONGPIN", Icon::Pill, State::Failed, ResultMark::None, b"WRONG PIN"),
+    ("PIN mismatch", b"PINDIFF", Icon::Pill, State::Failed, ResultMark::None, b"PINS DIFFER"),
+    ("PINs differ", b"PINDIFF", Icon::Pill, State::Failed, ResultMark::None, b"PINS DIFFER"),
+    ("Same as main", b"PINSAME", Icon::Pill, State::Failed, ResultMark::None, b"SAME AS MAIN PIN"),
+    ("Unlocked", b"UNLOCKED", Icon::Unlock, State::Done, ResultMark::None, b"UNLOCKED"),
+    ("LAST ATTEMPT", b"LASTTRY", Icon::Heart, State::Failed, ResultMark::None, b"LAST ATTEMPT - WIPES ON FAIL"),
+    ("Cancelled", b"CANCELED", Icon::ResultRing, State::Failed, ResultMark::Cross, b"CANCELED"),
+    ("Declined", b"CANCELED", Icon::ResultRing, State::Failed, ResultMark::Cross, b"CANCELED"),
+    ("Signed", b"SIGNED", Icon::ResultRing, State::Done, ResultMark::Check, b"SIGNED"),
+    ("WALLET WIPED", b"WIPED", Icon::Wipe, State::Failed, ResultMark::None, b"WALLET WIPED"),
+    ("WIPED", b"WIPED", Icon::Wipe, State::Failed, ResultMark::None, b"WALLET WIPED"),
+    ("TAMPER DETECT", b"TAMPER", Icon::Alert, State::Failed, ResultMark::None, b"TAMPER DETECTED"),
+    ("RNG failed", b"RNG", Icon::Die, State::Failed, ResultMark::None, b"RNG FAILED"),
+    ("Backup OK", b"BACKUPOK", Icon::Shield, State::Done, ResultMark::Check, b"BACKUP OK"),
+    ("Wrong word", b"NOMATCH", Icon::Shield, State::Failed, ResultMark::Cross, b"NO MATCH"),
+    ("Verify fail", b"NOMATCH", Icon::Shield, State::Failed, ResultMark::Cross, b"NO MATCH"),
+    ("Bad checksum", b"BADSEED", Icon::ResultRing, State::Failed, ResultMark::Cross, b"WRONG SEED PHRASE"),
+    ("No match", b"NOWORD", Icon::ResultRing, State::Failed, ResultMark::Cross, b"NO SUCH WORD"),
+    ("Words shown", b"SHOWN", Icon::Shield, State::Done, ResultMark::Check, b"WORDS SHOWN"),
+    ("Write 24 words", b"WRITE24", Icon::Shield, State::Awaiting, ResultMark::None, b"WRITE DOWN 24 WORDS"),
+];
+
 /// Map a legacy `show_status(title, sub)` to its screen.
 #[must_use]
 pub fn classify(title: &str, sub: &str) -> Status {
@@ -185,41 +215,29 @@ pub fn classify(title: &str, sub: &str) -> Status {
     let tb = t.as_bytes();
     let sb = s.as_bytes();
     let v = |id: &[u8], icon, state, result, parts: &[&[u8]]| Status::Show(verdict(id, icon, state, result, parts));
+    for &(title, id, icon, state, result, caption) in PLAIN_VERDICTS {
+        if t == title {
+            return v(id, icon, state, result, &[caption]);
+        }
+    }
     match t {
         // ---- PIN ----------------------------------------------------------
         "Enter PIN" => Status::PinPrompt(b"ENTER PIN"),
         "Set new PIN" => Status::PinPrompt(b"SET NEW PIN"),
         "Confirm PIN" => Status::PinPrompt(b"CONFIRM PIN"),
         "Duress PIN" => Status::PinPrompt(b"SET DURESS PIN"),
-        "Verifying..." => v(b"CHECKPIN", Icon::Pill, State::Awaiting, ResultMark::None, &[b"CHECKING PIN"]),
-        "Wrong PIN" => v(b"WRONGPIN", Icon::Pill, State::Failed, ResultMark::None, &[b"WRONG PIN"]),
-        "PIN mismatch" | "PINs differ" => v(b"PINDIFF", Icon::Pill, State::Failed, ResultMark::None, &[b"PINS DIFFER"]),
-        "Same as main" => v(b"PINSAME", Icon::Pill, State::Failed, ResultMark::None, &[b"SAME AS MAIN PIN"]),
         "PIN locked" => v(b"PINLOCK", Icon::Lock, State::Failed, ResultMark::None, &[b"PIN LOCKED", sb]),
         "Locked" | "Idle" => v(b"LOCKED", Icon::Lock, State::Failed, ResultMark::None, &[b"LOCKED", if eq(s, "retry...") { b"" } else { sb }]),
-        "Unlocked" => v(b"UNLOCKED", Icon::Unlock, State::Done, ResultMark::None, &[b"UNLOCKED"]),
-        "LAST ATTEMPT" => v(b"LASTTRY", Icon::Heart, State::Failed, ResultMark::None, &[b"LAST ATTEMPT", b"WIPES ON FAIL"]),
         // ---- rest / outcomes --------------------------------------------------
         "PQSigner OS" if eq(s, "Ready") => Status::Show(idle()),
-        "Cancelled" | "Declined" => v(b"CANCELED", Icon::ResultRing, State::Failed, ResultMark::Cross, &[b"CANCELED"]),
-        "Signed" => v(b"SIGNED", Icon::ResultRing, State::Done, ResultMark::Check, &[b"SIGNED"]),
         // ---- wipe / tamper / RNG / factory ----------------------------------
         // Destructive work follows at once: shown at rest, never delayed by
         // an entrance.
         "WIPING" => Status::Busy(verdict(b"WIPING", Icon::Wipe, State::Warning, ResultMark::None, &[b"WIPING", b"DO NOT POWER OFF"])),
-        "WALLET WIPED" | "WIPED" => v(b"WIPED", Icon::Wipe, State::Failed, ResultMark::None, &[b"WALLET WIPED"]),
-        "TAMPER DETECT" => v(b"TAMPER", Icon::Alert, State::Failed, ResultMark::None, &[b"TAMPER DETECTED"]),
-        "RNG failed" => v(b"RNG", Icon::Die, State::Failed, ResultMark::None, &[b"RNG FAILED"]),
         // Work in progress inside the sign window: Busy, so a running signing
         // film keeps the glass instead of being cut for a 3 s notice.
         "Factory" => Status::Busy(verdict(b"FACTORY", Icon::Gear, State::Awaiting, ResultMark::None, &[b"FACTORY SIGNING"])),
         // ---- the seed wizard -------------------------------------------------
-        "Backup OK" => v(b"BACKUPOK", Icon::Shield, State::Done, ResultMark::Check, &[b"BACKUP OK"]),
-        "Wrong word" | "Verify fail" => v(b"NOMATCH", Icon::Shield, State::Failed, ResultMark::Cross, &[b"NO MATCH"]),
-        "Bad checksum" => v(b"BADSEED", Icon::ResultRing, State::Failed, ResultMark::Cross, &[b"WRONG SEED PHRASE"]),
-        "No match" => v(b"NOWORD", Icon::ResultRing, State::Failed, ResultMark::Cross, &[b"NO SUCH WORD"]),
-        "Words shown" => v(b"SHOWN", Icon::Shield, State::Done, ResultMark::Check, &[b"WORDS SHOWN"]),
-        "Write 24 words" => v(b"WRITE24", Icon::Shield, State::Awaiting, ResultMark::None, &[b"WRITE DOWN 24 WORDS"]),
         // The intro to the words: the fingerprint mark on its white disc
         // (never the verified look — boot measures, it does not verify).
         "OS Fingerprint" => Status::Show(

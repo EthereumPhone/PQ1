@@ -1285,6 +1285,57 @@ pub fn confirm_index(visible: &[Screen]) -> usize {
         .map_or(CONFIRM_INDEX, |i| (i + 1).max(CONFIRM_INDEX))
 }
 
+/// One docked detail screen over explicit pages: `p0`, then (when not
+/// empty) `p1` on a second page, both at the smaller of their fitted tiers.
+/// The single assembly path every docked detail goes through — the secure
+/// world's `Emit` helpers and its trailer screens used to carry five copies
+/// of it.
+pub fn detail_pages(
+    id: &[u8],
+    look: Look,
+    side: Side,
+    label: &[u8],
+    p0: &[(&[u8], Weight)],
+    p1: &[(&[u8], Weight)],
+    pulse: bool,
+) -> Result<Screen, ()> {
+    let mut tier = crate::fit::fit_tier(p0, crate::fit::Region::Docked).ok_or(())?;
+    if !p1.is_empty() {
+        tier = tier.min(crate::fit::fit_tier(p1, crate::fit::Region::Docked).ok_or(())?);
+    }
+    let mut b = ScreenBuilder::detail(id, look.icon, side, label).look_tint(look).tier(tier);
+    for &(text, w) in p0 {
+        b = b.line(text, w);
+    }
+    if !p1.is_empty() {
+        b = b.next_page();
+        for &(text, w) in p1 {
+            b = b.line(text, w);
+        }
+    }
+    if pulse {
+        b = b.pulse();
+    }
+    b.finish().map_err(|_| ())
+}
+
+/// A docked detail over 1–6 `lines`, paged by three. Never truncates: a
+/// line that fits no tier is `Err`.
+pub fn detail_screen(
+    id: &[u8],
+    look: Look,
+    side: Side,
+    label: &[u8],
+    lines: &[(&[u8], Weight)],
+    pulse: bool,
+) -> Result<Screen, ()> {
+    if lines.is_empty() {
+        return Err(());
+    }
+    let (p0, p1) = lines.split_at(lines.len().min(LINES_PER_PAGE));
+    detail_pages(id, look, side, label, p0, p1, pulse)
+}
+
 /// Move `buf[from..n - 1]` up one slot to `buf[from + 1..n]` (`n` =
 /// `buf.len()`), leaving `buf[from]` for the caller to overwrite — the
 /// `copy_within(from..n - 1, from + 1)` the two inserts need.

@@ -308,28 +308,7 @@ impl<'a> Lines<'a> {
 /// A docked detail over `lines` (1–6, paged by three) at the largest tier
 /// that fits every line. Never truncates: a line that fits no tier is `Err`.
 fn detail(id: &[u8], look: Look, side: Side, label: &[u8], lines: &Lines<'_>, pulse: bool) -> Result<Screen, ()> {
-    let all = lines.as_slice();
-    if all.is_empty() {
-        return Err(());
-    }
-    // The tier is fitted per page (a page stacks at most three lines) and
-    // the screen takes the smaller of the two so both pages share it.
-    let (p0, p1) = all.split_at(all.len().min(LINES_PER_PAGE));
-    let mut tier = fit_tier(p0, Region::Docked).ok_or(())?;
-    if !p1.is_empty() {
-        tier = tier.min(fit_tier(p1, Region::Docked).ok_or(())?);
-    }
-    let mut b = ScreenBuilder::detail(id, look.icon, side, label).look_tint(look).tier(tier);
-    for (i, &(text, w)) in all.iter().enumerate() {
-        if i == LINES_PER_PAGE {
-            b = b.next_page();
-        }
-        b = b.line(text, w);
-    }
-    if pulse {
-        b = b.pulse();
-    }
-    b.finish().map_err(|_| ())
+    pqsigner_ui_px::screen::detail_screen(id, look, side, label, lines.as_slice(), pulse)
 }
 
 fn addr42(addr: &[u8; 20]) -> [u8; 42] {
