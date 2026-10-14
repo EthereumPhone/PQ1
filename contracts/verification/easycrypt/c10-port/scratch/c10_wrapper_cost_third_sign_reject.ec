@@ -53,15 +53,16 @@ proof.
   have step : forall (l z x a b t : int),
     l <= z => z <= l+a => z <= x => x <= z+b => a+b <= t =>
     l <= x <= l+t by smt(@Int).
-  have hbudget : 2*(4*signing_budget+435646)+771 <= wrapper_physical_budget
-    by rewrite wrapper_physical_budget_shape /signing_budget.
   proc; sp 1; if; last by auto => />; rewrite wrapper_physical_budget_shape /signing_budget ?lez_addl.
   seq 1 : (c <= Shared.calls <= c+4*signing_budget+435646).
   + call (signer_sign_physical_cost c); auto.
   if; last by auto; rewrite wrapper_physical_budget_shape /signing_budget; smt(@Int).
   seq 1 : (c <= Shared.calls <= c+2*(4*signing_budget+435646)).
   + exists* Shared.calls; elim* => z; call (signer_sign_physical_cost z); auto; smt(@Int).
-  if; last by auto; rewrite wrapper_physical_budget_shape /signing_budget; smt(@Int).
+  (* This return retains the bound from both preceding sign calls. *)
+  if; last by auto => />;
+    (suff : 2*(4*signing_budget+435646) <= wrapper_physical_budget by smt(@Int));
+    rewrite wrapper_physical_budget_shape /signing_budget.
   seq 1 : (c <= Shared.calls <= c+wrapper_physical_budget).
   + exists* Shared.calls; elim* => z.
     try call (signer_verify_physical_cost z).
@@ -80,15 +81,25 @@ lemma wrapper_public_cost q :
   hoare[RawWrapper(Independent).sign : size Independent.queries = q ==>
     q <= size Independent.queries <= q+wrapper_public_budget].
 proof.
-  have hbudget : 2*(3*signing_budget+364892)+771 <= wrapper_public_budget
-    by rewrite wrapper_public_budget_shape /signing_budget.
+  have step : forall (l z x a b t : int),
+    l <= z => z <= l+a => z <= x => x <= z+b => a+b <= t =>
+    l <= x <= l+t by smt(@Int).
   proc; sp 1; if; last by auto; rewrite wrapper_public_budget_shape /signing_budget; smt(@Int).
   seq 1 : (q <= size Independent.queries <= q+3*signing_budget+364892).
   + call (signer_sign_public_cost q); auto.
   if; last by auto; rewrite wrapper_public_budget_shape /signing_budget; smt(@Int).
   seq 1 : (q <= size Independent.queries <= q+2*(3*signing_budget+364892)).
   + exists* Independent.queries; elim* => zs; call (signer_sign_public_cost (size zs)); auto; smt(@Int).
-  if; last by auto; rewrite wrapper_public_budget_shape /signing_budget; smt(@Int).
-  wp; exists* Independent.queries; elim* => zs; call (signer_verify_public_cost (size zs));
-    auto; smt(@Int).
+  (* This return retains the bound from both preceding sign calls. *)
+  if; last by auto => />;
+    (suff : 2*(3*signing_budget+364892) <= wrapper_public_budget by smt(@Int));
+    rewrite wrapper_public_budget_shape /signing_budget.
+  seq 1 : (q <= size Independent.queries <= q+wrapper_public_budget).
+  + exists* Independent.queries; elim* => zs; call (signer_verify_public_cost (size zs)).
+    auto => /> &hr hcz hza _ queries hzx hxb.
+    try rewrite -addzA in hxb.
+    have hb := step q (size zs) (size queries) (2*(3*signing_budget+364892)) _ wrapper_public_budget hcz hza hzx hxb.
+    suff : q <= size queries <= q+wrapper_public_budget by smt(@Int).
+    apply hb; by rewrite wrapper_public_budget_shape /signing_budget.
+  by auto.
 qed.
