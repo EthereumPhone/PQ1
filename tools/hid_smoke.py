@@ -88,11 +88,11 @@ class HidRaw:
         os.close(self.fd)
 
 
-def frame_apdu(apdu: bytes) -> list[bytes]:
+def frame_apdu(apdu: bytes, channel: int = CHANNEL_ID) -> list[bytes]:
     frames = []
     first = bytearray(HID_REPORT_SIZE)
-    first[0] = (CHANNEL_ID >> 8) & 0xFF
-    first[1] = CHANNEL_ID & 0xFF
+    first[0] = (channel >> 8) & 0xFF
+    first[1] = channel & 0xFF
     first[2] = HID_TAG_APDU
     first[3] = first[4] = 0x00
     first[5] = (len(apdu) >> 8) & 0xFF
@@ -103,8 +103,8 @@ def frame_apdu(apdu: bytes) -> list[bytes]:
     off, seq = n, 1
     while off < len(apdu):
         f = bytearray(HID_REPORT_SIZE)
-        f[0] = (CHANNEL_ID >> 8) & 0xFF
-        f[1] = CHANNEL_ID & 0xFF
+        f[0] = (channel >> 8) & 0xFF
+        f[1] = channel & 0xFF
         f[2] = HID_TAG_APDU
         f[3] = (seq >> 8) & 0xFF
         f[4] = seq & 0xFF
