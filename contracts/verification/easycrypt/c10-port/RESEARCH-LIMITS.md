@@ -1157,7 +1157,7 @@ desired-output or oracle-losslessness premise.
 
 The leaf retains 43 private derivations, seven public steps per chain, ordered
 padded endpoints and the type-1 compression address. Signing retains `None` on
-count exhaustion, then the exact shared shuffle procedure, private derivations
+count exhaustion, then the paired shuffle procedure proved below, private derivations
 in its visit order, each accepted digit's chain length, writes at the shuffled
 signature index, and the returned count. A partial-correctness shuffle lemma
 proves index bounds for both its zero-seed identity and nonzero-seed branches
@@ -1172,8 +1172,8 @@ module-body, scope, source-binding and replay inventories. Lean headlines and
 the cryptographic axiom inventory are unchanged.
 
 This closes common-input composition for these two EasyCrypt callers. The
-shuffle remains an identical shared procedure, not a paired cross-language
-shuffle-derivation proof. Remaining FORS/tree/forest/layer/signer callers,
+paired-shuffle extension below composes the exact order relation into signing.
+At this stage, remaining FORS/tree/forest/layer/signer callers,
 cross-language control-flow/error and session relations, hash/backend/callback
 interpretations and secure-wrapper query costs remain open. No production
 source, signature format, concrete-SHA or hardware claim changes.
@@ -1224,8 +1224,8 @@ input. Returned values and the complete state of the same arbitrary
 
 The forest retains shuffled secret/path placement, the thirteenth
 root-as-secret, its distinct leaf address and ordered root compression.
-Layers retain construction before WOTS search, the exact shared shuffle
-derivation, count exhaustion and recovery of the returned signature. Local
+Layers retain construction before WOTS search, paired shuffle
+derivation with the same layer label, count exhaustion and recovery of the returned signature. Local
 partial-correctness lemmas derive successful signing counters' bounds without
 assuming oracle losslessness. The signer retains the two 9-bit coordinate
 updates, early layer failure, both randomizer modes, H_msg root binding,
@@ -1235,15 +1235,15 @@ Structured verification requires only the u32 range of the two counters it
 actually consumes. The real decoder establishes that premise for every
 4,008-byte input; neither valid authentication paths nor an accepted signature
 is assumed. Forest and layer interfaces retain their full u32/u64 field ranges,
-and forest-index bounds also cover short digests. Twenty-five typed mutations
+and forest-index bounds also cover short digests. Twenty-nine typed mutations
 exercise these distinctions: changed definitions compile, then the unchanged
 intended proof rejects promptly without syntax or resource-failure credit.
 The seventeen lemmas, three common modules, nine headlines, source bindings,
 scope probe and generated controls enter the exact certificate inventories.
 
 This closes the listed EasyCrypt outer callers' common-input composition.
-These caller proofs reuse the identical shuffle procedure; the separate
-component relation below now connects that procedure to paired expressions.
+These caller proofs now compose the component relation below, replacing the
+shared shuffle calls with paired derivation and permutation expressions.
 Cross-language control-flow/error and session relations, hash/backend/callback
 interpretation and secure-wrapper query costs remain open. The shared oracle
 is not identified with Lean's hash interpretation or physical SHA-256. No
@@ -1282,6 +1282,33 @@ remain explicit backend boundaries. Nor does it identify EasyCrypt's arbitrary
 oracle with Lean's concrete SHA interpretation, prove physical erasure or
 side-channel behavior, or supply the complete signer/session relation. No new
 cryptographic axiom or production behavior is introduced.
+
+Paired shuffle caller composition (2026-10-14): the WOTS fill, forest sign and
+layer sign comparison procedures now call `PairedShuffle`. The new
+`caller_shuffle_paired` relation combines exact raw/paired result and complete
+oracle-state equality with the raw shuffle's permutation proof, for lengths
+0 through 64. The actual callers discharge this bound at 43 and 12; the existing
+index-bound proofs therefore apply to the paired order without assuming it.
+Forest derivation retains the four-byte `fors` label and passes the resulting
+subseed to its permutation. Layer derivation retains `layer_label layer` and
+passes its result to WOTS signing. Both derivation calls consume
+`shuffle_derive_common`, including the zero-seed branch.
+
+Existing WOTS, forest, layer, signer and decoded-verification equivalences
+retain their statements and propagate this composition through results, errors
+and arbitrary prior oracle state. Four additional typed procedural mutations
+change the forest label, permutation seed/size, and layer seed; the existing
+WOTS shuffle and layer-label mutations remain enrolled. Positive definitions
+must compile and each unchanged proof must reject at its intended theorem.
+These are proof-sensitivity controls, not proofs that every mutation is false.
+The source/module/statement pins bind the selected paired procedures.
+
+This closes the EasyCrypt callers' use of the paired shuffle component. It
+adds no oracle losslessness, fresh-history, successful-search or desired-result
+premise. The layer-label expression remains shared EasyCrypt code; this batch
+does not separately refine the Rust label formatter. The paired printers,
+backend interpretation and complete cross-language/session relation retain
+the boundaries stated above.
 
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover

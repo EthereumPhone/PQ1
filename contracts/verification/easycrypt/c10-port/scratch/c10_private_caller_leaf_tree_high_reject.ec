@@ -1,11 +1,11 @@
 (* Common private inputs in the actual WOTS leaf and signing callers.
    The same arbitrary oracle runs on both sides, including its full state.
-   Shuffle remains the exact shared procedure; no cross-language shuffle or
-   concrete-SHA interpretation is asserted here. *)
+   Signing composes the paired shuffle representation with exact order and
+   oracle-state preservation; no concrete-SHA interpretation is asserted here. *)
 require import AllCore List IntDiv RadixEncoding.
 require import C10Bytes C10RawOracle PrefixGuess PrefixHybrid KeygenPrefixes.
 require import RawKeygen RawWots RawLeafChains RawWotsFill RawShuffle ShuffleBytes ShuffleSwap.
-require import C10Representation C10AddressInputBridge C10CallerInputBridge.
+require import C10Representation C10AddressInputBridge C10CallerInputBridge C10ShuffleBridge.
 
 lemma caller_private_query layer tree kp index :
   caller_fields layer tree kp => 0 <= index < 2^32 =>
@@ -55,7 +55,7 @@ module CommonPrivateWots (O : PrefixOracle) = {
   proc fill(seed : raw_input, layer tree kp : int, accepted : digest, shuffle : raw_input) : raw_input list = {
     var order, step, i, d, current, sigma;
     sigma <- nseq 43 (nseq 16 0);
-    order <@ RawShuffle(PreparationView(O)).permutation(shuffle,43);
+    order <@ PairedShuffle(PreparationView(O)).permutation(shuffle,43);
     step <- 0;
     while (step < 43) {
       i <- nth 0 order step;
@@ -115,14 +115,13 @@ proof.
   exact (caller_leaf_chains O).
 qed.
 
-lemma caller_shuffle_same (O <: PreparationOracle) n0 :
-  equiv [RawShuffle(O).permutation ~ RawShuffle(O).permutation :
-    ={arg,glob O} /\ n{1}=n0 /\ 0 <= n0 ==>
+lemma caller_shuffle_paired (O <: PreparationOracle) n0 :
+  equiv [RawShuffle(O).permutation ~ PairedShuffle(O).permutation :
+    ={arg,glob O} /\ n{1}=n0 /\ 0 <= n0 <= 64 ==>
     ={res,glob O} /\ perm_eq res{1} (range 0 n0)].
 proof.
-  conseq (_ : ={arg,glob O} ==> ={res,glob O})
-    (caller_shuffle_permutation O n0) _.
-  by sim.
+  conseq (shuffle_permutation_common O)
+    (caller_shuffle_permutation O n0) _; smt().
 qed.
 
 lemma caller_shuffle_index order step :
@@ -156,7 +155,7 @@ proof.
     move=> _ _ _.
     have [hlo hhi] : 0 <= step{m}+1 /\ step{m}+1 <= 43 by smt().
     by split=> //.
-  wp; call (caller_shuffle_same (PreparationView(O)) 43).
+  wp; call (caller_shuffle_paired (PreparationView(O)) 43).
   by auto.
 qed.
 

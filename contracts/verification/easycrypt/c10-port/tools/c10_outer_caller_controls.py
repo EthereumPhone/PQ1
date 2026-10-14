@@ -7,6 +7,14 @@ from c10_caller_controls import definitions_only, mutate
 
 # name, module, procedure, old text, new text, intended theorem
 OUTER_CALLER_CHANGES = [
+    ('forest-shuffle-label', 'CommonInputForest', 'sign',
+     'derive(shuffle,[102;111;114;115])', 'derive(shuffle,[102;111;114;116])', 'caller_forest_sign'),
+    ('forest-shuffle-seed', 'CommonInputForest', 'sign',
+     'permutation(subseed,12)', 'permutation(shuffle,12)', 'caller_forest_sign'),
+    ('forest-shuffle-size', 'CommonInputForest', 'sign',
+     'permutation(subseed,12)', 'permutation(subseed,11)', 'caller_forest_sign'),
+    ('layer-shuffle-seed', 'CommonInputLayer', 'sign',
+     'derive(shuffle,layer_label layer)', 'derive(seed,layer_label layer)', 'caller_layer_sign'),
     ('forest-one-secret', 'CommonInputForest', 'one',
      'return (sig.`1,sig.`2,root)', 'return (root,sig.`2,root)', 'caller_forest_one'),
     ('forest-secret-position', 'CommonInputForest', 'sign',
@@ -60,6 +68,13 @@ OUTER_CALLER_CHANGES = [
 ]
 
 OUTER_CALLER_REASONS = {'forest-one-secret': 'cannot save an incomplete proof', 'forest-secret-position': '[by]: cannot close goals', 'forest-path-position': '[by]: cannot close goals', 'forest-last-secret': 'cannot apply `split/None` on that goal', 'forest-last-domain': 'the given proof-term proves:', 'forest-root-order': 'the given proof-term proves:', 'forest-recover-count': 'cannot apply `split/None` on that goal', 'forest-recover-last': 'the given proof-term proves:', 'layer-full-counter': '[by]: cannot close goals', 'layer-recover-path': '[by]: cannot close goals', 'layer-shuffle-label': '[by]: cannot close goals', 'layer-exhaustion': '[by]: cannot close goals', 'layer-sign-path': '[by]: cannot close goals', 'signer-coordinate': '[by]: cannot close goals', 'signer-layer-count': '[by]: cannot close goals', 'signer-layer-failure': '[by]: cannot close goals', 'signer-randomizer': '[by]: cannot close goals', 'signer-randomness': 'expecting a goal of the form: equiv[S]', 'signer-grind-failure': '[by]: cannot close goals', 'verify-root-binding': 'nothing to rewrite', 'verify-acceptance': '[by]: cannot close goals', 'verify-coordinate': '[by]: cannot close goals', 'verify-layer-count': '[by]: cannot close goals', 'verify-root-result': '[by]: cannot close goals', 'verify-default-counter': '[by]: cannot close goals'}
+
+OUTER_CALLER_REASONS.update({
+    'forest-shuffle-label': '[by]: cannot close goals',
+    'forest-shuffle-seed': '[by]: cannot close goals',
+    'forest-shuffle-size': '[by]: cannot close goals',
+    'layer-shuffle-seed': '[by]: cannot close goals',
+})
 
 
 def outer_caller_outputs(port):

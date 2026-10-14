@@ -2514,14 +2514,14 @@ cdrafts-split/C10Representation.ec	defined-op:a36253b27d83	address_words	# line 
 cdrafts-split/C10CallerInputBridge.ec	defined-op:48f53e6a38e1	caller_fields	# line 10
 cdrafts-split/C10CallerInputBridge.ec	module:75efb257814a	CommonInputWots	# line 57
 cdrafts-split/C10CallerInputBridge.ec	module:a219cdf5d545	CommonInputGrind	# line 163
-cdrafts-split/C10PrivateCallerBridge.ec	module:b34c5561e9da	CommonPrivateWots	# line 43
+cdrafts-split/C10PrivateCallerBridge.ec	module:1de5f37c409f	CommonPrivateWots	# line 43
 cdrafts-split/C10TreeCallerBridge.ec	defined-op:5f713dbeb93a	tree_fields	# line 10
 cdrafts-split/C10TreeCallerBridge.ec	defined-op:f206f1d68df2	fors_fields	# line 11
 cdrafts-split/C10TreeCallerBridge.ec	module:8392a053c3ce	CommonInputFors	# line 72
 cdrafts-split/C10TreeCallerBridge.ec	module:fcb4c61bf435	CommonInputMerkle	# line 125
 cdrafts-split/C10OuterCallerBridge.ec	defined-op:3e453665a4d9	outer_counters	# line 13
-cdrafts-split/C10OuterCallerBridge.ec	module:047a8c495606	CommonInputForest	# line 66
-cdrafts-split/C10OuterCallerBridge.ec	module:7ffbefc5eaca	CommonInputLayer	# line 108
+cdrafts-split/C10OuterCallerBridge.ec	module:5d724b676877	CommonInputForest	# line 67
+cdrafts-split/C10OuterCallerBridge.ec	module:ec49c9e42a01	CommonInputLayer	# line 109
 cdrafts-split/C10OuterCallerBridge.ec	module:f0ef04371045	CommonInputSigner	# line 130
 cdrafts-split/C10Representation.ec	defined-op:8b52c0b1f0b4	shuffle_seed_preimage	# line 74
 cdrafts-split/C10Representation.ec	defined-op:1f16e9e3b017	shuffle_block_preimage	# line 77

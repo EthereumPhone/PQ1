@@ -987,6 +987,14 @@ scratch/c10_tree_caller_merkle_recover_order_reject.ec	MUST-FAIL	the given proof
 scratch/c10_tree_caller_merkle_recover_count_typed.ec	MUST-PASS	-
 scratch/c10_tree_caller_merkle_recover_count_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
 scratch/c10_outer_caller_positive.ec	MUST-PASS	-
+scratch/c10_outer_caller_forest_shuffle_label_typed.ec	MUST-PASS	-
+scratch/c10_outer_caller_forest_shuffle_label_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_outer_caller_forest_shuffle_seed_typed.ec	MUST-PASS	-
+scratch/c10_outer_caller_forest_shuffle_seed_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_outer_caller_forest_shuffle_size_typed.ec	MUST-PASS	-
+scratch/c10_outer_caller_forest_shuffle_size_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_outer_caller_layer_shuffle_seed_typed.ec	MUST-PASS	-
+scratch/c10_outer_caller_layer_shuffle_seed_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_outer_caller_forest_one_secret_typed.ec	MUST-PASS	-
 scratch/c10_outer_caller_forest_one_secret_reject.ec	MUST-FAIL	cannot save an incomplete proof
 scratch/c10_outer_caller_forest_secret_position_typed.ec	MUST-PASS	-

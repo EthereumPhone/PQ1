@@ -1,6 +1,7 @@
 (* Common-input composition of the actual forest, layer and signer callers.
    Preserve returned values, failures and the complete arbitrary oracle state.
-   Shuffle remains the identical shared procedure. Structured verification's
+   Shuffle derivation and permutation use the proved paired representation.
+   Structured verification's
    two consumed counters are u32; the decoder discharges that wire boundary.
    No concrete-SHA, cross-kernel or whole-session interpretation is claimed. *)
 require import AllCore List IntDiv.
@@ -8,7 +9,7 @@ require import C10Bytes C10Counter C10RawOracle C10RawGrind PrefixGuess PrefixHy
 require import RawKeygen RawFors RawMerkle RawShuffle RawWots RawForest RawLayer RawSigner.
 require import RawSignature RawDecode ForestCoordinates SignerCoordinates.
 require import C10Representation C10HashInputBridge C10AddressInputBridge.
-require import C10CallerInputBridge C10PrivateCallerBridge C10TreeCallerBridge.
+require import C10CallerInputBridge C10PrivateCallerBridge C10TreeCallerBridge C10ShuffleBridge.
 
 op outer_counters (sig : raw_signature) =
   forall i, 0 <= i < 2 => 0 <= (nth ([],0,[]) sig.`4 i).`2 < 4294967296.
@@ -29,8 +30,8 @@ module CommonInputForest (O : PrefixOracle) = {
     var subseed, order, step, t, sig, last, d, secrets, auths, roots;
     secrets <- nseq 13 (nseq 16 0);
     auths <- nseq 12 (nseq 11 (nseq 16 0)); roots <- nseq 13 (nseq 16 0);
-    subseed <@ RawShuffle(PreparationView(O)).derive(shuffle,[102;111;114;115]);
-    order <@ RawShuffle(PreparationView(O)).permutation(subseed,12);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,[102;111;114;115]);
+    order <@ PairedShuffle(PreparationView(O)).permutation(subseed,12);
     step <- 0;
     while (step < 12) {
       t <- nth 0 order step;
@@ -70,7 +71,7 @@ module CommonInputLayer (O : PrefixOracle) = {
   proc sign(seed : raw_input, layer tree leaf : int, message shuffle : raw_input) : (layer_signature * raw_input) option = {
     var built, subseed, signed, sig, root, result;
     built <@ CommonInputMerkle(O).build(seed,layer,tree,leaf);
-    subseed <@ RawShuffle(PreparationView(O)).derive(shuffle,layer_label layer);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,layer_label layer);
     signed <@ CommonPrivateWots(O).sign(seed,layer,tree,leaf,message,subseed);
     result <- Some (([],0,[]),[]);
     if (signed <> None) {

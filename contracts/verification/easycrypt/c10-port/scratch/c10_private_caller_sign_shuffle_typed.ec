@@ -1,11 +1,11 @@
 (* Common private inputs in the actual WOTS leaf and signing callers.
    The same arbitrary oracle runs on both sides, including its full state.
-   Shuffle remains the exact shared procedure; no cross-language shuffle or
-   concrete-SHA interpretation is asserted here. *)
+   Signing composes the paired shuffle representation with exact order and
+   oracle-state preservation; no concrete-SHA interpretation is asserted here. *)
 require import AllCore List IntDiv RadixEncoding.
 require import C10Bytes C10RawOracle PrefixGuess PrefixHybrid KeygenPrefixes.
 require import RawKeygen RawWots RawLeafChains RawWotsFill RawShuffle ShuffleBytes ShuffleSwap.
-require import C10Representation C10AddressInputBridge C10CallerInputBridge.
+require import C10Representation C10AddressInputBridge C10CallerInputBridge C10ShuffleBridge.
 
 
 (* Partial correctness requires no losslessness premise on the shared oracle. *)
@@ -25,7 +25,7 @@ module CommonPrivateWots (O : PrefixOracle) = {
   proc fill(seed : raw_input, layer tree kp : int, accepted : digest, shuffle : raw_input) : raw_input list = {
     var order, step, i, d, current, sigma;
     sigma <- nseq 43 (nseq 16 0);
-    order <@ RawShuffle(PreparationView(O)).permutation(nseq 32 0,43);
+    order <@ PairedShuffle(PreparationView(O)).permutation(nseq 32 0,43);
     step <- 0;
     while (step < 43) {
       i <- nth 0 order step;

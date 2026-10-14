@@ -749,6 +749,16 @@ SOURCES = (
     'contracts/verification/scripts/test_wots_sign_proof_controls.py',
     'contracts/verification/tools/fors-recovery-corpus/shuffle.rs',
 
+    # Paired-shuffle caller mutations.
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_forest_shuffle_label_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_forest_shuffle_label_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_forest_shuffle_seed_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_forest_shuffle_seed_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_forest_shuffle_size_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_forest_shuffle_size_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_layer_shuffle_seed_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_outer_caller_layer_shuffle_seed_typed.ec',
+
 )
 
 

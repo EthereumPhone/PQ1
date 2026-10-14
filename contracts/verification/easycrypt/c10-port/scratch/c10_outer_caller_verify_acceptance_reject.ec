@@ -1,6 +1,7 @@
 (* Common-input composition of the actual forest, layer and signer callers.
    Preserve returned values, failures and the complete arbitrary oracle state.
-   Shuffle remains the identical shared procedure. Structured verification's
+   Shuffle derivation and permutation use the proved paired representation.
+   Structured verification's
    two consumed counters are u32; the decoder discharges that wire boundary.
    No concrete-SHA, cross-kernel or whole-session interpretation is claimed. *)
 require import AllCore List IntDiv.
@@ -8,7 +9,7 @@ require import C10Bytes C10Counter C10RawOracle C10RawGrind PrefixGuess PrefixHy
 require import RawKeygen RawFors RawMerkle RawShuffle RawWots RawForest RawLayer RawSigner.
 require import RawSignature RawDecode ForestCoordinates SignerCoordinates.
 require import C10Representation C10HashInputBridge C10AddressInputBridge.
-require import C10CallerInputBridge C10PrivateCallerBridge C10TreeCallerBridge.
+require import C10CallerInputBridge C10PrivateCallerBridge C10TreeCallerBridge C10ShuffleBridge.
 
 op outer_counters (sig : raw_signature) =
   forall i, 0 <= i < 2 => 0 <= (nth ([],0,[]) sig.`4 i).`2 < 4294967296.
@@ -74,8 +75,8 @@ module CommonInputForest (O : PrefixOracle) = {
     var subseed, order, step, t, sig, last, d, secrets, auths, roots;
     secrets <- nseq 13 (nseq 16 0);
     auths <- nseq 12 (nseq 11 (nseq 16 0)); roots <- nseq 13 (nseq 16 0);
-    subseed <@ RawShuffle(PreparationView(O)).derive(shuffle,[102;111;114;115]);
-    order <@ RawShuffle(PreparationView(O)).permutation(subseed,12);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,[102;111;114;115]);
+    order <@ PairedShuffle(PreparationView(O)).permutation(subseed,12);
     step <- 0;
     while (step < 12) {
       t <- nth 0 order step;
@@ -115,7 +116,7 @@ module CommonInputLayer (O : PrefixOracle) = {
   proc sign(seed : raw_input, layer tree leaf : int, message shuffle : raw_input) : (layer_signature * raw_input) option = {
     var built, subseed, signed, sig, root, result;
     built <@ CommonInputMerkle(O).build(seed,layer,tree,leaf);
-    subseed <@ RawShuffle(PreparationView(O)).derive(shuffle,layer_label layer);
+    subseed <@ PairedShuffle(PreparationView(O)).derive(shuffle,layer_label layer);
     signed <@ CommonPrivateWots(O).sign(seed,layer,tree,leaf,message,subseed);
     result <- None;
     if (signed <> None) {
@@ -194,7 +195,13 @@ lemma caller_forest_sign (O <: PrefixOracle) :
     ={seed,ht,digest,shuffle,glob O} /\ 0 <= ht{1} < 2^32 ==>
     ={res,glob O}].
 proof.
-  proc; wp.
+  proc; seq 5 5 :
+    (={seed,ht,digest,order,secrets,auths,roots,glob O} /\
+     0 <= ht{1} < 2^32 /\ perm_eq order{1} (range 0 12)).
+  + call (caller_shuffle_paired (PreparationView(O)) 12).
+    call (shuffle_derive_common (PreparationView(O))).
+    by auto.
+  wp.
   call (_ : ={arg,glob O} ==> ={res,glob O}); first by sim.
   wp; call (_ : ={arg,glob O} ==> ={res,glob O}); first by sim.
   wp; call (caller_fors_root O).
@@ -211,9 +218,7 @@ proof.
       rewrite caller_u32_size; smt().
     have [hn0 hn] : 0 <= step{m}+1 /\ step{m}+1 <= 12 by smt().
     by split=> //.
-  wp; call (caller_shuffle_same (PreparationView(O)) 12).
-  call (_ : ={arg,glob O} ==> ={res,glob O}); first by sim.
-  auto => /> &m hh0 hh order hp roots step he1 he2 hs0 hs.
+  auto => /> &m hh0 hh hp roots step he1 he2 hs0 hs.
   have hf : 0 <= ht{m} < 2^32 by split=> //.
   split; first by rewrite caller_u32_size.
   move=> _ _ _ last_root; split.
@@ -263,7 +268,7 @@ proof.
     caller_fields layer{1} tree{1} leaf{1} /\
     (signed{1} <> None => 0 <= (oget signed{1}).`2 < signing_budget)).
   + call (outer_wots_sign O).
-    call (_ : ={arg,glob O} ==> ={res,glob O}); first by sim.
+    call (shuffle_derive_common (PreparationView(O))).
     call (caller_merkle_build O); by auto; rewrite /caller_fields /tree_fields; progress.
   sp 1 1; if; first by auto.
   + wp; call (caller_layer_recover O); auto => /> &m hl0 hl ht0 ht hf0 hf hc hs.

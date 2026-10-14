@@ -87,7 +87,7 @@ NONPOLICY_MAGNITUDES = {
         'da97fa1e1c8c680ee3d9904b64f509522397d23497dba36fe0098ea2e5545b09',
     # Partial-correctness proof of the same shuffle's 16-bit division.
     ('cdrafts-split/C10PrivateCallerBridge.ec', r'\b65536\b'):
-        '868a9205d37d91f11f79a7246586f1d3de4bccb430d75c70b12498db7e4fa123',
+        '9badb1ba9d9f54bb15673a424273889fc67abd713d1518ca3e3fb2b354feabe1',
 }
 
 
