@@ -15,11 +15,19 @@
 
 ### Variants
 
-| Part | Temp Range | Notes |
-|------|-----------|-------|
-| SLS32AIA010MS | -25C to +85C | Standard |
-| SLS32AIA010MH | -40C to +105C | Industrial |
-| SLS32AIA010MK | -40C to +105C | PSA Level 3 certified |
+> Corrected 2026-07-20 against Datasheet v3.70 Tables 1–3 (the previous table listed the
+> V1 parts as if current and gave MK the wrong temperature range). Vendor-doc pack for the
+> pinned PCB part: `docs/SLS32AIA010MKUSON10XTMA2/` — **local-only, gitignored** (Infineon
+> PDFs are not redistributable; fetch them from the upstream links in `README.md`).
+
+| Part | Gen | Temp Range | Notes |
+|------|-----|-----------|-------|
+| SLS32AIA010MH | V1 | -40C to +105C | Extended Temperature Range (ETR) |
+| SLS32AIA010MS | V1 | -25C to +85C | Standard Temperature Range (STR) |
+| SLS32AIA010ML | V3 | -40C to +105C | ETR |
+| **SLS32AIA010MK** | V3 | -25C to +85C | STR; PSA Level 3 certified; **PQ1 PCB part — exact OPN `SLS32AIA010MKUSON10XTMA2` (USON-10, tape & reel), decision 2026-07-20** |
+| SLS32AIA010MM | V3 | -25C to +85C | Trust M MTR (Matter) preconfiguration |
+| SLS32AIA010MLUSON10XTMA9 | V3 | -40C to +105C | Trust M Express preconfiguration |
 
 ### Provisioning Configurations (all V3 silicon)
 

@@ -16,6 +16,6 @@
     "PQSmartWalletFactory": "0xe8CE78CD976497447FF8B76c71b59aE42Af0d452"
   },
   "proxyInitCodeHash": "0xac0c44b6d06f678eb350426f4d0d7a89cc729dcb156de303fa77a7752ccc22b6",
-  "verified": false,
-  "note": "Deployed 2026-06-12 (blocks 47241971/47242046/47242047). CREATE2-deterministic via Arachnid's 0x4e59… deployer under FOUNDRY_PROFILE=deploy. Base Sepolia still carries older bytecode — redeploy pending. Source intentionally NOT published."
+  "verified": true,
+  "note": "Deployed 2026-06-12 (blocks 47241971/47242046/47242047). CREATE2-deterministic via Arachnid's 0x4e59… deployer under FOUNDRY_PROFILE=deploy. Base Sepolia still carries older bytecode — redeploy pending. Source verified on Basescan 2026-09-21 (Exact Match, all three; standard-JSON via Etherscan v2 API). Repro gotcha: build WITHOUT lib/kontrol-cheatcodes present (forge auto-adds it to metadata remappings; code identical, metadata CID differs)."
 }

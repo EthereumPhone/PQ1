@@ -113,14 +113,16 @@ def build_safe_canonical(chain_id: int, safe: bytes, to: bytes, value: int,
     return bytes(c)
 
 
-def compute_safe_tx_hash(c: bytes) -> bytes:
-    """Mirror of secure/src/tx/eip712/safe::compute_safe_tx_hash."""
-    domain = keccak256(
+def safe_domain_separator(c: bytes) -> bytes:
+    return keccak256(
         SAFE_DOMAIN_TYPEHASH
         + b"\0" * 24 + c[SAFE_OFF_CHAIN_ID:SAFE_OFF_CHAIN_ID + 8]
         + b"\0" * 12 + c[SAFE_OFF_SAFE_ADDRESS:SAFE_OFF_SAFE_ADDRESS + 20]
     )
-    struct_hash = keccak256(
+
+
+def safe_struct_hash(c: bytes) -> bytes:
+    return keccak256(
         SAFE_TX_TYPEHASH
         + b"\0" * 12 + c[SAFE_OFF_TO:SAFE_OFF_TO + 20]
         + c[SAFE_OFF_VALUE:SAFE_OFF_VALUE + 32]
@@ -133,7 +135,11 @@ def compute_safe_tx_hash(c: bytes) -> bytes:
         + b"\0" * 12 + c[SAFE_OFF_REFUND_RECEIVER:SAFE_OFF_REFUND_RECEIVER + 20]
         + c[SAFE_OFF_NONCE:SAFE_OFF_NONCE + 32]
     )
-    return keccak256(b"\x19\x01" + domain + struct_hash)
+
+
+def compute_safe_tx_hash(c: bytes) -> bytes:
+    """Mirror of secure/src/tx/eip712/safe::compute_safe_tx_hash."""
+    return keccak256(b"\x19\x01" + safe_domain_separator(c) + safe_struct_hash(c))
 
 
 def build_payload(sender: bytes, req: dict, inner_data: bytes,
