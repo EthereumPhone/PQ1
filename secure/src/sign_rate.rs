@@ -423,9 +423,14 @@ fn wait_for_min_interval() {
 mod tests {
     use super::*;
 
+    // These tests share the production module's session counters. Keep each
+    // reset-and-sign scenario atomic with respect to the other host tests.
+    static COUNTER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// First sign of a session always passes.
     #[test]
     fn first_sign_ok() {
+        let _guard = COUNTER_TEST_LOCK.lock().unwrap();
         reset_counters();
         assert_eq!(signs_this_session(), 0);
         assert!(pre_sign().is_ok());
@@ -441,6 +446,7 @@ mod tests {
     /// refused.
     #[test]
     fn session_cap_refuses() {
+        let _guard = COUNTER_TEST_LOCK.lock().unwrap();
         reset_counters();
         for _ in 0..MAX_SIGNS_PER_SESSION {
             assert!(pre_sign().is_ok());
@@ -452,6 +458,7 @@ mod tests {
     /// `reset_counters` re-arms the session.
     #[test]
     fn reset_re_arms() {
+        let _guard = COUNTER_TEST_LOCK.lock().unwrap();
         reset_counters();
         for _ in 0..MAX_SIGNS_PER_SESSION {
             assert!(pre_sign().is_ok());
