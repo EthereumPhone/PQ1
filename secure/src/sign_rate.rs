@@ -420,17 +420,21 @@ fn wait_for_min_interval() {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    // These tests share the production module's session counters. Keep each
-    // reset-and-sign scenario atomic with respect to the other host tests.
-    static COUNTER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// Hold throughout every scenario using the session counters, including
+    /// state tests whose unlock and zeroize paths reset them. Sharing this
+    /// lock with state_test_lock avoids nesting separate state/counter locks.
+    pub(crate) fn counter_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|p| p.into_inner())
+    }
 
     /// First sign of a session always passes.
     #[test]
     fn first_sign_ok() {
-        let _guard = COUNTER_TEST_LOCK.lock().unwrap();
+        let _guard = counter_test_lock();
         reset_counters();
         assert_eq!(signs_this_session(), 0);
         assert!(pre_sign().is_ok());
@@ -446,7 +450,7 @@ mod tests {
     /// refused.
     #[test]
     fn session_cap_refuses() {
-        let _guard = COUNTER_TEST_LOCK.lock().unwrap();
+        let _guard = counter_test_lock();
         reset_counters();
         for _ in 0..MAX_SIGNS_PER_SESSION {
             assert!(pre_sign().is_ok());
@@ -458,7 +462,7 @@ mod tests {
     /// `reset_counters` re-arms the session.
     #[test]
     fn reset_re_arms() {
-        let _guard = COUNTER_TEST_LOCK.lock().unwrap();
+        let _guard = counter_test_lock();
         reset_counters();
         for _ in 0..MAX_SIGNS_PER_SESSION {
             assert!(pre_sign().is_ok());
