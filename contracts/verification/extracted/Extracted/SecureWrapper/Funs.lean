@@ -52,7 +52,7 @@ def core.ops.range.RangeFull.Insts.CoreSliceIndexSliceIndexSliceSlice (T :
 }
 
 /-- [secure_wrapper_model::fi::OK_SENTINEL]
-    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 41:4-41:45
+    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 42:4-42:45
     Visibility: public -/
 @[global_simps, irreducible] def fi.OK_SENTINEL : Std.U32 := 2779096485#u32
 
@@ -257,7 +257,7 @@ def production.c10_sign_verified_with_progress_inner_loop1
     (iter, acc_a, acc_b)
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner]:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 73:0-379:1 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 73:0-400:1 -/
 def production.c10_sign_verified_with_progress_inner
   (sk : sphincs_c10.SigningKey) (msg_hash : Array Std.U8 32#usize)
   (progress : (Unit × Unit)) (effects : Effects)
@@ -437,11 +437,20 @@ def production.c10_sign_verified_with_progress_inner
                       let effects26 ← fi.zeroize_barrier effects25
                       ok (core.result.Result.Err (), effects26)
                     else
-                      let (_, effects24) ←
-                        ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize
-                          opt_rand_buf1 effects23
-                      let effects25 ← fi.zeroize_barrier effects24
-                      ok (core.result.Result.Ok sig_a, effects25)
+                      let (b5, effects24) ← fi.delay_source_failed effects23
+                      if b5
+                      then
+                        let (_, effects25) ←
+                          ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize
+                            opt_rand_buf1 effects24
+                        let effects26 ← fi.zeroize_barrier effects25
+                        ok (core.result.Result.Err (), effects26)
+                      else
+                        let (_, effects25) ←
+                          ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize
+                            opt_rand_buf1 effects24
+                        let effects26 ← fi.zeroize_barrier effects25
+                        ok (core.result.Result.Ok sig_a, effects26)
                 else
                   let effects18 ← nsc.zeroize_sensitive_state effects17
                   let (_, effects19) ←

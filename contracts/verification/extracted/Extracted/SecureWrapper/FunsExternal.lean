@@ -77,6 +77,10 @@ def fi.check_true_into_sentinel {F : Type}
   .ok (word, emit { e with checks := e.checks + 1 } (.sentinel condition word))
 def fi.zeroize_barrier (e : Effects) : Result Effects := .ok (emit e .barrier)
 def fi.wait_random (e : Effects) : Result Effects := .ok (emit e .wait)
+/-- Observe the final dependency status. This does not model the delay pool,
+    TRNG, interrupts or the physical success of earlier separations. -/
+def fi.delay_source_failed (e : Effects) : Result (Bool × Effects) :=
+  .ok (e.backend.delayFailed, emit e (.delaySource e.backend.delayFailed))
 def sign_rate.signs_this_session (e : Effects) : Result (Std.U32 × Effects) :=
   let value := if e.reads = 0 then e.backend.rateBefore else e.backend.rateAfter
   .ok (value, emit { e with reads := e.reads + 1 } (.readRate value))

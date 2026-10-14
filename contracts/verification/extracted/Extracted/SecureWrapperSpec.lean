@@ -35,11 +35,11 @@ def releaseEvents (sk : sphincs_c10.SigningKey) (msg : Bytes32) (sig : Signature
    .bump production.CFI_STEP_CT_EQ, .wait,
    .verify sk.pk_seed sk.pk_root msg sig true, .sentinel true fi.OK_SENTINEL,
    .bump production.CFI_STEP_VERIFY_GATE, .cfiCheck actual expected fi.OK_SENTINEL,
-   .wipe opt.val, .barrier]
+   .delaySource false, .wipe opt.val, .barrier]
 
 /-- A successful return has this exact final call transcript: two byte-equal
     signing outputs with identical key/message/OptRand, verification of the
-    returned bytes, the matching CFI sum, then cleanup. -/
+    returned bytes, the matching CFI sum, a successful delay-source status check, then cleanup. -/
 theorem wrapper_success_certificate (sk : sphincs_c10.SigningKey) (msg : Bytes32)
     (progress : Unit × Unit) (e out : Effects) (sig : Signature)
     (h : production.c10_sign_verified_with_progress_inner sk msg progress e fi.OK_SENTINEL =
@@ -50,7 +50,8 @@ theorem wrapper_success_certificate (sk : sphincs_c10.SigningKey) (msg : Bytes32
       out.trace = prior ++ releaseEvents sk msg sig opt sha shb actual expected ∧
       e.backend.sign sk.sk_seed sk.pk_seed sk.pk_root msg (some opt) sha = .ok sig ∧
       e.backend.sign sk.sk_seed sk.pk_seed sk.pk_root msg (some opt) shb = .ok sig ∧
-      e.backend.verify sk.pk_seed sk.pk_root msg sig = .ok true := by
+      e.backend.verify sk.pk_seed sk.pk_root msg sig = .ok true ∧
+      e.backend.delayFailed = false := by
   simp only [production.c10_sign_verified_with_progress_inner,
     fi.CfiCounter.new, fi.check_true_into_sentinel,
     production.c10_sign_verified_with_progress_inner.closure.Insts.CoreOpsFunctionFnMutTupleBool,
@@ -215,7 +216,17 @@ theorem wrapper_success_certificate (sk : sphincs_c10.SigningKey) (msg : Bytes32
                           fi.zeroize_barrier, nsc.zeroize_sensitive_state, bind_tc_ok,
                           uncurry_apply_pair, Result.ok.injEq, Prod.mk.injEq] at h
                         cases h.1
-                      · simp only [ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
+                      · simp only [fi.delay_source_failed, bind_tc_ok, uncurry_apply_pair] at h
+                        have hDelay : e20.backend.delayFailed = false := by
+                          by_contra hn
+                          have ht : e20.backend.delayFailed = true := Bool.eq_true_of_not_eq_false hn
+                          simp only [ht, if_true,
+                            ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
+                            fi.zeroize_barrier, bind_tc_ok, uncurry_apply_pair,
+                            Result.ok.injEq, Prod.mk.injEq] at h
+                          cases h.1
+                        simp only [hDelay, Bool.false_eq_true, if_false] at h
+                        simp only [ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
                           fi.zeroize_barrier, bind_tc_ok, uncurry_apply_pair,
                           Result.ok.injEq, Prod.mk.injEq,
                           Aeneas.Std.core.result.Result.Ok.injEq] at h
@@ -277,12 +288,13 @@ theorem wrapper_success_certificate (sk : sphincs_c10.SigningKey) (msg : Bytes32
                         simp only [if_pos hactual] at hwordEq
                         have hcfiWord := hwordEq.trans hword
                         refine ⟨random,sha,shb,e9.trace,expected,expected,rfl,hcExpected,?_⟩
-                        refine ⟨?_, ?_, ?_, ?_⟩
+                        refine ⟨?_, ?_, ?_, ?_, ?_⟩
                         · simp [emit, releaseEvents, List.append_assoc, hverifyWord,
-                            hactual, hwordEq, hword, hcfiWord]
+                            hactual, hwordEq, hword, hcfiWord, hDelay]
                         · simpa only [hBackend] using hbackend_a
                         · simpa only [emit,hBackend] using hbackend_b
                         · simpa only [emit,hBackend] using hbackend
+                        · simpa only [emit,hBackend] using hDelay
 
 
                 · simp only [ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
@@ -311,7 +323,7 @@ theorem wrapper_success_transcript (sk : sphincs_c10.SigningKey) (msg : Bytes32)
       actual = expected ∧
       production.c10_sign_verified_with_progress_inner.CFI_EXPECTED = .ok expected ∧
       out.trace = prior ++ releaseEvents sk msg sig opt sha shb actual expected := by
-  obtain ⟨opt,sha,shb,prior,actual,expected,ha,hc,ht,_,_,_⟩ :=
+  obtain ⟨opt,sha,shb,prior,actual,expected,ha,hc,ht,_,_,_,_⟩ :=
     wrapper_success_certificate sk msg progress e out sig h
   exact ⟨opt,sha,shb,prior,actual,expected,ha,hc,ht⟩
 
@@ -326,7 +338,8 @@ theorem wrapper_entry_success_certificate (sk : sphincs_c10.SigningKey) (msg : B
       out.trace = prior ++ releaseEvents sk msg sig opt sha shb actual expected ∧
       e.backend.sign sk.sk_seed sk.pk_seed sk.pk_root msg (some opt) sha = .ok sig ∧
       e.backend.sign sk.sk_seed sk.pk_seed sk.pk_root msg (some opt) shb = .ok sig ∧
-      e.backend.verify sk.pk_seed sk.pk_root msg sig = .ok true := by
+      e.backend.verify sk.pk_seed sk.pk_root msg sig = .ok true ∧
+      e.backend.delayFailed = false := by
   unfold production.c10_sign_verified_with_progress at h
   replace h := bind_success _ _ _ h
   rcases h with ⟨⟨before,e1⟩,hr,h⟩
@@ -364,7 +377,7 @@ theorem wrapper_entry_success_transcript (sk : sphincs_c10.SigningKey) (msg : By
       actual = expected ∧
       production.c10_sign_verified_with_progress_inner.CFI_EXPECTED = .ok expected ∧
       out.trace = prior ++ releaseEvents sk msg sig opt sha shb actual expected := by
-  obtain ⟨opt,sha,shb,prior,actual,expected,ha,hc,ht,_,_,_⟩ :=
+  obtain ⟨opt,sha,shb,prior,actual,expected,ha,hc,ht,_,_,_,_⟩ :=
     wrapper_entry_success_certificate sk msg progress e out sig h
   exact ⟨opt,sha,shb,prior,actual,expected,ha,hc,ht⟩
 

@@ -165,11 +165,14 @@ theorem wrapper_inner_cleanup (sk : sphincs_c10.SigningKey) (msg : Bytes32)
                           uncurry_apply_pair, Result.ok.injEq, Prod.mk.injEq] at h
                         rcases h with ⟨rfl,rfl⟩
                         exact Or.inr ⟨_,_,wipe_barrier_suffix _ _⟩
-                      · simp only [ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
-                          fi.zeroize_barrier, bind_tc_ok, uncurry_apply_pair,
-                          Result.ok.injEq, Prod.mk.injEq] at h
-                        rcases h with ⟨rfl,rfl⟩
-                        exact Or.inr ⟨_,_,wipe_barrier_suffix _ _⟩
+                      · simp only [fi.delay_source_failed, bind_tc_ok, uncurry_apply_pair] at h
+                        cases hDelay : e20.backend.delayFailed <;>
+                          simp only [hDelay, Bool.false_eq_true, if_false, if_true,
+                            ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
+                            fi.zeroize_barrier, bind_tc_ok, uncurry_apply_pair,
+                            Result.ok.injEq, Prod.mk.injEq] at h <;>
+                          rcases h with ⟨rfl,rfl⟩ <;>
+                          exact Or.inr ⟨_,_,wipe_barrier_suffix _ _⟩
 
 
 

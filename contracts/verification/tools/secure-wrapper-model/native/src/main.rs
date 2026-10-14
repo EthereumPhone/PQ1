@@ -25,6 +25,7 @@ pub mod fi {
     }
     pub fn zeroize_barrier() { super::effect(super::model::fi::zeroize_barrier); }
     pub fn wait_random() { super::effect(super::model::fi::wait_random); }
+    pub fn delay_source_failed()->bool { super::effect(super::model::fi::delay_source_failed) }
 }
 #[macro_export]
 macro_rules! cfi_expected {
@@ -88,6 +89,7 @@ fn fixture(bits:u32)->model::Effects {
         rate_sentinel:if b(2) {fi::OK_SENTINEL} else {0xdead_beef},
         verify_sentinel:if b(11) {fi::OK_SENTINEL} else {0xdead_beef},
         cfi_sentinel:if b(12) {fi::OK_SENTINEL} else {0xdead_beef},
+        delay_failed:!b(13),
         random:[if b(4) {0x31} else {0};16],
         shuffle_a:[if b(7) {0x52} else {0};32],
         shuffle_b:[if b(8) {0x73} else {0};32],
@@ -121,13 +123,23 @@ fn check(initial:model::Effects,expected_ok:bool,expected_relock:bool) {
         assert_eq!(native.trace[native.trace_len-1],7,"cleanup barrier must be last");
     }
     if expected_relock {assert_eq!(&native.trace[native.trace_len-3..native.trace_len],&[14,6,7]);}
-    if expected_ok {assert_eq!(native_result.unwrap(),native.sig_a);assert_eq!(native.signs,2);assert_eq!(native.fills,3);}
+    if expected_ok {
+        assert_eq!(native_result.unwrap(),native.sig_a);assert_eq!(native.signs,2);assert_eq!(native.fills,3);
+        assert!(!expected.delay_failed);
+        assert_eq!(&native.trace[native.trace_len-3..native.trace_len],&[15,6,7]);
+    }
+    if native.trace[..native.trace_len].contains(&15) {
+        assert_eq!(native_result.is_err(),expected.delay_failed,"delay failure must refuse release");
+        assert!(!expected_relock,"delay-source refusal must not relock");
+        assert_eq!(&native.trace[native.trace_len-3..native.trace_len],&[15,6,7]);
+    }
 }
 fn main() {
-    const ALL:u32=(1<<13)-1;
+    const ALL:u32=(1<<14)-1;
+    const FAULT_GUARDS:u32=(1<<13)-1;
     for bits in 0..=ALL {
         let ready=bits & ((1<<9)-1) == (1<<9)-1;
-        check(fixture(bits),bits==ALL,ready && bits != ALL);
+        check(fixture(bits),bits==ALL,ready && bits & FAULT_GUARDS != FAULT_GUARDS);
     }
     for i in 0..4008 {
         let mut f=fixture(ALL);f.sig_b[i]^=1;check(f,false,true);
@@ -138,5 +150,5 @@ fn main() {
         f.shuffle_a=[0;32];f.shuffle_a[index]=2;f.shuffle_b=[0;32];f.shuffle_b[31-index]=4;
         check(f,true,false);
     }
-    println!("PASS: 8192 guard combinations, 4008 mismatch positions, 32 sparse-entropy cases; production cfg; native/lifted result and effect equality");
+    println!("PASS: 16384 guard combinations, 4008 mismatch positions, 32 sparse-entropy cases; production cfg; native/lifted result and effect equality");
 }

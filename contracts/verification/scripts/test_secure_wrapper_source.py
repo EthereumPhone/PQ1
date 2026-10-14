@@ -14,12 +14,13 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
 REL = Path("contracts/verification/tools/secure-wrapper-model")
-MARKER = "PASS: 8192 guard combinations, 4008 mismatch positions, 32 sparse-entropy cases; production cfg; native/lifted result and effect equality"
+MARKER = "PASS: 16384 guard combinations, 4008 mismatch positions, 32 sparse-entropy cases; production cfg; native/lifted result and effect equality"
 MUTATIONS = [
     ("rate-readback", "secure/src/crypto.rs", "!= signs_before.wrapping_add(1)", "== signs_before.wrapping_add(1)", 2),
     ("comparison", "secure/src/crypto.rs", "if !bool::from(sig_a[..].ct_eq(&sig_b[..]))", "if bool::from(sig_a[..].ct_eq(&sig_b[..]))", 1),
     ("verification", "secure/src/crypto.rs", "check_true_into_sentinel(|| core::hint::black_box(v)) !=", "check_true_into_sentinel(|| core::hint::black_box(v)) ==", 1),
     ("cfi", "secure/src/crypto.rs", "check_into_sentinel(CFI_EXPECTED) !=", "check_into_sentinel(CFI_EXPECTED) ==", 1),
+    ("delay-source", "secure/src/crypto.rs", "if crate::fi::delay_source_failed() {", "if !crate::fi::delay_source_failed() {", 1),
     ("relock", str(REL / "src/lib.rs"), "super::event(e,14);", "let _ = e;", 1),
 ]
 
@@ -68,7 +69,7 @@ def main():
             assert "assertion `left == right` failed" in result.stderr
             assert any(reason in result.stderr for reason in ["wrong independent release outcome", "wrong relock classification"]), (label, result.stderr)
             print(f"PASS source control: {label} compiled and failed the independent outcome oracle", flush=True)
-    print("OK: 3 production-cfg corpus builds and 5 compiled semantic source controls")
+    print("OK: 3 production-cfg corpus builds and 6 compiled semantic source controls")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-/- Refusal paths retain an explicit entropy-cleanup or fault/relock suffix. -/
+/- Refusal paths retain explicit entropy, fault/relock, or delay-status cleanup suffixes. -/
 import Extracted.SecureWrapperSpec
 open Aeneas Aeneas.Std Result
 namespace secure_wrapper_model
@@ -39,12 +39,17 @@ def FaultGuard : Event → Prop
 def FaultRefusal (trace : List Event) : Prop :=
   ∃ prior guard bytes, FaultGuard guard ∧ trace = prior ++ [guard,.relock,.wipe bytes,.barrier]
 
+/-- An unavailable delay source refuses without a relock; the suffix records
+    the failed observation and OptRand cleanup. -/
+def DelayRefusal (trace : List Event) : Prop :=
+  ∃ prior bytes, trace = prior ++ [.delaySource true,.wipe bytes,.barrier]
+
 theorem wrapper_inner_refusal (sk : sphincs_c10.SigningKey) (msg : Bytes32)
     (progress : Unit × Unit) (e out : Effects)
     (h : production.c10_sign_verified_with_progress_inner sk msg progress e fi.OK_SENTINEL =
       .ok (.Err (), out)) :
     (∃ word, word ≠ fi.OK_SENTINEL ∧ out.trace = e.trace ++ [.initCfi,.sentinel true word]) ∨
-    EntropyRefusal out.trace ∨ FaultRefusal out.trace := by
+    EntropyRefusal out.trace ∨ FaultRefusal out.trace ∨ DelayRefusal out.trace := by
   simp only [production.c10_sign_verified_with_progress_inner,
     fi.CfiCounter.new, fi.check_true_into_sentinel,
     production.c10_sign_verified_with_progress_inner.closure.Insts.CoreOpsFunctionFnMutTupleBool,
@@ -169,7 +174,7 @@ theorem wrapper_inner_refusal (sk : sphincs_c10.SigningKey) (msg : Bytes32)
                   · simp [fi.OK_SENTINEL, ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
                       fi.zeroize_barrier, nsc.zeroize_sensitive_state, uncurry_apply_pair] at h
                     rcases h with ⟨_,rfl⟩
-                    refine Or.inr (Or.inr ⟨e18.trace,.sentinel false 0#u32,random.val,?_,?_⟩)
+                    refine Or.inr (Or.inr (Or.inl ⟨e18.trace,.sentinel false 0#u32,random.val,?_,?_⟩))
                     · change (0#u32) ≠ fi.OK_SENTINEL; unfold fi.OK_SENTINEL; decide
                     · simp [emit,List.append_assoc]
                   · simp only [if_true] at h
@@ -179,8 +184,8 @@ theorem wrapper_inner_refusal (sk : sphincs_c10.SigningKey) (msg : Bytes32)
                         fi.zeroize_barrier, nsc.zeroize_sensitive_state, bind_tc_ok,
                         uncurry_apply_pair, Result.ok.injEq, Prod.mk.injEq] at h
                       rcases h with ⟨_,rfl⟩
-                      refine Or.inr (Or.inr ⟨e18.trace,.sentinel true
-                        (if e18.checks = 0 then e18.backend.rateWord else e18.backend.verifyWord),random.val,?_,?_⟩)
+                      refine Or.inr (Or.inr (Or.inl ⟨e18.trace,.sentinel true
+                        (if e18.checks = 0 then e18.backend.rateWord else e18.backend.verifyWord),random.val,?_,?_⟩))
                       · change (if e18.checks = 0 then e18.backend.rateWord else e18.backend.verifyWord) ≠ fi.OK_SENTINEL
                         intro he; simp [he] at hverifyGate
                       · simp [emit,List.append_assoc]
@@ -200,15 +205,25 @@ theorem wrapper_inner_refusal (sk : sphincs_c10.SigningKey) (msg : Bytes32)
                         rcases h with ⟨_,rfl⟩
                         simp only [fi.CfiCounter.check_into_sentinel,Result.ok.injEq,Prod.mk.injEq] at hfinal
                         rcases hfinal with ⟨hword,rfl⟩
-                        refine Or.inr (Or.inr ⟨e19.trace,.cfiCheck cfi7.accum expected
-                          (if cfi7.accum = expected then e19.backend.cfiWord else 0#u32),random.val,?_,?_⟩)
+                        refine Or.inr (Or.inr (Or.inl ⟨e19.trace,.cfiCheck cfi7.accum expected
+                          (if cfi7.accum = expected then e19.backend.cfiWord else 0#u32),random.val,?_,?_⟩))
                         · change (if cfi7.accum = expected then e19.backend.cfiWord else 0#u32) ≠ fi.OK_SENTINEL
                           intro he; rw [← hword,he] at hCFIgate; simp at hCFIgate
                         · simp [emit,List.append_assoc]
-                      · simp only [ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
-                          fi.zeroize_barrier, bind_tc_ok, uncurry_apply_pair,
-                          Result.ok.injEq, Prod.mk.injEq] at h
-                        cases h.1
+                      · simp only [fi.delay_source_failed, bind_tc_ok, uncurry_apply_pair] at h
+                        cases hDelay : e20.backend.delayFailed
+                        · simp only [hDelay, Bool.false_eq_true, if_false,
+                            ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
+                            fi.zeroize_barrier, bind_tc_ok, uncurry_apply_pair,
+                            Result.ok.injEq, Prod.mk.injEq] at h
+                          cases h.1
+                        · simp only [hDelay, if_true,
+                            ArrayU8N.Insts.Secure_wrapper_modelZeroizeZeroize.zeroize,
+                            fi.zeroize_barrier, bind_tc_ok, uncurry_apply_pair,
+                            Result.ok.injEq, Prod.mk.injEq] at h
+                          rcases h with ⟨_,rfl⟩
+                          refine Or.inr (Or.inr (Or.inr ⟨e20.trace,random.val,?_⟩))
+                          simp [emit,List.append_assoc]
 
 
 
@@ -219,7 +234,7 @@ theorem wrapper_inner_refusal (sk : sphincs_c10.SigningKey) (msg : Bytes32)
                   simp only [SliceU8.Insts.Secure_wrapper_modelSubtleConstantTimeEq.ct_eq,
                     Result.ok.injEq,Prod.mk.injEq] at heq
                   rcases heq with ⟨hvalue,rfl⟩
-                  refine Or.inr (Or.inr ⟨e14.trace,.compare sa.val sb.val (decide (sa.val=sb.val)),random.val,?_,?_⟩)
+                  refine Or.inr (Or.inr (Or.inl ⟨e14.trace,.compare sa.val sb.val (decide (sa.val=sb.val)),random.val,?_,?_⟩))
                   · change decide (sa.val=sb.val) = false
                     rw [hvalue]; exact Bool.eq_false_iff.mpr hcompare
                   · simp [emit,List.append_assoc]

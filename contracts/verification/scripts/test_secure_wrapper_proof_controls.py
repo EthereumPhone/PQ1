@@ -21,10 +21,13 @@ FAMILIES = {
          "sphincs_c10.verify effects19 a a1 sk.sk_seed sig_a"),
         ("verify-result", "effects20 v", "effects20 true"),
         ("cfi-gate", "if i3 != fi.OK_SENTINEL", "if false"),
-        ("released-bytes", "ok (core.result.Result.Ok sig_a, effects25)",
-         "ok (core.result.Result.Ok (Array.repeat 4008#usize 0#u8), effects25)"),
-        ("success-barrier", "let effects25 ← fi.zeroize_barrier effects24",
-         "let effects25 ← ok effects24"),
+        ("released-bytes", "ok (core.result.Result.Ok sig_a, effects26)",
+         "ok (core.result.Result.Ok (Array.repeat 4008#usize 0#u8), effects26)"),
+        ("success-barrier", "let effects26 ← fi.zeroize_barrier effects25\n                        ok (core.result.Result.Ok",
+         "let effects26 ← ok effects25\n                        ok (core.result.Result.Ok"),
+        ("delay-gate", "if b5\n", "if false\n"),
+        ("delay-observation", "let (b5, effects24) ← fi.delay_source_failed effects23",
+         "let (b5, effects24) ← ok (false, effects23)"),
     ]),
     "refusal": ("SecureWrapperRefusal.lean", [
         ("mismatch-relock", "let effects18 ← nsc.zeroize_sensitive_state effects17",
@@ -35,6 +38,10 @@ FAMILIES = {
          "let effects24 ← ok effects23"),
         ("entropy-barrier", "let effects6 ← fi.zeroize_barrier effects5",
          "let effects6 ← ok effects5"),
+        ("delay-refusal-barrier", "let effects26 ← fi.zeroize_barrier effects25\n                        ok (core.result.Result.Err",
+         "let effects26 ← ok effects25\n                        ok (core.result.Result.Err"),
+        ("delay-refusal-relock", "if b5\n                      then\n",
+         "if b5\n                      then\n                        let effects24 ← nsc.zeroize_sensitive_state effects24\n"),
     ]),
 }
 

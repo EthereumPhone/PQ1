@@ -7,6 +7,7 @@ pub struct Effects {
     pub rate_sentinel: u32,
     pub verify_sentinel: u32,
     pub cfi_sentinel: u32,
+    pub delay_failed: bool,
     pub random: [u8; 16],
     pub shuffle_a: [u8; 32],
     pub shuffle_b: [u8; 32],
@@ -56,6 +57,7 @@ pub mod fi {
     }
     pub fn zeroize_barrier(e:&mut Effects) {event(e,7);}
     pub fn wait_random(e:&mut Effects) {event(e,9);}
+    pub fn delay_source_failed(e:&mut Effects)->bool {event(e,15);e.delay_failed}
 }
 #[macro_export]
 macro_rules! cfi_expected {

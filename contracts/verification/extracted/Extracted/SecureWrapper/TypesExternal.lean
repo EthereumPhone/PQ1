@@ -24,6 +24,7 @@ inductive Event where
       (shuffle : Bytes32) (result : Signature)
   | compare (a b : List Std.U8) (equal : Bool)
   | verify (seed root : Bytes16) (msg : Bytes32) (sig : Signature) (accepted : Bool)
+  | delaySource (failed : Bool)
   | cfiCheck (actual expected word : Std.U32)
   | relock
 
@@ -34,6 +35,7 @@ structure Backend where
   rateWord : Std.U32
   verifyWord : Std.U32
   cfiWord : Std.U32
+  delayFailed : Bool
   fill : Nat → Bool × List Std.U8
   sign : Bytes32 → Bytes16 → Bytes16 → Bytes32 → Option Bytes16 → Bytes32 → Result Signature
   verify : Bytes16 → Bytes16 → Bytes32 → Signature → Result Bool

@@ -23,19 +23,19 @@ namespace secure_wrapper_model
 def core.ops.range.RangeFull := Unit
 
 /-- [secure_wrapper_model::fi::CfiCounter]
-    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 42:4-42:44
+    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 43:4-43:44
     Visibility: public -/
 structure fi.CfiCounter where
   accum : Std.U32
 
 /-- [secure_wrapper_model::sphincs_c10::shuffle::ShuffleSeed]
-    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 97:21-97:57
+    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 99:21-99:57
     Visibility: public -/
 @[reducible]
 def sphincs_c10.shuffle.ShuffleSeed := Array Std.U8 32#usize
 
 /-- [secure_wrapper_model::sphincs_c10::SigningKey]
-    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 98:4-98:87
+    Source: 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', lines 100:4-100:87
     Visibility: public -/
 structure sphincs_c10.SigningKey where
   sk_seed : Array Std.U8 32#usize

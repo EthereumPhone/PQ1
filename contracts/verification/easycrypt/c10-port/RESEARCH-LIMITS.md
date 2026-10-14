@@ -1340,6 +1340,24 @@ regeneration, source/statement/module pins and the existing full signer evidence
 cover the changed dependencies; none supplies a complete cross-language session
 relation or closes the cryptographic, erasure or side-channel assumptions.
 
+Secure-wrapper integration with the current firmware (2026-10-14): the later
+FI-delay change adds a final `delay_source_failed` check before release. The
+source adapter and freshly generated wrapper now include that branch. The
+success certificates require a false status and include its observed event
+before OptRand cleanup. The refusal theorem distinguishes unavailable delay
+status (wipe and barrier, without relock in that suffix) from confirmed
+comparison/sentinel/CFI faults (relock, wipe and barrier). The all-return cleanup
+property and actual signer/verifier composition remain in place.
+
+The host corpus now compares 16,384 guard combinations in each of its three
+production-cfg builds, plus the existing mismatch-position and sparse-entropy
+cases. Six compiled source controls and sixteen typed Lean controls include
+changes to the final guard, observation, cleanup and relock classification.
+The backend supplies the observed delay-status boolean explicitly; neither the
+pool implementation nor its TRNG, interrupt, timing or physical FI behavior is
+proved by this sequential wrapper model. No production guard is removed or
+weakened to restore extraction freshness.
+
 The outstanding bridge is a compositional relation between the current Rust
 keygen/sign/verify implementation and the EasyCrypt byte game. It must cover
 the remaining fixed-width operations, primitive/caller computations, bounded

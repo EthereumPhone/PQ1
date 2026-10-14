@@ -29,7 +29,7 @@ theorem wrapper_firmware_release (sk : sphincs_c10.SigningKey) (msg : Bytes32)
       rawVerifierResult sk.pk_seed sk.pk_root msg sig = true ∧
       ∀ shuffle, _root_.sphincs_c10.hypertree.release_sign_inner
         sk.sk_seed sk.pk_seed sk.pk_root msg (some opt) () shuffle = .ok sig := by
-  obtain ⟨opt,sha,shb,prior,actual,expected,_,_,_,ha,_,hv⟩ :=
+  obtain ⟨opt,sha,shb,prior,actual,expected,_,_,_,ha,_,hv,_⟩ :=
     wrapper_entry_success_certificate sk msg progress _ out sig h
   change _root_.sphincs_c10.hypertree.release_sign_inner
     sk.sk_seed sk.pk_seed sk.pk_root msg (some opt) () sha = .ok sig at ha
