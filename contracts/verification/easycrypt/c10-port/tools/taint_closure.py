@@ -74,6 +74,22 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'wrapper_physical_budget_shape',
+    'wrapper_public_budget_shape',
+    'wrapper_physical_cost',
+    'wrapper_public_cost',
+    'wrapper_sign_full',
+    'wrapper_raw_full',
+    'wrapper_ready_refusal_charge',
+    'wrapper_attempt_charge',
+    'wrapper_sign_cap',
+    'wrapper_raw_cap',
+    'wrapper_client_physical_cost',
+    'wrapper_driver_physical_cost',
+    'wrapper_context_physical_cost',
+    'wrapper_client_public_cost',
+    'wrapper_driver_public_cost',
+    'wrapper_context_public_cost',
     "shuffle_seed_common", "shuffle_block_common",
     "shuffle_derive_common", "shuffle_permutation_common",
     "caller_forest_one", "caller_forest_sign", "caller_forest_recover",

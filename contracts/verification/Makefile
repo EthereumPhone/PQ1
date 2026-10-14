@@ -1973,7 +1973,7 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SignReleaseBridge 2>&1 | tail -1
 	@$(_FV_PYTHON3) scripts/test_sign_release_proof_controls.py
 	@$(_FV_PYTHON3) scripts/test_sign_release_profiles.py
-	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SecureWrapperBridge Extracted.SecureWrapperCleanup Extracted.SecureWrapperRefusal 2>&1 | tail -1
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.SecureWrapperBridge Extracted.SecureWrapperCleanup Extracted.SecureWrapperRefusal Extracted.SecureWrapperCost 2>&1 | tail -1
 	@$(_FV_PYTHON3) scripts/test_secure_wrapper_source.py
 	@$(_FV_PYTHON3) scripts/test_secure_wrapper_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.WotsSignBridge Extracted.ShuffleDiffVectors Extracted.WotsSignDiffVectors 2>&1 | tail -1

@@ -5,6 +5,7 @@ import Extracted.C10RepresentationBridge
 import Extracted.SecureWrapperBridge
 import Extracted.SecureWrapperCleanup
 import Extracted.SecureWrapperRefusal
+import Extracted.SecureWrapperCost
 import Extracted.SignReleaseBridge
 import Extracted.SignWholeSpec
 import Extracted.SignHeaderDiffVectors
@@ -442,3 +443,9 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.Equiv.shuffle_derive_total
 #print axioms Extracted.Equiv.actual_forest_label
 #print axioms Extracted.Equiv.actual_layer_label
+
+-- Secure-wrapper call accounting, including refusal and arbitrary prior trace.
+#print axioms secure_wrapper_model.wrapper_inner_call_cost
+#print axioms secure_wrapper_model.wrapper_entry_call_cost
+#print axioms secure_wrapper_model.wrapper_entry_call_bounds
+#print axioms secure_wrapper_model.wrapper_entry_success_call_counts

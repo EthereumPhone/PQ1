@@ -5,6 +5,7 @@ import Extracted.C10RepresentationBridge
 import Extracted.SecureWrapperBridge
 import Extracted.SecureWrapperCleanup
 import Extracted.SecureWrapperRefusal
+import Extracted.SecureWrapperCost
 import Extracted.SignReleaseBridge
 import Extracted.WotsSignBridge
 import Extracted.WotsKeygenBridge

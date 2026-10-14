@@ -465,3 +465,7 @@ C10PrivateCallerBridge
 C10TreeCallerBridge
 C10OuterCallerBridge
 C10ShuffleBridge
+
+# Sequential wrapper and adaptive query accounting, 2026-10-14.
+RawWrapperCost
+WrapperSessionCost

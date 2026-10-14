@@ -670,3 +670,7 @@ cdrafts-split/WotsZeroSentinel.ec
 cdrafts-split/XMSSMT_C_Scheme.ec
 cdrafts-split/XmssmtCCCharged.ec
 cdrafts-split/XmssmtCC_All.ec
+cdrafts-split/RawWrapper.ec
+cdrafts-split/RawWrapperCost.ec
+cdrafts-split/WrapperSession.ec
+cdrafts-split/WrapperSessionCost.ec

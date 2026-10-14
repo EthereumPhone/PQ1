@@ -2532,3 +2532,12 @@ cdrafts-split/C10ShuffleBridge.ec	defined-op:db88023b3f56	shuffle_finish	# line 
 cdrafts-split/C10ShuffleBridge.ec	module:57516d53c2ff	PairedShuffle	# line 47
 cdrafts-split/C10Representation.ec	defined-op:4f82711b6109	shuffle_layer_label
 cdrafts-split/C10Representation.ec	defined-op:6cf7543fe27f	shuffle_forest_label
+cdrafts-split/RawWrapper.ec	module:249d7b1039a8	RawWrapper
+cdrafts-split/RawWrapperCost.ec	defined-op:06f0090d8ced	wrapper_physical_budget
+cdrafts-split/RawWrapperCost.ec	defined-op:66344e04b6d3	wrapper_public_budget
+cdrafts-split/WrapperSession.ec	module-type:336dd0638b45	WrapperClient
+cdrafts-split/WrapperSession.ec	module-type:c503e165468a	WrapperClientOracle
+cdrafts-split/WrapperSession.ec	module:07cc0f12e405	WrapperContext
+cdrafts-split/WrapperSession.ec	module:093e89c7fc3b	WrapperLimits
+cdrafts-split/WrapperSession.ec	module:b4d2e89fe422	WrapperDriver
+cdrafts-split/WrapperSession.ec	module:cfc9bf1ae362	WrapperSession

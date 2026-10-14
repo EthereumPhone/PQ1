@@ -361,3 +361,9 @@ Extracted.Equiv.shuffle_derive_exact
 Extracted.Equiv.shuffle_derive_total
 Extracted.Equiv.actual_forest_label
 Extracted.Equiv.actual_layer_label
+
+# Secure-wrapper modeled call accounting.
+secure_wrapper_model.wrapper_inner_call_cost
+secure_wrapper_model.wrapper_entry_call_cost
+secure_wrapper_model.wrapper_entry_call_bounds
+secure_wrapper_model.wrapper_entry_success_call_counts

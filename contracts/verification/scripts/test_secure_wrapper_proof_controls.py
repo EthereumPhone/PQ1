@@ -43,6 +43,15 @@ FAMILIES = {
         ("delay-refusal-relock", "if b5\n                      then\n",
          "if b5\n                      then\n                        let effects24 ← nsc.zeroize_sensitive_state effects24\n"),
     ]),
+    "cost": ("SecureWrapperCost.lean", [
+        ('first-sign-charge', 'sphincs_c10.SigningKey.sign_with_shuffle sk effects11\n                    msg_hash (some opt_rand_buf1) shuffle_seed_a1 ()', 'ok (Array.repeat 4008#usize 0#u8, effects11)'),
+        ('second-sign-charge', 'sphincs_c10.SigningKey.sign_with_shuffle sk effects14\n                    msg_hash (some opt_rand_buf1) shuffle_seed_b1 ()', 'ok (sig_a, effects14)'),
+        ('internal-verify-charge', 'sphincs_c10.verify effects19 a a1 msg_hash sig_a', 'ok (true, effects19)'),
+        ('third-sign-charge', 'let (cfi5, effects16) ←', 'let (sig_b, effects15) ←\n                  sphincs_c10.SigningKey.sign_with_shuffle sk effects15\n                    msg_hash (some opt_rand_buf1) shuffle_seed_b1 ()\n                let (cfi5, effects16) ←'),
+        ('second-verify-charge', 'let (i1, effects21) ←', 'let (v, effects20) ← sphincs_c10.verify effects20 a a1 msg_hash sig_a\n                  let (i1, effects21) ←'),
+        ('prior-cost-reset', 'fi.CfiCounter.new effects', 'fi.CfiCounter.new { effects with trace := [] }'),
+    ]),
+
 }
 
 

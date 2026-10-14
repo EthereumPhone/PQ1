@@ -1379,3 +1379,41 @@ backend boundary even when the surrounding refinement is axiom-free.
 Replay optimization #789 and the combined owner-triggered assurance pass #509
 remain separate deferred work. None of the research above grants shipment or
 hardware authority.
+
+Secure-wrapper query accounting (2026-10-14): the extracted
+`SecureWrapperCost.lean` now proves that every **normal return**, including
+refusals, preserves the cost of the incoming event trace and adds at most two
+signing calls and one verification call. A successful return adds exactly those
+three calls. The weights are arbitrary natural numbers; separate instantiations
+bound the signing and verification counts. These are kernel-checked facts about
+the sequential lifted wrapper and its recorded effects, with no new project
+axiom. Aeneas failure/divergence carries no final `Effects` value, so this does
+**not** bound physical prefixes of aborted executions. RNG, delay, callbacks and
+other events are uncharged by this particular accounting and need their own
+backend/resource arguments.
+
+`RawWrapper` explicitly schedules two `RawSigner.sign` calls and, after equal
+successful results, one `RawSigner.verify` call over the same persistent oracle.
+`RawWrapperCost` proves bounds of `2*(4*signing_budget+435646)+771` physical-model
+queries and `2*(3*signing_budget+364892)+771` public-model queries, preserving
+arbitrary prior counts. Here “physical” names the existing `Physical` oracle
+model; it does not measure firmware instructions or hardware time. Caller-chosen
+readiness and final-guard booleans overapproximate environment outcomes.
+`WrapperSessionCost` composes these bounds for an adaptive client, charging every
+admitted attempt even when it refuses. Later attempts remain permitted. Key
+generation and a final candidate verification are charged separately: the total
+is at most `177151+qr+qs*wrapper_physical_budget+771`, or
+`155135+qr+qs*wrapper_public_budget+771` in the public-query model, for nonnegative
+raw-query and attempt caps `qr,qs`.
+
+This closes the separate **call-accounting and abstract query-budget** component
+of the wrapper-cost gap recorded above. The Lean per-call weights are not an
+instantiation of a proved backend-cost relation to EasyCrypt, and this new
+adaptive wrapper context has no cryptographic reduction theorem. The complete
+cross-language signer/session relation, physical abort prefixes, concrete hash,
+RNG/delay/callback interpretations, QROM assumptions and hardware claims remain
+open. Typed mutations check sensitivity to missing/extra calls, a reset prior
+trace/count, omitted verification or second-sign charges, uncharged refusals and
+removed caps. An intended proof rejection is sensitivity evidence, not a proof
+that every mutated specification is logically false. No production code changes
+or new signing authority are part of this result.
