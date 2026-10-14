@@ -351,11 +351,16 @@ class GateJudgeTests(unittest.TestCase):
                  (critical, 137, 'MUST-FAIL', 1)]
         for diagnostic in ('prover timeout', 'Fatal error: out of memory',
                            'solver timed out', 'Stack overflow', 'Killed',
-                           'Segmentation fault', 'resource limit exceeded'):
+                           'Segmentation fault', 'resource limit exceeded',
+                           'prover Z3 exited with Failure (unrecognized answer)',
+                           'prover Alt-Ergo exited with High failure (signaled)',
+                           "error when starting `Z3': process could not start"):
             for output in (critical + diagnostic + '\n', diagnostic + '\r' + critical):
                 cases.append((output, 1, 'MUST-FAIL', 1))
                 cases.append((output, 0, 'MUST-PASS', 1))
         cases.append((critical + 'prover timeout\n' + ('progress\n' * 20000), 1, 'MUST-FAIL', 1))
+        cases.append((critical + 'prover Z3 exited with High failure (signaled)\n' +
+                      ('progress\n' * 20000), 1, 'MUST-FAIL', 1))
         with tempfile.TemporaryDirectory() as directory:
             out = Path(directory) / 'control.out'
             for output, rc, polarity, failures in cases:

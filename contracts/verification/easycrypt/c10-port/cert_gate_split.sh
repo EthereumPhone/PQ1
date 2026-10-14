@@ -475,7 +475,9 @@ judge_control() { # $1 path  $2 polarity  $3 declared reason.  PHASE 3's verdict
   out=$(cat "$JR_OUT"); rc=$JR_RC
   # A declared proof diagnostic does not cancel a later solver/process failure.
   # Inspect the complete output before granting either control polarity credit.
-  if printf '%s' "$out" | tr '\r' '\n' | grep -aiE 'prover timeout|solver timeout|timed out|out of memory|memory exhausted|stack overflow|segmentation fault|fatal error|resource limit|^[[:space:]]*(timeout|killed)([[:space:]:]|$)' >/dev/null; then
+  # EasyCrypt reports Why3 Failure/HighFailure as warnings, independently of
+  # its ordinary proof-error exit status; failed prover startup is also a warning.
+  if printf '%s' "$out" | tr '\r' '\n' | grep -aiE 'prover timeout|solver timeout|timed out|out of memory|memory exhausted|stack overflow|segmentation fault|fatal error|resource limit|prover .* exited with (high )?failure|error when starting |^[[:space:]]*(timeout|killed)([[:space:]:]|$)' >/dev/null; then
     echo "FAIL control $path: resource/process diagnostic"; fail=$((fail+1)); return
   fi
   msg=$(printf '%s' "$out" | tr '\r' '\n' | grep -a '^\[critical\]' | head -1)
