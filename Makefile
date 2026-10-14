@@ -4,6 +4,14 @@
 # to surface it. `make help` also appends the FV / spec-assurance suite from
 # contracts/verification/; `make help-verify` shows just that suite.
 .DEFAULT_GOAL := help
+# Mutation controls for the FI delay-length path (#802/#832/#833/#835). Breaks
+# one mechanism at a time and demands that EXACTLY the named test(s) go red —
+# a green suite proves nothing until each test is shown to fail for its own
+# reason. These have caught four defects the host suite passed through.
+fi-delay-controls:
+	@python3 -I scripts/check_fi_delay_controls.py
+
+.PHONY: fi-delay-controls
 .PHONY: help help-verify
 help: ## Show the main runnable targets (root + the FV suite below)
 	@grep -hE '^[a-zA-Z0-9_.-]+:.*## ' $(MAKEFILE_LIST) | sort | awk -F':.*## ' '!seen[$$1]++ {printf "  \033[36m%-26s\033[0m %s\n", $$1, $$2}'
@@ -2862,7 +2870,7 @@ RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-
 override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key se-lcd-diag dev-dfu \
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
-                 erc7730-forced-blind \
+                 erc7730-forced-blind rng-fault-probe \
                  fw-rollback-e2e fwup-transport-e2e se050-scp03-allow-factory-fallback \
                  legacy-fw-rollback-unsafe prodtest factory-provisioning \
                  factory-provisioning-rehearsal factory-production-irreversible-im-sure \
@@ -5100,6 +5108,7 @@ UI_PX_SUFFIXES := \
 	debug-log,ui-px,ui-px-dma,ui-px-frametime \
 	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench \
 	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench,ui-px-te-probe \
+	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench,rng-fault-probe \
 	debug-log,ui-px,ui-px-spi40 \
 	ui-px,ui-px-dma
 UI_PX_CONFIGS := $(foreach b,board-pq1 board-iota2,\

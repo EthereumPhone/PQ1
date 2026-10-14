@@ -431,6 +431,10 @@ compile_error!(
         // OPTIGA configuration probe: terminal bench image that replaces
         // normal boot.
         feature = "optiga-probe",
+        // Deliberately stops the RNG kernel clock to provoke a real latched
+        // SECS/CECS. A fault-injection path has no business in a shipping
+        // image under any circumstances.
+        feature = "rng-fault-probe",
     )
 ))]
 compile_error!(
@@ -1930,7 +1934,34 @@ pub fn poll_gateway() {
         // the first signature failed). With the token in this caller,
         // `dispatch` is byte-for-byte what it was.
         let result = match GATEWAY_GATE.try_enter() {
-            Some(_token) => dispatch(cmd, &args),
+            Some(_token) => {
+                // #835's FI-delay boundary sits HERE, not in `dispatch`.
+                //
+                // It was in `dispatch` until this merge, which would have
+                // reintroduced the exact stack regression 763eb7ec removed:
+                // holding a value across `dispatch`'s `match` stops its arms
+                // being tail calls, so the large sign handlers' frames add
+                // onto `dispatch`'s. That commit requires `dispatch` to stay
+                // byte-for-byte, and it does.
+                //
+                // `poll_gateway` already holds `args` across the call, so it
+                // is not a tail call either way and this costs nothing.
+                //
+                // Ordering is preserved a fortiori: the gate has already
+                // refused a nested entry before this arm is reached, so the
+                // clear below can never wipe an outer operation's poison.
+                crate::fi::clear_delay_poison();
+                let status = dispatch(cmd, &args);
+                if crate::fi::delay_source_failed() {
+                    secure_log!(
+                        "[S] nsc: cmd {} ran with an unprotected FI delay — refusing",
+                        cmd
+                    );
+                    sphincs_tz_shared::NscStatus::CryptoError as u32
+                } else {
+                    status
+                }
+            }
             None => GATEWAY_REFUSED,
         };
 
@@ -2063,13 +2094,41 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
 //    handler's own `# Safety` doc-comment for the per-handler
 //    precondition list.
 
+/// Run one gateway command as an FI-delay operation boundary (#835).
+///
+/// A `wait_random()` that cannot be given a fresh length performs NO delay and
+/// raises `fi`'s poison rather than halting the device — that halt was what
+/// #833/#834 shipped and what two independent reviews rejected. The
+/// consequence has to land somewhere, and a gateway command is the natural
+/// place: this call failed, the companion gets a status it can show, and the
+/// device stays alive.
+///
+/// Cleared on entry so the flag means "this command", not "this boot".
+/// Otherwise a single transient would disable the device until reboot, which
+/// is the halt again wearing a different hat.
+///
+/// **Every veneer must go through this.** On `stm32u585` the CMSE veneers ARE
+/// the gateway — `dispatch` is the QEMU mailbox path only — so instrumenting
+/// `dispatch` alone would have left this entire mechanism inert on silicon.
+#[cfg(feature = "stm32u585")]
+#[inline(always)]
+fn fi_boundary(run: impl FnOnce() -> u32) -> u32 {
+    crate::fi::clear_delay_poison();
+    let status = run();
+    if crate::fi::delay_source_failed() {
+        secure_log!("[NSC] command ran with an unprotected FI delay — refusing");
+        return sphincs_tz_shared::NscStatus::CryptoError as u32;
+    }
+    status
+}
+
 /// CMD_GET_REMAINING — returns the remaining PIN attempts.
 #[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32 {
     gateway_enter!(0);
     secure_log!("[NSC] get_remaining_attempts");
-    let r = unsafe { cmd_get_remaining::run() };
+    let r = fi_boundary(|| unsafe { cmd_get_remaining::run() });
     secure_log!("[NSC] get_remaining_attempts -> {}", r);
     r
 }
@@ -2080,7 +2139,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_remaining_attempts() -> u32 {
 pub extern "cmse-nonsecure-entry" fn nsc_request_unlock() -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] request_unlock");
-    let r = unsafe { cmd_request_unlock::run() };
+    let r = fi_boundary(|| unsafe { cmd_request_unlock::run() });
     secure_log!("[NSC] request_unlock -> {}", r);
     r
 }
@@ -2096,7 +2155,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop(
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] sign_userop (len={})", total_len);
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
-    let r = unsafe { cmd_sign_userop::run(&args) };
+    let r = fi_boundary(|| unsafe { cmd_sign_userop::run(&args) });
     secure_log!("[NSC] sign_userop -> {}", r);
     r
 }
@@ -2115,7 +2174,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop_batch(
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] sign_userop_batch (len={})", total_len);
     let args = GatewayArgs { arg0: payload_ptr, arg1: sig_out_ptr, arg2: total_len };
-    let r = unsafe { cmd_sign_userop_batch::run(&args) };
+    let r = fi_boundary(|| unsafe { cmd_sign_userop_batch::run(&args) });
     secure_log!("[NSC] sign_userop_batch -> {}", r);
     r
 }
@@ -2126,7 +2185,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_userop_batch(
 pub extern "cmse-nonsecure-entry" fn nsc_is_unlocked() -> u32 {
     gateway_enter!(0);
     secure_log!("[NSC] is_unlocked");
-    let r = unsafe { cmd_is_unlocked::run() };
+    let r = fi_boundary(|| unsafe { cmd_is_unlocked::run() });
     secure_log!("[NSC] is_unlocked -> {}", r);
     r
 }
@@ -2137,7 +2196,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_is_unlocked() -> u32 {
 pub extern "cmse-nonsecure-entry" fn nsc_lock() -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] lock");
-    let r = unsafe { cmd_lock::run() };
+    let r = fi_boundary(|| unsafe { cmd_lock::run() });
     secure_log!("[NSC] lock -> {}", r);
     r
 }
@@ -2161,14 +2220,21 @@ pub extern "cmse-nonsecure-entry" fn nsc_register_heartbeat(addr: u32) -> u32 {
     // lacked, and requires two coordinated faults to bypass. `iwdg`'s own
     // alignment+window check stays as defense-in-depth (and covers the 4-byte
     // alignment the `read_volatile(_ as *const u32)` in SysTick relies on).
-    if ns_ptr::NsPtr::<u8>::new(addr).validate_read(4).is_err() {
-        return 1;
-    }
-    if crate::hw::iwdg::register_ns_heartbeat(addr) {
-        0
-    } else {
-        1
-    }
+    // #835: no `cmd_*::run` here, but `validate_read` goes through
+    // `check_true_into_sentinel`, which delays — so this veneer is an FI-delay
+    // operation like any other and needs the same boundary. Registering a
+    // heartbeat on an unprotected validation would be a particularly bad one
+    // to let through: it is what feeds the watchdog.
+    fi_boundary(|| {
+        if ns_ptr::NsPtr::<u8>::new(addr).validate_read(4).is_err() {
+            return 1;
+        }
+        if crate::hw::iwdg::register_ns_heartbeat(addr) {
+            0
+        } else {
+            1
+        }
+    })
 }
 
 /// CMD_TEST_PIN_LOCKOUT — non-interactive brute-force verification.
@@ -2179,7 +2245,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_register_heartbeat(addr: u32) -> u32 {
 pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] test_pin_lockout");
-    let r = unsafe { cmd_test_pin_lockout::run() };
+    let r = fi_boundary(|| unsafe { cmd_test_pin_lockout::run() });
     secure_log!("[NSC] test_pin_lockout -> {}", r);
     r
 }
@@ -2194,7 +2260,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_test_pin_lockout() -> u32 {
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
-    let r = unsafe { cmd_tzic_status::run() };
+    let r = fi_boundary(|| unsafe { cmd_tzic_status::run() });
     secure_log!("[NSC] tzic_status -> {}", r);
     r
 }
@@ -2204,6 +2270,25 @@ pub extern "cmse-nonsecure-entry" fn nsc_tzic_status() -> u32 {
 // ---------------------------------------------------------------------------
 
 /// CMD_GET_PIN_ATTEMPT_LOG (4) — why each PIN attempt was consumed (#715).
+///
+/// This was the ONE veneer in this file with no `#[cfg]` at all, which is two
+/// defects wearing one coat. The first is a build break this merge exposed: a
+/// `cmse-nonsecure-entry` veneer is meaningless off `stm32u585` (on QEMU the
+/// gateway is the `dispatch` mailbox), so when #835 put `fi_boundary` — which
+/// is `#[cfg(feature = "stm32u585")]`, because the veneers ARE the gateway on
+/// silicon — on every veneer, this one alone stopped compiling for QEMU. The
+/// NS side was already inside `#[cfg(feature = "stm32u585")]` and its comment
+/// there claims "the secure side declares these under `prodtest`; the NS side
+/// mirrors the gate" — a gate neither side ever applied to this symbol. Gating
+/// on `stm32u585` restores the pair and changes no hardware build: the feature
+/// is on in every one of them.
+///
+/// The second defect is NOT fixed here and is not mine to decide: the veneer
+/// (and `cmd_pin_attempt_log`'s bare pointer check) is therefore still in
+/// production hardware images with no PIN gate. That is USB-06 of the
+/// 2026-10-11 frontier research, and whether this log may be read at all is
+/// the open owner decision #719. Adding `prodtest` here would pre-empt it.
+#[cfg(feature = "stm32u585")]
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
@@ -2212,7 +2297,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_pin_attempt_log(out_ptr: u32) -> u3
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { cmd_pin_attempt_log::run(&args) };
+    let r = fi_boundary(|| unsafe { cmd_pin_attempt_log::run(&args) });
     secure_log!("[NSC] get_pin_attempt_log -> {}", r);
     r
 }
@@ -2227,7 +2312,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_get_id(out_ptr: u32) -> u32 {
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_get_id_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_get_id_run(&args) });
     secure_log!("[NSC] prodtest_get_id -> {}", r);
     r
 }
@@ -2242,7 +2327,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_display_pattern(in_ptr: u32) -
         arg1: 0,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_display_pattern_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_display_pattern_run(&args) });
     secure_log!("[NSC] prodtest_display_pattern -> {}", r);
     r
 }
@@ -2257,7 +2342,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_saes_selftest(out_ptr: u32) ->
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_saes_selftest_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_saes_selftest_run(&args) });
     secure_log!("[NSC] prodtest_saes_selftest -> {}", r);
     r
 }
@@ -2272,7 +2357,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_bhk_selftest(out_ptr: u32) -> 
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_bhk_selftest_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_bhk_selftest_run(&args) });
     secure_log!("[NSC] prodtest_bhk_selftest -> {}", r);
     r
 }
@@ -2287,7 +2372,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_flash_rw(in_ptr: u32) -> u32 {
         arg1: 0,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_flash_rw_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_flash_rw_run(&args) });
     secure_log!("[NSC] prodtest_flash_rw -> {}", r);
     r
 }
@@ -2302,7 +2387,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_trng_sample(in_ptr: u32, out_p
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_trng_sample_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_trng_sample_run(&args) });
     secure_log!("[NSC] prodtest_trng_sample -> {}", r);
     r
 }
@@ -2317,7 +2402,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_optiga_handshake(out_ptr: u32)
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_optiga_handshake_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_optiga_handshake_run(&args) });
     secure_log!("[NSC] prodtest_optiga_handshake -> {}", r);
     r
 }
@@ -2332,7 +2417,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_se050_handshake(out_ptr: u32) 
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_se050_handshake_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_se050_handshake_run(&args) });
     secure_log!("[NSC] prodtest_se050_handshake -> {}", r);
     r
 }
@@ -2351,7 +2436,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_usb_loopback(
         arg1: out_ptr,
         arg2: n,
     };
-    let r = unsafe { prodtest::cmd_usb_loopback_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_usb_loopback_run(&args) });
     secure_log!("[NSC] prodtest_usb_loopback({}) -> {}", n, r);
     r
 }
@@ -2366,7 +2451,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_button_test(out_ptr: u32) -> u
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_button_test_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_button_test_run(&args) });
     secure_log!("[NSC] prodtest_button_test -> {}", r);
     r
 }
@@ -2383,7 +2468,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr:
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_rgb_test_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_rgb_test_run(&args) });
     secure_log!("[NSC] prodtest_rgb_test -> {}", r);
     r
 }
@@ -2398,7 +2483,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rng_config(out_ptr: u32) -> u3
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_rng_config_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_rng_config_run(&args) });
     secure_log!("[NSC] prodtest_rng_config -> {}", r);
     r
 }
@@ -2414,7 +2499,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: 
         arg1: out_ptr,
         arg2: 0,
     };
-    let r = unsafe { prodtest::cmd_rgb_osd_run(&args) };
+    let r = fi_boundary(|| unsafe { prodtest::cmd_rgb_osd_run(&args) });
     secure_log!("[NSC] prodtest_rgb_osd -> {}", r);
     r
 }
@@ -2434,7 +2519,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_begin(manifest_ptr: u32, manifest_le
         arg1: 0,
         arg2: manifest_len,
     };
-    unsafe { cmd_fw_begin::run(&args) }
+    fi_boundary(|| unsafe { cmd_fw_begin::run(&args) })
 }
 
 /// CMD_FW_CHUNK — stream one image chunk. arg0 = chunk_ptr, arg2 = chunk_len.
@@ -2447,7 +2532,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32
         arg1: 0,
         arg2: chunk_len,
     };
-    unsafe { cmd_fw_chunk::run(&args) }
+    fi_boundary(|| unsafe { cmd_fw_chunk::run(&args) })
 }
 
 /// CMD_FW_COMMIT — finalize staged update. No args.
@@ -2456,7 +2541,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32
 pub extern "cmse-nonsecure-entry" fn nsc_fw_commit() -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: 0, arg1: 0, arg2: 0 };
-    unsafe { cmd_fw_commit::run(&args) }
+    fi_boundary(|| unsafe { cmd_fw_commit::run(&args) })
 }
 
 /// CMD_FW_STATUS — read update progress. arg1 = out_ptr.
@@ -2465,7 +2550,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_commit() -> u32 {
 pub extern "cmse-nonsecure-entry" fn nsc_fw_status(out_ptr: u32) -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: 0, arg1: out_ptr, arg2: 0 };
-    unsafe { cmd_fw_status::run(&args) }
+    fi_boundary(|| unsafe { cmd_fw_status::run(&args) })
 }
 
 /// CMD_FW_ABORT — discard partial update.
@@ -2473,7 +2558,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_fw_status(out_ptr: u32) -> u32 {
 #[no_mangle]
 pub extern "cmse-nonsecure-entry" fn nsc_fw_abort() -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
-    unsafe { cmd_fw_abort::run() }
+    fi_boundary(|| unsafe { cmd_fw_abort::run() })
 }
 
 /// CMD_GET_WALLET_ADDRESS — compute CREATE2-predicted wallet address for
@@ -2491,7 +2576,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_wallet_address(
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] get_wallet_address (acct={})", account_index);
     let args = GatewayArgs { arg0: out_ptr, arg1: account_index, arg2: show };
-    let r = unsafe { cmd_get_wallet_address::run(&args) };
+    let r = fi_boundary(|| unsafe { cmd_get_wallet_address::run(&args) });
     secure_log!("[NSC] get_wallet_address -> {}", r);
     r
 }
@@ -2511,7 +2596,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_get_init_code(
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] get_init_code (len={})", in_len);
     let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
-    let r = unsafe { cmd_get_init_code::run(&args) };
+    let r = fi_boundary(|| unsafe { cmd_get_init_code::run(&args) });
     secure_log!("[NSC] get_init_code -> {}", r);
     r
 }
@@ -2527,7 +2612,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_sign_offchain(
     gateway_enter!(GATEWAY_REFUSED);
     secure_log!("[NSC] sign_offchain (len={})", in_len);
     let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
-    let r = unsafe { cmd_sign_offchain::run(&args) };
+    let r = fi_boundary(|| unsafe { cmd_sign_offchain::run(&args) });
     secure_log!("[NSC] sign_offchain -> {}", r);
     r
 }
@@ -2542,7 +2627,7 @@ pub extern "cmse-nonsecure-entry" fn nsc_offchain_status(
 ) -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: in_ptr, arg1: out_ptr, arg2: in_len };
-    unsafe { cmd_offchain_status::run(&args) }
+    fi_boundary(|| unsafe { cmd_offchain_status::run(&args) })
 }
 
 /// CMD_OFFCHAIN_SYNC — bump the firmware's per-slot `last_userop_count`
@@ -2553,5 +2638,5 @@ pub extern "cmse-nonsecure-entry" fn nsc_offchain_status(
 pub extern "cmse-nonsecure-entry" fn nsc_offchain_sync(in_ptr: u32, in_len: u32) -> u32 {
     gateway_enter!(GATEWAY_REFUSED);
     let args = GatewayArgs { arg0: in_ptr, arg1: 0, arg2: in_len };
-    unsafe { cmd_offchain_sync::run(&args) }
+    fi_boundary(|| unsafe { cmd_offchain_sync::run(&args) })
 }

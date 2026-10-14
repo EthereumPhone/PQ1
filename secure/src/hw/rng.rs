@@ -130,6 +130,54 @@ static PREVIOUS_WORD: AtomicU32 = AtomicU32::new(0);
 /// Contention fails immediately instead of spinning in an interrupt.
 static DRIVER_BUSY: AtomicBool = AtomicBool::new(false);
 
+/// Set once [`init`] succeeds; bounds the #833 bootstrap exemption.
+///
+/// FI-hardened as a `(val, complement)` pair, and **fail-closed in the
+/// direction that CLOSES the exemption** (#835 M7). The dangerous reading is
+/// "init has not completed", because that keeps the fixed-delay window open
+/// forever — so anything other than the exact intact NOT-COMPLETE codeword
+/// reads as COMPLETE. A single skipped store therefore leaves an invalid pair
+/// and shuts the window, where a plain `AtomicBool` left it wide open while
+/// `init` reported success.
+const INIT_PENDING: u32 = 0x1555_5555;
+const INIT_DONE: u32 = 0x1AAA_AAAA;
+static INIT_VAL: AtomicU32 = AtomicU32::new(INIT_PENDING);
+static INIT_COMP: AtomicU32 = AtomicU32::new(!INIT_PENDING);
+
+/// True unless the pair is exactly the intact PENDING codeword.
+#[inline(never)]
+fn init_has_completed() -> bool {
+    pqsigner_fi::init_receipt_says_completed(
+        INIT_VAL.load(Ordering::Acquire),
+        INIT_COMP.load(Ordering::Acquire),
+        INIT_PENDING,
+    )
+}
+
+/// Which execution context opened the current conditioning window.
+///
+/// IPSR at `ConditioningWindow::enter`. ARMv8-M B1.4.2: 0 is thread mode,
+/// otherwise the active exception number.
+static CONDITIONING_CTX: AtomicU32 = AtomicU32::new(CTX_NONE);
+const CTX_NONE: u32 = 0xFFFF_FFFF;
+
+/// Fixed delays already served inside the current window, and the cap.
+///
+/// #835 M7: the measured "4 per window" was a clean-path observation, not a
+/// bound — `read_healthy_word_into`'s `compare_exchange_weak` loop adds three
+/// delays per failed CAS and Cortex-M clears the exclusive monitor across
+/// exceptions. Rather than assert a bound, enforce one: past this many the
+/// window stops permitting a fixed length and the delay poisons instead.
+/// Headroom over the measured 4 so an ordinary retry cannot trip it.
+static CONDITIONING_FIXED_USED: AtomicU32 = AtomicU32::new(0);
+const MAX_FIXED_PER_WINDOW: u32 = 32;
+
+/// Fixed delays REFUSED — wrong context, or past the per-window cap.
+///
+/// Unconditional, not bench-gated: this is the signal that the exemption is
+/// being pushed on.
+pub static CONDITIONING_REFUSED: AtomicU32 = AtomicU32::new(0);
+
 struct DriverGuard;
 
 impl DriverGuard {
@@ -143,8 +191,161 @@ impl DriverGuard {
 
 impl Drop for DriverGuard {
     fn drop(&mut self) {
-        DRIVER_BUSY.store(false, Ordering::Release);
+        // #832: the delay pool is armed only for a guard's lifetime, so disarm
+        // before releasing the busy flag — never the reverse, or the pool would
+        // be armed with no guard held.
+        //
+        // #835 H5: and both stores must be atomic together. With them
+        // separated, a preempting `wait_random` could observe
+        // `DRIVER_BUSY = true` with `ARMED = false`, find nothing to draw and
+        // nothing to acquire, and fail a delay on perfectly healthy hardware.
+        cortex_m::interrupt::free(|_| {
+            crate::fi_delay_pool::disarm();
+            DRIVER_BUSY.store(false, Ordering::Release);
+        });
     }
+}
+
+/// Bench-only: provoke a GENUINE latched RNG error, then prove `fill`
+/// recovers from it instead of halting or poisoning (#835 C1).
+///
+/// This is the last inference in #835. Everything else about the
+/// recover-before-delay ordering is argued from source or demonstrated against
+/// a window opened by hand; nothing has driven the actual condition — a real
+/// `SECS`/`CECS` latched at `fill_bound` entry — which is what used to kill
+/// the device outright.
+///
+/// Sequence, and the shape is deliberate:
+///
+/// 1. stop HSI48, the kernel clock. Registers stay addressable (AHB bus clock
+///    untouched) but the noise source and clock checker lose their clock, so
+///    the hardware latches a real error.
+/// 2. poll `SR` until an `ERROR_FLAGS` bit appears, bounded.
+/// 3. **restore HSI48 and wait for ready.** The flag is sticky — cleared only
+///    by software or a conditioning reset — so this leaves exactly the state
+///    that matters: a LATCHED ERROR OVER HEALTHY HARDWARE. Testing with the
+///    clock still stopped would only prove that a dead RNG fails, which is
+///    not the interesting claim.
+/// 4. call `rng::fill` from thread mode. It must recover and return `Ok`.
+///
+/// Returns a bit mask. Bit 4 is a liveness witness: if the provocation did not
+/// latch anything, the remaining bits are left CLEAR rather than reported as
+/// passes, because they would be vacuous.
+///
+/// Note what CANNOT happen any more: if recovery fails, this returns a partial
+/// mask and the bench keeps running. Before #835 the same condition parked the
+/// CPU in a `wfe` loop, so a failed probe would have been indistinguishable
+/// from a dead board.
+///
+/// MEASURED, enclosed EVT unit, 2026-10-12, `evt-images/px835merged` (the
+/// MERGED tree: master's 60 commits including #846's nested-entry guard, plus
+/// the 25 FI commits). Overlay read `255 / 0 / 2`:
+///
+/// ```text
+///   bit 4  a REAL SECS/CECS latched          <- the provocation worked
+///   bit 5  rng::fill returned Ok WITH it latched  <- the C1 recovery
+///   bit 6  the operation was not poisoned
+///   bit 7  SR clean afterwards: the reset ran
+/// ```
+///
+/// So the recover-before-delay ordering in `fill_bound` survives a GENUINE
+/// hardware error, not one raised by hand. That was the last inference in
+/// #835: every other claim about it was argued from source or demonstrated
+/// against a window opened artificially. Bit 4 is what makes the rest
+/// non-vacuous — without a real latch, bits 5..7 would be measuring nothing,
+/// which is why they are left clear in that case rather than reported as
+/// passes.
+///
+/// Before 0a02fe54 this exact condition halted the device, so a readable
+/// screen at all is part of the result.
+#[cfg(feature = "rng-fault-probe")]
+pub fn provoke_latched_error_and_recover() -> u32 {
+    const BIT_LATCHED: u32 = 1 << 4;
+    const BIT_FILL_OK: u32 = 1 << 5;
+    const BIT_NOT_POISONED: u32 = 1 << 6;
+    const BIT_SR_CLEAN: u32 = 1 << 7;
+
+    let mut bits = 0u32;
+
+    // ---- 1 + 2: stop the kernel clock and wait for a real latch ----
+    crate::hw::rcc::set_hsi48(false);
+    let mut spin = 0u32;
+    let mut latched = false;
+    while spin < 2_000_000 {
+        // Touching DR encourages the seed/clock checkers to run; the value is
+        // discarded and never reaches a caller.
+        let _ = REG.dr.read();
+        if REG.sr.read() & ERROR_FLAGS != 0 {
+            latched = true;
+            break;
+        }
+        spin = spin.wrapping_add(1);
+    }
+
+    // ---- 3: healthy hardware again, error still latched ----
+    crate::hw::rcc::set_hsi48(true);
+
+    if !latched {
+        // Honest inconclusive: leave 5..7 clear. Nothing was tested.
+        secure_log!("[S] rng-probe: no error latched — inconclusive, not a pass");
+        return bits;
+    }
+    bits |= BIT_LATCHED;
+    secure_log!("[S] rng-probe: latched SR=0x{:08x}; now testing recovery", REG.sr.read());
+
+    // ---- 4: the claim under test ----
+    let mut buf = [0u8; 8];
+    let filled = fill(&mut buf).is_ok();
+    buf.fill(0);
+    if filled {
+        bits |= BIT_FILL_OK;
+    }
+    if !crate::fi::delay_source_failed() {
+        bits |= BIT_NOT_POISONED;
+    }
+    if status_is_clean(REG.sr.read()) {
+        bits |= BIT_SR_CLEAN;
+    }
+    bits
+}
+
+/// One raw TRNG word for the FI delay pool (#832). Caller must hold
+/// `DriverGuard`.
+///
+/// Deliberately NOT `read_healthy_word_into`, on two counts that are the whole
+/// point of the fix:
+///
+///   * **No `wait_random()`.** This feeds the delay path; calling into it
+///     would re-enter the recursion the pool exists to break.
+///   * **No `PREVIOUS_WORD` update.** Pool words must not participate in the
+///     continuous-repetition test that guards real output, or a pool draw
+///     could trip CRNGT on a word no secret will ever see.
+///
+/// Delay lengths are non-secret (see `rng::byte_nonsecret`), so the full
+/// health ladder is not required here. A latched seed/clock error, a DRDY
+/// timeout or an all-zero word still refuse, which leaves the pool unarmed and
+/// the behaviour byte-identical to before this fix.
+pub(crate) fn delay_pool_word() -> Option<u32> {
+    let mut timeout = 0u32;
+    loop {
+        let sr = REG.sr.read();
+        if !status_is_clean(sr) {
+            return None;
+        }
+        if sr & DRDY != 0 {
+            break;
+        }
+        timeout = timeout.wrapping_add(1);
+        if timeout >= POLL_LIMIT {
+            return None;
+        }
+    }
+    let word = REG.dr.read();
+    // RM0456: a seed error can assert concurrently with the DR read.
+    if !status_is_clean(REG.sr.read()) || word == 0 {
+        return None;
+    }
+    Some(word)
 }
 
 #[inline]
@@ -440,7 +641,20 @@ fn read_healthy_word_into(word_out: &mut u32, read_receipt: &mut u32) {
     // word between our load and compare-exchange, re-evaluate against that
     // newer predecessor before committing.
     let mut previous = PREVIOUS_WORD.load(Ordering::Relaxed);
+    // #835 M7: each iteration of this loop costs a `wait_random`, and a
+    // `compare_exchange_weak` can fail spuriously or lose to an interrupt, so
+    // the delay count per conditioning window was unbounded. Cap it. Exiting
+    // without publishing leaves the caller's receipt FAILED, so the word is
+    // rejected — fail-closed, and far more headroom than a single core with
+    // one preempting ISR can plausibly need.
+    let mut cas_attempts = 0u32;
+    const MAX_CAS_ATTEMPTS: u32 = 8;
     loop {
+        if cas_attempts >= MAX_CAS_ATTEMPTS {
+            secure_log!("[S] rng: CRNGT publish exceeded {} attempts — rejecting", MAX_CAS_ATTEMPTS);
+            return;
+        }
+        cas_attempts = cas_attempts.wrapping_add(1);
         let mut health_receipt = crate::fi::FAIL_SENTINEL;
         let checked_health = crate::fi::check_true_into_sentinel(|| {
             crate::rng_health::word_is_acceptable(status_clean, word, previous)
@@ -490,7 +704,120 @@ fn read_healthy_word_into(word_out: &mut u32, read_receipt: &mut u32) {
 /// Initialize the RNG peripheral. Must be called after `rcc::init()`.
 /// Returns `Err(())` unless conditioning reset completes and one healthy
 /// warm-up word is observed and discarded.
+/// Conditioning-reset window: while this is set, the RNG provably cannot
+/// deliver a word, so the FI delay path is permitted its one fixed length.
+///
+/// Set for the WHOLE of [`init_conditioning`], which covers `init` at boot and
+/// `fill_bound`'s recovery from a latched `SECS`/`CECS`. Without the recovery
+/// case, a documented transient error would reach #833's refusal and halt the
+/// device inside the very sequence meant to fix it — strictly worse than the
+/// fallback #833 removed.
+static CONDITIONING: AtomicBool = AtomicBool::new(false);
+
+/// Clears [`CONDITIONING`] on every exit path, including the early returns
+/// `init_conditioning` takes when a register read-back fails closed.
+struct ConditioningWindow;
+
+impl ConditioningWindow {
+    fn enter() -> Self {
+        CONDITIONING_WINDOWS.fetch_add(1, Ordering::Relaxed);
+        CONDITIONING_FIXED_USED.store(0, Ordering::Relaxed);
+        // #835 M7: remember WHO opened it. The exemption used to be a global
+        // boolean every `wait_random` caller observed, so a handler that
+        // preempted a recovery — PendSV's `enter_pin`, SysTick's reseed — got
+        // the fixed length for delays that had nothing to do with conditioning.
+        CONDITIONING_CTX.store(current_context(), Ordering::Release);
+        CONDITIONING.store(true, Ordering::Release);
+        Self
+    }
+}
+
+/// IPSR: 0 in thread mode, else the active exception number.
+#[inline(always)]
+fn current_context() -> u32 {
+    #[cfg(target_arch = "arm")]
+    {
+        let ipsr: u32;
+        // SAFETY: `mrs` from IPSR is a side-effect-free status read.
+        unsafe {
+            core::arch::asm!(
+                "mrs {}, ipsr",
+                out(reg) ipsr,
+                options(nomem, nostack, preserves_flags)
+            );
+        }
+        ipsr
+    }
+    #[cfg(not(target_arch = "arm"))]
+    {
+        0
+    }
+}
+
+/// How many conditioning windows have opened. Bench instrumentation.
+///
+/// Separates "many windows" from "few windows with interrupt-context delays
+/// landing inside them" — a distinction the fixed-delay count alone cannot
+/// make, and which decides whether the #834 residual is routine or
+/// exceptional.
+pub static CONDITIONING_WINDOWS: AtomicU32 = AtomicU32::new(0);
+
+impl Drop for ConditioningWindow {
+    fn drop(&mut self) {
+        CONDITIONING.store(false, Ordering::Release);
+        CONDITIONING_CTX.store(CTX_NONE, Ordering::Release);
+    }
+}
+
+/// Whether a FIXED FI delay length is currently permitted (#833/#834).
+///
+/// True only while the RNG is inside its own conditioning sequence — before
+/// the first successful `init`, or during a recovery reset. Outside those the
+/// delay path refuses rather than reusing a length.
+///
+/// RESIDUAL, stated rather than hidden: an attacker who repeatedly induces
+/// `SECS`/`CECS` can repeatedly open this window. The delays inside it protect
+/// the conditioning-reset register writes, not key material, and a failed
+/// recovery still makes `fill` refuse — but the window is attacker-reachable,
+/// so `CONDITIONING_DELAYS` counts it and a climbing count means something is
+/// forcing resets.
+pub fn fixed_delay_permitted() -> bool {
+    // The DECISION lives in `pqsigner_fi::fixed_delay_decision`, which is a
+    // pure host-tested crate. This function only gathers the
+    // live inputs and owns the counters — this module is `stm32u585`-only, so
+    // branch logic kept here could never be tested except by grepping it.
+    let init_done = init_has_completed();
+    let conditioning = CONDITIONING.load(Ordering::Acquire);
+    let ctx_matches = CONDITIONING_CTX.load(Ordering::Acquire) == current_context();
+    // Consume a slot only while actually inside a window, or ordinary running
+    // would exhaust the cap before any window opens.
+    let used = if conditioning && ctx_matches {
+        CONDITIONING_FIXED_USED.fetch_add(1, Ordering::Relaxed)
+    } else {
+        0
+    };
+
+    let permitted = pqsigner_fi::fixed_delay_decision(
+        init_done,
+        conditioning,
+        ctx_matches,
+        used,
+        MAX_FIXED_PER_WINDOW,
+    );
+    // Refusals only count post-init: before that the exemption is universal
+    // by design and nothing is being refused.
+    if !permitted && init_done {
+        CONDITIONING_REFUSED.fetch_add(1, Ordering::Relaxed);
+    }
+    permitted
+}
+
 fn init_locked() -> Result<(), ()> {
+    let _window = ConditioningWindow::enter();
+    init_conditioning()
+}
+
+fn init_conditioning() -> Result<(), ()> {
     // 1. Enter config mode with the NIST-compliant CR value.
     REG.cr.write(RNG_CR_NIST_DEFAULT | CONDRST);
     // 1b. Health-test thresholds matching the CR configuration. Must happen
@@ -577,7 +904,34 @@ fn init_locked() -> Result<(), ()> {
 /// Initialize the peripheral while excluding concurrent SysTick reads.
 pub fn init() -> Result<(), ()> {
     let _guard = DriverGuard::try_acquire()?;
-    init_locked()
+    let result = init_locked();
+    if result.is_ok() {
+        // #833: closes the bootstrap window. Until this is set the FI delay
+        // path tolerates a failed draw, because `init_locked` holds this very
+        // lock, runs a conditioning reset during which no word is available,
+        // and calls `wait_random` itself — refusing unconditionally would
+        // halt the device inside its own RNG bring-up. After it, a failed
+        // draw is a fault or an attack.
+        INIT_VAL.store(INIT_DONE, Ordering::Release);
+        INIT_COMP.store(!INIT_DONE, Ordering::Release);
+        // Read back. A skipped publication now shuts the window rather than
+        // leaving it open (the pair fails closed to COMPLETE), but a boot that
+        // cannot even record its own completion should not proceed quietly —
+        // `main` panics on `Err`, which zeroizes and draws the fatal screen.
+        if !init_has_completed() {
+            return Err(());
+        }
+    }
+    result
+}
+
+/// Whether [`init`] has ever completed successfully. See `rng::init_complete`.
+///
+/// Deliberately latching: it marks "past bootstrap", not "healthy right now".
+/// A later transient error is handled by `fill_bound`'s conditioning-reset
+/// recovery and, failing that, by refusal — not by reopening the exemption.
+pub fn init_complete() -> bool {
+    init_has_completed()
 }
 
 /// Fill `buf` with random bytes from the hardware TRNG.
@@ -619,6 +973,46 @@ unsafe fn fill_bound(
     // returns before any raw destination is constructed or touched.
     let _guard = DriverGuard::try_acquire()?;
 
+    // #835 C1 — RECOVER BEFORE YOU DELAY. This ordering is load-bearing and
+    // was wrong until today.
+    //
+    // Every `wait_random` below is the separation between a receipt check and
+    // its recheck, and inside a fill it can only be served from the pool,
+    // because arm 2 of `fi::rng_byte` cannot take the lock we are holding. If
+    // a `SECS`/`CECS` is already latched on entry, `delay_pool_word` refuses,
+    // the pool never arms, and the FIRST validator's delay has no source —
+    // which, while the sink was a halt, killed the device *before* reaching
+    // the conditioning reset that would have fixed the error. The recovery sat
+    // behind the delay that needed it.
+    //
+    // So: check the error first, recover first, and only then arm. `init_locked`
+    // opens its own `ConditioningWindow`, so its internal delays are served.
+    if REG.sr.read() & ERROR_FLAGS != 0 {
+        secure_log!("[S] rng::fill: error latched on entry — recovering before any delay");
+        init_locked()?;
+    }
+
+    // #832: draw the inner delays' lengths NOW, while the guard is held and
+    // the peripheral is live and (per above) known clean.
+    //
+    // #835 H5: arming must not be observable as a half-state. Between
+    // `try_acquire` and the pool publishing, a preempting `wait_random` saw
+    // `DRIVER_BUSY = true` with `ARMED = false` and nothing to draw from, so
+    // healthy hardware could fail the delay. Masking interrupts across the
+    // arm closes that window.
+    cortex_m::interrupt::free(|_| {
+        crate::fi_delay_pool::replenish(delay_pool_word);
+    });
+
+    // If the pool still cannot arm, the peripheral is not delivering words
+    // even after a conditioning reset. Refuse the OPERATION here — the caller
+    // sees `Err` and fails loudly, which is its contract — rather than walking
+    // into validators whose delays would poison and fail anyway.
+    if !crate::fi_delay_pool::is_armed() {
+        secure_log!("[S] rng::fill: no delay source after recovery — refusing the fill");
+        return Err(());
+    }
+
     let mut fill_binding_receipt = crate::fi::FAIL_SENTINEL;
     unsafe {
         core::ptr::write_volatile(&mut fill_binding_receipt, crate::fi::FAIL_SENTINEL);
@@ -642,6 +1036,12 @@ unsafe fn fill_bound(
     // pointer/length observations matched twice. Before this point no slice
     // was constructed and no rejection path dereferenced either raw region.
     let buf = unsafe { core::slice::from_raw_parts_mut(destination_base, destination_len) };
+    // #835: a fill whose own FI separations went unprotected must not be
+    // released as success. Checked again after the body, so a poisoning that
+    // happens mid-fill is caught too.
+    if crate::fi::delay_source_failed() {
+        return Err(());
+    }
     let result = (|| -> Result<(), ()> {
 
         let sr0 = REG.sr.read();
@@ -684,6 +1084,10 @@ unsafe fn fill_bound(
             if i >= buf.len() {
                 break;
             }
+            // #832: ~28 of the fan-out's delays live in this iteration, and
+            // `rng_strong::fill` passes the caller's whole buffer through, so
+            // no fixed pool covers every length. Top up per output word.
+            crate::fi_delay_pool::replenish(delay_pool_word);
             // Draw two independently receipted words and XOR them. Besides
             // preserving the STM32 TRNG's entropy, this means one skipped DR
             // load still leaves a fresh hardware sample in every output word.
@@ -882,6 +1286,14 @@ unsafe fn fill_bound(
     // redirect a bulk wipe. The failed receipt/Result is authoritative; every
     // current caller discards the buffer and the strong facade wipes its typed
     // slice. Successful completion still proves every requested byte.
+    //
+    // #835: and a fill that completed while one of its own FI separations went
+    // unprotected is not a success. The poison can be raised mid-body (the
+    // pool draining with the peripheral then refusing), so the check at entry
+    // is not sufficient on its own.
+    if crate::fi::delay_source_failed() {
+        return Err(());
+    }
     result
 }
 

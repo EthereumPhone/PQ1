@@ -1194,6 +1194,30 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
 #[cfg(feature = "ui-px-frametime")]
 const ONE_SHOT_RESET_MS: u32 = 180_000;
 
+/// #805 condition (d): the boot-time one-shot `fi::wait_random()` fallback
+/// measurement — `(calls, fallbacks)` for a SINGLE top-level delay, taken by
+/// the bench in thread mode before anything else runs.
+///
+/// Measured rather than inferred because the carve-out requires it; see the
+/// rationale on `crate::rng::NONSECRET_CALLS`.
+#[cfg(feature = "ui-px-frametime")]
+static FALLBACK_SHOT_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(feature = "ui-px-frametime")]
+static FALLBACK_SHOT_FB: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+#[cfg(feature = "ui-px-frametime")]
+static FALLBACK_SHOT_MISSES: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
+/// Publish the boot probe for the overlay: worst-case pool draw of any single
+/// fill in the length sweep, total fallbacks, total pool misses.
+#[cfg(feature = "ui-px-frametime")]
+pub fn set_fallback_probe(max_hits: u32, fallbacks: u32, misses: u32) {
+    use core::sync::atomic::Ordering::Relaxed;
+    FALLBACK_SHOT_CALLS.store(max_hits, Relaxed);
+    FALLBACK_SHOT_FB.store(fallbacks, Relaxed);
+    FALLBACK_SHOT_MISSES.store(misses, Relaxed);
+}
+
 /// An endless ambient screen, animated against real input (#783).
 ///
 /// WHY THIS EXISTS. `play_screen` plays a record "until it rests", and for a
@@ -1416,8 +1440,83 @@ impl Ambient {
                 #[cfg(not(feature = "stm32u585"))]
                 let (isr_ms, gate_per_s) = (0u32, 0u32);
                 let _ = (cost.split.items, cost.split.drawn);
-                self.ft.len3 =
-                    frametime::format_raw(&mut self.ft.buf3, isr_ms.min(999), gate_per_s.min(999), idle_s);
+                // Line 3 (green) — REPURPOSED for #805 condition (d), now
+                // that #802's `isr_ms -> 0` / `gate_calls` reading has been
+                // taken on glass and the issue is closed:
+                //
+                //   shot_calls / shot_fallbacks / running_pct
+                //
+                //   selftest    #835 poison-boundary self-test bitmask,
+                //               run once at boot. Expect 15:
+                //                 bit 0 flag reads POISONED after poisoning
+                //                 bit 1 `rng::fill` REFUSES while poisoned
+                //                 bit 2 flag reads CLEAN after clearing
+                //                 bit 3 `rng::fill` SUCCEEDS again after
+                //               Four bits rather than a verdict, because a
+                //               single pass/fail cannot tell "it works" from
+                //               "it never ran". Bit 3 is what separates this
+                //               from the halt it replaced: under #833/#834
+                //               the device would be in a `wfe` loop and this
+                //               screen would never paint.
+                //   poisonings  poisonings in ordinary running since that
+                //               self-test. MUST be 0 — a device doing nothing
+                //               unusual should never fail to source a delay.
+                //   zperm       zero bytes per 1000 bytes WRITTEN into the
+                //               pool — the TRNG byte distribution measured at
+                //               the source, with no consumption path in
+                //               between. Expect 4 (1/256 = 3.9).
+                //
+                //               Replaces the consumption-side ratio, which
+                //               was confounded: consumption is LIFO, bytes
+                //               below AVAIL can be wiped at disarm without
+                //               ever being drawn, and its two baselines are
+                //               separate non-atomic loads. One boot read a
+                //               PERSISTENT 0-1 against 3.9 — a sustained 4x
+                //               deficit of zeros, which noise does not
+                //               explain. This field says whether that is the
+                //               accounting or the hardware.
+                //
+                //               A DEFICIT is bias just as much as an excess
+                //               is. If this reads low too, the missing
+                //               continuous-repetition test in
+                //               `delay_pool_word` stops being theoretical.
+                //
+                //               999 until 1024 bytes have been written, so
+                //               the first number shown is already stable.
+                let (selftest, poisonings_now, zperm) = {
+                    #[cfg(feature = "ui-px-frametime")]
+                    {
+                        use core::sync::atomic::Ordering::Relaxed;
+                        let base = FALLBACK_SHOT_FB.load(Relaxed);
+                        let now = crate::fi::DELAY_POISONINGS.load(Relaxed);
+                        (
+                            FALLBACK_SHOT_CALLS.load(Relaxed),
+                            now.saturating_sub(base),
+                            {
+                                let z = crate::fi_delay_pool::ZERO_BYTES_WRITTEN
+                                    .load(Relaxed);
+                                let n = crate::fi_delay_pool::BYTES_WRITTEN.load(Relaxed);
+                                const MIN_BYTES_FOR_RATIO: u32 = 1024;
+                                if n < MIN_BYTES_FOR_RATIO {
+                                    999
+                                } else {
+                                    z.saturating_mul(1000) / n
+                                }
+                                                        },
+                        )
+                    }
+                    #[cfg(not(feature = "ui-px-frametime"))]
+                    {
+                        (0u32, 0u32, 0u32)
+                    }
+                };
+                let _ = (isr_ms, gate_per_s, idle_s);
+                self.ft.len3 = frametime::format_raw(
+                    &mut self.ft.buf3,
+                    selftest.min(999),
+                    poisonings_now.min(999),
+                    zperm.min(999),
+                );
                 self.ft.window_at = t;
                 self.ft.max_stream = 0;
                 self.ft.max_te = 0;

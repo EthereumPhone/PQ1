@@ -475,8 +475,8 @@
       "path": "pqsigner-fi",
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 4,
-      "bytes": 34283,
-      "sha256": "bee747984a2517870d1ce2759ba5ee2327a11ca97987cf7bf77833ec8bf964fa"
+      "bytes": 41013,
+      "sha256": "b56b78d876ae286a6228b600551f92b53f392d302d3584c1023e3f1d1b65a1ae"
     },
     {
       "path": "proto",
