@@ -841,6 +841,7 @@ mod tests {
                         crate::ui_setup_screens::backup_intro(),
                         seed_page(9, 8),
                         crate::ui_setup_screens::hidden(),
+                        crate::ui_setup_screens::paused(),
                         crate::ui_setup_screens::written(),
                         letter_row(b"Check word 5", b"abaa", 2),
                         st("Wrong word", ""),

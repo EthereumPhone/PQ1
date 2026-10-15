@@ -101,6 +101,18 @@ pub fn hidden() -> Screen {
     )
 }
 
+/// An entry row (the PIN, a check word, a word being typed in) left two
+/// minutes without a press. The row leaves the glass, because a typed prefix
+/// or a candidate list is seed material; any press brings it back.
+#[must_use]
+pub fn paused() -> Screen {
+    detail(
+        b"PAUSED",
+        b"PAUSED",
+        &[b"Paused after", b"2 minutes idle.", b"Press to go on."],
+    )
+}
+
 /// Before the words are typed in.
 #[must_use]
 pub fn import_intro() -> Screen {
@@ -121,6 +133,7 @@ mod tests {
             backup_intro(),
             written(),
             hidden(),
+            paused(),
             import_intro(),
         ]);
         v
@@ -150,7 +163,13 @@ mod tests {
         assert_eq!(asking, [CREATE, IMPORT]);
         assert_eq!(i[CREATE].caption(), b"CREATE NEW WALLET?");
         assert_eq!(i[IMPORT].caption(), b"IMPORT WALLET?");
-        for s in [pin_help(), backup_intro(), hidden(), import_intro()] {
+        for s in [
+            pin_help(),
+            backup_intro(),
+            hidden(),
+            paused(),
+            import_intro(),
+        ] {
             assert!(!s.commit(), "{s:?}");
         }
         assert!(written().commit());

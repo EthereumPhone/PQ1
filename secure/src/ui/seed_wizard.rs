@@ -251,15 +251,32 @@ fn draw_row(d: &mut super::Display, r: usize, text: &[u8]) {
     d.draw_line(r, super::ascii_str(&row));
 }
 
-/// Wait for any button with no idle check, then count it as activity. The
-/// one way back from an entry row that reported idle: re-entering the row
-/// straight away would find the timer still expired and return at once,
-/// forever (the EVT loop of 2026-10-15). A real press both ends the wait and
-/// is the only thing allowed to reset the timer (#426).
-fn wait_for_press() {
+/// Paint `s` over the whole panel, then wait for any button with no idle
+/// check and count the press as activity. A real press both ends the wait
+/// and is the only thing allowed to reset the timer (#426).
+fn hold(s: &Screen) {
+    paint_still(s);
     let mut never = || false;
     while input().wait_button(&mut never).is_none() {}
     timeout::reset_activity();
+}
+
+/// A screen painted once, at rest (the pixel UI's `show`, else the 16x4 page).
+fn paint_still(s: &Screen) {
+    #[cfg(feature = "ui-px")]
+    if super::px::screens::show(s) {
+        return;
+    }
+    paint_fallback(s);
+}
+
+/// The one way back from an entry row that reported idle: PAUSED until a
+/// press. Re-entering the row straight away would find the timer still
+/// expired and return at once, forever (the EVT loop of 2026-10-15). And the
+/// row must leave the glass first: it may show a typed prefix of a seed word,
+/// a candidate list or an imported word, and nothing else will repaint it.
+fn wait_for_press() {
+    hold(&setup_screens::paused());
 }
 
 /// The setup intro: welcome, the buttons, then create or import. Starts on
@@ -605,17 +622,7 @@ fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {
 /// stays on it.
 #[cfg(not(feature = "decoy-frames"))]
 fn hide_words() {
-    paint_hidden(&setup_screens::hidden());
-    wait_for_press();
-}
-
-#[cfg(not(feature = "decoy-frames"))]
-fn paint_hidden(s: &Screen) {
-    #[cfg(feature = "ui-px")]
-    if super::px::screens::show(s) {
-        return;
-    }
-    paint_fallback(s);
+    hold(&setup_screens::hidden());
 }
 
 #[cfg(feature = "decoy-frames")]

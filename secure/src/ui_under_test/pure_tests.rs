@@ -814,7 +814,7 @@ fn negative_seed_wizard_resets_activity_only_after_button_events() {
             "input().wait_button(&mut never)",
         ),
         // The one way back from an entry row that reported idle in setup.
-        ("fn wait_for_press() {", "input().wait_button(&mut never)"),
+        ("fn hold(s: &Screen) {", "input().wait_button(&mut never)"),
         (
             "fn yes_no(title: &str) -> Option<bool> {",
             "input().wait_button(&mut idle)",
@@ -1125,6 +1125,33 @@ fn negative_progress_bar_clamps_above_100_pct() {
     assert!(MOD_SRC.contains("let pct = if percent > 100 { 100 } else { percent };"));
     let bar = ref_render_bar(250);
     assert_eq!(&bar[..], b"[##############]");
+}
+
+#[test]
+fn negative_an_idle_entry_row_leaves_the_glass_before_the_hold() {
+    // Setup has no timeout, so an entry row that reports idle holds for a
+    // press instead of restarting setup. The row must not stay on the panel
+    // meanwhile: a check or import row shows a typed prefix of a seed word
+    // or a candidate list of full words, and nothing else repaints it.
+    let hold = wizard_fn_body(WIZARD_SRC, "fn hold(s: &Screen) {");
+    let paint = hold.find("paint_still(s);").expect("hold must paint its screen");
+    let wait = hold.find("input().wait_button(&mut never)").expect("hold must wait");
+    assert!(paint < wait, "the screen goes up BEFORE the wait");
+    let wfp = wizard_fn_body(WIZARD_SRC, "fn wait_for_press() {");
+    assert!(wfp.contains("hold(&setup_screens::paused());"));
+    // Only `hold` (and the 16x4 pager) wait without an idle check.
+    assert_eq!(WIZARD_SRC.matches("input().wait_button(&mut never)").count(), 2);
+    // Every idle arm of a setup entry row goes through it.
+    for sig in [
+        "pub fn choose_pin() -> Option<[u8; PIN_LEN]> {",
+        "pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {",
+        "pub fn enter_mnemonic() -> Result<Mnemonic, WizardError> {",
+    ] {
+        let body = wizard_fn_body(WIZARD_SRC, sig);
+        let arms = body.matches("Result::IdleWipe =>").count();
+        assert!(arms >= 1, "{sig} must handle the idle report");
+        assert_eq!(body.matches("wait_for_press()").count(), arms, "{sig}: every idle arm must pause");
+    }
 }
 
 #[test]
