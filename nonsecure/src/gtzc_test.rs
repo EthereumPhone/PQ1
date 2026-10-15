@@ -184,6 +184,9 @@ fn main() -> ! {
         PROBES.len(),
     );
 
+    #[cfg(feature = "gtzc-sys")]
+    sys_probe::run();
+
     if delta == PROBES.len() as u32 {
         let _ = hprintln!("[NS][gtzc] === PASS ===");
         // SYS_EXIT(0) via semihosting — host harness captures the
@@ -202,5 +205,152 @@ fn main() -> ! {
     // Loop on WFE just in case so we don't fall off into rt's panic.
     loop {
         cortex_m::asm::wfe();
+    }
+}
+
+/// DVT checklist rows 3.3 / 3.4 / 3.5 / 3.6 (`docs/hardware/dvt-silicon-test-checklist.md`).
+///
+/// Phase 2, opt-in (`gtzc-sys`), run AFTER the TZSC receipt above so it cannot
+/// disturb that count. Each probe is a non-secure read-modify-write of a
+/// system register that has no TZSC bit of its own (RCC/PWR/TAMP/EXTI carry
+/// their own `*_SECCFGR`), or of a GPIO pad the secure world owns. The NS
+/// read-back is printed, but it is NOT the verdict: a secure-only bit may
+/// read as zero from NS. The verdict comes from reading the SECURE alias
+/// over SWD after the run (the writes are deliberately left in place).
+///
+/// `GTZC_FAULT_ADDR` (hex, compile-time env) appends one NS read of that
+/// address as the very last action: an SAU-secure address must SecureFault
+/// (→ secure HardFault → reset), so at most one such probe per run.
+#[cfg(feature = "gtzc-sys")]
+mod sys_probe {
+    use cortex_m_semihosting::hprintln;
+
+    struct W {
+        addr: u32,
+        label: &'static str,
+        /// Bits XOR-toggled by the write. 0 = read only.
+        mask: u32,
+    }
+
+    const RCC: u32 = 0x4602_0C00;
+    const PWR: u32 = 0x4602_0800;
+    const TAMP: u32 = 0x4600_7C00;
+    const EXTI: u32 = 0x4602_2000;
+    const TZSC1: u32 = 0x4003_2400;
+    const GPIOA: u32 = 0x4202_0000;
+    const GPIOB: u32 = 0x4202_0400;
+
+    const PROBES: &[W] = &[
+        // Security config registers, read only (record the state).
+        W { addr: RCC + 0x110, label: "RCC_SECCFGR", mask: 0 },
+        W { addr: PWR + 0x30, label: "PWR_SECCFGR", mask: 0 },
+        W { addr: TAMP + 0x20, label: "TAMP_SECCFGR", mask: 0 },
+        W { addr: EXTI + 0x14, label: "EXTI_SECCFGR1", mask: 0 },
+        W { addr: GPIOA + 0x30, label: "GPIOA_SECCFGR", mask: 0 },
+        W { addr: GPIOB + 0x30, label: "GPIOB_SECCFGR", mask: 0 },
+        // Bus clocks the gtzc image leaves off: GPIOA/B (AHB2ENR1 bits 0/1)
+        // and RTCAPB (APB3ENR bit 21, TAMP/RTC registers). Without these the
+        // GPIO/TAMP probes below read garbage and prove nothing; enabling
+        // them from NS is itself a probe.
+        W { addr: RCC + 0x8C, label: "RCC_AHB2ENR1.GPIOA/B", mask: 0b11 },
+        W { addr: RCC + 0xA8, label: "RCC_APB3ENR.RTCAPBEN", mask: 1 << 21 },
+        W { addr: GPIOA + 0x30, label: "GPIOA_SECCFGR(clk on)", mask: 0 },
+        W { addr: GPIOB + 0x30, label: "GPIOB_SECCFGR(clk on)", mask: 0 },
+        W { addr: TAMP + 0x20, label: "TAMP_SECCFGR(clk on)", mask: 0 },
+        // RCC: TRNG kernel clock, secure-peripheral clock gate, prescaler.
+        W { addr: RCC + 0x00, label: "RCC_CR.HSI48ON", mask: 1 << 12 },
+        W { addr: RCC + 0x8C, label: "RCC_AHB2ENR1.RNGEN", mask: 1 << 18 },
+        W { addr: RCC + 0x24, label: "RCC_CFGR3.PPRE3", mask: 0b100 << 4 },
+        // PWR: voltage monitor + backup-domain write enable.
+        W { addr: PWR + 0x10, label: "PWR_SVMCR.PVDE", mask: 1 << 4 },
+        W { addr: PWR + 0x28, label: "PWR_DBPR.DBP", mask: 1 << 0 },
+        // TAMP (needs DBP=1, probed just above): filter cfg, tamper
+        // enables, backup regs (BKP0..7 hold the BHK on `bhk` builds).
+        W { addr: TAMP + 0x0C, label: "TAMP_FLTCR", mask: 0x0000_0003 },
+        W { addr: TAMP + 0x00, label: "TAMP_CR1.ITAMP5E", mask: 1 << 20 },
+        W { addr: TAMP + 0x100, label: "TAMP_BKP0R", mask: 0xA5A5_5A5A },
+        W { addr: TAMP + 0x17C, label: "TAMP_BKP31R", mask: 0xA5A5_5A5A },
+        // EXTI: rising-trigger enable on the button lines 0/1.
+        W { addr: EXTI + 0x00, label: "EXTI_RTSR1.L0L1", mask: 0b11 },
+        // GTZC1 TZSC itself: clearing SECCFGR1 would un-secure I2C1/I2C4/TIMs.
+        W { addr: TZSC1 + 0x10, label: "TZSC_SECCFGR1", mask: 0xFFFF_FFFF },
+        // GPIO pads the secure world owns (pq1): PA8 LDO2_EN, PA15 SE_RST,
+        // PA4 LCD CS; PB5 SE1_EN, PB15 LCM_EN. MODER is used rather than
+        // ODR so the effect is visible regardless of the current level.
+        W { addr: GPIOA + 0x14, label: "GPIOA_ODR.PA4/8/15", mask: (1 << 4) | (1 << 8) | (1 << 15) },
+        W { addr: GPIOB + 0x14, label: "GPIOB_ODR.PB5/15", mask: (1 << 5) | (1 << 15) },
+        W { addr: GPIOA + 0x00, label: "GPIOA_MODER.PA8", mask: 0b11 << 16 },
+        // Positive control: PA11 is NS (USB DM). Its MODER bits MUST move.
+        W { addr: GPIOA + 0x00, label: "GPIOA_MODER.PA11(ctl)", mask: 0b11 << 22 },
+    ];
+
+    fn spin() {
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+        for _ in 0..20_000 {
+            cortex_m::asm::nop();
+        }
+    }
+
+    pub(super) fn run() {
+        let _ = hprintln!("[NS][gtzc-sys] === phase 2: NS system-register write probes ===");
+        for p in PROBES {
+            // SAFETY: every address is a 4-byte-aligned register in the NS
+            // peripheral alias (SAU region 3 = NS). Reads of these are
+            // side-effect free; the writes are the probe under test, on a
+            // bench board running a mock-SE image that holds no secret.
+            let pre = unsafe { core::ptr::read_volatile(p.addr as *const u32) };
+            if p.mask != 0 {
+                unsafe { core::ptr::write_volatile(p.addr as *mut u32, pre ^ p.mask) };
+            }
+            spin();
+            let post = unsafe { core::ptr::read_volatile(p.addr as *const u32) };
+            let moved = (pre ^ post) & p.mask;
+            let _ = hprintln!(
+                "[NS][gtzc-sys] {:<22} @0x{:08x} S=0x{:08x} pre=0x{:08x} post=0x{:08x} mask=0x{:08x} moved=0x{:08x} {}",
+                p.label,
+                p.addr,
+                p.addr | 0x1000_0000,
+                pre,
+                post,
+                p.mask,
+                moved,
+                if p.mask == 0 { "READ" } else if moved != 0 { "NS-WROTE" } else { "ignored" },
+            );
+        }
+        // HSI48ON was cleared above: does the oscillator actually stop?
+        let mut rdy_gone_at = None;
+        for i in 0..2_000_000u32 {
+            // SAFETY: NS-alias RCC_CR read, side-effect free.
+            let cr = unsafe { core::ptr::read_volatile(RCC as *const u32) };
+            if cr & (1 << 13) == 0 {
+                rdy_gone_at = Some(i);
+                break;
+            }
+        }
+        let _ = hprintln!("[NS][gtzc-sys] HSI48RDY after NS clear of HSI48ON: dropped at poll {:?}", rdy_gone_at);
+        let _ = hprintln!("[NS][gtzc-sys] tzic_status after phase 2 = {}", crate::nsc_api::tzic_status());
+        let _ = hprintln!("[NS][gtzc-sys] DONE (writes left in place for SWD read-back)");
+
+        if let Some(s) = option_env!("GTZC_FAULT_ADDR") {
+            let a = u32::from_str_radix(s.trim_start_matches("0x"), 16).unwrap_or(0);
+            let _ = hprintln!("[NS][gtzc-sys] fault probe: NS read of 0x{:08x} ...", a);
+            for i in 0..4u32 {
+                // SAFETY: deliberate — this is the access under test. An
+                // SAU-secure address SecureFaults into the secure HardFault
+                // handler (zeroize + reset); an NS-mapped one returns data.
+                let v = unsafe { core::ptr::read_volatile((a + 4 * i) as *const u32) };
+                let _ = hprintln!("[NS][gtzc-sys] FAULT-PROBE READ 0x{:08x} = 0x{:08x}", a + 4 * i, v);
+            }
+            let _ = hprintln!("[NS][gtzc-sys] FAULT-PROBE SURVIVED (address readable from NS)");
+        }
+        if option_env!("GTZC_HOLD").is_some() {
+            // Park (no semihosting, no WFE) so SWD can read the secure
+            // aliases with every probe write still in place.
+            let _ = hprintln!("[NS][gtzc-sys] HOLD: parked for SWD read-back");
+            loop {
+                cortex_m::asm::nop();
+            }
+        }
     }
 }

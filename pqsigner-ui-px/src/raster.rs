@@ -931,6 +931,16 @@ impl Edge {
         qx * qx + qy * qy
     }
 
+    /// True when `(px, py)` lies outside the edge's bounding box grown by
+    /// `far` on every side, i.e. the segment is farther than `far` away.
+    #[inline]
+    fn misses(&self, px: Q8, py: Q8, far: Q8) -> bool {
+        px < self.ax.min(self.bx) - far
+            || px > self.ax.max(self.bx) + far
+            || py < self.ay.min(self.by) - far
+            || py > self.ay.max(self.by) + far
+    }
+
     /// Winding contribution of the edge for a rightward ray from `(px, py)`.
     #[inline]
     fn winding(&self, px: Q8, py: Q8) -> i32 {
@@ -988,27 +998,59 @@ fn shape(s: &mut Strip<'_>, pts: &[(i16, i16)], xf: Xform, mode: ShapeMode, colo
     if xb < xa {
         return;
     }
+    // NEAR-EDGE CULL (2026-10-15, owner: verdict shields "super laggy").
+    // The exact distance to the outline is only needed where it decides the
+    // coverage. Past `far` (Q8) from every edge the signed distance below is
+    // saturated whatever its exact value: `edge_cov` is 0 for sd >= 127 and
+    // full for sd <= -128, and `far` is mode's offset + 256 so both hold. So:
+    //   * an edge whose bounding box, grown by `far`, misses the pixel is
+    //     farther than `far` and cannot be the nearest edge of a pixel whose
+    //     coverage depends on the distance — its `dist2` is skipped;
+    //   * when every edge is skipped the pixel is far from the outline, and
+    //     its coverage is the saturated value: full inside a filled shape,
+    //     nothing otherwise — no `isqrt`.
+    // The winding still runs over EVERY edge, so inside/outside is exact.
+    // Pixel-identical to the plain loop (`shape_reference` in the tests runs
+    // it against this one); the shield used to take every-edge `dist2` +
+    // `isqrt` for every pixel of its box.
+    let far: Q8 = 256
+        + match mode {
+            ShapeMode::Fill { grow } => Q8::from(grow).abs(),
+            ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => Q8::from(hw).abs(),
+            ShapeMode::Rim { r, hw } => Q8::from(r).abs() + Q8::from(hw).abs(),
+        };
     note_work();
     for y in ya..=yb {
         let py = (y << 8) + ONE_Q8 / 2;
         for x in xa..=xb {
             let px = (x << 8) + ONE_Q8 / 2;
             let mut d2 = i64::MAX;
+            let mut near = false;
             let mut wind = 0i32;
             for e in edges {
-                d2 = d2.min(e.dist2(px, py));
                 if signed {
                     wind += e.winding(px, py);
                 }
+                if e.misses(px, py, far) {
+                    continue;
+                }
+                near = true;
+                d2 = d2.min(e.dist2(px, py));
             }
-            let d = isqrt_u64(d2 as u64) as Q8;
-            let d_signed = if wind != 0 { -d } else { d };
-            let sd = match mode {
-                ShapeMode::Fill { grow } => d_signed - Q8::from(grow),
-                ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => d - Q8::from(hw),
-                ShapeMode::Rim { r, hw } => (d_signed - Q8::from(r)).abs() - Q8::from(hw),
+            let cov = if near {
+                let d = isqrt_u64(d2 as u64) as Q8;
+                let d_signed = if wind != 0 { -d } else { d };
+                let sd = match mode {
+                    ShapeMode::Fill { grow } => d_signed - Q8::from(grow),
+                    ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => d - Q8::from(hw),
+                    ShapeMode::Rim { r, hw } => (d_signed - Q8::from(r)).abs() - Q8::from(hw),
+                };
+                edge_cov(sd)
+            } else if matches!(mode, ShapeMode::Fill { .. }) && wind != 0 {
+                255
+            } else {
+                0
             };
-            let cov = edge_cov(sd);
             if cov != 0 {
                 let aa = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
                 s.blend(x, y, color, aa);
@@ -1054,6 +1096,122 @@ pub fn sqrt_q16_to_q8(v: i64) -> Q8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The shape loop as it was before the near-edge cull (2026-10-15):
+    /// every edge's distance and an `isqrt` for every pixel of the box. The
+    /// reference the cull must match pixel for pixel.
+    fn shape_reference(s: &mut Strip<'_>, pts: &[(i16, i16)], xf: Xform, mode: ShapeMode, color: Rgb, a: u8) {
+        let n = pts.len();
+        if !(2..=SHAPE_MAX_PTS).contains(&n) || a == 0 {
+            return;
+        }
+        let closed =
+            matches!(mode, ShapeMode::Fill { .. } | ShapeMode::Loop { .. }) || (matches!(mode, ShapeMode::Rim { .. }) && n >= 3);
+        let signed = closed && !matches!(mode, ShapeMode::Loop { .. });
+        let mut edges = [Edge::default(); SHAPE_MAX_PTS];
+        let (mut x_lo, mut x_hi, mut y_lo, mut y_hi) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+        let mut prev = xf.apply(pts[0]);
+        let first = prev;
+        let mut ne = 0usize;
+        for (i, &p) in pts.iter().enumerate() {
+            let q = if i == 0 { first } else { xf.apply(p) };
+            x_lo = x_lo.min(q.0);
+            x_hi = x_hi.max(q.0);
+            y_lo = y_lo.min(q.1);
+            y_hi = y_hi.max(q.1);
+            if i > 0 {
+                edges[ne] = Edge::new(prev, q);
+                ne += 1;
+            }
+            prev = q;
+        }
+        if closed && prev != first {
+            edges[ne] = Edge::new(prev, first);
+            ne += 1;
+        }
+        let edges = &edges[..ne];
+        let reach = Q8::from(match mode {
+            ShapeMode::Fill { grow } => grow,
+            ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => hw,
+            ShapeMode::Rim { r, hw } => r.saturating_add(hw),
+        }) + ONE_Q8;
+        let ya = ((y_lo - reach) >> 8).max(0);
+        let yb = ((y_hi + reach) >> 8).min(H - 1);
+        let xa = ((x_lo - reach) >> 8).max(s.x0);
+        let xb = ((x_hi + reach) >> 8).min(s.x0 + s.w - 1);
+        if xb < xa {
+            return;
+        }
+        for y in ya..=yb {
+            let py = (y << 8) + ONE_Q8 / 2;
+            for x in xa..=xb {
+                let px = (x << 8) + ONE_Q8 / 2;
+                let mut d2 = i64::MAX;
+                let mut wind = 0i32;
+                for e in edges {
+                    d2 = d2.min(e.dist2(px, py));
+                    if signed {
+                        wind += e.winding(px, py);
+                    }
+                }
+                let d = isqrt_u64(d2 as u64) as Q8;
+                let d_signed = if wind != 0 { -d } else { d };
+                let sd = match mode {
+                    ShapeMode::Fill { grow } => d_signed - Q8::from(grow),
+                    ShapeMode::Stroke { hw } | ShapeMode::Loop { hw } => d - Q8::from(hw),
+                    ShapeMode::Rim { r, hw } => (d_signed - Q8::from(r)).abs() - Q8::from(hw),
+                };
+                let cov = edge_cov(sd);
+                if cov != 0 {
+                    let aa = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
+                    s.blend(x, y, color, aa);
+                }
+            }
+        }
+    }
+
+    /// The near-edge cull is pixel-identical to the plain loop: every baked
+    /// verdict outline, in every mode, at several sizes, turns and offsets,
+    /// rendered into a full-width strip and into 48-px bands.
+    #[test]
+    fn shape_cull_matches_the_reference_pixel_for_pixel() {
+        use crate::verdict_geom as g;
+        let outlines: [&[(i16, i16)]; 9] = [
+            &g::SHIELD, &g::HEART, &g::BRUSH_BODY, &g::BRUSH_BRISTLES, &g::SHACKLE_ARCH, &g::TRIANGLE, &g::PILL,
+            &g::GEAR_TOOTH, &g::DIE_PIP_4,
+        ];
+        let modes = [
+            ShapeMode::Fill { grow: 0 },
+            ShapeMode::Fill { grow: 300 },
+            ShapeMode::Stroke { hw: 200 },
+            ShapeMode::Loop { hw: 384 },
+            ShapeMode::Loop { hw: 0 },
+            ShapeMode::Rim { r: 900, hw: 330 },
+            ShapeMode::Rim { r: 0, hw: 150 },
+        ];
+        let mut cases = 0;
+        for pts in outlines {
+            for mode in modes {
+                for (k, rot, ox, oy) in [(256i16, 0u16, 214, 70), (180, 4000, 120, 60), (330, 30000, 300, 80), (90, 60000, 10, 140)] {
+                    let xf = Xform::at(ox << 8, oy << 8).scaled(k).turned(rot);
+                    for band in [W, 48] {
+                        let mut x0 = 0;
+                        while x0 < W {
+                            let w = band.min(W - x0);
+                            let mut got = std::vec![0u16; (w * H) as usize];
+                            let mut want = got.clone();
+                            shape(&mut Strip::new(x0, w, &mut got).unwrap(), pts, xf, mode, Rgb::WHITE, 255);
+                            shape_reference(&mut Strip::new(x0, w, &mut want).unwrap(), pts, xf, mode, Rgb::WHITE, 255);
+                            assert!(got == want, "cull differs: {} pts, mode {:?}, k {k}, rot {rot}, band {x0}+{w}", pts.len(), mode);
+                            x0 += w;
+                            cases += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(cases > 2000);
+    }
 
     #[test]
     fn color_round_trips_and_scales() {

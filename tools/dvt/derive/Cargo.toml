@@ -1,0 +1,10 @@
+[package]
+name = "derive"
+version = "0.0.0"
+edition = "2021"
+[workspace]
+[dependencies]
+pqsigner-domain = { path = "../../../domain" }
+sphincs-tz-bip39 = { path = "../../../bip39", features = ["full-wordlist"] }
+sha2 = { version = "0.10", default-features = false }
+hex = "0.4"

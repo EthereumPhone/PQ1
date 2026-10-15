@@ -1131,6 +1131,9 @@ optiga-probe-report: ## Re-analyse a saved OPTIGA probe log (LOG=path)
 test-optiga-probe: ## Host tests for the OPTIGA probe report tool
 	@python3 -I -m unittest discover -s tools/optiga_probe -v
 
+# GTZC_NS_EXTRA=,gtzc-sys adds the DVT 3.3-3.6 NS system-register write probes
+# (phase 2, after the TZSC receipt); GTZC_FAULT_ADDR=0x... (env) appends one
+# NS read of that address, expected to SecureFault. See gtzc_test.rs.
 gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 	@echo "==> Building GTZC1 enforcement test (secure + stm32u585 + e2e-test + mock-se)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
@@ -1141,7 +1144,7 @@ gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585,$(BOARD_FEATURE)
+			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585,$(BOARD_FEATURE)$(GTZC_NS_EXTRA)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)

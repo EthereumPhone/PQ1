@@ -304,8 +304,18 @@ impl Font<'_> {
         for (i, &secret) in text.iter().enumerate() {
             let c = black_box(secret);
             let cx = x + i as i32 * SECRET_ADV + SECRET_ADV / 2; // cell centre
+            // Only the columns of this cell that this strip holds. Every
+            // frame is painted strip by strip, and before 2026-10-15 each
+            // strip ran the whole 26-glyph scan for every cell of every word
+            // and threw away all but its own columns — ~9x the work, the
+            // "seed page draws across the screen" lag on the EVT. The bounds
+            // are the cell's position and the strip's, both public; the
+            // per-pixel work below is unchanged, so each pixel of each cell
+            // is still scanned and composited exactly once per frame.
+            let x_lo = (cx - half_w).max(s.x0);
+            let x_hi = (cx + half_w).min(s.x0 + s.w);
             for yy in y_lo..y_hi {
-                for xx in (cx - half_w)..(cx + half_w) {
+                for xx in x_lo..x_hi {
                     let mut acc = 0u8;
                     for (g_code, slot) in (SECRET_FIRST..=SECRET_LAST).zip(glyphs.iter()) {
                         let mask = black_box(ct_eq_u8(g_code, c));

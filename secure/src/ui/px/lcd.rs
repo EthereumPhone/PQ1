@@ -1151,6 +1151,97 @@ fn clock_running() -> bool {
     false
 }
 
+/// The frame-time overlay for [`play_screen`] (bench only): the same three
+/// lines as the dialog's (`run_flow`), so a status screen, a verdict or a seed
+/// page can be read against the dialog's numbers. Until 2026-10-15 these
+/// screens had no overlay at all, so the setup flow's "laggy shield" report
+/// could not be measured. Worst case per second, like the dialog.
+#[cfg(feature = "ui-px-frametime")]
+#[derive(Default)]
+struct PlayOverlay {
+    last_paint: u32,
+    window_at: u32,
+    max_render: u32,
+    max_blit: u32,
+    max_period: u32,
+    max_shapes: u32,
+    max_glyphs: u32,
+    max_secret: u32,
+    max_stream: u32,
+    max_wire_last: u32,
+    max_te: u32,
+    l1: [u8; 24],
+    n1: usize,
+    l2: [u8; 24],
+    n2: usize,
+    l3: [u8; 24],
+    n3: usize,
+}
+
+#[cfg(feature = "ui-px-frametime")]
+impl PlayOverlay {
+    /// The last published window, as the dialog paints it: yellow
+    /// render/blit/period (ms), white shapes/glyphs/secret and green
+    /// stream/wire_last/te_wait (tenths of a ms).
+    fn push_items<'a>(&'a self, frame: &mut Frame<'a>) {
+        use pqsigner_ui_px::font::{Align, TextRun, TierId};
+        use pqsigner_ui_px::raster::Rgb;
+        for (text, y, color) in [
+            (&self.l1[..self.n1], 16, Rgb::YELLOW),
+            (&self.l2[..self.n2], 34, Rgb::WHITE),
+            (&self.l3[..self.n3], 52, Rgb::GREEN),
+        ] {
+            if text.is_empty() {
+                continue;
+            }
+            let run = TextRun {
+                text,
+                tier: TierId::regular(16),
+                x: 40,
+                y,
+                align: Align::Left,
+                baseline: true,
+                ls_q6: 0,
+                alpha: 255,
+            };
+            let _ = frame.text(run, color);
+        }
+    }
+
+    /// Fold one presented frame in; republish once a second.
+    fn account(&mut self, build: u32, cost: &FrameCost) {
+        let now = timeout::now();
+        if self.last_paint != 0 {
+            self.max_period = self.max_period.max(now.wrapping_sub(self.last_paint));
+        }
+        self.last_paint = now;
+        self.max_render = self.max_render.max(cost.render.wrapping_add(build));
+        self.max_blit = self.max_blit.max(cost.blit);
+        self.max_shapes = self.max_shapes.max(cost.split.shapes);
+        self.max_glyphs = self.max_glyphs.max(cost.split.glyphs.wrapping_add(cost.split.fills));
+        self.max_secret = self.max_secret.max(cost.split.secret);
+        self.max_stream = self.max_stream.max(cost.stream);
+        self.max_wire_last = self.max_wire_last.max(cost.wire_last);
+        self.max_te = self.max_te.max(cost.te_wait);
+        if now.wrapping_sub(self.window_at) >= 1_000 || self.n1 == 0 {
+            self.n1 = frametime::format(&mut self.l1, self.max_render, self.max_blit, self.max_period);
+            self.n2 = frametime::format_tenths(&mut self.l2, self.max_shapes, self.max_glyphs, self.max_secret);
+            self.n3 = frametime::format_tenths(&mut self.l3, self.max_stream, self.max_wire_last, self.max_te);
+            *self = Self {
+                window_at: now,
+                last_paint: now,
+                l1: self.l1,
+                n1: self.n1,
+                l2: self.l2,
+                n2: self.n2,
+                l3: self.l3,
+                n3: self.n3,
+                ..Self::default()
+            };
+        }
+    }
+}
+
 /// Play a non-dialog record from its arrival until it rests, leaving the
 /// resting frame on the glass; `secret` grid cells are painted over every
 /// frame by the constant-time run, and such a frame streams every strip.
@@ -1160,13 +1251,27 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
     let marks = atlas.marks();
     let font = atlas.font();
     let force = !secret.is_empty();
-    let paint = |anim: &Anim| {
-        let mut frame = Frame::new();
-        anim.build(&marks, &font, &mut frame);
-        for &(k, w) in secret {
-            pqsigner_ui_px::rows::push_secret_word(&mut frame, k, w, 255);
-        }
-        let _ = present_frame_ex(&frame, &font, force);
+    #[cfg(feature = "ui-px-frametime")]
+    let mut ft = PlayOverlay::default();
+    let mut paint = |anim: &Anim| {
+        #[cfg(feature = "ui-px-frametime")]
+        let t0 = frametime::cycles();
+        let (_cost, _build) = {
+            let mut frame = Frame::new();
+            anim.build(&marks, &font, &mut frame);
+            for &(k, w) in secret {
+                pqsigner_ui_px::rows::push_secret_word(&mut frame, k, w, 255);
+            }
+            #[cfg(feature = "ui-px-frametime")]
+            let build = frametime::cycles().wrapping_sub(t0);
+            #[cfg(not(feature = "ui-px-frametime"))]
+            let build = 0u32;
+            #[cfg(feature = "ui-px-frametime")]
+            ft.push_items(&mut frame);
+            (present_frame_ex(&frame, &font, force), build)
+        };
+        #[cfg(feature = "ui-px-frametime")]
+        ft.account(_build, &_cost);
     };
     if pqsigner_ui_px::scene::plays_forever(s, 0) {
         // #783. This screen has NO rest pose, so "play it until it rests"

@@ -50,6 +50,9 @@ fwup-hw-test = ["stm32u585"]
 # peripheral marked SECURE in `sau.rs`, then reads back the TZIC
 # counter and asserts. Use `make gtzc-enforcement-hw`.
 gtzc-test = ["e2e-test", "stm32u585"]
+# DVT checklist 3.3-3.6: adds a phase-2 NS write-probe pass over RCC/PWR/
+# TAMP/EXTI/TZSC/GPIO to `gtzc-test` (see `gtzc_test.rs::sys_probe`).
+gtzc-sys = ["gtzc-test"]
 # Slice 2 demo for the GTZC1 illegal-access → wipe escalation.
 # Pairs with the secure crate's `tzic-wipe` feature. Replaces the
 # interactive main() with a single-probe driver that would log a

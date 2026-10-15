@@ -240,6 +240,38 @@ mod tests {
         assert_ne!(a, lit(&[b"ability\0"]));
     }
 
+    /// The seed run is clipped to each strip's columns (2026-10-15, the EVT
+    /// "seed page draws across the screen" lag). Strips are column-major, so
+    /// painting a page band by band and joining the bands must give exactly
+    /// the pixels one full-width strip gives: nothing lost or doubled at a
+    /// seam, whatever the band width.
+    #[test]
+    fn secret_run_is_identical_across_strip_widths() {
+        use crate::raster::H;
+        let font = Font::parse(FONTS).unwrap();
+        let mut f = Frame::new();
+        let words: [&[u8; SECRET_CELLS]; 8] =
+            [b"abandon\0", b"ability\0", b"zoo\0\0\0\0\0", b"wrist\0\0\0", b"mandate\0", b"quantum\0", b"abstract", b"jelly\0\0\0"];
+        for (k, w) in words.iter().enumerate() {
+            push_secret_word(&mut f, k, &w[..], 255);
+        }
+        let mut whole = vec![0u16; (W * H) as usize];
+        render_strip(&f, &font, &mut Strip::new(0, W, &mut whole).unwrap());
+        assert!(whole.iter().filter(|&&p| p != 0).count() > 800, "the page draws");
+        for band in [48, 44, 37, 1] {
+            let mut joined = std::vec::Vec::new();
+            let mut x0 = 0;
+            while x0 < W {
+                let w = band.min(W - x0);
+                let mut buf = vec![0u16; (w * H) as usize];
+                render_strip(&f, &font, &mut Strip::new(x0, w, &mut buf).unwrap());
+                joined.extend_from_slice(&buf);
+                x0 += w;
+            }
+            assert!(joined == whole, "band width {band}: strips disagree with the full-width render");
+        }
+    }
+
     #[test]
     fn entry_and_grid_records_round_trip() {
         let e = ScreenBuilder::entry(b"PIN", b"ENTER PIN", b"**5_____", b"EEA_____").finish().unwrap();
