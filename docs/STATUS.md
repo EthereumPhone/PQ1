@@ -172,9 +172,11 @@ receipt validation, physical erasure/fault resistance, hash backend correctness,
 randomness freshness and the complete Rust/EasyCrypt signer/session relation
 remain open. The raw verifier's zero-node continuation remains explicit.
 
-**EasyCrypt coverage tightening (2026-10-08):** canonical witness counting
-reduces the adaptive FORS coverage term while retaining the initialized byte
-game. The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
+**EasyCrypt coverage tightening (2026-10-15):** exact Stirling and falling-factorial
+counts replace the earlier canonical overcount in the adaptive FORS coverage
+term, retaining the initialized byte game and its premises. The complete bound
+remains dominated by the unchanged birthday charges.
+The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
 and [remaining research obligations](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md)
 distinguish that result from tighter collision charges, concrete SHA-256, QROM
 and full Rust correspondence.

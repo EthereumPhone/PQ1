@@ -1203,3 +1203,35 @@ scratch/c10_digest_caller_finish_layer_coordinate_reject.ec	MUST-FAIL	[by]: cann
 scratch/c10_digest_caller_wots_exhaustion_typed.ec	MUST-PASS	-
 scratch/c10_digest_caller_wots_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/_scope_neg_op_C10DigestCallers.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Exact enumeration: positive counts/events and paired intended proof rejection.
+scratch/stirling_reverse_labels_positive.ec	MUST-PASS	-
+scratch/stirling_reverse_labels_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_stirling_count_positive.ec	MUST-PASS	-
+scratch/stirling_stirling_count_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_stirling_recurrence_positive.ec	MUST-PASS	-
+scratch/stirling_stirling_recurrence_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_distinct_count_positive.ec	MUST-PASS	-
+scratch/stirling_distinct_count_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_excluded_target_positive.ec	MUST-PASS	-
+scratch/stirling_excluded_target_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_insufficient_pool_positive.ec	MUST-PASS	-
+scratch/stirling_insufficient_pool_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_empty_selection_positive.ec	MUST-PASS	-
+scratch/stirling_empty_selection_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_all_coordinates_positive.ec	MUST-PASS	-
+scratch/stirling_all_coordinates_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_event_preservation_positive.ec	MUST-PASS	-
+scratch/stirling_event_preservation_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_byte_coverage_transfer_positive.ec	MUST-PASS	-
+scratch/stirling_byte_coverage_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/stirling_physical_prefix_transfer_positive.ec	MUST-PASS	-
+scratch/stirling_physical_prefix_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_RestrictedGrowthWords.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ReverseGrowthEncoding.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DistinctWitnessWords.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_StirlingPoolWitness.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_StirlingPoolEvent.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_StirlingCoverageBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_OriginalStirlingCoverage.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_StirlingNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.

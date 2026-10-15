@@ -678,3 +678,11 @@ cdrafts-split/C10AcceptanceBridge.ec
 cdrafts-split/C10SearchAcceptance.ec
 cdrafts-split/C10PairedSigner.ec
 cdrafts-split/C10DigestCallers.ec
+cdrafts-split/RestrictedGrowthWords.ec
+cdrafts-split/ReverseGrowthEncoding.ec
+cdrafts-split/DistinctWitnessWords.ec
+cdrafts-split/StirlingPoolWitness.ec
+cdrafts-split/StirlingPoolEvent.ec
+cdrafts-split/StirlingCoverageBound.ec
+cdrafts-split/OriginalStirlingCoverage.ec
+cdrafts-split/StirlingNumericalBound.ec

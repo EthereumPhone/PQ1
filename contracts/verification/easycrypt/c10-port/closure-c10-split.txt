@@ -481,3 +481,13 @@ C10PairedSigner
 
 # Paired digest fields throughout signer callers, 2026-10-15.
 C10DigestCallers
+
+# Exact distinct-witness/Stirling coverage, 2026-10-15.
+RestrictedGrowthWords
+ReverseGrowthEncoding
+DistinctWitnessWords
+StirlingPoolWitness
+StirlingPoolEvent
+StirlingCoverageBound
+OriginalStirlingCoverage
+StirlingNumericalBound
