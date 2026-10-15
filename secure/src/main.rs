@@ -610,6 +610,12 @@ mod ui_under_test;
 #[path = "ui/px/status_map.rs"]
 mod ui_px_status_map;
 
+// The setup flow's screens (`ui::setup_screens`): pure records, host-tested
+// and carried by the lifecycle fixtures.
+#[cfg(test)]
+#[path = "ui/setup_screens.rs"]
+mod ui_setup_screens;
+
 // Everything below this point is firmware infrastructure — gated out in
 // host test builds where only the pure aa/tx logic is exercised.
 #[cfg(all(feature = "mock-se", not(test)))]
@@ -981,47 +987,36 @@ fn is_provisioned(se: &mut impl WalletStore) -> bool {
 /// provisioning the secure element. The mnemonic only ever lives on the
 /// stack and is zeroed on drop. The caller must wipe the returned PIN.
 ///
-/// On any cancel/idle-wipe/mismatch the wizard restarts from PIN entry —
-/// there is no other recovery from a bricked first boot.
+/// Back from the PIN or from the import intro returns to the choice the user
+/// made; nothing restarts setup on a timeout (setup has none).
 #[cfg(not(test))]
 fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
-    use ui::pin_entry::{enter_pin_with_confirm, PinEntryResult};
-    use ui::seed_wizard::{
-        choose_setup_mode, enter_mnemonic, show_mnemonic, verify_mnemonic, WizardChoice,
-        WizardError, WizardResult,
-    };
+    use ui::seed_wizard::{choose_pin, create_backup, import_wallet, setup_intro, SetupChoice};
     use zeroize::Zeroize;
 
+    // Owner decisions 2026-10-15: welcome and the buttons first, then create
+    // or import, THEN the PIN (explained before it is asked for), then the
+    // words. Going back from the PIN returns to the choice; nothing in setup
+    // restarts it on a timeout, and a wrong check word asks the same word
+    // again rather than making a new seed.
+    let mut back_to = None;
     loop {
-        // ---- 1. Choose PIN (twice) ----
-        secure_log!("[S] wizard: enter_pin_with_confirm");
-        let pin = match enter_pin_with_confirm() {
-            PinEntryResult::Pin(p) => {
-                secure_log!("[S] wizard: PIN confirmed");
-                p
-            }
-            PinEntryResult::Mismatch => {
-                secure_log!("[S] wizard: PIN mismatch — retry");
-                ui::show_status("PINs differ", "retry...");
-                continue;
-            }
-            PinEntryResult::Cancelled => {
-                secure_log!("[S] wizard: PIN entry cancelled — retry");
-                ui::show_status("Cancelled", "retry...");
-                continue;
-            }
-            PinEntryResult::IdleWipe => {
-                secure_log!("[S] wizard: PIN entry idle wipe — retry");
-                ui::show_status("Idle", "retry...");
-                continue;
-            }
+        // ---- 1. Welcome, the buttons, create or import ----
+        secure_log!("[S] wizard: setup_intro");
+        let choice = setup_intro(back_to);
+        back_to = Some(choice);
+
+        // ---- 2. Choose the PIN (twice) ----
+        secure_log!("[S] wizard: choose_pin");
+        let Some(mut pin) = choose_pin() else {
+            secure_log!("[S] wizard: back from the PIN to the choice");
+            continue;
         };
 
-        // ---- 2. New or restore? ----
-        secure_log!("[S] wizard: choose_setup_mode");
-        let mnemonic = match choose_setup_mode() {
-            WizardChoice::NewWallet => {
-                secure_log!("[S] wizard: NewWallet — generating entropy");
+        // ---- 3. The words ----
+        let mnemonic = match choice {
+            SetupChoice::Create => {
+                secure_log!("[S] wizard: Create — generating entropy");
                 // Pull 32 bytes of entropy via the multi-source strong
                 // RNG (STM32 hardware TRNG ⊕ OPTIGA GetRandom ⊕ SE050
                 // GetRandom — Trezor-parity 3-source XOR). The wallet
@@ -1035,63 +1030,29 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
                 let mut entropy = [0u8; 32];
                 if rng_strong::fill(&mut entropy).is_err() {
                     secure_log!("[S] wizard: rng_strong::fill FAILED");
-                    let mut p = pin;
-                    p.zeroize();
+                    pin.zeroize();
                     ui::show_status("RNG failed", "retry...");
                     continue;
                 }
-                secure_log!("[S] wizard: entropy ok, showing mnemonic");
                 let m = sphincs_tz_bip39::Mnemonic::from_entropy(&entropy);
                 entropy.zeroize();
                 crate::fi::zeroize_barrier();
-
-                // Show the 24 words paginated; require the user to walk to
-                // the last page before they can confirm.
-                let sm = show_mnemonic(&m);
-                if sm != WizardResult::Confirmed {
-                    secure_log!("[S] wizard: show_mnemonic returned {:?} — retry", sm);
-                    let mut p = pin;
-                    p.zeroize();
-                    ui::show_status("Cancelled", "retry...");
-                    continue;
-                }
-                // Spot-check 3 random words against what they wrote down.
-                let vm = verify_mnemonic(&m);
-                if vm != WizardResult::Confirmed {
-                    secure_log!("[S] wizard: verify_mnemonic returned {:?} — retry", vm);
-                    let mut p = pin;
-                    p.zeroize();
-                    ui::show_status("Verify fail", "retry...");
-                    continue;
-                }
+                // The intro, every page, WORDS WRITTEN DOWN? and the three
+                // checks. It only returns once all of them are done, and it
+                // never trades `m` for a new seed.
+                create_backup(&m);
                 m
             }
-            WizardChoice::Restore => {
-                secure_log!("[S] wizard: Restore — entering mnemonic");
-                match enter_mnemonic() {
-                    Ok(m) => m,
-                    Err(WizardError::Cancelled) => {
-                        secure_log!("[S] wizard: enter_mnemonic cancelled — retry");
-                        let mut p = pin;
-                        p.zeroize();
-                        ui::show_status("Cancelled", "retry...");
-                        continue;
-                    }
-                    Err(WizardError::IdleWipe) => {
-                        secure_log!("[S] wizard: enter_mnemonic idle wipe — retry");
-                        let mut p = pin;
-                        p.zeroize();
-                        ui::show_status("Idle", "retry...");
+            SetupChoice::Import => {
+                secure_log!("[S] wizard: Import — entering mnemonic");
+                match import_wallet() {
+                    Some(m) => m,
+                    None => {
+                        secure_log!("[S] wizard: back from import to the choice");
+                        pin.zeroize();
                         continue;
                     }
                 }
-            }
-            WizardChoice::Cancelled | WizardChoice::IdleWipe => {
-                secure_log!("[S] wizard: choose_setup_mode cancelled/idle — retry");
-                let mut p = pin;
-                p.zeroize();
-                ui::show_status("Cancelled", "retry...");
-                continue;
             }
         };
 
@@ -4462,6 +4423,10 @@ fn main() -> ! {
                 Ok(master) => {
                     nsc::unlock_with_master(master);
                     secure_log!("[S] Auto-unlocked after provisioning");
+                    // Only here: the wallet is on both chips and opens with
+                    // the PIN just chosen (`provision_from_mnemonic` panics on
+                    // any failure, so a failed write never reaches this line).
+                    ui::show_status("Setup complete", "");
                 }
                 Err(_) => {
                     secure_log!("[S] WARNING: auto-unlock failed after provision");

@@ -128,7 +128,30 @@ pub fn show(s: &Screen) -> bool {
     show_with(s, &[])
 }
 
+/// The setup pager on the panel ([`super::lcd::run_pager`]). `None` when the
+/// pixel UI cannot run it — no verified atlas, or the text presenter — and
+/// the caller runs its 16x4 pager instead. Each screen is recorded once, as
+/// every presenter does.
+pub fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> Option<crate::ui::PagerOut> {
+    #[cfg(feature = "ui-lcd")]
+    {
+        let Ok(atlas) = super::assets::verify_atlas() else {
+            return None;
+        };
+        for s in screens {
+            record(s);
+        }
+        Some(super::lcd::run_pager(screens, start, &atlas, may_back, may_forward))
+    }
+    #[cfg(not(feature = "ui-lcd"))]
+    {
+        let _ = (screens, start, may_back, may_forward);
+        None
+    }
+}
+
 /// What [`show_waiting`] did.
+#[cfg_attr(not(any(feature = "duress-pin", feature = "duress-ui-test")), allow(dead_code))]
 pub enum Waited {
     /// No verified atlas — the caller must paint its own 16x4 page and run
     /// its own `wait_button`. Same contract as `show_with` returning `false`.
@@ -151,6 +174,10 @@ pub enum Waited {
 /// Goes through the same `record(s)` as every other presenter, exactly once,
 /// so the `[UI-PXSR]` log line and the `ui-capture` frame hash are unchanged
 /// and the transcript count does not move.
+///
+/// Only the duress yes / no still waits here; the setup choice is a page of
+/// [`pager`].
+#[cfg_attr(not(any(feature = "duress-pin", feature = "duress-ui-test")), allow(dead_code))]
 pub fn show_waiting(s: &Screen, idle: &mut dyn FnMut() -> bool) -> Waited {
     #[cfg(feature = "ui-lcd")]
     {

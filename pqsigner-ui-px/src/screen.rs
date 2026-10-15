@@ -126,6 +126,52 @@ const OFF_TINT: usize = OFF_LINES + LINE_REC - 1;
 /// rides here, the same trick the tint uses one record earlier.
 const OFF_MONOGRAM: usize = OFF_LINES + 2 * LINE_REC - 1;
 const _: () = assert!(OFF_MONOGRAM != OFF_TINT);
+/// The navigation pose rides in the pad byte of line record 2 (see
+/// [`Nav`]). Space — every record written before 2026-10-15 — is the
+/// default, so existing records are unchanged.
+const OFF_NAV: usize = OFF_LINES + 3 * LINE_REC - 1;
+const _: () = assert!(OFF_NAV != OFF_TINT && OFF_NAV != OFF_MONOGRAM);
+
+/// How a screen's navigation is drawn, where it departs from what its kind
+/// implies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Nav {
+    /// What the kind implies (every record before 2026-10-15).
+    Default,
+    /// A hero that introduces instead of asking (design: `band_chev`): the
+    /// caption carries one right-pointing chevron, the corner chevrons hide
+    /// and nothing is armed (`catalog/screen-types/hero-intro.md`).
+    Intro,
+    /// Only the left corner chevron: the last screen of a pager, nothing
+    /// to go on to (device rule, owner 2026-10-15).
+    LeftOnly,
+    /// Only the right corner chevron: the first screen of a pager, nothing
+    /// to go back to (device rule, owner 2026-10-15).
+    RightOnly,
+}
+
+impl Nav {
+    #[must_use]
+    pub const fn as_byte(self) -> u8 {
+        match self {
+            Self::Default => b' ',
+            Self::Intro => b'I',
+            Self::LeftOnly => b'<',
+            Self::RightOnly => b'>',
+        }
+    }
+
+    #[must_use]
+    pub const fn from_byte(b: u8) -> Option<Self> {
+        match b {
+            b' ' => Some(Self::Default),
+            b'I' => Some(Self::Intro),
+            b'<' => Some(Self::LeftOnly),
+            b'>' => Some(Self::RightOnly),
+            _ => None,
+        }
+    }
+}
 /// Number of placeholder ramps (`colors.PLACEHOLDER_GRADIENTS`).
 pub const N_RAMPS: u8 = 14;
 
@@ -257,6 +303,10 @@ pub enum Icon {
     ///
     /// The character itself is in the record's [`OFF_MONOGRAM`] byte.
     Letter,
+    /// The setup family's mark: a 3 x 3 grid of black dots on the white
+    /// disc (`pq1/procedural/marks.py` `dots`), drawn procedurally — no
+    /// atlas bytes.
+    Dots,
     /// Verdict signs (procedural art, `verdict.rs`): the padlock locking /
     /// unlocking, the warning triangle with its exclamation, the triangle
     /// carrying the wipe brush, the backup shield, the PIN pill, the die,
@@ -304,6 +354,7 @@ impl Icon {
             Self::Verified => b'V',
             Self::Heart => b'A',
             Self::Letter => b'L',
+            Self::Dots => b'9',
             Self::None => b'-',
         }
     }
@@ -334,6 +385,7 @@ impl Icon {
             b'V' => Some(Self::Verified),
             b'A' => Some(Self::Heart),
             b'L' => Some(Self::Letter),
+            b'9' => Some(Self::Dots),
             b'-' => Some(Self::None),
             _ => None,
         }
@@ -680,6 +732,12 @@ impl Screen {
         }
     }
 
+    /// The navigation pose ([`Nav`]); `None` for a malformed byte.
+    #[must_use]
+    pub fn nav(&self) -> Option<Nav> {
+        Nav::from_byte(self.0[OFF_NAV])
+    }
+
     /// The disc look (icon + tint + monogram).
     #[must_use]
     pub fn look(&self) -> Option<Look> {
@@ -857,6 +915,17 @@ impl Screen {
         }
         if t != b' ' && self.kind() == Some(Kind::Legacy) {
             return false;
+        }
+        match self.nav() {
+            None => return false,
+            // An intro is a hero that asks nothing: never armed.
+            Some(Nav::Intro) if kind != Kind::Hero || self.0[OFF_COMMIT] == b'Y' => return false,
+            Some(Nav::LeftOnly | Nav::RightOnly)
+                if !matches!(kind, Kind::Hero | Kind::Detail | Kind::Value | Kind::Words) =>
+            {
+                return false
+            }
+            _ => {}
         }
         let tier_ok = if kind == Kind::Words {
             self.grid_first().is_some()
@@ -1055,6 +1124,23 @@ impl ScreenBuilder {
     #[must_use]
     pub fn uncommitted(mut self) -> Self {
         self.s.0[OFF_COMMIT] = b'N';
+        self
+    }
+
+    /// Make a hero an INTRO ([`Nav::Intro`]): the caption carries the band
+    /// chevron, the corners hide, and nothing is armed.
+    #[must_use]
+    pub fn intro(mut self) -> Self {
+        self.s.0[OFF_COMMIT] = b'N';
+        self.s.0[OFF_NAV] = Nav::Intro.as_byte();
+        self
+    }
+
+    /// Set the navigation pose ([`Nav`]); `finish` refuses a pose the kind
+    /// cannot wear.
+    #[must_use]
+    pub fn nav(mut self, n: Nav) -> Self {
+        self.s.0[OFF_NAV] = n.as_byte();
         self
     }
 
@@ -1515,6 +1601,55 @@ mod tests {
             b = b.line(b"0x123", Weight::Regular);
         }
         b.finish().unwrap()
+    }
+
+    /// The nav byte rides the third line record's spare byte: three
+    /// full-width lines leave it intact, and a record written before the
+    /// byte existed (a space there) reads as the default.
+    #[test]
+    fn nav_round_trips_beside_full_width_lines() {
+        let full = [b'x'; LINE_LEN];
+        let mut b = ScreenBuilder::detail(b"NAV", Icon::Safe, Side::Left, b"LABEL").tier(Tier::T22).nav(Nav::LeftOnly);
+        for _ in 0..3 {
+            b = b.line(&full, Weight::Regular);
+        }
+        let s = b.finish().unwrap();
+        assert_eq!(s.nav(), Some(Nav::LeftOnly));
+        assert!(s.is_well_formed());
+        for k in 0..3u8 {
+            assert_eq!(s.line(0, k).map(|(_, t)| t.len()), Some(LINE_LEN), "line {k}");
+        }
+        assert_eq!(detail(b"OLD", 3).nav(), Some(Nav::Default));
+        for n in [Nav::Default, Nav::Intro, Nav::LeftOnly, Nav::RightOnly] {
+            assert_eq!(Nav::from_byte(n.as_byte()), Some(n));
+        }
+    }
+
+    /// An intro is a hero that asks nothing; one-sided arrows only where the
+    /// corner pair is drawn; any other byte is malformed.
+    #[test]
+    fn nav_rules() {
+        let intro = ScreenBuilder::hero(b"INTRO", Icon::Dots, b"WRITE IT DOWN").intro().finish().unwrap();
+        assert!(intro.is_well_formed());
+        assert!(!intro.commit());
+        assert_eq!(intro.nav(), Some(Nav::Intro));
+        let mut armed = intro;
+        armed.0[OFF_COMMIT] = b'Y';
+        assert!(!armed.is_well_formed(), "an armed intro");
+        let mut on_detail = detail(b"D", 1);
+        on_detail.0[OFF_NAV] = Nav::Intro.as_byte();
+        assert!(!on_detail.is_well_formed(), "an intro that is not a hero");
+        let one_sided = ScreenBuilder::hero(b"LAST", Icon::Dots, b"LAST?").nav(Nav::LeftOnly).finish().unwrap();
+        assert!(one_sided.is_well_formed());
+        assert!(one_sided.commit(), "a one-sided ask still asks");
+        let mut verdict = ScreenBuilder::verdict(b"V", Icon::Pill, b"WRONG PIN", State::Failed, ResultMark::None)
+            .finish()
+            .unwrap();
+        verdict.0[OFF_NAV] = Nav::RightOnly.as_byte();
+        assert!(!verdict.is_well_formed(), "a verdict draws no corner pair");
+        let mut junk = detail(b"D", 1);
+        junk.0[OFF_NAV] = b'?';
+        assert!(!junk.is_well_formed());
     }
 
     #[test]

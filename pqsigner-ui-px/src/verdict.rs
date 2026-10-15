@@ -19,7 +19,7 @@
 
 use crate::fixed::{clamp01, cos_turns_q16, exp_neg_q16, lerp, mul_q16, sin_turns_q16, Q16, Q8, ONE_Q16, ONE_Q8};
 use crate::motion::{self, ease, ease_out, phase, ARRIVE_MS};
-use crate::raster::{Frame, Item, Rgb, ShapeMode, Xform};
+use crate::raster::{Frame, Rgb, ShapeMode, Xform};
 use crate::scene::{state_color, CENTER_X, CIRCLE_CY, CIRCLE_R, COL_LEFT_CX, COL_RIGHT_CX, TOKEN_RING_W_Q8};
 use crate::screen::{Icon, Kind, ResultMark, Screen, Side, State};
 use crate::verdict_geom as g;

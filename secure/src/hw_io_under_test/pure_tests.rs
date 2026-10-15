@@ -2480,17 +2480,55 @@ fn positive_the_chooser_animates_from_inside_its_input_wait() {
         2,
         "show_waiting must record the screen on each cfg arm, exactly once"
     );
-    // Both wizard choosers must use it (the fn itself plus two call sites),
-    // and the paint-then-block helper must not come back.
+    // The duress yes / no still uses it (the fn itself plus its one call
+    // site), and the paint-then-block helper must not come back.
     assert_eq!(
         SEED_WIZARD_SRC.matches("px_choice_wait(").count(),
-        3,
-        "both chooser loops must animate while waiting"
+        2,
+        "the duress chooser must animate while waiting"
     );
     assert!(
         !contains_in_code(SEED_WIZARD_SRC, "fn px_choice("),
         "the paint-then-block helper must not come back"
     );
+    // The setup choice (2026-10-15) is a page of the setup pager, which has
+    // the same shape: one loop that drains the buttons AND steps and paints
+    // the animation, so the hero sweeps while it waits.
+    assert!(
+        contains_in_code(SEED_WIZARD_SRC, "super::px::screens::pager(screens, start, may_back, may_forward)"),
+        "the setup pager must run on the pixel pager when the panel can draw it"
+    );
+    let pager = UI_PX_LCD_SRC
+        .split("pub fn run_pager(")
+        .nth(1)
+        .expect("run_pager must exist");
+    let pager = &pager[..pager.find("\n}\n").unwrap_or(pager.len())];
+    let lp = pager.find("let result = loop {").expect("run_pager must loop");
+    for needle in ["let (g, now) = drain(&mut fsm);", "anim.step(now);", "build_and_present(&anim"] {
+        assert!(pager[lp..].contains(needle), "run_pager must {needle} inside its wait loop");
+    }
+}
+
+#[test]
+fn negative_the_setup_pager_resets_activity_only_on_a_button_edge() {
+    // #426 on the pixel pager: the timer is reset by a real button edge and
+    // by nothing else (no reset on entry, none per frame).
+    let pager = UI_PX_LCD_SRC
+        .split("pub fn run_pager(")
+        .nth(1)
+        .expect("run_pager must exist");
+    let pager = &pager[..pager.find("\n}\n").unwrap_or(pager.len())];
+    assert_eq!(pager.matches("timeout::reset_activity()").count(), 1);
+    assert!(pager.contains("if g.edge {\n            timeout::reset_activity();"));
+    // It selects only on the confirm click, only on a screen that asks, and
+    // only once that screen has been painted complete.
+    assert_eq!(pager.matches("PagerOut::Selected(").count(), 1);
+    assert!(pager.contains(
+        "Gesture::ChordClick => {\n                    if asks && presented == Some(i) {"
+    ));
+    // A page change forgets the painted mark, so the next page must paint
+    // before it can be selected.
+    assert_eq!(pager.matches("presented = None;").count(), 2);
 }
 
 #[test]

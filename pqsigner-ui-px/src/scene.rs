@@ -28,6 +28,13 @@ use crate::screen::{Icon, Kind, ResultMark, Screen, State, Tier, Weight, N_RAMPS
 pub const CIRCLE_R: i32 = 30;
 pub const CIRCLE_CY: i32 = 72;
 pub const CENTER_X: i32 = 214;
+/// An intro's caption centre (catalog band-chevron.md: 206, the panel centre
+/// nudged left so caption + chevron read centred together).
+pub const INTRO_CAPTION_X: i32 = 206;
+/// The band chevron: 13 px right of the caption's measured right edge, on
+/// the caps' optical centre (y 121.5).
+const BAND_CHEV_GAP: i32 = 13;
+const BAND_CHEV_Y_Q8: Q8 = (121 << 8) + 128;
 pub const COL_LEFT_CX: i32 = 74;
 pub const COL_RIGHT_CX: i32 = 352;
 pub const TEXT_CX_CIRCLE_LEFT: i32 = 263;
@@ -74,6 +81,12 @@ pub enum Chev {
     Up,
     /// No input (status screens).
     None,
+    /// Only the left chevron, pointing out: the last screen of a pager
+    /// ([`crate::screen::Nav::LeftOnly`]).
+    LeftOnly,
+    /// Only the right chevron, pointing out: the first screen of a pager
+    /// ([`crate::screen::Nav::RightOnly`]).
+    RightOnly,
 }
 
 /// A screen's static geometry.
@@ -86,6 +99,9 @@ pub struct Layout {
     pub sweep: bool,
     pub hint: bool,
     pub band: bool,
+    /// A hero intro ([`crate::screen::Nav::Intro`]): the caption sits on
+    /// [`INTRO_CAPTION_X`] and carries the band chevron.
+    pub intro: bool,
 }
 
 /// Which record bytes a text spec refers to — the layout only carries
@@ -198,6 +214,7 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         sweep: false,
         hint: false,
         band: false,
+        intro: false,
     };
     let mut nt = 0usize;
     let mut push = |t: Option<TextSpec>| {
@@ -212,7 +229,10 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         Some(Kind::Hero) => {
             l.circle = Some((CENTER_X, CIRCLE_CY));
             l.sweep = true;
-            l.hint = true;
+            // The hint (the pair turning up and bobbing) says "a commit is
+            // armed here"; the design sets it on asks only. A hero that asks
+            // nothing (a welcome, a chooser page, an intro) rests without it.
+            l.hint = s.commit();
             push(spec(s, Src::Caption, TierId::regular(18), CENTER_X, BASELINE_Y, Align::Center, true, LS_QUESTION_Q6));
         }
         Some(Kind::Status) => {
@@ -284,6 +304,21 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
                 push(spec(s, Src::Line(0, i), TierId::regular(22), CENTER_X, y, Align::Center, false, 0));
             }
         }
+    }
+    match s.nav() {
+        // The band unit (catalog: band-chevron.md): no corner pair, no hint,
+        // the caption nudged left so text + chevron read centred.
+        Some(crate::screen::Nav::Intro) if s.kind() == Some(Kind::Hero) => {
+            l.chev = Chev::None;
+            l.hint = false;
+            l.intro = true;
+            if let Some(cap) = l.texts.iter_mut().flatten().next() {
+                cap.x = INTRO_CAPTION_X;
+            }
+        }
+        Some(crate::screen::Nav::LeftOnly) if l.chev == Chev::Lr => l.chev = Chev::LeftOnly,
+        Some(crate::screen::Nav::RightOnly) if l.chev == Chev::Lr => l.chev = Chev::RightOnly,
+        _ => {}
     }
     l
 }
@@ -432,7 +467,9 @@ pub fn disc_style(icon: Option<Icon>, tint: Option<u8>) -> DiscStyle {
             film: Rgb::COWSWAP_FILL,
             branded: true,
         },
-        Some(Icon::Fingerprint) => DiscStyle {
+        // The firmware family's device-action look, which the setup family
+        // (the dots) wears too (flows/setup DEFAULTS).
+        Some(Icon::Fingerprint | Icon::Dots) => DiscStyle {
             fill: Rgb::WHITE,
             ring: Rgb::BLACK,
             mark: Rgb::BLACK,
@@ -549,7 +586,9 @@ impl<'a> Marks<'a> {
                 | Icon::Heart
                 // A monogram is not an atlas mark: it is blitted from the
                 // font by `monogram_mask` (#774).
-                | Icon::Letter,
+                | Icon::Letter
+                // The setup mark is drawn procedurally (`push_dots`).
+                | Icon::Dots,
             )
             | None => None,
         }
@@ -967,6 +1006,9 @@ impl Anim {
             };
             let up_amount = if l.chev == Chev::Up { ONE_Q16 } else { hint_up };
             for (side, x, out_turns) in [(Btn::Left, CHEV_LEFT_X_Q8, ONE_Q16 / 2), (Btn::Right, CHEV_RIGHT_X_Q8, 0)] {
+                if (l.chev == Chev::LeftOnly && side == Btn::Right) || (l.chev == Chev::RightOnly && side == Btn::Left) {
+                    continue;
+                }
                 // Rest: outward; hint / armed: up (0.25 turns).
                 let angle = lerp(out_turns, ONE_Q16 / 4, up_amount);
                 let nudge = match self.press {
@@ -978,7 +1020,7 @@ impl Anim {
                     }
                     _ => 0,
                 };
-                frame.chevron(x + (nudge << 8), ((CHEV_Y + bob) << 8), angle, Rgb::WHITE);
+                frame.chevron(x + (nudge << 8), (CHEV_Y + bob) << 8, angle, Rgb::WHITE);
             }
         }
 
@@ -1146,6 +1188,8 @@ impl Anim {
                     };
                     if let Some(m) = mark {
                         frame.mask(cx_q8, cy_q8, m, ONE_Q8, style.mark, 255);
+                    } else if icon == Some(Icon::Dots) {
+                        push_dots(frame, cx_q8, cy_q8, visible_r, style.mark);
                     } else if let (Some(Icon::Letter), Some(ch)) = (icon, self.cur.monogram()) {
                         if let Some((m, box_cy)) = monogram_mask(font, ch, cy_q8) {
                             frame.mask(cx_q8, box_cy, m, ONE_Q8, style.mark, 255);
@@ -1236,6 +1280,9 @@ impl Anim {
                 frame.disc(cx, cy, r, blend_rgb(style.fill, fill, p.u));
                 if let (Some(m), true) = (mark, p.glyph_a > 0) {
                     frame.mask(cx, cy + mark_dy, m, ONE_Q8, style.mark, p.glyph_a);
+                } else if icon == Some(Icon::Dots) && p.glyph_a > 0 {
+                    let c = blend_rgb(style.fill, style.mark, i32::from(p.glyph_a) * (ONE_Q16 / 255));
+                    push_dots(frame, cx, cy, r, c);
                 }
                 frame.ring(cx, cy, r, TOKEN_RING_W_Q8, blend_rgb(style.ring, ring, p.u));
                 if p.flash_a > 0 {
@@ -1255,6 +1302,9 @@ impl Anim {
                             let scale = ((i64::from(b.r) << 8) / i64::from(visible_r.max(1))) as Q8;
                             let dy = ((i64::from(mark_dy) * i64::from(scale)) >> 8) as Q8;
                             frame.mask(b.x, b.y + dy, m, scale, style.mark, p.glyph_a);
+                        } else if icon == Some(Icon::Dots) && p.glyph_a > 0 {
+                            let c = blend_rgb(style.fill, style.mark, i32::from(p.glyph_a) * (ONE_Q16 / 255));
+                            push_dots(frame, b.x, b.y, b.r, c);
                         }
                         if p.glyph_a > 0 {
                             frame.ring(b.x, b.y, b.r, TOKEN_RING_W_Q8, style.ring.scale(p.glyph_a));
@@ -1358,6 +1408,29 @@ pub(crate) fn push_texts<'a>(frame: &mut Frame<'a>, s: &'a Screen, page: u8, alp
                 alpha,
             }, Rgb::WHITE);
     }
+    // The band unit: one chevron hung off the caption's measured right edge,
+    // sharing the caption's alpha (no fade of its own, no bob).
+    if l.intro {
+        let cap = s.caption();
+        if let Some(w) = crate::fit::measure_q6(cap, 18, false, LS_QUESTION_Q6 as u16) {
+            let right = INTRO_CAPTION_X + (w as i32 / 64) / 2;
+            let _ = frame.chevron((right + BAND_CHEV_GAP) << 8, BAND_CHEV_Y_Q8, 0, Rgb::WHITE.scale(alpha));
+        }
+    }
+}
+
+/// The setup family's mark (`Icon::Dots`): nine round dots, `DOTS_PITCH`
+/// apart, each `DOTS_R` across its radius, both fractions of the disc's
+/// radius `r` (`pq1/procedural/marks.py`: 0.32 and 0.10). Procedural — no
+/// atlas bytes. `color` is the mark colour already blended for alpha.
+fn push_dots(frame: &mut Frame<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb) {
+    let pitch = (i64::from(r) * 32 / 100) as Q8;
+    let dot = (i64::from(r) * 10 / 100) as Q8;
+    for j in -1..=1 {
+        for i in -1..=1 {
+            let _ = frame.disc(cx + i * pitch, cy + j * pitch, dot, color);
+        }
+    }
 }
 
 // The state colours are available for status screens (`State`), kept here
@@ -1389,6 +1462,26 @@ mod tests {
 
     fn hero() -> Screen {
         ScreenBuilder::hero(b"APPROVE", Icon::Safe, b"APPROVE SAFE TX?").finish().unwrap()
+    }
+
+    /// The arrows as navigation indicators (owner 2026-10-15): a one-sided
+    /// nav hides the other corner chevron, an intro hides both and carries
+    /// the band chevron, and only an ask shows the hint.
+    #[test]
+    fn nav_sets_the_chevrons_and_the_hint() {
+        use crate::screen::Nav;
+        let l = layout_of(&hero(), 0);
+        assert_eq!((l.chev, l.hint, l.intro), (Chev::Lr, true, false));
+        let first = ScreenBuilder::hero(b"W", Icon::Dots, b"WELCOME").uncommitted().nav(Nav::RightOnly).finish().unwrap();
+        let l = layout_of(&first, 0);
+        assert_eq!((l.chev, l.hint), (Chev::RightOnly, false));
+        let last = ScreenBuilder::hero(b"I", Icon::Dots, b"IMPORT?").nav(Nav::LeftOnly).finish().unwrap();
+        let l = layout_of(&last, 0);
+        assert_eq!((l.chev, l.hint), (Chev::LeftOnly, true));
+        let intro = ScreenBuilder::hero(b"B", Icon::Dots, b"WRITE DOWN 24 WORDS").intro().finish().unwrap();
+        let l = layout_of(&intro, 0);
+        assert_eq!((l.chev, l.hint, l.intro), (Chev::None, false, true));
+        assert_eq!(l.texts[0].map(|t| t.x), Some(INTRO_CAPTION_X));
     }
     fn detail() -> Screen {
         ScreenBuilder::detail(b"SAFEACCT", Icon::Safe, Side::Left, b"SAFE ACCT")

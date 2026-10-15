@@ -364,18 +364,20 @@ pub fn run() -> ! {
         let mut never_expires = || false;
         let _ = super::lcd::run_flow(&screens, &atlas, &mut never_expires);
 
-        // ---- C. the setup flow's shield verdicts and a seed-word page ----
+        // ---- C. the setup flow's verdicts and a seed-word page ----
         //
         // Owner report 2026-10-15 from the wizard on the EVT: the shield
         // animations and the 24-word pages are "SUPER laggy", and every
-        // shield verdict shows a vertical line on its left. The host renders
-        // of those records are clean at rest, so this shows them on the
+        // shield verdict shows a vertical line on its left (it was tearing).
+        // The setup flow has since dropped the shield; these are the verdicts
+        // it still shows. The host renders are clean at rest, so this shows
+        // them on the
         // panel in isolation, through the exact calls the wizard makes
         // (`ui::show_status` and `screens::show_with` -> `play_screen`, which
         // now paints the frame-time overlay under `ui-px-frametime`). Each
         // plays from its entrance to rest; a press moves to the next, and
         // after the seed page the bench starts over at A.
-        for (title, sub) in [("Write 24 words", ""), ("Words shown", ""), ("Backup OK", ""), ("Wrong word", "")] {
+        for (title, sub) in [("PIN mismatch", ""), ("Wrong word", ""), ("Words shown", ""), ("Setup complete", "")] {
             crate::ui::show_status(title, sub);
             let mut idle = || false;
             let _ = crate::ui::input().wait_button(&mut idle);

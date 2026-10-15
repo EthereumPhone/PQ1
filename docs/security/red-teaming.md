@@ -181,7 +181,7 @@ C4 check enforces that a claimed target is real, so the ledger cannot get ahead 
 GetRandom`, XOR-folded, fail-closed on any source error, all-zero rejected.
 Path: `secure/src/rng_strong.rs` → `secure/src/rng.rs` → `secure/src/hw/rng.rs` +
 SE fold in `secure/src/dual_se.rs::random()`. Consumed by the wizard at
-`secure/src/main.rs` (`WizardChoice::NewWallet`).
+`secure/src/main.rs` (`SetupChoice::Create`).
 
 **The LA cannot test this.** The STM32 TRNG never leaves the die; the OPTIGA/SE050 GetRandom
 responses cross I²C **encrypted** under Shielded Connection / SCP03. On the production unit you

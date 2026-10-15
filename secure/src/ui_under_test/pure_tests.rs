@@ -32,6 +32,7 @@ const CONFIRM_SRC: &str = include_str!("../ui/confirm.rs");
 const CONFIRM_CORE_SRC: &str = include_str!("../ui/confirm_core.rs");
 const PIN_SRC: &str = include_str!("../ui/pin_entry.rs");
 const WIZARD_SRC: &str = include_str!("../ui/seed_wizard.rs");
+const SETUP_SRC: &str = include_str!("../ui/setup_screens.rs");
 const CAPTURE_SRC: &str = include_str!("../ui/capture.rs");
 const SEMI_SRC: &str = include_str!("../ui/semihosting.rs");
 const NOOP_SRC: &str = include_str!("../ui/noop.rs");
@@ -400,6 +401,20 @@ fn positive_seed_wizard_show_mnemonic_seen_last_gate() {
     assert!(WIZARD_SRC.contains("if page == TOTAL_PAGES - 1 {"));
     assert!(WIZARD_SRC.contains("seen_last = true;"));
     assert!(WIZARD_SRC.contains("if seen_last {"));
+    // The walk the setup flow uses: a right tap on the last page finishes,
+    // and only once that page has been painted. `start_last` (back from
+    // WORDS WRITTEN DOWN?) reopens on the last page, which was seen to get
+    // there — and `create_backup` sets it only on that path.
+    let simple = wizard_fn_body(WIZARD_SRC, "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {");
+    assert!(simple.contains("let mut seen_last = start_last;"));
+    assert!(simple.contains("if page == total_pages - 1 {\n            seen_last = true;"));
+    assert!(simple.contains("} else if seen_last {\n                    return WizardResult::Confirmed;"));
+    assert_eq!(simple.matches("WizardResult::Confirmed").count(), 1);
+    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic) {");
+    assert_eq!(backup.matches("start_last = true;").count(), 1);
+    assert!(backup.contains(
+        "if pager(&written, 0, true, false) == PagerOut::Back {\n                start_last = true;"
+    ));
 }
 
 #[test]
@@ -762,9 +777,9 @@ fn negative_seed_wizard_must_not_reset_activity_on_step_entry() {
         "the #426 policy comment must remain — it documents why step-entry resets are forbidden"
     );
     const STEP_FNS: [&str; 6] = [
-        "pub fn choose_setup_mode() -> WizardChoice {",
+        "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {",
         "fn yes_no(title: &str) -> Option<bool> {",
-        "fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {",
+        "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {",
         "fn show_mnemonic_with_decoys(m: &Mnemonic) -> WizardResult {",
         "fn enter_single_word(title: &str) -> EnterWordResult {",
         "fn pick_candidate(title: &str, start: usize, end: usize) -> CandidateResult {",
@@ -795,19 +810,17 @@ fn negative_seed_wizard_resets_activity_only_after_button_events() {
     // call rather than a literal `wait_button`.
     const CASES: [(&str, &str); 7] = [
         (
-            "pub fn choose_setup_mode() -> WizardChoice {",
-            "input().wait_button(&mut idle)",
+            "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {",
+            "input().wait_button(&mut never)",
         ),
+        // The one way back from an entry row that reported idle in setup.
+        ("fn wait_for_press() {", "input().wait_button(&mut never)"),
         (
             "fn yes_no(title: &str) -> Option<bool> {",
             "input().wait_button(&mut idle)",
         ),
         (
-            "pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {",
-            "input().wait_button(&mut idle)",
-        ),
-        (
-            "fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {",
+            "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {",
             "input().wait_button(&mut idle)",
         ),
         (
@@ -1115,15 +1128,22 @@ fn negative_progress_bar_clamps_above_100_pct() {
 }
 
 #[test]
-fn negative_show_mnemonic_warning_screen_requires_explicit_right_press() {
-    // The warning screen "Write 24 words L=cancel R=show" is the
-    // last gate before the words hit the display. The user must
-    // press Right to advance — Left cancels. An accidental short
-    // press of Left should NOT silently advance into showing the
-    // words.
-    assert!(WIZARD_SRC.contains("show_status(\"Write 24 words\", \"L=cancel R=show\");"));
-    assert!(WIZARD_SRC.contains("(Button::Right, _) => {}"));
-    assert!(WIZARD_SRC.contains("(Button::Left, _) => return WizardResult::Cancelled,"));
+fn negative_the_words_open_only_on_a_right_tap_from_their_intro() {
+    // WRITE DOWN 24 WORDS is the last gate before the words hit the
+    // display (it replaced the 16x4 "Write 24 words / L=cancel R=show",
+    // 2026-10-15). Only a right tap may pass it: the pager runs it with
+    // no back, and the intro asks nothing, so neither a left tap nor the
+    // confirm click can open the words by accident.
+    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic) {");
+    assert!(backup.contains("let intro = [setup_screens::backup_intro()];"));
+    assert!(backup.contains("while pager(&intro, 0, false, true) != PagerOut::Forward {}"));
+    let intro = SETUP_SRC
+        .split("pub fn backup_intro() -> Screen {")
+        .nth(1)
+        .expect("backup_intro must exist");
+    let intro = &intro[..intro.find("\n}\n").unwrap_or(intro.len())];
+    assert!(intro.contains("b\"WRITE DOWN 24 WORDS\"") && intro.contains(".intro()"));
+    // The decoy walk keeps its own idle exit.
     assert!(WIZARD_SRC.contains("None => return WizardResult::IdleWipe,"));
 }
 
@@ -1194,13 +1214,24 @@ fn negative_seed_wizard_enter_word_back_up_at_position_zero_cancels_word() {
 }
 
 #[test]
-fn negative_choose_setup_mode_long_left_is_always_cancel() {
-    // A long-Left on the setup mode menu must NOT confirm whatever
-    // option is currently highlighted — it must cancel the flow.
-    // Without this, a user who long-pressed the wrong button on
-    // "Restore" would proceed into mnemonic entry expecting a
-    // cancel.
-    assert!(WIZARD_SRC.contains("(Button::Left, Press::Long) => return WizardChoice::Cancelled,"));
+fn negative_the_setup_pager_selects_only_an_asking_screen() {
+    // Successor of the chooser's "long-Left is always cancel" pin. Only the
+    // confirm gesture may select, and only on a screen that asks: a wrong
+    // button must never pick the highlighted CREATE / IMPORT, and the
+    // confirm must not "select" the welcome or the buttons help. On the
+    // 16x4 fallback the confirm is the legacy long-Right (the driver cannot
+    // tell it from the chord); long-Left does nothing.
+    let body = wizard_fn_body(WIZARD_SRC, "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {");
+    assert!(body.contains(
+        "(Button::Right, Press::Long) => {\n                if screens[i].commit() {\n                    return PagerOut::Selected(i);"
+    ));
+    assert!(body.contains("(Button::Left, Press::Long) => {}"));
+    assert_eq!(body.matches("PagerOut::Selected(").count(), 1);
+    // The choice maps the selected index to its screen by name, never by a
+    // bare position the screen list could drift from.
+    let intro = wizard_fn_body(WIZARD_SRC, "pub fn setup_intro(back_to: Option<SetupChoice>) -> SetupChoice {");
+    assert!(intro.contains("PagerOut::Selected(setup_screens::CREATE) => return SetupChoice::Create,"));
+    assert!(intro.contains("PagerOut::Selected(setup_screens::IMPORT) => return SetupChoice::Import,"));
 }
 
 // ═════════════════════════════════════════════════════════════════════

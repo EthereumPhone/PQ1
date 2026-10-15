@@ -162,7 +162,43 @@
 #     CHECK 3 / 12 / 22              verify_mnemonic (main.rs:988)
 #     SETUP COMPLETE                 "Backup OK"
 #
-# So the two REAL differences, both presentational:
+# UPDATE 2026-10-15 — the setup flow was rebuilt from the owner's EVT
+# walk-through (the table above is the 2026-10-02 state). Now, in order
+# (`secure/src/ui/setup_screens.rs`, walked by `seed_wizard`):
+#
+#     reference                      device
+#     —                              WELCOME TO PQ1 (hero, right arrow only)
+#     —                              BUTTONS (detail: left back, right next,
+#                                    both select)
+#     SET UP PQ1?                    CREATE NEW WALLET? / IMPORT WALLET?
+#                                    (two heroes; IMPORT has the left arrow
+#                                    only)
+#     —                              PIN (detail: what the PIN is for)
+#     SET PIN / REPEAT PIN           SET PIN / REPEAT PIN; a miss shows
+#                                    PIN MISMATCH and asks for both again
+#     SET DURESS PIN / REPEAT        unchanged (duress-pin builds only)
+#     WRITE DOWN 24 WORDS            WRITE DOWN 24 WORDS (backup_intro: the
+#                                    band chevron, no corner arrows)
+#     the 24 WORDS                   the 24 words, 3 pages; HIDDEN after
+#                                    5 minutes without a press
+#     WORDS WRITTEN DOWN?            WORDS WRITTEN DOWN? (left arrow only:
+#                                    left = back to the words)
+#     CHECK 3 / 12 / 22              three random checks, TYPED (item 1)
+#     WRONG SEED PHRASE (wrong check)  WRONG WORD - TRY AGAIN (owner: the
+#                                    message must say what happened), then
+#                                    the same check again
+#     —                              ENTER YOUR 24 WORDS (import intro)
+#     SETUP COMPLETE                 SETUP COMPLETE, only after the wallet
+#                                    is written to both chips and unlocked
+#
+# Every screen wears the setup family's look (the 3 x 3 dots on the white
+# disc), never the shield. The added screens and the one-sided arrows are
+# owner decisions of 2026-10-15 ("the arrows on the top should also work as
+# navigation indicators"), not port gaps. Setup has no inactivity timeout
+# (same date): nothing is provisioned until the end, and the old timeout
+# restarted setup and threw away a seed the user had written down.
+#
+# So the two REAL differences of 2026-10-02, both presentational:
 #
 # 1. THE CHECK-WORD INPUT. The reference shows the asked word among eight
 #    decoys in a 3x3 grid and the user PICKS; the device has the user ENTER

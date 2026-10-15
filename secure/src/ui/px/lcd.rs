@@ -1253,6 +1253,8 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
     let force = !secret.is_empty();
     #[cfg(feature = "ui-px-frametime")]
     let mut ft = PlayOverlay::default();
+    // `mut` only matters when the overlay accumulator is captured.
+    #[cfg_attr(not(feature = "ui-px-frametime"), allow(unused_mut))]
     let mut paint = |anim: &Anim| {
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
@@ -1917,6 +1919,115 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
             // input sample, never adding idle time after a slow frame; an
             // accepted edge ends the wait early so a tap mid-animation is
             // handled on the very next frame.
+            while now.wrapping_add(FRAME_PERIOD_MS).wrapping_sub(timeout::now()) < (1 << 31) {
+                if ring_has_edges() {
+                    break;
+                }
+                cortex_m::asm::wfi();
+            }
+        }
+    };
+    sampling_disable();
+    result
+}
+
+/// The setup flow's pager (owner decisions 2026-10-15): the signing grammar
+/// without a signature. Tap right moves to the next screen, tap left to the
+/// previous one; the two-button click selects on a screen that asks
+/// (`commit` byte set) once that screen has reached the glass in full; holds
+/// do nothing. A right tap on the last screen returns `Forward` and a left tap
+/// on the first returns `Back`, each only where the caller allows it.
+///
+/// No inactivity timeout: setup has no wallet to protect yet, and a timeout
+/// that restarted setup threw away a seed the user may already have written
+/// down (and looped forever on the EVT). The watchdog wait guard is held for
+/// the whole wait, as in `run_flow`.
+pub fn run_pager(
+    screens: &[Screen],
+    start: usize,
+    atlas: &assets::AtlasRef,
+    may_back: bool,
+    may_forward: bool,
+) -> crate::ui::PagerOut {
+    use crate::ui::PagerOut;
+    let n = screens.len();
+    let mut i = start.min(n.saturating_sub(1));
+    film_abort();
+    let marks = atlas.marks();
+    let font = atlas.font();
+    let now = timeout::now();
+    let mut anim = Anim::new(&screens[i], 0, now);
+    sampling_enable();
+    // Seed from the buttons' current level, as `run_flow` does, so a chord
+    // still held from the previous step does not select here.
+    let sb = stable_bits();
+    let mut fsm = InputFsm::resumed(InputCtx::NAV, sb & 1 != 0, sb & 2 != 0);
+    let _trusted_ui_wait = timeout::TrustedUiWaitGuard::enter();
+    let mut presented: Option<usize> = None;
+    let result = loop {
+        let (g, now) = drain(&mut fsm);
+        if g.edge {
+            timeout::reset_activity();
+        }
+        let asks = screens[i].commit();
+        let mut decided: Option<PagerOut> = None;
+        for ev in g.buf[..g.n].iter().flatten() {
+            match *ev {
+                Gesture::Press(side) => anim.press(side, now),
+                Gesture::Chord => {
+                    if asks {
+                        anim.hold(Btn::Right, pqsigner_ui_px::motion::HOLD_COMMIT_MS, now);
+                    }
+                }
+                Gesture::ChordClick => {
+                    if asks && presented == Some(i) {
+                        anim.hold_commit(now);
+                        decided = Some(PagerOut::Selected(i));
+                    } else {
+                        anim.hold_release(now);
+                    }
+                }
+                Gesture::Tap(Btn::Right) => {
+                    if i + 1 < n {
+                        i += 1;
+                        presented = None;
+                        anim.go_to(&screens[i], 0, now);
+                    } else if may_forward {
+                        decided = Some(PagerOut::Forward);
+                    }
+                }
+                Gesture::Tap(Btn::Left) => {
+                    if i > 0 {
+                        i -= 1;
+                        presented = None;
+                        anim.go_to(&screens[i], 0, now);
+                    } else if may_back {
+                        decided = Some(PagerOut::Back);
+                    }
+                }
+                Gesture::HoldCancel(_) | Gesture::HoldCommit(_) => anim.hold_release(now),
+                Gesture::HoldStart(_) | Gesture::Release(_) | Gesture::DoubleTap(_) => {}
+            }
+            if decided.is_some() {
+                break;
+            }
+        }
+        if let Some(d) = decided {
+            break d;
+        }
+        let animating = anim.step(now);
+        let cost = build_and_present(&anim, &marks, &font, None, None, None);
+        if cost.complete {
+            presented = Some(i);
+        }
+        if !animating && anim.next_wake(now).is_none() && stable_bits() == 0 {
+            loop {
+                cortex_m::asm::wfi();
+                if ring_has_edges() || stable_bits() != 0 {
+                    break;
+                }
+            }
+        } else {
             while now.wrapping_add(FRAME_PERIOD_MS).wrapping_sub(timeout::now()) < (1 << 31) {
                 if ring_has_edges() {
                     break;

@@ -1,25 +1,30 @@
-//! First-boot seed phrase wizard. Three flows:
+//! First-boot setup wizard (the flow is `main::run_first_boot_wizard`):
 //!
-//! 1. `choose_setup_mode` — pick "New Wallet" or "Restore from seed phrase".
-//! 2. `show_mnemonic` — display all 24 words across paged screens so the user
-//!    can write them down.
-//! 3. `verify_mnemonic` — spot-check 3 random words against what the user
-//!    just wrote down.
-//! 4. `enter_mnemonic` — type in 24 words via letter-scroll + 4-letter prefix
-//!    narrowing. Used by both restore and verify.
+//! 1. `setup_intro` — welcome, the buttons, then create or import.
+//! 2. `choose_pin` — what the PIN is for, then SET PIN / REPEAT PIN.
+//! 3. `create_backup` — WRITE DOWN 24 WORDS, the words (`show_mnemonic`),
+//!    WORDS WRITTEN DOWN?, then three typed checks (`verify_mnemonic`).
+//! 4. `import_wallet` — ENTER YOUR 24 WORDS, then `enter_mnemonic`: 24 words
+//!    via letter-scroll + 4-letter prefix narrowing (also used by the
+//!    checks).
 //!
-//! All flows reuse the existing `Display`, `Input`, `Button`, `Press`, and
-//! `timeout::is_idle` plumbing so the inactivity wipe works the same as on
-//! every other trusted UI screen.
+//! Setup has NO inactivity timeout (owner decision 2026-10-15): nothing is
+//! provisioned until the end, and a timeout used to restart setup and throw
+//! away a seed the user had already written down. A seed page hides its
+//! words after five minutes without a press instead (`WORDS_HIDE_MS`).
 //!
-//! UX conventions (consistent with `pin_entry.rs` and `confirm.rs`):
+//! The screens are `setup_screens`; they are walked with the signing grammar
+//! (`pager`, the pixel UI's `run_pager`):
 //!
-//! | Action     | Effect                                       |
-//! |------------|----------------------------------------------|
-//! | `Right`    | next / increment                             |
-//! | `Left`     | prev / decrement                             |
-//! | long-Right | confirm / advance / select                   |
-//! | long-Left  | cancel / back                                |
+//! | Action        | Effect                                           |
+//! |---------------|--------------------------------------------------|
+//! | tap right     | next screen (from the last: on to the next step) |
+//! | tap left      | previous screen (from the first: back a step)    |
+//! | both, click   | select, on a screen that asks (CREATE NEW WALLET?) |
+//!
+//! The PIN and word entry rows keep their own grammar (`pin_entry.rs`,
+//! `enter_single_word`): short presses scroll, long-Right accepts, long-Left
+//! deletes or goes back.
 //!
 //! ## X17-UI3 policy (#426)
 //!
@@ -32,7 +37,10 @@
 //! after its button wait returns `Some(ev)`, never in the prologue
 //! before the loop.
 
-use super::{display, input, show_status, Button, Press, DISPLAY_COLS, DISPLAY_ROWS};
+use super::setup_screens;
+use super::{display, input, show_status, Button, PagerOut, Press, DISPLAY_COLS, DISPLAY_ROWS};
+use pqsigner_ui_px::Screen;
+use sphincs_tz_shared::PIN_LEN;
 use crate::rng;
 use crate::timeout;
 use sphincs_tz_bip39::{
@@ -49,7 +57,8 @@ use zeroize::Zeroize;
 // (no `ui-px`, or no verified atlas) means the caller paints its 16×4 page.
 
 /// The chooser ask (`status_map::choice`), shown and ANIMATED for the whole
-/// input wait (#783).
+/// input wait (#783). Only the duress yes / no still uses it; the setup
+/// choice is a page of the setup pager ([`pager`]).
 ///
 /// Returns `None` when the pixel UI could not paint it, and the caller falls
 /// back to its 16x4 page plus an ordinary `wait_button` — the same contract
@@ -62,7 +71,7 @@ use zeroize::Zeroize;
 /// into a 5 s sweep, stranding the disc off-centre. And because the old
 /// paint loop sampled no input at all, a tap inside those 3 s was dropped.
 /// Animating from inside the input wait removes both.
-#[cfg(feature = "ui-px")]
+#[cfg(all(feature = "ui-px", any(feature = "duress-pin", feature = "duress-ui-test")))]
 fn px_choice_wait(
     title: &[u8],
     option: &[u8],
@@ -114,84 +123,229 @@ fn px_mnemonic_page(m: &Mnemonic, page: usize) -> bool {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum WizardChoice {
-    NewWallet,
-    Restore,
-    Cancelled,
-    IdleWipe,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum WizardResult {
     Confirmed,
     Cancelled,
+    /// Only the `decoy-frames` seed walk still times out; every other setup
+    /// step holds for a press instead.
+    #[cfg_attr(not(feature = "decoy-frames"), allow(dead_code))]
     IdleWipe,
 }
 
 #[derive(Debug)]
 pub enum WizardError {
     Cancelled,
-    IdleWipe,
 }
 
 // ---------------------------------------------------------------------------
-// 1. Choose setup mode
+// 1. The setup flow's own screens (owner decisions 2026-10-15)
 // ---------------------------------------------------------------------------
+//
+// Welcome -> buttons -> create / import -> PIN help -> SET / REPEAT PIN ->
+// (create) WRITE DOWN 24 WORDS -> the words -> WORDS WRITTEN DOWN? -> three
+// typed checks, or (import) ENTER YOUR 24 WORDS -> the words typed in. The
+// screens wear the setup family's look (the 3 x 3 dots on the white disc,
+// `flows/setup` in the design) and are walked with the signing grammar:
+// tap right = next, tap left = back, the two-button click selects on a
+// screen that asks. Setup has no inactivity timeout: there is no wallet to
+// protect yet, and the old timeout restarted setup and threw away a seed the
+// user may already have written down.
 
-/// Two-option menu, scrollable with Left/Right short, confirmed with long-Right.
-pub fn choose_setup_mode() -> WizardChoice {
-    let options = ["New Wallet", "Restore"];
-    let mut idx: usize = 0;
+/// What the user chose on the setup intro.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum SetupChoice {
+    Create,
+    Import,
+}
 
+/// Walk `screens` (see [`PagerOut`]): the pixel pager when the panel can
+/// draw it, otherwise each screen as a 16x4 page with the legacy buttons —
+/// short right / left move, the confirm chord selects a screen that asks.
+/// (The legacy driver cannot tell the chord from a right hold, so on that
+/// fallback a right hold selects too.)
+fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {
+    #[cfg(feature = "ui-px")]
+    if let Some(out) = super::px::screens::pager(screens, start, may_back, may_forward) {
+        return out;
+    }
+    let n = screens.len();
+    let mut i = start.min(n.saturating_sub(1));
     loop {
-        // Port step 4: the chooser is the design's ask, the highlighted
-        // option as its caption (taps switch it, the chord selects).
-        let mut idle = || timeout::is_idle();
-
-        // The pixel chooser paints AND waits, so it can keep animating for
-        // the whole wait (#783). `None` = it could not paint; fall through to
-        // the 16x4 page and the plain wait.
-        #[cfg(feature = "ui-px")]
-        let waited = px_choice_wait(b"", [&b"Create new wallet"[..], b"Restore wallet"][idx], &mut idle);
-        #[cfg(not(feature = "ui-px"))]
-        let waited: Option<Option<(Button, Press)>> = None;
-
-        let event = match waited {
-            Some(Some(ev)) => ev,
-            Some(None) => return WizardChoice::IdleWipe,
-            None => {
-                let d = display();
-                d.clear();
-                d.draw_line(0, "  Wallet Setup");
-                for (i, label) in options.iter().enumerate() {
-                    let mut row = [b' '; DISPLAY_COLS];
-                    row[0] = if i == idx { b'>' } else { b' ' };
-                    let lb = label.as_bytes();
-                    let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
-                    row[2..2 + max].copy_from_slice(&lb[..max]);
-                    d.draw_line(i + 1, super::ascii_str(&row));
-                }
-                d.draw_line(3, "L=- R=+ LR=ok");
-                d.flush();
-                match input().wait_button(&mut idle) {
-                    Some(ev) => ev,
-                    None => return WizardChoice::IdleWipe,
-                }
-            }
+        paint_fallback(&screens[i]);
+        // No idle check: setup has no inactivity timeout.
+        let mut never = || false;
+        let Some(event) = input().wait_button(&mut never) else {
+            continue;
         };
         timeout::reset_activity();
-
         match event {
-            (Button::Right, Press::Short) => idx = (idx + 1) % options.len(),
-            (Button::Left, Press::Short) => idx = (idx + options.len() - 1) % options.len(),
-            (Button::Right, Press::Long) => {
-                return if idx == 0 {
-                    WizardChoice::NewWallet
-                } else {
-                    WizardChoice::Restore
-                };
+            (Button::Right, Press::Short) => {
+                if i + 1 < n {
+                    i += 1;
+                } else if may_forward {
+                    return PagerOut::Forward;
+                }
             }
-            (Button::Left, Press::Long) => return WizardChoice::Cancelled,
+            (Button::Left, Press::Short) => {
+                if i > 0 {
+                    i -= 1;
+                } else if may_back {
+                    return PagerOut::Back;
+                }
+            }
+            (Button::Right, Press::Long) => {
+                if screens[i].commit() {
+                    return PagerOut::Selected(i);
+                }
+            }
+            (Button::Left, Press::Long) => {}
+        }
+    }
+}
+
+/// A setup screen on the fallback: through the text presenter when the pixel
+/// UI is the text one, else as a 16x4 page (caption or label, then lines).
+fn paint_fallback(s: &Screen) {
+    #[cfg(all(feature = "ui-px", not(feature = "ui-lcd")))]
+    {
+        let _ = super::px::screens::show(s);
+    }
+    #[cfg(not(all(feature = "ui-px", not(feature = "ui-lcd"))))]
+    {
+        let d = display();
+        d.clear();
+        let head = if s.caption().is_empty() { s.label() } else { s.caption() };
+        // A caption longer than a row (CREATE NEW WALLET? is 18) breaks at
+        // its last space that fits and carries on to the next row, rather
+        // than losing its end.
+        let (first, rest) = if head.len() > DISPLAY_COLS {
+            let cut = head[..=DISPLAY_COLS].iter().rposition(|&b| b == b' ').unwrap_or(DISPLAY_COLS);
+            (&head[..cut], head[cut..].trim_ascii_start())
+        } else {
+            (head, &[][..])
+        };
+        let mut r = 0usize;
+        for text in [first, rest].into_iter().filter(|t| !t.is_empty()) {
+            draw_row(d, r, text);
+            r += 1;
+        }
+        for k in 0..s.nlines(0) {
+            if r >= DISPLAY_ROWS {
+                break;
+            }
+            if let Some((_, text)) = s.line(0, k) {
+                draw_row(d, r, text);
+                r += 1;
+            }
+        }
+        d.flush();
+    }
+}
+
+/// One 16x4 row, cut at the row's width.
+#[cfg(not(all(feature = "ui-px", not(feature = "ui-lcd"))))]
+fn draw_row(d: &mut super::Display, r: usize, text: &[u8]) {
+    let mut row = [b' '; DISPLAY_COLS];
+    let k = text.len().min(DISPLAY_COLS);
+    row[..k].copy_from_slice(&text[..k]);
+    d.draw_line(r, super::ascii_str(&row));
+}
+
+/// Wait for any button with no idle check, then count it as activity. The
+/// one way back from an entry row that reported idle: re-entering the row
+/// straight away would find the timer still expired and return at once,
+/// forever (the EVT loop of 2026-10-15). A real press both ends the wait and
+/// is the only thing allowed to reset the timer (#426).
+fn wait_for_press() {
+    let mut never = || false;
+    while input().wait_button(&mut never).is_none() {}
+    timeout::reset_activity();
+}
+
+/// The setup intro: welcome, the buttons, then create or import. Starts on
+/// the welcome, or, when the user came back from a later step, on the
+/// choice they had made.
+pub fn setup_intro(back_to: Option<SetupChoice>) -> SetupChoice {
+    let screens = setup_screens::intro();
+    let mut start = match back_to {
+        None => 0,
+        Some(SetupChoice::Create) => setup_screens::CREATE,
+        Some(SetupChoice::Import) => setup_screens::IMPORT,
+    };
+    loop {
+        match pager(&screens, start, false, false) {
+            PagerOut::Selected(setup_screens::CREATE) => return SetupChoice::Create,
+            PagerOut::Selected(setup_screens::IMPORT) => return SetupChoice::Import,
+            PagerOut::Selected(i) => start = i,
+            PagerOut::Forward | PagerOut::Back => {}
+        }
+    }
+}
+
+/// Choose the PIN: what it is for, then SET PIN and REPEAT PIN. A mismatch
+/// shows PIN MISMATCH and asks for both again. `None` = the user went back
+/// past the explanation (to create / import).
+pub fn choose_pin() -> Option<[u8; PIN_LEN]> {
+    use super::pin_entry::{enter_pin_with_confirm, PinEntryResult};
+    let help = [setup_screens::pin_help()];
+    loop {
+        if pager(&help, 0, true, true) == PagerOut::Back {
+            return None;
+        }
+        loop {
+            match enter_pin_with_confirm() {
+                PinEntryResult::Pin(p) => return Some(p),
+                PinEntryResult::Mismatch => show_status("PIN mismatch", ""),
+                // A left hold on the first digit: back to the explanation.
+                PinEntryResult::Cancelled => break,
+                // No timeout in setup: hold the row until a real press, then
+                // ask again (never re-enter on an expired timer).
+                PinEntryResult::IdleWipe => wait_for_press(),
+            }
+        }
+    }
+}
+
+/// Create: the intro, the 24 words, WORDS WRITTEN DOWN?, then three typed
+/// checks. Returns once the user has walked every page and passed the
+/// checks; it never gives up on `m`, so the words the user wrote down stay
+/// the words of this wallet.
+pub fn create_backup(m: &Mnemonic) {
+    let intro = [setup_screens::backup_intro()];
+    let written = [setup_screens::written()];
+    'intro: loop {
+        // Only a right tap leaves the intro: there is no back (the words are
+        // already drawn) and nothing to select (it asks nothing).
+        while pager(&intro, 0, false, true) != PagerOut::Forward {}
+        let mut start_last = false;
+        loop {
+            if show_mnemonic(m, start_last) != WizardResult::Confirmed {
+                // A left tap on the first page: back to the intro.
+                continue 'intro;
+            }
+            if pager(&written, 0, true, false) == PagerOut::Back {
+                start_last = true;
+                continue;
+            }
+            if verify_mnemonic(m) == WizardResult::Confirmed {
+                return;
+            }
+            // Cancelled out of a check: back to the words, from the start.
+            start_last = false;
+        }
+    }
+}
+
+/// Import: the intro, then the 24 words typed in. `None` = the user went
+/// back past the intro (to create / import).
+pub fn import_wallet() -> Option<Mnemonic> {
+    let intro = [setup_screens::import_intro()];
+    loop {
+        if pager(&intro, 0, true, true) == PagerOut::Back {
+            return None;
+        }
+        if let Ok(m) = enter_mnemonic() {
+            return Some(m);
         }
     }
 }
@@ -199,9 +353,6 @@ pub fn choose_setup_mode() -> WizardChoice {
 // ---------------------------------------------------------------------------
 // §32 P4/P5 — duress (decoy) PIN setup dialogs
 // ---------------------------------------------------------------------------
-
-#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
-use sphincs_tz_shared::PIN_LEN;
 
 /// Hold the currently-rendered status message on screen for `ms`
 /// milliseconds so the user can read it before the next dialog redraws
@@ -358,28 +509,12 @@ const REAL_FRAME_HOLD_MS: u32 = 200;
 /// decoy_{N_DECOYS-1}]` round-robin on consecutive decoy cycles.
 const DECOY_FRAME_HOLD_MS: u32 = 40;
 
-/// Display the 24 words paginated. The user pages forward with right, back
-/// with left, confirms with long-Right (only valid on the last page so the
-/// user cannot dismiss the screen without seeing every word), or cancels
-/// with long-Left.
-pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {
-    // Warn the user before showing the secret.
-    show_status("Write 24 words", "L=cancel R=show");
-    let mut idle = || timeout::is_idle();
-    let event = match input().wait_button(&mut idle) {
-        Some(ev) => ev,
-        None => return WizardResult::IdleWipe,
-    };
-    // A button event IS real user activity — reset the timer (see the
-    // X17-UI3 policy note at the top of this file). This covers the
-    // R=show press that the deleted step-entry resets in
-    // `show_mnemonic_simple` / `show_mnemonic_with_decoys` used to proxy.
-    timeout::reset_activity();
-    match event {
-        (Button::Right, _) => {}
-        (Button::Left, _) => return WizardResult::Cancelled,
-    }
-
+/// Display the 24 words paginated (the setup intro has announced them).
+/// Tap right pages forward and, from the last page, finishes; tap left pages
+/// back and, from the first page, returns `Cancelled` (back to the intro).
+/// The words cannot be finished without the last page having been shown.
+/// `start_last` reopens on the last page (back from WORDS WRITTEN DOWN?).
+pub fn show_mnemonic(m: &Mnemonic, start_last: bool) -> WizardResult {
     // Decoy frames are gated on `decoy-frames` (off by default).
     // OLED displays are bistable — pixels hold state between paints,
     // so a 40 ms decoy frame is fully visible to the user; the
@@ -392,21 +527,32 @@ pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {
     // sub-channel 4` for the trade-off analysis.
     #[cfg(feature = "decoy-frames")]
     {
+        let _ = start_last;
         show_mnemonic_with_decoys(m)
     }
     #[cfg(not(feature = "decoy-frames"))]
     {
-        show_mnemonic_simple(m)
+        show_mnemonic_simple(m, start_last)
     }
 }
 
+/// After this long on one seed page with no press, the words leave the glass
+/// (HIDDEN; any press brings the same page back). Setup has no timeout, so
+/// this is the only thing that stops a device left on a seed page from
+/// showing the seed indefinitely (owner decision 2026-10-15).
 #[cfg(not(feature = "decoy-frames"))]
-fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
-    let mut page: usize = 0;
-    let mut seen_last = false;
+const WORDS_HIDE_MS: u32 = 5 * 60 * 1000;
+
+#[cfg(not(feature = "decoy-frames"))]
+fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {
     // The pixel grid holds eight words a page, the 16×4 page three; the
     // paging is fixed for the whole walk (see `mnemonic_paging`).
     let (total_pages, per_page) = mnemonic_paging();
+    let mut page: usize = if start_last { total_pages - 1 } else { 0 };
+    let mut seen_last = start_last;
+    // Waiting here can last minutes (the user is writing): hold the
+    // watchdog's trusted-UI wait for the whole walk.
+    let _trusted_ui_wait = timeout::TrustedUiWaitGuard::enter();
 
     loop {
         if per_page == WORDS_PER_PAGE {
@@ -415,7 +561,7 @@ fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
             #[cfg(feature = "ui-px")]
             if !px_mnemonic_page(m, page) {
                 // The atlas stopped verifying mid-walk: never fall back to
-                // a paging that would skip words — cancel, the wizard
+                // a paging that would skip words — back to the intro, which
                 // retries on the 16×4 pages.
                 return WizardResult::Cancelled;
             }
@@ -424,10 +570,12 @@ fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
             seen_last = true;
         }
 
-        let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
-            Some(ev) => ev,
-            None => return WizardResult::IdleWipe,
+        let shown_at = timeout::now();
+        let mut idle = || timeout::now().wrapping_sub(shown_at) > WORDS_HIDE_MS;
+        let Some(event) = input().wait_button(&mut idle) else {
+            // Five minutes with no press: take the words off the glass.
+            hide_words();
+            continue;
         };
         timeout::reset_activity();
 
@@ -435,27 +583,39 @@ fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {
             (Button::Right, Press::Short) => {
                 if page + 1 < total_pages {
                     page += 1;
+                } else if seen_last {
+                    return WizardResult::Confirmed;
                 }
             }
             (Button::Left, Press::Short) => {
                 if page > 0 {
                     page -= 1;
+                } else {
+                    return WizardResult::Cancelled;
                 }
             }
-            (Button::Right, Press::Long) => {
-                if seen_last {
-                    // Wipe display before returning so the words don't linger.
-                    show_status("Words shown", "");
-                    return WizardResult::Confirmed;
-                }
-                // Otherwise treat long-Right as "next page" hint.
-                if page + 1 < total_pages {
-                    page += 1;
-                }
-            }
-            (Button::Left, Press::Long) => return WizardResult::Cancelled,
+            // Holds (and the chord) are not gestures on a word page.
+            (_, Press::Long) => {}
         }
     }
+}
+
+/// The words leave the glass: the HIDDEN screen until any press (which
+/// redraws the same page). Painted over the whole panel, so no seed pixel
+/// stays on it.
+#[cfg(not(feature = "decoy-frames"))]
+fn hide_words() {
+    paint_hidden(&setup_screens::hidden());
+    wait_for_press();
+}
+
+#[cfg(not(feature = "decoy-frames"))]
+fn paint_hidden(s: &Screen) {
+    #[cfg(feature = "ui-px")]
+    if super::px::screens::show(s) {
+        return;
+    }
+    paint_fallback(s);
 }
 
 #[cfg(feature = "decoy-frames")]
@@ -667,6 +827,9 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
     );
 
     for (step, &probe) in indices.iter().enumerate() {
+        // Only the debug-log lines read `step`.
+        #[cfg(not(feature = "debug-log"))]
+        let _ = step;
         let title_buf = build_check_title(probe + 1);
         let title_s = super::ascii_str(&title_buf);
 
@@ -686,51 +849,58 @@ pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {
             );
         }
 
-        match enter_single_word(title_s) {
-            EnterWordResult::Word(idx) => {
-                let expected = m.word_index(probe as usize);
-                if idx != expected {
-                    #[cfg(feature = "debug-log")]
-                    {
-                        // CT lookup — debug-log compiles out of production,
-                        // but keep the leaky `WORDLIST[idx]` pattern out of
-                        // the source so it can't be copy-pasted into a
-                        // secret-bearing context by accident.
-                        let (gb, glen) = word_bytes_at(idx);
-                        let mut eb = [0u8; MAX_WORD_BYTES];
-                        let elen = m.word_bytes(probe as usize, &mut eb);
-                        secure_log!(
-                            "[wizard] verify step {}/3: MISMATCH — got BIP39 idx {} (\"{}\") but expected {} (\"{}\") at word #{}",
-                            step + 1, idx,
-                            super::ascii_str(&gb[..glen as usize]),
-                            expected,
-                            super::ascii_str(&eb[..elen as usize]),
-                            probe + 1,
-                        );
+        // One check, asked until it is answered right (or cancelled).
+        loop {
+            match enter_single_word(title_s) {
+                EnterWordResult::Word(idx) => {
+                    let expected = m.word_index(probe as usize);
+                    if idx != expected {
+                        #[cfg(feature = "debug-log")]
+                        {
+                            // CT lookup — debug-log compiles out of production,
+                            // but keep the leaky `WORDLIST[idx]` pattern out of
+                            // the source so it can't be copy-pasted into a
+                            // secret-bearing context by accident.
+                            let (gb, glen) = word_bytes_at(idx);
+                            let mut eb = [0u8; MAX_WORD_BYTES];
+                            let elen = m.word_bytes(probe as usize, &mut eb);
+                            secure_log!(
+                                "[wizard] verify step {}/3: MISMATCH — got BIP39 idx {} (\"{}\") but expected {} (\"{}\") at word #{}",
+                                step + 1, idx,
+                                super::ascii_str(&gb[..glen as usize]),
+                                expected,
+                                super::ascii_str(&eb[..elen as usize]),
+                                probe + 1,
+                            );
+                        }
+                        // The design's headshake, then the SAME check again —
+                        // never a new seed (owner report 2026-10-15: a failed
+                        // check used to restart setup and make the written
+                        // words useless).
+                        show_status("Wrong word", "");
+                        continue;
                     }
-                    show_status("Wrong word", "retrying...");
+                    #[cfg(feature = "debug-log")]
+                    secure_log!("[wizard] verify step {}/3: OK", step + 1);
+                }
+                EnterWordResult::Cancelled => {
+                    #[cfg(feature = "debug-log")]
+                    secure_log!(
+                        "[wizard] verify step {}/3: enter_single_word cancelled (long-Left at position 0)",
+                        step + 1,
+                    );
                     return WizardResult::Cancelled;
                 }
-                #[cfg(feature = "debug-log")]
-                secure_log!("[wizard] verify step {}/3: OK", step + 1);
+                EnterWordResult::IdleWipe => {
+                    // No timeout in setup: keep the row, ask again after a press.
+                    wait_for_press();
+                    continue;
+                }
             }
-            EnterWordResult::Cancelled => {
-                #[cfg(feature = "debug-log")]
-                secure_log!(
-                    "[wizard] verify step {}/3: enter_single_word cancelled (long-Left at position 0)",
-                    step + 1,
-                );
-                return WizardResult::Cancelled;
-            }
-            EnterWordResult::IdleWipe => {
-                #[cfg(feature = "debug-log")]
-                secure_log!("[wizard] verify step {}/3: idle wipe", step + 1);
-                return WizardResult::IdleWipe;
-            }
+            break;
         }
     }
 
-    show_status("Backup OK", "");
     WizardResult::Confirmed
 }
 
@@ -802,7 +972,9 @@ pub fn enter_mnemonic() -> Result<Mnemonic, WizardError> {
                 i -= 1;
                 indices[i] = 0;
             }
-            EnterWordResult::IdleWipe => return Err(WizardError::IdleWipe),
+            // No timeout in setup: keep the words typed so far and ask for
+            // this one again after a real press.
+            EnterWordResult::IdleWipe => wait_for_press(),
         }
     }
 

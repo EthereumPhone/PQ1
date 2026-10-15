@@ -49,6 +49,7 @@ mod confirm_core;
 pub mod golden;
 pub mod pin_entry;
 pub mod seed_wizard;
+pub mod setup_screens;
 /// F-24 stage D: constant-time glyph blit for secret-bearing display rows.
 /// Bypasses address-keyed font lookups for the seed wizard's word rows. Used by
 /// the `ui-lcd` (RGB565 via `secret_glyph_cols`) backend; the
@@ -77,6 +78,17 @@ pub const DISPLAY_ROWS: usize = 4;
 #[inline]
 pub(crate) fn ascii_str(buf: &[u8]) -> &str {
     core::str::from_utf8(buf).unwrap_or("?")
+}
+
+/// Where the setup pager (`seed_wizard::pager`) ended.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PagerOut {
+    /// The two-button click on a screen that asks (its index).
+    Selected(usize),
+    /// A right tap on the last screen (only when the caller allows it).
+    Forward,
+    /// A left tap on the first screen (only when the caller allows it).
+    Back,
 }
 
 /// Two-button input event.
