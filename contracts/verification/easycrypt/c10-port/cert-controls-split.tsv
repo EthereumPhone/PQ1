@@ -1180,3 +1180,26 @@ scratch/c10_paired_signer_verify_accept_reject.ec	MUST-FAIL	[by]: cannot close g
 scratch/c10_paired_signer_verify_root_typed.ec	MUST-PASS	-
 scratch/c10_paired_signer_verify_root_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/_scope_neg_op_C10PairedSigner.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Paired digest computations: typed changes and intended proof rejection.
+scratch/c10_digest_caller_positive.ec	MUST-PASS	-
+scratch/c10_digest_caller_preserving.ec	MUST-PASS	-
+scratch/c10_digest_caller_fill_digit_index_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_fill_digit_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_fill_digit_digest_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_fill_digit_digest_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_recover_digit_index_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_recover_digit_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_forest_sign_index_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_forest_sign_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_forest_recover_digest_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_forest_recover_digest_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_finish_ht_field_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_finish_ht_field_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_verify_ht_field_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_verify_ht_field_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_finish_layer_coordinate_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_finish_layer_coordinate_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_digest_caller_wots_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_digest_caller_wots_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_C10DigestCallers.ec	MUST-FAIL	FORS_C_TreePort.

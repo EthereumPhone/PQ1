@@ -926,6 +926,31 @@ SOURCES = (
     'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_wots_exhaustion_typed.ec',
     'contracts/verification/easycrypt/c10-port/tools/c10_paired_signer_controls.py',
 
+    # Paired digest computations and typed caller controls.
+    'contracts/verification/easycrypt/c10-port/cdrafts-split/C10DigestCallers.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_C10DigestCallers.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_fill_digit_digest_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_fill_digit_digest_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_fill_digit_index_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_fill_digit_index_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_finish_ht_field_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_finish_ht_field_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_finish_layer_coordinate_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_finish_layer_coordinate_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_forest_recover_digest_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_forest_recover_digest_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_forest_sign_index_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_forest_sign_index_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_preserving.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_recover_digit_index_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_recover_digit_index_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_verify_ht_field_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_verify_ht_field_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_wots_exhaustion_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_digest_caller_wots_exhaustion_typed.ec',
+    'contracts/verification/easycrypt/c10-port/tools/c10_digest_caller_controls.py',
+
 )
 
 

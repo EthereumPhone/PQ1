@@ -478,3 +478,6 @@ C10SearchAcceptance
 
 # Exact paired search-acceptance computations, 2026-10-15.
 C10PairedSigner
+
+# Paired digest fields throughout signer callers, 2026-10-15.
+C10DigestCallers

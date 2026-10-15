@@ -677,3 +677,4 @@ cdrafts-split/WrapperSessionCost.ec
 cdrafts-split/C10AcceptanceBridge.ec
 cdrafts-split/C10SearchAcceptance.ec
 cdrafts-split/C10PairedSigner.ec
+cdrafts-split/C10DigestCallers.ec

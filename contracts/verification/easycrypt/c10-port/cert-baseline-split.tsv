@@ -2549,3 +2549,7 @@ cdrafts-split/C10SearchAcceptance.ec	module:89c3002856fd	PairedAcceptanceGrind
 cdrafts-split/C10PairedSigner.ec	module:3c94178b0eb7	PairedSigningSigner
 cdrafts-split/C10PairedSigner.ec	module:9b4777ebfa5f	PairedSigningWots
 cdrafts-split/C10PairedSigner.ec	module:d27a8962df63	PairedSigningLayer
+cdrafts-split/C10DigestCallers.ec	module:790e95fdd6aa	PairedDigestSigner
+cdrafts-split/C10DigestCallers.ec	module:b42865188e4b	PairedDigestWots
+cdrafts-split/C10DigestCallers.ec	module:c367701fffa5	PairedDigestForest
+cdrafts-split/C10DigestCallers.ec	module:c5effa12aaef	PairedDigestLayer

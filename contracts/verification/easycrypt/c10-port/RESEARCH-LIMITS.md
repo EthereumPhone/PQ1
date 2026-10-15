@@ -1514,3 +1514,35 @@ digest, exhaustion, layer counter/path, layer order, nonce root input and verifi
 acceptance/root comparison. Each definition-only fixture compiles before its
 unchanged consuming proof rejects; baseline and value-preserving fixtures pass.
 These controls establish proof sensitivity, not falsity of every mutant theorem.
+
+Paired digest computations through complete EasyCrypt callers (2026-10-15):
+`C10DigestCallers` connects the WOTS signing and recovery chain lengths, FORS
+leaf indices, and hypertree digest field to the existing shared integer/list
+definitions. Its comparison procedures consume `wots_field`, `fors_field` and
+`ht_field` on the bytes of the actual digest. The forest's shuffled visit order,
+the two nine-bit layer-coordinate splits, and all hash preimages remain exact.
+The refinements reach `RawSigner.sign`, structured verification and the decoded
+4,008-element representation, preserving results, exhaustion, the WOTS recovery
+zero sentinel, and the complete `Physical` state and query order.
+
+The proof obtains 256-bit digests from the actual hash and bounded-search
+contracts under the existing `valid_history` invariant. It proves the shuffled
+WOTS and FORS index bounds from the permutation result. The new standalone
+`finish` equivalence explicitly requires a 256-bit supplied digest; the actual
+signer discharges this from nonce grinding, without assuming search success.
+The top-level sign and verify statements add no new premise to the previous
+paired-acceptance endpoints. Existing theorems, including the older arbitrary-
+digest finish endpoint, remain unchanged.
+
+This closes the **EasyCrypt callers' use of paired digest fields and chain
+lengths**. It does not identify the pure Rust/Lean SHA backend with the stateful
+oracle or prove a complete cross-language session relation. The paired printers
+and primitive interpretation remain TCB; callbacks, physical abort prefixes,
+probability transfer, cryptographic assumptions and shipment remain outside
+this result. Twenty-five lemmas introduce no project axiom or production change.
+Nine typed mutations change digit selection or its digest, FORS selection or its
+digest, either hypertree field, the layer-coordinate divisor, and WOTS exhaustion.
+Each definition-only fixture compiles before the unchanged proof rejects at its
+intended theorem; unchanged and value-preserving fixtures pass. The field
+equalities use direct proof steps so these controls do not rely on an SMT budget
+failure. These remain proof-sensitivity controls, not proofs of mutant falsity.
