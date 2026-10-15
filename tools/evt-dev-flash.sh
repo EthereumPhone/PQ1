@@ -78,9 +78,18 @@ echo "==> option bytes:"; ob | tee $IMG/ob-before.txt
 grep -qE '^\s*RDP\s*:\s*0xAA' $IMG/ob-before.txt || { echo "!! RDP not level 0 — stop" >&2; exit 1; }
 grep -qE '^\s*TZEN\s*:\s*0x1' $IMG/ob-before.txt || { echo "!! TZEN=0 — this script assumes the TZEN=1 layout; use tools/flash-evt-dfu.sh" >&2; exit 1; }
 
-echo "==> bank 1 temporarily NON-secure (so the NS bootloader can write/verify it)"
-$P -ob SECWM1_PSTRT=0x7F SECWM1_PEND=0x0 2>&1 | strip | grep -E -i 'rror|success' | tail -2
-sleep 5; wait_dfu after-secwm1-off
+# A run interrupted after this step (USB dropped mid-flash, 2026-10-14) leaves
+# bank 1 non-secure. Programming the same value again prints only "Option
+# Bytes are unchanged", which the grep below does not match, so under
+# `pipefail` the script exited here and could never resume. Skip the write
+# when the watermark already reads non-secure; the rest of the run is the same.
+if grep -qE '^\s*SECWM1_PSTRT\s*:\s*0x7F\b' $IMG/ob-before.txt && grep -qE '^\s*SECWM1_PEND\s*:\s*0x0\b' $IMG/ob-before.txt; then
+  echo "==> bank 1 already NON-secure (resuming an interrupted run)"
+else
+  echo "==> bank 1 temporarily NON-secure (so the NS bootloader can write/verify it)"
+  $P -ob SECWM1_PSTRT=0x7F SECWM1_PEND=0x0 2>&1 | strip | grep -E -i 'rror|success' | tail -2
+  sleep 5; wait_dfu after-secwm1-off
+fi
 ob | grep -E 'SECWM1'
 
 # With TZEN=1 the programmer classifies the aliases as "Not flash Memory" and
