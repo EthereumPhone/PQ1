@@ -169,7 +169,10 @@ pub fn usb_frame_number() -> u16 {
     // SAFETY: read-only access to an NS-mapped USB OTG register; no
     // side effects, races, or aliasing concerns for a volatile load.
     let dsts = unsafe { core::ptr::read_volatile(OTG_DSTS) };
-    ((dsts >> 8) & 0x3FFF) as u16
+    // Full speed: an 11-bit frame number, wrapping every 2.048 s
+    // (`USB_FS_FRAME_MASK`; DVT1 row 11.2). Callers take deltas with
+    // `apdu_framing::frame_delta`, never a raw subtraction.
+    ((dsts >> 8) as u16) & sphincs_tz_shared::apdu_framing::USB_FS_FRAME_MASK
 }
 
 /// Initialize the USB stack.  Returns a fully-configured `UsbStack` ready

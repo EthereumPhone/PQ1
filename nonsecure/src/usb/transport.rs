@@ -12,10 +12,46 @@
 
 use sphincs_tz_shared::{HID_REPORT_SIZE, HID_TAG_APDU};
 use sphincs_tz_shared::apdu_framing::{
-    FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
+    frame_delta, FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
 };
 use super::hid::PqSignerHid;
 use super::UsbBusType;
+
+/// Transport counters (DVT checklist 11.2), readable over SWD by symbol
+/// (`arm-none-eabi-nm` the NS ELF). They separate a lost OUT frame (a
+/// same-channel `RX_DESYNC`) from a lost IN reply (`TX_REPORTS` equal to the
+/// host's count, reply never seen) without a USB analyser. Counts only, no
+/// payload; they hold no secret.
+pub mod diag {
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    #[no_mangle]
+    pub static USB_DIAG_RX_REPORTS: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_RX_APDUS: AtomicU32 = AtomicU32::new(0);
+    /// Same-channel stream aborted (sequence gap or a fresh first frame
+    /// mid-stream): an OUT frame was lost or the host restarted.
+    #[no_mangle]
+    pub static USB_DIAG_RX_DESYNC: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_RX_DROPPED: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_RX_TIMEOUTS: AtomicU32 = AtomicU32::new(0);
+    /// `(previous sample << 16) | now` frame numbers at the most recent
+    /// reassembly timeout, so a false trip can be told from a real one.
+    #[no_mangle]
+    pub static USB_DIAG_RX_TIMEOUT_LAST: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_TX_REPORTS: AtomicU32 = AtomicU32::new(0);
+    /// IN endpoint still busy when a report was offered (retried later).
+    #[no_mangle]
+    pub static USB_DIAG_TX_BUSY: AtomicU32 = AtomicU32::new(0);
+
+    #[inline(always)]
+    pub fn bump(c: &AtomicU32) {
+        c.fetch_add(1, Ordering::Relaxed);
+    }
+}
 
 /// APDU-over-HID transport state machine.
 ///
@@ -32,12 +68,15 @@ pub struct Transport {
     rx: HidFrameAssembler,
     rx_buf: [u8; MAX_APDU_RX],
 
-    // USB frame number (OTG_DSTS.FNSOF) captured when a multi-frame
-    // reassembly began, or `None` when idle. Drives the 5 s reassembly
-    // timeout in `check_rx_timeout`. `Some` precisely while the
-    // assembler is mid-APDU (between a seq=0 NeedMore and the matching
-    // ApduComplete/Dropped).
-    rx_start_frame: Option<u16>,
+    // USB frame number (OTG_DSTS.FNSOF) at the last reassembly-clock
+    // sample, or `None` when idle. `Some` precisely while the assembler is
+    // mid-APDU (between a seq=0 NeedMore and the matching
+    // ApduComplete/Dropped). `rx_elapsed` accumulates `frame_delta`s from
+    // it: the full-speed frame number wraps every 2.048 s, shorter than
+    // the 5 s bound, so a single start→now difference cannot measure it
+    // (DVT1 row 11.2 — that difference falsely expired APDUs at every wrap).
+    rx_last_frame: Option<u16>,
+    rx_elapsed: u32,
 
     // TX state: fragment one response APDU into multiple HID frames.
     // `channel_id` is captured from the most recent successfully
@@ -50,9 +89,9 @@ pub struct Transport {
     tx_active: bool,
 }
 
-/// 5 s reassembly timeout in USB frames (1 frame = 1 ms SOF). Below
-/// the 14-bit `OTG_DSTS.FNSOF` wrap (16.384 s) so wrap-aware
-/// subtraction stays unambiguous. §19 P0 "Bounded APDU reassembly".
+/// 5 s reassembly timeout in USB frames (1 frame = 1 ms SOF), measured by
+/// accumulating `frame_delta`s because the full-speed frame number wraps
+/// every 2.048 s. §19 P0 "Bounded APDU reassembly".
 pub const RX_REASSEMBLY_TIMEOUT_FRAMES: u16 = 5000;
 
 impl Transport {
@@ -61,7 +100,8 @@ impl Transport {
             hid,
             rx: HidFrameAssembler::new(),
             rx_buf: [0u8; MAX_APDU_RX],
-            rx_start_frame: None,
+            rx_last_frame: None,
+            rx_elapsed: 0,
             channel_id: 0,
             tx_buf: [0u8; 256],
             tx_len: 0,
@@ -88,12 +128,15 @@ impl Transport {
     pub fn try_receive(&mut self, now_frame: u16) -> Option<(u16, &[u8])> {
         let mut report = [0u8; HID_REPORT_SIZE];
         let n = self.hid.read_report(&mut report)?;
+        diag::bump(&diag::USB_DIAG_RX_REPORTS);
+        let was_active = self.rx.rx_expected() != 0;
 
         match self.rx.process_frame(&report, n, &mut self.rx_buf) {
             FrameOutcome::ApduComplete(len) => {
+                diag::bump(&diag::USB_DIAG_RX_APDUS);
                 let channel = self.rx.channel_id();
                 self.channel_id = channel;
-                self.rx_start_frame = None;
+                self.rx_last_frame = None;
                 Some((channel, &self.rx_buf[..len]))
             }
             FrameOutcome::PingEcho => {
@@ -104,12 +147,17 @@ impl Transport {
                 // Reassembly in progress — stamp the start frame on the
                 // transition from idle so the total-reassembly clock
                 // runs from the first chunk, not the latest.
-                if self.rx_start_frame.is_none() {
-                    self.rx_start_frame = Some(now_frame);
+                if self.rx_last_frame.is_none() {
+                    self.rx_last_frame = Some(now_frame);
+                    self.rx_elapsed = 0;
                 }
                 None
             }
             FrameOutcome::Dropped => {
+                diag::bump(&diag::USB_DIAG_RX_DROPPED);
+                if was_active && self.rx.rx_expected() == 0 {
+                    diag::bump(&diag::USB_DIAG_RX_DESYNC);
+                }
                 // Clear the reassembly deadline only when the drop also
                 // killed the stream (desync abort / invalid first frame).
                 // A FOREIGN-channel frame is dropped while the owner's
@@ -117,7 +165,7 @@ impl Transport {
                 // one injected frame disarm `check_rx_timeout` for a
                 // stalled owner indefinitely (GPT-5.6 wave finding).
                 if self.rx.rx_expected() == 0 {
-                    self.rx_start_frame = None;
+                    self.rx_last_frame = None;
                 }
                 None
             }
@@ -136,15 +184,22 @@ impl Transport {
     /// sending SOFs, so a genuinely-idle (suspended/unplugged) link
     /// won't false-trip this.
     pub fn check_rx_timeout(&mut self, now_frame: u16) -> bool {
-        let Some(start) = self.rx_start_frame else {
+        let Some(last) = self.rx_last_frame else {
             return false;
         };
-        // Wrap-aware elapsed over the 14-bit frame counter.
-        let elapsed = now_frame.wrapping_sub(start) & 0x3FFF;
-        if elapsed >= RX_REASSEMBLY_TIMEOUT_FRAMES {
+        // Accumulate per-sample deltas on the 11-bit full-speed frame clock.
+        // The NS loop samples at kHz, so each delta is a few frames.
+        self.rx_elapsed = self.rx_elapsed.saturating_add(frame_delta(now_frame, last));
+        self.rx_last_frame = Some(now_frame);
+        if self.rx_elapsed >= u32::from(RX_REASSEMBLY_TIMEOUT_FRAMES) {
+            diag::bump(&diag::USB_DIAG_RX_TIMEOUTS);
+            diag::USB_DIAG_RX_TIMEOUT_LAST.store(
+                (u32::from(last) << 16) | u32::from(now_frame),
+                core::sync::atomic::Ordering::Relaxed,
+            );
             self.rx_buf.fill(0);
             self.rx.reset();
-            self.rx_start_frame = None;
+            self.rx_last_frame = None;
             return true;
         }
         false
@@ -191,8 +246,10 @@ impl Transport {
             let chunk = core::cmp::min(HID_FIRST_DATA, remaining);
             frame[7..7 + chunk].copy_from_slice(&self.tx_buf[self.tx_pos..self.tx_pos + chunk]);
             if !self.hid.write_report(&frame) {
+                diag::bump(&diag::USB_DIAG_TX_BUSY);
                 return false;
             }
+            diag::bump(&diag::USB_DIAG_TX_REPORTS);
             self.tx_pos += chunk;
             self.tx_seq += 1;
         } else {
@@ -201,8 +258,10 @@ impl Transport {
             let chunk = core::cmp::min(HID_CONT_DATA, remaining);
             frame[5..5 + chunk].copy_from_slice(&self.tx_buf[self.tx_pos..self.tx_pos + chunk]);
             if !self.hid.write_report(&frame) {
+                diag::bump(&diag::USB_DIAG_TX_BUSY);
                 return false;
             }
+            diag::bump(&diag::USB_DIAG_TX_REPORTS);
             self.tx_pos += chunk;
             self.tx_seq += 1;
         }

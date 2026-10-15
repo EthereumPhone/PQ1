@@ -28,7 +28,7 @@
 
 use sphincs_tz_shared::*;
 use sphincs_tz_shared::apdu_framing::{
-    parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
+    frame_delta, parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
 };
 
 use crate::nsc_api;
@@ -146,9 +146,12 @@ static mut ROUTER_OWNER: Option<u16> = None;
 /// cursor once `PENDING_TIMEOUT_FRAMES` pass without a GET_RESPONSE.
 ///
 /// Accumulating per-iteration deltas (rather than a single start→now
-/// delta) sidesteps the 14-bit FNSOF wrap at 16.384 s: the NS loop
-/// polls at kHz, so each `(now - last) & 0x3FFF` delta is tiny and
-/// always wrap-correct, and 30 s > one wrap is handled by summation.
+/// delta) sidesteps the FNSOF wrap: on this full-speed core the frame
+/// number is 11 bits and wraps every 2.048 s, the NS loop polls at kHz,
+/// so each `frame_delta(now, last)` is tiny and wrap-correct, and 30 s
+/// spans many wraps by summation. (This used `& 0x3FFF`, the high-speed
+/// width: every wrap then added ~14,337 frames, so these 30 s / 120 s
+/// bounds expired after about two wraps — DVT1 row 11.2.)
 static mut PENDING_LAST_FRAME: u16 = 0;
 static mut PENDING_ELAPSED_FRAMES: u32 = 0;
 /// 30 s at the nominal 1 ms USB SOF cadence.
@@ -921,12 +924,12 @@ impl CommandRouter {
             PENDING_LAST_FRAME = now_frame;
             return;
         }
-        let delta = now_frame.wrapping_sub(PENDING_LAST_FRAME) & 0x3FFF;
+        let delta = frame_delta(now_frame, PENDING_LAST_FRAME);
         PENDING_LAST_FRAME = now_frame;
-        PENDING_ELAPSED_FRAMES = PENDING_ELAPSED_FRAMES.saturating_add(delta as u32);
+        PENDING_ELAPSED_FRAMES = PENDING_ELAPSED_FRAMES.saturating_add(delta);
         // Activity resets the idle accumulator in `get_response` but
         // never this absolute one.
-        PENDING_ABS_ELAPSED_FRAMES = PENDING_ABS_ELAPSED_FRAMES.saturating_add(delta as u32);
+        PENDING_ABS_ELAPSED_FRAMES = PENDING_ABS_ELAPSED_FRAMES.saturating_add(delta);
         if PENDING_ELAPSED_FRAMES >= PENDING_TIMEOUT_FRAMES
             || PENDING_ABS_ELAPSED_FRAMES >= PENDING_ABS_TIMEOUT_FRAMES
         {
@@ -955,9 +958,9 @@ impl CommandRouter {
     /// Touches the module `ROUTER_OWNER` static-mut state under the
     /// single-threaded NS dispatcher invariant (same as `dispatch`).
     pub unsafe fn check_chain_timeout(&mut self, now_frame: u16) {
-        let delta = now_frame.wrapping_sub(CHAIN_LAST_FRAME) & 0x3FFF;
+        let delta = frame_delta(now_frame, CHAIN_LAST_FRAME);
         CHAIN_LAST_FRAME = now_frame;
-        if self.chain.tick_timeout(delta as u32) {
+        if self.chain.tick_timeout(delta) {
             // Chain lifetime expired — `tick_timeout` already reset the
             // chain state. A live chain and a pending drain are mutually
             // exclusive, so clearing the owner here is safe.

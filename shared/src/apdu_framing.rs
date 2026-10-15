@@ -141,6 +141,30 @@ pub struct ChainState {
     elapsed_frames: u32,
 }
 
+/// Mask of a USB full-speed frame number. A full-speed SOF carries an 11-bit
+/// frame number (USB 2.0 §8.4.3), so on the U585's full-speed-only OTG core
+/// `OTG_DSTS.FNSOF` counts 0..=2047 and wraps every 2.048 s. The 14-bit field
+/// width is the high-speed microframe layout.
+///
+/// Until 2026-10-15 every timeout here used `& 0x3FFF`. At each wrap a
+/// 0x7FF→0 step then read as 14,337 elapsed frames: an APDU whose HID frames
+/// straddled a wrap was scrubbed as "timed out" and silently dropped
+/// (DVT1 checklist 11.2: 29 lost replies in 300 FW_BEGIN chains, every one
+/// with `USB_DIAG_RX_TIMEOUTS` +1 and capture `start=0x7FE now=0x000`), and
+/// the 30 s / 120 s lease timers expired after about two wraps.
+pub const USB_FS_FRAME_MASK: u16 = 0x7FF;
+
+/// Frames elapsed from `last` to `now` on the 11-bit full-speed frame clock.
+///
+/// Correct across one wrap. A gap longer than 2.048 s between two samples
+/// (the NS loop blocked in a long secure call) loses whole wraps, so callers
+/// that accumulate these deltas measure LONGER deadlines than nominal, never
+/// shorter: a timeout can fire late but never early.
+#[must_use]
+pub const fn frame_delta(now: u16, last: u16) -> u32 {
+    (now.wrapping_sub(last) & USB_FS_FRAME_MASK) as u32
+}
+
 impl ChainState {
     /// Total lifetime bound for one chained exchange, in USB SOF frames
     /// (nominal 1 ms cadence): 30 s, mirroring the GET_RESPONSE
@@ -1303,5 +1327,48 @@ mod kani_harnesses {
             assert!(h.data.len() == h.lc);
             assert!(h.lc <= len);
         }
+    }
+}
+
+#[cfg(test)]
+mod frame_clock_tests {
+    use super::*;
+
+    #[test]
+    fn frame_delta_wraps_at_2048_like_full_speed_fnsof() {
+        assert_eq!(frame_delta(5, 3), 2);
+        // The DVT1 capture: start 0x7FE, now 0x000 is TWO frames, not 14,338.
+        assert_eq!(frame_delta(0x000, 0x7FE), 2);
+        assert_eq!(frame_delta(0x7FF, 0x000), 0x7FF);
+        assert_eq!(frame_delta(0x123, 0x123), 0);
+        // Bits above the 11-bit field never leak into a delta.
+        assert_eq!(frame_delta(0x3801, 0x0000), 1);
+    }
+
+    #[test]
+    fn negative_old_14_bit_mask_falsely_expires_a_short_reassembly() {
+        // The pre-fix arithmetic on the same capture crossed every deadline.
+        let old = u32::from(0x000u16.wrapping_sub(0x7FE) & 0x3FFF);
+        assert!(old >= 5000, "the defect this guards: {old}");
+        assert!(frame_delta(0x000, 0x7FE) < 5000);
+    }
+
+    #[test]
+    fn accumulating_deltas_measures_a_30_s_chain_across_wraps() {
+        // One sample per ms for 30 s across 14 wraps: the chain expires at
+        // exactly its budget, not after the first wrap.
+        let mut s = ChainState::new();
+        s.ins = 0x40;
+        let mut last = 0u16;
+        let mut expired_at = None;
+        for t in 1..=40_000u32 {
+            let now = (t & u32::from(USB_FS_FRAME_MASK)) as u16;
+            if s.tick_timeout(frame_delta(now, last)) {
+                expired_at = Some(t);
+                break;
+            }
+            last = now;
+        }
+        assert_eq!(expired_at, Some(ChainState::CHAIN_TIMEOUT_FRAMES));
     }
 }

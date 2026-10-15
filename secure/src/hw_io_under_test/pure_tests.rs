@@ -1107,6 +1107,33 @@ fn negative_usb_hw_does_not_use_ns_rcc_alias() {
 }
 
 #[test]
+fn negative_usb_hsi48_is_trimmed_by_the_crs_to_usb_sof() {
+    // DVT1 row 11.2: with HSI48 untrimmed, about one HID reply in every
+    // 5–9 bad FW_BEGIN chains was lost. Crystal-less USB FS needs the CRS
+    // synchronised to the host SOF; pin that it is clocked, configured for
+    // USB SOF with the 48 MHz / 1 kHz reload, and enabled with auto-trim,
+    // through the secure alias (TZSC SECCFGR1 bit 15 makes CRS secure-only).
+    for needle in [
+        "const CRS_S: u32 = 0x5000_6000;",
+        "const CRSEN: u32 = 1 << 24;",
+        "const CRS_AUTOTRIM_AND_COUNTER: u32 = (1 << 6) | (1 << 5);",
+        "const CRS_CFGR_USB_SOF: u32 = (0b10 << 28) | (0x22 << 16) | 0xBB7F;",
+        "rcc_apb1enr1: Reg32::new(RCC_S + 0x9C),",
+        "REG.rcc_apb1enr1.set_bits(CRSEN);",
+        "REG.crs_cfgr.write(CRS_CFGR_USB_SOF);",
+        "REG.crs_cr.set_bits(CRS_AUTOTRIM_AND_COUNTER);",
+    ] {
+        assert!(contains_in_code(USB_HW_SRC, needle), "usb_hw.rs must contain `{needle}`");
+    }
+    // CFGR is writable only while CEN = 0: the clear must precede the write.
+    let clr = USB_HW_SRC.find("REG.crs_cr.clear_bits(CRS_AUTOTRIM_AND_COUNTER);").unwrap();
+    let cfg = USB_HW_SRC.find("REG.crs_cfgr.write(CRS_CFGR_USB_SOF);").unwrap();
+    let en = USB_HW_SRC.find("REG.crs_cr.set_bits(CRS_AUTOTRIM_AND_COUNTER);").unwrap();
+    assert!(clr < cfg && cfg < en);
+    assert!(!contains_in_code(USB_HW_SRC, "0x4000_6000"), "CRS NS alias forbidden");
+}
+
+#[test]
 fn negative_uart_does_not_use_ns_aliases() {
     assert!(
         !contains_in_code(UART_SRC, "0x4001_3800"),

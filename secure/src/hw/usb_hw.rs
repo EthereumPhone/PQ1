@@ -64,8 +64,34 @@ const GPIOB_S: u32 = 0x5202_0400;
 // ---------------------------------------------------------------------------
 const UCPD1: u32 = 0x5000_DC00;
 
+// ---------------------------------------------------------------------------
+// CRS (clock recovery system), secure alias. TZSC SECCFGR1 bit 15 makes it
+// secure-only (`sau.rs` `SECCFGR1_CRS_BIT`).
+//
+// The OTG FS kernel clock is HSI48 (ICLKSEL reset value), an RC oscillator
+// whose untrimmed accuracy is outside the USB full-speed ±0.25 % budget. ST's
+// crystal-less USB scheme trims it continuously against the host's 1 kHz SOF
+// through the CRS. Until 2026-10-15 nothing enabled the CRS, and DVT1 row 11.2
+// lost about one HID reply in every 5–9 bad FW_BEGIN chains (~1 in 1,000+
+// packets) with the device otherwise healthy — the signature of sporadic
+// link-level CRC errors.
+// ---------------------------------------------------------------------------
+const CRS_S: u32 = 0x5000_6000;
+/// RCC_APB1ENR1.CRSEN.
+const CRSEN: u32 = 1 << 24;
+/// CRS_CR.AUTOTRIMEN | CRS_CR.CEN.
+const CRS_AUTOTRIM_AND_COUNTER: u32 = (1 << 6) | (1 << 5);
+/// CRS_CFGR: SYNCSRC = 0b10 (USB SOF), SYNCDIV = 1, FELIM = 0x22,
+/// RELOAD = 48 MHz / 1 kHz − 1 = 0xBB7F. Equal to the reset value; written
+/// explicitly so the trim target does not rest on reset state. CFGR is only
+/// writable while CEN = 0.
+const CRS_CFGR_USB_SOF: u32 = (0b10 << 28) | (0x22 << 16) | 0xBB7F;
+
 struct UsbHwRegs {
     rcc_ahb2enr1: Reg32,
+    rcc_apb1enr1: Reg32,
+    crs_cr: Reg32,
+    crs_cfgr: Reg32,
     rcc_apb1enr2: Reg32,
     rcc_ahb2rstr1: Reg32,
     pwr_svmcr: Reg32,
@@ -91,6 +117,9 @@ struct UsbHwRegs {
 const REG: UsbHwRegs = unsafe {
     UsbHwRegs {
         rcc_ahb2enr1: Reg32::new(RCC_S + 0x8C),
+        rcc_apb1enr1: Reg32::new(RCC_S + 0x9C),
+        crs_cr: Reg32::new(CRS_S + 0x00),
+        crs_cfgr: Reg32::new(CRS_S + 0x04),
         rcc_apb1enr2: Reg32::new(RCC_S + 0xA0),
         rcc_ahb2rstr1: Reg32::new(RCC_S + 0x64),
         pwr_svmcr: Reg32::new(PWR + 0x10),
@@ -151,6 +180,17 @@ pub unsafe fn init() {
     REG.rcc_ahb2rstr1.set_bits(1 << 14);
     cortex_m::asm::dsb();
     REG.rcc_ahb2rstr1.clear_bits(1 << 14);
+    cortex_m::asm::dsb();
+
+    // ---- 5. CRS: trim HSI48 to the host's USB SOF (DVT1 row 11.2) ----
+    // Counter + auto-trim run continuously once the host starts sending SOFs;
+    // before enumeration there are no SYNC events and the trim stays at its
+    // factory value, so enabling it here is safe on an unplugged device.
+    REG.rcc_apb1enr1.set_bits(CRSEN);
+    cortex_m::asm::dsb();
+    REG.crs_cr.clear_bits(CRS_AUTOTRIM_AND_COUNTER);
+    REG.crs_cfgr.write(CRS_CFGR_USB_SOF);
+    REG.crs_cr.set_bits(CRS_AUTOTRIM_AND_COUNTER);
     cortex_m::asm::dsb();
 
     // ---- 6. Mark USB pins as non-secure (per-pin GPIO security) ----

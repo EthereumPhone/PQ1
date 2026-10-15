@@ -4552,6 +4552,10 @@ $(FWUP_FIXTURE_FILES) &:
 	  --version 1 --secure-len 240 --nonsecure-len 240 \
 	  --out-dir $(FWUP_FIXTURE_DIR)
 
+# FWUP_TEST_ARGS="--flood-bad-begin 1000" replaces the e2e with the DVT 11.2
+# dropped-reply flood; raise FWUP_RUN_TIMEOUT (s) to cover it (~0.25 s/chain).
+FWUP_RUN_TIMEOUT ?= 120
+FWUP_TEST_ARGS ?=
 fwup-transport-hw: dev-pubkey-fixture fwup-transport-fixture
 	@echo "==> Building secure (fwup-transport-e2e + usb + mock-se)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
@@ -4571,7 +4575,7 @@ fwup-transport-hw: dev-pubkey-fixture fwup-transport-fixture
 	  --optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 	  SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> probe-rs run (background) — letting the device boot + USB enumerate..."
-	@(timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
+	@(timeout $(FWUP_RUN_TIMEOUT) probe-rs run --chip $(CHIP) $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
 	@for i in $$(seq 1 25); do \
 	  if lsusb 2>/dev/null | grep -qi '1209:7051'; then echo "==> Enumerated (~$${i}s)"; break; fi; \
 	  sleep 1; \
@@ -4583,7 +4587,7 @@ fwup-transport-hw: dev-pubkey-fixture fwup-transport-fixture
 	  exit 1; \
 	fi
 	@echo "==> Running transport e2e test (tools/fwup-transport-test.py)..."
-	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) || rc=$$?; \
+	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) $(FWUP_TEST_ARGS) || rc=$$?; \
 	pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
 	echo "===================================="; \
 	if [ $$rc -eq 0 ]; then \
@@ -4631,7 +4635,7 @@ fwup-transport-hw-iwdg: dev-pubkey-fixture fwup-transport-fixture
 	  --optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 	  SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> probe-rs run (background) — letting the device boot + USB enumerate..."
-	@(timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
+	@(timeout $(FWUP_RUN_TIMEOUT) probe-rs run --chip $(CHIP) $(SECURE_ELF) > /tmp/fwup-transport-run.log 2>&1 &)
 	@for i in $$(seq 1 25); do \
 	  if lsusb 2>/dev/null | grep -qi '1209:7051'; then echo "==> Enumerated (~$${i}s)"; break; fi; \
 	  sleep 1; \
@@ -4651,7 +4655,7 @@ fwup-transport-hw-iwdg: dev-pubkey-fixture fwup-transport-fixture
 	fi
 	@echo "==> Still enumerated after 12 s idle — no false-fire ✓"
 	@echo "==> Running transport e2e test (tools/fwup-transport-test.py)..."
-	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) || rc=$$?; \
+	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) $(FWUP_TEST_ARGS) || rc=$$?; \
 	pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
 	echo "===================================="; \
 	if [ $$rc -eq 0 ]; then \
