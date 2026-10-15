@@ -73,3 +73,30 @@ without relying on a failed SMT search. Each new module also has an unavailable-
 symbol scope probe. These checks exercise the canonical counting machinery;
 they do not establish optimality, remove the birthday charges, or certify a
 concrete hash backend.
+
+## Exact witness enumeration controls
+
+Eleven positive/negative twins cover reverse last-occurrence labels, the exact
+`S(12,2)=2047` count (the previous canonical enumeration had 2048 words), the
+old-label factor in the Stirling recurrence, six distinct two-witness choices
+from a three-position alphabet rather than nine with replacement, exclusion of
+the target, insufficient pools, the one empty selection, all twelve coordinate
+labels, preservation of the coverage event, and both initialized byte-game
+transfers. The recurrence is evaluated on its small numeric rows; the control
+does not materialize the full twelve-coordinate partition enumeration.
+
+Each negative keeps its positive twin's proof and changes the claimed count,
+word, event or charge. The checker must reject the final proof application in
+`checked` with `the given proof-term proves:`. Parser errors, missing symbols,
+unfinished earlier helper proofs and time/resource failures are not credited.
+The finite-word/count twins provide checked counterexamples. The event and
+game-transfer twins test proof sensitivity; they do not establish a lower bound
+on forgery probability or the necessity of every summand. In particular, the
+independent-game twin removes the coverage charge and the physical-game twin
+removes the shared/private-prefix charge without supplying a new proof.
+
+`tools/stirling_coverage_controls.py` generates the fixtures, which are checked
+by the existing source-binding and exact control-enrollment gates. Each of the
+eight new modules also has an unavailable-symbol scope probe. These controls
+do not discharge the remaining collision-budget, concrete-hash, QROM or full
+Rust/session obligations.

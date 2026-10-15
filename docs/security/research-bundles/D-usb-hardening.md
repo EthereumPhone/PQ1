@@ -190,8 +190,34 @@ const GPIOB_S: u32 = 0x5202_0400;
 // ---------------------------------------------------------------------------
 const UCPD1: u32 = 0x5000_DC00;
 
+// ---------------------------------------------------------------------------
+// CRS (clock recovery system), secure alias. TZSC SECCFGR1 bit 15 makes it
+// secure-only (`sau.rs` `SECCFGR1_CRS_BIT`).
+//
+// The OTG FS kernel clock is HSI48 (ICLKSEL reset value), an RC oscillator
+// whose untrimmed accuracy is outside the USB full-speed ±0.25 % budget. ST's
+// crystal-less USB scheme trims it continuously against the host's 1 kHz SOF
+// through the CRS. Until 2026-10-15 nothing enabled the CRS, and DVT1 row 11.2
+// lost about one HID reply in every 5–9 bad FW_BEGIN chains (~1 in 1,000+
+// packets) with the device otherwise healthy — the signature of sporadic
+// link-level CRC errors.
+// ---------------------------------------------------------------------------
+const CRS_S: u32 = 0x5000_6000;
+/// RCC_APB1ENR1.CRSEN.
+const CRSEN: u32 = 1 << 24;
+/// CRS_CR.AUTOTRIMEN | CRS_CR.CEN.
+const CRS_AUTOTRIM_AND_COUNTER: u32 = (1 << 6) | (1 << 5);
+/// CRS_CFGR: SYNCSRC = 0b10 (USB SOF), SYNCDIV = 1, FELIM = 0x22,
+/// RELOAD = 48 MHz / 1 kHz − 1 = 0xBB7F. Equal to the reset value; written
+/// explicitly so the trim target does not rest on reset state. CFGR is only
+/// writable while CEN = 0.
+const CRS_CFGR_USB_SOF: u32 = (0b10 << 28) | (0x22 << 16) | 0xBB7F;
+
 struct UsbHwRegs {
     rcc_ahb2enr1: Reg32,
+    rcc_apb1enr1: Reg32,
+    crs_cr: Reg32,
+    crs_cfgr: Reg32,
     rcc_apb1enr2: Reg32,
     rcc_ahb2rstr1: Reg32,
     pwr_svmcr: Reg32,
@@ -217,6 +243,9 @@ struct UsbHwRegs {
 const REG: UsbHwRegs = unsafe {
     UsbHwRegs {
         rcc_ahb2enr1: Reg32::new(RCC_S + 0x8C),
+        rcc_apb1enr1: Reg32::new(RCC_S + 0x9C),
+        crs_cr: Reg32::new(CRS_S + 0x00),
+        crs_cfgr: Reg32::new(CRS_S + 0x04),
         rcc_apb1enr2: Reg32::new(RCC_S + 0xA0),
         rcc_ahb2rstr1: Reg32::new(RCC_S + 0x64),
         pwr_svmcr: Reg32::new(PWR + 0x10),
@@ -277,6 +306,17 @@ pub unsafe fn init() {
     REG.rcc_ahb2rstr1.set_bits(1 << 14);
     cortex_m::asm::dsb();
     REG.rcc_ahb2rstr1.clear_bits(1 << 14);
+    cortex_m::asm::dsb();
+
+    // ---- 5. CRS: trim HSI48 to the host's USB SOF (DVT1 row 11.2) ----
+    // Counter + auto-trim run continuously once the host starts sending SOFs;
+    // before enumeration there are no SYNC events and the trim stays at its
+    // factory value, so enabling it here is safe on an unplugged device.
+    REG.rcc_apb1enr1.set_bits(CRSEN);
+    cortex_m::asm::dsb();
+    REG.crs_cr.clear_bits(CRS_AUTOTRIM_AND_COUNTER);
+    REG.crs_cfgr.write(CRS_CFGR_USB_SOF);
+    REG.crs_cr.set_bits(CRS_AUTOTRIM_AND_COUNTER);
     cortex_m::asm::dsb();
 
     // ---- 6. Mark USB pins as non-secure (per-pin GPIO security) ----
@@ -798,7 +838,10 @@ pub fn usb_frame_number() -> u16 {
     // SAFETY: read-only access to an NS-mapped USB OTG register; no
     // side effects, races, or aliasing concerns for a volatile load.
     let dsts = unsafe { core::ptr::read_volatile(OTG_DSTS) };
-    ((dsts >> 8) & 0x3FFF) as u16
+    // Full speed: an 11-bit frame number, wrapping every 2.048 s
+    // (`USB_FS_FRAME_MASK`; DVT1 row 11.2). Callers take deltas with
+    // `apdu_framing::frame_delta`, never a raw subtraction.
+    ((dsts >> 8) as u16) & sphincs_tz_shared::apdu_framing::USB_FS_FRAME_MASK
 }
 
 /// Initialize the USB stack.  Returns a fully-configured `UsbStack` ready
@@ -870,10 +913,46 @@ pub unsafe fn init() -> UsbStack {
 
 use sphincs_tz_shared::{HID_REPORT_SIZE, HID_TAG_APDU};
 use sphincs_tz_shared::apdu_framing::{
-    FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
+    frame_delta, FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
 };
 use super::hid::PqSignerHid;
 use super::UsbBusType;
+
+/// Transport counters (DVT checklist 11.2), readable over SWD by symbol
+/// (`arm-none-eabi-nm` the NS ELF). They separate a lost OUT frame (a
+/// same-channel `RX_DESYNC`) from a lost IN reply (`TX_REPORTS` equal to the
+/// host's count, reply never seen) without a USB analyser. Counts only, no
+/// payload; they hold no secret.
+pub mod diag {
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    #[no_mangle]
+    pub static USB_DIAG_RX_REPORTS: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_RX_APDUS: AtomicU32 = AtomicU32::new(0);
+    /// Same-channel stream aborted (sequence gap or a fresh first frame
+    /// mid-stream): an OUT frame was lost or the host restarted.
+    #[no_mangle]
+    pub static USB_DIAG_RX_DESYNC: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_RX_DROPPED: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_RX_TIMEOUTS: AtomicU32 = AtomicU32::new(0);
+    /// `(previous sample << 16) | now` frame numbers at the most recent
+    /// reassembly timeout, so a false trip can be told from a real one.
+    #[no_mangle]
+    pub static USB_DIAG_RX_TIMEOUT_LAST: AtomicU32 = AtomicU32::new(0);
+    #[no_mangle]
+    pub static USB_DIAG_TX_REPORTS: AtomicU32 = AtomicU32::new(0);
+    /// IN endpoint still busy when a report was offered (retried later).
+    #[no_mangle]
+    pub static USB_DIAG_TX_BUSY: AtomicU32 = AtomicU32::new(0);
+
+    #[inline(always)]
+    pub fn bump(c: &AtomicU32) {
+        c.fetch_add(1, Ordering::Relaxed);
+    }
+}
 
 /// APDU-over-HID transport state machine.
 ///
@@ -890,12 +969,15 @@ pub struct Transport {
     rx: HidFrameAssembler,
     rx_buf: [u8; MAX_APDU_RX],
 
-    // USB frame number (OTG_DSTS.FNSOF) captured when a multi-frame
-    // reassembly began, or `None` when idle. Drives the 5 s reassembly
-    // timeout in `check_rx_timeout`. `Some` precisely while the
-    // assembler is mid-APDU (between a seq=0 NeedMore and the matching
-    // ApduComplete/Dropped).
-    rx_start_frame: Option<u16>,
+    // USB frame number (OTG_DSTS.FNSOF) at the last reassembly-clock
+    // sample, or `None` when idle. `Some` precisely while the assembler is
+    // mid-APDU (between a seq=0 NeedMore and the matching
+    // ApduComplete/Dropped). `rx_elapsed` accumulates `frame_delta`s from
+    // it: the full-speed frame number wraps every 2.048 s, shorter than
+    // the 5 s bound, so a single start→now difference cannot measure it
+    // (DVT1 row 11.2 — that difference falsely expired APDUs at every wrap).
+    rx_last_frame: Option<u16>,
+    rx_elapsed: u32,
 
     // TX state: fragment one response APDU into multiple HID frames.
     // `channel_id` is captured from the most recent successfully
@@ -908,9 +990,9 @@ pub struct Transport {
     tx_active: bool,
 }
 
-/// 5 s reassembly timeout in USB frames (1 frame = 1 ms SOF). Below
-/// the 14-bit `OTG_DSTS.FNSOF` wrap (16.384 s) so wrap-aware
-/// subtraction stays unambiguous. §19 P0 "Bounded APDU reassembly".
+/// 5 s reassembly timeout in USB frames (1 frame = 1 ms SOF), measured by
+/// accumulating `frame_delta`s because the full-speed frame number wraps
+/// every 2.048 s. §19 P0 "Bounded APDU reassembly".
 pub const RX_REASSEMBLY_TIMEOUT_FRAMES: u16 = 5000;
 
 impl Transport {
@@ -919,7 +1001,8 @@ impl Transport {
             hid,
             rx: HidFrameAssembler::new(),
             rx_buf: [0u8; MAX_APDU_RX],
-            rx_start_frame: None,
+            rx_last_frame: None,
+            rx_elapsed: 0,
             channel_id: 0,
             tx_buf: [0u8; 256],
             tx_len: 0,
@@ -946,12 +1029,15 @@ impl Transport {
     pub fn try_receive(&mut self, now_frame: u16) -> Option<(u16, &[u8])> {
         let mut report = [0u8; HID_REPORT_SIZE];
         let n = self.hid.read_report(&mut report)?;
+        diag::bump(&diag::USB_DIAG_RX_REPORTS);
+        let was_active = self.rx.rx_expected() != 0;
 
         match self.rx.process_frame(&report, n, &mut self.rx_buf) {
             FrameOutcome::ApduComplete(len) => {
+                diag::bump(&diag::USB_DIAG_RX_APDUS);
                 let channel = self.rx.channel_id();
                 self.channel_id = channel;
-                self.rx_start_frame = None;
+                self.rx_last_frame = None;
                 Some((channel, &self.rx_buf[..len]))
             }
             FrameOutcome::PingEcho => {
@@ -962,12 +1048,17 @@ impl Transport {
                 // Reassembly in progress — stamp the start frame on the
                 // transition from idle so the total-reassembly clock
                 // runs from the first chunk, not the latest.
-                if self.rx_start_frame.is_none() {
-                    self.rx_start_frame = Some(now_frame);
+                if self.rx_last_frame.is_none() {
+                    self.rx_last_frame = Some(now_frame);
+                    self.rx_elapsed = 0;
                 }
                 None
             }
             FrameOutcome::Dropped => {
+                diag::bump(&diag::USB_DIAG_RX_DROPPED);
+                if was_active && self.rx.rx_expected() == 0 {
+                    diag::bump(&diag::USB_DIAG_RX_DESYNC);
+                }
                 // Clear the reassembly deadline only when the drop also
                 // killed the stream (desync abort / invalid first frame).
                 // A FOREIGN-channel frame is dropped while the owner's
@@ -975,7 +1066,7 @@ impl Transport {
                 // one injected frame disarm `check_rx_timeout` for a
                 // stalled owner indefinitely (GPT-5.6 wave finding).
                 if self.rx.rx_expected() == 0 {
-                    self.rx_start_frame = None;
+                    self.rx_last_frame = None;
                 }
                 None
             }
@@ -994,15 +1085,22 @@ impl Transport {
     /// sending SOFs, so a genuinely-idle (suspended/unplugged) link
     /// won't false-trip this.
     pub fn check_rx_timeout(&mut self, now_frame: u16) -> bool {
-        let Some(start) = self.rx_start_frame else {
+        let Some(last) = self.rx_last_frame else {
             return false;
         };
-        // Wrap-aware elapsed over the 14-bit frame counter.
-        let elapsed = now_frame.wrapping_sub(start) & 0x3FFF;
-        if elapsed >= RX_REASSEMBLY_TIMEOUT_FRAMES {
+        // Accumulate per-sample deltas on the 11-bit full-speed frame clock.
+        // The NS loop samples at kHz, so each delta is a few frames.
+        self.rx_elapsed = self.rx_elapsed.saturating_add(frame_delta(now_frame, last));
+        self.rx_last_frame = Some(now_frame);
+        if self.rx_elapsed >= u32::from(RX_REASSEMBLY_TIMEOUT_FRAMES) {
+            diag::bump(&diag::USB_DIAG_RX_TIMEOUTS);
+            diag::USB_DIAG_RX_TIMEOUT_LAST.store(
+                (u32::from(last) << 16) | u32::from(now_frame),
+                core::sync::atomic::Ordering::Relaxed,
+            );
             self.rx_buf.fill(0);
             self.rx.reset();
-            self.rx_start_frame = None;
+            self.rx_last_frame = None;
             return true;
         }
         false
@@ -1049,8 +1147,10 @@ impl Transport {
             let chunk = core::cmp::min(HID_FIRST_DATA, remaining);
             frame[7..7 + chunk].copy_from_slice(&self.tx_buf[self.tx_pos..self.tx_pos + chunk]);
             if !self.hid.write_report(&frame) {
+                diag::bump(&diag::USB_DIAG_TX_BUSY);
                 return false;
             }
+            diag::bump(&diag::USB_DIAG_TX_REPORTS);
             self.tx_pos += chunk;
             self.tx_seq += 1;
         } else {
@@ -1059,8 +1159,10 @@ impl Transport {
             let chunk = core::cmp::min(HID_CONT_DATA, remaining);
             frame[5..5 + chunk].copy_from_slice(&self.tx_buf[self.tx_pos..self.tx_pos + chunk]);
             if !self.hid.write_report(&frame) {
+                diag::bump(&diag::USB_DIAG_TX_BUSY);
                 return false;
             }
+            diag::bump(&diag::USB_DIAG_TX_REPORTS);
             self.tx_pos += chunk;
             self.tx_seq += 1;
         }
@@ -1259,7 +1361,7 @@ impl<B: UsbBus> UsbClass<B> for PqSignerHid<'_, B> {
 
 use sphincs_tz_shared::*;
 use sphincs_tz_shared::apdu_framing::{
-    parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
+    frame_delta, parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
 };
 
 use crate::nsc_api;
@@ -1377,9 +1479,12 @@ static mut ROUTER_OWNER: Option<u16> = None;
 /// cursor once `PENDING_TIMEOUT_FRAMES` pass without a GET_RESPONSE.
 ///
 /// Accumulating per-iteration deltas (rather than a single start→now
-/// delta) sidesteps the 14-bit FNSOF wrap at 16.384 s: the NS loop
-/// polls at kHz, so each `(now - last) & 0x3FFF` delta is tiny and
-/// always wrap-correct, and 30 s > one wrap is handled by summation.
+/// delta) sidesteps the FNSOF wrap: on this full-speed core the frame
+/// number is 11 bits and wraps every 2.048 s, the NS loop polls at kHz,
+/// so each `frame_delta(now, last)` is tiny and wrap-correct, and 30 s
+/// spans many wraps by summation. (This used `& 0x3FFF`, the high-speed
+/// width: every wrap then added ~14,337 frames, so these 30 s / 120 s
+/// bounds expired after about two wraps — DVT1 row 11.2.)
 static mut PENDING_LAST_FRAME: u16 = 0;
 static mut PENDING_ELAPSED_FRAMES: u32 = 0;
 /// 30 s at the nominal 1 ms USB SOF cadence.
@@ -2152,12 +2257,12 @@ impl CommandRouter {
             PENDING_LAST_FRAME = now_frame;
             return;
         }
-        let delta = now_frame.wrapping_sub(PENDING_LAST_FRAME) & 0x3FFF;
+        let delta = frame_delta(now_frame, PENDING_LAST_FRAME);
         PENDING_LAST_FRAME = now_frame;
-        PENDING_ELAPSED_FRAMES = PENDING_ELAPSED_FRAMES.saturating_add(delta as u32);
+        PENDING_ELAPSED_FRAMES = PENDING_ELAPSED_FRAMES.saturating_add(delta);
         // Activity resets the idle accumulator in `get_response` but
         // never this absolute one.
-        PENDING_ABS_ELAPSED_FRAMES = PENDING_ABS_ELAPSED_FRAMES.saturating_add(delta as u32);
+        PENDING_ABS_ELAPSED_FRAMES = PENDING_ABS_ELAPSED_FRAMES.saturating_add(delta);
         if PENDING_ELAPSED_FRAMES >= PENDING_TIMEOUT_FRAMES
             || PENDING_ABS_ELAPSED_FRAMES >= PENDING_ABS_TIMEOUT_FRAMES
         {
@@ -2186,9 +2291,9 @@ impl CommandRouter {
     /// Touches the module `ROUTER_OWNER` static-mut state under the
     /// single-threaded NS dispatcher invariant (same as `dispatch`).
     pub unsafe fn check_chain_timeout(&mut self, now_frame: u16) {
-        let delta = now_frame.wrapping_sub(CHAIN_LAST_FRAME) & 0x3FFF;
+        let delta = frame_delta(now_frame, CHAIN_LAST_FRAME);
         CHAIN_LAST_FRAME = now_frame;
-        if self.chain.tick_timeout(delta as u32) {
+        if self.chain.tick_timeout(delta) {
             // Chain lifetime expired — `tick_timeout` already reset the
             // chain state. A live chain and a pending drain are mutually
             // exclusive, so clearing the owner here is safe.

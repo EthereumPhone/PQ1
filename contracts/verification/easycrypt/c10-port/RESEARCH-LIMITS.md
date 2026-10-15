@@ -1,30 +1,31 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-08, following the initialized classical byte-game
+Research checkpoint: 2026-10-15, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Work remains tracked under PQ1 #100 and #295.
 
 ## Quantitative loss
 
-The canonical-witness continuation removes redundant assignment choices from
-the adaptive FORS coverage union. At `qr = qs = 65536` its coverage charge is
-about `2^-93.29`, down from `2^-82.60`. The complete bound remains about
+The exact-witness continuation counts reverse restricted-growth assignments
+and ordered distinct witness positions excluding the target. Its enrolled
+coefficient is `n * (n-1)_j * S(12,j)`: the finite enumerators, falling factorial,
+Stirling recurrence and preservation of the coverage event are proved in
+EasyCrypt. The same adaptive-prefix argument and initialized byte games apply,
+with unchanged premises. At `qr = qs = 65536` the coverage charge is about
+`2^-98.14`, down from the earlier canonical `2^-93.29` (originally `2^-82.60`).
+This closes the previously listed exact-enumeration obligation. It does not
+make the union of overlapping coverage events an exact probability.
+The complete bound remains about
 `2^-46.70`: public-node and WOTS-encoding birthday terms dominate. These are
 upper probability bounds, not attack costs or a deployed security rating.
 
-Two distinct next obligations remain:
-
-- Count only canonical surjections and distinct witness positions. A candidate
-  sharper coefficient is `n * (n-1)_j * S(12,j)`, with a falling factorial and
-  Stirling number of the second kind, instead of `n^(j+1) * j! * j^(12-j)`.
-  This requires another event-preserving enumeration proof; it is not the
-  enrolled bound.
-- Replace the global all-pairs collision event with the target collisions
-  actually sufficient for successful verification, or prove a tail charge for
-  a smaller effective hash budget. Substituting average grinding work for the
-  proved worst-case budget is invalid. Honest-but-private intermediate values,
-  repeated calls, failed signing and adaptive oracle queries must be covered.
+The next quantitative obligation is to replace the global all-pairs collision
+event with the target collisions actually sufficient for successful
+verification, or prove a tail charge for a smaller effective hash budget.
+Substituting average grinding work for the proved worst-case budget is invalid.
+Honest-but-private intermediate values, repeated calls, failed signing and
+adaptive oracle queries must be covered.
 
 The [formally verified SPHINCS+ reduction](https://eprint.iacr.org/2024/910)
 provides a modular approach to tighter component reductions. Its construction

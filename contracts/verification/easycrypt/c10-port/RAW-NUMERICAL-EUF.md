@@ -97,6 +97,47 @@ approximately `8.7695861e-15` (`2^-46.70`) because the other charges are unchang
 The assignment enumeration still overcounts; this is not the exact occupancy
 or Stirling-number formula.
 
+## Exact witness enumeration
+
+`StirlingNumericalBound.physical_byte_stirling_euf_bound` replaces only the
+coverage term of the same initialized physical byte game by
+
+```
+(m)_j = product(i = 0..j-1, max(0, m-i))
+S(0,j) = 1 if j=0, otherwise 0
+S(k+1,j) = j*S(k,j) + S(k,j-1), for k >= 0
+Cstirling(n) = sum(j = 1..12, n * (n-1)_j * S(12,j) / 2^(132+18*j))
+```
+
+`RestrictedGrowthWords` generates labels from right to left: reuse a label
+below the suffix width or introduce the next label. It proves membership,
+uniqueness, use of every label and the exact Stirling count.
+`ReverseGrowthEncoding` proves that reverse last-occurrence normalization
+produces such a word, reconstructs the original positions, and is included in
+the earlier canonical assignment enumeration. `DistinctWitnessWords` removes
+each selected position before the next selection and excludes the target. Its
+enumerator has exactly `(n-1)_j` entries for a valid target, including empty
+selection and insufficient-pool boundaries.
+
+`StirlingPoolWitness` and `StirlingPoolEvent` prove that every covered coordinate
+survives normalization and that the enumeration is exactly the existing pool
+coverage event. `StirlingCoverageBound` reuses the fixed-assignment mass and
+adaptive-prefix domination. `OriginalStirlingCoverage` transfers the result
+through the same oracle projections to the initialized byte game.
+`original_byte_stirling_euf_bound` and `physical_byte_stirling_euf_bound` retain
+the existing client, module exclusions, losslessness premise, configured caps
+and all other charges. Both new full charges are proved no larger than their
+canonical predecessors for every nonnegative pair of caps. No new axiom,
+freshness, independence or successful-search premise is introduced.
+
+At `qr = qs = 65536`, the coverage charge is approximately `2.8623021e-30`
+(`2^-98.14`), about 28.94 times smaller than the canonical charge. The relative
+decrease in the full bound is only about `9.12e-15`; its displayed value remains
+`2^-46.70`. These counts remove redundant enumeration, but the union still
+overcounts overlapping events. They do not prove a tight forgery probability,
+a concrete SHA-256 security level, or a quantum-oracle result. The separate
+probability-monad requirement tracked by #295 remains open.
+
 ## Composition, evidence and limits
 
 `NumericalByteCases` proves that every successful output belongs to one of the
@@ -113,6 +154,10 @@ rejections have the limited meaning described in [CONTROL-EVIDENCE.md](CONTROL-E
 Successful local prototype compilation alone is not the full certificate;
 landing requires the source-matched two-driver replay, cold full gate and
 bounded review receipts.
+The exact-enumeration continuation adds eight replay targets, 76 lemmas,
+23 operation pins, eleven paired checks and eight scope probes. Its negative
+controls distinguish checked finite counterexamples from sensitivity of the
+event/game transfer proofs; see [CONTROL-EVIDENCE.md](CONTROL-EVIDENCE.md).
 
 The bound is conservative. At `qr = qs = 65536`, exact rational evaluation gives
 approximately `8.7695861e-15` overall (about `2^-46.70`), with coverage alone

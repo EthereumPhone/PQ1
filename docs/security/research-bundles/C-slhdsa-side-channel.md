@@ -604,6 +604,20 @@ fn c10_sign_verified_with_progress_inner(
 ///
 /// Determinism: the same `(mnemonic, pin)` pair always produces the
 /// same SPHINCS+ keypair on any device running this firmware.
+/// Placeholder written to the SE "verifying key" slots in place of the
+/// legacy C7 keys (DVT1 row 5.5, 2026-10-15).
+///
+/// `derive_keypair_from_entropy` / `derive_bootstrap_vk_from_entropy` build a
+/// legacy SPHINCS+ key from the entropy only to store its public half. That
+/// public half has no on-chain or signing authority (the wallet's identity is
+/// the `derive_c10_master_*` chain), and its only reader is a `debug-log`
+/// print. Deriving it left the 48-byte secret seed on the secure stack after
+/// LOCK. The slots keep a fixed, non-zero, public value instead: non-zero
+/// because the mock store's `is_provisioned` reads the VK slot.
+pub const RETIRED_LEGACY_VK: [u8; 32] = *b"PQ1:legacy-c7-vk:retired:2026-10";
+/// Bootstrap counterpart of [`RETIRED_LEGACY_VK`].
+pub const RETIRED_LEGACY_BOOTSTRAP_VK: [u8; 32] = *b"PQ1:legacy-c7-bvk:retired:202610";
+
 pub fn provision_from_mnemonic(
     store: &mut impl crate::secure_element::WalletStore,
     mnemonic: &Mnemonic,
@@ -616,12 +630,8 @@ pub fn provision_from_mnemonic(
 
     let mut master_secret: [u8; 32] = kdf(b"sphincs-master", &entropy, 0);
 
-    let (sk, vk_bytes) = derive_keypair_from_entropy(&entropy);
-    drop(sk);
-    let bootstrap_vk = derive_bootstrap_vk_from_entropy(&entropy);
-
     if store
-        .provision(&entropy, &master_secret, &vk_bytes, &bootstrap_vk, pin)
+        .provision(&entropy, &master_secret, &RETIRED_LEGACY_VK, &RETIRED_LEGACY_BOOTSTRAP_VK, pin)
         .is_err()
     {
         // A provision that fails PART-WAY (e.g. a transient SE050 I²C fault
@@ -721,12 +731,15 @@ fn provision_duress_wallet(
     };
 
     let mut decoy_master: [u8; 32] = kdf(b"sphincs-master", &decoy_entropy, 0);
-    let (sk, decoy_vk) = derive_keypair_from_entropy(&decoy_entropy);
-    drop(sk);
-    let decoy_bvk = derive_bootstrap_vk_from_entropy(&decoy_entropy);
 
+    // Same placeholder as the real wallet: the slots must not tell the two
+    // apart, and neither needs a derived key (see `RETIRED_LEGACY_VK`).
     let result = store.provision_duress(
-        &decoy_entropy, &decoy_master, &decoy_vk, &decoy_bvk, &actual_duress_pin,
+        &decoy_entropy,
+        &decoy_master,
+        &RETIRED_LEGACY_VK,
+        &RETIRED_LEGACY_BOOTSTRAP_VK,
+        &actual_duress_pin,
     );
 
     // Zeroize every secret regardless of success/failure.
@@ -4078,7 +4091,13 @@ embedded-graphics = { version = "0.8", default-features = false, optional = true
 # pure-logic unit tests (aa, tx) on the host without pulling in hardware deps.
 [target.'cfg(target_arch = "arm")'.dependencies]
 cortex-m = { workspace = true, features = ["critical-section-single-core"] }
-cortex-m-rt          = { workspace = true }
+# `zero-init-ram`: the reset handler zeroes ALL of secure RAM (_ram_start ..
+# _ram_end, SRAM1) before .data/.bss init, so nothing a previous session left
+# in SRAM1 or on the stack survives into the next boot (DVT1 row 5.4). The
+# option byte SRAM_RST=0 does the same in hardware on a system reset; this
+# covers the window it does not (a reset class it excludes, or a unit
+# shipped without it).
+cortex-m-rt          = { workspace = true, features = ["zero-init-ram"] }
 cortex-m-semihosting = { workspace = true }
 
 [features]
