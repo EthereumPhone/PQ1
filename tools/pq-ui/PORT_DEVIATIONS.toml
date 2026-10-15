@@ -186,13 +186,15 @@
 #     SET PIN / REPEAT PIN           SET PIN / REPEAT PIN; a miss shows
 #                                    PIN MISMATCH and asks for both again
 #     SET DURESS PIN / REPEAT        unchanged (duress-pin builds only)
-#     WRITE DOWN 24 WORDS            four pages in the buttons' style, the
+#     WRITE DOWN 24 WORDS            five pages in the buttons' style, the
 #                                    disc crossing on each: RECOVERY, WRITE
 #                                    DOWN (in the exact order), ONLY BACKUP,
-#                                    KEEP SAFE (owner wording 2026-10-15)
+#                                    KEEP SAFE (never share), SAFETY (Freedom
+#                                    Factory never asks; impostors) (owner
+#                                    wording 2026-10-15)
 #     the 24 WORDS                   the 24 words, 3 pages; HIDDEN after
 #                                    5 minutes without a press
-#     WORDS WRITTEN DOWN?            WORDS WRITTEN DOWN? (left arrow only:
+#     WORDS WRITTEN DOWN?            CONFIRM TO VERIFY WORDS (left arrow only:
 #                                    left = back to the words)
 #     CHECK 3 / 12 / 22              three random checks, TYPED (item 1)
 #     WRONG SEED PHRASE (wrong check)  WRONG WORD - TRY AGAIN (owner: the

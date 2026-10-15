@@ -1193,7 +1193,7 @@ fn negative_an_idle_entry_row_leaves_the_glass_before_the_hold() {
 
 #[test]
 fn negative_the_words_open_only_on_a_right_tap_from_their_intro() {
-    // The intro pages (RECOVERY .. KEEP SAFE, 2026-10-15; before that
+    // The intro pages (RECOVERY .. SAFETY, 2026-10-15; before that
     // WRITE DOWN 24 WORDS, and the 16x4 "Write 24 words / L=cancel R=show")
     // are the last gate before the words hit the display. Only a right tap
     // off the last page may pass it: the pager runs them with no back and
@@ -1203,7 +1203,7 @@ fn negative_the_words_open_only_on_a_right_tap_from_their_intro() {
     let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic) {");
     assert!(backup.contains("let intro = setup_screens::backup_intro();"));
     assert!(backup.contains("while pager(&intro, intro_at, false, true) != PagerOut::Forward {}"));
-    assert!(SETUP_SRC.contains("pub fn backup_intro() -> [Screen; 4] {"));
+    assert!(SETUP_SRC.contains("pub fn backup_intro() -> [Screen; 5] {"));
     // The decoy walk keeps its own idle exit.
     assert!(WIZARD_SRC.contains("None => return WizardResult::IdleWipe,"));
 }

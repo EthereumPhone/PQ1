@@ -3,7 +3,7 @@
 //! 1. `setup_intro` — welcome, the buttons, then create or import.
 //! 2. `choose_pin` — what the PIN is for, then SET PIN / REPEAT PIN.
 //! 3. `create_backup` — WRITE DOWN 24 WORDS, the words (`show_mnemonic`),
-//!    WORDS WRITTEN DOWN?, then three typed checks (`verify_mnemonic`).
+//!    CONFIRM TO VERIFY WORDS, then three typed checks (`verify_mnemonic`).
 //! 4. `import_wallet` — ENTER YOUR 24 WORDS, then `enter_mnemonic`: 24 words
 //!    via letter-scroll + 4-letter prefix narrowing (also used by the
 //!    checks).
@@ -142,7 +142,7 @@ pub enum WizardError {
 // ---------------------------------------------------------------------------
 //
 // Welcome -> buttons -> create / import -> PIN help -> SET / REPEAT PIN ->
-// (create) WRITE DOWN 24 WORDS -> the words -> WORDS WRITTEN DOWN? -> three
+// (create) RECOVERY .. SAFETY -> the words -> CONFIRM TO VERIFY WORDS -> three
 // typed checks, or (import) ENTER YOUR 24 WORDS -> the words typed in. The
 // screens wear the setup family's look (the 3 x 3 dots on the white disc,
 // `flows/setup` in the design) and are walked with the signing grammar:
@@ -355,7 +355,7 @@ pub fn choose_pin() -> Option<[u8; PIN_LEN]> {
     }
 }
 
-/// Create: the intro, the 24 words, WORDS WRITTEN DOWN?, then three typed
+/// Create: the intro, the 24 words, CONFIRM TO VERIFY WORDS, then three typed
 /// checks. Returns once the user has walked every page and passed the
 /// checks; it never gives up on `m`, so the words the user wrote down stay
 /// the words of this wallet.
@@ -565,7 +565,7 @@ const DECOY_FRAME_HOLD_MS: u32 = 40;
 /// Tap right pages forward and, from the last page, finishes; tap left pages
 /// back and, from the first page, returns `Cancelled` (back to the intro).
 /// The words cannot be finished without the last page having been shown.
-/// `start_last` reopens on the last page (back from WORDS WRITTEN DOWN?).
+/// `start_last` reopens on the last page (back from CONFIRM TO VERIFY WORDS).
 pub fn show_mnemonic(m: &Mnemonic, start_last: bool) -> WizardResult {
     // Decoy frames are gated on `decoy-frames` (off by default).
     // OLED displays are bistable — pixels hold state between paints,

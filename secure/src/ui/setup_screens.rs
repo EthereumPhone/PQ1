@@ -93,12 +93,12 @@ pub fn pin_help() -> Screen {
     )
 }
 
-/// Before the words: four pages in the buttons' style, the disc crossing the
+/// Before the words: five pages in the buttons' style, the disc crossing the
 /// panel on each (owner wording, 2026-10-15). A right tap on the last shows
 /// the words; the first has no way back (the PIN is set and the phrase is
 /// already drawn), so it shows the right arrow only. None of them asks.
 #[must_use]
-pub fn backup_intro() -> [Screen; 4] {
+pub fn backup_intro() -> [Screen; 5] {
     [
         detail_on(
             b"RECOVER",
@@ -134,7 +134,18 @@ pub fn backup_intro() -> [Screen; 4] {
             Side::Left,
             Nav::Default,
             b"KEEP SAFE",
-            &[b"Keep them in a", b"secure, private", b"place."],
+            &[b"Store them safely", b"and never share", b"them."],
+        ),
+        detail_on(
+            b"SAFETY",
+            Side::Right,
+            Nav::Default,
+            b"SAFETY",
+            &[
+                b"Freedom Factory will",
+                b"never ask for them.",
+                b"Beware of impostors.",
+            ],
         ),
     ]
 }
@@ -143,7 +154,7 @@ pub fn backup_intro() -> [Screen; 4] {
 /// moves on. Nothing lies to the right, so only the left arrow shows.
 #[must_use]
 pub fn written() -> Screen {
-    hero(b"WRITTEN", b"WORDS WRITTEN DOWN?")
+    hero(b"WRITTEN", b"CONFIRM TO VERIFY WORDS")
         .nav(Nav::LeftOnly)
         .finish()
         .unwrap_or(Screen::BLANK)
@@ -255,7 +266,8 @@ mod tests {
                 Some(Side::Right),
                 Some(Side::Left),
                 Some(Side::Right),
-                Some(Side::Left)
+                Some(Side::Left),
+                Some(Side::Right)
             ],
             "the disc crosses the panel on every page"
         );
