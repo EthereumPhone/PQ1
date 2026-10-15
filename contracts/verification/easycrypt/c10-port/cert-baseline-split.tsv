@@ -2593,3 +2593,16 @@ cdrafts-split/FullDigestPrefixSampling.ec	module:6aae1c136757	FullDigestGame
 cdrafts-split/FullDigestPrefixSampling.ec	module:72f74a6e1cf1	FullDigestSamples
 cdrafts-split/WotsAcceptanceMass.ec	defined-op:5fc27d567e7b	digit_distribution
 cdrafts-split/WotsAcceptanceMass.ec	defined-op:f6c4bac4bd6d	wots_acceptance_mass
+cdrafts-split/DomainCollisionGame.ec	module:4d1c5940ed08	DomainPublicDraws
+cdrafts-split/DomainCollisionGame.ec	module:87f74c1acd5f	IndependentDomainCollision
+cdrafts-split/DomainMemoOracle.ec	defined-op:49861d6ea51a	domain_memo_nodes_valid
+cdrafts-split/DomainMemoOracle.ec	module:8005c3c10b51	DomainMemo
+cdrafts-split/DomainNodeCases.ec	defined-op:3b552a5ad679	domain_node_output_cases
+cdrafts-split/DomainNodeCollision.ec	defined-op:815d295ca3fe	domain_node_collision
+cdrafts-split/DomainNodeTable.ec	defined-op:7aef34aee60b	domain_table_recorded
+cdrafts-split/DomainNodeTable.ec	defined-op:ebd09e55e3cc	domain_nodes_cover
+cdrafts-split/DomainNumericalBound.ec	defined-op:66b21dc3d08a	domain_node_independent_euf_charge
+cdrafts-split/DomainNumericalBound.ec	defined-op:6e5ee5c75526	domain_node_physical_euf_charge
+cdrafts-split/DomainQueryCount.ec	defined-op:148d391646cb	node_query_count
+cdrafts-split/DomainSessionCost.ec	defined-op:84e36582d9e3	node_public_budget
+cdrafts-split/NodeQueryDomain.ec	defined-op:63fb6f806bff	node_query

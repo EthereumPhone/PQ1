@@ -179,6 +179,61 @@ about 1.496 times. The unchanged public-node charge still dominates. Its
 high-128-bit projection differs from the low-129-bit encoding projection;
 equal encodings do not imply equal public nodes.
 
+## Public-node domain accounting
+
+`DomainNumericalBound.physical_byte_domain_node_euf_bound` retains the accepted
+encoding and Stirling coverage charges and replaces only the public-node
+birthday term by
+
+```
+N = node_public_budget(qr, qs) = 155135 + qr + qs * 364892 + 771
+Cnode(N) = N*(N-1)/(2*2^128)
+```
+
+`NodeQueryDomain.node_query` conservatively excludes all 160-byte inputs and
+128-byte inputs whose address-kind bytes at offsets 44–47 encode zero. It
+retains every other arbitrary raw input, including inputs outside the actual
+signer's shapes. Length alone cannot distinguish the 128-byte WOTS count input
+from the 128-byte Merkle and FORS pairs: the latter use kinds two and three.
+The proofs also retain the 96-byte chain, 480-byte forest compression and
+1440-byte WOTS compression inputs. The actual initialized game establishes the
+32-byte public seed and required element widths.
+
+The `Domain*Extraction`, `DomainWotsOpening`, `DomainActualPartition` and
+`DomainNodeCases` proofs restrict both sides of every relevant collision to
+this domain, through actual recovery and the successful-output partition.
+All other charged events are retained. The high-128-bit node projection is
+still distinct from the low-129-bit WOTS encoding projection.
+
+`Domain*Cost` counts selected calls through the actual key generation,
+grinders, tree construction, reconstruction, signer, verifier and adaptive
+session. Cached repeats count too, so this is an upper bound on fresh selected
+draws. Only the proved non-domain WOTS-count and H_msg grinding calls are
+removed from the budget; arbitrary client calls and conservative remaining
+costs stay. Failed searches and absorbing sessions are covered. Partial
+correctness supplies these budgets without a new losslessness premise, and
+oracle initialization establishes the private-table validity used by the proof.
+
+`DomainMemoOracle` keeps one raw memo table and the original private table.
+A fresh selected key draws through the node sampler; a fresh excluded key
+draws from the same full-digest distribution without entering that sampler.
+Cached replies never resample. Exact relational refinement preserves both
+tables, the call log, client globals and return value. `DomainCollisionBound`
+then applies the existing adaptive birthday theorem with the selected-draw
+budget. No fixed-history independence or average-grinding-work premise is
+introduced. The additional `DomainMemo` exclusion hides only this proof oracle;
+all prior game premises remain.
+
+Both complete charges are proved no greater than their accepted-encoding
+predecessors for nonnegative caps. At `qr = qs = 65536`, `N = 23913783554`,
+compared with `Q = 1989993783554`. The node charge falls from `5.8188076e-15`
+to `8.4028604e-19`, about 6,925 times smaller. The complete physical-game bound
+becomes approximately `4.2309698e-17` (`2^-54.39`), about 138.51 times tighter.
+The unreturned ordinary FORS opening charge now dominates (`3.7675879e-17`);
+the WOTS reverse-chain charge is next (`3.6987594e-18`). Both still conservatively
+use `Q`. These are upper probability bounds in the stated classical model,
+not attack costs, lower bounds or a deployed security rating.
+
 ## Composition, evidence and limits
 
 `NumericalByteCases` proves that every successful output belongs to one of the
@@ -203,6 +258,10 @@ The accepted-encoding continuation adds twelve replay targets, 60 proved
 statements, twelve operation pins, fourteen paired checks and twelve scope
 probes. Three concrete modules and two module interfaces are census-pinned;
 there are no new project axioms.
+The public-node domain continuation adds 31 replay targets, 112 proved
+statements, ten operation pins, three concrete module declarations,
+23 paired controls and 31 scope probes. It adds no project axiom and changes
+no existing theorem statement.
 
 The original bound is conservative. At `qr = qs = 65536`, exact rational evaluation gives
 approximately `8.7695861e-15` overall (about `2^-46.70`), with coverage alone

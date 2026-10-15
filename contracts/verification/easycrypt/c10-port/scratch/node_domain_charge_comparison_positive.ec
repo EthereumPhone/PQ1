@@ -1,0 +1,31 @@
+require import AllCore List Distr FMap StdOrder.
+require import C10RawOracle PrefixGuess PrefixHybrid KeygenPrefixes KeygenExhaustion RawKeygen FullPrefix.
+require import FullSession ByteSession ExposureLog ClientQueryLog.
+require import ChainValueView ChainStageSampling CachedChainOracle ChainByteCandidates.
+require import PublicTargetSampling PrivateValueSampling ChainVectorInstall DualDigestSampling RedactedChainOracle ChainPublicHybrid.
+require import SelectedChainSampling LateSelectedPreservation EarlyObservedWots EarlySelectedCharge FreshChainGuess FreshByteBound.
+require import ObservedValueOpening.
+require import SelectedWotsBound WotsCoordinateUniverse WotsCoordinateValidity ActualWotsCoordinate.
+require import PrefixIdeal ClientQueryDriver OriginalWotsCutBound ActualWotsCut.
+require import RawSigner RawForest C10HashDomains ExposureComponents ExposurePartition ByteEncodingCharge EncodingMemoOracle EncodingCollisionState EncodingBirthday.
+require import C10RawOracle PrefixGuess PrefixHybrid PrefixIdeal RawKeygen ForsPrivateLeaves FullSession FullPrefix ByteSession.
+require import KeygenPrefixes KeygenExhaustion ExposureLog ClientQueryLog ClientQueryDriver.
+require import LeafCommitmentHybrid LeafOpeningBound PrivateTargetSampling.
+require import TargetOracleSplit TargetTableProjection TargetByteView OriginalTargetEvent OriginalCandidateUnion.
+require import ForsCoordinateUniverse ActualForsOpening.
+require import OriginalWotsCutBound OriginalForsOpeningBound OriginalCoverageBound.
+require import ProjectedBirthday ProjectedMemoOracle HmsgMemoOracle AcceptedPrefixSampling.
+require import MemoNodeCollision PublicNodeZero QueryPublicCharges CoveredOutputPool PoolCoverageBound NumericalByteCases ByteBound PrefixGames.
+require import StirlingCoverageBound OriginalStirlingCoverage StirlingNumericalBound.
+require import WotsAcceptanceMass AcceptedEncodingPool AcceptedEncodingCases AcceptedWotsCollision ByteAcceptedEncodingCharge FullDigestPrefixSampling.
+require import C10Counter.
+require import AcceptedEncodingNumericalBound DomainQueryCount DomainSessionCost DomainNodeCases DomainMemoOracle ByteDomainCollision.
+import RealOrder.
+require import DomainNumericalBound.
+
+lemma checked qr qs :
+  0<=qr => 0<=qs =>
+  domain_node_physical_euf_charge qr qs<=accepted_encoding_physical_euf_charge qr qs.
+proof.
+  move=> hr hs; exact (domain_node_physical_charge_tighter qr qs hr hs).
+qed.

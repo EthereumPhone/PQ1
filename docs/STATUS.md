@@ -177,10 +177,14 @@ counts replace the earlier canonical overcount in the adaptive FORS coverage
 term, retaining the initialized byte game and its premises. The complete bound
 also charges WOTS encoding collisions only when both encodings pass the actual
 sum-205 test, with a proved exact acceptance mass and adaptive memoized-oracle
-transfer. Public-node birthday collisions remain the dominant quantitative loss.
+transfer. A further domain proof restricts public-node collisions to the actual
+node-producing inputs and excludes proved WOTS-count/H_msg grinder calls from
+the node budget. Exact adaptive memoization and failed-session accounting are
+retained. Generic ordinary FORS-opening and WOTS reverse-chain charges now
+dominate the remaining quantitative loss.
 The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
 and [remaining research obligations](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md)
-distinguish those results from tighter public-node charges, concrete SHA-256, QROM
+distinguish those results from tighter component charges, concrete SHA-256, QROM
 and full Rust correspondence.
 
 **Kani/EasyCrypt evidence correction (2026-09-16):** current gate scope and

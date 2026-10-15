@@ -128,3 +128,30 @@ not expose the tainted structural FORS theorem. The complete two-driver replay,
 source bindings, operation/statement pins and declaration census remain
 separate gates. These controls leave the public-node, concrete-hash, QROM and
 full Rust/session obligations open.
+
+## Public-node domain controls
+
+Twenty-three positive/negative twins cover concrete 160-byte exclusions,
+128-byte kind-zero counts and kind-two/three pairs, cached-repeat call counts,
+excluded calls, seed/element widths, compression row counts, restricted WOTS
+opening, fresh and excluded table insertion, zero-cost count loops, signer and
+initialized-session budgets, adaptive budget premises, the restricted table
+event, successful-output guard, both full-game charges and their comparison.
+The finite input/count twins have explicit false paired claims. The transfer
+and premise-removal twins test theorem sensitivity; they do not establish that
+every smaller bound is false or that every charge is necessary.
+
+Rejection must occur at the final application in `checked`, not in an earlier
+helper, parser or import. The expected diagnostic is `the given proof-term
+proves:`, except the removed count-seed-width premise (`[by]: cannot close
+goals`) and the changed adaptive budget premise (`this proof-term proves:`).
+The exact source line and theorem are checked in the focused receipt. Resource
+and timeout failures are not credited. `tools/node_domain_controls.py` contains
+literal reviewed claims and generates the fixtures and exact control rows;
+it does not automatically adopt changed implementation statements.
+
+Every new proof module is checked directly and through the CLI, source-bound,
+statement/operation-pinned and declaration-censused. Thirty-one scope probes
+also require the tainted structural FORS theorem to stay unavailable. The full
+cold replay and bounded review remain separate requirements. Concrete hash,
+quantum-oracle and full Rust/session correspondence obligations remain open.

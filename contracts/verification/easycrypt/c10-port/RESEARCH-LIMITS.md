@@ -21,19 +21,28 @@ event: actual opening and output-partition proofs require collisions only
 between encodings that pass the sum-205 predicate. Its exact fresh-digest
 acceptance mass is proved from the existing digit enumeration, and an adaptive
 prefix argument transfers the smaller charge through the memoized oracle.
-At these caps the encoding charge is about 30,698 times smaller and the complete
-bound improves from about `2^-46.70` to `2^-47.28`. Public-node collisions now
-dominate. These are upper probability bounds, not attack costs or a deployed
-security rating.
+At these caps the encoding charge is about 30,698 times smaller and that
+continuation improved the complete bound from about `2^-46.70` to `2^-47.28`.
+The subsequent public-node domain proof removes the WOTS-count and H_msg
+search calls from the node birthday budget, using actual widths and address
+kinds rather than assuming all 128-byte inputs have the same role. Both
+collision inputs in the successful-output partition are proved to belong to
+the retained domain. The filtered memo oracle preserves adaptive state and
+cached replies; the budget includes failed signing and arbitrary raw calls.
+This reduces the complete bound to about `2^-54.39`. See the numerical owner
+for the exact formula. These are upper probability bounds, not attack costs
+or a deployed security rating.
 
-The next quantitative obligation is to replace the global all-pairs public-node
-collision event with the target collisions actually sufficient for successful
-verification, or prove a tail charge for a smaller effective hash budget.
-Substituting average grinding work for the proved worst-case budget is invalid.
-Honest-but-private intermediate values, repeated calls, failed signing and
-adaptive oracle queries must be covered. The high-128-bit node projection and
-low-129-bit encoding projection are different; the accepted-encoding theorem
-does not reduce the public-node term.
+The next quantitative obligations are tighter ordinary FORS-opening and WOTS
+reverse-chain charges, now the largest terms. Their existing generic candidate
+bounds still charge the full public-query budget, including grinding work.
+A reduction must prove which actual candidate inputs or views can expose the
+hidden values, with consistent adaptive history, before excluding any calls.
+Finer target-specific node reductions and a tail charge for a smaller effective
+hash budget also remain possible. Substituting average grinding work for the
+proved worst-case budget is invalid. The high-128-bit node projection and
+low-129-bit encoding projection remain different, and their charges are
+reduced by separate proofs.
 
 The [formally verified SPHINCS+ reduction](https://eprint.iacr.org/2024/910)
 provides a modular approach to tighter component reductions. Its construction

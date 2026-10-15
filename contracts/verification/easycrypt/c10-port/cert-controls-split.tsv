@@ -1277,3 +1277,82 @@ scratch/_scope_neg_op_AcceptedEncodingGame.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AcceptedEncodingCharge.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_ByteAcceptedEncodingCharge.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AcceptedEncodingNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Node domains, complete costs and adaptive collision reduction: paired controls.
+scratch/node_domain_length_160_positive.ec	MUST-PASS	-
+scratch/node_domain_length_160_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_kind_zero_128_positive.ec	MUST-PASS	-
+scratch/node_domain_kind_zero_128_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_pair_kind_2_positive.ec	MUST-PASS	-
+scratch/node_domain_pair_kind_2_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_pair_kind_3_positive.ec	MUST-PASS	-
+scratch/node_domain_pair_kind_3_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_repeat_count_positive.ec	MUST-PASS	-
+scratch/node_domain_repeat_count_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_excluded_count_positive.ec	MUST-PASS	-
+scratch/node_domain_excluded_count_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_pair_kind_positive.ec	MUST-PASS	-
+scratch/node_domain_pair_kind_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_chain_width_positive.ec	MUST-PASS	-
+scratch/node_domain_chain_width_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_count_seed_width_positive.ec	MUST-PASS	-
+scratch/node_domain_count_seed_width_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/node_domain_compression_rows_positive.ec	MUST-PASS	-
+scratch/node_domain_compression_rows_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_wots_domain_collision_positive.ec	MUST-PASS	-
+scratch/node_domain_wots_domain_collision_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_table_other_positive.ec	MUST-PASS	-
+scratch/node_domain_table_other_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_table_fresh_positive.ec	MUST-PASS	-
+scratch/node_domain_table_fresh_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_hash_nondomain_positive.ec	MUST-PASS	-
+scratch/node_domain_hash_nondomain_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_grinder_width_positive.ec	MUST-PASS	-
+scratch/node_domain_grinder_width_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_signer_budget_positive.ec	MUST-PASS	-
+scratch/node_domain_signer_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_session_budget_positive.ec	MUST-PASS	-
+scratch/node_domain_session_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_adaptive_budget_positive.ec	MUST-PASS	-
+scratch/node_domain_adaptive_budget_reject.ec	MUST-FAIL	this proof-term proves:
+scratch/node_domain_byte_event_positive.ec	MUST-PASS	-
+scratch/node_domain_byte_event_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_output_partition_positive.ec	MUST-PASS	-
+scratch/node_domain_output_partition_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_independent_charge_positive.ec	MUST-PASS	-
+scratch/node_domain_independent_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_physical_transfer_positive.ec	MUST-PASS	-
+scratch/node_domain_physical_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/node_domain_charge_comparison_positive.ec	MUST-PASS	-
+scratch/node_domain_charge_comparison_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ByteDomainCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainActualForest.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainActualPartition.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainCollisionBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainCollisionGame.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainExposureCoverage.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainExposurePartition.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainExposurePrivate.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainForestCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainForestCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainForestExtraction.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainForsCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainForsExtraction.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainKeygenCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainLayerCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainLayerExtraction.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainLinearCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainMemoOracle.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainMerkleCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainNodeCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainNodeCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainNodeTable.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainPathInputs.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainQueryCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainSessionCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainShuffleCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainSignerCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainWotsCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_DomainWotsOpening.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_NodeQueryDomain.ec	MUST-FAIL	FORS_C_TreePort.
