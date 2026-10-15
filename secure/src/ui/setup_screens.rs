@@ -93,13 +93,50 @@ pub fn pin_help() -> Screen {
     )
 }
 
-/// Before the words: an intro hero (a tap right shows them; it asks nothing).
+/// Before the words: four pages in the buttons' style, the disc crossing the
+/// panel on each (owner wording, 2026-10-15). A right tap on the last shows
+/// the words; the first has no way back (the PIN is set and the phrase is
+/// already drawn), so it shows the right arrow only. None of them asks.
 #[must_use]
-pub fn backup_intro() -> Screen {
-    hero(b"BACKUP", b"WRITE DOWN 24 WORDS")
-        .intro()
-        .finish()
-        .unwrap_or(Screen::BLANK)
+pub fn backup_intro() -> [Screen; 4] {
+    [
+        detail_on(
+            b"RECOVER",
+            Side::Right,
+            Nav::RightOnly,
+            b"RECOVERY",
+            &[
+                b"Your PQ1 will now",
+                b"generate a 24-word",
+                b"recovery phrase.",
+            ],
+        ),
+        detail_on(
+            b"WRITEDWN",
+            Side::Left,
+            Nav::Default,
+            b"WRITE DOWN",
+            &[
+                b"Write the words down",
+                b"in the exact order",
+                b"they are shown.",
+            ],
+        ),
+        detail_on(
+            b"ONLYBACK",
+            Side::Right,
+            Nav::Default,
+            b"ONLY BACKUP",
+            &[b"They are the only", b"way to restore", b"your wallet."],
+        ),
+        detail_on(
+            b"KEEPSAFE",
+            Side::Left,
+            Nav::Default,
+            b"KEEP SAFE",
+            &[b"Keep them in a", b"secure, private", b"place."],
+        ),
+    ]
 }
 
 /// After the last word page: a tap left goes back to the words, the click
@@ -149,14 +186,8 @@ mod tests {
 
     fn all() -> std::vec::Vec<Screen> {
         let mut v = intro().to_vec();
-        v.extend([
-            pin_help(),
-            backup_intro(),
-            written(),
-            hidden(),
-            paused(),
-            import_intro(),
-        ]);
+        v.extend(backup_intro());
+        v.extend([pin_help(), written(), hidden(), paused(), import_intro()]);
         v
     }
 
@@ -188,14 +219,14 @@ mod tests {
         assert_eq!(confirmable, [CONFIRM_HELP, CREATE, IMPORT]);
         assert_eq!(i[CREATE].caption(), b"CREATE NEW WALLET?");
         assert_eq!(i[IMPORT].caption(), b"IMPORT WALLET?");
-        for s in [
-            pin_help(),
-            backup_intro(),
-            hidden(),
-            paused(),
-            import_intro(),
-        ] {
+        for s in [pin_help(), hidden(), paused(), import_intro()] {
             assert!(!s.commit(), "{s:?}");
+        }
+        for s in backup_intro() {
+            assert!(
+                !s.confirmable(),
+                "nothing on the way to the words asks: {s:?}"
+            );
         }
         assert!(written().commit());
     }
@@ -211,7 +242,23 @@ mod tests {
         assert_eq!(i[CONFIRM_HELP].side(), Some(Side::Left));
         assert_eq!(i[CREATE].nav(), Some(Nav::Default));
         assert_eq!(i[IMPORT].nav(), Some(Nav::LeftOnly));
-        assert_eq!(backup_intro().nav(), Some(Nav::Intro));
+        let b = backup_intro();
+        assert_eq!(
+            b[0].nav(),
+            Some(Nav::RightOnly),
+            "no way back from the first"
+        );
+        let sides: std::vec::Vec<_> = b.iter().map(|s| s.side()).collect();
+        assert_eq!(
+            sides,
+            [
+                Some(Side::Right),
+                Some(Side::Left),
+                Some(Side::Right),
+                Some(Side::Left)
+            ],
+            "the disc crosses the panel on every page"
+        );
         assert_eq!(import_intro().nav(), Some(Nav::Intro));
         assert_eq!(written().nav(), Some(Nav::LeftOnly));
     }

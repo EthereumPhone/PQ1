@@ -186,8 +186,10 @@
 #     SET PIN / REPEAT PIN           SET PIN / REPEAT PIN; a miss shows
 #                                    PIN MISMATCH and asks for both again
 #     SET DURESS PIN / REPEAT        unchanged (duress-pin builds only)
-#     WRITE DOWN 24 WORDS            WRITE DOWN 24 WORDS (backup_intro: the
-#                                    band chevron, no corner arrows)
+#     WRITE DOWN 24 WORDS            four pages in the buttons' style, the
+#                                    disc crossing on each: RECOVERY, WRITE
+#                                    DOWN (in the exact order), ONLY BACKUP,
+#                                    KEEP SAFE (owner wording 2026-10-15)
 #     the 24 WORDS                   the 24 words, 3 pages; HIDDEN after
 #                                    5 minutes without a press
 #     WORDS WRITTEN DOWN?            WORDS WRITTEN DOWN? (left arrow only:

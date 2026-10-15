@@ -217,9 +217,7 @@ fn paint_fallback(s: &Screen) {
         let head = if s.caption().is_empty() { s.label() } else { s.caption() };
         // The caption (or label), then the lines. A text longer than a row
         // (CREATE NEW WALLET? is 18) breaks at its last space that fits and
-        // carries on to the next row, rather than losing its end. When the
-        // lines need every row, the label gives way: it names the screen, the
-        // lines are what it says.
+        // carries on to the next row, rather than losing its end.
         let mut rows: [&[u8]; 2 * (1 + pqsigner_ui_px::screen::LINES_PER_PAGE)] = [&[]; 8];
         let mut n = 0usize;
         for k in 0..=s.nlines(0) {
@@ -237,10 +235,38 @@ fn paint_fallback(s: &Screen) {
                 }
             }
         }
-        let head_rows = usize::from(!head.is_empty()) + usize::from(head.len() > DISPLAY_COLS);
-        let skip = if n > DISPLAY_ROWS && s.nlines(0) > 0 { head_rows } else { 0 };
-        for (r, text) in rows[skip..n].iter().take(DISPLAY_ROWS).enumerate() {
-            draw_row(d, r, text);
+        if n <= DISPLAY_ROWS || s.nlines(0) == 0 {
+            for (r, text) in rows[..n].iter().take(DISPLAY_ROWS).enumerate() {
+                draw_row(d, r, text);
+            }
+        } else {
+            // Too long line by line: the label gives way (it names the
+            // screen, the lines are what it says) and the lines re-flow as
+            // one paragraph (RECOVERY's "Your PQ1 will now / generate a
+            // 24-word / recovery phrase.") instead of losing their end.
+            let mut flow = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+            let (mut r, mut c) = (0usize, 0usize);
+            for k in 0..s.nlines(0) {
+                let line = s.line(0, k).map_or(&[][..], |(_, t)| t);
+                for word in line.split(|&b| b == b' ').filter(|w| !w.is_empty()) {
+                    let word = &word[..word.len().min(DISPLAY_COLS)];
+                    if c > 0 && c + 1 + word.len() > DISPLAY_COLS {
+                        r += 1;
+                        c = 0;
+                    }
+                    if r >= DISPLAY_ROWS {
+                        break;
+                    }
+                    if c > 0 {
+                        c += 1;
+                    }
+                    flow[r][c..c + word.len()].copy_from_slice(word);
+                    c += word.len();
+                }
+            }
+            for (r, row) in flow.iter().enumerate() {
+                draw_row(d, r, row);
+            }
         }
         d.flush();
     }
@@ -334,16 +360,19 @@ pub fn choose_pin() -> Option<[u8; PIN_LEN]> {
 /// checks; it never gives up on `m`, so the words the user wrote down stay
 /// the words of this wallet.
 pub fn create_backup(m: &Mnemonic) {
-    let intro = [setup_screens::backup_intro()];
+    let intro = setup_screens::backup_intro();
     let written = [setup_screens::written()];
+    // Back from the first word page lands on the intro's last page.
+    let mut intro_at = 0;
     'intro: loop {
-        // Only a right tap leaves the intro: there is no back (the words are
-        // already drawn) and nothing to select (it asks nothing).
-        while pager(&intro, 0, false, true) != PagerOut::Forward {}
+        // Only a right tap off the last page leaves the intro: there is no
+        // back (the words are already drawn) and nothing to select.
+        while pager(&intro, intro_at, false, true) != PagerOut::Forward {}
         let mut start_last = false;
         loop {
             if show_mnemonic(m, start_last) != WizardResult::Confirmed {
                 // A left tap on the first page: back to the intro.
+                intro_at = intro.len() - 1;
                 continue 'intro;
             }
             if pager(&written, 0, true, false) == PagerOut::Back {

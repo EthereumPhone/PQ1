@@ -833,12 +833,12 @@ mod tests {
                     // The setup flow in order (owner decisions 2026-10-15):
                     // intro, PIN, the words and their checks, import, done.
                     let mut v = crate::ui_setup_screens::intro().to_vec();
+                    v.extend(crate::ui_setup_screens::backup_intro());
                     v.extend([
                         crate::ui_setup_screens::pin_help(),
                         pin_row(b"SET PIN", &[0; 8], 0),
                         pin_row(b"REPEAT PIN", &[0; 8], 0),
                         st("PIN mismatch", ""),
-                        crate::ui_setup_screens::backup_intro(),
                         seed_page(9, 8),
                         crate::ui_setup_screens::hidden(),
                         crate::ui_setup_screens::paused(),
