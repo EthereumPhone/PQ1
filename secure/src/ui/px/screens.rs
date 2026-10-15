@@ -150,7 +150,51 @@ pub fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool
     }
 }
 
-/// What [`show_waiting`] did.
+/// An entry dialog's input wait (the PIN, a word's letters): the row is
+/// shown and kept drawing while it waits, on the timestamped input path
+/// (`lcd::EntryInput`), and each call returns the next legacy event. One per
+/// dialog. Without the panel (the text presenter) it records the row and
+/// waits on the ordinary buttons.
+pub struct EntryWait {
+    #[cfg(feature = "ui-lcd")]
+    inner: super::lcd::EntryInput,
+}
+
+impl EntryWait {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            #[cfg(feature = "ui-lcd")]
+            inner: super::lcd::EntryInput::new(),
+        }
+    }
+
+    /// Show `s` and wait for the next event. [`Waited::NoAtlas`] when the
+    /// panel cannot draw it: the caller paints its 16x4 page and waits itself.
+    pub fn wait(&mut self, s: &Screen, idle: &mut dyn FnMut() -> bool) -> Waited {
+        #[cfg(feature = "ui-lcd")]
+        {
+            let Ok(atlas) = super::assets::verify_atlas() else {
+                return Waited::NoAtlas;
+            };
+            record(s);
+            Waited::Event(self.inner.wait(s, &atlas, idle))
+        }
+        #[cfg(not(feature = "ui-lcd"))]
+        {
+            record(s);
+            Waited::Event(crate::ui::input().wait_button(idle))
+        }
+    }
+}
+
+impl Default for EntryWait {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// What [`show_waiting`] / [`EntryWait::wait`] did.
 pub enum Waited {
     /// No verified atlas — the caller must paint its own 16x4 page and run
     /// its own `wait_button`. Same contract as `show_with` returning `false`.
@@ -176,9 +220,9 @@ pub enum Waited {
 /// so the `[UI-PXSR]` log line and the `ui-capture` frame hash are unchanged
 /// and the transcript count does not move.
 ///
-/// The entry rows (the PIN, a word's letters) wait here too, so the hint
-/// between their chevrons keeps swapping; the duress yes / no does. The
-/// setup choice is a page of [`pager`].
+/// Only the duress yes / no waits here now: the entry rows wait on
+/// [`EntryWait`], and the setup choice is a page of [`pager`].
+#[cfg_attr(not(any(feature = "duress-pin", feature = "duress-ui-test")), allow(dead_code))]
 pub fn show_waiting(s: &Screen, idle: &mut dyn FnMut() -> bool) -> Waited {
     #[cfg(feature = "ui-lcd")]
     {

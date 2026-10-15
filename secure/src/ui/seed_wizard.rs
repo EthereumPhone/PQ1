@@ -1035,6 +1035,9 @@ const MAX_LETTERS: usize = 4;
 fn enter_single_word(title: &str) -> EnterWordResult {
     let mut buf = [b'a'; MAX_LETTERS];
     let mut len: usize = 0;
+    // The pixel row's input wait, one for the whole word: it keeps the row
+    // drawing through presses (owner 2026-10-15).
+    let mut px = PxLetterWait::new();
 
     loop {
         // Compute current prefix lookup. If we have at least one letter
@@ -1043,7 +1046,7 @@ fn enter_single_word(title: &str) -> EnterWordResult {
         let mut idle = || timeout::is_idle();
         // The pixel row keeps drawing for the whole wait (its hint swaps);
         // `None` = it could not paint: the page, and a plain wait.
-        let waited = match px_letter_wait(title, &buf, len, &mut idle) {
+        let waited = match px_letter_wait(&mut px, title, &buf, len, &mut idle) {
             Some(waited) => waited,
             None => {
                 render_letter_screen(title, &buf, len);
@@ -1134,19 +1137,33 @@ fn prefix_is_exact_word(p: &str) -> bool {
     is_exact_wordlist_entry(p.as_bytes())
 }
 
+/// The pixel row's input wait for one word (nothing without the pixel UI).
+#[cfg(feature = "ui-px")]
+use super::px::screens::EntryWait as PxLetterWait;
+#[cfg(not(feature = "ui-px"))]
+struct PxLetterWait;
+#[cfg(not(feature = "ui-px"))]
+impl PxLetterWait {
+    fn new() -> Self {
+        Self
+    }
+}
+
 /// Port step 4: the entry row (committed letters in white rings, the dialed
 /// one in the active ring), the same letters the page shows, kept drawing
-/// for the whole input wait so its hint can swap. `None` when the pixel UI
-/// could not paint it: the caller paints the page and waits itself.
+/// for the whole input wait so its hint can swap even while the user dials.
+/// `None` when the pixel UI could not paint it: the caller paints the page
+/// and waits itself.
 #[cfg(feature = "ui-px")]
 fn px_letter_wait(
+    px: &mut PxLetterWait,
     title: &str,
     buf: &[u8; MAX_LETTERS],
     len: usize,
     idle: &mut dyn FnMut() -> bool,
 ) -> Option<Option<(Button, Press)>> {
     let row = super::px::status_map::letter_row(title.as_bytes(), buf, len);
-    match super::px::screens::show_waiting(&row, idle) {
+    match px.wait(&row, idle) {
         super::px::screens::Waited::NoAtlas => None,
         super::px::screens::Waited::Event(ev) => Some(ev),
     }
@@ -1154,6 +1171,7 @@ fn px_letter_wait(
 
 #[cfg(not(feature = "ui-px"))]
 fn px_letter_wait(
+    _px: &mut PxLetterWait,
     _title: &str,
     _buf: &[u8; MAX_LETTERS],
     _len: usize,

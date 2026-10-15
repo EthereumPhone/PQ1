@@ -2540,21 +2540,26 @@ fn positive_a_pager_continues_from_the_previous_pager_only_while_its_frame_is_on
 }
 
 #[test]
-fn positive_a_still_entry_row_is_not_streamed_at_the_frame_rate() {
-    // The entry row's only motion is a hint swap every 5 s. The ambient
-    // presenter paints at the frame rate for a moving screen, which for the
-    // row would stream the same frame to the panel ~60 times a second. It
-    // sleeps until the next change instead, after the first paint and after
-    // every later one.
+fn positive_the_entry_wait_reads_the_timestamped_stream_and_paints_only_on_change() {
+    // Owner report 2026-10-15: the entry row's hint fade lagged while
+    // dialling, because the legacy driver cannot draw while a button is
+    // down. `EntryInput` reads the SysTick-sampled edges instead, so it draws
+    // through presses; it maps them with the host-tested `EntryGrammar`.
     let body = UI_PX_LCD_SRC
-        .split("fn sleep_while_still(&mut self, now: u32) {")
+        .split("pub fn wait(\n        &mut self,\n        s: &Screen,")
         .nth(1)
-        .expect("sleep_while_still must exist");
-    let body = &body[..body.find("\n    }\n").unwrap_or(body.len())];
-    assert!(body.contains("if let Some(t) = self.anim.cycle_wake(now) {"));
-    assert!(body.contains("self.due_at = t;"));
-    assert!(UI_PX_LCD_SRC.contains("a.paint(atlas);\n        a.sleep_while_still(now);"));
-    assert!(UI_PX_LCD_SRC.contains("self.paint(atlas);\n        self.sleep_while_still(now);"));
+        .expect("EntryInput::wait must exist");
+    let body = &body[..body.find("\n    }\n}\n").unwrap_or(body.len())];
+    assert!(body.contains("let (g, now) = drain(&mut self.fsm);"));
+    assert!(body.contains("match self.grammar.feed(ev) {"));
+    assert!(body.contains("Some(EntryEvent::Confirm) => Some((Button::Right, Press::Long)),"));
+    // A still row is not streamed at the frame rate: it paints once, then
+    // only while something on it moves (the fade, a press nudge).
+    assert!(body.contains("let still = anim.cycle_wake(now);\n            if !drawn || still.is_none() {"));
+    // Another dialog drew since: its input was not ours.
+    assert!(body.contains("if !self.live || lcd::glass_writes() != self.glass {\n            self.sync();"));
+    // #426: the entry loops reset the timer after each event; the wait never does.
+    assert!(!body.contains("reset_activity"));
 }
 
 #[test]

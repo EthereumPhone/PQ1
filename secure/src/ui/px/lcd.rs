@@ -38,7 +38,7 @@ use crate::hw::lcd_nv3007 as lcd;
 use crate::timeout;
 use pqsigner_ui_px::driver::{Btn, FlowDriver, Gesture as NavGesture, NavResult};
 use pqsigner_ui_px::font::Font;
-use pqsigner_ui_px::input::{Gesture, InputCtx, InputFsm, DEBOUNCE_MS};
+use pqsigner_ui_px::input::{EntryEvent, EntryGrammar, Gesture, InputCtx, InputFsm, DEBOUNCE_MS};
 use pqsigner_ui_px::raster::{render_strip, Frame, Strip, H, W};
 use zeroize::Zeroize;
 use pqsigner_ui_px::scene::{Anim, Ending, Marks};
@@ -1423,7 +1423,6 @@ impl Ambient {
             ft: AmbientFt::default(),
         };
         a.paint(atlas);
-        a.sleep_while_still(now);
         a
     }
 
@@ -1450,17 +1449,7 @@ impl Ambient {
         }
         let _ = self.anim.step(now);
         self.paint(atlas);
-        self.sleep_while_still(now);
         true
-    }
-
-    /// A screen whose only motion is the entry row's hint swap holds the same
-    /// frame for seconds at a time: sleep until it next changes instead of
-    /// streaming that frame at the frame rate. Anything else keeps the rate.
-    fn sleep_while_still(&mut self, now: u32) {
-        if let Some(t) = self.anim.cycle_wake(now) {
-            self.due_at = t;
-        }
     }
 
     fn paint(&mut self, atlas: &assets::AtlasRef) {
@@ -2094,4 +2083,175 @@ pub fn run_pager(
     sampling_disable();
     carry_keep(anim);
     result
+}
+
+/// An entry row's input wait (the PIN, a word's letters) on the timestamped
+/// input path the pager and the signing flow use.
+///
+/// WHY (owner report 2026-10-15). The entry rows used to wait on the legacy
+/// button driver, which may only draw while no button is down (it times a
+/// hold by counting its own polls) and stops polling for every frame it
+/// draws. The row's hint fade froze on each press and slowed the presses it
+/// overlapped. Here the SysTick sampler records every edge with its time and
+/// the FSM turns them into gestures, so the row draws through presses
+/// without delaying or losing one.
+///
+/// It hands back the legacy events the entry loops already speak, so their
+/// grammar (and every pin on it) is unchanged. The reading is
+/// `pqsigner_ui_px::input::EntryGrammar` (host-tested there): a tap is
+/// `(side, Short)`; a hold that reaches 500 ms (the legacy long press) is
+/// `(side, Long)` at once, then nothing more until both buttons are up; the
+/// two-button click is `(Right, Long)`, the confirm.
+///
+/// Lives for one entry dialog; `wait` once per event. It re-syncs (drops
+/// stale edges, adopts the live button level) whenever something else drew
+/// since its last frame, because then another dialog had the buttons: the
+/// letter row's candidate list and its NO SUCH WORD notice run between two
+/// of its waits. No `reset_activity` here: the entry loops reset after each
+/// event they receive (#426).
+pub struct EntryInput {
+    fsm: InputFsm,
+    grammar: EntryGrammar,
+    anim: Option<Anim>,
+    queue: [Option<(crate::ui::Button, crate::ui::Press)>; 4],
+    /// `lcd::glass_writes` after this wait's last frame.
+    glass: u32,
+    /// Sampling is on and `fsm` tracks it.
+    live: bool,
+}
+
+impl EntryInput {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            fsm: InputFsm::new(InputCtx::NAV),
+            grammar: EntryGrammar::default(),
+            anim: None,
+            queue: [None; 4],
+            glass: 0,
+            live: false,
+        }
+    }
+
+    fn sync(&mut self) {
+        sampling_enable();
+        let sb = stable_bits();
+        self.fsm = InputFsm::resumed(InputCtx::NAV, sb & 1 != 0, sb & 2 != 0);
+        self.queue = [None; 4];
+        self.grammar = EntryGrammar::default();
+        self.live = true;
+    }
+
+    fn pop(&mut self) -> Option<(crate::ui::Button, crate::ui::Press)> {
+        let ev = self.queue[0].take();
+        self.queue.rotate_left(1);
+        ev
+    }
+
+    fn push(&mut self, ev: (crate::ui::Button, crate::ui::Press)) {
+        if let Some(slot) = self.queue.iter_mut().find(|q| q.is_none()) {
+            *slot = Some(ev);
+        }
+    }
+
+    /// Show `s` (kept drawing while it waits) and return the next event, or
+    /// `None` when `idle` fires.
+    pub fn wait(
+        &mut self,
+        s: &Screen,
+        atlas: &assets::AtlasRef,
+        idle: &mut dyn FnMut() -> bool,
+    ) -> Option<(crate::ui::Button, crate::ui::Press)> {
+        use crate::ui::{Button, Press};
+        if !self.live || lcd::glass_writes() != self.glass {
+            self.sync();
+        }
+        if let Some(ev) = self.pop() {
+            return Some(ev);
+        }
+        film_abort();
+        let marks = atlas.marks();
+        let font = atlas.font();
+        // A new record (a press changed the row): start it at rest.
+        if self.anim.as_ref().map_or(true, |a| a.current().0 .0 != s.0) {
+            self.anim = Some(Anim::new(s, 0, timeout::now()));
+        }
+        let mut drawn = false;
+        loop {
+            if idle() {
+                return None;
+            }
+            let (g, now) = drain(&mut self.fsm);
+            let side = |b: Btn| if b == Btn::Left { Button::Left } else { Button::Right };
+            for &ev in g.buf[..g.n].iter().flatten() {
+                if let Gesture::Press(b) = ev {
+                    if let Some(a) = self.anim.as_mut() {
+                        a.press(b, now);
+                    }
+                }
+                let mapped = match self.grammar.feed(ev) {
+                    Some(EntryEvent::Tap(b)) => Some((side(b), Press::Short)),
+                    Some(EntryEvent::Hold(b)) => Some((side(b), Press::Long)),
+                    Some(EntryEvent::Confirm) => Some((Button::Right, Press::Long)),
+                    None => None,
+                };
+                if let Some(m) = mapped {
+                    self.push(m);
+                }
+            }
+            if stable_bits() == 0 {
+                self.grammar.released();
+            }
+            if let Some(ev) = self.pop() {
+                return Some(ev);
+            }
+            let Some(anim) = self.anim.as_mut() else { return None };
+            let _ = anim.step(now);
+            // Paint the row once, then only while something on it moves (the
+            // hint's fade, a press nudge): between fades it is the same frame.
+            let still = anim.cycle_wake(now);
+            if !drawn || still.is_none() {
+                let _ = build_and_present(anim, &marks, &font, None, None, None);
+                drawn = true;
+                self.glass = lcd::glass_writes();
+            }
+            // Sleep until the next change, an edge, or idle; a held button
+            // is polled at the frame rate so its hold is timed.
+            let mut wake = still.unwrap_or(now.wrapping_add(FRAME_PERIOD_MS));
+            if stable_bits() != 0 {
+                let poll = now.wrapping_add(FRAME_PERIOD_MS);
+                if poll.wrapping_sub(wake) >= (1 << 31) {
+                    wake = poll;
+                }
+            }
+            while wake.wrapping_sub(timeout::now()).wrapping_sub(1) < (1 << 31) {
+                if ring_has_edges() || idle() {
+                    break;
+                }
+                cortex_m::asm::wfi();
+            }
+        }
+    }
+}
+
+impl Default for EntryInput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for EntryInput {
+    fn drop(&mut self) {
+        if self.live {
+            sampling_disable();
+        }
+        // The last row's record holds the dialed digit (or a typed letter of
+        // a seed word): overwrite it rather than leave it on the stack.
+        if let Some(a) = self.anim.as_mut() {
+            // SAFETY: `a` is a valid, exclusive reference to an initialised
+            // `Anim`; `Anim` needs no drop (asserted at `CARRY`), and the
+            // volatile write keeps the scrub from being optimised away.
+            unsafe { core::ptr::write_volatile(a, Anim::new(&Screen::BLANK, 0, 0)) };
+        }
+    }
 }

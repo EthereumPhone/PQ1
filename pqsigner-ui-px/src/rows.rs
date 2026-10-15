@@ -56,40 +56,22 @@ fn glyph_str(c: u8) -> &'static [u8] {
 /// hold goes back and, on the first slot, leaves the row).
 pub const ENTRY_HINTS: [&[u8]; 2] = [b"CONFIRM (BOTH)", b"BACK (HOLD LEFT)"];
 
-/// How long after a press the hint changes by a cut instead of a fade.
-///
-/// The entry loop waits on the legacy button driver, which may only draw
-/// while no button is down (it times a hold by counting its own polls), and
-/// every drawn frame holds the poll back for a frame's time. A 300 ms fade
-/// that overlapped the user's dialling therefore froze on each press and
-/// jumped on release, and slowed the presses it overlapped (owner report
-/// 2026-10-15: "it lags"). While the user dials, the swap is one frame.
-pub const ENTRY_HINT_QUIET_MS: u32 = 1_000;
-
-/// The hint showing at `now` and its alpha, `idle_ms` after the last press:
-/// the Confirm? band's swap (5 s a message, 300 ms fades), on the WALL clock
-/// rather than the time since the row settled, so the repaint on every press
-/// neither restarts the cycle nor fades the hint back in. Within
-/// [`ENTRY_HINT_QUIET_MS`] of a press there is no fade: the message cuts
-/// over at the slot boundary. Shifted by one fade so `now` = 0 shows the
-/// first hint at full strength.
+/// The hint showing at `now` and its alpha: the Confirm? band's swap (5 s a
+/// message, 300 ms fades), on the WALL clock rather than the time since the
+/// row settled, so the repaint on every press neither restarts the cycle nor
+/// fades the hint back in. Shifted by one fade so `now` = 0 shows the first
+/// hint at full strength.
 #[must_use]
-pub fn entry_hint(now: u32, idle_ms: u32) -> (&'static [u8], u8) {
+pub fn entry_hint(now: u32) -> (&'static [u8], u8) {
     let (which, a) = motion::confirm_band(now.wrapping_add(motion::BAND_FADE_MS));
-    let a = if idle_ms < ENTRY_HINT_QUIET_MS { crate::fixed::ONE_Q16 } else { a };
     (ENTRY_HINTS[usize::from(which & 1)], (i64::from(a) * 255 >> 16) as u8)
 }
 
 /// Milliseconds from `now` until [`entry_hint`] next changes: 0 inside a
-/// fade (paint every frame), else the time left before the next change.
-/// Within the quiet after a press that is the cut or the quiet's end,
-/// whichever comes first.
+/// fade, else the time left in the slot's still part.
 #[must_use]
-pub fn entry_hint_still_for(now: u32, idle_ms: u32) -> u32 {
+pub fn entry_hint_still_for(now: u32) -> u32 {
     let local = now.wrapping_add(motion::BAND_FADE_MS) % motion::BAND_SWAP_MS;
-    if idle_ms < ENTRY_HINT_QUIET_MS {
-        return (motion::BAND_SWAP_MS - local).min(ENTRY_HINT_QUIET_MS - idle_ms);
-    }
     let still_end = motion::BAND_SWAP_MS - motion::BAND_FADE_MS;
     if (motion::BAND_FADE_MS..still_end).contains(&local) {
         still_end - local
@@ -99,9 +81,8 @@ pub fn entry_hint_still_for(now: u32, idle_ms: u32) -> u32 {
 }
 
 /// Draw an entry row record (rings, glyphs, the − / + marks and the hint at
-/// `now`, `idle_ms` after the last press). The caption and the corner
-/// chevrons come from the screen's layout.
-pub fn build_entry<'a>(s: &'a Screen, now: u32, idle_ms: u32, frame: &mut Frame<'a>) {
+/// `now`). The caption and the corner chevrons come from the screen's layout.
+pub fn build_entry<'a>(s: &'a Screen, now: u32, frame: &mut Frame<'a>) {
     let Some((glyphs, states)) = s.entry_slots() else { return };
     let n = glyphs.len() as i32;
     let x0 = CENTER_X - (n - 1) * RING_PITCH / 2;
@@ -142,7 +123,7 @@ pub fn build_entry<'a>(s: &'a Screen, now: u32, idle_ms: u32, frame: &mut Frame<
     for (pts, x) in [(&MINUS, lx), (&MINUS, rx), (&PLUS_UPRIGHT, rx)] {
         frame.shape(pts, Xform::at(x, cy), ShapeMode::Stroke { hw: SIGN_HW_Q8 }, hint, 255);
     }
-    let (text, alpha) = entry_hint(now, idle_ms);
+    let (text, alpha) = entry_hint(now);
     frame.text(TextRun {
             text,
             // The 16 px caps face (the regular 16 tier is digits only).
@@ -263,47 +244,22 @@ mod tests {
     /// fades, on the wall clock; a still stretch reports how long it lasts.
     #[test]
     fn the_entry_hint_swaps_every_five_seconds() {
-        const IDLE: u32 = 60_000; // long past the last press
-        assert_eq!(entry_hint(0, IDLE), (ENTRY_HINTS[0], 255), "t = 0 shows the first hint in full");
-        assert_eq!(entry_hint(4_000, IDLE), (ENTRY_HINTS[0], 255));
-        let (t, a) = entry_hint(4_550, IDLE);
+        assert_eq!(entry_hint(0), (ENTRY_HINTS[0], 255), "t = 0 shows the first hint in full");
+        assert_eq!(entry_hint(4_000), (ENTRY_HINTS[0], 255));
+        let (t, a) = entry_hint(4_550);
         assert!(t == ENTRY_HINTS[0] && a < 255 && a > 0, "fading out");
-        assert_eq!(entry_hint(4_700, IDLE).1, 0, "the swap point");
-        assert_eq!(entry_hint(5_000, IDLE), (ENTRY_HINTS[1], 255));
-        assert_eq!(entry_hint(10_000, IDLE), (ENTRY_HINTS[0], 255), "and back");
-        assert_eq!(entry_hint_still_for(0, IDLE), 4_400);
-        assert_eq!(entry_hint_still_for(4_500, IDLE), 0, "inside a fade: paint every frame");
-        assert_eq!(entry_hint_still_for(5_000, IDLE), 4_400);
+        assert_eq!(entry_hint(4_700).1, 0, "the swap point");
+        assert_eq!(entry_hint(5_000), (ENTRY_HINTS[1], 255));
+        assert_eq!(entry_hint(10_000), (ENTRY_HINTS[0], 255), "and back");
+        assert_eq!(entry_hint_still_for(0), 4_400);
+        assert_eq!(entry_hint_still_for(4_500), 0, "inside a fade: paint every frame");
+        assert_eq!(entry_hint_still_for(5_000), 4_400);
         // Still exactly until the next fade begins.
         for now in (0..20_000).step_by(50) {
-            let still = entry_hint_still_for(now, IDLE);
+            let still = entry_hint_still_for(now);
             if still > 0 {
-                assert_eq!(entry_hint(now, IDLE), entry_hint(now + still - 1, IDLE), "at {now}");
-                assert!(entry_hint(now + still + 30, IDLE).1 < 255, "fading just after, at {now}");
-            }
-        }
-    }
-
-    /// Within a second of a press the hint never fades (the wait cannot
-    /// draw while a button is down, so a fade there stutters): it cuts over
-    /// at the slot boundary, and nothing changes before the cut or the end
-    /// of the quiet, so no frame is drawn in between.
-    #[test]
-    fn while_dialling_the_hint_cuts_instead_of_fading() {
-        for idle in [0, 300, ENTRY_HINT_QUIET_MS - 1] {
-            assert_eq!(entry_hint(4_550, idle), (ENTRY_HINTS[0], 255), "no fade-out at idle {idle}");
-            assert_eq!(entry_hint(4_699, idle), (ENTRY_HINTS[0], 255));
-            assert_eq!(entry_hint(4_700, idle), (ENTRY_HINTS[1], 255), "the cut");
-            assert_eq!(entry_hint(4_850, idle), (ENTRY_HINTS[1], 255), "no fade-in");
-        }
-        assert_eq!(entry_hint_still_for(4_500, 0), 200, "wake for the cut");
-        assert_eq!(entry_hint_still_for(1_000, 400), 600, "or for the end of the quiet");
-        for idle in (0..ENTRY_HINT_QUIET_MS).step_by(37) {
-            for now in (0..12_000).step_by(41) {
-                let still = entry_hint_still_for(now, idle);
-                assert!(still > 0, "the quiet never paints frame by frame");
-                let span = still.min(ENTRY_HINT_QUIET_MS - idle) - 1;
-                assert_eq!(entry_hint(now, idle), entry_hint(now + span, idle + span), "at {now}/{idle}");
+                assert_eq!(entry_hint(now), entry_hint(now + still - 1), "at {now}");
+                assert!(entry_hint(now + still + 30).1 < 255, "fading just after, at {now}");
             }
         }
     }

@@ -1131,16 +1131,33 @@ fn negative_progress_bar_clamps_above_100_pct() {
 fn positive_the_entry_rows_keep_drawing_while_they_wait() {
     // Owner 2026-10-15: the hint between an entry row's chevrons swaps
     // between CONFIRM (BOTH) and BACK (HOLD LEFT), so the row must keep
-    // drawing during the input wait (`show_waiting`, the ambient presenter),
-    // not be painted once and left: a swap that never repaints never shows.
-    for (src, sig, call) in [
-        (PIN_SRC, "fn px_pin_wait(", "px_pin_wait(&pin, pos, &mut idle)"),
-        (WIZARD_SRC, "fn px_letter_wait(", "px_letter_wait(title, &buf, len, &mut idle)"),
+    // drawing during the input wait, through presses (the timestamped input
+    // path, `EntryWait`), not be painted once and left. One wait object per
+    // dialog, created before the loop, so its input state and queued taps
+    // survive from one event to the next.
+    for (src, fn_sig, sig, new, call) in [
+        (
+            PIN_SRC,
+            "pub fn enter_pin() -> PinEntryResult {",
+            "fn px_pin_wait(",
+            "let mut px = PxWait::new();",
+            "px_pin_wait(&mut px, &pin, pos, &mut idle)",
+        ),
+        (
+            WIZARD_SRC,
+            "fn enter_single_word(title: &str) -> EnterWordResult {",
+            "fn px_letter_wait(",
+            "let mut px = PxLetterWait::new();",
+            "px_letter_wait(&mut px, title, &buf, len, &mut idle)",
+        ),
     ] {
         let body = src.split(sig).nth(1).unwrap_or_else(|| panic!("{sig} must exist"));
         let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
-        assert!(body.contains("super::px::screens::show_waiting(&row, idle)"), "{sig}");
-        assert!(src.contains(call), "the row's loop must wait through {sig}");
+        assert!(body.contains("match px.wait(&row, idle) {"), "{sig}");
+        let f = src.split(fn_sig).nth(1).unwrap_or_else(|| panic!("{fn_sig} must exist"));
+        let (new_at, loop_at) = (f.find(new).expect("the wait is created"), f.find("loop {").expect("a loop"));
+        assert!(new_at < loop_at, "{fn_sig}: one wait per dialog, before the loop");
+        assert!(f[loop_at..].contains(call), "the loop must wait through {sig}");
     }
     // The paint-once presenters must not come back on either row.
     assert!(!PIN_SRC.contains("super::px::screens::show(&row)"));

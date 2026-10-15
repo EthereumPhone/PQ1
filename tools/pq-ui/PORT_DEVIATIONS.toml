@@ -44,7 +44,10 @@
 #     300 ms fades), on the wall clock so a press neither restarts it nor
 #     re-fades it — still not the reference's 18 s - / + / ENTER / BACK-NEXT
 #     rotation, and still the legacy gestures. The row keeps drawing through
-#     its input wait for that (`show_waiting`), sleeping between fades;
+#     its input wait for that: on the timestamped input path (the SysTick
+#     sampler + InputFsm, read by `input::EntryGrammar` into the legacy
+#     events), so the fade runs through presses; it paints only while
+#     something moves;
 #   * seed words: drawn by the constant-time cell run (fixed 14 px cells,
 #     each glyph centred in its cell) - a monospaced setting of the
 #     proportional Aileron face, F-24; three pages of eight words (the

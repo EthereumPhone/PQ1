@@ -96,12 +96,15 @@ pub fn enter_pin() -> PinEntryResult {
     // forever. Only a real button event (below, inside the loop) counts
     // as user activity, matching the `confirm()` contract.
 
+    // The pixel row's input wait, one for the whole dialog (owner
+    // 2026-10-15): it keeps the row drawing through presses.
+    let mut px = PxWait::new();
+
     loop {
         let mut idle = || timeout::is_idle();
-        // The pixel row keeps drawing for the whole wait (its hint swaps,
-        // owner 2026-10-15); `None` = it could not paint: the page, and a
-        // plain wait.
-        let waited = match px_pin_wait(&pin, pos, &mut idle) {
+        // `None` = the pixel row could not be drawn: the page, and a plain
+        // wait.
+        let waited = match px_pin_wait(&mut px, &pin, pos, &mut idle) {
             Some(waited) => waited,
             None => {
                 render_pin_screen(&pin, pos);
@@ -182,19 +185,33 @@ pub fn enter_pin() -> PinEntryResult {
     PinEntryResult::Pin(*b"00000000")
 }
 
+/// The pixel row's input wait for one entry dialog (nothing without the
+/// pixel UI).
+#[cfg(all(feature = "ui-px", not(feature = "e2e-test")))]
+use super::px::screens::EntryWait as PxWait;
+#[cfg(all(not(feature = "ui-px"), not(feature = "e2e-test")))]
+struct PxWait;
+#[cfg(all(not(feature = "ui-px"), not(feature = "e2e-test")))]
+impl PxWait {
+    fn new() -> Self {
+        Self
+    }
+}
+
 /// Port step 4: the design's PIN row (eight rings, the active one dialing its
 /// digit, entered digits masked as the page masks them), shown and kept
 /// drawing for the whole input wait, so its hint can swap between CONFIRM
-/// (BOTH) and BACK (HOLD LEFT). `None` when the pixel UI could not paint it:
-/// the caller paints the 16x4 page and waits itself.
+/// (BOTH) and BACK (HOLD LEFT) even while the user dials. `None` when the
+/// pixel UI could not paint it: the caller paints the 16x4 page and waits.
 #[cfg(all(feature = "ui-px", not(feature = "e2e-test")))]
 fn px_pin_wait(
+    px: &mut PxWait,
     pin: &[u8; PIN_LEN],
     pos: usize,
     idle: &mut dyn FnMut() -> bool,
 ) -> Option<Option<(Button, Press)>> {
     let row = super::px::status_map::pin_row(super::px::screens::pin_caption(), pin, pos);
-    match super::px::screens::show_waiting(&row, idle) {
+    match px.wait(&row, idle) {
         super::px::screens::Waited::NoAtlas => None,
         super::px::screens::Waited::Event(ev) => Some(ev),
     }
@@ -202,6 +219,7 @@ fn px_pin_wait(
 
 #[cfg(all(not(feature = "ui-px"), not(feature = "e2e-test")))]
 fn px_pin_wait(
+    _px: &mut PxWait,
     _pin: &[u8; PIN_LEN],
     _pos: usize,
     _idle: &mut dyn FnMut() -> bool,

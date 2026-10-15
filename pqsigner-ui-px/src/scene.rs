@@ -997,8 +997,7 @@ impl Anim {
             return Some(now.wrapping_add(33));
         }
         if l.cycle {
-            let still = crate::rows::entry_hint_still_for(now, now.wrapping_sub(self.idle_since));
-            return Some(now.wrapping_add(still.max(16)));
+            return Some(now.wrapping_add(crate::rows::entry_hint_still_for(now).max(16)));
         }
         None
     }
@@ -1019,7 +1018,7 @@ impl Anim {
         if !(l.cycle && !l.sweep && !l.hint && !l.band && quiet) {
             return None;
         }
-        let still = crate::rows::entry_hint_still_for(now, now.wrapping_sub(self.idle_since));
+        let still = crate::rows::entry_hint_still_for(now);
         (still > 0).then(|| now.wrapping_add(still))
     }
 
@@ -1072,7 +1071,7 @@ impl Anim {
                     push_texts(frame, &self.cur, 0, a);
                 }
                 Some(Kind::Entry) => {
-                    crate::rows::build_entry(&self.cur, now, now.wrapping_sub(self.idle_since), frame);
+                    crate::rows::build_entry(&self.cur, now, frame);
                     push_texts(frame, &self.cur, 0, a_in.max(1));
                 }
                 Some(Kind::Words) => {
