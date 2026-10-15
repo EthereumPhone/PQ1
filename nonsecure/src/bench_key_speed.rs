@@ -210,6 +210,25 @@ fn main() -> ! {
         a.cycles, a.ms
     );
 
+    // DVT checklist 5.5 (opt-in, `BENCH_RESIDUE` env at build time): park
+    // unlocked with master + slot keys cached, then LOCK and park again, so
+    // SWD can dump secure SRAM in both states. The host advances each park by
+    // writing `RESIDUE_GO` (address from `nm`) over SWD. No semihosting while
+    // parked: a debugger detach would otherwise reset-loop the board.
+    if option_env!("BENCH_RESIDUE").is_some() {
+        residue_park(1, "unlocked, master+slot(1,1) cached, after first sign");
+        // From here on no semihosting: the probe has detached by now.
+        let st = nsc_api::lock();
+        let unl = nsc_api::is_unlocked() as u32;
+        // SAFETY: single-threaded NS; read back by the host over SWD.
+        unsafe {
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(RESIDUE_LOCK_ST), st | (unl << 16) | 0xA500_0000);
+        }
+        loop {
+            cortex_m::asm::nop();
+        }
+    }
+
     // ---- B. N subsequent signs on chain 1: Type 2 only (slot cached) ----
     const N: u32 = 5;
     let mut total_b: u64 = 0;
@@ -269,4 +288,21 @@ fn main() -> ! {
     hprintln!("[NS][bench] === PASS ===");
     debug::exit(debug::EXIT_SUCCESS);
     loop {}
+}
+
+/// Host-written release flag for [`residue_park`] (DVT checklist 5.5).
+#[no_mangle]
+static mut RESIDUE_GO: u32 = 0;
+/// `0xA5uu_ssss`: CMD_LOCK status (low 16) and `is_unlocked` (bits 16..23).
+#[no_mangle]
+static mut RESIDUE_LOCK_ST: u32 = 0;
+
+fn residue_park(stage: u32, what: &str) {
+    if stage == 1 {
+        hprintln!("[NS][residue] PARK stage={} ({}) — write RESIDUE_GO={} to continue", stage, what, stage);
+    }
+    // SAFETY: single-threaded NS; the host writes this word over SWD.
+    while unsafe { core::ptr::read_volatile(core::ptr::addr_of!(RESIDUE_GO)) } < stage {
+        cortex_m::asm::nop();
+    }
 }
