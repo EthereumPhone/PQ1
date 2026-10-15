@@ -618,9 +618,10 @@ fn positive_tz2_locks_security_config_after_enabling_sau() {
         );
     }
 
-    // GTZC2 (RTC-domain: TAMP/BKP) must NOT be locked — it is unconfigured
-    // on this branch (tracked TAMP/GTZC2 follow-up), and locking it would
-    // freeze its NS reset default. There is exactly ONE TZSC CR lock write
+    // GTZC2 (SPI3/LPUART1/I2C3/LPTIM/ADC4/DAC1/...) must NOT be locked — it
+    // is unconfigured on this branch, and locking it would freeze its NS
+    // reset default. (TAMP/RTC are not GTZC2 peripherals: they are secured
+    // by their own SECCFGR in `secure_system_controllers`.) There is exactly ONE TZSC CR lock write
     // (GTZC1); a second would indicate a GTZC2 lock crept in. ("GTZC2"
     // appears in comments, so count the actual lock write instead.)
     assert_eq!(
@@ -881,6 +882,7 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
         "| SECCFGR1_I2C2_BIT",
         "| SECCFGR1_BOARD_IMAGE",
         "| SECCFGR1_UCPD1_BIT",
+        "| SECCFGR1_CRS_BIT",
         "| SECCFGR1_TIM2_BIT",
         "| SECCFGR1_TIM3_BIT;",
     ] {
@@ -894,6 +896,9 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
     // the secure world owns it at boot. A cleared bit has no functional symptom
     // on either board — only NS reachability changes.
     assert!(SAU_SRC.contains("const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;"));
+    // CRS (bit 15) trims HSI48, the USB and TRNG kernel clock; the secure
+    // world owns it (DVT1 row 11.2 fix), so NS must not reach it.
+    assert!(SAU_SRC.contains("const SECCFGR1_CRS_BIT: u32 = 1 << 15;"));
     // TIM2 (bit 0) carries the production-mandatory consumption mask. Leaving
     // it unattributed lets NS clear TIM2_CR1.CEN and flat-line the PWM with no
     // secure-side symptom — the secure world writes CCR1 and never reads back
@@ -908,10 +913,10 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
     assert!(SAU_SRC.contains("const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;"));
     assert!(SAU_SRC.contains("let seccfgr1 = SECCFGR1_IMAGE;"));
     for arm in [
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 19),",                        // iota2, no iwdg
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",             // iota2 + iwdg
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",            // pq1, no iwdg
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),", // pq1 + iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),",                        // iota2, no iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),",             // iota2 + iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),",            // pq1, no iwdg
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),", // pq1 + iwdg
     ] {
         // EXACTLY once, not merely present. With the trailing comma these four
         // are mutually non-containing; without it the two iota2 arms were
@@ -944,6 +949,7 @@ fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
         "| SECCFGR1_I2C2_BIT",
         "| SECCFGR1_BOARD_IMAGE",
         "| SECCFGR1_UCPD1_BIT",
+        "| SECCFGR1_CRS_BIT",
         "| SECCFGR1_TIM2_BIT",
         "| SECCFGR1_TIM3_BIT;",
     ] {
@@ -961,8 +967,8 @@ fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
     // Found by the 2026-08-31 adversarial review; it was introduced by the
     // commit that added the pq1 arms.
     for arm in [
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),",
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),",
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),",
+        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),",
     ] {
         assert_eq!(
             SAU_SRC.matches(arm).count(),
@@ -2032,4 +2038,82 @@ fn negative_pendsv_lowest_priority_claims_have_backing_code() {
              programs SHPR3 — that exact drift was #729"
         );
     }
+}
+
+/// Byte range of a secure-world function body, for order assertions.
+/// `close` is the function's closing line: `"\n    }\n"` inside `mod stm32`,
+/// `"\n}\n"` at the top level.
+fn fn_body<'a>(src: &'a str, sig: &str, close: &str) -> &'a str {
+    let start = src.find(sig).unwrap_or_else(|| panic!("missing `{sig}`"));
+    let rest = &src[start..];
+    let end = rest.find(close).expect("fn end");
+    &rest[..end]
+}
+
+#[test]
+fn negative_system_controllers_secured_rcc_pwr_tamp_rtc_exti() {
+    // DVT1 2026-10-15, checklist row 3.5: RCC/PWR/TAMP/EXTI_SECCFGR all read
+    // 0 on silicon and non-secure code wrote HSI48ON, PPRE3, PVDE, DBP,
+    // TAMP_CR1/FLTCR and TAMP_BKP0R (the BHK register). Every image value is
+    // pinned to the SVD field layout, by exact text.
+    for needle in [
+        "const RCC_S: u32 = 0x5602_0C00;",
+        "const PWR_S: u32 = 0x5602_0800;",
+        "const TAMP_S: u32 = 0x5600_7C00;",
+        "const RTC_S: u32 = 0x5600_7800;",
+        "const EXTI_S: u32 = 0x5602_2000;",
+        "const RCC_SECCFGR_IMAGE: u32 = 0x1FFF;",
+        "const PWR_SECCFGR_IMAGE: u32 = 0xF0FF;",
+        "const RTC_SECCFGR_IMAGE: u32 = (1 << 15) | (1 << 14) | (1 << 13) | 0xF;",
+        "const TAMP_SECCFGR_IMAGE: u32 = (1 << 31) | (1 << 15) | (32 << 16) | 32;",
+        "const TAMP_SECCFGR_BHKLOCK: u32 = 1 << 30;",
+        "const EXTI_SECCFGR1_ALL: u32 = 0x00FF_FFFF;",
+        "const EXTI_LOCKR_LOCK: u32 = 1 << 0;",
+        "const RCC_APB3ENR_RTCAPBEN: u32 = 1 << 21;",
+        "const PWR_DBPR_DBP: u32 = 1 << 0;",
+        "Reg32::new(RCC_S + 0x110)",
+        "Reg32::new(PWR_S + 0x30)",
+        "Reg32::new(RTC_S + 0x20)",
+        "Reg32::new(TAMP_S + 0x20)",
+        "Reg32::new(EXTI_S + 0x14)",
+        "Reg32::new(EXTI_S + 0x70)",
+        // Every write is read back, fail-closed, in release too.
+        "verify_or_halt(rcc_seccfgr.read(), RCC_SECCFGR_IMAGE);",
+        "verify_or_halt(pwr_seccfgr.read(), PWR_SECCFGR_IMAGE);",
+        "verify_or_halt(rtc_seccfgr.read(), RTC_SECCFGR_IMAGE);",
+        // BHKLOCK is sticky across reset and owned by bhk.rs: masked out.
+        "verify_or_halt(tamp_seccfgr.read() & !TAMP_SECCFGR_BHKLOCK, TAMP_SECCFGR_IMAGE);",
+        "verify_or_halt(exti_seccfgr1.read(), EXTI_SECCFGR1_ALL);",
+        "verify_or_halt(exti_lockr.read() & EXTI_LOCKR_LOCK, EXTI_LOCKR_LOCK);",
+        // set_bits, never write: lcd_te may have claimed its TE line first.
+        "exti_seccfgr1.set_bits(EXTI_SECCFGR1_ALL);",
+        "tamp_seccfgr.modify(|v| (v & TAMP_SECCFGR_BHKLOCK) | TAMP_SECCFGR_IMAGE);",
+    ] {
+        assert!(SAU_SRC.contains(needle), "sau.rs must contain `{needle}`");
+    }
+    assert!(
+        !SAU_SRC.contains("exti_seccfgr1.write("),
+        "EXTI_SECCFGR1 must be OR-ed: a whole-register write clears lcd_te's TE line"
+    );
+
+    // The backup-domain prerequisites come before the TAMP/RTC writes,
+    // otherwise those writes are silently dropped and the readback halts.
+    let body = fn_body(SAU_SRC, "pub fn secure_system_controllers()", "\n    }\n");
+    let pos = |n: &str| body.find(n).unwrap_or_else(|| panic!("missing `{n}`"));
+    assert!(pos("rcc_apb3enr.set_bits(RCC_APB3ENR_RTCAPBEN);") < pos("rtc_seccfgr.write("));
+    assert!(pos("pwr_dbpr.set_bits(PWR_DBPR_DBP);") < pos("tamp_seccfgr.modify("));
+    assert!(pos("pwr_dbpr.set_bits(PWR_DBPR_DBP);") < pos("pwr_seccfgr.write("));
+    assert!(
+        pos("verify_or_halt(exti_seccfgr1.read()") < pos("exti_lockr.set_bits("),
+        "the EXTI attribution must read back before it is frozen"
+    );
+
+    // init(): TZSC image, then the system controllers, then the lock.
+    let init = fn_body(SAU_SRC, "pub fn init()", "\n}\n");
+    let gtzc = init.find("stm32::configure_gtzc();").expect("configure_gtzc call");
+    let sys = init
+        .find("stm32::secure_system_controllers();")
+        .expect("init() must call stm32::secure_system_controllers() (DVT1 row 3.5)");
+    let lock = init.find("stm32::lock_security_config();").expect("lock call");
+    assert!(gtzc < sys && sys < lock);
 }

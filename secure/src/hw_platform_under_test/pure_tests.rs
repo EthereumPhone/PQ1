@@ -279,11 +279,15 @@ fn positive_flash_icache_secure_alias() {
 // ═════════════════════════════════════════════════════════════════════
 
 #[test]
-fn positive_rcc_ns_alias_for_clock_setup() {
-    // CLAUDE.md / RCC: NS alias is intentional for clock setup
-    // because PWR / FLASH / ICACHE live behind their own secure aliases
-    // and RCC clock-source selection is bank-agnostic.
-    assert!(RCC_SRC.contains("const RCC: u32 = 0x4602_0C00;"));
+fn negative_rcc_driver_uses_the_secure_alias() {
+    // This test used to pin the NS alias (0x4602_0C00), on the theory that
+    // RCC clock-source selection is bank-agnostic. It is only while
+    // RCC_SECCFGR is 0. `sau::secure_system_controllers` now sets it (DVT1
+    // row 3.5), after which a clock-config write through the NS alias from
+    // secure code is silently dropped — the trap measured on SAES. Pin the
+    // secure alias so `rcc::set_hsi48`, which runs after SAU, keeps working.
+    assert!(RCC_SRC.contains("const RCC: u32 = 0x5602_0C00;"));
+    assert!(!RCC_SRC.contains("const RCC: u32 = 0x4602_0C00;"));
 }
 
 #[test]
@@ -303,9 +307,14 @@ fn positive_rcc_pll1_dividers_target_160mhz() {
 
 #[test]
 fn positive_rcc_hsi48_for_rng_clock() {
-    // RNG requires HSI48 on STM32U5. CCIPR5 must point at it.
+    // RNG requires HSI48 on STM32U5, selected by RCC_CCIPR2.RNGSEL [13:12].
+    // The mux write used to hit RCC_CCIPR1 (0xE0) bits [1:0], USART1SEL.
     assert!(RCC_SRC.contains("const HSI48ON: u32 = 1 << 12;"));
     assert!(RCC_SRC.contains("const HSI48RDY: u32 = 1 << 13;"));
+    assert!(RCC_SRC.contains("ccipr2: Reg32::new(RCC + 0xE4),"));
+    assert!(RCC_SRC.contains("const RNGSEL_MASK: u32 = 0b11 << 12;"));
+    assert!(RCC_SRC.contains("REG.ccipr2.clear_bits(RNGSEL_MASK);"));
+    assert!(!RCC_SRC.contains("Reg32::new(RCC + 0xE0)"), "0xE0 is CCIPR1, not the RNG mux");
 }
 
 #[test]

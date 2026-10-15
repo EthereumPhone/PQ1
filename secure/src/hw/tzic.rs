@@ -101,7 +101,8 @@ static mut LAST_SR: [u32; 4] = [0; 4];
 /// peripherals nothing in the secure world currently drives.
 ///
 /// RCC_AHB2ENR1 bit positions per CMSIS `stm32u585xx.h`:
-/// AES=16, PKA=19, SAES=20.
+/// AES=16, PKA=19, SAES=20. Also CRS (APB1ENR1 bit 24), secured in TZSC
+/// since the DVT1 row 11.2 fix.
 #[cfg(feature = "e2e-test")]
 pub fn enable_test_target_clocks() {
     // RCC is on AHB3 at `0x5602_0C00`; AHB2ENR1 is offset `0x8C`.
@@ -109,6 +110,11 @@ pub fn enable_test_target_clocks() {
     // single-threaded boot path.
     let rcc_ahb2enr1 = unsafe { Reg32::new(0x5602_0C00 + 0x8C) };
     rcc_ahb2enr1.set_bits((1 << 16) | (1 << 19) | (1 << 20));
+    // CRS (APB1ENR1 @ 0x9C, CRSEN = bit 24): clocked by `hw::usb_hw` on USB
+    // images only, and the gtzc image has no USB.
+    // SAFETY: real 4-byte-aligned MMIO register, as above.
+    let rcc_apb1enr1 = unsafe { Reg32::new(0x5602_0C00 + 0x9C) };
+    rcc_apb1enr1.set_bits(1 << 24);
     cortex_m::asm::dsb();
 }
 

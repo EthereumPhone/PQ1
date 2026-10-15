@@ -210,8 +210,10 @@ mod stm32 {
     //
     // The pre-fix comment claimed "AHB2 peripherals are governed by a
     // SECOND, separate controller GTZC2_TZSC" — that was a
-    // misdiagnosis. GTZC2 on STM32U585 governs *RTC-domain*
-    // peripherals (TAMP, BKP-SRAM, etc., in `GTZC2_PERIPH_REG{1,2}`).
+    // misdiagnosis. GTZC2 on STM32U585 governs the SmartRun-domain
+    // peripherals (SPI3, LPUART1, I2C3, LPTIM1/3/4, OPAMP, COMP, ADC4,
+    // VREFBUF, DAC1, ADF1 — SVD `GTZC2_TZSC_SECCFGR1`). TAMP and RTC are in
+    // neither TZSC; they have their own `*_SECCFGR`.
     // The AHB2 crypto block + USB OTG FS all live in GTZC1's SECCFGR3.
     //
     // Base addr: `GTZC_TZSC1_BASE_S = 0x5003_2400` (= PERIPH_BASE_S
@@ -392,6 +394,12 @@ mod stm32 {
     //   defensively so a stale NS driver cannot poke the peripheral.
     // - SAES (bit 15): Tier-1 KDF (DHUK / BHK derivation) — the
     //   single most secret-bearing peripheral on the bus.
+    // CRS (SECCFGR1 bit 15, `GTZC_CFGR1_CRS_Pos`): the clock recovery system
+    // that trims HSI48 to the host's USB SOF. HSI48 is also the TRNG kernel
+    // clock. The secure world enables and owns it (`hw::usb_hw`); NS has no
+    // CRS code (`grep -rn CRS nonsecure/src` finds only the gtzc probe).
+    const SECCFGR1_CRS_BIT: u32 = 1 << 15;
+
     const SECCFGR3_AES_BIT:  u32 = 1 << 11;
     const SECCFGR3_HASH_BIT: u32 = 1 << 12;
     const SECCFGR3_RNG_BIT:  u32 = 1 << 13;
@@ -471,9 +479,9 @@ mod stm32 {
         // NS reset default; we don't currently use them from the
         // secure side, and they're irrelevant to the threat model.
         //
-        // TAMP lives in GTZC2 (a different controller); its SECCFGR
-        // setup is owed in a follow-up (the `tamp` feature flag is
-        // log-only-on-this-branch per CLAUDE.md anyway).
+        // RCC, PWR, TAMP, RTC and EXTI are NOT TZSC peripherals: each
+        // carries its own `*_SECCFGR`. They are secured separately, by
+        // `secure_system_controllers()` below (DVT1 row 3.5).
         // ---- C3: the register image is FEATURE-CONDITIONAL — pin it ----
         //
         // Pinned so a feature-combo change to the TZSC image is a build failure
@@ -514,24 +522,25 @@ mod stm32 {
             | SECCFGR1_I2C2_BIT
             | SECCFGR1_BOARD_IMAGE
             | SECCFGR1_UCPD1_BIT
+            | SECCFGR1_CRS_BIT
             | SECCFGR1_TIM2_BIT
             | SECCFGR1_TIM3_BIT;
 
         #[cfg(all(feature = "iwdg", not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),
             "TZSC_SECCFGR1 IWDG image drifted — IWDG must be Secure alongside the SE buses. \
              Source closure is not #79 silicon denial evidence."
         );
         #[cfg(all(not(feature = "iwdg"), not(feature = "board-pq1")))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),
             "TZSC_SECCFGR1 image drifted — I2C1+I2C2 are the SE buses (invariant #3). \
              Update the pin ONLY with a matching gtzc-enforcement-hw receipt."
         );
         #[cfg(all(feature = "iwdg", feature = "board-pq1"))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),
             "TZSC_SECCFGR1 pq1+IWDG image drifted — on pq1 the SE050 has its OWN bus (I2C4, \
              bit 16) and it MUST be Secure: a clear bit hands the non-secure world the SE050 \
              bus with no functional symptom whatsoever. Update ONLY with a matching \
@@ -539,7 +548,7 @@ mod stm32 {
         );
         #[cfg(all(not(feature = "iwdg"), feature = "board-pq1"))]
         const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 16) | (1 << 19),
+            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),
             "TZSC_SECCFGR1 pq1 image drifted — on pq1 the SE050 has its OWN bus (I2C4, bit 16) \
              and it MUST be Secure: a clear bit hands the non-secure world the SE050 bus with \
              no functional symptom whatsoever. Update ONLY with a matching gtzc-enforcement-hw \
@@ -628,6 +637,112 @@ mod stm32 {
         crate::hw::tzic::configure(seccfgr1, seccfgr2, seccfgr3, 0);
     }
 
+    // ---- System controllers: RCC / PWR / TAMP / RTC / EXTI (DVT1 row 3.5) ----
+    //
+    // None of these is a TZSC peripheral; each has its own security register,
+    // and all five reset to 0 = every function non-secure. Until 2026-10-15
+    // nothing wrote them, and the DVT1 run showed non-secure code writing the
+    // TRNG oscillator enable, an APB prescaler, the PVD, the backup-domain
+    // write enable, the tamper enables and TAMP_BKP0R (the BHK register). By
+    // RM0456 the same zeros also left VOS, PLL1 and SYSCLK (software
+    // under-volt / over-clock fault injection) and RCC_BDCR.BDRST (backup
+    // domain reset) to the non-secure world.
+    //
+    // The non-secure image needs none of it: `nonsecure/src/usb/mod.rs`
+    // `enable()` is empty because `hw::usb_hw::init` clocks OTG, sets
+    // VDDUSB and muxes the pins from here; OTG's own clock-enable bit stays
+    // NS-writable because OTG is NS in TZSC. Every field is therefore secured.
+    // Addresses and field layouts: STM32U585 SVD (CubeProgrammer) / RM0456.
+    const RCC_S: u32 = 0x5602_0C00;
+    const PWR_S: u32 = 0x5602_0800;
+    const TAMP_S: u32 = 0x5600_7C00;
+    const RTC_S: u32 = 0x5600_7800;
+    const EXTI_S: u32 = 0x5602_2000;
+
+    const RCC_AHB3ENR_PWREN: u32 = 1 << 2; // RCC_AHB3ENR @ +0x94
+    const RCC_APB3ENR_RTCAPBEN: u32 = 1 << 21; // RCC_APB3ENR @ +0xA8
+    const PWR_DBPR_DBP: u32 = 1 << 0; // PWR_DBPR @ +0x28
+
+    /// RCC_SECCFGR @ +0x110: HSI, HSE, MSI, LSI, LSE, SYSCLK (also guards
+    /// PWR_VOSR.VOS), PRESC, PLL1, PLL2, PLL3, ICLK, HSI48, RMVF = bits 0..12.
+    const RCC_SECCFGR_IMAGE: u32 = 0x1FFF;
+    /// PWR_SECCFGR @ +0x30: WUP1..8 (bits 0..7), LPM (12), VDM (13: PVD,
+    /// PVM, VDDUSB), VB (14: backup domain, DBPR), APC (15).
+    const PWR_SECCFGR_IMAGE: u32 = 0xF0FF;
+    /// RTC_SECCFGR @ +0x20: SEC, INITSEC, CALSEC, TSSEC, WUTSEC, ALRBSEC,
+    /// ALRASEC. There is no RTC driver; securing it closes RCC_BDCR to NS.
+    const RTC_SECCFGR_IMAGE: u32 = (1 << 15) | (1 << 14) | (1 << 13) | 0xF;
+    /// TAMP_SECCFGR @ +0x20: TAMPSEC (31), CNT1SEC (15), and
+    /// BKPRWSEC = BKPWSEC = 32 (bits 7:0, 23:16), so all 32 backup registers
+    /// are secure read/write (BKP0..7 hold the BHK on `bhk` builds).
+    /// BHKLOCK (bit 30) is NOT part of the image: it is `bhk.rs`'s, sticky,
+    /// and survives a system reset, so it is masked out of the readback.
+    const TAMP_SECCFGR_IMAGE: u32 = (1 << 31) | (1 << 15) | (32 << 16) | 32;
+    const TAMP_SECCFGR_BHKLOCK: u32 = 1 << 30;
+    /// EXTI_SECCFGR1 @ +0x14: every event line. NS has no EXTI user; with a
+    /// line secure, its EXTICR port select is secure too, so NS can no longer
+    /// route the secure button pins to an interrupt of its own. The SVD lists
+    /// SEC0..SEC25, but the U585 implements lines 0..23 only: on DVT1 a write
+    /// of 0x03FF_FFFF reads back 0x00FF_FFFF (2026-10-15), so the exact
+    /// readback below would halt every boot with the SVD value.
+    const EXTI_SECCFGR1_ALL: u32 = 0x00FF_FFFF;
+    /// EXTI_LOCKR @ +0x70: LOCK freezes EXTI_SECCFGR/PRIVCFGR until reset.
+    const EXTI_LOCKR_LOCK: u32 = 1 << 0;
+
+    /// Secure RCC, PWR, TAMP, RTC and EXTI (DVT1 row 3.5). Called from
+    /// [`super::init`] after the TZSC image and before the lock.
+    ///
+    /// Every write is read back through the unconditional, fail-closed
+    /// [`verify_or_halt`]. Order matters: the TAMP and RTC registers sit in
+    /// the backup domain, so their APB clock (RTCAPBEN) and the backup write
+    /// enable (DBP) must be on first, or the SECCFGR writes are silently
+    /// dropped and the readback halts every boot. DBP stays set (as
+    /// `hw::bhk` and `hw::tamp` leave it); with VBSEC it is secure-only.
+    pub fn secure_system_controllers() {
+        // SAFETY: each address is a 4-byte-aligned security/config register
+        // on the secure alias, owned by the single-threaded boot path.
+        let rcc_ahb3enr = unsafe { Reg32::new(RCC_S + 0x94) };
+        let rcc_apb3enr = unsafe { Reg32::new(RCC_S + 0xA8) };
+        let rcc_seccfgr = unsafe { Reg32::new(RCC_S + 0x110) };
+        let pwr_dbpr = unsafe { Reg32::new(PWR_S + 0x28) };
+        let pwr_seccfgr = unsafe { Reg32::new(PWR_S + 0x30) };
+        let rtc_seccfgr = unsafe { Reg32::new(RTC_S + 0x20) };
+        let tamp_seccfgr = unsafe { Reg32::new(TAMP_S + 0x20) };
+        let exti_seccfgr1 = unsafe { Reg32::new(EXTI_S + 0x14) };
+        let exti_lockr = unsafe { Reg32::new(EXTI_S + 0x70) };
+
+        // Prerequisites: PWR bus clock (already on from `rcc::init`, set
+        // again so this function stands alone), RTC/TAMP APB clock, and the
+        // backup-domain write enable.
+        rcc_ahb3enr.set_bits(RCC_AHB3ENR_PWREN);
+        rcc_apb3enr.set_bits(RCC_APB3ENR_RTCAPBEN);
+        cortex_m::asm::dsb();
+        pwr_dbpr.set_bits(PWR_DBPR_DBP);
+        cortex_m::asm::dsb();
+
+        rcc_seccfgr.write(RCC_SECCFGR_IMAGE);
+        pwr_seccfgr.write(PWR_SECCFGR_IMAGE);
+        rtc_seccfgr.write(RTC_SECCFGR_IMAGE);
+        // Absolute image, carrying BHKLOCK through: the register survives a
+        // system reset, so OR-ing would keep any stale offset field.
+        tamp_seccfgr.modify(|v| (v & TAMP_SECCFGR_BHKLOCK) | TAMP_SECCFGR_IMAGE);
+        // `set_bits`, not `write`: `hw::lcd_te` may already have claimed its
+        // TE line on builds whose `ui::init` runs before SAU.
+        exti_seccfgr1.set_bits(EXTI_SECCFGR1_ALL);
+        cortex_m::asm::dsb();
+
+        verify_or_halt(rcc_seccfgr.read(), RCC_SECCFGR_IMAGE);
+        verify_or_halt(pwr_seccfgr.read(), PWR_SECCFGR_IMAGE);
+        verify_or_halt(rtc_seccfgr.read(), RTC_SECCFGR_IMAGE);
+        verify_or_halt(tamp_seccfgr.read() & !TAMP_SECCFGR_BHKLOCK, TAMP_SECCFGR_IMAGE);
+        verify_or_halt(exti_seccfgr1.read(), EXTI_SECCFGR1_ALL);
+
+        // Freeze the EXTI security attribution only after it reads back.
+        exti_lockr.set_bits(EXTI_LOCKR_LOCK);
+        cortex_m::asm::dsb();
+        verify_or_halt(exti_lockr.read() & EXTI_LOCKR_LOCK, EXTI_LOCKR_LOCK);
+    }
+
     // ---- tz-2 (Trezor-port) lock registers ----
     // SYSCFG @ APB3, secure alias: SYSCFG_BASE_S = PERIPH_BASE_S(0x5000_0000)
     // + APB3 offset(0x0600_0000) + 0x0400 = 0x5600_0400; CSLCKR @ +0x10.
@@ -676,10 +791,11 @@ mod stm32 {
     /// NS-initiated `cc_open_then_reset` USB-C warm reset. `LOCKSVTAIRCR`
     /// freezes the AIRCR *security-config* bits, not the reset trigger.
     ///
-    /// GTZC2 (RTC-domain: TAMP / BKP-SRAM) is intentionally NOT locked —
-    /// it is not configured on this branch (the tracked TAMP/GTZC2
-    /// follow-up); locking an unconfigured controller would freeze its NS
-    /// reset default.
+    /// GTZC2 (SPI3, LPUART1, I2C3, LPTIM1/3/4, ADC4, DAC1, ...) is
+    /// intentionally NOT locked: it is not configured on this branch, and
+    /// locking an unconfigured controller would freeze its NS reset default.
+    /// TAMP/RTC are not GTZC2 peripherals; they are secured through their own
+    /// `*_SECCFGR` in [`secure_system_controllers`], as are RCC/PWR/EXTI.
     pub fn lock_security_config() {
         // SAFETY: core + peripheral security registers, 4-byte aligned,
         // owned exclusively by the single-threaded boot path.
@@ -762,6 +878,11 @@ pub fn init() {
 
     #[cfg(feature = "stm32u585")]
     stm32::configure_gtzc();
+
+    // RCC / PWR / TAMP / RTC / EXTI carry their own security registers
+    // (DVT1 row 3.5); secure them before NS can ever run.
+    #[cfg(feature = "stm32u585")]
+    stm32::secure_system_controllers();
 
     // Disable SAU while configuring.
     SAU.ctrl.write(0);

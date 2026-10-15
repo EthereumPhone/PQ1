@@ -6,8 +6,11 @@
 
 use crate::hw::mmio::Reg32;
 
-// RCC register base (NS alias — AHB3 bus)
-const RCC: u32 = 0x4602_0C00;
+// RCC register base, secure alias (AHB3). Not the NS alias 0x4602_0C00:
+// once `sau::secure_system_controllers` sets RCC_SECCFGR, a clock-config
+// write through the NS alias from secure code is silently dropped
+// (DVT1 row 3.5). `init` runs before SAU either way; `set_hsi48` does not.
+const RCC: u32 = 0x5602_0C00;
 
 // PWR registers (secure alias — PWR is secure by default with TZEN=1,
 // writes via NS alias 0x4602_0800 are silently ignored)
@@ -26,7 +29,7 @@ struct RccRegs {
     pll1divr: Reg32,
     ahb2enr1: Reg32,
     ahb3enr: Reg32,
-    ccipr5: Reg32,
+    ccipr2: Reg32,
     pwr_vosr: Reg32,
     #[cfg(feature = "board-pq1")]
     pwr_ucpdr: Reg32,
@@ -45,7 +48,7 @@ const REG: RccRegs = unsafe {
         pll1divr: Reg32::new(RCC + 0x34),
         ahb2enr1: Reg32::new(RCC + 0x8C),
         ahb3enr: Reg32::new(RCC + 0x94),
-        ccipr5: Reg32::new(RCC + 0xE0),
+        ccipr2: Reg32::new(RCC + 0xE4),
         pwr_vosr: Reg32::new(PWR + 0x0C),
         #[cfg(feature = "board-pq1")]
         pwr_ucpdr: Reg32::new(PWR + 0x2C),
@@ -53,6 +56,9 @@ const REG: RccRegs = unsafe {
         icache_cr: Reg32::new(ICACHE + 0x00),
     }
 };
+
+// RCC_CCIPR2.RNGSEL (bits 13:12): 00 = HSI48.
+const RNGSEL_MASK: u32 = 0b11 << 12;
 
 // RCC_CR bits
 const HSION: u32 = 1 << 8;
@@ -143,7 +149,11 @@ pub unsafe fn init() -> u32 {
     while REG.cr.read() & HSI48RDY == 0 {}
 
     // ---- 6. Select HSI48 as RNG clock source ----
-    REG.ccipr5.clear_bits(0x3);
+    // RCC_CCIPR2.RNGSEL [13:12] = 00 (HSI48). This used to clear bits [1:0]
+    // of offset 0xE0, which is RCC_CCIPR1.USART1SEL, not the RNG mux
+    // (DVT1 2026-10-15; RM0456 §11.8 / SVD). Harmless only because both
+    // reset to 00.
+    REG.ccipr2.clear_bits(RNGSEL_MASK);
 
     // ---- 7. Enable RNG peripheral clock (AHB2ENR1 bit 18) ----
     REG.ahb2enr1.set_bits(1 << 18);

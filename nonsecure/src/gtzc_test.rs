@@ -18,8 +18,8 @@
 //!      access (read returns 0, no fault propagates to NS) and the
 //!      TZIC raises NVIC IRQ 8 in the secure world, which logs the
 //!      offender and bumps `hw::tzic::VIOLATION_COUNT`.
-//!   3. After all 7 probes, read the TZIC counter via the
-//!      `nsc_tzic_status` CMSE veneer. Expected = 7.
+//!   3. After all probes, read the TZIC counter via the
+//!      `nsc_tzic_status` CMSE veneer. Expected = `PROBES.len()`.
 //!   4. Emit a single `[NS][gtzc] === PASS ===` line on success or
 //!      `=== FAIL n=<count> ===` on mismatch.
 //!
@@ -99,6 +99,10 @@ const PROBES: &[Probe] = &[
     Probe { addr: 0x4000_0000, label: "TIM2_CR1"  },
     Probe { addr: 0x4000_0400, label: "TIM3_CR1"  },
     Probe { addr: 0x4000_DC00, label: "UCPD1_CFG1" },
+    // APB1 — CRS (SECCFGR1 bit 15), secured with the 2026-10-15 CRS fix
+    // (DVT1 row 11.2): it trims HSI48, the USB and TRNG kernel clock. NS
+    // alias of `0x5000_6000`; the e2e test clocks enable CRSEN for it.
+    Probe { addr: 0x4000_6000, label: "CRS_CR" },
 ];
 
 /// NS-side entry point under `--features gtzc-test`.
@@ -235,6 +239,7 @@ mod sys_probe {
     const RCC: u32 = 0x4602_0C00;
     const PWR: u32 = 0x4602_0800;
     const TAMP: u32 = 0x4600_7C00;
+    const RTC: u32 = 0x4600_7800;
     const EXTI: u32 = 0x4602_2000;
     const TZSC1: u32 = 0x4003_2400;
     const GPIOA: u32 = 0x4202_0000;
@@ -246,6 +251,8 @@ mod sys_probe {
         W { addr: PWR + 0x30, label: "PWR_SECCFGR", mask: 0 },
         W { addr: TAMP + 0x20, label: "TAMP_SECCFGR", mask: 0 },
         W { addr: EXTI + 0x14, label: "EXTI_SECCFGR1", mask: 0 },
+        W { addr: RTC + 0x20, label: "RTC_SECCFGR", mask: 0 },
+        W { addr: EXTI + 0x70, label: "EXTI_LOCKR", mask: 0 },
         W { addr: GPIOA + 0x30, label: "GPIOA_SECCFGR", mask: 0 },
         W { addr: GPIOB + 0x30, label: "GPIOB_SECCFGR", mask: 0 },
         // Bus clocks the gtzc image leaves off: GPIOA/B (AHB2ENR1 bits 0/1)
@@ -270,8 +277,22 @@ mod sys_probe {
         W { addr: TAMP + 0x00, label: "TAMP_CR1.ITAMP5E", mask: 1 << 20 },
         W { addr: TAMP + 0x100, label: "TAMP_BKP0R", mask: 0xA5A5_5A5A },
         W { addr: TAMP + 0x17C, label: "TAMP_BKP31R", mask: 0xA5A5_5A5A },
-        // EXTI: rising-trigger enable on the button lines 0/1.
+        // RCC fields the 2026-10-15 fix covers that the first run did not
+        // probe. Each is harmless if it moves on this image: MCOSEL (bits
+        // 27:24, SYSCLKSEC; no MCO pin is muxed), PLL1FRACR (PLL1SEC; unused
+        // while PLL1FRACEN=0), LSCOSEL (BDCR bit 25; backup domain, VBSEC +
+        // RTC/TAMP security). BDRST itself is never probed: it would reset
+        // the backup domain.
+        W { addr: RCC + 0x1C, label: "RCC_CFGR1.MCOSEL", mask: 0b0001 << 24 },
+        W { addr: RCC + 0x38, label: "RCC_PLL1FRACR", mask: 0x0000_0008 },
+        W { addr: RCC + 0xF0, label: "RCC_BDCR.LSCOSEL", mask: 1 << 25 },
+        // EXTI: rising-trigger enable on the button lines 0/1, the port
+        // routing of lines 0..3 (EXTICR1), and the attribution itself.
         W { addr: EXTI + 0x00, label: "EXTI_RTSR1.L0L1", mask: 0b11 },
+        W { addr: EXTI + 0x60, label: "EXTI_EXTICR1.L0", mask: 0x01 },
+        W { addr: EXTI + 0x14, label: "EXTI_SECCFGR1(clr)", mask: 0b11 },
+        // RTC attribution (no RTC driver; secured to close RCC_BDCR).
+        W { addr: RTC + 0x20, label: "RTC_SECCFGR(clr)", mask: 1 << 15 },
         // GTZC1 TZSC itself: clearing SECCFGR1 would un-secure I2C1/I2C4/TIMs.
         W { addr: TZSC1 + 0x10, label: "TZSC_SECCFGR1", mask: 0xFFFF_FFFF },
         // GPIO pads the secure world owns (pq1): PA8 LDO2_EN, PA15 SE_RST,
