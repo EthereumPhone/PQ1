@@ -1450,3 +1450,34 @@ last WOTS digit, a nonzero initial sum, an altered target and shifted/narrowed
 FORS windows. Each unchanged endpoint proof must reject at its intended
 theorem; unchanged and value-preserving fixtures must pass. These are
 sensitivity controls, not proofs that every mutated proposition is false.
+
+Paired acceptance in search procedures (2026-10-15): `C10SearchAcceptance`
+now composes those endpoint equalities into WOTS count search, WOTS recovery
+and FORS nonce grinding. The comparison procedures consume `wots_sum`,
+`wots_target` and `fors_zero_field` on the bytes of the current oracle digest.
+Their equivalences reach the original `RawWots`, `RoleGrind` and
+`StatefulGrind` procedures through the existing common-input refinements.
+They preserve the exact result, including bounded exhaustion and the recovery
+zero sentinel, and the complete shared history and call/draw counters. The
+role-based comparisons also preserve the physical-model secret key. Existing
+address/counter bounds remain explicit for the raw WOTS input refinements.
+
+The history premise is `valid_history`, which permits arbitrary prior entries
+and repeated inputs but requires every recorded digest to have 256 bits. The
+initialization theorem establishes it, and the proved shared-oracle coupling
+preserves it on every hash call. Conversion then yields exactly 32 valid bytes,
+with a proved bit/byte round trip. This premise is necessary: an arbitrary
+abstract oracle may return malformed lengths, so these new equivalences are
+not stated for every possible oracle implementation. No empty-history,
+successful-search, independent-trial or desired-result premise is added.
+
+This closes the **EasyCrypt procedural use of the paired acceptance component**;
+it does not establish a cross-kernel search or whole signer/session theorem.
+The supplied pure Rust/Lean SHA backend is still not identified with the
+stateful EasyCrypt oracle or its distribution. Paired-printer interpretation,
+callbacks, physical abort prefixes, cryptographic assumptions and shipment
+remain outside this result. Typed procedural changes exercise the acceptance
+target, search budget, returned counter, rejection sentinel, wrong digest,
+inverted FORS test and exhaustion result. Their definitions must compile before
+the unchanged consuming proof rejects; baseline and value-preserving variants
+must pass. No production behavior or project axiom changes.

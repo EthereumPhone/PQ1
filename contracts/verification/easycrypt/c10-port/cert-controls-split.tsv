@@ -1136,3 +1136,24 @@ scratch/c10_acceptance_fors_offset_reject.ec	MUST-FAIL	nothing to rewrite
 scratch/c10_acceptance_fors_width_typed.ec	MUST-PASS	-
 scratch/c10_acceptance_fors_width_reject.ec	MUST-FAIL	nothing to rewrite
 scratch/_scope_neg_op_C10AcceptanceBridge.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'
+
+# Paired search acceptance: typed changes and intended proof rejection.
+scratch/c10_search_acceptance_positive.ec	MUST-PASS	-
+scratch/c10_search_acceptance_preserving.ec	MUST-PASS	-
+scratch/c10_search_acceptance_count_target_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_count_target_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_search_acceptance_count_budget_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_count_budget_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_search_acceptance_count_result_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_count_result_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_search_acceptance_recover_target_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_recover_target_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_search_acceptance_recover_sentinel_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_recover_sentinel_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_search_acceptance_nonce_accept_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_nonce_accept_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_search_acceptance_nonce_digest_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_nonce_digest_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_search_acceptance_nonce_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_search_acceptance_nonce_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_C10SearchAcceptance.ec	MUST-FAIL	unknown variable or constant: `FORS_C_TreePort.fverify_structural'

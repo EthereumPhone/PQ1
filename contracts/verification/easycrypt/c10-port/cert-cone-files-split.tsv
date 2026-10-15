@@ -675,3 +675,4 @@ cdrafts-split/RawWrapperCost.ec
 cdrafts-split/WrapperSession.ec
 cdrafts-split/WrapperSessionCost.ec
 cdrafts-split/C10AcceptanceBridge.ec
+cdrafts-split/C10SearchAcceptance.ec

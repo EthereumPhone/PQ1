@@ -2544,3 +2544,5 @@ cdrafts-split/WrapperSession.ec	module:cfc9bf1ae362	WrapperSession
 cdrafts-split/C10Representation.ec	defined-op:0782646cdb57	fors_zero_field
 cdrafts-split/C10Representation.ec	defined-op:16636978a466	wots_target
 cdrafts-split/C10Representation.ec	defined-op:568b5a39e1f3	wots_sum
+cdrafts-split/C10SearchAcceptance.ec	module:370cfe1f4f32	PairedAcceptanceWots
+cdrafts-split/C10SearchAcceptance.ec	module:89c3002856fd	PairedAcceptanceGrind

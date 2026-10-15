@@ -878,6 +878,29 @@ SOURCES = (
     'contracts/verification/extracted/Extracted/WotsSpecVendored.lean',
     'contracts/verification/scripts/test_c10_acceptance_controls.py',
 
+    # Paired search-acceptance endpoints and typed controls.
+    'contracts/verification/easycrypt/c10-port/cdrafts-split/C10SearchAcceptance.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_C10SearchAcceptance.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_count_budget_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_count_budget_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_count_result_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_count_result_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_count_target_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_count_target_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_nonce_accept_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_nonce_accept_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_nonce_digest_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_nonce_digest_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_nonce_exhaustion_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_nonce_exhaustion_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_preserving.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_recover_sentinel_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_recover_sentinel_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_recover_target_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_recover_target_typed.ec',
+    'contracts/verification/easycrypt/c10-port/tools/c10_search_acceptance_controls.py',
+
 )
 
 
