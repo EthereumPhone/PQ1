@@ -645,7 +645,14 @@ mod stm32 {
     const SCB_AIRCR_ADDR: u32 = 0xE000_ED0C;
     const AIRCR_VECTKEY: u32 = 0x05FA << 16; // required on every write
     const AIRCR_VECTKEY_MASK: u32 = 0xFFFF << 16;
-    const AIRCR_PRIS: u32 = 1 << 10; // secure IRQs outprioritize NS (ARMv8-M AIRCR bit 10 — NOT bit 14; core_cm33.h SCB_AIRCR_PRIS_Pos)
+    // PRIS is AIRCR bit 14 (CMSIS `core_cm33.h` `SCB_AIRCR_PRIS_Pos 14U`).
+    // Bit 10 is PRIGROUP[2]: until the DVT1 run (2026-10-15, checklist row
+    // 3.7) this constant was `1 << 10`, so the boot set PRIGROUP=4, never set
+    // PRIS, and a non-secure PRIMASK (every `interrupt::free` in the NS USB
+    // stack) masked the secure SysTick — the idle wipe and the IWDG kick.
+    // Silicon readback with bit 14: AIRCR = 0xFA05_4000.
+    const AIRCR_PRIS: u32 = 1 << 14; // NS exception priorities mapped to the lower half
+    const AIRCR_PRIGROUP_MASK: u32 = 0x7 << 8; // left at 0: no sub-priority split
     const AIRCR_BFHFNMINS: u32 = 1 << 13; // 0 = BusFault/HardFault/NMI are SECURE
     #[cfg(feature = "mode-production")]
     const AIRCR_SYSRESETREQS: u32 = 1 << 3; // restrict SYSRESETREQ to secure
@@ -698,7 +705,7 @@ mod stm32 {
         // write, and the read returns VECTKEYSTAT in the top half, so this
         // is an explicit read-clear-set-write (not `set_bits`).
         let mut v = aircr.read();
-        v &= !AIRCR_VECTKEY_MASK;
+        v &= !(AIRCR_VECTKEY_MASK | AIRCR_PRIGROUP_MASK);
         v |= AIRCR_VECTKEY | AIRCR_PRIS;
         v &= !AIRCR_BFHFNMINS;
         #[cfg(feature = "mode-production")]

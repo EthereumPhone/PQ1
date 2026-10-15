@@ -571,12 +571,13 @@ fn positive_tz2_locks_security_config_after_enabling_sau() {
         "const TZSC_CR_ADDR: u32 = TZSC_BASE;",
         "const TZSC_CR_LCK: u32 = 1 << 0;",
         "const SCB_AIRCR_ADDR: u32 = 0xE000_ED0C;",
-        "const AIRCR_PRIS: u32 = 1 << 10;",
+        "const AIRCR_PRIS: u32 = 1 << 14;",
         "const AIRCR_BFHFNMINS: u32 = 1 << 13;",
         // The two lock writes + the AIRCR fixup must all be present.
         "syscfg_cslckr.set_bits(CSLCKR_LOCKSAU | CSLCKR_LOCKSVTAIRCR);",
         "tzsc_cr.set_bits(TZSC_CR_LCK);",
         "v |= AIRCR_VECTKEY | AIRCR_PRIS;",
+        "v &= !(AIRCR_VECTKEY_MASK | AIRCR_PRIGROUP_MASK);",
         "v &= !AIRCR_BFHFNMINS;",
     ] {
         assert!(
@@ -668,16 +669,27 @@ fn positive_aircr_sec_config_write_is_read_back_before_freeze() {
         "AIRCR_SECCFG_MASK must cover PRIS|BFHFNMINS (+SYSRESETREQS in production) and exclude the VECTKEY half-word"
     );
 
-    // Constants guard (2026-07-19 bench brick): PRIS is AIRCR bit 10,
-    // NOT bit 14 — a `1 << 14` PRIS constant writes a reserved bit
-    // (readback zero) and WFE-halts every hardware boot at the X17-TZ1
-    // verify. Pin the exact ARMv8-M bit positions so a wrong-bit edit
-    // fails on the host, not on the bench (core_cm33.h:
-    // SCB_AIRCR_PRIS_Pos=10, SCB_AIRCR_BFHFNMINS_Pos=13,
-    // SCB_AIRCR_SYSRESETREQS_Pos=3).
+    // Constants guard. PRIS is AIRCR bit 14 (core_cm33.h:
+    // SCB_AIRCR_PRIS_Pos=14, SCB_AIRCR_BFHFNMINS_Pos=13,
+    // SCB_AIRCR_SYSRESETREQS_Pos=3; bits [10:8] are PRIGROUP). This pin
+    // used to REQUIRE `1 << 10`, on the theory that bit 14 was reserved and
+    // WFE-halted the boot (2026-07-19). That brick was the SYSCFG clock
+    // missing for the CSLCKR write (fixed in the same commit, db46babc);
+    // bit 10 silently set PRIGROUP=4 and left PRIS clear. DVT1 2026-10-15
+    // (checklist row 3.7): the `1 << 10` image read AIRCR = 0xFA05_0400
+    // (PRIS=0), a `1 << 14` image booted through the X17-TZ1 verify and
+    // read 0xFA05_4000.
     assert!(
-        SAU_SRC.contains("const AIRCR_PRIS: u32 = 1 << 10;"),
-        "AIRCR_PRIS must be AIRCR bit 10 (1 << 10) — bit 14 is reserved and WFE-bricks the boot"
+        SAU_SRC.contains("const AIRCR_PRIS: u32 = 1 << 14;"),
+        "AIRCR_PRIS must be AIRCR bit 14 (1 << 14), CMSIS SCB_AIRCR_PRIS_Pos"
+    );
+    assert!(
+        !SAU_SRC.contains("const AIRCR_PRIS: u32 = 1 << 10;"),
+        "AIRCR bit 10 is PRIGROUP[2], not PRIS (DVT1 row 3.7)"
+    );
+    assert!(
+        SAU_SRC.contains("const AIRCR_PRIGROUP_MASK: u32 = 0x7 << 8;"),
+        "the AIRCR write must clear PRIGROUP[10:8]"
     );
     assert!(
         SAU_SRC.contains("const AIRCR_BFHFNMINS: u32 = 1 << 13;"),
