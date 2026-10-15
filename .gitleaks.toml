@@ -54,6 +54,13 @@ regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/scripts/test_fors_auth_proof_controls\.py": "2b2380a9baf8bd6bf5f863f0220d10ca5df28d269518c8d6c299d6f5c3c95ed5",?\s*$''']
 
 [[rules.allowlists]]
+description = "Exact public source digest of the node-domain keygen scope probe"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_DomainKeygenCost\.ec": "53aa59d62e50a8cd967d33800e6e66690c08d578042b433f5e9465ad07d32048",?\s*$''']
+
+[[rules.allowlists]]
 description = "Public OPTIGA inventory object label, not object data"
 condition = "AND"
 paths = ['''^secure/src/optiga/probe/inventory\.rs$''']
