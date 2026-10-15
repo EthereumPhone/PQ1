@@ -388,7 +388,16 @@ Addresses: prerequisite for making informed choices in Stages 2 and 4.
   down. In the ISR: set a "dirty shutdown" flag in a TAMP backup
   register, zeroize master secret + decrypted entropy + PIN buffers in
   SRAM, `wfi()` and let BOR finish.
-- **SRAM2 relocation** for active-window secrets. Move `nsc::state`,
+- **UPDATE 2026-10-15 — SUPERSEDED, do not implement as written.** On this
+  design SRAM2 is the **non-secure** bank (`sau.rs`: MPCBB2 all-NS; SAU
+  region 2 is the NS data SRAM), so relocating secrets there would hand them
+  to the non-secure world. The goal (hardware zeroization of SRAM1 secrets
+  on every reset) is met instead by option byte `SRAM_RST=0`
+  (`FLASH_OPTR.SRAM1345_RST`, erases SRAM1/3/4 on every system reset) plus
+  cortex-m-rt `zero-init-ram`. `SRAM_RST=0` is now in `stm32-harden-opts`,
+  both ship profiles, and a first-boot Phase-A refusal (0x080F). DVT1
+  evidence: checklist row 5.4.
+- ~~**SRAM2 relocation**~~ (superseded, see above) for active-window secrets. Move `nsc::state`,
   `crypto::master_secret_buf`, entropy decryption buffers from SRAM1 to
   SRAM2 (`0x3003_0000`). Requires linker script split. After this, the
   `SRAM2_RST=0` option byte (set in Stage 1c) guarantees hardware

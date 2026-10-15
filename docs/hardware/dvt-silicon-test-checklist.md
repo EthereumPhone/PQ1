@@ -134,6 +134,22 @@ Unit tiers follow the EVT sacrificial plan (`evt-silicon-validation.md` "Sacrifi
 
 **Unit state after the run:** RDP 0, TZEN=1, bank 2 NS, WRP off, OTP blank (re-read after every image that lacked `otp-hardcoded-master-key`), pages 123–127 byte-identical to the start of the session, flash = `fwup-transport-hw` test image.
 
+## DVT1 fix run 2026-10-15 (evening) — summary
+
+**UPDATE 2026-10-15 (evening, DVT1, ST-LINK V3SET + USB-C).** Every failure from the afternoon run is fixed in code and re-verified on this unit; per-row detail is in the status cells and the evidence log.
+
+| Row | Root cause | Fix (commit) | Silicon result |
+|---|---|---|---|
+| 3.7 | `AIRCR_PRIS = 1 << 10` (PRIGROUP), PRIS never set | bit 14, PRIGROUP cleared (`19ee30ba`) | AIRCR `0xFA054000` |
+| 3.5 | RCC/PWR/TAMP/RTC/EXTI `*_SECCFGR` never written | `sau::stm32::secure_system_controllers`, read back fail-closed; EXTI locked (`f78a9631`) | SWD verdict 22/22, every NS write ignored |
+| 11.2 | NS USB timeouts used a 14-bit frame mask; full-speed FNSOF is 11 bits and wraps every 2.048 s, so an APDU straddling a wrap was scrubbed as timed out | shared `frame_delta` (0x7FF), accumulating timers; CRS on HSI48 (`7ec21173`) | 1,000-chain flood 0 missing (was 29/300); e2e and `-iwdg` e2e PASS, no reset |
+| 5.5 | legacy C7 seeds left in `main`'s frame; LOCK never touched the stack | legacy keys no longer derived; dead-stack scrub after every command, idle wipe, faults, PendSV; whole-stack scrub at NS hand-off (`78eab928`) | 0 hits after LOCK and after idle wipe |
+| 5.4 | `SRAM_RST=1` (factory default) | `SRAM_RST=0` in harden-opts, ship profiles, Phase-A refusal 0x080F; `zero-init-ram` (`78eab928`) | SRAM1/SRAM3 all zero after NRST |
+
+Also fixed: the RNG clock-mux write hit `RCC_CCIPR1` (now `CCIPR2.RNGSEL`). Row 4.12 is a measurement artefact (`e2e-test` disables `fi::wait_random`). Regression after all fixes: `gtzc-enforcement-hw` (+`gtzc-sys`), `test-key-speed`, `nested-gate-test-hw` and `-nctl`, `fw-rollback-hw`, `test-update-hw`, `tzic-wipe-hw`, `fwup-transport-hw` and `-iwdg`, `verify-ship-state` (17/17) all PASS. Unit left at RDP 0, TZEN=1, **SRAM_RST=0**, OTP blank, pages 123–127 byte-identical to the session backup, `fwup-transport-hw` image.
+
+**Still open (not code-closable here):** the E140 hold (O-13) rows, the dual-SE residue run (PRF outputs), 5.4's POR/BOR/IWDG legs (need a PSU/relay), 3.4 on a GPIO-clocked image, and every owner/irreversible gate (#268, S-1/S-2/S-3, O-1..O-12).
+
 ## Highest-risk untested assumptions — run these first
 
 | # | Row | Why first |
@@ -443,7 +459,7 @@ config needs owner sign-off. Runbook: `docs/provisioning/first-boot-hardware-bri
 - **EVT §6:** calls the part SE050C2 and says it has "never run on silicon". pq1 EVT #1 needed the E2 keyset.
 - **EVT 10.6 and `red-teaming.md` §5.3:** call `pin-gate-wipe-e2e` the "QEMU analogue". It is a hardware target.
 - **CLAUDE.md:**
-  - The inactivity timer is "S-only TIM"; the code uses the secure SysTick.
+  - FIXED 10-15: The inactivity timer is "S-only TIM"; the code uses the secure SysTick.
   - "TE never waited on" is stale.
   - The lifecycle lists "SE attest"; no attestation code exists.
   - "S-1 candidate uses `Auto(F1D0)`"; runnable images install `ALW`.
@@ -455,7 +471,7 @@ config needs owner sign-off. Runbook: `docs/provisioning/first-boot-hardware-bri
 - **`hardware-assumption-boundary` ledger:**
   - "no health tests" is stale; minimal zero/repeat tests exist.
   - The `hal` "contradiction" on QW atomicity is stale.
-- **`brownout-hardening.md`:** plans to put secrets in SRAM2, which is the non-secure bank.
+- FIXED 10-15: **`brownout-hardening.md`:** plans to put secrets in SRAM2, which is the non-secure bank (Stage-2 item now marked superseded by `SRAM_RST=0`).
 - **`firmware-update.md`:**
   - COMMIT behaviour and the "stubbed" confirm dialog are stale.
   - "no flash write until COMMIT" is false: BEGIN erases a slot.
@@ -511,3 +527,4 @@ Append one line per run (newest last): `date · unit · commit · target/feature
 - 2026-10-15 · DVT1 · fix 3 (11-bit frame clock + CRS) · flood 1,000 chains; `fwup-transport-hw` e2e; `fwup-transport-hw-iwdg` e2e + flood 500 (11.2, 5.8) · ✅ 0 missing, counters clean, e2e PASS ×2, no IWDG reset · `run-2026-10-15-fix/{flood-fixed-1000,fwup-e2e-fixed,fwup-iwdg-fixed,flood-iwdg-500}.log`
 - 2026-10-15 · DVT1 · fix 4 (no legacy derivation, stack scrub, zero-init-ram) · `tools/dvt/residue.sh` + idle dump (5.5) · ✅ after LOCK 0 hits, after idle wipe 0 hits; unlocked control shows only live caches · `run-2026-10-15-fix/residue/`
 - 2026-10-15 · DVT1 · fix 4 · `-ob SRAM_RST=0`, then parked unlocked image + `mode=UR` dump (5.4) · ✅ SRAM1/SRAM3 all zero after NRST, SRAM2 control non-zero; `make verify-ship-state` 17/17 incl. SRAM_RST · `run-2026-10-15-fix/residue/sram-{prenrst,nrst}.bin`
+- 2026-10-15 · DVT1 · `78eab928` · regression: `nested-gate-test-hw`, `-nctl-hw`, `fw-rollback-hw`, `test-update-hw`, `tzic-wipe-hw`, `fwup-transport-hw` (3.10, 11.6, 11.7, 3.12, 11.2) · ✅ all PASS; page 125 wipe flag and 32 new page-123 records restored to the backup bytes; OTP blank · `run-2026-10-15-fix/regress/`, `run-2026-10-15-fix/p123-127-final.bin`
