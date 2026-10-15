@@ -85,7 +85,11 @@ pub fn pin_help() -> Screen {
     detail(
         b"PINHELP",
         b"PIN",
-        &[b"Secure your PQ1", b"with an 8-digit PIN.", b"Enter it twice."],
+        &[
+            b"Secure your PQ1",
+            b"with an 8-digit PIN.",
+            b"Enter it twice.",
+        ],
     )
 }
 
