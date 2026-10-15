@@ -1141,7 +1141,7 @@ gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/nonsecure \
-			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585,,$(BOARD_FEATURE)$(BOARD_FEATURE)
+			-p sphincs-tz-nonsecure --features gtzc-test,stm32u585,$(BOARD_FEATURE)
 	@echo "==> Flashing..."
 	@probe-rs download --chip $(CHIP) $(NONSECURE_ELF)
 	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
@@ -3821,7 +3821,7 @@ saes-self-test-hw: ## SAES SW + DHUK round-trip + fingerprint (HW)
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features saes-self-test,debug-log,ui-noop,e2e-test,mock-se
+		--features saes-self-test,debug-log,ui-noop,e2e-test,mock-se,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \

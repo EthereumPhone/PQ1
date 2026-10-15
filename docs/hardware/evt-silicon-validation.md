@@ -1057,6 +1057,82 @@ Full results are in the issue comments.
     blocks of the running image's code in place of flash contents. Two
     `mode=UR` reads matched each other and showed no such blocks.
 
+### UPDATE 2026-10-15 — DVT #1, first SWD session: five non-destructive tests PASS
+
+First DVT unit, over `J210` with an STLINK-V3SET (FW V3J16M9B5S1), firmware
+from master `62486d98` plus the two Makefile fixes below. Nothing permanent
+was done: no RDP change, no OTP write, nothing written to either secure
+element. The only option-byte change was TZEN 0 → 1 with SECWM2 set to make
+bank 2 non-secure, which RDP 0 → 1 → 0 undoes.
+
+**As received.**
+- **Option bytes:** RDP 0 (`0xAA`), TZEN=0, nSWBOOT0=1, NSBOOTADD0 =
+  `0x0800_0000`, no WRP.
+- **OTP:** all 512 B are `0xFF`.
+- **Flash:** an ODM test image (`[SE IC] I2C Check`). It is not the same image
+  as EVT #1's ODM backup: sha256 `a9ab0052…` here, `5316cc30…` there.
+- **Backup:** off-repo at `~/Documents/PQ1/dvt1-backup-2026-10-15/` (2 MB
+  flash, OTP, option-byte log, `SHA256SUMS`). Two separate `mode=UR` reads
+  gave identical hashes.
+
+**Same board, different die.**
+- **Board:** `BOARD=pq1` (the `AL_A66_MB_V10` map) fits this DVT. Both secure
+  elements answer at their V10 addresses.
+- **Die:** `DBGMCU_IDCODE` reads `rev_id=0x3007`. STM32CubeProgrammer still
+  prints "Rev U". The SESIP-2400133-01 die is `0x3003` (TN1545 Rev 3). Its
+  physical-attacker evidence behind `HW-ASSUME-RDP2` therefore does not
+  automatically cover this part. This is a scope fact, not a defect, and it is
+  unresolved whether MP parts will be `0x3003` or `0x3007`.
+
+| Target (`BOARD=pq1`) | Result |
+|---|---|
+| `se-i2c-probe-hw` | **PASS.** I2C1 PB8/PB9 AF4: OPTIGA `0x30` ACKs on attempt 2/10. I2C4 PB6/PB7 AF5: SE050 `0x48` ACKs on attempt 1/10. |
+| `optiga-probe-hw` (first silicon run of `4ea7db61`) | **Completed, read-only confirmed.** All 48 metadata re-reads were unchanged. SEC stayed 0 at R2–R9. Handshakes were skipped (`pbs-unknown-or-mismatch`). Verdict `FINDINGS (43)`, but these are false positives; see below. UID `cd1633ca01001c00…`. |
+| `gtzc-enforcement-hw` | **PASS 11/11.** I2C1, I2C2, I2C4, AES, HASH, RNG, PKA, SAES, TIM2, TIM3 and UCPD1 each read as zero from the non-secure side and raise exactly one TZIC event. |
+| `saes-self-test-hw` | **PASS.** SW and DHUK round-trip. The fingerprint is `117d822a62a50830`, ST's shared RDP-0 constant, so the per-die DHUK is untested (that needs RDP 1). |
+| `test-key-speed` (mock SE) | **PASS.** HW SHA-256 KAT PASS. First sign 12.3 s (chain 1) and 11.9 s (chain 2). Cached Type-2: 5.3–6.5 s, average 5.76 s. The 2026-09-18 pq1 figures in `CLAUDE.md` are 6.4–7.2 s. |
+
+**The OPTIGA chip is factory-blank, and `report.py` misreads it.**
+- **Chip state:**
+  - The wallet and duress objects are at LcsO=creation with their
+    shipped access rules: `Read=ALW` and `Change=LcsO<operational`.
+  - Every F1D0–F1DB slot holds 100 zero bytes. The probe fingerprints each
+    as `cd00e292c5970d3c`, which is the SHA-256 of 100 `0x00` bytes.
+  - E120 is 0/0. E140 holds a 64-byte PBS that is not the dev-testkey PBS.
+- **How the report scores it:** `tools/optiga_probe/report.py` has no
+  "unprovisioned" class, so it scores the zeros as `SECRET_READABLE_PLAIN`
+  (9 CRITICAL). It scores the open shipped access rules as
+  `WALLET_OBJECT_WRITABLE` and S-1/S-2/S-3. These findings are true of a blank
+  part but say nothing about a provisioned one.
+- **Follow-up:** add a factory-blank classification, all-zero data at
+  LcsO=creation, so this case reports as `UNPROVISIONED`.
+- **Other observations:** the E100–E103 session contexts return no metadata
+  (MEDIUM `META_UNREADABLE`). The ECC slots E0F1–E0F3 are open
+  `Change=LcsO<operational` (LOW).
+
+**Bench-tooling defects found and fixed (Makefile).**
+- **`gtzc-enforcement-hw`** passed `$(BOARD_FEATURE)$(BOARD_FEATURE)`, i.e.
+  `board-pq1board-pq1`, so the target could not build for any board. The
+  defect dates from `65968d7e`.
+- **`saes-self-test-hw`** hard-coded its secure feature list without
+  `$(BOARD_FEATURE)`, so the `board/mod.rs` fence refused the build.
+- **Neither recipe can configure a factory chip in one pass.** Their single
+  `--optionbytes TZEN=1 SECWM… SECBOOTADD0=…` write applies only TZEN to a
+  TZEN=0 chip. The other names "do not exist" until TZEN=1, and the programmer
+  only warns. A second write is needed for `SECWM2_PSTRT=0x7F SECWM2_PEND=0x0`,
+  or bank 2 stays all-secure. Secure-only images, such as the two probes, run
+  anyway. Anything that boots the non-secure world does not.
+
+**State left on the unit:**
+- RDP 0, TZEN=1, bank 1 secure, bank 2 non-secure.
+- Flash holds the `test-key-speed` image.
+- OTP is untouched and the OPTIGA is untouched (blank).
+- The SE050 was only addressed on the bus.
+
+Restoring the ODM image needs RDP 0 → 1 → 0 with TZEN=0 (mass erase), then
+the backup reflashed. Mass-erase first so no firmware runs at RDP 1. The
+fallback is the BOOT0-wire ROM-DFU path in `evt-debug-pins.md`.
+
 ---
 
 ## §11 — Firmware-rollback + SCP03-rotation receipts (DESTRUCTIVE, ship-blockers)
