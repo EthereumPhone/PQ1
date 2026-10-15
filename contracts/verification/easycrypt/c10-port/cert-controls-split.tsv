@@ -1356,3 +1356,70 @@ scratch/_scope_neg_op_DomainSignerCost.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_DomainWotsCost.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_DomainWotsOpening.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_NodeQueryDomain.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Ordinary FORS fixed/variable candidates, complete costs and probability transfer: paired controls.
+scratch/leaf_candidate_retain_zero_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_retain_zero_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_retain_ff_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_retain_ff_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_two_fixed_slots_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_two_fixed_slots_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_repeat_malformed_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_repeat_malformed_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_repeat_fixed_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_repeat_fixed_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_retain_output_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_retain_output_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_max_u32_counter_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_max_u32_counter_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_counter_width_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_counter_width_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/leaf_candidate_counter_range_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_counter_range_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/leaf_candidate_hmsg_fixed_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_hmsg_fixed_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_fixed_query_only_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_fixed_query_only_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_fixed_mass_charge_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_fixed_mass_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_adaptive_budget_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_adaptive_budget_reject.ec	MUST-FAIL	this proof-term proves:
+scratch/leaf_candidate_hidden_fixed_charge_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_hidden_fixed_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_final_output_charge_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_final_output_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_signer_work_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_signer_work_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_verification_work_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_verification_work_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_raw_query_cap_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_raw_query_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_signing_cap_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_signing_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_accepted_output_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_accepted_output_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_independent_charge_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_independent_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_physical_transfer_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_physical_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/leaf_candidate_charge_comparison_positive.ec	MUST-PASS	-
+scratch/leaf_candidate_charge_comparison_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ForsCandidateNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafBudgetKeygen.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafBudgetLayer.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafBudgetMerkle.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafBudgetShuffle.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafBudgetWots.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafByteTargetBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafCandidateBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafCandidateCoordinate.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafCandidateCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafCandidateMass.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafCandidateUnion.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafForsOpeningBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafGrindingCandidates.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafTargetForsCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafTargetOracleCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafTargetSessionCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_LeafTargetSignerCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_OriginalLeafCandidateBound.ec	MUST-FAIL	FORS_C_TreePort.

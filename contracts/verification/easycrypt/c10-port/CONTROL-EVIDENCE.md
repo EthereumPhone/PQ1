@@ -155,3 +155,30 @@ statement/operation-pinned and declaration-censused. Thirty-one scope probes
 also require the tainted structural FORS theorem to stay unavailable. The full
 cold replay and bounded review remain separate requirements. Concrete hash,
 quantum-oracle and full Rust/session correspondence obligations remain open.
+
+## Ordinary FORS candidate controls
+
+Twenty-three positive/negative twins cover retention of both fixed guesses,
+their two-slot charge, repeated malformed and fixed queries, final candidate
+retention, the maximum u32 counter, padding/counter bounds, the actual H_msg
+suffix, the fixed-query guard, candidate mass, adaptive query budgets, hidden
+and final-output charges, signer/verification work, raw and signing caps,
+the accepted-output event, both complete games and comparison with the prior
+bound. Seven finite pairs have explicit false alternatives. The remaining
+pairs test theorem sensitivity; they do not establish that every smaller
+bound is false or that each conservative summand is necessary.
+
+Rejection must occur at the final proof application in `checked`. Expected
+diagnostics are `the given proof-term proves:`, except the removed counter
+width/range premises (`[by]: cannot close goals`) and changed adaptive budget
+(`this proof-term proves:`). Earlier helper failures, missing imports, parser
+errors and time/resource failures receive no credit. The focused audit binds
+each accepted rejection to its exact source line, theorem and raw output.
+
+`tools/leaf_candidate_controls.py` contains literal claims and generates the
+paired fixtures and exact control rows without adopting changed statements
+from implementation files. Nineteen scope probes keep the tainted structural
+FORS result unavailable. Direct/CLI replay, exact statement/operation/source
+inventories, the full cold gate and bounded review remain separate gates.
+The classical ideal-oracle, concrete-hash, cross-language and quantum limits
+remain explicit.

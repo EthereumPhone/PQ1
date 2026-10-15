@@ -23,6 +23,7 @@ from c10_digest_caller_controls import digest_caller_outputs, digest_caller_rows
 from stirling_coverage_controls import stirling_outputs, stirling_rows
 from accepted_encoding_controls import accepted_encoding_outputs, accepted_encoding_rows
 from node_domain_controls import node_domain_outputs, node_domain_rows
+from leaf_candidate_controls import leaf_candidate_outputs, leaf_candidate_rows
 from c10_search_acceptance_controls import search_acceptance_outputs, search_acceptance_rows
 
 CHANGES = [
@@ -103,6 +104,7 @@ def control_outputs(port):
     result.update(stirling_outputs(port))
     result.update(accepted_encoding_outputs(port))
     result.update(node_domain_outputs(port))
+    result.update(leaf_candidate_outputs(port))
     result.update(search_acceptance_outputs(port))
     return result
 
@@ -112,11 +114,11 @@ def control_rows():
         stem="scratch/c10_rep_"+name.replace("-","_")
         rows.extend([stem+"_typed.ec\tMUST-PASS\t-",
                      stem+"_reject.ec\tMUST-FAIL\t"+REASONS[name]])
-    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + paired_signer_rows() + digest_caller_rows() + stirling_rows() + accepted_encoding_rows() + node_domain_rows() + search_acceptance_rows()
+    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + paired_signer_rows() + digest_caller_rows() + stirling_rows() + accepted_encoding_rows() + node_domain_rows() + leaf_candidate_rows() + search_acceptance_rows()
 
 def check_manifest_rows(rows):
     expected=control_rows()
-    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_", "scratch/c10_paired_signer_", "scratch/c10_digest_caller_", "scratch/stirling_", "scratch/accepted_encoding_", "scratch/node_domain_"))]
+    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_", "scratch/c10_paired_signer_", "scratch/c10_digest_caller_", "scratch/stirling_", "scratch/accepted_encoding_", "scratch/node_domain_", "scratch/leaf_candidate_"))]
     if sorted(live)!=sorted(expected):
         raise ValueError("paired representation control enrollment changed")
 

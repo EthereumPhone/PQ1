@@ -229,10 +229,46 @@ predecessors for nonnegative caps. At `qr = qs = 65536`, `N = 23913783554`,
 compared with `Q = 1989993783554`. The node charge falls from `5.8188076e-15`
 to `8.4028604e-19`, about 6,925 times smaller. The complete physical-game bound
 becomes approximately `4.2309698e-17` (`2^-54.39`), about 138.51 times tighter.
-The unreturned ordinary FORS opening charge now dominates (`3.7675879e-17`);
-the WOTS reverse-chain charge is next (`3.6987594e-18`). Both still conservatively
-use `Q`. These are upper probability bounds in the stated classical model,
+At that stage the unreturned ordinary FORS opening charge dominates
+(`3.7675879e-17`), followed by WOTS reverse-chain cuts (`3.6987594e-18`).
+Both terms there use `Q`. These are upper probability bounds in the stated classical model,
 not attack costs, lower bounds or a deployed security rating.
+
+## Ordinary FORS candidate accounting
+
+`ForsCandidateNumericalBound.physical_byte_fors_candidate_euf_bound` retains
+all public-node, zero-node, accepted-encoding, WOTS, coverage and physical
+transfer terms above, replacing only the ordinary FORS opening charge by
+
+```
+V = leaf_candidate_budget(qr, qs) = 155135 + qr + qs * 364892 + 771
+Cfors = min(6442450944*(Q+12)/2^128, 6442450944*(V+14)/2^128)
+```
+
+The actual commitment hybrid examines a query's sixteen-byte suffix candidate.
+WOTS grinder counter words contribute the same zero-valued candidate, and
+H_msg contributes the same all-`FF` candidate. The covering list retains both
+once, every other query candidate, and the twelve final output slots. It does
+not remove any query or memo-table entry from the experiment. Arbitrary raw
+inputs, malformed inputs, adaptive history and cached repeats remain covered.
+The actual transformed target session proves the `V` budget, including key
+generation, failed searches, all admitted attempts and final verification.
+Its formula happens to equal the node-domain budget; the two measures and
+their game instantiations have separate proofs.
+
+The existing hybrid-to-independent, late-sampling, reveal-redaction and
+private-table event transfers are reused without new premises or axioms.
+The new bound reaches the same accepted-output event and coordinate union.
+The minimum retains the prior charge where adding two fixed candidates would
+otherwise be worse, including the zero-signing case. Both complete charges
+are proved no greater than their public-node-domain predecessors.
+
+At `qr = qs = 65536`, `V = 23913783554`; the ordinary FORS term falls by about
+83.22 times to `4.5275157e-19`. The complete physical-game expression becomes
+approximately `5.0865709e-18` (`2^-57.45`), about 8.32 times tighter than the
+previous `4.2309698e-17`. WOTS reverse-chain cuts now dominate. These are
+conservative classical ideal-oracle upper bounds, not attack costs or a
+deployed security rating. Further candidate-specific reductions remain open.
 
 ## Composition, evidence and limits
 
@@ -262,6 +298,10 @@ The public-node domain continuation adds 31 replay targets, 112 proved
 statements, ten operation pins, three concrete module declarations,
 23 paired controls and 31 scope probes. It adds no project axiom and changes
 no existing theorem statement.
+The ordinary FORS candidate continuation adds nineteen replay targets,
+67 proved statements, seven operation pins, 23 paired controls and nineteen
+scope probes. It adds no project axiom or new concrete module and preserves
+the previous games and theorem statements.
 
 The original bound is conservative. At `qr = qs = 65536`, exact rational evaluation gives
 approximately `8.7695861e-15` overall (about `2^-46.70`), with coverage alone

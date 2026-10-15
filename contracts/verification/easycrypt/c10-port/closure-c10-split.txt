@@ -538,3 +538,24 @@ DomainSignerCost
 DomainWotsCost
 DomainWotsOpening
 NodeQueryDomain
+
+# Ordinary FORS candidate counting, complete target budget and adaptive bound, 2026-10-15.
+ForsCandidateNumericalBound
+LeafBudgetKeygen
+LeafBudgetLayer
+LeafBudgetMerkle
+LeafBudgetShuffle
+LeafBudgetWots
+LeafByteTargetBound
+LeafCandidateBound
+LeafCandidateCoordinate
+LeafCandidateCount
+LeafCandidateMass
+LeafCandidateUnion
+LeafForsOpeningBound
+LeafGrindingCandidates
+LeafTargetForsCost
+LeafTargetOracleCost
+LeafTargetSessionCost
+LeafTargetSignerCost
+OriginalLeafCandidateBound

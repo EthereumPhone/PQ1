@@ -180,8 +180,12 @@ sum-205 test, with a proved exact acceptance mass and adaptive memoized-oracle
 transfer. A further domain proof restricts public-node collisions to the actual
 node-producing inputs and excludes proved WOTS-count/H_msg grinder calls from
 the node budget. Exact adaptive memoization and failed-session accounting are
-retained. Generic ordinary FORS-opening and WOTS reverse-chain charges now
-dominate the remaining quantitative loss.
+retained. The ordinary FORS opening continuation counts the two fixed grinder
+candidates once, keeps both guesses charged, and proves the remaining budget
+through the actual transformed session. Existing adaptive hiding and
+private-table transfers reach the same accepted output. The complete bound
+retains the smaller of the old and new FORS charges, so every cap configuration
+is preserved. WOTS reverse-chain cuts now dominate the quantitative loss.
 The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
 and [remaining research obligations](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md)
 distinguish those results from tighter component charges, concrete SHA-256, QROM

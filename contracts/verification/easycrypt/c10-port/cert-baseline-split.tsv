@@ -2606,3 +2606,10 @@ cdrafts-split/DomainNumericalBound.ec	defined-op:6e5ee5c75526	domain_node_physic
 cdrafts-split/DomainQueryCount.ec	defined-op:148d391646cb	node_query_count
 cdrafts-split/DomainSessionCost.ec	defined-op:84e36582d9e3	node_public_budget
 cdrafts-split/NodeQueryDomain.ec	defined-op:63fb6f806bff	node_query
+cdrafts-split/ForsCandidateNumericalBound.ec	defined-op:008e6280c92a	fors_candidate_physical_euf_charge
+cdrafts-split/ForsCandidateNumericalBound.ec	defined-op:c3a9fb11b2f4	fors_candidate_opening_charge
+cdrafts-split/ForsCandidateNumericalBound.ec	defined-op:cba9b6b078bd	fors_candidate_independent_euf_charge
+cdrafts-split/LeafCandidateCount.ec	defined-op:75d3f578c835	leaf_variable_query
+cdrafts-split/LeafCandidateCount.ec	defined-op:d78e815ee178	leaf_variable_count
+cdrafts-split/LeafCandidateMass.ec	defined-op:d764855e2c4b	leaf_reduced_candidates
+cdrafts-split/LeafTargetSessionCost.ec	defined-op:7f2db0dce303	leaf_candidate_budget

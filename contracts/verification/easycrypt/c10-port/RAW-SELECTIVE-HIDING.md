@@ -5,7 +5,8 @@ in the manual classical ideal-oracle model. The selective hiding experiment
 is now connected to an unreturned ordinary private opening in the **actual
 accepted output** of the original initialized byte game.
 
-`OriginalForsOpeningBound.original_byte_fors_opening_bound` proves
+The earlier `OriginalForsOpeningBound.original_byte_fors_opening_bound`,
+retained unchanged, proves
 
 ```
 Pr[IndependentGame(ClientQueryContext(ByteLift(A))).run :
@@ -22,6 +23,46 @@ budget or private-independence premise. Its finite-universe factor is
 `2^18 * 12 * 2^11 = 6442450944`; this is a conservative union bound, not a tight
 128-bit security claim. It charges this event only, not complete EUF success.
 The special thirteenth tree is not an ordinary private-value candidate.
+
+## Repeated fixed candidates
+
+`LeafForsOpeningBound.original_byte_fors_candidate_bound` proves the same
+actual-output event has the smaller charge
+
+```
+6442450944 * (V + 14) / 2^128
+V = leaf_candidate_budget(qr, qs) = 155135 + qr + qs * 364892 + 771
+```
+
+The existing commitment hybrid tests the first sixteen bytes of each query's
+last 32-byte block. In the actual bounded WOTS search, the counter block is
+28 zero bytes followed by a four-byte counter, so every trial contributes the
+same zero-valued candidate. H_msg ends in 32 bytes of `FF`, contributing a
+second fixed candidate. Both values can equal the hidden key: neither guess
+is discarded. `LeafCandidateMass` covers the original candidate list by every
+other query candidate, these two fixed values, and the twelve final slots.
+The charge is therefore `V + 2 + 12`. Arbitrary and malformed raw queries are
+covered too; repeated variable candidates are conservatively counted again.
+
+`LeafCandidateBound` reuses the existing hybrid, late-sampling and adaptive
+reveal-redaction games. Their oracle tables, query histories, return values
+and module exclusions are unchanged. The initial-state bound is transferred
+through the selected private table and finite coordinate union to the exact
+accepted byte output. No independent-history or successful-search premise is
+introduced. `LeafBudget*` and `LeafTarget*Cost` discharge the variable-candidate
+budget through actual key generation, tree construction, reconstruction,
+signing, verification and the capped adaptive session, including failed and
+absorbed requests. The finite WOTS loop proves its counter bound explicitly;
+the suffix identities need no additional seed/message-width premise.
+
+`ForsCandidateNumericalBound` uses the minimum of the earlier and new FORS
+charges and proves the complete independent and physical bounds no greater
+than their predecessors. Keeping the earlier charge matters when there are
+no signing requests: charging two fixed values must not silently worsen that
+case. At `qr = qs = 65536`, the FORS term is approximately `4.5275157e-19`,
+about 83.22 times smaller. The [numerical owner](RAW-NUMERICAL-EUF.md) composes
+it with the unchanged other terms. This remains a classical ideal-oracle
+probability bound, not a concrete hash or deployed-security claim.
 
 ## Quantitative result and its premises
 

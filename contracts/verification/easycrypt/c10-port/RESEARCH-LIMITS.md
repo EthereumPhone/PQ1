@@ -33,11 +33,22 @@ This reduces the complete bound to about `2^-54.39`. See the numerical owner
 for the exact formula. These are upper probability bounds, not attack costs
 or a deployed security rating.
 
-The next quantitative obligations are tighter ordinary FORS-opening and WOTS
-reverse-chain charges, now the largest terms. Their existing generic candidate
-bounds still charge the full public-query budget, including grinding work.
-A reduction must prove which actual candidate inputs or views can expose the
-hidden values, with consistent adaptive history, before excluding any calls.
+The ordinary FORS continuation now counts repeated grinder candidates once:
+the WOTS counter block yields a zero-valued candidate and H_msg an all-`FF`
+candidate. Both guesses remain charged, together with every other query
+candidate and the twelve final slots. The actual transformed target session
+proves the remaining budget through key generation, signing failures and
+verification. Existing adaptive hiding and private-table transfers reach the
+same actual output; no query history is removed. Taking the minimum with the
+previous FORS charge preserves every cap configuration. This improves the
+complete bound to about `2^-57.45` without changing its model or premises.
+
+The next largest quantitative obligation is the WOTS reverse-chain charge.
+Its existing candidate bound still charges the full public-query budget,
+including grinding work. A reduction must prove which actual candidate inputs
+or views can expose the hidden values, with consistent adaptive history,
+before reducing that charge. Finer ordinary FORS target/candidate reductions
+remain possible beyond the fixed-value accounting already proved.
 Finer target-specific node reductions and a tail charge for a smaller effective
 hash budget also remain possible. Substituting average grinding work for the
 proved worst-case budget is invalid. The high-128-bit node projection and
