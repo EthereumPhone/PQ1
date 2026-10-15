@@ -2546,3 +2546,6 @@ cdrafts-split/C10Representation.ec	defined-op:16636978a466	wots_target
 cdrafts-split/C10Representation.ec	defined-op:568b5a39e1f3	wots_sum
 cdrafts-split/C10SearchAcceptance.ec	module:370cfe1f4f32	PairedAcceptanceWots
 cdrafts-split/C10SearchAcceptance.ec	module:89c3002856fd	PairedAcceptanceGrind
+cdrafts-split/C10PairedSigner.ec	module:3c94178b0eb7	PairedSigningSigner
+cdrafts-split/C10PairedSigner.ec	module:9b4777ebfa5f	PairedSigningWots
+cdrafts-split/C10PairedSigner.ec	module:d27a8962df63	PairedSigningLayer

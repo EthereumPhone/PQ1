@@ -18,6 +18,7 @@ from c10_outer_caller_controls import outer_caller_outputs, outer_caller_rows
 from c10_shuffle_controls import shuffle_outputs, shuffle_rows
 from c10_wrapper_cost_controls import wrapper_cost_outputs, wrapper_cost_rows
 from c10_acceptance_controls import acceptance_outputs, acceptance_rows
+from c10_paired_signer_controls import paired_signer_outputs, paired_signer_rows
 from c10_search_acceptance_controls import search_acceptance_outputs, search_acceptance_rows
 
 CHANGES = [
@@ -93,6 +94,7 @@ def control_outputs(port):
     result.update(shuffle_outputs(port))
     result.update(wrapper_cost_outputs(port))
     result.update(acceptance_outputs(port))
+    result.update(paired_signer_outputs(port))
     result.update(search_acceptance_outputs(port))
     return result
 
@@ -102,11 +104,11 @@ def control_rows():
         stem="scratch/c10_rep_"+name.replace("-","_")
         rows.extend([stem+"_typed.ec\tMUST-PASS\t-",
                      stem+"_reject.ec\tMUST-FAIL\t"+REASONS[name]])
-    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + search_acceptance_rows()
+    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + paired_signer_rows() + search_acceptance_rows()
 
 def check_manifest_rows(rows):
     expected=control_rows()
-    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_"))]
+    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_", "scratch/c10_paired_signer_"))]
     if sorted(live)!=sorted(expected):
         raise ValueError("paired representation control enrollment changed")
 

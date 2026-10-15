@@ -1481,3 +1481,36 @@ target, search budget, returned counter, rejection sentinel, wrong digest,
 inverted FORS test and exhaustion result. Their definitions must compile before
 the unchanged consuming proof rejects; baseline and value-preserving variants
 must pass. No production behavior or project axiom changes.
+
+Paired acceptance through complete EasyCrypt callers (2026-10-15):
+`C10PairedSigner` composes the paired WOTS count/recovery and FORS nonce
+acceptance procedures through WOTS signing, both hypertree layers and the
+complete `RawSigner` signing and verification callers. The comparison verifier
+also consumes the paired FORS zero-field predicate on its current message
+digest. The refinements preserve exact results, all bounded failure branches,
+the WOTS recovery zero sentinel, and the complete `Physical` oracle state:
+shared history, call/draw counters and secret key. No successful-signing or
+fresh-history premise is imposed. The existing `valid_history` invariant allows
+arbitrary valid prior entries and repeated inputs; new helper contracts show
+that shuffle, private derivation, trees and the forest preserve it throughout.
+
+The structured verification endpoint retains the existing two-u32-counter
+condition. The decoded endpoint discharges it for any 4,008-element byte
+representation using the established decoder theorem. These are EasyCrypt
+procedure equivalences under the existing oracle model, not new totality or
+cryptographic probability claims. The original results and their existing
+termination evidence are unchanged. The paired comparison procedures continue
+to use the existing bit-valued chain digits and digest coordinates; pairing the
+acceptance predicate does not identify every internal computation with the
+shared integer/list representation.
+
+This closes the **whole EasyCrypt caller composition of paired acceptance**.
+It does not connect pure Rust/Lean SHA to the stateful oracle or its distribution,
+or establish the complete cross-language signer/session relation. Paired-printer
+interpretation, callbacks, physical abort prefixes, cryptographic assumptions
+and shipment remain open. Thirty-one lemmas add no project axiom or production
+change. Nine typed caller mutations exercise the returned WOTS counter, accepted
+digest, exhaustion, layer counter/path, layer order, nonce root input and verifier
+acceptance/root comparison. Each definition-only fixture compiles before its
+unchanged consuming proof rejects; baseline and value-preserving fixtures pass.
+These controls establish proof sensitivity, not falsity of every mutant theorem.

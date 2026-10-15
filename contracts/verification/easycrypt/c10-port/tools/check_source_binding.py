@@ -901,6 +901,31 @@ SOURCES = (
     'contracts/verification/easycrypt/c10-port/scratch/c10_search_acceptance_recover_target_typed.ec',
     'contracts/verification/easycrypt/c10-port/tools/c10_search_acceptance_controls.py',
 
+    # Paired search-acceptance endpoints and typed controls.
+    'contracts/verification/easycrypt/c10-port/cdrafts-split/C10PairedSigner.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_C10PairedSigner.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_layer_counter_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_layer_counter_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_layer_path_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_layer_path_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_positive.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_preserving.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_signer_layer_order_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_signer_layer_order_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_signer_root_input_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_signer_root_input_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_verify_accept_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_verify_accept_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_verify_root_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_verify_root_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_wots_counter_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_wots_counter_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_wots_digest_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_wots_digest_typed.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_wots_exhaustion_reject.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_paired_signer_wots_exhaustion_typed.ec',
+    'contracts/verification/easycrypt/c10-port/tools/c10_paired_signer_controls.py',
+
 )
 
 
