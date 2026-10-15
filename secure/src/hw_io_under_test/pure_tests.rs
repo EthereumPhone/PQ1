@@ -2510,6 +2510,36 @@ fn positive_the_chooser_animates_from_inside_its_input_wait() {
 }
 
 #[test]
+fn positive_a_pager_continues_from_the_previous_pager_only_while_its_frame_is_on_the_glass() {
+    // Owner report 2026-10-15: selecting CREATE NEW WALLET? redrew the disc
+    // in the PIN help's dock instead of moving it there, because each setup
+    // step starts a new pager. The pager now keeps its animation and the
+    // next one continues from it with `go_to`.
+    let pager = UI_PX_LCD_SRC
+        .split("pub fn run_pager(")
+        .nth(1)
+        .expect("run_pager must exist");
+    let pager = &pager[..pager.find("\n}\n").unwrap_or(pager.len())];
+    assert!(pager.contains("let mut anim = match carry_take() {"));
+    assert!(pager.contains("a.go_to(&screens[i], 0, now);"));
+    assert!(pager.contains("carry_keep(anim);"));
+    // Only while nothing else has drawn since: every panel write passes
+    // `set_window`, which counts, and the take compares the count.
+    let sw = LCD_NV3007_SRC
+        .split("pub fn set_window(")
+        .nth(1)
+        .expect("set_window must exist");
+    let sw = &sw[..sw.find("\n}\n").unwrap_or(sw.len())];
+    assert!(sw.contains("GLASS_WRITES.fetch_add(1"), "every window set must count as a glass write");
+    let take = UI_PX_LCD_SRC.split("fn carry_take()").nth(1).expect("carry_take must exist");
+    let take = &take[..take.find("\n}\n").unwrap_or(take.len())];
+    assert!(take.contains("CARRY_GLASS.load(Ordering::Relaxed) != lcd::glass_writes()"));
+    // Only the pager keeps one: a PIN row's record carries a live digit,
+    // which must not outlive its dialog in a static.
+    assert_eq!(UI_PX_LCD_SRC.matches("carry_keep(").count(), 2, "the fn and the pager's one call");
+}
+
+#[test]
 fn negative_the_setup_pager_resets_activity_only_on_a_button_edge() {
     // #426 on the pixel pager: the timer is reset by a real button edge and
     // by nothing else (no reset on entry, none per frame).

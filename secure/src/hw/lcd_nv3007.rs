@@ -842,6 +842,18 @@ pub fn run_init_sequence() {
 // Address window + bulk pixel write
 // ---------------------------------------------------------------------------
 
+/// Bumped by every [`set_window`], so before any pixel reaches the panel,
+/// whoever draws it (the pixel UI, the 16x4 page, the panic screen). A
+/// presenter that wants to continue from what it left on the glass reads
+/// this after its last frame; unchanged later means nothing has drawn since.
+static GLASS_WRITES: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
+/// See [`GLASS_WRITES`]. Read only by the pixel UI.
+#[cfg_attr(not(feature = "ui-px"), allow(dead_code))]
+pub fn glass_writes() -> u32 {
+    GLASS_WRITES.load(core::sync::atomic::Ordering::Relaxed)
+}
+
 /// Set the active drawing window. Subsequent [`write_pixels`] /
 /// [`write_data_bulk`] data lands inside this rect. The X offset is
 /// applied internally per the production driver's `BlockWrite`.
@@ -850,6 +862,7 @@ pub fn run_init_sequence() {
 /// `set_window(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1)` selects the
 /// entire visible area.
 pub fn set_window(x0: u16, y0: u16, x1: u16, y1: u16) {
+    GLASS_WRITES.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let bytes = build_set_window_bytes(x0, y0, x1, y1);
     write_cmd_data(0x2A, &bytes.caset); // CASET — single CS window
     write_cmd_data(0x2B, &bytes.raset); // RASET — single CS window

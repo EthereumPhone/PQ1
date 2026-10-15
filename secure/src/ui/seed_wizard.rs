@@ -293,6 +293,8 @@ pub fn setup_intro(back_to: Option<SetupChoice>) -> SetupChoice {
         match pager(&screens, start, false, false) {
             PagerOut::Selected(setup_screens::CREATE) => return SetupChoice::Create,
             PagerOut::Selected(setup_screens::IMPORT) => return SetupChoice::Import,
+            // The practice selects nothing: on to the choice.
+            PagerOut::Selected(setup_screens::PRACTICE) => start = setup_screens::CREATE,
             PagerOut::Selected(i) => start = i,
             PagerOut::Forward | PagerOut::Back => {}
         }

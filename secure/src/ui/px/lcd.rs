@@ -1942,6 +1942,41 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
 /// that restarted setup threw away a seed the user may already have written
 /// down (and looped forever on the EVT). The watchdog wait guard is held for
 /// the whole wait, as in `run_flow`.
+/// The animation a pager left on the glass, so the next pager continues
+/// from it: the disc travels to the next step's place instead of being
+/// redrawn there (owner report 2026-10-15, CREATE NEW WALLET? -> the PIN
+/// help). Valid only while `CARRY_SET` is true AND the panel has not been
+/// written since (`CARRY_GLASS` against `lcd::glass_writes`). Only the pager
+/// stores it: its screens are public, where a PIN row's record holds a live
+/// digit that must not outlive its dialog in a static.
+///
+/// Zeroed `MaybeUninit` plus a flag, as `FILM`, to keep it in `.bss`.
+/// Single-threaded driver state, never touched from an ISR.
+static mut CARRY: MaybeUninit<Anim> = MaybeUninit::zeroed();
+static CARRY_SET: AtomicBool = AtomicBool::new(false);
+static CARRY_GLASS: AtomicU32 = AtomicU32::new(0);
+const _: () = assert!(!core::mem::needs_drop::<Anim>());
+
+/// Keep `anim`, the last thing presented, for the next pager.
+fn carry_keep(anim: Anim) {
+    // SAFETY: single-threaded driver state; nothing else references CARRY
+    // (`carry_take` moves out under `CARRY_SET`, cleared before the read),
+    // and `Anim` needs no drop, so overwriting a live value leaks nothing.
+    unsafe { (*core::ptr::addr_of_mut!(CARRY)).write(anim) };
+    CARRY_GLASS.store(lcd::glass_writes(), Ordering::Relaxed);
+    CARRY_SET.store(true, Ordering::Relaxed);
+}
+
+/// The kept animation, if the glass still shows it.
+fn carry_take() -> Option<Anim> {
+    if !CARRY_SET.swap(false, Ordering::Relaxed) || CARRY_GLASS.load(Ordering::Relaxed) != lcd::glass_writes() {
+        return None;
+    }
+    // SAFETY: `CARRY_SET` was true, so `carry_keep` wrote it; clearing the
+    // flag first makes this read the last one.
+    Some(unsafe { (*core::ptr::addr_of_mut!(CARRY)).assume_init_read() })
+}
+
 pub fn run_pager(
     screens: &[Screen],
     start: usize,
@@ -1956,7 +1991,15 @@ pub fn run_pager(
     let marks = atlas.marks();
     let font = atlas.font();
     let now = timeout::now();
-    let mut anim = Anim::new(&screens[i], 0, now);
+    // Continue from the previous pager when its frame is still on the glass
+    // (the disc springs over, the text cross-fades); otherwise start at rest.
+    let mut anim = match carry_take() {
+        Some(mut a) => {
+            a.go_to(&screens[i], 0, now);
+            a
+        }
+        None => Anim::new(&screens[i], 0, now),
+    };
     sampling_enable();
     // Seed from the buttons' current level, as `run_flow` does, so a chord
     // still held from the previous step does not select here.
@@ -2037,5 +2080,6 @@ pub fn run_pager(
         }
     };
     sampling_disable();
+    carry_keep(anim);
     result
 }
