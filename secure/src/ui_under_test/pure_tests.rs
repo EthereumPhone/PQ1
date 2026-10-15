@@ -1128,6 +1128,26 @@ fn negative_progress_bar_clamps_above_100_pct() {
 }
 
 #[test]
+fn positive_the_entry_rows_keep_drawing_while_they_wait() {
+    // Owner 2026-10-15: the hint between an entry row's chevrons swaps
+    // between CONFIRM (BOTH) and BACK (HOLD LEFT), so the row must keep
+    // drawing during the input wait (`show_waiting`, the ambient presenter),
+    // not be painted once and left: a swap that never repaints never shows.
+    for (src, sig, call) in [
+        (PIN_SRC, "fn px_pin_wait(", "px_pin_wait(&pin, pos, &mut idle)"),
+        (WIZARD_SRC, "fn px_letter_wait(", "px_letter_wait(title, &buf, len, &mut idle)"),
+    ] {
+        let body = src.split(sig).nth(1).unwrap_or_else(|| panic!("{sig} must exist"));
+        let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
+        assert!(body.contains("super::px::screens::show_waiting(&row, idle)"), "{sig}");
+        assert!(src.contains(call), "the row's loop must wait through {sig}");
+    }
+    // The paint-once presenters must not come back on either row.
+    assert!(!PIN_SRC.contains("super::px::screens::show(&row)"));
+    assert!(!WIZARD_SRC.contains("super::px::screens::show(&super::px::status_map::letter_row"));
+}
+
+#[test]
 fn negative_an_idle_entry_row_leaves_the_glass_before_the_hold() {
     // Setup has no timeout, so an entry row that reports idle holds for a
     // press instead of restarting setup. The row must not stay on the panel

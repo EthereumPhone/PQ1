@@ -102,6 +102,9 @@ pub struct Layout {
     /// A hero intro ([`crate::screen::Nav::Intro`]): the caption sits on
     /// [`INTRO_CAPTION_X`] and carries the band chevron.
     pub intro: bool,
+    /// The entry row's hint swaps between its two messages, forever
+    /// ([`crate::rows::entry_hint`]).
+    pub cycle: bool,
 }
 
 /// Which record bytes a text spec refers to — the layout only carries
@@ -182,7 +185,7 @@ impl Layout {
     /// mean endless" would drift the first time a fourth ambient flag lands.
     #[must_use]
     pub fn plays_forever(&self) -> bool {
-        self.sweep || self.hint || self.band
+        self.sweep || self.hint || self.band || self.cycle
     }
 }
 
@@ -215,6 +218,7 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         hint: false,
         band: false,
         intro: false,
+        cycle: false,
     };
     let mut nt = 0usize;
     let mut push = |t: Option<TextSpec>| {
@@ -283,6 +287,8 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         Some(Kind::Entry) => {
             // The row replaces the token; the corner chevrons carry the taps.
             l.circle = None;
+            // The hint between the chevrons swaps forever (`rows::entry_hint`).
+            l.cycle = true;
             push(spec(s, Src::Caption, TierId::regular(18), CENTER_X, BASELINE_Y, Align::Center, true, LS_QUESTION_Q6));
         }
         Some(Kind::Words) => {
@@ -990,7 +996,30 @@ impl Anim {
         if l.band {
             return Some(now.wrapping_add(33));
         }
+        if l.cycle {
+            return Some(now.wrapping_add(crate::rows::entry_hint_still_for(now).max(16)));
+        }
         None
+    }
+
+    /// When a screen whose ONLY motion is the entry row's hint swap next
+    /// changes, while it is otherwise at rest: a presenter can sleep until
+    /// then instead of repainting the same frame. `None` while anything else
+    /// moves (or for any other screen), meaning: paint at the frame rate.
+    #[must_use]
+    pub fn cycle_wake(&self, now: u32) -> Option<u32> {
+        let l = layout_of(&self.cur, self.cur_page);
+        let quiet = self.film.is_none()
+            && self.hold.is_none()
+            && self.press.is_none()
+            && self.flip_at.is_none()
+            && self.text_in_at.is_none()
+            && self.settled_at.is_some();
+        if !(l.cycle && !l.sweep && !l.hint && !l.band && quiet) {
+            return None;
+        }
+        let still = crate::rows::entry_hint_still_for(now);
+        (still > 0).then(|| now.wrapping_add(still))
     }
 
     /// Build the display list for the current pose.
@@ -1042,7 +1071,7 @@ impl Anim {
                     push_texts(frame, &self.cur, 0, a);
                 }
                 Some(Kind::Entry) => {
-                    crate::rows::build_entry(&self.cur, frame);
+                    crate::rows::build_entry(&self.cur, now, frame);
                     push_texts(frame, &self.cur, 0, a_in.max(1));
                 }
                 Some(Kind::Words) => {

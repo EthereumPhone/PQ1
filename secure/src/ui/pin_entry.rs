@@ -97,10 +97,18 @@ pub fn enter_pin() -> PinEntryResult {
     // as user activity, matching the `confirm()` contract.
 
     loop {
-        render_pin_screen(&pin, pos);
-
         let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
+        // The pixel row keeps drawing for the whole wait (its hint swaps,
+        // owner 2026-10-15); `None` = it could not paint: the page, and a
+        // plain wait.
+        let waited = match px_pin_wait(&pin, pos, &mut idle) {
+            Some(waited) => waited,
+            None => {
+                render_pin_screen(&pin, pos);
+                input().wait_button(&mut idle)
+            }
+        };
+        let event = match waited {
             Some(ev) => ev,
             None => {
                 // backend signalled idle wipe
@@ -174,17 +182,35 @@ pub fn enter_pin() -> PinEntryResult {
     PinEntryResult::Pin(*b"00000000")
 }
 
-fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
-    // Port step 4: the design's PIN row (eight rings, the active one dialing
-    // its digit, entered digits masked as the page masks them). The page
-    // below is the fallback when the pixel path declines.
-    #[cfg(feature = "ui-px")]
-    {
-        let row = super::px::status_map::pin_row(super::px::screens::pin_caption(), pin, pos);
-        if super::px::screens::show(&row) {
-            return;
-        }
+/// Port step 4: the design's PIN row (eight rings, the active one dialing its
+/// digit, entered digits masked as the page masks them), shown and kept
+/// drawing for the whole input wait, so its hint can swap between CONFIRM
+/// (BOTH) and BACK (HOLD LEFT). `None` when the pixel UI could not paint it:
+/// the caller paints the 16x4 page and waits itself.
+#[cfg(all(feature = "ui-px", not(feature = "e2e-test")))]
+fn px_pin_wait(
+    pin: &[u8; PIN_LEN],
+    pos: usize,
+    idle: &mut dyn FnMut() -> bool,
+) -> Option<Option<(Button, Press)>> {
+    let row = super::px::status_map::pin_row(super::px::screens::pin_caption(), pin, pos);
+    match super::px::screens::show_waiting(&row, idle) {
+        super::px::screens::Waited::NoAtlas => None,
+        super::px::screens::Waited::Event(ev) => Some(ev),
     }
+}
+
+#[cfg(all(not(feature = "ui-px"), not(feature = "e2e-test")))]
+fn px_pin_wait(
+    _pin: &[u8; PIN_LEN],
+    _pos: usize,
+    _idle: &mut dyn FnMut() -> bool,
+) -> Option<Option<(Button, Press)>> {
+    None
+}
+
+/// The 16x4 PIN page (no pixel UI, or no verified atlas).
+fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
     let d = display();
     d.clear();
     d.draw_line(0, "   Enter PIN");

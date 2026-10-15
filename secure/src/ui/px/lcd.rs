@@ -1423,6 +1423,7 @@ impl Ambient {
             ft: AmbientFt::default(),
         };
         a.paint(atlas);
+        a.sleep_while_still(now);
         a
     }
 
@@ -1449,7 +1450,17 @@ impl Ambient {
         }
         let _ = self.anim.step(now);
         self.paint(atlas);
+        self.sleep_while_still(now);
         true
+    }
+
+    /// A screen whose only motion is the entry row's hint swap holds the same
+    /// frame for seconds at a time: sleep until it next changes instead of
+    /// streaming that frame at the frame rate. Anything else keeps the rate.
+    fn sleep_while_still(&mut self, now: u32) {
+        if let Some(t) = self.anim.cycle_wake(now) {
+            self.due_at = t;
+        }
     }
 
     fn paint(&mut self, atlas: &assets::AtlasRef) {

@@ -217,8 +217,11 @@ fn paint_fallback(s: &Screen) {
         let head = if s.caption().is_empty() { s.label() } else { s.caption() };
         // The caption (or label), then the lines. A text longer than a row
         // (CREATE NEW WALLET? is 18) breaks at its last space that fits and
-        // carries on to the next row, rather than losing its end.
-        let mut r = 0usize;
+        // carries on to the next row, rather than losing its end. When the
+        // lines need every row, the label gives way: it names the screen, the
+        // lines are what it says.
+        let mut rows: [&[u8]; 2 * (1 + pqsigner_ui_px::screen::LINES_PER_PAGE)] = [&[]; 8];
+        let mut n = 0usize;
         for k in 0..=s.nlines(0) {
             let text = if k == 0 { head } else { s.line(0, k - 1).map_or(&[][..], |(_, t)| t) };
             let (first, rest) = if text.len() > DISPLAY_COLS {
@@ -228,11 +231,16 @@ fn paint_fallback(s: &Screen) {
                 (text, &[][..])
             };
             for part in [first, rest] {
-                if !part.is_empty() && r < DISPLAY_ROWS {
-                    draw_row(d, r, part);
-                    r += 1;
+                if !part.is_empty() && n < rows.len() {
+                    rows[n] = part;
+                    n += 1;
                 }
             }
+        }
+        let head_rows = usize::from(!head.is_empty()) + usize::from(head.len() > DISPLAY_COLS);
+        let skip = if n > DISPLAY_ROWS && s.nlines(0) > 0 { head_rows } else { 0 };
+        for (r, text) in rows[skip..n].iter().take(DISPLAY_ROWS).enumerate() {
+            draw_row(d, r, text);
         }
         d.flush();
     }
@@ -1032,10 +1040,17 @@ fn enter_single_word(title: &str) -> EnterWordResult {
         // Compute current prefix lookup. If we have at least one letter
         // committed, look up. If zero letters, treat as "Multiple" over the
         // entire wordlist.
-        render_letter_screen(title, &buf, len);
-
         let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
+        // The pixel row keeps drawing for the whole wait (its hint swaps);
+        // `None` = it could not paint: the page, and a plain wait.
+        let waited = match px_letter_wait(title, &buf, len, &mut idle) {
+            Some(waited) => waited,
+            None => {
+                render_letter_screen(title, &buf, len);
+                input().wait_button(&mut idle)
+            }
+        };
+        let event = match waited {
             Some(ev) => ev,
             None => return EnterWordResult::IdleWipe,
         };
@@ -1119,13 +1134,36 @@ fn prefix_is_exact_word(p: &str) -> bool {
     is_exact_wordlist_entry(p.as_bytes())
 }
 
-fn render_letter_screen(title: &str, buf: &[u8; MAX_LETTERS], len: usize) {
-    // Port step 4: the entry row (committed letters in white rings, the
-    // dialed one in the active ring) — the same letters the page shows.
-    #[cfg(feature = "ui-px")]
-    if super::px::screens::show(&super::px::status_map::letter_row(title.as_bytes(), buf, len)) {
-        return;
+/// Port step 4: the entry row (committed letters in white rings, the dialed
+/// one in the active ring), the same letters the page shows, kept drawing
+/// for the whole input wait so its hint can swap. `None` when the pixel UI
+/// could not paint it: the caller paints the page and waits itself.
+#[cfg(feature = "ui-px")]
+fn px_letter_wait(
+    title: &str,
+    buf: &[u8; MAX_LETTERS],
+    len: usize,
+    idle: &mut dyn FnMut() -> bool,
+) -> Option<Option<(Button, Press)>> {
+    let row = super::px::status_map::letter_row(title.as_bytes(), buf, len);
+    match super::px::screens::show_waiting(&row, idle) {
+        super::px::screens::Waited::NoAtlas => None,
+        super::px::screens::Waited::Event(ev) => Some(ev),
     }
+}
+
+#[cfg(not(feature = "ui-px"))]
+fn px_letter_wait(
+    _title: &str,
+    _buf: &[u8; MAX_LETTERS],
+    _len: usize,
+    _idle: &mut dyn FnMut() -> bool,
+) -> Option<Option<(Button, Press)>> {
+    None
+}
+
+/// The 16x4 letter page (no pixel UI, or no verified atlas).
+fn render_letter_screen(title: &str, buf: &[u8; MAX_LETTERS], len: usize) {
     let d = display();
     d.clear();
     d.draw_line(0, title);

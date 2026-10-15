@@ -151,10 +151,11 @@ pub fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool
 }
 
 /// What [`show_waiting`] did.
-#[cfg_attr(not(any(feature = "duress-pin", feature = "duress-ui-test")), allow(dead_code))]
 pub enum Waited {
     /// No verified atlas — the caller must paint its own 16x4 page and run
     /// its own `wait_button`. Same contract as `show_with` returning `false`.
+    /// (The text presenter has no atlas to fail.)
+    #[cfg_attr(not(feature = "ui-lcd"), allow(dead_code))]
     NoAtlas,
     /// The screen was shown and kept animating for the whole wait. Carries
     /// the input event, or `None` if the idle timer fired.
@@ -175,9 +176,9 @@ pub enum Waited {
 /// so the `[UI-PXSR]` log line and the `ui-capture` frame hash are unchanged
 /// and the transcript count does not move.
 ///
-/// Only the duress yes / no still waits here; the setup choice is a page of
-/// [`pager`].
-#[cfg_attr(not(any(feature = "duress-pin", feature = "duress-ui-test")), allow(dead_code))]
+/// The entry rows (the PIN, a word's letters) wait here too, so the hint
+/// between their chevrons keeps swapping; the duress yes / no does. The
+/// setup choice is a page of [`pager`].
 pub fn show_waiting(s: &Screen, idle: &mut dyn FnMut() -> bool) -> Waited {
     #[cfg(feature = "ui-lcd")]
     {

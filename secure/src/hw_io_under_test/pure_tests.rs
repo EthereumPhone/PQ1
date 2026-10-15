@@ -2540,6 +2540,24 @@ fn positive_a_pager_continues_from_the_previous_pager_only_while_its_frame_is_on
 }
 
 #[test]
+fn positive_a_still_entry_row_is_not_streamed_at_the_frame_rate() {
+    // The entry row's only motion is a hint swap every 5 s. The ambient
+    // presenter paints at the frame rate for a moving screen, which for the
+    // row would stream the same frame to the panel ~60 times a second. It
+    // sleeps until the next change instead, after the first paint and after
+    // every later one.
+    let body = UI_PX_LCD_SRC
+        .split("fn sleep_while_still(&mut self, now: u32) {")
+        .nth(1)
+        .expect("sleep_while_still must exist");
+    let body = &body[..body.find("\n    }\n").unwrap_or(body.len())];
+    assert!(body.contains("if let Some(t) = self.anim.cycle_wake(now) {"));
+    assert!(body.contains("self.due_at = t;"));
+    assert!(UI_PX_LCD_SRC.contains("a.paint(atlas);\n        a.sleep_while_still(now);"));
+    assert!(UI_PX_LCD_SRC.contains("self.paint(atlas);\n        self.sleep_while_still(now);"));
+}
+
+#[test]
 fn negative_the_setup_pager_resets_activity_only_on_a_button_edge() {
     // #426 on the pixel pager: the timer is reset by a real button edge and
     // by nothing else (no reset on entry, none per frame).

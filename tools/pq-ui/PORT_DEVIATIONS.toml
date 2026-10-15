@@ -39,6 +39,12 @@
 #     the reference binds BACK/NEXT to double presses; the hint row shows the
 #     static `- ENTER (BOTH) +` (no 3 s pulse cycle, no ring bounce: the
 #     entry loop paints once per button event);
+#     UPDATE 2026-10-15 (owner): the hint now swaps between CONFIRM (BOTH)
+#     and BACK (HOLD LEFT) on the Confirm? band's timing (5 s a message,
+#     300 ms fades), on the wall clock so a press neither restarts it nor
+#     re-fades it — still not the reference's 18 s - / + / ENTER / BACK-NEXT
+#     rotation, and still the legacy gestures. The row keeps drawing through
+#     its input wait for that (`show_waiting`), sleeping between fades;
 #   * seed words: drawn by the constant-time cell run (fixed 14 px cells,
 #     each glyph centred in its cell) - a monospaced setting of the
 #     proportional Aileron face, F-24; three pages of eight words (the
