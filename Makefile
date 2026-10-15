@@ -3793,7 +3793,7 @@ bench-masked-sha-hw:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features bench-masked-sha,ui-noop,e2e-test,mock-se
+		--features bench-masked-sha,ui-noop,e2e-test,mock-se,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \
@@ -3871,7 +3871,7 @@ saes-self-test-hw-rdp1:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/secure \
 		-p sphincs-tz-secure --no-default-features \
-		--features saes-self-test,uart-console,debug-log,ui-noop,e2e-test,mock-se
+		--features saes-self-test,uart-console,debug-log,ui-noop,e2e-test,mock-se,$(BOARD_FEATURE)
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
 	cargo build --release --target $(TARGET) --target-dir target/nonsecure \

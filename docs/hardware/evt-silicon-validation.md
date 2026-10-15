@@ -1155,6 +1155,10 @@ current authority. Listed for completeness; do not action without owner stage de
 
 ## Related / duplicate aggregations (do not re-derive; keep in sync)
 
+- **`docs/hardware/dvt-silicon-test-checklist.md`** — the DVT **run sheet** (created
+  2026-10-15). It holds per-unit status and an evidence log, and it cites this index for
+  procedures. Record DVT runs there. Fix procedures here.
+
 - **`docs/STATUS.md` §A ship-gate table** — the authoritative ship-blocker list
   (FW-RB, S-1..S-7, HIGH-1, Claim 3) with `blocked-on: bench/factory/code` columns.
 - **`docs/provisioning/first-boot-hardware-bringup.md`** — the ordered on-silicon
