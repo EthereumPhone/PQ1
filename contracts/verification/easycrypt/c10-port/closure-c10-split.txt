@@ -491,3 +491,17 @@ StirlingPoolEvent
 StirlingCoverageBound
 OriginalStirlingCoverage
 StirlingNumericalBound
+
+# Exact accepted WOTS encoding-collision charge, 2026-10-15.
+WotsAcceptanceMass
+FullDigestPrefixSampling
+AcceptedEncodingPool
+AcceptedWotsCollision
+AcceptedWotsCut
+AcceptedActualWotsCut
+AcceptedEncodingCases
+AcceptedEncodingMemo
+AcceptedEncodingGame
+AcceptedEncodingCharge
+ByteAcceptedEncodingCharge
+AcceptedEncodingNumericalBound

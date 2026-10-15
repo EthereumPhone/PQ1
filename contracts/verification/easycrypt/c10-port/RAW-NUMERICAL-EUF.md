@@ -138,6 +138,47 @@ overcounts overlapping events. They do not prove a tight forgery probability,
 a concrete SHA-256 security level, or a quantum-oracle result. The separate
 probability-monad requirement tracked by #295 remains open.
 
+## Accepted WOTS encoding collisions
+
+`AcceptedEncodingNumericalBound.physical_byte_accepted_encoding_euf_bound`
+retains the Stirling coverage charge and replaces the WOTS encoding term by
+
+```
+p = count_ds(43, 8, 205) / 8^43
+  = 22169393903687611906220091621190388 / 680564733841876926926749214863536422912
+Caccepted(Q) = Q*(Q-1)/2 * p * 2^-129
+```
+
+`WotsAcceptanceMass` proves that the actual `RawWots.raw_digits` projection of
+a fresh full digest is uniform over 43 base-eight digits. The existing
+kernel-checked sum enumeration then gives exactly `p` for `count_accepts`, the
+sum-205 predicate. A fixed encoding has mass `2^-129`; an independent pair with
+equal accepted encodings has mass `p * 2^-129`. Acceptance is nonvacuous: `p > 0`.
+
+`AcceptedEncodingPool` bounds collisions among the accepted words in an iid
+full-digest list. `FullDigestPrefixSampling` proves completion domination for
+arbitrary adaptive prefixes. `AcceptedEncodingMemo`, `AcceptedEncodingGame`
+and `AcceptedEncodingCharge` relate that pool to the existing memoized oracle:
+fresh inputs draw once, cached inputs retain their earlier replies. The actual
+whole-run budget bounds the pool, without a freshness or successful-grind
+premise and without substituting average work for worst-case work.
+
+`AcceptedWotsCollision`, `AcceptedWotsCut`, `AcceptedActualWotsCut` and
+`AcceptedEncodingCases` prove that the actual opening and output partition need
+only exclude equal encodings whose digests both pass the acceptance test.
+`ByteAcceptedEncodingCharge` transfers this event bound to the initialized
+byte context. All other charges, configured caps, losslessness and existing
+private-state exclusions are retained; the additional `FullDigestSamples`
+exclusion hides only the new proof sampler. Both new full charges are proved
+no larger than their Stirling predecessors for all nonnegative caps.
+
+At `qr = qs = 65536`, `p` is approximately `3.2574997e-5`, reducing the encoding
+charge from `2.9094038e-15` to `9.4773819e-20`, by about 30,698 times. The full
+bound becomes approximately `5.8602770e-15` (`2^-47.28`), an improvement by
+about 1.496 times. The unchanged public-node charge still dominates. Its
+high-128-bit projection differs from the low-129-bit encoding projection;
+equal encodings do not imply equal public nodes.
+
 ## Composition, evidence and limits
 
 `NumericalByteCases` proves that every successful output belongs to one of the
@@ -158,11 +199,16 @@ The exact-enumeration continuation adds eight replay targets, 76 lemmas,
 23 operation pins, eleven paired checks and eight scope probes. Its negative
 controls distinguish checked finite counterexamples from sensitivity of the
 event/game transfer proofs; see [CONTROL-EVIDENCE.md](CONTROL-EVIDENCE.md).
+The accepted-encoding continuation adds twelve replay targets, 60 proved
+statements, twelve operation pins, fourteen paired checks and twelve scope
+probes. Three concrete modules and two module interfaces are census-pinned;
+there are no new project axioms.
 
-The bound is conservative. At `qr = qs = 65536`, exact rational evaluation gives
+The original bound is conservative. At `qr = qs = 65536`, exact rational evaluation gives
 approximately `8.7695861e-15` overall (about `2^-46.70`), with coverage alone
 approximately `1.3619301e-25` (about `2^-82.60`). The broad public-query budget
-and birthday terms dominate. These are upper bounds on game probability, not
+and birthday terms dominate. The continuations above give the improved bounds.
+These are upper bounds on game probability, not
 attack costs, lower bounds, or a claim of deployed 96-bit security. For large
 caps the expression can exceed one and is then uninformative.
 

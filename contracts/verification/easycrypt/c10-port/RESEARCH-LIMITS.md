@@ -16,16 +16,24 @@ with unchanged premises. At `qr = qs = 65536` the coverage charge is about
 `2^-98.14`, down from the earlier canonical `2^-93.29` (originally `2^-82.60`).
 This closes the previously listed exact-enumeration obligation. It does not
 make the union of overlapping coverage events an exact probability.
-The complete bound remains about
-`2^-46.70`: public-node and WOTS-encoding birthday terms dominate. These are
-upper probability bounds, not attack costs or a deployed security rating.
+The accepted-encoding continuation also closes the overbroad WOTS encoding
+event: actual opening and output-partition proofs require collisions only
+between encodings that pass the sum-205 predicate. Its exact fresh-digest
+acceptance mass is proved from the existing digit enumeration, and an adaptive
+prefix argument transfers the smaller charge through the memoized oracle.
+At these caps the encoding charge is about 30,698 times smaller and the complete
+bound improves from about `2^-46.70` to `2^-47.28`. Public-node collisions now
+dominate. These are upper probability bounds, not attack costs or a deployed
+security rating.
 
-The next quantitative obligation is to replace the global all-pairs collision
-event with the target collisions actually sufficient for successful
+The next quantitative obligation is to replace the global all-pairs public-node
+collision event with the target collisions actually sufficient for successful
 verification, or prove a tail charge for a smaller effective hash budget.
 Substituting average grinding work for the proved worst-case budget is invalid.
 Honest-but-private intermediate values, repeated calls, failed signing and
-adaptive oracle queries must be covered.
+adaptive oracle queries must be covered. The high-128-bit node projection and
+low-129-bit encoding projection are different; the accepted-encoding theorem
+does not reduce the public-node term.
 
 The [formally verified SPHINCS+ reduction](https://eprint.iacr.org/2024/910)
 provides a modular approach to tighter component reductions. Its construction

@@ -175,10 +175,12 @@ remain open. The raw verifier's zero-node continuation remains explicit.
 **EasyCrypt coverage tightening (2026-10-15):** exact Stirling and falling-factorial
 counts replace the earlier canonical overcount in the adaptive FORS coverage
 term, retaining the initialized byte game and its premises. The complete bound
-remains dominated by the unchanged birthday charges.
+also charges WOTS encoding collisions only when both encodings pass the actual
+sum-205 test, with a proved exact acceptance mass and adaptive memoized-oracle
+transfer. Public-node birthday collisions remain the dominant quantitative loss.
 The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
 and [remaining research obligations](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md)
-distinguish that result from tighter collision charges, concrete SHA-256, QROM
+distinguish those results from tighter public-node charges, concrete SHA-256, QROM
 and full Rust correspondence.
 
 **Kani/EasyCrypt evidence correction (2026-09-16):** current gate scope and

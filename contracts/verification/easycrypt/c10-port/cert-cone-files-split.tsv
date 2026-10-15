@@ -686,3 +686,15 @@ cdrafts-split/StirlingPoolEvent.ec
 cdrafts-split/StirlingCoverageBound.ec
 cdrafts-split/OriginalStirlingCoverage.ec
 cdrafts-split/StirlingNumericalBound.ec
+cdrafts-split/WotsAcceptanceMass.ec
+cdrafts-split/FullDigestPrefixSampling.ec
+cdrafts-split/AcceptedEncodingPool.ec
+cdrafts-split/AcceptedWotsCollision.ec
+cdrafts-split/AcceptedWotsCut.ec
+cdrafts-split/AcceptedActualWotsCut.ec
+cdrafts-split/AcceptedEncodingCases.ec
+cdrafts-split/AcceptedEncodingMemo.ec
+cdrafts-split/AcceptedEncodingGame.ec
+cdrafts-split/AcceptedEncodingCharge.ec
+cdrafts-split/ByteAcceptedEncodingCharge.ec
+cdrafts-split/AcceptedEncodingNumericalBound.ec

@@ -1235,3 +1235,45 @@ scratch/_scope_neg_op_StirlingPoolEvent.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_StirlingCoverageBound.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_OriginalStirlingCoverage.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_StirlingNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Exact enumeration: positive counts/events and paired intended proof rejection.
+scratch/accepted_encoding_digit_outside_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_digit_outside_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_digit_mass_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_digit_mass_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_low129_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_low129_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_acceptance_mass_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_acceptance_mass_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_pair_acceptance_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_pair_acceptance_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_empty_pool_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_empty_pool_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/accepted_encoding_singleton_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_singleton_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_repeated_accepted_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_repeated_accepted_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_adaptive_cap_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_adaptive_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_byte_event_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_byte_event_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_output_partition_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_output_partition_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_independent_transfer_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_independent_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_physical_transfer_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_physical_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/accepted_encoding_charge_comparison_positive.ec	MUST-PASS	-
+scratch/accepted_encoding_charge_comparison_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_WotsAcceptanceMass.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_FullDigestPrefixSampling.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedEncodingPool.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedWotsCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedWotsCut.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedActualWotsCut.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedEncodingCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedEncodingMemo.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedEncodingGame.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedEncodingCharge.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ByteAcceptedEncodingCharge.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AcceptedEncodingNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.

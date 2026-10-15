@@ -100,3 +100,31 @@ by the existing source-binding and exact control-enrollment gates. Each of the
 eight new modules also has an unavailable-symbol scope probe. These controls
 do not discharge the remaining collision-budget, concrete-hash, QROM or full
 Rust/session obligations.
+
+## Accepted WOTS encoding controls
+
+Fourteen positive/negative twins cover the digit alphabet and atom mass, the
+129-bit encoding width, actual sum-205 acceptance mass, both acceptance
+predicates in the pair event, empty/singleton/repeated-accepted pools, the
+adaptive prefix cap, the accepted table event, the successful-output guard,
+the independent and physical game transfers, and comparison to the prior
+charge. They exercise twelve new modules containing 60 proved statements.
+
+Each negative retains its positive twin's proof and changes the claimed event,
+mass or charge. Rejection must occur at the final proof application in
+`checked`: `the given proof-term proves:`, except the empty-list false claim,
+which simplifies and reports `[by]: cannot close goals`. Parser errors, missing
+symbols, earlier helper failures and time/resource failures are not credited.
+The finite digit/list cases have checked counterexamples; positivity of the
+actual acceptance mass rules out an empty acceptance event. The adaptive,
+event and game-transfer controls establish proof sensitivity, not lower
+forgery probabilities or necessity of every charge. In particular, removing a
+charge and reapplying the old theorem is not a proof that the smaller bound
+is false.
+
+`tools/accepted_encoding_controls.py` generates these fixtures and their exact
+enrollment. Twelve unavailable-symbol probes check that the new modules do
+not expose the tainted structural FORS theorem. The complete two-driver replay,
+source bindings, operation/statement pins and declaration census remain
+separate gates. These controls leave the public-node, concrete-hash, QROM and
+full Rust/session obligations open.
