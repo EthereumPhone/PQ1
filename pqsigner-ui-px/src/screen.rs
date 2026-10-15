@@ -148,6 +148,11 @@ pub enum Nav {
     /// Only the right corner chevron: the first screen of a pager, nothing
     /// to go back to (device rule, owner 2026-10-15).
     RightOnly,
+    /// A detail that plays the ask's arrow hint (turn up, bob) with nothing
+    /// armed: the setup tutorial's "Both = confirm" page, so the moving
+    /// arrows are learned as "confirm works here" (owner 2026-10-15). Its
+    /// confirm only moves on ([`Screen::confirmable`]); signing never sets it.
+    Hint,
 }
 
 impl Nav {
@@ -158,6 +163,7 @@ impl Nav {
             Self::Intro => b'I',
             Self::LeftOnly => b'<',
             Self::RightOnly => b'>',
+            Self::Hint => b'^',
         }
     }
 
@@ -168,6 +174,7 @@ impl Nav {
             b'I' => Some(Self::Intro),
             b'<' => Some(Self::LeftOnly),
             b'>' => Some(Self::RightOnly),
+            b'^' => Some(Self::Hint),
             _ => None,
         }
     }
@@ -763,6 +770,15 @@ impl Screen {
         a && b
     }
 
+    /// Whether the confirm gesture does anything on this screen in a pager:
+    /// an armed screen ([`Screen::commit`]), or the [`Nav::Hint`]
+    /// demonstration, whose confirm only moves on. The signing flow reads
+    /// `commit` alone.
+    #[must_use]
+    pub fn confirmable(&self) -> bool {
+        self.commit() || self.nav() == Some(Nav::Hint)
+    }
+
     #[must_use]
     pub fn pulse(&self) -> bool {
         self.0[OFF_PULSE] == b'Y'
@@ -925,6 +941,8 @@ impl Screen {
             {
                 return false
             }
+            // The demonstration is a detail's (an ask already has the hint).
+            Some(Nav::Hint) if kind != Kind::Detail => return false,
             _ => {}
         }
         let tier_ok = if kind == Kind::Words {
@@ -1620,7 +1638,7 @@ mod tests {
             assert_eq!(s.line(0, k).map(|(_, t)| t.len()), Some(LINE_LEN), "line {k}");
         }
         assert_eq!(detail(b"OLD", 3).nav(), Some(Nav::Default));
-        for n in [Nav::Default, Nav::Intro, Nav::LeftOnly, Nav::RightOnly] {
+        for n in [Nav::Default, Nav::Intro, Nav::LeftOnly, Nav::RightOnly, Nav::Hint] {
             assert_eq!(Nav::from_byte(n.as_byte()), Some(n));
         }
     }
@@ -1650,6 +1668,21 @@ mod tests {
         let mut junk = detail(b"D", 1);
         junk.0[OFF_NAV] = b'?';
         assert!(!junk.is_well_formed());
+        // The hint demonstration is a detail's, armed nowhere: confirmable in
+        // a pager, never `commit` (the signing flow reads `commit` alone).
+        let demo = ScreenBuilder::detail(b"D", Icon::Dots, Side::Left, b"BUTTONS")
+            .tier(Tier::T22)
+            .line(b"Both = confirm", Weight::Regular)
+            .nav(Nav::Hint)
+            .finish()
+            .unwrap();
+        assert!(demo.is_well_formed());
+        assert!(!demo.commit());
+        assert!(demo.confirmable());
+        let mut on_hero = ScreenBuilder::hero(b"H", Icon::Dots, b"ASK?").finish().unwrap();
+        on_hero.0[OFF_NAV] = Nav::Hint.as_byte();
+        assert!(!on_hero.is_well_formed(), "an ask already has the hint");
+        assert!(!detail(b"D", 1).confirmable());
     }
 
     #[test]

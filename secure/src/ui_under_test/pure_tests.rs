@@ -1250,7 +1250,7 @@ fn negative_the_setup_pager_selects_only_an_asking_screen() {
     // tell it from the chord); long-Left does nothing.
     let body = wizard_fn_body(WIZARD_SRC, "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {");
     assert!(body.contains(
-        "(Button::Right, Press::Long) => {\n                if screens[i].commit() {\n                    return PagerOut::Selected(i);"
+        "(Button::Right, Press::Long) => {\n                if screens[i].confirmable() {\n                    return PagerOut::Selected(i);"
     ));
     assert!(body.contains("(Button::Left, Press::Long) => {}"));
     assert_eq!(body.matches("PagerOut::Selected(").count(), 1);

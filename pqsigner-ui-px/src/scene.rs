@@ -318,6 +318,8 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         }
         Some(crate::screen::Nav::LeftOnly) if l.chev == Chev::Lr => l.chev = Chev::LeftOnly,
         Some(crate::screen::Nav::RightOnly) if l.chev == Chev::Lr => l.chev = Chev::RightOnly,
+        // The tutorial's demonstration: the ask's hint on a detail.
+        Some(crate::screen::Nav::Hint) if s.kind() == Some(Kind::Detail) => l.hint = true,
         _ => {}
     }
     l
@@ -1478,6 +1480,15 @@ mod tests {
         let last = ScreenBuilder::hero(b"I", Icon::Dots, b"IMPORT?").nav(Nav::LeftOnly).finish().unwrap();
         let l = layout_of(&last, 0);
         assert_eq!((l.chev, l.hint), (Chev::LeftOnly, true));
+        let demo = ScreenBuilder::detail(b"C", Icon::Dots, Side::Left, b"BUTTONS")
+            .tier(Tier::T22)
+            .line(b"Both = confirm", Weight::Regular)
+            .nav(Nav::Hint)
+            .finish()
+            .unwrap();
+        let l = layout_of(&demo, 0);
+        assert_eq!((l.chev, l.hint), (Chev::Lr, true), "the hint plays on the demonstration");
+        assert!(!layout_of(&detail(), 0).hint, "and on no other detail");
         let intro = ScreenBuilder::hero(b"B", Icon::Dots, b"WRITE DOWN 24 WORDS").intro().finish().unwrap();
         let l = layout_of(&intro, 0);
         assert_eq!((l.chev, l.hint, l.intro), (Chev::None, false, true));

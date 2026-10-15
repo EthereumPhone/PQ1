@@ -2012,7 +2012,8 @@ pub fn run_pager(
         if g.edge {
             timeout::reset_activity();
         }
-        let asks = screens[i].commit();
+        // An armed screen, or the tutorial's demonstration (`Nav::Hint`).
+        let asks = screens[i].confirmable();
         let mut decided: Option<PagerOut> = None;
         for ev in g.buf[..g.n].iter().flatten() {
             match *ev {

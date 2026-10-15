@@ -194,7 +194,7 @@ fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) ->
                 }
             }
             (Button::Right, Press::Long) => {
-                if screens[i].commit() {
+                if screens[i].confirmable() {
                     return PagerOut::Selected(i);
                 }
             }
@@ -215,27 +215,23 @@ fn paint_fallback(s: &Screen) {
         let d = display();
         d.clear();
         let head = if s.caption().is_empty() { s.label() } else { s.caption() };
-        // A caption longer than a row (CREATE NEW WALLET? is 18) breaks at
-        // its last space that fits and carries on to the next row, rather
-        // than losing its end.
-        let (first, rest) = if head.len() > DISPLAY_COLS {
-            let cut = head[..=DISPLAY_COLS].iter().rposition(|&b| b == b' ').unwrap_or(DISPLAY_COLS);
-            (&head[..cut], head[cut..].trim_ascii_start())
-        } else {
-            (head, &[][..])
-        };
+        // The caption (or label), then the lines. A text longer than a row
+        // (CREATE NEW WALLET? is 18) breaks at its last space that fits and
+        // carries on to the next row, rather than losing its end.
         let mut r = 0usize;
-        for text in [first, rest].into_iter().filter(|t| !t.is_empty()) {
-            draw_row(d, r, text);
-            r += 1;
-        }
-        for k in 0..s.nlines(0) {
-            if r >= DISPLAY_ROWS {
-                break;
-            }
-            if let Some((_, text)) = s.line(0, k) {
-                draw_row(d, r, text);
-                r += 1;
+        for k in 0..=s.nlines(0) {
+            let text = if k == 0 { head } else { s.line(0, k - 1).map_or(&[][..], |(_, t)| t) };
+            let (first, rest) = if text.len() > DISPLAY_COLS {
+                let cut = text[..=DISPLAY_COLS].iter().rposition(|&b| b == b' ').unwrap_or(DISPLAY_COLS);
+                (&text[..cut], text[cut..].trim_ascii_start())
+            } else {
+                (text, &[][..])
+            };
+            for part in [first, rest] {
+                if !part.is_empty() && r < DISPLAY_ROWS {
+                    draw_row(d, r, part);
+                    r += 1;
+                }
             }
         }
         d.flush();
@@ -293,8 +289,8 @@ pub fn setup_intro(back_to: Option<SetupChoice>) -> SetupChoice {
         match pager(&screens, start, false, false) {
             PagerOut::Selected(setup_screens::CREATE) => return SetupChoice::Create,
             PagerOut::Selected(setup_screens::IMPORT) => return SetupChoice::Import,
-            // The practice selects nothing: on to the choice.
-            PagerOut::Selected(setup_screens::PRACTICE) => start = setup_screens::CREATE,
+            // The confirm page's confirm selects nothing: on to the choice.
+            PagerOut::Selected(setup_screens::CONFIRM_HELP) => start = setup_screens::CREATE,
             PagerOut::Selected(i) => start = i,
             PagerOut::Forward | PagerOut::Back => {}
         }

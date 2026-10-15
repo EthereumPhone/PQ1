@@ -19,33 +19,40 @@ fn hero(id: &[u8], caption: &[u8]) -> ScreenBuilder {
 /// A setup detail: the dots docked right, `label` under them, `lines` at the
 /// largest tier that fits.
 fn detail(id: &[u8], label: &[u8], lines: &[&[u8]]) -> Screen {
+    detail_on(id, Side::Right, Nav::Default, label, lines)
+}
+
+/// [`detail`] docked on `side`, in the navigation pose `nav`.
+fn detail_on(id: &[u8], side: Side, nav: Nav, label: &[u8], lines: &[&[u8]]) -> Screen {
     let mut l: [(&[u8], Weight); 3] = [(&[], Weight::Regular); 3];
     for (d, s) in l.iter_mut().zip(lines) {
         *d = (s, Weight::Regular);
     }
     let l = &l[..lines.len().min(3)];
     let tier = fit_tier(l, Region::Docked).unwrap_or(Tier::T22);
-    let mut b = ScreenBuilder::detail(id, Icon::Dots, Side::Right, label).tier(tier);
+    let mut b = ScreenBuilder::detail(id, Icon::Dots, side, label)
+        .tier(tier)
+        .nav(nav);
     for &(s, w) in l {
         b = b.line(s, w);
     }
     b.finish().unwrap_or(Screen::BLANK)
 }
 
-/// Index of the select practice in [`intro`].
-pub const PRACTICE: usize = 2;
+/// Index of the second buttons page (confirm, cancel) in [`intro`].
+pub const CONFIRM_HELP: usize = 2;
 /// Index of CREATE NEW WALLET? in [`intro`].
 pub const CREATE: usize = 3;
 /// Index of IMPORT WALLET? in [`intro`].
 pub const IMPORT: usize = 4;
 
-/// The setup intro: welcome (right arrow only), the buttons, the select
-/// practice, then the two asks (the last one with the left arrow only).
+/// The setup intro: welcome (right arrow only), the buttons on two pages,
+/// then the two asks (the last one with the left arrow only).
 ///
-/// The practice is an ask that selects nothing (owner 2026-10-15): its arrows
-/// turn up and bob, the way every screen shows that both buttons select
-/// there, and the caption says so. Pressing both plays the select and moves
-/// on to the choice; a right tap skips it.
+/// The second buttons page (owner 2026-10-15) docks the disc on the left and
+/// plays the ask's arrow hint ([`Nav::Hint`]) beside "Both = confirm", so the
+/// moving arrows are learned as "confirm works here". Its confirm does work:
+/// it moves on to the choice, as a right tap does.
 #[must_use]
 pub fn intro() -> [Screen; 5] {
     [
@@ -54,14 +61,14 @@ pub fn intro() -> [Screen; 5] {
             .nav(Nav::RightOnly)
             .finish()
             .unwrap_or(Screen::BLANK),
-        detail(
+        detail(b"BUTTONS", b"BUTTONS", &[b"Left = back", b"Right = next"]),
+        detail_on(
+            b"CONFIRM",
+            Side::Left,
+            Nav::Hint,
             b"BUTTONS",
-            b"BUTTONS",
-            &[b"Left = back", b"Right = next", b"Both = select"],
+            &[b"Both = confirm", b"Hold left = cancel"],
         ),
-        hero(b"PRACTICE", b"ARROWS UP: PRESS BOTH")
-            .finish()
-            .unwrap_or(Screen::BLANK),
         hero(b"CREATE", b"CREATE NEW WALLET?")
             .finish()
             .unwrap_or(Screen::BLANK),
@@ -164,14 +171,17 @@ mod tests {
         }
     }
 
-    /// The asks are the select practice and the two choices; the welcome,
-    /// the buttons and the intros ask nothing, so the confirm gesture cannot
-    /// select them.
+    /// The asks are the two choices; the welcome, the buttons and the intros
+    /// ask nothing, so the confirm gesture cannot select them.
     #[test]
-    fn only_the_practice_and_the_choices_ask() {
+    fn only_the_two_choices_ask() {
         let i = intro();
         let asking: std::vec::Vec<usize> = (0..i.len()).filter(|&k| i[k].commit()).collect();
-        assert_eq!(asking, [PRACTICE, CREATE, IMPORT]);
+        assert_eq!(asking, [CREATE, IMPORT]);
+        // The confirm page asks nothing, but its confirm moves on.
+        let confirmable: std::vec::Vec<usize> =
+            (0..i.len()).filter(|&k| i[k].confirmable()).collect();
+        assert_eq!(confirmable, [CONFIRM_HELP, CREATE, IMPORT]);
         assert_eq!(i[CREATE].caption(), b"CREATE NEW WALLET?");
         assert_eq!(i[IMPORT].caption(), b"IMPORT WALLET?");
         for s in [
@@ -193,7 +203,8 @@ mod tests {
         let i = intro();
         assert_eq!(i[0].nav(), Some(Nav::RightOnly));
         assert_eq!(i[1].nav(), Some(Nav::Default));
-        assert_eq!(i[PRACTICE].nav(), Some(Nav::Default));
+        assert_eq!(i[CONFIRM_HELP].nav(), Some(Nav::Hint));
+        assert_eq!(i[CONFIRM_HELP].side(), Some(Side::Left));
         assert_eq!(i[CREATE].nav(), Some(Nav::Default));
         assert_eq!(i[IMPORT].nav(), Some(Nav::LeftOnly));
         assert_eq!(backup_intro().nav(), Some(Nav::Intro));
