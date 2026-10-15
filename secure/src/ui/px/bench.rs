@@ -363,6 +363,51 @@ pub fn run() -> ! {
         // No deadline: the bench is watched by a human, not a timeout.
         let mut never_expires = || false;
         let _ = super::lcd::run_flow(&screens, &atlas, &mut never_expires);
+
+        // ---- C. the setup flow's shield verdicts and a seed-word page ----
+        //
+        // Owner report 2026-10-15 from the wizard on the EVT: the shield
+        // animations and the 24-word pages are "SUPER laggy", and every
+        // shield verdict shows a vertical line on its left. The host renders
+        // of those records are clean at rest, so this shows them on the
+        // panel in isolation, through the exact calls the wizard makes
+        // (`ui::show_status` and `screens::show_with` -> `play_screen`, which
+        // now paints the frame-time overlay under `ui-px-frametime`). Each
+        // plays from its entrance to rest; a press moves to the next, and
+        // after the seed page the bench starts over at A.
+        for (title, sub) in [("Write 24 words", ""), ("Words shown", ""), ("Backup OK", ""), ("Wrong word", "")] {
+            crate::ui::show_status(title, sub);
+            let mut idle = || false;
+            let _ = crate::ui::input().wait_button(&mut idle);
+        }
+        {
+            // Public placeholder words in the fixed eight-byte cells the
+            // wizard fills from the mnemonic (`px_mnemonic_page`), so the
+            // constant-time run does exactly the work it does in setup.
+            const fn cell(w: &[u8]) -> [u8; 8] {
+                let mut c = [0u8; 8];
+                let mut i = 0;
+                while i < w.len() {
+                    c[i] = w[i];
+                    i += 1;
+                }
+                c
+            }
+            const WORDS: [[u8; 8]; 8] = [
+                cell(b"abandon"),
+                cell(b"ability"),
+                cell(b"able"),
+                cell(b"about"),
+                cell(b"above"),
+                cell(b"absent"),
+                cell(b"absorb"),
+                cell(b"abstract"),
+            ];
+            let secret: [(usize, &[u8]); 8] = core::array::from_fn(|k| (k, &WORDS[k][..]));
+            let _ = super::screens::show_with(&super::status_map::seed_page(1, 8), &secret);
+            let mut idle = || false;
+            let _ = crate::ui::input().wait_button(&mut idle);
+        }
     }
 }
 
