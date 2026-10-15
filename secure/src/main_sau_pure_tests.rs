@@ -59,6 +59,12 @@ const MAIN_SRC: &str = include_str!("main.rs");
 const SAU_SRC: &str = include_str!("sau.rs");
 const RESET_CAUSE_SRC: &str = include_str!("reset_cause.rs");
 const IWDG_SRC: &str = include_str!("hw/iwdg.rs");
+const STACK_SCRUB_SRC: &str = include_str!("stack_scrub.rs");
+const BOOT_NS_SRC: &str = include_str!("boot_ns.rs");
+const NSC_MOD_SRC: &str = include_str!("nsc/mod.rs");
+const SECURE_CARGO_TOML: &str = include_str!("../Cargo.toml");
+const CRYPTO_SRC: &str = include_str!("crypto.rs");
+const SE050_MOD_SRC: &str = include_str!("se050/mod.rs");
 
 // ═════════════════════════════════════════════════════════════════════
 // 1. reset_cause.rs — local mirror + pure-logic tests
@@ -2116,4 +2122,61 @@ fn negative_system_controllers_secured_rcc_pwr_tamp_rtc_exti() {
         .expect("init() must call stm32::secure_system_controllers() (DVT1 row 3.5)");
     let lock = init.find("stm32::lock_security_config();").expect("lock call");
     assert!(gtzc < sys && sys < lock);
+}
+
+#[test]
+fn negative_secret_residue_paths_scrub_the_stack() {
+    // DVT1 2026-10-15, checklist rows 5.4/5.5: after CMD_LOCK and the 120 s
+    // idle wipe, 48-byte key seeds were still on the secure stack, and a pin
+    // reset left every unlocked secret in SRAM1.
+    //
+    // The scrub is a register-only asm loop over [_stack_end, SP).
+    for needle in [
+        "static _stack_end: u32;",
+        "\"mov {end}, sp\",",
+        "\"str {zero}, [{p}], #4\",",
+        "options(nostack),",
+        "pub struct ScrubOnDrop;",
+    ] {
+        assert!(STACK_SCRUB_SRC.contains(needle), "stack_scrub.rs must contain `{needle}`");
+    }
+    // Every gateway command ends in fi_boundary, so this covers LOCK.
+    let fb = NSC_MOD_SRC.find("fn fi_boundary(").expect("fi_boundary");
+    let fb_body = &NSC_MOD_SRC[fb..fb + 600];
+    let run = fb_body.find("let status = run();").expect("run()");
+    let scrub = fb_body
+        .find("crate::stack_scrub::scrub_dead_stack();")
+        .expect("fi_boundary must scrub the stack after every command");
+    assert!(run < scrub);
+    // Idle wipe, HardFault, panic, and the PendSV re-unlock dialog.
+    let idle = MAIN_SRC
+        .find("if timeout::is_idle() && !nsc::handler_is_busy() && !nsc::is_definitely_locked() {")
+        .expect("idle-wipe branch");
+    let idle_body = &MAIN_SRC[idle..idle + 400];
+    assert!(idle_body.contains("nsc::zeroize_sensitive_state();\n        // Moved-from copies on the stack survive the cache wipe (DVT1 row 5.5).\n        stack_scrub::scrub_dead_stack();"));
+    let hf = MAIN_SRC.find("unsafe fn HardFault(").expect("HardFault");
+    assert!(MAIN_SRC[hf..hf + 600].contains("stack_scrub::scrub_dead_stack();"));
+    let pn = MAIN_SRC.find("fn panic(_info: &core::panic::PanicInfo) -> ! {").expect("panic");
+    assert!(MAIN_SRC[pn..pn + 200].contains("stack_scrub::scrub_dead_stack();"));
+    let pendsv = MAIN_SRC.find("fn PendSV() {").expect("PendSV");
+    assert!(MAIN_SRC[pendsv..pendsv + 300].contains("let _stack_scrub = stack_scrub::ScrubOnDrop;"));
+    // The NS hand-off frees `main`'s frame: MSP back to the top, whole stack
+    // zeroed, in the same asm block as BXNS.
+    let asm = BOOT_NS_SRC.find("\"msr msp, {top}\",").expect("boot_ns must reset MSP before BXNS");
+    let loop_store = BOOT_NS_SRC.find("\"str {zero}, [{p}], #4\",").expect("boot_ns zero loop");
+    let bxns = BOOT_NS_SRC.find("\"bxns lr\",").expect("bxns");
+    assert!(asm < loop_store && loop_store < bxns);
+    // Reset zeroes all of RAM before .data/.bss init.
+    assert!(SECURE_CARGO_TOML.contains(
+        "cortex-m-rt          = { workspace = true, features = [\"zero-init-ram\"] }"
+    ));
+    // The legacy C7 keys are no longer derived on the device: they left their
+    // seed on the stack and carry no authority.
+    let prov = CRYPTO_SRC.find("pub fn provision_from_mnemonic(").expect("provision");
+    let prov_end = CRYPTO_SRC[prov..].find("\n}\n").unwrap() + prov;
+    assert!(!CRYPTO_SRC[prov..prov_end].contains("derive_keypair_from_entropy("));
+    assert!(!CRYPTO_SRC[prov..prov_end].contains("derive_bootstrap_vk_from_entropy("));
+    assert!(!CRYPTO_SRC.contains("let (sk, decoy_vk) = derive_keypair_from_entropy("));
+    assert!(!SE050_MOD_SRC.contains("crate::crypto::derive_keypair_from_entropy(&entropy)"));
+    assert!(!SE050_MOD_SRC.contains("crate::crypto::derive_bootstrap_vk_from_entropy(&entropy)"));
 }

@@ -10,6 +10,13 @@
 // Non-Secure Vector Table Offset Register
 const VTOR_NS: *mut u32 = 0xE002_ED08 as *mut u32;
 
+extern "C" {
+    /// Top of the secure stack (cortex-m-rt `link.x`).
+    static _stack_start: u32;
+    /// Bottom of the secure stack (cortex-m-rt `link.x`: `__euninit`).
+    static _stack_end: u32;
+}
+
 /// # Safety
 ///
 /// `ns_vector_table` must point to a valid non-secure vector table
@@ -55,7 +62,25 @@ pub unsafe fn boot(ns_vector_table: u32) -> ! {
     //    enable the FPU by default in this build. If FPU is enabled later,
     //    add: `vmov.f32 sN, #0` for s0..s31 (or use VLDMIA from a zeroed
     //    16-aligned buffer).
+    //    7. Before that: `main` never returns, so from here on its frame is
+    //    dead. Move MSP back to the top of the secure stack and zero the
+    //    whole stack region, so the boot path's provisioning and unlock
+    //    temporaries (DVT1 row 5.5: by-value key moves left in `main`'s
+    //    frame) do not sit under every later gateway call for the rest of
+    //    the session. Done in the same asm block as BXNS because nothing
+    //    after the MSP switch may touch the stack. An exception taken during
+    //    the loop stacks below the new MSP and returns before the loop
+    //    resumes. No static holds a pointer into `main`'s frame.
+    let stack_top = core::ptr::addr_of!(_stack_start) as u32;
+    let stack_bottom = core::ptr::addr_of!(_stack_end) as u32;
     core::arch::asm!(
+        "msr msp, {top}",
+        "2:",
+        "cmp {p}, {top}",
+        "bhs 3f",
+        "str {zero}, [{p}], #4",
+        "b 2b",
+        "3:",
         "mov lr, {entry}",
         "mov r0,  #0",
         "mov r1,  #0",
@@ -72,6 +97,9 @@ pub unsafe fn boot(ns_vector_table: u32) -> ! {
         "mov r12, #0",
         "bxns lr",
         entry = in(reg) ns_entry,
+        top = in(reg) stack_top,
+        p = in(reg) stack_bottom,
+        zero = in(reg) 0u32,
         options(noreturn),
     );
 }

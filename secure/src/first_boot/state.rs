@@ -93,6 +93,10 @@ pub enum FirstBootError {
     /// Ship-profile: `SECBOOTADD0R.BOOT_LOCK` is clear where the profile
     /// requires it (`ObField::BootLock`). Added 2026-09-24.
     ObBootLockClear = 0x080E,
+    /// Ship-profile: `FLASH_OPTR.SRAM1345_RST` is 1, so secure SRAM1 is not
+    /// erased on a system reset (`ObField::SramRetained`). Added 2026-10-15
+    /// (DVT1 row 5.4). RDP-2 would freeze that for the unit's life.
+    ObSramRetainedOnReset = 0x080F,
 
     // Phase B (post-lock) — RMA / retry.
     /// OTP master is blank — the factory must burn it; first boot must not.
@@ -160,6 +164,7 @@ pub const fn ob_field_code(f: sphincs_tz_shared::lockdown::ObField) -> FirstBoot
         F::SwapBank => FirstBootError::ObSwapBankSet,
         F::BootLock => FirstBootError::ObBootLockClear,
         F::OemLock => FirstBootError::ObOemLockPresentOrUnpinned,
+        F::SramRetained => FirstBootError::ObSramRetainedOnReset,
     }
 }
 
@@ -890,16 +895,22 @@ mod tests {
             ObField::SecBootAdd0,
             ObField::Wrp1a,
             ObField::OemLock,
+            ObField::Wrp2a,
+            ObField::SwapBank,
+            ObField::BootLock,
+            ObField::SramRetained,
         ];
         let mut codes = Vec::new();
         for f in all {
             let c = ob_field_code(f).raw();
-            // Each maps into the distinct pre-lock 0x0804..=0x080A band.
-            assert!((0x0804..=0x080A).contains(&c), "{f:?} -> {c:#06x} out of band");
+            // Each maps into the distinct pre-lock 0x0804..=0x080F band
+            // (0x080B is the per-device-page code, not an ObField).
+            assert!((0x0804..=0x080F).contains(&c), "{f:?} -> {c:#06x} out of band");
+            assert_ne!(c, 0x080B, "{f:?} collides with PerDevicePageNotBlank");
             assert!(!codes.contains(&c), "{f:?} -> {c:#06x} collides");
             codes.push(c);
         }
-        assert_eq!(codes.len(), 7, "all seven fields mapped");
+        assert_eq!(codes.len(), 11, "all eleven fields mapped");
     }
 
     #[test]

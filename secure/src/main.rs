@@ -154,6 +154,8 @@ mod boot_ns;
 mod board;
 mod crypto;
 mod fi;
+/// Zero the dead part of the secure stack (DVT1 row 5.5).
+mod stack_scrub;
 /// Pre-drawn fresh-TRNG pool for FI delay lengths (#832).
 mod fi_delay_pool;
 mod fih;
@@ -4752,6 +4754,8 @@ fn SysTick() {
     // whole idle window now means glitching every tick of it.
     if timeout::is_idle() && !nsc::handler_is_busy() && !nsc::is_definitely_locked() {
         nsc::zeroize_sensitive_state();
+        // Moved-from copies on the stack survive the cache wipe (DVT1 row 5.5).
+        stack_scrub::scrub_dead_stack();
 
         // Trigger PendSV to run the re-unlock flow outside the ISR.
         // PendSV runs at the lowest priority so it cannot block SysTick.
@@ -4897,6 +4901,9 @@ const _: () = assert!(
 #[cfg(all(not(test), feature = "stm32u585"))]
 #[cortex_m_rt::exception]
 fn PendSV() {
+    // The re-unlock dialog runs the PIN entry and the SE unlock below this
+    // frame; scrub what they leave on every return path (DVT1 row 5.5).
+    let _stack_scrub = stack_scrub::ScrubOnDrop;
     unsafe {
         if core::ptr::read_volatile(core::ptr::addr_of!(PENDSV_IN_FLIGHT)) != 0 {
             return;
@@ -5107,6 +5114,7 @@ unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {
     // fenced inside `zeroize_sensitive_state`; the trailing barrier keeps the
     // wipe from being reordered past the reset.
     nsc::zeroize_sensitive_state();
+    stack_scrub::scrub_dead_stack();
     crate::fi::zeroize_barrier();
     // Full system reset (AIRCR.SYSRESETREQ) — diverges. NOT the SE wipe.
     cortex_m::peripheral::SCB::sys_reset()
@@ -5133,6 +5141,7 @@ unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     nsc::zeroize_sensitive_state();
+    stack_scrub::scrub_dead_stack();
 
     // Tear down the pixel blit's DMA channel BEFORE the fatal screen paints.
     // A panic can land inside `ui::px::lcd::present_frame_ex`'s band loop,

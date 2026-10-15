@@ -388,11 +388,12 @@ play-hw-duress-ui:
 # SRAM2 — put sensitive active-window state there (Stage 2 of the
 # brownout hardening roadmap; see docs/security/brownout-hardening.md).
 stm32-harden-opts:
-	@echo "==> Configuring brown-out supervision + SRAM2 auto-erase"
-	@echo "    BOR_LEV=3 (~2.7V), SRAM2_RST=0 (auto-erase on reset)"
+	@echo "==> Configuring brown-out supervision + SRAM auto-erase"
+	@echo "    BOR_LEV=3 (~2.7V), SRAM_RST=0 (secure SRAM1/3/4 erased on every reset),"
+	@echo "    SRAM2_RST=0 (non-secure SRAM2 erased on reset)"
 	@echo "    This triggers an Option Byte Load — the chip will reset."
 	@$(STM32_PROG) --connect port=SWD \
-		--optionbytes BOR_LEV=3 SRAM2_RST=0
+		--optionbytes BOR_LEV=3 SRAM_RST=0 SRAM2_RST=0
 	@echo "==> Option bytes written. Reset triggered. Chip state: hardened."
 
 # Real STM32U585 hardware build (full): real chips + real LCD + real buttons.

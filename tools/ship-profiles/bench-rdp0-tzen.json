@@ -6,6 +6,7 @@
     "RDP": "0xAA",
     "TZEN": "0x1",
     "SWAP_BANK": "0x0",
+    "SRAM_RST": "0x0",
     "nSWBOOT0": "0x1",
     "SECBOOTADD0": "0x180000",
     "BOOT_LOCK": "0x0",
@@ -26,6 +27,10 @@
     "NOT 'protect pages 0x7F..0x0'. A profile that wrote 0x0/0x0 would silently mean",
     "'protect page 0', which is the opposite of what a bench board wants.",
     "SECWM1 covers the whole of bank 1 (pages 0..0x7F) because the monolithic bench",
-    "image is secure-world-only. SECWM2 is off (0x7F > 0x0) so bank 2 stays non-secure."
+    "image is secure-world-only. SECWM2 is off (0x7F > 0x0) so bank 2 stays non-secure.",
+    "SRAM_RST=0 (FLASH_OPTR.SRAM1345_RST, added 2026-10-15): hardware erases secure SRAM1",
+    "on every system reset. The factory default 1 leaves unlocked secrets readable after an",
+    "NRST (DVT1 row 5.4). `make stm32-harden-opts` sets it; the RDP-2 first-boot lock",
+    "refuses a unit without it (first-boot code 0x080F)."
   ]
 }

@@ -18,6 +18,7 @@
     "RDP": "0xAA",
     "TZEN": "0x1",
     "SWAP_BANK": "0x0",
+    "SRAM_RST": "0x0",
     "nSWBOOT0": "0x1",
     "SECBOOTADD0": "0x180000",
     "BOOT_LOCK": "PENDING_OWNER_DECISION",

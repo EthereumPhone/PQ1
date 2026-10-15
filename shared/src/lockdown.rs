@@ -309,6 +309,23 @@ pub enum ObField {
     /// Added 2026-09-24.
     BootLock,
     OemLock,
+    /// `FLASH_OPTR.SRAM1345_RST` is 1: secure SRAM1 survives a system reset.
+    /// Added 2026-10-15 (DVT1 row 5.4: an NRST left every unlocked secret
+    /// readable in SRAM1).
+    SramRetained,
+}
+
+/// `FLASH_OPTR.SRAM1345_RST` (bit 15; CubeProgrammer calls it `SRAM_RST`).
+/// `0` = SRAM1, SRAM3, SRAM4 and SRAM5 are erased by hardware on every system
+/// reset; `1` (factory default) = they are not. Secure SRAM1 holds the
+/// unlocked secrets, so the ship profile requires `0`. (`SRAM2_RST`, bit 25,
+/// covers SRAM2, which is the NON-secure bank on this design.)
+pub const OPTR_SRAM1345_RST: u32 = 1 << 15;
+
+/// Is secure SRAM1 erased by hardware on every system reset?
+#[must_use]
+pub const fn sram1_erased_on_reset(optr: u32) -> bool {
+    optr & OPTR_SRAM1345_RST == 0
 }
 
 /// The confirmed, load-bearing half of the ship option-byte profile. Fields
@@ -543,6 +560,14 @@ pub const fn verify_ship_profile(
 ) -> Result<(), ObField> {
     if let Err(f) = optr_matches_ship(optr, p) {
         return Err(f);
+    }
+    // SRAM1345_RST, added 2026-10-15 (DVT1 row 5.4). Phase A only, not in
+    // `optr_matches_ship`: the every-boot FSBL tripwire uses that, and every
+    // bench unit carries the factory default 1, so it would halt them all.
+    // RDP-2 freezes the option bytes, so a unit locked with the bit at 1
+    // keeps its secrets across every reset for life.
+    if !sram1_erased_on_reset(optr) {
+        return Err(ObField::SramRetained);
     }
     if !secwm_bank1_all_secure(secwm1r1) {
         return Err(ObField::Secwm1);
@@ -1032,6 +1057,32 @@ mod tests {
     }
     /// The four profile gaps closed on 2026-09-24, each with the failing
     /// direction AND the passing direction. Before this, a unit could be
+    /// DVT1 row 5.4 (2026-10-15): a pin reset left every unlocked secret in
+    /// SRAM1 because `SRAM1345_RST` was at its factory default 1. Phase A must
+    /// refuse to freeze that at RDP-2; the every-boot tripwire must not
+    /// (bench units carry the default and would all halt).
+    #[test]
+    fn phase_a_requires_sram1_erase_on_reset_but_tripwire_does_not() {
+        assert!(sram1_erased_on_reset(GOOD_OPTR), "control: bit 15 clear = erased");
+        assert!(!sram1_erased_on_reset(GOOD_OPTR | OPTR_SRAM1345_RST));
+        assert_eq!(OPTR_SRAM1345_RST, 1 << 15, "RM0456 / SVD FLASH_OPTR.SRAM1345_RST");
+        assert_eq!(
+            verify_ship_profile(
+                GOOD_OPTR | OPTR_SRAM1345_RST, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, GOOD_WRP_FROZEN, GOOD_WRP_FROZEN, 0, &SHIP_PROFILE_U585,
+            ),
+            Err(ObField::SramRetained),
+        );
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR | OPTR_SRAM1345_RST, SECWM1_ALL_SECURE, SECWM2_ALL_NS,
+                GOOD_SECBOOT, &SHIP_PROFILE_U585,
+            ),
+            Ok(()),
+            "the FSBL tripwire subset must not depend on SRAM1345_RST"
+        );
+    }
+
     /// verified and then frozen at RDP-2 with any of them wrong.
     #[test]
     fn profile_closes_the_2026_09_24_gaps() {

@@ -88,7 +88,13 @@ embedded-graphics = { version = "0.8", default-features = false, optional = true
 # pure-logic unit tests (aa, tx) on the host without pulling in hardware deps.
 [target.'cfg(target_arch = "arm")'.dependencies]
 cortex-m = { workspace = true, features = ["critical-section-single-core"] }
-cortex-m-rt          = { workspace = true }
+# `zero-init-ram`: the reset handler zeroes ALL of secure RAM (_ram_start ..
+# _ram_end, SRAM1) before .data/.bss init, so nothing a previous session left
+# in SRAM1 or on the stack survives into the next boot (DVT1 row 5.4). The
+# option byte SRAM_RST=0 does the same in hardware on a system reset; this
+# covers the window it does not (a reset class it excludes, or a unit
+# shipped without it).
+cortex-m-rt          = { workspace = true, features = ["zero-init-ram"] }
 cortex-m-semihosting = { workspace = true }
 
 [features]

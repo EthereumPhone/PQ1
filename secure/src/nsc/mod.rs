@@ -2115,6 +2115,10 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
 fn fi_boundary(run: impl FnOnce() -> u32) -> u32 {
     crate::fi::clear_delay_poison();
     let status = run();
+    // Every gateway command ends here, LOCK included: zero the stack the
+    // command just used. Its secrets are already dropped, but by-value moves
+    // leave copies the drops never see (DVT1 row 5.5).
+    crate::stack_scrub::scrub_dead_stack();
     if crate::fi::delay_source_failed() {
         secure_log!("[NSC] command ran with an unprotected FI delay — refusing");
         return sphincs_tz_shared::NscStatus::CryptoError as u32;

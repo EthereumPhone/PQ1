@@ -3287,26 +3287,25 @@ impl Se050 {
         // read in the same authenticated session as the entropy.
         //
         // A zero VK means the SE050 read failed (legacy provisioning or
-        // transport glitch). Fall back to the expensive full keygen only
-        // in that case.
+        // transport glitch). This used to re-derive the legacy C7 key from
+        // `entropy` (under dual-SE, from `half_E` alone, so the result was
+        // meaningless) and left its secret seed on the stack on every such
+        // unlock (DVT1 row 5.5). The slot carries no authority: cache the
+        // public placeholder instead.
         if vk_from_se != [0u8; 32] {
             self.vk_cache.copy_from_slice(&vk_from_se);
-            self.vk_cached = true;
         } else {
-            let (sk, vk_bytes) = crate::crypto::derive_keypair_from_entropy(&entropy);
-            drop(sk);
-            self.vk_cache.copy_from_slice(&vk_bytes);
-            self.vk_cached = true;
+            self.vk_cache.copy_from_slice(&crate::crypto::RETIRED_LEGACY_VK);
         }
+        self.vk_cached = true;
 
         if bvk_from_se != [0u8; 32] {
             self.bootstrap_vk_cache.copy_from_slice(&bvk_from_se);
-            self.bootstrap_vk_cached = true;
         } else {
-            let bvk = crate::crypto::derive_bootstrap_vk_from_entropy(&entropy);
-            self.bootstrap_vk_cache.copy_from_slice(&bvk);
-            self.bootstrap_vk_cached = true;
+            self.bootstrap_vk_cache
+                .copy_from_slice(&crate::crypto::RETIRED_LEGACY_BOOTSTRAP_VK);
         }
+        self.bootstrap_vk_cached = true;
 
         entropy.zeroize();
         crate::fi::zeroize_barrier();
