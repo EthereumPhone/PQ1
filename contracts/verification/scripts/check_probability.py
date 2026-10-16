@@ -215,7 +215,7 @@ def main() -> None:
         result["passed"] = True
     finally:
         (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(f"PASS: {len(result['closures'])} theorem closures; 207 typed cases / 693 compiler jobs")
+    print(f"PASS: {len(result['closures'])} theorem closures; 231 typed cases / 693 compiler jobs")
 
 
 if __name__ == "__main__":
