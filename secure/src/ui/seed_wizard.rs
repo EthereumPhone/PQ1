@@ -398,6 +398,8 @@ fn show_film_gaps() {
     let mut rows = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     super::px::film_gaps::rows(&mut rows);
     hold(&Screen::legacy(&rows));
+    super::px::film_gaps::rows2(&mut rows);
+    hold(&Screen::legacy(&rows));
 }
 
 /// Import: the intro, then the 24 words typed in. `None` = the user went

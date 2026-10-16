@@ -85,6 +85,10 @@ const CR2_AUTOEND: u32 = 1 << 25;
 const CR2_RELOAD: u32 = 1 << 24;
 const CR2_RD_WRN: u32 = 1 << 10; // 1 = read, 0 = write
 
+/// The dev provisioning recorder's name for this bus (`ui-px-film-gaps`).
+#[cfg(feature = "ui-px-film-gaps")]
+const BUS: usize = 1;
+
 /// Wait for a flag in ISR, with timeout. Returns the ISR value.
 fn wait_flag(mask: u32) -> Result<u32, I2cError> {
     for _ in 0..TIMEOUT_LOOPS {
@@ -118,6 +122,8 @@ fn wait_flag(mask: u32) -> Result<u32, I2cError> {
             while REG.isr.read() & ISR_STOPF == 0 {
                 s -= 1;
                 if s == 0 {
+                    #[cfg(feature = "ui-px-film-gaps")]
+                    crate::ui::px::film_gaps::i2c_drain_timeout(BUS);
                     break;
                 }
             }
@@ -136,6 +142,8 @@ fn wait_flag(mask: u32) -> Result<u32, I2cError> {
             return Ok(isr);
         }
     }
+    #[cfg(feature = "ui-px-film-gaps")]
+    crate::ui::px::film_gaps::i2c_timeout(BUS);
     Err(I2cError::Timeout)
 }
 
@@ -153,6 +161,8 @@ fn configure_transfer(addr: u8, nbytes: u8, direction: u32, flags: u32) {
 /// Write `data` to the SE050 (blocking).
 /// Handles transfers > 255 bytes using RELOAD mode.
 pub fn write(data: &[u8]) -> Result<(), I2cError> {
+    #[cfg(feature = "ui-px-film-gaps")]
+    let _watch = crate::ui::px::film_gaps::I2cWatch::new(BUS);
     let total = data.len();
     if total == 0 {
         return Ok(());
@@ -194,6 +204,8 @@ pub fn write(data: &[u8]) -> Result<(), I2cError> {
 /// Read `buf.len()` bytes from the SE050 (blocking).
 /// Handles transfers > 255 bytes using RELOAD mode.
 pub fn read(buf: &mut [u8]) -> Result<(), I2cError> {
+    #[cfg(feature = "ui-px-film-gaps")]
+    let _watch = crate::ui::px::film_gaps::I2cWatch::new(BUS);
     let total = buf.len();
     if total == 0 {
         return Ok(());
