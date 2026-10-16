@@ -8,7 +8,7 @@ namespace C10Probability
 open scoped ENNReal
 noncomputable section
 
-variable {K α R : Type*} [DecidableEq K]
+variable {K α R : Type*}
 
 def NoTarget (target : α → Bool) (table : Memo K α) : Prop :=
   ∀ (key : K) (value : α), table key = some value → target value = false
@@ -16,7 +16,7 @@ def NoTarget (target : α → Bool) (table : Memo K α) : Prop :=
 theorem noTarget_empty (target : α → Bool) :
     NoTarget target (fun _ : K => none) := by simp [NoTarget]
 
-theorem noTarget_update (target : α → Bool) (table : Memo K α)
+theorem noTarget_update [DecidableEq K] (target : α → Bool) (table : Memo K α)
     (h : NoTarget target table) (key : K) (value : α) (hv : target value = false) :
     NoTarget target (Function.update table key (some value)) := by
   intro other reply hr
@@ -27,7 +27,7 @@ theorem noTarget_update (target : α → Bool) (table : Memo K α)
   · exact h other reply (by simpa only [Function.update_of_ne hk] using hr)
 
 /-- The budget bounds every continuation, including cached calls and early returns. -/
-theorem evalProgram_target_bound (p : PMF α) (target : α → Bool) {n : ℕ}
+theorem evalProgram_target_bound [DecidableEq K] (p : PMF α) (target : α → Bool) {n : ℕ}
     (program : QueryProgram K α R n) (table : Memo K α) (h : NoTarget target table) :
     (evalProgram p program table).toOuterMeasure {out | ¬ NoTarget target out.2} ≤
       (n : ℝ≥0∞) * acceptMass p target := by
@@ -63,7 +63,7 @@ theorem evalProgram_target_bound (p : PMF α) (target : α → Bool) {n : ℕ}
           rw [Nat.cast_add, Nat.cast_one, add_mul, one_mul]
           exact add_comm _ _
 
-theorem randomizedProgram_target_bound (p : PMF α) (target : α → Bool) {n : ℕ}
+theorem randomizedProgram_target_bound [DecidableEq K] (p : PMF α) (target : α → Bool) {n : ℕ}
     (client : PMF (QueryProgram K α R n)) (table : Memo K α) (h : NoTarget target table) :
     (randomizedProgram p client table).toOuterMeasure {out | ¬ NoTarget target out.2} ≤
       (n : ℝ≥0∞) * acceptMass p target := by
@@ -75,7 +75,7 @@ theorem randomizedProgram_target_bound (p : PMF α) (target : α → Bool) {n : 
       exact mul_le_mul_right (evalProgram_target_bound p target program table h) _
     _ = _ := by rw [ENNReal.tsum_mul_right, PMF.tsum_coe, one_mul]
 
-theorem randomizedProgram_target_bound_real (p : PMF α) (target : α → Bool) {n : ℕ}
+theorem randomizedProgram_target_bound_real [DecidableEq K] (p : PMF α) (target : α → Bool) {n : ℕ}
     (client : PMF (QueryProgram K α R n)) (table : Memo K α) (h : NoTarget target table) :
     ((randomizedProgram p client table).toOuterMeasure
       {out | ¬ NoTarget target out.2}).toReal ≤
@@ -87,7 +87,7 @@ theorem randomizedProgram_target_bound_real (p : PMF α) (target : α → Bool) 
   simpa only [ENNReal.toReal_mul, ENNReal.toReal_natCast] using hb
 
 /-- Cached target hits cannot be erased by later execution, even at zero budget. -/
-theorem evalProgram_initial_target_mass (p : PMF α) (target : α → Bool) {n : ℕ}
+theorem evalProgram_initial_target_mass [DecidableEq K] (p : PMF α) (target : α → Bool) {n : ℕ}
     (program : QueryProgram K α R n) (table : Memo K α) (key : K) (value : α)
     (hv : table key = some value) (ht : target value = true) :
     (evalProgram p program table).toOuterMeasure {out | ¬ NoTarget target out.2} = 1 := by
@@ -99,7 +99,7 @@ theorem evalProgram_initial_target_mass (p : PMF α) (target : α → Bool) {n :
   have hf := hn key value hp
   simp only [ht, Bool.true_eq_false] at hf
 
-theorem randomizedProgram_initial_target_mass (p : PMF α) (target : α → Bool) {n : ℕ}
+theorem randomizedProgram_initial_target_mass [DecidableEq K] (p : PMF α) (target : α → Bool) {n : ℕ}
     (client : PMF (QueryProgram K α R n)) (table : Memo K α) (key : K) (value : α)
     (hv : table key = some value) (ht : target value = true) :
     (randomizedProgram p client table).toOuterMeasure {out | ¬ NoTarget target out.2} = 1 := by
