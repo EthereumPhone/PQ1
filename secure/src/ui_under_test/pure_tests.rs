@@ -1628,6 +1628,38 @@ fn positive_optiga_reset_waits_draw_only_while_provisioning() {
 }
 
 #[test]
+fn negative_pq1_resets_the_optiga_once_per_reinit_cycle() {
+    // EVT 2026-10-16: on pq1 `hard_reset_and_reinit` pulsed RST and then
+    // called `init()`, which (with `ready` cleared) pulses RST again. One
+    // pulse per cycle is enough. ASSUMPTION ATTACKED: (a) the pq1 pulse comes
+    // back into `hard_reset_and_reinit`, or (b) `init` stops pulsing, which
+    // would leave a reinit with no reset at all on pq1.
+    // Methods: slice to the method's own closing brace (`fn_body` prefers a
+    // column-0 brace, which for a method is the end of the whole impl).
+    let method = |sig: &str| -> &'static str {
+        let start = OPTIGA_MOD_SRC.find(sig).unwrap_or_else(|| panic!("`{sig}` missing"));
+        let end = OPTIGA_MOD_SRC[start..].find("\n    }\n").expect("method end");
+        &OPTIGA_MOD_SRC[start..start + end]
+    };
+    let reinit = method("fn hard_reset_and_reinit(&mut self) -> Result<(), OptigaError> {");
+    let code: std::string::String = reinit
+        .lines()
+        .map(|l| l.split("//").next().unwrap_or(""))
+        .collect::<std::vec::Vec<_>>()
+        .join("\n");
+    assert!(!code.contains("hard_pulse"), "(a) a second RST pulse per cycle");
+    let at = reinit.find("self.ready = false;").expect("clears ready");
+    assert!(reinit[at..].contains("self.init()"), "(b) the reinit must go through init");
+    let init = method("pub fn init(&mut self) -> Result<(), OptigaError> {");
+    let ready = init.find("if self.ready {").expect("init's early return");
+    let pulse = init
+        .find("#[cfg(all(feature = \"stm32u585\", feature = \"board-pq1\"))]\n            reset_pin::hard_pulse();")
+        .expect("(b) init pulses RST on pq1");
+    let wait = init.find("settle(8_000_000);").expect("post-reset wait");
+    assert!(ready < pulse && pulse < wait);
+}
+
+#[test]
 fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
     // Signing and the timing-uniform unlock path must never draw from a chip
     // wait: only `provision_from_mnemonic` holds the guard.

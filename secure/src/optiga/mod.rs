@@ -279,12 +279,12 @@ impl OptigaTrustM {
         // place to scope.
         #[cfg(not(feature = "board-pq1"))]
         crate::pin_diag::run();
-        #[cfg(feature = "board-pq1")]
-        // SAFETY: secure-world boot/session path, single-threaded; touches
-        // only the RST pin's bits in its own port.
-        unsafe {
-            reset_pin::hard_pulse()
-        };
+        // pq1: NO pulse here. `self.init()` below begins with the same
+        // `reset_pin::hard_pulse()` because `ready` is false at that point, so
+        // pulsing here as well reset the chip twice per cycle: two lead-ins,
+        // two trailing waits, on each of the seven cycles of the provisioning
+        // write sequence (EVT recorder, 2026-10-16). iota2 keeps its
+        // empirically validated `pin_diag::run` + init sequence unchanged.
         self.ifx = ifx_i2c::IfxState::new();
         self.ready = false;
         // An RST pulse wipes the chip's PRL session. Reflect that on the
