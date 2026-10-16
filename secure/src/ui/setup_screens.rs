@@ -175,20 +175,21 @@ pub fn quiz_intro() -> Screen {
     )
 }
 
-/// Index of WIPE DEVICE? in [`duress_intro`].
+/// Index of CONFIRM WIPE ON DURESS in [`duress_intro`].
 #[cfg(any(feature = "duress-pin", feature = "duress-ui-test", test))]
-pub const DURESS_WIPE: usize = 3;
-/// Index of OPEN DECOY WALLET? in [`duress_intro`].
+pub const DURESS_WIPE: usize = 4;
+/// Index of CONFIRM DECOY ON DURESS in [`duress_intro`].
 #[cfg(any(feature = "duress-pin", feature = "duress-ui-test", test))]
-pub const DURESS_DECOY: usize = 4;
+pub const DURESS_DECOY: usize = 5;
 
 /// After the word quiz: the duress PIN explained, then what it does (owner
 /// wording 2026-10-16). It cannot be skipped (owner decision, same date), so
 /// the first page shows the right arrow only and the pages end on the two
-/// choices, laid out like CREATE NEW WALLET? / IMPORT WALLET?.
+/// choices, laid out like CREATE NEW WALLET? / IMPORT WALLET?. DECIDE, and
+/// the CONFIRM ... ON DURESS wording, owner 2026-10-16.
 #[cfg(any(feature = "duress-pin", feature = "duress-ui-test", test))]
 #[must_use]
-pub fn duress_intro() -> [Screen; 5] {
+pub fn duress_intro() -> [Screen; 6] {
     [
         detail_on(
             b"DURESS",
@@ -223,10 +224,21 @@ pub fn duress_intro() -> [Screen; 5] {
                 b"separate from yours.",
             ],
         ),
-        hero(b"DWIPE", b"WIPE DEVICE?")
+        detail_on(
+            b"DECIDE",
+            Side::Left,
+            Nav::Default,
+            b"DECIDE",
+            &[
+                b"Now decide if the",
+                b"duress PIN wipes or",
+                b"opens the decoy.",
+            ],
+        ),
+        hero(b"DWIPE", b"CONFIRM WIPE ON DURESS")
             .finish()
             .unwrap_or(Screen::BLANK),
-        hero(b"DDECOY", b"OPEN DECOY WALLET?")
+        hero(b"DDECOY", b"CONFIRM DECOY ON DURESS")
             .nav(Nav::LeftOnly)
             .finish()
             .unwrap_or(Screen::BLANK),
@@ -404,8 +416,8 @@ mod tests {
         let d = duress_intro();
         let asking: std::vec::Vec<usize> = (0..d.len()).filter(|&k| d[k].confirmable()).collect();
         assert_eq!(asking, [DURESS_WIPE, DURESS_DECOY]);
-        assert_eq!(d[DURESS_WIPE].caption(), b"WIPE DEVICE?");
-        assert_eq!(d[DURESS_DECOY].caption(), b"OPEN DECOY WALLET?");
+        assert_eq!(d[DURESS_WIPE].caption(), b"CONFIRM WIPE ON DURESS");
+        assert_eq!(d[DURESS_DECOY].caption(), b"CONFIRM DECOY ON DURESS");
     }
 
     /// The arrows are the navigation indicators: the first screen points

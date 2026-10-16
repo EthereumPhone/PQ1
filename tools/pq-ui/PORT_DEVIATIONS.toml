@@ -185,10 +185,10 @@
 #     —                              PIN (detail: what the PIN is for)
 #     SET PIN / REPEAT PIN           SET PIN / REPEAT PIN; a miss shows
 #                                    PIN MISMATCH and asks for both again
-#     SET DURESS PIN / REPEAT        after the word quiz: three pages (DURESS
-#                                    PIN, WIPE / DECOY, DECOY), WIPE DEVICE? /
-#                                    OPEN DECOY WALLET?, SET / REPEAT DURESS
-#                                    PIN; a decoy then gets DECOY WORDS, KEEP
+#     SET DURESS PIN / REPEAT        after the word quiz: four pages (DURESS
+#                                    PIN, WIPE / DECOY, DECOY, DECIDE),
+#                                    CONFIRM WIPE ON DURESS / CONFIRM DECOY
+#                                    ON DURESS, SET / REPEAT DURESS PIN; a decoy then gets DECOY WORDS, KEEP
 #                                    APART, its words and checks. Cannot be
 #                                    skipped (owner 2026-10-16)
 #     WRITE DOWN 24 WORDS            five pages in the buttons' style, the

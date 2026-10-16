@@ -435,8 +435,8 @@ impl Drop for DuressSetup {
     }
 }
 
-/// After the word quiz: the duress pages, the choice between WIPE DEVICE? and
-/// OPEN DECOY WALLET?, then SET / REPEAT DURESS PIN. It cannot be skipped
+/// After the word quiz: the duress pages, the choice between CONFIRM WIPE ON
+/// DURESS and CONFIRM DECOY ON DURESS, then SET / REPEAT DURESS PIN. It cannot be skipped
 /// (owner decision 2026-10-16): there is no way out but a duress PIN that
 /// differs from `main_pin`. A left hold on the PIN's first digit goes back
 /// to the choice.
