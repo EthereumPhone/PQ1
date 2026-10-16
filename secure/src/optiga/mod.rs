@@ -101,6 +101,31 @@ pub struct OptigaTrustM {
     remaining: u8,
 }
 
+/// A fixed settle wait around an OPTIGA reset (`cycles` at 160 MHz, the
+/// figures the reset code was written in).
+///
+/// Outside provisioning this is exactly the plain `cortex_m::asm::delay` it
+/// replaced. While provisioning writes the wallet (`ui::ChipWaitTicks`), the
+/// same minimum is timed by the S-only millisecond clock instead and the busy
+/// film draws inside it: the seven reset cycles of the write sequence used to
+/// freeze the film for ~607 ms each (EVT recorder, owner 2026-10-16). The wait
+/// never ends before `cycles / 160_000 + 1` ms, the nominal figure every one
+/// of these delays is documented against, so it stays above the datasheet
+/// minima they cover (tSTARTUP <= 20 ms against 50 and 100 ms here). The RST
+/// LOW phase never comes through here: it has a 2.5 ms maximum.
+pub(crate) fn settle(cycles: u32) {
+    if !crate::ui::chip_wait_ticks_active() {
+        cortex_m::asm::delay(cycles);
+        return;
+    }
+    let ms = cycles / 160_000 + 1;
+    let t0 = crate::timeout::now();
+    while crate::timeout::now().wrapping_sub(t0) < ms {
+        cortex_m::asm::delay(16_000);
+        crate::ui::busy_poll();
+    }
+}
+
 impl OptigaTrustM {
     pub const fn new() -> Self {
         Self {
@@ -167,7 +192,7 @@ impl OptigaTrustM {
             // side effect per the Rust abstract machine) and leave an
             // infinite `bl nop; b back` behind. `delay()` is implemented
             // with a volatile counter so it always runs the full count.
-            cortex_m::asm::delay(8_000_000);
+            settle(8_000_000);
 
             // Retry with SHORT delays. The chip goes into sleep mode and
             // NACKs until woken by I2C address detection — each probe wakes
@@ -254,12 +279,12 @@ impl OptigaTrustM {
         // place to scope.
         #[cfg(not(feature = "board-pq1"))]
         crate::pin_diag::run();
-        #[cfg(feature = "board-pq1")]
-        // SAFETY: secure-world boot/session path, single-threaded; touches
-        // only the RST pin's bits in its own port.
-        unsafe {
-            reset_pin::hard_pulse()
-        };
+        // pq1: NO pulse here. `self.init()` below begins with the same
+        // `reset_pin::hard_pulse()` because `ready` is false at that point, so
+        // pulsing here as well reset the chip twice per cycle: two lead-ins,
+        // two trailing waits, on each of the seven cycles of the provisioning
+        // write sequence (EVT recorder, 2026-10-16). iota2 keeps its
+        // empirically validated `pin_diag::run` + init sequence unchanged.
         self.ifx = ifx_i2c::IfxState::new();
         self.ready = false;
         // An RST pulse wipes the chip's PRL session. Reflect that on the
@@ -2907,28 +2932,27 @@ impl OptigaTrustM {
             apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_BOOTSTRAP_VK, &blank)?;
         }
 
-        // §32: also blank the duress (decoy) OIDs. Best-effort (NOT `?`):
-        // the real wipe above already succeeded, and a stale decoy half_o
-        // left on OPTIGA reveals nothing once the SE050 decoy half is gone
-        // (the admin-delete policy on the SE050 duress objects makes
-        // `factory_reset_admin` delete them) — XOR split means one half is
-        // information-free. We blank anyway for hygiene + parity. F1D8
-        // (Change=ALW) and F1D9/F1DA/F1DB/F1D6 (Change=Auto(F1D8) OR
-        // Conf(E140), satisfied by the shield) are all writable here; we
-        // deliberately do NOT touch E121 (its Change=Auto(F1D8) has no
-        // Conf escape, and it's an unenforced high-limit counter — its
-        // stale value is harmless and its metadata must persist for the
-        // re-provision idempotency skip). Re-provisioning the decoy after
-        // a wipe rewrites all four via the same Conf(E140) path the real
-        // OIDs use, so the wipe→re-provision recovery path is intact.
+        // §32: also blank the duress (decoy) OIDs, with the same `?` as the
+        // real ones (#950): a failure aborts this leg, the coordinator
+        // re-arms the wipe flag and the next boot resumes the wipe. These
+        // used to be best-effort on the premise that the SE050 decoy half
+        // was always deleted, which shipping-shaped builds did not do until
+        // #948. F1D8 (Change=ALW) and F1D9/F1DA/F1DB/F1D6
+        // (Change=Auto(F1D8) OR Conf(E140), satisfied by the shield) are all
+        // writable here. E121 is deliberately NOT touched: its
+        // Change=Auto(F1D8) has no Conf escape, it is an unenforced
+        // high-limit counter whose stale value is harmless, and its metadata
+        // must persist for the re-provision idempotency skip. Re-provisioning
+        // the decoy after a wipe rewrites all of these through the same
+        // Conf(E140) path the real OIDs use.
         #[cfg(feature = "duress-pin")]
         unsafe {
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_ENTROPY, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_MASTER_SECRET, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_VK, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_BOOTSTRAP_VK, &blank);
-            secure_log!("[OPTIGA] Factory reset: duress OIDs blanked (best-effort)");
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_ENTROPY, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_MASTER_SECRET, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_VK, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_BOOTSTRAP_VK, &blank)?;
+            secure_log!("[OPTIGA] Factory reset: duress OIDs blanked");
         }
 
         self.zeroize_caches_internal();

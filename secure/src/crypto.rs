@@ -486,23 +486,37 @@ fn c10_sign_verified_with_progress_inner(
 pub const RETIRED_LEGACY_VK: [u8; 32] = *b"PQ1:legacy-c7-vk:retired:2026-10";
 /// Bootstrap counterpart of [`RETIRED_LEGACY_VK`].
 pub const RETIRED_LEGACY_BOOTSTRAP_VK: [u8; 32] = *b"PQ1:legacy-c7-bvk:retired:202610";
+/// Advances the busy film while provisioning writes the chips (the loading
+/// film's orbit, owner 2026-10-16; the 16x4 page shows a bar). Display only:
+/// nothing the wallet holds depends on it.
+fn provision_progress(percent: u8) {
+    crate::ui::show_progress("Provisioning", percent);
+}
 
 pub fn provision_from_mnemonic(
     store: &mut impl crate::secure_element::WalletStore,
     mnemonic: &Mnemonic,
     pin: &[u8; 8],
     duress_pin: Option<&[u8; 8]>,
+    decoy: Option<&Mnemonic>,
 ) {
+    #[cfg(all(feature = "ui-px-film-gaps", not(test)))]
+    crate::ui::px::film_gaps::start();
+
     let mut entropy = mnemonic
         .to_entropy()
         .expect("mnemonic was already checksum-verified");
 
     let mut master_secret: [u8; 32] = kdf(b"sphincs-master", &entropy, 0);
 
-    if store
-        .provision(&entropy, &master_secret, &RETIRED_LEGACY_VK, &RETIRED_LEGACY_BOOTSTRAP_VK, pin)
-        .is_err()
-    {
+    provision_progress(50);
+
+    // The chip writes report no progress: let their busy-polls draw the film.
+    let ticks = crate::ui::ChipWaitTicks::enter();
+    let provisioned =
+        store.provision(&entropy, &master_secret, &RETIRED_LEGACY_VK, &RETIRED_LEGACY_BOOTSTRAP_VK, pin);
+    drop(ticks);
+    if provisioned.is_err() {
         // A provision that fails PART-WAY (e.g. a transient SE050 I²C fault
         // after the UserID object is written but before the entropy object)
         // must not leave the device half-provisioned. `is_provisioned()`
@@ -532,6 +546,8 @@ pub fn provision_from_mnemonic(
     master_secret.zeroize();
     crate::fi::zeroize_barrier();
 
+    provision_progress(75);
+
     // §32 duress (decoy) wallet. Always provision a decoy — a RANDOM PIN
     // when the user declined (`duress_pin = None`) — so "duress configured
     // vs not" is indistinguishable on-chip (always-provision is load-
@@ -546,13 +562,21 @@ pub fn provision_from_mnemonic(
     // the wizard. If the decoy provision fails, wipe BOTH wallets so the
     // next cold boot restarts the wizard cleanly (no stuck state).
     #[cfg(feature = "duress-pin")]
-    if provision_duress_wallet(store, duress_pin).is_err() {
-        let _ = store.factory_reset_admin();
-        panic!("duress provisioning failed — wiped both wallets for wizard restart");
+    {
+        let ticks = crate::ui::ChipWaitTicks::enter();
+        let decoy_provisioned = provision_duress_wallet(store, duress_pin, decoy);
+        drop(ticks);
+        if decoy_provisioned.is_err() {
+            let _ = store.factory_reset_admin();
+            panic!("duress provisioning failed — wiped both wallets for wizard restart");
+        }
     }
 
     #[cfg(not(feature = "duress-pin"))]
-    let _ = duress_pin;
+    let _ = (duress_pin, decoy);
+
+    #[cfg(all(feature = "ui-px-film-gaps", not(test)))]
+    crate::ui::px::film_gaps::stop();
 }
 
 /// §32: generate + store an independent decoy wallet behind the duress
@@ -576,12 +600,23 @@ fn fill_strong_with_store<const N: usize>(
 fn provision_duress_wallet(
     store: &mut impl crate::secure_element::WalletStore,
     duress_pin: Option<&[u8; 8]>,
+    decoy: Option<&Mnemonic>,
 ) -> Result<(), crate::secure_element::SeError> {
-    // Fresh independent decoy entropy: STM32 TRNG XOR the SE-combined TRNG
+    // The decoy's entropy: the words the user wrote down at setup when the
+    // duress PIN opens a decoy (drawn by the wizard from the three-source
+    // `rng_strong`, checksum-verified by construction); otherwise fresh,
+    // independent entropy here: STM32 TRNG XOR the SE-combined TRNG
     // (OPTIGA ⊕ SE050 via the store) — same multi-source quality as the
     // real seed path, no re-entrancy (we are not inside a store method).
     let mut decoy_entropy = [0u8; 32];
-    fill_strong_with_store(store, &mut decoy_entropy)?;
+    match decoy {
+        Some(m) => {
+            decoy_entropy = m
+                .to_entropy()
+                .expect("the decoy mnemonic was built from entropy");
+        }
+        None => fill_strong_with_store(store, &mut decoy_entropy)?,
+    }
 
     // Resolve the duress PIN: user-chosen, or a fresh random 8 bytes when
     // declined (never entered by anyone → unguessable; the chip can't
@@ -600,6 +635,7 @@ fn provision_duress_wallet(
     };
 
     let mut decoy_master: [u8; 32] = kdf(b"sphincs-master", &decoy_entropy, 0);
+    provision_progress(95);
 
     // Same placeholder as the real wallet: the slots must not tell the two
     // apart, and neither needs a derived key (see `RETIRED_LEGACY_VK`).

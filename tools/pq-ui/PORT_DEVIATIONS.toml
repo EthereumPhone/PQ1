@@ -39,6 +39,15 @@
 #     the reference binds BACK/NEXT to double presses; the hint row shows the
 #     static `- ENTER (BOTH) +` (no 3 s pulse cycle, no ring bounce: the
 #     entry loop paints once per button event);
+#     UPDATE 2026-10-15 (owner): the hint now swaps between CONFIRM (BOTH)
+#     and BACK (HOLD LEFT) on the Confirm? band's timing (5 s a message,
+#     300 ms fades), on the wall clock so a press neither restarts it nor
+#     re-fades it — still not the reference's 18 s - / + / ENTER / BACK-NEXT
+#     rotation, and still the legacy gestures. The row keeps drawing through
+#     its input wait for that: on the timestamped input path (the SysTick
+#     sampler + InputFsm, read by `input::EntryGrammar` into the legacy
+#     events), so the fade runs through presses; it paints only while
+#     something moves;
 #   * seed words: drawn by the constant-time cell run (fixed 14 px cells,
 #     each glyph centred in its cell) - a monospaced setting of the
 #     proportional Aileron face, F-24; three pages of eight words (the
@@ -162,7 +171,52 @@
 #     CHECK 3 / 12 / 22              verify_mnemonic (main.rs:988)
 #     SETUP COMPLETE                 "Backup OK"
 #
-# So the two REAL differences, both presentational:
+# UPDATE 2026-10-15 — the setup flow was rebuilt from the owner's EVT
+# walk-through (the table above is the 2026-10-02 state). Now, in order
+# (`secure/src/ui/setup_screens.rs`, walked by `seed_wizard`):
+#
+#     reference                      device
+#     —                              WELCOME TO PQ1 (hero, right arrow only)
+#     —                              BUTTONS (detail: left back, right next,
+#                                    both select)
+#     SET UP PQ1?                    CREATE NEW WALLET? / IMPORT WALLET?
+#                                    (two heroes; IMPORT has the left arrow
+#                                    only)
+#     —                              PIN (detail: what the PIN is for)
+#     SET PIN / REPEAT PIN           SET PIN / REPEAT PIN; a miss shows
+#                                    PIN MISMATCH and asks for both again
+#     SET DURESS PIN / REPEAT        after the word quiz: four pages (DURESS
+#                                    PIN, WIPE / DECOY, DECOY, DECIDE),
+#                                    CONFIRM WIPE ON DURESS / CONFIRM DECOY
+#                                    ON DURESS, SET / REPEAT DURESS PIN; a decoy then gets DECOY WORDS, KEEP
+#                                    APART, its words and checks. Cannot be
+#                                    skipped (owner 2026-10-16)
+#     WRITE DOWN 24 WORDS            five pages in the buttons' style, the
+#                                    disc crossing on each: RECOVERY, WRITE
+#                                    DOWN (in the exact order), ONLY BACKUP,
+#                                    KEEP SAFE (never share), SAFETY (Freedom
+#                                    Factory never asks; impostors) (owner
+#                                    wording 2026-10-15)
+#     the 24 WORDS                   the 24 words, 3 pages; HIDDEN after
+#                                    5 minutes without a press
+#     WORDS WRITTEN DOWN?            CONFIRM TO VERIFY WORDS (left arrow only:
+#                                    left = back to the words)
+#     CHECK 3 / 12 / 22              three random checks, TYPED (item 1)
+#     WRONG SEED PHRASE (wrong check)  WRONG WORD - TRY AGAIN (owner: the
+#                                    message must say what happened), then
+#                                    the same check again
+#     —                              ENTER YOUR 24 WORDS (import intro)
+#     SETUP COMPLETE                 SETUP COMPLETE, only after the wallet
+#                                    is written to both chips and unlocked
+#
+# Every screen wears the setup family's look (the 3 x 3 dots on the white
+# disc), never the shield. The added screens and the one-sided arrows are
+# owner decisions of 2026-10-15 ("the arrows on the top should also work as
+# navigation indicators"), not port gaps. Setup has no inactivity timeout
+# (same date): nothing is provisioned until the end, and the old timeout
+# restarted setup and threw away a seed the user had written down.
+#
+# So the two REAL differences of 2026-10-02, both presentational:
 #
 # 1. THE CHECK-WORD INPUT. The reference shows the asked word among eight
 #    decoys in a 3x3 grid and the user PICKS; the device has the user ENTER

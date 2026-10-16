@@ -28,6 +28,13 @@ use crate::screen::{Icon, Kind, ResultMark, Screen, State, Tier, Weight, N_RAMPS
 pub const CIRCLE_R: i32 = 30;
 pub const CIRCLE_CY: i32 = 72;
 pub const CENTER_X: i32 = 214;
+/// An intro's caption centre (catalog band-chevron.md: 206, the panel centre
+/// nudged left so caption + chevron read centred together).
+pub const INTRO_CAPTION_X: i32 = 206;
+/// The band chevron: 13 px right of the caption's measured right edge, on
+/// the caps' optical centre (y 121.5).
+const BAND_CHEV_GAP: i32 = 13;
+const BAND_CHEV_Y_Q8: Q8 = (121 << 8) + 128;
 pub const COL_LEFT_CX: i32 = 74;
 pub const COL_RIGHT_CX: i32 = 352;
 pub const TEXT_CX_CIRCLE_LEFT: i32 = 263;
@@ -74,6 +81,12 @@ pub enum Chev {
     Up,
     /// No input (status screens).
     None,
+    /// Only the left chevron, pointing out: the last screen of a pager
+    /// ([`crate::screen::Nav::LeftOnly`]).
+    LeftOnly,
+    /// Only the right chevron, pointing out: the first screen of a pager
+    /// ([`crate::screen::Nav::RightOnly`]).
+    RightOnly,
 }
 
 /// A screen's static geometry.
@@ -86,6 +99,12 @@ pub struct Layout {
     pub sweep: bool,
     pub hint: bool,
     pub band: bool,
+    /// A hero intro ([`crate::screen::Nav::Intro`]): the caption sits on
+    /// [`INTRO_CAPTION_X`] and carries the band chevron.
+    pub intro: bool,
+    /// The entry row's hint swaps between its two messages, forever
+    /// ([`crate::rows::entry_hint`]).
+    pub cycle: bool,
 }
 
 /// Which record bytes a text spec refers to — the layout only carries
@@ -166,7 +185,7 @@ impl Layout {
     /// mean endless" would drift the first time a fourth ambient flag lands.
     #[must_use]
     pub fn plays_forever(&self) -> bool {
-        self.sweep || self.hint || self.band
+        self.sweep || self.hint || self.band || self.cycle
     }
 }
 
@@ -198,6 +217,8 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         sweep: false,
         hint: false,
         band: false,
+        intro: false,
+        cycle: false,
     };
     let mut nt = 0usize;
     let mut push = |t: Option<TextSpec>| {
@@ -212,7 +233,10 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         Some(Kind::Hero) => {
             l.circle = Some((CENTER_X, CIRCLE_CY));
             l.sweep = true;
-            l.hint = true;
+            // The hint (the pair turning up and bobbing) says "a commit is
+            // armed here"; the design sets it on asks only. A hero that asks
+            // nothing (a welcome, a chooser page, an intro) rests without it.
+            l.hint = s.commit();
             push(spec(s, Src::Caption, TierId::regular(18), CENTER_X, BASELINE_Y, Align::Center, true, LS_QUESTION_Q6));
         }
         Some(Kind::Status) => {
@@ -263,6 +287,8 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
         Some(Kind::Entry) => {
             // The row replaces the token; the corner chevrons carry the taps.
             l.circle = None;
+            // The hint between the chevrons swaps forever (`rows::entry_hint`).
+            l.cycle = true;
             push(spec(s, Src::Caption, TierId::regular(18), CENTER_X, BASELINE_Y, Align::Center, true, LS_QUESTION_Q6));
         }
         Some(Kind::Words) => {
@@ -284,6 +310,23 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
                 push(spec(s, Src::Line(0, i), TierId::regular(22), CENTER_X, y, Align::Center, false, 0));
             }
         }
+    }
+    match s.nav() {
+        // The band unit (catalog: band-chevron.md): no corner pair, no hint,
+        // the caption nudged left so text + chevron read centred.
+        Some(crate::screen::Nav::Intro) if s.kind() == Some(Kind::Hero) => {
+            l.chev = Chev::None;
+            l.hint = false;
+            l.intro = true;
+            if let Some(cap) = l.texts.iter_mut().flatten().next() {
+                cap.x = INTRO_CAPTION_X;
+            }
+        }
+        Some(crate::screen::Nav::LeftOnly) if l.chev == Chev::Lr => l.chev = Chev::LeftOnly,
+        Some(crate::screen::Nav::RightOnly) if l.chev == Chev::Lr => l.chev = Chev::RightOnly,
+        // The tutorial's demonstration: the ask's hint on a detail.
+        Some(crate::screen::Nav::Hint) if s.kind() == Some(Kind::Detail) => l.hint = true,
+        _ => {}
     }
     l
 }
@@ -432,7 +475,9 @@ pub fn disc_style(icon: Option<Icon>, tint: Option<u8>) -> DiscStyle {
             film: Rgb::COWSWAP_FILL,
             branded: true,
         },
-        Some(Icon::Fingerprint) => DiscStyle {
+        // The firmware family's device-action look, which the setup family
+        // (the dots) wears too (flows/setup DEFAULTS).
+        Some(Icon::Fingerprint | Icon::Dots) => DiscStyle {
             fill: Rgb::WHITE,
             ring: Rgb::BLACK,
             mark: Rgb::BLACK,
@@ -549,7 +594,9 @@ impl<'a> Marks<'a> {
                 | Icon::Heart
                 // A monogram is not an atlas mark: it is blitted from the
                 // font by `monogram_mask` (#774).
-                | Icon::Letter,
+                | Icon::Letter
+                // The setup mark is drawn procedurally (`push_dots`).
+                | Icon::Dots,
             )
             | None => None,
         }
@@ -595,6 +642,13 @@ pub enum Ending {
     /// stopped calling it and left the last painted orbit frame on the glass
     /// forever, indistinguishable from "still working" (#773).
     Failed,
+    /// The explosion (`screens/fx/explosion.py`, MAJOR): the running film
+    /// spirals in, the pair clumps, trembles and booms (`crate::burst`), and
+    /// the canvas ends EMPTY at [`crate::burst::T_EMPTY`] — it leads the next
+    /// screen instead of landing on a result: no mark, no caption. For long
+    /// work that succeeded (setup's provisioning). With no film running it
+    /// plays from the clump, in place of the disc.
+    Burst,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -791,19 +845,29 @@ impl Anim {
     /// resolve (no work was done: the arrived token resolves in place over
     /// one flash beat, then the result holds `RESULT_HOLD_MS`).
     pub fn ending(&mut self, e: Ending, now: u32) {
-        self.film = Some(Film::Resolve { film: ResolveFilm::start(now), outcome: e });
+        self.film = Some(if e == Ending::Burst {
+            // No loading leg ran: the clump forms where the spiral would end.
+            Film::Qubit { film: QubitFilm::answered_at(now, loading::T6), seed: self.film_seed(), outcome: Some(e) }
+        } else {
+            Film::Resolve { film: ResolveFilm::start(now), outcome: e }
+        });
         self.leave_flow(now);
+    }
+
+    /// The circle a film starts from: the disc where it stands.
+    fn film_seed(&self) -> Body {
+        Body {
+            x: (self.sx.value + self.sweep) >> 8,
+            y: self.sy.value >> 8,
+            r: (CIRCLE_R << 8) - TOKEN_INSET_Q8,
+        }
     }
 
     /// Start the qubit loading film (the work is under way): the disc where
     /// it stands becomes the seed, the texts fade, the orbit loops until
     /// [`Self::film_resolve`].
     pub fn film_start(&mut self, now: u32) {
-        let seed = Body {
-            x: (self.sx.value + self.sweep) >> 8,
-            y: self.sy.value >> 8,
-            r: (CIRCLE_R << 8) - TOKEN_INSET_Q8,
-        };
+        let seed = self.film_seed();
         self.film = Some(Film::Qubit { film: QubitFilm::start(now), seed, outcome: None });
         self.leave_flow(now);
     }
@@ -826,10 +890,14 @@ impl Anim {
         self.film.is_some()
     }
 
-    /// The film has landed its result and held it for `RESULT_HOLD_MS`.
+    /// The film has landed its result and held it for `RESULT_HOLD_MS` — or,
+    /// for [`Ending::Burst`], the last ring has flown and the canvas is empty.
     #[must_use]
     pub fn film_done(&self, now: u32) -> bool {
         match self.film {
+            Some(Film::Qubit { film, outcome: Some(Ending::Burst), .. }) => {
+                !film.pending() && film.film_t(now) >= crate::burst::T_EMPTY
+            }
             Some(Film::Qubit { film, outcome: Some(_), .. }) => film.done(now),
             Some(Film::Resolve { film, .. }) => film.done(now),
             _ => false,
@@ -949,7 +1017,30 @@ impl Anim {
         if l.band {
             return Some(now.wrapping_add(33));
         }
+        if l.cycle {
+            return Some(now.wrapping_add(crate::rows::entry_hint_still_for(now).max(16)));
+        }
         None
+    }
+
+    /// When a screen whose ONLY motion is the entry row's hint swap next
+    /// changes, while it is otherwise at rest: a presenter can sleep until
+    /// then instead of repainting the same frame. `None` while anything else
+    /// moves (or for any other screen), meaning: paint at the frame rate.
+    #[must_use]
+    pub fn cycle_wake(&self, now: u32) -> Option<u32> {
+        let l = layout_of(&self.cur, self.cur_page);
+        let quiet = self.film.is_none()
+            && self.hold.is_none()
+            && self.press.is_none()
+            && self.flip_at.is_none()
+            && self.text_in_at.is_none()
+            && self.settled_at.is_some();
+        if !(l.cycle && !l.sweep && !l.hint && !l.band && quiet) {
+            return None;
+        }
+        let still = crate::rows::entry_hint_still_for(now);
+        (still > 0).then(|| now.wrapping_add(still))
     }
 
     /// Build the display list for the current pose.
@@ -967,6 +1058,9 @@ impl Anim {
             };
             let up_amount = if l.chev == Chev::Up { ONE_Q16 } else { hint_up };
             for (side, x, out_turns) in [(Btn::Left, CHEV_LEFT_X_Q8, ONE_Q16 / 2), (Btn::Right, CHEV_RIGHT_X_Q8, 0)] {
+                if (l.chev == Chev::LeftOnly && side == Btn::Right) || (l.chev == Chev::RightOnly && side == Btn::Left) {
+                    continue;
+                }
                 // Rest: outward; hint / armed: up (0.25 turns).
                 let angle = lerp(out_turns, ONE_Q16 / 4, up_amount);
                 let nudge = match self.press {
@@ -978,7 +1072,7 @@ impl Anim {
                     }
                     _ => 0,
                 };
-                frame.chevron(x + (nudge << 8), ((CHEV_Y + bob) << 8), angle, Rgb::WHITE);
+                frame.chevron(x + (nudge << 8), (CHEV_Y + bob) << 8, angle, Rgb::WHITE);
             }
         }
 
@@ -998,7 +1092,7 @@ impl Anim {
                     push_texts(frame, &self.cur, 0, a);
                 }
                 Some(Kind::Entry) => {
-                    crate::rows::build_entry(&self.cur, frame);
+                    crate::rows::build_entry(&self.cur, now, frame);
                     push_texts(frame, &self.cur, 0, a_in.max(1));
                 }
                 Some(Kind::Words) => {
@@ -1077,6 +1171,7 @@ impl Anim {
                     Ending::Signed => signed,
                     Ending::Declined => declined,
                     Ending::Failed => failed,
+                    Ending::Burst => &[],
                 }
             };
             // The busy line: the film screen's own caption (GENERATING KEYS,
@@ -1146,6 +1241,8 @@ impl Anim {
                     };
                     if let Some(m) = mark {
                         frame.mask(cx_q8, cy_q8, m, ONE_Q8, style.mark, 255);
+                    } else if icon == Some(Icon::Dots) {
+                        push_dots(frame, cx_q8, cy_q8, visible_r, style.mark);
                     } else if let (Some(Icon::Letter), Some(ch)) = (icon, self.cur.monogram()) {
                         if let Some((m, box_cy)) = monogram_mask(font, ch, cy_q8) {
                             frame.mask(cx_q8, box_cy, m, ONE_Q8, style.mark, 255);
@@ -1186,6 +1283,8 @@ impl Anim {
             (Ending::Declined | Ending::Failed, true) => (Rgb::RED, Rgb::BLACK, Rgb::BLACK),
             (Ending::Signed, false) => (Rgb::BLACK, Rgb::GREEN, Rgb::GREEN),
             (Ending::Declined | Ending::Failed, false) => (Rgb::BLACK, Rgb::RED, Rgb::RED),
+            // Never drawn: the burst leaves an empty canvas, no resting disc.
+            (Ending::Burst, _) => (Rgb::BLACK, Rgb::BLACK, Rgb::BLACK),
         }
     }
 
@@ -1194,6 +1293,7 @@ impl Anim {
             match e {
                 Ending::Signed => frame.check(cx, cy, r, mark_c, k),
                 Ending::Declined | Ending::Failed => frame.cross(cx, cy, r, mark_c, k),
+                Ending::Burst => false,
             };
         }
     }
@@ -1231,11 +1331,15 @@ impl Anim {
                 let state = match outcome {
                     Ending::Signed => Rgb::GREEN,
                     Ending::Declined | Ending::Failed => Rgb::RED,
+                    Ending::Burst => Rgb::WHITE,
                 };
                 let r = lerp(visible_r, CIRCLE_R << 8, p.u);
                 frame.disc(cx, cy, r, blend_rgb(style.fill, fill, p.u));
                 if let (Some(m), true) = (mark, p.glyph_a > 0) {
                     frame.mask(cx, cy + mark_dy, m, ONE_Q8, style.mark, p.glyph_a);
+                } else if icon == Some(Icon::Dots) && p.glyph_a > 0 {
+                    let c = blend_rgb(style.fill, style.mark, i32::from(p.glyph_a) * (ONE_Q16 / 255));
+                    push_dots(frame, cx, cy, r, c);
                 }
                 frame.ring(cx, cy, r, TOKEN_RING_W_Q8, blend_rgb(style.ring, ring, p.u));
                 if p.flash_a > 0 {
@@ -1255,6 +1359,9 @@ impl Anim {
                             let scale = ((i64::from(b.r) << 8) / i64::from(visible_r.max(1))) as Q8;
                             let dy = ((i64::from(mark_dy) * i64::from(scale)) >> 8) as Q8;
                             frame.mask(b.x, b.y + dy, m, scale, style.mark, p.glyph_a);
+                        } else if icon == Some(Icon::Dots) && p.glyph_a > 0 {
+                            let c = blend_rgb(style.fill, style.mark, i32::from(p.glyph_a) * (ONE_Q16 / 255));
+                            push_dots(frame, b.x, b.y, b.r, c);
                         }
                         if p.glyph_a > 0 {
                             frame.ring(b.x, b.y, b.r, TOKEN_RING_W_Q8, style.ring.scale(p.glyph_a));
@@ -1281,12 +1388,16 @@ impl Anim {
                             frame.disc(b.x, b.y, b.r, style.film);
                         }
                     }
+                    Phase::Flash | Phase::Result if outcome == Some(Ending::Burst) => {
+                        Self::push_burst(frame, style, film.film_t(now));
+                    }
                     Phase::Flash | Phase::Result => {
                         let e = outcome.unwrap_or(Ending::Declined);
                         let (fill, ring, mark_c) = Self::resting(e, style);
                         let state = match e {
                             Ending::Signed => Rgb::GREEN,
                             Ending::Declined | Ending::Failed => Rgb::RED,
+                            Ending::Burst => Rgb::WHITE,
                         };
                         let b = p.bodies[0];
                         let u = if p.phase == Phase::Flash { motion::ease_out(motion::phase(ft_of(&film, now), loading::T6, loading::QUBIT_T_FLASH)) } else { ONE_Q16 };
@@ -1299,6 +1410,30 @@ impl Anim {
                     }
                 }
             }
+        }
+    }
+}
+
+impl Anim {
+    /// The explosion after the spiral (`burst.draw` past `t6`): the clump in
+    /// the film's own colour (the pair it formed from — the reference's
+    /// `clump_from` = `clump_to` = the body, white by default), the core
+    /// flash and the rings in the reference's default white.
+    fn push_burst(frame: &mut Frame<'_>, style: &DiscStyle, t: u32) {
+        match crate::burst::pose(t) {
+            crate::burst::Pose::Clump(c) => {
+                frame.clump(c.cx, c.cy, c.r, c.intensity, c.phases, style.film);
+            }
+            crate::burst::Pose::Boom(b) => {
+                let (cx, cy) = (loading::GC_X_Q8, loading::GC_Y_Q8);
+                if let Some((r, a)) = b.flash {
+                    frame.disc(cx, cy, r, Rgb::WHITE.scale_q16(a));
+                }
+                for ring in b.rings.iter().flatten() {
+                    frame.ellipse_ring(cx, cy, ring.rx, ring.ry, ring.w, Rgb::WHITE.scale_q16(ring.a));
+                }
+            }
+            crate::burst::Pose::Loading | crate::burst::Pose::Empty => {}
         }
     }
 }
@@ -1358,6 +1493,29 @@ pub(crate) fn push_texts<'a>(frame: &mut Frame<'a>, s: &'a Screen, page: u8, alp
                 alpha,
             }, Rgb::WHITE);
     }
+    // The band unit: one chevron hung off the caption's measured right edge,
+    // sharing the caption's alpha (no fade of its own, no bob).
+    if l.intro {
+        let cap = s.caption();
+        if let Some(w) = crate::fit::measure_q6(cap, 18, false, LS_QUESTION_Q6 as u16) {
+            let right = INTRO_CAPTION_X + (w as i32 / 64) / 2;
+            let _ = frame.chevron((right + BAND_CHEV_GAP) << 8, BAND_CHEV_Y_Q8, 0, Rgb::WHITE.scale(alpha));
+        }
+    }
+}
+
+/// The setup family's mark (`Icon::Dots`): nine round dots, `DOTS_PITCH`
+/// apart, each `DOTS_R` across its radius, both fractions of the disc's
+/// radius `r` (`pq1/procedural/marks.py`: 0.32 and 0.10). Procedural — no
+/// atlas bytes. `color` is the mark colour already blended for alpha.
+fn push_dots(frame: &mut Frame<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb) {
+    let pitch = (i64::from(r) * 32 / 100) as Q8;
+    let dot = (i64::from(r) * 10 / 100) as Q8;
+    for j in -1..=1 {
+        for i in -1..=1 {
+            let _ = frame.disc(cx + i * pitch, cy + j * pitch, dot, color);
+        }
+    }
 }
 
 // The state colours are available for status screens (`State`), kept here
@@ -1389,6 +1547,35 @@ mod tests {
 
     fn hero() -> Screen {
         ScreenBuilder::hero(b"APPROVE", Icon::Safe, b"APPROVE SAFE TX?").finish().unwrap()
+    }
+
+    /// The arrows as navigation indicators (owner 2026-10-15): a one-sided
+    /// nav hides the other corner chevron, an intro hides both and carries
+    /// the band chevron, and only an ask shows the hint.
+    #[test]
+    fn nav_sets_the_chevrons_and_the_hint() {
+        use crate::screen::Nav;
+        let l = layout_of(&hero(), 0);
+        assert_eq!((l.chev, l.hint, l.intro), (Chev::Lr, true, false));
+        let first = ScreenBuilder::hero(b"W", Icon::Dots, b"WELCOME").uncommitted().nav(Nav::RightOnly).finish().unwrap();
+        let l = layout_of(&first, 0);
+        assert_eq!((l.chev, l.hint), (Chev::RightOnly, false));
+        let last = ScreenBuilder::hero(b"I", Icon::Dots, b"IMPORT?").nav(Nav::LeftOnly).finish().unwrap();
+        let l = layout_of(&last, 0);
+        assert_eq!((l.chev, l.hint), (Chev::LeftOnly, true));
+        let demo = ScreenBuilder::detail(b"C", Icon::Dots, Side::Left, b"BUTTONS")
+            .tier(Tier::T22)
+            .line(b"Both = confirm", Weight::Regular)
+            .nav(Nav::Hint)
+            .finish()
+            .unwrap();
+        let l = layout_of(&demo, 0);
+        assert_eq!((l.chev, l.hint), (Chev::Lr, true), "the hint plays on the demonstration");
+        assert!(!layout_of(&detail(), 0).hint, "and on no other detail");
+        let intro = ScreenBuilder::hero(b"B", Icon::Dots, b"WRITE DOWN 24 WORDS").intro().finish().unwrap();
+        let l = layout_of(&intro, 0);
+        assert_eq!((l.chev, l.hint, l.intro), (Chev::None, false, true));
+        assert_eq!(l.texts[0].map(|t| t.x), Some(INTRO_CAPTION_X));
     }
     fn detail() -> Screen {
         ScreenBuilder::detail(b"SAFEACCT", Icon::Safe, Side::Left, b"SAFE ACCT")
@@ -1480,6 +1667,75 @@ mod tests {
         let mut f = Frame::new();
         a.build(&Marks::default(), &Font::empty(), &mut f);
         assert!(!f.items().iter().any(|i| matches!(i, Item::Chord { .. })), "drained");
+    }
+
+    /// The explosion: the busy film loops until the work answers, then
+    /// spirals, clumps, booms and leaves an EMPTY frame — `film_done` exactly
+    /// when the last ring has flown, not a result hold later.
+    #[test]
+    fn the_burst_ending_clumps_booms_and_ends_on_an_empty_canvas() {
+        use crate::screen::{ResultMark, State};
+        let s = ScreenBuilder::status(b"SETUP", Icon::Dots, b"SETTING UP YOUR PQ1", State::Awaiting, ResultMark::None)
+            .finish()
+            .unwrap();
+        let mut a = Anim::new(&s, 0, 0);
+        a.film_start(0);
+        // Long work: the orbit loops well past its minimum, then answers.
+        let answered = 9_000;
+        for t in (16..answered).step_by(16) {
+            a.step(t);
+        }
+        a.film_resolve(Ending::Burst, answered);
+        let kinds = |a: &Anim, t: u32| {
+            let _ = t;
+            let mut f = Frame::new();
+            a.build(&Marks::default(), &Font::empty(), &mut f);
+            let n = f.items().len();
+            let clump = f.items().iter().any(|i| matches!(i, Item::Clump { .. }));
+            let rings = f.items().iter().filter(|i| matches!(i, Item::EllipseRing { .. })).count();
+            let marks = f.items().iter().any(|i| matches!(i, Item::Check { .. } | Item::Cross { .. }));
+            (n, clump, rings, marks)
+        };
+        let (mut saw_clump, mut max_rings, mut done_at) = (false, 0, None);
+        let mut t = answered;
+        while t < answered + 20_000 {
+            t += 16;
+            a.step(t);
+            let (n, clump, rings, marks) = kinds(&a, t);
+            assert!(!marks, "the burst lands on no result mark");
+            saw_clump |= clump;
+            max_rings = max_rings.max(rings);
+            if a.film_done(t) {
+                assert_eq!(n, 0, "done means an empty canvas: {n} items at {t}");
+                done_at = Some(t);
+                break;
+            }
+        }
+        assert!(saw_clump, "the pair clumped");
+        assert_eq!(max_rings, crate::burst::RINGS as usize, "all five rings flew together at some point");
+        let done_at = done_at.expect("the burst finishes");
+        // The film finishes its turn, spirals (1 s), clumps (1.1 s), booms
+        // (0.9 s + 0.58 s tail): ~3.6 s plus at most one turn after the answer.
+        let took = done_at - answered;
+        assert!((3_580..=3_580 + crate::loading::LOOP_MS + 32).contains(&took), "{took}");
+    }
+
+    /// With no film running the burst plays from the clump in place of the
+    /// disc, and the other endings keep their film-less resolve.
+    #[test]
+    fn a_burst_without_a_film_starts_at_the_clump() {
+        let h = hero();
+        let mut a = Anim::new(&h, 0, 0);
+        a.ending(Ending::Burst, 100);
+        a.step(116);
+        let mut f = Frame::new();
+        a.build(&Marks::default(), &Font::empty(), &mut f);
+        assert!(f.items().iter().any(|i| matches!(i, Item::Clump { .. })));
+        assert!(!a.film_done(116));
+        assert!(a.film_done(100 + crate::burst::T_EMPTY - crate::loading::T6));
+        let mut b = Anim::new(&h, 0, 0);
+        b.ending(Ending::Signed, 100);
+        assert!(!b.film_done(100 + crate::burst::T_EMPTY - crate::loading::T6), "a result still holds");
     }
 
     #[test]

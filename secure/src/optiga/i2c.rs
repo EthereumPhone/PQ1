@@ -101,6 +101,10 @@ const CR2_AUTOEND: u32 = 1 << 25;
 const CR2_RELOAD: u32 = 1 << 24;
 const CR2_RD_WRN: u32 = 1 << 10;
 
+/// The dev provisioning recorder's name for this bus (`ui-px-film-gaps`).
+#[cfg(feature = "ui-px-film-gaps")]
+const BUS: usize = 0;
+
 /// Wait for a flag in ISR, with timeout.
 fn wait_flag(mask: u32) -> Result<u32, I2cError> {
     for _ in 0..TIMEOUT_LOOPS {
@@ -121,6 +125,8 @@ fn wait_flag(mask: u32) -> Result<u32, I2cError> {
             return Ok(isr);
         }
     }
+    #[cfg(feature = "ui-px-film-gaps")]
+    crate::ui::px::film_gaps::i2c_timeout(BUS);
     Err(I2cError::Timeout)
 }
 
@@ -137,6 +143,8 @@ fn configure_transfer(addr: u8, nbytes: u8, direction: u32, flags: u32) {
 /// Probe a single 7-bit I2C address with a 0-byte write. Returns `Ok(())`
 /// iff the slave ACKs.
 pub fn probe_addr(addr: u8) -> Result<(), I2cError> {
+    #[cfg(feature = "ui-px-film-gaps")]
+    let _watch = crate::ui::px::film_gaps::I2cWatch::new(BUS);
     guard_time_pad();
     REG.icr.write(ICR_NACKCF | ICR_STOPCF | ICR_BERRCF | ICR_ARLOCF);
 
@@ -154,7 +162,11 @@ pub fn probe_addr(addr: u8) -> Result<(), I2cError> {
             let mut s = TIMEOUT_LOOPS;
             while REG.isr.read() & ISR_STOPF == 0 {
                 s -= 1;
-                if s == 0 { break; }
+                if s == 0 {
+                    #[cfg(feature = "ui-px-film-gaps")]
+                    crate::ui::px::film_gaps::i2c_drain_timeout(BUS);
+                    break;
+                }
             }
             REG.icr.write(ICR_STOPCF);
             return Err(I2cError::Nack);
@@ -165,6 +177,8 @@ pub fn probe_addr(addr: u8) -> Result<(), I2cError> {
         }
         t -= 1;
         if t == 0 {
+            #[cfg(feature = "ui-px-film-gaps")]
+            crate::ui::px::film_gaps::i2c_timeout(BUS);
             return Err(I2cError::Timeout);
         }
     }
@@ -198,6 +212,8 @@ pub fn scan() {
 
 /// Write `data` to the OPTIGA Trust M (blocking).
 pub fn write(data: &[u8]) -> Result<(), I2cError> {
+    #[cfg(feature = "ui-px-film-gaps")]
+    let _watch = crate::ui::px::film_gaps::I2cWatch::new(BUS);
     let total = data.len();
     if total == 0 {
         return Ok(());
@@ -240,6 +256,8 @@ pub fn write(data: &[u8]) -> Result<(), I2cError> {
 
 /// Read `buf.len()` bytes from the OPTIGA Trust M (blocking).
 pub fn read(buf: &mut [u8]) -> Result<(), I2cError> {
+    #[cfg(feature = "ui-px-film-gaps")]
+    let _watch = crate::ui::px::film_gaps::I2cWatch::new(BUS);
     let total = buf.len();
     if total == 0 {
         return Ok(());

@@ -7,10 +7,10 @@
 //! screen for it, the same "one rule" as the sign families:
 //!
 //! * a **verdict** where the design has one (DESIGN.md § Verdict screens):
-//!   LOCKED / UNLOCKED (the padlock), WRONG PIN / PINS DIFFER (the PIN
+//!   LOCKED / UNLOCKED (the padlock), WRONG PIN / PIN MISMATCH (the PIN
 //!   pill), WALLET WIPED (triangle + brush), TAMPER DETECTED, RNG FAILED
-//!   (the die), BACKUP OK / NO MATCH (the shield), CANCELED / SIGNED (the
-//!   result ring), FACTORY SIGNING (the gear);
+//!   (the die), CANCELED / SIGNED / WRONG WORD (the result ring), SETUP
+//!   COMPLETE (the verified disc), FACTORY SIGNING (the gear);
 //! * a **busy** screen (the film's caption) for work in progress;
 //! * the **idle** screen (READY) at rest;
 //! * everything else — every refusal and error — the detail-grid **notice**
@@ -183,8 +183,7 @@ fn eq(a: &str, b: &str) -> bool {
 const PLAIN_VERDICTS: &[(&str, &[u8], Icon, State, ResultMark, &[u8])] = &[
     ("Verifying...", b"CHECKPIN", Icon::Pill, State::Awaiting, ResultMark::None, b"CHECKING PIN"),
     ("Wrong PIN", b"WRONGPIN", Icon::Pill, State::Failed, ResultMark::None, b"WRONG PIN"),
-    ("PIN mismatch", b"PINDIFF", Icon::Pill, State::Failed, ResultMark::None, b"PINS DIFFER"),
-    ("PINs differ", b"PINDIFF", Icon::Pill, State::Failed, ResultMark::None, b"PINS DIFFER"),
+    ("PIN mismatch", b"PINDIFF", Icon::Pill, State::Failed, ResultMark::None, b"PIN MISMATCH"),
     ("Same as main", b"PINSAME", Icon::Pill, State::Failed, ResultMark::None, b"SAME AS MAIN PIN"),
     ("Unlocked", b"UNLOCKED", Icon::Unlock, State::Done, ResultMark::None, b"UNLOCKED"),
     ("LAST ATTEMPT", b"LASTTRY", Icon::Heart, State::Failed, ResultMark::None, b"LAST ATTEMPT - WIPES ON FAIL"),
@@ -195,13 +194,12 @@ const PLAIN_VERDICTS: &[(&str, &[u8], Icon, State, ResultMark, &[u8])] = &[
     ("WIPED", b"WIPED", Icon::Wipe, State::Failed, ResultMark::None, b"WALLET WIPED"),
     ("TAMPER DETECT", b"TAMPER", Icon::Alert, State::Failed, ResultMark::None, b"TAMPER DETECTED"),
     ("RNG failed", b"RNG", Icon::Die, State::Failed, ResultMark::None, b"RNG FAILED"),
-    ("Backup OK", b"BACKUPOK", Icon::Shield, State::Done, ResultMark::Check, b"BACKUP OK"),
-    ("Wrong word", b"NOMATCH", Icon::Shield, State::Failed, ResultMark::Cross, b"NO MATCH"),
-    ("Verify fail", b"NOMATCH", Icon::Shield, State::Failed, ResultMark::Cross, b"NO MATCH"),
+    // A check word that is not the word at that position: the design's
+    // headshake, then the same check again (the setup flow retries it).
+    ("Wrong word", b"WRONGWRD", Icon::ResultRing, State::Failed, ResultMark::Cross, b"WRONG WORD - TRY AGAIN"),
     ("Bad checksum", b"BADSEED", Icon::ResultRing, State::Failed, ResultMark::Cross, b"WRONG SEED PHRASE"),
     ("No match", b"NOWORD", Icon::ResultRing, State::Failed, ResultMark::Cross, b"NO SUCH WORD"),
     ("Words shown", b"SHOWN", Icon::Shield, State::Done, ResultMark::Check, b"WORDS SHOWN"),
-    ("Write 24 words", b"WRITE24", Icon::Shield, State::Awaiting, ResultMark::None, b"WRITE DOWN 24 WORDS"),
 ];
 
 /// Map a legacy `show_status(title, sub)` to its screen.
@@ -223,9 +221,17 @@ pub fn classify(title: &str, sub: &str) -> Status {
     match t {
         // ---- PIN ----------------------------------------------------------
         "Enter PIN" => Status::PinPrompt(b"ENTER PIN"),
-        "Set new PIN" => Status::PinPrompt(b"SET NEW PIN"),
-        "Confirm PIN" => Status::PinPrompt(b"CONFIRM PIN"),
+        "Set new PIN" => Status::PinPrompt(b"SET PIN"),
+        "Confirm PIN" => Status::PinPrompt(b"REPEAT PIN"),
         "Duress PIN" => Status::PinPrompt(b"SET DURESS PIN"),
+        // Setup writing the wallet: the busy film on the setup family's disc
+        // (owner 2026-10-16); it resolves into the explosion when done.
+        "Provisioning" => Status::Busy(
+            ScreenBuilder::status(b"SETUP", Icon::Dots, b"SETTING UP YOUR PQ1", State::Awaiting, ResultMark::None)
+                .finish()
+                .unwrap_or(Screen::BLANK),
+        ),
+        "Repeat duress PIN" => Status::PinPrompt(b"REPEAT DURESS PIN"),
         "PIN locked" => v(b"PINLOCK", Icon::Lock, State::Failed, ResultMark::None, &[b"PIN LOCKED", sb]),
         "Locked" | "Idle" => v(b"LOCKED", Icon::Lock, State::Failed, ResultMark::None, &[b"LOCKED", if eq(s, "retry...") { b"" } else { sb }]),
         // ---- rest / outcomes --------------------------------------------------
@@ -339,9 +345,10 @@ pub fn letter_row(title: &[u8], buf: &[u8], len: usize) -> Screen {
         .unwrap_or(Screen::BLANK)
 }
 
-/// A two-option chooser (the wizard's setup menu, the duress yes / no): the
-/// hero asks the highlighted option; taps switch it.
+/// A two-option chooser: the hero asks the highlighted option. Only the bench
+/// uses it now (the setup and duress choices are pages of the setup pager).
 #[must_use]
+#[cfg_attr(not(feature = "ui-px-bench"), allow(dead_code))]
 pub fn choice(title: &[u8], option: &[u8]) -> Screen {
     let mut buf = [b' '; CAPTION_LEN];
     let mut n = 0usize;
@@ -664,7 +671,8 @@ mod tests {
             ("TAMPER DETECT", "wiping...", Icon::Alert, b"TAMPER DETECTED"),
             ("RNG failed", "retry...", Icon::Die, b"RNG FAILED"),
             ("Cancelled", "", Icon::ResultRing, b"CANCELED"),
-            ("Backup OK", "", Icon::Shield, b"BACKUP OK"),
+            ("PIN mismatch", "", Icon::Pill, b"PIN MISMATCH"),
+            ("Wrong word", "", Icon::ResultRing, b"WRONG WORD - TRY AGAIN"),
         ];
         for &(t, s, icon, cap) in cases {
             let sc = shown(classify(t, s));
@@ -825,19 +833,37 @@ mod tests {
             ),
             (
                 "wizard",
-                std::vec![
-                    choice(b"", b"Create new wallet"),
-                    choice(b"", b"Restore wallet"),
-                    pin_row(b"SET NEW PIN", &[0; 8], 0),
-                    st("Write 24 words", "L=cancel R=show"),
-                    seed_page(9, 8),
-                    letter_row(b"Check word 5", b"abaa", 2),
-                    candidate_list(b"Word 3 of 24"),
-                    st("Backup OK", ""),
-                    st("Wrong word", "retrying..."),
-                    st("Bad checksum", "retry..."),
-                    st("PINs differ", "retry..."),
-                ],
+                {
+                    // The setup flow in order (owner decisions 2026-10-15):
+                    // intro, PIN, the words and their checks, import, done.
+                    let mut v = crate::ui_setup_screens::intro().to_vec();
+                    v.extend(crate::ui_setup_screens::backup_intro());
+                    v.extend(crate::ui_setup_screens::duress_intro());
+                    v.extend(crate::ui_setup_screens::decoy_intro());
+                    v.extend([
+                        crate::ui_setup_screens::pin_help(),
+                        pin_row(b"SET PIN", &[0; 8], 0),
+                        pin_row(b"REPEAT PIN", &[0; 8], 0),
+                        st("PIN mismatch", ""),
+                        seed_page(9, 8),
+                        crate::ui_setup_screens::hidden(),
+                        crate::ui_setup_screens::paused(),
+                        crate::ui_setup_screens::written(),
+                        crate::ui_setup_screens::quiz_intro(),
+                        letter_row(b"Check word 5", b"abaa", 2),
+                        st("Wrong word", ""),
+                        crate::ui_setup_screens::import_intro(),
+                        pin_row(b"SET DURESS PIN", &[0; 8], 0),
+                        pin_row(b"REPEAT DURESS PIN", &[0; 8], 0),
+                        st("Same as main", ""),
+                        candidate_list(b"Word 3 of 24"),
+                        st("No match", ""),
+                        st("Bad checksum", "retry..."),
+                        crate::ui_setup_screens::ready()[0],
+                        crate::ui_setup_screens::ready()[1],
+                    ]);
+                    v
+                },
             ),
             (
                 "outcomes",

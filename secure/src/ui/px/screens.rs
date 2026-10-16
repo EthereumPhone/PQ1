@@ -128,46 +128,84 @@ pub fn show(s: &Screen) -> bool {
     show_with(s, &[])
 }
 
-/// What [`show_waiting`] did.
+/// The setup pager on the panel ([`super::lcd::run_pager`]). `None` when the
+/// pixel UI cannot run it — no verified atlas, or the text presenter — and
+/// the caller runs its 16x4 pager instead. Each screen is recorded once, as
+/// every presenter does.
+pub fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> Option<crate::ui::PagerOut> {
+    #[cfg(feature = "ui-lcd")]
+    {
+        let Ok(atlas) = super::assets::verify_atlas() else {
+            return None;
+        };
+        for s in screens {
+            record(s);
+        }
+        Some(super::lcd::run_pager(screens, start, &atlas, may_back, may_forward))
+    }
+    #[cfg(not(feature = "ui-lcd"))]
+    {
+        let _ = (screens, start, may_back, may_forward);
+        None
+    }
+}
+
+/// An entry dialog's input wait (the PIN, a word's letters): the row is
+/// shown and kept drawing while it waits, on the timestamped input path
+/// (`lcd::EntryInput`), and each call returns the next legacy event. One per
+/// dialog. Without the panel (the text presenter) it records the row and
+/// waits on the ordinary buttons.
+pub struct EntryWait {
+    #[cfg(feature = "ui-lcd")]
+    inner: super::lcd::EntryInput,
+}
+
+impl EntryWait {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            #[cfg(feature = "ui-lcd")]
+            inner: super::lcd::EntryInput::new(),
+        }
+    }
+
+    /// Show `s` and wait for the next event. [`Waited::NoAtlas`] when the
+    /// panel cannot draw it: the caller paints its 16x4 page and waits itself.
+    pub fn wait(&mut self, s: &Screen, idle: &mut dyn FnMut() -> bool) -> Waited {
+        #[cfg(feature = "ui-lcd")]
+        {
+            let Ok(atlas) = super::assets::verify_atlas() else {
+                return Waited::NoAtlas;
+            };
+            record(s);
+            Waited::Event(self.inner.wait(s, &atlas, idle))
+        }
+        #[cfg(not(feature = "ui-lcd"))]
+        {
+            record(s);
+            Waited::Event(crate::ui::input().wait_button(idle))
+        }
+    }
+}
+
+impl Default for EntryWait {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// What [`EntryWait::wait`] did.
 pub enum Waited {
     /// No verified atlas — the caller must paint its own 16x4 page and run
     /// its own `wait_button`. Same contract as `show_with` returning `false`.
+    /// (The text presenter has no atlas to fail.)
+    #[cfg_attr(not(feature = "ui-lcd"), allow(dead_code))]
     NoAtlas,
     /// The screen was shown and kept animating for the whole wait. Carries
     /// the input event, or `None` if the idle timer fired.
     Event(Option<(crate::ui::Button, crate::ui::Press)>),
 }
 
-/// Show an ENDLESS ambient record and wait for a button, animating it
-/// throughout (#783).
-///
-/// This is the fix for the wizard chooser. `show`/`play_screen` play a record
-/// "until it rests", which for a screen that never rests means a 3 s cap
-/// firing mid-swing, followed by a blocking input wait during which nothing
-/// moves at all — and because that wait samples no input, a tap that starts
-/// and ends inside the 3 s window was invisible. Driving the animation FROM
-/// the input wait fixes both halves with one loop.
-///
-/// Goes through the same `record(s)` as every other presenter, exactly once,
-/// so the `[UI-PXSR]` log line and the `ui-capture` frame hash are unchanged
-/// and the transcript count does not move.
-pub fn show_waiting(s: &Screen, idle: &mut dyn FnMut() -> bool) -> Waited {
-    #[cfg(feature = "ui-lcd")]
-    {
-        let Ok(atlas) = super::assets::verify_atlas() else {
-            return Waited::NoAtlas;
-        };
-        record(s);
-        let mut amb = super::lcd::Ambient::new(s, &atlas);
-        let ev = crate::ui::input().wait_button_ticking(idle, &mut || amb.tick(&atlas));
-        Waited::Event(ev)
-    }
-    #[cfg(not(feature = "ui-lcd"))]
-    {
-        record(s);
-        Waited::Event(crate::ui::input().wait_button(idle))
-    }
-}
 
 /// Work in progress (a one-off status before the work runs): the record
 /// painted at rest at once — an entrance would only delay the work. With a
@@ -234,6 +272,8 @@ pub fn status(title: &str, sub: &str) -> bool {
 /// `ui::show_progress` on the pixel UI: the first call of a run shows the
 /// busy screen, later calls advance its film.
 pub fn progress(title: &str, _percent: u8) -> bool {
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::note_pct(_percent);
     #[cfg(not(feature = "ui-lcd"))]
     {
         // Log each run once, not every percent.

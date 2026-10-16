@@ -297,6 +297,15 @@ pub enum Item<'a> {
     /// outline in Q4 design units placed by `xf`, filled / stroked / ringed
     /// per `mode`, composited at `a`.
     Shape { pts: &'static [(i16, i16)], xf: Xform, mode: ShapeMode, color: Rgb, a: u8 },
+    /// An elliptical ring (the explosion's blast, `burst.py`): the band of
+    /// width `w` just inside the ellipse with semi-axes `rx`, `ry`, stroked
+    /// inward like [`Item::Ring`]. Q8 throughout.
+    EllipseRing { cx: Q8, cy: Q8, rx: Q8, ry: Q8, w: Q8, color: Rgb },
+    /// The explosion's clump (`burst.py` `clump_poly`): a filled disc of
+    /// radius `r` whose edge trembles by three harmonics,
+    /// `r · (1 + i · (0.012 sin(3a + p3) + 0.008 sin(5a − p5) + 0.005 sin(7a + p7)))`,
+    /// `i` = `intensity` (Q16), the phases in Q16 turns.
+    Clump { cx: Q8, cy: Q8, r: Q8, intensity: Q16, phases: [Q16; 3], color: Rgb },
 }
 
 /// Where a [`Item::Shape`]'s Q4 outline lands: uniform scale `k` (Q8,
@@ -455,6 +464,18 @@ impl<'a> Frame<'a> {
         self.push(Item::Shape { pts, xf, mode, color, a })
     }
 
+    /// [`Item::EllipseRing`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn ellipse_ring(&mut self, cx: Q8, cy: Q8, rx: Q8, ry: Q8, w: Q8, color: Rgb) -> bool {
+        self.push(Item::EllipseRing { cx, cy, rx, ry, w, color })
+    }
+
+    /// [`Item::Clump`] by its fields (see [`Self::disc`]).
+    #[inline(never)]
+    pub fn clump(&mut self, cx: Q8, cy: Q8, r: Q8, intensity: Q16, phases: [Q16; 3], color: Rgb) -> bool {
+        self.push(Item::Clump { cx, cy, r, intensity, phases, color })
+    }
+
     #[must_use]
     pub fn items(&self) -> &[Item<'a>] {
         &self.items[..self.n]
@@ -554,6 +575,8 @@ fn draw_item(item: &Item<'_>, font: &Font<'_>, s: &mut Strip<'_>) {
         Item::Cross { cx, cy, r, color, k } => cross(s, cx, cy, r, color, k),
         Item::Mask { cx, cy, mask, scale, color, a } => mask_blit(s, cx, cy, &mask, scale, color, a),
         Item::Shape { pts, xf, mode, color, a } => shape(s, pts, xf, mode, color, a),
+        Item::EllipseRing { cx, cy, rx, ry, w, color } => ellipse_ring(s, cx, cy, rx, ry, w, color),
+        Item::Clump { cx, cy, r, intensity, phases, color } => clump(s, cx, cy, r, intensity, phases, color),
         Item::Secret { text, tier, x, y, color } => font.blit_secret_run(tier, text, x, y, color, s),
         Item::Rect { x, y, w, h, color, a } => {
             if !s.x_hits(x, x + w - 1) {
@@ -764,6 +787,178 @@ fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
         } else {
             band(s, xa, ha - 1);
             band(s, hb + 1, xb);
+        }
+    }
+}
+
+/// Elliptical ring: the band of width `w` inside the ellipse `rx` × `ry`.
+///
+/// Per row only the stroke band is evaluated: columns between the outer
+/// ellipse grown by a pixel and the hole (the ellipse shrunk by `w` + 2 px,
+/// which the stroke's inner edge never reaches) — the rest of a blast ring's
+/// huge bounding box is skipped. Signed distance to the ellipse is the
+/// first-order estimate `F / |∇F|` taken in the space where the ellipse is a
+/// circle of radius `rx`: `S = |(x, y·rx/ry)|`, `T = |(x, y·(rx/ry)²)|`,
+/// `d ≈ (S − rx) · S / T` (exact on both axes). The stroke's inner edge is
+/// the curve `w` inside, so a stroke keeps its width all round.
+fn ellipse_ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, rx: Q8, ry: Q8, w: Q8, color: Rgb) {
+    if rx <= 0 || ry <= 0 || !s.x_hits(((cx - rx) >> 8) - 2, ((cx + rx) >> 8) + 2) {
+        return;
+    }
+    note_work();
+    let (ox, oy) = (rx + ONE_Q8, ry + ONE_Q8);
+    let (hx, hy) = (rx - w - 2 * ONE_Q8, ry - w - 2 * ONE_Q8);
+    let c = ONE_Q8 / 2 - cx;
+    let (rx64, ry64) = (i64::from(rx), i64::from(ry));
+    let y_lo = ((cy - oy) >> 8) - 1;
+    let y_hi = ((cy + oy) >> 8) + 1;
+    for y in y_lo.max(0)..=y_hi.min(H - 1) {
+        let dy = (y << 8) + ONE_Q8 / 2 - cy;
+        if dy.abs() >= oy {
+            continue;
+        }
+        let dy64 = i64::from(dy);
+        // Half-width of an ellipse a × b at this row: a·√(b² − dy²) / b.
+        let half = |a: Q8, b: Q8| -> Q8 {
+            let b64 = i64::from(b);
+            ((i64::from(a) * i64::from(isqrt_u64((b64 * b64 - dy64 * dy64) as u64))) / b64) as Q8
+        };
+        let (xa, xb) = centres_within(c, half(ox, oy));
+        let (xa, xb) = (xa.max(s.x0), xb.min(s.x0 + s.w - 1));
+        if xb < xa {
+            continue;
+        }
+        let (ha, hb) = if hx > 0 && hy > 0 && dy.abs() < hy { centres_within(c, half(hx, hy)) } else { (1, 0) };
+        let (ha, hb) = (ha.max(xa), hb.min(xb));
+        let (ky, k2y) = ellipse_row(dy64, rx64, ry64);
+        let band = |s: &mut Strip<'_>, x0: i32, x1: i32| {
+            for x in x0..=x1 {
+                let cov = ellipse_ring_cov(i64::from((x << 8) + ONE_Q8 / 2 - cx), ky, k2y, rx64, w);
+                if cov != 0 {
+                    s.blend(x, y, color, cov);
+                }
+            }
+        };
+        if hb < ha {
+            band(s, xa, xb);
+        } else {
+            band(s, xa, ha - 1);
+            band(s, hb + 1, xb);
+        }
+    }
+}
+
+/// A row's scaled offsets for [`ellipse_ring_cov`]: `dy·rx/ry`, `dy·(rx/ry)²`.
+#[inline]
+fn ellipse_row(dy: i64, rx: i64, ry: i64) -> (i64, i64) {
+    (dy * rx / ry, dy * rx * rx / (ry * ry))
+}
+
+/// Coverage of the ring band at column offset `dx` on a row whose
+/// [`ellipse_row`] offsets are `ky`, `k2y` (see [`ellipse_ring`]).
+#[inline]
+fn ellipse_ring_cov(dx: i64, ky: i64, k2y: i64, rx: i64, w: Q8) -> u8 {
+    let sq = isqrt_u64((dx * dx + ky * ky) as u64) as i64;
+    let t = isqrt_u64((dx * dx + k2y * k2y) as u64) as i64;
+    if t == 0 {
+        return 0;
+    }
+    let d = ((sq - rx) * sq / t) as Q8;
+    edge_cov(d.max(-d - w))
+}
+
+/// The clump's three harmonics for [`clump_cov`]: (weight·intensity, cos φ,
+/// ±sin φ) for n = 3, 5, 7 (the 5th turns the other way, `sin(5a − φ5)`).
+fn clump_harmonics(intensity: Q16, phases: [Q16; 3]) -> [(Q16, Q16, Q16); 3] {
+    use crate::fixed::{cos_turns_q16, mul_q16, sin_turns_q16};
+    let k = |w: Q16| mul_q16(intensity, w);
+    [
+        (k(786), cos_turns_q16(phases[0]), sin_turns_q16(phases[0])),
+        (k(524), cos_turns_q16(phases[1]), -sin_turns_q16(phases[1])),
+        (k(328), cos_turns_q16(phases[2]), sin_turns_q16(phases[2])),
+    ]
+}
+
+/// Coverage of the clump at offset `(dx, dy)` from its centre.
+#[inline]
+fn clump_cov(dx: Q8, dy: Q8, r: Q8, h: &[(Q16, Q16, Q16); 3]) -> u8 {
+    use crate::fixed::mul_q16;
+    let d = dist_q8(dx, dy);
+    if d == 0 {
+        return 255;
+    }
+    // z = (cos a, sin a) in Q16; z³, z⁵, z⁷ by complex products.
+    let z = (((i64::from(dx) << 16) / i64::from(d)) as Q16, ((i64::from(dy) << 16) / i64::from(d)) as Q16);
+    let mul = |a: (Q16, Q16), b: (Q16, Q16)| -> (Q16, Q16) {
+        (mul_q16(a.0, b.0) - mul_q16(a.1, b.1), mul_q16(a.0, b.1) + mul_q16(a.1, b.0))
+    };
+    let z2 = mul(z, z);
+    let z3 = mul(z2, z);
+    let z5 = mul(z3, z2);
+    let z7 = mul(z5, z2);
+    let mut wv: Q16 = 0;
+    for (zn, &(wt, cp, sp)) in [z3, z5, z7].into_iter().zip(h) {
+        // sin(n a ± φ) = Im(zⁿ)·cos φ ± Re(zⁿ)·sin φ (the sign folded into sp).
+        wv += mul_q16(wt, mul_q16(zn.1, cp) + mul_q16(zn.0, sp));
+    }
+    let edge = r + ((i64::from(r) * i64::from(wv)) >> 16) as Q8;
+    edge_cov(d - edge)
+}
+
+/// The explosion's clump: a disc whose edge trembles by three harmonics.
+///
+/// The edge stays within `r · (1 ± 0.025 · intensity)`, so the interior below
+/// that is one span fill and the outside above it is skipped; only the rim
+/// evaluates the angle. `cos a`, `sin a` come from the pixel's offset over its
+/// distance, and `sin(n·a + φ)` from the complex power `(cos a + i sin a)^n`,
+/// so no inverse trigonometry runs per pixel.
+fn clump(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, intensity: Q16, phases: [Q16; 3], color: Rgb) {
+    use crate::fixed::mul_q16;
+    // 0.012 + 0.008 + 0.005 = 0.025 (Q16 1638.4, rounded up).
+    let amp = ((i64::from(r) * i64::from(mul_q16(intensity, 1_639))) >> 16) as Q8 + 1;
+    let (r_max, r_min) = (r + amp, r - amp);
+    if !s.x_hits(((cx - r_max) >> 8) - 1, ((cx + r_max) >> 8) + 1) {
+        return;
+    }
+    note_work();
+    let h = clump_harmonics(intensity, phases);
+    let c = ONE_Q8 / 2 - cx;
+    let r_zero = i64::from(r_max + ZERO_D);
+    let r_full = i64::from(r_min - FULL_D + 1);
+    let y_lo = ((cy - r_max) >> 8) - 1;
+    let y_hi = ((cy + r_max) >> 8) + 1;
+    for y in y_lo.max(0)..=y_hi.min(H - 1) {
+        let dy = (y << 8) + ONE_Q8 / 2 - cy;
+        let dy2 = i64::from(dy) * i64::from(dy);
+        let Some(hz) = half_width(r_zero * r_zero - dy2) else { continue };
+        let (xa, xb) = centres_within(c, hz);
+        let (xa, xb) = (xa.max(s.x0), xb.min(s.x0 + s.w - 1));
+        if xb < xa {
+            continue;
+        }
+        let (fa, fb) = if r_full > 0 {
+            match half_width(r_full * r_full - dy2) {
+                Some(hf) => centres_within(c, hf),
+                None => (1, 0),
+            }
+        } else {
+            (1, 0)
+        };
+        let (fa, fb) = (fa.max(xa), fb.min(xb));
+        let rim = |s: &mut Strip<'_>, x0: i32, x1: i32| {
+            for x in x0..=x1 {
+                let cov = clump_cov((x << 8) + ONE_Q8 / 2 - cx, dy, r, &h);
+                if cov != 0 {
+                    s.blend(x, y, color, cov);
+                }
+            }
+        };
+        if fb < fa {
+            rim(s, xa, xb);
+        } else {
+            rim(s, xa, fa - 1);
+            s.fill_span(fa, fb, y, color, 255);
+            rim(s, fb + 1, xb);
         }
     }
 }
@@ -1173,6 +1368,83 @@ mod tests {
     /// The near-edge cull is pixel-identical to the plain loop: every baked
     /// verdict outline, in every mode, at several sizes, turns and offsets,
     /// rendered into a full-width strip and into 48-px bands.
+    /// The two burst primitives' row culls (band, hole, interior span) are
+    /// exact: the same pixels as evaluating their coverage everywhere.
+    #[test]
+    fn burst_primitive_culls_match_the_reference_pixel_for_pixel() {
+        let mut cases = 0;
+        for band in [W, 48] {
+            let mut x0 = 0;
+            while x0 < W {
+                let w = band.min(W - x0);
+                let cx = 214 << 8;
+                let cy = 72 << 8;
+                for (rx, sw) in [(10 << 8, 666), (40 << 8, 576), (150 << 8, 486), (230 << 8, 397), (310 << 8, 307)] {
+                    let ry = (i64::from(rx) * 47_186 >> 16) as Q8;
+                    let mut got = std::vec![0u16; (w * H) as usize];
+                    let mut want = got.clone();
+                    ellipse_ring(&mut Strip::new(x0, w, &mut got).unwrap(), cx, cy, rx, ry, sw, Rgb::WHITE);
+                    let mut st = Strip::new(x0, w, &mut want).unwrap();
+                    for y in 0..H {
+                        let (ky, k2y) = ellipse_row(i64::from((y << 8) + 128 - cy), i64::from(rx), i64::from(ry));
+                        for x in x0..x0 + w {
+                            let cov = ellipse_ring_cov(i64::from((x << 8) + 128 - cx), ky, k2y, i64::from(rx), sw);
+                            if cov != 0 {
+                                st.blend(x, y, Rgb::WHITE, cov);
+                            }
+                        }
+                    }
+                    assert!(got == want, "ellipse ring cull differs: rx {} band {x0}+{w}", rx >> 8);
+                    cases += 1;
+                }
+                for (r, i, ph) in [(22 << 8, 39_322, [0, 0, 0]), (18 << 8, 120_000, [9_000, 40_000, 63_000]), ((143 << 8) / 10, 196_608, [30_000, 1_000, 50_000])] {
+                    let (ccx, ccy) = (cx + 700, cy - 900);
+                    let mut got = std::vec![0u16; (w * H) as usize];
+                    let mut want = got.clone();
+                    clump(&mut Strip::new(x0, w, &mut got).unwrap(), ccx, ccy, r, i, ph, Rgb::WHITE);
+                    let h = clump_harmonics(i, ph);
+                    let mut st = Strip::new(x0, w, &mut want).unwrap();
+                    for y in 0..H {
+                        for x in x0..x0 + w {
+                            let cov = clump_cov((x << 8) + 128 - ccx, (y << 8) + 128 - ccy, r, &h);
+                            if cov != 0 {
+                                st.blend(x, y, Rgb::WHITE, cov);
+                            }
+                        }
+                    }
+                    assert!(got == want, "clump cull differs: r {} band {x0}+{w}", r >> 8);
+                    cases += 1;
+                }
+                x0 += w;
+            }
+        }
+        assert!(cases > 60);
+    }
+
+    /// The ring lands where the ellipse is: lit on its rim at both axes, dark
+    /// in the hole and outside; the clump is solid inside and trembles only
+    /// within its 2.5 %·intensity bound.
+    #[test]
+    fn burst_primitives_land_on_their_geometry() {
+        let mut buf = std::vec![0u16; (W * H) as usize];
+        let mut st = Strip::new(0, W, &mut buf).unwrap();
+        let (cx, cy, rx, ry, sw) = (214 << 8, 72 << 8, 100 << 8, 72 << 8, 666);
+        ellipse_ring(&mut st, cx, cy, rx, ry, sw, Rgb::WHITE);
+        let px = |st: &Strip<'_>, x: i32, y: i32| st.buf[((x - st.x0) * H + (H - 1 - y)) as usize];
+        assert_ne!(px(&st, 214 + 99, 72), 0, "rim on the x axis");
+        assert_ne!(px(&st, 214 - 99, 72), 0);
+        assert_ne!(px(&st, 214, 72 - 71), 0, "rim on the y axis");
+        assert_eq!(px(&st, 214, 72), 0, "the hole");
+        assert_eq!(px(&st, 214 + 95, 72), 0, "inside the stroke's inner edge");
+        assert_eq!(px(&st, 214 + 102, 72), 0, "outside");
+        let mut buf = std::vec![0u16; (W * H) as usize];
+        let mut st = Strip::new(0, W, &mut buf).unwrap();
+        clump(&mut st, cx, cy, 20 << 8, 196_608, [1_000, 2_000, 3_000], Rgb::WHITE);
+        assert_eq!(px(&st, 214, 72), Rgb::WHITE.to565(), "solid inside");
+        assert_eq!(px(&st, 214 + 18, 72), Rgb::WHITE.to565());
+        assert_eq!(px(&st, 214 + 23, 72), 0, "never past r·(1 + 0.025·3) + ½");
+    }
+
     #[test]
     fn shape_cull_matches_the_reference_pixel_for_pixel() {
         use crate::verdict_geom as g;

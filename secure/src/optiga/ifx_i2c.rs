@@ -360,6 +360,8 @@ impl IfxState {
                 }
             }
             Self::delay_1ms();
+            // The chip is still working: the provisioning film may draw.
+            crate::ui::busy_poll();
         }
         secure_log!(
             "[OPTIGA/ifx] poll: TIMEOUT after {} iters, {} ok reads, last state[0]=0x{:02x}",

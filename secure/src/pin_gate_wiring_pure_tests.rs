@@ -419,7 +419,7 @@ not(feature=\"se050-crash-safety-e2e\"),not(test),))]unsafe{usesecure_element::W
         "fn factory_reset_admin(&mut self) -> Result<(), SeError> {",
     ));
     assert!(wipe.contains(
-        "ifsalt_gone.is_err()||optiga_result.is_err()||se050_result.is_err(){unsafe{if!crate::hw::flash::is_wipe_armed(){let_=crate::hw::flash::arm_wipe_flag();}}}"
+        "ifsalt_gone.is_err()||offchain_result.is_err()||optiga_result.is_err()||se050_result.is_err(){unsafe{if!crate::hw::flash::is_wipe_armed(){let_=crate::hw::flash::arm_wipe_flag();}}}"
     ));
 }
 
@@ -595,4 +595,161 @@ fn negative_salt_log_sits_after_the_flag_quadwords_and_only_zeros_are_overwritte
         "    fn erase_region(&mut self) -> Result<(), ()> {",
     ));
     assert!(erase.ends_with("unsafe{erase_admin_page()?;arm_wipe_flag()}}"));
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// What a wipe leaves behind (#949-#953, audit 2026-10-16)
+// ─────────────────────────────────────────────────────────────────────
+
+#[test]
+fn negative_every_wipe_erases_page_123_and_the_attempt_log() {
+    // #949 / #952. ASSUMPTION ATTACKED: a wipe destroys the wallet on both
+    // chips but leaves its off-chain counters (keyed by account/chain/slot,
+    // not by wallet, so the next seed inherits them) and its PIN-attempt
+    // history on the device.
+    let body = code_only(function_text(
+        DUAL_SE_SRC,
+        "    fn factory_reset_admin(&mut self) -> Result<(), SeError> {",
+    ));
+    let salt = body.find("crate::pin_gate::begin_wipe()").expect("opens with the salt");
+    let log = body.find("crate::pin_attempt_log::clear();").expect("#952: clears the attempt log");
+    let page = body
+        .find("unsafe{crate::hw::flash::erase_offchain_page_for_wipe()}")
+        .expect("#949: erases page 123");
+    let se050 = body.find("self.se050.factory_reset_admin()").expect("the SE050 leg");
+    // Page 123 goes while the wipe flag is armed, before the SE050 leg erases
+    // page 125 and with it the flag that makes a cut wipe resume.
+    assert!(salt < log && salt < page && page < se050);
+    // A failed erase keeps the wipe armed and is reported.
+    assert!(body.contains("||offchain_result.is_err()||"), "a failed page-123 erase must re-arm the wipe");
+    assert!(body.contains("offchain_result.map_err(|()|SeError::InternalError)?;"));
+
+    // The erase helper skips an already blank page and erases otherwise.
+    let helper = code_only(function_text(
+        FLASH_SRC,
+        "pub unsafe fn erase_offchain_page_for_wipe() -> Result<(), ()> {",
+    ));
+    assert!(helper.contains("ifblank{returnOk(());}"));
+    assert!(helper.ends_with("unsafe{erase_offchain_page()}}"));
+}
+
+#[test]
+fn negative_a_duress_wipe_resets_page_124_and_leaves_no_log_entry() {
+    // #951 / #952. ASSUMPTION ATTACKED: the duress arm wipes but, unlike
+    // `trigger_lockout_wipe`, leaves page 124 charged, then writes the
+    // `AlreadyAtMax` entry (pre-count below ten) the wipe had just cleared.
+    let body = code_only(function_text(
+        NSC_MOD_SRC,
+        "pub unsafe fn gated_unlock(",
+    ));
+    let wipe = body.find("let_=se.factory_reset_admin();").expect("the duress wipe");
+    let tail = &body[wipe..];
+    let reset = tail
+        .find("let_=crate::hw::flash::pin_attempts_reset_after_wipe();")
+        .expect("#951: the duress wipe resets page 124 like trigger_lockout_wipe");
+    let flag = tail.find("duress_wiped=true;").expect("#952: the wipe is noted");
+    let err = tail.find("Err(UnlockError::PinLocked)").expect("and reports PinLocked");
+    assert!(reset < err && flag < err);
+    // The outcome arm skips the log after a duress wipe, and only then.
+    assert!(body.contains("letlog_it=!duress_wiped;"));
+    assert!(body.contains("iflog_it{crate::pin_attempt_log::record_outcome("));
+    // The model it mirrors.
+    let lockout = code_only(function_text(REQUEST_UNLOCK_SRC, "unsafe fn trigger_lockout_wipe() -> u32 {"));
+    assert!(lockout.contains("let_=crate::hw::flash::pin_attempts_reset_after_wipe();"));
+}
+
+#[test]
+fn negative_optiga_wipe_reports_a_failed_decoy_blank() {
+    // #950. ASSUMPTION ATTACKED: the decoy OIDs go back to `let _ =`, so a
+    // failed blank is neither reported nor resumed while the real OIDs above
+    // them are.
+    let body = code_only(OPTIGA_SRC);
+    for oid in [
+        "OID_DURESS_AUTH_REF",
+        "OID_DURESS_ENTROPY",
+        "OID_DURESS_MASTER_SECRET",
+        "OID_DURESS_VK",
+        "OID_DURESS_BOOTSTRAP_VK",
+    ] {
+        let blank = std::format!(
+            "apdu::set_data_object(&mutself.ifx,&mutself.shield,apdu::{oid},&blank)"
+        );
+        assert!(body.contains(&std::format!("{blank}?;")), "{oid}: a failed blank must abort the leg");
+        assert!(!body.contains(&std::format!("let_={blank}")), "{oid}: best-effort again");
+    }
+}
+
+#[test]
+fn negative_setup_starts_without_the_previous_wallets_flash_state() {
+    // #949 / #953. ASSUMPTION ATTACKED: the wizard provisions on top of a
+    // previous wallet's page 123 or its duress mode (which reads as WIPE
+    // whatever the user now chooses), or erases page 125 under a pending
+    // wipe and so loses the flag that finishes it.
+    let wizard = MAIN_SRC.find("let first = run_first_boot_wizard();").expect("the wizard");
+    let provision = wizard
+        + MAIN_SRC[wizard..]
+            .find("crypto::provision_from_mnemonic(")
+            .expect("provisioning after the wizard");
+    let span = code_only(&MAIN_SRC[wizard..provision]);
+    let page123 = span
+        .find("ifhw::flash::erase_offchain_page_for_wipe().is_err(){")
+        .expect("#949: page 123 is cleared before provisioning");
+    assert!(span[page123..].starts_with(
+        "ifhw::flash::erase_offchain_page_for_wipe().is_err(){ui::show_status(\"Setupfailed\""
+    ));
+    let stale = span.find("ifhw::flash::is_duress_wipe_mode(){").expect("#953: a stale duress mode is cleared");
+    let armed = span.find("ifhw::flash::is_wipe_armed(){").expect("never under a pending wipe");
+    let erase = span.find("ifhw::flash::erase_admin_page().is_err(){").expect("page 125 is erased");
+    let arm = span.find("arm_duress_wipe_mode().is_err()").expect("the duress mode is set after");
+    assert!(stale < armed && armed < erase && erase < arm);
+    assert!(span[armed..erase].contains("panic!("), "a pending wipe refuses setup");
+}
+
+#[test]
+fn negative_a_failed_auto_unlock_never_leaves_ready_on_a_locked_wallet() {
+    // EVT 2026-10-16: the auto-unlock after setup failed, READY stayed on the
+    // glass, and a locked device has nothing for the idle timeout to wipe: no
+    // PIN prompt ever came and only a power cycle recovered. ASSUMPTION
+    // ATTACKED: the error arm goes back to logging and moving on, or READY is
+    // painted whatever the lock state.
+    let at = MAIN_SRC
+        .find("let auto = (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin);")
+        .expect("the post-setup auto-unlock");
+    let arm = at + MAIN_SRC[at..].find("Err(_e) => {").expect("its error arm");
+    let end = arm + MAIN_SRC[arm..].find("        } else {").expect("end of the first-boot branch");
+    let err_arm = code_only(&MAIN_SRC[arm..end]);
+    assert!(err_arm.contains("show_auto_unlock_failure();boot_pin_unlock();"), "{err_arm}");
+    assert!(!err_arm.contains("\"Ready\""), "READY on the error arm");
+    // The provisioned branch uses the same loop.
+    assert!(code_only(&MAIN_SRC[end..end + 300]).contains("boot_pin_unlock();"));
+    // The loop is the counted one.
+    let lp = code_only(function_text(MAIN_SRC, "fn boot_pin_unlock() {"));
+    assert!(lp.contains("nsc::gated_unlock(se_ref,&pin)"));
+    // The last READY before NS boots is painted only over an unlocked wallet.
+    let gw = MAIN_SRC.find("secure_log!(\"[S] Gateway ready\");").expect("gateway ready");
+    let rest = code_only(&MAIN_SRC[gw..gw + 600]);
+    assert!(
+        rest.contains("ifnsc::is_unlocked(){ui::show_status(\"PQSignerOS\",\"Ready\");}"),
+        "{rest}"
+    );
+}
+
+#[test]
+fn negative_an_idle_pin_prompt_stays_up() {
+    // Owner 2026-10-16: left idle, the PendSV PIN prompt went to LOCKED -
+    // RETRY LATER after ~24 minutes, because every 120 s idle re-prompt was
+    // counted against the runaway cap. ASSUMPTION ATTACKED: the cap goes back
+    // to counting prompts rather than submitted PINs.
+    let body = code_only(function_text(MAIN_SRC, "fn PendSV() {"));
+    let prompt = body.find("letmutpin=matchenter_pin(){").expect("the prompt");
+    let count = body.find("attempts+=1;").expect("the runaway count");
+    assert_eq!(body.matches("attempts+=1;").count(), 1);
+    assert!(prompt < count, "the cap counts prompts again, so an idle prompt gives up");
+    // An idle or cancelled prompt goes straight back round, uncounted.
+    assert!(body[prompt..count].contains("PinEntryResult::Cancelled|PinEntryResult::IdleWipe=>{continue;}"));
+    // A PIN the cap stops is wiped, not left on the stack.
+    let cap = body.find("ifattempts>PENDSV_MAX_REUNLOCK_ATTEMPTS{").expect("the cap");
+    assert!(body[cap..].starts_with(
+        "ifattempts>PENDSV_MAX_REUNLOCK_ATTEMPTS{pin.zeroize();crate::fi::zeroize_barrier();"
+    ));
 }

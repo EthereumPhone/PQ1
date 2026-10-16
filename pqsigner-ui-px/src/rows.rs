@@ -2,13 +2,14 @@
 //! (DESIGN.md § Components, PIN row — `pq1/procedural/pin_slots.py`) and the
 //! numbered **words grid** (`pq1/layout.py` `_words_texts`).
 //!
-//! Both are static pictures of a record: the firmware's own input loop
+//! Both are pictures of a record: the firmware's own input loop
 //! (`pin_entry.rs`, the seed wizard) decides what the row holds and repaints
-//! it on every button event, so there is nothing to animate here — the ring
-//! bounce and the pulsing hint cycle of the design are demo pacing the
-//! device leaves out (the device paints once per press).
+//! it on every button event. The one thing that moves on its own is the
+//! entry row's hint, which swaps between two messages ([`entry_hint`]); the
+//! ring bounce of the design is demo pacing the device leaves out.
 
 use crate::font::{Align, TextRun, TierId};
+use crate::motion;
 use crate::raster::{Frame, Item, Rgb, ShapeMode, Xform};
 use crate::scene::{CENTER_X, CHEV_LEFT_X_Q8, CHEV_RIGHT_X_Q8, CHEV_Y, CIRCLE_CY};
 use crate::screen::Screen;
@@ -49,12 +50,39 @@ fn glyph_str(c: u8) -> &'static [u8] {
     }
 }
 
-/// The hint centred between the chevrons: the device's ENTER gesture.
-pub const ENTRY_HINT: &[u8] = b"ENTER (BOTH)";
+/// The two hints that take turns between the chevrons (owner 2026-10-15):
+/// how to confirm a digit or a letter, and how to step back. Both are the
+/// entry loop's own gestures (the chord, or a right hold, enters; a left
+/// hold goes back and, on the first slot, leaves the row).
+pub const ENTRY_HINTS: [&[u8]; 2] = [b"CONFIRM (BOTH)", b"BACK (HOLD LEFT)"];
 
-/// Draw an entry row record (rings, glyphs, the − / + marks and the hint).
-/// The caption and the corner chevrons come from the screen's layout.
-pub fn build_entry<'a>(s: &'a Screen, frame: &mut Frame<'a>) {
+/// The hint showing at `now` and its alpha: the Confirm? band's swap (5 s a
+/// message, 300 ms fades), on the WALL clock rather than the time since the
+/// row settled, so the repaint on every press neither restarts the cycle nor
+/// fades the hint back in. Shifted by one fade so `now` = 0 shows the first
+/// hint at full strength.
+#[must_use]
+pub fn entry_hint(now: u32) -> (&'static [u8], u8) {
+    let (which, a) = motion::confirm_band(now.wrapping_add(motion::BAND_FADE_MS));
+    (ENTRY_HINTS[usize::from(which & 1)], (i64::from(a) * 255 >> 16) as u8)
+}
+
+/// Milliseconds from `now` until [`entry_hint`] next changes: 0 inside a
+/// fade, else the time left in the slot's still part.
+#[must_use]
+pub fn entry_hint_still_for(now: u32) -> u32 {
+    let local = now.wrapping_add(motion::BAND_FADE_MS) % motion::BAND_SWAP_MS;
+    let still_end = motion::BAND_SWAP_MS - motion::BAND_FADE_MS;
+    if (motion::BAND_FADE_MS..still_end).contains(&local) {
+        still_end - local
+    } else {
+        0
+    }
+}
+
+/// Draw an entry row record (rings, glyphs, the − / + marks and the hint at
+/// `now`). The caption and the corner chevrons come from the screen's layout.
+pub fn build_entry<'a>(s: &'a Screen, now: u32, frame: &mut Frame<'a>) {
     let Some((glyphs, states)) = s.entry_slots() else { return };
     let n = glyphs.len() as i32;
     let x0 = CENTER_X - (n - 1) * RING_PITCH / 2;
@@ -95,8 +123,9 @@ pub fn build_entry<'a>(s: &'a Screen, frame: &mut Frame<'a>) {
     for (pts, x) in [(&MINUS, lx), (&MINUS, rx), (&PLUS_UPRIGHT, rx)] {
         frame.shape(pts, Xform::at(x, cy), ShapeMode::Stroke { hw: SIGN_HW_Q8 }, hint, 255);
     }
+    let (text, alpha) = entry_hint(now);
     frame.text(TextRun {
-            text: ENTRY_HINT,
+            text,
             // The 16 px caps face (the regular 16 tier is digits only).
             tier: TierId::semibold(16),
             x: CENTER_X,
@@ -104,7 +133,7 @@ pub fn build_entry<'a>(s: &'a Screen, frame: &mut Frame<'a>) {
             align: Align::Center,
             baseline: false,
             ls_q6: 64,
-            alpha: 255,
+            alpha,
         }, hint);
 }
 
@@ -210,6 +239,30 @@ pub fn push_secret_word<'a>(frame: &mut Frame<'a>, k: usize, text: &'a [u8], alp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The swap: CONFIRM (BOTH) for 5 s, BACK (HOLD LEFT) for 5 s, 300 ms
+    /// fades, on the wall clock; a still stretch reports how long it lasts.
+    #[test]
+    fn the_entry_hint_swaps_every_five_seconds() {
+        assert_eq!(entry_hint(0), (ENTRY_HINTS[0], 255), "t = 0 shows the first hint in full");
+        assert_eq!(entry_hint(4_000), (ENTRY_HINTS[0], 255));
+        let (t, a) = entry_hint(4_550);
+        assert!(t == ENTRY_HINTS[0] && a < 255 && a > 0, "fading out");
+        assert_eq!(entry_hint(4_700).1, 0, "the swap point");
+        assert_eq!(entry_hint(5_000), (ENTRY_HINTS[1], 255));
+        assert_eq!(entry_hint(10_000), (ENTRY_HINTS[0], 255), "and back");
+        assert_eq!(entry_hint_still_for(0), 4_400);
+        assert_eq!(entry_hint_still_for(4_500), 0, "inside a fade: paint every frame");
+        assert_eq!(entry_hint_still_for(5_000), 4_400);
+        // Still exactly until the next fade begins.
+        for now in (0..20_000).step_by(50) {
+            let still = entry_hint_still_for(now);
+            if still > 0 {
+                assert_eq!(entry_hint(now), entry_hint(now + still - 1), "at {now}");
+                assert!(entry_hint(now + still + 30).1 < 255, "fading just after, at {now}");
+            }
+        }
+    }
     use crate::font::{Font, SECRET_CELLS};
     use crate::raster::{render_strip, Strip, W};
     use crate::screen::ScreenBuilder;

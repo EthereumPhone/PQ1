@@ -1194,7 +1194,7 @@ mod pin_tests {
         let mut se = MockSecureElement::new();
         let mnemonic = Mnemonic::from_entropy(&[0u8; 32]);
         let pin = [b'1', b'2', b'3', b'4', 0, 0, 0, 0];
-        provision_from_mnemonic(&mut se, &mnemonic, &pin, None);
+        provision_from_mnemonic(&mut se, &mnemonic, &pin, None, None);
         se
     }
 

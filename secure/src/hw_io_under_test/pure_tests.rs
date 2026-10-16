@@ -2457,40 +2457,105 @@ fn positive_an_endless_screen_is_never_played_to_rest() {
 #[test]
 fn positive_the_chooser_animates_from_inside_its_input_wait() {
     // The two defects were one structure: a paint loop that sampled no
-    // input, followed by an input wait that painted nothing. Neither half is
-    // fixable alone, so the chooser paints AND waits in one call.
+    // input, followed by an input wait that painted nothing (#783). Every
+    // choice in setup (create / import, wipe / decoy) is now a page of the
+    // setup pager, which drains the buttons AND steps and paints the
+    // animation in one loop. The paint-then-block helpers must not come back.
+    for gone in ["fn px_choice(", "fn px_choice_wait(", "fn yes_no("] {
+        assert!(!contains_in_code(SEED_WIZARD_SRC, gone), "{gone} must not come back");
+    }
+    assert!(!contains_in_code(PX_SCREENS_SRC, "pub fn show_waiting("));
+    // The setup choice (2026-10-15) is a page of the setup pager, which has
+    // the same shape: one loop that drains the buttons AND steps and paints
+    // the animation, so the hero sweeps while it waits.
     assert!(
-        contains_in_code(PX_SCREENS_SRC, "pub fn show_waiting(")
-            && contains_in_code(
-                PX_SCREENS_SRC,
-                "wait_button_ticking(idle, &mut || amb.tick(&atlas))"
-            ),
-        "the ambient presenter must drive its animation from the input wait"
+        contains_in_code(SEED_WIZARD_SRC, "super::px::screens::pager(screens, start, may_back, may_forward)"),
+        "the setup pager must run on the pixel pager when the panel can draw it"
     );
-    // Through `record` on every arm, like every other presenter, or the
-    // [UI-PXSR] line and the ui-capture frame hash change and the transcript
-    // count moves.
-    let body = PX_SCREENS_SRC
-        .split("pub fn show_waiting(")
+    let pager = UI_PX_LCD_SRC
+        .split("pub fn run_pager(")
         .nth(1)
-        .expect("show_waiting must exist");
-    let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
-    assert_eq!(
-        body.matches("record(s);").count(),
-        2,
-        "show_waiting must record the screen on each cfg arm, exactly once"
-    );
-    // Both wizard choosers must use it (the fn itself plus two call sites),
-    // and the paint-then-block helper must not come back.
-    assert_eq!(
-        SEED_WIZARD_SRC.matches("px_choice_wait(").count(),
-        3,
-        "both chooser loops must animate while waiting"
-    );
-    assert!(
-        !contains_in_code(SEED_WIZARD_SRC, "fn px_choice("),
-        "the paint-then-block helper must not come back"
-    );
+        .expect("run_pager must exist");
+    let pager = &pager[..pager.find("\n}\n").unwrap_or(pager.len())];
+    let lp = pager.find("let result = loop {").expect("run_pager must loop");
+    for needle in ["let (g, now) = drain(&mut fsm);", "anim.step(now);", "build_and_present(&anim"] {
+        assert!(pager[lp..].contains(needle), "run_pager must {needle} inside its wait loop");
+    }
+}
+
+#[test]
+fn positive_a_pager_continues_from_the_previous_pager_only_while_its_frame_is_on_the_glass() {
+    // Owner report 2026-10-15: selecting CREATE NEW WALLET? redrew the disc
+    // in the PIN help's dock instead of moving it there, because each setup
+    // step starts a new pager. The pager now keeps its animation and the
+    // next one continues from it with `go_to`.
+    let pager = UI_PX_LCD_SRC
+        .split("pub fn run_pager(")
+        .nth(1)
+        .expect("run_pager must exist");
+    let pager = &pager[..pager.find("\n}\n").unwrap_or(pager.len())];
+    assert!(pager.contains("let mut anim = match carry_take() {"));
+    assert!(pager.contains("a.go_to(&screens[i], 0, now);"));
+    assert!(pager.contains("carry_keep(anim);"));
+    // Only while nothing else has drawn since: every panel write passes
+    // `set_window`, which counts, and the take compares the count.
+    let sw = LCD_NV3007_SRC
+        .split("pub fn set_window(")
+        .nth(1)
+        .expect("set_window must exist");
+    let sw = &sw[..sw.find("\n}\n").unwrap_or(sw.len())];
+    assert!(sw.contains("GLASS_WRITES.fetch_add(1"), "every window set must count as a glass write");
+    let take = UI_PX_LCD_SRC.split("fn carry_take()").nth(1).expect("carry_take must exist");
+    let take = &take[..take.find("\n}\n").unwrap_or(take.len())];
+    assert!(take.contains("CARRY_GLASS.load(Ordering::Relaxed) != lcd::glass_writes()"));
+    // Only the pager keeps one: a PIN row's record carries a live digit,
+    // which must not outlive its dialog in a static.
+    assert_eq!(UI_PX_LCD_SRC.matches("carry_keep(").count(), 2, "the fn and the pager's one call");
+}
+
+#[test]
+fn positive_the_entry_wait_reads_the_timestamped_stream_and_paints_only_on_change() {
+    // Owner report 2026-10-15: the entry row's hint fade lagged while
+    // dialling, because the legacy driver cannot draw while a button is
+    // down. `EntryInput` reads the SysTick-sampled edges instead, so it draws
+    // through presses; it maps them with the host-tested `EntryGrammar`.
+    let body = UI_PX_LCD_SRC
+        .split("pub fn wait(\n        &mut self,\n        s: &Screen,")
+        .nth(1)
+        .expect("EntryInput::wait must exist");
+    let body = &body[..body.find("\n    }\n}\n").unwrap_or(body.len())];
+    assert!(body.contains("let (g, now) = drain(&mut self.fsm);"));
+    assert!(body.contains("match self.grammar.feed(ev) {"));
+    assert!(body.contains("Some(EntryEvent::Confirm) => Some((Button::Right, Press::Long)),"));
+    // A still row is not streamed at the frame rate: it paints once, then
+    // only while something on it moves (the fade, a press nudge).
+    assert!(body.contains("let still = anim.cycle_wake(now);\n            if !drawn || still.is_none() {"));
+    // Another dialog drew since: its input was not ours.
+    assert!(body.contains("if !self.live || lcd::glass_writes() != self.glass {\n            self.sync();"));
+    // #426: the entry loops reset the timer after each event; the wait never does.
+    assert!(!body.contains("reset_activity"));
+}
+
+#[test]
+fn negative_the_setup_pager_resets_activity_only_on_a_button_edge() {
+    // #426 on the pixel pager: the timer is reset by a real button edge and
+    // by nothing else (no reset on entry, none per frame).
+    let pager = UI_PX_LCD_SRC
+        .split("pub fn run_pager(")
+        .nth(1)
+        .expect("run_pager must exist");
+    let pager = &pager[..pager.find("\n}\n").unwrap_or(pager.len())];
+    assert_eq!(pager.matches("timeout::reset_activity()").count(), 1);
+    assert!(pager.contains("if g.edge {\n            timeout::reset_activity();"));
+    // It selects only on the confirm click, only on a screen that asks, and
+    // only once that screen has been painted complete.
+    assert_eq!(pager.matches("PagerOut::Selected(").count(), 1);
+    assert!(pager.contains(
+        "Gesture::ChordClick => {\n                    if asks && presented == Some(i) {"
+    ));
+    // A page change forgets the painted mark, so the next page must paint
+    // before it can be selected.
+    assert_eq!(pager.matches("presented = None;").count(), 2);
 }
 
 #[test]

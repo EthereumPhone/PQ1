@@ -49,6 +49,7 @@ mod confirm_core;
 pub mod golden;
 pub mod pin_entry;
 pub mod seed_wizard;
+pub mod setup_screens;
 /// F-24 stage D: constant-time glyph blit for secret-bearing display rows.
 /// Bypasses address-keyed font lookups for the seed wizard's word rows. Used by
 /// the `ui-lcd` (RGB565 via `secret_glyph_cols`) backend; the
@@ -77,6 +78,17 @@ pub const DISPLAY_ROWS: usize = 4;
 #[inline]
 pub(crate) fn ascii_str(buf: &[u8]) -> &str {
     core::str::from_utf8(buf).unwrap_or("?")
+}
+
+/// Where the setup pager (`seed_wizard::pager`) ended.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PagerOut {
+    /// The two-button click on a screen that asks (its index).
+    Selected(usize),
+    /// A right tap on the last screen (only when the caller allows it).
+    Forward,
+    /// A left tap on the first screen (only when the caller allows it).
+    Back,
 }
 
 /// Two-button input event.
@@ -274,4 +286,50 @@ pub fn show_progress(title: &str, percent: u8) {
     d.draw_line(1, title);
     d.draw_line(3, ascii_str(&bar));
     d.flush();
+}
+
+/// Set only while provisioning writes the wallet to the two chips (a
+/// [`ChipWaitTicks`] held by `crypto::provision_from_mnemonic`). Nothing else
+/// sets it, so signing and the PIN check never draw from inside a chip wait.
+static CHIP_WAIT_TICKS: AtomicBool = AtomicBool::new(false);
+
+/// While alive, [`busy_poll`] advances the busy film: the chip writes of
+/// provisioning have no progress callback of their own, and without this the
+/// orbit froze for their whole length (EVT, owner 2026-10-16).
+pub struct ChipWaitTicks(());
+
+impl ChipWaitTicks {
+    #[must_use]
+    pub fn enter() -> Self {
+        CHIP_WAIT_TICKS.store(true, Ordering::Relaxed);
+        Self(())
+    }
+}
+
+impl Drop for ChipWaitTicks {
+    fn drop(&mut self) {
+        CHIP_WAIT_TICKS.store(false, Ordering::Relaxed);
+    }
+}
+
+/// Whether provisioning's chip writes are running (a [`ChipWaitTicks`] is
+/// alive). `optiga::settle` reads it to time its waits by the S-only clock
+/// and draw the film inside them; everywhere else the waits stay the plain
+/// cycle delays they always were.
+#[inline]
+#[must_use]
+pub fn chip_wait_ticks_active() -> bool {
+    CHIP_WAIT_TICKS.load(Ordering::Relaxed)
+}
+
+/// The OPTIGA and SE050 drivers call this each time they wait on a busy
+/// chip. Under [`ChipWaitTicks`] it draws at most one film frame
+/// (`film_tick` is rate-limited and a no-op with no film running); otherwise
+/// it does nothing.
+#[inline]
+pub fn busy_poll() {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {
+        px::lcd::film_tick(0);
+    }
 }

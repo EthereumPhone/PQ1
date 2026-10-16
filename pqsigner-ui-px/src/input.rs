@@ -367,9 +367,138 @@ impl InputFsm {
     }
 }
 
+/// What an entry row (the PIN, a word's letters) makes of the gestures: the
+/// legacy entry grammar the firmware's entry loops speak, read off the
+/// timestamped stream instead of the polling driver (owner 2026-10-15).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EntryEvent {
+    /// A short press: dial (− on the left, + on the right).
+    Tap(Btn),
+    /// A press that reached `TAP_MAX_MS` (the legacy 500 ms long press):
+    /// reported as soon as it does, while the button is still down. Right =
+    /// enter the slot, left = back.
+    Hold(Btn),
+    /// Both buttons pressed together, then released: enter the slot.
+    Confirm,
+}
+
+/// The entry rows' reading of an [`InputFsm`] stream ([`EntryEvent`]).
+///
+/// After a hold fires, nothing else counts until both buttons are up: a
+/// chord formed under a running hold (hold right, then press left) would
+/// otherwise enter a second time on its click.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct EntryGrammar {
+    swallow: bool,
+}
+
+impl EntryGrammar {
+    /// Read one gesture.
+    pub fn feed(&mut self, g: Gesture) -> Option<EntryEvent> {
+        if self.swallow {
+            return None;
+        }
+        match g {
+            Gesture::Tap(b) => Some(EntryEvent::Tap(b)),
+            Gesture::HoldStart(b) => {
+                self.swallow = true;
+                Some(EntryEvent::Hold(b))
+            }
+            Gesture::ChordClick => Some(EntryEvent::Confirm),
+            _ => None,
+        }
+    }
+
+    /// Both buttons are up: the hold that was swallowing has ended.
+    pub fn released(&mut self) {
+        self.swallow = false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Run `(t, left, right)` samples through a NAV FSM and the entry
+    /// grammar, the way the presenter does (`released` once both are up).
+    fn entry(samples: &[(u32, bool, bool)]) -> alloc::vec::Vec<(u32, EntryEvent)> {
+        let mut f = InputFsm::new(InputCtx::NAV);
+        let mut g = EntryGrammar::default();
+        let mut out = alloc::vec::Vec::new();
+        for &(t, l, r) in samples {
+            for ev in f.poll(t, l, r).iter() {
+                if let Some(e) = g.feed(ev) {
+                    out.push((t, e));
+                }
+            }
+            if !l && !r {
+                g.released();
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn entry_taps_dial_on_release() {
+        let got = entry(&[(0, false, true), (120, false, false), (300, true, false), (420, false, false)]);
+        assert_eq!(got, [(120, EntryEvent::Tap(Btn::Right)), (420, EntryEvent::Tap(Btn::Left))]);
+    }
+
+    #[test]
+    fn entry_fast_taps_each_count() {
+        // Dialling quickly: every tap is its own event, none delayed.
+        let mut s = alloc::vec::Vec::new();
+        for k in 0..5u32 {
+            s.push((k * 140, false, true));
+            s.push((k * 140 + 70, false, false));
+        }
+        let got = entry(&s);
+        assert_eq!(got.len(), 5);
+        assert!(got.iter().all(|&(_, e)| e == EntryEvent::Tap(Btn::Right)));
+    }
+
+    #[test]
+    fn entry_hold_fires_once_at_the_long_press_mark() {
+        let got = entry(&[
+            (0, true, false),
+            (TAP_MAX_MS, true, false),
+            (TAP_MAX_MS + 10, true, false),
+            (HOLD_COMMIT_MS + 100, true, false),
+            (HOLD_COMMIT_MS + 200, false, false),
+        ]);
+        assert_eq!(got, [(TAP_MAX_MS + 10, EntryEvent::Hold(Btn::Left))], "once, while held; nothing at release");
+    }
+
+    #[test]
+    fn entry_both_buttons_confirm_once() {
+        let got = entry(&[(0, true, false), (40, true, true), (200, false, true), (260, false, false)]);
+        assert_eq!(got, [(260, EntryEvent::Confirm)]);
+    }
+
+    #[test]
+    fn entry_chord_under_a_hold_does_not_enter_twice() {
+        let got = entry(&[
+            (0, false, true),
+            (TAP_MAX_MS + 10, false, true), // the hold fires: enter
+            (800, true, true),              // left joins: a chord under the hold
+            (900, false, true),
+            (1_000, false, false),
+        ]);
+        assert_eq!(got, [(TAP_MAX_MS + 10, EntryEvent::Hold(Btn::Right))]);
+        // And the next press counts again.
+        let mut f = InputFsm::new(InputCtx::NAV);
+        let mut g = EntryGrammar::default();
+        let mut n = 0;
+        for (t, l, r) in [(0, false, true), (TAP_MAX_MS + 10, false, true), (900, false, false), (1_200, false, true), (1_300, false, false)] {
+            for ev in f.poll(t, l, r).iter() {
+                n += usize::from(g.feed(ev).is_some());
+            }
+            if !l && !r {
+                g.released();
+            }
+        }
+        assert_eq!(n, 2);
+    }
 
     fn collect(ev: Events) -> alloc::vec::Vec<Gesture> {
         ev.iter().collect()

@@ -21,6 +21,8 @@ pub mod lcd;
 
 #[cfg(feature = "ui-px-bench")]
 pub mod bench;
+#[cfg(feature = "ui-px-film-gaps")]
+pub mod film_gaps;
 
 pub use confirm_px::confirm_screens_checked;
 

@@ -32,6 +32,7 @@ const CONFIRM_SRC: &str = include_str!("../ui/confirm.rs");
 const CONFIRM_CORE_SRC: &str = include_str!("../ui/confirm_core.rs");
 const PIN_SRC: &str = include_str!("../ui/pin_entry.rs");
 const WIZARD_SRC: &str = include_str!("../ui/seed_wizard.rs");
+const SETUP_SRC: &str = include_str!("../ui/setup_screens.rs");
 const CAPTURE_SRC: &str = include_str!("../ui/capture.rs");
 const SEMI_SRC: &str = include_str!("../ui/semihosting.rs");
 const NOOP_SRC: &str = include_str!("../ui/noop.rs");
@@ -400,6 +401,20 @@ fn positive_seed_wizard_show_mnemonic_seen_last_gate() {
     assert!(WIZARD_SRC.contains("if page == TOTAL_PAGES - 1 {"));
     assert!(WIZARD_SRC.contains("seen_last = true;"));
     assert!(WIZARD_SRC.contains("if seen_last {"));
+    // The walk the setup flow uses: a right tap on the last page finishes,
+    // and only once that page has been painted. `start_last` (back from
+    // WORDS WRITTEN DOWN?) reopens on the last page, which was seen to get
+    // there — and `create_backup` sets it only on that path.
+    let simple = wizard_fn_body(WIZARD_SRC, "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {");
+    assert!(simple.contains("let mut seen_last = start_last;"));
+    assert!(simple.contains("if page == total_pages - 1 {\n            seen_last = true;"));
+    assert!(simple.contains("} else if seen_last {\n                    return WizardResult::Confirmed;"));
+    assert_eq!(simple.matches("WizardResult::Confirmed").count(), 1);
+    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic, intro: &[Screen]) {");
+    assert_eq!(backup.matches("start_last = true;").count(), 1);
+    assert!(backup.contains(
+        "if pager(&written, 0, true, false) == PagerOut::Back {\n                    start_last = true;"
+    ));
 }
 
 #[test]
@@ -762,9 +777,9 @@ fn negative_seed_wizard_must_not_reset_activity_on_step_entry() {
         "the #426 policy comment must remain — it documents why step-entry resets are forbidden"
     );
     const STEP_FNS: [&str; 6] = [
-        "pub fn choose_setup_mode() -> WizardChoice {",
-        "fn yes_no(title: &str) -> Option<bool> {",
-        "fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {",
+        "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {",
+        "pub fn choose_duress(main_pin: &[u8; PIN_LEN]) -> DuressSetup {",
+        "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {",
         "fn show_mnemonic_with_decoys(m: &Mnemonic) -> WizardResult {",
         "fn enter_single_word(title: &str) -> EnterWordResult {",
         "fn pick_candidate(title: &str, start: usize, end: usize) -> CandidateResult {",
@@ -793,21 +808,15 @@ fn negative_seed_wizard_resets_activity_only_after_button_events() {
     // `show_mnemonic_with_decoys` waits inside
     // `show_mnemonic_page_with_decoys`, so its wait marker is the page
     // call rather than a literal `wait_button`.
-    const CASES: [(&str, &str); 7] = [
+    const CASES: [(&str, &str); 6] = [
         (
-            "pub fn choose_setup_mode() -> WizardChoice {",
-            "input().wait_button(&mut idle)",
+            "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {",
+            "input().wait_button(&mut never)",
         ),
+        // The one way back from an entry row that reported idle in setup.
+        ("fn hold(s: &Screen) {", "input().wait_button(&mut never)"),
         (
-            "fn yes_no(title: &str) -> Option<bool> {",
-            "input().wait_button(&mut idle)",
-        ),
-        (
-            "pub fn show_mnemonic(m: &Mnemonic) -> WizardResult {",
-            "input().wait_button(&mut idle)",
-        ),
-        (
-            "fn show_mnemonic_simple(m: &Mnemonic) -> WizardResult {",
+            "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {",
             "input().wait_button(&mut idle)",
         ),
         (
@@ -1115,15 +1124,83 @@ fn negative_progress_bar_clamps_above_100_pct() {
 }
 
 #[test]
-fn negative_show_mnemonic_warning_screen_requires_explicit_right_press() {
-    // The warning screen "Write 24 words L=cancel R=show" is the
-    // last gate before the words hit the display. The user must
-    // press Right to advance — Left cancels. An accidental short
-    // press of Left should NOT silently advance into showing the
-    // words.
-    assert!(WIZARD_SRC.contains("show_status(\"Write 24 words\", \"L=cancel R=show\");"));
-    assert!(WIZARD_SRC.contains("(Button::Right, _) => {}"));
-    assert!(WIZARD_SRC.contains("(Button::Left, _) => return WizardResult::Cancelled,"));
+fn positive_the_entry_rows_keep_drawing_while_they_wait() {
+    // Owner 2026-10-15: the hint between an entry row's chevrons swaps
+    // between CONFIRM (BOTH) and BACK (HOLD LEFT), so the row must keep
+    // drawing during the input wait, through presses (the timestamped input
+    // path, `EntryWait`), not be painted once and left. One wait object per
+    // dialog, created before the loop, so its input state and queued taps
+    // survive from one event to the next.
+    for (src, fn_sig, sig, new, call) in [
+        (
+            PIN_SRC,
+            "pub fn enter_pin() -> PinEntryResult {",
+            "fn px_pin_wait(",
+            "let mut px = PxWait::new();",
+            "px_pin_wait(&mut px, &pin, pos, &mut idle)",
+        ),
+        (
+            WIZARD_SRC,
+            "fn enter_single_word(title: &str) -> EnterWordResult {",
+            "fn px_letter_wait(",
+            "let mut px = PxLetterWait::new();",
+            "px_letter_wait(&mut px, title, &buf, len, &mut idle)",
+        ),
+    ] {
+        let body = src.split(sig).nth(1).unwrap_or_else(|| panic!("{sig} must exist"));
+        let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
+        assert!(body.contains("match px.wait(&row, idle) {"), "{sig}");
+        let f = src.split(fn_sig).nth(1).unwrap_or_else(|| panic!("{fn_sig} must exist"));
+        let (new_at, loop_at) = (f.find(new).expect("the wait is created"), f.find("loop {").expect("a loop"));
+        assert!(new_at < loop_at, "{fn_sig}: one wait per dialog, before the loop");
+        assert!(f[loop_at..].contains(call), "the loop must wait through {sig}");
+    }
+    // The paint-once presenters must not come back on either row.
+    assert!(!PIN_SRC.contains("super::px::screens::show(&row)"));
+    assert!(!WIZARD_SRC.contains("super::px::screens::show(&super::px::status_map::letter_row"));
+}
+
+#[test]
+fn negative_an_idle_entry_row_leaves_the_glass_before_the_hold() {
+    // Setup has no timeout, so an entry row that reports idle holds for a
+    // press instead of restarting setup. The row must not stay on the panel
+    // meanwhile: a check or import row shows a typed prefix of a seed word
+    // or a candidate list of full words, and nothing else repaints it.
+    let hold = wizard_fn_body(WIZARD_SRC, "fn hold(s: &Screen) {");
+    let paint = hold.find("paint_still(s);").expect("hold must paint its screen");
+    let wait = hold.find("input().wait_button(&mut never)").expect("hold must wait");
+    assert!(paint < wait, "the screen goes up BEFORE the wait");
+    let wfp = wizard_fn_body(WIZARD_SRC, "fn wait_for_press() {");
+    assert!(wfp.contains("hold(&setup_screens::paused());"));
+    // Only `hold` (and the 16x4 pager) wait without an idle check.
+    assert_eq!(WIZARD_SRC.matches("input().wait_button(&mut never)").count(), 2);
+    // Every idle arm of a setup entry row goes through it.
+    for sig in [
+        "pub fn choose_pin() -> Option<[u8; PIN_LEN]> {",
+        "pub fn verify_mnemonic(m: &Mnemonic) -> WizardResult {",
+        "pub fn enter_mnemonic() -> Result<Mnemonic, WizardError> {",
+    ] {
+        let body = wizard_fn_body(WIZARD_SRC, sig);
+        let arms = body.matches("Result::IdleWipe =>").count();
+        assert!(arms >= 1, "{sig} must handle the idle report");
+        assert_eq!(body.matches("wait_for_press()").count(), arms, "{sig}: every idle arm must pause");
+    }
+}
+
+#[test]
+fn negative_the_words_open_only_from_their_show_ask() {
+    // The intro pages (the real wallet's RECOVERY .. SAFETY, or the decoy's
+    // two; before 2026-10-15, WRITE DOWN 24 WORDS and the 16x4 "Write 24
+    // words / L=cancel R=show") end on CONFIRM TO SHOW WORDS, the last gate
+    // before the words hit the display. Only the click on that ask opens
+    // them: the pager runs with no back and no forward, and nothing else
+    // asks (`only_the_two_choices_ask` in `setup_screens` checks it), so
+    // neither a tap nor a click on an earlier page opens the words.
+    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic, intro: &[Screen]) {");
+    assert!(backup.contains("let show = intro.len() - 1;"));
+    assert!(backup.contains("while pager(intro, intro_at, false, false) != PagerOut::Selected(show) {}"));
+    assert!(SETUP_SRC.contains("pub fn backup_intro() -> [Screen; 6] {"));
+    // The decoy walk keeps its own idle exit.
     assert!(WIZARD_SRC.contains("None => return WizardResult::IdleWipe,"));
 }
 
@@ -1194,13 +1271,24 @@ fn negative_seed_wizard_enter_word_back_up_at_position_zero_cancels_word() {
 }
 
 #[test]
-fn negative_choose_setup_mode_long_left_is_always_cancel() {
-    // A long-Left on the setup mode menu must NOT confirm whatever
-    // option is currently highlighted — it must cancel the flow.
-    // Without this, a user who long-pressed the wrong button on
-    // "Restore" would proceed into mnemonic entry expecting a
-    // cancel.
-    assert!(WIZARD_SRC.contains("(Button::Left, Press::Long) => return WizardChoice::Cancelled,"));
+fn negative_the_setup_pager_selects_only_an_asking_screen() {
+    // Successor of the chooser's "long-Left is always cancel" pin. Only the
+    // confirm gesture may select, and only on a screen that asks: a wrong
+    // button must never pick the highlighted CREATE / IMPORT, and the
+    // confirm must not "select" the welcome or the buttons help. On the
+    // 16x4 fallback the confirm is the legacy long-Right (the driver cannot
+    // tell it from the chord); long-Left does nothing.
+    let body = wizard_fn_body(WIZARD_SRC, "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {");
+    assert!(body.contains(
+        "(Button::Right, Press::Long) => {\n                if screens[i].confirmable() {\n                    return PagerOut::Selected(i);"
+    ));
+    assert!(body.contains("(Button::Left, Press::Long) => {}"));
+    assert_eq!(body.matches("PagerOut::Selected(").count(), 1);
+    // The choice maps the selected index to its screen by name, never by a
+    // bare position the screen list could drift from.
+    let intro = wizard_fn_body(WIZARD_SRC, "pub fn setup_intro(back_to: Option<SetupChoice>) -> SetupChoice {");
+    assert!(intro.contains("PagerOut::Selected(setup_screens::CREATE) => return SetupChoice::Create,"));
+    assert!(intro.contains("PagerOut::Selected(setup_screens::IMPORT) => return SetupChoice::Import,"));
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -1281,7 +1369,7 @@ fn negative_frame_loop_uses_constant_time_render() {
 }
 
 #[test]
-fn positive_collect_duress_pin_must_differ_from_main() {
+fn positive_the_duress_pin_must_differ_from_main() {
     // §32 P4: the duress PIN MUST be confirmed-distinct from the main
     // PIN (else the duress credential would be a no-op alias). Pin the
     // constant-time-ish XOR-accumulate distinct check + the reject path.
@@ -1296,14 +1384,16 @@ fn positive_collect_duress_pin_must_differ_from_main() {
 }
 
 #[test]
-fn positive_collect_duress_pin_is_bounded() {
-    // §32 P4: the distinct-PIN retry loop is bounded (3 attempts) so a
-    // user can't lock themselves in the dialog — after that it declines
-    // (None → random decoy, always-provision preserved).
-    assert!(
-        WIZARD_SRC.contains("for _ in 0..3 {"),
-        "collect_duress_pin must bound its retry loop to 3 attempts",
-    );
+fn positive_the_duress_pin_cannot_be_skipped() {
+    // Owner decision 2026-10-16: setup asks for a duress PIN and there is no
+    // way past it but a PIN that differs from the main one (the old dialog
+    // could be declined, or gave up after three tries, provisioning a decoy
+    // with a random PIN). `choose_duress` returns the setup, not an Option,
+    // and leaves its loops only through that one return.
+    let body = wizard_fn_body(WIZARD_SRC, "pub fn choose_duress(main_pin: &[u8; PIN_LEN]) -> DuressSetup {");
+    assert_eq!(body.matches("return ").count(), 1, "one way out: the chosen PIN");
+    assert!(body.contains("return setup;"));
+    assert!(!body.contains("for _ in 0..3"), "no bounded give-up");
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -1402,4 +1492,280 @@ fn negative_full_frame_window_never_exceeds_the_panel_ram() {
     assert!(y1 <= 447, "row {y1} past NV3007 RAM (0..=447)");
     assert_eq!(x1, FRAME_WIDTH - 1 + X_OFFSET);
     assert_eq!(y1, FRAME_HEIGHT - 1 + Y_OFFSET);
+}
+
+// ---------------------------------------------------------------------------
+// Provisioning film: chip busy-polls draw it, and only during provisioning
+// (owner 2026-10-16: the orbit froze while the wallet was written)
+// ---------------------------------------------------------------------------
+
+const CRYPTO_SRC_PROV: &str = include_str!("../crypto.rs");
+const IFX_I2C_SRC: &str = include_str!("../optiga/ifx_i2c.rs");
+const T1OI2C_SRC: &str = include_str!("../se050/t1oi2c.rs");
+const PX_LCD_SRC: &str = include_str!("../ui/px/lcd.rs");
+const PX_SCREENS_SRC: &str = include_str!("../ui/px/screens.rs");
+const FILM_GAPS_SRC: &str = include_str!("../ui/px/film_gaps.rs");
+const SECURE_CARGO_SRC: &str = include_str!("../../Cargo.toml");
+const NSC_MOD_SRC_PROV: &str = include_str!("../nsc/mod.rs");
+const MAKEFILE_SRC_PROV: &str = include_str!("../../../Makefile");
+
+/// The body of the first `fn <name>` in `src`, up to the next top-level item.
+fn fn_body<'a>(src: &'a str, sig: &str) -> &'a str {
+    let start = src.find(sig).unwrap_or_else(|| panic!("`{sig}` missing"));
+    let rest = &src[start..];
+    let end = rest[1..]
+        .find("\n}\n")
+        .or_else(|| rest[1..].find("\n    }\n"))
+        .unwrap_or(rest.len() - 1);
+    &rest[..end + 2]
+}
+
+/// Every production `.rs` under `secure/src` (test modules excluded).
+fn production_sources() -> std::vec::Vec<(std::string::String, std::string::String)> {
+    fn walk(
+        dir: &std::path::Path,
+        out: &mut std::vec::Vec<(std::string::String, std::string::String)>,
+    ) {
+        for entry in std::fs::read_dir(dir).expect("read secure/src") {
+            let path = entry.expect("entry").path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+                let rel = path
+                    .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+                    .expect("below the manifest")
+                    .to_string_lossy()
+                    .into_owned();
+                if !rel.contains("test") {
+                    out.push((rel, std::fs::read_to_string(&path).expect("read")));
+                }
+            }
+        }
+    }
+    let mut out = std::vec::Vec::new();
+    walk(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut out,
+    );
+    out
+}
+
+#[test]
+fn positive_busy_poll_draws_only_under_the_provisioning_flag() {
+    let body = fn_body(MOD_SRC, "pub fn busy_poll()");
+    let guard = body
+        .find("if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {")
+        .expect("busy_poll must test the provisioning flag");
+    let tick = body
+        .find("px::lcd::film_tick(0);")
+        .expect("busy_poll must advance the film");
+    assert!(guard < tick, "the film tick must sit inside the flag test");
+    assert_eq!(body.matches("film_tick").count(), 1, "one tick per poll");
+    // The flag is raised in one place: the guard's constructor.
+    assert_eq!(MOD_SRC.matches("CHIP_WAIT_TICKS.store(true").count(), 1);
+    let enter = fn_body(MOD_SRC, "pub fn enter() -> Self {");
+    assert!(enter.contains("CHIP_WAIT_TICKS.store(true"));
+    let drop_body = MOD_SRC
+        .split("impl Drop for ChipWaitTicks {")
+        .nth(1)
+        .expect("ChipWaitTicks must lower the flag on drop");
+    assert!(drop_body[..200].contains("CHIP_WAIT_TICKS.store(false"));
+}
+
+#[test]
+fn positive_each_driver_ticks_once_from_its_busy_wait() {
+    assert_eq!(IFX_I2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
+    let poll = fn_body(IFX_I2C_SRC, "unsafe fn poll_response_ready(");
+    assert!(
+        poll.contains("crate::ui::busy_poll();"),
+        "OPTIGA: tick while the chip is busy"
+    );
+    assert_eq!(T1OI2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
+    let read = fn_body(T1OI2C_SRC, "unsafe fn read_frame(");
+    let sof_loop = &read[..read.find("if !found_sof {").expect("SOF loop")];
+    assert!(
+        sof_loop.contains("crate::ui::busy_poll();"),
+        "SE050: tick in the SOF poll"
+    );
+}
+
+const OPTIGA_MOD_SRC: &str = include_str!("../optiga/mod.rs");
+const RESET_PIN_SRC: &str = include_str!("../optiga/reset_pin.rs");
+
+#[test]
+fn positive_optiga_reset_waits_draw_only_while_provisioning() {
+    // EVT recorder 2026-10-16: seven ~607 ms freezes, one per OPTIGA reset
+    // cycle of the provisioning write sequence (I2C transactions all <10 ms).
+    // ASSUMPTION ATTACKED: (a) `settle` changes timing outside provisioning,
+    // (b) it can end before the nominal wait, (c) the RST LOW phase (2.5 ms
+    // datasheet maximum) is routed through it.
+    let body = fn_body(OPTIGA_MOD_SRC, "pub(crate) fn settle(cycles: u32) {");
+    let gate = body
+        .find("if !crate::ui::chip_wait_ticks_active() {\n        cortex_m::asm::delay(cycles);\n        return;\n    }")
+        .expect("(a) outside provisioning: exactly the old delay");
+    let floor = body.find("let ms = cycles / 160_000 + 1;").expect("(b) the nominal floor");
+    let wait = body
+        .find("while crate::timeout::now().wrapping_sub(t0) < ms {")
+        .expect("(b) timed by the S-only clock");
+    assert!(gate < floor && floor < wait);
+    assert!(body.contains("crate::ui::busy_poll();"));
+    // The three settle waits, and nothing else.
+    assert!(OPTIGA_MOD_SRC.contains("            settle(8_000_000);"));
+    assert!(RESET_PIN_SRC.contains("    super::settle(160_000 * 50);"));
+    assert!(RESET_PIN_SRC.contains("        super::settle(160_000 * 100);"));
+    assert_eq!(RESET_PIN_SRC.matches("settle(").count(), 2);
+    // (c) the LOW phase stays a plain delay between the two BSRR edges.
+    let low = RESET_PIN_SRC
+        .find("write_volatile(bsrr, 1u32 << (RST_PIN + 16));")
+        .expect("RST driven low");
+    let high = low
+        + RESET_PIN_SRC[low..]
+            .find("write_volatile(bsrr, 1u32 << RST_PIN);")
+            .expect("RST released");
+    let between = &RESET_PIN_SRC[low..high];
+    assert!(between.contains("cortex_m::asm::delay(RST_LOW_CYCLES);"));
+    assert!(!between.contains("settle("), "(c) the LOW phase must not draw frames");
+}
+
+#[test]
+fn negative_pq1_resets_the_optiga_once_per_reinit_cycle() {
+    // EVT 2026-10-16: on pq1 `hard_reset_and_reinit` pulsed RST and then
+    // called `init()`, which (with `ready` cleared) pulses RST again. One
+    // pulse per cycle is enough. ASSUMPTION ATTACKED: (a) the pq1 pulse comes
+    // back into `hard_reset_and_reinit`, or (b) `init` stops pulsing, which
+    // would leave a reinit with no reset at all on pq1.
+    // Methods: slice to the method's own closing brace (`fn_body` prefers a
+    // column-0 brace, which for a method is the end of the whole impl).
+    let method = |sig: &str| -> &'static str {
+        let start = OPTIGA_MOD_SRC.find(sig).unwrap_or_else(|| panic!("`{sig}` missing"));
+        let end = OPTIGA_MOD_SRC[start..].find("\n    }\n").expect("method end");
+        &OPTIGA_MOD_SRC[start..start + end]
+    };
+    let reinit = method("fn hard_reset_and_reinit(&mut self) -> Result<(), OptigaError> {");
+    let code: std::string::String = reinit
+        .lines()
+        .map(|l| l.split("//").next().unwrap_or(""))
+        .collect::<std::vec::Vec<_>>()
+        .join("\n");
+    assert!(!code.contains("hard_pulse"), "(a) a second RST pulse per cycle");
+    let at = reinit.find("self.ready = false;").expect("clears ready");
+    assert!(reinit[at..].contains("self.init()"), "(b) the reinit must go through init");
+    let init = method("pub fn init(&mut self) -> Result<(), OptigaError> {");
+    let ready = init.find("if self.ready {").expect("init's early return");
+    let pulse = init
+        .find("#[cfg(all(feature = \"stm32u585\", feature = \"board-pq1\"))]\n            reset_pin::hard_pulse();")
+        .expect("(b) init pulses RST on pq1");
+    let wait = init.find("settle(8_000_000);").expect("post-reset wait");
+    assert!(ready < pulse && pulse < wait);
+}
+
+#[test]
+fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
+    // Signing and the timing-uniform unlock path must never draw from a chip
+    // wait: only `provision_from_mnemonic` holds the guard.
+    let mut holders = std::vec::Vec::new();
+    for (path, src) in production_sources() {
+        let n = src.matches("ChipWaitTicks::enter()").count();
+        if n > 0 {
+            holders.push((path, n));
+        }
+    }
+    assert_eq!(
+        holders,
+        std::vec![("src/crypto.rs".into(), 2)],
+        "holders: {holders:?}"
+    );
+    let prov = fn_body(CRYPTO_SRC_PROV, "pub fn provision_from_mnemonic(");
+    assert_eq!(prov.matches("ChipWaitTicks::enter()").count(), 2);
+    let enter = prov
+        .find("let ticks = crate::ui::ChipWaitTicks::enter();")
+        .expect("guard");
+    let write = prov
+        .find("store.provision(&entropy")
+        .expect("the chip writes");
+    let lower = prov[write..].find("drop(ticks);").expect("guard dropped") + write;
+    assert!(
+        enter < write && write < lower,
+        "the guard must bracket the chip writes"
+    );
+    // Lowered before the failure path's wipe (and its panic).
+    let wipe = prov
+        .find("store.factory_reset_admin()")
+        .expect("rollback wipe");
+    assert!(lower < wipe);
+    let decoy = prov
+        .find("provision_duress_wallet(store, duress_pin, decoy)")
+        .expect("decoy");
+    let before = &prov[..decoy];
+    assert!(
+        before.rfind("ChipWaitTicks::enter()") > before.rfind("drop(ticks);"),
+        "the decoy's chip writes run under their own guard"
+    );
+}
+
+#[test]
+fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
+    // Implied by nothing, not a default, fenced from production.
+    let features = SECURE_CARGO_SRC
+        .split("[features]")
+        .nth(1)
+        .expect("[features]");
+    let defaults = features
+        .lines()
+        .find(|l| l.starts_with("default"))
+        .expect("default features");
+    assert!(!defaults.contains("ui-px-film-gaps"));
+    let mentions: std::vec::Vec<&str> = features
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("ui-px-film-gaps"))
+        .collect();
+    assert_eq!(
+        mentions,
+        std::vec!["ui-px-film-gaps = [\"ui-px\", \"ui-lcd\"]"]
+    );
+    assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-gaps\","));
+    let forbidden = MAKEFILE_SRC_PROV
+        .split_once("override PROD_FORBIDDEN :=")
+        .expect("PROD_FORBIDDEN")
+        .1
+        .split_once("\n\n")
+        .expect("one block")
+        .0;
+    assert!(forbidden.contains("ui-px-film-gaps"));
+    // Every call into the recorder sits under its feature.
+    for (path, src) in production_sources() {
+        if path.ends_with("film_gaps.rs") {
+            continue;
+        }
+        let lines: std::vec::Vec<&str> = src.lines().collect();
+        for (i, l) in lines.iter().enumerate() {
+            if l.contains("film_gaps::") || l.trim() == "show_film_gaps();" {
+                // Gated on the line itself, or by the function it sits in.
+                let gated = |k: usize| {
+                    let attr = lines[k].trim();
+                    attr.starts_with("#[cfg(") && attr.contains("feature = \"ui-px-film-gaps\"")
+                };
+                let encl = (0..i)
+                    .rev()
+                    .find(|&k| lines[k].starts_with("fn ") || lines[k].starts_with("pub fn "))
+                    .expect("enclosing fn");
+                assert!(
+                    gated(i - 1) || (encl > 0 && gated(encl - 1)),
+                    "{path}:{}: recorder call without its cfg: {l}",
+                    i + 1
+                );
+            }
+        }
+    }
+    assert!(include_str!("../ui/px/mod.rs")
+        .contains("#[cfg(feature = \"ui-px-film-gaps\")]\npub mod film_gaps;"));
+    // The frame hooks report what reached the glass, in both film paths.
+    assert_eq!(PX_LCD_SRC.matches("super::film_gaps::frame(").count(), 2);
+    assert_eq!(
+        PX_SCREENS_SRC
+            .matches("super::film_gaps::note_pct(")
+            .count(),
+        1
+    );
+    assert!(FILM_GAPS_SRC.contains("NEVER ship"));
 }

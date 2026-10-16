@@ -38,7 +38,7 @@ use crate::hw::lcd_nv3007 as lcd;
 use crate::timeout;
 use pqsigner_ui_px::driver::{Btn, FlowDriver, Gesture as NavGesture, NavResult};
 use pqsigner_ui_px::font::Font;
-use pqsigner_ui_px::input::{Gesture, InputCtx, InputFsm, DEBOUNCE_MS};
+use pqsigner_ui_px::input::{EntryEvent, EntryGrammar, Gesture, InputCtx, InputFsm, DEBOUNCE_MS};
 use pqsigner_ui_px::raster::{render_strip, Frame, Strip, H, W};
 use zeroize::Zeroize;
 use pqsigner_ui_px::scene::{Anim, Ending, Marks};
@@ -982,6 +982,8 @@ pub fn film_start_with(s: &Screen) {
     let mut anim = Anim::new(s, 0, now);
     anim.film_start(now);
     let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::frame(timeout::now());
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
     // this is the only writer while `FILM_LIVE` is false.
     unsafe {
@@ -1016,6 +1018,8 @@ pub fn film_tick(_percent: u8) {
     anim.step(now);
     let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
     let after = timeout::now();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::frame(after);
     *last = if after.wrapping_sub(now) > 50 { after.wrapping_add(FRAME_PERIOD_MS) } else { after };
 }
 
@@ -1253,6 +1257,8 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
     let force = !secret.is_empty();
     #[cfg(feature = "ui-px-frametime")]
     let mut ft = PlayOverlay::default();
+    // `mut` only matters when the overlay accumulator is captured.
+    #[cfg_attr(not(feature = "ui-px-frametime"), allow(unused_mut))]
     let mut paint = |anim: &Anim| {
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
@@ -1314,7 +1320,7 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
 ///
 /// 180 s: comfortably past the 120 s boundary, so the degraded state has been
 /// established and read off the glass before the gate is closed again.
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 const ONE_SHOT_RESET_MS: u32 = 180_000;
 
 /// #805 condition (d): the boot-time one-shot `fi::wait_random()` fallback
@@ -1323,17 +1329,17 @@ const ONE_SHOT_RESET_MS: u32 = 180_000;
 ///
 /// Measured rather than inferred because the carve-out requires it; see the
 /// rationale on `crate::rng::NONSECRET_CALLS`.
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 static FALLBACK_SHOT_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 static FALLBACK_SHOT_FB: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 static FALLBACK_SHOT_MISSES: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
 /// Publish the boot probe for the overlay: worst-case pool draw of any single
 /// fill in the length sweep, total fallbacks, total pool misses.
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 pub fn set_fallback_probe(max_hits: u32, fallbacks: u32, misses: u32) {
     use core::sync::atomic::Ordering::Relaxed;
     FALLBACK_SHOT_CALLS.store(max_hits, Relaxed);
@@ -1341,6 +1347,7 @@ pub fn set_fallback_probe(max_hits: u32, fallbacks: u32, misses: u32) {
     FALLBACK_SHOT_MISSES.store(misses, Relaxed);
 }
 
+#[cfg(feature = "ui-px-bench")]
 /// An endless ambient screen, animated against real input (#783).
 ///
 /// WHY THIS EXISTS. `play_screen` plays a record "until it rests", and for a
@@ -1381,7 +1388,7 @@ pub struct Ambient {
 }
 
 /// The ambient overlay's accumulators (bench only).
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 #[derive(Default)]
 struct AmbientFt {
     max_stream: u32,
@@ -1405,6 +1412,7 @@ struct AmbientFt {
     reset_fired: bool,
 }
 
+#[cfg(feature = "ui-px-bench")]
 impl Ambient {
     /// Start animating `s` and paint its first frame NOW.
     ///
@@ -1927,4 +1935,329 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     };
     sampling_disable();
     result
+}
+
+/// The setup flow's pager (owner decisions 2026-10-15): the signing grammar
+/// without a signature. Tap right moves to the next screen, tap left to the
+/// previous one; the two-button click selects on a screen that asks
+/// (`commit` byte set) once that screen has reached the glass in full; holds
+/// do nothing. A right tap on the last screen returns `Forward` and a left tap
+/// on the first returns `Back`, each only where the caller allows it.
+///
+/// No inactivity timeout: setup has no wallet to protect yet, and a timeout
+/// that restarted setup threw away a seed the user may already have written
+/// down (and looped forever on the EVT). The watchdog wait guard is held for
+/// the whole wait, as in `run_flow`.
+/// The animation a pager left on the glass, so the next pager continues
+/// from it: the disc travels to the next step's place instead of being
+/// redrawn there (owner report 2026-10-15, CREATE NEW WALLET? -> the PIN
+/// help). Valid only while `CARRY_SET` is true AND the panel has not been
+/// written since (`CARRY_GLASS` against `lcd::glass_writes`). Only the pager
+/// stores it: its screens are public, where a PIN row's record holds a live
+/// digit that must not outlive its dialog in a static.
+///
+/// Zeroed `MaybeUninit` plus a flag, as `FILM`, to keep it in `.bss`.
+/// Single-threaded driver state, never touched from an ISR.
+static mut CARRY: MaybeUninit<Anim> = MaybeUninit::zeroed();
+static CARRY_SET: AtomicBool = AtomicBool::new(false);
+static CARRY_GLASS: AtomicU32 = AtomicU32::new(0);
+const _: () = assert!(!core::mem::needs_drop::<Anim>());
+
+/// Keep `anim`, the last thing presented, for the next pager.
+fn carry_keep(anim: Anim) {
+    // SAFETY: single-threaded driver state; nothing else references CARRY
+    // (`carry_take` moves out under `CARRY_SET`, cleared before the read),
+    // and `Anim` needs no drop, so overwriting a live value leaks nothing.
+    unsafe { (*core::ptr::addr_of_mut!(CARRY)).write(anim) };
+    CARRY_GLASS.store(lcd::glass_writes(), Ordering::Relaxed);
+    CARRY_SET.store(true, Ordering::Relaxed);
+}
+
+/// The kept animation, if the glass still shows it.
+fn carry_take() -> Option<Anim> {
+    if !CARRY_SET.swap(false, Ordering::Relaxed) || CARRY_GLASS.load(Ordering::Relaxed) != lcd::glass_writes() {
+        return None;
+    }
+    // SAFETY: `CARRY_SET` was true, so `carry_keep` wrote it; clearing the
+    // flag first makes this read the last one.
+    Some(unsafe { (*core::ptr::addr_of_mut!(CARRY)).assume_init_read() })
+}
+
+pub fn run_pager(
+    screens: &[Screen],
+    start: usize,
+    atlas: &assets::AtlasRef,
+    may_back: bool,
+    may_forward: bool,
+) -> crate::ui::PagerOut {
+    use crate::ui::PagerOut;
+    let n = screens.len();
+    let mut i = start.min(n.saturating_sub(1));
+    film_abort();
+    let marks = atlas.marks();
+    let font = atlas.font();
+    let now = timeout::now();
+    // Continue from the previous pager when its frame is still on the glass
+    // (the disc springs over, the text cross-fades); otherwise start at rest.
+    let mut anim = match carry_take() {
+        Some(mut a) => {
+            a.go_to(&screens[i], 0, now);
+            a
+        }
+        None => Anim::new(&screens[i], 0, now),
+    };
+    sampling_enable();
+    // Seed from the buttons' current level, as `run_flow` does, so a chord
+    // still held from the previous step does not select here.
+    let sb = stable_bits();
+    let mut fsm = InputFsm::resumed(InputCtx::NAV, sb & 1 != 0, sb & 2 != 0);
+    let _trusted_ui_wait = timeout::TrustedUiWaitGuard::enter();
+    let mut presented: Option<usize> = None;
+    let result = loop {
+        let (g, now) = drain(&mut fsm);
+        if g.edge {
+            timeout::reset_activity();
+        }
+        // An armed screen, or the tutorial's demonstration (`Nav::Hint`).
+        let asks = screens[i].confirmable();
+        let mut decided: Option<PagerOut> = None;
+        for ev in g.buf[..g.n].iter().flatten() {
+            match *ev {
+                Gesture::Press(side) => anim.press(side, now),
+                Gesture::Chord => {
+                    if asks {
+                        anim.hold(Btn::Right, pqsigner_ui_px::motion::HOLD_COMMIT_MS, now);
+                    }
+                }
+                Gesture::ChordClick => {
+                    if asks && presented == Some(i) {
+                        anim.hold_commit(now);
+                        decided = Some(PagerOut::Selected(i));
+                    } else {
+                        anim.hold_release(now);
+                    }
+                }
+                Gesture::Tap(Btn::Right) => {
+                    if i + 1 < n {
+                        i += 1;
+                        presented = None;
+                        anim.go_to(&screens[i], 0, now);
+                    } else if may_forward {
+                        decided = Some(PagerOut::Forward);
+                    }
+                }
+                Gesture::Tap(Btn::Left) => {
+                    if i > 0 {
+                        i -= 1;
+                        presented = None;
+                        anim.go_to(&screens[i], 0, now);
+                    } else if may_back {
+                        decided = Some(PagerOut::Back);
+                    }
+                }
+                Gesture::HoldCancel(_) | Gesture::HoldCommit(_) => anim.hold_release(now),
+                Gesture::HoldStart(_) | Gesture::Release(_) | Gesture::DoubleTap(_) => {}
+            }
+            if decided.is_some() {
+                break;
+            }
+        }
+        if let Some(d) = decided {
+            break d;
+        }
+        let animating = anim.step(now);
+        let cost = build_and_present(&anim, &marks, &font, None, None, None);
+        if cost.complete {
+            presented = Some(i);
+        }
+        if !animating && anim.next_wake(now).is_none() && stable_bits() == 0 {
+            loop {
+                cortex_m::asm::wfi();
+                if ring_has_edges() || stable_bits() != 0 {
+                    break;
+                }
+            }
+        } else {
+            while now.wrapping_add(FRAME_PERIOD_MS).wrapping_sub(timeout::now()) < (1 << 31) {
+                if ring_has_edges() {
+                    break;
+                }
+                cortex_m::asm::wfi();
+            }
+        }
+    };
+    sampling_disable();
+    carry_keep(anim);
+    result
+}
+
+/// An entry row's input wait (the PIN, a word's letters) on the timestamped
+/// input path the pager and the signing flow use.
+///
+/// WHY (owner report 2026-10-15). The entry rows used to wait on the legacy
+/// button driver, which may only draw while no button is down (it times a
+/// hold by counting its own polls) and stops polling for every frame it
+/// draws. The row's hint fade froze on each press and slowed the presses it
+/// overlapped. Here the SysTick sampler records every edge with its time and
+/// the FSM turns them into gestures, so the row draws through presses
+/// without delaying or losing one.
+///
+/// It hands back the legacy events the entry loops already speak, so their
+/// grammar (and every pin on it) is unchanged. The reading is
+/// `pqsigner_ui_px::input::EntryGrammar` (host-tested there): a tap is
+/// `(side, Short)`; a hold that reaches 500 ms (the legacy long press) is
+/// `(side, Long)` at once, then nothing more until both buttons are up; the
+/// two-button click is `(Right, Long)`, the confirm.
+///
+/// Lives for one entry dialog; `wait` once per event. It re-syncs (drops
+/// stale edges, adopts the live button level) whenever something else drew
+/// since its last frame, because then another dialog had the buttons: the
+/// letter row's candidate list and its NO SUCH WORD notice run between two
+/// of its waits. No `reset_activity` here: the entry loops reset after each
+/// event they receive (#426).
+pub struct EntryInput {
+    fsm: InputFsm,
+    grammar: EntryGrammar,
+    anim: Option<Anim>,
+    queue: [Option<(crate::ui::Button, crate::ui::Press)>; 4],
+    /// `lcd::glass_writes` after this wait's last frame.
+    glass: u32,
+    /// Sampling is on and `fsm` tracks it.
+    live: bool,
+}
+
+impl EntryInput {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            fsm: InputFsm::new(InputCtx::NAV),
+            grammar: EntryGrammar::default(),
+            anim: None,
+            queue: [None; 4],
+            glass: 0,
+            live: false,
+        }
+    }
+
+    fn sync(&mut self) {
+        sampling_enable();
+        let sb = stable_bits();
+        self.fsm = InputFsm::resumed(InputCtx::NAV, sb & 1 != 0, sb & 2 != 0);
+        self.queue = [None; 4];
+        self.grammar = EntryGrammar::default();
+        self.live = true;
+    }
+
+    fn pop(&mut self) -> Option<(crate::ui::Button, crate::ui::Press)> {
+        let ev = self.queue[0].take();
+        self.queue.rotate_left(1);
+        ev
+    }
+
+    fn push(&mut self, ev: (crate::ui::Button, crate::ui::Press)) {
+        if let Some(slot) = self.queue.iter_mut().find(|q| q.is_none()) {
+            *slot = Some(ev);
+        }
+    }
+
+    /// Show `s` (kept drawing while it waits) and return the next event, or
+    /// `None` when `idle` fires.
+    pub fn wait(
+        &mut self,
+        s: &Screen,
+        atlas: &assets::AtlasRef,
+        idle: &mut dyn FnMut() -> bool,
+    ) -> Option<(crate::ui::Button, crate::ui::Press)> {
+        use crate::ui::{Button, Press};
+        if !self.live || lcd::glass_writes() != self.glass {
+            self.sync();
+        }
+        if let Some(ev) = self.pop() {
+            return Some(ev);
+        }
+        film_abort();
+        let marks = atlas.marks();
+        let font = atlas.font();
+        // A new record (a press changed the row): start it at rest.
+        if self.anim.as_ref().map_or(true, |a| a.current().0 .0 != s.0) {
+            self.anim = Some(Anim::new(s, 0, timeout::now()));
+        }
+        let mut drawn = false;
+        loop {
+            if idle() {
+                return None;
+            }
+            let (g, now) = drain(&mut self.fsm);
+            let side = |b: Btn| if b == Btn::Left { Button::Left } else { Button::Right };
+            for &ev in g.buf[..g.n].iter().flatten() {
+                if let Gesture::Press(b) = ev {
+                    if let Some(a) = self.anim.as_mut() {
+                        a.press(b, now);
+                    }
+                }
+                let mapped = match self.grammar.feed(ev) {
+                    Some(EntryEvent::Tap(b)) => Some((side(b), Press::Short)),
+                    Some(EntryEvent::Hold(b)) => Some((side(b), Press::Long)),
+                    Some(EntryEvent::Confirm) => Some((Button::Right, Press::Long)),
+                    None => None,
+                };
+                if let Some(m) = mapped {
+                    self.push(m);
+                }
+            }
+            if stable_bits() == 0 {
+                self.grammar.released();
+            }
+            if let Some(ev) = self.pop() {
+                return Some(ev);
+            }
+            let Some(anim) = self.anim.as_mut() else { return None };
+            let _ = anim.step(now);
+            // Paint the row once, then only while something on it moves (the
+            // hint's fade, a press nudge): between fades it is the same frame.
+            let still = anim.cycle_wake(now);
+            if !drawn || still.is_none() {
+                let _ = build_and_present(anim, &marks, &font, None, None, None);
+                drawn = true;
+                self.glass = lcd::glass_writes();
+            }
+            // Sleep until the next change, an edge, or idle; a held button
+            // is polled at the frame rate so its hold is timed.
+            let mut wake = still.unwrap_or(now.wrapping_add(FRAME_PERIOD_MS));
+            if stable_bits() != 0 {
+                let poll = now.wrapping_add(FRAME_PERIOD_MS);
+                if poll.wrapping_sub(wake) >= (1 << 31) {
+                    wake = poll;
+                }
+            }
+            while wake.wrapping_sub(timeout::now()).wrapping_sub(1) < (1 << 31) {
+                if ring_has_edges() || idle() {
+                    break;
+                }
+                cortex_m::asm::wfi();
+            }
+        }
+    }
+}
+
+impl Default for EntryInput {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Drop for EntryInput {
+    fn drop(&mut self) {
+        if self.live {
+            sampling_disable();
+        }
+        // The last row's record holds the dialed digit (or a typed letter of
+        // a seed word): overwrite it rather than leave it on the stack.
+        if let Some(a) = self.anim.as_mut() {
+            // SAFETY: `a` is a valid, exclusive reference to an initialised
+            // `Anim`; `Anim` needs no drop (asserted at `CARRY`), and the
+            // volatile write keeps the scrub from being optimised away.
+            unsafe { core::ptr::write_volatile(a, Anim::new(&Screen::BLANK, 0, 0)) };
+        }
+    }
 }

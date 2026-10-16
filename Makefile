@@ -345,14 +345,13 @@ play-hw-px: ## Interactive NV3007 play with the pixel trusted UI (ui-px), physic
 PX_EXTRA_FEATURES ?=
 
 
-# on the real OLED. No SE, no provisioning (mock-se + duress-ui-test
-# short-circuits into a dialog loop at boot). Driven by the PHYSICAL
-# perfboard buttons (gpio-buttons: LEFT=PC1/D8, RIGHT=PA8/D9; both = OK,
-# long-left = cancel) — same input path as `play-hw-display`, so no host
-# key-forwarder is needed. wallet_run_hw.py still streams the OLED debug
-# lines if you want them.
+# §32 duress setup screens on a board, mock-se: the first-boot wizard runs
+# its duress steps (duress-ui-test: shown, never stored). Driven by the
+# PHYSICAL buttons (gpio-buttons) — same input path as `play-hw-display`,
+# so no host key-forwarder is needed. wallet_run_hw.py still streams the
+# debug lines if you want them.
 play-hw-duress-ui:
-	@echo "==> Building §32 duress-PIN UI harness (mock-se, dialogs only)"
+	@echo "==> Building §32 duress setup screens (mock-se, nothing stored)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
@@ -2882,7 +2881,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  se050-crash-safety-e2e se050-admin-extract-attempt-e2e se050-stress \
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e optiga-ac-probe duress-provision-e2e \
-                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime \
+                 pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime ui-px-film-gaps \
                  ui-px-bench ui-px-te-probe gateway-gate-off optiga-probe
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above

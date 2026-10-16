@@ -58,6 +58,7 @@ pub mod fixed;
 pub mod font;
 pub mod input;
 pub mod loading;
+pub mod burst;
 #[allow(clippy::unreadable_literal, missing_docs)]
 pub mod metrics_gen;
 pub mod motion;
@@ -73,6 +74,6 @@ pub mod verdict;
 pub mod verdict_geom;
 
 pub use screen::{
-    exact_screen_occurrences, placeholder_ramp, screen_at_matches, screen_exact, BuildErr, Icon, Kind, Look, ResultMark,
+    exact_screen_occurrences, placeholder_ramp, screen_at_matches, screen_exact, BuildErr, Icon, Kind, Look, Nav, ResultMark,
     Screen, ScreenBuilder, Screens, Side, State, Tier, Weight, MAX_SCREENS, N_RAMPS, SCREENS_BYTES, SCREEN_BYTES,
 };

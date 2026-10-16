@@ -96,11 +96,22 @@ pub fn enter_pin() -> PinEntryResult {
     // forever. Only a real button event (below, inside the loop) counts
     // as user activity, matching the `confirm()` contract.
 
-    loop {
-        render_pin_screen(&pin, pos);
+    // The pixel row's input wait, one for the whole dialog (owner
+    // 2026-10-15): it keeps the row drawing through presses.
+    let mut px = PxWait::new();
 
+    loop {
         let mut idle = || timeout::is_idle();
-        let event = match input().wait_button(&mut idle) {
+        // `None` = the pixel row could not be drawn: the page, and a plain
+        // wait.
+        let waited = match px_pin_wait(&mut px, &pin, pos, &mut idle) {
+            Some(waited) => waited,
+            None => {
+                render_pin_screen(&pin, pos);
+                input().wait_button(&mut idle)
+            }
+        };
+        let event = match waited {
             Some(ev) => ev,
             None => {
                 // backend signalled idle wipe
@@ -174,17 +185,50 @@ pub fn enter_pin() -> PinEntryResult {
     PinEntryResult::Pin(*b"00000000")
 }
 
-fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
-    // Port step 4: the design's PIN row (eight rings, the active one dialing
-    // its digit, entered digits masked as the page masks them). The page
-    // below is the fallback when the pixel path declines.
-    #[cfg(feature = "ui-px")]
-    {
-        let row = super::px::status_map::pin_row(super::px::screens::pin_caption(), pin, pos);
-        if super::px::screens::show(&row) {
-            return;
-        }
+/// The pixel row's input wait for one entry dialog (nothing without the
+/// pixel UI).
+#[cfg(all(feature = "ui-px", not(feature = "e2e-test")))]
+use super::px::screens::EntryWait as PxWait;
+#[cfg(all(not(feature = "ui-px"), not(feature = "e2e-test")))]
+struct PxWait;
+#[cfg(all(not(feature = "ui-px"), not(feature = "e2e-test")))]
+impl PxWait {
+    fn new() -> Self {
+        Self
     }
+}
+
+/// Port step 4: the design's PIN row (eight rings, the active one dialing its
+/// digit, entered digits masked as the page masks them), shown and kept
+/// drawing for the whole input wait, so its hint can swap between CONFIRM
+/// (BOTH) and BACK (HOLD LEFT) even while the user dials. `None` when the
+/// pixel UI could not paint it: the caller paints the 16x4 page and waits.
+#[cfg(all(feature = "ui-px", not(feature = "e2e-test")))]
+fn px_pin_wait(
+    px: &mut PxWait,
+    pin: &[u8; PIN_LEN],
+    pos: usize,
+    idle: &mut dyn FnMut() -> bool,
+) -> Option<Option<(Button, Press)>> {
+    let row = super::px::status_map::pin_row(super::px::screens::pin_caption(), pin, pos);
+    match px.wait(&row, idle) {
+        super::px::screens::Waited::NoAtlas => None,
+        super::px::screens::Waited::Event(ev) => Some(ev),
+    }
+}
+
+#[cfg(all(not(feature = "ui-px"), not(feature = "e2e-test")))]
+fn px_pin_wait(
+    _px: &mut PxWait,
+    _pin: &[u8; PIN_LEN],
+    _pos: usize,
+    _idle: &mut dyn FnMut() -> bool,
+) -> Option<Option<(Button, Press)>> {
+    None
+}
+
+/// The 16x4 PIN page (no pixel UI, or no verified atlas).
+fn render_pin_screen(pin: &[u8; PIN_LEN], pos: usize) {
     let d = display();
     d.clear();
     d.draw_line(0, "   Enter PIN");
@@ -233,13 +277,19 @@ fn wipe_pin(pin: &mut [u8; PIN_LEN]) {
 /// idle-wipe, or mismatch, returns the corresponding variant and zeroes any
 /// PIN material that briefly held a value.
 pub fn enter_pin_with_confirm() -> PinEntryResult {
-    show_status("Set new PIN", "");
+    enter_pin_with_confirm_titled("Set new PIN", "Confirm PIN")
+}
+
+/// [`enter_pin_with_confirm`] under other titles (the duress PIN's SET /
+/// REPEAT DURESS PIN).
+pub fn enter_pin_with_confirm_titled(set_title: &str, repeat_title: &str) -> PinEntryResult {
+    show_status(set_title, "");
     let first = match enter_pin() {
         PinEntryResult::Pin(p) => p,
         other => return other,
     };
 
-    show_status("Confirm PIN", "");
+    show_status(repeat_title, "");
     let second = match enter_pin() {
         PinEntryResult::Pin(p) => p,
         other => {

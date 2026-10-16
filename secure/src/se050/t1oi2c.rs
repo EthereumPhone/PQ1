@@ -315,6 +315,8 @@ impl T1State {
                 }
                 Err(e) => return Err(T1Error::I2c(e)),
             }
+            // Not ready yet (both arms above): the provisioning film may draw.
+            crate::ui::busy_poll();
         }
 
         if !found_sof {

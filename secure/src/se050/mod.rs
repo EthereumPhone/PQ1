@@ -2420,25 +2420,16 @@ impl Se050 {
         // what `policy_roundtrip_selftest` writes (Bug 3 / work-todo
         // #29). If the selftest crashed between write and its own
         // cleanup, admin_factory_reset sweeps the stragglers.
-        #[cfg(not(any(feature = "e2e-test", feature = "otp-hardcoded-master-key")))]
-        const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[
-            (ENTROPY_OBJ, "ENTROPY_OBJ"),
-            (VK_OBJ, "VK_OBJ"),
-            (BOOTSTRAP_VK_OBJ, "BOOTSTRAP_VK_OBJ"),
-            (0x7B10_00B0, "CANARY_USERID"),
-            (0x7B10_00B1, "CANARY_DATA_1"),
-            (0x7B10_00B2, "CANARY_DATA_2"),
-            (0x7B10_00B3, "CANARY_DATA_3"),
-            (0x7B10_00B4, "CANARY_DATA_4"),
-            (0x7B10_00B5, "CANARY_DATA_5"),
-        ];
-        // #912: a bench wipe also removes the duress UserID (below). Its
-        // three data objects have to go first, while both authorities
-        // still exist, or they would be left on the chip with nothing able
-        // to delete them. They carry the admin-delete entry in every build.
-        // (A shipping wipe has never deleted them, and still does not: this
-        // list is the shipping list plus the three.)
-        #[cfg(any(feature = "e2e-test", feature = "otp-hardcoded-master-key"))]
+        //
+        // The decoy wallet's three data objects are on this list in EVERY
+        // build (#948): they carry the admin-delete entry everywhere, and
+        // they have to go while the admin session still exists, or they
+        // stay on the chip with nothing able to delete them. Until
+        // 2026-10-16 only bench builds listed them, so a shipping-shaped
+        // wipe left the decoy's half and keys behind and still reported
+        // success (the post-check below walks this same list). Deleting an
+        // object that was never created is tolerated, which is how
+        // non-duress builds already ran the bench list.
         const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[
             (ENTROPY_OBJ, "ENTROPY_OBJ"),
             (VK_OBJ, "VK_OBJ"),
