@@ -213,8 +213,15 @@ bound `(1-1/2048)^n + (n*q+n.choose 2)/2^128 + q/2^256`. Trace erasure, cache
 origins, exact 32-byte prefix decoding and the public-history bound are proved.
 This requires a uniform secret independent of the prelude and public request
 parameters; secret-dependent keygen, prior signing outputs and repeated
-signing remain outside the result. All 276 theorem closures and 144 typed
-cases are gated separately; `lean/` stays mathlib-free. #295 remains open for the full
+signing remain outside that result. A further interleaved private-prefix
+interface theorem compares full executions through one shared table and
+separate public/private caches, with a derived `q/2^256` returned-value event
+error. Earlier private replies may influence later queries; a proved structural
+budget counts public calls and repeated private inputs remain cached. Uniform
+hidden secret and empty initial tables are explicit. This closes that interface
+component, not full C10 client translation or repeated-grinder freshness.
+All 327 theorem closures and 176 typed cases are gated separately;
+`lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.
 

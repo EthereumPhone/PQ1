@@ -54,11 +54,28 @@ counter/digest. The composed first-FORS-grinder exhaustion bound is
 Both counts are worst-case budgets. Public client state and request parameters
 must be independent of the secret. This does not cover secret-dependent keygen,
 earlier signing responses, later continuations or repeated signing. Selected R
-and final cache are marginalized by the final event comparison. A full
-private-interface hybrid and signer-session/forgery composition remain open;
-a leaked-secret counterexample has certain success with one query.
+and final cache are marginalized by the final event comparison. Signer-session
+and forgery composition remain open; a leaked-secret counterexample has certain
+success with one query.
 Cached and prefilled-key examples show why local counter uniqueness alone
 cannot establish independent fresh sampling.
+The private-prefix interface component now also has a separate PMF proof for
+interleaved public and private calls. The same indexed adaptive client runs
+against one shared memo table or separate public/private memo entries, with
+actual cached replies in both. Stopped-execution equality is derived from a
+proved cache relation and injectivity away from public prefix hits; its actual
+abort mass is connected to the full query trace. Delayed sampling and a
+structural public-call budget give a two-sided returned-value event error at
+most `q/2^256` for the concrete 32-byte secret prefix. Earlier private replies
+may influence later queries; private calls do not consume the public charge.
+Zero public budget gives exact returned-value distribution equality. Both
+experiments start empty and the client never receives the uniform secret or
+the private table. The result does not translate the complete C10 signer/client,
+prove repeated-grinder freshness, or supply the full PMF forgery theorem.
+Repeated private inputs remain cached, so this comparison must not be read as
+a fresh-R sampler. Independent finite examples exhibit a real/ideal gap and
+show why secret leakage, noninjective private encoding and a prefilled
+physical table invalidate the relevant premises.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

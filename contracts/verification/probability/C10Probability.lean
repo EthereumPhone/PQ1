@@ -9,3 +9,4 @@ import C10Probability.Randomizer
 import C10Probability.SharedRandomizer
 import C10Probability.AdaptiveExamples
 import C10Probability.PreludeExamples
+import C10Probability.PrivateExamples

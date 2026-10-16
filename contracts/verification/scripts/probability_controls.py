@@ -619,4 +619,107 @@ def cases(project: Path) -> list[dict]:
     add("request-alternative-preserving", "PreludeTransfer",
         "request.random.length = 0 ∨ request.random.length = 16",
         "request.random.length = 16 ∨ request.random.length = 0", valid_request, True)
+
+    # Interleaved public/private calls: mutation consumers must connect to the
+    # executed definitions, including locally proved composition helpers.
+    mapped = theorem(src["QueryMap"], "mapProgram_id")
+    add("mapped-tail-key-constant", "QueryMap", "mapProgram encode (next reply)",
+        "mapProgram (fun _ => encode key) (next reply)", mapped)
+    add("mapped-reply-preserving", "QueryMap", "mapProgram encode (next reply)",
+        "mapProgram encode (next (id reply))", mapped, True)
+    public_length = theorem(src["QueryMap"], "traceProgram_public_length")
+    add("public-budget-no-charge", "QueryMap", "PublicBudget (next reply) (q - 1)",
+        "PublicBudget (next reply) q", public_length)
+    add("public-budget-zero-allowed", "QueryMap", "0 < q ∧", "True ∧", public_length)
+    add("private-budget-increases", "QueryMap", "| _, .query (.inr _) next, q => ∀ reply, PublicBudget (next reply) q",
+        "| _, .query (.inr _) next, q => ∀ reply, PublicBudget (next reply) (q + 1)", public_length)
+    add("public-query-omitted", "QueryMap", "| .inl key => some key", "| .inl key => none",
+        """theorem checked :
+    publicQueries ([.inl false, .inr (), .inl true] : List (Sum Bool Unit)) = [false, true] := by
+  simp [publicQueries]
+""")
+    private_budget = """theorem checked :
+    PublicBudget (.query (.inr ()) (fun _ : Bool => .query (.inl false)
+      (fun _ => .done (n := 0) ()))) 1 := by
+  simp [PublicBudget]
+"""
+    add("private-budget-charged", "QueryMap", "| _, .query (.inr _) next, q => ∀ reply, PublicBudget (next reply) q",
+        "| _, .query (.inr _) next, q => ∀ reply, PublicBudget (next reply) (q - 1)", private_budget)
+    add("public-budget-pred-preserving", "QueryMap", "PublicBudget (next reply) (q - 1)",
+        "PublicBudget (next reply) q.pred", public_length, True)
+
+    stopped = theorem(src["StoppedProgram"], "stoppedProgram_trace")
+    add("stopped-return-absent", "StoppedProgram", "| _, .done value, _ => PMF.pure (some value)",
+        "| _, .done value, _ => PMF.pure none", stopped)
+    add("stopped-guard-inverted", "StoppedProgram", "if bad key then", "if !bad key then", stopped)
+    add("stopped-guard-disabled", "StoppedProgram", "if bad key then", "if false then", stopped)
+    add("stopped-cache-reset", "StoppedProgram", "memoQuery p table (encode key)",
+        "memoQuery p (fun _ => none) (encode key)", stopped)
+    add("stopped-cache-discarded", "StoppedProgram",
+        "stoppedProgram p encode bad (next reply.1) reply.2",
+        "stoppedProgram p encode bad (next reply.1) table", stopped)
+    add("stopped-continuation-resampled", "StoppedProgram",
+        "stoppedProgram p encode bad (next reply.1) reply.2",
+        "p.bind fun fresh => stoppedProgram p encode bad (next fresh) reply.2", stopped)
+    add("stopped-event-includes-abort", "StoppedProgram", "| none => False | some value => value ∈ event",
+        "| none => True | some value => value ∈ event",
+        theorem(src["StoppedProgram"], "stoppedProgram_retained_le"))
+    add("stopped-trace-all-queries", "StoppedProgram", "out.queries.any bad", "out.queries.all bad", stopped)
+    add("stopped-guard-preserving", "StoppedProgram", "if bad key then", "if true = bad key then", stopped, True)
+
+    add("good-injectivity-reversed", "MemoRelabel",
+        "encode first = encode second → first = second",
+        "first = second → encode first = encode second",
+        theorem(src["MemoRelabel"], "tablesRelate_update"))
+    related = theorem(src["MemoRelabel"], "stoppedProgram_relabel")
+    update = theorem(src["MemoRelabel"], "tablesRelate_update").replace("theorem checked", "have tablesRelate_update", 1)
+    head, proof = related.split(":= by\n", 1)
+    related = head + ":= by\n" + "\n".join("  " + line for line in update.splitlines()) + "\n" + proof
+    add("cache-relation-erased", "MemoRelabel", "physical (encode key) = ideal key",
+        "ideal key = ideal key", related)
+
+    add("public-prefix-decoding-omitted", "PrivateQueries", "| .inl key => decode key",
+        "| .inl key => none", theorem(src["PrivateQueries"], "publicCandidates_eq"))
+    bad_trace = theorem(src["PrivateQueries"], "privateBad_trace")
+    add("private-queries-count-as-prefix-hits", "PrivateQueries",
+        "decide (publicDecode decode key = some secret)",
+        "match key with | .inl key => decide (decode key = some secret) | .inr _ => true", bad_trace)
+    add("private-prefix-hit-inverted", "PrivateQueries", "decide (publicDecode decode key = some secret)",
+        "!decide (publicDecode decode key = some secret)", bad_trace)
+
+    interleaved = theorem(src["PrivateTransfer"], "private_event_bounds")
+    helpers = []
+    for name in ("privateKey_good_injective", "private_program_bounds", "private_client_bounds", "private_mixture_bounds"):
+        local = theorem(src["PrivateTransfer"], name).replace("theorem checked", "have " + name, 1)
+        helpers.append("\n".join("  " + line for line in local.splitlines()))
+    head, proof = interleaved.split(":= by\n", 1)
+    interleaved = head + ":= by\n" + "\n".join(helpers) + "\n" + proof
+    add("private-secret-fixed", "PrivateTransfer",
+        "secretDraw.bind fun secret => privateSharedAt p encode secret client",
+        "secretDraw.bind fun _ => privateSharedAt p encode (Classical.choose secretDraw.support_nonempty) client",
+        interleaved)
+    add("private-client-randomness-discarded", "PrivateTransfer", "client.bind fun program =>",
+        "(PMF.pure (Classical.choose client.support_nonempty)).bind fun program =>", interleaved)
+    add("independent-client-randomness-discarded", "PrivateTransfer",
+        "randomizedProgram p client (fun _ => none)",
+        "randomizedProgram p (PMF.pure (Classical.choose client.support_nonempty)) (fun _ => none)", interleaved)
+    add("private-prefix-charge-suppressed", "PrivateTransfer",
+        "fun out => prefixHit (publicDecode decode) (secret, out)", "fun out => false", interleaved)
+    add("private-secret-preserving", "PrivateTransfer",
+        "secretDraw.bind fun secret => privateSharedAt p encode secret client",
+        "secretDraw.bind fun secret => privateSharedAt p encode (id secret) client", interleaved, True)
+
+    concrete = theorem(src["PrivateSecret"], "prefixedPrivateInput_decodes")
+    add("private-secret-prefix-order", "PrivateSecret", "secretBytes secret ++ tail", "tail ++ secretBytes secret", concrete)
+    add("private-secret-prefix-value", "PrivateSecret", "secretBytes secret ++ tail", "secretBytes 0 ++ tail",
+        """theorem checked (secret : Digest) (tail : ByteKey) :
+    decodeSecretPrefix (prefixedPrivateInput secret tail) = some secret := by
+  unfold prefixedPrivateInput
+  rw [decodeSecretPrefix_secret]
+""")
+    add("private-tail-discarded", "PrivateSecret", "secretBytes secret ++ tail", "secretBytes secret",
+        theorem(src["PrivateSecret"], "prefixedPrivateInput_injective"))
+    add("private-tail-reversed", "PrivateSecret", "secretBytes secret ++ tail", "secretBytes secret ++ tail.reverse",
+        theorem(src["PrivateSecret"], "prefixedPrivateInput_r"))
+    add("private-prefix-preserving", "PrivateSecret", "secretBytes secret ++ tail", "secretBytes secret ++ id tail", concrete, True)
     return out

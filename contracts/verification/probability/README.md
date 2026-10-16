@@ -11,7 +11,10 @@ under explicit initial R-input freshness and proved domain separation. A bounded
 adaptive oracle interpreter now also derives the birthday charge for actual
 distinct-input collisions in its final memo table. A first shared-table grinder
 after an adaptive public-query prelude now has a derived secret-prefix error
-and composed exhaustion bound, with secret-independent public inputs. **The probability-monad forgery-game theorem
+and composed exhaustion bound, with secret-independent public inputs. A further
+private-prefix interface theorem compares full interleaved public/private
+executions through one shared memo table and separate memo tables, including
+queries chosen from earlier private replies. **The probability-monad forgery-game theorem
 and full signer-session transfer remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
@@ -238,8 +241,9 @@ The theorem includes the ten-million-trial specialization. Here `q` bounds
 all prelude queries and `n` bounds actual grinding attempts; both are
 worst-case counts. The secret is uniform and independent of the public
 prelude and request parameters. Secret-dependent key generation, earlier
-signing responses, a full private-interface hybrid and repeated signing are
-not covered. Those are still needed for the full signer-session/forgery claim.
+signing responses and repeated signing are not covered by this first-grinder
+theorem. The interleaved interface result below does not itself prove repeated
+grinder freshness or instantiate the complete signer-session/forgery game.
 
 `PreludeExamples.lean` independently checks fixed and repeated Boolean guesses
 (probability `1/2`), an adaptive guess (`3/4`), and a client explicitly given
@@ -247,6 +251,67 @@ the secret (one-query hit probability one). The latter uses a different
 interface and shows why uniformity alone is insufficient. A prefilled-cache
 example also shows that an empty trace cannot establish freshness unless the
 initial cache condition is respected.
+
+`QueryMap.lean` relabels inputs of the existing adaptive interpreter, preserving
+its reply-dependent continuations and total-call index. Public and private calls
+are represented by different sum constructors. `PublicBudget` is a structural
+condition on every continuation; a support proof bounds the number of public
+calls in the actual trace. Every program also satisfies its total-call index as
+a conservative public budget. Private calls consume that total index but do not
+consume the separate public-call charge.
+
+`StoppedProgram.lean` defines an auxiliary execution that stops before a
+designated bad query. It proves both that its retained-event probability is
+below the full execution's and that the full execution is bounded by the
+retained event plus the actual stopped mass. Its stopped mass equals the bad
+event on the full query trace. `MemoRelabel.lean` proves equality of stopped
+executions from a cache correspondence and key injectivity away from bad
+queries, then derives the two-sided event comparison for the full executions.
+The shared and independent experiments themselves never use the stopped
+interpreter.
+
+`PrivateQueries.lean` collects prefix candidates only from public queries.
+The ideal oracle uses one sum-key memo table, which gives separate public and
+private caches. Repeated private tails return their stored reply. The hidden
+uniform secret is sampled before the client, but the program, its initial
+randomness and the ideal oracle do not receive it. Public queries may depend
+on earlier private replies. Delayed sampling and the proved public trace bound
+give an actual prefix-hit probability at most `q/cardSecret`.
+
+`PrivateTransfer.lean` executes the same bounded client against a shared table
+where private keys are secret-prefixed, and against the independent sum-key
+table. Prefix decoding and private-tail injectivity discharge the correspondence
+away from a public prefix hit. For every event on the returned client value,
+the probability difference is at most `q/cardSecret`, in both `ENNReal` and
+real-valued forms. Zero public budget gives exact returned-value distribution
+equality. Both experiments start with empty tables. Their final private tables
+are not public observations; a finite adaptive continuation can instead be
+included in the client and its returned value.
+
+`PrivateSecret.lean` instantiates the interface with the exact 32-byte
+big-endian secret followed by an arbitrary byte tail, a uniform full-digest
+reply law, and error `q/2^256`. It proves private-tail injectivity and the exact
+connection to the existing `R_grind` preimage. The generic theorem's encoding
+conditions are discharged for these concrete formulas.
+
+`PrivateExamples.lean` computes a nonzero comparison gap independently: a
+private call followed by a fixed public guess, or the reverse call order, gives
+equality of the two replies with probability `3/4` in the shared experiment and
+`1/2` in the separate-cache experiment. Repeated private calls return the same
+reply with probability one. An adaptive public guess after a private reply has
+prefix-hit probability `1/2` in the Boolean instance. Giving the client a
+three-valued secret makes the `1/3` charge invalid; a noninjective private
+encoding also creates a gap with zero public calls. A prefilled physical table
+fails the required empty-start cache relation, and short byte inputs do not
+name a complete secret prefix.
+
+This closes the interleaved private-prefix interface component. It does not
+translate C10 key generation, signing and verification into one PMF client or
+prove the full forgery bound. In particular, separate private caching is not
+fresh resampling: a repeated R-input still returns its earlier reply. The
+first-grinder exhaustion theorem keeps its existing premises. Direct secret
+leakage, correlated initial state, concrete SHA and quantum queries remain
+outside these results.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -291,16 +356,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 276 theorem closures against
+The gate rebuilds every project module, checks all 327 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-144 typed cases run 432 compiler jobs: each baseline and changed
-definition must compile, 127 changed behaviors must reject at the
-consuming `checked` theorem, and seventeen value-preserving changes must pass. Cases cover exhaustion,
+176 typed cases run 528 compiler jobs: each baseline and changed
+definition must compile, 154 changed behaviors must reject at the
+consuming `checked` theorem, and twenty-two value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -328,7 +393,13 @@ short-input refusal, request lengths and the actual shared/independent
 comparison implementations. The comparison control proves its bridge helpers
 locally inside the consuming theorem; imported original implementations cannot
 mask a changed executed definition. Equivalent trace, set, prefix-guard and
-request forms must pass. Syntax
+request forms must pass. Interleaved controls cover input relabeling, public
+budgets and traces, stopping/abort semantics, retained-event definitions,
+cache preservation, continuation replies, cache correspondence, prefix
+decoding, client/secret randomization and the concrete private-input layout.
+The full event-bound consumer proves its composition helpers locally, so an
+imported original implementation cannot mask these mutations. Equivalent
+mapping, budget, guard, secret and prefix expressions must pass. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.
