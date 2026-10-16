@@ -182,3 +182,23 @@ FORS result unavailable. Direct/CLI replay, exact statement/operation/source
 inventories, the full cold gate and bounded review remain separate gates.
 The classical ideal-oracle, concrete-hash, cross-language and quantum limits
 remain explicit.
+
+## WOTS fixed-candidate controls
+
+Twenty-three positive/negative twins cover both fixed guesses, their two-slot
+charge, repeated malformed and fixed candidates, final-output retention, the
+eighth hidden value, vector multiplicity, adaptive budgets, valid cuts,
+cached-value work, signer and final-verifier work, raw/sign caps, all 86 output
+slots, seed binding, the finite coordinate universe, the accepted-output guard,
+both complete game charges and comparison with the prior bound. Seven finite
+pairs have explicit false alternatives; sixteen theorem-sensitivity pairs do
+not assert that every smaller bound is false or every premise necessary.
+
+Each rejection must occur at the final proof application in `checked`, with
+`the given proof-term proves:`. Earlier type/import/helper failures and resource
+failures receive no credit. `tools/chain_candidate_controls.py` stores literal
+claims and generates the paired fixtures and exact enrollment. The focused
+audit binds the rejection to its source line and raw output. Nineteen scope
+probes retain the forbidden structural-FORS boundary. Direct and CLI checks,
+statement/operation/source inventories, the full cold replay and bounded
+review remain separate requirements.

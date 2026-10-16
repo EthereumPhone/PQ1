@@ -266,9 +266,50 @@ are proved no greater than their public-node-domain predecessors.
 At `qr = qs = 65536`, `V = 23913783554`; the ordinary FORS term falls by about
 83.22 times to `4.5275157e-19`. The complete physical-game expression becomes
 approximately `5.0865709e-18` (`2^-57.45`), about 8.32 times tighter than the
-previous `4.2309698e-17`. WOTS reverse-chain cuts now dominate. These are
+previous `4.2309698e-17`. At that stage, WOTS reverse-chain cuts dominate. These are
 conservative classical ideal-oracle upper bounds, not attack costs or a
 deployed security rating. Further candidate-specific reductions remain open.
+
+## WOTS fixed-candidate accounting
+
+`WotsCandidateNumericalBound.physical_byte_wots_candidate_euf_bound` replaces
+only the WOTS reverse-chain term of the ordinary-FORS continuation by
+
+```
+Vchain = chain_candidate_budget(qr, qs) = 155135 + qr + qs * 364892 + 771
+Cwots = min(632475648 * (Q + 86) / 2^128,
+            632475648 * (Vchain + 2 + 86) / 2^128)
+```
+
+The same `leaf_suffix_candidate` appears in the chain hybrid's bad event.
+`ChainCandidateMass` covers the original candidate list with its nonfixed
+entries and the zero/all-`FF` values. Both fixed guesses remain charged even
+when they equal hidden nodes. All eight iid hidden digests and all 86 WOTS
+output slots remain covered. The original independent-vector experiment and
+late-sampling argument are unchanged; this is a bound on the same event.
+
+`ChainVariable*Cost` proves the filtered budget in the actual opening-redacted
+chain backend, including cache hits, private derivations, key generation,
+finite grinder failures, arbitrary admitted raw calls, absorbing sessions and
+final verification. No oracle query or history entry is deleted. The numerical
+formula agrees with the FORS and node budgets, but this game instantiation has
+its own accounting proofs. `VisibleChainCandidateBudget` connects the actual
+query suffixes and outputs to the filtered list.
+
+The programmed, fresh, selected and finite-coordinate transfers retain the
+existing opening flags, private-state exclusions, valid-cut requirements and
+losslessness premise. `WotsCandidateCutBound` reaches the same successful
+actual-output cut event. The complete independent and physical game bounds
+retain every previous non-WOTS term. Taking the minimum with the old WOTS
+charge makes both complete bounds no larger for every pair of caps, including
+zero signing requests. There are no new axioms, modules or game assumptions.
+
+At `qr = qs = 65536`, the WOTS term falls by about 83.22 times to
+`4.4448045e-20`. The complete physical-game expression is approximately
+`1.4322595e-18` (`2^-59.28`), about 3.55 times smaller than the previous
+`5.0865709e-18`. The public-node charge now dominates, followed by ordinary
+FORS openings. These are conservative upper probability bounds in the same
+classical ideal-oracle model, not attack costs or deployed security ratings.
 
 ## Composition, evidence and limits
 
@@ -302,6 +343,11 @@ The ordinary FORS candidate continuation adds nineteen replay targets,
 67 proved statements, seven operation pins, 23 paired controls and nineteen
 scope probes. It adds no project axiom or new concrete module and preserves
 the previous games and theorem statements.
+
+The WOTS candidate continuation adds nineteen replay targets, 61 proved
+statements, seven operation pins, 23 paired controls and nineteen scope probes.
+It adds no project axiom or concrete module and preserves all previous games
+and theorem statements.
 
 The original bound is conservative. At `qr = qs = 65536`, exact rational evaluation gives
 approximately `8.7695861e-15` overall (about `2^-46.70`), with coverage alone

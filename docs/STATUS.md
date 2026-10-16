@@ -185,7 +185,11 @@ candidates once, keeps both guesses charged, and proves the remaining budget
 through the actual transformed session. Existing adaptive hiding and
 private-table transfers reach the same accepted output. The complete bound
 retains the smaller of the old and new FORS charges, so every cap configuration
-is preserved. WOTS reverse-chain cuts now dominate the quantitative loss.
+is preserved. The WOTS continuation (2026-10-16) applies the same fixed-value
+cover to the eight-hidden-value chain experiment, proves the actual redacted
+session budget and retains all 86 output slots. Its original-game transfers
+and minimum with the old charge preserve the existing premises and all other
+terms. The public-node birthday charge now dominates the quantitative loss.
 The [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md)
 and [remaining research obligations](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md)
 distinguish those results from tighter component charges, concrete SHA-256, QROM

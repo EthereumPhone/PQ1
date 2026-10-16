@@ -111,3 +111,26 @@ Concrete SHA-256, QROM and Rust extraction are outside this result. The
 [numerical continuation](RAW-NUMERICAL-EUF.md) supplies accumulated adaptive FORS
 coverage and the final common-game composition. The older conditional MM45
 capstone remains a separate theorem family.
+
+## Fixed grinder candidates
+
+The subsequent `ChainCandidateMass`/`ChainCandidateBound` results cover the
+same adaptive candidate event using the nonfixed candidates plus the zero and
+all-`FF` values. Existing counter/H_msg suffix proofs identify these two fixed
+guesses; neither is omitted. All eight hidden digests and 86 final nodes remain
+covered, including repeats and arbitrary malformed raw inputs.
+
+`ChainVariable*Cost` and `VisibleChainCandidateBudget` prove the variable-query
+budget `155135 + qr + qs*364892 + 771` in the actual opening-redacted chain
+session. They cover initialization, cached values, private derivations, failed
+searches, absorbing sessions, admitted raw calls and final verification.
+The queries, memo tables and opening flags are unchanged.
+
+`ProgrammedCandidateByteBound`, `FreshCandidateByteBound`,
+`SelectedWotsCandidateBound`, `WotsCandidateCoordinateBound`,
+`WotsCandidateUnion` and `WotsCandidateCutBound` reuse the existing transfers.
+The actual accepted-output cut charge is at most
+`632475648 * (chain_candidate_budget(qr,qs) + 2 + 86) / 2^128`.
+`WotsCandidateNumericalBound` takes the minimum with the old charge and proves
+both complete bounds no larger for all caps. Every non-WOTS term is retained.
+See [the numerical owner](RAW-NUMERICAL-EUF.md) for evaluation and limits.

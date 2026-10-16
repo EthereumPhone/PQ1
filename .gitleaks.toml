@@ -68,6 +68,13 @@ regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_LeafBudgetKeygen\.ec": "0901d1d1d90d6c071cdc4ed32e03ce4452f948ab0db27805a6daab0223bad33f",?\s*$''']
 
 [[rules.allowlists]]
+description = "Exact public source digest of the WOTS candidate keygen scope probe"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_ChainVariableKeygenCost\.ec": "e8052e6e798e7aa34327d7032d83c3e9a90d2611a5ced4d8bc67c618c7884d19",?\s*$''']
+
+[[rules.allowlists]]
 description = "Public OPTIGA inventory object label, not object data"
 condition = "AND"
 paths = ['''^secure/src/optiga/probe/inventory\.rs$''']

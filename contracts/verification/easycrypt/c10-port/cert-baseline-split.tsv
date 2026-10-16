@@ -2613,3 +2613,10 @@ cdrafts-split/LeafCandidateCount.ec	defined-op:75d3f578c835	leaf_variable_query
 cdrafts-split/LeafCandidateCount.ec	defined-op:d78e815ee178	leaf_variable_count
 cdrafts-split/LeafCandidateMass.ec	defined-op:d764855e2c4b	leaf_reduced_candidates
 cdrafts-split/LeafTargetSessionCost.ec	defined-op:7f2db0dce303	leaf_candidate_budget
+cdrafts-split/ChainCandidateMass.ec	defined-op:36a1401f97c9	chain_candidate_cover
+cdrafts-split/ChainCandidateMass.ec	defined-op:ebbe56533a43	chain_variable_nodes
+cdrafts-split/ChainVariableSessionCost.ec	defined-op:0d6b77c0ffbb	chain_variable_session_accounting
+cdrafts-split/ChainVariableSessionCost.ec	defined-op:c59112d8796b	chain_candidate_budget
+cdrafts-split/WotsCandidateNumericalBound.ec	defined-op:375692564d7b	wots_candidate_cut_charge
+cdrafts-split/WotsCandidateNumericalBound.ec	defined-op:f10fac6d6a29	wots_candidate_physical_euf_charge
+cdrafts-split/WotsCandidateNumericalBound.ec	defined-op:f4045ec6f6c0	wots_candidate_independent_euf_charge

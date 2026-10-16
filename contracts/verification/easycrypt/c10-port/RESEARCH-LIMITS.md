@@ -1,6 +1,6 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-15, following the initialized classical byte-game
+Research checkpoint: 2026-10-16, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Work remains tracked under PQ1 #100 and #295.
@@ -43,12 +43,17 @@ same actual output; no query history is removed. Taking the minimum with the
 previous FORS charge preserves every cap configuration. This improves the
 complete bound to about `2^-57.45` without changing its model or premises.
 
-The next largest quantitative obligation is the WOTS reverse-chain charge.
-Its existing candidate bound still charges the full public-query budget,
-including grinding work. A reduction must prove which actual candidate inputs
-or views can expose the hidden values, with consistent adaptive history,
-before reducing that charge. Finer ordinary FORS target/candidate reductions
-remain possible beyond the fixed-value accounting already proved.
+The WOTS reverse-chain continuation also charges these same two fixed guesses
+once, retaining all eight hidden digests and all 86 final output nodes. Its
+filtered budget is proved in the actual opening-redacted chain session, with
+unchanged cache, history and opening behavior. Existing programmed/fresh/
+selected/coordinate transfers reach the same accepted output event. The
+minimum with the old charge preserves every cap configuration. This brings
+the complete bound to about `2^-59.28`; the public-node birthday charge now
+dominates, followed by ordinary FORS openings. It closes this fixed-grinder
+candidate obligation, not every possible WOTS or FORS reduction.
+
+Finer ordinary FORS and WOTS target/candidate reductions remain possible.
 Finer target-specific node reductions and a tail charge for a smaller effective
 hash budget also remain possible. Substituting average grinding work for the
 proved worst-case budget is invalid. The high-128-bit node projection and

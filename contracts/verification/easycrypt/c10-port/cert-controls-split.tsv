@@ -1423,3 +1423,70 @@ scratch/_scope_neg_op_LeafTargetOracleCost.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_LeafTargetSessionCost.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_LeafTargetSignerCost.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_OriginalLeafCandidateBound.ec	MUST-FAIL	FORS_C_TreePort.
+
+# WOTS fixed/variable candidates, complete costs and probability transfer: paired controls.
+scratch/chain_candidate_retain_zero_positive.ec	MUST-PASS	-
+scratch/chain_candidate_retain_zero_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_retain_ff_positive.ec	MUST-PASS	-
+scratch/chain_candidate_retain_ff_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_two_fixed_slots_positive.ec	MUST-PASS	-
+scratch/chain_candidate_two_fixed_slots_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_repeat_malformed_positive.ec	MUST-PASS	-
+scratch/chain_candidate_repeat_malformed_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_repeat_fixed_positive.ec	MUST-PASS	-
+scratch/chain_candidate_repeat_fixed_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_retain_output_positive.ec	MUST-PASS	-
+scratch/chain_candidate_retain_output_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_eighth_hidden_value_positive.ec	MUST-PASS	-
+scratch/chain_candidate_eighth_hidden_value_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_fixed_mass_charge_positive.ec	MUST-PASS	-
+scratch/chain_candidate_fixed_mass_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_vector_multiplicity_positive.ec	MUST-PASS	-
+scratch/chain_candidate_vector_multiplicity_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_adaptive_budget_positive.ec	MUST-PASS	-
+scratch/chain_candidate_adaptive_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_cut_range_positive.ec	MUST-PASS	-
+scratch/chain_candidate_cut_range_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_cached_value_work_positive.ec	MUST-PASS	-
+scratch/chain_candidate_cached_value_work_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_signer_work_positive.ec	MUST-PASS	-
+scratch/chain_candidate_signer_work_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_verification_work_positive.ec	MUST-PASS	-
+scratch/chain_candidate_verification_work_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_raw_query_cap_positive.ec	MUST-PASS	-
+scratch/chain_candidate_raw_query_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_signing_cap_positive.ec	MUST-PASS	-
+scratch/chain_candidate_signing_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_output_slots_positive.ec	MUST-PASS	-
+scratch/chain_candidate_output_slots_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_seed_binding_positive.ec	MUST-PASS	-
+scratch/chain_candidate_seed_binding_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_coordinate_universe_positive.ec	MUST-PASS	-
+scratch/chain_candidate_coordinate_universe_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_accepted_output_positive.ec	MUST-PASS	-
+scratch/chain_candidate_accepted_output_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_independent_charge_positive.ec	MUST-PASS	-
+scratch/chain_candidate_independent_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_physical_transfer_positive.ec	MUST-PASS	-
+scratch/chain_candidate_physical_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/chain_candidate_charge_comparison_positive.ec	MUST-PASS	-
+scratch/chain_candidate_charge_comparison_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_ChainCandidateBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainCandidateMass.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableBasicCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableForestCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableForsCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableKeygenCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableLayerCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableMerkleCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableSessionCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableSignerCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ChainVariableWotsCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_FreshCandidateByteBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ProgrammedCandidateByteBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_SelectedWotsCandidateBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_VisibleChainCandidateBudget.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsCandidateCoordinateBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsCandidateCutBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsCandidateNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsCandidateUnion.ec	MUST-FAIL	FORS_C_TreePort.

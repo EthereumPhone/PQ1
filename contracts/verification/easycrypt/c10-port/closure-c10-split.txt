@@ -559,3 +559,24 @@ LeafTargetOracleCost
 LeafTargetSessionCost
 LeafTargetSignerCost
 OriginalLeafCandidateBound
+
+# WOTS candidate counting, redacted-session budget and adaptive bound, 2026-10-16.
+ChainCandidateBound
+ChainCandidateMass
+ChainVariableBasicCost
+ChainVariableForestCost
+ChainVariableForsCost
+ChainVariableKeygenCost
+ChainVariableLayerCost
+ChainVariableMerkleCost
+ChainVariableSessionCost
+ChainVariableSignerCost
+ChainVariableWotsCost
+FreshCandidateByteBound
+ProgrammedCandidateByteBound
+SelectedWotsCandidateBound
+VisibleChainCandidateBudget
+WotsCandidateCoordinateBound
+WotsCandidateCutBound
+WotsCandidateNumericalBound
+WotsCandidateUnion
