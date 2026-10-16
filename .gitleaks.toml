@@ -123,6 +123,13 @@ paths = ['''^tools/pq-ui/(handoff/spec/exceptions|tools/check/baseline)\.toml$''
 regexTarget = "secret"
 regexes = ['''^DEFAULT_END=None$''']
 
+[[rules.allowlists]]
+description = "Exact public PMF key-collision proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/KeyCollision\.lean": "fcd6aad405882f45796804afbd3dd8ff1540cadd188478400213247d49731473",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
