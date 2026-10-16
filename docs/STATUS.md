@@ -191,8 +191,13 @@ projections while preserving counters and failure. A persistent memo-table
 search now refines that sampler for distinct initially fresh keys; serialized
 32-byte counter schedules discharge distinctness, while prior-history freshness
 remains explicit. An independent uniform-key collision detector has a proved
-history-plus-birthday bound. All 115 theorem closures and 43 typed cases are
-gated separately; `lean/` stays mathlib-free. #295 remains open for the full
+history-plus-birthday bound. Online random-key memoized search is proved equal
+to executing a pre-sampled schedule, including its final table. Its result-event
+probabilities differ from independent sampling by at most that derived charge.
+The high-128-bit randomizer projection and injective padded H_msg key layout
+instantiate the bound and conditional FORS exhaustion at the signing cap. Actual
+secret-keyed R freshness remains open. All 149 theorem closures and 60 typed
+cases are gated separately; `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.
 

@@ -218,4 +218,76 @@ def cases(project: Path) -> list[dict]:
         "history * trials + trials.choose 2", """theorem checked (h n : ℕ) :
     collisionPairs h n = n * h + n.choose 2 := by simp [collisionPairs, Nat.mul_comm]
 """, True)
+    add("schedule-length", "Schedules", "(drawList q n).map (List.cons key)",
+        "drawList q n", """theorem checked :
+    drawList (PMF.pure true) 2 = PMF.pure [true, true] := by
+  simp [drawList, PMF.pure_bind, PMF.pure_map]
+""")
+    add("schedule-independent", "Schedules", "(drawList q n).map (List.cons key)",
+        "(drawList q n).map (fun _ => List.replicate (n + 1) key)", """theorem checked :
+    drawList (PMF.uniformOfFintype Bool) 2 [false, true] =
+      (2 : ℝ≥0∞)⁻¹ * (2 : ℝ≥0∞)⁻¹ := by
+  simp only [drawList, PMF.pure_map, PMF.map_bind, PMF.map_comp, Function.comp_def]
+  norm_num [PMF.bind_apply, PMF.pure_apply, tsum_fintype]
+""")
+    add("scan-forgot-hit", "Schedules", "if key ∈ seen then true",
+        "if key ∈ seen then false", theorem(src["Schedules"], "collisionScan_history"))
+    add("scan-forgot-insert", "Schedules", "collisionScan (insert key seen) keys",
+        "collisionScan seen keys", theorem(src["Schedules"], "collisionScan_repeat"))
+    online_first = """theorem checked :
+    (randomMemoGrind (PMF.pure true) (PMF.pure true) id (fun _ => none) 4 1).map
+      Prod.fst = PMF.pure (some (4, true)) := by
+  simp [randomMemoGrind, memoQuery, PMF.pure_bind, PMF.pure_map]
+"""
+    add("online-counter", "RandomGrind", "some (start, out.1)",
+        "some (start + 1, out.1)", online_first)
+    add("online-retry-table", "RandomGrind", "randomMemoGrind q p accept out.2",
+        "randomMemoGrind q p accept table", """theorem checked :
+    ((randomMemoGrind (PMF.pure true) fairReply id (fun _ => none) 0 2).map Prod.fst)
+      none = (2 : ℝ≥0∞)⁻¹ := by
+  simp only [randomMemoGrind, PMF.pure_bind, memoQuery, PMF.bind_map,
+    Function.comp_def, Function.update_self, PMF.map_bind, PMF.pure_map]
+  norm_num [fairReply, PMF.bind_apply, PMF.pure_apply, tsum_fintype]
+  simp only [← ite_and]
+  simp_rw [@and_comm (none = _) (_ = _)]
+  simp [ite_and]
+""")
+    add("online-cache-start", "RandomGrind", "memoQuery p table key",
+        "memoQuery p (fun _ => none) key", """theorem checked :
+    (randomMemoGrind (PMF.pure true) (PMF.pure true) id (fun _ => some false) 0 1).map
+      Prod.fst = PMF.pure none := by
+  simp [randomMemoGrind, memoQuery, PMF.pure_bind, PMF.pure_map]
+""")
+    add("embedded-history-drop", "Transfer", "(table (embed key)).isSome",
+        "false", theorem(src["Transfer"], "embeddedHistory_covers"))
+    add("randomizer-half", "Randomizer", "(digestHalves d).1", "(digestHalves d).2",
+        theorem(src["Randomizer"], "randomizer_first_retained_bit"))
+    add("randomizer-byte-order", "Randomizer",
+        "toFun bytes i := bytes i.rev\n  invFun bytes i := bytes i.rev",
+        "toFun bytes i := bytes i\n  invFun bytes i := bytes i",
+        theorem(src["Randomizer"], "randomizer_last_byte"))
+    add("randomizer-truncate", "Randomizer", "(digestHalves d).1",
+        "⟨(digestHalves d).1.val % 2 ^ 127, Nat.lt_of_lt_of_le "
+        "(Nat.mod_lt _ (by decide)) (by norm_num)⟩",
+        """theorem checked :
+    (randomizerOfDigest ⟨2 ^ 255, by decide⟩).val = 2 ^ 127 := by decide
+""")
+    add("hmsg-pad-width", "Randomizer", "List.replicate 16 0", "List.replicate 15 0",
+        theorem(src["Randomizer"], "hmsg_randomizer_length"))
+    add("hmsg-pad-value", "Randomizer", "List.replicate 16 0", "List.replicate 16 1",
+        theorem(src["Randomizer"], "hmsg_randomizer_zero_layout"))
+    add("hmsg-domain-tag", "Randomizer", "List.replicate 32 255", "List.replicate 32 254",
+        theorem(src["Randomizer"], "hmsg_randomizer_zero_layout"))
+    add("hmsg-key-drop", "Randomizer", "List.ofFn (randomizerBytesEquiv.symm r)",
+        "List.replicate 16 0", """theorem checked :
+    hmsgRandomizerInput [] [] [] 0 ≠ hmsgRandomizerInput [] [] [] 1 := by decide
+""")
+    add("history-preserving", "Transfer", "(table (embed key)).isSome",
+        "!(table (embed key)).isNone", """theorem checked [Fintype K]
+    (table : Memo L α) (embed : K → L) (key : K) :
+    key ∈ embeddedHistory table embed ↔ (table (embed key)).isSome := by
+  cases ht : table (embed key) <;> simp [embeddedHistory, ht]
+""", True)
+    add("online-counter-preserving", "RandomGrind", "some (start, out.1)",
+        "some (0 + start, out.1)", online_first, True)
     return out

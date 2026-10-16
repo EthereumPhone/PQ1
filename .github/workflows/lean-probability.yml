@@ -21,6 +21,8 @@ on:
       - 'sphincs-c10/src/fors.rs'
       - 'sphincs-c10/src/hash.rs'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10Randomizer.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10HashDomains.ec'
   pull_request:
     paths: *probability_paths
 

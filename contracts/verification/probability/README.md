@@ -3,9 +3,9 @@
 This is the separate mathlib project requested by
 [PQ1 #295](https://github.com/EthereumPhone/PQ1/issues/295). It proves bounded
 independent sampling and derives the C10 projection PMFs from a uniform full
-256-bit digest, within this Lean project. It also proves a memoized-search
-refinement for distinct, initially fresh keys and bounds collisions in an
-independent uniform-key experiment. **The probability-monad forgery-game theorem
+256-bit digest, within this Lean project. It also proves an event-probability comparison between online memoized search
+and independent sampling, using a derived history-plus-birthday charge. The
+randomizer instance includes its high-128-bit projection and padded H_msg bytes. **The probability-monad forgery-game theorem
 and full signer-session transfer remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
@@ -86,8 +86,32 @@ its growing finite seen set, and returns a collision flag. For `n` trials,
 probability is at most `(n*h + n*(n-1)/2)/M`. Both the history and pair terms
 are derived; the bound also has a real-valued form and a `2^128` key-space
 instantiation. It is an upper bound (possibly above one), not an equality or
-a claim that the concrete keyed-R stream meets this experiment. Connecting
-random-key collisions to the full shared R/H_msg session remains open.
+a claim that the concrete keyed-R stream meets this experiment.
+
+`Schedules.lean` and `RandomGrind.lean` prove that drawing keys online and stopping
+at the first accepted memoized reply has the same distribution as drawing a
+complete independent key schedule first, then running `memoGrind`. This equality
+preserves both the returned result and final table; unused scheduled keys are
+not queried after success.
+
+`Transfer.lean` proves a two-sided event bound for that online program. For any
+fixed result event, its probability differs from independent reply sampling by
+at most `(n*h + n*(n-1)/2)/M`. Equality on collision-free schedules follows from
+the earlier freshness theorem. The initial history covers every cached key in
+the injectively encoded source alphabet; its exact finite preimage supplies a
+witness for any starting table. The bound compares result marginals, not final
+table events.
+
+`Randomizer.lean` derives the uniform high 128 bits from the full digest and
+proves that their big-endian encoding is exactly its first 16 bytes. The H_msg
+key is `seed || root || R[16] || zero[16] || message || FF[32]`, with proved
+injectivity in R and length 160 for 32-byte seed, root and message. For independent
+R draws and memoized full-digest replies, FORS exhaustion differs from
+`(1 - 1/2048)^n` by at most the history-plus-birthday charge over `2^128`. With an
+empty initial table, the upper bound is that exhaustion term plus
+`n.choose 2 / 2^128`, also specialized to the 10,000,000-trial cap. This is still
+an independent-R comparison experiment: identifying the actual secret-keyed R
+procedure and full shared session with its inputs remains open.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -132,23 +156,27 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 115 theorem closures against
+The gate rebuilds every project module, checks all 149 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-Forty-three typed cases run 129 compiler jobs: each baseline and changed
-definition must compile, thirty-seven changed behaviors must reject at the
-consuming `checked` theorem, and six value-preserving changes must pass. Cases cover exhaustion,
+Sixty typed cases run 180 compiler jobs: each baseline and changed
+definition must compile, fifty-two changed behaviors must reject at the
+consuming `checked` theorem, and eight value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
 field offset/width, mixed-radix orientation and result projection. New cases
 cover cached resampling/history loss, missing insertion, changes to other keys,
 search counter/acceptance, counter byte order/block width/schedule repetition,
-and both collision-charge terms and seen-set insertion. Syntax
+and both collision-charge terms and seen-set insertion. Online controls cover
+schedule length/independence, collision scanning, cache reuse across retries,
+initial cached replies and counters. Randomizer controls cover high-half
+selection, truncation, byte order, padding width/value, the domain suffix and
+key injectivity; equivalent history and counter expressions must pass. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.

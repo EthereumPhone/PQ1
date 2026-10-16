@@ -17,8 +17,14 @@ model now proves result-distribution equivalence for distinct keys absent from
 the initial history. Serialized 32-byte WOTS counter schedules establish local
 distinctness, not absence from arbitrary earlier queries. A separate actual
 collision detector for independent uniform keys proves the prior-history plus
-birthday bound, including a 128-bit key-space instance. The full probability-monad
-forgery-game theorem and shared R/H_msg signer-session transfer remain open.
+birthday bound. The online random-key memoized loop is now proved equal to
+pre-sampling its key schedule, retaining the returned result and final table.
+The derived collision charge bounds differences in result-event probabilities
+from independent reply sampling. The high-128-bit randomizer projection and
+injective padded H_msg input instantiate this result, including conditional
+FORS exhaustion at the signing cap. Actual secret-keyed R freshness, the full
+probability-monad forgery-game theorem and shared signer-session transfer remain
+open; independent R draws are explicit inputs to this comparison experiment.
 Cached and prefilled-key examples show why local counter uniqueness alone
 cannot establish independent fresh sampling.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

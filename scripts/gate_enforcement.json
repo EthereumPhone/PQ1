@@ -1821,7 +1821,9 @@
         "sphincs-c10/src/wots.rs",
         "sphincs-c10/src/fors.rs",
         "sphincs-c10/src/hash.rs",
-        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec"
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Randomizer.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10HashDomains.ec"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",
@@ -1844,7 +1846,7 @@
         ],
         "workflow_context": {}
       },
-      "note": "Separate pinned mathlib PMF project: full digest projections, memo-table search with explicit fresh distinct-key premises, serialized counters and independent-key collision bound; no full forgery-game or concrete-backend claim."
+      "note": "Separate pinned mathlib PMF project: online memoized independent-key search, proved schedule equivalence and event error, high-128-bit randomizer and padded H_msg inputs; actual keyed-R freshness and full forgery-game transfer remain open."
     }
   ],
   "_completeness_waived": {}
