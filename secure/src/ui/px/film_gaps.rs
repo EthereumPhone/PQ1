@@ -231,6 +231,17 @@ pub fn rows2(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     push(&mut out[1], &mut n, b' ');
     push(&mut out[1], &mut n, b'E');
     push_u32(&mut out[1], &mut n, r.steps[3]);
+    // The OPTIGA reset-on-demand experiment: steps that needed a reset.
+    #[cfg(feature = "optiga-reset-on-demand")]
+    {
+        push(&mut out[1], &mut n, b' ');
+        push(&mut out[1], &mut n, b'R');
+        push_u32(
+            &mut out[1],
+            &mut n,
+            crate::optiga::ON_DEMAND_RESETS.load(core::sync::atomic::Ordering::Relaxed),
+        );
+    }
     for (row, (tag, b)) in out[2..]
         .iter_mut()
         .zip([(b'O', r.buses[0]), (b'E', r.buses[1])])

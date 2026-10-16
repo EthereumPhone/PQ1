@@ -106,6 +106,11 @@ pub struct OptigaTrustM {
     remaining: u8,
 }
 
+/// Dev experiment `optiga-reset-on-demand`: provisioning steps that failed
+/// without the throttle reset and needed one (shown on the recorder page).
+#[cfg(feature = "optiga-reset-on-demand")]
+pub static ON_DEMAND_RESETS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+
 /// A fixed settle wait around an OPTIGA reset (`cycles` at 160 MHz, the
 /// figures the reset code was written in).
 ///
@@ -2324,6 +2329,33 @@ impl OptigaTrustM {
     /// cached copy, and the subsequent data writes go through because the
     /// user OIDs are `Change = Auto(F1D0) OR Conf(0xE140)` — the `Conf` arm
     /// is satisfied by the shielded connection.
+    /// Run one provisioning step. Normally exactly `f(self)`.
+    ///
+    /// Under the dev experiment `optiga-reset-on-demand` (2026-10-16: does
+    /// pq1's OPTIGA have the 2-writes-per-session throttle the iota2 shield
+    /// had?) the unconditional reset after each write is skipped, and a step
+    /// that fails is retried once after `hard_reset_and_reinit` +
+    /// `ensure_shield`; each such retry is counted in [`ON_DEMAND_RESETS`].
+    fn on_demand<T>(
+        &mut self,
+        mut f: impl FnMut(&mut Self) -> Result<T, OptigaError>,
+    ) -> Result<T, OptigaError> {
+        #[cfg(feature = "optiga-reset-on-demand")]
+        {
+            match f(self) {
+                Ok(v) => Ok(v),
+                Err(_first) => {
+                    ON_DEMAND_RESETS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                    self.hard_reset_and_reinit()?;
+                    self.ensure_shield()?;
+                    f(self)
+                }
+            }
+        }
+        #[cfg(not(feature = "optiga-reset-on-demand"))]
+        f(self)
+    }
+
     fn store_objects(
         &mut self,
         entropy: &[u8; 32],
@@ -2370,7 +2402,9 @@ impl OptigaTrustM {
             // After PBS write (2 SetData ops) the chip refuses further
             // writes until it is hard-reset. Pulse RST (PE4) to clear
             // the wedge; NV OIDs (including the PBS we just wrote) survive.
-            #[cfg(feature = "stm32u585")]
+            // (`optiga-reset-on-demand`, dev experiment: skipped, and reset
+            // only if the next step fails; see `on_demand`.)
+            #[cfg(all(feature = "stm32u585", not(feature = "optiga-reset-on-demand")))]
             self.hard_reset_and_reinit()?;
         }
 
@@ -2384,7 +2418,7 @@ impl OptigaTrustM {
         // non-negotiable contract (mod.rs:716-720). No-op under
         // `optiga-no-shield`.
         secure_log!("[OPTIGA/prov] step 1b: ensure_shield (pre-auth_ref)");
-        self.ensure_shield()?;
+        self.on_demand(|s| s.ensure_shield())?;
 
         // 1c. (optiga-hw-counter) Silicon PIN counter MUST be provisioned
         //     BEFORE auth_ref — the F1D0 Execute AC will reference E120
@@ -2414,12 +2448,15 @@ impl OptigaTrustM {
         // 2. Auth reference
         secure_log!("[OPTIGA/prov] step 2: provision_auth_ref");
         {
+            #[cfg(not(feature = "optiga-reset-on-demand"))]
             let result = unsafe { self.provision_auth_ref(cred.expose_for_optiga()) };
+            #[cfg(feature = "optiga-reset-on-demand")]
+            let result = self.on_demand(|s| unsafe { s.provision_auth_ref(cred.expose_for_optiga()) });
             if let Err(e) = result {
                 secure_log!("[OPTIGA/prov] provision_auth_ref FAILED: {:?}", e);
                 return Err(e);
             }
-            #[cfg(feature = "stm32u585")]
+            #[cfg(all(feature = "stm32u585", not(feature = "optiga-reset-on-demand")))]
             {
                 self.hard_reset_and_reinit()?;
                 secure_log!("[OPTIGA/prov] post-auth_ref: re-establishing shield");
@@ -2446,10 +2483,10 @@ impl OptigaTrustM {
         macro_rules! prov_with_reset {
             ($name:literal, $call:expr) => {{
                 secure_log!("[OPTIGA/prov] step: {}", $name);
-                $call.map_err(|e| {
+                self.on_demand($call).map_err(|e| {
                     secure_log!("[OPTIGA/prov] {} write FAILED: {:?}", $name, e); e
                 })?;
-                #[cfg(feature = "stm32u585")]
+                #[cfg(all(feature = "stm32u585", not(feature = "optiga-reset-on-demand")))]
                 {
                     self.hard_reset_and_reinit()?;
                     secure_log!("[OPTIGA/prov] post-{}: re-establishing shield", $name);
@@ -2459,11 +2496,11 @@ impl OptigaTrustM {
         }
 
         unsafe {
-            prov_with_reset!("entropy", self.provision_user_oid(apdu::OID_ENTROPY, entropy));
-            prov_with_reset!("master_secret", self.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret));
-            prov_with_reset!("vk", self.provision_user_oid(apdu::OID_VK, vk));
-            prov_with_reset!("bootstrap_vk", self.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk));
-            prov_with_reset!("counter", self.provision_counter());
+            prov_with_reset!("entropy", |s| s.provision_user_oid(apdu::OID_ENTROPY, entropy));
+            prov_with_reset!("master_secret", |s| s.provision_user_oid(apdu::OID_MASTER_SECRET, master_secret));
+            prov_with_reset!("vk", |s| s.provision_user_oid(apdu::OID_VK, vk));
+            prov_with_reset!("bootstrap_vk", |s| s.provision_user_oid(apdu::OID_BOOTSTRAP_VK, bootstrap_vk));
+            prov_with_reset!("counter", |s| s.provision_counter());
         }
 
         // S-2 sacrificial candidate: neutralize the enumerated trust-anchor

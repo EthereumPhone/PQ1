@@ -212,6 +212,11 @@ ui-px-frametime = ["ui-px", "ui-lcd", "pqsigner-ui-px/render-split"]
 # after HELP (`ui/px/film_gaps.rs`). NEVER ship: fenced in `nsc/mod.rs` and
 # listed in the Makefile's PROD_FORBIDDEN.
 ui-px-film-gaps = ["ui-px", "ui-lcd"]
+# Dev experiment (2026-10-16): skip the OPTIGA throttle reset after each
+# provisioning write and reset only when a step fails, counting how often
+# (shown by ui-px-film-gaps). Answers whether pq1's OPTIGA has the
+# 2-writes-per-session throttle the iota2 shield had. NEVER ships.
+optiga-reset-on-demand = []
 
 # Stream the pixel-UI strip blit over GPDMA1 instead of the polled per-byte
 # loop, so strip k goes out on the wire while strip k+1 renders. Opt-in: this
