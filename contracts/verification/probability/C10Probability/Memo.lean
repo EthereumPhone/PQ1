@@ -138,5 +138,10 @@ theorem memo_prefilled_reject (p : PMF α) (accept : α → Bool) (key : K)
     (memoGrind p accept (fun _ => some x) 0 [key]).map Prod.fst = PMF.pure none := by
   simp [memoGrind, memoQuery, hx, PMF.pure_bind, PMF.pure_map]
 
+theorem memoGrind_immediate_state (key : K) (keys : List K) (start : ℕ) :
+    memoGrind (PMF.pure true) id (fun _ => none) start (key :: keys) =
+      PMF.pure (some (start, true), Function.update (fun _ => none) key (some true)) := by
+  simp [memoGrind, memoQuery, PMF.pure_map, PMF.pure_bind]
+
 end
 end C10Probability

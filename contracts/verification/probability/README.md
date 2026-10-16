@@ -5,7 +5,9 @@ This is the separate mathlib project requested by
 independent sampling and derives the C10 projection PMFs from a uniform full
 256-bit digest, within this Lean project. It also proves an event-probability comparison between online memoized search
 and independent sampling, using a derived history-plus-birthday charge. The
-randomizer instance includes its high-128-bit projection and padded H_msg bytes. **The probability-monad forgery-game theorem
+randomizer instance includes its high-128-bit projection and padded H_msg bytes.
+A two-query shared-table grinder now derives that independent-R comparison
+under explicit initial R-input freshness and proved domain separation. **The probability-monad forgery-game theorem
 and full signer-session transfer remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
@@ -110,8 +112,44 @@ R draws and memoized full-digest replies, FORS exhaustion differs from
 `(1 - 1/2048)^n` by at most the history-plus-birthday charge over `2^128`. With an
 empty initial table, the upper bound is that exhaustion term plus
 `n.choose 2 / 2^128`, also specialized to the 10,000,000-trial cap. This is still
-an independent-R comparison experiment: identifying the actual secret-keyed R
-procedure and full shared session with its inputs remains open.
+an independent-R comparison experiment. The shared-table refinement below
+identifies its relation to the manually transcribed R-derivation procedure;
+global session freshness remains open.
+
+`LabelledGrind.lean` retains the chosen randomizer label, full reply, counter
+and table in the independent-key loop. `forgetLabel` is an explicit projection
+to the earlier digest-only result, and it preserves exhaustion probability.
+`MemoView.lean` proves that observing a table with a designated domain erased
+commutes with queries outside that domain. This erasure is an observation of
+the final state, not a change to the executed oracle.
+
+`DerivedGrind.lean` executes two queries through the same table per attempt:
+the first reply determines the randomizer and hence the second key. If the
+first-query inputs are distinct and initially absent, and their domain is
+disjoint from the second-query keys, its distribution equals the labelled
+independent-key comparison after erasing the first-query domain in the
+observed table. The theorem retains the selected label, full reply, counter
+and failure. A prefilled first-query input gives a checked counterexample to
+using that comparison without freshness. A cached rejected second reply still
+forces failure. Immediate-success postconditions independently check the
+updated table for scheduled, online and two-query searches.
+
+`SharedRandomizer.lean` instantiates this with
+`secret[32] || R_grind[7] || optional_random[0 or 16] || message[32] || nonce[32]`.
+The tag bytes, field order and full big-endian nonce block are explicit. The
+103/119-byte input widths separate these queries from 160-byte H_msg inputs;
+the existing bounded counter schedule supplies nonce distinctness. Distinct
+nonzero field witnesses check deterministic and hedged R layouts and the
+H_msg layout. The shared experiment returns R as its proved 128-bit value,
+whose 16-byte serialization is already a bijection.
+
+Under the explicit premise that every scheduled R input is initially absent,
+the shared experiment inherits the digest-result event and FORS exhaustion
+bounds, with arbitrary initial H_msg history retained. Empty history discharges
+the R-input premise and gives `(1-1/2048)^n + n.choose 2 / 2^128`, including the
+ten-million cap. No theorem says that secret keys or nonce distinctness alone
+exclude earlier queries to these inputs. Adaptive prior-query guessing,
+repeated signing calls and complete signer-session transfer remain open.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -156,16 +194,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 149 theorem closures against
+The gate rebuilds every project module, checks all 186 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-Sixty typed cases run 180 compiler jobs: each baseline and changed
-definition must compile, fifty-two changed behaviors must reject at the
-consuming `checked` theorem, and eight value-preserving changes must pass. Cases cover exhaustion,
+87 typed cases run 261 compiler jobs: each baseline and changed
+definition must compile, 77 changed behaviors must reject at the
+consuming `checked` theorem, and ten value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -176,7 +214,12 @@ and both collision-charge terms and seen-set insertion. Online controls cover
 schedule length/independence, collision scanning, cache reuse across retries,
 initial cached replies and counters. Randomizer controls cover high-half
 selection, truncation, byte order, padding width/value, the domain suffix and
-key injectivity; equivalent history and counter expressions must pass. Syntax
+key injectivity; equivalent history and counter expressions must pass. Shared
+search controls cover R/H_msg cache resets, missing stores, discarded successful
+updates, continuing past success, returned label/reply/counter, acceptance and
+retry-table propagation. Layout controls cover the R tag, optional randomness,
+nonce placement, both R domains and three H_msg field-order swaps. The table
+erasure and equivalent counter forms also have positive controls. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.

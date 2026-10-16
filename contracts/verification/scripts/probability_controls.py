@@ -290,4 +290,102 @@ def cases(project: Path) -> list[dict]:
 """, True)
     add("online-counter-preserving", "RandomGrind", "some (start, out.1)",
         "some (0 + start, out.1)", online_first, True)
+    add("erase-hidden-inverted", "MemoView", "if hidden key then none else table key",
+        "if !hidden key then none else table key", theorem(src["MemoView"], "eraseMemo_hidden"))
+    memo_success = "PMF.pure (some (start, out.1), out.2)"
+    add("memo-success-store", "Memo", memo_success, "PMF.pure (some (start, out.1), table)",
+        theorem(src["Memo"], "memoGrind_immediate_state"))
+    add("memo-success-continues", "Memo", memo_success,
+        "(memoGrind p accept out.2 (start + 1) keys).map "
+        "(fun rest => (some (start, out.1), rest.2))",
+        theorem(src["Memo"], "memoGrind_immediate_state"))
+    add("online-success-store", "RandomGrind", memo_success,
+        "PMF.pure (some (start, out.1), table)",
+        theorem(src["RandomGrind"], "randomMemoGrind_immediate_state"))
+    add("online-success-continues", "RandomGrind", memo_success,
+        "(randomMemoGrind q p accept out.2 (start + 1) n).map "
+        "(fun rest => (some (start, out.1), rest.2))",
+        theorem(src["RandomGrind"], "randomMemoGrind_immediate_state"))
+    labelled_first = """theorem checked :
+    (labelledMemoGrind (PMF.pure true) (PMF.pure false) id (fun _ => true)
+      (fun _ : Bool => none) 4 1).map Prod.fst = PMF.pure (some (4, true, false)) := by
+  simp [labelledMemoGrind, memoQuery, PMF.pure_map, PMF.pure_bind]
+"""
+    add("labelled-counter", "LabelledGrind", "some (start, label, out.1)",
+        "some (start + 1, label, out.1)", labelled_first)
+    add("labelled-result-drop", "LabelledGrind", "some (start, label, out.1)",
+        "none", labelled_first)
+    prefilled = theorem(src["DerivedGrind"], "derived_prefilled_label")
+    immediate = theorem(src["DerivedGrind"], "derived_immediate_state")
+    cached_hmsg = theorem(src["DerivedGrind"], "derived_cached_hmsg_failure")
+    add("derived-r-cache-reset", "DerivedGrind", "memoQuery p table key",
+        "memoQuery p (fun _ => none) key", prefilled)
+    add("derived-hmsg-cache-reset", "DerivedGrind", "memoQuery p first.2",
+        "memoQuery p (fun _ => none)", cached_hmsg)
+    add("derived-r-store-drop", "DerivedGrind", "memoQuery p first.2",
+        "memoQuery p table", immediate)
+    derived_success = "PMF.pure (some (start, derive first.1, second.1), second.2)"
+    add("derived-success-store", "DerivedGrind", derived_success,
+        "PMF.pure (some (start, derive first.1, second.1), first.2)", immediate)
+    add("derived-success-continues", "DerivedGrind", derived_success,
+        "(derivedMemoGrind p derive encode accept second.2 (start + 1) keys).map "
+        "(fun rest => (some (start, derive first.1, second.1), rest.2))", immediate)
+    add("derived-returned-label", "DerivedGrind", "some (start, derive first.1, second.1)",
+        "some (start, derive second.1, second.1)", prefilled)
+    add("derived-returned-reply", "DerivedGrind", "some (start, derive first.1, second.1)",
+        "some (start, derive first.1, first.1)", prefilled)
+    add("derived-counter", "DerivedGrind", "some (start, derive first.1, second.1)",
+        "some (start + 1, derive first.1, second.1)", prefilled)
+    add("derived-acceptance", "DerivedGrind", "if accept second.1 then",
+        "if !accept second.1 then", cached_hmsg)
+    add("derived-retry-table", "DerivedGrind",
+        "else derivedMemoGrind p derive encode accept second.2",
+        "else derivedMemoGrind p derive encode accept first.2", """theorem checked :
+    ((derivedMemoGrind fairReply (fun _ => true) (fun _ => (2 : ℕ)) id
+      (fun _ => none) 0 [0, 1]).map Prod.fst) none = (2 : ENNReal)⁻¹ := by
+  classical
+  letI : DecidableEq (Option (ℕ × Bool × Bool) × Memo ℕ Bool) := Classical.decEq _
+  have split_sum (c : Prop) [Decidable c] (a b : ENNReal) :
+      (if c then a + b else 0) = (if c then a else 0) + (if c then b else 0) := by
+    split_ifs <;> simp
+  have atom_sum (z : Option (ℕ × Bool × Bool) × Memo ℕ Bool) (v : ENNReal) :
+      (∑' a : Option (ℕ × Bool × Bool) × Memo ℕ Bool,
+        if none = a.1 then (if a = z then v else 0) else 0) =
+          if none = z.1 then v else 0 := by
+    rw [tsum_eq_single z (by intro a ha; simp [ha])]
+    simp
+  simp only [derivedMemoGrind, memoQuery, PMF.bind_map, Function.comp_def, PMF.map_bind]
+  norm_num [fairReply, PMF.bind_apply, PMF.pure_apply, tsum_fintype]
+  simp only [split_sum, ENNReal.tsum_add, atom_sum]
+  simp [ENNReal.inv_two_add_inv_two]
+  rw [← mul_add, ENNReal.inv_two_add_inv_two, mul_one]
+""")
+    add("r-input-tag", "SharedRandomizer", "[82, 95, 103, 114, 105, 110, 100]",
+        "[83, 95, 103, 114, 105, 110, 100]",
+        theorem(src["SharedRandomizer"], "r_deterministic_layout"))
+    add("r-input-random-drop", "SharedRandomizer", "secret ++ rGrindTag ++ random ++ message",
+        "secret ++ rGrindTag ++ message", theorem(src["SharedRandomizer"], "r_hedged_layout"))
+    add("r-input-nonce-order", "SharedRandomizer",
+        "counterKey (rInputStem secret random message) nonce",
+        "counterKey (rInputStem secret random []) nonce ++ message",
+        theorem(src["SharedRandomizer"], "r_deterministic_layout"))
+    add("r-domain-hedged", "SharedRandomizer", "key.length = 119", "key.length = 120",
+        """theorem checked :
+    rInputDomain (rDerivationInput (List.replicate 32 1) (List.replicate 16 2)
+      (List.replicate 32 3) 4) = true := by decide
+""")
+    add("r-domain-hmsg", "SharedRandomizer", "key.length = 119", "key.length = 160",
+        theorem(src["SharedRandomizer"], "hmsg_input_visible"))
+    marked = theorem(src["SharedRandomizer"], "hmsg_marked_layout")
+    add("hmsg-seed-root-order", "Randomizer", "(seed ++ root)", "(root ++ seed)", marked)
+    add("hmsg-r-padding-order", "Randomizer",
+        "List.ofFn (randomizerBytesEquiv.symm r) ++ List.replicate 16 0",
+        "List.replicate 16 0 ++ List.ofFn (randomizerBytesEquiv.symm r)", marked)
+    add("hmsg-message-suffix-order", "Randomizer", "(message ++ List.replicate 32 255)",
+        "(List.replicate 32 255 ++ message)", marked)
+    add("erase-hidden-preserving", "MemoView", "if hidden key then none else table key",
+        "if hidden key = true then none else table key",
+        theorem(src["MemoView"], "eraseMemo_hidden"), True)
+    add("derived-counter-preserving", "DerivedGrind", "some (start, derive first.1, second.1)",
+        "some (0 + start, derive first.1, second.1)", prefilled, True)
     return out

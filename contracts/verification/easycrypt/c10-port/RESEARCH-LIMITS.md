@@ -22,9 +22,16 @@ pre-sampling its key schedule, retaining the returned result and final table.
 The derived collision charge bounds differences in result-event probabilities
 from independent reply sampling. The high-128-bit randomizer projection and
 injective padded H_msg input instantiate this result, including conditional
-FORS exhaustion at the signing cap. Actual secret-keyed R freshness, the full
-probability-monad forgery-game theorem and shared signer-session transfer remain
-open; independent R draws are explicit inputs to this comparison experiment.
+FORS exhaustion at the signing cap. A shared-table two-query interpreter now
+proves the independent-R comparison under distinct initially absent R inputs
+and exact domain separation: deterministic/hedged R inputs occupy 103/119 bytes,
+while H_msg inputs occupy 160 bytes. Its selected R, full digest, counter and
+observed table are retained; only an explicit later projection forgets R for
+the digest-result event bound. The empty-cache exhaustion bound follows at the
+ten-million cap. Global initial R-input freshness, the full probability-monad
+forgery-game theorem and shared signer-session transfer remain open. Neither
+nonce uniqueness nor a secret prefix proves absence from arbitrary prior
+queries or earlier signing calls.
 Cached and prefilled-key examples show why local counter uniqueness alone
 cannot establish independent fresh sampling.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

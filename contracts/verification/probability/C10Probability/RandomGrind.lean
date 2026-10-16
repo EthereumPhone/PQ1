@@ -53,5 +53,11 @@ theorem randomMemoGrind_embedded (q : PMF K) (p : PMF α) (accept : α → Bool)
   rw [randomMemoGrind_schedule, drawList_map, PMF.bind_map]
   rfl
 
+theorem randomMemoGrind_immediate_state [DecidableEq K] (q : PMF K) (start n : ℕ) :
+    randomMemoGrind q (PMF.pure true) id (fun _ => none) start (n + 1) =
+      q.map (fun key =>
+        (some (start, true), Function.update (fun _ => none) key (some true))) := by
+  simp [randomMemoGrind, memoQuery, PMF.map, Function.comp_def]
+
 end
 end C10Probability

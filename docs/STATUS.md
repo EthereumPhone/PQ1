@@ -196,7 +196,11 @@ to executing a pre-sampled schedule, including its final table. Its result-event
 probabilities differ from independent sampling by at most that derived charge.
 The high-128-bit randomizer projection and injective padded H_msg key layout
 instantiate the bound and conditional FORS exhaustion at the signing cap. Actual
-secret-keyed R freshness remains open. All 149 theorem closures and 60 typed
+secret-keyed R freshness remains open globally. A two-query shared-table
+interpreter now derives the independent-R comparison from distinct initially
+absent R inputs and proved 103/119-byte versus 160-byte domain separation. It
+retains the selected R, digest, counter and observed table, and transfers the
+conditional event/exhaustion bounds. All 186 theorem closures and 87 typed
 cases are gated separately; `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.
