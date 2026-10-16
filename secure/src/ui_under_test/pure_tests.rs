@@ -410,10 +410,10 @@ fn positive_seed_wizard_show_mnemonic_seen_last_gate() {
     assert!(simple.contains("if page == total_pages - 1 {\n            seen_last = true;"));
     assert!(simple.contains("} else if seen_last {\n                    return WizardResult::Confirmed;"));
     assert_eq!(simple.matches("WizardResult::Confirmed").count(), 1);
-    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic) {");
+    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic, intro: &[Screen]) {");
     assert_eq!(backup.matches("start_last = true;").count(), 1);
     assert!(backup.contains(
-        "if pager(&written, 0, true, false) == PagerOut::Back {\n                start_last = true;"
+        "if pager(&written, 0, true, false) == PagerOut::Back {\n                    start_last = true;"
     ));
 }
 
@@ -778,7 +778,7 @@ fn negative_seed_wizard_must_not_reset_activity_on_step_entry() {
     );
     const STEP_FNS: [&str; 6] = [
         "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {",
-        "fn yes_no(title: &str) -> Option<bool> {",
+        "pub fn choose_duress(main_pin: &[u8; PIN_LEN]) -> DuressSetup {",
         "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {",
         "fn show_mnemonic_with_decoys(m: &Mnemonic) -> WizardResult {",
         "fn enter_single_word(title: &str) -> EnterWordResult {",
@@ -808,17 +808,13 @@ fn negative_seed_wizard_resets_activity_only_after_button_events() {
     // `show_mnemonic_with_decoys` waits inside
     // `show_mnemonic_page_with_decoys`, so its wait marker is the page
     // call rather than a literal `wait_button`.
-    const CASES: [(&str, &str); 7] = [
+    const CASES: [(&str, &str); 6] = [
         (
             "fn pager(screens: &[Screen], start: usize, may_back: bool, may_forward: bool) -> PagerOut {",
             "input().wait_button(&mut never)",
         ),
         // The one way back from an entry row that reported idle in setup.
         ("fn hold(s: &Screen) {", "input().wait_button(&mut never)"),
-        (
-            "fn yes_no(title: &str) -> Option<bool> {",
-            "input().wait_button(&mut idle)",
-        ),
         (
             "fn show_mnemonic_simple(m: &Mnemonic, start_last: bool) -> WizardResult {",
             "input().wait_button(&mut idle)",
@@ -1192,18 +1188,18 @@ fn negative_an_idle_entry_row_leaves_the_glass_before_the_hold() {
 }
 
 #[test]
-fn negative_the_words_open_only_on_a_right_tap_from_their_intro() {
-    // The intro pages (RECOVERY .. SAFETY, 2026-10-15; before that
-    // WRITE DOWN 24 WORDS, and the 16x4 "Write 24 words / L=cancel R=show")
-    // are the last gate before the words hit the display. Only a right tap
-    // off the last page may pass it: the pager runs them with no back and
-    // `Forward` only, and no page asks (`only_the_two_choices_ask` in
-    // `setup_screens` checks none is confirmable), so neither a left tap nor
-    // the confirm click can open the words by accident.
-    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic) {");
-    assert!(backup.contains("let intro = setup_screens::backup_intro();"));
-    assert!(backup.contains("while pager(&intro, intro_at, false, true) != PagerOut::Forward {}"));
-    assert!(SETUP_SRC.contains("pub fn backup_intro() -> [Screen; 5] {"));
+fn negative_the_words_open_only_from_their_show_ask() {
+    // The intro pages (the real wallet's RECOVERY .. SAFETY, or the decoy's
+    // two; before 2026-10-15, WRITE DOWN 24 WORDS and the 16x4 "Write 24
+    // words / L=cancel R=show") end on CONFIRM TO SHOW WORDS, the last gate
+    // before the words hit the display. Only the click on that ask opens
+    // them: the pager runs with no back and no forward, and nothing else
+    // asks (`only_the_two_choices_ask` in `setup_screens` checks it), so
+    // neither a tap nor a click on an earlier page opens the words.
+    let backup = wizard_fn_body(WIZARD_SRC, "pub fn create_backup(m: &Mnemonic, intro: &[Screen]) {");
+    assert!(backup.contains("let show = intro.len() - 1;"));
+    assert!(backup.contains("while pager(intro, intro_at, false, false) != PagerOut::Selected(show) {}"));
+    assert!(SETUP_SRC.contains("pub fn backup_intro() -> [Screen; 6] {"));
     // The decoy walk keeps its own idle exit.
     assert!(WIZARD_SRC.contains("None => return WizardResult::IdleWipe,"));
 }
@@ -1373,7 +1369,7 @@ fn negative_frame_loop_uses_constant_time_render() {
 }
 
 #[test]
-fn positive_collect_duress_pin_must_differ_from_main() {
+fn positive_the_duress_pin_must_differ_from_main() {
     // §32 P4: the duress PIN MUST be confirmed-distinct from the main
     // PIN (else the duress credential would be a no-op alias). Pin the
     // constant-time-ish XOR-accumulate distinct check + the reject path.
@@ -1388,14 +1384,16 @@ fn positive_collect_duress_pin_must_differ_from_main() {
 }
 
 #[test]
-fn positive_collect_duress_pin_is_bounded() {
-    // §32 P4: the distinct-PIN retry loop is bounded (3 attempts) so a
-    // user can't lock themselves in the dialog — after that it declines
-    // (None → random decoy, always-provision preserved).
-    assert!(
-        WIZARD_SRC.contains("for _ in 0..3 {"),
-        "collect_duress_pin must bound its retry loop to 3 attempts",
-    );
+fn positive_the_duress_pin_cannot_be_skipped() {
+    // Owner decision 2026-10-16: setup asks for a duress PIN and there is no
+    // way past it but a PIN that differs from the main one (the old dialog
+    // could be declined, or gave up after three tries, provisioning a decoy
+    // with a random PIN). `choose_duress` returns the setup, not an Option,
+    // and leaves its loops only through that one return.
+    let body = wizard_fn_body(WIZARD_SRC, "pub fn choose_duress(main_pin: &[u8; PIN_LEN]) -> DuressSetup {");
+    assert_eq!(body.matches("return ").count(), 1, "one way out: the chosen PIN");
+    assert!(body.contains("return setup;"));
+    assert!(!body.contains("for _ in 0..3"), "no bounded give-up");
 }
 
 // ═════════════════════════════════════════════════════════════════════

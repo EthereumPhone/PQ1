@@ -2685,7 +2685,7 @@ fn positive_crypto_duress_always_provisions_decoy() {
     // so "duress configured vs not" is indistinguishable on-chip. Pin the
     // unconditional call + the random-PIN-on-None path in source.
     assert!(
-        CRYPTO_SRC.contains("provision_duress_wallet(store, duress_pin)"),
+        CRYPTO_SRC.contains("provision_duress_wallet(store, duress_pin, decoy)"),
         "provision_from_mnemonic must always call provision_duress_wallet under the feature",
     );
     assert!(
@@ -2694,10 +2694,18 @@ fn positive_crypto_duress_always_provisions_decoy() {
         "declined duress (None) must provision a decoy with a fresh random PIN, not skip",
     );
     // Decoy must be an INDEPENDENT fresh entropy (separate-entropy model),
-    // not derived from the real seed.
+    // not derived from the real seed: either the words the user wrote down
+    // at setup (the wizard's own three-source draw, owner 2026-10-16), or a
+    // fresh three-source draw here when the duress PIN wipes.
     assert!(
-        CRYPTO_SRC.contains("fill_strong_with_store(store, &mut decoy_entropy)?;"),
-        "decoy entropy must be a fresh independent three-source draw",
+        CRYPTO_SRC.contains("None => fill_strong_with_store(store, &mut decoy_entropy)?,"),
+        "without the user's decoy words, the decoy entropy is a fresh independent three-source draw",
+    );
+    const MAIN_SRC: &str = include_str!("../main.rs");
+    assert!(
+        MAIN_SRC.contains("while rng_strong::fill(&mut decoy_entropy).is_err() {")
+            && MAIN_SRC.contains("let m = sphincs_tz_bip39::Mnemonic::from_entropy(&decoy_entropy);"),
+        "the decoy words shown at setup come from their own three-source draw",
     );
     assert!(CRYPTO_SRC.contains("crate::rng_strong::fill_with_store(out, store)"));
     assert!(!CRYPTO_SRC.contains("if store.random().is_ok()"));

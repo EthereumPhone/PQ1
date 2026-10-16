@@ -277,13 +277,19 @@ fn wipe_pin(pin: &mut [u8; PIN_LEN]) {
 /// idle-wipe, or mismatch, returns the corresponding variant and zeroes any
 /// PIN material that briefly held a value.
 pub fn enter_pin_with_confirm() -> PinEntryResult {
-    show_status("Set new PIN", "");
+    enter_pin_with_confirm_titled("Set new PIN", "Confirm PIN")
+}
+
+/// [`enter_pin_with_confirm`] under other titles (the duress PIN's SET /
+/// REPEAT DURESS PIN).
+pub fn enter_pin_with_confirm_titled(set_title: &str, repeat_title: &str) -> PinEntryResult {
+    show_status(set_title, "");
     let first = match enter_pin() {
         PinEntryResult::Pin(p) => p,
         other => return other,
     };
 
-    show_status("Confirm PIN", "");
+    show_status(repeat_title, "");
     let second = match enter_pin() {
         PinEntryResult::Pin(p) => p,
         other => {

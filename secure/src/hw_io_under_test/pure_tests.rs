@@ -2457,40 +2457,14 @@ fn positive_an_endless_screen_is_never_played_to_rest() {
 #[test]
 fn positive_the_chooser_animates_from_inside_its_input_wait() {
     // The two defects were one structure: a paint loop that sampled no
-    // input, followed by an input wait that painted nothing. Neither half is
-    // fixable alone, so the chooser paints AND waits in one call.
-    assert!(
-        contains_in_code(PX_SCREENS_SRC, "pub fn show_waiting(")
-            && contains_in_code(
-                PX_SCREENS_SRC,
-                "wait_button_ticking(idle, &mut || amb.tick(&atlas))"
-            ),
-        "the ambient presenter must drive its animation from the input wait"
-    );
-    // Through `record` on every arm, like every other presenter, or the
-    // [UI-PXSR] line and the ui-capture frame hash change and the transcript
-    // count moves.
-    let body = PX_SCREENS_SRC
-        .split("pub fn show_waiting(")
-        .nth(1)
-        .expect("show_waiting must exist");
-    let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
-    assert_eq!(
-        body.matches("record(s);").count(),
-        2,
-        "show_waiting must record the screen on each cfg arm, exactly once"
-    );
-    // The duress yes / no still uses it (the fn itself plus its one call
-    // site), and the paint-then-block helper must not come back.
-    assert_eq!(
-        SEED_WIZARD_SRC.matches("px_choice_wait(").count(),
-        2,
-        "the duress chooser must animate while waiting"
-    );
-    assert!(
-        !contains_in_code(SEED_WIZARD_SRC, "fn px_choice("),
-        "the paint-then-block helper must not come back"
-    );
+    // input, followed by an input wait that painted nothing (#783). Every
+    // choice in setup (create / import, wipe / decoy) is now a page of the
+    // setup pager, which drains the buttons AND steps and paints the
+    // animation in one loop. The paint-then-block helpers must not come back.
+    for gone in ["fn px_choice(", "fn px_choice_wait(", "fn yes_no("] {
+        assert!(!contains_in_code(SEED_WIZARD_SRC, gone), "{gone} must not come back");
+    }
+    assert!(!contains_in_code(PX_SCREENS_SRC, "pub fn show_waiting("));
     // The setup choice (2026-10-15) is a page of the setup pager, which has
     // the same shape: one loop that drains the buttons AND steps and paints
     // the animation, so the hero sweeps while it waits.

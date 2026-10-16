@@ -93,12 +93,22 @@ pub fn pin_help() -> Screen {
     )
 }
 
-/// Before the words: five pages in the buttons' style, the disc crossing the
-/// panel on each (owner wording, 2026-10-15). A right tap on the last shows
-/// the words; the first has no way back (the PIN is set and the phrase is
-/// already drawn), so it shows the right arrow only. None of them asks.
+/// The ask that ends every intro to a set of words: the click shows them.
+/// Nothing lies to the right, so only the left arrow shows.
 #[must_use]
-pub fn backup_intro() -> [Screen; 5] {
+pub fn show_words() -> Screen {
+    hero(b"SHOWWRDS", b"CONFIRM TO SHOW WORDS")
+        .nav(Nav::LeftOnly)
+        .finish()
+        .unwrap_or(Screen::BLANK)
+}
+
+/// Before the words: five pages in the buttons' style, the disc crossing the
+/// panel on each, then [`show_words`] (owner wording, 2026-10-15). The first
+/// has no way back (the PIN is set and the phrase is already drawn), so it
+/// shows the right arrow only; only the last asks.
+#[must_use]
+pub fn backup_intro() -> [Screen; 6] {
     [
         detail_on(
             b"RECOVER",
@@ -147,6 +157,112 @@ pub fn backup_intro() -> [Screen; 5] {
                 b"Beware of impostors.",
             ],
         ),
+        show_words(),
+    ]
+}
+
+/// Between CONFIRM TO VERIFY WORDS and the first check: what the checks ask.
+#[must_use]
+pub fn quiz_intro() -> Screen {
+    detail(
+        b"QUIZ",
+        b"QUIZ",
+        &[
+            b"Next, a quiz on 3 of",
+            b"your words. Type the",
+            b"first 4 letters.",
+        ],
+    )
+}
+
+/// Index of WIPE DEVICE? in [`duress_intro`].
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test", test))]
+pub const DURESS_WIPE: usize = 3;
+/// Index of OPEN DECOY WALLET? in [`duress_intro`].
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test", test))]
+pub const DURESS_DECOY: usize = 4;
+
+/// After the word quiz: the duress PIN explained, then what it does (owner
+/// wording 2026-10-16). It cannot be skipped (owner decision, same date), so
+/// the first page shows the right arrow only and the pages end on the two
+/// choices, laid out like CREATE NEW WALLET? / IMPORT WALLET?.
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test", test))]
+#[must_use]
+pub fn duress_intro() -> [Screen; 5] {
+    [
+        detail_on(
+            b"DURESS",
+            Side::Right,
+            Nav::RightOnly,
+            b"DURESS PIN",
+            &[
+                b"Great! Now set a",
+                b"duress PIN, a second",
+                b"PIN for emergencies.",
+            ],
+        ),
+        detail_on(
+            b"WIPEDCOY",
+            Side::Left,
+            Nav::Default,
+            b"WIPE / DECOY",
+            &[
+                b"It can wipe your PQ1",
+                b"or open a decoy",
+                b"wallet instead.",
+            ],
+        ),
+        detail_on(
+            b"DECOY",
+            Side::Right,
+            Nav::Default,
+            b"DECOY",
+            &[
+                b"A decoy holds real",
+                b"funds and can sign,",
+                b"separate from yours.",
+            ],
+        ),
+        hero(b"DWIPE", b"WIPE DEVICE?")
+            .finish()
+            .unwrap_or(Screen::BLANK),
+        hero(b"DDECOY", b"OPEN DECOY WALLET?")
+            .nav(Nav::LeftOnly)
+            .finish()
+            .unwrap_or(Screen::BLANK),
+    ]
+}
+
+/// Before the decoy wallet's words (owner wording 2026-10-16): two pages,
+/// then [`show_words`]. The first has no way back (the choice is made and
+/// the decoy's phrase drawn).
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test", test))]
+#[must_use]
+pub fn decoy_intro() -> [Screen; 3] {
+    [
+        detail_on(
+            b"DCYWORDS",
+            Side::Right,
+            Nav::RightOnly,
+            b"DECOY WORDS",
+            &[
+                b"Your PQ1 will now",
+                b"generate the decoy's",
+                b"24-word phrase.",
+            ],
+        ),
+        detail_on(
+            b"DCYAPART",
+            Side::Left,
+            Nav::Default,
+            b"KEEP APART",
+            &[
+                b"Write them down too,",
+                b"apart from your real",
+                b"recovery phrase.",
+            ],
+        ),
+        show_words(),
     ]
 }
 
@@ -198,7 +314,16 @@ mod tests {
     fn all() -> std::vec::Vec<Screen> {
         let mut v = intro().to_vec();
         v.extend(backup_intro());
-        v.extend([pin_help(), written(), hidden(), paused(), import_intro()]);
+        v.extend(duress_intro());
+        v.extend(decoy_intro());
+        v.extend([
+            pin_help(),
+            written(),
+            quiz_intro(),
+            hidden(),
+            paused(),
+            import_intro(),
+        ]);
         v
     }
 
@@ -230,16 +355,30 @@ mod tests {
         assert_eq!(confirmable, [CONFIRM_HELP, CREATE, IMPORT]);
         assert_eq!(i[CREATE].caption(), b"CREATE NEW WALLET?");
         assert_eq!(i[IMPORT].caption(), b"IMPORT WALLET?");
-        for s in [pin_help(), hidden(), paused(), import_intro()] {
+        for s in [pin_help(), quiz_intro(), hidden(), paused(), import_intro()] {
             assert!(!s.commit(), "{s:?}");
         }
-        for s in backup_intro() {
-            assert!(
-                !s.confirmable(),
-                "nothing on the way to the words asks: {s:?}"
-            );
+        // Each intro to a set of words asks once, on its last page: the
+        // click that shows the words. Nothing before it can.
+        for intro in [&backup_intro()[..], &decoy_intro()[..]] {
+            let (last, before) = intro.split_last().unwrap();
+            assert_eq!(last.caption(), b"CONFIRM TO SHOW WORDS");
+            assert!(last.commit());
+            for s in before {
+                assert!(
+                    !s.confirmable(),
+                    "nothing on the way to the words asks: {s:?}"
+                );
+            }
         }
         assert!(written().commit());
+        // The duress pages end on the two choices and nothing else asks: the
+        // duress PIN cannot be skipped (owner 2026-10-16).
+        let d = duress_intro();
+        let asking: std::vec::Vec<usize> = (0..d.len()).filter(|&k| d[k].confirmable()).collect();
+        assert_eq!(asking, [DURESS_WIPE, DURESS_DECOY]);
+        assert_eq!(d[DURESS_WIPE].caption(), b"WIPE DEVICE?");
+        assert_eq!(d[DURESS_DECOY].caption(), b"OPEN DECOY WALLET?");
     }
 
     /// The arrows are the navigation indicators: the first screen points
@@ -259,7 +398,7 @@ mod tests {
             Some(Nav::RightOnly),
             "no way back from the first"
         );
-        let sides: std::vec::Vec<_> = b.iter().map(|s| s.side()).collect();
+        let sides: std::vec::Vec<_> = b[..5].iter().map(|s| s.side()).collect();
         assert_eq!(
             sides,
             [
@@ -269,9 +408,14 @@ mod tests {
                 Some(Side::Left),
                 Some(Side::Right)
             ],
-            "the disc crosses the panel on every page"
+            "the disc crosses the panel on every page before the ask"
         );
         assert_eq!(import_intro().nav(), Some(Nav::Intro));
         assert_eq!(written().nav(), Some(Nav::LeftOnly));
+        // No way back into a step already done; the last ask, left only.
+        for pages in [&backup_intro()[..], &duress_intro()[..], &decoy_intro()[..]] {
+            assert_eq!(pages[0].nav(), Some(Nav::RightOnly), "{:?}", pages[0]);
+            assert_eq!(pages[pages.len() - 1].nav(), Some(Nav::LeftOnly));
+        }
     }
 }

@@ -345,14 +345,13 @@ play-hw-px: ## Interactive NV3007 play with the pixel trusted UI (ui-px), physic
 PX_EXTRA_FEATURES ?=
 
 
-# on the real OLED. No SE, no provisioning (mock-se + duress-ui-test
-# short-circuits into a dialog loop at boot). Driven by the PHYSICAL
-# perfboard buttons (gpio-buttons: LEFT=PC1/D8, RIGHT=PA8/D9; both = OK,
-# long-left = cancel) — same input path as `play-hw-display`, so no host
-# key-forwarder is needed. wallet_run_hw.py still streams the OLED debug
-# lines if you want them.
+# §32 duress setup screens on a board, mock-se: the first-boot wizard runs
+# its duress steps (duress-ui-test: shown, never stored). Driven by the
+# PHYSICAL buttons (gpio-buttons) — same input path as `play-hw-display`,
+# so no host key-forwarder is needed. wallet_run_hw.py still streams the
+# debug lines if you want them.
 play-hw-duress-ui:
-	@echo "==> Building §32 duress-PIN UI harness (mock-se, dialogs only)"
+	@echo "==> Building §32 duress setup screens (mock-se, nothing stored)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \

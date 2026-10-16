@@ -56,33 +56,6 @@ use zeroize::Zeroize;
 // Each painter returns `true` when the pixel UI showed the screen; `false`
 // (no `ui-px`, or no verified atlas) means the caller paints its 16×4 page.
 
-/// The chooser ask (`status_map::choice`), shown and ANIMATED for the whole
-/// input wait (#783). Only the duress yes / no still uses it; the setup
-/// choice is a page of the setup pager ([`pager`]).
-///
-/// Returns `None` when the pixel UI could not paint it, and the caller falls
-/// back to its 16x4 page plus an ordinary `wait_button` — the same contract
-/// the old `px_choice` had, except the wait now belongs to the painter.
-///
-/// It has to be one call, not paint-then-wait. The chooser ask is a
-/// `Kind::Hero`, the one non-dialog screen whose `Anim::step` never returns
-/// false (`scene::plays_forever`), so "play it until it rests" cannot
-/// terminate: `play_screen`'s 3 s cap was its NORMAL exit and it fired 40%
-/// into a 5 s sweep, stranding the disc off-centre. And because the old
-/// paint loop sampled no input at all, a tap inside those 3 s was dropped.
-/// Animating from inside the input wait removes both.
-#[cfg(all(feature = "ui-px", any(feature = "duress-pin", feature = "duress-ui-test")))]
-fn px_choice_wait(
-    title: &[u8],
-    option: &[u8],
-    idle: &mut dyn FnMut() -> bool,
-) -> Option<Option<(Button, Press)>> {
-    match super::px::screens::show_waiting(&super::px::status_map::choice(title, option), idle) {
-        super::px::screens::Waited::NoAtlas => None,
-        super::px::screens::Waited::Event(ev) => Some(ev),
-    }
-}
-
 /// Words a seed page holds on the pixel grid (two columns of four).
 #[cfg(feature = "ui-px")]
 const PX_WORDS_PER_PAGE: usize = 8;
@@ -355,29 +328,40 @@ pub fn choose_pin() -> Option<[u8; PIN_LEN]> {
     }
 }
 
-/// Create: the intro, the 24 words, CONFIRM TO VERIFY WORDS, then three typed
-/// checks. Returns once the user has walked every page and passed the
-/// checks; it never gives up on `m`, so the words the user wrote down stay
-/// the words of this wallet.
-pub fn create_backup(m: &Mnemonic) {
-    let intro = setup_screens::backup_intro();
+/// The words of a wallet being created: `intro` (its last page is CONFIRM
+/// TO SHOW WORDS; the real wallet's five pages, or the decoy's two), the 24
+/// words, CONFIRM TO VERIFY WORDS, the QUIZ page, then three typed checks.
+/// Returns once the user has walked every page and passed the checks; it
+/// never gives up on `m`, so the words the user wrote down stay the words of
+/// this wallet.
+pub fn create_backup(m: &Mnemonic, intro: &[Screen]) {
     let written = [setup_screens::written()];
-    // Back from the first word page lands on the intro's last page.
+    let quiz = [setup_screens::quiz_intro()];
+    let show = intro.len() - 1;
+    // Back from the first word page lands on the ask.
     let mut intro_at = 0;
     'intro: loop {
-        // Only a right tap off the last page leaves the intro: there is no
-        // back (the words are already drawn) and nothing to select.
-        while pager(&intro, intro_at, false, true) != PagerOut::Forward {}
+        // Only the ask on the last page opens the words: there is no back
+        // (the words are already drawn) and nothing past it.
+        while pager(intro, intro_at, false, false) != PagerOut::Selected(show) {}
         let mut start_last = false;
-        loop {
+        'words: loop {
             if show_mnemonic(m, start_last) != WizardResult::Confirmed {
-                // A left tap on the first page: back to the intro.
-                intro_at = intro.len() - 1;
+                // A left tap on the first page: back to the ask.
+                intro_at = show;
                 continue 'intro;
             }
-            if pager(&written, 0, true, false) == PagerOut::Back {
-                start_last = true;
-                continue;
+            loop {
+                // CONFIRM TO VERIFY WORDS: a left tap goes back to the words.
+                if pager(&written, 0, true, false) == PagerOut::Back {
+                    start_last = true;
+                    continue 'words;
+                }
+                // What the checks ask; a left tap goes back to the ask.
+                if pager(&quiz, 0, true, true) == PagerOut::Back {
+                    continue;
+                }
+                break;
             }
             if verify_mnemonic(m) == WizardResult::Confirmed {
                 return;
@@ -403,123 +387,73 @@ pub fn import_wallet() -> Option<Mnemonic> {
 }
 
 // ---------------------------------------------------------------------------
-// §32 P4/P5 — duress (decoy) PIN setup dialogs
+// §32 — the duress PIN at setup (owner flow 2026-10-16)
 // ---------------------------------------------------------------------------
 
-/// Hold the currently-rendered status message on screen for `ms`
-/// milliseconds so the user can read it before the next dialog redraws
-/// over it (e.g. an error before `enter_pin_with_confirm` reclaims the
-/// display). `timeout::now()` is a 1 kHz SysTick counter.
+/// The duress PIN chosen at setup and what it does. The PIN is wiped when
+/// this drops.
 #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
-fn hold_message(ms: u32) {
-    let start = timeout::now();
-    while timeout::now().wrapping_sub(start) < ms {
-        core::hint::spin_loop();
+pub struct DuressSetup {
+    pub pin: [u8; PIN_LEN],
+    /// The duress PIN wipes the device; otherwise it opens the decoy wallet.
+    pub wipe: bool,
+}
+
+#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+impl Drop for DuressSetup {
+    fn drop(&mut self) {
+        self.pin.zeroize();
+        crate::fi::zeroize_barrier();
     }
 }
 
-/// Two-option yes/no chooser (mirrors `choose_setup_mode`'s navigation:
-/// L/R move the `>` cursor, long-Right selects, long-Left cancels = No).
-/// Returns `None` only on idle-timeout (caller treats as decline).
+/// After the word quiz: the duress pages, the choice between WIPE DEVICE? and
+/// OPEN DECOY WALLET?, then SET / REPEAT DURESS PIN. It cannot be skipped
+/// (owner decision 2026-10-16): there is no way out but a duress PIN that
+/// differs from `main_pin`. A left hold on the PIN's first digit goes back
+/// to the choice.
 #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
-fn yes_no(title: &str) -> Option<bool> {
-    let options = ["No", "Yes"];
-    let mut idx: usize = 0;
+pub fn choose_duress(main_pin: &[u8; PIN_LEN]) -> DuressSetup {
+    use super::pin_entry::{enter_pin_with_confirm_titled, PinEntryResult};
+    let pages = setup_screens::duress_intro();
+    let mut start = 0;
     loop {
-        let mut idle = || timeout::is_idle();
-
-        #[cfg(feature = "ui-px")]
-        let waited = px_choice_wait(title.as_bytes(), options[idx].as_bytes(), &mut idle);
-        #[cfg(not(feature = "ui-px"))]
-        let waited: Option<Option<(Button, Press)>> = None;
-
-        let event = match waited {
-            Some(Some(ev)) => ev,
-            Some(None) => return None,
-            None => {
-                let d = display();
-                d.clear();
-                d.draw_line(0, title);
-                for (i, label) in options.iter().enumerate() {
-                    let mut row = [b' '; DISPLAY_COLS];
-                    row[0] = if i == idx { b'>' } else { b' ' };
-                    let lb = label.as_bytes();
-                    let max = core::cmp::min(lb.len(), DISPLAY_COLS - 2);
-                    row[2..2 + max].copy_from_slice(&lb[..max]);
-                    d.draw_line(i + 1, super::ascii_str(&row));
-                }
-                d.draw_line(3, "L=- R=+ LR=ok");
-                d.flush();
-                match input().wait_button(&mut idle) {
-                    Some(ev) => ev,
-                    None => return None,
-                }
-            }
-        };
-        timeout::reset_activity();
-        match event {
-            (Button::Right, Press::Short) => idx = (idx + 1) % options.len(),
-            (Button::Left, Press::Short) => idx = (idx + options.len() - 1) % options.len(),
-            (Button::Right, Press::Long) => return Some(idx == 1),
-            (Button::Left, Press::Long) => return Some(false), // cancel = No
-        }
-    }
-}
-
-/// §32 P4: optionally collect a duress (decoy) PIN at first-boot setup.
-/// Returns `Some(pin)` if the user set one, confirmed-DISTINCT from the
-/// main PIN; `None` to decline — the caller then provisions a decoy with
-/// a RANDOM PIN (always-provision preserves deniability either way).
-///
-/// Bounded to 3 distinct-PIN attempts so a user repeatedly entering the
-/// main PIN (or mismatching) can't lock themselves in the dialog — after
-/// that it falls back to `None` (random decoy) and setup proceeds.
-#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
-pub fn collect_duress_pin(main_pin: &[u8; PIN_LEN]) -> Option<[u8; PIN_LEN]> {
-    use super::pin_entry::{enter_pin_with_confirm, PinEntryResult};
-
-    match yes_no(" Set duress PIN?") {
-        Some(true) => {}
-        _ => return None,
-    }
-
-    for _ in 0..3 {
-        show_status("Duress PIN", "must differ");
-        match enter_pin_with_confirm() {
-            PinEntryResult::Pin(p) => {
-                // Constant-time-ish distinct check vs the main PIN.
-                let mut diff: u8 = 0;
-                for i in 0..PIN_LEN {
-                    diff |= p[i] ^ main_pin[i];
-                }
-                if diff == 0 {
-                    let mut pp = p;
-                    pp.zeroize();
-                    show_status("Same as main", "pick another");
-                    hold_message(1800);
-                    continue;
-                }
-                return Some(p);
-            }
-            PinEntryResult::Mismatch => {
-                show_status("PIN mismatch", "try again");
-                hold_message(1800);
+        let wipe = match pager(&pages, start, false, false) {
+            PagerOut::Selected(setup_screens::DURESS_WIPE) => true,
+            PagerOut::Selected(setup_screens::DURESS_DECOY) => false,
+            PagerOut::Selected(i) => {
+                start = i;
                 continue;
             }
-            PinEntryResult::Cancelled | PinEntryResult::IdleWipe => return None,
+            PagerOut::Forward | PagerOut::Back => continue,
+        };
+        start = if wipe { setup_screens::DURESS_WIPE } else { setup_screens::DURESS_DECOY };
+        loop {
+            match enter_pin_with_confirm_titled("Duress PIN", "Repeat duress PIN") {
+                PinEntryResult::Pin(mut p) => {
+                    // Constant-time-ish distinct check vs the main PIN.
+                    let mut diff: u8 = 0;
+                    for i in 0..PIN_LEN {
+                        diff |= p[i] ^ main_pin[i];
+                    }
+                    if diff == 0 {
+                        p.zeroize();
+                        crate::fi::zeroize_barrier();
+                        show_status("Same as main", "");
+                        continue;
+                    }
+                    let setup = DuressSetup { pin: p, wipe };
+                    p.zeroize();
+                    return setup;
+                }
+                PinEntryResult::Mismatch => show_status("PIN mismatch", ""),
+                // A left hold on the first digit: back to the choice.
+                PinEntryResult::Cancelled => break,
+                // No timeout in setup: hold for a press, then ask again.
+                PinEntryResult::IdleWipe => wait_for_press(),
+            }
         }
     }
-    // Exhausted attempts → decline (random decoy PIN).
-    None
-}
-
-/// §32 P5: ask whether a duress-PIN entry should WIPE the device rather
-/// than open the decoy wallet. `true` = wipe-on-duress. Only meaningful
-/// when a duress PIN was set; the caller persists the choice (default =
-/// decoy) before provisioning.
-#[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
-pub fn choose_duress_wipe_mode() -> bool {
-    matches!(yes_no("Wipe on duress?"), Some(true))
 }
 
 // ---------------------------------------------------------------------------

@@ -989,8 +989,22 @@ fn is_provisioned(se: &mut impl WalletStore) -> bool {
 ///
 /// Back from the PIN or from the import intro returns to the choice the user
 /// made; nothing restarts setup on a timeout (setup has none).
+/// What first-boot setup hands to provisioning.
 #[cfg(not(test))]
-fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
+struct FirstBoot {
+    mnemonic: sphincs_tz_bip39::Mnemonic,
+    /// The caller wipes it.
+    pin: [u8; 8],
+    /// The duress PIN and what it does (cannot be skipped; owner 2026-10-16).
+    #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+    duress: ui::seed_wizard::DuressSetup,
+    /// The decoy wallet's words, when the duress PIN opens a decoy.
+    #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+    decoy: Option<sphincs_tz_bip39::Mnemonic>,
+}
+
+#[cfg(not(test))]
+fn run_first_boot_wizard() -> FirstBoot {
     use ui::seed_wizard::{choose_pin, create_backup, import_wallet, setup_intro, SetupChoice};
     use zeroize::Zeroize;
 
@@ -1040,7 +1054,7 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
                 // The intro, every page, WORDS WRITTEN DOWN? and the three
                 // checks. It only returns once all of them are done, and it
                 // never trades `m` for a new seed.
-                create_backup(&m);
+                create_backup(&m, &ui::setup_screens::backup_intro());
                 m
             }
             SetupChoice::Import => {
@@ -1056,7 +1070,42 @@ fn run_first_boot_wizard() -> (sphincs_tz_bip39::Mnemonic, [u8; 8]) {
             }
         };
 
-        return (mnemonic, pin);
+        // ---- 4. The duress PIN, then (decoy) the decoy wallet's words ----
+        // Owner flow 2026-10-16: after the words, on both paths; it cannot
+        // be skipped. With `duress-ui-test` the screens run but nothing is
+        // stored (the decoy is provisioned only by `duress-pin`).
+        #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+        let duress = ui::seed_wizard::choose_duress(&pin);
+        #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+        let decoy = if duress.wipe {
+            None
+        } else {
+            secure_log!("[S] wizard: decoy wallet — generating its entropy");
+            // The decoy's seed is drawn like the real one (three-source
+            // `rng_strong`), here rather than inside provisioning, so its
+            // words can be shown and checked. A source failure is retried in
+            // place: restarting setup would throw away the real words the
+            // user has already written down.
+            let mut decoy_entropy = [0u8; 32];
+            while rng_strong::fill(&mut decoy_entropy).is_err() {
+                secure_log!("[S] wizard: rng_strong::fill FAILED (decoy)");
+                ui::show_status("RNG failed", "retry...");
+            }
+            let m = sphincs_tz_bip39::Mnemonic::from_entropy(&decoy_entropy);
+            decoy_entropy.zeroize();
+            crate::fi::zeroize_barrier();
+            create_backup(&m, &ui::setup_screens::decoy_intro());
+            Some(m)
+        };
+
+        return FirstBoot {
+            mnemonic,
+            pin,
+            #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+            duress,
+            #[cfg(any(feature = "duress-pin", feature = "duress-ui-test"))]
+            decoy,
+        };
     }
 }
 
@@ -1758,53 +1807,6 @@ fn main() -> ! {
     // Run via `make splash-test-hw`.
     #[cfg(feature = "splash-test")]
     ui::splash_test::run();
-
-    // §32 P4/P5 interactive UI harness. Short-circuits into a loop that
-    // drives JUST the duress-PIN setup dialogs on the real OLED — no SE,
-    // no wizard, no provisioning. Lets a bench operator validate the
-    // dialog rendering + button nav + the distinct-PIN reject + the
-    // wipe-mode chooser. Run: `make play-hw-duress-ui` (keyboard buttons
-    // forwarded via wallet_run_hw.py). The "main PIN" is fixed to
-    // 12345678 so the operator can verify the distinct-check rejects it.
-    #[cfg(feature = "duress-ui-test")]
-    unsafe {
-        // NB: use `secure_log!` (DHCSR.C_DEBUGEN-gated), NOT raw
-        // `hprintln!` — an ungated semihosting BKPT HardFaults when no
-        // debugger is attached (e.g. straight after a probe-rs download
-        // resets the board), hanging the device before the OLED renders.
-        use zeroize::Zeroize;
-        let main_pin: [u8; sphincs_tz_shared::PIN_LEN] = *b"12345678";
-        secure_log!("[DURESS-UI] harness ready. Main PIN = 12345678.");
-        secure_log!("[DURESS-UI] Try setting a duress PIN; enter 12345678 once to see the reject.");
-        loop {
-            ui::show_status("Duress UI test", "LR=start");
-            // Wait for any button to (re)start a pass.
-            let mut idle = || false;
-            let _ = ui::input().wait_button(&mut idle);
-
-            match ui::seed_wizard::collect_duress_pin(&main_pin) {
-                Some(mut p) => {
-                    secure_log!("[DURESS-UI] duress PIN accepted (distinct from main)");
-                    let wipe = ui::seed_wizard::choose_duress_wipe_mode();
-                    secure_log!("[DURESS-UI] wipe-on-duress = {}", wipe);
-                    ui::show_status(
-                        "Duress set",
-                        if wipe { "mode: WIPE" } else { "mode: DECOY" },
-                    );
-                    p.zeroize();
-                }
-                None => {
-                    secure_log!("[DURESS-UI] duress declined / exhausted -> random decoy");
-                    ui::show_status("Declined", "random decoy");
-                }
-            }
-            // Hold the result on screen ~2.5 s (readable), then loop.
-            let start = timeout::now();
-            while timeout::now().wrapping_sub(start) < 2500 {
-                cortex_m::asm::nop();
-            }
-        }
-    }
 
     // Isolated interactive pixel-UI bench (`ui-px-bench`, PROD_FORBIDDEN).
     // Hooked HERE: the display stack is up, but measured boot, PIN entry, the
@@ -4214,7 +4216,7 @@ fn main() -> ! {
             );
         }
         #[cfg(not(feature = "e2e-skip-provision"))]
-        crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin, None);
+        crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin, None, None);
         #[cfg(feature = "e2e-skip-provision")]
         {
             let _ = &mnemonic; // silence unused warning under this feature
@@ -4312,28 +4314,46 @@ fn main() -> ! {
                 }
             }
 
-            let (mnemonic, mut pin) = run_first_boot_wizard();
+            let first = run_first_boot_wizard();
+            let mnemonic = first.mnemonic;
+            let mut pin = first.pin;
 
-            // §32 P4: optionally collect a duress (decoy) PIN — ONLY on
-            // this unprovisioned first-boot path (never on the
-            // already-provisioned unlock path below). Declined / exhausted
-            // → None → a random decoy PIN is provisioned anyway
-            // (always-provision preserves deniability).
+            // §32: the duress PIN (`choose_duress`, inside the wizard: ONLY
+            // on this unprovisioned first-boot path, never on the unlock
+            // path below; it cannot be skipped, owner 2026-10-16) and, when
+            // it opens a decoy, the decoy's words the user wrote down. The
+            // decoy is always provisioned (deniability); with no words it
+            // gets fresh random entropy (the wipe mode).
             #[cfg(feature = "duress-pin")]
-            let mut duress_pin = ui::seed_wizard::collect_duress_pin(&pin);
+            let mut duress_pin: Option<[u8; sphincs_tz_shared::PIN_LEN]> = Some(first.duress.pin);
             #[cfg(not(feature = "duress-pin"))]
             let duress_pin: Option<[u8; sphincs_tz_shared::PIN_LEN]> = None;
+            #[cfg(feature = "duress-pin")]
+            let decoy = first.decoy;
+            #[cfg(feature = "duress-pin")]
+            let decoy_ref = decoy.as_ref();
+            #[cfg(not(feature = "duress-pin"))]
+            let decoy_ref: Option<&sphincs_tz_bip39::Mnemonic> = None;
+            // `duress-ui-test`: the screens ran; nothing is stored. Dropping
+            // the duress setup wipes its PIN; the decoy's words drop zeroed.
+            #[cfg(all(feature = "duress-ui-test", not(feature = "duress-pin")))]
+            {
+                secure_log!(
+                    "[S] [DURESS-UI] duress {} chosen; not stored in this build",
+                    if first.duress.wipe { "WIPE" } else { "DECOY" }
+                );
+                drop(first.duress);
+                drop(first.decoy);
+            }
 
-            // §32 P5: if a duress PIN was set, ask whether a duress entry
-            // should WIPE the device (vs the default: open the decoy).
-            // Persist the choice BEFORE provisioning — a crash after
-            // provision but before this write would silently downgrade
-            // wipe→decoy. Blank flash = decoy (safe default); we only
-            // ever 1→0 bit-clear here, so the wizard can only UPGRADE to
-            // wipe (stale-decoy is the conservative fallback).
+            // §32 P5: when the duress PIN wipes the device, persist that
+            // BEFORE provisioning — a crash after provision but before this
+            // write would silently downgrade wipe→decoy. Blank flash = decoy
+            // (safe default); we only ever 1→0 bit-clear here, so setup can
+            // only UPGRADE to wipe (stale-decoy is the conservative fallback).
             #[cfg(feature = "duress-pin")]
             {
-                if duress_pin.is_some() && ui::seed_wizard::choose_duress_wipe_mode() {
+                if first.duress.wipe {
                     // F26/LIFE-1 (cut point A): do NOT swallow an arm
                     // failure. `secure_log!` compiles out in production,
                     // so the old path kept provisioning with page-125
@@ -4374,7 +4394,13 @@ fn main() -> ! {
 
             ui::show_status("Provisioning", "...");
 
-            crypto::provision_from_mnemonic(&mut *core::ptr::addr_of_mut!(SE), &mnemonic, &pin, duress_pin.as_ref());
+            crypto::provision_from_mnemonic(
+                &mut *core::ptr::addr_of_mut!(SE),
+                &mnemonic,
+                &pin,
+                duress_pin.as_ref(),
+                decoy_ref,
+            );
             #[cfg(feature = "duress-pin")]
             {
                 use zeroize::Zeroize;

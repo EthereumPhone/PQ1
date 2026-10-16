@@ -505,12 +505,13 @@ duress-pin = ["dual-se", "optiga-hw-counter"]
 # cross-check). Asserts E121 bumped + E120 untouched, real wallet still
 # unlocks. Stays LcsO=Creation. Use `make duress-provision-hw`.
 duress-provision-e2e = ["duress-pin"]
-# §32 P4/P5 INTERACTIVE UI harness. Compiles ONLY the duress-PIN setup
-# dialogs (`collect_duress_pin` / `choose_duress_wipe_mode`) — NOT the
-# dual-SE / OPTIGA storage stack — so the wizard dialogs can be driven on
-# the real OLED with keyboard-forwarded buttons (`make play-hw-duress-ui`)
-# without standing up a full dual-SE provision. main.rs short-circuits
-# into a dialog loop at boot. Pure UI; pairs with mock-se + ui-oled.
+# §32 setup UI WITHOUT the duress storage: the first-boot wizard runs the
+# duress steps (`choose_duress`: the pages, WIPE DEVICE? / OPEN DECOY
+# WALLET?, the duress PIN, and for a decoy its 24 words and checks; owner
+# flow 2026-10-16) but nothing duress-related is provisioned (that is
+# `duress-pin`, which implies the irreversible `optiga-hw-counter`). For
+# driving the screens on a board that must not take `optiga-hw-counter`
+# (the EVT) and in QEMU. NEVER ships (no decoy is stored).
 duress-ui-test = []
 # Combined MCU page-124 + OPTIGA E120 + SE050 per-attempt and in-run
 # desynchronization/recovery E2E. It exercises ordinary three-way attempt

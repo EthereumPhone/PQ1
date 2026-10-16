@@ -1837,25 +1837,30 @@ fn negative_ns_flash_base_constants_match_proto_layout() {
 
 #[test]
 fn positive_duress_pin_collected_only_on_first_boot_and_threaded() {
-    // §32 P4: the duress-PIN dialog must run ONLY on the unprovisioned
-    // first-boot path (so it doesn't re-prompt on every unlock), and the
-    // collected PIN must be threaded into provisioning. Pin both: the
-    // collect call + that provision_from_mnemonic receives duress_pin
-    // (NOT the hardcoded `None` the e2e auto-provision path passes).
+    // §32: the duress PIN is chosen ONLY on the unprovisioned first-boot
+    // path (inside `run_first_boot_wizard`, so it never re-prompts on an
+    // unlock), it cannot be skipped (owner 2026-10-16: `choose_duress`
+    // returns a PIN, not an Option), and the PIN and the decoy's words are
+    // threaded into provisioning (NOT the hardcoded `None` the e2e
+    // auto-provision path passes).
+    let wizard = MAIN_SRC
+        .split("fn run_first_boot_wizard() -> FirstBoot {")
+        .nth(1)
+        .expect("the first-boot wizard must exist");
+    let wizard = &wizard[..wizard.find("\n}\n").unwrap_or(wizard.len())];
     assert!(
-        MAIN_SRC.contains("ui::seed_wizard::collect_duress_pin(&pin)"),
-        "first-boot wizard must collect a duress PIN",
+        wizard.contains("let duress = ui::seed_wizard::choose_duress(&pin);"),
+        "the first-boot wizard must choose the duress PIN"
+    );
+    assert_eq!(MAIN_SRC.matches("choose_duress(").count(), 1, "and only there");
+    assert!(
+        MAIN_SRC.contains("Some(first.duress.pin);"),
+        "the wizard's duress PIN must reach provisioning"
     );
     assert!(
-        MAIN_SRC.contains("&pin, duress_pin.as_ref())"),
-        "the wizard's provision_from_mnemonic must thread the collected duress PIN",
+        MAIN_SRC.contains("                &pin,\n                duress_pin.as_ref(),\n                decoy_ref,\n            );"),
+        "the wizard's provision_from_mnemonic must thread the duress PIN and the decoy's words"
     );
-    // Belt-and-braces: the collect call sits AFTER run_first_boot_wizard
-    // (the unprovisioned branch), not in the already-provisioned unlock
-    // loop which uses enter_pin() directly.
-    let collect_pos = MAIN_SRC.find("collect_duress_pin(&pin)").expect("collect present");
-    let wizard_pos = MAIN_SRC.find("run_first_boot_wizard();").expect("wizard present");
-    assert!(collect_pos > wizard_pos, "duress collection must follow run_first_boot_wizard");
 }
 
 #[test]
@@ -1863,10 +1868,11 @@ fn positive_wipe_on_duress_flag_armed_before_provision() {
     // §32 P5: the wipe-on-duress flag MUST be written BEFORE
     // provision_from_mnemonic — a crash after provision but before the
     // flag write would silently downgrade the user's chosen wipe mode to
-    // the decoy default. Pin the ordering in the first-boot wizard.
+    // the decoy default. Pin the ordering in the first-boot path.
     let arm_pos = MAIN_SRC.find("arm_duress_wipe_mode()").expect("arm present");
-    // The wizard's provision call threads `duress_pin.as_ref()`.
-    let prov_pos = MAIN_SRC.find("&pin, duress_pin.as_ref())").expect("wizard provision present");
+    let prov_pos = MAIN_SRC
+        .find("                duress_pin.as_ref(),\n                decoy_ref,")
+        .expect("wizard provision present");
     assert!(
         arm_pos < prov_pos,
         "arm_duress_wipe_mode must be written BEFORE provision_from_mnemonic",
@@ -1886,7 +1892,7 @@ fn negative_wipe_on_duress_arm_failure_is_not_swallowed() {
     // duress prodtest also reference these symbols and would win a
     // plain `find`).
     let base = MAIN_SRC
-        .find("duress_pin.is_some() && ui::seed_wizard::choose_duress_wipe_mode()")
+        .find("                if first.duress.wipe {")
         .expect("wizard duress-mode choice present");
     let err_pos = base
         + MAIN_SRC[base..]

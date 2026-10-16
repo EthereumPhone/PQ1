@@ -226,6 +226,7 @@ pub fn classify(title: &str, sub: &str) -> Status {
         "Set new PIN" => Status::PinPrompt(b"SET PIN"),
         "Confirm PIN" => Status::PinPrompt(b"REPEAT PIN"),
         "Duress PIN" => Status::PinPrompt(b"SET DURESS PIN"),
+        "Repeat duress PIN" => Status::PinPrompt(b"REPEAT DURESS PIN"),
         "PIN locked" => v(b"PINLOCK", Icon::Lock, State::Failed, ResultMark::None, &[b"PIN LOCKED", sb]),
         "Locked" | "Idle" => v(b"LOCKED", Icon::Lock, State::Failed, ResultMark::None, &[b"LOCKED", if eq(s, "retry...") { b"" } else { sb }]),
         // ---- rest / outcomes --------------------------------------------------
@@ -339,11 +340,10 @@ pub fn letter_row(title: &[u8], buf: &[u8], len: usize) -> Screen {
         .unwrap_or(Screen::BLANK)
 }
 
-/// A two-option chooser (the duress yes / no, and the bench): the hero asks
-/// the highlighted option; taps switch it. The setup choice is no longer one
-/// (its create / import heroes are pages of the setup pager).
+/// A two-option chooser: the hero asks the highlighted option. Only the bench
+/// uses it now (the setup and duress choices are pages of the setup pager).
 #[must_use]
-#[cfg_attr(not(any(feature = "duress-pin", feature = "duress-ui-test", feature = "ui-px-bench")), allow(dead_code))]
+#[cfg_attr(not(feature = "ui-px-bench"), allow(dead_code))]
 pub fn choice(title: &[u8], option: &[u8]) -> Screen {
     let mut buf = [b' '; CAPTION_LEN];
     let mut n = 0usize;
@@ -834,6 +834,8 @@ mod tests {
                     // intro, PIN, the words and their checks, import, done.
                     let mut v = crate::ui_setup_screens::intro().to_vec();
                     v.extend(crate::ui_setup_screens::backup_intro());
+                    v.extend(crate::ui_setup_screens::duress_intro());
+                    v.extend(crate::ui_setup_screens::decoy_intro());
                     v.extend([
                         crate::ui_setup_screens::pin_help(),
                         pin_row(b"SET PIN", &[0; 8], 0),
@@ -843,9 +845,13 @@ mod tests {
                         crate::ui_setup_screens::hidden(),
                         crate::ui_setup_screens::paused(),
                         crate::ui_setup_screens::written(),
+                        crate::ui_setup_screens::quiz_intro(),
                         letter_row(b"Check word 5", b"abaa", 2),
                         st("Wrong word", ""),
                         crate::ui_setup_screens::import_intro(),
+                        pin_row(b"SET DURESS PIN", &[0; 8], 0),
+                        pin_row(b"REPEAT DURESS PIN", &[0; 8], 0),
+                        st("Same as main", ""),
                         candidate_list(b"Word 3 of 24"),
                         st("No match", ""),
                         st("Bad checksum", "retry..."),

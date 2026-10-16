@@ -492,6 +492,7 @@ pub fn provision_from_mnemonic(
     mnemonic: &Mnemonic,
     pin: &[u8; 8],
     duress_pin: Option<&[u8; 8]>,
+    decoy: Option<&Mnemonic>,
 ) {
     let mut entropy = mnemonic
         .to_entropy()
@@ -546,13 +547,13 @@ pub fn provision_from_mnemonic(
     // the wizard. If the decoy provision fails, wipe BOTH wallets so the
     // next cold boot restarts the wizard cleanly (no stuck state).
     #[cfg(feature = "duress-pin")]
-    if provision_duress_wallet(store, duress_pin).is_err() {
+    if provision_duress_wallet(store, duress_pin, decoy).is_err() {
         let _ = store.factory_reset_admin();
         panic!("duress provisioning failed — wiped both wallets for wizard restart");
     }
 
     #[cfg(not(feature = "duress-pin"))]
-    let _ = duress_pin;
+    let _ = (duress_pin, decoy);
 }
 
 /// §32: generate + store an independent decoy wallet behind the duress
@@ -576,12 +577,23 @@ fn fill_strong_with_store<const N: usize>(
 fn provision_duress_wallet(
     store: &mut impl crate::secure_element::WalletStore,
     duress_pin: Option<&[u8; 8]>,
+    decoy: Option<&Mnemonic>,
 ) -> Result<(), crate::secure_element::SeError> {
-    // Fresh independent decoy entropy: STM32 TRNG XOR the SE-combined TRNG
+    // The decoy's entropy: the words the user wrote down at setup when the
+    // duress PIN opens a decoy (drawn by the wizard from the three-source
+    // `rng_strong`, checksum-verified by construction); otherwise fresh,
+    // independent entropy here: STM32 TRNG XOR the SE-combined TRNG
     // (OPTIGA ⊕ SE050 via the store) — same multi-source quality as the
     // real seed path, no re-entrancy (we are not inside a store method).
     let mut decoy_entropy = [0u8; 32];
-    fill_strong_with_store(store, &mut decoy_entropy)?;
+    match decoy {
+        Some(m) => {
+            decoy_entropy = m
+                .to_entropy()
+                .expect("the decoy mnemonic was built from entropy");
+        }
+        None => fill_strong_with_store(store, &mut decoy_entropy)?,
+    }
 
     // Resolve the duress PIN: user-chosen, or a fresh random 8 bytes when
     // declined (never entered by anyone → unguessable; the chip can't

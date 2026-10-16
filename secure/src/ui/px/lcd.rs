@@ -1316,7 +1316,7 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
 ///
 /// 180 s: comfortably past the 120 s boundary, so the degraded state has been
 /// established and read off the glass before the gate is closed again.
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 const ONE_SHOT_RESET_MS: u32 = 180_000;
 
 /// #805 condition (d): the boot-time one-shot `fi::wait_random()` fallback
@@ -1325,17 +1325,17 @@ const ONE_SHOT_RESET_MS: u32 = 180_000;
 ///
 /// Measured rather than inferred because the carve-out requires it; see the
 /// rationale on `crate::rng::NONSECRET_CALLS`.
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 static FALLBACK_SHOT_CALLS: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 static FALLBACK_SHOT_FB: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 static FALLBACK_SHOT_MISSES: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
 /// Publish the boot probe for the overlay: worst-case pool draw of any single
 /// fill in the length sweep, total fallbacks, total pool misses.
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 pub fn set_fallback_probe(max_hits: u32, fallbacks: u32, misses: u32) {
     use core::sync::atomic::Ordering::Relaxed;
     FALLBACK_SHOT_CALLS.store(max_hits, Relaxed);
@@ -1343,6 +1343,7 @@ pub fn set_fallback_probe(max_hits: u32, fallbacks: u32, misses: u32) {
     FALLBACK_SHOT_MISSES.store(misses, Relaxed);
 }
 
+#[cfg(feature = "ui-px-bench")]
 /// An endless ambient screen, animated against real input (#783).
 ///
 /// WHY THIS EXISTS. `play_screen` plays a record "until it rests", and for a
@@ -1383,7 +1384,7 @@ pub struct Ambient {
 }
 
 /// The ambient overlay's accumulators (bench only).
-#[cfg(feature = "ui-px-frametime")]
+#[cfg(all(feature = "ui-px-frametime", feature = "ui-px-bench"))]
 #[derive(Default)]
 struct AmbientFt {
     max_stream: u32,
@@ -1407,6 +1408,7 @@ struct AmbientFt {
     reset_fired: bool,
 }
 
+#[cfg(feature = "ui-px-bench")]
 impl Ambient {
     /// Start animating `s` and paint its first frame NOW.
     ///
