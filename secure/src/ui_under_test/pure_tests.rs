@@ -1660,6 +1660,44 @@ fn negative_pq1_resets_the_optiga_once_per_reinit_cycle() {
 }
 
 #[test]
+fn negative_pq1_optiga_provisioning_resets_only_on_demand() {
+    // EVT 2026-10-16: pq1's OPTIGA ran the whole write sequence with no
+    // throttle reset and zero retries (OPTIGA phase 4.1 s -> 1.4 s), and the
+    // wallet unlocked before and after a power cycle. ASSUMPTION ATTACKED:
+    // (a) pq1 loses the retry, so a chip that does throttle fails setup;
+    // (b) a reset site comes back unconditional on pq1; (c) iota2, where the
+    // throttle was seen, loses its resets.
+    let start = OPTIGA_MOD_SRC.find("fn on_demand<T>(").expect("on_demand");
+    let end = start + OPTIGA_MOD_SRC[start..].find("\n    }\n").expect("end");
+    let od = &OPTIGA_MOD_SRC[start..end];
+    let pq1 = od
+        .find("#[cfg(all(feature = \"stm32u585\", feature = \"board-pq1\"))]")
+        .expect("(a) the pq1 retry path");
+    let retry = &od[pq1..];
+    let reset = retry.find("self.hard_reset_and_reinit()?;").expect("(a) resets on failure");
+    let shield = retry.find("self.ensure_shield()?;").expect("(a) re-handshakes");
+    let again = retry.find("f(self)\n").expect("(a) retries");
+    assert!(reset < shield && shield < again);
+    assert_eq!(retry.matches("f(self)").count(), 3, "(a) one try, one retry, and the plain path");
+    assert!(od.contains("#[cfg(not(all(feature = \"stm32u585\", feature = \"board-pq1\")))]\n        f(self)"));
+    // (b)/(c): in store_objects every throttle reset is iota2-only.
+    let so = OPTIGA_MOD_SRC.find("    fn store_objects(").expect("store_objects");
+    let so_end = so + OPTIGA_MOD_SRC[so..].find("\n    }\n").expect("end");
+    let body = &OPTIGA_MOD_SRC[so..so_end];
+    let gated = "#[cfg(all(feature = \"stm32u585\", not(feature = \"board-pq1\")))]";
+    assert_eq!(body.matches(gated).count(), 3, "(b)/(c) PBS, auth_ref and per-OID resets");
+    assert!(!body.contains("#[cfg(feature = \"stm32u585\")]\n            self.hard_reset_and_reinit()?;"));
+    // The steps go through on_demand.
+    for step in [
+        "self.on_demand(|s| s.ensure_shield())?;",
+        "self.on_demand(|s| unsafe { s.provision_auth_ref(cred.expose_for_optiga()) });",
+        "self.on_demand($call)",
+    ] {
+        assert!(body.contains(step), "missing: {step}");
+    }
+}
+
+#[test]
 fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
     // Signing and the timing-uniform unlock path must never draw from a chip
     // wait: only `provision_from_mnemonic` holds the guard.

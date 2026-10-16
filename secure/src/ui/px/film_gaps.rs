@@ -231,8 +231,8 @@ pub fn rows2(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     push(&mut out[1], &mut n, b' ');
     push(&mut out[1], &mut n, b'E');
     push_u32(&mut out[1], &mut n, r.steps[3]);
-    // The OPTIGA reset-on-demand experiment: steps that needed a reset.
-    #[cfg(feature = "optiga-reset-on-demand")]
+    // pq1's OPTIGA writes: steps that needed a throttle reset after all.
+    #[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
     {
         push(&mut out[1], &mut n, b' ');
         push(&mut out[1], &mut n, b'R');

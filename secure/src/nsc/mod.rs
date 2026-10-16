@@ -431,8 +431,6 @@ compile_error!(
         feature = "ui-px-frametime",
         // Provisioning film-gap recorder: adds a diagnostics page to setup.
         feature = "ui-px-film-gaps",
-        // Dev experiment: provisioning skips the OPTIGA throttle resets.
-        feature = "optiga-reset-on-demand",
         // #846 negative control: removes the one-at-a-time gateway gate
         // from the veneer path. Never ship — a shipping image with this on
         // reinstates the re-entrancy #846 fixed.
