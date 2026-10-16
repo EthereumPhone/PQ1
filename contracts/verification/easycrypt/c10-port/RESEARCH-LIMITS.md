@@ -12,9 +12,15 @@ independent sampling, including exact first-hit, returned-event and exhaustion
 probabilities. It now derives the C10 WOTS/FORS projection PMFs from a full
 uniform 256-bit digest, proves the 32-byte big-endian bijection and exact
 quotient/remainder formulas, and transfers the bounded search through those
-projections without losing counters or failure. The full probability-monad
-forgery-game theorem and actual memoized-search/session transfer remain open.
-A countermodel shows why cached replies cannot simply be counted as fresh.
+projections without losing counters or failure. The persistent memo-table
+model now proves result-distribution equivalence for distinct keys absent from
+the initial history. Serialized 32-byte WOTS counter schedules establish local
+distinctness, not absence from arbitrary earlier queries. A separate actual
+collision detector for independent uniform keys proves the prior-history plus
+birthday bound, including a 128-bit key-space instance. The full probability-monad
+forgery-game theorem and shared R/H_msg signer-session transfer remain open.
+Cached and prefilled-key examples show why local counter uniqueness alone
+cannot establish independent fresh sampling.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

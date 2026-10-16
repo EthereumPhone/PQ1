@@ -19,6 +19,8 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10Encoding.ec'
       - 'sphincs-c10/src/wots.rs'
       - 'sphincs-c10/src/fors.rs'
+      - 'sphincs-c10/src/hash.rs'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec'
   pull_request:
     paths: *probability_paths
 
@@ -58,6 +60,6 @@ jobs:
           key: lean-probability-deps-${{ hashFiles('contracts/verification/probability/lake-manifest.json', 'contracts/verification/probability/lean-toolchain') }}
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
-        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic
+        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
       - name: verify-probability (fresh kernel build, claims and typed controls)
         run: make -C contracts/verification verify-probability

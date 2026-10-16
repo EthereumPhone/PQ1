@@ -187,11 +187,14 @@ and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESE
 bounded first-hit, returned-event and exhaustion laws. It derives C10 WOTS/FORS
 projection distributions from a full uniform 256-bit digest and an explicit
 32-byte big-endian bijection, and transfers the bounded search through those
-projections while preserving counters and failure. All 81 theorem closures
-and 29 typed cases are gated separately; `lean/` stays mathlib-free. The
-repeated-reply countermodel remains: #295 is open for the full probability-monad
-forgery game and actual memoized-search transfer. No cross-kernel probability
-or deployed hash-independence claim is made.
+projections while preserving counters and failure. A persistent memo-table
+search now refines that sampler for distinct initially fresh keys; serialized
+32-byte counter schedules discharge distinctness, while prior-history freshness
+remains explicit. An independent uniform-key collision detector has a proved
+history-plus-birthday bound. All 115 theorem closures and 43 typed cases are
+gated separately; `lean/` stays mathlib-free. #295 remains open for the full
+probability-monad forgery game and shared signer-session transfer. No cross-kernel
+probability or deployed hash-independence claim is made.
 
 **EasyCrypt coverage tightening (2026-10-15):** exact Stirling and falling-factorial
 counts replace the earlier canonical overcount in the adaptive FORS coverage

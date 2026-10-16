@@ -1,16 +1,19 @@
 {
   "schema": 1,
-  "scope": "Full uniform256bit digest projections and bounded independent-search transfer; no memoized-oracle or complete forgery-game transfer.",
+  "scope": "Memoized PMF search with distinct initially fresh-key refinement, serialized counter schedules and an independent uniform-key collision bound; no full session or forgery-game transfer.",
   "sources": {
-    "Audit.lean": "a894f3c2ed903c16848603e84ac0921240a77a52887b279bfc5da609894e448e",
+    "Audit.lean": "80d3134831f772b4c0694c900f90fb6ff9376c379d1ba35bdc12b766b113d24b",
     "C10Probability/Boundaries.lean": "b2715545caea41d26f97145c73bee8c8a57adced252eb517d2a630a5424b2fd9",
+    "C10Probability/Counter.lean": "dee39cd6074d94e7e816bdc88ec9ebc5fd0d251e7feda6833540a1d4df1aac57",
     "C10Probability/Digest.lean": "fb67b058bab333230a65acb788c69484cb6b0413ac4b39810525b0b940c4adfb",
     "C10Probability/DigestGrind.lean": "0fa9f04c8292263ef4147dbf418a6fb2eb1b0b363915d943b6a9b02e19093816",
     "C10Probability/Grind.lean": "0798b393b52a313213d8be2d4079ffa462dd860595b7760d2d7a836bc76557ad",
+    "C10Probability/KeyCollision.lean": "fcd6aad405882f45796804afbd3dd8ff1540cadd188478400213247d49731473",
+    "C10Probability/Memo.lean": "b913443857594d93b0c4a1c2598131e6ff5701c0d7a82635e3b1fb31ace85d42",
     "C10Probability/Projections.lean": "a75db239651fc102f691c001b6992101e322e6a20d71e59744648c366d8e45c9",
     "C10Probability/Returned.lean": "bfff3d01a295f769809a757cea3b63baea09040c5f8feb940384df2482b711c6",
     "C10Probability/Uniform.lean": "226b4108a3d3d9eb10e6cdb3efbf2bb6b46811f361a5d0bed485a9e3058a5a02",
-    "C10Probability.lean": "e5a28811aeb3951087185abf101789b129284fce168b0cb8e0220200a3410c6f"
+    "C10Probability.lean": "34a9597a679fa69cff0bb0f97db8e5302f420481dfd9ae5fe4869d7db5697990"
   },
   "theorems": {
     "C10Probability.budget_zero": {
@@ -48,6 +51,54 @@
     "C10Probability.repeated_reply_not_iid": {
       "file": "C10Probability/Boundaries.lean",
       "statement_sha256": "a071da5f73ec5dc0ea19d15641c027b64cc8af3a47350b6ed521aeb87eb7abf2"
+    },
+    "C10Probability.counter_byte_value": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "2842e2e569d604ebdda3e093e665c61dac70451a90bf9e3ff436becd813c2631"
+    },
+    "C10Probability.counter_leading_zero": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "c00332542cde84e4d7ab4dd34ae922bf2e0fa8d897c559067f46d478dd775b64"
+    },
+    "C10Probability.counter_last_byte": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "742efdf836c0987f1a4abc347516e4adb43bf3393233f96334ddfd0d3659513a"
+    },
+    "C10Probability.counter_bytes_injective": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "849f94cff89acbecd72e18754f8349c12384480b7a6d1369d913e319e7ae07ea"
+    },
+    "C10Probability.counter_key_length": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "a23de275fead54a68140660d5f69e96eed08deb9411c69add5755335ad5d4dc0"
+    },
+    "C10Probability.counter_key_injective": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "90cae3917c5cd0172628c4eee62dd52b4a800263d72af8b3de8563b0e94b2efe"
+    },
+    "C10Probability.counter_schedule_length": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "e19f90905bc7d8eb565ef5e859e34d51d5cfec6a2c944bba9b6ed52ed3bd450e"
+    },
+    "C10Probability.counter_schedule_nodup": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "27ec2bc2ac51c57eda8351a77bc4feab21e76f7d8b45176d3833196c1342ae96"
+    },
+    "C10Probability.signing_counter_fits": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "bae25d7c2b2a00452794827c27e3d7735388a3d2b03865f712869aa0dbaf603c"
+    },
+    "C10Probability.counter_grind_fresh": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "1d2514bb3c1fe7944fcbc141d72684ee033840b0d01bc32180b97ed73b7592d8"
+    },
+    "C10Probability.wots_memo_projection": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "0196bd751e3a608faad9b1ca0ca4ff0514277d8f7b96fc6b7d45fba7ab8430a0"
+    },
+    "C10Probability.wots_memo_exhaustion": {
+      "file": "C10Probability/Counter.lean",
+      "statement_sha256": "78f26ff7b59d7119fcc3d94541bde651bb5f08ec9a287f1202a3b2b592c424e0"
     },
     "C10Probability.bytes_digest_value": {
       "file": "C10Probability/Digest.lean",
@@ -245,6 +296,94 @@
       "file": "C10Probability/Grind.lean",
       "statement_sha256": "064f3132bc6063dd2c4696ab1ae0c57055ed2ce554ced754c261f085578577bd"
     },
+    "C10Probability.collision_pairs_zero": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "1724a43498158157b9c286797c93c1691644871db03f07e667c7ecc741d2070d"
+    },
+    "C10Probability.collision_pairs_step": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "c5712aaec4fccfb31a93f152d1478b3dbb374fb3b8395f6551d11515842b76d7"
+    },
+    "C10Probability.collision_pairs_formula": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "b41ec47d7760203a3a66e3237fba48a555e28e0ce7031336d698dcd9f60fd584"
+    },
+    "C10Probability.uniform_seen_mass": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "52cdade20e5a7cbaa20b8a2aafd2cc271094796f7b28572fd469aa2297edcf1d"
+    },
+    "C10Probability.key_collision_bound": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "451f6aecdf1d45c90b18181c385ef26081a8336eea5e796560d92ca1be1a6053"
+    },
+    "C10Probability.key_collision_one": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "b485b30bdb6e6870c1aa82328d5232aa7c2d7f822c2e912c0ddd1509244ff954"
+    },
+    "C10Probability.key_collision_empty_one": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "7546d9a105ab3f53efa64dde89b3009dcc3b75e1276b0553a81f70ce734872ed"
+    },
+    "C10Probability.key_collision_all_one": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "856f5644a3d297eccacc905cd35d22f7e16b052ed4962e504830b74f5c1c89c9"
+    },
+    "C10Probability.key_collision_bool_two": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "220f9423814a29a6adcabeab93a7dcb6e9bdb65c55830bb38e109512703eb6a9"
+    },
+    "C10Probability.key_collision_bound_real": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "b1c69a56ef31e8145d44ba3ab4a502a2457c0eae1f40d6369862a8b6cea349eb"
+    },
+    "C10Probability.randomizer_key_collision_bound": {
+      "file": "C10Probability/KeyCollision.lean",
+      "statement_sha256": "17fdd15a0f8341f67572b366bfb8e7c1e7c2c7a42defbd677cb0523a0ab1544a"
+    },
+    "C10Probability.memoQuery_cached": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "a0ada9771442dfc8814b7ca291dca1afb28551179bc802a6abed31bc69f1c4de"
+    },
+    "C10Probability.memoQuery_fresh": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "9a569fb47341f024a12916d3184b183afef3cbee95b017f643de1e6517c42429"
+    },
+    "C10Probability.memoQuery_stores": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "1b8b7e2bc86f82dad9aefc42c56ab7d2b5720f5ed8d7d15f61dda5c1e4d15517"
+    },
+    "C10Probability.memoQuery_other": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "8fe7d692dd14aec972ac9320876a9dd1802d9e6fc477fe9c9021f2acaf29dda8"
+    },
+    "C10Probability.memoQuery_preserves": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "2cdd3eb7b5221d39b777900d462748054933b00ad44306124396902c3c5440cb"
+    },
+    "C10Probability.memoGrind_preserves": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "b072902c45f80cab5867e2eacb8854526f78b69883c643be9453ec78449203df"
+    },
+    "C10Probability.memoGrind_fresh": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "bac8ad5664af9a62e60f0833081584a96db1b6d32c63e6112ae8f6432bc4caa5"
+    },
+    "C10Probability.memoGrind_empty": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "23afc541835579c041ca2342da6a58bd44cf579ecfa68ddcb87ad99a09f02d69"
+    },
+    "C10Probability.memoGrind_repeat": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "6e482f9731841ee2550eaad7aa03036d38193555ade4ec46f75707c74d4d372d"
+    },
+    "C10Probability.memo_repeat_two_failure": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "fcb9628b233a423e4ccade88dd321e8e9bd10b10caece130937173fac03ab6a7"
+    },
+    "C10Probability.memo_prefilled_reject": {
+      "file": "C10Probability/Memo.lean",
+      "statement_sha256": "cf1c283e73d01ae1c2c93e76b8fba2cbf2b6a154c1a61e364535009d786a8528"
+    },
     "C10Probability.wots_mass_count": {
       "file": "C10Probability/Projections.lean",
       "statement_sha256": "b40fd49bdd46398dd27c14124530f45953d123a9d2cd389bc0ad900ef519598a"
@@ -347,7 +486,9 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWots.ec": "b0510301eba5d387e3199d216bae2772f5e27480bdb3a23f037881c59138a558",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/WotsAcceptanceMass.ec": "69249bbfb9b719e1c1303c607ca0238ac0add2f9eafbf4a5806f52653cf8079e",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Encoding.ec": "b90581c1aa6ee8300763763c8537f32c1f0e642fa13842ea39937786c36390a2",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec": "bf87e10779968fb910aa907188a7814a406def59d89e77534c12c3a13d8be7a2",
     "sphincs-c10/src/wots.rs": "6c28b721396b8e748e1a1a18d86e03c071b3878c366c58ad36fca164590d44c1",
-    "sphincs-c10/src/fors.rs": "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804"
+    "sphincs-c10/src/fors.rs": "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
+    "sphincs-c10/src/hash.rs": "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
   }
 }

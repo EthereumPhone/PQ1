@@ -3,8 +3,10 @@
 This is the separate mathlib project requested by
 [PQ1 #295](https://github.com/EthereumPhone/PQ1/issues/295). It proves bounded
 independent sampling and derives the C10 projection PMFs from a uniform full
-256-bit digest, within this Lean project. **The probability-monad forgery-game theorem
-and the connection to the actual memoized grinder remain open.** The existing
+256-bit digest, within this Lean project. It also proves a memoized-search
+refinement for distinct, initially fresh keys and bounds collisions in an
+independent uniform-key experiment. **The probability-monad forgery-game theorem
+and full signer-session transfer remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
 ## What is checked
@@ -62,16 +64,42 @@ and first-hit laws. An individual full returned digest has atom mass
 `1/2^256`; an individual WOTS projection has mass `1/8^43`. These outcomes are
 not conflated.
 
-The starting distribution is an explicit uniform independent-digest comparison
-experiment. No theorem here identifies each actual stateful hash call with
-that experiment. The integer formulas are manually transcribed from the
-existing EasyCrypt and Rust source specifications and bound to them by hashes.
-Those pins detect drift; they do not prove extraction, cross-kernel
-correspondence or freshness.
+`Memo.lean` models actual lookup and update: a present key returns its stored
+value without sampling, while an absent key draws and stores a reply. Existing
+entries survive both queries and the complete bounded search. The search keeps
+the final table even on exhaustion. Its returned-result distribution equals
+`grind` when the schedule has no duplicate keys **and every key is absent from
+the initial history**. Empty history witnesses this premise; uniqueness alone
+does not imply it. This theorem concerns the result marginal, not equality of
+a stateful distribution with a stateless one.
+
+`Counter.lean` instantiates the schedule with a fixed input stem followed by a
+full 32-byte big-endian counter block. It proves that the first 28 bytes are
+zero for a `u32`, proves key injectivity and bounded-schedule distinctness, and
+checks that the 10,000,000-trial cap fits. The WOTS digest projection and
+exhaustion laws then transfer under the explicit initial-history premise.
+Arbitrary earlier queries or an earlier signing call can invalidate it.
+
+`KeyCollision.lean` samples independent uniform keys, stops on a hit against
+its growing finite seen set, and returns a collision flag. For `n` trials,
+`h` existing keys and a nonempty key space of size `M`, the actual flag's
+probability is at most `(n*h + n*(n-1)/2)/M`. Both the history and pair terms
+are derived; the bound also has a real-valued form and a `2^128` key-space
+instantiation. It is an upper bound (possibly above one), not an equality or
+a claim that the concrete keyed-R stream meets this experiment. Connecting
+random-key collisions to the full shared R/H_msg session remains open.
+
+These programs and integer formulas are manually transcribed from the existing
+EasyCrypt and Rust source specifications and bound to them by hashes. Those
+pins detect drift; they do not prove extraction, cross-kernel correspondence,
+or global session freshness. No theorem equates concrete SHA-256 with this
+ideal sampler.
 
 `Boundaries.cached` draws once and reuses that reply. With a fair Boolean reply
 and two attempts, failure has probability `1/2`; two independent attempts fail
-with probability `1/4`. The strict inequality is kernel-checked. A repeated
+with probability `1/4`. The strict inequality is kernel-checked. `memoGrind` now reproduces
+the same `1/2` failure from actual persistent-table lookup, and a prefilled
+rejected key forces failure even on a one-key distinct schedule. A repeated
 memoized query therefore cannot be treated as a fresh draw without a further
 argument. The actual EasyCrypt game retains its memo table and separate
 revisit/transfer proofs.
@@ -95,7 +123,7 @@ neither upgraded nor made dependent on this project.
 From this directory, fetch the relevant prebuilt dependencies once:
 
 ```sh
-lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic
+lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
 ```
 
 From the repository root, run:
@@ -104,20 +132,23 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 81 theorem closures against
+The gate rebuilds every project module, checks all 115 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-Twenty-nine typed cases run 87 compiler jobs: each baseline and changed
-definition must compile, twenty-five changed behaviors must reject at the
-consuming `checked` theorem, and four value-preserving changes must pass. Cases cover exhaustion,
+Forty-three typed cases run 129 compiler jobs: each baseline and changed
+definition must compile, thirty-seven changed behaviors must reject at the
+consuming `checked` theorem, and six value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
-field offset/width, mixed-radix orientation and result projection. Syntax
+field offset/width, mixed-radix orientation and result projection. New cases
+cover cached resampling/history loss, missing insertion, changes to other keys,
+search counter/acceptance, counter byte order/block width/schedule repetition,
+and both collision-charge terms and seen-set insertion. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.

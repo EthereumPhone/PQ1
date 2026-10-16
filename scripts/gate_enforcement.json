@@ -1819,7 +1819,9 @@
         "contracts/verification/easycrypt/c10-port/cdrafts-split/WotsAcceptanceMass.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Encoding.ec",
         "sphincs-c10/src/wots.rs",
-        "sphincs-c10/src/fors.rs"
+        "sphincs-c10/src/fors.rs",
+        "sphincs-c10/src/hash.rs",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",
@@ -1842,7 +1844,7 @@
         ],
         "workflow_context": {}
       },
-      "note": "#295 separate PMF project: fresh build, complete theorem closures/statement pins, full-digest projection laws, manual source bindings and29 typed semantic cases. Does not establish cross-kernel or stateful-oracle transfer."
+      "note": "Separate pinned mathlib PMF project: full digest projections, memo-table search with explicit fresh distinct-key premises, serialized counters and independent-key collision bound; no full forgery-game or concrete-backend claim."
     }
   ],
   "_completeness_waived": {}

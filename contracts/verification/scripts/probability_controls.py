@@ -158,4 +158,64 @@ def cases(project: Path) -> list[dict]:
     Fintype.card_fin, Nat.cast_pow, Nat.cast_ofNat, ENNReal.toReal_inv,
     ENNReal.toReal_pow, ENNReal.toReal_ofNat]
 """, True)
+    add("memo-cached-resample", "Memo", "| some x => PMF.pure (x, table)",
+        "| some _ => p.map (fun x => (x, table))", """theorem checked :
+    (memoQuery (PMF.pure true) (fun _ : Bool => some false) true).map Prod.fst =
+      PMF.pure false := by
+  simp [memoQuery, PMF.pure_map]
+""")
+    add("memo-cached-history", "Memo", "| some x => PMF.pure (x, table)",
+        "| some x => PMF.pure (x, fun _ => none)",
+        theorem(src["Memo"], "memoQuery_cached"))
+    add("memo-store", "Memo", "(x, Function.update table key (some x))", "(x, table)",
+        """theorem checked :
+    (memoQuery (PMF.pure true) (fun _ : Bool => none) true).map
+      (fun out => out.2 true) = PMF.pure (some true) := by
+  simp [memoQuery, PMF.pure_map]
+""")
+    add("memo-other-key", "Memo", "Function.update table key (some x)",
+        "fun _ => some x", """theorem checked :
+    (memoQuery (PMF.pure true) (fun k : Bool => if k then none else some false) true).map
+      (fun out => out.2 false) = PMF.pure (some false) := by
+  simp [memoQuery, PMF.pure_map]
+""")
+    add("memo-search-counter", "Memo", "some (start, out.1)", "some (start + 1, out.1)",
+        """theorem checked :
+    (memoGrind (PMF.pure true) id (fun _ : Bool => none) 4 [true]).map Prod.fst =
+      PMF.pure (some (4, true)) := by
+  simp [memoGrind, memoQuery, PMF.bind_map, Function.comp_def,
+    PMF.pure_bind, PMF.pure_map]
+""")
+    add("memo-search-acceptance", "Memo", "if accept out.1 then", "if !accept out.1 then",
+        """theorem checked :
+    (memoGrind (PMF.pure false) id (fun _ : Bool => none) 0 [true]).map Prod.fst =
+      PMF.pure none := by
+  simp [memoGrind, memoQuery, PMF.bind_map, Function.comp_def,
+    PMF.pure_bind, PMF.pure_map]
+""")
+    add("counter-byte-order", "Counter", "bytesDigestEquiv.symm (counterDigest c)",
+        "fun i => bytesDigestEquiv.symm (counterDigest c) i.rev", """theorem checked :
+    (counterBytes 1 31).val = 1 := by decide
+""")
+    add("counter-block-width", "Counter", "List.ofFn (counterBytes c)",
+        "(List.ofFn (counterBytes c)).take 4", theorem(src["Counter"], "counter_key_length"))
+    add("counter-schedule-repeat", "Counter", "⟨start + i.val, by omega⟩",
+        "⟨start, by have hi := i.isLt; omega⟩", """theorem checked :
+    (counterSchedule [] 0 2 (by decide)).Nodup := by decide
+""")
+    add("collision-forgot-history", "KeyCollision", "trials * history + trials.choose 2",
+        "trials.choose 2", """theorem checked : collisionPairs 1 1 = 1 := by decide
+""")
+    add("collision-forgot-pairs", "KeyCollision", "trials * history + trials.choose 2",
+        "trials * history", """theorem checked : collisionPairs 0 2 = 1 := by decide
+""")
+    add("collision-forgot-insert", "KeyCollision", "keyCollision (insert key seen) n",
+        "keyCollision seen n", theorem(src["KeyCollision"], "key_collision_bool_two"))
+    add("memo-preserving", "Memo", "| some x => PMF.pure (x, table)",
+        "| some x => PMF.pure (id x, table)",
+        theorem(src["Memo"], "memoQuery_cached"), True)
+    add("collision-charge-preserving", "KeyCollision", "trials * history + trials.choose 2",
+        "history * trials + trials.choose 2", """theorem checked (h n : ℕ) :
+    collisionPairs h n = n * h + n.choose 2 := by simp [collisionPairs, Nat.mul_comm]
+""", True)
     return out
