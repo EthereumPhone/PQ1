@@ -144,6 +144,13 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/SecretPrefix\.ec": "7d78a6e128a0bb2e268e7f84bf0546042958abf50cc4438ba435745bb4c06284",?\s*$''']
 
+[[rules.allowlists]]
+description = "Exact public interleaved private-prefix proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/PrivateSecret\.lean": "7e0d6568a42c784b1feb04a8f43c3322fb3bff9ffa49fc3fc61fdef3f5d21afa",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
