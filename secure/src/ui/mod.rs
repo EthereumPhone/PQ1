@@ -287,3 +287,39 @@ pub fn show_progress(title: &str, percent: u8) {
     d.draw_line(3, ascii_str(&bar));
     d.flush();
 }
+
+/// Set only while provisioning writes the wallet to the two chips (a
+/// [`ChipWaitTicks`] held by `crypto::provision_from_mnemonic`). Nothing else
+/// sets it, so signing and the PIN check never draw from inside a chip wait.
+static CHIP_WAIT_TICKS: AtomicBool = AtomicBool::new(false);
+
+/// While alive, [`busy_poll`] advances the busy film: the chip writes of
+/// provisioning have no progress callback of their own, and without this the
+/// orbit froze for their whole length (EVT, owner 2026-10-16).
+pub struct ChipWaitTicks(());
+
+impl ChipWaitTicks {
+    #[must_use]
+    pub fn enter() -> Self {
+        CHIP_WAIT_TICKS.store(true, Ordering::Relaxed);
+        Self(())
+    }
+}
+
+impl Drop for ChipWaitTicks {
+    fn drop(&mut self) {
+        CHIP_WAIT_TICKS.store(false, Ordering::Relaxed);
+    }
+}
+
+/// The OPTIGA and SE050 drivers call this each time they wait on a busy
+/// chip. Under [`ChipWaitTicks`] it draws at most one film frame
+/// (`film_tick` is rate-limited and a no-op with no film running); otherwise
+/// it does nothing.
+#[inline]
+pub fn busy_poll() {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {
+        px::lcd::film_tick(0);
+    }
+}

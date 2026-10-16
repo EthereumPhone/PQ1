@@ -500,6 +500,9 @@ pub fn provision_from_mnemonic(
     duress_pin: Option<&[u8; 8]>,
     decoy: Option<&Mnemonic>,
 ) {
+    #[cfg(all(feature = "ui-px-film-gaps", not(test)))]
+    crate::ui::px::film_gaps::start();
+
     let mut entropy = mnemonic
         .to_entropy()
         .expect("mnemonic was already checksum-verified");
@@ -508,10 +511,12 @@ pub fn provision_from_mnemonic(
 
     provision_progress(50);
 
-    if store
-        .provision(&entropy, &master_secret, &RETIRED_LEGACY_VK, &RETIRED_LEGACY_BOOTSTRAP_VK, pin)
-        .is_err()
-    {
+    // The chip writes report no progress: let their busy-polls draw the film.
+    let ticks = crate::ui::ChipWaitTicks::enter();
+    let provisioned =
+        store.provision(&entropy, &master_secret, &RETIRED_LEGACY_VK, &RETIRED_LEGACY_BOOTSTRAP_VK, pin);
+    drop(ticks);
+    if provisioned.is_err() {
         // A provision that fails PART-WAY (e.g. a transient SE050 I²C fault
         // after the UserID object is written but before the entropy object)
         // must not leave the device half-provisioned. `is_provisioned()`
@@ -557,13 +562,21 @@ pub fn provision_from_mnemonic(
     // the wizard. If the decoy provision fails, wipe BOTH wallets so the
     // next cold boot restarts the wizard cleanly (no stuck state).
     #[cfg(feature = "duress-pin")]
-    if provision_duress_wallet(store, duress_pin, decoy).is_err() {
-        let _ = store.factory_reset_admin();
-        panic!("duress provisioning failed — wiped both wallets for wizard restart");
+    {
+        let ticks = crate::ui::ChipWaitTicks::enter();
+        let decoy_provisioned = provision_duress_wallet(store, duress_pin, decoy);
+        drop(ticks);
+        if decoy_provisioned.is_err() {
+            let _ = store.factory_reset_admin();
+            panic!("duress provisioning failed — wiped both wallets for wizard restart");
+        }
     }
 
     #[cfg(not(feature = "duress-pin"))]
     let _ = (duress_pin, decoy);
+
+    #[cfg(all(feature = "ui-px-film-gaps", not(test)))]
+    crate::ui::px::film_gaps::stop();
 }
 
 /// §32: generate + store an independent decoy wallet behind the duress

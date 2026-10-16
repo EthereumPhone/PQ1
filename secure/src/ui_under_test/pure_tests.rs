@@ -1493,3 +1493,209 @@ fn negative_full_frame_window_never_exceeds_the_panel_ram() {
     assert_eq!(x1, FRAME_WIDTH - 1 + X_OFFSET);
     assert_eq!(y1, FRAME_HEIGHT - 1 + Y_OFFSET);
 }
+
+// ---------------------------------------------------------------------------
+// Provisioning film: chip busy-polls draw it, and only during provisioning
+// (owner 2026-10-16: the orbit froze while the wallet was written)
+// ---------------------------------------------------------------------------
+
+const CRYPTO_SRC_PROV: &str = include_str!("../crypto.rs");
+const IFX_I2C_SRC: &str = include_str!("../optiga/ifx_i2c.rs");
+const T1OI2C_SRC: &str = include_str!("../se050/t1oi2c.rs");
+const PX_LCD_SRC: &str = include_str!("../ui/px/lcd.rs");
+const PX_SCREENS_SRC: &str = include_str!("../ui/px/screens.rs");
+const FILM_GAPS_SRC: &str = include_str!("../ui/px/film_gaps.rs");
+const SECURE_CARGO_SRC: &str = include_str!("../../Cargo.toml");
+const NSC_MOD_SRC_PROV: &str = include_str!("../nsc/mod.rs");
+const MAKEFILE_SRC_PROV: &str = include_str!("../../../Makefile");
+
+/// The body of the first `fn <name>` in `src`, up to the next top-level item.
+fn fn_body<'a>(src: &'a str, sig: &str) -> &'a str {
+    let start = src.find(sig).unwrap_or_else(|| panic!("`{sig}` missing"));
+    let rest = &src[start..];
+    let end = rest[1..]
+        .find("\n}\n")
+        .or_else(|| rest[1..].find("\n    }\n"))
+        .unwrap_or(rest.len() - 1);
+    &rest[..end + 2]
+}
+
+/// Every production `.rs` under `secure/src` (test modules excluded).
+fn production_sources() -> std::vec::Vec<(std::string::String, std::string::String)> {
+    fn walk(
+        dir: &std::path::Path,
+        out: &mut std::vec::Vec<(std::string::String, std::string::String)>,
+    ) {
+        for entry in std::fs::read_dir(dir).expect("read secure/src") {
+            let path = entry.expect("entry").path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+                let rel = path
+                    .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+                    .expect("below the manifest")
+                    .to_string_lossy()
+                    .into_owned();
+                if !rel.contains("test") {
+                    out.push((rel, std::fs::read_to_string(&path).expect("read")));
+                }
+            }
+        }
+    }
+    let mut out = std::vec::Vec::new();
+    walk(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut out,
+    );
+    out
+}
+
+#[test]
+fn positive_busy_poll_draws_only_under_the_provisioning_flag() {
+    let body = fn_body(MOD_SRC, "pub fn busy_poll()");
+    let guard = body
+        .find("if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {")
+        .expect("busy_poll must test the provisioning flag");
+    let tick = body
+        .find("px::lcd::film_tick(0);")
+        .expect("busy_poll must advance the film");
+    assert!(guard < tick, "the film tick must sit inside the flag test");
+    assert_eq!(body.matches("film_tick").count(), 1, "one tick per poll");
+    // The flag is raised in one place: the guard's constructor.
+    assert_eq!(MOD_SRC.matches("CHIP_WAIT_TICKS.store(true").count(), 1);
+    let enter = fn_body(MOD_SRC, "pub fn enter() -> Self {");
+    assert!(enter.contains("CHIP_WAIT_TICKS.store(true"));
+    let drop_body = MOD_SRC
+        .split("impl Drop for ChipWaitTicks {")
+        .nth(1)
+        .expect("ChipWaitTicks must lower the flag on drop");
+    assert!(drop_body[..200].contains("CHIP_WAIT_TICKS.store(false"));
+}
+
+#[test]
+fn positive_each_driver_ticks_once_from_its_busy_wait() {
+    assert_eq!(IFX_I2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
+    let poll = fn_body(IFX_I2C_SRC, "unsafe fn poll_response_ready(");
+    assert!(
+        poll.contains("crate::ui::busy_poll();"),
+        "OPTIGA: tick while the chip is busy"
+    );
+    assert_eq!(T1OI2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
+    let read = fn_body(T1OI2C_SRC, "unsafe fn read_frame(");
+    let sof_loop = &read[..read.find("if !found_sof {").expect("SOF loop")];
+    assert!(
+        sof_loop.contains("crate::ui::busy_poll();"),
+        "SE050: tick in the SOF poll"
+    );
+}
+
+#[test]
+fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
+    // Signing and the timing-uniform unlock path must never draw from a chip
+    // wait: only `provision_from_mnemonic` holds the guard.
+    let mut holders = std::vec::Vec::new();
+    for (path, src) in production_sources() {
+        let n = src.matches("ChipWaitTicks::enter()").count();
+        if n > 0 {
+            holders.push((path, n));
+        }
+    }
+    assert_eq!(
+        holders,
+        std::vec![("src/crypto.rs".into(), 2)],
+        "holders: {holders:?}"
+    );
+    let prov = fn_body(CRYPTO_SRC_PROV, "pub fn provision_from_mnemonic(");
+    assert_eq!(prov.matches("ChipWaitTicks::enter()").count(), 2);
+    let enter = prov
+        .find("let ticks = crate::ui::ChipWaitTicks::enter();")
+        .expect("guard");
+    let write = prov
+        .find("store.provision(&entropy")
+        .expect("the chip writes");
+    let lower = prov[write..].find("drop(ticks);").expect("guard dropped") + write;
+    assert!(
+        enter < write && write < lower,
+        "the guard must bracket the chip writes"
+    );
+    // Lowered before the failure path's wipe (and its panic).
+    let wipe = prov
+        .find("store.factory_reset_admin()")
+        .expect("rollback wipe");
+    assert!(lower < wipe);
+    let decoy = prov
+        .find("provision_duress_wallet(store, duress_pin, decoy)")
+        .expect("decoy");
+    let before = &prov[..decoy];
+    assert!(
+        before.rfind("ChipWaitTicks::enter()") > before.rfind("drop(ticks);"),
+        "the decoy's chip writes run under their own guard"
+    );
+}
+
+#[test]
+fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
+    // Implied by nothing, not a default, fenced from production.
+    let features = SECURE_CARGO_SRC
+        .split("[features]")
+        .nth(1)
+        .expect("[features]");
+    let defaults = features
+        .lines()
+        .find(|l| l.starts_with("default"))
+        .expect("default features");
+    assert!(!defaults.contains("ui-px-film-gaps"));
+    let mentions: std::vec::Vec<&str> = features
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("ui-px-film-gaps"))
+        .collect();
+    assert_eq!(
+        mentions,
+        std::vec!["ui-px-film-gaps = [\"ui-px\", \"ui-lcd\"]"]
+    );
+    assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-gaps\","));
+    let forbidden = MAKEFILE_SRC_PROV
+        .split_once("override PROD_FORBIDDEN :=")
+        .expect("PROD_FORBIDDEN")
+        .1
+        .split_once("\n\n")
+        .expect("one block")
+        .0;
+    assert!(forbidden.contains("ui-px-film-gaps"));
+    // Every call into the recorder sits under its feature.
+    for (path, src) in production_sources() {
+        if path.ends_with("film_gaps.rs") {
+            continue;
+        }
+        let lines: std::vec::Vec<&str> = src.lines().collect();
+        for (i, l) in lines.iter().enumerate() {
+            if l.contains("film_gaps::") || l.trim() == "show_film_gaps();" {
+                // Gated on the line itself, or by the function it sits in.
+                let gated = |k: usize| {
+                    let attr = lines[k].trim();
+                    attr.starts_with("#[cfg(") && attr.contains("feature = \"ui-px-film-gaps\"")
+                };
+                let encl = (0..i)
+                    .rev()
+                    .find(|&k| lines[k].starts_with("fn ") || lines[k].starts_with("pub fn "))
+                    .expect("enclosing fn");
+                assert!(
+                    gated(i - 1) || (encl > 0 && gated(encl - 1)),
+                    "{path}:{}: recorder call without its cfg: {l}",
+                    i + 1
+                );
+            }
+        }
+    }
+    assert!(include_str!("../ui/px/mod.rs")
+        .contains("#[cfg(feature = \"ui-px-film-gaps\")]\npub mod film_gaps;"));
+    // The frame hooks report what reached the glass, in both film paths.
+    assert_eq!(PX_LCD_SRC.matches("super::film_gaps::frame(").count(), 2);
+    assert_eq!(
+        PX_SCREENS_SRC
+            .matches("super::film_gaps::note_pct(")
+            .count(),
+        1
+    );
+    assert!(FILM_GAPS_SRC.contains("NEVER ship"));
+}

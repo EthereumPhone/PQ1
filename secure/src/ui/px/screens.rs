@@ -272,6 +272,8 @@ pub fn status(title: &str, sub: &str) -> bool {
 /// `ui::show_progress` on the pixel UI: the first call of a run shows the
 /// busy screen, later calls advance its film.
 pub fn progress(title: &str, _percent: u8) -> bool {
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::note_pct(_percent);
     #[cfg(not(feature = "ui-lcd"))]
     {
         // Log each run once, not every percent.

@@ -424,6 +424,8 @@ compile_error!(
         // Frame-time overlay: prints render/blit timings over the trusted
         // display. Not destructive, but it paints over consent screens.
         feature = "ui-px-frametime",
+        // Provisioning film-gap recorder: adds a diagnostics page to setup.
+        feature = "ui-px-film-gaps",
         // #846 negative control: removes the one-at-a-time gateway gate
         // from the veneer path. Never ship — a shipping image with this on
         // reinstates the re-entrancy #846 fixed.

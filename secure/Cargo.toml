@@ -207,6 +207,11 @@ ui-px-spi40 = ["ui-px", "ui-lcd"]
 # Bench-only: overlay the previous frame's render / blit / period (ms) in the
 # top-left of every pixel-UI frame (DWT cycle counter). NEVER ship.
 ui-px-frametime = ["ui-px", "ui-lcd", "pqsigner-ui-px/render-split"]
+# Dev-only: record the provisioning busy film's longest pauses between frames
+# (each with the progress percent when it began) and show them on a 16x4 page
+# after HELP (`ui/px/film_gaps.rs`). NEVER ship: fenced in `nsc/mod.rs` and
+# listed in the Makefile's PROD_FORBIDDEN.
+ui-px-film-gaps = ["ui-px", "ui-lcd"]
 
 # Stream the pixel-UI strip blit over GPDMA1 instead of the polled per-byte
 # loop, so strip k goes out on the wire while strip k+1 renders. Opt-in: this

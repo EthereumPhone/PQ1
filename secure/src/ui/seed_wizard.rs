@@ -387,6 +387,17 @@ pub fn finish_setup() {
     super::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Burst);
     let pages = setup_screens::ready();
     while pager(&pages, 0, false, true) != PagerOut::Forward {}
+    #[cfg(feature = "ui-px-film-gaps")]
+    show_film_gaps();
+}
+
+/// Dev only (`ui-px-film-gaps`): the provisioning film's frame count, run
+/// length and longest pauses (`ms@percent`), on a 16x4 page until a press.
+#[cfg(feature = "ui-px-film-gaps")]
+fn show_film_gaps() {
+    let mut rows = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
+    super::px::film_gaps::rows(&mut rows);
+    hold(&Screen::legacy(&rows));
 }
 
 /// Import: the intro, then the 24 words typed in. `None` = the user went

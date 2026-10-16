@@ -380,6 +380,17 @@ mod ui {
     pub fn show_status(_title: &str, _sub: &str) {}
     pub fn show_progress(_title: &str, _percent: u8) {}
 
+    /// `crypto::provision_from_mnemonic` holds one around the chip writes.
+    pub struct ChipWaitTicks;
+    impl ChipWaitTicks {
+        pub fn enter() -> Self {
+            Self
+        }
+    }
+    impl Drop for ChipWaitTicks {
+        fn drop(&mut self) {}
+    }
+
     // Mirrors the production constants in `crate::ui` so the
     // `display_under_test` scaffold can re-mount the per-renderer
     // source files under host test builds (see

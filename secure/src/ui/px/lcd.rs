@@ -982,6 +982,8 @@ pub fn film_start_with(s: &Screen) {
     let mut anim = Anim::new(s, 0, now);
     anim.film_start(now);
     let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::frame(timeout::now());
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
     // this is the only writer while `FILM_LIVE` is false.
     unsafe {
@@ -1016,6 +1018,8 @@ pub fn film_tick(_percent: u8) {
     anim.step(now);
     let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
     let after = timeout::now();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::frame(after);
     *last = if after.wrapping_sub(now) > 50 { after.wrapping_add(FRAME_PERIOD_MS) } else { after };
 }
 
