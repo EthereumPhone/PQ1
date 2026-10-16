@@ -312,6 +312,16 @@ impl Drop for ChipWaitTicks {
     }
 }
 
+/// Whether provisioning's chip writes are running (a [`ChipWaitTicks`] is
+/// alive). `optiga::settle` reads it to time its waits by the S-only clock
+/// and draw the film inside them; everywhere else the waits stay the plain
+/// cycle delays they always were.
+#[inline]
+#[must_use]
+pub fn chip_wait_ticks_active() -> bool {
+    CHIP_WAIT_TICKS.load(Ordering::Relaxed)
+}
+
 /// The OPTIGA and SE050 drivers call this each time they wait on a busy
 /// chip. Under [`ChipWaitTicks`] it draws at most one film frame
 /// (`film_tick` is rate-limited and a no-op with no film running); otherwise

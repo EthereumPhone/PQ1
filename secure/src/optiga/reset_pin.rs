@@ -137,8 +137,8 @@ pub unsafe fn init() {
         config_rst_output_high();
     }
     // 50 ms idle-high settle before the first pulse, matching the lead-
-    // in delay in `pin_diag::run`.
-    cortex_m::asm::delay(160_000 * 50);
+    // in delay in `pin_diag::run` (drawing the film while provisioning).
+    super::settle(160_000 * 50);
 }
 
 /// Datasheet-bounded RST low time: 10 us <= t_low <= 2.5 ms (OPTIGA Trust M
@@ -186,8 +186,9 @@ pub unsafe fn hard_pulse() {
         cortex_m::asm::delay(RST_LOW_CYCLES);
         write_volatile(bsrr, 1u32 << RST_PIN); // set bit n -> release HIGH
 
-        // Trailing idle high, matching `pin_diag::run`'s 100 ms.
-        cortex_m::asm::delay(160_000 * 100);
+        // Trailing idle high, matching `pin_diag::run`'s 100 ms (drawing
+        // the film while provisioning; never the LOW phase above).
+        super::settle(160_000 * 100);
     }
 }
 

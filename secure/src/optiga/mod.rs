@@ -101,6 +101,31 @@ pub struct OptigaTrustM {
     remaining: u8,
 }
 
+/// A fixed settle wait around an OPTIGA reset (`cycles` at 160 MHz, the
+/// figures the reset code was written in).
+///
+/// Outside provisioning this is exactly the plain `cortex_m::asm::delay` it
+/// replaced. While provisioning writes the wallet (`ui::ChipWaitTicks`), the
+/// same minimum is timed by the S-only millisecond clock instead and the busy
+/// film draws inside it: the seven reset cycles of the write sequence used to
+/// freeze the film for ~607 ms each (EVT recorder, owner 2026-10-16). The wait
+/// never ends before `cycles / 160_000 + 1` ms, the nominal figure every one
+/// of these delays is documented against, so it stays above the datasheet
+/// minima they cover (tSTARTUP <= 20 ms against 50 and 100 ms here). The RST
+/// LOW phase never comes through here: it has a 2.5 ms maximum.
+pub(crate) fn settle(cycles: u32) {
+    if !crate::ui::chip_wait_ticks_active() {
+        cortex_m::asm::delay(cycles);
+        return;
+    }
+    let ms = cycles / 160_000 + 1;
+    let t0 = crate::timeout::now();
+    while crate::timeout::now().wrapping_sub(t0) < ms {
+        cortex_m::asm::delay(16_000);
+        crate::ui::busy_poll();
+    }
+}
+
 impl OptigaTrustM {
     pub const fn new() -> Self {
         Self {
@@ -167,7 +192,7 @@ impl OptigaTrustM {
             // side effect per the Rust abstract machine) and leave an
             // infinite `bl nop; b back` behind. `delay()` is implemented
             // with a volatile counter so it always runs the full count.
-            cortex_m::asm::delay(8_000_000);
+            settle(8_000_000);
 
             // Retry with SHORT delays. The chip goes into sleep mode and
             // NACKs until woken by I2C address detection — each probe wakes

@@ -1589,6 +1589,44 @@ fn positive_each_driver_ticks_once_from_its_busy_wait() {
     );
 }
 
+const OPTIGA_MOD_SRC: &str = include_str!("../optiga/mod.rs");
+const RESET_PIN_SRC: &str = include_str!("../optiga/reset_pin.rs");
+
+#[test]
+fn positive_optiga_reset_waits_draw_only_while_provisioning() {
+    // EVT recorder 2026-10-16: seven ~607 ms freezes, one per OPTIGA reset
+    // cycle of the provisioning write sequence (I2C transactions all <10 ms).
+    // ASSUMPTION ATTACKED: (a) `settle` changes timing outside provisioning,
+    // (b) it can end before the nominal wait, (c) the RST LOW phase (2.5 ms
+    // datasheet maximum) is routed through it.
+    let body = fn_body(OPTIGA_MOD_SRC, "pub(crate) fn settle(cycles: u32) {");
+    let gate = body
+        .find("if !crate::ui::chip_wait_ticks_active() {\n        cortex_m::asm::delay(cycles);\n        return;\n    }")
+        .expect("(a) outside provisioning: exactly the old delay");
+    let floor = body.find("let ms = cycles / 160_000 + 1;").expect("(b) the nominal floor");
+    let wait = body
+        .find("while crate::timeout::now().wrapping_sub(t0) < ms {")
+        .expect("(b) timed by the S-only clock");
+    assert!(gate < floor && floor < wait);
+    assert!(body.contains("crate::ui::busy_poll();"));
+    // The three settle waits, and nothing else.
+    assert!(OPTIGA_MOD_SRC.contains("            settle(8_000_000);"));
+    assert!(RESET_PIN_SRC.contains("    super::settle(160_000 * 50);"));
+    assert!(RESET_PIN_SRC.contains("        super::settle(160_000 * 100);"));
+    assert_eq!(RESET_PIN_SRC.matches("settle(").count(), 2);
+    // (c) the LOW phase stays a plain delay between the two BSRR edges.
+    let low = RESET_PIN_SRC
+        .find("write_volatile(bsrr, 1u32 << (RST_PIN + 16));")
+        .expect("RST driven low");
+    let high = low
+        + RESET_PIN_SRC[low..]
+            .find("write_volatile(bsrr, 1u32 << RST_PIN);")
+            .expect("RST released");
+    let between = &RESET_PIN_SRC[low..high];
+    assert!(between.contains("cortex_m::asm::delay(RST_LOW_CYCLES);"));
+    assert!(!between.contains("settle("), "(c) the LOW phase must not draw frames");
+}
+
 #[test]
 fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
     // Signing and the timing-uniform unlock path must never draw from a chip
