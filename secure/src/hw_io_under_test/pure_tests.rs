@@ -2508,9 +2508,26 @@ fn positive_a_pager_continues_from_the_previous_pager_only_while_its_frame_is_on
     let take = UI_PX_LCD_SRC.split("fn carry_take()").nth(1).expect("carry_take must exist");
     let take = &take[..take.find("\n}\n").unwrap_or(take.len())];
     assert!(take.contains("CARRY_GLASS.load(Ordering::Relaxed) != lcd::glass_writes()"));
-    // Only the pager keeps one: a PIN row's record carries a live digit,
-    // which must not outlive its dialog in a static.
-    assert_eq!(UI_PX_LCD_SRC.matches("carry_keep(").count(), 2, "the fn and the pager's one call");
+    // Only public screens are kept: a PIN row's record carries a live digit,
+    // which must not outlive its dialog in a static. The keepers are the
+    // pager and, since 2026-10-16, `play_screen` for CHECKING PIN alone (no
+    // digit on it), so the result can continue from its pill.
+    assert_eq!(
+        UI_PX_LCD_SRC.matches("carry_keep(").count(),
+        3,
+        "the fn, the pager's call and play_screen's CHECKING PIN call"
+    );
+    let play = UI_PX_LCD_SRC
+        .split("pub fn play_screen(")
+        .nth(1)
+        .expect("play_screen must exist");
+    let play = &play[..play.find("\n}\n").unwrap_or(play.len())];
+    assert!(play.contains(
+        "if !force && pqsigner_ui_px::verdict::is_pin_check(s) {\n            carry_keep(anim);"
+    ));
+    let take = UI_PX_LCD_SRC.split("fn pin_check_take(").nth(1).expect("pin_check_take must exist");
+    let take = &take[..take.find("\n}\n").unwrap_or(take.len())];
+    assert!(take.contains("carry_take().filter(|a| pqsigner_ui_px::verdict::is_pin_check(a.current().0))"));
 }
 
 #[test]

@@ -1299,7 +1299,17 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
         paint(&anim);
     } else {
         let t0 = timeout::now();
-        let mut anim = Anim::new(s, 0, t0);
+        // The PIN check's result continues from the CHECKING PIN pill still
+        // on the glass instead of opening on black (owner 2026-10-16):
+        // `Anim::verdict_to`. Only from that one screen, only if nothing
+        // has drawn since (`carry_take`).
+        let mut anim = match pin_check_take(s) {
+            Some(mut a) => {
+                a.verdict_to(s, t0);
+                a
+            }
+            None => Anim::new(s, 0, t0),
+        };
         loop {
             let now = timeout::now();
             let moving = anim.step(now);
@@ -1310,6 +1320,10 @@ pub fn play_screen(s: &Screen, atlas: &assets::AtlasRef, secret: &[(usize, &[u8]
             while now.wrapping_add(FRAME_PERIOD_MS).wrapping_sub(timeout::now()) < (1 << 31) {
                 cortex_m::asm::wfi();
             }
+        }
+        // CHECKING PIN is public (no digit, no secret): keep it for the result.
+        if !force && pqsigner_ui_px::verdict::is_pin_check(s) {
+            carry_keep(anim);
         }
     }
     if force {
@@ -1971,6 +1985,15 @@ fn carry_keep(anim: Anim) {
     unsafe { (*core::ptr::addr_of_mut!(CARRY)).write(anim) };
     CARRY_GLASS.store(lcd::glass_writes(), Ordering::Relaxed);
     CARRY_SET.store(true, Ordering::Relaxed);
+}
+
+/// A resting CHECKING PIN kept by `play_screen`, when `s` is the verdict that
+/// answers it and the glass still shows the pill.
+fn pin_check_take(s: &Screen) -> Option<Anim> {
+    if s.kind() != Some(pqsigner_ui_px::Kind::Verdict) {
+        return None;
+    }
+    carry_take().filter(|a| pqsigner_ui_px::verdict::is_pin_check(a.current().0))
 }
 
 /// The kept animation, if the glass still shows it.
