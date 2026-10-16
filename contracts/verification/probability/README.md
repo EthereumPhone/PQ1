@@ -1,8 +1,9 @@
 # C10 probability project
 
 This is the separate mathlib project requested by
-[PQ1 #295](https://github.com/EthereumPhone/PQ1/issues/295). It proves a bounded
-independent-sampling component. **The probability-monad forgery-game theorem
+[PQ1 #295](https://github.com/EthereumPhone/PQ1/issues/295). It proves bounded
+independent sampling and derives the C10 projection PMFs from a uniform full
+256-bit digest, within this Lean project. **The probability-monad forgery-game theorem
 and the connection to the actual memoized grinder remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
@@ -46,11 +47,27 @@ That proof is not automatically transferred to Lean.
 
 ## Independence and correspondence boundary
 
-These are projection distributions. This project does not yet prove their
-derivation from the full 256-bit digest or identify them with each call to the
-stateful hash oracle. The shapes are manually transcribed and bound to the
-specific EasyCrypt sources by hashes. Those checks detect drift; they do not
-prove correspondence or freshness.
+`Digest.lean` proves an explicit bijection between 32 big-endian bytes and
+`Fin (2^256)`, with round trips and both byte/integer formulas. Under the
+uniform PMF on that full type, the quotient/remainder maps produce exactly
+`wotsDraw` and `forsDraw`: digit `i` is `(d / 2^(3*i)) % 8`, and the FORS
+acceptance field is `(d / 2^132) % 2048`. The decomposition retains all unused
+bits when proving the bijection; no projection-uniformity premise is assumed.
+Pointwise witnesses cover byte order, WOTS bit128 versus bit129, and FORS
+bits131/132/142/143. Uniformity alone would not distinguish those positions.
+
+`DigestGrind.lean` proves that projection commutes with bounded first-accepted
+sampling, retaining the counter and `none`. It derives the raw-digest failure
+and first-hit laws. An individual full returned digest has atom mass
+`1/2^256`; an individual WOTS projection has mass `1/8^43`. These outcomes are
+not conflated.
+
+The starting distribution is an explicit uniform independent-digest comparison
+experiment. No theorem here identifies each actual stateful hash call with
+that experiment. The integer formulas are manually transcribed from the
+existing EasyCrypt and Rust source specifications and bound to them by hashes.
+Those pins detect drift; they do not prove extraction, cross-kernel
+correspondence or freshness.
 
 `Boundaries.cached` draws once and reuses that reply. With a fair Boolean reply
 and two attempts, failure has probability `1/2`; two independent attempts fail
@@ -78,7 +95,7 @@ neither upgraded nor made dependent on this project.
 From this directory, fetch the relevant prebuilt dependencies once:
 
 ```sh
-lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic
+lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic
 ```
 
 From the repository root, run:
@@ -87,19 +104,21 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 43 theorem closures against
+The gate rebuilds every project module, checks all 81 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-Eighteen typed cases run 54 compiler jobs: each baseline and changed definition
-must compile, sixteen changed behaviors must reject at the consuming `checked`
-theorem, and two value-preserving changes must pass. Cases cover exhaustion,
+Twenty-nine typed cases run 87 compiler jobs: each baseline and changed
+definition must compile, twenty-five changed behaviors must reject at the
+consuming `checked` theorem, and four value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
-resampling. Syntax errors, resource limits and failures before the consumer
+resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
+field offset/width, mixed-radix orientation and result projection. Syntax
+errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.
 

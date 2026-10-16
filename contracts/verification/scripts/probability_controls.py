@@ -9,7 +9,7 @@ import re
 
 
 def definitions(source: str) -> str:
-    # These four source modules use only this deliberately restricted layout.
+    # These source modules use only this deliberately restricted layout.
     # The normal build, full-source pins and theorem census are separate gates.
     return re.sub(r"^theorem\b.*?(?=^(?:theorem|def|abbrev|end)\b)", "", source,
                   flags=re.M | re.S)
@@ -116,4 +116,46 @@ def cases(project: Path) -> list[dict]:
     cached (PMF.uniformOfFintype Bool) id 2 none = (2 : ℝ≥0∞)⁻¹ := by
   norm_num [cached, grind, PMF.bind_apply, PMF.pure_apply, tsum_fintype] <;> simp
 """)
+    add("digest-byte-order", "Digest",
+        "toFun b i := b i.rev\n  invFun b i := b i.rev",
+        "toFun b i := b i\n  invFun b i := b i",
+        theorem(src["Digest"], "last_byte_is_low"))
+    add("wots-digest-shift", "Digest", "radixField (2 ^ 127) (8 ^ 43) 1",
+        "radixField (2 ^ 126) (8 ^ 43) 2",
+        theorem(src["Digest"], "wots_129th_bit"))
+    add("wots-128-bit-truncation", "Digest",
+        "finFunctionFinEquiv.symm (wotsBlock d)",
+        "finFunctionFinEquiv.symm ⟨(wotsBlock d).val % 2 ^ 128, "
+        "Nat.lt_of_le_of_lt (Nat.mod_le _ _) (wotsBlock d).isLt⟩",
+        theorem(src["Digest"], "wots_129th_bit"))
+    add("wots-digit-order", "Digest",
+        "finFunctionFinEquiv.symm (wotsBlock d)",
+        "fun i => finFunctionFinEquiv.symm (wotsBlock d) i.rev",
+        theorem(src["Digest"], "wots_129th_bit"))
+    add("fors-digest-offset", "Digest", "radixField (2 ^ 113) 2048 (2 ^ 132)",
+        "radixField (2 ^ 114) 2048 (2 ^ 131)",
+        theorem(src["Digest"], "fors_first_bit"))
+    add("fors-digest-width", "Digest",
+        "radixField (2 ^ 113) 2048 (2 ^ 132) ((finCongr (by norm_num)) d)",
+        "⟨d.val / 2 ^ 132 % 1024, Nat.lt_of_lt_of_le "
+        "(Nat.mod_lt _ (by decide)) (by decide)⟩",
+        theorem(src["Digest"], "fors_last_bit"))
+    add("project-counter", "DigestGrind", "Prod.map id f", "Prod.map Nat.succ f",
+        theorem(src["DigestGrind"], "project_some"))
+    add("project-value-drop", "DigestGrind", "Option.map (Prod.map id f)",
+        "fun _ => none", theorem(src["DigestGrind"], "project_some"))
+    add("radix-field-reversal", "Uniform", ").symm x).1).2", ").symm x).1).2.rev",
+        theorem(src["Uniform"], "radixField_value"))
+    add("project-preserving", "DigestGrind", "Prod.map id f",
+        "Prod.map (fun i => 0 + i) f", """theorem checked (f : α → β) (i : ℕ) (x : α) :
+    projectResult f (some (i, x)) = some (i, f x) := by
+  simp [projectResult]
+""", True)
+    add("digest-draw-preserving", "Digest", "PMF.uniformOfFintype Digest",
+        "(PMF.uniformOfFintype Digest).map id", """theorem checked (d : Digest) :
+    (digestDraw d).toReal = ((2 : ℝ) ^ 256)⁻¹ := by
+  simp only [digestDraw, PMF.map_id, PMF.uniformOfFintype_apply, Digest,
+    Fintype.card_fin, Nat.cast_pow, Nat.cast_ofNat, ENNReal.toReal_inv,
+    ENNReal.toReal_pow, ENNReal.toReal_ofNat]
+""", True)
     return out

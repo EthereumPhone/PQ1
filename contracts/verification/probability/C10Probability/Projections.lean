@@ -6,9 +6,9 @@ import Mathlib.Probability.Distributions.Uniform
 
 The WOTS projection is 43 base-eight digits with target sum 205. The FORS
 acceptance projection is an eleven-bit field equal to zero. These are the
-projection PMFs, not a Lean proof of their extraction from a 256-bit digest
-or of fresh samples at every call of the persistent oracle. EasyCrypt proves
-those distributional projections separately; that proof is not imported here.
+projection PMFs. Digest.lean derives them from a uniform 256-bit digest in
+this project. Fresh sampling at each persistent-oracle call remains separate;
+no EasyCrypt probability theorem is imported here.
 -/
 
 namespace C10Probability

@@ -7,14 +7,17 @@ status label. Work remains tracked under PQ1 #100 and #295.
 
 ## Quantitative loss
 
-The [separate mathlib PMF project](../../probability/README.md) now proves the
-bounded independent-sampling component of #295: exact first-hit, returned-event
-and exhaustion probabilities, C10 acceptance-projection instances, and a
-countermodel showing why cached replies cannot simply be counted as fresh
-draws. The full probability-monad forgery-game theorem, the full-digest
-projection relation and actual memoized-search/session transfer remain open.
-No EasyCrypt probability theorem is automatically imported into Lean, and the
-main `lean/` project remains mathlib-free.
+The [separate mathlib PMF project](../../probability/README.md) proves bounded
+independent sampling, including exact first-hit, returned-event and exhaustion
+probabilities. It now derives the C10 WOTS/FORS projection PMFs from a full
+uniform 256-bit digest, proves the 32-byte big-endian bijection and exact
+quotient/remainder formulas, and transfers the bounded search through those
+projections without losing counters or failure. The full probability-monad
+forgery-game theorem and actual memoized-search/session transfer remain open.
+A countermodel shows why cached replies cannot simply be counted as fresh.
+No EasyCrypt theorem is imported into Lean; source pins on the manually
+transcribed formulas do not prove extraction or cross-kernel correspondence.
+The main `lean/` project remains mathlib-free.
 
 The exact-witness continuation counts reverse restricted-growth assignments
 and ordered distinct witness positions excluding the target. Its enrolled

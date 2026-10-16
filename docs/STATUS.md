@@ -182,14 +182,16 @@ backend interpretation and the separate secure-wrapper experiment remain open.
 See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
 and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 
-**Separate C10 probability project (2026-10-16):** the new
+**Separate C10 probability project (2026-10-16):** the
 [mathlib PMF project](../contracts/verification/probability/README.md) proves
-bounded first-hit, returned-event and exhaustion laws, with C10 WOTS/FORS
-projection instances and an explicit repeated-reply countermodel. All 43
-theorem closures and typed semantic controls are gated separately; `lean/`
-stays mathlib-free. #295 remains open for the full probability-monad forgery
-game and actual memoized-search transfer. No cross-kernel probability or
-deployed hash-independence claim is made.
+bounded first-hit, returned-event and exhaustion laws. It derives C10 WOTS/FORS
+projection distributions from a full uniform 256-bit digest and an explicit
+32-byte big-endian bijection, and transfers the bounded search through those
+projections while preserving counters and failure. All 81 theorem closures
+and 29 typed cases are gated separately; `lean/` stays mathlib-free. The
+repeated-reply countermodel remains: #295 is open for the full probability-monad
+forgery game and actual memoized-search transfer. No cross-kernel probability
+or deployed hash-independence claim is made.
 
 **EasyCrypt coverage tightening (2026-10-15):** exact Stirling and falling-factorial
 counts replace the earlier canonical overcount in the adaptive FORS coverage
