@@ -12,6 +12,7 @@ on:
       - 'contracts/verification/scripts/check_ledger_consistency.py'
       - 'contracts/verification/Makefile'
       - '.github/workflows/lean-probability.yml'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/NodeQueryDomain.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10Counter.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawGrind.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawWots.ec'
