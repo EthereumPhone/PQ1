@@ -236,6 +236,32 @@ entry and a fresh query have collision mass `1/2`; an already accepted-colliding
 cache has mass one with zero new queries. These examples also check flag
 persistence and that rejected fresh replies remain stored.
 
+`TargetEvent.lean` derives a direct final-cache target-hit bound from the
+unchanged adaptive interpreter: at most `n * acceptMass p target`, provided the
+initial cache has no hit. The predicate is fixed before execution. Query keys,
+early returns and client randomness may depend on replies; cached calls do
+not draw again. Existing target hits persist, including with zero new queries.
+`TargetSet.lean` specializes uniform projected replies to a fixed finite set,
+with bound `n * targets.card / M`. This does not apply to targets chosen after
+seeing the replies.
+
+`NodeZero.lean` defines a node as the actual first sixteen big-endian digest
+bytes and proves that its all-zero predicate is the high-128-bit projection's
+zero value. Its fresh mass is `1/2^128`, yielding an actual final-cache zero-node
+bound `n/2^128` from an empty cache. A nonzero full digest can still have a zero
+node. `NodeCharges.lean` unions that event with the existing public collision
+event on the same program and cache, giving `(n.choose 2+n)/2^128`. This counts
+all queries in the program; the narrower EasyCrypt node-producing-domain
+budget is not imported or assumed here.
+
+`TargetExamples.lean` checks actual finite cache-event probabilities: two fresh
+Boolean keys hit `true` with probability `3/4`, a repeated key with `1/2`, a
+reply-dependent repeat with `1/2`, early return with `3/4`, and a randomized
+optional query with `1/4`. Safe cached replies, rejecting/accepting predicates,
+initial hits at zero budget and empty/full target sets are checked separately.
+Concrete caches distinguish a zero node without collision from a collision
+without a zero node, so neither side of the union is dispensable.
+
 These adaptive results supply a random-oracle collision component. They do not
 instantiate a complete C10 signer/adversary program, prove global R-input
 freshness or supply the remaining full forgery bound. No theorem replaces
@@ -452,16 +478,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 449 theorem closures against
+The gate rebuilds every project module, checks all 493 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-255 typed cases run 765 compiler jobs: each baseline and changed
-definition must compile, 220 changed behaviors must reject at the
-consuming `checked` theorem, and thirty-five value-preserving changes must pass. Cases cover exhaustion,
+279 typed cases run 837 compiler jobs: each baseline and changed
+definition must compile, 240 changed behaviors must reject at the
+consuming `checked` theorem, and thirty-nine value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -521,3 +547,9 @@ Exact-count controls cover radix, length, target, negative-target clamping,
 sum offset, convolution window, row tail, zero/omitted/duplicated steps,
 basis length/value/order, representation direction/default and the decimal
 result. Equivalent target, window, basis and result expressions must pass.
+
+Target-event controls cover predicate inversion/vacuity, missing or inverted
+cache lookup, weakened quantification, fixed-set membership, low-half or
+repeated-byte nodes, byte order, whole-digest/any-byte/incorrect-value zero
+tests, lost cache or target conditions and either omitted union event.
+Equivalent predicate, set, index and zero-value expressions must pass.

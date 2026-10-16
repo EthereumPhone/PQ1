@@ -235,7 +235,14 @@ kernel-proved independently in Lean: `22169393903687611906220091621190388`
 accepted words out of `8^43`. A proved finite-vector computation connects this
 integer to the actual sum-205 subtype and existing PMF laws. The
 successful-output/forgery composition remains open in this PMF project.
-All 449 theorem closures and 255 typed cases are gated separately;
+A direct target-hit induction now bounds the actual adaptive final cache by
+`n*acceptMass`, with a fixed target predicate and an initially hit-free cache.
+The concrete first-sixteen-byte/high-128-bit zero-node event has bound
+`n/2^128`; its union with public collisions on the same program is bounded by
+`(n.choose 2+n)/2^128`. This uses the full structural query budget, not the
+narrower EasyCrypt node-domain budget. Initial hits persist even at zero
+queries. Full PMF successful-output/forgery composition remains open.
+All 493 theorem closures and 279 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

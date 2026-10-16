@@ -986,4 +986,68 @@ def cases(project: Path) -> list[dict]:
     add("count-result-preserving", "WotsCount",
         "def wotsCountValue : ℕ := 22169393903687611906220091621190388",
         "def wotsCountValue : ℕ := 22169393903687611906220091621190388 + 0", exact_count, True)
+    # Fixed target hits in the actual cache. Concrete finite witnesses guard
+    # the event and its initial-history boundary; projection consumers guard
+    # the precise first16-byte node rather than a different zero predicate.
+    target_one = theorem(src["TargetExamples"], "one_entry_no_target")
+    target_live = theorem(src["TargetExamples"], "target_membership_nonvacuous")
+    target_empty = theorem(src["TargetExamples"], "target_lookup_matters")
+    add("target-predicate-inverted", "TargetEvent", "target value = false",
+        "target value = true", target_one)
+    add("target-predicate-waived", "TargetEvent", "target value = false",
+        "True", target_live)
+    add("target-lookup-omitted", "TargetEvent", "table key = some value → target value = false",
+        "target value = false", target_empty)
+    add("target-lookup-inverted", "TargetEvent", "table key = some value → target value = false",
+        "table key ≠ some value → target value = false", target_one)
+    add("target-universal-weakened", "TargetEvent", "∀ (key : K) (value : α), table key",
+        "∃ (key : K) (value : α), table key", target_one)
+
+    target_single = theorem(src["TargetExamples"], "fixed_target_singleton")
+    add("target-set-inverted", "TargetSet", "decide (project value ∈ targets)",
+        "decide (project value ∉ targets)", target_single)
+    add("target-set-ignored", "TargetSet", "decide (project value ∈ targets)",
+        "false", target_single)
+    add("target-set-full", "TargetSet", "decide (project value ∈ targets)",
+        "true", theorem(src["TargetExamples"], "fixed_target_empty"))
+
+    node_projection = theorem(src["NodeZero"], "node_bytes_projection")
+    add("node-low-half", "NodeZero", "⟨i.val, by omega⟩",
+        "⟨i.val + 16, by omega⟩", node_projection)
+    add("node-first-byte-repeated", "NodeZero", "⟨i.val, by omega⟩",
+        "⟨0, by omega⟩", node_projection)
+    add("node-last-byte-repeated", "NodeZero", "⟨i.val, by omega⟩",
+        "⟨15, by omega⟩", node_projection)
+    add("node-byte-order", "NodeZero", "⟨i.val, by omega⟩",
+        "⟨15 - i.val, by omega⟩", node_projection)
+    node_zero = local_consumer("NodeZero", "node_zero_iff",
+        ["node_bytes_projection", "zero_randomizer_bytes"])
+    add("node-whole-digest-zero", "NodeZero", "decide (nodeBytes digest = fun _ => 0)",
+        "decide (digest = 0)", node_zero)
+    add("node-any-byte-zero", "NodeZero", "decide (nodeBytes digest = fun _ => 0)",
+        "decide (∃ i, nodeBytes digest i = 0)", node_zero)
+    add("node-zero-replaced-one", "NodeZero", "decide (nodeBytes digest = fun _ => 0)",
+        "decide (nodeBytes digest = fun _ => 1)", node_zero)
+    node_event = theorem(src["NodeZero"], "public_node_zero_iff")
+    add("node-event-cache-omitted", "NodeZero", "table key = some digest ∧ nodeZero digest = true",
+        "nodeZero digest = true", node_event)
+    add("node-event-target-inverted", "NodeZero", "table key = some digest ∧ nodeZero digest = true",
+        "table key = some digest ∧ nodeZero digest = false", node_event)
+    add("node-event-conjunction-lost", "NodeZero", "table key = some digest ∧ nodeZero digest = true",
+        "table key = some digest ∨ nodeZero digest = true", node_event)
+    node_union = "(¬ CollisionFree randomizerOfDigest table) ∨ PublicNodeZero table"
+    add("node-union-zero-omitted", "NodeCharges", node_union,
+        "¬ CollisionFree randomizerOfDigest table",
+        theorem(src["TargetExamples"], "public_zero_alone_bad"))
+    add("node-union-collision-omitted", "NodeCharges", node_union,
+        "PublicNodeZero table", theorem(src["TargetExamples"], "public_collision_alone_bad"))
+
+    add("target-predicate-preserving", "TargetEvent", "target value = false",
+        "(target value || false) = false", target_one, True)
+    add("target-set-preserving", "TargetSet", "decide (project value ∈ targets)",
+        "decide (project value ∈ targets ∪ ∅)", target_single, True)
+    add("node-byte-index-preserving", "NodeZero", "⟨i.val, by omega⟩",
+        "⟨i.val + 0, by omega⟩", node_projection, True)
+    add("node-zero-value-preserving", "NodeZero", "decide (nodeBytes digest = fun _ => 0)",
+        "decide (nodeBytes digest = fun _ => (0 + 0))", node_zero, True)
     return out

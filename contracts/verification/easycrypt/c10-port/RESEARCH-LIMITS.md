@@ -108,6 +108,19 @@ recurrence, a checked vector algorithm computes it, and the kernel evaluates
 the finite computation. Exact PMF acceptance, first-hit, exhaustion and
 accepted-collision substitutions retain their existing premises. The
 EasyCrypt count is not imported as a premise or a cross-kernel certificate.
+The public zero-sentinel component now also has a separate PMF proof over the
+actual adaptive interpreter. Direct induction on the final cache gives
+`n*acceptMass` for a target predicate fixed before execution, assuming the
+initial cache contains no target hit. Existing hits persist even at zero
+budget. Uniform projected replies give `n*targets.card/M` for a fixed finite
+set. The concrete first sixteen big-endian digest bytes equal the high-128-bit
+projection, so an all-zero node has fresh mass `1/2^128` and final-cache charge
+`n/2^128`. Its union with public collisions on the same program and cache has
+charge `(n.choose 2+n)/2^128`. This uses all program queries; the refined
+EasyCrypt node-producing-domain budget has not been ported. Neither target
+postselection nor independent query keys is assumed. This retires the unported
+zero-sentinel component, not the remaining successful-output partition,
+reverse-chain/FORS continuations or full PMF forgery composition.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

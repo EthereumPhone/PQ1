@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "The actual 43-digit base-eight sum-205 AcceptedWots subtype has kernel-proved cardinality 22169393903687611906220091621190388. A first-digit/tail equivalence derives the finite-word recurrence over integer target sums; a structural finite vector computes it and the full count is evaluated by the Lean kernel. Exact numeric acceptance, independent first-hit/exhaustion and actual memoized adaptive accepted-collision laws follow from existing PMF theorems. All previous cache/history/freshness/budget premises remain explicit. No native evaluator, imported EasyCrypt theorem or numerical assumption; no full C10 client/successful-output/forgery composition, repeated-private-input iid, cross-kernel or concrete backend claim.",
+  "scope": "The actual adaptive final-cache target-hit probability is bounded by n*acceptMass for a fixed target and an initially hit-free cache; existing hits persist even at zero budget. Uniform projected targets yield n*card/M. The first16 big-endian digest bytes equal the high128-bit projection, whose zero-node event has mass 1/2^128; its actual empty-cache adaptive bound is n/2^128. Union with collisions on the same actual program gives (n.choose2+n)/2^128 using the full structural query budget. Previous exact WOTS cardinality and all cache/history/freshness premises remain intact. No postselected targets, independent-query-key assumption, new axiom, native evaluator, imported EasyCrypt theorem, full C10 client/successful-output/forgery composition, repeated-private-input iid, cross-kernel or concrete backend claim.",
   "sources": {
-    "Audit.lean": "d1e74ccef148e65fb6037d2d4f85a1f859b2ee8d47f26a3143ba451ffad74c3a",
+    "Audit.lean": "7565a343f0cbe89bd792030686883a7db16de23c101a174e83afd8bd181300f0",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -27,6 +27,8 @@
     "C10Probability/Memo.lean": "b91558cc183d9b0cf195de3c7a64b29c3057219acb1b451bff4b5b19aaee53c4",
     "C10Probability/MemoRelabel.lean": "52ec0afa4da94f66ac9a6b260e32700c622b4139a88d3c781a289406982770e9",
     "C10Probability/MemoView.lean": "c6533833c6d5a60cd713e15d96e81610dad15790e497789ab1d7870eef1ae133",
+    "C10Probability/NodeCharges.lean": "0ea856433767a453448496fa13f21407859d767f1bc6ff56606f104d9b206c52",
+    "C10Probability/NodeZero.lean": "df32dd017cd803782cf984ac63ffd133ef4f9a499cfec3080ff71824c6d8d252",
     "C10Probability/PrefixGuess.lean": "5d75706c1e138c7c79aecbdad1e250d8ba0675117c05a3dc4a6c06dedc98ab30",
     "C10Probability/PreludeBound.lean": "2c395b4e1fffc14ef62a6c5d86d5d4f4bee74dadce45e098243a501d2eb575bf",
     "C10Probability/PreludeExamples.lean": "756204d7e9e5b6cfb396c0b292fb65cdaea5bfbb819b4fa506cb4aad070bf36b",
@@ -47,12 +49,15 @@
     "C10Probability/SecretPrefix.lean": "02ce5bede98116369b8010cc65746e1fbff2db748063a4d26e5ddba9d11b921a",
     "C10Probability/SharedRandomizer.lean": "627502eccbf94318ce1f83d8bf916137b7d835f888f2141924ee1f518f763ec6",
     "C10Probability/StoppedProgram.lean": "c6ae47cf5068ef5c29ff638b3cfa28e1a42ec2a43cf6334d918ad995c972ee51",
+    "C10Probability/TargetEvent.lean": "b80d53cf917ffeb09b1b7520cc32f86e1427452c1b1deb5d2ab8078693b8d55f",
+    "C10Probability/TargetExamples.lean": "6c08c145806583cf2a1d072cb109e9af89c99ea4f9f6b3e2cb8b0e96e19bdafe",
+    "C10Probability/TargetSet.lean": "fb186ca6bef60fa866e8d5b441ff804ef1326229b80e05ed128e3523b81d7627",
     "C10Probability/Transfer.lean": "f3bfcc365888942c599d329662b8370495878e398868b383f521001a59f6a4c8",
     "C10Probability/Uniform.lean": "226b4108a3d3d9eb10e6cdb3efbf2bb6b46811f361a5d0bed485a9e3058a5a02",
     "C10Probability/WordCount.lean": "ca4c40c8d237395093833f0bd7d237ecb46940f7b3febc9ee22187a078af9ee4",
     "C10Probability/WotsCount.lean": "50a5634bb2919755ea1fb32daa7bdcd59689f090d7b69d4172b568a3086f1cbf",
     "C10Probability/WotsExact.lean": "6f042fe7a32c03820af0f47a4bcf11a9318ef0ff780288c9fb9fa6e09ea39b04",
-    "C10Probability.lean": "c128aa90d50d403cd7630465a3c7b2f9e5130be238ea957438176f63f2ca3ad8"
+    "C10Probability.lean": "c10e7f727cbb08bc9a2b799089273bbbf24e0d35fd6679540ba84a029e68885a"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -1039,6 +1044,54 @@
       "file": "C10Probability/MemoView.lean",
       "statement_sha256": "02f228ed2d33fca12772a84dcae8b5c1dab7f5cbf5f4d820a3c5aaaa6f214c85"
     },
+    "C10Probability.digest_program_node_bad_bound": {
+      "file": "C10Probability/NodeCharges.lean",
+      "statement_sha256": "f19b91131591556791c1e8f4ee489ea3a20998f9ad338beb6338daeb4b6cf674"
+    },
+    "C10Probability.digest_program_node_bad_bound_real": {
+      "file": "C10Probability/NodeCharges.lean",
+      "statement_sha256": "45797bc0aef5526b2876c98af2a130acd695bcb884a66fee1d73ee0f97ca6e67"
+    },
+    "C10Probability.node_bytes_projection": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "2545e6cdab078d0b04842f4c447d64d40d0f071db6b95390c0a0c921a9806746"
+    },
+    "C10Probability.zero_randomizer_bytes": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "e557b3d0a667d5912fd1a5b769510f730ebcf10621bc225ecb639c1af7084fae"
+    },
+    "C10Probability.node_zero_iff": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "4202bd309e012053f7e9ca90bdee43e2fcaa8b25449c17beb557f2ba0e5e2b84"
+    },
+    "C10Probability.node_zero_targets": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "f12d72575410ad7f93d9bdd9da558c935e4613d72715ccad449d51e2fc1ada5c"
+    },
+    "C10Probability.public_node_zero_iff": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "8ceb2499d6c99af117d919291a60eb2c6a1a93a9f23cd78dd5ce2cfe7506d0ec"
+    },
+    "C10Probability.node_zero_mass": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "2fac4f7d464e1113c37132388a3e3d93e6dba36128af8e7c6d7f06aa1270aa13"
+    },
+    "C10Probability.digest_program_zero_bound": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "9c8fbc136f6bfef009c1991eda283e978e1f90bca817efbe96a8abcda635cade"
+    },
+    "C10Probability.digest_program_zero_bound_real": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "f414b05a314aeb3c5cccdb31b71caeb6fb17020f22464611dcad6e8bda487dac"
+    },
+    "C10Probability.node_zero_low_bit": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "d90668e451e4faac7c769de89619fe7270859faa2ec25f621c54368cf31bbe91"
+    },
+    "C10Probability.node_zero_retained_bit": {
+      "file": "C10Probability/NodeZero.lean",
+      "statement_sha256": "fd9e50f890fc9693500e6f035f62d289fb5e41ef2bb6331a070fc2c6cb7997f9"
+    },
     "C10Probability.prefixCandidates_mem": {
       "file": "C10Probability/PrefixGuess.lean",
       "statement_sha256": "f49a4ce7527ccee7b69c5015005847dd07ce04cc6918fae4809927a865f11798"
@@ -1738,6 +1791,134 @@
     "C10Probability.stoppedProgram_abort": {
       "file": "C10Probability/StoppedProgram.lean",
       "statement_sha256": "15fda7b552eddb19f455a758a0a3e8a570694f78938055f785684f52d52b3d7e"
+    },
+    "C10Probability.noTarget_empty": {
+      "file": "C10Probability/TargetEvent.lean",
+      "statement_sha256": "cd37e80f3cdd09ffa5356d74d919e3fec5c0792fa421e1ac334bd3c563a394c4"
+    },
+    "C10Probability.noTarget_update": {
+      "file": "C10Probability/TargetEvent.lean",
+      "statement_sha256": "4823b2f2c527ffff18ab2f33e16f3484cc9c459d134af18e8cff9d784fdcd506"
+    },
+    "C10Probability.evalProgram_target_bound": {
+      "file": "C10Probability/TargetEvent.lean",
+      "statement_sha256": "f52941554c2c319a8fd138a9a8bdf9e67748b67acb3d880803b56b5fe3385de4"
+    },
+    "C10Probability.randomizedProgram_target_bound": {
+      "file": "C10Probability/TargetEvent.lean",
+      "statement_sha256": "d1f1f192666ba734b1112983c22d979c5a204ceea218b2377b8ffdeaace26e10"
+    },
+    "C10Probability.randomizedProgram_target_bound_real": {
+      "file": "C10Probability/TargetEvent.lean",
+      "statement_sha256": "e4d9c49b5ca788a68cd514d532602d43651b07d100a60f62a4a0a259b3ebf8da"
+    },
+    "C10Probability.evalProgram_initial_target_mass": {
+      "file": "C10Probability/TargetEvent.lean",
+      "statement_sha256": "7c27ca7d0b2838c1c283b372ca4a6d1de20b61df1c22f298036ac291958ea00f"
+    },
+    "C10Probability.randomizedProgram_initial_target_mass": {
+      "file": "C10Probability/TargetEvent.lean",
+      "statement_sha256": "84f5ff474fef5c7b3863cd42b66ee2e0b72568dcf008fe03989afc09b4d56c0c"
+    },
+    "C10Probability.one_entry_no_target": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "df12305fa1c6f66754e0ad8cffe39f2b1bbc350f67a1dacd14fb6d17d6b5b41e"
+    },
+    "C10Probability.two_entries_no_target": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "6c1884389ac66e799e3fef296065319057be397169c2f1429b5b854bae425ba6"
+    },
+    "C10Probability.repeatedBool_target_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "57fde67974625990b94fe96c01088cc6fcc4b2b8c830d3f9f539611e42ea7bc7"
+    },
+    "C10Probability.twoBool_target_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "e2116ff9dd46f5d4ebbc4e23fd9038a819b9409d66c1d6e18479dd6f5c5b2128"
+    },
+    "C10Probability.adaptiveBool_target_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "f1ea0e99e2a8d37469550b24165fe058b186fd4d2cbaf8eb4a283823bcc1ecf1"
+    },
+    "C10Probability.earlyTarget_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "a36d38fedb18bd3cec2b8d98fccc94ecdc9244f08b8413b4b1506ae63aadadb2"
+    },
+    "C10Probability.randomized_optional_target_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "3b8c510f61f1f460049f10a84d7177c71d02a1d9f891016df9c5f517b2cd0525"
+    },
+    "C10Probability.zero_queries_initial_target": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "2580d53e771a12c6c47ce95d6fb74577e40dd4bf2df6c3211bcb2a168fb8570c"
+    },
+    "C10Probability.zero_queries_safe_history": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "ae969fab657d987518b9114c752566c5435ee7ad3c3db955a470a066ddb2760c"
+    },
+    "C10Probability.cached_safe_query_target_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "94f83b2bae666522df95ceba52e418b31c594a3a982ea0febee83ddd95ca1f61"
+    },
+    "C10Probability.rejecting_target_safe": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "68d6f254542c8f379540bae33d52e3ee830ec68e1a001087a85d515401a1c131"
+    },
+    "C10Probability.all_reject_target_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "ecf00406ce2221e135955dacbb120a8e7a8890a1ec93642ed179504bd06c0aa2"
+    },
+    "C10Probability.all_accept_target_mass": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "2ec915b73edff91c3bc80704e52b11b7356e9c120f87bc9195b57dc63f70ba41"
+    },
+    "C10Probability.fixed_target_empty": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "8e40e3471c3f299588e11e77ac5151c7284e14caf36d96e4781e7c3f951fa89a"
+    },
+    "C10Probability.fixed_target_singleton": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "26cee010ea057798b65b6ab077c54c56f34768b4b4e0e97e901c772a78cf3a10"
+    },
+    "C10Probability.fixed_target_full": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "800210f981fd3952905f20325fccb924efdca3ad0b902c6a0035245fa47c3b0b"
+    },
+    "C10Probability.target_membership_nonvacuous": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "87da640ad99d189bf71a0a4b3f3a0bfed74d352910c55b4bb2696a069433fab6"
+    },
+    "C10Probability.target_lookup_matters": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "33801249548afed0e565476716d518aa2535469ff0a558870fb3e8de5936f230"
+    },
+    "C10Probability.singleton_zero_collision_free": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "694a469b64484e658a16683b2a03b39406a5dd907b2e9b5d4d298215dbc98063"
+    },
+    "C10Probability.public_zero_alone_bad": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "7be703e8233d747ea2e95798aaf44c144d737971aecd0c81131773b8a5baaff5"
+    },
+    "C10Probability.constant_nonzero_has_no_zero": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "da29da13a83e920f52ff15062a2a42a64eb779e1ab286f95d5cad3db5df3cce6"
+    },
+    "C10Probability.public_collision_alone_bad": {
+      "file": "C10Probability/TargetExamples.lean",
+      "statement_sha256": "6b71d0b7aa9022fc84dbe411edbdc7f986007fee20447b565f6adc28a7113fe8"
+    },
+    "C10Probability.projected_target_mass": {
+      "file": "C10Probability/TargetSet.lean",
+      "statement_sha256": "5ea68f94ea8ff5f981c5407e71b13ec42d296aa6b642c3442a8969fa5d4afe3d"
+    },
+    "C10Probability.randomizedProgram_target_set_bound": {
+      "file": "C10Probability/TargetSet.lean",
+      "statement_sha256": "e50aa33613ba31a513ff2a039354affe4f4912882ae2b0e38991f366e56e9a78"
+    },
+    "C10Probability.randomizedProgram_target_set_bound_real": {
+      "file": "C10Probability/TargetSet.lean",
+      "statement_sha256": "fa22b2529074e76db5e394d098db6bf99a3fd38ebd4a19efb46320b7b54c67e5"
     },
     "C10Probability.event_mass_le_one": {
       "file": "C10Probability/Transfer.lean",
