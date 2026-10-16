@@ -336,6 +336,8 @@ impl WalletStore for DualSecureElement {
             //
             // SAFETY: `&mut self` on the SE store implies the single-threaded
             // secure-world context the page-125 salt write requires.
+            #[cfg(feature = "ui-px-film-gaps")]
+            crate::ui::px::film_gaps::step(0);
             let salt = unsafe {
                 crate::pin_gate::load_or_create_salt(|bytes| self.draw_pin_salt(bytes))
             }
@@ -348,6 +350,8 @@ impl WalletStore for DualSecureElement {
                 SeError::InternalError
             })?;
 
+            #[cfg(feature = "ui-px-film-gaps")]
+            crate::ui::px::film_gaps::step(1);
             let half_o = Zeroizing::new(self.generate_split_half()?);
             secure_log!("[DUAL/prov] rng OK (3-source XOR mix), calling optiga.provision");
             let half_e = Zeroizing::new(xor_32(entropy, &half_o));
@@ -393,6 +397,8 @@ impl WalletStore for DualSecureElement {
             // HMAC auth reference gate; SE050 stores its half-object behind
             // hardware UserID gating. Each gate holds a different die-bound
             // credential. The VK and bootstrap VK are identical on both chips.
+            #[cfg(feature = "ui-px-film-gaps")]
+            crate::ui::px::film_gaps::step(2);
             if let Err(e) =
                 self.optiga
                     .provision_image(&optiga_image, master_secret, vk, bootstrap_vk)
@@ -401,10 +407,14 @@ impl WalletStore for DualSecureElement {
                 return Err(e);
             }
             secure_log!("[DUAL/prov] optiga OK, calling se050.provision");
+            #[cfg(feature = "ui-px-film-gaps")]
+            crate::ui::px::film_gaps::step(3);
             if let Err(e) = self.se050.provision_image(&se050_image, vk, bootstrap_vk) {
                 secure_log!("[DUAL/prov] se050.provision FAILED: {:?}", e);
                 return Err(e);
             }
+            #[cfg(feature = "ui-px-film-gaps")]
+            crate::ui::px::film_gaps::step(4);
             Ok(())
         })();
 
