@@ -49,7 +49,7 @@ sphincs-tz-shared = { path = "../shared" }
 # the API surface hasn't drifted. None of these are linked into the
 # libFuzzer bins.
 [dev-dependencies]
-toml             = "0.8"
+toml             = "1.1"
 pqsigner-proto   = { path = "../proto" }
 sphincs-tz-shared = { path = "../shared" }
 # DEV-ONLY EVM ground-truth oracle for the multiSend record-walk
