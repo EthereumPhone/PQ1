@@ -32,6 +32,16 @@ ten-million cap. Global initial R-input freshness, the full probability-monad
 forgery-game theorem and shared signer-session transfer remain open. Neither
 nonce uniqueness nor a secret prefix proves absence from arbitrary prior
 queries or earlier signing calls.
+A bounded adaptive oracle interpreter additionally proves the final-table
+collision component: reply-dependent query inputs, cached replies, early
+returns and initial client randomness are retained. Observer erasure is exact,
+and a support invariant connects its persistent flag to distinct-input
+projected collisions. Uniform fresh projections yield the history-plus-birthday
+charge; an empty table and the proved full-digest/high-128-bit law give
+`n.choose 2 / 2^128`. This is a bound for the actual adaptive PMF interpreter,
+not yet a translation of the complete C10 signer/adversary session or a full
+forgery theorem. Nonempty history requires coverage and initial collision
+freedom, and all counts remain worst-case query budgets.
 Cached and prefilled-key examples show why local counter uniqueness alone
 cannot establish independent fresh sampling.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

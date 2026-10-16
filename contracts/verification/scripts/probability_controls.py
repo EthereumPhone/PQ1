@@ -388,4 +388,113 @@ def cases(project: Path) -> list[dict]:
         theorem(src["MemoView"], "eraseMemo_hidden"), True)
     add("derived-counter-preserving", "DerivedGrind", "some (start, derive first.1, second.1)",
         "some (0 + start, derive first.1, second.1)", prefilled, True)
+
+    # Bounded adaptive clients and observational collision instrumentation.
+    add("randomized-cache-reset", "QueryProgram", "evalProgram p program table",
+        "evalProgram p program (fun _ => none)",
+        theorem(src["QueryProgram"], "randomizedProgram_pure"))
+    add("adaptive-return-table", "QueryProgram", "PMF.pure (value, table)",
+        "PMF.pure (value, fun _ => none)", theorem(src["QueryProgram"], "evalProgram_done"))
+    query_step = "evalProgram p (next out.1) out.2"
+    query_one = theorem(src["QueryProgram"], "evalProgram_one")
+    add("adaptive-query-store", "QueryProgram", query_step,
+        "evalProgram p (next out.1) table", query_one)
+    add("adaptive-cache-reset", "QueryProgram", "memoQuery p table key",
+        "memoQuery p (fun _ => none) key", """theorem checked :
+    evalProgram (PMF.pure true) (.query false (fun reply => .done (n := 0) reply))
+      (fun _ : Bool => some false) = PMF.pure (false, fun _ => some false) := by
+  simp [evalProgram, memoQuery, PMF.pure_map]
+""")
+    add("adaptive-reply-resample", "QueryProgram", query_step,
+        "p.bind (fun value => evalProgram p (next value) out.2)", query_one)
+    add("adaptive-key-fixed", "QueryProgram",
+        ".query first (fun second => .done (first, second))",
+        ".query true (fun second => .done (first, second))",
+        theorem(src["QueryProgram"], "adaptiveBool_cached_branch"))
+    add("observer-cache-store", "CollisionObserver",
+        "Function.update state.cache key (some value)", "state.cache",
+        theorem(src["CollisionObserver"], "observedQuery_erases"))
+    seen_check = """theorem checked [DecidableEq K] [DecidableEq V]
+    (project : α → V) (state : CollisionView K α V) (key : K) (value : α) :
+    (recordReply project state key value).seen = insert (project value) state.seen := by
+  simp [recordReply]
+"""
+    add("observer-seen-insert", "CollisionObserver", "insert (project value) state.seen",
+        "state.seen", seen_check)
+    add("observer-prior-flag", "CollisionObserver",
+        "state.bad || decide (project value ∈ state.seen)",
+        "decide (project value ∈ state.seen)",
+        theorem(src["AdaptiveExamples"], "observer_retains_prior_flag"))
+    add("observer-collision-drop", "CollisionObserver", "decide (project value ∈ state.seen)",
+        "false", """theorem checked :
+    (recordReply id
+      (⟨fun key : Bool => if key then none else some true, {true}, false⟩ :
+        CollisionView Bool Bool Bool) true true).bad = true := by decide
+""")
+    add("observer-collision-invert", "CollisionObserver", "decide (project value ∈ state.seen)",
+        "decide (project value ∉ state.seen)", """theorem checked :
+    (recordReply id (emptyView : CollisionView Bool Bool Bool) false true).bad = false := by
+  simp [recordReply, emptyView]
+""")
+    add("observer-cached-resample", "CollisionObserver", "| some value => PMF.pure (value, state)",
+        "| some value => p.map (fun reply => (reply, recordReply project state key reply))",
+        theorem(src["CollisionObserver"], "observedQuery_cached"))
+    add("observer-query-state", "CollisionObserver",
+        "observeProgram p project (next out.1) out.2",
+        "observeProgram p project (next out.1) state", """theorem checked :
+    observeProgram (PMF.pure true) id
+      (.query false (fun reply => .done (n := 0) reply)) emptyView =
+        PMF.pure (true, (⟨Function.update (fun _ : Bool => none) false (some true),
+          {true}, false⟩ : CollisionView Bool Bool Bool)) := by
+  simp [observeProgram, observedQuery, recordReply, emptyView, PMF.pure_map]
+""")
+    observer_return = """theorem checked (state : CollisionView Bool Bool Bool) :
+    observeProgram fairReply id (.done (n := 0) true) state = PMF.pure (true, state) := by rfl
+"""
+    add("observer-return-history", "CollisionObserver",
+        "| _, .done value, state => PMF.pure (value, state)",
+        "| _, .done value, state => PMF.pure (value, ⟨state.cache, ∅, state.bad⟩)",
+        observer_return)
+    add("observer-return-flag", "CollisionObserver",
+        "| _, .done value, state => PMF.pure (value, state)",
+        "| _, .done value, state => PMF.pure (value, ⟨state.cache, state.seen, false⟩)",
+        observer_return)
+    add("collision-input-identity", "CollisionObserver",
+        "project value = project reply → key = other",
+        "project value = project reply → value = reply",
+        theorem(src["AdaptiveExamples"], "two_entries_collision"))
+    add("collision-projection", "CollisionObserver",
+        "project value = project reply → key = other",
+        "value = reply → key = other", """theorem checked :
+    ¬ CollisionFree (fun _ : Bool => false) (fun key : Bool => some key) := by
+  unfold CollisionFree
+  decide
+""")
+    add("observer-history-coverage", "CollisionObserver",
+        "cache key = some value → project value ∈ seen",
+        "cache key = some value → project value ∉ seen", """theorem checked :
+    SeenCovers id (fun _ : Bool => some true) {true} := by
+  unfold SeenCovers
+  decide
+""")
+    add("observer-validity-guard", "CollisionObserver",
+        "state.bad = false → CollisionFree project state.cache",
+        "state.bad = true → CollisionFree project state.cache", """theorem checked :
+    ¬ ViewValid id (⟨fun _ : Bool => some false, {false}, false⟩ :
+      CollisionView Bool Bool Bool) := by
+  unfold ViewValid SeenCovers CollisionFree
+  decide
+""")
+    add("observer-initial-flag", "CollisionObserver",
+        "⟨fun _ => none, ∅, false⟩", "⟨fun _ => none, ∅, true⟩", """theorem checked :
+    (emptyView : CollisionView Bool Bool Bool).bad = false := by rfl
+""")
+    add("adaptive-budget-preserving", "QueryProgram", "QueryProgram K α R (n + 1)",
+        "QueryProgram K α R (Nat.succ n)", query_one, True)
+    add("observer-flag-preserving", "CollisionObserver",
+        "state.bad || decide (project value ∈ state.seen)",
+        "decide (project value ∈ state.seen) || state.bad",
+        theorem(src["AdaptiveExamples"], "observer_retains_prior_flag"), True)
+    add("observer-seen-preserving", "CollisionObserver", "insert (project value) state.seen",
+        "{project value} ∪ state.seen", seen_check, True)
     return out

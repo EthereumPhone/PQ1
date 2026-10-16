@@ -7,7 +7,9 @@ independent sampling and derives the C10 projection PMFs from a uniform full
 and independent sampling, using a derived history-plus-birthday charge. The
 randomizer instance includes its high-128-bit projection and padded H_msg bytes.
 A two-query shared-table grinder now derives that independent-R comparison
-under explicit initial R-input freshness and proved domain separation. **The probability-monad forgery-game theorem
+under explicit initial R-input freshness and proved domain separation. A bounded
+adaptive oracle interpreter now also derives the birthday charge for actual
+distinct-input collisions in its final memo table. **The probability-monad forgery-game theorem
 and full signer-session transfer remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
@@ -151,6 +153,46 @@ ten-million cap. No theorem says that secret keys or nonce distinctness alone
 exclude earlier queries to these inputs. Adaptive prior-query guessing,
 repeated signing calls and complete signer-session transfer remain open.
 
+`QueryProgram.lean` represents a finite oracle client whose next input may
+be chosen from earlier replies. Its index bounds the number of queries on
+every continuation, including early returns and the last permitted query.
+`evalProgram` uses the existing memoized oracle and returns both the client's
+value and the final table. A PMF over such programs supplies client randomness;
+continuations receive replies rather than the oracle's private table. This
+represents bounded adaptive clients, not a translation of the complete signer.
+
+`CollisionObserver.lean` adds a finite set of projected replies and a persistent
+collision flag. Only fresh queries insert a projection or set the flag;
+cached repeats retain the previous reply and observer state. Erasing these
+observers gives exactly the original program's returned-result and final-table
+distribution. A proved support invariant connects the flag to actual final-table
+collisions between distinct inputs, including different full replies with the
+same projection.
+
+`AdaptiveCollision.lean` derives a history-plus-birthday bound for every such
+adaptive program and every initial randomized choice of program. If the
+initial table has no projected collision, a set of `h` projections covers all
+its entries, and each fresh reply has a uniform projection in a space of size
+`M`, the probability of a distinct-input projected collision in the final table
+is at most `(n*h + n.choose 2)/M`. Query inputs need not be independent or
+uniform. Cached queries do not resample, and the budget is worst-case query
+count rather than expected work. The real-valued bound is derived from PMF
+probabilities with explicit finiteness checks. The already-proved full-digest
+high-128-bit law gives `n.choose 2 / 2^128` from an empty table.
+
+`AdaptiveExamples.lean` independently checks the boundary: repeated lookup of
+one input has collision probability zero; two fresh Boolean inputs have
+collision probability `1/2`; one prior entry and a fresh query also give `1/2`.
+A reply-dependent query has observer-flag probability `1/4`. An already
+colliding table has collision probability one even with zero new queries, so
+initial collision freedom cannot silently be omitted. The client, observer
+and final-table event are separate definitions connected by proved laws.
+
+These adaptive results supply a random-oracle collision component. They do not
+instantiate a complete C10 signer/adversary program, prove global R-input
+freshness or supply the remaining full forgery bound. No theorem replaces
+worst-case hash budgets with expected grinding work.
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -194,16 +236,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 186 theorem closures against
+The gate rebuilds every project module, checks all 226 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-87 typed cases run 261 compiler jobs: each baseline and changed
-definition must compile, 77 changed behaviors must reject at the
-consuming `checked` theorem, and ten value-preserving changes must pass. Cases cover exhaustion,
+110 typed cases run 330 compiler jobs: each baseline and changed
+definition must compile, 97 changed behaviors must reject at the
+consuming `checked` theorem, and thirteen value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -219,7 +261,12 @@ search controls cover R/H_msg cache resets, missing stores, discarded successful
 updates, continuing past success, returned label/reply/counter, acceptance and
 retry-table propagation. Layout controls cover the R tag, optional randomness,
 nonce placement, both R domains and three H_msg field-order swaps. The table
-erasure and equivalent counter forms also have positive controls. Syntax
+erasure and equivalent counter forms also have positive controls. Adaptive
+controls cover initial-cache resets, discarded updates, resampled replies to
+continuations, a fixed replacement for a reply-dependent key, observer stores
+and history, cached resampling, lost flags, distinct-input identity, projection
+semantics and the initial-validity guard. Equivalent budget, insertion and flag
+forms must pass. The query budget is enforced by the indexed program type. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.

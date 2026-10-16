@@ -200,7 +200,14 @@ secret-keyed R freshness remains open globally. A two-query shared-table
 interpreter now derives the independent-R comparison from distinct initially
 absent R inputs and proved 103/119-byte versus 160-byte domain separation. It
 retains the selected R, digest, counter and observed table, and transfers the
-conditional event/exhaustion bounds. All 186 theorem closures and 87 typed
+conditional event/exhaustion bounds. A separate bounded adaptive query interpreter
+now derives a birthday bound for distinct-input projected collisions in its
+actual final memo table, with cached replies, arbitrary reply-dependent inputs
+and initial client randomness. Observer erasure preserves the result and table;
+initial history coverage/collision freedom remain explicit. The full-digest
+high-128-bit instance gives `n.choose 2 / 2^128` from an empty cache, without
+independent query keys. The complete C10 client/session translation and forgery
+bound remain open. All 226 theorem closures and 110 typed
 cases are gated separately; `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.
