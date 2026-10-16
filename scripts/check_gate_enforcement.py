@@ -117,6 +117,7 @@ ENFORCEMENT_POLICY = {
     "verify-exec-gate": "local_documented",
     "verify-extract-differential": "nightly",
     "verify-extracted": "per_pr_blocking",
+    "verify-probability": "per_pr_blocking",
     "verify-extracted-heavy": "local_documented",
     "verify-extraction-freshness": "per_pr_blocking",
     "verify-extraction-regen": "local_documented",

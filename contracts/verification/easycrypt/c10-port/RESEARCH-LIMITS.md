@@ -7,6 +7,15 @@ status label. Work remains tracked under PQ1 #100 and #295.
 
 ## Quantitative loss
 
+The [separate mathlib PMF project](../../probability/README.md) now proves the
+bounded independent-sampling component of #295: exact first-hit, returned-event
+and exhaustion probabilities, C10 acceptance-projection instances, and a
+countermodel showing why cached replies cannot simply be counted as fresh
+draws. The full probability-monad forgery-game theorem, the full-digest
+projection relation and actual memoized-search/session transfer remain open.
+No EasyCrypt probability theorem is automatically imported into Lean, and the
+main `lean/` project remains mathlib-free.
+
 The exact-witness continuation counts reverse restricted-growth assignments
 and ordered distinct witness positions excluding the target. Its enrolled
 coefficient is `n * (n-1)_j * S(12,j)`: the finite enumerators, falling factorial,

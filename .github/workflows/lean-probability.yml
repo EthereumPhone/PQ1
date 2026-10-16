@@ -1,0 +1,60 @@
+name: Lean FV (C10 probability)
+
+# Separate research project; the mathlib-free lean/ project does not import it.
+on:
+  push:
+    branches: [master]
+    paths: &probability_paths
+      - 'contracts/verification/probability/**'
+      - 'contracts/verification/scripts/check_probability.py'
+      - 'contracts/verification/scripts/probability_controls.py'
+      - 'contracts/verification/scripts/check_axiom_closure.py'
+      - 'contracts/verification/scripts/check_ledger_consistency.py'
+      - 'contracts/verification/Makefile'
+      - '.github/workflows/lean-probability.yml'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10Counter.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawGrind.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawWots.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/WotsAcceptanceMass.ec'
+  pull_request:
+    paths: *probability_paths
+
+permissions:
+  contents: read
+
+jobs:
+  probability:
+    name: PMF proofs and semantic controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: install elan (toolchain pinned by lean-toolchain)
+        run: |
+          # Pinned + verified, not `curl | sh` from a moving branch. `master`
+          # is mutable: whoever controls that ref controls the toolchain
+          # installer on every FV runner, which is the trust root the
+          # verification Makefile builds on. Pin the commit, check the bytes,
+          # and only then execute. (#562)
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o elan-init.sh
+          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          rm -f elan-init.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: cache pinned probability dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: contracts/verification/probability/.lake/packages
+          key: lean-probability-deps-${{ hashFiles('contracts/verification/probability/lake-manifest.json', 'contracts/verification/probability/lean-toolchain') }}
+      - name: fetch pinned mathlib probability cache
+        working-directory: contracts/verification/probability
+        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic
+      - name: verify-probability (fresh kernel build, claims and typed controls)
+        run: make -C contracts/verification verify-probability

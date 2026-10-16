@@ -1801,6 +1801,45 @@
       ],
       "enforcement": "local_documented",
       "why": "2026-09-16 master integration: non-cumulative heavy mutation tier plus canary, also invoked by make kani-heavy. The selected no_hidden_value harness has measured peak RSS 13.05 GiB; keep this mutation baseline and mutant replay local, outside hosted CI. See #662 for the memory boundary."
+    },
+    {
+      "id": "verify-probability",
+      "make": "make -C contracts/verification verify-probability",
+      "polices_paths": [
+        "contracts/verification/probability/**",
+        "contracts/verification/scripts/check_probability.py",
+        "contracts/verification/scripts/probability_controls.py",
+        "contracts/verification/scripts/check_axiom_closure.py",
+        "contracts/verification/scripts/check_ledger_consistency.py",
+        "contracts/verification/Makefile",
+        ".github/workflows/lean-probability.yml",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10Counter.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawGrind.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawWots.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/WotsAcceptanceMass.ec"
+      ],
+      "runs_in": "lean-probability.yml",
+      "enforcement": "per_pr_blocking",
+      "required_context": {
+        "step": {
+          "name": "verify-probability (fresh kernel build, claims and typed controls)",
+          "run": "make -C contracts/verification verify-probability"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      },
+      "note": "#295 separate PMF project: fresh project build, all theorem closures/statement pins, exact manual projection-source bindings and 18 typed semantic cases. Does not establish cross-kernel or stateful-oracle transfer."
     }
   ],
   "_completeness_waived": {}

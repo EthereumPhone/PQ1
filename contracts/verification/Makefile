@@ -303,7 +303,7 @@ override _FV_EVIDENCE_TARGETS := \
 	verify-bytecode verify-clean verify-extraction-freshness \
 	verify-extraction-regen verify-extraction-regen-self-test \
 	verify-extract-differential verify-extracted verify-extracted-heavy \
-	verify-spec-vendored-fidelity verify-rollback-freeze-pin
+	verify-spec-vendored-fidelity verify-rollback-freeze-pin verify-probability
 # This is also the exact parser-guard inventory below.  Its self-test compares
 # it bidirectionally with every concrete `verify*:` definition in this file.
 .PHONY: $(_FV_EVIDENCE_TARGETS)
@@ -2947,3 +2947,7 @@ _extract-secure-wrapper-impl:
 	@$(_FV_PYTHON3) scripts/normalize_secure_wrapper_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/normalize_secure_wrapper_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-secure-wrapper $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
+
+# Separate mathlib PMF project. Existing EasyCrypt/extracted proofs are independent.
+verify-probability: ## C10 PMF kernel proofs, exact closures and typed controls
+	@$(_FV_PYTHON3) scripts/check_probability.py
