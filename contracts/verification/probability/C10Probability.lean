@@ -15,3 +15,5 @@ import C10Probability.AcceptedObserver
 import C10Probability.AcceptedCollision
 import C10Probability.AcceptedWots
 import C10Probability.AcceptedExamples
+import C10Probability.WotsExact
+import C10Probability.CountExamples

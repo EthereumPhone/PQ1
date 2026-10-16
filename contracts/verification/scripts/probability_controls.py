@@ -921,4 +921,69 @@ def cases(project: Path) -> list[dict]:
         pair_charge, True)
     add("accepted-charge-history-preserving", "AcceptedCollision",
         "(trials : ℝ≥0∞) * history", "(trials : ℝ≥0∞) * (0 + history)", history_charge, True)
+    # Exact finite-word count: independent small enumerations and the unchanged
+    # kernel computation consume the mutated definitions, including signed
+    # residuals, row orientation, absent entries and the claimed decimal value.
+    small_count = theorem(src["CountExamples"], "count_small_middle")
+    add("count-radix-shifted", "WordCount", "Fintype.card (SumWords base digits target)",
+        "Fintype.card (SumWords (base + 1) digits target)", small_count)
+    add("count-length-shifted", "WordCount", "Fintype.card (SumWords base digits target)",
+        "Fintype.card (SumWords base (digits + 1) target)", small_count)
+    add("count-target-shifted", "WordCount", "Fintype.card (SumWords base digits target)",
+        "Fintype.card (SumWords base digits (target + 1))", small_count)
+    add("count-negative-clamped", "WordCount", "Fintype.card (SumWords base digits target)",
+        "Fintype.card (SumWords base digits (target.toNat : ℤ))",
+        theorem(src["CountExamples"], "count_negative_target"))
+    add("count-sum-offset", "WordCount", "((word i).val : ℤ) = target}",
+        "((word i).val : ℤ) = target + 1}",
+        theorem(src["CountExamples"], "count_empty_zero"))
+
+    step_window = theorem(src["CountExamples"], "count_step_window")
+    vector_small = theorem(src["CountExamples"], "count_vector_small")
+    basis_zero = theorem(src["CountExamples"], "count_basis_zero")
+    basis_rep = theorem(src["CountVector"], "count_basis_rep")
+    add("count-window-widened", "CountVector", "((value :: rest).take base).sum",
+        "((value :: rest).take (base + 1)).sum", step_window)
+    add("count-window-shifted", "CountVector", "((value :: rest).take base).sum",
+        "(rest.take base).sum", step_window)
+    add("count-window-unbounded", "CountVector", "((value :: rest).take base).sum",
+        "(value :: rest).sum", step_window)
+    add("count-row-tail-lost", "CountVector", ":: countStep base rest",
+        ":: []", step_window)
+    add("count-zero-steps-lost", "CountVector", "| 0, row => row",
+        "| 0, _ => []", theorem(src["CountExamples"], "count_vector_zero_steps"))
+    add("count-step-omitted", "CountVector", "countRun base digits (countStep base row)",
+        "countRun base digits row", vector_small)
+    add("count-step-duplicated", "CountVector", "countRun base digits (countStep base row)",
+        "countRun base digits (countStep base (countStep base row))", vector_small)
+    add("count-step-radix-ignored", "CountVector", "countRun base digits (countStep base row)",
+        "countRun base digits (countStep 1 row)", vector_small)
+    add("count-basis-length", "CountVector", "List.replicate target 0 ++ [1]",
+        "List.replicate (target + 1) 0 ++ [1]", basis_zero)
+    add("count-basis-zeroed", "CountVector", "List.replicate target 0 ++ [1]",
+        "List.replicate target 0 ++ [0]", basis_zero)
+    add("count-basis-reversed", "CountVector", "List.replicate target 0 ++ [1]",
+        "[1] ++ List.replicate target 0", vector_small)
+    add("count-representation-direction", "CountVector", "((target : ℤ) - i)",
+        "((target : ℤ) + i)", basis_rep)
+    add("count-representation-default", "CountVector", "row[i]?.getD 0",
+        "row[i]?.getD 1", basis_rep)
+
+    exact_count = theorem(src["WotsCount"], "wots_word_count_kernel")
+    add("count-result-off-by-one", "WotsCount",
+        "def wotsCountValue : ℕ := 22169393903687611906220091621190388",
+        "def wotsCountValue : ℕ := 22169393903687611906220091621190389", exact_count)
+    add("count-result-zeroed", "WotsCount",
+        "def wotsCountValue : ℕ := 22169393903687611906220091621190388",
+        "def wotsCountValue : ℕ := 0", exact_count)
+
+    add("count-target-preserving", "WordCount", "Fintype.card (SumWords base digits target)",
+        "Fintype.card (SumWords base digits (target + 0))", small_count, True)
+    add("count-window-preserving", "CountVector", "((value :: rest).take base).sum",
+        "(((value + 0) :: rest).take base).sum", step_window, True)
+    add("count-basis-preserving", "CountVector", "List.replicate target 0 ++ [1]",
+        "List.replicate target (0 + 0) ++ [1]", vector_small, True)
+    add("count-result-preserving", "WotsCount",
+        "def wotsCountValue : ℕ := 22169393903687611906220091621190388",
+        "def wotsCountValue : ℕ := 22169393903687611906220091621190388 + 0", exact_count, True)
     return out

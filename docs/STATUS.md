@@ -230,9 +230,12 @@ An acceptance-filtered observer now derives the actual adaptive accepted-WOTS
 collision charge `n.choose 2*p/2^129` from an empty cache, with exact
 `p = Nat.card AcceptedWots/8^43`. Its history bound is
 `(n*h+n.choose 2*p)/M`; cached replies, rejected values and adaptive early
-returns keep their original execution semantics. The numerical WOTS count and
-the successful-output/forgery composition remain open in this PMF project.
-All 412 theorem closures and 231 typed cases are gated separately;
+returns keep their original execution semantics. The exact WOTS count is now
+kernel-proved independently in Lean: `22169393903687611906220091621190388`
+accepted words out of `8^43`. A proved finite-vector computation connects this
+integer to the actual sum-205 subtype and existing PMF laws. The
+successful-output/forgery composition remains open in this PMF project.
+All 449 theorem closures and 255 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

@@ -101,8 +101,13 @@ count as new accepted collisions. Initial accepted-history coverage and
 collision freedom remain explicit for nonempty tables; neither independent
 query keys nor successful grinding is assumed. This retires the unported
 accepted-encoding charge, not the full PMF successful-output partition or
-forgery composition. Its numerical acceptance enumeration remains to be
-kernel-proved in Lean; the EasyCrypt count is not imported as a premise.
+forgery composition. Its numerical acceptance enumeration is now independently
+kernel-proved in Lean: `Nat.card AcceptedWots` is exactly
+`22169393903687611906220091621190388`. A finite-word bijection derives the
+recurrence, a checked vector algorithm computes it, and the kernel evaluates
+the finite computation. Exact PMF acceptance, first-hit, exhaustion and
+accepted-collision substitutions retain their existing premises. The
+EasyCrypt count is not imported as a premise or a cross-kernel certificate.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

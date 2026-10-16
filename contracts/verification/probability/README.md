@@ -52,12 +52,23 @@ the required finiteness checks before conversion from `ENNReal`.
 | 43 uniform base-eight digits | digit sum is 205 | `Nat.card AcceptedWots / 8^43` |
 | Uniform eleven-bit field | field equals zero | `1/2048` |
 
-Both searches use 10,000,000 trials. The WOTS numerator is a proved finite
-cardinality, **not a Lean-checked evaluation of that integer**. A concrete
-accepted word and a rejected word witness that the predicate is nontrivial.
-EasyCrypt's separate evaluated count is documented in
+Both searches use 10,000,000 trials. `WotsCount.lean` now proves
+`Nat.card AcceptedWots = 22169393903687611906220091621190388` in Lean.
+`WordCount.lean` derives the exact recurrence by a first-digit/tail bijection;
+integer target sums preserve negative residuals. `CountVector.lean` proves
+that a descending-target vector computes that cardinality, including its
+zero-word basis and default-zero entries. The Lean kernel evaluates all 43
+steps at base eight and target 205; no native evaluator or asserted numerical
+count is trusted. The existing concrete accepted and rejected words remain.
+
+`WotsExact.lean` substitutes this count into the projection and full-digest
+acceptance, first-hit and exhaustion laws, and the actual adaptive accepted
+collision bound. Full digest atoms retain denominator `2^256`; projected
+word atoms retain `8^43`. `CountExamples.lean` independently enumerates small
+finite word spaces and checks zero/empty/negative and maximum-sum boundaries.
+EasyCrypt's separate count is documented in
 [RAW-NUMERICAL-EUF.md](../easycrypt/c10-port/RAW-NUMERICAL-EUF.md#accepted-wots-encoding-collisions).
-That proof is not automatically transferred to Lean.
+Its theorem is not imported into Lean.
 
 ## Independence and correspondence boundary
 
@@ -211,9 +222,9 @@ proved; the initial-validity guard is explicit.
 `AcceptedWots.lean` instantiates this result with the existing full-digest
 projection to 43 base-eight digits and the sum-205 test. From an empty cache,
 the accepted-encoding charge is `n.choose 2*p/2^129`, with the exact
-`p = Nat.card AcceptedWots / 8^43`. This Lean component does not yet prove the
-numerical enumeration used by the EasyCrypt result. It introduces no
-freshness or successful-grinding premise and does not supply the full forgery
+`p = Nat.card AcceptedWots / 8^43`. `WotsCount.lean` and `WotsExact.lean`
+now supply its kernel-checked numerator and numeric substitution. This
+introduces no freshness or successful-grinding premise and does not supply the full forgery
 game or its successful-output partition.
 
 `AcceptedExamples.lean` independently computes actual finite distributions.
@@ -441,16 +452,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 412 theorem closures against
+The gate rebuilds every project module, checks all 449 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-231 typed cases run 693 compiler jobs: each baseline and changed
-definition must compile, 200 changed behaviors must reject at the
-consuming `checked` theorem, and thirty-one value-preserving changes must pass. Cases cover exhaustion,
+255 typed cases run 765 compiler jobs: each baseline and changed
+definition must compile, 220 changed behaviors must reject at the
+consuming `checked` theorem, and thirty-five value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -505,3 +516,8 @@ requests and master pushes. It is registered with the repository's enforcement
 checker. Each local run retains its sources, logs and receipts under
 `.lake/probability-evidence-*`. A green gate establishes only the statements
 above; semantic review and the remaining game/backend obligations still matter.
+
+Exact-count controls cover radix, length, target, negative-target clamping,
+sum offset, convolution window, row tail, zero/omitted/duplicated steps,
+basis length/value/order, representation direction/default and the decimal
+result. Equivalent target, window, basis and result expressions must pass.
