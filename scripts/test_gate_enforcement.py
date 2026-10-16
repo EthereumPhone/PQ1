@@ -26,7 +26,8 @@ class GateControls(unittest.TestCase):
         self.root = Path(self.temp.name)
         names = [Path('Makefile'), MANIFEST_PATH, Path('scripts/check_gate_enforcement.py'),
                  Path('scripts/kani_mutations.json'),
-                 Path('contracts/verification/extraction_registry.json')]
+                 Path('contracts/verification/extraction_registry.json'),
+                 Path('contracts/verification/probability/claims.json')]
         names += [p.relative_to(ROOT) for p in (ROOT / '.github/workflows').glob('*.yml')]
         names += [p.relative_to(ROOT) for p in ROOT.glob('*/Cargo.toml')]
         for name in names:
