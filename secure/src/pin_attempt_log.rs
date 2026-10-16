@@ -213,6 +213,18 @@ pub fn record(reason: AttemptReason, pre_count: u8) {
     }
 }
 
+/// Forget every entry and the in-flight pre-charge. Part of every wallet
+/// wipe (#952): the log is the destroyed wallet's history, and an entry left
+/// behind by a duress wipe (`AlreadyAtMax` with a pre-count below ten, which
+/// no real lockout produces) would say which PIN was entered.
+pub fn clear() {
+    // SAFETY: as in `record`.
+    unsafe {
+        *core::ptr::addr_of_mut!(ATTEMPT_LOG) = AttemptLog::new();
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDING_PRE_COUNT), 0);
+    }
+}
+
 /// Serialise the log for the read-only gateway command.
 pub fn snapshot(out: &mut [u8; SERIALISED_LEN]) {
     // SAFETY: as in `record`; read-only access.

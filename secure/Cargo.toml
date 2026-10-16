@@ -518,6 +518,10 @@ duress-provision-e2e = ["duress-pin"]
 # driving the screens on a board that must not take `optiga-hw-counter`
 # (the EVT) and in QEMU. NEVER ships (no decoy is stored).
 duress-ui-test = []
+# Dev diagnostic (2026-10-16): when the auto-unlock right after setup fails,
+# show which step of `DualSecureElement::unlock` failed ("code N") for 8 s
+# before the PIN prompt. NEVER ships (fenced in nsc/mod.rs).
+unlock-diag = []
 # Combined MCU page-124 + OPTIGA E120 + SE050 per-attempt and in-run
 # desynchronization/recovery E2E. It exercises ordinary three-way attempt
 # consumption plus MCU-, OPTIGA-, and SE050-ahead recovery and simulated

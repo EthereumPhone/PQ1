@@ -1503,26 +1503,30 @@ Some(ADMIN_WIPE_OBJ)\n    } else {\n        None\n    };\n";
     // still passes `admin_ref`.
     assert!(MOD_SRC.contains("USERID_OBJ, admin_ref,"));
 
-    // The shipping wipe's DATA list is unchanged too; the bench list is the
-    // same list plus the decoy's three data objects, which a bench wipe has
-    // to remove BEFORE the duress UserID that gates them (second review
-    // wave: otherwise they are left with nothing able to delete them).
-    let shipping_data = "#[cfg(not(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\")))]\n        \
-const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[\n            \
-(ENTROPY_OBJ, \"ENTROPY_OBJ\"),\n            \
-(VK_OBJ, \"VK_OBJ\"),\n            \
-(BOOTSTRAP_VK_OBJ, \"BOOTSTRAP_VK_OBJ\"),\n            \
-(0x7B10_00B0, \"CANARY_USERID\"),";
-    assert!(MOD_SRC.contains(shipping_data), "the shipping wipe's data list changed");
-    let bench_data = "#[cfg(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\"))]\n        \
-const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[\n            \
+    // #948: ONE data list, in every build, and it removes the decoy's three
+    // data objects BEFORE the UserIDs that gate them (second review wave:
+    // otherwise they are left with nothing able to delete them). Until
+    // 2026-10-16 only the bench list had them, so a shipping-shaped wipe
+    // left the decoy's half and keys on the chip and still reported success.
+    assert_eq!(
+        MOD_SRC.matches("const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[").count(),
+        1,
+        "the wipe's data list must not be split by build again (#948)"
+    );
+    let data = "\n        const DATA_AND_CANARY_OBJS: &[(u32, &str)] = &[\n            \
 (ENTROPY_OBJ, \"ENTROPY_OBJ\"),\n            \
 (VK_OBJ, \"VK_OBJ\"),\n            \
 (BOOTSTRAP_VK_OBJ, \"BOOTSTRAP_VK_OBJ\"),\n            \
 (DURESS_ENTROPY_OBJ, \"DURESS_ENTROPY_OBJ\"),\n            \
 (DURESS_VK_OBJ, \"DURESS_VK_OBJ\"),\n            \
 (DURESS_BOOTSTRAP_VK_OBJ, \"DURESS_BOOTSTRAP_VK_OBJ\"),";
-    assert!(MOD_SRC.contains(bench_data), "a bench wipe no longer removes the decoy's data objects");
+    assert!(MOD_SRC.contains(data), "a wipe no longer removes the decoy's data objects");
+    let decl = MOD_SRC.find(data).expect("the data list");
+    let before = &MOD_SRC[MOD_SRC[..decl].rfind(";\n").unwrap_or(0)..decl];
+    assert!(
+        !before.contains("#[cfg("),
+        "the data list is cfg-gated again: a build without it leaves the decoy's objects (#948)"
+    );
     // In the wipe, the data loop runs before the UserID loop.
     let data_loop = MOD_SRC
         .find("                for (obj_id, name) in DATA_AND_CANARY_OBJS {")

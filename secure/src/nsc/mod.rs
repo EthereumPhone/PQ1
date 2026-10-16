@@ -437,6 +437,11 @@ compile_error!(
         // SECS/CECS. A fault-injection path has no business in a shipping
         // image under any circumstances.
         feature = "rng-fault-probe",
+        // Shows the duress setup screens but stores nothing: a shipping
+        // image with it would tell the user a duress PIN is set when none is.
+        feature = "duress-ui-test",
+        // Dev diagnostic: names the failing unlock step on the display.
+        feature = "unlock-diag",
     )
 ))]
 compile_error!(
@@ -1643,6 +1648,11 @@ pub unsafe fn gated_unlock(
     // duress-correct unlock resets the MCU counter exactly like a real
     // success (handled by the shared post-match logic below) — else the
     // lockout state would distinguish duress from real.
+    // #952: set when the duress PIN wiped the device. The wipe cleared the
+    // attempt log, and the outcome arm below must not write the tell-tale
+    // entry straight back into it.
+    #[cfg(feature = "duress-pin")]
+    let mut duress_wiped = false;
     #[cfg(feature = "duress-pin")]
     let result = match se.unlock_duress(pin) {
         Ok(mut m) => {
@@ -1677,6 +1687,14 @@ pub unsafe fn gated_unlock(
                 crate::fi::zeroize_barrier();
                 secure_log!("[NSC] duress=wipe configured — wiping device");
                 let _ = se.factory_reset_admin();
+                // #951: the same reset `trigger_lockout_wipe` performs after
+                // its wipe. Without it a duress wipe from the boot or PendSV
+                // prompt (which only show PIN LOCKED) left page 124 charged,
+                // and the next wallet started short of attempts. Refused
+                // unless the salt is verifiably gone.
+                #[cfg(feature = "stm32u585")]
+                let _ = crate::hw::flash::pin_attempts_reset_after_wipe();
+                duress_wiped = true;
                 Err(UnlockError::PinLocked)
             }
         }
@@ -1752,15 +1770,21 @@ pub unsafe fn gated_unlock(
             Err(UnlockError::InternalError)
         }
         Err(e) => {
+            #[cfg(feature = "duress-pin")]
+            let log_it = !duress_wiped;
+            #[cfg(not(feature = "duress-pin"))]
+            let log_it = true;
             // A real chip-side verdict is what the budget exists for; anything
             // else burned an attempt without judging the PIN.
-            crate::pin_attempt_log::record_outcome(match e {
-                UnlockError::PinIncorrect => {
-                    crate::pin_attempt_log::AttemptReason::PinIncorrect
-                }
-                UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
-                _ => crate::pin_attempt_log::AttemptReason::NoVerdict,
-            });
+            if log_it {
+                crate::pin_attempt_log::record_outcome(match e {
+                    UnlockError::PinIncorrect => {
+                        crate::pin_attempt_log::AttemptReason::PinIncorrect
+                    }
+                    UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                    _ => crate::pin_attempt_log::AttemptReason::NoVerdict,
+                });
+            }
             Err(e)
         }
     }

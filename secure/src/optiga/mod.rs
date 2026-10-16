@@ -2907,28 +2907,27 @@ impl OptigaTrustM {
             apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_BOOTSTRAP_VK, &blank)?;
         }
 
-        // §32: also blank the duress (decoy) OIDs. Best-effort (NOT `?`):
-        // the real wipe above already succeeded, and a stale decoy half_o
-        // left on OPTIGA reveals nothing once the SE050 decoy half is gone
-        // (the admin-delete policy on the SE050 duress objects makes
-        // `factory_reset_admin` delete them) — XOR split means one half is
-        // information-free. We blank anyway for hygiene + parity. F1D8
-        // (Change=ALW) and F1D9/F1DA/F1DB/F1D6 (Change=Auto(F1D8) OR
-        // Conf(E140), satisfied by the shield) are all writable here; we
-        // deliberately do NOT touch E121 (its Change=Auto(F1D8) has no
-        // Conf escape, and it's an unenforced high-limit counter — its
-        // stale value is harmless and its metadata must persist for the
-        // re-provision idempotency skip). Re-provisioning the decoy after
-        // a wipe rewrites all four via the same Conf(E140) path the real
-        // OIDs use, so the wipe→re-provision recovery path is intact.
+        // §32: also blank the duress (decoy) OIDs, with the same `?` as the
+        // real ones (#950): a failure aborts this leg, the coordinator
+        // re-arms the wipe flag and the next boot resumes the wipe. These
+        // used to be best-effort on the premise that the SE050 decoy half
+        // was always deleted, which shipping-shaped builds did not do until
+        // #948. F1D8 (Change=ALW) and F1D9/F1DA/F1DB/F1D6
+        // (Change=Auto(F1D8) OR Conf(E140), satisfied by the shield) are all
+        // writable here. E121 is deliberately NOT touched: its
+        // Change=Auto(F1D8) has no Conf escape, it is an unenforced
+        // high-limit counter whose stale value is harmless, and its metadata
+        // must persist for the re-provision idempotency skip. Re-provisioning
+        // the decoy after a wipe rewrites all of these through the same
+        // Conf(E140) path the real OIDs use.
         #[cfg(feature = "duress-pin")]
         unsafe {
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_ENTROPY, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_MASTER_SECRET, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_VK, &blank);
-            let _ = apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_BOOTSTRAP_VK, &blank);
-            secure_log!("[OPTIGA] Factory reset: duress OIDs blanked (best-effort)");
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_AUTH_REF, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_ENTROPY, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_MASTER_SECRET, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_VK, &blank)?;
+            apdu::set_data_object(&mut self.ifx, &mut self.shield, apdu::OID_DURESS_BOOTSTRAP_VK, &blank)?;
+            secure_log!("[OPTIGA] Factory reset: duress OIDs blanked");
         }
 
         self.zeroize_caches_internal();

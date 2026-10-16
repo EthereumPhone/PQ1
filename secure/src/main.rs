@@ -989,6 +989,142 @@ fn is_provisioned(se: &mut impl WalletStore) -> bool {
     se.is_provisioned()
 }
 
+/// Ask for the PIN until the wallet unlocks, through `nsc::gated_unlock`
+/// (every typed PIN charges page 124), or until the device reports it is
+/// PIN-locked. The normal boot of a provisioned device, and the fallback when
+/// the auto-unlock right after setup fails.
+#[cfg(all(not(test), not(feature = "e2e-test")))]
+fn boot_pin_unlock() {
+    // Prompt for PIN and unlock via the SE / MACD path.
+    // Loop until the user enters the correct PIN or the device
+    // locks out (SE050: 9 attempts, MACD: 13 attempts).
+    use ui::pin_entry::{enter_pin, PinEntryResult};
+    use zeroize::Zeroize;
+
+    loop {
+        ui::show_status("Enter PIN", "to unlock");
+
+        // #728: reset the inactivity timer for THIS prompt.
+        //
+        // `enter_pin()` samples `timeout::is_idle()` BEFORE waiting and
+        // only resets after a button event (`pin_entry.rs:112`). Without
+        // the line below, a deadline that has already passed when boot
+        // reaches here makes every iteration return `IdleWipe`
+        // immediately -> "Locked" -> `continue` -> re-prompt, forever.
+        // Observed on pq1 silicon: the panel flickers Enter-PIN/Locked
+        // and the operator must enter the PIN twice. No attempt is
+        // consumed (no PIN is submitted), so it does not walk toward the
+        // 10-attempt wipe — it just looks broken, on the first thing a
+        // user ever does with the device.
+        //
+        // The boundary is LOCKED vs UNLOCKED, not NS-reachable vs
+        // boot-only. Resetting while LOCKED arms an input window; there
+        // is no session to extend and no secret that idling out would
+        // protect. Resetting while UNLOCKED would prolong a live
+        // signing session, which is what X17-UI3 / HIGH-13 forbids
+        // `enter_pin()` from doing unconditionally.
+        //
+        // `cmd_request_unlock.rs` is the precedent: it returns Ok
+        // immediately when already unlocked (so a companion cannot spam
+        // prompts) and resets activity only on the locked path, for
+        // exactly this reason (#713). The PendSV re-unlock loop below
+        // does the same, bounded by PENDSV_MAX_REUNLOCK_ATTEMPTS.
+        timeout::reset_activity();
+
+        let mut pin = match enter_pin() {
+            PinEntryResult::Pin(p) => p,
+            PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {
+                ui::show_status("Locked", "");
+                continue;
+            }
+            PinEntryResult::Mismatch => continue,
+        };
+
+        ui::show_status("Verifying...", "");
+
+        // Route through the MCU-counter-gated unlock so every
+        // user-typed PIN burns the same MCU budget, regardless
+        // of entry point (boot-interactive here, PendSV re-
+        // unlock, CMD_REQUEST_UNLOCK from NS). See
+        // `nsc::gated_unlock` docstring for the full rationale.
+        // SAFETY: the single-threaded secure boot path owns the `SE` driver
+        // here (NS has not started; PendSV only pends after SysTick sees an
+        // unlocked wallet go idle, and this loop runs while it is locked).
+        let result = unsafe {
+            let se_ref = &mut *core::ptr::addr_of_mut!(SE);
+            nsc::gated_unlock(se_ref, &pin)
+        };
+
+        pin.zeroize();
+        crate::fi::zeroize_barrier();
+
+        match result {
+            Ok(master) => {
+                let unlocked = nsc::unlock_after_verified_pin(master);
+                if unlocked == crate::fi::OK_SENTINEL {
+                    #[cfg(feature = "ui-px")]
+                    ui::show_status("Unlocked", "");
+                    ui::show_status("PQSigner OS", "Ready");
+                    secure_log!("[S] PIN verified — unlocked");
+                    break;
+                }
+                ui::show_status("Unlock error", "try again");
+                secure_log!("[S] PIN verified but forced-attempt arm failed closed");
+            }
+            Err(secure_element::UnlockError::PinLocked) => {
+                // Same correction as the PendSV arm (#715): this is
+                // also reached as a short-circuit when the counter is
+                // already at MAX, where nothing was wiped. The real
+                // wipe path prints its own WIPING / WALLET WIPED
+                // screens, so a reset claimed here would be false.
+                ui::show_status("PIN locked", "power cycle");
+                secure_log!("[S] PIN locked out (no wipe performed on this path)");
+                break;
+            }
+            Err(secure_element::UnlockError::PinIncorrect) => {
+                ui::show_status("Wrong PIN", "try again");
+                secure_log!("[S] Wrong PIN");
+            }
+            Err(_) => {
+                // InternalError — SE/transport trouble, not a PIN
+                // verdict (see the PendSV re-unlock twin).
+                ui::show_status("Unlock error", "try again");
+                secure_log!("[S] Boot unlock failed: internal/SE error (not a PIN mismatch)");
+            }
+        }
+    }
+}
+
+/// The auto-unlock after setup failed: say so before the PIN prompt. Dev
+/// images built with `unlock-diag` also show which step of
+/// `DualSecureElement::unlock` failed and hold it long enough to photograph.
+#[cfg(all(not(test), not(feature = "e2e-test")))]
+fn show_auto_unlock_failure() {
+    #[cfg(all(feature = "unlock-diag", feature = "dual-se"))]
+    {
+        let code = dual_se::last_unlock_failure();
+        let mut sub = *b"code 00";
+        sub[5] = b'0' + (code / 10) % 10;
+        sub[6] = b'0' + code % 10;
+        ui::show_status("Unlock error", ui::ascii_str(&sub));
+        hold_ms(8_000);
+    }
+    #[cfg(not(all(feature = "unlock-diag", feature = "dual-se")))]
+    {
+        ui::show_status("Unlock error", "enter PIN");
+        hold_ms(2_000);
+    }
+}
+
+/// Busy-wait on the S-only tick (SysTick runs from early boot on hardware).
+#[cfg(all(not(test), not(feature = "e2e-test")))]
+fn hold_ms(ms: u32) {
+    let t0 = timeout::now();
+    while timeout::now().wrapping_sub(t0) < ms {
+        cortex_m::asm::nop();
+    }
+}
+
 /// Run the first-boot interactive wizard. Loops until the user successfully:
 /// 1. Picks (and confirms) a PIN
 /// 2. Either generates a fresh BIP-39 mnemonic or restores one
@@ -4358,6 +4494,33 @@ fn main() -> ! {
                 drop(first.decoy);
             }
 
+            // #949 / #953: nothing of a previous wallet's flash state may
+            // carry into this one. A wipe that completes erases pages 123
+            // and 125 itself; these cover a wallet that went some other way
+            // (a chip-side reset tool, or a wipe whose SE050 leg could not
+            // erase page 125). Fail closed like the rest of provisioning:
+            // the next boot runs the wizard again.
+            #[cfg(feature = "stm32u585")]
+            if hw::flash::erase_offchain_page_for_wipe().is_err() {
+                ui::show_status("Setup failed", "power cycle to retry");
+                panic!("page 123 erase failed before provisioning");
+            }
+            // A stale duress mode reads as WIPE (the read is fail-closed),
+            // so it would silently turn a DECOY choice into WIPE. Page 125
+            // is never erased under a pending wipe: its flag is what makes
+            // the next boot finish that wipe.
+            #[cfg(feature = "duress-pin")]
+            if hw::flash::is_duress_wipe_mode() {
+                if hw::flash::is_wipe_armed() {
+                    ui::show_status("Wipe pending", "power cycle");
+                    panic!("stale duress mode while a wipe is pending");
+                }
+                if hw::flash::erase_admin_page().is_err() {
+                    ui::show_status("Setup failed", "power cycle to retry");
+                    panic!("page 125 erase failed before provisioning");
+                }
+            }
+
             // §32 P5: when the duress PIN wipes the device, persist that
             // BEFORE provisioning — a crash after provision but before this
             // write would silently downgrade wipe→decoy. Blank flash = decoy
@@ -4465,118 +4628,34 @@ fn main() -> ! {
             // provision for no security gain (can't be an attack path:
             // we control both the PIN and the PIN target in the same
             // call).
-            match (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin) {
-                Ok(master) => {
-                    nsc::unlock_with_master(master);
-                    secure_log!("[S] Auto-unlocked after provisioning");
-                }
-                Err(_) => {
-                    secure_log!("[S] WARNING: auto-unlock failed after provision");
-                }
-            }
-
-            // mnemonic drops here → indices zeroed.
+            let auto = (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin);
+            // mnemonic drops at the end of this block → indices zeroed.
             use zeroize::Zeroize;
             pin.zeroize();
             crate::fi::zeroize_barrier();
-            ui::show_status("PQSigner OS", "Ready");
-            secure_log!("[S] Provisioned + unlocked");
-        } else {
-            secure_log!("[S] Device already provisioned — requesting PIN unlock");
-
-            // Prompt for PIN and unlock via the SE / MACD path.
-            // Loop until the user enters the correct PIN or the device
-            // locks out (SE050: 9 attempts, MACD: 13 attempts).
-            use ui::pin_entry::{enter_pin, PinEntryResult};
-            use zeroize::Zeroize;
-
-            loop {
-                ui::show_status("Enter PIN", "to unlock");
-
-                // #728: reset the inactivity timer for THIS prompt.
-                //
-                // `enter_pin()` samples `timeout::is_idle()` BEFORE waiting and
-                // only resets after a button event (`pin_entry.rs:112`). Without
-                // the line below, a deadline that has already passed when boot
-                // reaches here makes every iteration return `IdleWipe`
-                // immediately -> "Locked" -> `continue` -> re-prompt, forever.
-                // Observed on pq1 silicon: the panel flickers Enter-PIN/Locked
-                // and the operator must enter the PIN twice. No attempt is
-                // consumed (no PIN is submitted), so it does not walk toward the
-                // 10-attempt wipe — it just looks broken, on the first thing a
-                // user ever does with the device.
-                //
-                // The boundary is LOCKED vs UNLOCKED, not NS-reachable vs
-                // boot-only. Resetting while LOCKED arms an input window; there
-                // is no session to extend and no secret that idling out would
-                // protect. Resetting while UNLOCKED would prolong a live
-                // signing session, which is what X17-UI3 / HIGH-13 forbids
-                // `enter_pin()` from doing unconditionally.
-                //
-                // `cmd_request_unlock.rs` is the precedent: it returns Ok
-                // immediately when already unlocked (so a companion cannot spam
-                // prompts) and resets activity only on the locked path, for
-                // exactly this reason (#713). The PendSV re-unlock loop below
-                // does the same, bounded by PENDSV_MAX_REUNLOCK_ATTEMPTS.
-                timeout::reset_activity();
-
-                let mut pin = match enter_pin() {
-                    PinEntryResult::Pin(p) => p,
-                    PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {
-                        ui::show_status("Locked", "");
-                        continue;
-                    }
-                    PinEntryResult::Mismatch => continue,
-                };
-
-                ui::show_status("Verifying...", "");
-
-                // Route through the MCU-counter-gated unlock so every
-                // user-typed PIN burns the same MCU budget, regardless
-                // of entry point (boot-interactive here, PendSV re-
-                // unlock, CMD_REQUEST_UNLOCK from NS). See
-                // `nsc::gated_unlock` docstring for the full rationale.
-                let se_ref = &mut *core::ptr::addr_of_mut!(SE);
-                let result = nsc::gated_unlock(se_ref, &pin);
-
-                pin.zeroize();
-                crate::fi::zeroize_barrier();
-
-                match result {
-                    Ok(master) => {
-                        let unlocked = nsc::unlock_after_verified_pin(master);
-                        if unlocked == crate::fi::OK_SENTINEL {
-                            #[cfg(feature = "ui-px")]
-                            ui::show_status("Unlocked", "");
-                            ui::show_status("PQSigner OS", "Ready");
-                            secure_log!("[S] PIN verified — unlocked");
-                            break;
-                        }
-                        ui::show_status("Unlock error", "try again");
-                        secure_log!("[S] PIN verified but forced-attempt arm failed closed");
-                    }
-                    Err(secure_element::UnlockError::PinLocked) => {
-                        // Same correction as the PendSV arm (#715): this is
-                        // also reached as a short-circuit when the counter is
-                        // already at MAX, where nothing was wiped. The real
-                        // wipe path prints its own WIPING / WALLET WIPED
-                        // screens, so a reset claimed here would be false.
-                        ui::show_status("PIN locked", "power cycle");
-                        secure_log!("[S] PIN locked out (no wipe performed on this path)");
-                        break;
-                    }
-                    Err(secure_element::UnlockError::PinIncorrect) => {
-                        ui::show_status("Wrong PIN", "try again");
-                        secure_log!("[S] Wrong PIN");
-                    }
-                    Err(_) => {
-                        // InternalError — SE/transport trouble, not a PIN
-                        // verdict (see the PendSV re-unlock twin).
-                        ui::show_status("Unlock error", "try again");
-                        secure_log!("[S] Boot unlock failed: internal/SE error (not a PIN mismatch)");
-                    }
+            match auto {
+                Ok(master) => {
+                    nsc::unlock_with_master(master);
+                    secure_log!("[S] Auto-unlocked after provisioning");
+                    #[cfg(feature = "ui-px")]
+                    ui::show_status("Unlocked", "");
+                    secure_log!("[S] Provisioned + unlocked");
+                }
+                Err(_e) => {
+                    // NEVER leave the user on READY with the wallet locked
+                    // (seen on the EVT 2026-10-16): a locked device has
+                    // nothing for the idle timeout to wipe, so no PIN prompt
+                    // ever came, buttons did nothing, and only a power cycle
+                    // got the PIN prompt back. Ask for the PIN the user just
+                    // set, through the same counted loop a normal boot uses.
+                    secure_log!("[S] WARNING: auto-unlock failed after provision: {:?}", _e);
+                    show_auto_unlock_failure();
+                    boot_pin_unlock();
                 }
             }
+        } else {
+            secure_log!("[S] Device already provisioned — requesting PIN unlock");
+            boot_pin_unlock();
         }
     }
 
@@ -4618,7 +4697,12 @@ fn main() -> ! {
 
     secure_log!("[S] Gateway ready");
 
-    ui::show_status("PQSigner OS", "Ready");
+    // READY only over an unlocked wallet. Locked here means the PIN-locked
+    // arm of `boot_pin_unlock`: its "PIN locked / power cycle" stays on the
+    // glass instead of being painted over by a READY the device is not.
+    if nsc::is_unlocked() {
+        ui::show_status("PQSigner OS", "Ready");
+    }
 
     // Enable the DWT cycle counter so the non-secure world can measure
     // timing (e2e benchmarks, companion latency logging).  The counter
