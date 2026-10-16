@@ -419,7 +419,7 @@ not(feature=\"se050-crash-safety-e2e\"),not(test),))]unsafe{usesecure_element::W
         "fn factory_reset_admin(&mut self) -> Result<(), SeError> {",
     ));
     assert!(wipe.contains(
-        "ifsalt_gone.is_err()||optiga_result.is_err()||se050_result.is_err(){unsafe{if!crate::hw::flash::is_wipe_armed(){let_=crate::hw::flash::arm_wipe_flag();}}}"
+        "ifsalt_gone.is_err()||offchain_result.is_err()||optiga_result.is_err()||se050_result.is_err(){unsafe{if!crate::hw::flash::is_wipe_armed(){let_=crate::hw::flash::arm_wipe_flag();}}}"
     ));
 }
 
@@ -732,4 +732,24 @@ fn negative_a_failed_auto_unlock_never_leaves_ready_on_a_locked_wallet() {
         rest.contains("ifnsc::is_unlocked(){ui::show_status(\"PQSignerOS\",\"Ready\");}"),
         "{rest}"
     );
+}
+
+#[test]
+fn negative_an_idle_pin_prompt_stays_up() {
+    // Owner 2026-10-16: left idle, the PendSV PIN prompt went to LOCKED -
+    // RETRY LATER after ~24 minutes, because every 120 s idle re-prompt was
+    // counted against the runaway cap. ASSUMPTION ATTACKED: the cap goes back
+    // to counting prompts rather than submitted PINs.
+    let body = code_only(function_text(MAIN_SRC, "fn PendSV() {"));
+    let prompt = body.find("letmutpin=matchenter_pin(){").expect("the prompt");
+    let count = body.find("attempts+=1;").expect("the runaway count");
+    assert_eq!(body.matches("attempts+=1;").count(), 1);
+    assert!(prompt < count, "the cap counts prompts again, so an idle prompt gives up");
+    // An idle or cancelled prompt goes straight back round, uncounted.
+    assert!(body[prompt..count].contains("PinEntryResult::Cancelled|PinEntryResult::IdleWipe=>{continue;}"));
+    // A PIN the cap stops is wiped, not left on the stack.
+    let cap = body.find("ifattempts>PENDSV_MAX_REUNLOCK_ATTEMPTS{").expect("the cap");
+    assert!(body[cap..].starts_with(
+        "ifattempts>PENDSV_MAX_REUNLOCK_ATTEMPTS{pin.zeroize();crate::fi::zeroize_barrier();"
+    ));
 }

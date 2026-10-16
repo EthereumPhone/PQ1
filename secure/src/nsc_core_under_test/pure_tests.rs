@@ -487,9 +487,17 @@ fn negative_gated_unlock_reset_failure_fails_closed() {
         body.contains("return Err(UnlockError::InternalError);"),
         "a failed reset must refuse the unlock (fail-closed)",
     );
+    // Scoped to the CORRECT-PIN reset. The duress-wipe arm's
+    // `pin_attempts_reset_after_wipe` (#951) is discarded on purpose, as in
+    // `trigger_lockout_wipe`: it refuses unless the salt is gone, and a
+    // refusal leaves the counter charged, which is the safe direction.
     assert!(
-        !body.contains("let _ = crate::hw::flash::pin_attempts_reset"),
+        !body.contains("let _ = crate::hw::flash::pin_attempts_reset_after_correct_pin"),
         "F17/SCAFI-5: the success arm must not swallow pin_attempts_reset failure",
+    );
+    assert!(
+        !body.contains("let _ = crate::hw::flash::pin_attempts_reset()"),
+        "an unguarded reset must not appear in gated_unlock",
     );
 }
 
@@ -524,20 +532,28 @@ fn positive_gated_unlock_wipe_on_duress_branch() {
         NSC_MOD_SRC.contains("is_duress_wipe_mode()"),
         "gated_unlock must consult the wipe-on-duress flag on a duress match",
     );
-    // The wipe branch must `factory_reset_admin()` then immediately
-    // return `Err(UnlockError::PinLocked)` — with NO `pin_attempts_reset`
-    // between them (a reset after a terminal wipe is confused state; the
-    // downstream Err arm handles the page-124 counter correctly by
-    // leaving it bumped). Check the window between the wipe call and the
-    // PinLocked return contains no reset.
+    // The wipe branch must `factory_reset_admin()` then return
+    // `Err(UnlockError::PinLocked)`. Between them the ONLY counter reset
+    // allowed is the wipe-guarded one (#951, 2026-10-16): the same
+    // `pin_attempts_reset_after_wipe` `trigger_lockout_wipe` runs, which
+    // refuses unless the salt is verifiably gone. This pin used to forbid any
+    // reset here ("confused state, leave it bumped"); it predates that guard,
+    // and leaving the counter bumped is what made the next wallet start
+    // short of attempts after a duress wipe from the boot or PendSV prompt.
     let wipe_pos = NSC_MOD_SRC.find("se.factory_reset_admin()")
         .expect("wipe-mode branch must factory_reset_admin");
     let after = &NSC_MOD_SRC[wipe_pos..];
     let locked_pos = after.find("Err(UnlockError::PinLocked)")
         .expect("wipe must be followed by PinLocked");
+    let window = &after[..locked_pos];
+    assert_eq!(
+        window.matches("pin_attempts_reset").count(),
+        1,
+        "exactly one counter reset between the wipe and the PinLocked return",
+    );
     assert!(
-        !after[..locked_pos].contains("pin_attempts_reset"),
-        "no pin_attempts_reset between the wipe and the PinLocked return (confused state)",
+        window.contains("crate::hw::flash::pin_attempts_reset_after_wipe()"),
+        "the reset after a duress wipe must be the salt-guarded one (#951)",
     );
 }
 

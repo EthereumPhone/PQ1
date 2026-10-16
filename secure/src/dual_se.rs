@@ -42,6 +42,28 @@ use crate::secure_element::{SeError, UnlockError, WalletStore};
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
 
+/// Dev diagnostic (`unlock-diag`): the step at which the last
+/// [`DualSecureElement::unlock`] failed, 0 while none has. 1 = no usable salt
+/// (credentials), 2/3 = OPTIGA rejected the PIN / other OPTIGA error, 4/5 =
+/// the same for the SE050, 6/7 = OPTIGA blob read / decrypt, 8/9 = SE050
+/// blob read / decrypt, 10 = the reconstructed entropy disagrees with the
+/// stored master. A step number only, never a secret; added 2026-10-16 to
+/// find why the auto-unlock after setup failed on the EVT.
+#[cfg(feature = "unlock-diag")]
+static LAST_UNLOCK_FAIL: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+#[inline(always)]
+fn unlock_failed_at(_step: u8) {
+    #[cfg(feature = "unlock-diag")]
+    LAST_UNLOCK_FAIL.store(_step, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// See [`LAST_UNLOCK_FAIL`].
+#[cfg(feature = "unlock-diag")]
+pub fn last_unlock_failure() -> u8 {
+    LAST_UNLOCK_FAIL.load(core::sync::atomic::Ordering::Relaxed)
+}
+
 /// XOR two 32-byte arrays. Inherently constant-time.
 fn xor_32(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
     let mut out = [0u8; 32];
@@ -161,28 +183,6 @@ impl DualSecureElement {
         let result = self.optiga.factory_reset_admin();
         result
     }
-}
-
-/// Dev diagnostic (`unlock-diag`): the step at which the last
-/// [`DualSecureElement::unlock`] failed, 0 while none has. 1 = no usable salt
-/// (credentials), 2/3 = OPTIGA rejected the PIN / other OPTIGA error, 4/5 =
-/// the same for the SE050, 6/7 = OPTIGA blob read / decrypt, 8/9 = SE050
-/// blob read / decrypt, 10 = the reconstructed entropy disagrees with the
-/// stored master. A step number only, never a secret; added 2026-10-16 to
-/// find why the auto-unlock after setup failed on the EVT.
-#[cfg(feature = "unlock-diag")]
-static LAST_UNLOCK_FAIL: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
-
-#[inline(always)]
-fn unlock_failed_at(_step: u8) {
-    #[cfg(feature = "unlock-diag")]
-    LAST_UNLOCK_FAIL.store(_step, core::sync::atomic::Ordering::Relaxed);
-}
-
-/// See [`LAST_UNLOCK_FAIL`].
-#[cfg(feature = "unlock-diag")]
-pub fn last_unlock_failure() -> u8 {
-    LAST_UNLOCK_FAIL.load(core::sync::atomic::Ordering::Relaxed)
 }
 
 impl WalletStore for DualSecureElement {

@@ -4927,7 +4927,9 @@ unsafe fn DefaultHandler(irqn: i16) {
 #[cfg(all(not(test), feature = "stm32u585"))]
 static mut PENDSV_IN_FLIGHT: u32 = 0;
 
-/// Hard cap on re-unlock attempts within a single PendSV entry.
+/// Hard cap on SUBMITTED PINs within a single PendSV entry. Prompts that
+/// end with no PIN (idle, cancel) are not counted: an idle prompt stays up
+/// indefinitely (owner 2026-10-16).
 ///
 /// WHY THIS EXISTS: every pass through the re-unlock loop below can burn one
 /// page-124 pre-commit attempt — the `Err(_)` arm's own comment says so
@@ -5037,20 +5039,6 @@ fn PendSV() {
         ui::show_status("Locked", "");
 
         loop {
-            attempts += 1;
-            if attempts > PENDSV_MAX_REUNLOCK_ATTEMPTS {
-                // Runaway guard, not a lockout: the SE/page-124 budget is
-                // still the authority on wrong PINs. Returning leaves the
-                // device LOCKED but keeps the non-secure world scheduled,
-                // so USB stays alive instead of the CPU spinning here.
-                ui::show_status("Locked", "retry later");
-                secure_log!(
-                    "[S] PendSV re-unlock aborted after {} attempts (runaway guard)",
-                    PENDSV_MAX_REUNLOCK_ATTEMPTS
-                );
-                break;
-            }
-
             // The #729 attempt counter that used to render here (`to unlock
             // NN/12`, dev images only) was REMOVED 2026-09-23. It existed to
             // make "does the tick advance inside a PendSV-driven prompt?"
@@ -5072,11 +5060,36 @@ fn PendSV() {
 
             let mut pin = match enter_pin() {
                 PinEntryResult::Pin(p) => p,
+                // Nothing typed, nothing submitted, nothing charged: the
+                // prompt simply stays up, however long the device sits
+                // there (owner 2026-10-16: "it should just stay in the pin
+                // screen"). These passes are NOT counted against the
+                // runaway cap below; counting them is what turned a device
+                // left idle for ~24 minutes (12 x 120 s) into LOCKED -
+                // RETRY LATER with no prompt at all.
                 PinEntryResult::Cancelled | PinEntryResult::IdleWipe => {
                     continue;
                 }
                 PinEntryResult::Mismatch => continue,
             };
+
+            // Runaway guard, not a lockout: the SE/page-124 budget is still
+            // the authority on wrong PINs. Only a SUBMITTED PIN counts, so
+            // this fires only for a loop that keeps submitting without ever
+            // reaching a verdict that ends it (#729's amplification).
+            // Returning leaves the device LOCKED but keeps the non-secure
+            // world scheduled, so USB stays alive.
+            attempts += 1;
+            if attempts > PENDSV_MAX_REUNLOCK_ATTEMPTS {
+                pin.zeroize();
+                crate::fi::zeroize_barrier();
+                ui::show_status("Locked", "retry later");
+                secure_log!(
+                    "[S] PendSV re-unlock aborted after {} attempts (runaway guard)",
+                    PENDSV_MAX_REUNLOCK_ATTEMPTS
+                );
+                break;
+            }
 
             ui::show_status("Verifying...", "");
 
