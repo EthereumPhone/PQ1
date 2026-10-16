@@ -220,7 +220,13 @@ error. Earlier private replies may influence later queries; a proved structural
 budget counts public calls and repeated private inputs remain cached. Uniform
 hidden secret and empty initial tables are explicit. This closes that interface
 component, not full C10 client translation or repeated-grinder freshness.
-All 327 theorem closures and 176 typed cases are gated separately;
+The actual two-query FORS grinder now compiles to this client with full-state
+equality, retaining selected R, digest, counter, failure and cache. Its actual
+adaptive prelude/grinder/continuation execution has prefix-event error at most
+`(q_before+n+q_after)/2^256`, counting internal H_msg queries. Intermediate
+freshness and success are not assumed; repeated private inputs still stay
+cached, so no repeated-call independent-R exhaustion claim follows.
+All 364 theorem closures and 207 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

@@ -14,7 +14,10 @@ after an adaptive public-query prelude now has a derived secret-prefix error
 and composed exhaustion bound, with secret-independent public inputs. A further
 private-prefix interface theorem compares full interleaved public/private
 executions through one shared memo table and separate memo tables, including
-queries chosen from earlier private replies. **The probability-monad forgery-game theorem
+queries chosen from earlier private replies.
+The actual two-query FORS grinder now has an exact client compilation and a
+prefix-error comparison with bounded adaptive work before and after the call.
+**The probability-monad forgery-game theorem
 and full signer-session transfer remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
@@ -313,6 +316,59 @@ first-grinder exhaustion theorem keeps its existing premises. Direct secret
 leakage, correlated initial state, concrete SHA and quantum queries remain
 outside these results.
 
+`ProgramComposition.lean` composes bounded clients using their actual return
+values and persistent cache. Index padding preserves execution and does not
+issue queries. The composition theorem preserves the complete state, and the
+public-budget theorem adds worst-case public calls across both stages.
+
+`GrindProgram.lean` compiles `derivedMemoGrind` into that client language. Its
+full-state equality holds for arbitrary starting tables, including cached
+replies, without a successful-search or freshness premise. Each attempt makes
+the actual first query, derives the second input from its reply, and tests the
+second reply. Success retains the selected label, full reply and counter;
+failure advances the counter and retains the updated table. No later input is
+queried after acceptance. The total index is twice the number of permitted
+attempts, and the private/public instance has at most one public call per
+attempt.
+
+`GrindInterface.lean` proves that prefixing its secret-independent tail schedule
+produces exactly the existing R-input schedule, including `R_grind`, optional
+randomness, message and the full counter block. Its concrete client has total
+index `2*n` and public budget `n`. Mapping private calls through the hidden
+secret gives exactly `sharedRandomizerSearch`, including its returned R,
+digest, counter, failure and full memo table. Running the client with sum keys
+gives the separately cached private/public comparison. These equalities do not
+assume fresh R inputs or discard the final state.
+
+`GrindSession.lean` defines the actual three-stage executions separately: an
+adaptive prelude, the existing grinder, and a bounded continuation. It proves
+their equivalence to composed clients and obtains
+
+```
+|Pr[shared execution returns E] - Pr[separate-cache execution returns E]|
+  <= (q_before + n + q_after) / 2^256.
+```
+
+Both directions are proved over `ENNReal`, followed by the real-valued bound
+and the ten-million-trial specialization. Requests may depend on earlier
+private replies; the continuation receives the actual selected R and digest,
+counter or failure, and runs against the actual updated cache. The public
+budget includes the grinder's H_msg queries. Both global caches start empty,
+and neither the client, request function nor continuation directly receives
+the uniform secret. Intermediate tables need not be empty or fresh. A finite
+continuation can include further compiled calls, but private repeats remain
+cached; no repeated-call independent-sampling or exhaustion bound follows.
+
+`GrindClientExamples.lean` independently evaluates cache reuse across composed
+clients, a reply-dependent continuation with mass `1/4`, immediate success,
+cached first and second replies, counter advancement, zero-budget failure and
+two repeated private grinder calls. The repeated calls agree with probability
+one, illustrating why the ideal private table must not be read as fresh R
+sampling. This closes the actual grinder's application to the prefix-interface
+theorem, including later bounded work. Complete C10 keygen/sign/verify client
+translation, full PMF forgery composition and concrete backend correspondence
+remain open. The earlier independent-R exhaustion theorem keeps its premises.
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -356,16 +412,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 327 theorem closures against
+The gate rebuilds every project module, checks all 364 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-176 typed cases run 528 compiler jobs: each baseline and changed
-definition must compile, 154 changed behaviors must reject at the
-consuming `checked` theorem, and twenty-two value-preserving changes must pass. Cases cover exhaustion,
+207 typed cases run 621 compiler jobs: each baseline and changed
+definition must compile, 180 changed behaviors must reject at the
+consuming `checked` theorem, and twenty-seven value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -399,7 +455,14 @@ cache preservation, continuation replies, cache correspondence, prefix
 decoding, client/secret randomization and the concrete private-input layout.
 The full event-bound consumer proves its composition helpers locally, so an
 imported original implementation cannot mask these mutations. Equivalent
-mapping, budget, guard, secret and prefix expressions must pass. Syntax
+mapping, budget, guard, secret and prefix expressions must pass. Client/grinder
+controls additionally cover altered continuation keys, first/second query
+inputs, acceptance and stopping, selected R/reply/counter, exact R-tail and
+H_msg fields, private/public cache routing, secret and client randomization,
+and discarded state or results between actual session stages. The consuming
+session-bound proof establishes its compiler and composition helpers locally.
+Equivalent counter, association, continuation, secret and table expressions
+must pass. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.

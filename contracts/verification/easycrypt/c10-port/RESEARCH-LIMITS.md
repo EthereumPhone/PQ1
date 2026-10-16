@@ -76,6 +76,21 @@ Repeated private inputs remain cached, so this comparison must not be read as
 a fresh-R sampler. Independent finite examples exhibit a real/ideal gap and
 show why secret leakage, noninjective private encoding and a prefilled
 physical table invalidate the relevant premises.
+The existing two-query FORS grinder now has a proved full-state compilation
+into the interleaved client. Its secret-independent R-tail schedule, H_msg
+inputs, selected R, full digest, counter, failure and cache are retained.
+An actual adaptive prelude, that `sharedRandomizerSearch`, and a bounded
+continuation compare with the separate-cache execution with two-sided event
+error `(q_before+n+q_after)/2^256`, including the ten-million-trial
+specialization. Internal H_msg calls count toward this public-query budget.
+The continuation can depend on the returned R/digest or failure and keeps the
+updated table; no intermediate freshness or success premise is added. The
+uniform hidden secret and empty global initial cache remain explicit.
+This closes the grinder's application to the private-prefix interface and
+its bounded-continuation restriction. It does not make repeated private inputs
+fresh or transfer the earlier independent-R exhaustion bound to arbitrary
+repeated calls. Full C10 keygen/sign/verify client translation, PMF forgery
+composition and concrete backend correspondence remain open.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Bounded adaptive clients may interleave public raw queries and secret-prefixed private derivations. A proved stopped-execution relation and cache correspondence compare the full shared-table and separate-table returned-value distributions; structural worst-case public-call budgets give a derived q/cardSecret charge, instantiated as q/2^256 with exact 32-byte encoding. Earlier private replies may influence later queries and repeated private inputs stay cached. Uniform hidden secret and empty initial caches remain explicit. Prior first-grinder and collision results remain; full C10 PMF client/session translation, repeated-grinder freshness, full forgery composition, cross-language and backend correspondence remain open.",
+  "scope": "The existing two-query FORS grinder now compiles to the bounded adaptive query client with a proved full-state equality on arbitrary intermediate caches. Actual adaptive prelude, sharedRandomizerSearch and continuation executions compare to separate public/private caching with two-sided returned-event error (q_before+n+q_after)/2^256. Selected R, full digest, counter, exhaustion and internal cache persist through composition. Uniform hidden secret and empty global initial cache are explicit; internal H_msg calls count in the public budget. No repeated-private-input fresh resampling, full C10 client/forgery composition, cross-kernel import or concrete backend claim. Prior first-grinder exhaustion results retain their own premises.",
   "sources": {
-    "Audit.lean": "df4744c60cffc42b6f4c69077293e0cf6997d933efdee418b0b89a87967722a9",
+    "Audit.lean": "c6e60ebf2dc7feb0e4393ad0305f27b166f2d2f104a92c5946e087df8a0b9f4f",
     "C10Probability/AdaptiveCollision.lean": "abf2184b38b0347451064a7b3b28fc185341245607fa222f73ab93750da56cf7",
     "C10Probability/AdaptiveExamples.lean": "1378b3ba7f6e7063c72f488f7c1cdf18bc5f5a7cb85e75f0f187caf4a9523359",
     "C10Probability/Boundaries.lean": "b2715545caea41d26f97145c73bee8c8a57adced252eb517d2a630a5424b2fd9",
@@ -12,6 +12,10 @@
     "C10Probability/Digest.lean": "fb67b058bab333230a65acb788c69484cb6b0413ac4b39810525b0b940c4adfb",
     "C10Probability/DigestGrind.lean": "0fa9f04c8292263ef4147dbf418a6fb2eb1b0b363915d943b6a9b02e19093816",
     "C10Probability/Grind.lean": "0798b393b52a313213d8be2d4079ffa462dd860595b7760d2d7a836bc76557ad",
+    "C10Probability/GrindClientExamples.lean": "7a4bb203e38d89aefa251c38448b89cbad60216636aaaebc3cabbe0feec60bd3",
+    "C10Probability/GrindInterface.lean": "bb271492f6b0ed904cf6075a0fe108804058c645500072bee7072534b07adf96",
+    "C10Probability/GrindProgram.lean": "765f747ccb033eb0699e1e1c928c49a2c45c6ac5be3ee5b27b251899df24e989",
+    "C10Probability/GrindSession.lean": "23fc794028262c925781870dea0c8ddefc3df1eaed198ce585b468b7fe6f3933",
     "C10Probability/KeyCollision.lean": "fcd6aad405882f45796804afbd3dd8ff1540cadd188478400213247d49731473",
     "C10Probability/LabelledGrind.lean": "f90241b9073ee2e7dc2fb591270d06702d6ef80dbf70c2f36fb251e983de3950",
     "C10Probability/Memo.lean": "b91558cc183d9b0cf195de3c7a64b29c3057219acb1b451bff4b5b19aaee53c4",
@@ -25,6 +29,7 @@
     "C10Probability/PrivateQueries.lean": "b93ce800485497456bf4fd3e44185da25281062ecd48ff29666c8aff3f093982",
     "C10Probability/PrivateSecret.lean": "7e0d6568a42c784b1feb04a8f43c3322fb3bff9ffa49fc3fc61fdef3f5d21afa",
     "C10Probability/PrivateTransfer.lean": "84764dfeb347a13fb3244bbb152e877fb1f7a17e46c89ef718573e75a17493c8",
+    "C10Probability/ProgramComposition.lean": "9fdfa0902212321621b62178767d5c944e782f857e7b4b6648947cba3fe54a6e",
     "C10Probability/Projections.lean": "a75db239651fc102f691c001b6992101e322e6a20d71e59744648c366d8e45c9",
     "C10Probability/QueryMap.lean": "12bc0ae94edcada34c81a8dc406a2ef2011dc8284a7a15efbccbe4c681c5b597",
     "C10Probability/QueryProgram.lean": "53a204aa3f00c8f2558bcfc68b3c21235eb9644b78f809b156b338375d74f697",
@@ -38,7 +43,7 @@
     "C10Probability/StoppedProgram.lean": "c6ae47cf5068ef5c29ff638b3cfa28e1a42ec2a43cf6334d918ad995c972ee51",
     "C10Probability/Transfer.lean": "f3bfcc365888942c599d329662b8370495878e398868b383f521001a59f6a4c8",
     "C10Probability/Uniform.lean": "226b4108a3d3d9eb10e6cdb3efbf2bb6b46811f361a5d0bed485a9e3058a5a02",
-    "C10Probability.lean": "19a196cf1f2f06052c522e31a84fcba4e6450e5dcc65f3ec0e24c793b8cfd07e"
+    "C10Probability.lean": "510fbf30ddfc4b31b88ad480baa90f42b4e22a416608875a6d60794e1395efee"
   },
   "theorems": {
     "C10Probability.collision_pairs_mono_history": {
@@ -473,6 +478,118 @@
       "file": "C10Probability/Grind.lean",
       "statement_sha256": "064f3132bc6063dd2c4696ab1ae0c57055ed2ce554ced754c261f085578577bd"
     },
+    "C10Probability.composed_cached_reply": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "e7a3eac8cdda2c9542d846a2078becd7a18971188e8083b02eb52a01b1caf6ef"
+    },
+    "C10Probability.composed_reply_dependent_mass": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "6cd3aa73c2279a3185c08959699a7b7c10f5a5a31713521ff390f877190d6224"
+    },
+    "C10Probability.compiled_immediate_state": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "cb63f58626b0cdc7da2a52854e39c0ff01e8bdf46801e3b98f8211327a25897f"
+    },
+    "C10Probability.compiled_cached_rejection": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "ed641225f2b0e07c1c532b6cfcc0938a0d5562f871e288f2bc381d21a74a7616"
+    },
+    "C10Probability.compiled_cached_first_label": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "ad4bbfb7aee31199c65e60a00a34d2858a11fdc859c28a1e30c654add96b75a6"
+    },
+    "C10Probability.compiled_retry_counter_state": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "add84762cae14381911b9fc3ebe5afe43a6786847f81dd357072c53aafcda8f8"
+    },
+    "C10Probability.repeated_private_grind_cached": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "49d6633dc081c3bc06f6bf7061f181a875570df3bcdb2978e94abf1c42d310fe"
+    },
+    "C10Probability.shared_session_zero": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "559738255482bdeef00eea3193e52fe5b117b066eb5fcfd1a7785adcc5d8b8bd"
+    },
+    "C10Probability.independent_session_zero": {
+      "file": "C10Probability/GrindClientExamples.lean",
+      "statement_sha256": "de34ec1aa080359d422d67d705d5c7b7dd675cb3e6736214b22f0ee70650d4a2"
+    },
+    "C10Probability.prefixed_tail_counter": {
+      "file": "C10Probability/GrindInterface.lean",
+      "statement_sha256": "7baa464cc0ba4a8eba6431d72a5a22358eab71a7dd4929a15d64c06833ab8f48"
+    },
+    "C10Probability.prefixed_tail_schedule": {
+      "file": "C10Probability/GrindInterface.lean",
+      "statement_sha256": "29b323e243270cfc917b1085f41d08fa38209ade412336091913dc95bde2c204"
+    },
+    "C10Probability.privateRandomizerProgram_shared": {
+      "file": "C10Probability/GrindInterface.lean",
+      "statement_sha256": "5ddfc4f2042e1b73d160272856e49f37172899846b39206d6090f2fda8e5ce93"
+    },
+    "C10Probability.privateRandomizerProgram_independent": {
+      "file": "C10Probability/GrindInterface.lean",
+      "statement_sha256": "e622091b165bd62586902361857a7fc74c68ac64642663ea31e63c20865aaf26"
+    },
+    "C10Probability.privateRandomizerProgram_budget": {
+      "file": "C10Probability/GrindInterface.lean",
+      "statement_sha256": "efff11ab313f7bcf491f60bf2db1a201c2be6faef7da85897060d821c90d28e4"
+    },
+    "C10Probability.privateRandomizerSearch_zero": {
+      "file": "C10Probability/GrindInterface.lean",
+      "statement_sha256": "4af8b6f767b31a3e6339e362024d10d6169e58b94c4537b58794240032e50075"
+    },
+    "C10Probability.evalProgram_mapped_derived": {
+      "file": "C10Probability/GrindProgram.lean",
+      "statement_sha256": "9c57e6630dfad963d3e5e450eafeecbbcac9406283c59a60474e008b6efb56dc"
+    },
+    "C10Probability.evalProgram_derived": {
+      "file": "C10Probability/GrindProgram.lean",
+      "statement_sha256": "b4b5465dd1fc1f05f57cc94929fe0f20b050f87297e440766569aa8c251a2dce"
+    },
+    "C10Probability.private_derived_public_budget": {
+      "file": "C10Probability/GrindProgram.lean",
+      "statement_sha256": "592398c452c477228bab81f1ed0098f6569b3096b25efd106788bd2e735967e7"
+    },
+    "C10Probability.derived_program_zero": {
+      "file": "C10Probability/GrindProgram.lean",
+      "statement_sha256": "a81fb9f26df87f71a55affb33c18167291f492e291f7a5b3b264858e7705eb46"
+    },
+    "C10Probability.grindSessionProgram_shared": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "f01ac9e5a7dbe2a157b7f15accd302ed0cbe005ee5daea81f28c5c82317fdb58"
+    },
+    "C10Probability.grindSessionProgram_independent": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "49128751a92b8bf21c547c59662488d026bd6a2ad47155f62019d664dc957167"
+    },
+    "C10Probability.grindSessionProgram_budget": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "b2a6d4cb2cdbb6adb24f924605d2e658a945fbd6ea629d22cb1288c4a2acd314"
+    },
+    "C10Probability.sharedGrindSession_client": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "60a60bb00c7730a8da7b547cbe437286e58d65fc59467c66efefc2323df91a7f"
+    },
+    "C10Probability.independentGrindSession_client": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "fc75b10ffeb98ebabd80b14a120851d09c19b9ec73d0cd979a982a9fd12d921b"
+    },
+    "C10Probability.grindSessionClient_budget": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "332ba11fdfe3a6e2bfe86daa29be4958a24a812a075350ef1bfb3c0fe0e4a221"
+    },
+    "C10Probability.grindSession_event_bounds": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "0431ea1fc7d52845c5243189d8cffa10b56dd7e164db94cb73891242e7bf7024"
+    },
+    "C10Probability.grindSession_event_error_real": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "511e2eceddd79093fc313a6e97dd60bda0b3f81663d95f56af9a9ffa77b8c413"
+    },
+    "C10Probability.grindSession_signing_error": {
+      "file": "C10Probability/GrindSession.lean",
+      "statement_sha256": "e67c08e5f4f24ad197d3e584477847afc27613655e5893542cbc1ff007a1051a"
+    },
     "C10Probability.collision_pairs_zero": {
       "file": "C10Probability/KeyCollision.lean",
       "statement_sha256": "1724a43498158157b9c286797c93c1691644871db03f07e667c7ecc741d2070d"
@@ -892,6 +1009,42 @@
     "C10Probability.private_event_error_real": {
       "file": "C10Probability/PrivateTransfer.lean",
       "statement_sha256": "333ce47e747dd2a1578d7e2036919f2c23d3cb823fda618b09025b6b85a65ed0"
+    },
+    "C10Probability.evalProgram_cast": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "9558e497fd76951e17182c160f3b981d2c74b0a6a6b86acd277613ca803169ad"
+    },
+    "C10Probability.publicBudget_cast": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "429c6ae7a7487e50a728bcf112ab72700c8f278a38a828ac2a0347c18fe1a204"
+    },
+    "C10Probability.mapProgram_cast": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "616212e3cada7407aaa807b9e68fc08d846e95c94f3c172ae8a9b955ff308f52"
+    },
+    "C10Probability.evalProgram_reserve": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "7f7eee6fe48b8d77d4c21db1f0cf8fa04eadc6f9e8dacc39176a5a9264c852a8"
+    },
+    "C10Probability.publicBudget_reserve": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "289d39206cbc11c47accfad10391dd54cafdeda1bf4db92647240614f46426af"
+    },
+    "C10Probability.mapProgram_reserve": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "55df2519c3db23c00dec52052a075df1647e65bdb8dc5a4df63d271799784ad5"
+    },
+    "C10Probability.evalProgram_bind": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "35ad4204b47f4d2c5d9dcacf7fdbb26443a07ecfa2d2950423cd2d96c56360a6"
+    },
+    "C10Probability.mapProgram_bind": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "c17694d24438ccbfaa60c3b037109062c28957c3a141fb01933a669ee17590cb"
+    },
+    "C10Probability.publicBudget_bind": {
+      "file": "C10Probability/ProgramComposition.lean",
+      "statement_sha256": "467c32b73721431d033ac88cdb5e5539eb0a44dbad00ae53f9c8391943c26e60"
     },
     "C10Probability.wots_mass_count": {
       "file": "C10Probability/Projections.lean",

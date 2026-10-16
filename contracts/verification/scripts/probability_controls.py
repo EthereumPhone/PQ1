@@ -722,4 +722,116 @@ def cases(project: Path) -> list[dict]:
     add("private-tail-reversed", "PrivateSecret", "secretBytes secret ++ tail", "secretBytes secret ++ tail.reverse",
         theorem(src["PrivateSecret"], "prefixedPrivateInput_r"))
     add("private-prefix-preserving", "PrivateSecret", "secretBytes secret ++ tail", "secretBytes secret ++ id tail", concrete, True)
+
+    # Concrete grinder compilation and persistent prelude/continuation state.
+    # Keep the bridge proofs local to the consumer, including the actual
+    # session definitions; no imported original bridge can mask a mutation.
+    def local_consumer(module, name, helpers):
+        check = theorem(src[module], name)
+        head, proof = check.split(":= by\n", 1)
+        local = []
+        for helper in helpers:
+            text = theorem(src[module], helper).replace("theorem checked", "have " + helper, 1)
+            if module == "ProgramComposition":
+                # The composed program returns T, while its first stage returns R.
+                text = re.sub(r"\bR\b", "T", text)
+            local.append("\n".join("  " + line for line in text.splitlines()))
+        return head + ":= by\n" + "\n".join(local) + "\n" + proof
+
+    add("reserve-later-keys-fixed", "ProgramComposition",
+        "reserveProgram extra (next reply)",
+        "mapProgram (fun _ => key) (reserveProgram extra (next reply))",
+        theorem(src["ProgramComposition"], "evalProgram_reserve"))
+    composed = local_consumer("ProgramComposition", "evalProgram_bind",
+        ["evalProgram_cast", "evalProgram_reserve"])
+    composed = composed.replace("evalProgram_reserve, evalProgram]",
+        "evalProgram_reserve, evalProgram, mapProgram_id]")
+    add("bound-continuation-keys-fixed", "ProgramComposition",
+        "bindProgram (next reply) after",
+        "bindProgram (next reply) (fun value => mapProgram (fun _ => key) (after value))", composed)
+    add("bound-continuation-preserving", "ProgramComposition",
+        "reserveProgram n (after value)", "reserveProgram n (mapProgram id (after value))", composed, True)
+
+    compiled = theorem(src["GrindProgram"], "evalProgram_mapped_derived")
+    add("compiled-first-input-repeated", "GrindProgram",
+        "derivedProgram firstKey derive encode accept (start + 1) keys",
+        "derivedProgram (fun _ => firstKey key) derive encode accept (start + 1) keys", compiled)
+    add("compiled-second-input-reused", "GrindProgram", ".query (encode (derive first))",
+        ".query (firstKey key)", compiled)
+    add("compiled-accept-inverted", "GrindProgram", "if accept second then", "if !accept second then", compiled)
+    add("compiled-first-counter", "GrindProgram", ".done (some (start, derive first, second))",
+        ".done (some (start + 1, derive first, second))", compiled)
+    add("compiled-selected-label", "GrindProgram", ".done (some (start, derive first, second))",
+        ".done (some (start, derive second, second))", compiled)
+    add("compiled-returned-digest", "GrindProgram", ".done (some (start, derive first, second))",
+        ".done (some (start, derive first, first))", compiled)
+    add("compiled-retry-counter", "GrindProgram",
+        "derivedProgram firstKey derive encode accept (start + 1) keys",
+        "derivedProgram firstKey derive encode accept start keys", compiled)
+    add("compiled-continues-success", "GrindProgram", ".done (some (start, derive first, second))",
+        "derivedProgram firstKey derive encode accept (start + 1) keys", compiled)
+    add("compiled-counter-preserving", "GrindProgram",
+        "derivedProgram firstKey derive encode accept (start + 1) keys",
+        "derivedProgram firstKey derive encode accept (1 + start) keys",
+        compiled.replace("[ha, Bool.false_eq_true, ↓reduceIte]",
+                         "[ha, Bool.false_eq_true, ↓reduceIte, Nat.add_comm]"), True)
+
+    tail = theorem(src["GrindInterface"], "prefixed_tail_counter")
+    add("private-tail-fields-reversed", "GrindInterface", "rGrindTag ++ random ++ message",
+        "rGrindTag ++ message ++ random", tail)
+    add("private-tail-tag-omitted", "GrindInterface", "rGrindTag ++ random ++ message",
+        "random ++ message", tail)
+    add("private-tail-association-preserving", "GrindInterface", "rGrindTag ++ random ++ message",
+        "(rGrindTag ++ random) ++ message", tail, True)
+    shared_compiler = local_consumer("GrindInterface", "privateRandomizerProgram_shared",
+        ["prefixed_tail_counter", "prefixed_tail_schedule"])
+    add("compiled-private-call-public", "GrindInterface", "derivedProgram Sum.inr randomizerOfDigest",
+        "derivedProgram Sum.inl randomizerOfDigest", shared_compiler)
+    add("compiled-randomizer-fixed", "GrindInterface", "derivedProgram Sum.inr randomizerOfDigest",
+        "derivedProgram Sum.inr (fun _ : Digest => (0 : Randomizer))", shared_compiler)
+    add("compiled-search-counter", "GrindInterface",
+        "(forsAccept ∘ forsOfDigest) 0 (counterSchedule",
+        "(forsAccept ∘ forsOfDigest) 1 (counterSchedule", shared_compiler)
+    add("independent-private-cache-public", "GrindInterface",
+        "((counterSchedule (rTailStem random message) 0 n hb).map Sum.inr)",
+        "((counterSchedule (rTailStem random message) 0 n hb).map Sum.inl)",
+        theorem(src["GrindInterface"], "privateRandomizerProgram_independent"))
+    add("compiled-hmsg-seed-root", "GrindInterface",
+        "derivedProgram Sum.inr randomizerOfDigest (Sum.inl ∘ hmsgRandomizerInput seed root message)",
+        "derivedProgram Sum.inr randomizerOfDigest (Sum.inl ∘ hmsgRandomizerInput root seed message)", shared_compiler)
+
+    session = local_consumer("GrindSession", "grindSession_event_bounds",
+        ["grindSessionProgram_shared", "grindSessionProgram_independent", "grindSessionProgram_budget",
+         "sharedGrindSession_client", "independentGrindSession_client", "grindSessionClient_budget"])
+    session = session.replace("Function.comp_def,", "Function.comp_def, id_eq,")
+    add("session-discards-grind-result", "GrindSession",
+        "(request prior).seed (request prior).root n hb) (after prior)",
+        "(request prior).seed (request prior).root n hb) (fun _ => after prior none)", session)
+    add("shared-session-secret-fixed", "GrindSession",
+        "digestDraw.bind fun secret => client.bind fun before =>",
+        "digestDraw.bind fun _ => let secret : Digest := 0; client.bind fun before =>", session)
+    add("shared-session-grind-cache-reset", "GrindSession", "sharedRandomizerSearch prior.2",
+        "sharedRandomizerSearch (fun _ => none)", session)
+    add("shared-session-after-cache-reset", "GrindSession",
+        "(mapProgram (privateKey prefixedPrivateInput secret) (after prior.1 out.1)) out.2).map",
+        "(mapProgram (privateKey prefixedPrivateInput secret) (after prior.1 out.1)) (fun _ => none)).map", session)
+    add("shared-session-after-result-discard", "GrindSession",
+        "(mapProgram (privateKey prefixedPrivateInput secret) (after prior.1 out.1)) out.2).map",
+        "(mapProgram (privateKey prefixedPrivateInput secret) (after prior.1 none)) out.2).map", session)
+    add("independent-session-grind-cache-reset", "GrindSession", "privateRandomizerSearch prior.2",
+        "privateRandomizerSearch (fun _ => none)", session)
+    add("independent-session-after-cache-reset", "GrindSession",
+        "(evalProgram digestDraw (after prior.1 out.1) out.2).map",
+        "(evalProgram digestDraw (after prior.1 out.1) (fun _ => none)).map", session)
+    add("independent-session-after-result-discard", "GrindSession",
+        "(evalProgram digestDraw (after prior.1 out.1) out.2).map",
+        "(evalProgram digestDraw (after prior.1 none) out.2).map", session)
+    add("shared-session-client-fixed", "GrindSession",
+        "digestDraw.bind fun secret => client.bind fun before =>",
+        "digestDraw.bind fun secret => (PMF.pure (Classical.choose client.support_nonempty)).bind fun before =>", session)
+    add("session-secret-preserving", "GrindSession", "sharedRandomizerSearch prior.2 (secretBytes secret)",
+        "sharedRandomizerSearch prior.2 (secretBytes (id secret))", session, True)
+    add("session-after-table-preserving", "GrindSession",
+        "(evalProgram digestDraw (after prior.1 out.1) out.2).map",
+        "(evalProgram digestDraw (after prior.1 out.1) (id out.2)).map", session, True)
     return out
