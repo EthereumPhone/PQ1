@@ -130,6 +130,20 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"C10Probability/KeyCollision\.lean": "fcd6aad405882f45796804afbd3dd8ff1540cadd188478400213247d49731473",?\s*$''']
 
+[[rules.allowlists]]
+description = "Exact public prefix-proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/SecretPrefix\.lean": "02ce5bede98116369b8010cc65746e1fbff2db748063a4d26e5ddba9d11b921a",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public prefix-proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/SecretPrefix\.ec": "7d78a6e128a0bb2e268e7f84bf0546042958abf50cc4438ba435745bb4c06284",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
