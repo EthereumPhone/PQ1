@@ -295,6 +295,14 @@ impl QubitFilm {
         now.wrapping_sub(self.t0)
     }
 
+    /// A film already answered, standing at pose time `t` at wall-clock
+    /// `now` (no loop wraps): a landing played without its loading leg (the
+    /// explosion resolved on a screen where no film was running).
+    #[must_use]
+    pub const fn answered_at(now: u32, t: u32) -> Self {
+        Self { t0: now.wrapping_sub(t), ready: Some(0) }
+    }
+
     /// The pose clock: film time with the loop's wraps taken out.
     #[must_use]
     pub fn film_t(&self, now: u32) -> u32 {
