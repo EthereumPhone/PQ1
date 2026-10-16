@@ -181,7 +181,7 @@
         "contracts/verification/scripts/normalize_secure_wrapper_extraction.py"
       ],
       "rust_files_sha256": [
-        "d7b3c596c0217df53926d9948735194c0b90523635d61d263ed73884506837a6",
+        "411f9c738cfbcacca9cb2dd8d1b414c2085ca9550ff121d67fafede94dade1cf",
         "9d96c39994cac86850ccce3f2020124987a9410c051a39fa9635c399b2b0c225",
         "3b4d019bd520516643361f7553efa5870cc7a9c461df0cf4993721e6373e7b39",
         "d309e7288c25c7233b2879fd574041f77dbd7818ecd146abdc72708dde946128",
