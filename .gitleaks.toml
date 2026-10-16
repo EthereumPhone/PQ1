@@ -100,7 +100,7 @@ description = "Exact paired-keygen control label and theorem identifiers"
 condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10\-port/tools/c10_paired_keygen_controls\.py$''']
 regexTarget = "line"
-regexes = ['''^\ \ \ \ \('initial\-key\-input',\ 'C10PairedKeygen',\ 'paired_keygen_byte_initialized',$''']
+regexes = ['''^\s*\('initial\-key\-input',\ 'C10PairedKeygen',\ 'paired_keygen_byte_initialized',\s*$''']
 
 [[rules.allowlists]]
 description = "Public OPTIGA inventory object label, not object data"
