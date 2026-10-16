@@ -2306,6 +2306,9 @@ fn main() -> ! {
     // permanently; a bench image boots to the bench and nothing else.
     #[cfg(feature = "ui-px-bench")]
     ui::px::bench::run();
+    // Dev bench: the setup film's partial vs full redraw, no wallet (#934).
+    #[cfg(feature = "ui-px-film-bench")]
+    ui::px::lcd::film_bench();
 
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.

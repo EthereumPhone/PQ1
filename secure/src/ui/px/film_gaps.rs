@@ -261,6 +261,13 @@ pub fn rows2(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     }
 }
 
+/// The last run's frame count, length (ms) and longest pause (ms).
+#[must_use]
+pub fn summary() -> (u32, u32, u32) {
+    let r = *rec();
+    (r.frames, r.total, r.gaps[0].0)
+}
+
 /// Append `v` in decimal.
 fn push_u32(row: &mut [u8; DISPLAY_COLS], n: &mut usize, v: u32) {
     let mut digits = [0u8; 10];

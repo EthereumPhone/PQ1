@@ -1757,11 +1757,16 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
         .lines()
         .filter(|l| !l.trim_start().starts_with('#') && l.contains("ui-px-film-gaps"))
         .collect();
+    // Only the film bench (itself fenced, below) implies it.
     assert_eq!(
         mentions,
-        std::vec!["ui-px-film-gaps = [\"ui-px\", \"ui-lcd\"]"]
+        std::vec![
+            "ui-px-film-gaps = [\"ui-px\", \"ui-lcd\"]",
+            "ui-px-film-bench = [\"ui-px-film-gaps\"]"
+        ]
     );
     assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-gaps\","));
+    assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-bench\","));
     let forbidden = MAKEFILE_SRC_PROV
         .split_once("override PROD_FORBIDDEN :=")
         .expect("PROD_FORBIDDEN")
@@ -1770,6 +1775,7 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
         .expect("one block")
         .0;
     assert!(forbidden.contains("ui-px-film-gaps"));
+    assert!(forbidden.contains("ui-px-film-bench"));
     // Every call into the recorder sits under its feature.
     for (path, src) in production_sources() {
         if path.ends_with("film_gaps.rs") {
@@ -1781,7 +1787,10 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
                 // Gated on the line itself, or by the function it sits in.
                 let gated = |k: usize| {
                     let attr = lines[k].trim();
-                    attr.starts_with("#[cfg(") && attr.contains("feature = \"ui-px-film-gaps\"")
+                    // The film bench implies the recorder (and is fenced too).
+                    attr.starts_with("#[cfg(")
+                        && (attr.contains("feature = \"ui-px-film-gaps\"")
+                            || attr.contains("feature = \"ui-px-film-bench\""))
                 };
                 let encl = (0..i)
                     .rev()

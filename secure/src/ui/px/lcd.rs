@@ -408,6 +408,10 @@ struct FrameCost {
     /// they are shown (decision 2026-10-13, `HARDENING.md` §2.4) — arming the
     /// sign chord on something never legibly displayed.
     complete: bool,
+    /// Every band the frame asked for reached the panel (full or partial).
+    /// Ungated: the busy film's partial redraw (#934) trusts the glass to
+    /// hold its last frame only when this was true.
+    streamed: bool,
     render: u32,
     blit: u32,
     /// Per-class render breakdown (bench only) — see `RenderSplit`.
@@ -467,7 +471,21 @@ fn present_frame(frame: &Frame<'_>, font: &Font<'_>) -> FrameCost {
 /// [`present_frame`]; `force` streams every strip and records none (a frame
 /// carrying secret cells: no strip is skipped on a digest of secret pixels,
 /// and no such digest outlives the frame).
-fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCost {
+fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCost {
+    present_frame_cols(frame, font, force, None)
+}
+
+/// The panel's tear scanline (DCS 0x44 in `lcd_nv3007`): the beam's row at
+/// the TE edge.
+const TE_SCANLINE: i32 = 16;
+
+/// [`present_frame_ex`] over only the bands covering landscape columns
+/// `cols` (inclusive), when given: the busy film's partial redraw (#934,
+/// scoped to `film_tick`, owner 2026-10-16). Everything outside those bands
+/// stays as the glass already shows it, so the caller must know it is
+/// unchanged ([`pqsigner_ui_px::damage`]). A partial frame is never
+/// `complete`: it does not count as "this screen was presented".
+fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Option<(i32, i32)>) -> FrameCost {
     // `complete` stays false through every early exit below: the latch, the
     // band-0 `Strip::new` failure, and the mid-loop `break`.
     let mut cost = FrameCost::default();
@@ -507,11 +525,21 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     // ---- band 0 BEFORE the TE wait -------------------------------------
     // So the stream starts on the edge rather than one render after it: the
     // whole point of the wait is the phase it buys.
-    let w0 = BAND_W.min(W);
+    // The band-aligned window: `xa` is a band's first column, `xend` one past
+    // the last band's (the last band is 44 columns: W = 428).
+    let (xa, xend) = match cols {
+        Some((c0, c1)) => {
+            let a = (c0.clamp(0, W - 1) / BAND_W) * BAND_W;
+            let e = ((c1.clamp(0, W - 1) / BAND_W) + 1) * BAND_W;
+            (a, e.min(W))
+        }
+        None => (0, W),
+    };
+    let w0 = BAND_W.min(xend - xa);
     #[cfg(feature = "ui-px-frametime")]
     let t0 = frametime::cycles();
     {
-        let Some(mut strip) = Strip::new(0, w0, &mut bands[0].0[..]) else {
+        let Some(mut strip) = Strip::new(xa, w0, &mut bands[0].0[..]) else {
             return cost;
         };
         render_band(frame, font, &mut strip, &mut cost);
@@ -563,7 +591,24 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
     // ONE window for the whole frame. The panel auto-increments across all
     // 428 native rows, so the nine band transfers below are a single
     // continuous stream and nothing may send a command (DC low) between them.
-    lcd::set_window(0, 0, (H - 1) as u16, (W - 1) as u16);
+    // A window that starts below the tear scanline: the stream must start
+    // BEHIND the beam, as a full frame does, or the beam (faster than the
+    // wire) catches the write pointer inside the window during this refresh
+    // and shows a split. So wait until the beam has passed `xa`:
+    // (xa - 16) rows at 26.75 rows/ms (62.5 Hz, 428 rows), rounded up, + 1 ms
+    // for the millisecond clock's granularity. The window then trails the
+    // beam through this refresh and is all-new in the next, which it laps
+    // only after (delay + (xend - xa) / 15.3 rows/ms) < 16 + (xend - 16) /
+    // 26.75, true for every window here (the full sweep is the worst case and
+    // is the #780 bound). Full frames (xa = 0) start at once, as before.
+    if xa > TE_SCANLINE {
+        let wait_ms = ((xa - TE_SCANLINE) as u32 * 1000).div_ceil(26_750) + 1;
+        let t = timeout::now();
+        while timeout::now().wrapping_sub(t) < wait_ms {
+            core::hint::spin_loop();
+        }
+    }
+    lcd::set_window(0, xa as u16, (H - 1) as u16, (xend - 1) as u16);
     lcd::stream_open();
 
     // The buffer the wire is currently reading. Bands alternate, so the
@@ -585,9 +630,9 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
         ok &= lcd::stream_chunk(&bands[0].0[..(w0 * H) as usize]);
     }
 
-    let mut x0 = w0;
-    while x0 < W {
-        let w = BAND_W.min(W - x0);
+    let mut x0 = xa + w0;
+    while x0 < xend {
+        let w = BAND_W.min(xend - x0);
         let nxt = (cur + 1) % N_BANDBUF;
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
@@ -662,7 +707,8 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, _force: bool) -> FrameCo
         }
     }
     lcd::stream_close();
-    cost.complete = ok && x0 >= W;
+    cost.complete = ok && cols.is_none() && x0 >= W;
+    cost.streamed = ok && x0 >= xend;
     #[cfg(feature = "ui-px-frametime")]
     {
         cost.stream = frametime::cycles().wrapping_sub(t_edge);
@@ -824,6 +870,7 @@ fn build_and_present(
         // have looked perfect throughout.
         cost = FrameCost {
             complete: cost.complete,
+            streamed: cost.streamed,
             ..FrameCost::default()
         };
     }
@@ -981,7 +1028,7 @@ pub fn film_start_with(s: &Screen) {
     let now = timeout::now();
     let mut anim = Anim::new(s, 0, now);
     anim.film_start(now);
-    let _ = build_and_present(&anim, &atlas.marks(), &atlas.font(), None, None, None);
+    let _ = present_film(&anim, &atlas.marks(), &atlas.font(), true);
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::frame(timeout::now());
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
@@ -991,6 +1038,136 @@ pub fn film_start_with(s: &Screen) {
     }
     FILM_SET.store(true, Ordering::Relaxed);
     FILM_LIVE.store(true, Ordering::Relaxed);
+}
+
+/// What the glass holds after the last film frame, for the next one's
+/// partial redraw: the frame's item fingerprints and the panel write count
+/// right after it. `FrameSigs::UNKNOWN` (or a moved count: anything else
+/// drew) forces a full frame. Single-threaded driver state, never touched
+/// from an ISR.
+static mut FILM_SIGS: (pqsigner_ui_px::damage::FrameSigs, u32) = (pqsigner_ui_px::damage::FrameSigs::UNKNOWN, 0);
+
+/// Whether the film may redraw partially. Always, except that the dev bench
+/// (`ui-px-film-bench`) alternates it to compare the two on the glass.
+#[cfg(feature = "ui-px-film-bench")]
+static FILM_PARTIAL: AtomicBool = AtomicBool::new(true);
+
+fn film_partial_allowed() -> bool {
+    #[cfg(feature = "ui-px-film-bench")]
+    {
+        FILM_PARTIAL.load(Ordering::Relaxed)
+    }
+    #[cfg(not(feature = "ui-px-film-bench"))]
+    {
+        true
+    }
+}
+
+/// Present one busy-film frame, streaming only the bands whose columns
+/// changed since the film's previous frame (#934, scoped to the film, owner
+/// 2026-10-16). `first` (the film's opening frame) is always full, and so is
+/// any frame after something else drew, after a frame that did not fully
+/// stream, or one the fingerprints cannot bound ([`pqsigner_ui_px::damage`]).
+/// The film carries no consent and never a secret, and a partial frame is
+/// never `complete`.
+fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) -> FrameCost {
+    use pqsigner_ui_px::damage::{Damage, FrameSigs};
+    let mut frame = Frame::new();
+    anim.build(marks, font, &mut frame);
+    let sigs = FrameSigs::of(&frame, font);
+    // SAFETY: single-threaded driver state (no ISR touches it); copied out.
+    let (prev, glass) = unsafe { *core::ptr::addr_of!(FILM_SIGS) };
+    let damage = if first || glass != lcd::glass_writes() || !film_partial_allowed() {
+        Damage::All
+    } else {
+        sigs.damage(&prev)
+    };
+    let cost = match damage {
+        Damage::Nothing => FrameCost { streamed: true, ..FrameCost::default() },
+        Damage::Cols(x0, x1) => present_frame_cols(&frame, font, false, Some((x0, x1))),
+        Damage::All => present_frame_cols(&frame, font, false, None),
+    };
+    let kept = if cost.streamed { sigs } else { FrameSigs::UNKNOWN };
+    // SAFETY: as above; the only writer.
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM_SIGS) = (kept, lcd::glass_writes());
+    }
+    cost
+}
+
+/// Dev bench (`ui-px-film-bench`, NEVER ships): the setup busy film at boot,
+/// with no wallet, no secure element and no wizard, so the partial redraw
+/// can be judged on the glass without a provisioning run (owner 2026-10-16).
+/// Alternates partial and full redraw. Each run: 6 s of CPU-bound slices
+/// with a tick between (provisioning's key-derivation cadence), then 6 s of
+/// 1 ms waits with a tick each (its chip-wait cadence), then a 16x4 page:
+/// the mode, frames per second, the longest pause, and the frame count.
+/// A press (or 15 s) starts the next run. Never returns.
+#[cfg(feature = "ui-px-film-bench")]
+pub fn film_bench() -> ! {
+    use pqsigner_ui_px::{Icon, ResultMark, ScreenBuilder, State};
+    let screen = ScreenBuilder::status(b"SETUP", Icon::Dots, b"SETTING UP YOUR PQ1", State::Awaiting, ResultMark::None)
+        .finish()
+        .unwrap_or(Screen::BLANK);
+    let mut partial = true;
+    loop {
+        FILM_PARTIAL.store(partial, Ordering::Relaxed);
+        super::film_gaps::start();
+        film_start_with(&screen);
+        let t0 = timeout::now();
+        while timeout::now().wrapping_sub(t0) < 6_000 {
+            cortex_m::asm::delay(1_280_000);
+            film_tick(0);
+        }
+        while timeout::now().wrapping_sub(t0) < 12_000 {
+            cortex_m::asm::delay(160_000);
+            film_tick(0);
+        }
+        super::film_gaps::stop();
+        film_abort();
+        let (frames, total, gap) = super::film_gaps::summary();
+        let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
+        let put = |row: &mut [u8; crate::ui::DISPLAY_COLS], parts: &[&[u8]], nums: &[u32]| {
+            let mut n = 0;
+            let mut push = |b: u8| {
+                if n < row.len() {
+                    row[n] = b;
+                    n += 1;
+                }
+            };
+            for (k, p) in parts.iter().enumerate() {
+                for &b in *p {
+                    push(b);
+                }
+                if let Some(&v) = nums.get(k) {
+                    let mut d = [0u8; 10];
+                    let mut i = 0;
+                    let mut x = v;
+                    loop {
+                        d[i] = b'0' + (x % 10) as u8;
+                        i += 1;
+                        x /= 10;
+                        if x == 0 {
+                            break;
+                        }
+                    }
+                    while i > 0 {
+                        i -= 1;
+                        push(d[i]);
+                    }
+                }
+            }
+        };
+        put(&mut rows[0], &[if partial { b"PARTIAL REDRAW" } else { b"FULL REDRAW" }], &[]);
+        let tenths = if total > 0 { frames * 10_000 / total } else { 0 };
+        put(&mut rows[1], &[b"fps ", b"."], &[tenths / 10, tenths % 10]);
+        put(&mut rows[2], &[b"max gap ", b"ms"], &[gap]);
+        put(&mut rows[3], &[b"frames "], &[frames]);
+        let _ = paint_legacy(&rows);
+        let t = timeout::now();
+        let _ = crate::ui::input().wait_button(&mut || timeout::now().wrapping_sub(t) >= 15_000);
+        partial = !partial;
+    }
 }
 
 /// One frame of the running film, if one is due — the signer's `fn(u8)`
@@ -1016,7 +1193,7 @@ pub fn film_tick(_percent: u8) {
         return;
     };
     anim.step(now);
-    let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
+    let _ = present_film(anim, &atlas.marks(), &atlas.font(), false);
     let after = timeout::now();
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::frame(after);

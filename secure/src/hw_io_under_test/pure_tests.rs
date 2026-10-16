@@ -2266,9 +2266,12 @@ fn positive_an_incomplete_frame_cannot_arm_the_sign_gesture() {
         contains_in_code(UI_PX_LCD_SRC, "if cost.complete && driver.index() != painted_idx {"),
         "a frame that did not fully reach the glass must not mark the screen rendered"
     );
+    // #934 (2026-10-16): the busy film may stream a band range. A partial
+    // frame is never `complete` -- the arming latch must not count a frame
+    // that left most of the panel as it was.
     assert!(
-        contains_in_code(UI_PX_LCD_SRC, "cost.complete = ok && x0 >= W;"),
-        "completeness must account for BOTH a failed transfer and a short sweep"
+        contains_in_code(UI_PX_LCD_SRC, "cost.complete = ok && cols.is_none() && x0 >= W;"),
+        "completeness must account for a failed transfer, a short sweep and a partial frame"
     );
     // THE LOAD-BEARING HALF, and the one a must-fail control caught this gate
     // not testing: every `stream_dma_finish` result must feed `ok`. Swapping
@@ -2528,6 +2531,36 @@ fn positive_a_pager_continues_from_the_previous_pager_only_while_its_frame_is_on
     let take = UI_PX_LCD_SRC.split("fn pin_check_take(").nth(1).expect("pin_check_take must exist");
     let take = &take[..take.find("\n}\n").unwrap_or(take.len())];
     assert!(take.contains("carry_take().filter(|a| pqsigner_ui_px::verdict::is_pin_check(a.current().0))"));
+}
+
+#[test]
+fn negative_partial_redraw_is_the_busy_films_alone() {
+    // #934, scoped to the busy film (owner 2026-10-16). ASSUMPTION ATTACKED:
+    // a band-range present escapes the film (a consent screen streamed
+    // partially), or the film trusts the glass after something else drew,
+    // after a frame that did not fully stream, or on its first frame.
+    assert_eq!(
+        UI_PX_LCD_SRC.matches("present_frame_cols(").count(),
+        4,
+        "the fn, present_frame_ex's full call and present_film's two calls"
+    );
+    assert_eq!(UI_PX_LCD_SRC.matches("Some((x0, x1)))").count(), 1, "one partial call site");
+    let film = UI_PX_LCD_SRC
+        .split("fn present_film(")
+        .nth(1)
+        .expect("present_film must exist");
+    let film = &film[..film.find("\n}\n").unwrap_or(film.len())];
+    assert!(film.contains(
+        "if first || glass != lcd::glass_writes() || !film_partial_allowed() {\n        Damage::All"
+    ));
+    assert!(film.contains("Damage::Cols(x0, x1) => present_frame_cols(&frame, font, false, Some((x0, x1))),"));
+    assert!(film.contains("let kept = if cost.streamed { sigs } else { FrameSigs::UNKNOWN };"));
+    let start = UI_PX_LCD_SRC.split("pub fn film_start_with(").nth(1).expect("film_start_with");
+    let start = &start[..start.find("\n}\n").unwrap_or(start.len())];
+    assert!(start.contains("present_film(&anim, &atlas.marks(), &atlas.font(), true)"), "a film opens on a full frame");
+    let tick = UI_PX_LCD_SRC.split("pub fn film_tick(").nth(1).expect("film_tick");
+    let tick = &tick[..tick.find("\n}\n").unwrap_or(tick.len())];
+    assert!(tick.contains("present_film(anim, &atlas.marks(), &atlas.font(), false)"));
 }
 
 #[test]

@@ -52,6 +52,7 @@
 extern crate std;
 
 pub mod check;
+pub mod damage;
 pub mod driver;
 pub mod fit;
 pub mod fixed;
