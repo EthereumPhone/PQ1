@@ -1,8 +1,12 @@
 {
   "schema": 1,
-  "scope": "The existing two-query FORS grinder now compiles to the bounded adaptive query client with a proved full-state equality on arbitrary intermediate caches. Actual adaptive prelude, sharedRandomizerSearch and continuation executions compare to separate public/private caching with two-sided returned-event error (q_before+n+q_after)/2^256. Selected R, full digest, counter, exhaustion and internal cache persist through composition. Uniform hidden secret and empty global initial cache are explicit; internal H_msg calls count in the public budget. No repeated-private-input fresh resampling, full C10 client/forgery composition, cross-kernel import or concrete backend claim. Prior first-grinder exhaustion results retain their own premises.",
+  "scope": "Accepted collisions in the actual adaptive memoized query interpreter have the derived bound (n*h+choose(n,2)*p)/M. Observer erasure preserves the complete result and cache; only accepted fresh projections grow the observed set, while cached and rejected replies keep their real execution semantics. The full-digest sum-205 WOTS instance gives choose(n,2)*p/2^129 with exact p=Nat.card AcceptedWots/8^43 from an empty cache. Initial accepted-history coverage/collision freedom are explicit for nonempty caches; randomized clients, reply-dependent keys and early returns are covered. The existing sampling, grinder compilation and private-prefix component results retain their own premises. No unproved numerical enumeration, full C10 client/successful-output/forgery composition, cross-kernel import, repeated-private-input iid or concrete backend claim.",
   "sources": {
-    "Audit.lean": "c6e60ebf2dc7feb0e4393ad0305f27b166f2d2f104a92c5946e087df8a0b9f4f",
+    "Audit.lean": "923e48192c7e45ed10dd05c425141be80463ff1643fd33bcf7d8cf2f9873ce2a",
+    "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
+    "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
+    "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
+    "C10Probability/AcceptedWots.lean": "0bd8ee0df368dddfdc1282a02408e1d300404f7dbfb67e99c089c88a68d1465c",
     "C10Probability/AdaptiveCollision.lean": "abf2184b38b0347451064a7b3b28fc185341245607fa222f73ab93750da56cf7",
     "C10Probability/AdaptiveExamples.lean": "1378b3ba7f6e7063c72f488f7c1cdf18bc5f5a7cb85e75f0f187caf4a9523359",
     "C10Probability/Boundaries.lean": "b2715545caea41d26f97145c73bee8c8a57adced252eb517d2a630a5424b2fd9",
@@ -43,9 +47,201 @@
     "C10Probability/StoppedProgram.lean": "c6ae47cf5068ef5c29ff638b3cfa28e1a42ec2a43cf6334d918ad995c972ee51",
     "C10Probability/Transfer.lean": "f3bfcc365888942c599d329662b8370495878e398868b383f521001a59f6a4c8",
     "C10Probability/Uniform.lean": "226b4108a3d3d9eb10e6cdb3efbf2bb6b46811f361a5d0bed485a9e3058a5a02",
-    "C10Probability.lean": "510fbf30ddfc4b31b88ad480baa90f42b4e22a416608875a6d60794e1395efee"
+    "C10Probability.lean": "f887856c9f28d543ac3a4d4764006aa319fb22a13722a1102444341458e37ed6"
   },
   "theorems": {
+    "C10Probability.accepted_charge_zero": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "7dd7c9f3e221223a7627683322e3736d5964cdca7388d6590b8a6f3e6bcf0214"
+    },
+    "C10Probability.accepted_charge_history": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "6a5e3bad10ff7c5ede12d0a56fd6fa048b16299f8c0c0ac40d7c7ef6f6c1df75"
+    },
+    "C10Probability.accepted_charge_step": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "06b414cab37b798e9de04c186f79670972eaf0f3ce8b5beff0b0a5dccb284436"
+    },
+    "C10Probability.accepted_charge_mono_step": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "6a836db3ab38e4fc231a85b38d46fbec7f9773ea159d30126b1a802837bb66e1"
+    },
+    "C10Probability.accepted_weight_mass": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "12aab0719fb3d058bafb3953d238d03387987f63a1cf7b77d5e771e6dd024598"
+    },
+    "C10Probability.acceptMass_map": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "323050b31de43f50438c291e4189569e8919a8a9441659a981e67029b78160ab"
+    },
+    "C10Probability.observeAcceptedProgram_flag_bound": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "505251c57ab1cd2da83976f6edbefa01773fd11f2d5e773214ce25ea53febc1a"
+    },
+    "C10Probability.evalProgram_accepted_collision_bound": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "0eef79f4361567a58e2ec37a21f4bed80c0da0ea0ce1cae2c7bdf1613549e98b"
+    },
+    "C10Probability.randomizedProgram_accepted_collision_bound": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "25ea48596f1608bbbc93d791d6b0dff8736b32d268bc64b9407826816268b67e"
+    },
+    "C10Probability.accepted_charge_ne_top": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "e2b3dd140c3c7f70db16033e19dc34ee5a182ba3d1d4c960a5b51e39d82d2e1f"
+    },
+    "C10Probability.randomizedProgram_accepted_collision_bound_real": {
+      "file": "C10Probability/AcceptedCollision.lean",
+      "statement_sha256": "b78ecfea5de14cebeabbcf3380a152beac3b5e8f219a99f3e030b2376dd7e0ae"
+    },
+    "C10Probability.one_entry_accepted_collision_free": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "1653d1815af4000f1b9993507745129196f69b86addb1ed0ef3fab0ca0403d91"
+    },
+    "C10Probability.two_entries_accepted_collision": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "51eb665e48c4b8944abb3f76c4b8a4641fe30ac09864758975159a167e023dcb"
+    },
+    "C10Probability.repeatedBool_accepted_collision_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "91ecddc3ee0c768da5ca78a690f3ec304e618f5ee3da704d1597bf2852dfe650"
+    },
+    "C10Probability.twoBool_accepted_collision_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "3146817ccdf46e6b092824f4751a63f5c19979cd965b6ccdde1d8de28d2ba440"
+    },
+    "C10Probability.rejected_duplicates_are_accepted_collision_free": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "91441f9acbc9e5fa21a5139339209497ed9c65391bf6302c38af058d711ef04b"
+    },
+    "C10Probability.zero_queries_rejected_duplicates": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "5eca63f40005337ba96d0a6695666c6fb826f9e423ed3e67030b2b09ec91e05a"
+    },
+    "C10Probability.accepted_prior_collision": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "2f9c4953dbfa15102188d1bdd2d82334600ef42aa249efe5937f9b82c423e26d"
+    },
+    "C10Probability.zero_queries_accepted_prior_collision": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "187d6366b8f0a2963a4645c34289eb99f04d9b0762b155a43a7e411bb9c06c88"
+    },
+    "C10Probability.rejected_reply_stored_without_growth": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "80bcb5db98763021ed1cc2ed7d607d374a75533dee10042126d611e4d03ded83"
+    },
+    "C10Probability.rejected_reply_preserves_prior_flag": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "e69eb69a98f6b406e3ce189a1cc5178913416cd0fd682ef1e0eab4203fdc5c22"
+    },
+    "C10Probability.twoBool_accepted_observer_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "d66e0d848e70f4c28a0b01b1d203be8f4a228927c7a3572aaa5ba6291e7f9194"
+    },
+    "C10Probability.repeatedBool_accepted_observer": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "895c404f68c66c450082142fdcc591b6d7e1bd376ae50ffb25a8d37e67062639"
+    },
+    "C10Probability.adaptiveBool_accepted_observer_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "a87b29a854cf18a927b3b00e40a06a836455ddb93fb59b6ca4937d9f919f1327"
+    },
+    "C10Probability.stopped_rejection_distribution": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "ffdbf0d456d6aeb93c7ebc10418db7852a5c9a9a49cb9fede404896b1675c08e"
+    },
+    "C10Probability.stopped_rejection_collision_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "ad055d41a92875184b64e4717071475f35cb137671e29b53a2aee35a2200fa4f"
+    },
+    "C10Probability.stopped_rejection_skips_second_key": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "6dc4bad0b729ddfd1b5e884a55ec92896a394d12cd10982b01205f15f2105cf5"
+    },
+    "C10Probability.reject_all_collision_free": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "3f38cb8cce4a8eb3221548b594abeea0c1e2cec60855f2f29793363c92e8d08a"
+    },
+    "C10Probability.accept_all_collision_free_iff": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "9c8560e8d622851e459eb5f4a4e59d43a3ca1f44ce1a77499dee7528f95aed8d"
+    },
+    "C10Probability.twoBool_accept_all_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "adbfe282f41125c79495a28f72b6961da6684c426cdb5061c1ba60fdf9d58403"
+    },
+    "C10Probability.twoBool_reject_all_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "a64ee249a829d2d02094c3f18ff11a04a10fc78a48c8ff9bb255239f260c88bb"
+    },
+    "C10Probability.boolean_acceptance_charge_tight": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "d55c0d85f9b4744b2553053b3fb7eeebf5066daae1242d8a6b3f62d9dd1e432d"
+    },
+    "C10Probability.accepted_history_collision_mass": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "b97efbe1aeba064cec2fc057b70512205efa11e44b75c085be770ff7e4cb0fa2"
+    },
+    "C10Probability.accepted_history_charge_tight": {
+      "file": "C10Probability/AcceptedExamples.lean",
+      "statement_sha256": "b39ee5c3d8735dbe5431aebd85c62d874aeeeecb3f4586f833ad538b81937f2f"
+    },
+    "C10Probability.acceptedQuery_erases": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "ecbae0848680e88b07392babd58bcd1f50e904fe888511fd5d9b2d4230f0999a"
+    },
+    "C10Probability.observeAcceptedProgram_erases": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "38c44f6c8d553c4d3bb9e2b1384bec7efca9884bda0f8145ce8d2d8ae850c625"
+    },
+    "C10Probability.emptyAcceptedView_valid": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "bcf810a7607904453dd15059c47486d6425bf964939744ef78ee8bc8467c1edd"
+    },
+    "C10Probability.recordAcceptedReply_valid": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "af7c834d593729aff106b35f027a0c66e1b3edb36c25cf3a28a99a89fd6515a2"
+    },
+    "C10Probability.acceptedQuery_cached": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "907887edbdfa9b095ee1a40dcd26c090feace1fe6a4e6e7ee296b4afc11b1437"
+    },
+    "C10Probability.acceptedQuery_valid": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "0d9dc122c506dde191ac830b679148f3bd056b01744def1cad083a17a7d4d76c"
+    },
+    "C10Probability.observeAcceptedProgram_valid": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "b71d905571fa06a28d861c5abfd93e1ab45c11168e80bbe8c259abd95c3be0c0"
+    },
+    "C10Probability.observeAcceptedProgram_collision_flag": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "7c7d8151a19a1d28142b761d2b08f283e1071d03c2a7df5fdeb595763a81ba2a"
+    },
+    "C10Probability.acceptedQuery_bad_persists": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "29bb7336ecef0ccf41cd6ccc95b735d5f60c44479b8e3541b6211b729df38e07"
+    },
+    "C10Probability.observeAcceptedProgram_bad_persists": {
+      "file": "C10Probability/AcceptedObserver.lean",
+      "statement_sha256": "55a17b4469f3949e5269c0c9dcdc289bc4253cb08aada219bfda6c8694d769c6"
+    },
+    "C10Probability.digest_wots_acceptance_mass": {
+      "file": "C10Probability/AcceptedWots.lean",
+      "statement_sha256": "e53d485a52e310b73d7c1dcfea647441c07c6288370e30c8be4872448f7000b3"
+    },
+    "C10Probability.digest_program_accepted_wots_bound": {
+      "file": "C10Probability/AcceptedWots.lean",
+      "statement_sha256": "e90db7ce0ea4e890bba4e1cb19201b668982154330f010d6344f3ed1c0682f87"
+    },
+    "C10Probability.digest_program_accepted_wots_bound_real": {
+      "file": "C10Probability/AcceptedWots.lean",
+      "statement_sha256": "f4043f19822c3436891b494c158c914531b0da2fa0d2d772165efb7eca3ea5f5"
+    },
+    "C10Probability.digest_program_accepted_wots_129_bound": {
+      "file": "C10Probability/AcceptedWots.lean",
+      "statement_sha256": "69fc9760130e3a39ac9a0257df4697b63ead5d63293ee486d195452b5b0b1d4c"
+    },
     "C10Probability.collision_pairs_mono_history": {
       "file": "C10Probability/AdaptiveCollision.lean",
       "statement_sha256": "02891825428454151ce954c302c3d9b05bafe33a8ad23652129543ab0f7225ff"

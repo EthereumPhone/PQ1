@@ -834,4 +834,91 @@ def cases(project: Path) -> list[dict]:
     add("session-after-table-preserving", "GrindSession",
         "(evalProgram digestDraw (after prior.1 out.1) out.2).map",
         "(evalProgram digestDraw (after prior.1 out.1) (id out.2)).map", session, True)
+
+    # Accepted collisions: preserve actual cache execution, filter only the
+    # observer, and derive the acceptance-weighted charge. Helpers that mention
+    # a mutated definition are reproved locally inside the consumer.
+    accepted_query = theorem(src["AcceptedObserver"], "acceptedQuery_erases")
+    accepted_program = local_consumer("AcceptedObserver", "observeAcceptedProgram_erases",
+        ["acceptedQuery_erases"])
+    accepted_valid = theorem(src["AcceptedObserver"], "recordAcceptedReply_valid")
+    accepted_flag = local_consumer("AcceptedObserver", "observeAcceptedProgram_collision_flag",
+        ["recordAcceptedReply_valid", "acceptedQuery_valid", "observeAcceptedProgram_valid"])
+    add("accepted-cache-store-omitted", "AcceptedObserver",
+        "Function.update state.cache key (some value)", "state.cache", accepted_query)
+    add("accepted-rejected-cache-omitted", "AcceptedObserver",
+        "Function.update state.cache key (some value)",
+        "if accept (project value) then Function.update state.cache key (some value) else state.cache",
+        accepted_query)
+    add("accepted-cached-resampling", "AcceptedObserver", "| some value => PMF.pure (value, state)",
+        "| some _ => p.map (fun value => (value, state))", accepted_query)
+    add("accepted-cached-history-loss", "AcceptedObserver", "| some value => PMF.pure (value, state)",
+        "| some value => PMF.pure (value, emptyView)", accepted_query)
+    add("accepted-next-reply-fixed", "AcceptedObserver", "(next out.1) out.2",
+        "(next (Classical.choose p.support_nonempty)) out.2", accepted_program)
+    add("accepted-next-cache-reset", "AcceptedObserver", "(next out.1) out.2",
+        "(next out.1) emptyView", accepted_program)
+    add("accepted-seen-insertion-omitted", "AcceptedObserver",
+        "if accept (project value) then insert (project value) state.seen else state.seen",
+        "state.seen", accepted_valid)
+    add("accepted-rejected-seen-growth", "AcceptedObserver",
+        "if accept (project value) then insert (project value) state.seen else state.seen",
+        "insert (project value) state.seen",
+        theorem(src["AcceptedExamples"], "rejected_reply_stored_without_growth"))
+    add("accepted-flag-collision-omitted", "AcceptedObserver",
+        "state.bad || (accept (project value) && decide (project value ∈ state.seen))",
+        "state.bad", accepted_valid)
+    add("accepted-flag-history-forgotten", "AcceptedObserver",
+        "state.bad || (accept (project value) && decide (project value ∈ state.seen))",
+        "accept (project value) && decide (project value ∈ state.seen)",
+        theorem(src["AcceptedObserver"], "acceptedQuery_bad_persists"))
+    add("accepted-flag-rejection-ignored", "AcceptedObserver",
+        "state.bad || (accept (project value) && decide (project value ∈ state.seen))",
+        "state.bad || decide (project value ∈ state.seen)", """theorem checked :
+    (recordAcceptedReply id id (⟨fun _ : Bool => none, {false}, false⟩ : CollisionView Bool Bool Bool)
+      true false).bad = false := by decide
+""")
+    add("accepted-spec-rejection-ignored", "AcceptedObserver",
+        "accept (project value) = true → project value = project reply → key = other",
+        "project value = project reply → key = other",
+        theorem(src["AcceptedExamples"], "rejected_duplicates_are_accepted_collision_free"))
+    add("accepted-spec-key-identity-waived", "AcceptedObserver",
+        "accept (project value) = true → project value = project reply → key = other",
+        "accept (project value) = true → project value = project reply → True",
+        theorem(src["AcceptedExamples"], "accepted_prior_collision"))
+    add("accepted-spec-projection-ignored", "AcceptedObserver",
+        "accept (project value) = true → project value = project reply → key = other",
+        "accept (project value) = true → True → key = other", """theorem checked :
+    AcceptedCollisionFree id (fun _ => true)
+      (fun key : Bool => some (if key then (1 : Fin 3) else 0)) := by
+  unfold AcceptedCollisionFree
+  decide
+""")
+    add("accepted-initial-validity-waived", "AcceptedObserver",
+        "(state.bad = false → AcceptedCollisionFree project accept state.cache)",
+        "True", accepted_flag)
+
+    pair_charge = theorem(src["AcceptedExamples"], "boolean_acceptance_charge_tight")
+    history_charge = theorem(src["AcceptedExamples"], "accepted_history_charge_tight")
+    add("accepted-charge-mass-omitted", "AcceptedCollision",
+        "(trials.choose 2 : ℝ≥0∞) * mass", "(trials.choose 2 : ℝ≥0∞)", pair_charge)
+    add("accepted-charge-pairs-omitted", "AcceptedCollision",
+        "(trials.choose 2 : ℝ≥0∞) * mass", "0 * mass", pair_charge)
+    add("accepted-charge-history-omitted", "AcceptedCollision",
+        "(trials : ℝ≥0∞) * history", "(trials : ℝ≥0∞) * 0", history_charge)
+    add("accepted-charge-size-shifted", "AcceptedCollision", ") / size", ") / (size + 1)", pair_charge)
+    add("accepted-charge-mass-squared", "AcceptedCollision",
+        "(trials.choose 2 : ℝ≥0∞) * mass", "(trials.choose 2 : ℝ≥0∞) * mass ^ 2", pair_charge)
+
+    add("accepted-cache-preserving", "AcceptedObserver",
+        "Function.update state.cache key (some value)",
+        "Function.update state.cache key (some (id value))", accepted_query, True)
+    add("accepted-seen-preserving", "AcceptedObserver",
+        "insert (project value) state.seen", "insert (id (project value)) state.seen",
+        accepted_valid, True)
+    add("accepted-charge-mass-preserving", "AcceptedCollision",
+        "(trials.choose 2 : ℝ≥0∞) * mass", "(trials.choose 2 : ℝ≥0∞) * (mass * 1)",
+        pair_charge, True)
+    add("accepted-charge-history-preserving", "AcceptedCollision",
+        "(trials : ℝ≥0∞) * history", "(trials : ℝ≥0∞) * (0 + history)", history_charge, True)
     return out

@@ -11,3 +11,7 @@ import C10Probability.AdaptiveExamples
 import C10Probability.PreludeExamples
 import C10Probability.PrivateExamples
 import C10Probability.GrindClientExamples
+import C10Probability.AcceptedObserver
+import C10Probability.AcceptedCollision
+import C10Probability.AcceptedWots
+import C10Probability.AcceptedExamples

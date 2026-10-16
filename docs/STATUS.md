@@ -226,7 +226,13 @@ adaptive prelude/grinder/continuation execution has prefix-event error at most
 `(q_before+n+q_after)/2^256`, counting internal H_msg queries. Intermediate
 freshness and success are not assumed; repeated private inputs still stay
 cached, so no repeated-call independent-R exhaustion claim follows.
-All 364 theorem closures and 207 typed cases are gated separately;
+An acceptance-filtered observer now derives the actual adaptive accepted-WOTS
+collision charge `n.choose 2*p/2^129` from an empty cache, with exact
+`p = Nat.card AcceptedWots/8^43`. Its history bound is
+`(n*h+n.choose 2*p)/M`; cached replies, rejected values and adaptive early
+returns keep their original execution semantics. The numerical WOTS count and
+the successful-output/forgery composition remain open in this PMF project.
+All 412 theorem closures and 231 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

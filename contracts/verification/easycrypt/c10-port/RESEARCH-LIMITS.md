@@ -91,6 +91,18 @@ its bounded-continuation restriction. It does not make repeated private inputs
 fresh or transfer the earlier independent-R exhaustion bound to arbitrary
 repeated calls. Full C10 keygen/sign/verify client translation, PMF forgery
 composition and concrete backend correspondence remain open.
+The accepted WOTS encoding collision component now also has a separate PMF
+proof over the actual adaptive memoized interpreter. Its acceptance-filtered
+observer preserves the full cache and result, and its derived history bound is
+`(n*h + n.choose 2*p)/M`. The existing full-digest projection and sum-205
+predicate give `n.choose 2*p/2^129` from an empty cache, with the exact
+`p = Nat.card AcceptedWots/8^43`. Rejected duplicates and cached calls do not
+count as new accepted collisions. Initial accepted-history coverage and
+collision freedom remain explicit for nonempty tables; neither independent
+query keys nor successful grinding is assumed. This retires the unported
+accepted-encoding charge, not the full PMF successful-output partition or
+forgery composition. Its numerical acceptance enumeration remains to be
+kernel-proved in Lean; the EasyCrypt count is not imported as a premise.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

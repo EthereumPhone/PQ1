@@ -196,6 +196,35 @@ colliding table has collision probability one even with zero new queries, so
 initial collision freedom cannot silently be omitted. The client, observer
 and final-table event are separate definitions connected by proved laws.
 
+`AcceptedObserver.lean` and `AcceptedCollision.lean` tighten the collision
+component to equal **accepted** projections at distinct inputs. The real cache
+still stores every fresh reply; only accepted projections enter the observed
+set and can set its persistent flag. Erasure preserves the complete result and
+cache. If `h` projections cover the initially accepted entries and that cache
+has no accepted collision, the actual adaptive event probability is at most
+`(n*h + n.choose 2*p)/M`, where `p` is the fresh-reply acceptance probability.
+The proof derives the factor `p` from expected accepted-history growth. Query
+keys may depend on replies, cached calls do not resample, and early returns and
+randomized clients are retained. Both extended-nonnegative and real bounds are
+proved; the initial-validity guard is explicit.
+
+`AcceptedWots.lean` instantiates this result with the existing full-digest
+projection to 43 base-eight digits and the sum-205 test. From an empty cache,
+the accepted-encoding charge is `n.choose 2*p/2^129`, with the exact
+`p = Nat.card AcceptedWots / 8^43`. This Lean component does not yet prove the
+numerical enumeration used by the EasyCrypt result. It introduces no
+freshness or successful-grinding premise and does not supply the full forgery
+game or its successful-output partition.
+
+`AcceptedExamples.lean` independently computes actual finite distributions.
+Two fresh Boolean inputs have accepted-collision mass `1/4` when only `true`
+is accepted, versus `1/2` when every reply is accepted. Cached repeats and
+rejected duplicates contribute zero. Adaptive inputs and rejection-based early
+return are checked, including the unqueried second key. One accepted history
+entry and a fresh query have collision mass `1/2`; an already accepted-colliding
+cache has mass one with zero new queries. These examples also check flag
+persistence and that rejected fresh replies remain stored.
+
 These adaptive results supply a random-oracle collision component. They do not
 instantiate a complete C10 signer/adversary program, prove global R-input
 freshness or supply the remaining full forgery bound. No theorem replaces
@@ -412,16 +441,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 364 theorem closures against
+The gate rebuilds every project module, checks all 412 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-207 typed cases run 621 compiler jobs: each baseline and changed
-definition must compile, 180 changed behaviors must reject at the
-consuming `checked` theorem, and twenty-seven value-preserving changes must pass. Cases cover exhaustion,
+231 typed cases run 693 compiler jobs: each baseline and changed
+definition must compile, 200 changed behaviors must reject at the
+consuming `checked` theorem, and thirty-one value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -462,7 +491,11 @@ H_msg fields, private/public cache routing, secret and client randomization,
 and discarded state or results between actual session stages. The consuming
 session-bound proof establishes its compiler and composition helpers locally.
 Equivalent counter, association, continuation, secret and table expressions
-must pass. Syntax
+must pass. Accepted-collision controls cover rejected-reply storage, cached
+resampling, continuation reply/cache propagation, accepted-history insertion,
+filtering, persistent flags, distinct-input/projection semantics, initial
+validity, and the history, pair, acceptance and denominator terms in the charge.
+Equivalent cache, set and arithmetic expressions must pass. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.
