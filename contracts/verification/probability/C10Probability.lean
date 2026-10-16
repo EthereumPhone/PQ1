@@ -20,3 +20,4 @@ import C10Probability.CountExamples
 import C10Probability.TargetExamples
 import C10Probability.DomainExamples
 import C10Probability.WotsProgramExamples
+import C10Probability.WotsRecoveryExamples

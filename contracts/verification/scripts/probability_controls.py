@@ -1228,4 +1228,100 @@ def cases(project: Path) -> list[dict]:
         "width - (i.val + 1)", address_vector, True)
     add("wots-count-padding-preserving", "WotsProgram", "message ++ List.replicate 16 0",
         "message ++ List.replicate 16 (0 + 0)", wots_example("wots_count_message_padding"), True)
+    # Complete recovery: ordered collection, exact accepted-word work,
+    # compression bytes and both recovery continuations through the full cache.
+    def recovery_example(name):
+        return theorem(src["WotsRecoveryExamples"], name)
+
+    src["CollectionStepCount"] = (src["ChainCollection"].split("def mapReturnProgram", 1)[0] +
+        "def collectionSteps" + src["ChainCollection"].split("def collectionSteps", 1)[1].split(
+            "def chainCollectionProgram", 1)[0] + "end\nend C10Probability\n")
+    add("collection-raw-step-sum", "CollectionStepCount", "(indices.map steps).sum",
+        "(indices.map steps).length", recovery_example("collection_step_sum"))
+    add("collection-loop-order", "ChainCollection", "current.1 :: later.1",
+        "later.1 ++ [current.1]", recovery_example("collection_zero_order"))
+    add("collection-loop-return-lost", "ChainCollection", "current.1 :: later.1",
+        "values i :: later.1", recovery_example("collection_cached_order"))
+    add("collection-loop-history-lost", "ChainCollection", "values rest current.2",
+        "values rest table", recovery_example("collection_accumulates_cache"))
+    add("collection-loop-final-cache-lost", "ChainCollection", "current.1 :: later.1, later.2",
+        "current.1 :: later.1, table", recovery_example("collection_accumulates_cache"))
+    program_order = recovery_example("collection_program_zero_order")
+    map_helper = theorem(src["ChainCollection"], "evalProgram_mapReturn").replace(
+        "theorem checked", "have evalProgram_mapReturn {K α R T : Type}", 1)
+    program_order = program_order.replace(":= by\n", ":= by\n" +
+        "\n".join("  " + line for line in map_helper.splitlines()) + "\n", 1)
+    add("collection-program-order", "ChainCollection", "(List.cons current)",
+        "(fun later => later ++ [current])", program_order)
+    add("collection-loop-project-lost", "ChainCollection", "(starts i) (steps i) (values i) table",
+        "(starts i) 0 (values i) table", recovery_example("collection_cached_order"))
+
+    # The dependent client index enforces the arithmetic in the normal build.
+    # Isolate the actual index and work-count definitions here so a changed
+    # count remains well typed and is rejected at its numerical consumer.
+    src["WotsRemainingCore"] = src["WotsRemaining"].split("theorem wots_indices_length", 1)[0] + \
+        "end\nend C10Probability\n"
+    add("recovery-index-reversed", "WotsRemainingCore", "List.ofFn id",
+        "(List.ofFn id).reverse", recovery_example("wots_index_order"))
+    add("recovery-remaining-off-by-one", "WotsRemainingCore",
+        "collectionSteps (fun i => 7 - (word i).val)",
+        "collectionSteps (fun i => 8 - (word i).val)", recovery_example("wots_remaining_max_word"))
+    add("recovery-remaining-uses-digit", "WotsRemainingCore",
+        "collectionSteps (fun i => 7 - (word i).val)",
+        "collectionSteps (fun i => (word i).val)", recovery_example("wots_remaining_zero_word"))
+
+    add("compression-node-padding", "WotsCompression", "List.replicate 16 0",
+        "List.replicate 16 1", recovery_example("compression_node_bytes"))
+    add("compression-node-value", "WotsCompression", "randomizerBytesEquiv.symm value",
+        "randomizerBytesEquiv.symm 0", recovery_example("compression_node_bytes"))
+    add("compression-kind-zero", "WotsCompression", "c10Address layer tree 1 kp 0 0 0",
+        "c10Address layer tree 0 kp 0 0 0", recovery_example("compression_kind_bytes"))
+    add("compression-elements-reversed", "WotsCompression", "values.flatMap nodeBlock",
+        "values.reverse.flatMap nodeBlock", recovery_example("compression_element_order"))
+    add("compression-result-zeroed", "WotsCompression", "(randomizerOfDigest reply.1, reply.2)",
+        "(0, reply.2)", recovery_example("compression_result_cache"))
+    add("compression-cache-erased", "WotsCompression", "(randomizerOfDigest reply.1, reply.2)",
+        "(randomizerOfDigest reply.1, fun _ => none)", recovery_example("compression_result_cache"))
+
+    add("recovery-rejected-node-changed", "WotsRecovery", "else PMF.pure (0, counted.2)",
+        "else PMF.pure (1, counted.2)", recovery_example("recovery_invalid_retains_cache"))
+    add("recovery-rejected-cache-erased", "WotsRecovery", "else PMF.pure (0, counted.2)",
+        "else PMF.pure (0, fun _ => none)", recovery_example("recovery_invalid_retains_cache"))
+    add("recovery-client-fallback-changed", "WotsRecovery", "else .done 0",
+        "else .done 1", recovery_example("recovery_after_rejected"))
+    # An accepted cached execution consumes the actual branch and all chains.
+    # The comparison retains the complete cache, with no fresh-draw premise.
+    accepted_recovery = """theorem checked (seed : ByteKey) (layer tree kp : ℕ)
+    (message : ByteKey) (nonce : Counter) (digest : Digest)
+    (ha : wotsAccept (wotsOfDigest digest) = true) :
+    wotsRecovery (fun _ => some digest) seed layer tree kp message
+      (fun _ => randomizerOfDigest digest) nonce =
+      PMF.pure (randomizerOfDigest digest, fun _ => some digest) := by
+  simp only [wotsRecovery, memoQuery, PMF.pure_bind]
+  rw [ha]
+  simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte]
+  rw [wotsRecoverChains, chainCollectionLoop_constant_cached, PMF.pure_bind]
+  exact wots_compress_cached _ _ _ _ _ _ digest rfl
+"""
+    add("recovery-acceptance-inverted", "WotsRecovery", "if wotsAccept (wotsOfDigest counted.1) then",
+        "if !wotsAccept (wotsOfDigest counted.1) then", accepted_recovery)
+    add("recovery-chain-cache-reset", "WotsRecovery", "wotsRecoverChains counted.2 seed",
+        "wotsRecoverChains (fun _ => none) seed", accepted_recovery)
+    add("recovery-count-cache-reset", "WotsRecovery", "memoQuery digestDraw table (counterKey",
+        "memoQuery digestDraw (fun _ => none) (counterKey", accepted_recovery)
+    add("recovery-client-accepted-skipped", "WotsRecovery",
+        """bindProgram (wotsAcceptedChainsProgram seed layer tree kp (wotsOfDigest digest) ha sigma)
+      (fun values => wotsCompressProgram seed layer tree kp values)""",
+        ".done 0", theorem(src["WotsRecovery"], "wots_recovery_after_eval"))
+
+    add("collection-order-preserving", "ChainCollection", "current.1 :: later.1",
+        "[current.1] ++ later.1", recovery_example("collection_cached_order"), True)
+    add("recovery-remaining-preserving", "WotsRemainingCore",
+        "collectionSteps (fun i => 7 - (word i).val)",
+        "collectionSteps (fun i => (3 + 4) - (word i).val)",
+        recovery_example("wots_remaining_accepted_word"), True)
+    add("compression-padding-preserving", "WotsCompression", "List.replicate 16 0",
+        "List.replicate 16 (0 + 0)", recovery_example("compression_node_bytes"), True)
+    add("recovery-fallback-preserving", "WotsRecovery", "else PMF.pure (0, counted.2)",
+        "else PMF.pure (0, (fun out => out.2) counted)", recovery_example("recovery_invalid_retains_cache"), True)
     return out

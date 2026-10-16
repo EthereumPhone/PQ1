@@ -498,10 +498,36 @@ For any base-eight WOTS digit, running from zero to that digit and continuing
 to seven equals the full chain execution, including cached replies. The
 selected trace has exactly `stop-start` calls for an ordinary 32-byte seed;
 zero or reversed natural ranges retain the initial value and table. These are
-count/chain components, not the full 43-chain signer, shuffle/private-key
-preparation, public-key recovery, complete C10 cost or forgery partition.
+count/chain components; their composition into public recovery is described
+below. The full shuffled signer and private-key preparation remain open.
 `WotsProgramExamples.lean` checks finite adaptive/cached executions and exact
 byte vectors independently of the compiler-equality proofs.
+
+`ChainCollection.lean` executes an ordered finite collection of chains through
+one shared cache and compiles it with the exact sum of step counts as its raw
+index. `WotsRemaining.lean` instantiates all 43 signature positions in order.
+It proves `sum(7-digit) + sum(digit) = 301`; the actual sum-205 acceptance test
+therefore gives exactly 96 remaining steps. This is a derived cost, with no
+independent-chain or freshness premise. `WotsCompression.lean` preserves the
+kind-1 address and concatenates every 16-byte node with its sixteen zero padding
+bytes, in order. Its input is exactly 1,440 bytes for a 32-byte seed and 43 nodes;
+the returned node is the high 128 bits of the full cached digest.
+
+`WotsRecovery.lean` combines the count query, actual acceptance test, all chains
+and compression. Its compiler equality preserves both the result and full memo
+table for arbitrary initial history. Rejection returns zero after the one count
+query; it does not query a zero node. The complete client has at most 98 raw
+calls and 97 selected-node calls, since the count key is excluded. From an empty
+cache, its selected collision-or-raw-zero event has probability at most
+`(97.choose 2 + 98)/2^128 = 4754/2^128`, also in real-valued form. This event is
+about oracle replies, not the invalid-return sentinel. `WotsRecoveryExamples.lean`
+checks finite ordered/cache executions, exact compression bytes, accepted-word
+arithmetic, and a complete recovery with every query already cached.
+
+This closes the manually transcribed public WOTS recovery component, not the
+full C10 keygen/sign/verify client, shuffled private signer, session cost or
+forgery-game partition. Natural-number address truncation and the manual
+correspondence boundary remain as above.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -546,16 +572,18 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 629 theorem closures against
+The gate rebuilds every project module, checks all 683 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-336 typed cases run 1008 compiler jobs: each baseline and changed
-definition must compile, 289 changed behaviors must reject at the
-consuming `checked` theorem, and forty-seven value-preserving changes must pass. Cases cover exhaustion,
+363 typed cases run 1089 compiler jobs: each baseline and changed
+definition must compile, 312 changed behaviors must reject at the
+consuming `checked` theorem, and fifty-one value-preserving changes must pass. The recovery
+controls include chain ordering and shared-cache retention, accepted-word work,
+compression bytes, acceptance and both return branches. Cases also cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS

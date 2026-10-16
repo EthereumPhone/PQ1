@@ -142,9 +142,16 @@ search has zero selected-node cost but keeps its full raw-query zero charge;
 its independent-sampling/exhaustion laws still require initial schedule
 freshness. A chain split at a base-eight digit preserves execution through
 position seven, with exact selected-call trace length. This closes the
-count/chain component translation, not the 43-chain signer, private derivation
-and shuffle, full keygen/recovery/session cost, output partition or forgery
-composition. The `none` exhaustion model does not prove runtime panic/retry
+count/chain component translation. Public WOTS recovery now also composes all
+43 ordered chains with the actual acceptance test, kind-1 compression and zero
+fallback. Full result/cache equality holds for arbitrary initial history.
+Acceptance derives exactly 96 remaining steps, giving at most 98 raw/97 selected
+queries and an empty-cache collision-or-oracle-zero charge of 4754/2^128.
+Invalid returned zero is not identified with an oracle-zero event. This closes
+the manually transcribed public recovery component, not the full shuffled
+43-chain signer, private derivation, complete C10 keygen/sign/verify/session
+cost, output partition or forgery composition.
+The `none` exhaustion model does not prove runtime panic/retry
 semantics. All23 manual source bindings are now checked for declared and
 push/PR trigger coverage, closing the known future-drift gap #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
