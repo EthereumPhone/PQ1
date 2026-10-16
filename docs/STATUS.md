@@ -172,6 +172,15 @@ receipt validation, physical erasure/fault resistance, hash backend correctness,
 randomness freshness and the complete Rust/EasyCrypt signer/session relation
 remain open. The raw verifier's zero-node continuation remains explicit.
 
+**EasyCrypt paired session (2026-10-16):** paired signing and verification now
+compose through the initialized adaptive byte experiment, preserving results,
+failure, session state and the complete oracle history/counters. Exact success-
+probability equality transfers the existing numerical bound with unchanged
+premises. This closes the EasyCrypt session-composition component; full Rust/
+backend interpretation and the separate secure-wrapper experiment remain open.
+See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
+and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
+
 **EasyCrypt coverage tightening (2026-10-15):** exact Stirling and falling-factorial
 counts replace the earlier canonical overcount in the adaptive FORS coverage
 term, retaining the initialized byte game and its premises. The complete bound

@@ -311,6 +311,24 @@ At `qr = qs = 65536`, the WOTS term falls by about 83.22 times to
 FORS openings. These are conservative upper probability bounds in the same
 classical ideal-oracle model, not attack costs or deployed security ratings.
 
+## Transfer to paired signing and verification
+
+`C10PairedSessionBound.paired_byte_wots_candidate_euf_bound` gives the identical
+WOTS-candidate upper bound for `RealGame(PairedByteContext(A)).run`. The paired
+session calls the comparison signer and verifier whose input constructions,
+shuffle, acceptance tests and digest fields are connected to the shared
+representation. Session admission, caps, failure, returned-message tracking,
+byte validation and final verification are preserved.
+
+`C10PairedInitialization.paired_byte_success_probability` proves exact equality
+of the two initialized success probabilities. The procedural relation preserves
+the complete session and oracle state; key preparation preserves valid history,
+and initialization establishes it. The bound retains the same configured caps,
+losslessness and private-state exclusions. It supplies no tighter number and
+no new backend or cross-language interpretation. The original key-generation
+procedure and absorbing-failure contract remain; the secure-wrapper session is
+a separate experiment. See [RESEARCH-LIMITS.md](RESEARCH-LIMITS.md).
+
 ## Composition, evidence and limits
 
 `NumericalByteCases` proves that every successful output belongs to one of the

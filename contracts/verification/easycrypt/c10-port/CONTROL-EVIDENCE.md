@@ -202,3 +202,29 @@ audit binds the rejection to its source line and raw output. Nineteen scope
 probes retain the forbidden structural-FORS boundary. Direct and CLI checks,
 statement/operation/source inventories, the full cold replay and bounded
 review remain separate requirements.
+
+## Paired adaptive byte-session controls
+
+Twelve typed changes alter failed-session admission, the signing cap, message
+width, attempt charge, exhaustion flag, returned-message ledger, signer message,
+preservation of prior query cost, final failure/freshness/byte guards, and the
+verified payload. Each definition-only copy must compile before the unchanged
+session or driver proof rejects at its intended theorem. The original and a
+value-preserving variant must pass. Eleven rejections use `[by]: cannot close
+goals`; the changed payload rejects with `the given proof-term proves:` at the
+direct decoder-theorem application, without relying on an SMT timeout.
+
+Three further positive/negative contract pairs exercise equal initial caps,
+the exact success event and the inherited numerical charge. Their rejection is
+at the `checked` lemma's final application with `the given proof-term proves:`.
+These are theorem-sensitivity checks, not proofs that every changed contract is
+false or that the numerical bound is tight. Together there are 32 controls:
+17 expected passes and 15 expected rejections. The generator is
+`tools/c10_paired_session_controls.py`; the focused audit binds source bytes,
+transitive proof dependencies, intended theorem/line and raw output.
+
+All three new proof modules have direct/CLI checks, statement/source pins,
+declaration census entries and forbidden-symbol scope probes. Full cold replay
+and bounded review remain separate landing requirements. No control establishes
+a Rust/oracle interpretation, a secure-wrapper security reduction or a concrete
+hash/quantum claim.

@@ -1580,3 +1580,32 @@ Each definition-only fixture compiles before the unchanged proof rejects at its
 intended theorem; unchanged and value-preserving fixtures pass. The field
 equalities use direct proof steps so these controls do not rely on an SMT budget
 failure. These remain proof-sensitivity controls, not proofs of mutant falsity.
+
+Paired computations through the adaptive byte session (2026-10-16):
+`C10PairedSession` lifts the paired signing and verification procedures through
+the original session's raw/sign admission checks, configured caps, absorbing
+signing failure, byte conversion and returned-message ledger. The comparison
+uses the same session state. Its driver retains the exact final message,
+4,008-byte signature validation, decoding and new-message check. The relational
+results preserve the returned result, client globals, complete session state,
+oracle history, query/draw counters and physical-model secret key.
+
+`C10PairedInitialization` proves that actual key preparation preserves the
+valid-history invariant and discharges it from the existing oracle
+initialization. The initialized experiment therefore needs no caller-supplied
+history-validity or successful-search premise. Its success probability equals
+that of the original byte game. `C10PairedSessionBound` transfers the existing
+WOTS-candidate numerical bound with exactly the original configured caps,
+client losslessness and private-state exclusions. It does not reduce that
+bound or introduce a new cryptographic assumption.
+
+This closes the **EasyCrypt adaptive-session composition of paired signing and
+verification computations**. The comparison retains the existing key-generation
+procedure and the existing absorbing-failure session contract; it is not the
+separate secure-wrapper session, whose refused attempts may be followed by
+further calls. The pure Rust/Lean SHA backend is still not identified with the
+stateful oracle or its distribution. A complete cross-language session relation,
+paired-printer interpretation, callbacks, physical abort prefixes, concrete hash
+assumptions and QROM remain open. Twelve lemmas and three comparison modules add
+no project axiom or production change. Typed procedural and contract controls
+are described in [CONTROL-EVIDENCE.md](CONTROL-EVIDENCE.md).

@@ -1490,3 +1490,40 @@ scratch/_scope_neg_op_WotsCandidateCoordinateBound.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WotsCandidateCutBound.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WotsCandidateNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WotsCandidateUnion.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Paired adaptive byte session and probability transfer: typed and contract controls.
+scratch/c10_paired_session_positive.ec	MUST-PASS	-
+scratch/c10_paired_session_preserving.ec	MUST-PASS	-
+scratch/c10_paired_session_failed_admission_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_failed_admission_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_sign_cap_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_sign_cap_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_message_width_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_message_width_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_attempt_charge_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_attempt_charge_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_returned_ledger_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_returned_ledger_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_sign_message_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_sign_message_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_prior_query_cost_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_prior_query_cost_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_failed_final_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_failed_final_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_fresh_message_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_fresh_message_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_byte_domain_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_byte_domain_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_paired_session_verified_output_typed.ec	MUST-PASS	-
+scratch/c10_paired_session_verified_output_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_paired_session_initial_caps_positive.ec	MUST-PASS	-
+scratch/c10_paired_session_initial_caps_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_paired_session_success_event_positive.ec	MUST-PASS	-
+scratch/c10_paired_session_success_event_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_paired_session_numerical_charge_positive.ec	MUST-PASS	-
+scratch/c10_paired_session_numerical_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_C10PairedInitialization.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10PairedSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10PairedSessionBound.ec	MUST-FAIL	FORS_C_TreePort.

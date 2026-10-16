@@ -580,3 +580,8 @@ WotsCandidateCoordinateBound
 WotsCandidateCutBound
 WotsCandidateNumericalBound
 WotsCandidateUnion
+
+# Paired adaptive byte session, initialization and quantitative transfer, 2026-10-16.
+C10PairedInitialization
+C10PairedSession
+C10PairedSessionBound

@@ -767,3 +767,6 @@ cdrafts-split/WotsCandidateCoordinateBound.ec
 cdrafts-split/WotsCandidateCutBound.ec
 cdrafts-split/WotsCandidateNumericalBound.ec
 cdrafts-split/WotsCandidateUnion.ec
+cdrafts-split/C10PairedInitialization.ec
+cdrafts-split/C10PairedSession.ec
+cdrafts-split/C10PairedSessionBound.ec
