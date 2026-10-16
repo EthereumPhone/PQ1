@@ -75,6 +75,34 @@ regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_ChainVariableKeygenCost\.ec": "e8052e6e798e7aa34327d7032d83c3e9a90d2611a5ced4d8bc67c618c7884d19",?\s*$''']
 
 [[rules.allowlists]]
+description = "Exact public paired-keygen source digest"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10\-port/cert\-source\-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_C10PairedKeygen\.ec": "1ae3e5daa47568f119a0c1e6cfbf509a93863486d322443cb6835673c6e88e5d",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public paired-keygen source digest"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10\-port/cert\-source\-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_C10PairedKeygenBound\.ec": "4099eaf654fbbfab030f9b252ebec43b406c0b26082a7bdb6fdbddd654280af1",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public paired-keygen source digest"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10\-port/cert\-source\-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/tools/c10_paired_keygen_controls\.py": "f90c2090ee8379b5b469ddf7b5787ab53779b41a0f87caccf0688ae9f7ceea84",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact paired-keygen control label and theorem identifiers"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10\-port/tools/c10_paired_keygen_controls\.py$''']
+regexTarget = "line"
+regexes = ['''^\ \ \ \ \('initial\-key\-input',\ 'C10PairedKeygen',\ 'paired_keygen_byte_initialized',$''']
+
+[[rules.allowlists]]
 description = "Public OPTIGA inventory object label, not object data"
 condition = "AND"
 paths = ['''^secure/src/optiga/probe/inventory\.rs$''']
