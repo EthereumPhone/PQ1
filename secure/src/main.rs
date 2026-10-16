@@ -378,6 +378,7 @@ mod bench_masked_sha;
 #[cfg(test)]
 mod ui {
     pub fn show_status(_title: &str, _sub: &str) {}
+    pub fn show_progress(_title: &str, _percent: u8) {}
 
     // Mirrors the production constants in `crate::ui` so the
     // `display_under_test` scaffold can re-mount the per-renderer
@@ -4435,6 +4436,14 @@ fn main() -> ! {
                 }
             }
 
+            // The wallet is on both chips (`provision_from_mnemonic` panics
+            // on any failure, so a failed write never reaches this line):
+            // the explosion, then YOUR PQ1 IS READY and HELP (owner
+            // 2026-10-16). Before the auto-unlock, deliberately: while the
+            // user reads, the device stays locked, so the 120 s idle lock
+            // cannot interrupt the pages with a PIN prompt.
+            ui::seed_wizard::finish_setup();
+
             // Auto-unlock with the PIN the user just entered so the device
             // is immediately usable (caches entropy blob + VK for signing).
             //
@@ -4449,10 +4458,6 @@ fn main() -> ! {
                 Ok(master) => {
                     nsc::unlock_with_master(master);
                     secure_log!("[S] Auto-unlocked after provisioning");
-                    // Only here: the wallet is on both chips and opens with
-                    // the PIN just chosen (`provision_from_mnemonic` panics on
-                    // any failure, so a failed write never reaches this line).
-                    ui::show_status("Setup complete", "");
                 }
                 Err(_) => {
                     secure_log!("[S] WARNING: auto-unlock failed after provision");

@@ -222,19 +222,25 @@ fn paint_fallback(s: &Screen) {
             for k in 0..s.nlines(0) {
                 let line = s.line(0, k).map_or(&[][..], |(_, t)| t);
                 for word in line.split(|&b| b == b' ').filter(|w| !w.is_empty()) {
-                    let word = &word[..word.len().min(DISPLAY_COLS)];
                     if c > 0 && c + 1 + word.len() > DISPLAY_COLS {
                         r += 1;
                         c = 0;
                     }
-                    if r >= DISPLAY_ROWS {
-                        break;
-                    }
                     if c > 0 {
                         c += 1;
                     }
-                    flow[r][c..c + word.len()].copy_from_slice(word);
-                    c += word.len();
+                    // A word longer than a row (hi@freedomfactory.io) breaks
+                    // across rows rather than losing its end.
+                    for &b in word {
+                        if c == DISPLAY_COLS {
+                            r += 1;
+                            c = 0;
+                        }
+                        if r < DISPLAY_ROWS {
+                            flow[r][c] = b;
+                        }
+                        c += 1;
+                    }
                 }
             }
             for (r, row) in flow.iter().enumerate() {
@@ -370,6 +376,17 @@ pub fn create_backup(m: &Mnemonic, intro: &[Screen]) {
             start_last = false;
         }
     }
+}
+
+/// After the wallet is written: the busy film (SETTING UP YOUR PQ1) resolves
+/// into the explosion, which plays to its empty canvas with nothing else
+/// running (owner 2026-10-16: never while provisioning works), then YOUR PQ1
+/// IS READY and HELP; a right tap off HELP ends setup.
+pub fn finish_setup() {
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
+    super::px::lcd::film_resolve(pqsigner_ui_px::scene::Ending::Burst);
+    let pages = setup_screens::ready();
+    while pager(&pages, 0, false, true) != PagerOut::Forward {}
 }
 
 /// Import: the intro, then the 24 words typed in. `None` = the user went

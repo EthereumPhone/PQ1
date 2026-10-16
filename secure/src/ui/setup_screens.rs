@@ -286,6 +286,29 @@ pub fn hidden() -> Screen {
     )
 }
 
+/// After the wallet is written and the explosion has played (owner wording
+/// 2026-10-16): YOUR PQ1 IS READY, then HELP; a right tap off HELP ends
+/// setup. Nothing asks.
+#[must_use]
+pub fn ready() -> [Screen; 2] {
+    [
+        hero(b"READY", b"YOUR PQ1 IS READY")
+            .uncommitted()
+            .nav(Nav::RightOnly)
+            .finish()
+            .unwrap_or(Screen::BLANK),
+        detail(
+            b"HELP",
+            b"HELP",
+            &[
+                b"Questions? Email",
+                b"hi@freedomfactory.io",
+                b"Enjoy your PQ1 :)",
+            ],
+        ),
+    ]
+}
+
 /// An entry row (the PIN, a check word, a word being typed in) left two
 /// minutes without a press. The row leaves the glass, because a typed prefix
 /// or a candidate list is seed material; any press brings it back.
@@ -316,6 +339,7 @@ mod tests {
         v.extend(backup_intro());
         v.extend(duress_intro());
         v.extend(decoy_intro());
+        v.extend(ready());
         v.extend([
             pin_help(),
             written(),
@@ -355,6 +379,9 @@ mod tests {
         assert_eq!(confirmable, [CONFIRM_HELP, CREATE, IMPORT]);
         assert_eq!(i[CREATE].caption(), b"CREATE NEW WALLET?");
         assert_eq!(i[IMPORT].caption(), b"IMPORT WALLET?");
+        for s in ready() {
+            assert!(!s.confirmable(), "nothing after setup asks: {s:?}");
+        }
         for s in [pin_help(), quiz_intro(), hidden(), paused(), import_intro()] {
             assert!(!s.commit(), "{s:?}");
         }

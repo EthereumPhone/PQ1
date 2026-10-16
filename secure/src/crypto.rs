@@ -486,6 +486,12 @@ fn c10_sign_verified_with_progress_inner(
 pub const RETIRED_LEGACY_VK: [u8; 32] = *b"PQ1:legacy-c7-vk:retired:2026-10";
 /// Bootstrap counterpart of [`RETIRED_LEGACY_VK`].
 pub const RETIRED_LEGACY_BOOTSTRAP_VK: [u8; 32] = *b"PQ1:legacy-c7-bvk:retired:202610";
+/// Advances the busy film while provisioning writes the chips (the loading
+/// film's orbit, owner 2026-10-16; the 16x4 page shows a bar). Display only:
+/// nothing the wallet holds depends on it.
+fn provision_progress(percent: u8) {
+    crate::ui::show_progress("Provisioning", percent);
+}
 
 pub fn provision_from_mnemonic(
     store: &mut impl crate::secure_element::WalletStore,
@@ -499,6 +505,8 @@ pub fn provision_from_mnemonic(
         .expect("mnemonic was already checksum-verified");
 
     let mut master_secret: [u8; 32] = kdf(b"sphincs-master", &entropy, 0);
+
+    provision_progress(50);
 
     if store
         .provision(&entropy, &master_secret, &RETIRED_LEGACY_VK, &RETIRED_LEGACY_BOOTSTRAP_VK, pin)
@@ -532,6 +540,8 @@ pub fn provision_from_mnemonic(
     crate::fi::zeroize_barrier();
     master_secret.zeroize();
     crate::fi::zeroize_barrier();
+
+    provision_progress(75);
 
     // §32 duress (decoy) wallet. Always provision a decoy — a RANDOM PIN
     // when the user declined (`duress_pin = None`) — so "duress configured
@@ -612,6 +622,7 @@ fn provision_duress_wallet(
     };
 
     let mut decoy_master: [u8; 32] = kdf(b"sphincs-master", &decoy_entropy, 0);
+    provision_progress(95);
 
     // Same placeholder as the real wallet: the slots must not tell the two
     // apart, and neither needs a derived key (see `RETIRED_LEGACY_VK`).

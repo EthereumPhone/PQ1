@@ -200,8 +200,6 @@ const PLAIN_VERDICTS: &[(&str, &[u8], Icon, State, ResultMark, &[u8])] = &[
     ("Bad checksum", b"BADSEED", Icon::ResultRing, State::Failed, ResultMark::Cross, b"WRONG SEED PHRASE"),
     ("No match", b"NOWORD", Icon::ResultRing, State::Failed, ResultMark::Cross, b"NO SUCH WORD"),
     ("Words shown", b"SHOWN", Icon::Shield, State::Done, ResultMark::Check, b"WORDS SHOWN"),
-    // Shown by `main` only after the wallet is written to both chips.
-    ("Setup complete", b"COMPLETE", Icon::Verified, State::Done, ResultMark::Check, b"SETUP COMPLETE"),
 ];
 
 /// Map a legacy `show_status(title, sub)` to its screen.
@@ -226,6 +224,13 @@ pub fn classify(title: &str, sub: &str) -> Status {
         "Set new PIN" => Status::PinPrompt(b"SET PIN"),
         "Confirm PIN" => Status::PinPrompt(b"REPEAT PIN"),
         "Duress PIN" => Status::PinPrompt(b"SET DURESS PIN"),
+        // Setup writing the wallet: the busy film on the setup family's disc
+        // (owner 2026-10-16); it resolves into the explosion when done.
+        "Provisioning" => Status::Busy(
+            ScreenBuilder::status(b"SETUP", Icon::Dots, b"SETTING UP YOUR PQ1", State::Awaiting, ResultMark::None)
+                .finish()
+                .unwrap_or(Screen::BLANK),
+        ),
         "Repeat duress PIN" => Status::PinPrompt(b"REPEAT DURESS PIN"),
         "PIN locked" => v(b"PINLOCK", Icon::Lock, State::Failed, ResultMark::None, &[b"PIN LOCKED", sb]),
         "Locked" | "Idle" => v(b"LOCKED", Icon::Lock, State::Failed, ResultMark::None, &[b"LOCKED", if eq(s, "retry...") { b"" } else { sb }]),
@@ -668,7 +673,6 @@ mod tests {
             ("Cancelled", "", Icon::ResultRing, b"CANCELED"),
             ("PIN mismatch", "", Icon::Pill, b"PIN MISMATCH"),
             ("Wrong word", "", Icon::ResultRing, b"WRONG WORD - TRY AGAIN"),
-            ("Setup complete", "", Icon::Verified, b"SETUP COMPLETE"),
         ];
         for &(t, s, icon, cap) in cases {
             let sc = shown(classify(t, s));
@@ -855,7 +859,8 @@ mod tests {
                         candidate_list(b"Word 3 of 24"),
                         st("No match", ""),
                         st("Bad checksum", "retry..."),
-                        st("Setup complete", ""),
+                        crate::ui_setup_screens::ready()[0],
+                        crate::ui_setup_screens::ready()[1],
                     ]);
                     v
                 },
