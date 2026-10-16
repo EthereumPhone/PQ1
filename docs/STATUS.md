@@ -242,7 +242,15 @@ The concrete first-sixteen-byte/high-128-bit zero-node event has bound
 `(n.choose 2+n)/2^128`. This uses the full structural query budget, not the
 narrower EasyCrypt node-domain budget. Initial hits persist even at zero
 queries. Full PMF successful-output/forgery composition remains open.
-All 493 theorem closures and 279 typed cases are gated separately;
+The selected-domain collision component is now also proved: a fixed selector
+and structural selected-call budget `q` give `(q*h+q.choose 2)/M` with explicit
+initial selected-history conditions, while retaining the full cache and every
+adaptive reply. The exact byte-domain selector excludes H_msg and zero-kind
+count inputs. Its collision-or-zero charge is `(q.choose 2+n)/2^128`, with
+zero still charged to all `n` raw calls. The existing physical R/H_msg grinder
+derives one selected and two total calls per trial. The complete C10 node-cost
+formula and successful-output/forgery partition remain open.
+All 560 theorem closures and 308 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

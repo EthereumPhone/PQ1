@@ -116,11 +116,25 @@ budget. Uniform projected replies give `n*targets.card/M` for a fixed finite
 set. The concrete first sixteen big-endian digest bytes equal the high-128-bit
 projection, so an all-zero node has fresh mass `1/2^128` and final-cache charge
 `n/2^128`. Its union with public collisions on the same program and cache has
-charge `(n.choose 2+n)/2^128`. This uses all program queries; the refined
-EasyCrypt node-producing-domain budget has not been ported. Neither target
+charge `(n.choose 2+n)/2^128`. This uses all program queries. Neither target
 postselection nor independent query keys is assumed. This retires the unported
 zero-sentinel component, not the remaining successful-output partition,
 reverse-chain/FORS continuations or full PMF forgery composition.
+The fixed node-domain selector and selected-budget probability component are
+now separately proved in the PMF project. A structural budget `q` counts every
+selected call, including cached calls, while all excluded replies remain in
+the full cache and may influence future keys. Observer erasure preserves actual
+output/cache; selected initial-history coverage and collision freedom are
+explicit. The resulting selected collision charge is `(q*h+q.choose 2)/M`.
+The exact byte selector excludes160-byte keys and zero-kind128-byte keys,
+retaining other arbitrary raw inputs. From an empty cache the combined charge
+is `(q.choose 2+n)/2^128`: the zero term still uses the full total index `n`.
+The actual physical R/H_msg grinder proves at most one selected and two raw
+calls per trial, yielding `(trials.choose 2+2*trials)/2^128`; this needs no
+freshness or successful-grinding premise. The complete EasyCrypt C10 node-cost
+formula, selected successful-output witnesses and full PMF forgery partition
+remain unported. The R query is retained in this physical one-cache program;
+the separate-private-cache experiment is not silently substituted.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

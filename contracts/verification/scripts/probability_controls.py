@@ -1050,4 +1050,88 @@ def cases(project: Path) -> list[dict]:
         "⟨i.val + 0, by omega⟩", node_projection, True)
     add("node-zero-value-preserving", "NodeZero", "decide (nodeBytes digest = fun _ => 0)",
         "decide (nodeBytes digest = fun _ => (0 + 0))", node_zero, True)
+
+    # Selected-domain accounting keeps the full execution/cache. Definition
+    # fixtures and unchanged finite consumers distinguish erasure, observer,
+    # structural budget and exact byte-selector failures.
+    selected_membership = theorem(src["DomainExamples"], "selected_cache_membership")
+    selected_cache = "if select key then table key else none"
+    add("selected-cache-inverted", "SelectedObserver", selected_cache,
+        "if select key then none else table key", selected_membership)
+    add("selected-cache-erased", "SelectedObserver", selected_cache,
+        "none", selected_membership)
+    add("selected-view-unfiltered", "SelectedObserver",
+        "⟨selectedCache select state.cache, state.seen, state.bad⟩",
+        "⟨state.cache, state.seen, state.bad⟩",
+        theorem(src["DomainExamples"], "excluded_prior_history_valid"))
+    excluded_record = "else ⟨Function.update state.cache key (some value), state.seen, state.bad⟩"
+    stored = theorem(src["DomainExamples"], "excluded_reply_stored")
+    add("excluded-reply-forgotten", "SelectedObserver", excluded_record,
+        "else ⟨state.cache, state.seen, state.bad⟩", stored)
+    add("excluded-reply-inserted", "SelectedObserver", excluded_record,
+        "else ⟨Function.update state.cache key (some value), insert (project value) state.seen, state.bad⟩",
+        stored)
+    add("excluded-prior-flag-cleared", "SelectedObserver", excluded_record,
+        "else ⟨Function.update state.cache key (some value), state.seen, false⟩",
+        theorem(src["DomainExamples"], "selected_prior_flag"))
+    selected_record = "if select key then recordReply project state key value"
+    add("selected-record-inverted", "SelectedObserver", selected_record,
+        "if !select key then recordReply project state key value", stored)
+    add("selected-flag-cleared", "SelectedObserver", selected_record,
+        "if select key then { recordReply project state key value with bad := false }",
+        theorem(src["DomainExamples"], "selected_reply_collision"))
+    add("selected-seen-omitted", "SelectedObserver", selected_record,
+        "if select key then { recordReply project state key value with seen := state.seen }",
+        theorem(src["DomainExamples"], "selected_reply_seen"))
+    add("excluded-cached-resampled", "SelectedObserver", "| some value => PMF.pure (value, state)",
+        "| some value => p.map (fun fresh => (fresh, state))",
+        theorem(src["DomainExamples"], "excluded_cached_reply"))
+
+    repeats = theorem(src["DomainExamples"], "selected_budget_counts_repeats")
+    add("selected-budget-not-consumed", "SelectedBudget", "(next reply) (q - 1)",
+        "(next reply) q", repeats)
+    add("selected-budget-zero-waived", "SelectedBudget", "0 < q ∧", "True ∧", repeats)
+    add("selected-budget-one-branch", "SelectedBudget",
+        "else ∀ reply, SelectedBudget select (next reply) q",
+        "else ∃ reply, SelectedBudget select (next reply) q",
+        theorem(src["DomainExamples"], "selected_budget_all_branches"))
+    add("excluded-call-spends-selected-budget", "SelectedBudget",
+        "else ∀ reply, SelectedBudget select (next reply) q",
+        "else ∀ reply, SelectedBudget select (next reply) (q - 1)",
+        """theorem checked :
+    SelectedBudget id (.query false (fun _ : Bool => .query true
+      (fun _ => .done (n := 0) ()))) 1 := by
+  simp [SelectedBudget]
+""")
+
+    count_domain = theorem(src["DomainExamples"], "node_domain_count_zero_kind")
+    hmsg_domain = theorem(src["DomainExamples"], "node_domain_hmsg_width")
+    kind_first = theorem(src["DomainExamples"], "node_domain_kind_first_byte")
+    kind_last = theorem(src["DomainExamples"], "node_domain_kind_last_byte")
+    add("domain-hmsg-width-shifted", "NodeDomain", "key.length ≠ 160", "key.length ≠ 159", hmsg_domain)
+    add("domain-count-width-shifted", "NodeDomain", "key.length ≠ 128", "key.length ≠ 127", count_domain)
+    add("domain-hmsg-conjunction-lost", "NodeDomain", "key.length ≠ 160 ∧",
+        "key.length ≠ 160 ∨", hmsg_domain)
+    add("domain-pair-width-excluded", "NodeDomain", "key.length ≠ 128 ∨",
+        "key.length ≠ 128 ∧", kind_last)
+    add("domain-kind-start-early", "NodeDomain", "key.drop 44", "key.drop 43", kind_last)
+    add("domain-kind-start-late", "NodeDomain", "key.drop 44", "key.drop 45", kind_first)
+    add("domain-kind-shortened", "NodeDomain", ").take 4", ").take 3", count_domain)
+    add("domain-kind-widened", "NodeDomain", ").take 4", ").take 5", count_domain)
+    add("domain-kind-nonzero-excluded", "NodeDomain", "List.replicate 4 0",
+        "List.replicate 4 1", count_domain)
+
+    domain_union = "(¬ CollisionFree randomizerOfDigest (selectedCache nodeQuery table)) ∨ PublicNodeZero table"
+    add("domain-union-zero-omitted", "DomainNodeCharges", domain_union,
+        "¬ CollisionFree randomizerOfDigest (selectedCache nodeQuery table)",
+        theorem(src["DomainExamples"], "domain_zero_from_excluded"))
+    add("domain-union-collision-omitted", "DomainNodeCharges", domain_union,
+        "PublicNodeZero table", theorem(src["DomainExamples"], "domain_collision_alone_bad"))
+
+    add("selected-cache-preserving", "SelectedObserver", selected_cache,
+        "if select key || false then table key else none", selected_membership, True)
+    add("selected-budget-preserving", "SelectedBudget", "0 < q ∧", "0 + 0 < q ∧", repeats, True)
+    add("domain-kind-offset-preserving", "NodeDomain", "key.drop 44", "key.drop (40 + 4)", kind_last, True)
+    add("domain-kind-zero-preserving", "NodeDomain", "List.replicate 4 0",
+        "List.replicate 4 (0 + 0)", count_domain, True)
     return out

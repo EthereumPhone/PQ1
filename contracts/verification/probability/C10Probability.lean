@@ -18,3 +18,4 @@ import C10Probability.AcceptedExamples
 import C10Probability.WotsExact
 import C10Probability.CountExamples
 import C10Probability.TargetExamples
+import C10Probability.DomainExamples

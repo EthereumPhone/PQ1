@@ -254,6 +254,42 @@ event on the same program and cache, giving `(n.choose 2+n)/2^128`. This counts
 all queries in the program; the narrower EasyCrypt node-producing-domain
 budget is not imported or assumed here.
 
+`SelectedBudget.lean`, `SelectedObserver.lean` and `SelectedCollision.lean`
+now derive a tighter collision charge for a fixed input selector. A structural
+budget `q` counts selected calls on every continuation, including cache hits;
+the actual query trace satisfies that budget. All queries still execute against
+the full memo table, and excluded replies can choose future selected inputs.
+Erasing the observer preserves the complete returned result and cache. If the
+initial selected cache is collision-free and covered by `h` seen projections,
+the actual final selected-cache collision probability is at most
+`(q*h+q.choose 2)/M`. Randomized clients and real-valued bounds are included.
+
+`NodeDomain.lean` transcribes the exact EasyCrypt selector: exclude all160-byte
+inputs and128-byte inputs whose bytes44–47 are zero; retain everything else,
+including malformed raw inputs. H_msg and padded WOTS-count inputs are
+excluded under their width/tag premises. Chain/compression widths and
+nonzero-kind pair inputs remain selected. `DomainNodeCharges.lean` gives
+`(q.choose 2+n)/2^128` from an empty cache, where **zero nodes are still charged
+to the full raw-query index `n`**. The selected event and zero event share the
+same actual execution and final full cache.
+
+`DomainGrind.lean` derives this budget for the existing physical R/H_msg
+grinder: at most one selected and two total calls per trial. The H_msg call is
+excluded; R inputs remain selected by this conservative raw-domain selector.
+The actual `sharedRandomizerSearch` charge is therefore
+`(trials.choose 2+2*trials)/2^128`, without a freshness or successful-return
+premise. This does not yet port the complete EasyCrypt C10 node-cost formula
+or its successful-output/forgery partition.
+
+`DomainExamples.lean` computes actual finite events independently of the
+bound. An excluded first reply chooses whether later selected calls repeat,
+giving collision mass `1/4`; a randomized optional execution gives `1/8`.
+Nonempty selected history gives `1/2`, while a preexisting selected collision
+has mass one at zero queries. Cache retention, cached replies, repeated-call
+budgeting, every adaptive branch, exact kind-byte boundaries and malformed
+widths are checked. A zero value at an excluded input still makes the combined
+event bad.
+
 `TargetExamples.lean` checks actual finite cache-event probabilities: two fresh
 Boolean keys hit `true` with probability `3/4`, a repeated key with `1/2`, a
 reply-dependent repeat with `1/2`, early return with `3/4`, and a randomized
@@ -478,16 +514,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 493 theorem closures against
+The gate rebuilds every project module, checks all 560 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-279 typed cases run 837 compiler jobs: each baseline and changed
-definition must compile, 240 changed behaviors must reject at the
-consuming `checked` theorem, and thirty-nine value-preserving changes must pass. Cases cover exhaustion,
+308 typed cases run 924 compiler jobs: each baseline and changed
+definition must compile, 265 changed behaviors must reject at the
+consuming `checked` theorem, and forty-three value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -553,3 +589,9 @@ cache lookup, weakened quantification, fixed-set membership, low-half or
 repeated-byte nodes, byte order, whole-digest/any-byte/incorrect-value zero
 tests, lost cache or target conditions and either omitted union event.
 Equivalent predicate, set, index and zero-value expressions must pass.
+
+Selected-domain controls cover cache filtering, full-view erasure, excluded
+reply storage, seen-set and flag changes, cached resampling, budget consumption
+and universal continuation guards. Byte controls distinguish both excluded
+widths, the conjunction/disjunction, kind-field start/width/value and both
+union events. Equivalent selector, budget, offset and zero expressions pass.
