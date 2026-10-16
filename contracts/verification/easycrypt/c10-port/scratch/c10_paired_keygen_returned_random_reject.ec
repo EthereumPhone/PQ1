@@ -1,0 +1,82 @@
+(* Compose the existing common-input keygen relation with the paired byte
+   driver. Preserve the original public-input totalization and oracle state;
+   no concrete hash interpretation or cross-kernel theorem is asserted. *)
+require import AllCore List Distr FMap.
+require import C10RawOracle PrefixGuess PrefixHybrid PrefixGames.
+require import RawKeygen KeygenPrefixes KeygenExhaustion FullSession ByteSession.
+require import C10Representation C10CallerInputBridge C10TreeCallerBridge.
+require import C10SearchAcceptance C10PairedSession C10PairedInitialization.
+
+module PairedKeygenPreparation (O : PrefixOracle) = {
+  proc run() : raw_input * raw_input * raw_input * raw_input = {
+    var seed, root;
+    seed <- pad_node (node KeygenInputs.public_seed);
+    root <@ CommonInputMerkle(O).root(seed,1,0);
+    return ([],KeygenInputs.message,seed,pad_node root);
+  }
+}.
+
+module PairedKeygenByteContext (A : ByteClient) (O : PrefixOracle) = {
+  proc run() : bool = {
+    var inputs, result;
+    inputs <@ PairedKeygenPreparation(O).run();
+    result <@ PairedByteDriver(A,O).run(inputs.`3,inputs.`4,FullLimits.raw_cap,FullLimits.sign_cap);
+    return result;
+  }
+}.
+
+lemma paired_keygen_domain : tree_fields 1 0.
+proof.
+  rewrite /tree_fields; smt(caller_u32_size tree_u32_u64).
+qed.
+
+lemma paired_keygen_preparation (O <: PrefixOracle {-KeygenInputs}) :
+  equiv[KeygenPreparation(PreparationView(O)).run ~ PairedKeygenPreparation(O).run :
+    ={glob KeygenInputs,glob O} ==> ={res,glob KeygenInputs,glob O}].
+proof.
+  proc; call (caller_keygen_root O); auto => />.
+  by have := paired_keygen_domain; rewrite /tree_fields /=.
+qed.
+
+lemma paired_keygen_preparation_history :
+  equiv[KeygenPreparation(PreparationView(Physical)).run ~ PairedKeygenPreparation(Physical).run :
+    ={glob KeygenInputs,glob Physical} /\ valid_history Shared.history{1} ==>
+    ={res,glob KeygenInputs,glob Physical} /\ valid_history Shared.history{1}].
+proof.
+  transitivity KeygenPreparation(PreparationView(Physical)).run
+    (={glob KeygenInputs,glob Physical} /\ valid_history Shared.history{1} ==>
+      ={res,glob KeygenInputs,glob Physical} /\ valid_history Shared.history{1})
+    (={glob KeygenInputs,glob Physical} ==> ={res,glob KeygenInputs,glob Physical}) => //.
+  + smt().
+  + exact (paired_preparation KeygenPreparation).
+  exact (paired_keygen_preparation Physical).
+qed.
+
+lemma paired_keygen_byte_context
+  (A <: ByteClient {-FullSession,-Physical,-Shared,-FullLimits,-KeygenInputs}) :
+  equiv[ByteContext(A,Physical).run ~ PairedKeygenByteContext(A,Physical).run :
+    ={glob A,glob FullLimits,glob KeygenInputs,glob Physical} /\
+    valid_history Shared.history{1} ==>
+    ={res,glob A,glob FullSession,glob Physical} /\ valid_history Shared.history{1}].
+proof.
+  proc; call (paired_byte_driver A); wp; call paired_keygen_preparation_history; by auto.
+qed.
+
+lemma paired_keygen_byte_initialized
+  (A <: ByteClient {-FullSession,-Physical,-Shared,-FullLimits,-KeygenInputs}) :
+  equiv[RealGame(ByteContext(A)).run ~ RealGame(PairedKeygenByteContext(A)).run :
+    ={glob A,glob FullLimits,glob KeygenInputs} ==>
+    ={res,glob A,glob FullSession,glob Physical} /\ valid_history Shared.history{1}].
+proof.
+  proc; call (paired_keygen_byte_context A); inline Shared.init; auto.
+  by rewrite /valid_history; smt(emptyE).
+qed.
+
+lemma paired_keygen_byte_success_probability
+  (A <: ByteClient {-FullSession,-Physical,-Shared,-FullLimits,-KeygenInputs}) &m :
+  Pr[RealGame(PairedKeygenByteContext(A)).run() @ &m : res] =
+  Pr[RealGame(ByteContext(A)).run() @ &m : res].
+proof.
+  byequiv (_ : ={glob A,glob FullLimits,glob KeygenInputs} ==> ={res}) => //.
+  symmetry; conseq (paired_keygen_byte_initialized A); smt().
+qed.

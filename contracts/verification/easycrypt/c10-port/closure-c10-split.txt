@@ -585,3 +585,7 @@ WotsCandidateUnion
 C10PairedInitialization
 C10PairedSession
 C10PairedSessionBound
+
+# Paired key preparation, initialized game and quantitative transfer, 2026-10-16.
+C10PairedKeygen
+C10PairedKeygenBound

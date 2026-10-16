@@ -2623,3 +2623,5 @@ cdrafts-split/WotsCandidateNumericalBound.ec	defined-op:f4045ec6f6c0	wots_candid
 cdrafts-split/C10PairedSession.ec	module:26c7cb5ec1d9	PairedSession
 cdrafts-split/C10PairedSession.ec	module:3a25546b8d8e	PairedByteDriver
 cdrafts-split/C10PairedSession.ec	module:96ceffbd5ca0	PairedByteContext
+cdrafts-split/C10PairedKeygen.ec	module:632b5a2df69b	PairedKeygenPreparation
+cdrafts-split/C10PairedKeygen.ec	module:cfd6afcc4a76	PairedKeygenByteContext

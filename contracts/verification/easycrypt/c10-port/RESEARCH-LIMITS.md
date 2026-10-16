@@ -1609,3 +1609,28 @@ paired-printer interpretation, callbacks, physical abort prefixes, concrete hash
 assumptions and QROM remain open. Twelve lemmas and three comparison modules add
 no project axiom or production change. Typed procedural and contract controls
 are described in [CONTROL-EVIDENCE.md](CONTROL-EVIDENCE.md).
+
+Paired key preparation through initialization (2026-10-16):
+`C10PairedKeygen` composes the existing private-leaf and root refinements into
+key preparation. Its comparison calls `CommonInputMerkle.root` at layer 1,
+tree 0, with the exact public-seed padding, root padding and auxiliary returned
+values. The generic helper excludes an oracle that writes `KeygenInputs`;
+the concrete `Physical` oracle already satisfies this framing condition.
+The existing totalization for arbitrary public-seed bit lists is retained.
+No 256-bit public-seed premise or successful-keygen premise is introduced.
+
+`PairedKeygenByteContext` combines this preparation with the paired byte driver.
+The procedural and initialized relations preserve results, complete session
+state, the physical-model key, shared history and query/draw counters. Actual
+initialization discharges valid history. Its success probability equals the
+original byte game's, and `C10PairedKeygenBound` transfers the same numerical
+bound with exactly its existing caps, losslessness and private-state exclusions.
+Seven lemmas and two comparison modules add no operation or project axiom.
+
+This closes the **EasyCrypt composition of paired key preparation with the
+paired signing/verification session**. It does not remove the paired-printer
+or primitive-interpretation TCB, identify the pure Rust/Lean backend with the
+stateful oracle, or prove the complete cross-language session relation. The
+absorbing-failure game, separate secure-wrapper experiment, physical effects,
+concrete hash assumptions, QROM and separate #295 probability-monad scope keep
+their existing boundaries.

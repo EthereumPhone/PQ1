@@ -770,3 +770,5 @@ cdrafts-split/WotsCandidateUnion.ec
 cdrafts-split/C10PairedInitialization.ec
 cdrafts-split/C10PairedSession.ec
 cdrafts-split/C10PairedSessionBound.ec
+cdrafts-split/C10PairedKeygen.ec
+cdrafts-split/C10PairedKeygenBound.ec

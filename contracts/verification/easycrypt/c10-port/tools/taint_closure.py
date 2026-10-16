@@ -74,6 +74,13 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'paired_keygen_domain',
+    'paired_keygen_preparation',
+    'paired_keygen_preparation_history',
+    'paired_keygen_byte_context',
+    'paired_keygen_byte_initialized',
+    'paired_keygen_byte_success_probability',
+    'paired_keygen_byte_wots_candidate_euf_bound',
     'paired_preparation_wots',
     'paired_preparation_fors',
     'paired_preparation',

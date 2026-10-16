@@ -329,6 +329,15 @@ no new backend or cross-language interpretation. The original key-generation
 procedure and absorbing-failure contract remain; the secure-wrapper session is
 a separate experiment. See [RESEARCH-LIMITS.md](RESEARCH-LIMITS.md).
 
+The key-preparation continuation also gives this identical bound for
+`RealGame(PairedKeygenByteContext(A)).run`, through
+`C10PairedKeygenBound.paired_keygen_byte_wots_candidate_euf_bound`.
+`C10PairedKeygen.paired_keygen_byte_success_probability` proves equality to the
+original initialized experiment after composing the existing paired/common
+keygen-root relation. It preserves public-seed totalization, both padding
+operations, layer 1/tree 0 and complete state. Its bound has exactly the previous
+premises; it adds no public-seed width requirement or tighter numerical claim.
+
 ## Composition, evidence and limits
 
 `NumericalByteCases` proves that every successful output belongs to one of the
