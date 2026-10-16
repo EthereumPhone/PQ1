@@ -4181,6 +4181,29 @@ unsafe fn erase_offchain_page() -> Result<(), ()> {
     })
 }
 
+/// Erase page 123 as part of a wallet wipe, or before provisioning a new
+/// wallet (#949). Its counters and registration flags belong to the wallet
+/// being destroyed, but are keyed by (account, chain, slot), not by wallet:
+/// a seed set up afterwards would otherwise inherit them, including a
+/// "registered" flag that skips invariant #9's post-restore gate. An already
+/// blank page is left alone (no erase cycle spent).
+///
+/// # Safety
+/// Erases persistent flash at `OFFCHAIN_PAGE_ADDR`; the caller must hold the
+/// single-threaded secure context every page-123 writer assumes.
+pub unsafe fn erase_offchain_page_for_wipe() -> Result<(), ()> {
+    let base = OFFCHAIN_PAGE_ADDR as *const u32;
+    let words = (OFFCHAIN_CAPACITY * OFFCHAIN_QW_SIZE / 4) as usize;
+    // SAFETY: page 123 is a fixed, mapped secure-flash page of
+    // `OFFCHAIN_CAPACITY * OFFCHAIN_QW_SIZE` bytes; word-aligned reads.
+    let blank = (0..words).all(|i| unsafe { read_volatile(base.add(i)) } == 0xFFFF_FFFF);
+    if blank {
+        return Ok(());
+    }
+    // SAFETY: forwarded contract.
+    unsafe { erase_offchain_page() }
+}
+
 /// Maximum number of distinct active slots the SRAM compaction buffer
 /// supports. Realistic usage is far below this; well-behaved firmware
 /// rotates slots before they exhaust their 65,536-sig cap.

@@ -3448,6 +3448,28 @@ use crate::secure_element::{SeError, UnlockError, WalletStore};
 use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
 
+/// Dev diagnostic (`unlock-diag`): the step at which the last
+/// [`DualSecureElement::unlock`] failed, 0 while none has. 1 = no usable salt
+/// (credentials), 2/3 = OPTIGA rejected the PIN / other OPTIGA error, 4/5 =
+/// the same for the SE050, 6/7 = OPTIGA blob read / decrypt, 8/9 = SE050
+/// blob read / decrypt, 10 = the reconstructed entropy disagrees with the
+/// stored master. A step number only, never a secret; added 2026-10-16 to
+/// find why the auto-unlock after setup failed on the EVT.
+#[cfg(feature = "unlock-diag")]
+static LAST_UNLOCK_FAIL: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+#[inline(always)]
+fn unlock_failed_at(_step: u8) {
+    #[cfg(feature = "unlock-diag")]
+    LAST_UNLOCK_FAIL.store(_step, core::sync::atomic::Ordering::Relaxed);
+}
+
+/// See [`LAST_UNLOCK_FAIL`].
+#[cfg(feature = "unlock-diag")]
+pub fn last_unlock_failure() -> u8 {
+    LAST_UNLOCK_FAIL.load(core::sync::atomic::Ordering::Relaxed)
+}
+
 /// XOR two 32-byte arrays. Inherently constant-time.
 fn xor_32(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
     let mut out = [0u8; 32];
@@ -3868,6 +3890,7 @@ impl WalletStore for DualSecureElement {
         // directly or a fault that skipped that check.
         let creds = crate::pin_gate::unlock_credentials(WalletRole::Real, pin).map_err(|_e| {
             secure_log!("[DUAL] PIN credentials unavailable: {:?}", _e);
+            unlock_failed_at(1);
             UnlockError::InternalError
         })?;
 
@@ -3891,6 +3914,7 @@ impl WalletStore for DualSecureElement {
                 if let Some(Ok(mut me)) = se050_result {
                     me.zeroize();
                 }
+                unlock_failed_at(if matches!(e, UnlockError::PinIncorrect) { 2 } else { 3 });
                 return Err(e);
             }
         };
@@ -3903,6 +3927,7 @@ impl WalletStore for DualSecureElement {
             Err(e) => {
                 let mut m = master_o;
                 m.zeroize();
+                unlock_failed_at(if matches!(e, UnlockError::PinIncorrect) { 4 } else { 5 });
                 return Err(e);
             }
         };
@@ -3916,10 +3941,10 @@ impl WalletStore for DualSecureElement {
         // Read half_E from SE050 (encrypted entropy blob → decrypt)
         let mut blob_o = [0u8; 64];
         let blob_o_len = self.optiga.read_entropy_blob(&mut blob_o)
-            .map_err(|_| UnlockError::InternalError)?;
+            .map_err(|_| { unlock_failed_at(6); UnlockError::InternalError })?;
         let mut stored_o = crypto::decrypt_entropy_blob(
             &blob_o[..blob_o_len], &master_o
-        ).map_err(|_| UnlockError::InternalError)?;
+        ).map_err(|_| { unlock_failed_at(7); UnlockError::InternalError })?;
         blob_o.zeroize();
         // #855: the chip stored `half XOR mask`; remove the PIN-keyed mask
         // (outermost layer, so before the optional ML-KEM open below).
@@ -3939,14 +3964,14 @@ impl WalletStore for DualSecureElement {
 
         let mut blob_e = [0u8; 64];
         let blob_e_len = self.se050.read_entropy_blob(&mut blob_e)
-            .map_err(|_| UnlockError::InternalError)?;
+            .map_err(|_| { unlock_failed_at(8); UnlockError::InternalError })?;
         // SE050's blob is encrypted under ITS master_secret
         // (`kdf("sphincs-master", half_e, 0)`), not OPTIGA's. The
         // two chips encrypt their caches independently; each must
         // be decrypted with the matching key.
         let mut stored_e = crypto::decrypt_entropy_blob(
             &blob_e[..blob_e_len], &master_e
-        ).map_err(|_| UnlockError::InternalError)?;
+        ).map_err(|_| { unlock_failed_at(9); UnlockError::InternalError })?;
         blob_e.zeroize();
         // #855: same for the SE050 half.
         let mut half_e = *creds.mask_se050.apply(&stored_e);
@@ -3985,6 +4010,7 @@ impl WalletStore for DualSecureElement {
             let mut mo = master_o;
             mo.zeroize();
             secure_log!("[DUAL] CRITICAL: reconstructed entropy doesn't match master!");
+            unlock_failed_at(10);
             return Err(UnlockError::InternalError);
         }
 
@@ -4160,6 +4186,17 @@ impl WalletStore for DualSecureElement {
         // secure-world context the page-125 writes require.
         let salt_gone = unsafe { crate::pin_gate::begin_wipe() };
 
+        // #952: the PIN-attempt log is this wallet's history; forget it.
+        crate::pin_attempt_log::clear();
+
+        // #949: the off-chain counters and registration flags on page 123
+        // belong to this wallet. Erased while the wipe flag is armed and
+        // before the SE050 leg erases page 125 (which marks the wipe
+        // complete), so a power cut here is resumed by the next boot.
+        //
+        // SAFETY: same single-threaded secure-world context as above.
+        let offchain_result = unsafe { crate::hw::flash::erase_offchain_page_for_wipe() };
+
         let optiga_result = self.reset_optiga_for_admin();
         let se050_result = self.se050.factory_reset_admin();
 
@@ -4170,7 +4207,11 @@ impl WalletStore for DualSecureElement {
         // OPTIGA leg. If any part of this wipe failed, put the flag back so
         // the next boot resumes it; otherwise a chip could be left holding
         // a wallet that nothing will ever wipe or open. (Found in review.)
-        if salt_gone.is_err() || optiga_result.is_err() || se050_result.is_err() {
+        if salt_gone.is_err()
+            || offchain_result.is_err()
+            || optiga_result.is_err()
+            || se050_result.is_err()
+        {
             // SAFETY: same single-threaded secure-world context as above;
             // one quad-word program in page 125.
             unsafe {
@@ -4182,6 +4223,7 @@ impl WalletStore for DualSecureElement {
 
         // Surface the first error we saw, but SRAM is zeroized regardless.
         salt_gone.map_err(|()| SeError::InternalError)?;
+        offchain_result.map_err(|()| SeError::InternalError)?;
         optiga_result.and(se050_result)?;
 
         secure_log!("[DUAL] Factory reset complete — OPTIGA user data wiped, SE050 wiped");
@@ -5045,6 +5087,8 @@ compile_error!(
         // Frame-time overlay: prints render/blit timings over the trusted
         // display. Not destructive, but it paints over consent screens.
         feature = "ui-px-frametime",
+        // Provisioning film-gap recorder: adds a diagnostics page to setup.
+        feature = "ui-px-film-gaps",
         // #846 negative control: removes the one-at-a-time gateway gate
         // from the veneer path. Never ship — a shipping image with this on
         // reinstates the re-entrancy #846 fixed.
@@ -5056,6 +5100,11 @@ compile_error!(
         // SECS/CECS. A fault-injection path has no business in a shipping
         // image under any circumstances.
         feature = "rng-fault-probe",
+        // Shows the duress setup screens but stores nothing: a shipping
+        // image with it would tell the user a duress PIN is set when none is.
+        feature = "duress-ui-test",
+        // Dev diagnostic: names the failing unlock step on the display.
+        feature = "unlock-diag",
     )
 ))]
 compile_error!(
@@ -6262,6 +6311,11 @@ pub unsafe fn gated_unlock(
     // duress-correct unlock resets the MCU counter exactly like a real
     // success (handled by the shared post-match logic below) — else the
     // lockout state would distinguish duress from real.
+    // #952: set when the duress PIN wiped the device. The wipe cleared the
+    // attempt log, and the outcome arm below must not write the tell-tale
+    // entry straight back into it.
+    #[cfg(feature = "duress-pin")]
+    let mut duress_wiped = false;
     #[cfg(feature = "duress-pin")]
     let result = match se.unlock_duress(pin) {
         Ok(mut m) => {
@@ -6296,6 +6350,14 @@ pub unsafe fn gated_unlock(
                 crate::fi::zeroize_barrier();
                 secure_log!("[NSC] duress=wipe configured — wiping device");
                 let _ = se.factory_reset_admin();
+                // #951: the same reset `trigger_lockout_wipe` performs after
+                // its wipe. Without it a duress wipe from the boot or PendSV
+                // prompt (which only show PIN LOCKED) left page 124 charged,
+                // and the next wallet started short of attempts. Refused
+                // unless the salt is verifiably gone.
+                #[cfg(feature = "stm32u585")]
+                let _ = crate::hw::flash::pin_attempts_reset_after_wipe();
+                duress_wiped = true;
                 Err(UnlockError::PinLocked)
             }
         }
@@ -6371,15 +6433,21 @@ pub unsafe fn gated_unlock(
             Err(UnlockError::InternalError)
         }
         Err(e) => {
+            #[cfg(feature = "duress-pin")]
+            let log_it = !duress_wiped;
+            #[cfg(not(feature = "duress-pin"))]
+            let log_it = true;
             // A real chip-side verdict is what the budget exists for; anything
             // else burned an attempt without judging the PIN.
-            crate::pin_attempt_log::record_outcome(match e {
-                UnlockError::PinIncorrect => {
-                    crate::pin_attempt_log::AttemptReason::PinIncorrect
-                }
-                UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
-                _ => crate::pin_attempt_log::AttemptReason::NoVerdict,
-            });
+            if log_it {
+                crate::pin_attempt_log::record_outcome(match e {
+                    UnlockError::PinIncorrect => {
+                        crate::pin_attempt_log::AttemptReason::PinIncorrect
+                    }
+                    UnlockError::PinLocked => crate::pin_attempt_log::AttemptReason::AlreadyAtMax,
+                    _ => crate::pin_attempt_log::AttemptReason::NoVerdict,
+                });
+            }
             Err(e)
         }
     }
