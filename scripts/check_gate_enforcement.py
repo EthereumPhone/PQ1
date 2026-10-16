@@ -77,6 +77,7 @@ KANI_MUTATIONS = Path(__file__).resolve().parent / "kani_mutations.json"
 EXTRACTION_REGISTRY = (
     REPO_ROOT / "contracts" / "verification" / "extraction_registry.json"
 )
+PROBABILITY_CLAIMS = REPO_ROOT / "contracts/verification/probability/claims.json"
 REQUIRED_BLOCKING_BRANCH = "master"
 
 # Reviewed registration/level policy: update deliberately with the manifest.
@@ -907,6 +908,34 @@ def easycrypt_pin_coverage(policed: list[str]) -> list[str]:
             for path in required if not _covers(policed, path)]
 
 
+def probability_binding_coverage(policed: list[str], bindings: list[str]) -> list[str]:
+    """Every source actually hashed by the PMF gate must be declared as policed.
+
+    The ordinary forward check then requires both push and PR triggers to cover
+    that declaration. Removing a binding from both path lists cannot hide it.
+    """
+    required = set(bindings) | {"contracts/verification/probability/claims.json"}
+    return [f"probability-bindings-reverse: bound source `{path}` is not covered "
+            "by verify-probability polices_paths"
+            for path in sorted(required) if not _covers(policed, path)]
+
+
+def _probability_binding_files() -> list[str]:
+    try:
+        claims = _load_json_unique(PROBABILITY_CLAIMS.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"HARNESS ERROR: cannot read {PROBABILITY_CLAIMS}: {e}")
+    bindings = claims.get("bindings") if isinstance(claims, dict) else None
+    if not isinstance(bindings, dict) or not bindings or any(
+        not isinstance(path, str) or not path or Path(path).is_absolute()
+        or ".." in Path(path).parts or any(c in path for c in "*?[]\\")
+        or not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        for path, digest in bindings.items()
+    ):
+        raise SystemExit("HARNESS ERROR: probability claims need exact relative binding paths and SHA-256 values")
+    return list(bindings)
+
+
 def registration_failures(manifest: dict) -> list[str]:
     gates = manifest.get("gates")
     if not isinstance(gates, list) or any(not isinstance(g, dict) for g in gates):
@@ -939,6 +968,28 @@ def main() -> int:
     if self_test:
         # Negative controls; every one MUST be caught or the harness is void.
         print("=== --self-test (negative controls) ===")
+        probability_gate = next(g for g in gates if g["id"] == "verify-probability")
+        probability_bindings = _probability_binding_files()
+        probability_triggers = triggers(load_workflow(
+            REPO_ROOT / ".github/workflows/lean-probability.yml"))
+        if probability_binding_coverage(probability_gate["polices_paths"], probability_bindings):
+            print("  SELF-TEST FAILED: live probability binding coverage is incomplete.", file=sys.stderr)
+            return 2
+        for path in probability_bindings + ["contracts/verification/probability/claims.json"]:
+            reduced = [p for p in probability_gate["polices_paths"] if not _covers([p], path)]
+            if not any(path in failure for failure in probability_binding_coverage(reduced, [path])):
+                print(f"  SELF-TEST FAILED: probability declaration deletion escaped: {path}", file=sys.stderr)
+                return 2
+            for trigger in ("push", "pull_request"):
+                broken = json.loads(json.dumps(probability_triggers))
+                broken[trigger]["paths"] = [p for p in broken[trigger]["paths"]
+                                            if not _covers([p], path)]
+                failures, _ = _per_pr_trigger_failures(
+                    probability_gate["id"], probability_gate["runs_in"], [path], broken)
+                if not any("does NOT cover" in failure and path in failure for failure in failures):
+                    print(f"  SELF-TEST FAILED: probability {trigger} binding deletion escaped: {path}", file=sys.stderr)
+                    return 2
+        print("  probability binding declaration and push/PR path-deletion controls passed")
         broken_allow = {**next(g for g in gates if g["id"] == "verify-ledger-consistency"),
                         "polices_paths": ["totally/unpoliced/surface/**"]}
         fa = check_gate(broken_allow)
@@ -1371,6 +1422,9 @@ def main() -> int:
     all_fails += completeness(manifest)
     easycrypt_gate = next(g for g in gates if g["id"] == "verify-easycrypt-pins")
     all_fails += easycrypt_pin_coverage(easycrypt_gate.get("polices_paths", []))
+    probability_gate = next(g for g in gates if g["id"] == "verify-probability")
+    all_fails += probability_binding_coverage(
+        probability_gate.get("polices_paths", []), _probability_binding_files())
     for gate_id, workflow in [('verify-easycrypt-split-pins', 'lean-fv.yml'),
                               ('verify-easycrypt-split', 'nightly.yml')]:
         split_gate = next(g for g in gates if g['id'] == gate_id)

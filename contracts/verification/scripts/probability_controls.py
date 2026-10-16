@@ -1134,4 +1134,98 @@ def cases(project: Path) -> list[dict]:
     add("domain-kind-offset-preserving", "NodeDomain", "key.drop 44", "key.drop (40 + 4)", kind_last, True)
     add("domain-kind-zero-preserving", "NodeDomain", "List.replicate 4 0",
         "List.replicate 4 (0 + 0)", count_domain, True)
+    # Exact WOTS count/chain clients: compare typed definitions with unchanged
+    # finite executions and byte vectors, retaining cache and failure behavior.
+    def wots_example(name):
+        return theorem(src["WotsProgramExamples"], name)
+
+    add("count-client-accept-inverted", "CountProgram", "if accept reply then",
+        "if !accept reply then", wots_example("count_early_cache"))
+    add("count-client-success-counter", "CountProgram", ".done (some (start, reply))",
+        ".done (some (start + 1, reply))", wots_example("count_early_cache"))
+    add("count-client-result-lost", "CountProgram", ".done (some (start, reply))",
+        ".done none", wots_example("count_early_cache"))
+    add("count-client-retry-counter", "CountProgram", "countProgram accept (start + 1) keys",
+        "countProgram accept start keys", wots_example("count_cached_advances"))
+    add("count-client-premature-exhaustion", "CountProgram", "else countProgram accept (start + 1) keys",
+        "else .done none", wots_example("count_cached_advances"))
+
+    chain_step = "chainProgram input project (start + 1) steps (project reply)"
+    add("chain-client-projection-lost", "ChainProgram", chain_step,
+        "chainProgram input project (start + 1) steps current", wots_example("chain_projection_used"))
+    add("chain-client-position-not-advanced", "ChainProgram", chain_step,
+        "chainProgram input project start steps (project reply)", wots_example("chain_positions_advance"))
+    add("chain-client-first-position-shifted", "ChainProgram", ".query (input start current)",
+        ".query (input (start + 1) current)", wots_example("chain_positions_advance"))
+    add("chain-client-shortened", "ChainProgram", chain_step,
+        ".done (project reply)", wots_example("chain_positions_advance"))
+
+    loop_store = """theorem checked :
+    chainLoop (PMF.pure true) (fun pos (_ : Bool) => pos) id 2 1 false
+      (fun _ : ℕ => none) =
+      PMF.pure (true, Function.update (fun _ => none) 2 (some true)) := by
+  simp [chainLoop, memoQuery, PMF.pure_map, PMF.pure_bind]
+"""
+    add("chain-loop-store-lost", "ChainProgram", "steps (project reply.1) reply.2",
+        "steps (project reply.1) table", loop_store)
+    add("chain-loop-reply-lost", "ChainProgram", "steps (project reply.1) reply.2",
+        "steps current reply.2", loop_store)
+    add("chain-loop-zero-cache-lost", "ChainProgram", "PMF.pure (current, table)",
+        "PMF.pure (current, fun _ => none)", """theorem checked :
+    chainLoop fairReply (fun _ (value : Bool) => value) id 3 0 true (fun _ => some false) =
+      PMF.pure (true, fun _ => some false) := by rfl
+""")
+
+    address_vector = wots_example("address_field_endianness")
+    add("address-byte-order-reversed", "AddressBytes", "width - 1 - i.val", "i.val", address_vector)
+    add("address-tree-width-shortened", "AddressBytes", "beBytes 8 tree", "beBytes 4 tree", address_vector)
+    add("address-kind-and-keypair-swapped", "AddressBytes", "beBytes 4 kind ++ beBytes 4 kp",
+        "beBytes 4 kp ++ beBytes 4 kind", address_vector)
+    add("address-position-and-hash-swapped", "AddressBytes", "beBytes 4 position ++ beBytes 4 hashAddress",
+        "beBytes 4 hashAddress ++ beBytes 4 position", address_vector)
+
+    add("wots-count-kind-changed", "WotsProgram", "c10Address layer tree 0 kp 0 0 0",
+        "c10Address layer tree 1 kp 0 0 0", wots_example("wots_count_valid_excluded"))
+    add("wots-count-padding-changed", "WotsProgram", "message ++ List.replicate 16 0",
+        "message ++ List.replicate 16 1", wots_example("wots_count_message_padding"))
+    add("wots-count-index-changed", "WotsProgram", "c10Address layer tree 0 kp 0 0 0",
+        "c10Address layer tree 0 kp 1 0 0", theorem(src["WotsProgram"], "wots_count_key_layout"))
+    count_compile = theorem(src["WotsProgram"], "wots_count_program_eval")
+    add("wots-count-client-counter-shifted", "WotsProgram",
+        "countProgram (wotsAccept ∘ wotsOfDigest) start",
+        "countProgram (wotsAccept ∘ wotsOfDigest) (start + 1)", count_compile)
+    add("wots-count-search-history-lost", "WotsProgram",
+        "memoGrind digestDraw (wotsAccept ∘ wotsOfDigest) table start",
+        "memoGrind digestDraw (wotsAccept ∘ wotsOfDigest) (fun _ => none) start", count_compile)
+    add("wots-count-search-acceptance-lost", "WotsProgram",
+        "memoGrind digestDraw (wotsAccept ∘ wotsOfDigest) table start",
+        "memoGrind digestDraw (fun _ => true) table start", """theorem checked :
+    wotsCountSearch (fun _ => some 0) (List.replicate 32 0) 0 0 0
+      (List.replicate 16 0) 7 1 (by decide) = PMF.pure (none, fun _ => some 0) := by
+  have rejected : wotsAccept (wotsOfDigest 0) = false := by decide +kernel
+  unfold wotsCountSearch counterSchedule
+  rw [List.ofFn_succ]
+  simp only [List.ofFn_zero]
+  rw [memoGrind]
+  rw [memoQuery_cached digestDraw (fun _ => some 0) _ 0 rfl, PMF.pure_bind]
+  simp only [Function.comp_apply, Prod.fst, Prod.snd]
+  rw [rejected]
+  rfl
+""")
+
+    add("wots-chain-node-lost", "WotsChain", "randomizerBytesEquiv.symm current",
+        "randomizerBytesEquiv.symm 0", wots_example("wots_chain_node_and_padding"))
+    add("wots-chain-address-fields-swapped", "WotsChain",
+        "c10Address layer tree 0 kp index position 0",
+        "c10Address layer tree 0 kp position index 0", wots_example("wots_chain_address_offsets"))
+
+    add("count-client-counter-preserving", "CountProgram", "countProgram accept (start + 1) keys",
+        "countProgram accept (1 + start) keys", wots_example("count_cached_advances"), True)
+    add("chain-client-position-preserving", "ChainProgram", chain_step,
+        "chainProgram input project (1 + start) steps (project reply)",
+        wots_example("chain_positions_advance"), True)
+    add("address-byte-index-preserving", "AddressBytes", "width - 1 - i.val",
+        "width - (i.val + 1)", address_vector, True)
+    add("wots-count-padding-preserving", "WotsProgram", "message ++ List.replicate 16 0",
+        "message ++ List.replicate 16 (0 + 0)", wots_example("wots_count_message_padding"), True)
     return out

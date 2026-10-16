@@ -24,6 +24,14 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10RawOracle.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10Randomizer.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/C10HashDomains.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/SecretPrefix.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixGuess.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixHybrid.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixGames.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixIdeal.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixState.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawKeygen.ec'
+      - 'sphincs-c10/src/address.rs'
   pull_request:
     paths: *probability_paths
 

@@ -471,6 +471,38 @@ theorem, including later bounded work. Complete C10 keygen/sign/verify client
 translation, full PMF forgery composition and concrete backend correspondence
 remain open. The earlier independent-R exhaustion theorem keeps its premises.
 
+`CountProgram.lean` now compiles the one-query `memoGrind` search into the
+same bounded client language. The equality retains the complete cache, selected
+counter and full digest, early success and exhaustion, including cached replies.
+`SelectedComposition.lean` adds selected-budget composition without dropping
+excluded calls. `AddressBytes.lean` gives the exact big-endian 32-byte C10
+address layout; its natural-number fields are truncated to their byte widths,
+and correspondence to Rust uses the existing u32/u64 argument domains.
+
+`WotsProgram.lean` instantiates the actual WOTS count input:
+`seed[32] || address[32] || message[16] || zero[16] || counter[32]`.
+The counter schedule stays within its 32-bit range. At most `n` raw calls and
+zero selected-node calls follow from the actual program, with no freshness or
+success premise. Its final-cache node-collision-or-zero charge is therefore
+`n/2^128` from an empty table: excluded queries still contribute to the zero
+term. Existing independent-sampling projection and exact ten-million-trial
+exhaustion laws transfer only when every scheduled key is absent initially.
+Exhaustion is represented by `none`; this is not a proof of Rust panic handling
+or the secure wrapper's retry behavior.
+
+`ChainProgram.lean` and `WotsChain.lean` model the reply-dependent chain loop.
+Each 96-byte query includes the current chain position and the previous node;
+the next node is exactly the first sixteen big-endian digest bytes. Splitting
+at an intermediate position preserves the complete execution and shared cache.
+For any base-eight WOTS digit, running from zero to that digit and continuing
+to seven equals the full chain execution, including cached replies. The
+selected trace has exactly `stop-start` calls for an ordinary 32-byte seed;
+zero or reversed natural ranges retain the initial value and table. These are
+count/chain components, not the full 43-chain signer, shuffle/private-key
+preparation, public-key recovery, complete C10 cost or forgery partition.
+`WotsProgramExamples.lean` checks finite adaptive/cached executions and exact
+byte vectors independently of the compiler-equality proofs.
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -514,16 +546,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 560 theorem closures against
+The gate rebuilds every project module, checks all 629 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-308 typed cases run 924 compiler jobs: each baseline and changed
-definition must compile, 265 changed behaviors must reject at the
-consuming `checked` theorem, and forty-three value-preserving changes must pass. Cases cover exhaustion,
+336 typed cases run 1008 compiler jobs: each baseline and changed
+definition must compile, 289 changed behaviors must reject at the
+consuming `checked` theorem, and forty-seven value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -572,6 +604,13 @@ Equivalent cache, set and arithmetic expressions must pass. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.
+
+The gate-enforcement reverse check derives source paths from every entry in
+`claims.json.bindings` and requires their declared coverage; the forward check
+then requires both push and pull-request triggers to cover them. Deleting each
+binding from the declaration or either trigger is exercised by self-tests.
+These path checks detect future source drift; hashes remain manual bindings,
+not extraction evidence.
 
 The dedicated `lean-probability.yml` workflow runs this gate on relevant pull
 requests and master pushes. It is registered with the repository's enforcement

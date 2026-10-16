@@ -250,7 +250,15 @@ count inputs. Its collision-or-zero charge is `(q.choose 2+n)/2^128`, with
 zero still charged to all `n` raw calls. The existing physical R/H_msg grinder
 derives one selected and two total calls per trial. The complete C10 node-cost
 formula and successful-output/forgery partition remain open.
-All 560 theorem closures and 308 typed cases are gated separately;
+The WOTS count and chain components now also compile to actual shared-cache
+PMF clients, with exact address bytes, failure/counters and reply-dependent
+chain inputs. Count queries have zero selected-node cost but retain the full
+raw zero-node charge. Splitting a chain at any base-eight digit preserves the
+full execution through position seven. Independent count sampling still needs
+explicit initial freshness; the full 43-chain signer, shuffle/private
+preparation, runtime panic/retry behavior and session/forgery composition remain
+open. Source-binding CI coverage is checked in both directions (#961).
+All 629 theorem closures and 336 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

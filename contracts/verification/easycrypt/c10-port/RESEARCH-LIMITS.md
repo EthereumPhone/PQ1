@@ -135,6 +135,18 @@ freshness or successful-grinding premise. The complete EasyCrypt C10 node-cost
 formula, selected successful-output witnesses and full PMF forgery partition
 remain unported. The R query is retained in this physical one-cache program;
 the separate-private-cache experiment is not silently substituted.
+The ordinary WOTS count and chain components now have separate PMF client
+compilations. Exact address/count/chain bytes, counters, early success, failure,
+reply-dependent next inputs and the entire memo table are retained. Count
+search has zero selected-node cost but keeps its full raw-query zero charge;
+its independent-sampling/exhaustion laws still require initial schedule
+freshness. A chain split at a base-eight digit preserves execution through
+position seven, with exact selected-call trace length. This closes the
+count/chain component translation, not the 43-chain signer, private derivation
+and shuffle, full keygen/recovery/session cost, output partition or forgery
+composition. The `none` exhaustion model does not prove runtime panic/retry
+semantics. All23 manual source bindings are now checked for declared and
+push/PR trigger coverage, closing the known future-drift gap #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.
