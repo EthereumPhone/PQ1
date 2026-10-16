@@ -497,4 +497,126 @@ def cases(project: Path) -> list[dict]:
         theorem(src["AdaptiveExamples"], "observer_retains_prior_flag"), True)
     add("observer-seen-preserving", "CollisionObserver", "insert (project value) state.seen",
         "{project value} ∪ state.seen", seen_check, True)
+    # Public-query traces, independent-secret prefixes and first-call transfer.
+    trace_erases = theorem(src["QueryTrace"], "traceProgram_erases")
+    add("trace-return-cache", "QueryTrace", "PMF.pure ⟨value, table, []⟩",
+        "PMF.pure ⟨value, (fun _ => none), []⟩",
+        theorem(src["QueryTrace"], "traceProgram_done"))
+    trace_step = "traceProgram p (next out.1) out.2"
+    add("trace-query-cache", "QueryTrace", trace_step,
+        "traceProgram p (next out.1) table", trace_erases)
+    add("trace-reply-resample", "QueryTrace", "(traceProgram p (next out.1) out.2).map",
+        "(p.bind (fun value => traceProgram p (next value) out.2)).map", trace_erases)
+    add("trace-cached-resample", "QueryTrace", "memoQuery p table key",
+        "memoQuery p (fun _ => none) key", trace_erases)
+    traced_repeats = """theorem checked :
+    ((traceProgram (PMF.pure true)
+      (.query false (fun _ => .query false (fun reply => .done (n := 0) reply)))
+      (fun _ => some false)).map (fun out => out.queries)) = PMF.pure [false, false] := by
+  simp [traceProgram, memoQuery, PMF.pure_map]
+"""
+    add("trace-omit-query", "QueryTrace", "key :: rest.queries", "rest.queries", traced_repeats)
+    add("trace-omit-tail", "QueryTrace", "key :: rest.queries", "[key]", traced_repeats)
+    traced_order = """theorem checked :
+    ((traceProgram (PMF.pure true)
+      (.query false (fun _ => .query true (fun reply => .done (n := 0) reply)))
+      (fun _ => none)).map (fun out => out.queries)) = PMF.pure [false, true] := by
+  simp [traceProgram, memoQuery, PMF.pure_map]
+"""
+    add("trace-query-order", "QueryTrace", "key :: rest.queries",
+        "rest.queries ++ [key]", traced_order)
+    add("randomized-trace-reset", "QueryTrace", "traceProgram p program table",
+        "traceProgram p program (fun _ => none)", """theorem checked :
+    randomizedTrace fairReply (PMF.pure (.done (n := 0) true)) (fun _ : Bool => some false) =
+      PMF.pure (⟨true, fun _ => some false, []⟩ : TraceOutput Bool Bool Bool) := by
+  simp [randomizedTrace, traceProgram]
+""")
+    candidates = """theorem checked :
+    prefixCandidates (some : Bool → Option Bool) [false, true] = {false, true} := by
+  ext value
+  cases value <;> simp [prefixCandidates]
+"""
+    add("prefix-candidates-drop", "PrefixGuess", "(queries.filterMap decode).toFinset",
+        "∅", candidates)
+    add("prefix-candidates-tail", "PrefixGuess", "queries.filterMap decode",
+        "(queries.take 1).filterMap decode", candidates)
+    add("prefix-hit-invert", "PrefixGuess", "out.1 ∈ prefixCandidates decode out.2.queries",
+        "out.1 ∉ prefixCandidates decode out.2.queries", """theorem checked :
+    prefixHit (some : Bool → Option Bool)
+      (false, (⟨true, fun _ => none, []⟩ : TraceOutput Bool Bool Bool)) = false := by
+  simp [prefixHit, prefixCandidates]
+""")
+    public_prelude = theorem(src["PrefixGuess"], "secretPrelude_public")
+    add("secret-prelude-reset", "PrefixGuess", "randomizedTrace p client table",
+        "randomizedTrace p client (fun _ => none)", public_prelude)
+    add("secret-prelude-cache-drop", "PrefixGuess", "(secret, out)",
+        "(secret, {out with cache := fun _ => none})", public_prelude)
+    add("prefix-short-padding", "SecretPrefix", "else none", "else some 0",
+        theorem(src["SecretPrefix"], "decodeSecretPrefix_short"))
+    prefix_byte = "key[i.val]'(lt_of_lt_of_le i.isLt h)"
+    add("prefix-byte-order", "SecretPrefix", prefix_byte,
+        "key[31 - i.val]'(by omega)", theorem(src["SecretPrefix"], "secret_prefix_first_byte"))
+    add("prefix-value-change", "SecretPrefix",
+        "some (bytesDigestEquiv fun i => " + prefix_byte + ")",
+        "some ((bytesDigestEquiv fun i => " + prefix_byte + ") + 1)",
+        theorem(src["SecretPrefix"], "secret_prefix_last_byte"))
+    add("secret-bytes-reverse", "SecretPrefix", "List.ofFn (bytesDigestEquiv.symm secret)",
+        "List.ofFn (fun i : Fin 32 => bytesDigestEquiv.symm secret i.rev)", """theorem checked :
+    secretBytes 1 = List.replicate 31 0 ++ [1] := by decide
+""")
+    add("prefix-suffix-dependence", "SecretPrefix", prefix_byte,
+        "key[key.length - 32 + i.val]'(by omega)", """theorem checked :
+    decodeSecretPrefix (List.replicate 32 0 ++ [1]) = some 0 := by decide
+""")
+    valid_request = """theorem checked :
+    RequestValid ⟨[], List.replicate 32 0, List.replicate 32 0, List.replicate 32 0⟩ := by
+  unfold RequestValid
+  decide
+"""
+    add("request-random-width", "PreludeTransfer", "request.random.length = 16",
+        "request.random.length = 15", """theorem checked :
+    ¬ RequestValid ⟨List.replicate 15 0, List.replicate 32 0,
+      List.replicate 32 0, List.replicate 32 0⟩ := by
+  unfold RequestValid
+  decide
+""")
+    for field in ("message", "seed", "root"):
+        add("request-" + field + "-width", "PreludeTransfer",
+            "request." + field + ".length = 32", "request." + field + ".length = 31",
+            valid_request)
+    # The consuming quantitative theorem includes its own local proved bridge
+    # helpers, so a changed executed program cannot hide behind an imported
+    # original implementation. Every error must still be inside `checked`.
+    transfer = theorem(src["PreludeTransfer"], "prelude_event_bounds")
+    helpers = []
+    for name in ("preludeIndependent_with_secret", "prelude_grind_good"):
+        local = theorem(src["PreludeTransfer"], name).replace("theorem checked", "have " + name, 1)
+        helpers.append("\n".join("  " + line for line in local.splitlines()))
+    head, proof = transfer.split(":= by\n", 1)
+    transfer = head + ":= by\n" + "\n".join(helpers) + "\n" + proof
+    add("prelude-shared-cache-reset", "PreludeTransfer", "sharedRandomizerSearch prior.2.cache",
+        "sharedRandomizerSearch (fun _ => none)", transfer)
+    add("prelude-shared-result-drop", "PreludeTransfer", "forgetLabel out.1", "none", transfer)
+    add("prelude-shared-counter-shift", "PreludeTransfer", "forgetLabel out.1",
+        "(forgetLabel out.1).map (fun pair => (pair.1 + 1, pair.2))", transfer)
+    add("prelude-shared-digest-drop", "PreludeTransfer", "forgetLabel out.1",
+        "(forgetLabel out.1).map (fun pair => (pair.1, 0))", transfer)
+    add("prelude-shared-budget-zero", "PreludeTransfer", ".root n hb).map",
+        ".root 0 (by omega)).map", transfer)
+    add("prelude-shared-message-swap", "PreludeTransfer", "(request prior.2.value).message",
+        "(request prior.2.value).seed", transfer)
+    independent = theorem(src["PreludeTransfer"], "preludeIndependent_with_secret")
+    add("prelude-independent-cache-reset", "PreludeTransfer", "randomizerMemoSearch prior.cache",
+        "randomizerMemoSearch (fun _ => none)", independent)
+    add("prelude-independent-counter-shift", "PreludeTransfer", "(prior.value, out.1)",
+        "(prior.value, out.1.map (fun pair => (pair.1 + 1, pair.2)))", independent)
+    add("trace-cons-preserving", "QueryTrace", "key :: rest.queries",
+        "[key] ++ rest.queries", traced_order, True)
+    add("prefix-set-preserving", "PrefixGuess", "(queries.filterMap decode).toFinset",
+        "((queries.filterMap decode).reverse).toFinset", candidates, True)
+    add("prefix-guard-preserving", "SecretPrefix", "if h : 32 ≤ key.length then",
+        "if h : key.length ≥ 32 then", theorem(src["SecretPrefix"], "secret_prefix_last_byte"), True)
+    add("request-alternative-preserving", "PreludeTransfer",
+        "request.random.length = 0 ∨ request.random.length = 16",
+        "request.random.length = 16 ∨ request.random.length = 0", valid_request, True)
     return out

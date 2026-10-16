@@ -8,3 +8,4 @@ import C10Probability.KeyCollision
 import C10Probability.Randomizer
 import C10Probability.SharedRandomizer
 import C10Probability.AdaptiveExamples
+import C10Probability.PreludeExamples

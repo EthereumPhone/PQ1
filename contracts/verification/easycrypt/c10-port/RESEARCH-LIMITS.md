@@ -42,6 +42,21 @@ charge; an empty table and the proved full-digest/high-128-bit law give
 not yet a translation of the complete C10 signer/adversary session or a full
 forgery theorem. Nonempty history requires coverage and initial collision
 freedom, and all counts remain worst-case query budgets.
+A further first-call result now discharges the prior-history R-input freshness
+premise for an adaptive public-query prelude started from an empty table. The
+secret is sampled uniformly before that prelude, and proved late-sampling
+equality gives the actual prefix-hit charge `q/2^256`. Trace erasure and cache
+origins connect this event to the exact first 32 bytes of each R-input. The
+actual two-phase shared-table experiment differs from its independent-R
+comparison by at most that charge, for events on the public result and returned
+counter/digest. The composed first-FORS-grinder exhaustion bound is
+`(1-1/2048)^n + (n*q+n.choose 2)/2^128 + q/2^256`, including the ten-million cap.
+Both counts are worst-case budgets. Public client state and request parameters
+must be independent of the secret. This does not cover secret-dependent keygen,
+earlier signing responses, later continuations or repeated signing. Selected R
+and final cache are marginalized by the final event comparison. A full
+private-interface hybrid and signer-session/forgery composition remain open;
+a leaked-secret counterexample has certain success with one query.
 Cached and prefilled-key examples show why local counter uniqueness alone
 cannot establish independent fresh sampling.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

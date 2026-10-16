@@ -207,7 +207,13 @@ and initial client randomness. Observer erasure preserves the result and table;
 initial history coverage/collision freedom remain explicit. The full-digest
 high-128-bit instance gives `n.choose 2 / 2^128` from an empty cache, without
 independent query keys. The complete C10 client/session translation and forgery
-bound remain open. All 226 theorem closures and 110 typed
+bound remain open. A first shared-table grinder after an adaptive public-query
+prelude now has a derived `q/2^256` secret-prefix transfer charge and exhaustion
+bound `(1-1/2048)^n + (n*q+n.choose 2)/2^128 + q/2^256`. Trace erasure, cache
+origins, exact 32-byte prefix decoding and the public-history bound are proved.
+This requires a uniform secret independent of the prelude and public request
+parameters; secret-dependent keygen, prior signing outputs and repeated
+signing remain outside the result. All 276 theorem closures and 144 typed
 cases are gated separately; `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

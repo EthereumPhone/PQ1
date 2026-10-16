@@ -9,7 +9,9 @@ randomizer instance includes its high-128-bit projection and padded H_msg bytes.
 A two-query shared-table grinder now derives that independent-R comparison
 under explicit initial R-input freshness and proved domain separation. A bounded
 adaptive oracle interpreter now also derives the birthday charge for actual
-distinct-input collisions in its final memo table. **The probability-monad forgery-game theorem
+distinct-input collisions in its final memo table. A first shared-table grinder
+after an adaptive public-query prelude now has a derived secret-prefix error
+and composed exhaustion bound, with secret-independent public inputs. **The probability-monad forgery-game theorem
 and full signer-session transfer remain open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
@@ -193,6 +195,59 @@ instantiate a complete C10 signer/adversary program, prove global R-input
 freshness or supply the remaining full forgery bound. No theorem replaces
 worst-case hash budgets with expected grinding work.
 
+`QueryTrace.lean` records every public query of the actual adaptive interpreter,
+including cached repeats. Erasing the trace preserves the returned value and
+memo table. A support proof bounds its length by the program index and shows
+that every entry in a table started empty originated in a recorded query.
+This supplies the finite history bound used by the subsequent grinder.
+
+`PrefixGuess.lean` samples a uniform secret before the public prelude, then
+proves that sampling it afterwards gives the same joint distribution. The
+client, its initial randomization, the initial table and public reply law do
+not receive that secret. Each queried input decodes to at most one candidate,
+so the probability that the trace names the secret is at most `q/|Secret|`.
+The bound is derived from the actual trace; its probability is not a premise.
+
+`SecretPrefix.lean` decodes the first 32 big-endian bytes, rejecting shorter
+inputs. It proves the exact secret prefix of every transcribed `R_grind`
+input, including the existing tag, optional randomness and nonce placement.
+For the uniform 256-bit secret, the prelude hit charge is `q/2^256`. On a
+non-hit execution from an empty cache, every scheduled R-input is absent.
+This discharges the earlier initial-freshness premise for this public-prelude
+experiment; it does not establish freshness across earlier signing calls.
+
+`PreludeTransfer.lean` executes a first shared-table grinder after that
+prelude. Its request may depend on the public result, with the existing
+message/seed/root widths and zero-or-16-byte optional randomness. For every
+event on the returned public value and grinding counter/digest, the absolute
+probability difference from the independent-R memoized comparison is at most
+`q/2^256`. Both executions preserve cache behavior internally; this final
+observation marginalizes the selected R and final table. It is not a relation
+for an arbitrary continuation after that signing call.
+
+`PreludeBound.lean` proves that the prelude's H_msg history has at most `q`
+entries, rather than assuming a cache-size bound. It combines the derived
+prefix charge with the existing history/birthday and finite-search results:
+
+```
+Pr[first shared-table FORS grinder exhausts after n trials]
+  <= (1 - 1/2048)^n + (n*q + n.choose 2)/2^128 + q/2^256.
+```
+
+The theorem includes the ten-million-trial specialization. Here `q` bounds
+all prelude queries and `n` bounds actual grinding attempts; both are
+worst-case counts. The secret is uniform and independent of the public
+prelude and request parameters. Secret-dependent key generation, earlier
+signing responses, a full private-interface hybrid and repeated signing are
+not covered. Those are still needed for the full signer-session/forgery claim.
+
+`PreludeExamples.lean` independently checks fixed and repeated Boolean guesses
+(probability `1/2`), an adaptive guess (`3/4`), and a client explicitly given
+the secret (one-query hit probability one). The latter uses a different
+interface and shows why uniformity alone is insufficient. A prefilled-cache
+example also shows that an empty trace cannot establish freshness unless the
+initial cache condition is respected.
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -236,16 +291,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 226 theorem closures against
+The gate rebuilds every project module, checks all 276 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-110 typed cases run 330 compiler jobs: each baseline and changed
-definition must compile, 97 changed behaviors must reject at the
-consuming `checked` theorem, and thirteen value-preserving changes must pass. Cases cover exhaustion,
+144 typed cases run 432 compiler jobs: each baseline and changed
+definition must compile, 127 changed behaviors must reject at the
+consuming `checked` theorem, and seventeen value-preserving changes must pass. Cases cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,
 WOTS length/radix/target, FORS width/zero test, both cap directions and cached
 resampling, full-digest byte order, WOTS bit truncation/shift/digit order, FORS
@@ -266,7 +321,14 @@ controls cover initial-cache resets, discarded updates, resampled replies to
 continuations, a fixed replacement for a reply-dependent key, observer stores
 and history, cached resampling, lost flags, distinct-input identity, projection
 semantics and the initial-validity guard. Equivalent budget, insertion and flag
-forms must pass. The query budget is enforced by the indexed program type. Syntax
+forms must pass. The query budget is enforced by the indexed program type. Prelude
+controls additionally cover trace origin/order, cache preservation, prefix
+candidate collection and hit direction, full secret-byte order and width,
+short-input refusal, request lengths and the actual shared/independent
+comparison implementations. The comparison control proves its bridge helpers
+locally inside the consuming theorem; imported original implementations cannot
+mask a changed executed definition. Equivalent trace, set, prefix-guard and
+request forms must pass. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.
