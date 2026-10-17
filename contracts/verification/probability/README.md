@@ -621,12 +621,63 @@ for forest signing and 10731/2^128 for recovery. These bounds are not forgery
 bounds and do not turn cached repeats into independent samples.
 
 This closes the named manual WOTS, Merkle and FORS/forest compiler/cost clients.
-Full C10/hypertree composition, session cost, successful-output partition and
-the forgery game remain open. WOTS sub-seed derivation still belongs to its
-outer caller. Natural-number address truncation, the manual correspondence
-boundary, Rust panic/callback/erasure behavior and concrete backends remain
-explicit. No new universal tree/forest build/recover correctness theorem is
-claimed.
+The complete structured C10 clients now compose these components as described
+below. No new universal tree/forest build/recover correctness theorem is claimed.
+
+## Complete structured C10 clients
+
+`LayerInputs.lean` retains the seven-byte `wots-0\0`/`wots-1\0` labels,
+the 18-bit field starting at bit 143, and the actual leaf/parent coordinates.
+Recovery encodes natural counters in all 32 bytes; it does not wrap them to
+u32. `RecoveryRelabel.lean` and `WotsRecoveryUnder.lean` preserve public recovery
+under a surrounding input map and agree with the existing recovery on u32 counts.
+`LayerRecover.lean` still executes the nine-node path after WOTS returns zero.
+`LayerSign.lean` builds the subtree, derives its full-digest shuffle sub-seed,
+signs, and actually reconstructs the root. The builder's root is unused.
+
+`HypertreeSign.lean`, `HypertreeRecover.lean` and `C10Finish.lean` execute both
+layers in order, carrying reconstructed nodes, signatures and the full cache.
+`RandomizerUnder.lean` and `C10Sign.lean` prepend the actual two-query R/H_msg
+search. `C10Verify.lean` recomputes H_msg, enforces the last-FORS-field-zero
+condition, recovers the forest and both layers, and compares the whole padded
+32-byte root. Missing-layer defaults remain explicit. `C10Keygen.lean` takes
+the public digest's high half, pads it, and builds layer 1/tree 0.
+
+The compiler equations hold for arbitrary initial cache. Structural budgets
+count every call, including cache hits and prework before exhaustion. Let `m`
+be the R trial cap and `n` the WOTS count cap, each at most `2^32`:
+
+| Client | Total calls | Public calls | Selected node calls |
+| --- | ---: | ---: | ---: |
+| Layer signing | `n+177511` | `n+155452` | `177510` |
+| Finish after R | `2*n+435044` | `2*n+364290` | `435042` |
+| Complete signing | `2*m+2*n+435044` | `m+2*n+364290` | `m+435042` |
+| Verification | `361` | `361` | `358` |
+| Key generation | `177151` | `155135` | `177151` (conservative) |
+
+`C10Charges.lean` proves the physical shared-cache equations. Prefix event
+error is the public budget divided by `2^256`, under independent uniform hidden
+secret and empty-table premises. From an empty physical cache, signing's
+collision-or-oracle-zero charge is
+`((m+435042).choose 2 + 2*m+2*n+435044)/2^128`; verification's is
+`64264/2^128`. Selected-call exclusions require the proved seed/root/message
+widths; the zero term retains the total budget. These are not forgery bounds.
+
+`LayerAccess.lean` and `C10Access.lean` prove successful counter and signature
+shape bounds from the executed clients: 13 secrets, 12 eleven-node paths and
+two layers with u32 counts and nine-node paths. `C10Flow.lean` retains the
+actual resulting tables in first/second-layer failure equations and shows that
+zero WOTS budget still performs forest/build/sub-seed prework. `C10Cached.lean`
+and `C10Examples.lean` supply complete cached signing success/failure, verification,
+literal bytes, field placement, root-padding refusal and ordered two-layer traces.
+Populated constant-cache witnesses are not fresh-oracle or honest-correctness claims.
+
+This is a manually transcribed structured-signature model, not the 4008-byte
+codec or a Rust execution-equivalence theorem. The adaptive full session,
+successful-output/forgery partition, final forgery PMF bound, universal honest
+correctness, repeated-grinder freshness and concrete backends remain open.
+Rust panic/retry/callback/erasure behavior, natural-number address truncation,
+cross-language correspondence and physical execution retain their existing boundaries.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -671,16 +722,23 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1017 theorem closures against
+The gate rebuilds every project module, checks all 1160 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-511 typed cases run 1533 compiler jobs: each baseline and changed
-definition must compile, 448 changed behaviors must reject at the
-consuming `checked` theorem, and sixty-three value-preserving changes must pass.
+609 typed cases run 1827 compiler jobs: each baseline and changed
+definition must compile, 540 changed behaviors must reject at the
+consuming `checked` theorem, and sixty-nine value-preserving changes must pass.
+The 98 C10 client cases cover complete labels and natural count bytes,
+coordinate shifts, recovery and signing history, returned fields, both layers,
+R/H_msg composition, forced-zero and whole-root verification, and keygen's
+public seed and root coordinates. All preceding 511 fixture objects and 1017
+theorem statements are preserved; no previous proof-module bytes are changed.
+The classifier rejects unresolved typeclass arguments as well as non-reducing
+decisions and resource failures; none of these diagnostics counts as sensitivity.
 The 71 FORS/forest cases cover private/public byte layouts, digest indices,
 authentication overwrites, eleven-level recovery, full-digest sub-seed derivation,
 twelve-position shuffle, all four blocks, positional writes, actual recovery,

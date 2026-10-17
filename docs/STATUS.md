@@ -283,9 +283,20 @@ separately hashed compression slot. Costs are at most 80022 total/53386 public
 signing calls and 146 recovery calls. Prefix error is 53386/2^256 under the same
 independent-secret/empty-table premises; conservative empty-cache node charges
 are 3201800253/2^128 and 10731/2^128 respectively.
-Full C10/hypertree/session/forgery translation and concrete backends remain open.
+The complete structured C10 keygen/sign/verify and two-layer clients now also
+compile with full result/cache equality, including actual layer build/sub-seed/
+sign/reconstruction, R/H_msg search, forced-zero verification and whole padded-root
+comparison. For R cap `m` and WOTS cap `n`, signing derives `2*m+2*n+435044`
+total, `m+2*n+364290` public and `m+435042` selected calls; verification derives
+361 total/358 selected calls. Keygen retains high-half public-seed normalization
+and layer 1/tree 0, with 177151 total/155135 public calls. Successful signature
+shape/count bounds, literal bytes, two-layer order, cached success/failure and
+failure-history equations are checked. The same empty-table/independent-secret
+premises govern prefix error; node charges preserve raw-call zero terms.
+Adaptive full session/forgery composition, the 4008-byte codec in this separate
+PMF model, repeated-grinder freshness and concrete backends remain open.
 No new universal build/recover correctness, shuffle-uniformity or physical-security
-result is claimed. All 1017 theorem closures and 511 typed cases are gated separately;
+result is claimed. All 1160 theorem closures and 609 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

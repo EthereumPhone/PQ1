@@ -40,3 +40,4 @@ import C10Probability.MerkleCharges
 import C10Probability.MerkleExamples
 import C10Probability.TreeCached
 import C10Probability.ForestCached
+import C10Probability.C10Examples

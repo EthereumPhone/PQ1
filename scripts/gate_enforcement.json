@@ -1841,7 +1841,11 @@
         "sphincs-c10/src/merkle.rs",
         "sphincs-c10/src/params.rs",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForest.ec",
-        "sphincs-c10/src/hypertree.rs"
+        "sphincs-c10/src/hypertree.rs",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawLayer.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSigner.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenExhaustion.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",

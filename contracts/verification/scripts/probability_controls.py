@@ -1821,4 +1821,154 @@ def cases(project: Path) -> list[dict]:
     add("forest-recover-root-list-equivalent", key, "roots.1 ++ [randomizerOfDigest last.1]",
         "roots.1 ++ (randomizerOfDigest last.1 :: [])", check, True)
 
+
+    # Complete C10 clients: source-derived aliases retain the independent
+    # compiler and finite consumers. Definitions and baselines must compile;
+    # diagnostics from non-reduction or resource failure never count.
+    def client_alias(module, name):
+        candidate = name + "BMCandidate"
+        text = re.sub(r"\b" + re.escape(name) + r"\b", candidate, merkle_decl(module, name))
+        key = candidate + "Slice"
+        src[key] = ("import C10Probability.C10Examples\nnamespace C10Probability\n"
+            "noncomputable section\nvariable {K L : Type*}\n" + text +
+            "\nend\nend C10Probability\n")
+        return key, candidate
+
+    def client_check(module, name, original, candidate):
+        return "set_option maxRecDepth 4096\n" + re.sub(
+            r"\b" + re.escape(original) + r"\b", candidate, theorem(src[module], name))
+
+    def client_cases(module, definition, consumer_module, consumer, rows):
+        key, alias = client_alias(module, definition)
+        check = client_check(consumer_module, consumer, definition, alias)
+        for row in rows:
+            add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    client_cases("LayerInputs", "layerShuffleLabel", "LayerExamples", "layer_zero_label_vector", [
+        ("layer-label-zero-byte", "45,48,0]", "45,49,0]"),
+        ("layer-label-zero-terminator", "45,48,0]", "45,48]"),
+        ("layer-label-branch", "layer = 0", "layer = 1"),
+        ("layer-label-zero-equivalent", "45,48,0]", "45,47 + 1,0]", True)])
+    client_cases("LayerInputs", "layerShuffleLabel", "LayerExamples", "layer_one_label_vector", [
+        ("layer-label-one-byte", "45,49,0]", "45,48,0]"),
+        ("layer-label-one-terminator", "45,49,0]", "45,49]"),
+        ("layer-label-one-equivalent", "45,49,0]", "45,48 + 1,0]", True)])
+    client_cases("LayerInputs", "layerShuffleLabel", "LayerExamples", "layer_other_label_vector", [
+        ("layer-label-nonzero-domain", "layer = 0", "layer != 1")])
+    client_cases("LayerInputs", "hypertreeIndex", "LayerExamples", "hypertree_first_bit", [
+        ("hypertree-index-start", "2 ^ 143", "2 ^ 144")])
+    client_cases("LayerInputs", "hypertreeIndex", "LayerExamples", "hypertree_high_bit_boundary", [
+        ("hypertree-index-width", "% 2 ^ 18", "% 2 ^ 19")])
+    client_cases("LayerInputs", "hypertreeLeaf", "LayerExamples", "hypertree_last_coordinate_vector", [
+        ("hypertree-leaf-width", "index % 512", "index % 256")])
+    client_cases("LayerInputs", "hypertreeParent", "LayerExamples", "hypertree_last_coordinate_vector", [
+        ("hypertree-parent-shift", "index / 512", "index / 256")])
+    client_cases("LayerInputs", "wotsRecoverCountInput", "LayerExamples", "layer_count_full_block_vector", [
+        ("layer-count-width", "beBytes 32 count", "beBytes 4 count"),
+        ("layer-count-position", "++ beBytes 32 count", "++ (beBytes 32 count).reverse"),
+        ("layer-count-bytes-equivalent", "beBytes 32 count", "beBytes (16 + 16) count", True)])
+    client_cases("LayerInputs", "wotsRecoverCountInput", "LayerExamples", "layer_natural_count_not_u32_wrapped", [
+        ("layer-count-natural-wrapped", "beBytes 32 count", "beBytes 32 (count % 2 ^ 32)")])
+    client_cases("LayerInputs", "nodeValueBytes", "LayerExamples", "layer_message_byte_vector", [
+        ("layer-message-byte-order", "List.ofFn (randomizerBytesEquiv.symm value)",
+         "(List.ofFn (randomizerBytesEquiv.symm value)).reverse")])
+
+    client_cases("RecoveryRelabel", "wotsRecoverChainsUnder", "RecoveryRelabel", "wots_recover_chains_under_eval", [
+        ("relabel-chain-start", "(fun i => (word i).val)", "(fun _ => 0)"),
+        ("relabel-chain-remaining", "(fun i => 7 - (word i).val)", "(fun i => 6 - (word i).val)"),
+        ("relabel-chain-position", "kp i.val step node", "kp 0 step node"),
+        ("relabel-chain-cache-reset", "sigma wotsIndices table", "sigma wotsIndices (fun _ => none)")])
+    client_cases("RecoveryRelabel", "wotsCompressUnder", "RecoveryRelabel", "wots_compress_under_eval", [
+        ("relabel-compression-order", "kp values", "kp values.reverse"),
+        ("relabel-compression-cache", "out.1, out.2)", "out.1, table)")])
+    client_cases("WotsRecoveryUnder", "wotsRecoveryUnder", "WotsRecoveryUnder", "wots_recovery_under_eval", [
+        ("layer-wots-count-cache", "encode counted.2 seed", "encode table seed"),
+        ("layer-wots-chain-cache", "encode chains.2 seed", "encode table seed"),
+        ("layer-wots-reject-cache", "PMF.pure (0, counted.2)", "PMF.pure (0, table)"),
+        ("layer-wots-reject-node", "PMF.pure (0, counted.2)", "PMF.pure (1, counted.2)"),
+        ("layer-wots-count-coordinate", "seed layer tree kp message count", "seed layer tree 0 message count")])
+    client_cases("LayerRecover", "layerRecover", "LayerRecover", "layer_recover_eval", [
+        ("layer-recover-count", "sig.sigma sig.count", "sig.sigma 0"),
+        ("layer-recover-auth", "pk.1 leaf sig.auth", "pk.1 leaf []"),
+        ("layer-recover-history", "encode pk.2 seed", "encode table seed"),
+        ("layer-recover-leaf", "pk.1 leaf sig.auth", "pk.1 0 sig.auth"),
+        ("layer-recover-wots-node", "pk.1 leaf sig.auth", "message leaf sig.auth")])
+    client_cases("LayerSign", "layerSignAfter", "LayerSign", "layer_sign_after_eval", [
+        ("layer-sign-exhaustion-cache", "PMF.pure (none, table)", "PMF.pure (none, fun _ => none)"),
+        ("layer-sign-return-counter", "⟨sigma, count, auth⟩", "⟨sigma, count + 1, auth⟩"),
+        ("layer-sign-return-auth", "⟨sigma, count, auth⟩", "⟨sigma, count, []⟩"),
+        ("layer-sign-reconstructed-root", "(some (sig, root.1), root.2)", "(some (sig, message), root.2)"),
+        ("layer-sign-recovery-history", "(some (sig, root.1), root.2)", "(some (sig, root.1), table)")])
+    client_cases("LayerSign", "layerSign", "LayerSign", "layer_sign_eval", [
+        ("layer-sign-built-history", "(layerShuffleLabel layer) built.2", "(layerShuffleLabel layer) table"),
+        ("layer-sign-subseed-history", "wotsSign encode subseed.2", "wotsSign encode table"),
+        ("layer-sign-subseed-value", "message) subseed.1 n hb", "message) shuffle n hb"),
+        ("layer-sign-signed-history", "layerSignAfter encode signed.2", "layerSignAfter encode table"),
+        ("layer-sign-built-auth", "message built.1.1 signed.1", "message [] signed.1"),
+        ("layer-sign-wrong-label", "(layerShuffleLabel layer)", "(layerShuffleLabel 0)")])
+    client_cases("HypertreeSign", "hypertreeSign", "HypertreeSign", "hypertree_sign_eval", [
+        ("hypertree-sign-unshifted-tree", "seed layer (hypertreeParent index)", "seed layer index"),
+        ("hypertree-sign-leaf", "(hypertreeLeaf index) current", "0 current"),
+        ("hypertree-sign-layer-repeated", "(layer + 1)", "layer"),
+        ("hypertree-sign-root-discarded", "index) root (signatures", "index) current (signatures"),
+        ("hypertree-sign-signature-prepend", "(signatures ++ [sig])", "(sig :: signatures)"),
+        ("hypertree-sign-history-reset", "[sig]) signed.2", "[sig]) table"),
+        ("hypertree-sign-failure-cache", "PMF.pure (none, signed.2)", "PMF.pure (none, table)"),
+        ("hypertree-sign-next-layer-equivalent", "(layer + 1)", "(layer + (0 + 1))", True)])
+    client_cases("HypertreeRecover", "hypertreeRecover", "HypertreeRecover", "hypertree_recover_eval", [
+        ("hypertree-recover-leaf", "(hypertreeLeaf index)", "0"),
+        ("hypertree-recover-signature-index", "signatures[layer]?", "signatures[0]?"),
+        ("hypertree-recover-layer-repeated", "(layer + 1)", "layer"),
+        ("hypertree-recover-root-discarded", "index) root.1 root.2", "index) current root.2"),
+        ("hypertree-recover-history-reset", "index) root.1 root.2", "index) root.1 table")])
+    client_cases("C10Finish", "c10FinishOutput", "C10Examples", "c10_finish_output_fields", [
+        ("c10-output-r", "⟨randomizer, forest.secrets", "⟨0, forest.secrets"),
+        ("c10-output-secrets", "forest.secrets, forest.auths", "[], forest.auths"),
+        ("c10-output-auths", "forest.auths, result.1", "[], result.1"),
+        ("c10-output-layer-order", "forest.auths, result.1", "forest.auths, result.1.reverse")])
+    client_cases("C10Finish", "c10Finish", "C10Finish", "c10_finish_eval", [
+        ("c10-finish-single-layer", "n hb 2 0", "n hb 1 0"),
+        ("c10-finish-initial-layer", "n hb 2 0", "n hb 2 1"),
+        ("c10-finish-forest-root", "forest.1.pk []", "0 []"),
+        ("c10-finish-forest-history", "[] forest.2", "[] table"),
+        ("c10-finish-final-history", "signed.1, signed.2", "signed.1, table"),
+        ("c10-finish-two-equivalent", "n hb 2 0", "n hb (1 + 1) 0", True)])
+    client_cases("RandomizerUnder", "randomizerUnder", "RandomizerUnder", "randomizer_under_eval", [
+        ("c10-r-private-route", "encode (.inr key)", "encode (.inl key)"),
+        ("c10-r-message-order", "hmsgRandomizerInput seed root message r", "hmsgRandomizerInput root seed message r"),
+        ("c10-r-derivation-message", "rTailStem random message", "rTailStem message random"),
+        ("c10-r-accepted-counter", "table 0", "table 1"),
+        ("c10-r-cache-reset", "table 0", "(fun _ => none) 0")])
+    client_cases("C10Sign", "c10SignAfter", "C10Sign", "c10_sign_after_eval", [
+        ("c10-sign-r-exhaustion-history", "PMF.pure (none, table)", "PMF.pure (none, fun _ => none)"),
+        ("c10-sign-found-r", "table seed randomizer digest", "table seed 0 digest"),
+        ("c10-sign-found-digest", "table seed randomizer digest", "table seed randomizer 0")])
+    client_cases("C10Sign", "c10Sign", "C10Sign", "c10_sign_eval", [
+        ("c10-sign-r-history", "encode found.2 seed", "encode table seed"),
+        ("c10-sign-r-message", "table random message seed root", "table message random seed root"),
+        ("c10-sign-found-discarded", "n hn found.1", "n hn none")])
+    client_cases("C10Verify", "c10VerifyAfter", "C10Verify", "c10_verify_after_eval", [
+        ("c10-verify-forced-zero-negated", "if forsAccept (forsOfDigest digest) then", "if !forsAccept (forsOfDigest digest) then"),
+        ("c10-verify-forced-zero-skipped", "if forsAccept (forsOfDigest digest) then", "if true then"),
+        ("c10-verify-forest-secret-order", "digest sig.secrets sig.auths", "digest sig.secrets.reverse sig.auths"),
+        ("c10-verify-single-layer", "sig.layers 2 0", "sig.layers 1 0"),
+        ("c10-verify-initial-layer", "sig.layers 2 0", "sig.layers 2 1"),
+        ("c10-verify-forest-root", "digest) pk.1 pk.2", "digest) 0 pk.2"),
+        ("c10-verify-forest-history", "digest) pk.1 pk.2", "digest) pk.1 table"),
+        ("c10-verify-final-history", "root), current.2", "root), table"),
+        ("c10-verify-root-prefix-only", "decide (nodeBlock current.1 = root)", "decide (nodeValueBytes current.1 = root.take 16)"),
+        ("c10-verify-reject-history", "PMF.pure (false, table)", "PMF.pure (false, fun _ => none)"),
+        ("c10-verify-two-equivalent", "sig.layers 2 0", "sig.layers (1 + 1) 0", True)])
+    client_cases("C10Verify", "c10Verify", "C10Verify", "c10_verify_eval", [
+        ("c10-verify-signature-r", "message sig.randomizer", "message 0"),
+        ("c10-verify-hmsg-order", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput root seed message"),
+        ("c10-verify-hmsg-history", "encode digest.2 seed", "encode table seed"),
+        ("c10-verify-hmsg-reply", "root sig digest.1", "root sig 0")])
+    client_cases("C10Keygen", "c10Keygen", "C10Keygen", "c10_keygen_eval", [
+        ("c10-keygen-layer", "table seed 1 0", "table seed 0 0"),
+        ("c10-keygen-tree", "table seed 1 0", "table seed 1 1"),
+        ("c10-keygen-public-seed", "randomizerOfDigest publicSeed", "(⟨publicSeed.val % 2 ^ 128, Nat.mod_lt _ (by decide)⟩ : Randomizer)"),
+        ("c10-keygen-root-pad", "nodeBlock root.1", "nodeValueBytes root.1"),
+        ("c10-keygen-returned-cache", "root.1), root.2", "root.1), table")])
+
     return out

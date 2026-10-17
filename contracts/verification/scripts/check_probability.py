@@ -106,7 +106,7 @@ def run_controls(out: Path, lean: str, env: dict) -> list[dict]:
     fixtures = out / "controls"
     fixtures.mkdir()
     selected = cases(PROJECT)
-    require(len(selected) == 511 and sum(not c["expected"] for c in selected) == 448,
+    require(len(selected) == 609 and sum(not c["expected"] for c in selected) == 540,
             "control census differs")
     jobs = []
     for case in selected:
@@ -134,7 +134,7 @@ def run_controls(out: Path, lean: str, env: dict) -> list[dict]:
             require(all(m["pos"]["line"] >= first and
                         str(m.get("fileName")) == str(path) for m in errors),
                     f"mutant failed before consuming theorem: {path.name}")
-            excluded = r"unknown|unexpected token|timeout|heartbeats|recursion depth|stack|memory|failed to synthesize|did not reduce to"
+            excluded = r"unknown|unexpected token|timeout|heartbeats|recursion depth|stack|memory|failed to synthesize|typeclass instance problem is stuck|did not reduce to"
             require(all(not re.search(excluded, m.get("data", ""), re.I) for m in errors),
                     f"non-semantic mutant failure: {path.name}")
         row["errors"] = errors
@@ -215,7 +215,7 @@ def main() -> None:
         result["passed"] = True
     finally:
         (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(f"PASS: {len(result['closures'])} theorem closures; 511 typed cases / 1533 compiler jobs")
+    print(f"PASS: {len(result['closures'])} theorem closures; 609 typed cases / 1827 compiler jobs")
 
 
 if __name__ == "__main__":

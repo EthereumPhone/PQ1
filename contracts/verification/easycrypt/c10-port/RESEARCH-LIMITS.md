@@ -89,8 +89,8 @@ uniform hidden secret and empty global initial cache remain explicit.
 This closes the grinder's application to the private-prefix interface and
 its bounded-continuation restriction. It does not make repeated private inputs
 fresh or transfer the earlier independent-R exhaustion bound to arbitrary
-repeated calls. Full C10 keygen/sign/verify client translation, PMF forgery
-composition and concrete backend correspondence remain open.
+repeated calls. The manual structured C10 clients are now composed below;
+adaptive session/PMF forgery composition and concrete backend correspondence remain open.
 The accepted WOTS encoding collision component now also has a separate PMF
 proof over the actual adaptive memoized interpreter. Its acceptance-filtered
 observer preserves the full cache and result, and its derived history bound is
@@ -177,11 +177,25 @@ and recovery uses 146. Prefix comparison has error 53386/2^256 for forest
 signing under the same independent-secret/empty-table premises. Conservative
 empty-cache node-event charges are 3201800253/2^128 for signing and 10731/2^128
 for recovery. Cached calls are counted, not assumed fresh.
-This closes those manual compiler/cost components, not a new universal
-build/recover correctness theorem. The complete C10/hypertree and session
-client, WOTS outer sub-seed preparation, output partition and forgery composition
-remain open. The `none` exhaustion model does not prove runtime panic/retry,
-callback or erasure semantics. All 32 manual source bindings are checked for
+The manual structured C10 keygen/sign/verify clients now also compile with
+full result/cache equality. Layer signing executes the builder, exact seven-byte
+shuffle label, WOTS signing and actual reconstruction; two-layer composition
+passes the reconstructed node and full cache onward. Natural counters retain
+all 32 encoding bytes; successful counters are proved below their u32 cap.
+Signing runs the actual R/H_msg search before forest and both layers. Verification
+recomputes H_msg, enforces the forced-zero field, retains recovery defaults and
+compares the whole padded root. Keygen uses the public digest's high half and
+the layer-1/tree-0 root. Signing budgets are `2*m+2*n+435044` total,
+`m+2*n+364290` public and `m+435042` selected calls; verification has 361 total
+and 358 selected calls. Prefix error retains the independent uniform secret and
+empty tables, while empty-cache node charges retain the full raw zero term.
+Successful signature sizes, cached success/failure, full-table failure equations,
+literal bytes and ordered two-layer traces are checked.
+This closes the manual structured clients and costs, not universal honest
+correctness, the 4008-byte codec in the PMF model, adaptive session cost,
+successful-output/forgery partition, final forgery bound or repeated-grinder
+freshness. The `none` exhaustion model does not prove runtime panic/retry,
+callback or erasure semantics. All 36 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.

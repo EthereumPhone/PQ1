@@ -41,6 +41,10 @@ on:
       - 'sphincs-c10/src/params.rs'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawForest.ec'
       - 'sphincs-c10/src/hypertree.rs'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawLayer.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawSigner.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenExhaustion.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec'
   pull_request:
     paths: *probability_paths
 
