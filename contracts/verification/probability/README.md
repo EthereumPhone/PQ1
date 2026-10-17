@@ -798,6 +798,23 @@ comparisons and actual cached signing. Populated caches witness satisfiability,
 not empty-cache success probability. Truncated addresses are not claimed to be
 globally injective.
 
+`ReturnedAuth.lean` and `ReturnedAuthRecovery.lean` now establish forward
+correctness for the actual arrays returned by the 512-leaf Merkle and 2048-leaf
+FORS builders, at every valid selected target. The loop invariant certifies each
+stored sibling against the same memo table. Kernel-checked schedules supply
+merge alignment and array bounds; Merkle's kept-flag invariant follows from its
+actual all-false initialization. Functional cache consistency identifies the
+stored siblings with the tree nodes, without a collision exclusion or an assumed
+reference path. Recovery retains the actual WOTS leaf replay or FORS private
+value/public leaf lookup, and remains valid under cache extension.
+`ReturnedForsSigning.lean` binds recovery to the secret and authentication array
+actually returned by FORS signing and to that execution's builder root. This is
+not yet correctness of the whole C10 signer or a forgery-probability bound.
+The ten `AuthPathExamples.lean` witnesses use an asymmetric four-leaf cache;
+they cover all positions, order, false initialization of kept flags, short
+arrays, invalid targets and unaligned merges. Forty additional typed cases
+exercise the stored-node certificates, collector writes and kept-flag links.
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -841,16 +858,19 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1448 theorem closures against
+The gate rebuilds every project module, checks all 1505 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-830 typed cases run 2490 compiler jobs: each baseline and changed
-definition must compile, 745 changed behaviors must reject at the
-consuming `checked` theorem, and eighty-five value-preserving changes must pass.
+870 typed cases run 2610 compiler jobs: each baseline and changed
+definition must compile, 781 changed behaviors must reject at the
+consuming `checked` theorem, and eighty-nine value-preserving changes must pass.
+The 40 returned-authentication cases add 36 semantic negatives and four
+equivalent controls; the preceding 830 fixture objects, 1448 theorem statements,
+old proof-module bytes and 52 source bindings are preserved.
 The 47 WOTS chain-binding cases cover the joint top opening, actual layer/C10
 signing witnesses, private routing, chain inputs and selected-node collision
 conditions, including four equivalent controls. The three witness-predicate
