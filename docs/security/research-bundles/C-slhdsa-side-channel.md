@@ -4388,6 +4388,21 @@ e2e-test = [
     "erc7730-dev-unattested",
     "erc7730-nested-calldata-test-fixture",
 ]
+# Test-only opt-in (silicon checklist row 4.12, FI-delay pool measurement):
+# under `e2e-test`, `fi::wait_random` is normally a hard no-op so bench
+# timings don't drift — which also means the FI-delay pool
+# (`secure/src/fi_delay_pool.rs`, HITS/MISSES/ZERO_SKIPS/...) is never
+# exercised. With `fi-live-delays` ON alongside `e2e-test`, `wait_random`
+# runs its REAL arm (`rng_byte()` → `fi_delay_pool::take()`), so a signing
+# workload drives the pool and its counters can be read from live SRAM.
+# Changes no behaviour outside `e2e-test` builds. NEVER ship.
+fi-live-delays = []
+# Test-only (silicon checklist row 5.9, secure-stack high-water mark): paints
+# the dead stack with a pattern at `main` entry, at the NS hand-off and after
+# every `stack_scrub::scrub_dead_stack`, and records the lowest overwritten
+# word in `STACK_HWM_LOW` for an SWD read. The scrub still zeroes first, so
+# no secret survives it; the pattern is written after. NEVER ship.
+stack-hwm = []
 # Reversible firmware anti-rollback test: drives the real fw_update::
 # verify_manifest chain with dev-key-signed v1/v2/v3 manifests against
 # literal test floors (no OTP burn, no flash, no reboot). Runs early in
@@ -4641,6 +4656,15 @@ ui-golden-render = ["ui-capture", "erc7730-dev-unattested"]
 # slowdown, then SYS_EXITs. Pairs with hw-sha256 (implied by stm32u585)
 # so the HASH-peripheral baseline is real. Use `make bench-masked-sha-hw`.
 bench-masked-sha = ["stm32u585", "dep:masked-sha2"]
+# TRNG output dump for SP 800-90B (DVT checklist row 4.8). Parks after TRNG
+# init, fills a 64 KB SRAM buffer via `hw::rng::fill`, and hands it to the
+# host over SWD (`tools/dvt/trng_dump.py`). Bench only; never ship.
+trng-dump = ["stm32u585"]
+# Strong-RNG composition probe (DVT checklist row 4.9 + the three-source XOR
+# check). Terminal bench image: records each rng_strong source contribution
+# and holds one SE in reset to prove fail-closed. Writes nothing to either SE
+# (factory SCP03 keys; OPTIGA PBS read in place). Bench only; never ship.
+rng-xor-probe = ["dual-se", "stm32u585"]
 # F-24 stage E Phase 1 — hardware flicker validation harness for the
 # decoy-mnemonic-frame defense. Short-circuits `main()` into a forever-
 # loop that renders page 0 of a fixed test mnemonic interleaved with

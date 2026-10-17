@@ -323,9 +323,15 @@ words need not mean equal messages. Minimum exposure across repeated addresses,
 lower-layer/FORS descent and adaptive coverage/private-opening charges remain.
 Successful-output/forgery partition, the final bound, arbitrary lossless-adversary
 representation, the 4008-byte PMF codec, repeated-grinder freshness and concrete
-backends remain open. No new universal build/recover correctness,
-shuffle-uniformity or physical-security result is claimed. All 1448 theorem
-closures and 830 typed cases are gated separately; `lean/` stays mathlib-free.
+backends remain open. Forward recovery of the actual returned Merkle/FORS
+authentication arrays is now proved for every valid target, with concrete
+alignment, bounds and kept-flag initialization discharged. The same-cache
+witness retains the actual WOTS leaf or FORS private value and persists under
+cache extension; no collision exclusion is required for this direction.
+Actual FORS signing's returned secret/path recovers its own builder root.
+Whole C10 honest-signature correctness, shuffle-uniformity and physical-security
+claims remain open. All 1505 theorem closures and 870 typed cases are gated
+separately; `lean/` stays mathlib-free.
 #295 remains open for the remaining probability-monad forgery bound. No cross-kernel
 probability or deployed hash-independence claim is made.
 
