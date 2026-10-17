@@ -557,9 +557,33 @@ tables. Repeated private inputs remain cached. `WotsSignerExamples.lean` checks
 byte layouts, a separately computed patterned permutation, all four ordered
 shuffle calls, positional writes, cached complete signing and exhaustion.
 
-This closes the manually transcribed WOTS public recovery, key-generation leaf
-and shuffled signing clients. It does not close the full C10 tree/FORS/hypertree
-client, session cost, successful-output partition or forgery game. Shuffle
+`TreeShape.lean`, `TreeMerge.lean` and `TreeRun.lean` compile the actual
+leaf-by-leaf list-stack treehash procedure. The pure schedule proves that 512
+leaves leave one height-9 root and execute 511 merges; costs are derived from
+those transitions. `Subtree.lean` composes the WOTS leaves and ordered kind-2
+pair inputs into the full subtree root, with 177151 total and 155135 public
+calls. Compiler equalities preserve the complete result and arbitrary initial
+memo table, including cached calls and adaptive replies.
+
+`MerkleBuild.lean` retains the actual keep/kept state, sibling parity, pre-hash
+left/right choice and per-height list writes. `TreeAccess.lean` proves that all
+executed merge heights are below 9 and that the returned path has nine entries.
+`MerkleRecover.lean` retains all nine directional calls, parent/index updates,
+child order and default siblings; its array reads are in range for a nine-entry
+path. These are manual procedure/compiler and cost theorems, not a new universal
+build/recover correctness theorem or an all-input Rust extraction theorem.
+
+`MerkleCharges.lean` gives subtree root/build prefix-event error 155135/2^256,
+with a uniform hidden secret independent of the client and empty initial tables.
+The empty-cache selected collision-or-raw-zero charge is 15691326976/2^128,
+conservatively counting all 177151 calls in the selected budget. The recovery
+charge is 45/2^128. `MerkleExamples.lean` checks independent address/child bytes,
+authentication writes/defaults, exact query traces and cache retention;
+`TreeCached.lean` proves an inhabited complete cached subtree execution.
+
+This closes the named manually transcribed WOTS and Merkle subtree clients.
+Full C10 FORS/hypertree composition, session cost, successful-output partition
+and the forgery game remain open. Shuffle
 sub-seed derivation belongs to those outer callers. Natural-number address
 truncation, the manual correspondence boundary, Rust panic/callback/erasure
 behavior and concrete backends remain explicit.
@@ -607,16 +631,18 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 778 theorem closures against
+The gate rebuilds every project module, checks all 861 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-398 typed cases run 1194 compiler jobs: each baseline and changed
-definition must compile, 343 changed behaviors must reject at the
-consuming `checked` theorem, and fifty-five value-preserving changes must pass. The signer controls cover private
+440 typed cases run 1320 compiler jobs: each baseline and changed
+definition must compile, 381 changed behaviors must reject at the
+consuming `checked` theorem, and fifty-nine value-preserving changes must pass.
+The 42 Merkle cases cover stack geometry/costs, pair bytes/order, authentication
+selection/writes, full cache retention, leaf/query ordering and nine-step recovery. The signer controls cover private
 bytes/routing, positional writes, shuffle inputs/order/multiply-high, all four
 queries, zero-seed behavior, exhaustion and cache propagation. The recovery
 controls include chain ordering and shared-cache retention, accepted-word work,

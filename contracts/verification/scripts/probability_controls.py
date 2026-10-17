@@ -1485,4 +1485,135 @@ def cases(project: Path) -> list[dict]:
     add("wots-shuffle-four-calls-preserving", "WotsShuffleProgramAlias",
         "(shuffleBlocksProgram encode seed 0 4)",
         "(shuffleBlocksProgram encode seed 0 (2 + 2))", query_case, True)
+    # Merkle subtree controls: full source-derived pure/direct procedures and
+    # finite observable traces. Indexed compiler definitions keep their proved
+    # cost transports; mutations must typecheck before a consumer can count.
+    def merkle_example(name):
+        return "set_option maxRecDepth 20000\n" + theorem(src["MerkleExamples"], name)
+
+    def merkle_decl(module, name):
+        match = re.search(r"^(?:def|abbrev|structure) " + re.escape(name) +
+                          r"\b.*?(?=^(?:theorem|def|abbrev|structure|end|attribute)\b)",
+                          src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing Merkle definition " + name)
+        return match.group(0).split("\n/--", 1)[0]
+
+    def merkle_slice(name, imports, declarations, variables=""):
+        src[name] = ("".join("import C10Probability." + mod + "\n" for mod in imports) +
+            "namespace C10Probability\nnoncomputable section\n" + variables + "\n" +
+            "\n".join(merkle_decl(mod, decl) for mod, decl in declarations) +
+            "end\nend C10Probability\n")
+
+    merkle_slice("MerkleShapePure", ["StateFold"],
+        [("TreeShape", name) for name in ["MergeShape", "mergeShape", "nextShape", "runShape", "shapeCalls", "treeCalls"]])
+    merkle_slice("MerkleKeepPure", ["MerkleInputs"],
+        [("MerkleBuild", name) for name in ["AuthKeep", "emptyAuthKeep", "writeAuthKeep", "authRemember"]])
+    merkle_slice("MerkleMergeDirect", ["TreeShape"],
+        [("TreeMerge", "mergeLoop"), ("MerkleExamples", "treeExampleInput")],
+        "variable {K α N S : Type*}")
+    merkle_slice("MerkleTreeDirect", ["TreeMerge"],
+        [("TreeRun", "treeLoop"), ("MerkleExamples", "treeExampleInput")],
+        "variable {K α N S : Type*}")
+    merkle_slice("MerkleTreeCompiler", ["TreeMerge"],
+        [("TreeRun", "treeProgram"), ("MerkleExamples", "treeExampleInput")],
+        "variable {K α N S : Type*}")
+    merkle_slice("MerkleRecoveryDirect", ["MerkleInputs"],
+        [("MerkleRecover", name) for name in ["recoveryInput", "recoveryLoop", "merkleRecover"]],
+        "variable {K : Type*}")
+    merkle_slice("MerkleRecoveryCompiler", ["MerkleInputs"],
+        [("MerkleRecover", name) for name in ["recoveryInput", "recoveryProgram", "merkleRecoverProgram"]],
+        "variable {K : Type*}")
+
+    shape = merkle_example("tree_shape_frontier")
+    add("tree-shape-unequal-merge", "MerkleShapePure", "if level = height then",
+        "if height ≤ level then", shape)
+    add("tree-shape-height-jump", "MerkleShapePure", "mergeShape (height + 1) rest",
+        "mergeShape (height + 2) rest", shape)
+    add("tree-shape-double-charge", "MerkleShapePure", "next.calls + 1", "next.calls + 2", shape)
+    add("tree-shape-push-lost", "MerkleShapePure", "out.height :: out.rest", "out.rest", shape)
+    add("tree-leaf-charge-lost", "MerkleShapePure", "leafCalls * n + shapeCalls n stack",
+        "leafCalls * (n - 1) + shapeCalls n stack",
+        "set_option maxRecDepth 20000\ntheorem checked : treeCalls 345 512 [] = 177151 := by decide +kernel\n")
+
+    pair = merkle_example("merkle_pair_byte_vector")
+    add("merkle-pair-kind", "MerkleInputs", "c10Address layer tree 2 0 0", "c10Address layer tree 1 0 0", pair)
+    add("merkle-pair-height", "MerkleInputs", "(height + 1) parent", "height parent", pair)
+    add("merkle-pair-order", "MerkleInputs", "nodeBlock left ++ nodeBlock right",
+        "nodeBlock right ++ nodeBlock left", pair)
+    add("merkle-pair-child-duplicated", "MerkleInputs", "nodeBlock left ++ nodeBlock right",
+        "nodeBlock left ++ nodeBlock left", pair)
+    add("merkle-pair-parent-level", "MerkleInputs", "(kp / 2 ^ (height + 1))",
+        "(kp / 2 ^ height)", merkle_example("tree_pair_parent_vector"))
+    add("merkle-sibling-parity", "MerkleInputs", "if index % 2 = 0 then index + 1 else index - 1",
+        "if index % 2 = 0 then index - 1 else index + 1", merkle_example("sibling_index_vector"))
+    add("merkle-root-default", "MerkleInputs", "stack.headD (0, 0)", "stack.headD (1, 0)",
+        merkle_example("tree_root_default_vector"))
+
+    add("merkle-keep-left-child", "MerkleKeepPure", "then writeAuthKeep state height left",
+        "then writeAuthKeep state height right", merkle_example("auth_remember_left_vector"))
+    add("merkle-keep-right-child", "MerkleKeepPure", "then writeAuthKeep state height right",
+        "then writeAuthKeep state height left", merkle_example("auth_remember_right_vector"))
+    add("merkle-keep-height-slot", "MerkleKeepPure", "state.nodes.set height node",
+        "state.nodes.set (height + 1) node", merkle_example("auth_remember_high_vector"))
+    add("merkle-keep-flag", "MerkleKeepPure", "state.kept.set height true",
+        "state.kept.set height false", merkle_example("auth_remember_left_vector"))
+    add("merkle-keep-rewrites", "MerkleKeepPure", "if (state.kept[height]?).getD false then state",
+        "if false then state", merkle_example("auth_remember_once_vector"))
+    add("merkle-keep-left-coordinate", "MerkleKeepPure", "let leftIndex := pairStart / 2 ^ height",
+        "let leftIndex := kp / 2 ^ height", merkle_example("auth_remember_left_vector"))
+    add("merkle-keep-nonsibling", "MerkleKeepPure", "else if leftIndex + 1 = sibling then",
+        "else if true then", merkle_example("auth_remember_irrelevant_vector"))
+
+    add("merkle-merge-order", "MerkleMergeDirect", "input kp height left current",
+        "input kp height current left", merkle_example("merge_two_levels_cached"))
+    add("merkle-merge-height", "MerkleMergeDirect", "rest (height + 1) (project reply.1)",
+        "rest (height + 2) (project reply.1)", merkle_example("merge_two_levels_cached"))
+    add("merkle-merge-remember", "MerkleMergeDirect", "(remember kp height left current state) reply.2",
+        "state reply.2", merkle_example("merge_two_levels_cached"))
+    add("merkle-merge-cache-reset", "MerkleMergeDirect", "(remember kp height left current state) reply.2",
+        "(remember kp height left current state) table", merkle_example("merge_accumulated_cache"))
+    add("merkle-merge-rest-lost", "MerkleMergeDirect", "remember kp rest (height + 1)",
+        "remember kp [] (height + 1)", merkle_example("merge_two_levels_cached"))
+    add("merkle-merge-unmatched-rest-lost", "MerkleMergeDirect",
+        "(current, height) :: (left, level) :: rest", "[(current, height)]",
+        merkle_example("merge_stops_at_different_height"))
+
+    add("merkle-tree-leaf-order", "MerkleTreeDirect", "(leaf start table).bind",
+        "(leaf (start + 1) table).bind", merkle_example("tree_four_leaves_cached"))
+    add("merkle-tree-next-index", "MerkleTreeDirect", "remember n (start + 1)",
+        "remember n start", merkle_example("tree_four_leaves_cached"))
+    add("merkle-tree-final-cache", "MerkleTreeDirect", "PMF.pure ((stack, state), table)",
+        "PMF.pure ((stack, state), fun _ => none)", merkle_example("tree_four_leaves_cached"))
+    add("merkle-tree-compiler-leaf-index", "MerkleTreeCompiler", "bindProgram (leaf start)",
+        "bindProgram (leaf (start + 1))", merkle_example("tree_four_leaves_query_order"))
+    add("merkle-tree-compiler-next-index", "MerkleTreeCompiler", "remember n (start + 1)",
+        "remember n start", merkle_example("tree_four_leaves_query_order"))
+
+    add("merkle-recovery-child-parity", "MerkleRecoveryDirect",
+        "let left := if index % 2 = 0 then current else sibling",
+        "let left := if index % 2 = 0 then sibling else current", merkle_example("recovery_even_vector"))
+    add("merkle-recovery-default", "MerkleRecoveryDirect", "(auth[height]?).getD 0",
+        "(auth[height]?).getD 1", merkle_example("recovery_default_vector"))
+    add("merkle-recovery-parent", "MerkleRecoveryDirect", "height (index / 2) left right",
+        "height index left right", merkle_example("recovery_odd_vector"))
+    add("merkle-recovery-eight-levels", "MerkleRecoveryDirect", "auth 9 0 index leaf table",
+        "auth 8 0 index leaf table", merkle_example("recovery_nine_heights"))
+    add("merkle-recovery-return-cache", "MerkleRecoveryDirect", "(randomizerOfDigest reply.1) reply.2",
+        "(randomizerOfDigest reply.1) table", merkle_example("recovery_one_fresh_populated"))
+    add("merkle-recovery-output-zero", "MerkleRecoveryDirect", "(randomizerOfDigest reply.1) reply.2",
+        "0 reply.2", merkle_example("recovery_nine_heights"))
+    add("merkle-recovery-compiler-index", "MerkleRecoveryCompiler", "steps (height + 1) (index / 2)",
+        "steps (height + 1) index", merkle_example("merkle_recovery_query_order"))
+    add("merkle-recovery-compiler-height", "MerkleRecoveryCompiler", "steps (height + 1) (index / 2)",
+        "steps height (index / 2)", merkle_example("merkle_recovery_query_order"))
+
+    add("merkle-pair-kind-preserving", "MerkleInputs", "c10Address layer tree 2 0 0",
+        "c10Address layer tree (1 + 1) 0 0", pair, True)
+    add("merkle-keep-side-preserving", "MerkleKeepPure", "leftIndex + 1 = sibling",
+        "leftIndex + (0 + 1) = sibling", merkle_example("auth_remember_right_vector"), True)
+    add("merkle-tree-index-preserving", "MerkleTreeCompiler", "remember n (start + 1)",
+        "remember n (1 + start)", merkle_example("tree_four_leaves_query_order"), True)
+    add("merkle-recovery-parent-preserving", "MerkleRecoveryDirect", "height (index / 2) left right",
+        "height (index / (1 + 1)) left right", merkle_example("recovery_odd_vector"), True)
     return out

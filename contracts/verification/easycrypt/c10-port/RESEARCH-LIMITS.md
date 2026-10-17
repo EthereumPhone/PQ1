@@ -158,10 +158,19 @@ acceptance and the proved 43-position permutation derive `n+252` total,
 cache. Private-prefix event transfer is `(n+209)/2^256` for signing and
 `302/2^256` for the leaf, retaining empty tables and a uniform hidden secret
 independent of the client inputs. Cached private repeats are not fresh draws.
-The complete C10 tree/FORS/hypertree and session client, shuffle sub-seed
-preparation, output partition and forgery composition remain open. The `none`
+The PMF Merkle subtree root, authentication builder and nine-step recovery
+now also compile with full result/cache equality, including actual stack
+merges, keep/kept updates, sibling ordering and list defaults. The 512-leaf
+schedule derives 511 merges and 177151 total/155135 public tree calls; all
+executed authentication heights are below 9. Root/build prefix transfer has
+error 155135/2^256 under the same independent hidden-secret/empty-table premises.
+Their conservative empty-cache node-event charge is 15691326976/2^128; recovery's
+is 45/2^128. This closes those manual compiler/cost components, not a new
+universal build/recover correctness theorem. The complete C10 FORS/hypertree
+and session client, shuffle sub-seed preparation, output partition and forgery
+composition remain open. The `none`
 exhaustion model does not prove runtime panic/retry, callback or erasure
-semantics. All26 manual source bindings are checked for declared and
+semantics. All 30 manual source bindings are checked for declared and
 push/PR trigger coverage, closing the known future-drift gap #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.

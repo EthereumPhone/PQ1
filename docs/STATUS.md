@@ -268,9 +268,16 @@ writes. Acceptance and permutation derive 205 chain calls, giving `n+252` total,
 `n+209` public and 252 selected signing calls; the leaf has 345 total/302 public
 calls. The signing node-event bound is `(n+31878)/2^128` from an empty cache.
 Private-prefix transfer retains a uniform hidden secret and empty tables.
-Full C10 tree/FORS/hypertree/session/forgery translation and concrete backends
-remain open; no shuffle-uniformity or physical-security result is claimed.
-All 778 theorem closures and 398 typed cases are gated separately;
+The Merkle subtree root, authentication builder and nine-step recovery now
+also compile with full result/cache equality. The actual 512-leaf/511-merge
+stack schedule derives 177151 total/155135 public tree calls, with in-range
+nine-slot authentication accesses. Root/build prefix transfer is 155135/2^256
+under the same independent hidden-secret and empty-table premises; their
+conservative empty-cache node charge is 15691326976/2^128, and recovery's is 45/2^128.
+Full C10 FORS/hypertree/session/forgery translation and concrete backends remain
+open. No new universal build/recover correctness, shuffle-uniformity or
+physical-security result is claimed.
+All 861 theorem closures and 440 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

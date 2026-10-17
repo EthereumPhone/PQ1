@@ -1835,7 +1835,11 @@
         "sphincs-c10/src/address.rs",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenPrefixes.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/RawShuffle.ec",
-        "sphincs-c10/src/shuffle.rs"
+        "sphincs-c10/src/shuffle.rs",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawMerkle.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawFors.ec",
+        "sphincs-c10/src/merkle.rs",
+        "sphincs-c10/src/params.rs"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",

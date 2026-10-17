@@ -28,3 +28,14 @@ import C10Probability.WotsShuffle
 import C10Probability.WotsSigning
 import C10Probability.WotsSigningCharges
 import C10Probability.WotsSignerExamples
+import C10Probability.TreeShape
+import C10Probability.TreeMerge
+import C10Probability.TreeRun
+import C10Probability.MerkleInputs
+import C10Probability.Subtree
+import C10Probability.MerkleBuild
+import C10Probability.MerkleRecover
+import C10Probability.TreeAccess
+import C10Probability.MerkleCharges
+import C10Probability.MerkleExamples
+import C10Probability.TreeCached
