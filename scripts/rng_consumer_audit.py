@@ -59,6 +59,13 @@ EXPECTED = {
     "secure/src/bench_masked_sha.rs": Counter(
         {"let _ = crate::rng::fill(&mut b);": 1}
     ),
+    # `trng-dump` (DVT row 4.8): fills a buffer with platform-TRNG output so
+    # the host can read it over SWD for SP 800-90B. The output is the
+    # measurement, never a key; the feature is in PROD_FORBIDDEN and fenced in
+    # nsc/mod.rs.
+    "secure/src/trng_dump.rs": Counter(
+        {"while crate::rng::fill(buf).is_err() {": 1}
+    ),
     "secure/src/se050/scp03.rs": Counter(
         {
             "crate::rng::fill(&mut host_challenge).map_err(|_| Se050Error::Scp03)?;": 1,

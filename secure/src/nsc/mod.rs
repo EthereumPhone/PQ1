@@ -437,6 +437,9 @@ compile_error!(
         // SECS/CECS. A fault-injection path has no business in a shipping
         // image under any circumstances.
         feature = "rng-fault-probe",
+        // TRNG dump for SP 800-90B (DVT 4.8): parks after TRNG init and
+        // exposes TRNG output in SRAM for the debugger. Terminal bench image.
+        feature = "trng-dump",
         // Shows the duress setup screens but stores nothing: a shipping
         // image with it would tell the user a duress PIN is set when none is.
         feature = "duress-ui-test",

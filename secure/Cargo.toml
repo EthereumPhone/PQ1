@@ -602,6 +602,10 @@ ui-golden-render = ["ui-capture", "erc7730-dev-unattested"]
 # slowdown, then SYS_EXITs. Pairs with hw-sha256 (implied by stm32u585)
 # so the HASH-peripheral baseline is real. Use `make bench-masked-sha-hw`.
 bench-masked-sha = ["stm32u585", "dep:masked-sha2"]
+# TRNG output dump for SP 800-90B (DVT checklist row 4.8). Parks after TRNG
+# init, fills a 64 KB SRAM buffer via `hw::rng::fill`, and hands it to the
+# host over SWD (`tools/dvt/trng_dump.py`). Bench only; never ship.
+trng-dump = ["stm32u585"]
 # F-24 stage E Phase 1 — hardware flicker validation harness for the
 # decoy-mnemonic-frame defense. Short-circuits `main()` into a forever-
 # loop that renders page 0 of a fixed test mnemonic interleaved with

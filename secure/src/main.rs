@@ -365,6 +365,10 @@ mod factory_ui;
 #[cfg(feature = "bench-masked-sha")]
 mod bench_masked_sha;
 
+/// TRNG output dump over SWD for SP 800-90B (`trng-dump`, DVT row 4.8).
+#[cfg(feature = "trng-dump")]
+mod trng_dump;
+
 // ── Test-only re-includes for the `secure-nsc-sign-userop` slice ──
 //
 // `nsc` itself is `#[cfg(not(test))]` because most of its files pull in
@@ -1672,6 +1676,10 @@ fn main() -> ! {
     // Never returns. Does nothing unless `bench-masked-sha` is enabled.
     #[cfg(feature = "bench-masked-sha")]
     bench_masked_sha::run_and_halt();
+
+    // TRNG dump for SP 800-90B (DVT row 4.8). Never returns.
+    #[cfg(feature = "trng-dump")]
+    trng_dump::run_and_halt();
 
     // SAES self-test (Tier 1 of work-todo #7). Runs once at boot,
     // halts on PASS/FAIL. Does nothing unless `saes-self-test` is
