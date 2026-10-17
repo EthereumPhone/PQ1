@@ -2434,3 +2434,41 @@ fn negative_admin_existence_probe_does_not_unwrap_or_false_into_a_write() {
         "an unanswerable existence probe must propagate, not write"
     );
 }
+
+/// DVT row 4.9 (EVT-3D21 2026-10-17): after one bus fault the card had
+/// dropped the SCP03 session while the host still held `ready &&
+/// scp03.active`, so `init()` returned early and every later `random` failed
+/// until reboot. `random` must retry once through `reinit()` (full SELECT +
+/// SCP03 establish), mirroring `OptigaTrustM::random`, and zero the buffer
+/// before each attempt and on final failure.
+#[test]
+fn source_pin_random_reestablishes_scp03_after_failure() {
+    let start = MOD_SRC
+        .find("pub fn random(&mut self, buf: &mut [u8]) -> Result<(), Se050Error> {")
+        .expect("Se050::random");
+    let end = start + MOD_SRC[start..].find("\n    }\n").expect("end of random");
+    let body = &MOD_SRC[start..end];
+    assert!(body.contains("for attempt in 0..2u8 {"));
+    assert!(body.contains("if attempt == 0 { self.init() } else { self.reinit() }"));
+    assert!(body.matches("buf.fill(0);").count() >= 2);
+    assert!(body.contains("Err(last_err)"));
+}
+
+/// DVT row 4.9 (EVT-3D21 2026-10-17): a timeout left I2C4 mid-transfer and,
+/// with nothing else on that bus, every later transfer timed out too, so the
+/// SE050 stayed unreachable after the bus came back. `wait_flag`'s timeout
+/// exit must software-reset the peripheral (CR1.PE low, then high).
+#[test]
+fn source_pin_i2c_timeout_software_resets_peripheral() {
+    let start = I2C_SRC.find("fn wait_flag(mask: u32)").expect("wait_flag");
+    let end = start + I2C_SRC[start..].find("\n}\n").expect("end of wait_flag");
+    let body = &I2C_SRC[start..end];
+    let reset = body.find("software_reset();").expect("timeout path must reset");
+    let timeout = body.rfind("Err(I2cError::Timeout)").expect("timeout return");
+    assert!(reset < timeout, "the reset must run before the timeout is returned");
+    let f = I2C_SRC.find("fn software_reset()").expect("software_reset");
+    let fbody = &I2C_SRC[f..f + I2C_SRC[f..].find("\n}\n").unwrap()];
+    let clear = fbody.find("v & !CR1_PE").expect("PE cleared");
+    let set = fbody.find("v | CR1_PE").expect("PE set again");
+    assert!(clear < set);
+}

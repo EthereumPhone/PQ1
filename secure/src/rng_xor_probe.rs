@@ -277,6 +277,15 @@ pub fn run_and_halt(se: &mut crate::dual_se::DualSecureElement) -> ! {
     }
     hprintln!("[xor] SUMMARY calls={} ok={} xor_ok={}", sizes.len(), ok_calls, xor_ok);
 
+    // ---- Part 3: OPTIGA handshake-nonce soak (DVT 6.3) -----------------
+    // `RNG_PROBE_SKIP_SOAK=1` at build time skips the ~2-minute soak (for
+    // debug-log builds, where its draws would flood semihosting).
+    let soak = if option_env!("RNG_PROBE_SKIP_SOAK").is_some() {
+        "SKIPPED"
+    } else {
+        optiga_nonce_soak(se)
+    };
+
     // ---- Part 2a-i: SE1_EN low (informational) --------------------------
     // Run 1 found the SE050 still answering 50 ms after SE1_EN went low, so
     // this leg only records whether a longer hold stops it.
@@ -342,9 +351,10 @@ pub fn run_and_halt(se: &mut crate::dual_se::DualSecureElement) -> ! {
     );
 
     hprintln!(
-        "[xor] === RNG-XOR-PROBE DONE: xor_ok={}/{} se050_unreachable={} se050_recovered={} optiga_reset={} ===",
+        "[xor] === RNG-XOR-PROBE DONE: xor_ok={}/{} soak={} se050_unreachable={} se050_recovered={} optiga_reset={} ===",
         xor_ok,
         sizes.len(),
+        soak,
         if a { "FAIL-CLOSED" } else { "NOT-FAIL-CLOSED" },
         recovered as u8,
         if b { "FAIL-CLOSED" } else { "NOT-FAIL-CLOSED" }
@@ -352,7 +362,97 @@ pub fn run_and_halt(se: &mut crate::dual_se::DualSecureElement) -> ! {
     park();
 }
 
+/// Distance, in records, from the session's next host record / next chip
+/// reply to the nonce a handshake Finished message used; `None` when the
+/// handshake value is already behind the counter (no reuse possible).
+fn handshake_gaps(s: (u32, u32, u32, u32)) -> (Option<u32>, Option<u32>) {
+    let (enc, dec, enc_hs, dec_hs) = s;
+    let tx = if enc_hs >= enc { Some(enc_hs - enc) } else { None };
+    let rx = if dec_hs > dec { Some(dec_hs - dec - 1) } else { None };
+    (tx, rx)
+}
+
+/// Drive shielded OPTIGA draws through the production `random` path (which
+/// runs `ensure_shield`, and so the F-1 guard, before every draw) until the
+/// session walks up to a handshake nonce. PASS: the firmware renegotiates with
+/// at least one record of distance left, never at zero, and draws keep
+/// succeeding afterwards.
+fn optiga_nonce_soak(se: &mut crate::dual_se::DualSecureElement) -> &'static str {
+    const MAX_DRAWS: u32 = 70_000;
+    let Some(first) = se.optiga.bench_shield_sequences() else {
+        hprintln!("[6.3] soak: no active shield session; skipped");
+        return "NO-SESSION";
+    };
+    let (gtx, grx) = handshake_gaps(first);
+    hprintln!(
+        "[6.3] soak start: enc_seq={:#x} dec_seq={:#x} slave_seq={:#x} master_seq={:#x} gap_tx={:?} gap_rx={:?}",
+        first.0, first.1, first.2, first.3, gtx, grx
+    );
+    if gtx.is_none() && grx.is_none() {
+        hprintln!("[6.3] soak: handshake numbers already behind both counters; nothing to reach");
+        return "NOTHING-TO-REACH";
+    }
+    let mut prev = first;
+    let mut min_gap = u32::MAX;
+    let mut renegotiations = 0u32;
+    let mut errors = 0u32;
+    let mut zero_gap_seen = false;
+    let mut draws_after = 0u32;
+    let mut i = 0u32;
+    while i < MAX_DRAWS {
+        i += 1;
+        let mut b = [0u8; 8];
+        if se.optiga.random(&mut b).is_err() {
+            errors += 1;
+            hprintln!("[6.3] soak: draw {} failed (errors={})", i, errors);
+            if errors >= 5 {
+                break;
+            }
+            continue;
+        }
+        let Some(s) = se.optiga.bench_shield_sequences() else {
+            continue;
+        };
+        if (s.2, s.3) != (prev.2, prev.3) {
+            renegotiations += 1;
+            let (ptx, prx) = handshake_gaps(prev);
+            hprintln!(
+                "[6.3] soak: RENEGOTIATED at draw {}: before enc={:#x} dec={:#x} hs=({:#x},{:#x}) gap_tx={:?} gap_rx={:?}; after enc={:#x} dec={:#x} hs=({:#x},{:#x})",
+                i, prev.0, prev.1, prev.2, prev.3, ptx, prx, s.0, s.1, s.2, s.3
+            );
+        } else {
+            let (tx, rx) = handshake_gaps(s);
+            for g in [tx, rx].into_iter().flatten() {
+                min_gap = min_gap.min(g);
+                if g == 0 {
+                    zero_gap_seen = true;
+                }
+            }
+        }
+        if renegotiations > 0 {
+            draws_after += 1;
+            if draws_after >= 200 {
+                break;
+            }
+        }
+        if i % 5000 == 0 {
+            let (tx, rx) = handshake_gaps(s);
+            hprintln!("[6.3] soak: {} draws, gap_tx={:?} gap_rx={:?}", i, tx, rx);
+        }
+        prev = s;
+    }
+    let pass = renegotiations >= 1 && !zero_gap_seen && errors == 0 && draws_after >= 200;
+    hprintln!(
+        "[6.3] soak end: draws={} renegotiations={} min_gap_before_renegotiation={} zero_gap_seen={} errors={} draws_after_renegotiation={} -> {}",
+        i, renegotiations, min_gap, zero_gap_seen, errors, draws_after,
+        if pass { "PASS" } else { "NOT-PASS" }
+    );
+    if pass { "PASS" } else { "NOT-PASS" }
+}
+
 fn park() -> ! {
+    // End the `probe-rs run` session; the verdict is in the log.
+    cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_SUCCESS);
     loop {
         cortex_m::asm::wfe();
     }

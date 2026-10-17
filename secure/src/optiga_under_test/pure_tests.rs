@@ -2098,6 +2098,118 @@ fn negative_shield_wrap_past_nonce_threshold_forces_renegotiation() {
     );
 }
 
+// ── Audit F-1 / DVT row 6.3: handshake-nonce reuse ────────────────────
+//
+// MasterFinished goes out under the host key with nonce `slave_seq`; host
+// records then count up from `master_seq + 1`. SlaveFinished comes back under
+// the chip key with nonce `master_seq`; chip responses count up from
+// `slave_seq + 1`. The chip picks both numbers and EVT silicon returned
+// unequal ones in 2/2 handshakes (run 1 slave 0x395f / master 0x61f1, run 2
+// slave 0xad87 / master 0x8f97), so one direction always walks toward a
+// burned nonce. These pin the guard that stops it getting there.
+
+#[test]
+fn negative_handshake_nonce_reachable_predicate() {
+    use shield::handshake_nonce_reachable as r;
+    // Equal numbers: neither direction can ever collide.
+    assert!(!r(101, 100, 100, 100, 0));
+    assert!(!r(101, 100, 100, 100, u32::MAX - 3));
+    // Host direction (slave_seq > master_seq): the record numbered slave_seq.
+    assert!(r(0xad87, 0x8f97, 0xad87, 0x8f97, 0), "exact reuse");
+    assert!(!r(0xad86, 0x8f97, 0xad87, 0x8f97, 0), "one before is fine at zero headroom");
+    assert!(r(0xad86, 0x8f97, 0xad87, 0x8f97, 1), "but inside one record of headroom");
+    assert!(!r(0xad88, 0x8f97, 0xad87, 0x8f97, 64), "already passed: harmless");
+    // Chip direction (master_seq > slave_seq): a reply carries last_rx+1..=last_rx+3.
+    assert!(r(1, 0x61f0, 0x395f, 0x61f1, 0), "next reply could be master_seq");
+    assert!(r(1, 0x61ee, 0x395f, 0x61f1, 0), "three ahead is still in the reply window");
+    assert!(!r(1, 0x61ed, 0x395f, 0x61f1, 0), "four ahead is not");
+    assert!(!r(1, 0x61f1, 0x395f, 0x61f1, 64), "already passed: harmless");
+    // Fresh sessions from the two EVT handshakes are far from both.
+    assert!(!r(0x8f98, 0xad87, 0xad87, 0x8f97, 64));
+    assert!(!r(0x61f2, 0x395f, 0x395f, 0x61f1, 64));
+}
+
+#[test]
+fn negative_shield_wrap_refuses_record_that_reuses_master_finished_nonce() {
+    // ASSUMPTION ATTACKED: the host never sends a record under the nonce
+    // MasterFinished used. EVT run 2 shape, advanced to the colliding record.
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x31; 16], [0x31; 4], 0xad86, 0x8f97);
+    sc.set_handshake_sequences_for_test(0xad87, 0x8f97);
+    let mut out = [0u8; 64];
+    sc.wrap_command(b"last-safe", &mut out)
+        .expect("record 0xad86 does not reuse a nonce");
+    assert_eq!(&out[1..5], &[0x00, 0x00, 0xad, 0x86]);
+    let res = sc.wrap_command(b"would-reuse", &mut out);
+    assert!(matches!(res, Err(shield::ShieldError::NotActive)));
+    assert!(!sc.active, "the session must close so the caller renegotiates");
+}
+
+#[test]
+fn negative_shield_wrap_refuses_when_reply_could_reuse_slave_finished_nonce() {
+    // ASSUMPTION ATTACKED: the host never solicits a chip reply that could be
+    // numbered like SlaveFinished. EVT run 1 shape: master_seq 0x61f1 lies
+    // within the 1..=3 reply window of the last chip sequence.
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x32; 16], [0x32; 4], 0x61f2, 0x61ee);
+    sc.set_handshake_sequences_for_test(0x395f, 0x61f1);
+    let mut out = [0u8; 64];
+    let res = sc.wrap_command(b"x", &mut out);
+    assert!(matches!(res, Err(shield::ShieldError::NotActive)));
+    assert!(!sc.active);
+}
+
+#[test]
+fn negative_shield_unwrap_rejects_response_numbered_like_slave_finished() {
+    // Defence in depth: even a correctly authenticated response is refused
+    // if its sequence equals master_seq (it reused SlaveFinished's nonce).
+    const KEY: [u8; 16] = [0x33; 16];
+    const NONCE_BASE: [u8; 4] = [0x33; 4];
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test(KEY, NONCE_BASE, 0x61f2, 0x61f0);
+    sc.set_handshake_sequences_for_test(0x395f, 0x61f1);
+    let mut input = [0u8; 64];
+    let n = make_protected_response(&KEY, &NONCE_BASE, 0x61f1, b"reused", &mut input);
+    let mut out = [0u8; 64];
+    let mut receipt = crate::fi::OK_SENTINEL;
+    let res = sc.unwrap_response(&input[..n], &mut out, &mut receipt);
+    assert!(matches!(res, Err(shield::ShieldError::DecryptFailed)));
+    assert_eq!(receipt, crate::fi::FAIL_SENTINEL);
+}
+
+#[test]
+fn positive_shield_renegotiation_due_tracks_headroom() {
+    let mut sc = shield::ShieldedConnection::new();
+    assert!(!sc.renegotiation_due(), "an inactive session is never due");
+    // Run 2 shape, fresh: 7,663 records of room, far beyond the headroom.
+    sc.activate_for_test([0x34; 16], [0x34; 4], 0x8f98, 0xad87);
+    sc.set_handshake_sequences_for_test(0xad87, 0x8f97);
+    assert!(!sc.renegotiation_due());
+    // Within HANDSHAKE_NONCE_HEADROOM records of the burned nonce: due.
+    let close = 0xad87 - shield::HANDSHAKE_NONCE_HEADROOM;
+    sc.activate_for_test([0x34; 16], [0x34; 4], close, 0xad87);
+    sc.set_handshake_sequences_for_test(0xad87, 0x8f97);
+    assert!(sc.renegotiation_due());
+    sc.activate_for_test([0x34; 16], [0x34; 4], close - 1, 0xad87);
+    sc.set_handshake_sequences_for_test(0xad87, 0x8f97);
+    assert!(!sc.renegotiation_due());
+}
+
+#[test]
+fn source_pin_ensure_shield_renegotiates_before_handshake_nonce_reuse() {
+    // ensure_shield is the only place a renegotiation can happen without
+    // breaking a multi-APDU authorisation sequence (each such sequence calls
+    // it once, at its start). Pin that it consults the guard and is bounded.
+    let start = MOD_SRC
+        .find("pub(crate) fn ensure_shield(&mut self)")
+        .expect("ensure_shield");
+    let body = &MOD_SRC[start..start + 6000];
+    assert!(body.contains("for _ in 0..=MAX_NONCE_RENEGOTIATIONS {"));
+    assert!(body.contains("if self.shield.renegotiation_due() {"));
+    assert!(body.contains("self.hard_reset_and_reinit()?;"));
+    assert!(body.contains("if !self.shield.renegotiation_due() {\n                    return Ok(());"));
+}
+
 #[test]
 fn negative_shield_wrap_refused_when_receive_state_at_threshold() {
     // ASSUMPTION ATTACKED: the receive direction's last authenticated

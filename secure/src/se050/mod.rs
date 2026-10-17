@@ -763,19 +763,37 @@ impl Se050 {
         if buf.is_empty() {
             return Ok(());
         }
-        buf.fill(0);
-        crate::fi::zeroize_barrier();
-        if let Err(error) = self.init() {
-            return Err(error);
-        }
-        let result = unsafe {
-            apdu::get_random(&mut self.t1, &mut self.scp03, buf).map(|_| ())
-        };
-        if result.is_err() {
+        // Self-heal, one bounded retry, as `OptigaTrustM::random` does. Once a
+        // bus fault lands mid-APDU the card drops the SCP03 session (the next
+        // command answers 0x6982, then 0x6985) while the host still holds
+        // `ready && scp03.active`, so `init()` returned early on every later
+        // call and every strong-RNG draw failed until reboot (DVT row 4.9,
+        // EVT-3D21 2026-10-17). On a failure, discard the session so the
+        // retry runs the full SELECT + SCP03 establish. A second failure
+        // surfaces as Err; `rng_strong::fill` fails closed.
+        let mut last_err = Se050Error::Transport;
+        for attempt in 0..2u8 {
             buf.fill(0);
             crate::fi::zeroize_barrier();
+            let result = if attempt == 0 { self.init() } else { self.reinit() }.and_then(|()| {
+                unsafe { apdu::get_random(&mut self.t1, &mut self.scp03, buf).map(|_| ()) }
+            });
+            match result {
+                Ok(()) => return Ok(()),
+                Err(error) => {
+                    if attempt == 0 {
+                        secure_log!(
+                            "[SE050] random: {:?} — dropping SCP03 session, re-establish + retry",
+                            error
+                        );
+                    }
+                    last_err = error;
+                }
+            }
         }
-        result
+        buf.fill(0);
+        crate::fi::zeroize_barrier();
+        Err(last_err)
     }
 
     /// PROBE ONLY (`duress-probe-e2e`, §32 duress-PIN feasibility):

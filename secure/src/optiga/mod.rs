@@ -88,6 +88,11 @@ const RESET_SENTINEL: u8 = 0xFF;
 /// Caches the encrypted entropy blob, VK, and bootstrap VK in struct fields
 /// after provisioning or unlock, so signing operations don't require
 /// re-authenticating against the hardware.
+/// Fresh handshakes `ensure_shield` attempts when a session is within
+/// `shield::HANDSHAKE_NONCE_HEADROOM` records of reusing a handshake nonce.
+#[cfg(not(feature = "optiga-no-shield"))]
+const MAX_NONCE_RENEGOTIATIONS: u8 = 3;
+
 pub struct OptigaTrustM {
     ifx: IfxState,
     shield: ShieldedConnection,
@@ -570,45 +575,79 @@ impl OptigaTrustM {
         }
         #[cfg(not(feature = "optiga-no-shield"))]
         {
-            if !self.shield.active {
-                if !self.shield.pbs_loaded {
-                    return Err(OptigaError::Shield);
+            // Audit F-1 (DVT row 6.3): the chip picks both handshake sequence
+            // numbers, and unless they are equal one direction's record
+            // counter walks toward the nonce a Finished message already used.
+            // Renegotiate here, at the start of an operation, while at least
+            // `HANDSHAKE_NONCE_HEADROOM` records remain, so `wrap_command`'s
+            // exact backstop never fires inside an operation. A fresh
+            // handshake draws new numbers; a few tries always suffice in
+            // practice, and the loop is bounded anyway.
+            for _ in 0..=MAX_NONCE_RENEGOTIATIONS {
+                if self.shield.renegotiation_due() {
+                    secure_log!("[OPTIGA/shield] handshake nonce within headroom — renegotiating");
+                    #[cfg(feature = "stm32u585")]
+                    self.hard_reset_and_reinit()?;
+                    #[cfg(not(feature = "stm32u585"))]
+                    {
+                        self.shield.active = false;
+                    }
                 }
-                // The PRL state machine does NOT require E140 at LcsO=op —
-                // this was an earlier misread of the SRM on our side. The
-                // Infineon pairing example explicitly runs with E140 at
-                // LcsO=Creation (see `example_pair_host_and_optiga_using_
-                // pre_shared_secret.c:30-35`, `#define FINAL_LCSO_STATE
-                // (LCSO_STATE_CREATION)`), and the presentation-layer code
-                // (`ifx_i2c_presentation_layer.c:820-829`) has no LcsO check
-                // in the handshake dispatch. The SRM "Pairing Use Case
-                // Pre-conditions" explicitly requires `LcsO < operational`,
-                // not `= operational`. Bumping LcsO=op is an irreversible
-                // hardening primitive (it locks the PBS in place so only
-                // `Conf(E140)` can rewrite it afterwards), but its exact actor
-                // and order relative to the candidate salted-final rotation
-                // are unresolved. The `optiga-lock-operational`
-                // feature exists for controlled validation; it is NOT
-                // production authority and is not a handshake prerequisite.
-                unsafe {
-                    // D1 follow-up: do not discard WHY the handshake failed.
-                    // `HandshakeTransport` means the PRL exchange never got far
-                    // enough to prove anything about the PBS — surface it as a
-                    // transport fault so `is_inconclusive()` sees it and no
-                    // caller can read it as "wrong PBS". Only
-                    // `HandshakeRejected` (SlaveFinished failed to authenticate
-                    // under keys derived from the loaded PBS) is an
-                    // authoritative verdict. `map_err(|_| Shield)` collapsed
-                    // both, which is how a bus fault could reach the E140
-                    // rewrite.
-                    self.shield.establish(&mut self.ifx).map_err(|e| match e {
-                        shield::ShieldError::HandshakeTransport => OptigaError::Transport,
-                        _ => OptigaError::Shield,
-                    })?;
+                if !self.shield.active {
+                    if !self.shield.pbs_loaded {
+                        return Err(OptigaError::Shield);
+                    }
+                    // The PRL state machine does NOT require E140 at LcsO=op —
+                    // this was an earlier misread of the SRM on our side. The
+                    // Infineon pairing example explicitly runs with E140 at
+                    // LcsO=Creation (see `example_pair_host_and_optiga_using_
+                    // pre_shared_secret.c:30-35`, `#define FINAL_LCSO_STATE
+                    // (LCSO_STATE_CREATION)`), and the presentation-layer code
+                    // (`ifx_i2c_presentation_layer.c:820-829`) has no LcsO check
+                    // in the handshake dispatch. The SRM "Pairing Use Case
+                    // Pre-conditions" explicitly requires `LcsO < operational`,
+                    // not `= operational`. Bumping LcsO=op is an irreversible
+                    // hardening primitive (it locks the PBS in place so only
+                    // `Conf(E140)` can rewrite it afterwards), but its exact actor
+                    // and order relative to the candidate salted-final rotation
+                    // are unresolved. The `optiga-lock-operational`
+                    // feature exists for controlled validation; it is NOT
+                    // production authority and is not a handshake prerequisite.
+                    unsafe {
+                        // D1 follow-up: do not discard WHY the handshake failed.
+                        // `HandshakeTransport` means the PRL exchange never got far
+                        // enough to prove anything about the PBS — surface it as a
+                        // transport fault so `is_inconclusive()` sees it and no
+                        // caller can read it as "wrong PBS". Only
+                        // `HandshakeRejected` (SlaveFinished failed to authenticate
+                        // under keys derived from the loaded PBS) is an
+                        // authoritative verdict. `map_err(|_| Shield)` collapsed
+                        // both, which is how a bus fault could reach the E140
+                        // rewrite.
+                        self.shield.establish(&mut self.ifx).map_err(|e| match e {
+                            shield::ShieldError::HandshakeTransport => OptigaError::Transport,
+                            _ => OptigaError::Shield,
+                        })?;
+                    }
+                    secure_log!("[OPTIGA/shield] PRL handshake OK — encrypted I2C active");
                 }
-                secure_log!("[OPTIGA/shield] PRL handshake OK — encrypted I2C active");
+                if !self.shield.renegotiation_due() {
+                    return Ok(());
+                }
             }
-            Ok(())
+            self.shield.active = false;
+            Err(OptigaError::Shield)
+        }
+    }
+
+    /// Bench only (`rng-xor-probe`): the shield's sequence state, for the
+    /// DVT 6.3 renegotiation soak. `None` while no session is active.
+    #[cfg(feature = "rng-xor-probe")]
+    pub(crate) fn bench_shield_sequences(&self) -> Option<(u32, u32, u32, u32)> {
+        if self.shield.active {
+            Some(self.shield.sequence_snapshot())
+        } else {
+            None
         }
     }
 

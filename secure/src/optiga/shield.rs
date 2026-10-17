@@ -45,6 +45,11 @@ const PRL_MAX_FORWARD_DELTA: u32 = 3;
 /// Renegotiate before a record sequence reaches the reference driver's nonce
 /// exhaustion threshold.
 const PRL_SEQUENCE_THRESHOLD: u32 = 0xFFFF_FFF0;
+/// Records of headroom `OptigaTrustM::ensure_shield` keeps before a handshake
+/// nonce could be reused (see [`handshake_nonce_reachable`]). It renegotiates
+/// at the start of an operation, never inside one, so this must exceed the
+/// records any single operation sends after its one `ensure_shield` call.
+pub(crate) const HANDSHAKE_NONCE_HEADROOM: u32 = 64;
 
 /// Protocol version for pre-shared-secret mode.
 const PROTOCOL_VERSION: u8 = 0x01;
@@ -147,6 +152,12 @@ pub struct ShieldedConnection {
     /// Complement binding for `dec_seq`; any torn or faulted publication is
     /// rejected before a record can be authenticated.
     dec_seq_inv: u32,
+    /// Sequence MasterFinished was sent under (`enc_key`): the chip's
+    /// `slave_seq`. A host record with this sequence would reuse its nonce.
+    enc_handshake_seq: u32,
+    /// Sequence SlaveFinished was sent under (`dec_key`): the chip's
+    /// `master_seq`. A chip response with this sequence would reuse its nonce.
+    dec_handshake_seq: u32,
     /// Whether the shielded connection is active.
     pub active: bool,
     /// Platform Binding Secret. 64 bytes per OPTIGA Trust M SRM §
@@ -199,6 +210,39 @@ pub(crate) fn verify_response_sequence_into(
     unsafe {
         core::ptr::write_volatile(receipt, crate::fi::OK_SENTINEL);
     }
+}
+
+/// Could the next record, or the chip's reply to it, come within `headroom`
+/// records of reusing a handshake (key, nonce) pair?
+///
+/// Both sequence numbers come from the chip (audit F-1, DVT row 6.3; EVT
+/// silicon returned unequal values in 2/2 handshakes). Infineon's reference
+/// PRL, which ours follows, sends MasterFinished under the host key with nonce
+/// `slave_seq` and then numbers host records from `master_seq + 1`; the chip
+/// sends SlaveFinished under its key with nonce `master_seq` and numbers its
+/// responses from `slave_seq + 1`. So when `slave_seq > master_seq` the host
+/// record numbered `slave_seq` reuses MasterFinished's nonce, and when
+/// `master_seq > slave_seq` the chip response numbered `master_seq` reuses
+/// SlaveFinished's. The plaintext of both Finished messages is public, so a
+/// reused nonce hands a bus tap that record's plaintext. Neither number can be
+/// moved (the chip accepts records only 1..=3 ahead), so the defence is to
+/// renegotiate before either counter can get there.
+///
+/// `next_tx` is the sequence the next host record uses; `last_rx` the last
+/// authenticated chip sequence, whose next reply carries `last_rx + 1 ..=
+/// last_rx + PRL_MAX_FORWARD_DELTA`. A handshake value already passed is
+/// harmless: counters only increase.
+pub(crate) const fn handshake_nonce_reachable(
+    next_tx: u32,
+    last_rx: u32,
+    tx_handshake: u32,
+    rx_handshake: u32,
+    headroom: u32,
+) -> bool {
+    let tx = tx_handshake >= next_tx && tx_handshake - next_tx <= headroom;
+    let rx = rx_handshake > last_rx
+        && rx_handshake - last_rx <= PRL_MAX_FORWARD_DELTA.saturating_add(headroom);
+    tx || rx
 }
 
 /// Publish an authenticated response counter as a duplicated value/complement
@@ -305,6 +349,8 @@ impl ShieldedConnection {
             enc_seq_inv: !0,
             dec_seq: 0,
             dec_seq_inv: !0,
+            enc_handshake_seq: 0,
+            dec_handshake_seq: 0,
             active: false,
             pbs: [0; 64],
             pbs_loaded: false,
@@ -343,7 +389,23 @@ impl ShieldedConnection {
         self.enc_seq_inv = !0;
         self.dec_seq = 0;
         self.dec_seq_inv = !0;
+        self.enc_handshake_seq = 0;
+        self.dec_handshake_seq = 0;
         self.active = false;
+    }
+
+    /// True when the session is within [`HANDSHAKE_NONCE_HEADROOM`] records
+    /// of reusing a handshake nonce, so the caller should renegotiate before
+    /// starting another operation (`OptigaTrustM::ensure_shield`).
+    pub fn renegotiation_due(&self) -> bool {
+        self.active
+            && handshake_nonce_reachable(
+                self.enc_seq,
+                self.dec_seq,
+                self.enc_handshake_seq,
+                self.dec_handshake_seq,
+                HANDSHAKE_NONCE_HEADROOM,
+            )
     }
 
     /// Construct a deterministic authenticated-record state for the host-only
@@ -364,6 +426,8 @@ impl ShieldedConnection {
         self.enc_seq_inv = !next_master_sequence;
         self.dec_seq = last_slave_sequence;
         self.dec_seq_inv = !last_slave_sequence;
+        self.enc_handshake_seq = next_master_sequence.wrapping_sub(1);
+        self.dec_handshake_seq = last_slave_sequence;
         self.active = true;
     }
 
@@ -376,6 +440,21 @@ impl ShieldedConnection {
             self.dec_seq,
             self.dec_seq_inv,
         )
+    }
+
+    /// `(enc_seq, dec_seq, enc_handshake_seq, dec_handshake_seq)` for the
+    /// `rng-xor-probe` renegotiation soak (DVT 6.3). Bench only.
+    #[cfg(feature = "rng-xor-probe")]
+    pub(crate) fn sequence_snapshot(&self) -> (u32, u32, u32, u32) {
+        (self.enc_seq, self.dec_seq, self.enc_handshake_seq, self.dec_handshake_seq)
+    }
+
+    /// Set the sequences the handshake Finished messages used, as `establish`
+    /// does from the chip's `slave_seq` / `master_seq`. Host tests only.
+    #[cfg(test)]
+    pub(crate) fn set_handshake_sequences_for_test(&mut self, slave_seq: u32, master_seq: u32) {
+        self.enc_handshake_seq = slave_seq;
+        self.dec_handshake_seq = master_seq;
     }
 
     /// Derive session keys from the PBS and the chip-provided `random_S`.
@@ -404,6 +483,8 @@ impl ShieldedConnection {
         self.enc_seq_inv = !0;
         self.dec_seq = 0;
         self.dec_seq_inv = !0;
+        self.enc_handshake_seq = 0;
+        self.dec_handshake_seq = 0;
 
         key_material.zeroize();
     }
@@ -480,6 +561,33 @@ impl ShieldedConnection {
             core::ptr::addr_of!(self.dec_seq_inv),
             PRL_SEQUENCE_THRESHOLD - 1,
         ) {
+            self.active = false;
+            return Err(ShieldError::NotActive);
+        }
+
+        // Audit F-1: never send a record whose sequence, or whose reply's
+        // sequence window, reaches a nonce a handshake Finished message
+        // already used under the same key. `ensure_shield` renegotiates well
+        // before this; this is the exact backstop. Closing forces a fresh
+        // handshake, as the threshold check above does.
+        let handshake_nonce_hit = || {
+            // SAFETY: plain reads of this session's own fields.
+            let (tx, rx, tx_hs, rx_hs) = unsafe {
+                (
+                    core::ptr::read_volatile(&self.enc_seq),
+                    core::ptr::read_volatile(&self.dec_seq),
+                    core::ptr::read_volatile(&self.enc_handshake_seq),
+                    core::ptr::read_volatile(&self.dec_handshake_seq),
+                )
+            };
+            handshake_nonce_reachable(tx, rx, tx_hs, rx_hs, 0)
+        };
+        if handshake_nonce_hit() {
+            self.active = false;
+            return Err(ShieldError::NotActive);
+        }
+        crate::fi::wait_random();
+        if handshake_nonce_hit() {
             self.active = false;
             return Err(ShieldError::NotActive);
         }
@@ -603,6 +711,12 @@ impl ShieldedConnection {
         }
         crate::fi::wait_random();
         if unsafe { core::ptr::read_volatile(&sequence_receipt) } != crate::fi::OK_SENTINEL {
+            return Err(ShieldError::DecryptFailed);
+        }
+
+        // Audit F-1: a response numbered like SlaveFinished reuses its nonce.
+        // `wrap_command` never solicits one; refuse it if it arrives anyway.
+        if seq == self.dec_handshake_seq {
             return Err(ShieldError::DecryptFailed);
         }
 
@@ -950,6 +1064,10 @@ impl ShieldedConnection {
             crate::fi::zeroize_barrier();
             return Err(ShieldError::HandshakeRejected);
         }
+        // Remember which sequences the two Finished messages burned, so no
+        // later record can reuse their (key, nonce) pairs (audit F-1).
+        self.enc_handshake_seq = slave_seq;
+        self.dec_handshake_seq = master_seq;
         self.active = true;
 
         finished_plain.zeroize();

@@ -36,6 +36,7 @@ const TIMEOUT_LOOPS: u32 = 1_000_000;
 // ---------------------------------------------------------------------------
 
 struct I2cRegs {
+    cr1: Reg32,
     cr2: Reg32,
     isr: RoReg32,
     icr: Reg32,
@@ -54,6 +55,7 @@ struct I2cRegs {
 // safe `.read()` / `.write()` methods.
 const REG: I2cRegs = unsafe {
     I2cRegs {
+        cr1: Reg32::new(I2C_BASE + 0x00),
         cr2: Reg32::new(I2C_BASE + 0x04),
         isr: RoReg32::new(I2C_BASE + 0x18),
         icr: Reg32::new(I2C_BASE + 0x1C),
@@ -78,6 +80,9 @@ const ICR_NACKCF: u32 = 1 << 4;
 const ICR_STOPCF: u32 = 1 << 5;
 const ICR_BERRCF: u32 = 1 << 8;
 const ICR_ARLOCF: u32 = 1 << 9;
+
+// CR1 bits
+const CR1_PE: u32 = 1 << 0; // Peripheral enable
 
 // CR2 bits
 const CR2_START: u32 = 1 << 13;
@@ -144,7 +149,26 @@ fn wait_flag(mask: u32) -> Result<u32, I2cError> {
     }
     #[cfg(feature = "ui-px-film-gaps")]
     crate::ui::px::film_gaps::i2c_timeout(BUS);
+    software_reset();
     Err(I2cError::Timeout)
+}
+
+/// RM0456 I2C software reset: clearing `CR1.PE` releases SCL/SDA, resets the
+/// transfer state machine and clears the status flags; PE must stay low for
+/// at least three APB clock cycles. Configuration (TIMINGR, filters) is kept.
+///
+/// Run on every timeout. A timeout leaves the peripheral mid-transfer (START
+/// pending, BUSY set), and on `pq1` nothing else touches I2C4 to clean that
+/// up, so before this every later transfer timed out too: DVT row 4.9 on
+/// EVT-3D21 (2026-10-17), where 20 `interface_reset` attempts against a
+/// disconnected bus left the SE050 unreachable after the bus came back.
+fn software_reset() {
+    REG.cr1.modify(|v| v & !CR1_PE);
+    // Read back so the write has landed, then wait well past three APB
+    // cycles before re-enabling.
+    let _ = REG.cr1.read();
+    cortex_m::asm::delay(64);
+    REG.cr1.modify(|v| v | CR1_PE);
 }
 
 /// Configure CR2 for a transfer: slave address, direction, byte count,
