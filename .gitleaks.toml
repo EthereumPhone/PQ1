@@ -214,6 +214,14 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/KeygenExhaustion\.ec": "822cfe363dc338e4ca273a5424194b6af401b9043503c71994d8a83379178632",?\s*$''']
 
+
+[[rules.allowlists]]
+description = "Exact public FORS builder-secret proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/ForsBuilderSecret\.ec": "98adcfeb8d516e3239bd4c8ff1e35be0d369e11608fba4fd03d3b17d78d6289b",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
