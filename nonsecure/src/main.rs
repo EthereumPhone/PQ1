@@ -269,9 +269,9 @@ fn main() -> ! {
     loop {
         if let Some(threshold) = hang_threshold {
             let frame = usb::usb_frame_number();
-            hang_frames = hang_frames
-                .wrapping_add((frame.wrapping_sub(hang_last_frame) & 0x7FF) as u32);
-            hang_last_frame = frame;
+            hang_frames = hang_frames.wrapping_add(
+                sphincs_tz_shared::apdu_framing::frame_step(frame, &mut hang_last_frame),
+            );
             if hang_frames >= threshold {
                 // Never bump the heartbeat again: the secure watcher hits
                 // NS_STALL_LIMIT_TICKS after ~4 s, stops kicking, and the

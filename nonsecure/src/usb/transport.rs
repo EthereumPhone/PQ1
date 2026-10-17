@@ -12,7 +12,7 @@
 
 use sphincs_tz_shared::{HID_REPORT_SIZE, HID_TAG_APDU};
 use sphincs_tz_shared::apdu_framing::{
-    frame_delta, FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
+    frame_step, FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
 };
 use super::hid::PqSignerHid;
 use super::UsbBusType;
@@ -71,7 +71,7 @@ pub struct Transport {
     // USB frame number (OTG_DSTS.FNSOF) at the last reassembly-clock
     // sample, or `None` when idle. `Some` precisely while the assembler is
     // mid-APDU (between a seq=0 NeedMore and the matching
-    // ApduComplete/Dropped). `rx_elapsed` accumulates `frame_delta`s from
+    // ApduComplete/Dropped). `rx_elapsed` accumulates `frame_step`s from
     // it: the full-speed frame number wraps every 2.048 s, shorter than
     // the 5 s bound, so a single start→now difference cannot measure it
     // (DVT1 row 11.2 — that difference falsely expired APDUs at every wrap).
@@ -90,7 +90,7 @@ pub struct Transport {
 }
 
 /// 5 s reassembly timeout in USB frames (1 frame = 1 ms SOF), measured by
-/// accumulating `frame_delta`s because the full-speed frame number wraps
+/// accumulating `frame_step`s because the full-speed frame number wraps
 /// every 2.048 s. §19 P0 "Bounded APDU reassembly".
 pub const RX_REASSEMBLY_TIMEOUT_FRAMES: u16 = 5000;
 
@@ -189,8 +189,11 @@ impl Transport {
         };
         // Accumulate per-sample deltas on the 11-bit full-speed frame clock.
         // The NS loop samples at kHz, so each delta is a few frames.
-        self.rx_elapsed = self.rx_elapsed.saturating_add(frame_delta(now_frame, last));
-        self.rx_last_frame = Some(now_frame);
+        let mut last_counted = last;
+        self.rx_elapsed = self
+            .rx_elapsed
+            .saturating_add(frame_step(now_frame, &mut last_counted));
+        self.rx_last_frame = Some(last_counted);
         if self.rx_elapsed >= u32::from(RX_REASSEMBLY_TIMEOUT_FRAMES) {
             diag::bump(&diag::USB_DIAG_RX_TIMEOUTS);
             diag::USB_DIAG_RX_TIMEOUT_LAST.store(

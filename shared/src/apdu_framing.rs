@@ -160,9 +160,42 @@ pub const USB_FS_FRAME_MASK: u16 = 0x7FF;
 /// (the NS loop blocked in a long secure call) loses whole wraps, so callers
 /// that accumulate these deltas measure LONGER deadlines than nominal, never
 /// shorter: a timeout can fire late but never early.
+///
+/// A step in the upper half of the ring (`>= 1024`) reads as a backward step
+/// and counts as 0. The EVT-3D21 trace (2026-10-17, `nonsecure/src/fnsof_trace.rs`)
+/// saw `FNSOF` step back by exactly one frame about once every 4 s, as
+/// `DSTS.DEVLNSTS` toggled (e.g. 17 → 16), plus a few torn reads
+/// (0x7BF → 0x780). Masked, each read as +2,047 or so: about 2 s gained per
+/// event, roughly 1,490 accumulated frames per real second, so the 30 s and
+/// 120 s bounds expired after about 20 s and 80 s. Counting the half-ring as
+/// backward keeps "late, never early": the NS loop samples at hundreds of
+/// kHz, so a real forward gap of >= 1,024 frames only happens inside a long
+/// secure call, and dropping it lengthens the deadline.
 #[must_use]
 pub const fn frame_delta(now: u16, last: u16) -> u32 {
-    (now.wrapping_sub(last) & USB_FS_FRAME_MASK) as u32
+    let d = now.wrapping_sub(last) & USB_FS_FRAME_MASK;
+    if d > USB_FS_FRAME_MASK / 2 {
+        0
+    } else {
+        d as u32
+    }
+}
+
+/// Advance an accumulating frame clock: return [`frame_delta`] from `*last`
+/// to `now`, and move `*last` to `now` only when the clock went forward.
+///
+/// After a backward step `*last` keeps the newest frame already counted, so
+/// the frames between the backward reading and that point are not counted a
+/// second time when the clock moves on. Callers that accumulate deadlines use
+/// this, not `frame_delta` plus `last = now`, which would gain one frame per
+/// backward step.
+#[must_use]
+pub fn frame_step(now: u16, last: &mut u16) -> u32 {
+    let d = frame_delta(now, *last);
+    if d != 0 {
+        *last = now;
+    }
+    d
 }
 
 impl ChainState {
@@ -1339,10 +1372,86 @@ mod frame_clock_tests {
         assert_eq!(frame_delta(5, 3), 2);
         // The DVT1 capture: start 0x7FE, now 0x000 is TWO frames, not 14,338.
         assert_eq!(frame_delta(0x000, 0x7FE), 2);
-        assert_eq!(frame_delta(0x7FF, 0x000), 0x7FF);
+        assert_eq!(frame_delta(0x3FF, 0x000), 0x3FF);
         assert_eq!(frame_delta(0x123, 0x123), 0);
         // Bits above the 11-bit field never leak into a delta.
         assert_eq!(frame_delta(0x3801, 0x0000), 1);
+    }
+
+    #[test]
+    fn backward_frame_steps_count_as_zero() {
+        // EVT-3D21 2026-10-17 FNSOF trace: one-frame backward steps
+        // (DSTS 0x00001106 -> 0x00401006, frame 17 -> 16) and torn reads.
+        assert_eq!(frame_delta(16, 17), 0);
+        assert_eq!(frame_delta(0x7FF, 0x000), 0);
+        assert_eq!(frame_delta(0x780, 0x7BF), 0);
+        assert_eq!(frame_delta(0x4F0, 0x4F7), 0);
+        // The largest forward step still counted, and the first dropped one.
+        assert_eq!(frame_delta(0x3FF, 0x000), 1023);
+        assert_eq!(frame_delta(0x400, 0x000), 0);
+    }
+
+    #[test]
+    fn negative_masked_backward_step_gains_two_seconds() {
+        // The pre-fix arithmetic on the EVT capture: a one-frame backward
+        // step read as 2,047 elapsed frames.
+        let old = u32::from(16u16.wrapping_sub(17) & USB_FS_FRAME_MASK);
+        assert_eq!(old, 2047, "the defect this guards");
+        assert_eq!(frame_delta(16, 17), 0);
+    }
+
+    #[test]
+    fn backward_steps_every_4_s_never_expire_a_chain_early() {
+        // The EVT rate: one one-frame backward step every ~4,000 frames.
+        // Pre-fix each step added ~2 s and a 30 s chain expired after about
+        // 20 s. Now it expires within a few frames of its budget, never before.
+        let mut s = ChainState::new();
+        s.ins = 0x40;
+        let mut last = 0u16;
+        let mut expired_at = None;
+        for t in 1..=40_000u32 {
+            let mut f = t;
+            if t % 4_000 == 0 {
+                f -= 2; // the sample one frame behind its predecessor
+            }
+            let now = (f & u32::from(USB_FS_FRAME_MASK)) as u16;
+            if s.tick_timeout(frame_step(now, &mut last)) {
+                expired_at = Some(t);
+                break;
+            }
+        }
+        assert_eq!(expired_at, Some(ChainState::CHAIN_TIMEOUT_FRAMES));
+    }
+
+    #[test]
+    fn frame_step_holds_last_across_a_backward_step() {
+        let mut last = 17u16;
+        assert_eq!(frame_step(16, &mut last), 0);
+        assert_eq!(last, 17, "a backward reading must not move the reference");
+        assert_eq!(frame_step(18, &mut last), 1);
+        assert_eq!(last, 18);
+        // Across the wrap.
+        let mut last = 0x7FEu16;
+        assert_eq!(frame_step(0x001, &mut last), 3);
+        assert_eq!(last, 0x001);
+    }
+
+    #[test]
+    fn negative_last_equals_now_after_backward_step_counts_frames_twice() {
+        // The shape frame_step replaces: `delta(now, last); last = now`.
+        let mut acc = 0u32;
+        let mut last = 0u16;
+        for f in [1u16, 2, 3, 2, 3, 4] {
+            acc += frame_delta(f, last);
+            last = f;
+        }
+        assert_eq!(acc, 5, "the defect: 4 frames elapsed, 5 counted");
+        let mut acc = 0u32;
+        let mut last = 0u16;
+        for f in [1u16, 2, 3, 2, 3, 4] {
+            acc += frame_step(f, &mut last);
+        }
+        assert_eq!(acc, 4);
     }
 
     #[test]
@@ -1363,11 +1472,10 @@ mod frame_clock_tests {
         let mut expired_at = None;
         for t in 1..=40_000u32 {
             let now = (t & u32::from(USB_FS_FRAME_MASK)) as u16;
-            if s.tick_timeout(frame_delta(now, last)) {
+            if s.tick_timeout(frame_step(now, &mut last)) {
                 expired_at = Some(t);
                 break;
             }
-            last = now;
         }
         assert_eq!(expired_at, Some(ChainState::CHAIN_TIMEOUT_FRAMES));
     }

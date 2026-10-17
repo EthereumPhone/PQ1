@@ -4587,13 +4587,13 @@ fwup-transport-hw: dev-pubkey-fixture fwup-transport-fixture
 	done
 	@if ! lsusb 2>/dev/null | grep -qi '1209:7051'; then \
 	  echo "ERROR: 1209:7051 did not enumerate within 25s — is the USB-C cable plugged into the host?"; \
-	  pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null; \
+	  pkill -f "^probe-rs run --chip $(CHIP)" 2>/dev/null; \
 	  cat /tmp/fwup-transport-run.log | tail -20; \
 	  exit 1; \
 	fi
 	@echo "==> Running transport e2e test (tools/fwup-transport-test.py)..."
 	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) $(FWUP_TEST_ARGS) || rc=$$?; \
-	pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
+	pkill -f "^probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
 	echo "===================================="; \
 	if [ $$rc -eq 0 ]; then \
 	  echo "==> fwup-transport-hw: PASS — full BEGIN+CHUNK+COMMIT round-trip green"; \
@@ -4647,7 +4647,7 @@ fwup-transport-hw-iwdg: dev-pubkey-fixture fwup-transport-fixture
 	done
 	@if ! lsusb 2>/dev/null | grep -qi '1209:7051'; then \
 	  echo "ERROR: 1209:7051 did not enumerate within 25s"; \
-	  pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null; \
+	  pkill -f "^probe-rs run --chip $(CHIP)" 2>/dev/null; \
 	  cat /tmp/fwup-transport-run.log | tail -20; \
 	  exit 1; \
 	fi
@@ -4655,13 +4655,13 @@ fwup-transport-hw-iwdg: dev-pubkey-fixture fwup-transport-fixture
 	@sleep 12
 	@if ! lsusb 2>/dev/null | grep -qi '1209:7051'; then \
 	  echo "==> fwup-transport-hw-iwdg: FAIL — device dropped off USB during idle (IWDG false-fired)"; \
-	  pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null; \
+	  pkill -f "^probe-rs run --chip $(CHIP)" 2>/dev/null; \
 	  exit 1; \
 	fi
 	@echo "==> Still enumerated after 12 s idle — no false-fire ✓"
 	@echo "==> Running transport e2e test (tools/fwup-transport-test.py)..."
 	@rc=0; python3 tools/fwup-transport-test.py --fixture-dir $(FWUP_FIXTURE_DIR) $(FWUP_TEST_ARGS) || rc=$$?; \
-	pkill -f "probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
+	pkill -f "^probe-rs run --chip $(CHIP)" 2>/dev/null || true; \
 	echo "===================================="; \
 	if [ $$rc -eq 0 ]; then \
 	  echo "==> fwup-transport-hw-iwdg: PASS — idle-survival + full round-trip green with IWDG ON"; \

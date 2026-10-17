@@ -21,6 +21,11 @@ static mut FNSOF_SAMPLES: u32 = 0;
 /// Sum of the wrap-aware 11-bit deltas, as `main.rs`'s hook accumulates.
 #[no_mangle]
 static mut FNSOF_ACC: u32 = 0;
+/// The same clock through the production path: `usb::usb_frame_number` and
+/// `apdu_framing::frame_step`. Should advance at 1,000 per second.
+#[no_mangle]
+static mut FNSOF_ACC_FIXED: u32 = 0;
+static mut LAST_FIXED: u16 = u16::MAX;
 #[no_mangle]
 static mut FNSOF_EVENTS: u32 = 0;
 /// Per event: `[sample index, previous DSTS, DSTS, DSTS re-read]`.
@@ -56,6 +61,16 @@ pub fn sample() {
             }
         }
         core::ptr::write_volatile(core::ptr::addr_of_mut!(LAST_DSTS), d);
+        let fixed = crate::usb::usb_frame_number();
+        let mut lf = core::ptr::read_volatile(core::ptr::addr_of!(LAST_FIXED));
+        if lf != u16::MAX {
+            let step = sphincs_tz_shared::apdu_framing::frame_step(fixed, &mut lf);
+            let acc = core::ptr::addr_of_mut!(FNSOF_ACC_FIXED);
+            core::ptr::write_volatile(acc, core::ptr::read_volatile(acc).wrapping_add(step));
+        } else {
+            lf = fixed;
+        }
+        core::ptr::write_volatile(core::ptr::addr_of_mut!(LAST_FIXED), lf);
         core::ptr::write_volatile(core::ptr::addr_of_mut!(FNSOF_SAMPLES), n.wrapping_add(1));
     }
 }

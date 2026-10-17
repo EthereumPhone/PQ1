@@ -166,13 +166,27 @@ pub unsafe fn harden_otg() {
 pub fn usb_frame_number() -> u16 {
     // OTG_DSTS @ device-base (0x800) + 0x08 = OTG_FS base + 0x808.
     const OTG_DSTS: *const u32 = (USB_OTG_BASE + 0x808) as *const u32;
+    use sphincs_tz_shared::apdu_framing::USB_FS_FRAME_MASK;
+    let frame = |dsts: u32| ((dsts >> 8) as u16) & USB_FS_FRAME_MASK;
     // SAFETY: read-only access to an NS-mapped USB OTG register; no
     // side effects, races, or aliasing concerns for a volatile load.
-    let dsts = unsafe { core::ptr::read_volatile(OTG_DSTS) };
+    let read = || frame(unsafe { core::ptr::read_volatile(OTG_DSTS) });
+    // Read until two consecutive reads agree (bounded). The EVT-3D21 trace
+    // (2026-10-17) caught torn reads such as 0x7BF -> 0x780 whose immediate
+    // re-read differed; `apdu_framing::frame_step` drops the backward step
+    // either way, this only keeps one torn value from becoming the reference.
+    let mut f = read();
+    for _ in 0..3 {
+        let g = read();
+        if g == f {
+            break;
+        }
+        f = g;
+    }
     // Full speed: an 11-bit frame number, wrapping every 2.048 s
-    // (`USB_FS_FRAME_MASK`; DVT1 row 11.2). Callers take deltas with
-    // `apdu_framing::frame_delta`, never a raw subtraction.
-    ((dsts >> 8) as u16) & sphincs_tz_shared::apdu_framing::USB_FS_FRAME_MASK
+    // (`USB_FS_FRAME_MASK`; DVT1 row 11.2). Callers accumulate with
+    // `apdu_framing::frame_step`, never a raw subtraction.
+    f
 }
 
 /// Initialize the USB stack.  Returns a fully-configured `UsbStack` ready

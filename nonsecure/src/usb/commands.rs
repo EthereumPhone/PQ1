@@ -28,7 +28,7 @@
 
 use sphincs_tz_shared::*;
 use sphincs_tz_shared::apdu_framing::{
-    frame_delta, parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
+    frame_step, parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
 };
 
 use crate::nsc_api;
@@ -148,7 +148,7 @@ static mut ROUTER_OWNER: Option<u16> = None;
 /// Accumulating per-iteration deltas (rather than a single start→now
 /// delta) sidesteps the FNSOF wrap: on this full-speed core the frame
 /// number is 11 bits and wraps every 2.048 s, the NS loop polls at kHz,
-/// so each `frame_delta(now, last)` is tiny and wrap-correct, and 30 s
+/// so each `frame_step(now, &mut last)` is tiny and wrap-correct, and 30 s
 /// spans many wraps by summation. (This used `& 0x3FFF`, the high-speed
 /// width: every wrap then added ~14,337 frames, so these 30 s / 120 s
 /// bounds expired after about two wraps — DVT1 row 11.2.)
@@ -924,8 +924,9 @@ impl CommandRouter {
             PENDING_LAST_FRAME = now_frame;
             return;
         }
-        let delta = frame_delta(now_frame, PENDING_LAST_FRAME);
-        PENDING_LAST_FRAME = now_frame;
+        let mut last = PENDING_LAST_FRAME;
+        let delta = frame_step(now_frame, &mut last);
+        PENDING_LAST_FRAME = last;
         PENDING_ELAPSED_FRAMES = PENDING_ELAPSED_FRAMES.saturating_add(delta);
         // Activity resets the idle accumulator in `get_response` but
         // never this absolute one.
@@ -958,8 +959,9 @@ impl CommandRouter {
     /// Touches the module `ROUTER_OWNER` static-mut state under the
     /// single-threaded NS dispatcher invariant (same as `dispatch`).
     pub unsafe fn check_chain_timeout(&mut self, now_frame: u16) {
-        let delta = frame_delta(now_frame, CHAIN_LAST_FRAME);
-        CHAIN_LAST_FRAME = now_frame;
+        let mut last = CHAIN_LAST_FRAME;
+        let delta = frame_step(now_frame, &mut last);
+        CHAIN_LAST_FRAME = last;
         if self.chain.tick_timeout(delta) {
             // Chain lifetime expired — `tick_timeout` already reset the
             // chain state. A live chain and a pending drain are mutually
