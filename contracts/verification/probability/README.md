@@ -499,7 +499,7 @@ to seven equals the full chain execution, including cached replies. The
 selected trace has exactly `stop-start` calls for an ordinary 32-byte seed;
 zero or reversed natural ranges retain the initial value and table. These are
 count/chain components; their composition into public recovery is described
-below. The full shuffled signer and private-key preparation remain open.
+below. The complete WOTS leaf and shuffled signer are described after recovery.
 `WotsProgramExamples.lean` checks finite adaptive/cached executions and exact
 byte vectors independently of the compiler-equality proofs.
 
@@ -524,10 +524,45 @@ about oracle replies, not the invalid-return sentinel. `WotsRecoveryExamples.lea
 checks finite ordered/cache executions, exact compression bytes, accepted-word
 arithmetic, and a complete recovery with every query already cached.
 
-This closes the manually transcribed public WOTS recovery component, not the
-full C10 keygen/sign/verify client, shuffled private signer, session cost or
-forgery-game partition. Natural-number address truncation and the manual
-correspondence boundary remain as above.
+`StateFold.lean` compiles stateful indexed folds while threading the full cache.
+`WotsPrivate.lean` retains the actual private input: a 32-byte secret prefix,
+the literal `wots` tag, four-byte layer, 32-byte tree field, four-byte keypair
+and four-byte chain index. Private and public calls have separate labels in the
+interface client; physical interpretation sends both through one raw memo table.
+The direct loop writes each result at its chain index. `WotsLeaf.lean` composes
+43 private derivations, seven public steps each and ordered compression, deriving
+345 total and 302 public calls. Its physical compiler equation preserves the
+complete result and table for arbitrary initial history.
+
+`WotsShuffle.lean` executes four ordered full-digest block queries, then the
+actual little-endian 16-bit multiply-high Fisher-Yates computation. It proves
+index bounds, sufficient stream bytes, and preservation of all 43 positions.
+The zero seed returns the identity with no query. No uniform-permutation or
+physical side-channel claim is made. `WotsSigning.lean` composes bounded count
+search, this shuffle and the private chain fill, retaining exhaustion, the
+selected counter and every positional signature write. Its direct procedure
+has no extra acceptance guard: a support theorem proves the count procedure
+only returns accepted digests and discharges the compiler's unreachable branch.
+Actual sum-205 acceptance and the proved permutation give 205 chain calls,
+43 private calls and at most four shuffle calls. Thus the whole signer has at
+most `n+252` total and `n+209` public calls for an `n`-trial count limit.
+
+`WotsSigningCharges.lean` proves the full physical relabelling and derives at
+most 252 selected calls for normal seed/message widths. From an empty cache,
+the selected collision-or-raw-zero charge is `(n+31878)/2^128`; count calls
+remain in the zero term. The separate private-prefix comparison has event
+error at most `(n+209)/2^256` for signing and `302/2^256` for the leaf, with an
+initially uniform hidden secret, secret-independent client inputs and empty
+tables. Repeated private inputs remain cached. `WotsSignerExamples.lean` checks
+byte layouts, a separately computed patterned permutation, all four ordered
+shuffle calls, positional writes, cached complete signing and exhaustion.
+
+This closes the manually transcribed WOTS public recovery, key-generation leaf
+and shuffled signing clients. It does not close the full C10 tree/FORS/hypertree
+client, session cost, successful-output partition or forgery game. Shuffle
+sub-seed derivation belongs to those outer callers. Natural-number address
+truncation, the manual correspondence boundary, Rust panic/callback/erasure
+behavior and concrete backends remain explicit.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -572,16 +607,18 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 683 theorem closures against
+The gate rebuilds every project module, checks all 778 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-363 typed cases run 1089 compiler jobs: each baseline and changed
-definition must compile, 312 changed behaviors must reject at the
-consuming `checked` theorem, and fifty-one value-preserving changes must pass. The recovery
+398 typed cases run 1194 compiler jobs: each baseline and changed
+definition must compile, 343 changed behaviors must reject at the
+consuming `checked` theorem, and fifty-five value-preserving changes must pass. The signer controls cover private
+bytes/routing, positional writes, shuffle inputs/order/multiply-high, all four
+queries, zero-seed behavior, exhaustion and cache propagation. The recovery
 controls include chain ordering and shared-cache retention, accepted-word work,
 compression bytes, acceptance and both return branches. Cases also cover exhaustion,
 acceptance, returned values and counters, retry bounds, the observed event,

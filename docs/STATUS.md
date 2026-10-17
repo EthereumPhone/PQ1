@@ -255,16 +255,22 @@ PMF clients, with exact address bytes, failure/counters and reply-dependent
 chain inputs. Count queries have zero selected-node cost but retain the full
 raw zero-node charge. Splitting a chain at any base-eight digit preserves the
 full execution through position seven. Independent count sampling still needs
-explicit initial freshness; the full 43-chain signer, shuffle/private
-preparation, runtime panic/retry behavior and session/forgery composition remain
-open. Source-binding CI coverage is checked in both directions (#961).
+explicit initial freshness. Runtime panic/retry behavior and session/forgery
+composition remain open. Source-binding CI coverage is checked in both directions (#961).
 Complete public WOTS recovery now also compiles with full result/cache equality,
 including all 43 ordered chains, kind-1 compression and the invalid zero return.
 Actual sum-205 acceptance derives 96 remaining steps; the client derives at most
 98 raw and 97 selected queries, giving an empty-cache collision-or-oracle-zero
-bound of `4754/2^128`. This closes that public component, while the shuffled
-private signer and complete C10/session/forgery translation remain open.
-All 683 theorem closures and 363 typed cases are gated separately;
+bound of `4754/2^128`. The WOTS key-generation leaf and shuffled signer now also
+compile with full result/cache equality, retaining exact private bytes, four
+ordered shuffle queries, the actual multiply-high permutation and positional
+writes. Acceptance and permutation derive 205 chain calls, giving `n+252` total,
+`n+209` public and 252 selected signing calls; the leaf has 345 total/302 public
+calls. The signing node-event bound is `(n+31878)/2^128` from an empty cache.
+Private-prefix transfer retains a uniform hidden secret and empty tables.
+Full C10 tree/FORS/hypertree/session/forgery translation and concrete backends
+remain open; no shuffle-uniformity or physical-security result is claimed.
+All 778 theorem closures and 398 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

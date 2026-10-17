@@ -32,6 +32,9 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixState.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawKeygen.ec'
       - 'sphincs-c10/src/address.rs'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenPrefixes.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawShuffle.ec'
+      - 'sphincs-c10/src/shuffle.rs'
   pull_request:
     paths: *probability_paths
 

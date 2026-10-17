@@ -148,11 +148,20 @@ fallback. Full result/cache equality holds for arbitrary initial history.
 Acceptance derives exactly 96 remaining steps, giving at most 98 raw/97 selected
 queries and an empty-cache collision-or-oracle-zero charge of 4754/2^128.
 Invalid returned zero is not identified with an oracle-zero event. This closes
-the manually transcribed public recovery component, not the full shuffled
-43-chain signer, private derivation, complete C10 keygen/sign/verify/session
-cost, output partition or forgery composition.
-The `none` exhaustion model does not prove runtime panic/retry
-semantics. All23 manual source bindings are now checked for declared and
+the manually transcribed public recovery component. The PMF WOTS leaf and
+shuffled signer now also compile with full result/cache equality: exact tagged
+private derivations, four ordered shuffle blocks, little-endian multiply-high
+permutation, positional writes and bounded count exhaustion. Actual sum-205
+acceptance and the proved 43-position permutation derive `n+252` total,
+`n+209` public and 252 selected signing calls; the leaf derives 345 total and
+302 public calls. The signing node-event bound is `(n+31878)/2^128` from an empty
+cache. Private-prefix event transfer is `(n+209)/2^256` for signing and
+`302/2^256` for the leaf, retaining empty tables and a uniform hidden secret
+independent of the client inputs. Cached private repeats are not fresh draws.
+The complete C10 tree/FORS/hypertree and session client, shuffle sub-seed
+preparation, output partition and forgery composition remain open. The `none`
+exhaustion model does not prove runtime panic/retry, callback or erasure
+semantics. All26 manual source bindings are checked for declared and
 push/PR trigger coverage, closing the known future-drift gap #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.

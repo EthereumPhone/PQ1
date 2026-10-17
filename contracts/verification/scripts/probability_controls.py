@@ -1324,4 +1324,165 @@ def cases(project: Path) -> list[dict]:
         "List.replicate 16 (0 + 0)", recovery_example("compression_node_bytes"), True)
     add("recovery-fallback-preserving", "WotsRecovery", "else PMF.pure (0, counted.2)",
         "else PMF.pure (0, (fun out => out.2) counted)", recovery_example("recovery_invalid_retains_cache"), True)
+    # Full WOTS signing: source-derived definition slices retain the actual
+    # computations while omitting proof-index casts from mutation fixtures.
+    def signer_example(name):
+        return "set_option maxRecDepth 4096\n" + theorem(src["WotsSignerExamples"], name)
+
+    def signer_decl(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                          r"\b.*?(?=^(?:theorem|def|abbrev|end|attribute)\b)",
+                          src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing signer definition " + name)
+        return match.group(0).split("\n/--", 1)[0]
+
+    src["WotsShufflePure"] = src["WotsShuffle"].split("abbrev WotsOrder", 1)[0] + \
+        "end\nend C10Probability\n"
+    src["WotsShuffleBlocks"] = (
+        "import C10Probability.WotsPrivate\nnamespace C10Probability\nnoncomputable section\n"
+        "variable {K : Type*}\n" +
+        "\n".join(signer_decl("WotsShuffle", name) for name in
+                  ["fisherTag", "shuffleBlockInput", "shuffleBlocksProgram", "shuffleBlocks"]) +
+        "end\nend C10Probability\n")
+    src["WotsSignDirect"] = (
+        "import C10Probability.WotsLeaf\nimport C10Probability.WotsShuffle\n"
+        "import C10Probability.WotsProgram\nimport C10Probability.WotsRecoveryExamples\n"
+        "namespace C10Probability\nnoncomputable section\nvariable {K : Type*}\n" +
+        "\n".join(signer_decl("WotsSigning", name) for name in
+                  ["wotsCountUnder", "WotsSignature", "wotsSignAfter", "wotsSign"]) +
+        "end\nend C10Probability\n")
+    cached_helpers = "set_option maxRecDepth 4096\n" + "\n".join(
+        theorem(src["WotsSignerExamples"], name).replace("theorem checked", "theorem " + name, 1)
+        for name in ["wots_seed_chain_cached", "wots_fill_cached", "wots_constant_writes",
+                     "wots_fill_cached_complete", "memoGrind_cached_reject", "memoGrind_cached_accept"])
+    accepted_case = cached_helpers + signer_example("wots_sign_one_accepted_cached")
+    rejected_case = cached_helpers + signer_example("wots_sign_one_rejected")
+
+    add("state-fold-return-discarded", "StateFold", "rest out.1 out.2", "rest state out.2",
+        signer_example("state_fold_order"))
+    add("state-fold-cache-reset", "StateFold", "rest out.1 out.2", "rest out.1 table",
+        signer_example("state_fold_accumulated_cache"))
+    add("state-fold-visit-dropped", "StateFold", "stateFoldLoop p cost step rest out.1 out.2",
+        "PMF.pure out", signer_example("state_fold_order"))
+
+    add("wots-private-tag", "WotsPrivate", "[119, 111, 116, 115]", "[119, 111, 116, 116]",
+        signer_example("wots_private_byte_vector"))
+    add("wots-private-tree-width", "WotsPrivate", "beBytes 32 tree", "beBytes 8 tree",
+        signer_example("wots_private_byte_vector"))
+    add("wots-private-layer-width", "WotsPrivate", "beBytes 4 layer", "beBytes 8 layer",
+        signer_example("wots_private_byte_vector"))
+    add("wots-private-kp-index-order", "WotsPrivate", "beBytes 4 kp ++ beBytes 4 index",
+        "beBytes 4 index ++ beBytes 4 kp", signer_example("wots_private_byte_vector"))
+    add("wots-private-public-route", "WotsPrivate",
+        "memoQuery digestDraw table (encode (.inr (wotsPrivateTail layer tree kp index)))",
+        "memoQuery digestDraw table (encode (.inl (wotsPrivateTail layer tree kp index)))",
+        signer_example("wots_private_query_route"))
+    add("wots-private-node-zero", "WotsPrivate",
+        "0 steps (randomizerOfDigest reply.1) reply.2", "0 steps 0 reply.2",
+        signer_example("wots_fill_single_position"))
+    add("wots-fill-wrong-position", "WotsPrivate",
+        "(Function.update sigma i out.1) out.2", "(Function.update sigma 0 out.1) out.2",
+        signer_example("wots_fill_single_position"))
+    add("wots-fill-return-lost", "WotsPrivate",
+        "(Function.update sigma i out.1) out.2", "sigma out.2",
+        signer_example("wots_fill_single_position"))
+    add("wots-fill-cache-erased", "WotsPrivate", "| [], sigma, table => PMF.pure (sigma, table)",
+        "| [], sigma, table => PMF.pure (sigma, fun _ => none)",
+        signer_example("wots_fill_single_position"))
+
+    add("wots-shuffle-tag", "WotsShufflePure",
+        "[115,112,104,105,110,99,115,45,99,49,48,45,102,105,115,104,101,114,45,121,97,116,101,115,45,118,49]",
+        "[115,112,104,105,110,99,115,45,99,49,48,45,102,105,115,104,101,114,45,121,97,116,101,115,45,118,50]",
+        "theorem checked : fisherTag[26]? = some 49 := by decide +kernel\n")
+    add("wots-shuffle-counter-endian", "WotsShufflePure", "beBytes 4 block",
+        "(beBytes 4 block).reverse", signer_example("shuffle_block_counter_vector"))
+    add("wots-shuffle-pair-endian", "WotsShufflePure",
+        "((stream[pos + 1]?).getD 0).val * 256 + ((stream[pos]?).getD 0).val",
+        "((stream[pos]?).getD 0).val * 256 + ((stream[pos + 1]?).getD 0).val",
+        signer_example("shuffle_pair_little_endian"))
+    add("wots-shuffle-multiply-high-divisor", "WotsShufflePure", "/ 65536", "/ 65535",
+        signer_example("shuffle_multiply_high_not_modulo"))
+    add("wots-shuffle-modulo-replacement", "WotsShufflePure",
+        "* (i + 1) / 65536", "% (i + 1)", signer_example("shuffle_pair_little_endian"))
+    add("wots-shuffle-second-write", "WotsShufflePure",
+        ".set j ((order[i]?).getD 0)", ".set i ((order[i]?).getD 0)",
+        signer_example("shuffle_swap_positions"))
+    add("wots-shuffle-stream-stride", "WotsShufflePure",
+        "shuffleLoop stream i (pos + 2)", "shuffleLoop stream i (pos + 1)",
+        signer_example("shuffle_patterned_order"))
+    add("wots-shuffle-visit-index", "WotsShufflePure",
+        "shuffleSwap order (i + 1) (shuffleChoice stream pos (i + 1))",
+        "shuffleSwap order i (shuffleChoice stream pos i)", signer_example("shuffle_patterned_order"))
+
+    # The count and shuffle effects are retained as their actual PMF calls in
+    # these complete-procedure equations, so history/reset mutations are tested
+    # without enumerating the256-bit uniform sample space.
+    sign_equation = """theorem checked [DecidableEq K] (encode : WotsQuery → K)
+    (table : Memo K Digest) (seed : ByteKey) (layer tree kp : ℕ) (message shuffle : ByteKey)
+    (n : ℕ) (hb : n ≤ 2 ^ 32) :
+    wotsSign encode table seed layer tree kp message shuffle n hb =
+      (wotsCountUnder (fun key => encode (.inl key)) table seed layer tree kp message n hb).bind
+        (fun out => wotsSignAfter encode out.2 seed layer tree kp shuffle out.1) := by rfl
+"""
+    after_equation = """theorem checked [DecidableEq K] (encode : WotsQuery → K)
+    (table : Memo K Digest) (seed : ByteKey) (layer tree kp : ℕ) (shuffle : ByteKey)
+    (count : ℕ) (digest : Digest) :
+    wotsSignAfter encode table seed layer tree kp shuffle (some (count,digest)) =
+      (wotsShuffle (fun key => encode (.inl key)) shuffle table).bind (fun order =>
+        (wotsFillLoop encode seed layer tree kp (fun i => (wotsOfDigest digest i).val)
+          order.1.val wotsZeroSigma order.2).map (fun out => (some (out.1,count),out.2))) := by rfl
+"""
+    add("wots-sign-exhaustion-emits", "WotsSignDirect", "| none => PMF.pure (none, table)",
+        "| none => PMF.pure (some (wotsZeroSigma,0), table)", signer_example("wots_sign_no_trials"))
+    add("wots-sign-exhaustion-cache-lost", "WotsSignDirect", "| none => PMF.pure (none, table)",
+        "| none => PMF.pure (none, fun _ => none)", rejected_case)
+    add("wots-sign-counter-changed", "WotsSignDirect", "(some (out.1, count), out.2)",
+        "(some (out.1, count + 1), out.2)", accepted_case)
+    add("wots-sign-success-cache-lost", "WotsSignDirect", "(some (out.1, count), out.2)",
+        "(some (out.1, count), fun _ => none)", accepted_case)
+    add("wots-sign-count-history-reset", "WotsSignDirect", "wotsSignAfter encode out.2 seed",
+        "wotsSignAfter encode table seed", sign_equation)
+    add("wots-sign-shuffle-history-reset", "WotsSignDirect", "order.1.val wotsZeroSigma order.2",
+        "order.1.val wotsZeroSigma table", after_equation)
+    add("wots-sign-shuffle-order-discarded", "WotsSignDirect", "order.1.val wotsZeroSigma order.2",
+        "wotsIndices wotsZeroSigma order.2", after_equation)
+    add("wots-sign-chain-length-changed", "WotsSignDirect", "(fun i => (wotsOfDigest digest i).val)",
+        "(fun i => 7 - (wotsOfDigest digest i).val)", after_equation)
+
+    add("wots-private-tag-preserving", "WotsPrivate", "[119, 111, 116, 115]",
+        "[119, 111, 116, 114 + 1]", signer_example("wots_private_byte_vector"), True)
+    add("wots-shuffle-stride-preserving", "WotsShufflePure", "shuffleLoop stream i (pos + 2)",
+        "shuffleLoop stream i (pos + (1 + 1))", signer_example("shuffle_patterned_order"), True)
+    add("wots-sign-exhaustion-preserving", "WotsSignDirect", "| none => PMF.pure (none, table)",
+        "| none => PMF.pure ((none : WotsSignature), table)", signer_example("wots_sign_no_trials"), True)
+    # Alias only the definition under test so proof-dependent return types
+    # can be imported without redeclaring their checked permutation proofs.
+    src["WotsShuffleProgramAlias"] = (
+        "import C10Probability.WotsShuffle\nnamespace C10Probability\nnoncomputable section\n"
+        "variable {K : Type*}\n" + signer_decl("WotsShuffle", "wotsShuffleProgram").replace(
+            "def wotsShuffleProgram ", "def wotsShuffleCandidate ", 1) +
+        "end\nend C10Probability\n")
+    src["WotsShuffleBlocksAlias"] = (
+        "import C10Probability.WotsShuffle\nnamespace C10Probability\nnoncomputable section\n"
+        "variable {K : Type*}\n" + signer_decl("WotsShuffle", "shuffleBlocksProgram").replace(
+            "shuffleBlocksProgram", "shuffleBlocksCandidate") +
+        signer_decl("WotsShuffle", "wotsShuffleProgram").replace(
+            "def wotsShuffleProgram ", "def wotsShuffleCandidate ", 1).replace(
+            "shuffleBlocksProgram", "shuffleBlocksCandidate") +
+        "end\nend C10Probability\n")
+    query_case = signer_example("shuffle_query_order").replace("wotsShuffleProgram", "wotsShuffleCandidate")
+    block_case = query_case.replace("shuffleBlocksProgram", "shuffleBlocksCandidate")
+    add("wots-shuffle-fourth-call-missing", "WotsShuffleProgramAlias",
+        "(shuffleBlocksProgram encode seed 0 4)",
+        "(reserveProgram 1 (shuffleBlocksProgram encode seed 0 3))", query_case)
+    add("wots-shuffle-zero-seed-query", "WotsShuffleProgramAlias",
+        "if seed = List.replicate 32 0 then", "if seed = [] then",
+        signer_example("shuffle_zero_query_trace").replace("wotsShuffleProgram", "wotsShuffleCandidate"))
+    add("wots-shuffle-block-counter-repeated", "WotsShuffleBlocksAlias",
+        "shuffleBlocksCandidate encode seed (start + 1) n", "shuffleBlocksCandidate encode seed start n",
+        block_case)
+    add("wots-shuffle-four-calls-preserving", "WotsShuffleProgramAlias",
+        "(shuffleBlocksProgram encode seed 0 4)",
+        "(shuffleBlocksProgram encode seed 0 (2 + 2))", query_case, True)
     return out

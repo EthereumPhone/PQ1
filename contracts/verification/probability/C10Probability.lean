@@ -21,3 +21,10 @@ import C10Probability.TargetExamples
 import C10Probability.DomainExamples
 import C10Probability.WotsProgramExamples
 import C10Probability.WotsRecoveryExamples
+import C10Probability.StateFold
+import C10Probability.WotsPrivate
+import C10Probability.WotsLeaf
+import C10Probability.WotsShuffle
+import C10Probability.WotsSigning
+import C10Probability.WotsSigningCharges
+import C10Probability.WotsSignerExamples
