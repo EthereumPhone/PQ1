@@ -612,6 +612,41 @@ impl OptigaTrustM {
         }
     }
 
+    /// Bench only (`rng-xor-probe`): load the PBS that is ALREADY in E140 as
+    /// the shield key, read in plaintext (permitted at LcsO=creation on a
+    /// factory chip), so a shielded session opens without the E140 rewrite
+    /// that `pair_for_first_boot` does. Writes nothing to the chip. The value
+    /// stays in secure SRAM; only `sha256(pbs)[..8]` is returned.
+    #[cfg(feature = "rng-xor-probe")]
+    pub(crate) fn bench_load_pbs_in_place(&mut self) -> Result<[u8; 8], OptigaError> {
+        use sha2::{Digest, Sha256};
+        use zeroize::Zeroize;
+        self.init()?;
+        let mut pbs = [0u8; 64];
+        // SAFETY: single-threaded boot; the shield is not active yet, so this
+        // is a plaintext GetDataObject on this driver's own IFX state.
+        let n = unsafe {
+            apdu::get_data_object(&mut self.ifx, &mut self.shield, apdu::OID_PBS, 0, 64, &mut pbs)
+        };
+        match n {
+            Ok(64) => {}
+            Ok(_) => {
+                pbs.zeroize();
+                return Err(OptigaError::BufferOverflow);
+            }
+            Err(e) => {
+                pbs.zeroize();
+                return Err(e);
+            }
+        }
+        let digest: [u8; 32] = Sha256::digest(pbs).into();
+        let mut fp = [0u8; 8];
+        fp.copy_from_slice(&digest[..8]);
+        self.shield.load_pbs(&pbs);
+        pbs.zeroize();
+        Ok(fp)
+    }
+
     /// Bring-up transport pairing: write the deterministic device-root PBS to
     /// E140 (plaintext, allowed at LcsO=Creation) BEFORE the legacy wizard draws
     /// any entropy, so that

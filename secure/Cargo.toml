@@ -615,6 +615,11 @@ bench-masked-sha = ["stm32u585", "dep:masked-sha2"]
 # init, fills a 64 KB SRAM buffer via `hw::rng::fill`, and hands it to the
 # host over SWD (`tools/dvt/trng_dump.py`). Bench only; never ship.
 trng-dump = ["stm32u585"]
+# Strong-RNG composition probe (DVT checklist row 4.9 + the three-source XOR
+# check). Terminal bench image: records each rng_strong source contribution
+# and holds one SE in reset to prove fail-closed. Writes nothing to either SE
+# (factory SCP03 keys; OPTIGA PBS read in place). Bench only; never ship.
+rng-xor-probe = ["dual-se", "stm32u585"]
 # F-24 stage E Phase 1 — hardware flicker validation harness for the
 # decoy-mnemonic-frame defense. Short-circuits `main()` into a forever-
 # loop that renders page 0 of a fixed test mnemonic interleaved with

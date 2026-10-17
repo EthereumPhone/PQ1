@@ -108,6 +108,8 @@ pub(crate) fn fill_with_source_draw(
     buf.zeroize();
     crate::fi::zeroize_barrier();
     let platform_result = crate::rng::fill(buf);
+    #[cfg(feature = "rng-xor-probe")]
+    crate::rng_xor_probe::record_platform(buf);
     let mut platform_nonzero = 0u8;
     for &byte in buf.iter() {
         platform_nonzero |= byte;

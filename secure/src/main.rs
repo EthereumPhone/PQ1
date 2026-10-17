@@ -369,6 +369,10 @@ mod bench_masked_sha;
 #[cfg(feature = "trng-dump")]
 mod trng_dump;
 
+/// Strong-RNG XOR composition and fail-closed probe (`rng-xor-probe`, DVT 4.9).
+#[cfg(feature = "rng-xor-probe")]
+mod rng_xor_probe;
+
 // ── Test-only re-includes for the `secure-nsc-sign-userop` slice ──
 //
 // `nsc` itself is `#[cfg(not(test))]` because most of its files pull in
@@ -720,7 +724,10 @@ pub unsafe fn se_random_optiga(
     // (the standalone Se050/OptigaTrustM types have inherent
     // `random` methods returning their backend-specific error
     // type; the trait method returns `Result<_, SeError>`).
-    <_ as WalletStore>::random_optiga(se, buf)
+    let r = <_ as WalletStore>::random_optiga(se, buf);
+    #[cfg(feature = "rng-xor-probe")]
+    rng_xor_probe::record_se(true, r.is_ok(), buf);
+    r
 }
 
 /// Strong-RNG SE050 accessor; see [`se_random_optiga`].
@@ -730,7 +737,10 @@ pub unsafe fn se_random_se050(
 ) -> Result<(), crate::secure_element::SeError> {
     use crate::secure_element::WalletStore;
     let se = &mut *core::ptr::addr_of_mut!(SE);
-    <_ as WalletStore>::random_se050(se, buf)
+    let r = <_ as WalletStore>::random_se050(se, buf);
+    #[cfg(feature = "rng-xor-probe")]
+    rng_xor_probe::record_se(false, r.is_ok(), buf);
+    r
 }
 
 /// ML-KEM inner-wrap self-test — runs under `mlkem-self-test` only. Round-trips
@@ -1880,6 +1890,16 @@ fn main() -> ! {
             loop {
                 cortex_m::asm::wfe();
             }
+        }
+
+        // Strong-RNG composition probe (DVT 4.9 + XOR check). TERMINAL for
+        // the same reason as the probes above: everything after this point
+        // writes to the secure elements, and this build must not.
+        #[cfg(feature = "rng-xor-probe")]
+        {
+            // SAFETY: single-threaded boot path; nothing else holds SE.
+            let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
+            rng_xor_probe::run_and_halt(se);
         }
     }
 
