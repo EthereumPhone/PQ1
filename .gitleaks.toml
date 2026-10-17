@@ -167,6 +167,14 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/KeygenPrefixes\.ec": "19b7377f3c34ab07d8a2e0884efd4554e612667df34bc5c3d1db16f1045ea66e",?\s*$''']
 
+
+[[rules.allowlists]]
+description = "Exact public Merkle authentication-bound proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/TreeAccess\.lean": "44da17bc887abc12b58bc840f9d76cac38a567e03af0138c174fdd3fc184fed4",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
