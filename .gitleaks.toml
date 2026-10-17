@@ -159,6 +159,14 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/RawKeygen\.ec": "9f983fbb237129b0600ee1462429a722c53f86a5a74e25a0e508f16c1238174e",?\s*$''']
 
+
+[[rules.allowlists]]
+description = "Exact public WOTS private-prefix source binding digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/KeygenPrefixes\.ec": "19b7377f3c34ab07d8a2e0884efd4554e612667df34bc5c3d1db16f1045ea66e",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
