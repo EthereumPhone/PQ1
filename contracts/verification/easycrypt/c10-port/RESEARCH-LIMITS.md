@@ -214,7 +214,19 @@ witnesses, including ordered layers and rejected WOTS zero branches.
 Initialized returned-Boolean erasure inherits the existing transfer; it does
 not compare cache-visible events. This supplies a dependency for the six-case
 cryptographic partition, which remains open with the final numerical bound.
-All 44 manual source bindings are checked for
+Actual indexed tree builders now supply recorded Merkle/FORS root certificates
+in the PMF model. Every valid coordinate chosen later has a derived reference
+leaf and path; actual recovery at that coordinate binds to the actual WOTS leaf
+or private FORS value unless the selected public cache contains a node collision.
+Missing sibling defaults remain explicit. Winning initialized independent-game
+outputs yield selected-node collision, public zero, or a joint top-tree opening
+that retains H_msg, forest/layer recovery, actual keygen leaf, accepted WOTS count
+and root equality in one final cache. Zero exclusion is necessary to derive
+count acceptance. This structural opening is not itself a new-message WOTS
+attack or a probability bound; chain-opening extraction, lower-layer/FORS
+descent and the complete six-case partition/final charge remain open. The PMF
+inventory now has 1381 theorem closures and 783 typed sensitivity cases.
+All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.

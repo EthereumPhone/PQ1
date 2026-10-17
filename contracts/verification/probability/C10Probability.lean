@@ -43,3 +43,6 @@ import C10Probability.ForestCached
 import C10Probability.C10Examples
 import C10Probability.SessionExamples
 import C10Probability.ObservedExamples
+import C10Probability.TopTreeOpening
+import C10Probability.TreeCertificateExamples
+import C10Probability.TreeReferenceExamples

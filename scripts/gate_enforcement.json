@@ -1853,7 +1853,15 @@
         "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSupport.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureAccounting.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryLog.ec",
-        "contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryDriver.ec"
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryDriver.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/PathReplay.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/PathCollision.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawPathComparison.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawForsComparison.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawMerkleRootWitness.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RootCoverage.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ForsBuilderSecret.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteGameTopExtraction.ec"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",

@@ -2178,4 +2178,166 @@ def cases(project: Path) -> list[dict]:
         ("observed-driver-queries-cleared", "⟨observed.1, result.1⟩",
          "⟨{ observed.1 with queries := [] }, result.1⟩")])
 
+    # Actual tree certificates and recovery bindings. Keep earlier fixtures
+    # byte-for-byte stable; these new slices also support inductive declarations.
+    def tree_alias(module, name):
+        match = re.search(r"^(?:def|abbrev|structure|inductive) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing tree binding definition " + name)
+        alias = name + "BPCandidate"
+        declaration = re.sub(r"\b" + re.escape(name) + r"\b", alias,
+                             match.group(0).split("\n/--", 1)[0])
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.TopTreeOpening\n"
+            "import C10Probability.TreeCertificateExamples\n"
+            "import C10Probability.TreeReferenceExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "variable {K L R T α N S : Type*}\n" + declaration + "\nend\nend C10Probability\n")
+        return key, alias
+
+    def tree_consumer(module, name, definition, alias):
+        check = theorem(src[module], name).split("\nset_option", 1)[0]
+        return re.sub(r"\b" + re.escape(definition) + r"\b", alias, check)
+
+    def tree_cases(module, definition, consumer_module, consumer, rows):
+        key, alias = tree_alias(module, definition)
+        check = tree_consumer(consumer_module, consumer, definition, alias)
+        if definition == "replayMerge":
+            check = """theorem checked :
+    replayMergeBPCandidate certificateTable certificatePairKey id certificateRemember
+      3 [(3, 0), (7, 1)] 0 4 [(1, 0, 1, 2)] =
+    (replayProgram certificateTable (mergeProgram certificatePairKey id certificateRemember
+      3 [0, 1] 0 (3, (7, PUnit.unit)) 4 [(1, 0, 1, 2)])).map
+        (eraseTreeState (mergedShape 0 [0, 1])) := by
+  rw [replay_merge_program]
+  simp only [eraseStack]
+  rfl
+"""
+        if definition == "replayTree":
+            check = """theorem checked :
+    replayTreeBPCandidate certificateTable (fun kp => some (kp + 1))
+      certificatePairKey id certificateRemember 3 0 [] [] =
+    (replayProgram certificateTable (treeProgram 0 certificateLeafProgram
+      certificatePairKey id certificateRemember 3 0 [] PUnit.unit [])).map
+        (eraseTreeState (runShape 3 [])) := by
+  rw [replay_tree_program]
+  simp only [eraseStack]
+  rfl
+"""
+        for row in rows:
+            add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    tree_cases("TreeReplay", "replayMerge", "TreeReplay", "replay_merge_program", [
+        ("tree-replay-parent-absent", "(table (input kp height left current)).bind", "(none : Option α).bind"),
+        ("tree-replay-parent-order", "input kp height left current", "input kp height current left"),
+        ("tree-replay-height-branch", "if level = height then", "if level ≠ height then"),
+        ("tree-replay-parent-coordinate", "input kp height left current", "input (kp + 1) height left current"),
+        ("tree-replay-height-jump", "rest (height + 1)", "rest (height + 2)"),
+        ("tree-replay-parent-value", "(project reply) (remember", "current (remember"),
+        ("tree-replay-remember-lost", "(remember kp height left current state)", "state"),
+        ("tree-replay-final-height", "some ([(current, height)], state)", "some ([(current, height + 1)], state)"),
+        ("tree-replay-merge-equivalent", "rest (height + 1)", "rest (height + 0 + 1)", True)])
+    tree_cases("TreeReplay", "replayTree", "TreeReplay", "replay_tree_program", [
+        ("tree-replay-leaf-coordinate", "(leaf start).bind", "(leaf (start + 1)).bind"),
+        ("tree-replay-repeat-leaf", "n (start + 1)", "n start"),
+        ("tree-replay-prior-lost", "remember start stack 0", "remember start [] 0"),
+        ("tree-replay-state-lost", "merged.1 merged.2", "merged.1 state"),
+        ("tree-replay-merged-lost", "merged.1 merged.2", "stack merged.2"),
+        ("tree-replay-base-lost", "some (stack, state)", "some ([], state)"),
+        ("tree-replay-leaf-equivalent", "n (start + 1)", "n (start + 0 + 1)", True)])
+
+    key, alias = tree_alias("TreeCertificate", "RecordedTreeNode")
+    leaf_check = """theorem checked (table : Memo K α) (leaf : ℕ → Option N)
+    (input : ℕ → ℕ → N → N → K) (project : α → N)
+    (edge : ℕ) (root : N)
+    (recorded : RecordedTreeNodeBPCandidate table leaf input project 0 edge root) :
+    ∃ kp, edge = kp + 1 ∧ leaf kp = some root := by
+  cases recorded <;> exact ⟨_, rfl, by assumption⟩
+"""
+    add("tree-certificate-leaf-evidence", key, "leaf kp = some value", "True", leaf_check)
+    add("tree-certificate-leaf-coordinate", key, "0 (kp + 1) value", "0 kp value", leaf_check)
+    pair_check = """theorem checked (table : Memo K α) (leaf : ℕ → Option N)
+    (input : ℕ → ℕ → N → N → K) (project : α → N)
+    (height edge : ℕ) (root : N)
+    (recorded : RecordedTreeNodeBPCandidate table leaf input project (height + 1) edge root) :
+    ∃ left right reply,
+      RecordedTreeNodeBPCandidate table leaf input project height (edge - 2 ^ height) left ∧
+      RecordedTreeNodeBPCandidate table leaf input project height edge right ∧
+      table (input (edge - 1) height left right) = some reply ∧ root = project reply := by
+  cases recorded with
+  | pair h e l r d hl hr hd => exact ⟨l, r, d, hl, hr, hd, rfl⟩
+"""
+    for name, old, new in [
+        ("tree-certificate-left-edge", "height (edge - 2 ^ height) left", "height edge left"),
+        ("tree-certificate-right-edge", "height edge right", "height (edge + 1) right"),
+        ("tree-certificate-parent-coordinate", "input (edge - 1) height left right", "input edge height left right"),
+        ("tree-certificate-parent-height", "input (edge - 1) height left right", "input (edge - 1) (height + 1) left right"),
+        ("tree-certificate-parent-order", "input (edge - 1) height left right", "input (edge - 1) height right left")]:
+        add(name, key, old, new, pair_check)
+
+    key, alias = tree_alias("TreeCertificate", "RecordedForest")
+    check = """theorem checked (table : Memo K α) (leaf : ℕ → Option N)
+    (input : ℕ → ℕ → N → N → K) (project : α → N)
+    (edge height : ℕ) (root : N) (rest : List (N × ℕ))
+    (recorded : RecordedForestBPCandidate table leaf input project edge ((root, height) :: rest)) :
+    RecordedTreeNode table leaf input project height edge root ∧
+      RecordedForestBPCandidate table leaf input project (edge - 2 ^ height) rest := by
+  exact recorded
+"""
+    for name, old, new in [
+        ("tree-forest-head-lost", "RecordedTreeNode table leaf input project height edge root ∧", "True ∧"),
+        ("tree-forest-tail-edge", "(edge - 2 ^ height) rest", "edge rest"),
+        ("tree-forest-head-height", "project height edge root ∧", "project (height + 1) edge root ∧")]:
+        add(name, key, old, new, check)
+
+    tree_cases("PathReplay", "replayPath", "PathRecovery", "recovery_program_replay_path", [
+        ("tree-path-lookup-absent", "(table (pathPairInput pair height index current sibling)).bind", "(none : Option α).bind"),
+        ("tree-path-height", "(height + 1) (index / 2)", "height (index / 2)"),
+        ("tree-path-parent-index", "(height + 1) (index / 2)", "(height + 1) index"),
+        ("tree-path-parent-value", "(project reply) rest", "current rest"),
+        ("tree-path-suffix-lost", "replayPathBPCandidate table pair project (height + 1) (index / 2) (project reply) rest", "some (project reply)"),
+        ("tree-path-step-equivalent", "(height + 1) (index / 2)", "(height + 0 + 1) (index / 2)", True)])
+    key, alias = tree_alias("PathReplay", "pathPairInput")
+    check = """theorem checked (seed : ByteKey) (layer tree height index : ℕ)
+    (current : Randomizer) (auth : List Randomizer) :
+    pathPairInputBPCandidate (merklePairInput seed layer tree) height index current
+      ((auth[height]?).getD 0) = recoveryInput seed layer tree height index auth current := by
+  by_cases h : index % 2 = 0 <;> simp only [pathPairInputBPCandidate, recoveryInput, h, ↓reduceIte]
+"""
+    for name, old, new in [
+        ("tree-path-parity", "if index % 2 = 0 then", "if index % 2 = 1 then"),
+        ("tree-path-even-parent", "then pair height (index / 2)", "then pair height index"),
+        ("tree-path-odd-order", "else pair height (index / 2) sibling current", "else pair height (index / 2) current sibling")]:
+        add(name, key, old, new, check)
+    tree_cases("PathRecovery", "pathSiblings", "PathRecovery", "recovery_program_replay_path", [
+        ("tree-path-sibling-index", "(auth[height]?).getD fallback", "(auth[height + 1]?).getD fallback"),
+        ("tree-path-sibling-repeat", "steps (height + 1)", "steps height"),
+        ("tree-path-sibling-default", "(auth[height]?).getD fallback", "fallback"),
+        ("tree-path-sibling-equivalent", "steps (height + 1)", "steps (height + 0 + 1)", True)])
+    tree_cases("TreeRootCertificate", "MerkleTreeCertificate", "TreeRootCertificate", "replay_subtree_root_certificate", [
+        ("tree-merkle-certificate-height", "randomizerOfDigest 9 512 root", "randomizerOfDigest 8 512 root"),
+        ("tree-merkle-certificate-leaf-count", "randomizerOfDigest 9 512 root", "randomizerOfDigest 9 511 root"),
+        ("tree-merkle-certificate-leaf-index", "wotsLeafProgram encode seed layer tree kp", "wotsLeafProgram encode seed layer tree (kp + 1)")])
+    tree_cases("TreeRootCertificate", "ForsTreeCertificate", "TreeRootCertificate", "replay_fors_root_certificate", [
+        ("tree-fors-certificate-height", "randomizerOfDigest 11 2048 root", "randomizerOfDigest 10 2048 root"),
+        ("tree-fors-certificate-leaf-count", "randomizerOfDigest 11 2048 root", "randomizerOfDigest 11 2047 root"),
+        ("tree-fors-certificate-leaf-index", "forsLeafProgram encode seed ht tree kp", "forsLeafProgram encode seed ht tree (kp + 1)")])
+    tree_cases("NodePathBinding", "PublicNodeCollisionFree", "NodePathBinding", "merkle_path_leaf_eq", [
+        ("tree-binding-selection-empty", "selectedCache nodeQuery", "selectedCache (fun _ => false)"),
+        ("tree-binding-cache-empty", "fun key => table (encode key)", "fun (_ : ByteKey) => (none : Option Digest)"),
+        ("tree-binding-wrong-projection", "CollisionFree randomizerOfDigest", "CollisionFree (fun (d : Digest) => (⟨d.val % 2 ^ 128, Nat.mod_lt _ (by decide)⟩ : Randomizer))")])
+    tree_cases("TopTreeOpening", "TopTreeOpening", "TopTreeOpening", "verifier_top_tree_opening", [
+        ("tree-opening-hmsg-key", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput root seed message"),
+        ("tree-opening-forest-coordinate", "(hypertreeIndex digest) digest sig.secrets", "0 digest sig.secrets"),
+        ("tree-opening-lower-layer", "seed 0\n", "seed 1\n"),
+        ("tree-opening-top-signature", "((sig.layers[1]?).getD emptyLayerSignature).sigma", "((sig.layers[0]?).getD emptyLayerSignature).sigma"),
+        ("tree-opening-reference-absent", "replayProgram table (wotsLeafProgram encode seed 1 0\n      (hypertreeLeaf (hypertreeParent (hypertreeIndex digest)))) = some leaf", "True"),
+        ("tree-opening-reference-cache", "replayProgram table (wotsLeafProgram", "replayProgram (fun _ => none) (wotsLeafProgram"),
+        ("tree-opening-count-message", "wotsRecoverCountInput seed 1 0\n      (hypertreeLeaf (hypertreeParent (hypertreeIndex digest))) (nodeValueBytes middle)", "wotsRecoverCountInput seed 1 0\n      (hypertreeLeaf (hypertreeParent (hypertreeIndex digest))) message"),
+        ("tree-opening-count-acceptance", "wotsAccept (wotsOfDigest countDigest) = true", "wotsAccept (wotsOfDigest countDigest) = false"),
+        ("tree-opening-root-comparison", "nodeBlock top = root", "nodeBlock top = seed"),
+        ("tree-opening-reference-layer", "wotsLeafProgram encode seed 1 0", "wotsLeafProgram encode seed 0 0")])
+
     return out

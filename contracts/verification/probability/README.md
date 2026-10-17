@@ -743,6 +743,32 @@ Finite examples check refusal, order, repeated cached queries, exhaustion,
 duplicate signatures, replay rejection and populated-cache success; that last
 witness supplies no empty-cache success probability.
 
+`TreeReplay.lean` and `TreeCertificate.lean` now derive recorded tree
+certificates from the actual indexed builder loops. `TreeRootCertificate.lean`
+instantiates all 512 Merkle leaves and 2,048 FORS leaves. Each certificate
+retains actual leaf replay and ordered parent lookups in one cache, and survives
+later cache extensions. `TreeReference.lean` derives a reference leaf and path
+for every valid coordinate chosen after construction; it does not assume a
+reference oracle or correctness of the builder's returned authentication array.
+
+`PathRecovery.lean` connects those paths to actual recovery, retaining missing
+sibling zero defaults and ignoring surplus siblings exactly as the programs do.
+`NodeInputBinding.lean` proves fixed-width child-input injectivity at a common
+coordinate. `NodePathBinding.lean` and `BuilderRecoveryBinding.lean` therefore
+bind recovery to an actual WOTS leaf or private FORS derivation, or an explicit
+selected-node collision. Global injectivity of truncated addresses is not used.
+
+`TopTreeOpening.lean` applies this to actual winning initialized independent-game
+outputs: selected-node collision, public zero, or a jointly linked top-tree
+opening. H_msg, forest and lower-layer recovery, top WOTS recovery, the actual
+keygen leaf, count digest and padded root remain in the same final cache.
+Count acceptance is derived only after excluding the public-zero case. This
+opening is not yet a new-message WOTS attack; chain openings, lower-layer/FORS
+descent and the numerical forgery charges remain to be composed. The 21 finite
+examples cover populated tree execution, all four toy reference positions,
+defaults, and counterexamples when coordinate, length, collision or zero
+conditions are omitted. They supply no empty-cache success probability.
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -786,16 +812,21 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1305 theorem closures against
+The gate rebuilds every project module, checks all 1381 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-725 typed cases run 2175 compiler jobs: each baseline and changed
-definition must compile, 648 changed behaviors must reject at the
-consuming `checked` theorem, and seventy-seven value-preserving changes must pass.
+783 typed cases run 2349 compiler jobs: each baseline and changed
+definition must compile, 702 changed behaviors must reject at the
+consuming `checked` theorem, and eighty-one value-preserving changes must pass.
+The 58 tree-binding cases cover actual compiled merge/tree replay, certificate
+provenance and coordinates, recovery correspondence, selected-node collision
+premises and linked top-opening witnesses, including four equivalent controls.
+All preceding 725 fixture objects, 1305 theorem statements and proof-module
+bytes remain unchanged.
 The 56 observed-session cases cover passive logs, replay, cache/state erasure,
 initialized experiments and verifier/WOTS witnesses, including four equivalent
 controls. All preceding 669 fixture objects and 1224 theorem statements remain

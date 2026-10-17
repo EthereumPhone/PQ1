@@ -47,6 +47,14 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/FullSession.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ByteGameTopExtraction.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ForsBuilderSecret.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RootCoverage.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawMerkleRootWitness.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawForsComparison.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawPathComparison.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PathCollision.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/PathReplay.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryDriver.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryLog.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureAccounting.ec'
@@ -63,7 +71,9 @@ jobs:
   probability:
     name: PMF proofs and semantic controls
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The preceding 725-case push took 41m22s. Preserve every check while
+    # allowing headroom for 783 cases and 14 additional proof modules.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
