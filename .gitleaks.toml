@@ -182,6 +182,38 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"C10Probability/ForestAccess\.lean": "9c034627b1e0420573ada17b379d1608983082486fa1451425955b06464123be",?\s*$''']
 
+
+[[rules.allowlists]]
+description = "Exact public complete-C10 client source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/C10Access\.lean": "0adf6b407a4ca9501f8c0baa5efe6bb2ed674ae09a0353347132c202d60eab6c",?\s*$''']
+
+
+[[rules.allowlists]]
+description = "Exact public complete-C10 client source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/C10Keygen\.lean": "5e0f8c3aad010c65a2364ebba04bfaebd5e2893d2328433cd7af399cefd290ae",?\s*$''']
+
+
+[[rules.allowlists]]
+description = "Exact public complete-C10 client source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/LayerAccess\.lean": "0c2f74efdededb51f1c625473abb96880789f4bc5204b2cec0a9f0cdf8b974ad",?\s*$''']
+
+
+[[rules.allowlists]]
+description = "Exact public complete-C10 client source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/KeygenExhaustion\.ec": "822cfe363dc338e4ca273a5424194b6af401b9043503c71994d8a83379178632",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
