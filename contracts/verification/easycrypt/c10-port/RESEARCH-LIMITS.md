@@ -234,8 +234,14 @@ position with a suffix to the signed value. This closes chain-opening extraction
 it does not establish that the earlier value is undisclosed or that equal words
 mean equal messages. Minimum exposure across repeated addresses, lower-layer/FORS
 descent, adaptive coverage/private-opening charges and the complete six-case
-partition/final bound remain open. The PMF inventory now has 1448 theorem
-closures and 830 typed sensitivity cases.
+partition/final bound remain open. Forward correctness is now derived for the
+actual returned Merkle/FORS authentication arrays at every valid target, using
+certified stored siblings and the same cache; concrete merge alignment, bounds
+and kept-flag initialization are discharged. Recovery preserves the actual WOTS
+leaf or FORS private value and extends to later caches without a collision
+exclusion. Actual FORS signing's returned secret/path recovers its own builder
+root. Whole C10 honest-signature correctness and forgery descent remain separate.
+The PMF inventory now has 1505 theorem closures and 870 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

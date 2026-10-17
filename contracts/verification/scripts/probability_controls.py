@@ -2477,4 +2477,118 @@ def cases(project: Path) -> list[dict]:
                    theorem(src["WotsOpeningExamples"], "opening_zero_cut_uses_private_reply"))
     add("wots-chain-private-route-lost", key, "encode (.inr (wotsPrivateTail", "encode (.inl (wotsPrivateTail", check)
 
+    # Actual returned authentication arrays: typed predicate consumers and
+    # asymmetric execution vectors. Baseline/definition/consumer are separate.
+    def br_alias(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing returned-auth definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BRCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.AuthPathExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "variable {K α N S : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias, declaration
+
+    key, alias, declaration = br_alias("AuthCertificate", "RecordedAuthSlot")
+    check = """theorem checked (table : Memo K α) (leaf : ℕ → Option N)
+    (input : ℕ → ℕ → N → N → K) (project : α → N)
+    (target : ℕ) (auth : List N) (height : ℕ)
+    (slot : RecordedAuthSlotBRCandidate table leaf input project target auth height) :
+    RecordedAuthSlot table leaf input project target auth height := by
+  exact slot
+"""
+    for row in [
+        ("auth-slot-stored-index", "auth[height]?", "auth[0]?"),
+        ("auth-slot-stored-value-absent", "auth[height]? = some value", "True"),
+        ("auth-slot-node-absent", "RecordedTreeNode table leaf input project\n    height ((siblingIndex (target / 2 ^ height) + 1) * 2 ^ height) value", "True"),
+        ("auth-slot-target", "siblingIndex (target / 2 ^ height)", "siblingIndex (0 / 2 ^ height)"),
+        ("auth-slot-sibling", "siblingIndex (target / 2 ^ height)", "(target / 2 ^ height)"),
+        ("auth-slot-edge", "+ 1) * 2 ^ height", "+ 0) * 2 ^ height"),
+        ("auth-slot-cache", "RecordedTreeNode table leaf", "RecordedTreeNode (fun _ => none) leaf"),
+        ("auth-slot-index-equivalent", "auth[height]?", "auth[height + 0]?", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = br_alias("AuthCertificate", "CollectedTreeNode")
+    check = """theorem checked (table : Memo K α) (leaf : ℕ → Option N)
+    (input : ℕ → ℕ → N → N → K) (project : α → N)
+    (target : ℕ) (auth : List N) (height edge : ℕ) (root : N)
+    (node : CollectedTreeNodeBRCandidate table leaf input project target auth height edge root) :
+    CollectedTreeNode table leaf input project target auth height edge root := by
+  exact node
+"""
+    tail = declaration[declaration.index("(edge - 2 ^ height ≤ target"):].rstrip()
+    for row in [
+        ("auth-node-root-absent", "RecordedTreeNode table leaf input project height edge root", "True"),
+        ("auth-node-path-absent", tail, "True"),
+        ("auth-node-last-slot-omitted", "j < height →", "j < height - 1 →"),
+        ("auth-node-slots-other-array", "target auth j", "target [] j"),
+        ("auth-node-slots-other-target", "target auth j", "0 auth j")]:
+        add(row[0], key, row[1], row[2], check)
+
+    key, alias, declaration = br_alias("AuthKeepLaw", "AuthKeepValid")
+    check = """theorem checked (table : Memo K α) (leaf : ℕ → Option Randomizer)
+    (input : ℕ → ℕ → Randomizer → Randomizer → K) (project : α → Randomizer)
+    (target bound : ℕ) (state : AuthKeep)
+    (valid : AuthKeepValidBRCandidate table leaf input project target bound state) :
+    AuthKeepValid table leaf input project target bound state := by
+  exact valid
+"""
+    tail = declaration[declaration.index("∀ j,"):].rstrip()
+    for row in [
+        ("auth-keep-node-length-absent", "state.nodes.length = bound", "True"),
+        ("auth-keep-flag-length-absent", "state.kept.length = bound", "True"),
+        ("auth-keep-soundness-absent", tail, "True"),
+        ("auth-keep-flag-polarity", ".getD false = true", ".getD false = false"),
+        ("auth-keep-other-node-array", "target state.nodes j", "target [] j")]:
+        add(row[0], key, row[1], row[2], check)
+
+    for name, arguments, height, leaf_program in [
+        ("MerkleAuthCertificate", "layer tree", "9", "wotsLeafProgram encode seed layer tree kp"),
+        ("ForsAuthCertificate", "ht tree", "11", "forsLeafProgram encode seed ht tree kp")]:
+        key, alias, declaration = br_alias("ReturnedAuth", name)
+        check = ("theorem checked (encode : WotsQuery → K) (table : Memo K Digest)\n"
+            "    (seed : ByteKey) (" + arguments + " target : ℕ) (auth : List Randomizer) (root : Randomizer)\n"
+            "    (cert : " + alias + " encode table seed " + arguments + " target auth root) :\n"
+            "    " + name + " encode table seed " + arguments + " target auth root := by\n  exact cert\n")
+        prefix = "auth-merkle" if height == "9" else "auth-fors"
+        for row in [
+            (prefix + "-length-absent", "auth.length = " + height, "True"),
+            (prefix + "-leaf-coordinate", leaf_program, leaf_program[:-2] + "0"),
+            (prefix + "-returned-target", "randomizerOfDigest target auth", "randomizerOfDigest 0 auth"),
+            (prefix + "-returned-array", "randomizerOfDigest target auth", "randomizerOfDigest target []"),
+            (prefix + "-certificate-cache", "CollectedTreeNode table", "CollectedTreeNode (fun _ => none)"),
+            (prefix + "-array-equivalent", "randomizerOfDigest target auth", "randomizerOfDigest target (id auth)", True)]:
+            add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = br_alias("AuthGeometry", "collectAuth")
+    check = theorem(src["AuthPathExamples"], "four_leaf_fors_returned_paths").replace("forsRemember", alias)
+    for row in [
+        ("auth-collector-left-value", "auth.set height left", "auth.set height right"),
+        ("auth-collector-right-value", "auth.set height right", "auth.set height left"),
+        ("auth-collector-left-slot", "auth.set height left", "auth.set (height + 1) left"),
+        ("auth-collector-right-slot", "auth.set height right", "auth.set (height + 1) right"),
+        ("auth-collector-right-coordinate", "+ 1 = siblingIndex", "+ 0 = siblingIndex"),
+        ("auth-collector-right-write-absent", "auth.set height right", "auth"),
+        ("auth-collector-left-equivalent", "auth.set height left", "auth.set (height + 0) left", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = br_alias("MerkleBuild", "authRemember")
+    check = theorem(src["AuthPathExamples"], "initially_kept_path_fails").replace("authRemember", alias)
+    add("auth-kept-check-ignored", key, "if (state.kept[height]?).getD false then state",
+        "if false then state", check)
+
+    key, alias, declaration = br_alias("MerkleBuild", "writeAuthKeep")
+    check = """theorem checked :
+    (writeAuthKeepBRCandidate ⟨[1, 2], [false, false]⟩ 1 7).nodes = [1, 7] ∧
+    (writeAuthKeepBRCandidate ⟨[1, 2], [false, false]⟩ 1 7).kept = [false, true] := by decide +kernel
+"""
+    add("auth-written-flag-lost", key, "state.kept.set height true", "state.kept.set height false", check)
+    add("auth-written-node-lost", key, "state.nodes.set height node", "state.nodes", check)
+
     return out

@@ -5110,6 +5110,15 @@ compile_error!(
         // SECS/CECS. A fault-injection path has no business in a shipping
         // image under any circumstances.
         feature = "rng-fault-probe",
+        // TRNG dump for SP 800-90B (DVT 4.8): parks after TRNG init and
+        // exposes TRNG output in SRAM for the debugger. Terminal bench image.
+        feature = "trng-dump",
+        // DVT 4.12 measurement opt-in: keeps `fi::wait_random` live under
+        // `e2e-test`. Inert without `e2e-test`, but test-only by name.
+        feature = "fi-live-delays",
+        // DVT 4.9 strong-RNG probe: records every RNG source contribution
+        // and reads the OPTIGA PBS in place. Terminal bench image.
+        feature = "rng-xor-probe",
         // Shows the duress setup screens but stores nothing: a shipping
         // image with it would tell the user a duress PIN is set when none is.
         feature = "duress-ui-test",
