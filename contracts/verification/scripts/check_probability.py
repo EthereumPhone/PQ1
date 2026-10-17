@@ -134,7 +134,7 @@ def run_controls(out: Path, lean: str, env: dict) -> list[dict]:
             require(all(m["pos"]["line"] >= first and
                         str(m.get("fileName")) == str(path) for m in errors),
                     f"mutant failed before consuming theorem: {path.name}")
-            excluded = r"unknown|unexpected token|timeout|heartbeats|recursion depth|stack|memory|failed to synthesize"
+            excluded = r"unknown|unexpected token|timeout|heartbeats|recursion depth|stack|memory|failed to synthesize|did not reduce to"
             require(all(not re.search(excluded, m.get("data", ""), re.I) for m in errors),
                     f"non-semantic mutant failure: {path.name}")
         row["errors"] = errors

@@ -175,6 +175,13 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"C10Probability/TreeAccess\.lean": "44da17bc887abc12b58bc840f9d76cac38a567e03af0138c174fdd3fc184fed4",?\s*$''']
 
+[[rules.allowlists]]
+description = "Exact public FORS/forest array-bound proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/ForestAccess\.lean": "9c034627b1e0420573ada17b379d1608983082486fa1451425955b06464123be",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 

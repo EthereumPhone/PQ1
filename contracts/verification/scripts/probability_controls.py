@@ -1729,7 +1729,7 @@ def cases(project: Path) -> list[dict]:
     merkle_slice("ShuffleDeriveInputs", ["ForsInputs"],
         [("ShuffleDerive", n) for n in ["shuffleTag", "shuffleDeriveInput"]])
     add("forest-shuffle-domain-tag", "ShuffleDeriveInputs", "108,101,45,118,49]",
-        "108,101,45,118,50]", fors_example("forest_shuffle_tag_ascii"))
+        "108,101,45,118,50]", fors_example("forest_shuffle_derive_vector"))
     add("forest-shuffle-label-order", "ShuffleDeriveInputs", "shuffleTag ++ seed ++ label",
         "shuffleTag ++ label ++ seed", fors_example("forest_shuffle_derive_vector"))
     key, alias = fors_alias("ShuffleDerive", "shuffleDeriveProgram")
