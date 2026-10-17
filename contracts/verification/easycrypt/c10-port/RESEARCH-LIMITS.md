@@ -191,11 +191,22 @@ and 358 selected calls. Prefix error retains the independent uniform secret and
 empty tables, while empty-cache node charges retain the full raw zero term.
 Successful signature sizes, cached success/failure, full-table failure equations,
 literal bytes and ordered two-layer traces are checked.
-This closes the manual structured clients and costs, not universal honest
-correctness, the 4008-byte codec in the PMF model, adaptive session cost,
-successful-output/forgery partition, final forgery bound or repeated-grinder
-freshness. The `none` exhaustion model does not prove runtime panic/retry,
-callback or erasure semantics. All 36 manual source bindings are checked for
+The finite adaptive structured session now composes those clients with actual
+cap admission, persistent signing failure, successful-message ledger and final
+fresh-message/shape checks. Keygen, adaptive calls and final verification retain
+one full cache. For raw/sign caps `qr,qs`, initialized costs are
+`qr+qs*(2*m+2*n+435044)+177512` total,
+`qr+qs*(m+2*n+364290)+155496` public and
+`qr+qs*(m+435042)+177509` selected physical calls, independent of refused-attempt
+fuel. R inputs remain selected. The empty-cache physical node charge is
+`(choose(selected,2)+total)/2^128`; with an independent uniform hidden secret,
+initialized shared/independent returned-event error is at most `public/2^256`.
+The real-valued forgery-transfer theorem retains the independent game's forgery
+probability as an unresolved term. This closes finite structured session
+composition and cost, not universal honest correctness, the 4008-byte PMF codec,
+arbitrary lossless/unbounded-adversary representation, successful-output/forgery
+partition, final forgery bound or repeated-grinder freshness. The `none` exhaustion model does not prove runtime panic/retry,
+callback or erasure semantics. All 38 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.

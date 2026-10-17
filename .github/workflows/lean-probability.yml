@@ -45,6 +45,8 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawSigner.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenExhaustion.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/FullSession.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec'
   pull_request:
     paths: *probability_paths
 

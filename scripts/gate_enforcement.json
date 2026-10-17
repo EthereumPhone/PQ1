@@ -1845,7 +1845,9 @@
         "contracts/verification/easycrypt/c10-port/cdrafts-split/RawLayer.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSigner.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenExhaustion.ec",
-        "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec"
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/FullSession.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",

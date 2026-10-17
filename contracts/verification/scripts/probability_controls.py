@@ -1971,4 +1971,107 @@ def cases(project: Path) -> list[dict]:
         ("c10-keygen-root-pad", "nodeBlock root.1", "nodeValueBytes root.1"),
         ("c10-keygen-returned-cache", "root.1), root.2", "root.1), table")])
 
+
+    # Adaptive structured session: independently retained compiler/PMF and
+    # finite consumers check state transitions, cache history and final guards.
+    def session_alias(module, name):
+        candidate = name + "BNCandidate"
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                          r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute)\b)",
+                          src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing session definition " + name)
+        text = re.sub(r"\b" + re.escape(name) + r"\b", candidate, match.group(0))
+        key = candidate + "Slice"
+        src[key] = ("import C10Probability.SessionExamples\nnamespace C10Probability\n"
+            "noncomputable section\nvariable {K L R : Type*}\n" + text +
+            "\nend\nend C10Probability\n")
+        return key, candidate
+
+    def session_cases(module, definition, consumer_module, consumer, rows):
+        key, alias = session_alias(module, definition)
+        check = re.sub(r"\b" + re.escape(definition) + r"\b", alias,
+                      theorem(src[consumer_module], consumer))
+        for row in rows:
+            add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    session_cases("SessionTypes", "sessionAdmits", "SessionExamples", "session_admission_vectors", [
+        ("session-admit-failed", "!ledger.failed", "true"),
+        ("session-admit-message", "req.message.length = 32", "req.message.length = 31"),
+        ("session-admit-random-empty", "req.random.length = 0", "req.random.length = 1"),
+        ("session-admit-random-sixteen", "req.random.length = 16", "req.random.length = 15"),
+        ("session-admit-shuffle", "req.shuffle.length = 32", "req.shuffle.length = 33"),
+        ("session-admit-equivalent", "req.message.length = 32", "req.message.length = 16 + 16", True)])
+    session_cases("SessionTypes", "sessionAfterSign", "SessionTypes", "session_none_absorbs", [
+        ("session-none-failure", "⟨ledger.signedMessages, true⟩", "⟨ledger.signedMessages, false⟩"),
+        ("session-none-recorded", "⟨ledger.signedMessages, true⟩", "⟨ledger.signedMessages ++ [message], true⟩"),
+        ("session-none-erased", "⟨ledger.signedMessages, true⟩", "⟨[], true⟩")])
+    session_cases("SessionTypes", "sessionAfterSign", "SessionTypes", "session_some_records", [
+        ("session-some-missing", "ledger.signedMessages ++ [message]", "ledger.signedMessages"),
+        ("session-some-prepended", "ledger.signedMessages ++ [message]", "message :: ledger.signedMessages"),
+        ("session-some-clears-failed", "ledger.failed⟩", "false⟩")])
+    session_cases("SessionProgram", "c10Session", "SessionProgram", "c10_session_eval", [
+        ("session-done-ledger-reset", "PMF.pure (⟨value, ledger, qr, qs⟩, table)",
+         "PMF.pure (⟨value, emptySessionLedger, qr, qs⟩, table)"),
+        ("session-done-raw-cap", "PMF.pure (⟨value, ledger, qr, qs⟩, table)",
+         "PMF.pure (⟨value, ledger, qr + 1, qs⟩, table)"),
+        ("session-hash-capped-default", "(next 0) 0 qs ledger table", "(next 1) 0 qs ledger table"),
+        ("session-hash-private-route", "(encode (.inl key))", "(encode (.inr key))"),
+        ("session-hash-reply-discarded", "(next reply.1) qr qs ledger reply.2", "(next 0) qr qs ledger reply.2"),
+        ("session-hash-cap-not-spent", "(next reply.1) qr qs ledger reply.2", "(next reply.1) (qr + 1) qs ledger reply.2"),
+        ("session-hash-cache-discarded", "(next reply.1) qr qs ledger reply.2", "(next reply.1) qr qs ledger table"),
+        ("session-zero-sign-cap-increased", "(next none) qr 0 ledger table", "(next none) qr 1 ledger table"),
+        ("session-admission-skipped", "if sessionAdmits ledger req then", "if true then"),
+        ("session-sign-random-message-swapped", "table req.random req.message cfg.seed", "table req.message req.random cfg.seed"),
+        ("session-sign-seed-root-swapped", "req.message cfg.seed cfg.root req.shuffle", "req.message cfg.root cfg.seed req.shuffle"),
+        ("session-sign-cap-not-spent", "(next reply.1) qr qs\n", "(next reply.1) qr (qs + 1)\n"),
+        ("session-sign-response-discarded", "(next reply.1) qr qs\n", "(next none) qr qs\n"),
+        ("session-sign-cache-discarded", "(sessionAfterSign ledger req.message reply.1) reply.2", "(sessionAfterSign ledger req.message reply.1) table"),
+        ("session-sign-ledger-skipped", "(sessionAfterSign ledger req.message reply.1) reply.2", "ledger reply.2"),
+        ("session-refused-sign-spends-cap", "(next none) qr (qs + 1) ledger table", "(next none) qr qs ledger table"),
+        ("session-refused-sign-clears-cache", "(next none) qr (qs + 1) ledger table", "(next none) qr (qs + 1) ledger (fun _ => none)"),
+        ("session-hash-remaining-equivalent", "if sessionAdmits ledger req then", "if (fun value : Bool => value) (sessionAdmits ledger req) then", True)])
+    session_cases("SessionDriver", "sessionSignatureWidth", "SessionDriver", "session_signature_width_iff", [
+        ("session-width-secrets", "sig.secrets.length = 13", "sig.secrets.length = 12"),
+        ("session-width-auth-rows", "sig.auths.length = 12", "sig.auths.length = 11"),
+        ("session-width-auth-height", "auth.length = 11", "auth.length = 10"),
+        ("session-width-layer-count", "sig.layers.length = 2", "sig.layers.length = 1"),
+        ("session-width-u32", "layer.count < 2 ^ 32", "layer.count < 2 ^ 33"),
+        ("session-width-layer-auth", "layer.auth.length = 9", "layer.auth.length = 8"),
+        ("session-width-layer-equivalent", "sig.layers.length = 2", "sig.layers.length = 1 + 1", True)])
+    session_cases("SessionDriver", "sessionFinalAdmits", "SessionDriver", "session_final_admits_iff", [
+        ("session-final-ignore-failure", "!out.ledger.failed", "true"),
+        ("session-final-message-width", "out.value.1.length = 32", "out.value.1.length = 31"),
+        ("session-final-shape-skipped", "sessionSignatureWidth out.value.2", "true"),
+        ("session-final-replay-required", "out.value.1 ∉ out.ledger.signedMessages", "out.value.1 ∈ out.ledger.signedMessages"),
+        ("session-final-ledger-ignored", "out.value.1 ∉ out.ledger.signedMessages", "out.value.1 ∉ ([] : List ByteKey)")])
+    session_cases("SessionDriver", "c10Final", "SessionDriver", "c10_final_eval", [
+        ("session-final-guard-skipped", "if sessionFinalAdmits out then", "if true then"),
+        ("session-final-private-verify", "encode ∘ Sum.inl", "encode ∘ Sum.inr"),
+        ("session-final-root-swapped", "cfg.seed cfg.root out.value.1", "cfg.root cfg.seed out.value.1"),
+        ("session-final-cache-reset", "table cfg.seed", "(fun _ => none) cfg.seed"),
+        ("session-final-refusal-true", "PMF.pure (false, table)", "PMF.pure (true, table)"),
+        ("session-final-refusal-cache", "PMF.pure (false, table)", "PMF.pure (false, fun _ => none)")])
+    session_cases("SessionDriver", "c10Driver", "SessionDriver", "c10_driver_eval", [
+        ("session-driver-swapped-caps", "client qr qs emptySessionLedger", "client qs qr emptySessionLedger"),
+        ("session-driver-cache-discarded", "out.1 out.2", "out.1 table")])
+    session_cases("SessionGame", "sessionConfigAt", "SessionGame", "session_config_at_fields", [
+        ("session-game-public-root", "root := key.2", "root := key.1")])
+    session_cases("SessionGame", "c10Game", "SessionGame", "c10_game_eval", [
+        ("session-game-keygen-cache-reset", "encode table publicSeed", "encode (fun _ => none) publicSeed"),
+        ("session-game-keygen-seed-zero", "encode table publicSeed", "encode table 0"),
+        ("session-game-client-input-swapped", "adversary key.1.1 key.1.2", "adversary key.1.2 key.1.1"),
+        ("session-game-driver-cache-reset", "qr qs key.2", "qr qs table"),
+        ("session-game-no-raw-cap", "qr qs key.2", "0 qs key.2"),
+        ("session-game-sign-cap-equivalent", "qr qs key.2", "qr (qs + 0) key.2", True)])
+    for definition, target, old, new in [
+        ("sessionGameRaw", "121482646", "177512", "177511"),
+        ("sessionGamePublic", "91248368", "155496", "155495"),
+        ("sessionGameSelected", "31482637", "177509", "177508")]:
+        key, alias = session_alias("SessionCharges", definition)
+        check = ("theorem checked : " + alias +
+            " (⟨[],[],10000000,10000000,by decide,by decide⟩) 2 3 = " + target +
+            " := by decide +kernel\n")
+        add("session-game-cost-" + definition, key, old, new, check)
+
     return out

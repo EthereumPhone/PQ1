@@ -293,12 +293,21 @@ and layer 1/tree 0, with 177151 total/155135 public calls. Successful signature
 shape/count bounds, literal bytes, two-layer order, cached success/failure and
 failure-history equations are checked. The same empty-table/independent-secret
 premises govern prefix error; node charges preserve raw-call zero terms.
-Adaptive full session/forgery composition, the 4008-byte codec in this separate
-PMF model, repeated-grinder freshness and concrete backends remain open.
-No new universal build/recover correctness, shuffle-uniformity or physical-security
-result is claimed. All 1160 theorem closures and 609 typed cases are gated separately;
-`lean/` stays mathlib-free. #295 remains open for the full
-probability-monad forgery game and shared signer-session transfer. No cross-kernel
+The finite adaptive structured session now also compiles with cap admission,
+absorbing signing exhaustion, successful-message ledger and guarded fresh-message
+verification. Keygen and every continuation share the full cache. Initialized
+budgets are `qr+qs*(2*m+2*n+435044)+177512` total,
+`qr+qs*(m+2*n+364290)+155496` public and `qr+qs*(m+435042)+177509`
+selected calls; the physical node charge is `(choose(selected,2)+total)/2^128`.
+Under independent uniform hidden-secret/empty-table premises, the real-valued
+shared-to-independent game error is at most the public budget divided by `2^256`.
+The independent game's forgery probability remains an explicit residual.
+Successful-output/forgery partition, the final bound, arbitrary lossless-adversary
+representation, the 4008-byte PMF codec, repeated-grinder freshness and concrete
+backends remain open. No new universal build/recover correctness,
+shuffle-uniformity or physical-security result is claimed. All 1224 theorem
+closures and 669 typed cases are gated separately; `lean/` stays mathlib-free.
+#295 remains open for the remaining probability-monad forgery bound. No cross-kernel
 probability or deployed hash-independence claim is made.
 
 **EasyCrypt coverage tightening (2026-10-15):** exact Stirling and falling-factorial

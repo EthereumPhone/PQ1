@@ -673,11 +673,50 @@ literal bytes, field placement, root-padding refusal and ordered two-layer trace
 Populated constant-cache witnesses are not fresh-oracle or honest-correctness claims.
 
 This is a manually transcribed structured-signature model, not the 4008-byte
-codec or a Rust execution-equivalence theorem. The adaptive full session,
-successful-output/forgery partition, final forgery PMF bound, universal honest
+codec or a Rust execution-equivalence theorem. The structured finite adaptive
+session is composed below; successful-output/forgery partition, final forgery
+PMF bound, universal honest
 correctness, repeated-grinder freshness and concrete backends remain open.
 Rust panic/retry/callback/erasure behavior, natural-number address truncation,
 cross-language correspondence and physical execution retain their existing boundaries.
+
+The adaptive structured session now compiles through these clients.
+`SessionTypes.lean` represents finite reply-dependent hash/sign interactions,
+with attempted-interaction fuel distinct from admitted-call caps. `SessionProgram.lean`
+proves full result/cache equality between the compiler and direct PMF session.
+A raw-cap refusal returns the zero digest; signing checks the failure flag,
+message32, random0or16, shuffle32 and remaining signing cap. Refusal changes
+neither cap nor cache. Every admitted signing call spends one cap, including
+exhaustion; only successful signatures append the message, and failure prevents
+later signing while leaving raw hash calls available. `SessionState.lean` proves
+monotone caps, persistent failure, ledger-prefix preservation and message widths.
+
+`SessionDriver.lean` checks nonfailure, message width, structured signature shape
+and absence from the successful-message ledger before final verification.
+`SessionGame.lean` initializes keygen and passes the resulting public seed/root
+and full cache to the adaptive client. Its compiler-only public-key width guard
+is proved redundant on actual keygen support. All requested raw hashes,
+signatures and final verification retain the same oracle history.
+
+For nonnegative raw/sign caps `qr,qs`, define the complete initialized budgets:
+
+- `T = qr + qs*(2*m+2*n+435044) + 177512` total calls;
+- `P = qr + qs*(m+2*n+364290) + 155496` public calls;
+- `N = qr + qs*(m+435042) + 177509` selected physical-node calls.
+
+These bounds do not grow with refused attempts. Private R inputs remain in `N`.
+`SessionCharges.lean` gives the empty-cache physical node-event charge
+`(choose(N,2)+T)/2^128`. For any independent public-seed/adversary sampler, a
+uniform hidden secret and initially empty tables, the real-valued returned-event
+error between the actual initialized shared game and the independent-interface
+game is at most `P/2^256`. The forgery-transfer inequality keeps the independent
+game's forgery probability on its right-hand side; it does not bound that
+residual event. `SessionBranches.lean` characterizes successful driver support,
+and `SessionExamples.lean` checks refused calls, repeated cache reads, admitted
+exhaustion, duplicate successful messages, replay rejection and a populated-cache
+initialized success. These are finite structured clients, not a representation
+theorem for every lossless or unbounded EasyCrypt adversary. The byte codec,
+successful-output partition and final forgery bound remain open.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -722,16 +761,18 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1160 theorem closures against
+The gate rebuilds every project module, checks all 1224 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-609 typed cases run 1827 compiler jobs: each baseline and changed
-definition must compile, 540 changed behaviors must reject at the
-consuming `checked` theorem, and sixty-nine value-preserving changes must pass.
+669 typed cases run 2007 compiler jobs: each baseline and changed
+definition must compile, 596 changed behaviors must reject at the
+consuming `checked` theorem, and seventy-three value-preserving changes must pass.
+The 60 adaptive-session cases add admission, cap, history, ledger, final-guard,
+keygen composition and cost sensitivity, including four equivalent controls.
 The 98 C10 client cases cover complete labels and natural count bytes,
 coordinate shifts, recovery and signing history, returned fields, both layers,
 R/H_msg composition, forced-zero and whole-root verification, and keygen's
