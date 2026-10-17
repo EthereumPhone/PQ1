@@ -274,10 +274,18 @@ stack schedule derives 177151 total/155135 public tree calls, with in-range
 nine-slot authentication accesses. Root/build prefix transfer is 155135/2^256
 under the same independent hidden-secret and empty-table premises; their
 conservative empty-cache node charge is 15691326976/2^128, and recovery's is 45/2^128.
-Full C10 FORS/hypertree/session/forgery translation and concrete backends remain
-open. No new universal build/recover correctness, shuffle-uniformity or
-physical-security result is claimed.
-All 861 theorem closures and 440 typed cases are gated separately;
+FORS tree/sign/recovery and the shuffled forest now also compile with full
+result/cache equality. The actual 2048-leaf/2047-merge geometry gives 6143 tree
+calls, 6144 signing calls and twelve recovery calls. Forest signing retains the
+full-digest sub-seed, four shuffle blocks, twelve actual sign/recover pairs,
+natural-position stores and the special thirteenth root-as-secret with its
+separately hashed compression slot. Costs are at most 80022 total/53386 public
+signing calls and 146 recovery calls. Prefix error is 53386/2^256 under the same
+independent-secret/empty-table premises; conservative empty-cache node charges
+are 3201800253/2^128 and 10731/2^128 respectively.
+Full C10/hypertree/session/forgery translation and concrete backends remain open.
+No new universal build/recover correctness, shuffle-uniformity or physical-security
+result is claimed. All 1017 theorem closures and 511 typed cases are gated separately;
 `lean/` stays mathlib-free. #295 remains open for the full
 probability-monad forgery game and shared signer-session transfer. No cross-kernel
 probability or deployed hash-independence claim is made.

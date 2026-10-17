@@ -1616,4 +1616,209 @@ def cases(project: Path) -> list[dict]:
         "remember n (1 + start)", merkle_example("tree_four_leaves_query_order"), True)
     add("merkle-recovery-parent-preserving", "MerkleRecoveryDirect", "height (index / 2) left right",
         "height (index / (1 + 1)) left right", merkle_example("recovery_odd_vector"), True)
+
+    # FORS/forest controls: literal finite witnesses plus the unchanged
+    # compiler consumers. Aliases isolate a changed direct procedure from its
+    # independently defined compiler, while retaining all dependency proofs.
+    def fors_example(name):
+        return "set_option maxRecDepth 80000\n" + theorem(src["ForsExamples"], name)
+
+    def fors_alias(module, name, extras=()):
+        candidate = name + "Candidate"
+        text = merkle_decl(module, name)
+        text = re.sub(r"\b" + re.escape(name) + r"\b", candidate, text)
+        key = candidate + "Slice"
+        src[key] = ("import C10Probability.ForestCached\nnamespace C10Probability\n"
+            "noncomputable section\nvariable {K L S : Type*}\n" + text + "\n" +
+            "\n".join(merkle_decl(mod, decl) for mod, decl in extras) +
+            "end\nend C10Probability\n")
+        return key, candidate
+
+    def fors_consumer(module, name, original, candidate):
+        return re.sub(r"\b" + re.escape(original) + r"\b", candidate,
+                      theorem(src[module], name))
+
+    private = fors_example("fors_private_byte_vector")
+    leaf = fors_example("fors_leaf_byte_vector")
+    pair = fors_example("fors_pair_byte_vector")
+    compression = fors_example("fors_compression_byte_vector")
+    add("fors-private-tag-byte", "ForsInputs", "[102, 111, 114, 115]", "[102, 111, 114, 116]", private)
+    add("fors-private-ht-width", "ForsInputs", "beBytes 4 ht ++ beBytes 4 tree",
+        "beBytes 8 ht ++ beBytes 4 tree", private)
+    add("fors-private-coordinate-order", "ForsInputs", "beBytes 4 tree ++ beBytes 4 leaf",
+        "beBytes 4 leaf ++ beBytes 4 tree", private)
+    add("fors-leaf-kind", "ForsInputs", "c10Address 0 ht 3 tree 0 0 leaf",
+        "c10Address 0 ht 2 tree 0 0 leaf", leaf)
+    add("fors-leaf-index", "ForsInputs", "c10Address 0 ht 3 tree 0 0 leaf",
+        "c10Address 0 ht 3 tree 0 0 tree", leaf)
+    add("fors-pair-height", "ForsInputs", "(height + 1) parent", "height parent", pair)
+    add("fors-pair-child-order", "ForsInputs", "nodeBlock left ++ nodeBlock right",
+        "nodeBlock right ++ nodeBlock left", pair)
+    add("fors-tree-pair-parent", "ForsInputs", "(leaf / 2 ^ (height + 1))",
+        "(leaf / 2 ^ height)", fors_example("fors_tree_pair_parent_vector"))
+    add("fors-compression-kind", "ForsInputs", "c10Address 0 ht 4 0 0 0 0",
+        "c10Address 0 ht 3 0 0 0 0", compression)
+    add("fors-compression-root-order", "ForsInputs", "roots.flatMap nodeBlock",
+        "roots.reverse.flatMap nodeBlock", compression)
+    add("fors-index-field-stride", "ForsInputs", "(11 * tree) % 2048", "(12 * tree) % 2048",
+        fors_example("forest_digest_field_vector"))
+    add("fors-index-field-width", "ForsInputs", "(11 * tree) % 2048", "(11 * tree) % 4096",
+        fors_example("forest_digest_upper_boundary"))
+    add("fors-private-tag-equivalent", "ForsInputs", "[102, 111, 114, 115]",
+        "[102, 111, 114, 114 + 1]", private, True)
+
+    merkle_slice("ForsRememberPure", ["ForsInputs"], [("ForsTree", "forsRemember")])
+    add("fors-auth-left-value", "ForsRememberPure", "then auth.set height left else auth",
+        "then auth.set height right else auth", fors_example("fors_remember_left_vector"))
+    add("fors-auth-right-value", "ForsRememberPure", "then auth.set height right else auth",
+        "then auth.set height left else auth", fors_example("fors_remember_right_vector"))
+    add("fors-auth-high-slot", "ForsRememberPure", "auth.set height right",
+        "auth.set (height + 1) right", fors_example("fors_remember_high_vector"))
+    add("fors-auth-irrelevant-write", "ForsRememberPure", "sibling * 2 ^ height = rightStart",
+        "True", fors_example("fors_remember_irrelevant_vector"))
+    add("fors-auth-overwrite-suppressed", "ForsRememberPure", "then auth.set height left else auth",
+        "then (if (auth[height]?).getD 0 = 0 then auth.set height left else auth) else auth",
+        fors_example("fors_remember_overwrite_vector"))
+    add("fors-auth-coordinate-shift", "ForsRememberPure", "(leaf / 2 ^ (height + 1)) * 2 ^ (height + 1)",
+        "leaf", fors_example("fors_remember_left_vector"))
+
+    key, alias = fors_alias("ForsLeaf", "forsLeafProgram")
+    trace = fors_example("fors_leaf_query_order").replace("forsLeafProgram", alias)
+    add("fors-leaf-private-route", key, ".inr (forsPrivateTail", ".inl (forsPrivateTail", trace)
+    add("fors-leaf-secret-projection", key, "(randomizerOfDigest secret)", "0", trace)
+    key, alias = fors_alias("ForsLeaf", "forsLeaf")
+    check = fors_consumer("ForsLeaf", "fors_leaf_eval", "forsLeaf", alias)
+    add("fors-leaf-history-reset", key, "memoQuery digestDraw secret.2", "memoQuery digestDraw table", check)
+    add("fors-leaf-return-table", key, "reply.1, reply.2)", "reply.1, table)", check)
+
+    key, alias = fors_alias("ForsTree", "forsSign")
+    check = fors_consumer("ForsTree", "fors_sign_eval", "forsSign", alias)
+    add("fors-sign-secret-history", key, "forsTree encode secret.2", "forsTree encode table", check)
+    add("fors-sign-root-in-secret-slot", key, "randomizerOfDigest secret.1, out.1.2",
+        "out.1.1, out.1.2", check)
+
+    merkle_slice("ForsRecoveryPure", ["ForsInputs"], [("ForsRecover", "forsRecoveryInput")])
+    add("fors-recover-left-parity", "ForsRecoveryPure", "then current else sibling",
+        "then sibling else current", fors_example("fors_recovery_even_vector"))
+    add("fors-recover-default", "ForsRecoveryPure", "(auth[height]?).getD 0",
+        "(auth[height]?).getD 1", fors_example("fors_recovery_default_vector"))
+    add("fors-recover-parent", "ForsRecoveryPure", "(index / 2) left right",
+        "index left right", fors_example("fors_recovery_odd_vector"))
+    key, alias = fors_alias("ForsRecover", "forsRecoveryProgram")
+    # Include only the wrapper as a renamed definition; dependency references
+    # point at the mutated recursive compiler, not the original imported one.
+    wrapper = merkle_decl("ForsRecover", "forsRecoverProgram").replace(
+        "forsRecoveryProgram", alias).replace("forsRecoverProgram", "forsRecoverCandidate")
+    src[key] = src[key].replace("end\nend C10Probability\n", wrapper + "end\nend C10Probability\n")
+    trace = fors_example("fors_recovery_query_order").replace("forsRecoveryProgram", alias).replace(
+        "forsRecoverProgram", "forsRecoverCandidate")
+    add("fors-recover-index-step", key, "steps (height + 1) (index / 2)",
+        "steps (height + 1) index", trace)
+    add("fors-recover-height-step", key, "steps (height + 1) (index / 2)",
+        "steps height (index / 2)", trace)
+    key, alias = fors_alias("ForsRecover", "forsRecoverProgram")
+    trace = fors_example("fors_recovery_query_order").replace("forsRecoverProgram", alias)
+    add("fors-recover-eleventh-call-lost", key,
+        "forsRecoveryProgram encode seed ht tree auth 11 0 target (randomizerOfDigest reply)",
+        "reserveProgram 1 (forsRecoveryProgram encode seed ht tree auth 10 0 target (randomizerOfDigest reply))",
+        trace.replace("forsRecoveryProgram, traceProgram", "forsRecoveryProgram, reserveProgram, traceProgram"))
+    key, alias = fors_alias("ForsRecover", "forsRecoveryLoop")
+    add("fors-recover-fresh-cache-lost", key, "(current, table)", "(current, fun _ => none)",
+        fors_example("fors_recovery_one_fresh_populated").replace("forsRecoveryLoop", alias))
+
+    merkle_slice("ShuffleDeriveInputs", ["ForsInputs"],
+        [("ShuffleDerive", n) for n in ["shuffleTag", "shuffleDeriveInput"]])
+    add("forest-shuffle-domain-tag", "ShuffleDeriveInputs", "108,101,45,118,49]",
+        "108,101,45,118,50]", fors_example("forest_shuffle_tag_ascii"))
+    add("forest-shuffle-label-order", "ShuffleDeriveInputs", "shuffleTag ++ seed ++ label",
+        "shuffleTag ++ label ++ seed", fors_example("forest_shuffle_derive_vector"))
+    key, alias = fors_alias("ShuffleDerive", "shuffleDeriveProgram")
+    wrapper = merkle_decl("ForestShuffle", "forestShuffleProgram").replace(
+        "shuffleDeriveProgram", alias).replace("forestShuffleProgram", "forestShuffleCandidate")
+    src[key] = src[key].replace("end\nend C10Probability\n", wrapper + "end\nend C10Probability\n")
+    trace = fors_example("forest_shuffle_full_query_order").replace("shuffleDeriveProgram", alias).replace(
+        "forestShuffleProgram", "forestShuffleCandidate")
+    add("forest-shuffle-truncated-subseed", key, "secretBytes reply",
+        "nodeBlock (randomizerOfDigest reply)", trace)
+    add("forest-shuffle-zero-queries", key, "if seed = List.replicate 32 0 then",
+        "if seed = [] then", fors_example("forest_shuffle_zero_query_trace").replace(
+            "shuffleDeriveProgram", alias).replace("forestShuffleProgram", "forestShuffleCandidate"))
+    key, alias = fors_alias("ForestShuffle", "forestPermutationProgram")
+    trace = fors_example("forest_permutation_query_order").replace("forestPermutationProgram", alias)
+    add("forest-shuffle-fourth-block-lost", key, "(shuffleBlocksProgram encode seed 0 4)",
+        "(reserveProgram 1 (shuffleBlocksProgram encode seed 0 3))",
+        trace.replace("shuffleBlocksProgram,", "shuffleBlocksProgram, reserveProgram,"))
+    add("forest-shuffle-four-blocks-equivalent", key, "(shuffleBlocksProgram encode seed 0 4)",
+        "(shuffleBlocksProgram encode seed 0 (2 + 2))", trace, True)
+    merkle_slice("ForestShufflePure", ["WotsShuffle"],
+        [("ForestShuffle", n) for n in ["forestTreeIndices", "forestShuffleSwap", "forestShuffleLoop"]])
+    trace = fors_example("forest_shuffle_patterned_order")
+    add("forest-shuffle-second-write", "ForestShufflePure", ".set j ((order[i]?).getD 0)",
+        ".set i ((order[i]?).getD 0)", trace)
+    add("forest-shuffle-stride", "ForestShufflePure", "stream i (pos + 2)", "stream i (pos + 1)", trace)
+    add("forest-shuffle-visit", "ForestShufflePure", "order (i + 1) (shuffleChoice stream pos (i + 1))",
+        "order i (shuffleChoice stream pos i)", trace)
+    add("forest-shuffle-stride-equivalent", "ForestShufflePure", "stream i (pos + 2)",
+        "stream i (pos + (1 + 1))", trace, True)
+
+    key, alias = fors_alias("ForestOne", "forestOne")
+    check = fors_consumer("ForestOne", "forest_one_eval", "forestOne", alias)
+    add("forest-one-recovery-history", key, ") sig.2 seed ht tree target", ") table seed ht tree target", check)
+    add("forest-one-recovery-target", key, ") sig.2 seed ht tree target", ") sig.2 seed ht tree 0", check)
+    add("forest-one-secret-as-root", key, "sig.1.2, root.1", "sig.1.2, sig.1.1", check)
+    key, alias = fors_alias("ForestFill", "forestWrite")
+    check = fors_example("forest_positional_write_vector").replace("forestWrite", alias)
+    add("forest-fill-secret-position", key, "secrets.set tree", "secrets.set 0", check)
+    add("forest-fill-auth-position", key, "auths.set tree", "auths.set 0", check)
+    add("forest-fill-root-position", key, "roots.set tree", "roots.set 0", check)
+    key, alias = fors_alias("ForestFill", "forestFillLoop")
+    check = fors_consumer("ForestFill", "forest_fill_eval", "forestFillLoop", alias)
+    add("forest-fill-index-field", key, "(forestIndex digest tree.val)", "(forestIndex digest 0)", check)
+    add("forest-fill-cache-reset", key, "(forestWrite state tree.val out.1) out.2",
+        "(forestWrite state tree.val out.1) table", check)
+    add("forest-fill-state-discarded", key, "(forestWrite state tree.val out.1) out.2", "state out.2", check)
+
+    key, alias = fors_alias("ForestSign", "forestLastProgram")
+    trace = fors_example("forest_last_query_order").replace("forestLastProgram", alias)
+    add("forest-last-leaf-index", key, "ht 12 0 last", "ht 12 1 last", trace)
+    add("forest-last-unhashed-compression", key, "state.roots.set 12 (randomizerOfDigest leaf)",
+        "state.roots.set 12 last", trace)
+    add("forest-last-compression-order", key, "(state.roots.set 12 (randomizerOfDigest leaf))",
+        "(state.roots.set 12 (randomizerOfDigest leaf)).reverse", trace)
+    key, alias = fors_alias("ForestSign", "forestLast")
+    check = fors_consumer("ForestSign", "forest_last_eval", "forestLast", alias)
+    add("forest-last-hashed-transmitted-secret", key, "state.secrets.set 12 last",
+        "state.secrets.set 12 (randomizerOfDigest leaf.1)", check)
+    add("forest-last-leaf-as-pk", key, "state.auths, randomizerOfDigest reply.1",
+        "state.auths, randomizerOfDigest leaf.1", check)
+    add("forest-last-compression-history", key, "memoQuery digestDraw leaf.2",
+        "memoQuery digestDraw table", check)
+    add("forest-last-final-table", key, "reply.2)))", "table)))", check)
+    key, alias = fors_alias("ForestSign", "forestFinish")
+    check = fors_consumer("ForestSign", "forest_finish_eval", "forestFinish", alias)
+    add("forest-finish-thirteenth-tree", key, "forsRoot encode table seed ht 12",
+        "forsRoot encode table seed ht 11", check)
+    add("forest-finish-root-history", key, "forestLast encode last.2", "forestLast encode table", check)
+    key, alias = fors_alias("ForestSign", "forestSign")
+    check = fors_consumer("ForestSign", "forest_sign_eval", "forestSign", alias)
+    add("forest-sign-order-discarded", key, "digest order.1.val emptyForestState",
+        "digest forestTreeIndices emptyForestState", check)
+    add("forest-sign-shuffle-history", key, "emptyForestState order.2", "emptyForestState table", check)
+    add("forest-sign-filled-history", key, "forestFinish encode filled.2", "forestFinish encode table", check)
+    add("forest-sign-filled-state", key, "seed ht filled.1", "seed ht emptyForestState", check)
+
+    key, alias = fors_alias("ForestRecover", "forestRecoveryLoop")
+    check = fors_consumer("ForestRecover", "forest_recovery_program_eval", "forestRecoveryLoop", alias)
+    add("forest-recover-root-order", key, "(roots ++ [out.1]) out.2", "(out.1 :: roots) out.2", check)
+    add("forest-recover-tree-field", key, "(forestIndex digest tree.val)", "(forestIndex digest 0)", check)
+    add("forest-recover-cache-reset", key, "(roots ++ [out.1]) out.2", "(roots ++ [out.1]) table", check)
+    key, alias = fors_alias("ForestRecover", "forestRecover")
+    check = fors_consumer("ForestRecover", "forest_recover_eval", "forestRecover", alias)
+    add("forest-recover-last-secret-position", key, "(secrets[12]?).getD 0", "(secrets[11]?).getD 0", check)
+    add("forest-recover-unhashed-last", key, "roots.1 ++ [randomizerOfDigest last.1]",
+        "roots.1 ++ [((secrets[12]?).getD 0)]", check)
+    add("forest-recover-final-table", key, "reply.1, reply.2)", "reply.1, table)", check)
+    add("forest-recover-root-list-equivalent", key, "roots.1 ++ [randomizerOfDigest last.1]",
+        "roots.1 ++ (randomizerOfDigest last.1 :: [])", check, True)
+
     return out

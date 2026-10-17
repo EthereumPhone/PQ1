@@ -165,13 +165,24 @@ schedule derives 511 merges and 177151 total/155135 public tree calls; all
 executed authentication heights are below 9. Root/build prefix transfer has
 error 155135/2^256 under the same independent hidden-secret/empty-table premises.
 Their conservative empty-cache node-event charge is 15691326976/2^128; recovery's
-is 45/2^128. This closes those manual compiler/cost components, not a new
-universal build/recover correctness theorem. The complete C10 FORS/hypertree
-and session client, shuffle sub-seed preparation, output partition and forgery
-composition remain open. The `none`
-exhaustion model does not prove runtime panic/retry, callback or erasure
-semantics. All 30 manual source bindings are checked for declared and
-push/PR trigger coverage, closing the known future-drift gap #961.
+is 45/2^128. The PMF FORS tree/sign/recovery and shuffled forest clients now
+also compile with full result/cache equality. Actual 2048-leaf/2047-merge
+geometry, matching-slot authentication overwrites, eleven recovery levels,
+full-digest sub-seed derivation and the twelve-position shuffle are retained.
+The forest actually recovers each signed tree and stores by natural index.
+Its thirteenth transmitted secret is the tree root; a separate leaf hash fills
+the last ordered compression slot. Tree/sign costs are 6143/6144 total and
+4095 public calls; forest signing uses at most 80022 total/53386 public calls,
+and recovery uses 146. Prefix comparison has error 53386/2^256 for forest
+signing under the same independent-secret/empty-table premises. Conservative
+empty-cache node-event charges are 3201800253/2^128 for signing and 10731/2^128
+for recovery. Cached calls are counted, not assumed fresh.
+This closes those manual compiler/cost components, not a new universal
+build/recover correctness theorem. The complete C10/hypertree and session
+client, WOTS outer sub-seed preparation, output partition and forgery composition
+remain open. The `none` exhaustion model does not prove runtime panic/retry,
+callback or erasure semantics. All 32 manual source bindings are checked for
+declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
 The main `lean/` project remains mathlib-free.

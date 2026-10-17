@@ -581,12 +581,52 @@ charge is 45/2^128. `MerkleExamples.lean` checks independent address/child bytes
 authentication writes/defaults, exact query traces and cache retention;
 `TreeCached.lean` proves an inhabited complete cached subtree execution.
 
-This closes the named manually transcribed WOTS and Merkle subtree clients.
-Full C10 FORS/hypertree composition, session cost, successful-output partition
-and the forgery game remain open. Shuffle
-sub-seed derivation belongs to those outer callers. Natural-number address
-truncation, the manual correspondence boundary, Rust panic/callback/erasure
-behavior and concrete backends remain explicit.
+`ForsInputs.lean` and `ForsShape.lean` retain the private `fors` tag and
+coordinates, kind-3 leaf/pair addresses and kind-4 ordered compression. The
+executed stack schedule proves 2048 leaves, 2047 merges and eleven valid
+authentication slots. `ForsTree.lean` retains matching-slot overwrites (FORS
+has no Merkle kept flags), the target secret query before tree construction,
+and all cache updates. The tree uses 6143 total/4095 public calls, signing uses
+6144 total/4095 public calls, and `ForsRecover.lean` executes a leaf hash followed
+by eleven directional sibling calls. Full result/cache compiler equations hold
+for arbitrary initial history.
+
+`ShuffleDerive.lean` models the literal sub-seed domain, complete label and
+full 256-bit reply. `ForestShuffle.lean` executes the FORS sub-seed query and
+four ordered full-digest blocks, then the actual twelve-position Fisher-Yates
+permutation. Both zero-seed branches skip their queries. The permutation and
+read bounds are proved; uniform permutation and physical protection are not
+claimed. `ForestOne.lean` signs each tree and then actually recovers its root.
+`ForestFill.lean` visits those twelve trees in the computed order and writes
+secrets, paths and roots at natural tree positions.
+
+`ForestSign.lean` builds the thirteenth tree root, transmits that root as the
+last secret, and separately hashes it as a leaf for the final compression slot.
+The ordered thirteen-root compression supplies the returned public key. All
+stages share the cache. Worst-case cost, including cached calls and all shuffle
+branches, is 80022 total/53386 public calls. `ForestRecover.lean` executes twelve
+ascending recoveries, the last zero-index leaf and compression: 146 calls.
+The forced-zero digest check belongs to the outer verifier. `ForestAccess.lean`
+proves the returned array lengths and relevant read bounds. `ForsExamples.lean`
+checks literal bytes, digest fields, authentication overwrites, patterned shuffle,
+query order and distinct transmitted-root/leaf/compression roles.
+`ForestCached.lean` supplies inhabited complete cached executions.
+
+`ForestCharges.lean` derives physical full-cache compiler equalities. Prefix
+event error is 4095/2^256 for tree/signing and 53386/2^256 for forest signing,
+with an independent uniform hidden secret and empty initial tables. Conservative
+empty-cache collision-or-oracle-zero charges count every raw call as selected:
+18871296/2^128 for a tree, 18877440/2^128 for tree signing, 3201800253/2^128
+for forest signing and 10731/2^128 for recovery. These bounds are not forgery
+bounds and do not turn cached repeats into independent samples.
+
+This closes the named manual WOTS, Merkle and FORS/forest compiler/cost clients.
+Full C10/hypertree composition, session cost, successful-output partition and
+the forgery game remain open. WOTS sub-seed derivation still belongs to its
+outer caller. Natural-number address truncation, the manual correspondence
+boundary, Rust panic/callback/erasure behavior and concrete backends remain
+explicit. No new universal tree/forest build/recover correctness theorem is
+claimed.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -631,17 +671,22 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 861 theorem closures against
+The gate rebuilds every project module, checks all 1017 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-440 typed cases run 1320 compiler jobs: each baseline and changed
-definition must compile, 381 changed behaviors must reject at the
-consuming `checked` theorem, and fifty-nine value-preserving changes must pass.
-The 42 Merkle cases cover stack geometry/costs, pair bytes/order, authentication
+511 typed cases run 1533 compiler jobs: each baseline and changed
+definition must compile, 448 changed behaviors must reject at the
+consuming `checked` theorem, and sixty-three value-preserving changes must pass.
+The 71 FORS/forest cases cover private/public byte layouts, digest indices,
+authentication overwrites, eleven-level recovery, full-digest sub-seed derivation,
+twelve-position shuffle, all four blocks, positional writes, actual recovery,
+last-root/leaf/compression roles and full-table propagation through the complete
+sign/recover clients. Source-derived aliases isolate each changed direct
+procedure from its unchanged compiler consumer. The 42 Merkle cases cover stack geometry/costs, pair bytes/order, authentication
 selection/writes, full cache retention, leaf/query ordering and nine-step recovery. The signer controls cover private
 bytes/routing, positional writes, shuffle inputs/order/multiply-high, all four
 queries, zero-seed behavior, exhaustion and cache propagation. The recovery

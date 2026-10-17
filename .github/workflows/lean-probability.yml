@@ -39,6 +39,8 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawFors.ec'
       - 'sphincs-c10/src/merkle.rs'
       - 'sphincs-c10/src/params.rs'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawForest.ec'
+      - 'sphincs-c10/src/hypertree.rs'
   pull_request:
     paths: *probability_paths
 
@@ -49,7 +51,7 @@ jobs:
   probability:
     name: PMF proofs and semantic controls
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
