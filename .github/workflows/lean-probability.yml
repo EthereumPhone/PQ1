@@ -47,6 +47,12 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/FullSession.ec'
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryDriver.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryLog.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureAccounting.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSupport.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureDriver.ec'
+      - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureLog.ec'
   pull_request:
     paths: *probability_paths
 

@@ -302,11 +302,17 @@ selected calls; the physical node charge is `(choose(selected,2)+total)/2^128`.
 Under independent uniform hidden-secret/empty-table premises, the real-valued
 shared-to-independent game error is at most the public budget divided by `2^256`.
 The independent game's forgery probability remains an explicit residual.
+Passive observed games now retain actual successful request/signature exposures,
+admitted client hash inputs and the final forgery, with exact result/cache
+erasure. Their winning-output witnesses tie keygen, exposures, accounting,
+freshness and ordered verification to one final cache. WOTS zero-sentinel
+branches remain explicit. Initialized Boolean erasure preserves the existing
+transfer without asserting cache-visible event equivalence.
 Successful-output/forgery partition, the final bound, arbitrary lossless-adversary
 representation, the 4008-byte PMF codec, repeated-grinder freshness and concrete
 backends remain open. No new universal build/recover correctness,
-shuffle-uniformity or physical-security result is claimed. All 1224 theorem
-closures and 669 typed cases are gated separately; `lean/` stays mathlib-free.
+shuffle-uniformity or physical-security result is claimed. All 1305 theorem
+closures and 725 typed cases are gated separately; `lean/` stays mathlib-free.
 #295 remains open for the remaining probability-monad forgery bound. No cross-kernel
 probability or deployed hash-independence claim is made.
 

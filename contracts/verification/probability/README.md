@@ -718,6 +718,31 @@ initialized success. These are finite structured clients, not a representation
 theorem for every lossless or unbounded EasyCrypt adversary. The byte codec,
 successful-output partition and final forgery bound remain open.
 
+The passive observed interpreter in `ObservedSession.lean` now retains each
+successful request/signature exposure and each admitted client hash input in
+chronological order, including duplicates. Refused requests are absent; an
+exhausted signing call spends its cap without creating an exposure. Exact
+erasure preserves the original session result and complete cache.
+`ObservedAccounting.lean` identifies the message ledger with the exposure
+messages and proves query/cap accounting.
+
+`QueryReplay.lean` derives lookup-only replay from actual execution support
+and preserves it under later cache extensions. `ObservedGame.lean` and
+`ObservedOutput.lean` use that result to retain actual keygen, successful
+signing exposures, forwarded query replies and the final forgery in one final
+cache. Accepted outputs satisfy the actual admission/freshness checks and
+provide H_msg, FORS and ordered two-layer root-reconstruction witnesses.
+`RecoveryWitness.lean` preserves the rejected WOTS count/zero-sentinel branch;
+root equality does not establish acceptance of every WOTS count.
+
+`ObservedInitialized.lean` proves exact returned-Boolean erasure for both
+initialized games and inherits their existing `P/2^256` transfer. It does not
+compare cache-visible events across the two oracle interfaces. The six-case
+cryptographic forgery partition and final numerical bound still need proofs.
+Finite examples check refusal, order, repeated cached queries, exhaustion,
+duplicate signatures, replay rejection and populated-cache success; that last
+witness supplies no empty-cache success probability.
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -761,16 +786,20 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1224 theorem closures against
+The gate rebuilds every project module, checks all 1305 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-669 typed cases run 2007 compiler jobs: each baseline and changed
-definition must compile, 596 changed behaviors must reject at the
-consuming `checked` theorem, and seventy-three value-preserving changes must pass.
+725 typed cases run 2175 compiler jobs: each baseline and changed
+definition must compile, 648 changed behaviors must reject at the
+consuming `checked` theorem, and seventy-seven value-preserving changes must pass.
+The 56 observed-session cases cover passive logs, replay, cache/state erasure,
+initialized experiments and verifier/WOTS witnesses, including four equivalent
+controls. All preceding 669 fixture objects and 1224 theorem statements remain
+unchanged.
 The 60 adaptive-session cases add admission, cap, history, ledger, final-guard,
 keygen composition and cost sensitivity, including four equivalent controls.
 The 98 C10 client cases cover complete labels and natural count bytes,

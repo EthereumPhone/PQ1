@@ -2074,4 +2074,108 @@ def cases(project: Path) -> list[dict]:
             " := by decide +kernel\n")
         add("session-game-cost-" + definition, key, old, new, check)
 
+
+    # Passive observed histories and final-cache witnesses. Each mutated
+    # definition compiles separately; the unchanged consumer must reject it.
+    def observed_alias(module, name):
+        alias = name + "BOCandidate"
+        text = re.sub(r"\b" + re.escape(name) + r"\b", alias, merkle_decl(module, name))
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.ObservedExamples\nnamespace C10Probability\n"
+            "noncomputable section\nvariable {K L R T α : Type*}\n" + text +
+            "\nend\nend C10Probability\n")
+        return key, alias
+
+    def observed_cases(module, definition, consumer_module, consumer, rows):
+        key, alias = observed_alias(module, definition)
+        check = re.sub(r"\b" + re.escape(definition) + r"\b", alias,
+                      theorem(src[consumer_module], consumer))
+        for row in rows:
+            add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    observed_cases("QueryReplay", "replayProgram", "ObservedExamples", "replay_repeat_example", [
+        ("observed-replay-missing-reply", "(table key).bind", "(none : Option α).bind"),
+        ("observed-replay-done-drop", "| _, .done value => some value", "| _, .done _ => none"),
+        ("observed-replay-equivalent", "(table key).bind", "((fun x => x) (table key)).bind", True)])
+    observed_cases("ObservedSession", "observeHash", "ObservedSession", "observe_hash_session", [
+        ("observed-hash-corrupt-cap", "{ out with queries := key :: out.queries }",
+         "{ out with session := { out.session with rawRemaining := out.session.rawRemaining + 1 }, queries := key :: out.queries }")])
+    key, alias = observed_alias("ObservedSession", "observeHash")
+    check = ("theorem checked (key : ByteKey) (out : C10ObservedSession R) :\n"
+        "    (" + alias + " key out).queries = key :: out.queries := rfl\n")
+    for name, old, new, expected in [
+        ("observed-hash-log-drop", "key :: out.queries", "out.queries", False),
+        ("observed-hash-log-reversed", "key :: out.queries", "out.queries ++ [key]", False),
+        ("observed-hash-log-erase-prior", "key :: out.queries", "[key]", False),
+        ("observed-hash-log-key", "key :: out.queries", "[] :: out.queries", False),
+        ("observed-hash-log-equivalent", "key :: out.queries", "[key] ++ out.queries", True)]:
+        add(name, key, old, new, check, expected)
+    observed_cases("ObservedSession", "observeSign", "ObservedSession", "observe_sign_some", [
+        ("observed-sign-log-drop", "⟨req, sig⟩ :: out.exposures", "out.exposures"),
+        ("observed-sign-log-reversed", "⟨req, sig⟩ :: out.exposures", "out.exposures ++ [⟨req, sig⟩]"),
+        ("observed-sign-log-erase-prior", "⟨req, sig⟩ :: out.exposures", "[⟨req, sig⟩]"),
+        ("observed-sign-log-message", "⟨req, sig⟩ :: out.exposures", "⟨{ req with message := [] }, sig⟩ :: out.exposures"),
+        ("observed-sign-log-randomizer", "⟨req, sig⟩ :: out.exposures", "⟨req, { sig with randomizer := 0 }⟩ :: out.exposures"),
+        ("observed-sign-log-equivalent", "⟨req, sig⟩ :: out.exposures", "[⟨req, sig⟩] ++ out.exposures", True)])
+    observed_cases("ObservedSession", "observeSign", "ObservedSession", "observe_sign_none", [
+        ("observed-sign-none-clears-history", "| none => out", "| none => { out with exposures := [] }")])
+    observed_cases("ObservedSession", "c10ObservedSession", "ObservedSession", "c10_observed_session_erases", [
+        ("observed-session-done-cap", "⟨value, ledger, qr, qs⟩", "⟨value, ledger, qr + 1, qs⟩"),
+        ("observed-session-raw-refusal-reply", "(next 0) 0 qs ledger table", "(next 1) 0 qs ledger table"),
+        ("observed-session-raw-private", "encode (.inl key)", "encode (.inr key)"),
+        ("observed-session-raw-reply", "(next reply.1) qr qs ledger reply.2", "(next 0) qr qs ledger reply.2"),
+        ("observed-session-raw-cache", "(next reply.1) qr qs ledger reply.2", "(next reply.1) qr qs ledger table"),
+        ("observed-session-sign-admission", "if sessionAdmits ledger req then", "if true then"),
+        ("observed-session-sign-cap", "(next reply.1) qr qs\n", "(next reply.1) qr (qs + 1)\n"),
+        ("observed-session-sign-reply", "(next reply.1) qr qs\n", "(next none) qr qs\n"),
+        ("observed-session-sign-history", "(sessionAfterSign ledger req.message reply.1) reply.2", "ledger reply.2"),
+        ("observed-session-sign-cache", "(sessionAfterSign ledger req.message reply.1) reply.2", "(sessionAfterSign ledger req.message reply.1) table"),
+        ("observed-session-refused-spends", "(next none) qr (qs + 1) ledger table", "(next none) qr qs ledger table"),
+        ("observed-session-admission-equivalent", "if sessionAdmits ledger req then", "if (fun b : Bool => b) (sessionAdmits ledger req) then", True)])
+    observed_cases("ObservedSession", "c10ObservedSession", "ObservedExamples", "observed_repeated_hash", [
+        ("observed-session-raw-not-logged", "observeHash key out.1", "out.1"),
+        ("observed-session-raw-log-wrong-key", "observeHash key out.1", "observeHash [] out.1")])
+    observed_cases("ObservedDriver", "c10ObservedDriver", "ObservedDriver", "c10_observed_driver_erases", [
+        ("observed-driver-cap-swap", "client qr qs emptySessionLedger", "client qs qr emptySessionLedger"),
+        ("observed-driver-final-cache-reset", "observed.1.session observed.2", "observed.1.session table"),
+        ("observed-driver-result-flip", "⟨observed.1, result.1⟩", "⟨observed.1, !result.1⟩"),
+        ("observed-driver-output-cache", "⟨observed.1, result.1⟩, result.2", "⟨observed.1, result.1⟩, table")])
+    observed_cases("ObservedGame", "c10ObservedGame", "ObservedGame", "c10_observed_game_erases", [
+        ("observed-game-keygen-reset", "encode table publicSeed", "encode (fun _ => none) publicSeed"),
+        ("observed-game-client-key-swap", "adversary key.1.1 key.1.2", "adversary key.1.2 key.1.1"),
+        ("observed-game-session-cache-reset", "qr qs key.2", "qr qs table"),
+        ("observed-game-output-cache-reset", "(⟨key.1, out.1⟩, out.2)", "(⟨key.1, out.1⟩, table)")])
+    observed_cases("ObservedGame", "c10ObservedGame", "ObservedGame", "c10_observed_game_keygen", [
+        ("observed-game-recorded-key-swap", "⟨key.1, out.1⟩", "⟨(key.1.2, key.1.1), out.1⟩")])
+    observed_cases("ObservedInitialized", "c10ObservedInitializedShared", "ObservedInitialized",
+                   "c10_observed_initialized_shared_erases", [
+        ("observed-initial-secret-fixed", "prefixedPrivateInput secret", "prefixedPrivateInput 0"),
+        ("observed-initial-public-seed-fixed", "cfg input.1 input.2", "cfg 0 input.2"),
+        ("observed-initial-cache-populated", "(fun _ => none)", "(fun _ => some 0)")])
+    observed_cases("ObservedInitialized", "c10ObservedInitializedIndependent", "ObservedInitialized",
+                   "c10_observed_initialized_independent_erases", [
+        ("observed-independent-cap-swap", "input.2 qr qs", "input.2 qs qr"),
+        ("observed-independent-cache-populated", "(fun _ => none)", "(fun _ => some 0)")])
+    observed_cases("VerifierWitness", "VerificationWitness", "VerifierWitness", "verifier_witness_replay", [
+        ("observed-verifier-hmsg-key-swap", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput root seed message"),
+        ("observed-verifier-forgot-acceptance", "forsAccept (forsOfDigest digest) = true", "True"),
+        ("observed-verifier-forest-index", "(hypertreeIndex digest)\n      digest", "0\n      digest"),
+        ("observed-verifier-layer-order", "sig.layers 2 0", "sig.layers 2 1"),
+        ("observed-verifier-root-compare", "nodeBlock top = root", "nodeBlock top = seed")])
+    observed_cases("RecoveryWitness", "WotsRecoveryWitness", "RecoveryWitness", "wots_witness_replay", [
+        ("observed-wots-rejected-nonzero", "pk = 0", "pk = 1"),
+        ("observed-wots-count-input", "message count))", "message (count + 1)))"),
+        ("observed-wots-compression-address", "wotsCompressProgram seed layer tree kp values",
+         "wotsCompressProgram seed (layer + 1) tree kp values")])
+
+    observed_cases("ObservedSession", "c10ObservedSession", "ObservedBranches", "c10_observed_sign_returned", [
+        ("observed-session-sign-not-logged", "observeSign req reply.1 out.1", "out.1"),
+        ("observed-session-sign-request-changed", "observeSign req reply.1 out.1",
+         "observeSign { req with message := [] } reply.1 out.1")])
+    observed_cases("ObservedDriver", "c10ObservedDriver", "ObservedDriver", "c10_observed_driver_accounting", [
+        ("observed-driver-exposures-cleared", "⟨observed.1, result.1⟩",
+         "⟨{ observed.1 with exposures := [] }, result.1⟩"),
+        ("observed-driver-queries-cleared", "⟨observed.1, result.1⟩",
+         "⟨{ observed.1 with queries := [] }, result.1⟩")])
+
     return out

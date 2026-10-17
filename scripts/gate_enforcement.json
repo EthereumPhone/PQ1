@@ -1847,7 +1847,13 @@
         "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenExhaustion.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/RoleGrind.ec",
         "contracts/verification/easycrypt/c10-port/cdrafts-split/FullSession.ec",
-        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec"
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/RawSignature.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureLog.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureDriver.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureSupport.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureAccounting.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryLog.ec",
+        "contracts/verification/easycrypt/c10-port/cdrafts-split/ClientQueryDriver.ec"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",

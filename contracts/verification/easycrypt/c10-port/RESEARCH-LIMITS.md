@@ -206,7 +206,15 @@ probability as an unresolved term. This closes finite structured session
 composition and cost, not universal honest correctness, the 4008-byte PMF codec,
 arbitrary lossless/unbounded-adversary representation, successful-output/forgery
 partition, final forgery bound or repeated-grinder freshness. The `none` exhaustion model does not prove runtime panic/retry,
-callback or erasure semantics. All 38 manual source bindings are checked for
+callback or erasure semantics. Passive observations now retain actual successful
+request/signature exposures and admitted client hash inputs, with exact
+session/game result-and-cache erasure. Lookup-only replay in the actual final
+cache supports joint keygen, exposure, ledger/cap, freshness and verifier
+witnesses, including ordered layers and rejected WOTS zero branches.
+Initialized returned-Boolean erasure inherits the existing transfer; it does
+not compare cache-visible events. This supplies a dependency for the six-case
+cryptographic partition, which remains open with the final numerical bound.
+All 44 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
 transcribed formulas do not prove extraction or cross-kernel correspondence.
