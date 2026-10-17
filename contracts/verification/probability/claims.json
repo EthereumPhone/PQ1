@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Actual WOTS key-generation fill and ordered recovery derive all43 positional private-seeded chain references in one final cache. Fixed-width input and compression binding connect accepted recovery to those prefixes under the selected public-node collision exclusion. Winning initialized independent outputs retain linked top-chain openings or collision/zero alternatives. Actual successful C10 signing exposures retain randomizer, forest, ordered layers, count results and chain prefixes; accepted-word comparison retains equality or a strictly earlier chain position at the same address. Neither a chain opening nor an earlier position establishes secrecy, a new-message attack or a numerical probability charge. Prior1381 theorem statements,783 typed cases,52bindings and old proof-module bytes are preserved. Lower-layer/FORS descent, full PMF forgery partition/final bound, adaptive disclosure charges, universal honest correctness, arbitrary lossless/unbounded-adversary representation,4008-byte codec,repeated-grinder freshness,concrete backend/Rust/crosskernel,QROM and physical claims remain open. Existing manual-program source bindings are drift checks, not cross-kernel theorems.",
+  "scope": "Actual Merkle and FORS returned authentication arrays now have derived sibling-node certificates and recover their builders roots at every valid target, in the same cache and under cache extension. The FORS signing theorem retains its actual private value, returned array and builder root. Static schedules establish all merge alignments and bounds; Merkle kept-flag soundness derives from the actual initialization. Forward correctness uses functional cache consistency, with no collision exclusion or assumed reference array. Prior1448 theorem statements,830 typed fixtures,52bindings and old proof-module bytes are preserved. Whole C10 honest-signature correctness, lower/FORS forgery descent, minimum exposure across repeated addresses, adaptive coverage/private-opening charges, complete six-case PMF forgery partition/final bound, unbounded adversaries,4008-byte codec,repeated-grinder freshness,concrete hash/Rust/cross-kernel,QROM and physical claims remain open. Manual source bindings detect drift and are not cross-kernel theorems.",
   "sources": {
-    "Audit.lean": "71ee99a6f5a3711fd362c2272fd8d8f91aa49e99730478fb9a86c67dce2f9de9",
+    "Audit.lean": "73f7a3f1df6a563cc0ab1fcf2d426aeb6cf1434c0b2c922883c29f8b0c8903f5",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -10,6 +10,14 @@
     "C10Probability/AdaptiveCollision.lean": "abf2184b38b0347451064a7b3b28fc185341245607fa222f73ab93750da56cf7",
     "C10Probability/AdaptiveExamples.lean": "1378b3ba7f6e7063c72f488f7c1cdf18bc5f5a7cb85e75f0f187caf4a9523359",
     "C10Probability/AddressBytes.lean": "822ae2b659ebef6e78a12e542f581347a757ceac410215875798e1789ff3109e",
+    "C10Probability/AuthCertificate.lean": "b96286e278b1b7c1ab36ed7cb2e5b6c7a6a4fd184f0adcc34e1266c1c5275a15",
+    "C10Probability/AuthCollect.lean": "8d045b5ecd145ccc8478132ad0dfd006eedc618ae65c76550f2739ae9efddf9c",
+    "C10Probability/AuthGeometry.lean": "9c3d1a1d8185ed2bef2fc58bb903274cea5e809af8a318d919674a2f7901ff17",
+    "C10Probability/AuthKeepLaw.lean": "5056e57fb616073aa23c0dc9286d16f76b4cf747a1dc8b7aeb2fd731ff60cfa0",
+    "C10Probability/AuthPath.lean": "ff4465c9dc3e2c51cb1f0b4229119eea2042427a373bfd1b0e4259768a10c80c",
+    "C10Probability/AuthPathExamples.lean": "5e3a10d43f72eb01847a65a3f1850aceced78430a031634ee14351ff4ed147b3",
+    "C10Probability/AuthReplay.lean": "3fa7539b61880f9010272b6fbe91d00dc5c48ac3439e0a3f35c5cd3b44587844",
+    "C10Probability/AuthSchedule.lean": "e877fce4d254e5c97301cef332d83b0525dd8a5ca93ceace7699847e0d9938b1",
     "C10Probability/Boundaries.lean": "b2715545caea41d26f97145c73bee8c8a57adced252eb517d2a630a5424b2fd9",
     "C10Probability/BuilderRecoveryBinding.lean": "63f272a3ff9909008d2ed8bc061aa69e409b4cfd434615f2220f1ce59c9f7283",
     "C10Probability/C10Access.lean": "0adf6b407a4ca9501f8c0baa5efe6bb2ed674ae09a0353347132c202d60eab6c",
@@ -117,6 +125,9 @@
     "C10Probability/RecoveryRelabel.lean": "1efa9acc36f266366ddb9be6e19f2c989d8b2a519f61a04eccd1503ee1ab7d1b",
     "C10Probability/RecoveryWitness.lean": "3b77fd86e9fcc2a4910e10460f7158c2f38a4a66c446d9852a2ba52f807bad08",
     "C10Probability/Returned.lean": "bfff3d01a295f769809a757cea3b63baea09040c5f8feb940384df2482b711c6",
+    "C10Probability/ReturnedAuth.lean": "455b21143b0b281708bd40f63b277f6c6830ea4ab0fc7a9c506b6f6dfb44a901",
+    "C10Probability/ReturnedAuthRecovery.lean": "3fbe568a5becd0d45bb6bbce87bf37c09edca56af7be77d91fa9908ecd5ed5b8",
+    "C10Probability/ReturnedForsSigning.lean": "5255941ea4aefdc448533de2ce553d5090b0a16475bca13ce9a94b8022b03854",
     "C10Probability/RootReference.lean": "a5451aedfbe637ca0751d2c781c06dc98ce869bd9fbd97a6a307bab3677a426e",
     "C10Probability/Schedules.lean": "cfd4abef7f077e1fa21670dbb412c38bcd547ec25701b33ddab061320cf7135f",
     "C10Probability/SecretPrefix.lean": "02ce5bede98116369b8010cc65746e1fbff2db748063a4d26e5ddba9d11b921a",
@@ -182,7 +193,7 @@
     "C10Probability/WotsSigning.lean": "092add3513664ccc85400af2bd9d27b4a05f4455f036760a66c6c0833a7df28a",
     "C10Probability/WotsSigningCharges.lean": "714be87e7b26c808bfbd79149e6e4bc9166fde1b884985c768274aa57abdaf11",
     "C10Probability/WotsSigningReplay.lean": "82f5beb5b9759c5d979015bc61833535e591ea0591fa15805bb223985f19cef2",
-    "C10Probability.lean": "d492f4127b47bf51a8e1dd8a8cb5732d22355a06b9ad45ae4a3e48af106e9b0b"
+    "C10Probability.lean": "72a077d6791ca8f49fad7c91eae61a4e4785c7f974ddd7f0f4c052f73e742572"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -488,6 +499,170 @@
     "C10Probability.c10_address_count_kind": {
       "file": "C10Probability/AddressBytes.lean",
       "statement_sha256": "dbe87dfb02e06724839f37c5d419398097506ddd2cd1994131befff5704ccdc1"
+    },
+    "C10Probability.collected_node_mono": {
+      "file": "C10Probability/AuthCertificate.lean",
+      "statement_sha256": "f51687a9157e84001cd18974f2753e359927c35162a4f4e5712adb498046a68d"
+    },
+    "C10Probability.collected_forest_mono": {
+      "file": "C10Probability/AuthCertificate.lean",
+      "statement_sha256": "5b6831a0668468fe59bec4e50c28d5b1a79e42e03655378d0736334b8c8d610a"
+    },
+    "C10Probability.collected_node_pair": {
+      "file": "C10Probability/AuthCertificate.lean",
+      "statement_sha256": "57d926c5457103c9bfa4d05b9445eb3eb134fafc2f6ac99c1aad271e33b07f6d"
+    },
+    "C10Probability.recorded_tree_node_unique": {
+      "file": "C10Probability/AuthCertificate.lean",
+      "statement_sha256": "8809e663d355c499c39456dac39f266877a05a79d804dd2177e2ffb0c06a0a7c"
+    },
+    "C10Probability.merge_sibling_selected": {
+      "file": "C10Probability/AuthCollect.lean",
+      "statement_sha256": "14e4aa5e345f508a6dd07db52a57ada1f724cdc1a700b6ad34a4cb3158706334"
+    },
+    "C10Probability.merge_sibling_left_edge": {
+      "file": "C10Probability/AuthCollect.lean",
+      "statement_sha256": "5792db742f476120d25b1e5275f8cd8aebc06a9bc94ddf015dafd895f8cc61d3"
+    },
+    "C10Probability.merge_sibling_right_edge": {
+      "file": "C10Probability/AuthCollect.lean",
+      "statement_sha256": "a90a8fe38c8afa7a5965fac1247b1d686f828393cd9e5a7431281c0d20d04993"
+    },
+    "C10Probability.recorded_auth_set": {
+      "file": "C10Probability/AuthCollect.lean",
+      "statement_sha256": "dad0f03ffb338d301f1fbf66033694170e2aad08cb78f93f4ea5279837f85780"
+    },
+    "C10Probability.collect_auth_certified": {
+      "file": "C10Probability/AuthCollect.lean",
+      "statement_sha256": "e6c4fb13d4ea9c15c2f8bcf836fa0c9a297bd978ea619e07a47dbeb5d4237dd8"
+    },
+    "C10Probability.fors_remember_auth_law": {
+      "file": "C10Probability/AuthCollect.lean",
+      "statement_sha256": "60c13b249d8c64b80ff45539c02b90a87c4d891931b87d8157cfa1dd63a10c7c"
+    },
+    "C10Probability.auth_pair_start": {
+      "file": "C10Probability/AuthGeometry.lean",
+      "statement_sha256": "63bf164392505fff0c3892073f552bf69148501ca2767415d609c4121e2710c0"
+    },
+    "C10Probability.auth_remember_nodes": {
+      "file": "C10Probability/AuthGeometry.lean",
+      "statement_sha256": "28a27aa2c62c15aa29e88bd232e112764bb144de703ff66b39efb5aea6654656"
+    },
+    "C10Probability.fors_remember_collect": {
+      "file": "C10Probability/AuthGeometry.lean",
+      "statement_sha256": "b862e2a784acfe73ecfa5844bd614c356085caa7698da05695e289e94fb2e07f"
+    },
+    "C10Probability.sibling_parent": {
+      "file": "C10Probability/AuthGeometry.lean",
+      "statement_sha256": "56951d96f423d8aa484b992610667f2b0fde7587161234aee84bb9d5e579f565"
+    },
+    "C10Probability.sibling_left": {
+      "file": "C10Probability/AuthGeometry.lean",
+      "statement_sha256": "fee512f45b07a03f1dedf2a75f166f5350d4e4facb0ce702f2e4f58c09d1ef8e"
+    },
+    "C10Probability.sibling_right": {
+      "file": "C10Probability/AuthGeometry.lean",
+      "statement_sha256": "b0c6ab6b12f4f499967f5fdd248d92bde14ec3a26d5270d38de67307a4d7fb85"
+    },
+    "C10Probability.aligned_merge_edge": {
+      "file": "C10Probability/AuthGeometry.lean",
+      "statement_sha256": "e147848382b181aba4c9c1eb3e356f69e728ddc4798a7c1e1eeb01373dd3ef89"
+    },
+    "C10Probability.initial_auth_keep_valid": {
+      "file": "C10Probability/AuthKeepLaw.lean",
+      "statement_sha256": "1d93e206a49dfa7f68d00fe8bcf7f6cee47c14748c7093e6ae92e9ef2429539a"
+    },
+    "C10Probability.auth_keep_write_valid": {
+      "file": "C10Probability/AuthKeepLaw.lean",
+      "statement_sha256": "604943cff2c46219d52ce35cb9f87d3559302f10b08a2d6377892aa9b1e9dc0e"
+    },
+    "C10Probability.merkle_remember_auth_law": {
+      "file": "C10Probability/AuthKeepLaw.lean",
+      "statement_sha256": "74ac812ea2d43cca0d5cdb4127a29f44afc365ed18634f41af68ab130902bcec"
+    },
+    "C10Probability.recorded_auth_path": {
+      "file": "C10Probability/AuthPath.lean",
+      "statement_sha256": "1b5bf8f25a6e92f86f2bfdb04d26740f6d12e9f1f4adcfbfb9c0463c6f52bc76"
+    },
+    "C10Probability.collected_complete_path": {
+      "file": "C10Probability/AuthPath.lean",
+      "statement_sha256": "d58e1e8a82ae13dc7a98219cb32f739342c4e3b7e03b3d2fba523cc90e4466d2"
+    },
+    "C10Probability.four_leaf_fors_returned_paths": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "2f316a0a0dd5e1a1eb88d78c6f7971dbfc921cbb3fa0f270a7a14378e18a60f7"
+    },
+    "C10Probability.four_leaf_merkle_returned_paths": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "df478eeb7eb00c40ccdd4ae50f4164a1bc61274c1a2ac0a1828cc0b75d45911c"
+    },
+    "C10Probability.four_leaf_returned_recovery_vector": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "47b576922dbf8302fc39b80c17076a24af5b87a6ed0b91ac4c8f93809e047dae"
+    },
+    "C10Probability.four_leaf_swapped_path_fails": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "7f60418e49ef4cadeb471912312f0b173bc43470203edaeef2b18c68704c4c95"
+    },
+    "C10Probability.initially_kept_path_fails": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "029a9fbd5e28a31468454c3d755c2365ebbacb922b540b0180e1268f18a17c6b"
+    },
+    "C10Probability.short_initial_path_fails": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "db8b317836a42b3a99e5ad6efa87c2c31e6216eab292e0a4bfae3c2dac8b361d"
+    },
+    "C10Probability.out_of_range_target_fails": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "cb57a533a3d4573d1323ab7abb6e31f4163c01dde9a65bafd490c9243330ac91"
+    },
+    "C10Probability.unaligned_merge_path_fails": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "03e14c8025abbc6f120b3f8200d805474e56522b2621ee3f37938e9debf6086e"
+    },
+    "C10Probability.four_leaf_collected_certificate": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "a6b180bda56bc50901c43b99163b235933633cc200d0e62199400344bdaa0ba1"
+    },
+    "C10Probability.four_leaf_collected_recovery": {
+      "file": "C10Probability/AuthPathExamples.lean",
+      "statement_sha256": "a40e4f5b11df7ec95f46a51aeb0550f1075b257c8bee14a52fba2f7ceff31f6e"
+    },
+    "C10Probability.replay_merge_collected": {
+      "file": "C10Probability/AuthReplay.lean",
+      "statement_sha256": "0123c11682747733429c61f051acb4c130e52af4ee1becf2ecd611aff741d22b"
+    },
+    "C10Probability.replay_tree_collected": {
+      "file": "C10Probability/AuthReplay.lean",
+      "statement_sha256": "c623b45295dfd642bc9acf1ef666b63354dd5a67362b9009d4a9fcaf56509e2d"
+    },
+    "C10Probability.tree_program_collected": {
+      "file": "C10Probability/AuthReplay.lean",
+      "statement_sha256": "6aceff453ccc98ee1ac98013254c147913482410865bd5dbe4f0d868dbf03e4c"
+    },
+    "C10Probability.collected_erased_root": {
+      "file": "C10Probability/AuthReplay.lean",
+      "statement_sha256": "d3fdd25d38317f8b6eebf3fc7d002976c4aa5a324500a921d80d96ab3be771ee"
+    },
+    "C10Probability.replay_complete_tree_collected": {
+      "file": "C10Probability/AuthReplay.lean",
+      "statement_sha256": "de2d9176e120d4acb768f9e9e65740db0af20ed53e17ed9c9e98f3c83d723d6a"
+    },
+    "C10Probability.merkle_auth_schedule": {
+      "file": "C10Probability/AuthSchedule.lean",
+      "statement_sha256": "e9d392824647ccd17062f8c32d9fb9e2692400f46a1e21da9d0b0bfaa242a521"
+    },
+    "C10Probability.fors_auth_schedule": {
+      "file": "C10Probability/AuthSchedule.lean",
+      "statement_sha256": "7154786a5fb76387c02734eff542358c22345e1d624f2e19f832ad17bcc6f9a8"
+    },
+    "C10Probability.erased_stack_shape": {
+      "file": "C10Probability/AuthSchedule.lean",
+      "statement_sha256": "10d8c09c0d07405c4b81b950ebec60ef033748b9bcb2a91bcdcb6e53ed3548a3"
+    },
+    "C10Probability.replay_merge_shape": {
+      "file": "C10Probability/AuthSchedule.lean",
+      "statement_sha256": "d13370dc6050f061cb3671c2524b81277b8b2d0b9c74fa30b97c22028b5d7d14"
     },
     "C10Probability.budget_zero": {
       "file": "C10Probability/Boundaries.lean",
@@ -3916,6 +4091,70 @@
     "C10Probability.returnedMass_le_conditional": {
       "file": "C10Probability/Returned.lean",
       "statement_sha256": "6145cfbd0ed5ca71b6156fe60d7e94fbcf6c1fbc4fd8c0ce6c3570945a358744"
+    },
+    "C10Probability.replay_subtree_auth_certificate": {
+      "file": "C10Probability/ReturnedAuth.lean",
+      "statement_sha256": "ddc032524bc7a4bb3d66e577286de9c103d37675a4ad201b0fb0c2b40bd19ae1"
+    },
+    "C10Probability.replay_merkle_auth_certificate": {
+      "file": "C10Probability/ReturnedAuth.lean",
+      "statement_sha256": "73180137175f863cff1536e33989f7a69beea5a1d9fb2fcf8b6fa7ef6629336c"
+    },
+    "C10Probability.replay_fors_state_auth_certificate": {
+      "file": "C10Probability/ReturnedAuth.lean",
+      "statement_sha256": "1e67154d8064163a47d3c50347b8a7894de4848550079cf96c1e71a9471b4b71"
+    },
+    "C10Probability.replay_fors_auth_certificate": {
+      "file": "C10Probability/ReturnedAuth.lean",
+      "statement_sha256": "6de2f19296e7d7c7c7fba7e4f6d1290af9b66f43f47ed94cbe74ff81591e0a69"
+    },
+    "C10Probability.merkle_build_auth_certificate": {
+      "file": "C10Probability/ReturnedAuth.lean",
+      "statement_sha256": "803ee9492b753adfe69bb9389ca8541b93b7244a55d8a08c5a069ff079d7cfed"
+    },
+    "C10Probability.fors_tree_auth_certificate": {
+      "file": "C10Probability/ReturnedAuth.lean",
+      "statement_sha256": "10dcd2a7e858c622bec15b8733cb0b04d6d68b2a0b08cb7b50a004ed45f8f3ca"
+    },
+    "C10Probability.merkle_auth_certificate_recovery": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "3cac1952c2beeba058f80e1c6f208bcd8aaa9a4632d10377de1b71496cfb2a0e"
+    },
+    "C10Probability.fors_auth_certificate_recovery": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "8205310bf2704f260e4a4805b7d53dc9e7dc7cec5a7c95496c0c4f02bfb8e2b0"
+    },
+    "C10Probability.replay_merkle_build_recovery": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "eecdcbeefa347fe8f8f73fe756a2bcdebf68040378493e6355ff1a15009d2d2f"
+    },
+    "C10Probability.replay_fors_tree_recovery": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "09c2320e746edab00bf64659ff457a482a983161645101bcedbcf9aea89e651e"
+    },
+    "C10Probability.merkle_build_returned_recovery": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "7e64d1c3e36baf926649a491d77cd2269847de542d307dde241f3cc6e84970dd"
+    },
+    "C10Probability.fors_tree_returned_recovery": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "cad7177eac18599413a68be23408583fc7e6416a0f4e105ad406a7b96ea5d0cd"
+    },
+    "C10Probability.merkle_returned_recovery_extends": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "95d88ec5d8cc6d8ac29c0abe5939de3a8bf239a2f4c1436ab2ef03680555ae78"
+    },
+    "C10Probability.fors_returned_recovery_extends": {
+      "file": "C10Probability/ReturnedAuthRecovery.lean",
+      "statement_sha256": "5dd0903dc71be726d8c9b283f3b443f54a01b04eed702ed551f07778574bfdb6"
+    },
+    "C10Probability.replay_fors_sign_returned_recovery": {
+      "file": "C10Probability/ReturnedForsSigning.lean",
+      "statement_sha256": "c35e2ff7ae175485f86c57b36193d87426d7b049eaf92c71704c6fbd2bc97731"
+    },
+    "C10Probability.fors_sign_returned_recovery": {
+      "file": "C10Probability/ReturnedForsSigning.lean",
+      "statement_sha256": "effb80e57b05b05918a2ad8a9fe3c2d69a0f3ee1b63c82dcbd9e89eddfca00ec"
     },
     "C10Probability.merkle_certificate_reference": {
       "file": "C10Probability/RootReference.lean",
