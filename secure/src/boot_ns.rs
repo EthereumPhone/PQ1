@@ -71,6 +71,14 @@ pub unsafe fn boot(ns_vector_table: u32) -> ! {
     //    after the MSP switch may touch the stack. An exception taken during
     //    the loop stacks below the new MSP and returns before the loop
     //    resumes. No static holds a pointer into `main`'s frame.
+    // DVT 5.9 (test-only `stack-hwm`): record `main`'s high-water mark, then
+    // fill with the paint pattern so the next scan sees an unused stack.
+    #[cfg(feature = "stack-hwm")]
+    crate::stack_scrub::hwm::scan_below_sp();
+    #[cfg(feature = "stack-hwm")]
+    const HANDOFF_FILL: u32 = crate::stack_scrub::hwm::PATTERN;
+    #[cfg(not(feature = "stack-hwm"))]
+    const HANDOFF_FILL: u32 = 0;
     let stack_top = core::ptr::addr_of!(_stack_start) as u32;
     let stack_bottom = core::ptr::addr_of!(_stack_end) as u32;
     core::arch::asm!(
@@ -99,7 +107,7 @@ pub unsafe fn boot(ns_vector_table: u32) -> ! {
         entry = in(reg) ns_entry,
         top = in(reg) stack_top,
         p = in(reg) stack_bottom,
-        zero = in(reg) 0u32,
+        zero = in(reg) HANDOFF_FILL,
         options(noreturn),
     );
 }

@@ -30,6 +30,8 @@ extern "C" {
 #[cfg(target_arch = "arm")]
 #[inline(never)]
 pub fn scrub_dead_stack() {
+    #[cfg(feature = "stack-hwm")]
+    hwm::scan_below_sp();
     // SAFETY: writes only to `[_stack_end, SP)`, which is inside the RAM
     // region the linker reserved for the stack and holds no live data in any
     // calling context (see the module docs). `_stack_end` is word-aligned
@@ -52,6 +54,69 @@ pub fn scrub_dead_stack() {
         );
     }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    #[cfg(feature = "stack-hwm")]
+    hwm::paint_below_sp();
+}
+
+/// DVT checklist row 5.9 (test-only `stack-hwm`): secure-stack high-water
+/// mark. The dead stack is painted with [`hwm::PATTERN`] at `main` entry and
+/// after every scrub (the NS hand-off fills with it too, `boot_ns.rs`); each
+/// scrub first records the lowest word below SP that no longer holds it.
+/// `STACK_HWM_LOW` is read over SWD. A frame word that happens to equal the
+/// pattern hides that word only, so the result is exact to within one frame
+/// of such words.
+#[cfg(all(feature = "stack-hwm", target_arch = "arm"))]
+pub mod hwm {
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    pub const PATTERN: u32 = 0xC5AC_E5A5;
+
+    #[used]
+    #[no_mangle]
+    pub static STACK_HWM_LOW: AtomicU32 = AtomicU32::new(u32::MAX);
+    #[used]
+    #[no_mangle]
+    pub static STACK_HWM_SCANS: AtomicU32 = AtomicU32::new(0);
+
+    fn sp() -> u32 {
+        let sp: u32;
+        // SAFETY: reads SP only.
+        unsafe { core::arch::asm!("mov {}, sp", out(reg) sp, options(nomem, nostack)) };
+        sp
+    }
+
+    fn bottom() -> u32 {
+        // SAFETY: address of a linker symbol, never dereferenced here.
+        unsafe { core::ptr::addr_of!(super::_stack_end) as u32 }
+    }
+
+    /// Record the lowest non-pattern word in `[_stack_end, SP)`.
+    #[inline(never)]
+    pub fn scan_below_sp() {
+        let top = sp();
+        let mut p = bottom();
+        while p < top {
+            // SAFETY: word-aligned read of dead stack inside the RAM region.
+            if unsafe { core::ptr::read_volatile(p as *const u32) } != PATTERN {
+                STACK_HWM_LOW.fetch_min(p, Ordering::Relaxed);
+                break;
+            }
+            p += 4;
+        }
+        STACK_HWM_SCANS.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Fill `[_stack_end, SP)` with the pattern.
+    #[inline(never)]
+    pub fn paint_below_sp() {
+        let top = sp();
+        let mut p = bottom();
+        while p < top {
+            // SAFETY: word-aligned write to dead stack inside the RAM region.
+            unsafe { core::ptr::write_volatile(p as *mut u32, PATTERN) };
+            p += 4;
+        }
+    }
 }
 
 /// Runs [`scrub_dead_stack`] when dropped: put one at the top of a handler

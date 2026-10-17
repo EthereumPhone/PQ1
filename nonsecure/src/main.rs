@@ -148,6 +148,8 @@ mod ui_px_atlas;
 mod selectors_db;
 #[cfg(feature = "usb")]
 mod usb;
+#[cfg(feature = "usb")]
+mod fnsof_trace;
 
 /// Scratch buffer for the unified sign command response (Type 1 + Type 2).
 /// Only the no-USB interactive QEMU demo uses these — the USB router in
@@ -278,6 +280,12 @@ fn main() -> ! {
                     cortex_m::asm::nop();
                 }
             }
+        }
+
+        // Test-only USB frame-clock trace (`fnsof_trace.rs`): compiled in
+        // only when the NS image is built with FNSOF_TRACE set.
+        if option_env!("FNSOF_TRACE").is_some() {
+            fnsof_trace::sample();
         }
 
         // IWDG heartbeat: bump once per poll-loop iteration so the

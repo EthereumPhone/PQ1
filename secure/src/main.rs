@@ -1414,6 +1414,10 @@ fn main() -> ! {
     // supplies or overrides this identity.
     let _ = core::hint::black_box(&db_roots::PQSIGNER_ERC7730_CATALOGUE_STATUS);
 
+    // DVT 5.9 (test-only): paint the dead stack for the high-water mark.
+    #[cfg(feature = "stack-hwm")]
+    stack_scrub::hwm::paint_below_sp();
+
     // RDP1 boot bisection: pulse PE13 (Arduino D13) before any other
     // init so we see at least one pulse if the CPU made it into `main`
     // at all. Stage encoding documented in `hw::boot_pulse`.

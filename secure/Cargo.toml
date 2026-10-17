@@ -358,6 +358,12 @@ e2e-test = [
 # workload drives the pool and its counters can be read from live SRAM.
 # Changes no behaviour outside `e2e-test` builds. NEVER ship.
 fi-live-delays = []
+# Test-only (silicon checklist row 5.9, secure-stack high-water mark): paints
+# the dead stack with a pattern at `main` entry, at the NS hand-off and after
+# every `stack_scrub::scrub_dead_stack`, and records the lowest overwritten
+# word in `STACK_HWM_LOW` for an SWD read. The scrub still zeroes first, so
+# no secret survives it; the pattern is written after. NEVER ship.
+stack-hwm = []
 # Reversible firmware anti-rollback test: drives the real fw_update::
 # verify_manifest chain with dev-key-signed v1/v2/v3 manifests against
 # literal test floors (no OTP burn, no flash, no reboot). Runs early in
