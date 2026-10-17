@@ -209,7 +209,9 @@ use core::sync::atomic::Ordering;
 /// Trezor's `wait_random()` (port of
 /// `core/embed/sec/random_delays/stm32/random_delays.c:186-202`), specialized
 /// to the secure-world TRNG. On `e2e-test` builds: no-op so test timings
-/// don't drift.
+/// don't drift — UNLESS the test-only `fi-live-delays` feature is also on
+/// (silicon checklist row 4.12: bench images that must exercise the real
+/// delay path + FI-delay pool under `e2e-test`'s auto-unlock).
 ///
 /// `#[inline(never)]` so a glitch that skips the CALL is observable at the
 /// caller; this remains true through the shim because we never inline this
@@ -217,11 +219,11 @@ use core::sync::atomic::Ordering;
 /// `#[inline(never)]`.
 #[inline(never)]
 pub fn wait_random() {
-    #[cfg(feature = "e2e-test")]
+    #[cfg(all(feature = "e2e-test", not(feature = "fi-live-delays")))]
     {
         return;
     }
-    #[cfg(not(feature = "e2e-test"))]
+    #[cfg(any(not(feature = "e2e-test"), feature = "fi-live-delays"))]
     {
         // #835: on `None` there is no delay at all — not a reused one. The
         // glitch-detector half of `wait_random_loop` is lost for this call,

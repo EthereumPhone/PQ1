@@ -1134,12 +1134,17 @@ test-optiga-probe: ## Host tests for the OPTIGA probe report tool
 # GTZC_NS_EXTRA=,gtzc-sys adds the DVT 3.3-3.6 NS system-register write probes
 # (phase 2, after the TZSC receipt); GTZC_FAULT_ADDR=0x... (env) appends one
 # NS read of that address, expected to SecureFault. See gtzc_test.rs.
+# GTZC_SECURE_EXTRA=,usb,iwdg extends the SECURE feature set the same way
+# (e.g. the DVT 3.4 / 5.8 image, which needs usb_hw's GPIO clock + SECCFGR
+# writes and the iwdg SECCFGR1 bit).
+# GTZC_LOG=/path/to.log (env) preserves the semihosting log instead of
+# deleting the mktemp file on exit.
 gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 	@echo "==> Building GTZC1 enforcement test (secure + stm32u585 + e2e-test + mock-se)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)
+			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)$(GTZC_SECURE_EXTRA)
 	@echo "==> Building GTZC1 enforcement test (NS + gtzc-test + stm32u585)"
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
@@ -1153,9 +1158,9 @@ gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
 		--optionbytes TZEN=1 SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F \
 		SECWM2_PSTRT=0x7F SECWM2_PEND=0x0 SECBOOTADD0=0x180000
 	@echo "==> Running GTZC enforcement validation on hardware..."
-	@log=$$(mktemp -t gtzc-enforcement-hw.XXXXXX.log); \
+	@log=$${GTZC_LOG:-$$(mktemp -t gtzc-enforcement-hw.XXXXXX.log)}; \
 	rc_file=$$(mktemp -t gtzc-enforcement-hw-rc.XXXXXX); \
-	trap 'rm -f "$$log" "$$rc_file"' EXIT; \
+	trap 'if [ -z "$${GTZC_LOG:-}" ]; then rm -f "$$log"; fi; rm -f "$$rc_file"' EXIT; \
 	{ timeout 120 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1; \
 	  echo $$? >"$$rc_file"; } | tee "$$log"; \
 	rc=$$(cat "$$rc_file"); \
@@ -2873,7 +2878,7 @@ RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-
 override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key se-lcd-diag dev-dfu \
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
-                 erc7730-forced-blind rng-fault-probe trng-dump \
+                 erc7730-forced-blind rng-fault-probe trng-dump fi-live-delays \
                  fw-rollback-e2e fwup-transport-e2e se050-scp03-allow-factory-fallback \
                  legacy-fw-rollback-unsafe prodtest factory-provisioning \
                  factory-provisioning-rehearsal factory-production-irreversible-im-sure \

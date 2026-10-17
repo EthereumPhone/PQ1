@@ -303,6 +303,13 @@ mod sys_probe {
         W { addr: GPIOA + 0x00, label: "GPIOA_MODER.PA8", mask: 0b11 << 16 },
         // Positive control: PA11 is NS (USB DM). Its MODER bits MUST move.
         W { addr: GPIOA + 0x00, label: "GPIOA_MODER.PA11(ctl)", mask: 0b11 << 22 },
+        // IWDG_KR (DVT 5.8 leg b): IWDG is TZSC-secured (SECCFGR1 bit 7) on
+        // `iwdg` secure builds, so this NS write must be gated at the bridge
+        // and raise exactly one TZIC event. The mask XORs the RAZ'd pre value
+        // (0) into 0xAAAA = KEY_RELOAD — benign even if enforcement were
+        // broken (a reload only restarts the down-counter). The verdict is
+        // the secure-alias SWD read-back of IWDG_PR/RLR plus the TZIC delta.
+        W { addr: 0x4000_3000, label: "IWDG_KR", mask: 0xAAAA },
     ];
 
     fn spin() {
@@ -327,8 +334,12 @@ mod sys_probe {
             spin();
             let post = unsafe { core::ptr::read_volatile(p.addr as *const u32) };
             let moved = (pre ^ post) & p.mask;
+            // Per-probe TZIC count — attributes events to individual probes
+            // (TZSC-peripheral writes raise one GTZC event each; per-pin GPIO
+            // and RCC/PWR/TAMP/EXTI securing are silent-ignore).
+            let tz = crate::nsc_api::tzic_status();
             let _ = hprintln!(
-                "[NS][gtzc-sys] {:<22} @0x{:08x} S=0x{:08x} pre=0x{:08x} post=0x{:08x} mask=0x{:08x} moved=0x{:08x} {}",
+                "[NS][gtzc-sys] {:<22} @0x{:08x} S=0x{:08x} pre=0x{:08x} post=0x{:08x} mask=0x{:08x} moved=0x{:08x} tzic={} {}",
                 p.label,
                 p.addr,
                 p.addr | 0x1000_0000,
@@ -336,6 +347,7 @@ mod sys_probe {
                 post,
                 p.mask,
                 moved,
+                tz,
                 if p.mask == 0 { "READ" } else if moved != 0 { "NS-WROTE" } else { "ignored" },
             );
         }

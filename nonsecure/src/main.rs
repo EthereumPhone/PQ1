@@ -249,8 +249,37 @@ fn main() -> ! {
         });
     }
 
+    // Hardware-test hook for DVT row 5.8 leg (a): when the NS image is
+    // compiled with IWDG_HANG_FRAMES=<n> in the environment, the poll
+    // loop enters a nop spin after <n> cumulative SOF frames (~<n> ms
+    // of host-driven frame traffic), so the secure IWDG stall path can
+    // be timed on the wire. `option_env!` folds to None in stock builds
+    // and the whole block is optimized away — stock images are
+    // unaffected. The frame number is 11-bit and only advances while
+    // the host sends SOFs (post-enumeration), so accumulate wrap-aware
+    // deltas instead of comparing the raw value.
+    let hang_threshold: Option<u32> =
+        option_env!("IWDG_HANG_FRAMES").and_then(|s| s.parse().ok());
+    let mut hang_last_frame: u16 = usb::usb_frame_number();
+    let mut hang_frames: u32 = 0;
+
     let mut poll_counter: u32 = 0;
     loop {
+        if let Some(threshold) = hang_threshold {
+            let frame = usb::usb_frame_number();
+            hang_frames = hang_frames
+                .wrapping_add((frame.wrapping_sub(hang_last_frame) & 0x7FF) as u32);
+            hang_last_frame = frame;
+            if hang_frames >= threshold {
+                // Never bump the heartbeat again: the secure watcher hits
+                // NS_STALL_LIMIT_TICKS after ~4 s, stops kicking, and the
+                // IWDG fires ~2 s later.
+                loop {
+                    cortex_m::asm::nop();
+                }
+            }
+        }
+
         // IWDG heartbeat: bump once per poll-loop iteration so the
         // secure watcher can tell a live (even idle-polling) loop from
         // a hung one. Single store; no-op build when `iwdg` is off.

@@ -493,11 +493,19 @@ mod fi_source_text {
             .map(|i| pos + i + 2)
             .expect("wait_random must have a closing brace");
         let body = &FI_SRC[pos..end];
+        // The only exception is the test-only `fi-live-delays` opt-in (DVT
+        // row 4.12), which keeps the real arm live under `e2e-test` so the
+        // FI-delay pool can be measured; it is in PROD_FORBIDDEN and the
+        // nsc/mod.rs production fence.
         assert!(
-            body.contains("cfg(feature = \"e2e-test\")"),
+            body.contains("cfg(all(feature = \"e2e-test\", not(feature = \"fi-live-delays\")))"),
             "wait_random must short-circuit on e2e-test builds (timing-only \
              skip, no security impact under e2e since the chip is not under \
-             attack)."
+             attack), unless the test-only `fi-live-delays` is on."
+        );
+        assert!(
+            body.contains("cfg(any(not(feature = \"e2e-test\"), feature = \"fi-live-delays\"))"),
+            "wait_random's real arm must be compiled into every non-e2e build."
         );
         assert!(
             body.contains("pqsigner_fi::wait_random_loop(|| b)"),
