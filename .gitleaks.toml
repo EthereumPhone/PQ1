@@ -222,6 +222,76 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/cdrafts\-split/ForsBuilderSecret\.ec": "98adcfeb8d516e3239bd4c8ff1e35be0d369e11608fba4fd03d3b17d78d6289b",?\s*$''']
 
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthCertificate\.lean": "b96286e278b1b7c1ab36ed7cb2e5b6c7a6a4fd184f0adcc34e1266c1c5275a15",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthCollect\.lean": "8d045b5ecd145ccc8478132ad0dfd006eedc618ae65c76550f2739ae9efddf9c",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthGeometry\.lean": "9c3d1a1d8185ed2bef2fc58bb903274cea5e809af8a318d919674a2f7901ff17",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthKeepLaw\.lean": "5056e57fb616073aa23c0dc9286d16f76b4cf747a1dc8b7aeb2fd731ff60cfa0",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthPath\.lean": "ff4465c9dc3e2c51cb1f0b4229119eea2042427a373bfd1b0e4259768a10c80c",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthPathExamples\.lean": "5e3a10d43f72eb01847a65a3f1850aceced78430a031634ee14351ff4ed147b3",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthReplay\.lean": "3fa7539b61880f9010272b6fbe91d00dc5c48ac3439e0a3f35c5cd3b44587844",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/AuthSchedule\.lean": "e877fce4d254e5c97301cef332d83b0525dd8a5ca93ceace7699847e0d9938b1",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/ReturnedAuth\.lean": "455b21143b0b281708bd40f63b277f6c6830ea4ab0fc7a9c506b6f6dfb44a901",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public returned-authentication proof source digest"
+condition = "AND"
+paths = ['''^contracts/verification/probability/claims\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"C10Probability/ReturnedAuthRecovery\.lean": "3fbe568a5becd0d45bb6bbce87bf37c09edca56af7be77d91fa9908ecd5ed5b8",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
