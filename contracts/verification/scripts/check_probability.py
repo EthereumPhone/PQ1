@@ -106,7 +106,7 @@ def run_controls(out: Path, lean: str, env: dict) -> list[dict]:
     fixtures = out / "controls"
     fixtures.mkdir()
     selected = cases(PROJECT)
-    require(len(selected) == 783 and sum(not c["expected"] for c in selected) == 702,
+    require(len(selected) == 830 and sum(not c["expected"] for c in selected) == 745,
             "control census differs")
     jobs = []
     for case in selected:
@@ -215,7 +215,7 @@ def main() -> None:
         result["passed"] = True
     finally:
         (out / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(f"PASS: {len(result['closures'])} theorem closures; 783 typed cases / 2349 compiler jobs")
+    print(f"PASS: {len(result['closures'])} theorem closures; 830 typed cases / 2490 compiler jobs")
 
 
 if __name__ == "__main__":

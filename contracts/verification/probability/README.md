@@ -763,11 +763,40 @@ outputs: selected-node collision, public zero, or a jointly linked top-tree
 opening. H_msg, forest and lower-layer recovery, top WOTS recovery, the actual
 keygen leaf, count digest and padded root remain in the same final cache.
 Count acceptance is derived only after excluding the public-zero case. This
-opening is not yet a new-message WOTS attack; chain openings, lower-layer/FORS
-descent and the numerical forgery charges remain to be composed. The 21 finite
+opening is not yet a new-message WOTS attack. The 21 tree-binding finite
 examples cover populated tree execution, all four toy reference positions,
 defaults, and counterexamples when coordinate, length, collision or zero
 conditions are omitted. They supply no empty-cache success probability.
+
+`ChainReplay.lean`, `WotsInputBinding.lean` and `WotsChainBinding.lean`
+split actual lookup chains and bind their starting values at the same coordinate
+under the selected-public-node collision exclusion. `WotsFillReplay.lean` and
+`WotsRecoveryReplay.lean` extract all 43 private-seeded keygen references and
+ordered recovery endpoints. `WotsLeafBinding.lean` binds the ordered, fixed-width
+compression inputs: accepted recovery of the actual keygen leaf fixes each
+submitted signature value to its private-seeded prefix in the same cache.
+`TopChainOpening.lean` carries these prefixes into the joint winning-output
+witness, retaining the selected-node-collision and public-zero alternatives.
+
+The signing replay modules derive actual randomizer, forest and ordered
+two-layer witnesses, including the accepted count and chain values, from
+successful signing. `ObservedChains.lean` puts every successful session exposure
+and the winning top-chain alternatives in one final cache. This does not assume
+universal honest-signature correctness or equate a builder root with a recovered
+root. `WotsPrefixComparison.lean` and `LayerPrefixComparison.lean` compare accepted
+sum-205 words at a common address: equal words give equal prefix values; otherwise
+some recovered position is earlier, with an actual suffix to the signed value.
+An earlier position is not necessarily undisclosed, and equal words need not
+mean equal messages or full digests. Minimum exposure across repeated addresses,
+lower-layer/FORS descent, adaptive coverage and private-opening charges, and the
+complete six-case partition/final forgery bound remain open.
+
+The 21 additional finite examples in `ChainBindingExamples.lean` and
+`WotsOpeningExamples.lean` cover split chains, binding failures without the
+coordinate/length/collision conditions, ordered input sensitivity, accepted-word
+comparisons and actual cached signing. Populated caches witness satisfiability,
+not empty-cache success probability. Truncated addresses are not claimed to be
+globally injective.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -812,16 +841,24 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1381 theorem closures against
+The gate rebuilds every project module, checks all 1448 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-783 typed cases run 2349 compiler jobs: each baseline and changed
-definition must compile, 702 changed behaviors must reject at the
-consuming `checked` theorem, and eighty-one value-preserving changes must pass.
+830 typed cases run 2490 compiler jobs: each baseline and changed
+definition must compile, 745 changed behaviors must reject at the
+consuming `checked` theorem, and eighty-five value-preserving changes must pass.
+The 47 WOTS chain-binding cases cover the joint top opening, actual layer/C10
+signing witnesses, private routing, chain inputs and selected-node collision
+conditions, including four equivalent controls. The three witness-predicate
+consumers require the complete original claim from the changed predicate; a
+deleted link must fail that consumer. These checks establish sensitivity of
+the selected consumers, not logical falsity of every altered predicate.
+All preceding 783 fixture objects, 1381 theorem statements, old proof-module
+bytes and 52 source bindings remain unchanged.
 The 58 tree-binding cases cover actual compiled merge/tree replay, certificate
 provenance and coordinates, recovery correspondence, selected-node collision
 premises and linked top-opening witnesses, including four equivalent controls.

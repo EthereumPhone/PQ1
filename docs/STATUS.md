@@ -313,13 +313,19 @@ reference paths for every valid coordinate chosen after construction. Recovery
 binds to the actual WOTS leaf or private FORS derivation, or an explicit selected
 node collision, with missing-sibling defaults preserved. Actual winning outputs
 yield a jointly linked top-tree opening or a selected-node collision/public zero;
-count acceptance is derived using zero exclusion. The opening still needs the
-new-message WOTS chain and lower-layer/FORS arguments and numerical charges.
+count acceptance is derived using zero exclusion. Actual keygen and recovery
+now bind all 43 submitted WOTS values to private-seeded prefixes in that cache.
+Successful signing exposures retain their actual randomizer, forest, ordered
+layers, accepted counts and prefixes. At a common address, accepted words are
+equal with equal values, or there is an earlier chain position with a suffix to
+the signed value. An earlier position is not automatically undisclosed; equal
+words need not mean equal messages. Minimum exposure across repeated addresses,
+lower-layer/FORS descent and adaptive coverage/private-opening charges remain.
 Successful-output/forgery partition, the final bound, arbitrary lossless-adversary
 representation, the 4008-byte PMF codec, repeated-grinder freshness and concrete
 backends remain open. No new universal build/recover correctness,
-shuffle-uniformity or physical-security result is claimed. All 1381 theorem
-closures and 783 typed cases are gated separately; `lean/` stays mathlib-free.
+shuffle-uniformity or physical-security result is claimed. All 1448 theorem
+closures and 830 typed cases are gated separately; `lean/` stays mathlib-free.
 #295 remains open for the remaining probability-monad forgery bound. No cross-kernel
 probability or deployed hash-independence claim is made.
 

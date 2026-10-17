@@ -2358,4 +2358,123 @@ def cases(project: Path) -> list[dict]:
         ("tree-opening-root-comparison", "nodeBlock top = root", "nodeBlock top = seed"),
         ("tree-opening-reference-layer", "wotsLeafProgram encode seed 1 0", "wotsLeafProgram encode seed 0 0")])
 
+    # WOTS chain openings and actual signing witnesses. The three predicate
+    # consumers retain the complete original claim, so deleting a conjunct
+    # cannot pass merely because a weaker producer still has a proof.
+    def bq_alias(module, name):
+        match = re.search(r"^(?:def|abbrev|structure|inductive) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing WOTS binding definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BQCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.ObservedChains\n"
+            "import C10Probability.LayerPrefixComparison\n"
+            "import C10Probability.ChainBindingExamples\n"
+            "import C10Probability.WotsOpeningExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "variable {I K L R T α β N S : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias, declaration
+
+    key, alias, declaration = bq_alias("TopChainOpening", "TopChainOpening")
+    check = """theorem checked (encode : WotsQuery → K) (table : Memo K Digest)
+    (seed root message : ByteKey) (sig : C10Signature)
+    (opening : TopChainOpeningBQCandidate encode table seed root message sig) :
+    TopChainOpening encode table seed root message sig := by
+  exact opening
+"""
+    tail = declaration[declaration.index("∀ i, replayProgram table (wotsSeedChainProgram"):].rstrip()
+    for row in [
+        ("wots-opening-hmsg-input", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput root seed message"),
+        ("wots-opening-fors-acceptance-absent", "forsAccept (forsOfDigest digest) = true", "True"),
+        ("wots-opening-forest-coordinate", "(hypertreeIndex digest) digest sig.secrets", "0 digest sig.secrets"),
+        ("wots-opening-lower-layer", "seed 0\n", "seed 1\n"),
+        ("wots-opening-recovered-signature", "((sig.layers[1]?).getD emptyLayerSignature).sigma\n", "((sig.layers[0]?).getD emptyLayerSignature).sigma\n"),
+        ("wots-opening-reference-absent", "replayProgram table (wotsLeafProgram encode seed 1 0\n      (hypertreeLeaf (hypertreeParent (hypertreeIndex digest)))) = some leaf", "True"),
+        ("wots-opening-count-acceptance-absent", "wotsAccept (wotsOfDigest countDigest) = true", "True"),
+        ("wots-opening-root-compare", "nodeBlock top = root", "nodeBlock top = seed"),
+        ("wots-opening-prefixes-absent", tail, "True"),
+        ("wots-opening-prefix-cache", "∀ i, replayProgram table", "∀ i, replayProgram (fun _ => none)"),
+        ("wots-opening-prefix-coordinate", "(hypertreeLeaf (hypertreeParent (hypertreeIndex digest))) i.val", "(hypertreeLeaf (hypertreeParent (hypertreeIndex digest)) + 1) i.val"),
+        ("wots-opening-prefix-index", "))) i.val\n", "))) 0\n"),
+        ("wots-opening-prefix-digit", "(wotsOfDigest countDigest i).val", "((wotsOfDigest countDigest i).val + 1)"),
+        ("wots-opening-prefix-submitted-value", "some (((sig.layers[1]?).getD emptyLayerSignature).sigma i)", "some (((sig.layers[1]?).getD emptyLayerSignature).sigma 0)"),
+        ("wots-opening-digit-equivalent", "(wotsOfDigest countDigest i).val", "((wotsOfDigest countDigest i).val + 0)", True),
+        ("wots-opening-position-equivalent", "some (((sig.layers[1]?).getD emptyLayerSignature).sigma i)", "some (((sig.layers[1]?).getD emptyLayerSignature).sigma (id i))", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = bq_alias("LayerSigningReplay", "LayerChainWitness")
+    check = """theorem checked (encode : WotsQuery → K) (table : Memo K Digest)
+    (seed : ByteKey) (layer tree leaf : ℕ) (message : Randomizer) (shuffle : ByteKey)
+    (n : ℕ) (bound : n ≤ 2 ^ 32) (sig : LayerSignature) (root : Randomizer)
+    (witness : LayerChainWitnessBQCandidate encode table seed layer tree leaf message shuffle n bound sig root) :
+    LayerChainWitness encode table seed layer tree leaf message shuffle n bound sig root := by
+  exact witness
+"""
+    tail = declaration[declaration.index("∀ i, replayProgram table (wotsSeedChainProgram"):].rstrip()
+    for row in [
+        ("wots-layer-signing-absent", "replayProgram table (layerSignProgram encode seed layer tree leaf message shuffle n bound) =\n    some (some (sig, root))", "True"),
+        ("wots-layer-signing-cache", "replayProgram table (layerSignProgram", "replayProgram (fun _ => none) (layerSignProgram"),
+        ("wots-layer-shuffle-coordinate", "shuffle (layerShuffleLabel layer)", "shuffle (layerShuffleLabel (layer + 1))"),
+        ("wots-layer-shuffle-result", "= some subseed ∧", "= some [] ∧"),
+        ("wots-layer-signed-message", "wotsSignProgram encode seed layer tree leaf\n      (nodeValueBytes message)", "wotsSignProgram encode seed layer tree leaf\n      []"),
+        ("wots-layer-returned-values", "some (some (sig.sigma, sig.count))", "some (some ((fun _ => 0), sig.count))"),
+        ("wots-layer-count-message", "wotsCountProgram seed layer tree leaf (nodeValueBytes message)", "wotsCountProgram seed layer tree leaf (nodeValueBytes 0)"),
+        ("wots-layer-count-result", "some (some (sig.count, digest))", "some (some (0, digest))"),
+        ("wots-layer-acceptance-absent", "wotsAccept (wotsOfDigest digest) = true", "True"),
+        ("wots-layer-prefixes-absent", tail, "True"),
+        ("wots-layer-prefix-index", "seed layer tree leaf i.val", "seed layer tree leaf 0"),
+        ("wots-layer-prefix-digit", "(wotsOfDigest digest i).val", "7"),
+        ("wots-layer-digit-equivalent", "(wotsOfDigest digest i).val", "((wotsOfDigest digest i).val + 0)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = bq_alias("C10SigningReplay", "C10ChainWitness")
+    check = """theorem checked (encode : WotsQuery → K) (table : Memo K Digest)
+    (random message seed root shuffle : ByteKey) (m n : ℕ)
+    (rBound : m ≤ 2 ^ 32) (wBound : n ≤ 2 ^ 32) (sig : C10Signature)
+    (witness : C10ChainWitnessBQCandidate encode table random message seed root shuffle m n rBound wBound sig) :
+    C10ChainWitness encode table random message seed root shuffle m n rBound wBound sig := by
+  exact witness
+"""
+    for row in [
+        ("wots-c10-r-message", "randomizerUnderProgram encode random message seed root", "randomizerUnderProgram encode random root seed root"),
+        ("wots-c10-r-value", "some (some (trial, sig.randomizer, digest))", "some (some (trial, 0, digest))"),
+        ("wots-c10-r-digest", "some (some (trial, sig.randomizer, digest))", "some (some (trial, sig.randomizer, 0))"),
+        ("wots-c10-forest-absent", "replayProgram table (forestSignProgram encode seed (hypertreeIndex digest) digest shuffle) = some forest", "(forest : ForestOutput) = forest"),
+        ("wots-c10-forest-cache", "replayProgram table (forestSignProgram", "replayProgram (fun _ => none) (forestSignProgram"),
+        ("wots-c10-secrets-absent", "sig.secrets = forest.secrets", "True"),
+        ("wots-c10-auths-absent", "sig.auths = forest.auths", "True"),
+        ("wots-c10-layers-reversed", "sig.layers = [lower, upper]", "sig.layers = [upper, lower]"),
+        ("wots-c10-layers-absent", "sig.layers = [lower, upper]", "True"),
+        ("wots-c10-lower-coordinate", "(hypertreeLeaf (hypertreeIndex digest)) forest.pk", "0 forest.pk"),
+        ("wots-c10-upper-coordinate", "seed 1 0 (hypertreeLeaf (hypertreeParent (hypertreeIndex digest)))", "seed 1 0 0"),
+        ("wots-c10-upper-message", "middle shuffle n wBound upper top", "forest.pk shuffle n wBound upper top"),
+        ("wots-c10-layer-list-equivalent", "sig.layers = [lower, upper]", "sig.layers = lower :: upper :: []", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = bq_alias("NodePathBinding", "PublicNodeCollisionFree")
+    check = re.sub(r"\bPublicNodeCollisionFree\b", alias,
+                   theorem(src["WotsChainBinding"], "replay_wots_chain_start_eq"))
+    for name, old, new in [
+        ("wots-chain-collision-domain-empty", "selectedCache nodeQuery", "selectedCache (fun _ => false)"),
+        ("wots-chain-collision-cache-empty", "fun key => table (encode key)", "fun (_ : ByteKey) => (none : Option Digest)"),
+        ("wots-chain-collision-projection", "CollisionFree randomizerOfDigest", "CollisionFree (fun (d : Digest) => (⟨d.val % 2 ^ 128, Nat.mod_lt _ (by decide)⟩ : Randomizer))")]:
+        add(name, key, old, new, check)
+
+    key, alias, declaration = bq_alias("WotsChain", "wotsChainInput")
+    check = re.sub(r"\bwotsChainInput\b", alias,
+                   theorem(src["ChainBindingExamples"], "binding_wots_chain_node_changes_input"))
+    add("wots-chain-binding-node-absent", key, "randomizerBytesEquiv.symm current",
+        "randomizerBytesEquiv.symm 0", check)
+    key, alias, declaration = bq_alias("WotsPrivate", "wotsSeedChainProgram")
+    src[key] = src[key].replace("noncomputable section\n",
+        "noncomputable section\nset_option maxRecDepth 4096\n")
+    check = re.sub(r"\bwotsSeedChainProgram\b", alias,
+                   theorem(src["WotsOpeningExamples"], "opening_zero_cut_uses_private_reply"))
+    add("wots-chain-private-route-lost", key, "encode (.inr (wotsPrivateTail", "encode (.inl (wotsPrivateTail", check)
+
     return out

@@ -46,3 +46,7 @@ import C10Probability.ObservedExamples
 import C10Probability.TopTreeOpening
 import C10Probability.TreeCertificateExamples
 import C10Probability.TreeReferenceExamples
+import C10Probability.ObservedChains
+import C10Probability.LayerPrefixComparison
+import C10Probability.ChainBindingExamples
+import C10Probability.WotsOpeningExamples

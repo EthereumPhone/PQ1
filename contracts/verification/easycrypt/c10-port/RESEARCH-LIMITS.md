@@ -223,9 +223,19 @@ outputs yield selected-node collision, public zero, or a joint top-tree opening
 that retains H_msg, forest/layer recovery, actual keygen leaf, accepted WOTS count
 and root equality in one final cache. Zero exclusion is necessary to derive
 count acceptance. This structural opening is not itself a new-message WOTS
-attack or a probability bound; chain-opening extraction, lower-layer/FORS
-descent and the complete six-case partition/final charge remain open. The PMF
-inventory now has 1381 theorem closures and 783 typed sensitivity cases.
+attack or a probability bound. Actual keygen fill and ordered WOTS recovery now
+derive all 43 chain references. Fixed-width compression and same-coordinate
+chain binding extend the top opening to every submitted signature value's
+private-seeded prefix, retaining the collision and zero alternatives. Successful
+session exposures have joint randomizer, forest and ordered layer witnesses with
+their actual accepted counts and prefixes in that same final cache. Comparing
+accepted words at a common address gives equal words/values or an earlier
+position with a suffix to the signed value. This closes chain-opening extraction;
+it does not establish that the earlier value is undisclosed or that equal words
+mean equal messages. Minimum exposure across repeated addresses, lower-layer/FORS
+descent, adaptive coverage/private-opening charges and the complete six-case
+partition/final bound remain open. The PMF inventory now has 1448 theorem
+closures and 830 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually
