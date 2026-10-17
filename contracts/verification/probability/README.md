@@ -825,6 +825,9 @@ consuming `checked` theorem, and eighty-one value-preserving changes must pass.
 The 58 tree-binding cases cover actual compiled merge/tree replay, certificate
 provenance and coordinates, recovery correspondence, selected-node collision
 premises and linked top-opening witnesses, including four equivalent controls.
+The reference-deletion control consumes the opening to recover the same H_msg
+digest, recovered WOTS leaf and keygen-reference leaf; deleting that conjunct
+must reject this consumer, rather than merely break the opening's producer proof.
 All preceding 725 fixture objects, 1305 theorem statements and proof-module
 bytes remain unchanged.
 The 56 observed-session cases cover passive logs, replay, cache/state erasure,

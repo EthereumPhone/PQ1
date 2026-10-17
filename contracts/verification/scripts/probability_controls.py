@@ -2227,7 +2227,25 @@ def cases(project: Path) -> list[dict]:
   rfl
 """
         for row in rows:
-            add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+            consumer_check = check
+            if row[0] == "tree-opening-reference-absent":
+                # Consume the reference link. A producer of a weakened opening
+                # can still succeed after replacing its reference proof by True.intro.
+                consumer_check = """theorem checked (encode : WotsQuery → K) (table : Memo K Digest)
+    (seed root message : ByteKey) (sig : C10Signature)
+    (opening : TopTreeOpeningBPCandidate encode table seed root message sig) :
+    ∃ digest middle leaf,
+      table (encode (.inl (hmsgRandomizerInput seed root message sig.randomizer))) = some digest ∧
+      replayProgram table (wotsRecoveryUnderProgram (fun key => encode (.inl key)) seed 1 0
+        (hypertreeLeaf (hypertreeParent (hypertreeIndex digest))) (nodeValueBytes middle)
+        ((sig.layers[1]?).getD emptyLayerSignature).sigma
+        ((sig.layers[1]?).getD emptyLayerSignature).count) = some leaf ∧
+      replayProgram table (wotsLeafProgram encode seed 1 0
+        (hypertreeLeaf (hypertreeParent (hypertreeIndex digest)))) = some leaf := by
+  obtain ⟨digest, forest, middle, top, leaf, countDigest, hd, ha, hf, hm, hw, hp, hl, hc, accepted, he⟩ := opening
+  exact ⟨digest, middle, leaf, hd, hw, hl⟩
+"""
+            add(row[0], key, row[1], row[2], consumer_check, row[3] if len(row) == 4 else False)
 
     tree_cases("TreeReplay", "replayMerge", "TreeReplay", "replay_merge_program", [
         ("tree-replay-parent-absent", "(table (input kp height left current)).bind", "(none : Option α).bind"),
