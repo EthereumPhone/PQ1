@@ -2804,4 +2804,86 @@ def cases(project: Path) -> list[dict]:
         ("exposure-case-endpoint-equivalent", "(opening.word i).val < 7", "(opening.word i).val < 7 + 0", True)]:
         add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
 
+
+    # Lower descent: actual complete consuming proofs, with equivalent controls.
+    # These test proof sensitivity, not universal falsity of every changed statement.
+    def bu_alias(module, name):
+        match = re.search(r"^(?:def|abbrev|structure) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing lower-descent definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BUCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.LowerDescentExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "set_option maxRecDepth 4096\nvariable {K : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias
+
+    key, alias = bu_alias("LayerInputs", "wotsRecoverCountInput")
+    check = theorem(src["CountMessageBinding"], "wots_count_input_message_eq").replace("wotsRecoverCountInput", alias)
+    check = check.replace("List.append_assoc]", "List.append_assoc, List.append_nil]")
+    for row in [
+        ("descent-count-omit-message", "kp message ++", "kp [] ++"),
+        ("descent-count-truncate-message", "kp message ++", "kp (message.take 1) ++"),
+        ("descent-count-drop-message-head", "kp message ++", "kp (message.drop 1) ++"),
+        ("descent-count-reverse-message", "kp message ++", "kp message.reverse ++"),
+        ("descent-count-message-equivalent", "kp message ++", "kp (message ++ []) ++", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bu_alias("CountMessageBinding", "AcceptedWotsCollision")
+    check = theorem(src["CountMessageBinding"], "accepted_wots_collision_iff").replace("AcceptedWotsCollision", alias)
+    check = check.replace("exists_prop]", "exists_prop, and_true]")
+    for row in [
+        ("descent-collision-allow-same-input", "key ≠ other", "True"),
+        ("descent-collision-require-same-input", "key ≠ other", "key = other"),
+        ("descent-collision-ignore-acceptance", "wotsAccept (wotsOfDigest value) = true", "True"),
+        ("descent-collision-ignore-second-word", "wotsOfDigest value = wotsOfDigest reply", "wotsOfDigest value = wotsOfDigest value"),
+        ("descent-collision-second-lookup", "cache other = some reply", "cache key = some reply"),
+        ("descent-collision-conjunction-equivalent", "key ≠ other", "key ≠ other ∧ True", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bu_alias("LowerChainOpening", "LowerChainRecordValid")
+    check = theorem(src["LowerChainOpening"], "lower_chain_opening_of_certificate").replace("LowerChainRecordValid", alias)
+    for row in [
+        ("descent-opening-certificate-root", "top.lowerTree top.middle", "top.lowerTree 0"),
+        ("descent-opening-wots-layer", "wotsRecoveryUnderProgram (fun key => encode (.inl key)) seed 0", "wotsRecoveryUnderProgram (fun key => encode (.inl key)) seed 1"),
+        ("descent-opening-generated-address", "wotsLeafProgram encode seed 0 top.lowerTree top.lowerKp", "wotsLeafProgram encode seed 0 top.lowerTree 0"),
+        ("descent-opening-count-message", "(nodeValueBytes top.forest) ((sig.layers[0]?).getD emptyLayerSignature).count", "[] ((sig.layers[0]?).getD emptyLayerSignature).count"),
+        ("descent-opening-count-value", "(nodeValueBytes top.forest) ((sig.layers[0]?).getD emptyLayerSignature).count", "(nodeValueBytes top.forest) 0"),
+        ("descent-opening-auth-path", "top.lowerKp ((sig.layers[0]?).getD emptyLayerSignature).auth", "top.lowerKp []"),
+        ("descent-opening-acceptance", "wotsAccept lower.word = true", "wotsAccept lower.word = false"),
+        ("descent-opening-prefix-position", "i.val (lower.word i).val", "i.val 0"),
+        ("descent-opening-count-equivalent", "(nodeValueBytes top.forest) ((sig.layers[0]?).getD emptyLayerSignature).count", "(nodeValueBytes top.forest) (((sig.layers[0]?).getD emptyLayerSignature).count + 0)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bu_alias("LowerExposureOpening", "LowerExposureCase")
+    check = theorem(src["LowerExposureOpening"], "lower_chain_exposure_comparison").replace("LowerExposureCase", alias)
+    check = check.replace("  rcases lower_exposure_minimum_comparison",
+        "  unfold " + alias + "\n  simp (config := { failIfUnchanged := false }) only [Nat.add_zero]\n  rcases lower_exposure_minimum_comparison")
+    for row in [
+        ("descent-exposure-wrong-tree", "lowerExposureWords records opening.lowerTree opening.lowerKp", "lowerExposureWords records (opening.lowerTree + 1) opening.lowerKp"),
+        ("descent-exposure-wrong-leaf", "lowerExposureWords records opening.lowerTree opening.lowerKp", "lowerExposureWords records opening.lowerTree (opening.lowerKp + 1)"),
+        ("descent-exposure-full-digest", "lower.word = wotsOfDigest prior.lowerDigest", "lower.countDigest = prior.lowerDigest"),
+        ("descent-exposure-upper-value", "some (prior.lower.sigma i)", "some (prior.upper.sigma i)"),
+        ("descent-exposure-suffix-length", "(wotsOfDigest prior.lowerDigest i).val - (lower.word i).val", "(wotsOfDigest prior.lowerDigest i).val"),
+        ("descent-exposure-suffix-layer", "wotsChainInput seed 0 opening.lowerTree", "wotsChainInput seed 1 opening.lowerTree"),
+        ("descent-exposure-endpoint-equivalent", "(lower.word i).val < 7", "(lower.word i).val < 7 + 0", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bu_alias("LowerDescent", "LowerDescentCase")
+    check = theorem(src["LowerDescent"], "top_chain_lower_descent").replace("LowerDescentCase", alias)
+    check = check.replace("  rcases top_chain_exposure_comparison",
+        "  unfold " + alias + "\n  simp (config := { failIfUnchanged := false }) only [List.append_nil]\n  rcases top_chain_exposure_comparison")
+    for row in [
+        ("descent-endpoint-drop-prior", "∃ prior ∈ records,", "∃ prior ∈ records.drop 1,"),
+        ("descent-endpoint-wrong-root", "top.middle = prior.middle", "top.middle = prior.top"),
+        ("descent-endpoint-lower-digest", "top.word = wotsOfDigest prior.upperDigest", "top.word = wotsOfDigest prior.lowerDigest"),
+        ("descent-endpoint-lower-sigma", "sigma = prior.upper.sigma", "sigma = prior.lower.sigma"),
+        ("descent-endpoint-history-equivalent", "∃ prior ∈ records,", "∃ prior ∈ records ++ [],", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
     return out

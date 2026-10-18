@@ -65,3 +65,9 @@ import C10Probability.TopChainRecord
 import C10Probability.TopExposureOpening
 import C10Probability.ExposureExamples
 import C10Probability.ExposureHistoryExamples
+import C10Probability.CountMessageBinding
+import C10Probability.RepeatedUpperBinding
+import C10Probability.LowerChainOpening
+import C10Probability.LowerExposureOpening
+import C10Probability.LowerDescent
+import C10Probability.LowerDescentExamples
