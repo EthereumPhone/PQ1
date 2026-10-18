@@ -62,7 +62,7 @@ use panic_halt as _;
 // warning-clean.
 #[cfg(all(
     not(feature = "e2e-test"),
-    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"),
+    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"),
     not(feature = "fwup-hw-test"),
     not(feature = "gtzc-test"),
     not(feature = "tzic-wipe-test"),
@@ -76,7 +76,7 @@ use cortex_m_semihosting::{debug, hprintln};
 // dead-code warnings.
 #[cfg(all(
     not(feature = "e2e-test"),
-    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"),
+    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"),
     not(feature = "fwup-hw-test"),
     not(feature = "gtzc-test"),
     not(feature = "tzic-wipe-test"),
@@ -107,6 +107,9 @@ mod tzic_wipe_test;
 // failing later as a duplicate-`main` link error.
 #[cfg(feature = "nested-gate-test")]
 mod nested_gate_test;
+// DVT row 3.8 NS pointer-validation table; owns its own entry like nested-gate-test.
+#[cfg(feature = "ns-ptr-probe")]
+mod ns_ptr_probe;
 #[cfg(all(
     feature = "nested-gate-test",
     any(
@@ -157,7 +160,7 @@ mod fnsof_trace;
 /// declare their own.
 #[cfg(all(
     not(feature = "e2e-test"),
-    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"),
+    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"),
     not(feature = "fwup-hw-test"),
     not(feature = "gtzc-test"),
     not(feature = "tzic-wipe-test"),
@@ -168,7 +171,7 @@ static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
 /// Scratch buffer for a sign payload (header + up to 256B inner calldata).
 #[cfg(all(
     not(feature = "e2e-test"),
-    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"),
+    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"),
     not(feature = "fwup-hw-test"),
     not(feature = "gtzc-test"),
     not(feature = "tzic-wipe-test"),
@@ -177,7 +180,7 @@ static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
 const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 256;
 #[cfg(all(
     not(feature = "e2e-test"),
-    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"),
+    not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"),
     not(feature = "fwup-hw-test"),
     not(feature = "gtzc-test"),
     not(feature = "tzic-wipe-test"),
@@ -198,7 +201,7 @@ static mut USB_HEARTBEAT: u32 = 0;
 // USB main loop: polls USB HID, dispatches APDUs to the NSC gateway.
 // Active when the `usb` feature is enabled (hardware builds with host comms).
 // ---------------------------------------------------------------------------
-#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     ns_debug_log("[NS] main() entered");
@@ -331,7 +334,7 @@ fn main() -> ! {
 /// Emit a semihosting log line only if a debugger is attached (DHCSR.C_DEBUGEN=1).
 /// Required because NS uses `panic_halt` and `hprintln!` without a debugger
 /// BKPTs → HardFault → silent halt.
-#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
+#[cfg(all(feature = "usb", not(feature = "e2e-test"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 fn ns_debug_log(msg: &str) {
     const DHCSR: *const u32 = 0xE000_EDF0 as *const u32;
     let c_debugen = unsafe { core::ptr::read_volatile(DHCSR) } & 1;
@@ -344,7 +347,7 @@ fn ns_debug_log(msg: &str) {
 // Interactive QEMU demo (no USB). Exercises the unified sign
 // command end-to-end: unlock → sign a value-transfer → print result.
 // ---------------------------------------------------------------------------
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS] Non-secure world started!");
@@ -408,7 +411,7 @@ fn main() -> ! {
 
 /// Build a unified-sign payload for a value-transfer tx.
 /// Output layout matches `sphincs_tz_shared::SIGN_USEROP_HEADER_LEN`.
-#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
+#[cfg(all(not(feature = "e2e-test"), not(feature = "usb"), not(feature = "bench-key-speed"), not(feature = "nested-gate-test"), not(feature = "ns-ptr-probe"), not(feature = "fwup-hw-test"), not(feature = "gtzc-test"), not(feature = "tzic-wipe-test")))]
 fn build_value_transfer_payload(buf: &mut [u8], sender: &[u8; 20]) -> usize {
     // Sepolia chain_id, account 0, slot 0 with INCLUDE_INIT_CODE: the factory
     // atomically deploys the deterministic wallet and seeds slot 0, while the

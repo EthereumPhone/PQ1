@@ -369,6 +369,10 @@ mod bench_masked_sha;
 #[cfg(feature = "trng-dump")]
 mod trng_dump;
 
+/// On-core timing bench over SWD (`sign-timing`, DVT 16.4 / 16.6).
+#[cfg(feature = "sign-timing")]
+mod sign_timing;
+
 /// Strong-RNG XOR composition and fail-closed probe (`rng-xor-probe`, DVT 4.9).
 #[cfg(feature = "rng-xor-probe")]
 mod rng_xor_probe;
@@ -1694,6 +1698,10 @@ fn main() -> ! {
     // TRNG dump for SP 800-90B (DVT row 4.8). Never returns.
     #[cfg(feature = "trng-dump")]
     trng_dump::run_and_halt();
+
+    // On-core timing bench (DVT 16.4 / 16.6). Never returns.
+    #[cfg(feature = "sign-timing")]
+    sign_timing::run_and_halt();
 
     // SAES self-test (Tier 1 of work-todo #7). Runs once at boot,
     // halts on PASS/FAIL. Does nothing unless `saes-self-test` is

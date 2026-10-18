@@ -68,6 +68,9 @@ tzic-wipe-test = ["stm32u585"]
 # over semihosting, so it needs a debug probe: SWD bench board only, not
 # the enclosed DFU unit. Use `make nested-gate-test-hw`.
 nested-gate-test = ["stm32u585"]
+# DVT row 3.8: NS pointer-validation boundary table. Owns main(); results
+# over SWD (`tools/dvt/ns_ptr_probe.py`). Needs an e2e-test + mock-se secure image.
+ns-ptr-probe = ["stm32u585"]
 # Flips the runner's PASS condition for the negative-control build (paired
 # with the secure crate's `gateway-gate-off`): the nested call must be
 # ADMITTED, not refused. Use `make nested-gate-test-nctl-hw`.

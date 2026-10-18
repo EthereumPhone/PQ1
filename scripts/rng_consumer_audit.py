@@ -66,6 +66,12 @@ EXPECTED = {
     "secure/src/trng_dump.rs": Counter(
         {"while crate::rng::fill(buf).is_err() {": 1}
     ),
+    # `sign-timing` (DVT rows 16.4/16.6): draws dudect classes, random test
+    # inputs and per-sign test keys for a timing bench. No wallet key or SE
+    # value; the feature is in PROD_FORBIDDEN and fenced in nsc/mod.rs.
+    "secure/src/sign_timing.rs": Counter(
+        {"while crate::rng::fill(buf).is_err() {": 1}
+    ),
     "secure/src/se050/scp03.rs": Counter(
         {
             "crate::rng::fill(&mut host_challenge).map_err(|_| Se050Error::Scp03)?;": 1,
