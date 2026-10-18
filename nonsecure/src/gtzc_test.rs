@@ -320,6 +320,144 @@ mod sys_probe {
         }
     }
 
+    /// DVT row 3.9 (`GTZC_DMA`, compile-time env): can a NON-SECURE GPDMA1
+    /// channel copy out of secure memory? Channel 3 (the secure world owns
+    /// channel 0, the pixel-UI blit), memory-to-memory software request,
+    /// word beats, 64 bytes, `SSEC = DSEC = 0` (NS cannot set them). Each
+    /// source is copied into an NS buffer pre-filled with a canary; the
+    /// verdict is the channel flags plus whether any canary word changed.
+    /// The first source is NS SRAM2, the positive control: it must copy.
+    fn dma_probe() {
+        const GPDMA1: u32 = 0x4002_0000;
+        const CH: u32 = 3;
+        const O: u32 = 0x80 * CH;
+        const CFCR: u32 = GPDMA1 + 0x5C + O;
+        const CSR: u32 = GPDMA1 + 0x60 + O;
+        const CCR: u32 = GPDMA1 + 0x64 + O;
+        const CTR1: u32 = GPDMA1 + 0x90 + O;
+        const CTR2: u32 = GPDMA1 + 0x94 + O;
+        const CBR1: u32 = GPDMA1 + 0x98 + O;
+        const CSAR: u32 = GPDMA1 + 0x9C + O;
+        const CDAR: u32 = GPDMA1 + 0xA0 + O;
+        const CLLR: u32 = GPDMA1 + 0xCC + O;
+        const CANARY: u32 = 0x5EC0_C0DE;
+        static mut SRC: [u32; 16] = [0; 16];
+        static mut DST: [u32; 16] = [0; 16];
+
+        // SAFETY: NS-alias GPDMA1/RCC registers and this module's own NS
+        // statics; single-threaded test image. The DMA sources are the
+        // accesses under test.
+        unsafe {
+            let src_ctl = core::ptr::addr_of_mut!(SRC) as u32;
+            for i in 0..16u32 {
+                core::ptr::write_volatile((src_ctl + 4 * i) as *mut u32, 0x1100_0000 | i);
+            }
+            let ahb1enr = RCC + 0x88;
+            let e = core::ptr::read_volatile(ahb1enr as *const u32);
+            core::ptr::write_volatile(ahb1enr as *mut u32, e | 1);
+            spin();
+            // Channel 3 privileged (GPDMA_PRIVCFGR bit 3): an unprivileged
+            // channel's writes did not land in NS SRAM2 on the first run.
+            let pc = core::ptr::read_volatile((GPDMA1 + 0x04) as *const u32);
+            core::ptr::write_volatile((GPDMA1 + 0x04) as *mut u32, pc | (1 << CH));
+            let _ = hprintln!(
+                "[NS][gtzc-dma] RCC_AHB1ENR 0x{:08x} -> 0x{:08x}; GPDMA_SECCFGR(NS view)=0x{:08x}",
+                e,
+                core::ptr::read_volatile(ahb1enr as *const u32),
+                core::ptr::read_volatile(GPDMA1 as *const u32),
+            );
+            let sources: [(u32, &str); 10] = [
+                (src_ctl, "NS SRAM2 static (ctl)"),
+                (0x3000_0000, "SRAM1 secure alias"),
+                (0x2000_0000, "SRAM1 NS alias"),
+                (0x2004_0000, "SRAM3 NS alias"),
+                (0x0C00_0000, "flash bank1 S alias"),
+                (0x0800_0000, "flash bank1 NS alias"),
+                (0x0BFA_0000, "OTP"),
+                // Known non-0xFF content in the same block, to tell real
+                // data from read-as-0xFF: the 96-bit UID and the ROM.
+                (0x0BFA_0700, "UID"),
+                (0x0BF9_0000, "system memory (ROM)"),
+                (0x0810_0000, "flash bank2 NS (ctl)"),
+            ];
+            for (src, label) in sources {
+                let dst = core::ptr::addr_of_mut!(DST) as u32;
+                for i in 0..16u32 {
+                    core::ptr::write_volatile((dst + 4 * i) as *mut u32, CANARY);
+                }
+                let tz0 = crate::nsc_api::tzic_status();
+                core::ptr::write_volatile(CCR as *mut u32, 0);
+                core::ptr::write_volatile(CFCR as *mut u32, 0x7F00);
+                // SDW=word, SINC, DDW=word, DINC; SSEC/DSEC left 0.
+                core::ptr::write_volatile(CTR1 as *mut u32, 0x000A_000A);
+                core::ptr::write_volatile(CTR2 as *mut u32, 1 << 9); // SWREQ
+                core::ptr::write_volatile(CBR1 as *mut u32, 64);
+                core::ptr::write_volatile(CSAR as *mut u32, src);
+                core::ptr::write_volatile(CDAR as *mut u32, dst);
+                core::ptr::write_volatile(CLLR as *mut u32, 0);
+                let _ = hprintln!(
+                    "[NS][gtzc-dma]   pre-EN TR1=0x{:08x} TR2=0x{:08x} BR1=0x{:08x} SAR=0x{:08x} DAR=0x{:08x} SR=0x{:08x} PRIVCFGR=0x{:08x}",
+                    core::ptr::read_volatile(CTR1 as *const u32),
+                    core::ptr::read_volatile(CTR2 as *const u32),
+                    core::ptr::read_volatile(CBR1 as *const u32),
+                    core::ptr::read_volatile(CSAR as *const u32),
+                    core::ptr::read_volatile(CDAR as *const u32),
+                    core::ptr::read_volatile(CSR as *const u32),
+                    core::ptr::read_volatile((GPDMA1 + 0x04) as *const u32),
+                );
+                core::ptr::write_volatile(CCR as *mut u32, 1); // EN
+                let mut sr = 0;
+                for _ in 0..1_000_000u32 {
+                    sr = core::ptr::read_volatile(CSR as *const u32);
+                    if sr & 0x1D00 != 0 {
+                        break;
+                    }
+                }
+                spin();
+                let tz1 = crate::nsc_api::tzic_status();
+                let mut changed = 0u32;
+                let mut first = [0u32; 4];
+                for i in 0..16u32 {
+                    let v = core::ptr::read_volatile((dst + 4 * i) as *const u32);
+                    if v != CANARY {
+                        changed += 1;
+                    }
+                    if i < 4 {
+                        first[i as usize] = v;
+                    }
+                }
+                let all_zero = first == [0; 4];
+                let verdict = if changed == 0 && sr & (1 << 10) != 0 {
+                    "BLOCKED (DTEF)"
+                } else if changed == 0 {
+                    "NO DATA"
+                } else if all_zero {
+                    "COPIED ZEROS (RAZ?)"
+                } else {
+                    "COPIED DATA"
+                };
+                let _ = hprintln!(
+                    "[NS][gtzc-dma] src=0x{:08x} {:<22} CSR=0x{:08x} TCF={} DTEF={} USEF={} ULEF={} words_changed={}/16 first=[{:08x} {:08x} {:08x} {:08x}] tzic+={} {}",
+                    src,
+                    label,
+                    sr,
+                    (sr >> 8) & 1,
+                    (sr >> 10) & 1,
+                    (sr >> 12) & 1,
+                    (sr >> 11) & 1,
+                    changed,
+                    first[0],
+                    first[1],
+                    first[2],
+                    first[3],
+                    tz1.wrapping_sub(tz0),
+                    verdict,
+                );
+            }
+            core::ptr::write_volatile(CCR as *mut u32, 0);
+        }
+    }
+
     pub(super) fn run() {
         let _ = hprintln!("[NS][gtzc-sys] === phase 2: NS system-register write probes ===");
         for p in PROBES {
@@ -365,6 +503,9 @@ mod sys_probe {
         let _ = hprintln!("[NS][gtzc-sys] tzic_status after phase 2 = {}", crate::nsc_api::tzic_status());
         let _ = hprintln!("[NS][gtzc-sys] DONE (writes left in place for SWD read-back)");
 
+        if option_env!("GTZC_DMA").is_some() {
+            dma_probe();
+        }
         if let Some(s) = option_env!("GTZC_FAULT_ADDR") {
             let a = u32::from_str_radix(s.trim_start_matches("0x"), 16).unwrap_or(0);
             let _ = hprintln!("[NS][gtzc-sys] fault probe: NS read of 0x{:08x} ...", a);
