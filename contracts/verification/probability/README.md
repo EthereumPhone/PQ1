@@ -674,9 +674,9 @@ Populated constant-cache witnesses are not fresh-oracle or honest-correctness cl
 
 This is a manually transcribed structured-signature model, not the 4008-byte
 codec or a Rust execution-equivalence theorem. The structured finite adaptive
-session is composed below; successful-output/forgery partition, final forgery
-PMF bound, universal honest
-correctness, repeated-grinder freshness and concrete backends remain open.
+session and honest structured-signature correctness are composed below;
+successful-output/forgery partition, final forgery PMF bound,
+repeated-grinder freshness and concrete backends remain open.
 Rust panic/retry/callback/erasure behavior, natural-number address truncation,
 cross-language correspondence and physical execution retain their existing boundaries.
 
@@ -808,12 +808,47 @@ stored siblings with the tree nodes, without a collision exclusion or an assumed
 reference path. Recovery retains the actual WOTS leaf replay or FORS private
 value/public leaf lookup, and remains valid under cache extension.
 `ReturnedForsSigning.lean` binds recovery to the secret and authentication array
-actually returned by FORS signing and to that execution's builder root. This is
-not yet correctness of the whole C10 signer or a forgery-probability bound.
+actually returned by FORS signing and to that execution's builder root. This
+component supplies the whole structured-signer result below; it is not a
+forgery-probability bound.
 The ten `AuthPathExamples.lean` witnesses use an asymmetric four-leaf cache;
 they cover all positions, order, false initialization of kept flags, short
 arrays, invalid targets and unaligned merges. Forty additional typed cases
 exercise the stored-node certificates, collector writes and kept-flag links.
+
+`C10Honest.lean` now proves universal honest correctness for the actual
+structured keygen/sign/verify clients. Every successful bounded signature
+under an actually generated key verifies in its resulting cache, and in any
+later cache that preserves its recorded replies. The keygen premise is consumed:
+the top layer's reconstructed root is proved equal to the independently
+constructed layer-one/tree-zero root, rather than assumed equal.
+
+`CountReplay.lean`, `WotsHonest.lean` and `WotsHonestSign.lean` derive the
+accepted full-width count lookup and recover each actual private-seeded prefix
+to the generated WOTS leaf. `LayerHonest.lean` composes the actual returned
+authentication path and uses functional tree-node uniqueness to identify the
+builder root. `ForestRecords.lean` preserves all twelve positional records
+through the computed shuffle; `ForestHonest.lean` connects them to ordered
+recovery, the special final root-as-secret, its separate leaf hash and all
+thirteen compression positions. `RandomizerReplay.lean` retains the actual
+R/H_msg lookup and accepted digest. `HypertreeHonest.lean` composes the two
+returned layers and their actual top keygen root. None of these forward
+correctness results requires fresh queries, hash injectivity or collision
+exclusion.
+
+`HonestProbability.lean` composes actual keygen, signing and verification in a
+single PMF experiment. Its result law keeps `none` for bounded signing failure
+and returns `some true` for every successful signature; the rejection outcome
+`some false` has mass zero. This proves neither guaranteed signing success nor
+unforgeability. The generic input map covers both the independent public/private
+interface and the physical shared-input interpretation under the same memoized
+ideal digest model. `HonestExamples.lean` supplies eleven finite witnesses:
+asymmetric chains, retry/query selection, positional forest writes and last-slot
+compression, an inhabited actual keygen/sign/verify execution, and rejection
+counterexamples for an arbitrary supplied root and an overwritten cache. The
+whole-signature witness uses a populated constant cache and gives no empty-cache
+success probability. The structured result does not include the 4,008-byte
+codec or establish Rust, EasyCrypt, backend or cross-kernel equivalence.
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -858,16 +893,29 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1505 theorem closures against
+The gate rebuilds every project module, checks all 1545 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-870 typed cases run 2610 compiler jobs: each baseline and changed
-definition must compile, 781 changed behaviors must reject at the
-consuming `checked` theorem, and eighty-nine value-preserving changes must pass.
+917 typed cases run 2751 compiler jobs: each baseline and changed
+definition must compile, 821 changed behaviors must reject at the
+consuming `checked` theorem, and ninety-six value-preserving changes must pass.
+The 47 honest-correctness cases add 40 semantic negatives and seven equivalent
+controls. They cover actual forest positions, special final-leaf/compression
+handling, selected randomizer replies/counters, ordered chains, H_msg/signature
+inputs and the composed PMF's cache threading and failure outcome. The endpoint
+controls re-run the complete honest-replay and distribution proof bodies against
+the changed definitions, retaining actual keygen and successful signing. The
+slot consumer derives actual forest recovery from the changed record predicate.
+Value-preserving `b && true` and `root ++ []` controls pass with elementary
+normalization in the same baseline/mutant proof, despite not being definitionally
+equal to their variable inputs. These are sensitivity checks for the selected
+consuming proofs, not proofs that every changed program falsifies the theorem.
+The preceding 870 fixture objects, 1505 theorem statements, old proof-module
+bytes and 52 source bindings are preserved.
 The 40 returned-authentication cases add 36 semantic negatives and four
 equivalent controls; the preceding 830 fixture objects, 1448 theorem statements,
 old proof-module bytes and 52 source bindings are preserved.

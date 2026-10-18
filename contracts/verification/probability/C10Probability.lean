@@ -51,3 +51,4 @@ import C10Probability.LayerPrefixComparison
 import C10Probability.ChainBindingExamples
 import C10Probability.WotsOpeningExamples
 import C10Probability.AuthPathExamples
+import C10Probability.HonestExamples

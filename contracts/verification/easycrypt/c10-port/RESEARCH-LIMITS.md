@@ -1,6 +1,6 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-16, following the initialized classical byte-game
+Research checkpoint: 2026-10-18, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Work remains tracked under PQ1 #100 and #295.
@@ -203,7 +203,8 @@ fuel. R inputs remain selected. The empty-cache physical node charge is
 initialized shared/independent returned-event error is at most `public/2^256`.
 The real-valued forgery-transfer theorem retains the independent game's forgery
 probability as an unresolved term. This closes finite structured session
-composition and cost, not universal honest correctness, the 4008-byte PMF codec,
+composition and cost; honest structured correctness is now proved below.
+It does not close the 4008-byte PMF codec,
 arbitrary lossless/unbounded-adversary representation, successful-output/forgery
 partition, final forgery bound or repeated-grinder freshness. The `none` exhaustion model does not prove runtime panic/retry,
 callback or erasure semantics. Passive observations now retain actual successful
@@ -240,8 +241,24 @@ certified stored siblings and the same cache; concrete merge alignment, bounds
 and kept-flag initialization are discharged. Recovery preserves the actual WOTS
 leaf or FORS private value and extends to later caches without a collision
 exclusion. Actual FORS signing's returned secret/path recovers its own builder
-root. Whole C10 honest-signature correctness and forgery descent remain separate.
-The PMF inventory now has 1505 theorem closures and 870 typed sensitivity cases.
+root. The whole structured C10 honest-signature obligation is now closed under
+the actual keygen result: every successful bounded signature verifies in its
+resulting cache and every consistent later cache. The proof derives accepted
+WOTS count lookups and recovery of the private-seeded prefixes, the actual
+layer/builder root, shuffled positional forest records, special final-leaf
+compression and both returned layers. Functional node uniqueness identifies
+the top root with actual key generation; no desired root/path equality,
+freshness, hash injectivity or collision exclusion is assumed.
+The composed keygen/sign/verify PMF retains bounded failure as `none` and has
+zero mass at `some false`. This is honest correctness, not guaranteed signing
+success or a forgery bound. Eleven finite examples include asymmetric component
+executions and counterexamples for wrong supplied roots and overwritten caches;
+the inhabited whole-signature example uses a populated constant cache, not an
+empty-cache success-probability argument. Minimum repeated-address exposure,
+lower-layer/FORS forgery descent, adaptive coverage/private-opening charges and
+the final six-case forgery partition/bound remain open. The structured theorem
+does not close the byte codec or concrete/hash/Rust/cross-kernel boundaries.
+The PMF inventory now has 1545 theorem closures and 917 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

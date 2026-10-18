@@ -2591,4 +2591,113 @@ def cases(project: Path) -> list[dict]:
     add("auth-written-flag-lost", key, "state.kept.set height true", "state.kept.set height false", check)
     add("auth-written-node-lost", key, "state.nodes.set height node", "state.nodes", check)
 
+    # Honest structured C10: actual positional vectors and complete proof-body
+    # consumers of the replay/distribution endpoints. Alias one source definition so a
+    # mutation cannot silently use its original compiled implementation.
+    def bs_alias(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing honest-correctness definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BSCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.HonestExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "set_option maxRecDepth 4096\n"
+            "variable {K J P L I α N R : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias
+
+    key, alias = bs_alias("ForestRecords", "RecordedForestSlot")
+    check = theorem(src["ForestRecords"], "recorded_forest_slot_recovery").replace("RecordedForestSlot", alias)
+    check = check.replace("  simpa only [secret, auth, root, Option.getD_some] using",
+        "  simp (config := { failIfUnchanged := false }) only [Nat.add_zero] at secret auth root\n"
+        "  simpa only [secret, auth, root, Option.getD_some] using")
+    for row in [
+        ("honest-slot-execution-absent", "replayProgram table (forestOneProgram encode seed ht i.val (forestIndex digest i.val)) = some out", "True"),
+        ("honest-slot-secret-absent", "state.secrets[i.val]? = some out.secret", "True"),
+        ("honest-slot-auth-absent", "state.auths[i.val]? = some out.auth", "True"),
+        ("honest-slot-root-absent", "state.roots[i.val]? = some out.root", "True"),
+        ("honest-slot-secret-position", "state.secrets[i.val]?", "state.secrets[0]?"),
+        ("honest-slot-auth-position", "state.auths[i.val]?", "state.auths[0]?"),
+        ("honest-slot-root-position", "state.roots[i.val]?", "state.roots[0]?"),
+        ("honest-slot-target", "forestIndex digest i.val", "forestIndex digest 12"),
+        ("honest-slot-position-equivalent", "state.roots[i.val]?", "state.roots[i.val + 0]?", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("ForestSign", "forestLastProgram")
+    check = theorem(src["HonestExamples"], "honest_last_slot_replay").replace("forestLastProgram", alias)
+    for row in [
+        ("honest-last-private-route", "encode (.inl (forsLeafInput", "encode (.inr (forsLeafInput"),
+        ("honest-last-tree-coordinate", "forsLeafInput seed ht 12 0 last", "forsLeafInput seed ht 11 0 last"),
+        ("honest-last-leaf-coordinate", "forsLeafInput seed ht 12 0 last", "forsLeafInput seed ht 12 1 last"),
+        ("honest-last-compression-unhashed", "state.roots.set 12 (randomizerOfDigest leaf)", "state.roots.set 12 last"),
+        ("honest-last-compression-position", "state.roots.set 12", "state.roots.set 0"),
+        ("honest-last-transmitted-root", "state.secrets.set 12 last", "state.secrets.set 12 (randomizerOfDigest leaf)"),
+        ("honest-last-transmitted-position", "state.secrets.set 12 last", "state.secrets.set 0 last"),
+        ("honest-last-position-equivalent", "state.secrets.set 12 last", "state.secrets.set (12 + 0) last", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("ForestFill", "forestWrite")
+    check = theorem(src["HonestExamples"], "honest_forest_positional_writes").replace("forestWrite", alias)
+    for row in [
+        ("honest-write-secret-position", "state.secrets.set tree", "state.secrets.set 0"),
+        ("honest-write-auth-position", "state.auths.set tree", "state.auths.set 0"),
+        ("honest-write-root-position", "state.roots.set tree", "state.roots.set 0"),
+        ("honest-write-secret-lost", "state.secrets.set tree out.secret", "state.secrets"),
+        ("honest-write-auth-lost", "state.auths.set tree out.auth", "state.auths"),
+        ("honest-write-root-lost", "state.roots.set tree out.root", "state.roots"),
+        ("honest-write-position-equivalent", "state.roots.set tree", "state.roots.set (tree + 0)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("GrindProgram", "derivedProgram")
+    check = theorem(src["HonestExamples"], "honest_derived_retry_replay").replace("derivedProgram", alias)
+    for row in [
+        ("honest-derived-retry-count", "accept (start + 1) keys", "accept start keys"),
+        ("honest-derived-selected-count", "some (start, derive first, second)", "some (start + 1, derive first, second)"),
+        ("honest-derived-selected-label", "some (start, derive first, second)", "some (start, derive second, second)"),
+        ("honest-derived-selected-reply", "some (start, derive first, second)", "some (start, derive first, first)"),
+        ("honest-derived-acceptance", "if accept second", "if accept first"),
+        ("honest-derived-count-equivalent", "accept (start + 1) keys", "accept (1 + start) keys", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("ChainCollection", "chainCollectionProgram")
+    check = theorem(src["HonestExamples"], "honest_asymmetric_chain_collection").replace("chainCollectionProgram", alias)
+    for row in [
+        ("honest-collection-chain-start", "project (starts i) (steps i)", "project 0 (steps i)"),
+        ("honest-collection-order", "(List.cons current)", "(fun tail => tail ++ [current])"),
+        ("honest-collection-start-equivalent", "project (starts i) (steps i)", "project (starts i + 0) (steps i)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("C10Verify", "c10VerifyProgram")
+    check = theorem(src["C10Honest"], "replay_c10_honest_verification").replace("c10VerifyProgram", alias)
+    check = check.replace("simp only [rootValue, decide_true]",
+        "simp only [rootValue, List.append_nil, decide_true]")
+    for row in [
+        ("honest-verify-hmsg-seed", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput [] root message"),
+        ("honest-verify-hmsg-root", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput seed [] message"),
+        ("honest-verify-hmsg-message", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput seed root []"),
+        ("honest-verify-hmsg-randomizer", "message sig.randomizer", "message 0"),
+        ("honest-verify-recovery-seed", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode [] root sig"),
+        ("honest-verify-recovery-root", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode seed [] sig"),
+        ("honest-verify-secret-fields", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode seed root {sig with secrets := []}"),
+        ("honest-verify-root-equivalent", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode seed (root ++ []) sig", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("HonestProbability", "c10HonestCheck")
+    check = theorem(src["HonestProbability"], "c10_honest_check_distribution").replace("c10HonestCheck", alias)
+    check = check.replace("  unfold " + alias,
+        "  unfold " + alias + "\n  simp (config := { failIfUnchanged := false }) only [Bool.and_true]")
+    for row in [
+        ("honest-check-keygen-cache-lost", "c10Sign encode key.2", "c10Sign encode initial"),
+        ("honest-check-verify-cache-lost", "encode (.inl input)) signed.2", "encode (.inl input)) initial"),
+        ("honest-check-private-verifier", "encode (.inl input)", "encode (.inr input)"),
+        ("honest-check-failure-is-success", "| none => PMF.pure none", "| none => PMF.pure (some true)"),
+        ("honest-check-inverted-result", "some verified.1", "some (!verified.1)"),
+        ("honest-check-result-equivalent", "some verified.1", "some (verified.1 && true)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
     return out
