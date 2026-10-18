@@ -2477,4 +2477,331 @@ def cases(project: Path) -> list[dict]:
                    theorem(src["WotsOpeningExamples"], "opening_zero_cut_uses_private_reply"))
     add("wots-chain-private-route-lost", key, "encode (.inr (wotsPrivateTail", "encode (.inl (wotsPrivateTail", check)
 
+    # Actual returned authentication arrays: typed predicate consumers and
+    # asymmetric execution vectors. Baseline/definition/consumer are separate.
+    def br_alias(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing returned-auth definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BRCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.AuthPathExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "variable {K α N S : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias, declaration
+
+    key, alias, declaration = br_alias("AuthCertificate", "RecordedAuthSlot")
+    check = """theorem checked (table : Memo K α) (leaf : ℕ → Option N)
+    (input : ℕ → ℕ → N → N → K) (project : α → N)
+    (target : ℕ) (auth : List N) (height : ℕ)
+    (slot : RecordedAuthSlotBRCandidate table leaf input project target auth height) :
+    RecordedAuthSlot table leaf input project target auth height := by
+  exact slot
+"""
+    for row in [
+        ("auth-slot-stored-index", "auth[height]?", "auth[0]?"),
+        ("auth-slot-stored-value-absent", "auth[height]? = some value", "True"),
+        ("auth-slot-node-absent", "RecordedTreeNode table leaf input project\n    height ((siblingIndex (target / 2 ^ height) + 1) * 2 ^ height) value", "True"),
+        ("auth-slot-target", "siblingIndex (target / 2 ^ height)", "siblingIndex (0 / 2 ^ height)"),
+        ("auth-slot-sibling", "siblingIndex (target / 2 ^ height)", "(target / 2 ^ height)"),
+        ("auth-slot-edge", "+ 1) * 2 ^ height", "+ 0) * 2 ^ height"),
+        ("auth-slot-cache", "RecordedTreeNode table leaf", "RecordedTreeNode (fun _ => none) leaf"),
+        ("auth-slot-index-equivalent", "auth[height]?", "auth[height + 0]?", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = br_alias("AuthCertificate", "CollectedTreeNode")
+    check = """theorem checked (table : Memo K α) (leaf : ℕ → Option N)
+    (input : ℕ → ℕ → N → N → K) (project : α → N)
+    (target : ℕ) (auth : List N) (height edge : ℕ) (root : N)
+    (node : CollectedTreeNodeBRCandidate table leaf input project target auth height edge root) :
+    CollectedTreeNode table leaf input project target auth height edge root := by
+  exact node
+"""
+    tail = declaration[declaration.index("(edge - 2 ^ height ≤ target"):].rstrip()
+    for row in [
+        ("auth-node-root-absent", "RecordedTreeNode table leaf input project height edge root", "True"),
+        ("auth-node-path-absent", tail, "True"),
+        ("auth-node-last-slot-omitted", "j < height →", "j < height - 1 →"),
+        ("auth-node-slots-other-array", "target auth j", "target [] j"),
+        ("auth-node-slots-other-target", "target auth j", "0 auth j")]:
+        add(row[0], key, row[1], row[2], check)
+
+    key, alias, declaration = br_alias("AuthKeepLaw", "AuthKeepValid")
+    check = """theorem checked (table : Memo K α) (leaf : ℕ → Option Randomizer)
+    (input : ℕ → ℕ → Randomizer → Randomizer → K) (project : α → Randomizer)
+    (target bound : ℕ) (state : AuthKeep)
+    (valid : AuthKeepValidBRCandidate table leaf input project target bound state) :
+    AuthKeepValid table leaf input project target bound state := by
+  exact valid
+"""
+    tail = declaration[declaration.index("∀ j,"):].rstrip()
+    for row in [
+        ("auth-keep-node-length-absent", "state.nodes.length = bound", "True"),
+        ("auth-keep-flag-length-absent", "state.kept.length = bound", "True"),
+        ("auth-keep-soundness-absent", tail, "True"),
+        ("auth-keep-flag-polarity", ".getD false = true", ".getD false = false"),
+        ("auth-keep-other-node-array", "target state.nodes j", "target [] j")]:
+        add(row[0], key, row[1], row[2], check)
+
+    for name, arguments, height, leaf_program in [
+        ("MerkleAuthCertificate", "layer tree", "9", "wotsLeafProgram encode seed layer tree kp"),
+        ("ForsAuthCertificate", "ht tree", "11", "forsLeafProgram encode seed ht tree kp")]:
+        key, alias, declaration = br_alias("ReturnedAuth", name)
+        check = ("theorem checked (encode : WotsQuery → K) (table : Memo K Digest)\n"
+            "    (seed : ByteKey) (" + arguments + " target : ℕ) (auth : List Randomizer) (root : Randomizer)\n"
+            "    (cert : " + alias + " encode table seed " + arguments + " target auth root) :\n"
+            "    " + name + " encode table seed " + arguments + " target auth root := by\n  exact cert\n")
+        prefix = "auth-merkle" if height == "9" else "auth-fors"
+        for row in [
+            (prefix + "-length-absent", "auth.length = " + height, "True"),
+            (prefix + "-leaf-coordinate", leaf_program, leaf_program[:-2] + "0"),
+            (prefix + "-returned-target", "randomizerOfDigest target auth", "randomizerOfDigest 0 auth"),
+            (prefix + "-returned-array", "randomizerOfDigest target auth", "randomizerOfDigest target []"),
+            (prefix + "-certificate-cache", "CollectedTreeNode table", "CollectedTreeNode (fun _ => none)"),
+            (prefix + "-array-equivalent", "randomizerOfDigest target auth", "randomizerOfDigest target (id auth)", True)]:
+            add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = br_alias("AuthGeometry", "collectAuth")
+    check = theorem(src["AuthPathExamples"], "four_leaf_fors_returned_paths").replace("forsRemember", alias)
+    for row in [
+        ("auth-collector-left-value", "auth.set height left", "auth.set height right"),
+        ("auth-collector-right-value", "auth.set height right", "auth.set height left"),
+        ("auth-collector-left-slot", "auth.set height left", "auth.set (height + 1) left"),
+        ("auth-collector-right-slot", "auth.set height right", "auth.set (height + 1) right"),
+        ("auth-collector-right-coordinate", "+ 1 = siblingIndex", "+ 0 = siblingIndex"),
+        ("auth-collector-right-write-absent", "auth.set height right", "auth"),
+        ("auth-collector-left-equivalent", "auth.set height left", "auth.set (height + 0) left", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias, declaration = br_alias("MerkleBuild", "authRemember")
+    check = theorem(src["AuthPathExamples"], "initially_kept_path_fails").replace("authRemember", alias)
+    add("auth-kept-check-ignored", key, "if (state.kept[height]?).getD false then state",
+        "if false then state", check)
+
+    key, alias, declaration = br_alias("MerkleBuild", "writeAuthKeep")
+    check = """theorem checked :
+    (writeAuthKeepBRCandidate ⟨[1, 2], [false, false]⟩ 1 7).nodes = [1, 7] ∧
+    (writeAuthKeepBRCandidate ⟨[1, 2], [false, false]⟩ 1 7).kept = [false, true] := by decide +kernel
+"""
+    add("auth-written-flag-lost", key, "state.kept.set height true", "state.kept.set height false", check)
+    add("auth-written-node-lost", key, "state.nodes.set height node", "state.nodes", check)
+
+    # Honest structured C10: actual positional vectors and complete proof-body
+    # consumers of the replay/distribution endpoints. Alias one source definition so a
+    # mutation cannot silently use its original compiled implementation.
+    def bs_alias(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing honest-correctness definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BSCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.HonestExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "set_option maxRecDepth 4096\n"
+            "variable {K J P L I α N R : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias
+
+    key, alias = bs_alias("ForestRecords", "RecordedForestSlot")
+    check = theorem(src["ForestRecords"], "recorded_forest_slot_recovery").replace("RecordedForestSlot", alias)
+    check = check.replace("  simpa only [secret, auth, root, Option.getD_some] using",
+        "  simp (config := { failIfUnchanged := false }) only [Nat.add_zero] at secret auth root\n"
+        "  simpa only [secret, auth, root, Option.getD_some] using")
+    for row in [
+        ("honest-slot-execution-absent", "replayProgram table (forestOneProgram encode seed ht i.val (forestIndex digest i.val)) = some out", "True"),
+        ("honest-slot-secret-absent", "state.secrets[i.val]? = some out.secret", "True"),
+        ("honest-slot-auth-absent", "state.auths[i.val]? = some out.auth", "True"),
+        ("honest-slot-root-absent", "state.roots[i.val]? = some out.root", "True"),
+        ("honest-slot-secret-position", "state.secrets[i.val]?", "state.secrets[0]?"),
+        ("honest-slot-auth-position", "state.auths[i.val]?", "state.auths[0]?"),
+        ("honest-slot-root-position", "state.roots[i.val]?", "state.roots[0]?"),
+        ("honest-slot-target", "forestIndex digest i.val", "forestIndex digest 12"),
+        ("honest-slot-position-equivalent", "state.roots[i.val]?", "state.roots[i.val + 0]?", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("ForestSign", "forestLastProgram")
+    check = theorem(src["HonestExamples"], "honest_last_slot_replay").replace("forestLastProgram", alias)
+    for row in [
+        ("honest-last-private-route", "encode (.inl (forsLeafInput", "encode (.inr (forsLeafInput"),
+        ("honest-last-tree-coordinate", "forsLeafInput seed ht 12 0 last", "forsLeafInput seed ht 11 0 last"),
+        ("honest-last-leaf-coordinate", "forsLeafInput seed ht 12 0 last", "forsLeafInput seed ht 12 1 last"),
+        ("honest-last-compression-unhashed", "state.roots.set 12 (randomizerOfDigest leaf)", "state.roots.set 12 last"),
+        ("honest-last-compression-position", "state.roots.set 12", "state.roots.set 0"),
+        ("honest-last-transmitted-root", "state.secrets.set 12 last", "state.secrets.set 12 (randomizerOfDigest leaf)"),
+        ("honest-last-transmitted-position", "state.secrets.set 12 last", "state.secrets.set 0 last"),
+        ("honest-last-position-equivalent", "state.secrets.set 12 last", "state.secrets.set (12 + 0) last", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("ForestFill", "forestWrite")
+    check = theorem(src["HonestExamples"], "honest_forest_positional_writes").replace("forestWrite", alias)
+    for row in [
+        ("honest-write-secret-position", "state.secrets.set tree", "state.secrets.set 0"),
+        ("honest-write-auth-position", "state.auths.set tree", "state.auths.set 0"),
+        ("honest-write-root-position", "state.roots.set tree", "state.roots.set 0"),
+        ("honest-write-secret-lost", "state.secrets.set tree out.secret", "state.secrets"),
+        ("honest-write-auth-lost", "state.auths.set tree out.auth", "state.auths"),
+        ("honest-write-root-lost", "state.roots.set tree out.root", "state.roots"),
+        ("honest-write-position-equivalent", "state.roots.set tree", "state.roots.set (tree + 0)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("GrindProgram", "derivedProgram")
+    check = theorem(src["HonestExamples"], "honest_derived_retry_replay").replace("derivedProgram", alias)
+    for row in [
+        ("honest-derived-retry-count", "accept (start + 1) keys", "accept start keys"),
+        ("honest-derived-selected-count", "some (start, derive first, second)", "some (start + 1, derive first, second)"),
+        ("honest-derived-selected-label", "some (start, derive first, second)", "some (start, derive second, second)"),
+        ("honest-derived-selected-reply", "some (start, derive first, second)", "some (start, derive first, first)"),
+        ("honest-derived-acceptance", "if accept second", "if accept first"),
+        ("honest-derived-count-equivalent", "accept (start + 1) keys", "accept (1 + start) keys", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("ChainCollection", "chainCollectionProgram")
+    check = theorem(src["HonestExamples"], "honest_asymmetric_chain_collection").replace("chainCollectionProgram", alias)
+    for row in [
+        ("honest-collection-chain-start", "project (starts i) (steps i)", "project 0 (steps i)"),
+        ("honest-collection-order", "(List.cons current)", "(fun tail => tail ++ [current])"),
+        ("honest-collection-start-equivalent", "project (starts i) (steps i)", "project (starts i + 0) (steps i)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("C10Verify", "c10VerifyProgram")
+    check = theorem(src["C10Honest"], "replay_c10_honest_verification").replace("c10VerifyProgram", alias)
+    check = check.replace("simp only [rootValue, decide_true]",
+        "simp only [rootValue, List.append_nil, decide_true]")
+    for row in [
+        ("honest-verify-hmsg-seed", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput [] root message"),
+        ("honest-verify-hmsg-root", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput seed [] message"),
+        ("honest-verify-hmsg-message", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput seed root []"),
+        ("honest-verify-hmsg-randomizer", "message sig.randomizer", "message 0"),
+        ("honest-verify-recovery-seed", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode [] root sig"),
+        ("honest-verify-recovery-root", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode seed [] sig"),
+        ("honest-verify-secret-fields", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode seed root {sig with secrets := []}"),
+        ("honest-verify-root-equivalent", "c10VerifyAfterProgram encode seed root sig", "c10VerifyAfterProgram encode seed (root ++ []) sig", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bs_alias("HonestProbability", "c10HonestCheck")
+    check = theorem(src["HonestProbability"], "c10_honest_check_distribution").replace("c10HonestCheck", alias)
+    check = check.replace("  unfold " + alias,
+        "  unfold " + alias + "\n  simp (config := { failIfUnchanged := false }) only [Bool.and_true]")
+    for row in [
+        ("honest-check-keygen-cache-lost", "c10Sign encode key.2", "c10Sign encode initial"),
+        ("honest-check-verify-cache-lost", "encode (.inl input)) signed.2", "encode (.inl input)) initial"),
+        ("honest-check-private-verifier", "encode (.inl input)", "encode (.inr input)"),
+        ("honest-check-failure-is-success", "| none => PMF.pure none", "| none => PMF.pure (some true)"),
+        ("honest-check-inverted-result", "some verified.1", "some (!verified.1)"),
+        ("honest-check-result-equivalent", "some verified.1", "some (verified.1 && true)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+
+    # Complete repeated-address exposure: asymmetric finite computations and
+    # complete consuming proofs. Rejection establishes selected proof sensitivity;
+    # positive equivalents guard against accidental definitional-identity tests.
+    def bt_alias(module, name):
+        match = re.search(r"^(?:def|abbrev|structure) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing repeated-exposure definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BTCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.ExposureExamples\n"
+            "import C10Probability.ExposureHistoryExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "set_option maxRecDepth 4096\nvariable {K : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias
+
+    key, alias = bt_alias("ExposureMinimum", "wotsExposureMinimum")
+    check = theorem(src["ExposureExamples"], "exposure_minimum_retains_all_words").replace("wotsExposureMinimum", alias)
+    for row in [
+        ("exposure-minimum-max", "min (word i).val value", "max (word i).val value"),
+        ("exposure-minimum-ignore-head", "min (word i).val value", "value"),
+        ("exposure-minimum-ignore-tail", "min (word i).val value", "(word i).val"),
+        ("exposure-minimum-drop-middle", "words.foldr", "(words.take 1 ++ words.drop 2).foldr"),
+        ("exposure-minimum-wrong-position", "(word i).val", "(word 29).val"),
+        ("exposure-minimum-zero-cap", "value) 7", "value) 0"),
+        ("exposure-minimum-commuted", "min (word i).val value", "min value (word i).val", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+    empty = theorem(src["ExposureExamples"], "exposure_empty_minimum_endpoint").replace("wotsExposureMinimum", alias)
+    add("exposure-empty-endpoint", key, "value) 7", "value) 6", empty)
+
+    key, alias = bt_alias("C10ExposureMinimum", "lowerExposureWords")
+    check = theorem(src["ExposureExamples"], "exposure_lower_filter_keeps_tree_leaf_and_order").replace("lowerExposureWords", alias)
+    for row in [
+        ("exposure-lower-ignore-tree", "hypertreeParent (hypertreeIndex record.digest) = tree", "True"),
+        ("exposure-lower-ignore-leaf", "hypertreeLeaf (hypertreeIndex record.digest) = kp", "True"),
+        ("exposure-lower-either-coordinate", "= tree ∧", "= tree ∨"),
+        ("exposure-lower-wrong-tree", "= tree ∧", "= (tree + 1) ∧"),
+        ("exposure-lower-upper-word", "record.lowerDigest", "record.upperDigest"),
+        ("exposure-lower-drop-first", "records.filter", "(records.drop 1).filter"),
+        ("exposure-lower-reverse-history", "records.filter", "records.reverse.filter"),
+        ("exposure-lower-list-equivalent", "records.filter", "(records ++ [] : List C10SigningRecord).filter", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bt_alias("C10ExposureMinimum", "upperExposureWords")
+    check = theorem(src["ExposureExamples"], "exposure_upper_filter_uses_parent_coordinate").replace("upperExposureWords", alias)
+    for row in [
+        ("exposure-upper-leaf-coordinate", "hypertreeLeaf (hypertreeParent (hypertreeIndex record.digest))", "hypertreeLeaf (hypertreeIndex record.digest)"),
+        ("exposure-upper-wrong-address", "= kp", "= kp + 1"),
+        ("exposure-upper-ignore-address", "hypertreeLeaf (hypertreeParent (hypertreeIndex record.digest)) = kp", "True"),
+        ("exposure-upper-lower-word", "record.upperDigest", "record.lowerDigest"),
+        ("exposure-upper-drop-last", "records.filter", "(records.take (records.length - 1)).filter"),
+        ("exposure-upper-reverse-history", "records.filter", "records.reverse.filter"),
+        ("exposure-upper-predicate-equivalent", "= kp", "= kp ∧ True", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+    duplicate = theorem(src["ExposureExamples"], "exposure_filter_retains_repeated_occurrences").replace("upperExposureWords", alias)
+    add("exposure-upper-drop-duplicate", key, "records.filter", "(records.take 1).filter", duplicate)
+
+    key, alias = bt_alias("C10ExposureHistory", "C10SigningHistory")
+    check = theorem(src["C10ExposureHistory"], "exposure_history_length").replace("C10SigningHistory", alias)
+    check = check.replace("  induction history with",
+        "  simp only [" + alias + ", List.append_nil] at history\n  induction history with")
+    for row in [
+        ("exposure-history-drop-entry", "entries records", "(entries.drop 1) records"),
+        ("exposure-history-drop-record", "entries records", "entries (records.drop 1)"),
+        ("exposure-history-duplicate-entries", "entries records", "(entries ++ entries) records"),
+        ("exposure-history-duplicate-records", "entries records", "entries (records ++ records)"),
+        ("exposure-history-list-equivalent", "entries records", "(entries ++ []) records", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bt_alias("TopChainRecord", "TopChainRecordValid")
+    check = theorem(src["TopChainRecord"], "top_chain_record_opening").replace("TopChainRecordValid", alias)
+    check = check.replace("valid.root, valid.prefixes", "(by simpa only [List.append_nil] using valid.root), valid.prefixes")
+    for row in [
+        ("exposure-opening-hmsg-message", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput seed root []"),
+        ("exposure-opening-hmsg-randomizer", "message sig.randomizer", "message 0"),
+        ("exposure-opening-fors-acceptance", "forsAccept (forsOfDigest record.digest) = true", "True"),
+        ("exposure-opening-forest-secrets", "record.digest sig.secrets sig.auths", "record.digest [] sig.auths"),
+        ("exposure-opening-lower-message", "record.forest ((sig.layers[0]?)", "0 ((sig.layers[0]?)"),
+        ("exposure-opening-generated-leaf", "wotsLeafProgram encode seed 1 0 record.kp", "wotsLeafProgram encode seed 1 0 0"),
+        ("exposure-opening-count-message", "wotsRecoverCountInput seed 1 0 record.kp (nodeValueBytes record.middle)", "wotsRecoverCountInput seed 1 0 record.kp []"),
+        ("exposure-opening-acceptance", "wotsAccept record.word = true", "True"),
+        ("exposure-opening-root", "nodeBlock record.top = root", "True"),
+        ("exposure-opening-prefix-position", "(record.word i).val)", "0)"),
+        ("exposure-opening-root-equivalent", "nodeBlock record.top = root", "nodeBlock record.top = root ++ []", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bt_alias("TopExposureOpening", "TopExposureCase")
+    check = theorem(src["TopExposureOpening"], "top_chain_exposure_comparison").replace("TopExposureCase", alias)
+    check = check.replace("  rcases upper_exposure_minimum_comparison",
+        "  unfold " + alias + "\n  simp (config := { failIfUnchanged := false }) only [Nat.add_zero]\n  rcases upper_exposure_minimum_comparison")
+    for row in [
+        ("exposure-case-equal-word-is-full-digest", "opening.word = wotsOfDigest prior.upperDigest", "opening.countDigest = prior.upperDigest"),
+        ("exposure-case-wrong-minimum-address", "upperExposureWords records opening.kp", "upperExposureWords records (opening.kp + 1)"),
+        ("exposure-case-wrong-suffix-start", "randomizerOfDigest\n        (opening.word i).val", "randomizerOfDigest\n        0"),
+        ("exposure-case-suffix-length", "(wotsOfDigest prior.upperDigest i).val - (opening.word i).val", "(wotsOfDigest prior.upperDigest i).val"),
+        ("exposure-case-lower-returned-value", "some (prior.upper.sigma i)", "some (prior.lower.sigma i)"),
+        ("exposure-case-endpoint-equivalent", "(opening.word i).val < 7", "(opening.word i).val < 7 + 0", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
     return out

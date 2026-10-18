@@ -1,6 +1,6 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-16, following the initialized classical byte-game
+Research checkpoint: 2026-10-18, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Work remains tracked under PQ1 #100 and #295.
@@ -203,7 +203,8 @@ fuel. R inputs remain selected. The empty-cache physical node charge is
 initialized shared/independent returned-event error is at most `public/2^256`.
 The real-valued forgery-transfer theorem retains the independent game's forgery
 probability as an unresolved term. This closes finite structured session
-composition and cost, not universal honest correctness, the 4008-byte PMF codec,
+composition and cost; honest structured correctness is now proved below.
+It does not close the 4008-byte PMF codec,
 arbitrary lossless/unbounded-adversary representation, successful-output/forgery
 partition, final forgery bound or repeated-grinder freshness. The `none` exhaustion model does not prove runtime panic/retry,
 callback or erasure semantics. Passive observations now retain actual successful
@@ -232,10 +233,50 @@ their actual accepted counts and prefixes in that same final cache. Comparing
 accepted words at a common address gives equal words/values or an earlier
 position with a suffix to the signed value. This closes chain-opening extraction;
 it does not establish that the earlier value is undisclosed or that equal words
-mean equal messages. Minimum exposure across repeated addresses, lower-layer/FORS
+mean equal messages. The complete repeated-address minimum is now derived below. Lower-layer/FORS
 descent, adaptive coverage/private-opening charges and the complete six-case
-partition/final bound remain open. The PMF inventory now has 1448 theorem
-closures and 830 typed sensitivity cases.
+partition/final bound remain open. Forward correctness is now derived for the
+actual returned Merkle/FORS authentication arrays at every valid target, using
+certified stored siblings and the same cache; concrete merge alignment, bounds
+and kept-flag initialization are discharged. Recovery preserves the actual WOTS
+leaf or FORS private value and extends to later caches without a collision
+exclusion. Actual FORS signing's returned secret/path recovers its own builder
+root. The whole structured C10 honest-signature obligation is now closed under
+the actual keygen result: every successful bounded signature verifies in its
+resulting cache and every consistent later cache. The proof derives accepted
+WOTS count lookups and recovery of the private-seeded prefixes, the actual
+layer/builder root, shuffled positional forest records, special final-leaf
+compression and both returned layers. Functional node uniqueness identifies
+the top root with actual key generation; no desired root/path equality,
+freshness, hash injectivity or collision exclusion is assumed.
+The composed keygen/sign/verify PMF retains bounded failure as `none` and has
+zero mass at `some false`. This is honest correctness, not guaranteed signing
+success or a forgery bound. Eleven finite examples include asymmetric component
+executions and counterexamples for wrong supplied roots and overwritten caches;
+the inhabited whole-signature example uses a populated constant cache, not an
+empty-cache success-probability argument. Lower-layer/FORS forgery descent,
+adaptive coverage/private-opening charges and the final six-case forgery
+partition/bound remain open. The structured theorem
+does not close the byte codec or concrete/hash/Rust/cross-kernel boundaries.
+The repeated-address minimum component is now structurally derived from actual
+signing: functional tree/forest root uniqueness, bounded count replay and the
+actual 18-bit hypertree coordinates establish stable messages and accepted words
+at each logical WOTS address. A complete chronological two-layer history is
+constructed from all successful observed exposures, retaining duplicate calls
+and the signing cap. Address filtering preserves every matching occurrence.
+The actual winning top-chain opening either repeats a prior word and every
+returned prefix value, or contains a coordinate below the exact minimum of all
+prior returned positions at that address (endpoint seven for an empty history),
+with an actual private-seeded prefix and suffix to every matching prior value.
+All original collision/public-zero alternatives and actual opening witnesses
+remain. No stable-word or completeness premise is assumed. The mixed accepted-word
+counterexample shows why uniformity must be derived: an arbitrary minimum need
+not have sum 205. This closes positional comparison only; it does not prove
+secrecy, absence from raw queries or a private-opening probability charge.
+Lower/FORS forgery descent, adaptive coverage/private-opening charges and the
+complete six-case PMF partition/bound remain open. No byte-codec, concrete hash,
+Rust, cross-kernel, unbounded-adversary or repeated-freshness claim follows.
+The PMF inventory now has 1605 theorem closures and 963 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

@@ -674,9 +674,9 @@ Populated constant-cache witnesses are not fresh-oracle or honest-correctness cl
 
 This is a manually transcribed structured-signature model, not the 4008-byte
 codec or a Rust execution-equivalence theorem. The structured finite adaptive
-session is composed below; successful-output/forgery partition, final forgery
-PMF bound, universal honest
-correctness, repeated-grinder freshness and concrete backends remain open.
+session and honest structured-signature correctness are composed below;
+successful-output/forgery partition, final forgery PMF bound,
+repeated-grinder freshness and concrete backends remain open.
 Rust panic/retry/callback/erasure behavior, natural-number address truncation,
 cross-language correspondence and physical execution retain their existing boundaries.
 
@@ -787,9 +787,9 @@ root. `WotsPrefixComparison.lean` and `LayerPrefixComparison.lean` compare accep
 sum-205 words at a common address: equal words give equal prefix values; otherwise
 some recovered position is earlier, with an actual suffix to the signed value.
 An earlier position is not necessarily undisclosed, and equal words need not
-mean equal messages or full digests. Minimum exposure across repeated addresses,
-lower-layer/FORS descent, adaptive coverage and private-opening charges, and the
-complete six-case partition/final forgery bound remain open.
+mean equal messages or full digests. The complete repeated-address minimum is derived below. Lower-layer/FORS
+descent, adaptive coverage and private-opening charges, and the complete
+six-case partition/final forgery bound remain open.
 
 The 21 additional finite examples in `ChainBindingExamples.lean` and
 `WotsOpeningExamples.lean` cover split chains, binding failures without the
@@ -797,6 +797,97 @@ coordinate/length/collision conditions, ordered input sensitivity, accepted-word
 comparisons and actual cached signing. Populated caches witness satisfiability,
 not empty-cache success probability. Truncated addresses are not claimed to be
 globally injective.
+
+`ReturnedAuth.lean` and `ReturnedAuthRecovery.lean` now establish forward
+correctness for the actual arrays returned by the 512-leaf Merkle and 2048-leaf
+FORS builders, at every valid selected target. The loop invariant certifies each
+stored sibling against the same memo table. Kernel-checked schedules supply
+merge alignment and array bounds; Merkle's kept-flag invariant follows from its
+actual all-false initialization. Functional cache consistency identifies the
+stored siblings with the tree nodes, without a collision exclusion or an assumed
+reference path. Recovery retains the actual WOTS leaf replay or FORS private
+value/public leaf lookup, and remains valid under cache extension.
+`ReturnedForsSigning.lean` binds recovery to the secret and authentication array
+actually returned by FORS signing and to that execution's builder root. This
+component supplies the whole structured-signer result below; it is not a
+forgery-probability bound.
+The ten `AuthPathExamples.lean` witnesses use an asymmetric four-leaf cache;
+they cover all positions, order, false initialization of kept flags, short
+arrays, invalid targets and unaligned merges. Forty additional typed cases
+exercise the stored-node certificates, collector writes and kept-flag links.
+
+`C10Honest.lean` now proves universal honest correctness for the actual
+structured keygen/sign/verify clients. Every successful bounded signature
+under an actually generated key verifies in its resulting cache, and in any
+later cache that preserves its recorded replies. The keygen premise is consumed:
+the top layer's reconstructed root is proved equal to the independently
+constructed layer-one/tree-zero root, rather than assumed equal.
+
+`CountReplay.lean`, `WotsHonest.lean` and `WotsHonestSign.lean` derive the
+accepted full-width count lookup and recover each actual private-seeded prefix
+to the generated WOTS leaf. `LayerHonest.lean` composes the actual returned
+authentication path and uses functional tree-node uniqueness to identify the
+builder root. `ForestRecords.lean` preserves all twelve positional records
+through the computed shuffle; `ForestHonest.lean` connects them to ordered
+recovery, the special final root-as-secret, its separate leaf hash and all
+thirteen compression positions. `RandomizerReplay.lean` retains the actual
+R/H_msg lookup and accepted digest. `HypertreeHonest.lean` composes the two
+returned layers and their actual top keygen root. None of these forward
+correctness results requires fresh queries, hash injectivity or collision
+exclusion.
+
+`HonestProbability.lean` composes actual keygen, signing and verification in a
+single PMF experiment. Its result law keeps `none` for bounded signing failure
+and returns `some true` for every successful signature; the rejection outcome
+`some false` has mass zero. This proves neither guaranteed signing success nor
+unforgeability. The generic input map covers both the independent public/private
+interface and the physical shared-input interpretation under the same memoized
+ideal digest model. `HonestExamples.lean` supplies eleven finite witnesses:
+asymmetric chains, retry/query selection, positional forest writes and last-slot
+compression, an inhabited actual keygen/sign/verify execution, and rejection
+counterexamples for an arbitrary supplied root and an overwritten cache. The
+whole-signature witness uses a populated constant cache and gives no empty-cache
+success probability. The structured result does not include the 4,008-byte
+codec or establish Rust, EasyCrypt, backend or cross-kernel equivalence.
+
+`RootStability.lean`, `ForestStability.lean` and `WotsStability.lean` derive
+functional root and signing-result uniqueness in one memo table, including
+different selected paths and shuffles. `C10AddressStability.lean` and
+`C10RecordStability.lean` use the actual 18-bit hypertree coordinates to prove
+that successful C10 signatures at a repeated logical WOTS address have the
+same signed message, accepted count digest and returned word. This uses actual
+replay; stable messages or words are not additional assumptions.
+
+`C10SigningRecord.lean` retains the actual request/signature replay, R/H_msg,
+forest, both layer signatures, accepted count lookups and all private-seeded
+prefixes. `C10ExposureHistory.lean` derives a complete chronological record
+list from every successful observed exposure, including duplicate calls, and
+proves its length is bounded by the signing allowance. `C10ExposureMinimum.lean`
+filters all occurrences by the full logical lower or upper address. Its
+accepted-word uniformity follows from the actual records.
+
+`ExposureMinimum.lean` takes the coordinatewise minimum of all returned words,
+using endpoint seven for an empty history. `TopChainRecord.lean` preserves every
+witness of the existing top-chain opening in both directions.
+`TopExposureOpening.lean` connects that actual winning opening to the complete
+history: either it repeats a prior word and all returned prefix values, or a
+coordinate lies strictly below the exact minimum of every prior returned
+position at that address. The latter retains the actual private-seeded prefix
+and an actual chain suffix to every matching prior value. Initialized independent
+winning-game endpoints retain the original collision and public-zero alternatives.
+An earlier position is not a secrecy claim, absence from raw queries, or a
+private-opening probability charge; equal words do not imply equal full digests.
+Lower/FORS forgery descent and the final six-case PMF bound remain open.
+
+The fifteen finite examples in `ExposureExamples.lean` and
+`ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
+their mixed minimum has sum 203, and a third accepted word is distinct from both
+without falling below that minimum. This demonstrates why actual same-address
+uniformity is necessary. Synthetic records test logical coordinates, order and
+duplicates; separate actual cached executions establish duplicate histories and
+the failure of cache consistency after an overwrite. These populated-cache
+witnesses make no initialized empty-cache probability claim.
+
 
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
@@ -841,16 +932,39 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1448 theorem closures against
+The gate rebuilds every project module, checks all 1605 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-830 typed cases run 2490 compiler jobs: each baseline and changed
-definition must compile, 745 changed behaviors must reject at the
-consuming `checked` theorem, and eighty-five value-preserving changes must pass.
+963 typed cases run 2889 compiler jobs: each baseline and changed
+definition must compile, 861 changed behaviors must reject at the
+consuming `checked` theorem, and 102 value-preserving changes must pass.
+The 46 repeated-exposure cases add 40 negatives and six mathematical equivalents.
+They exercise minimum selection, empty-history endpoint, complete logical-address
+filtering and occurrence order, history length, every retained top-opening
+witness and the complete winning-exposure comparison proof. Full consuming proof
+bodies or asymmetric kernel computations use the changed definitions; the
+previous 917 fixture objects, 1545 theorem statements, old proof-module bytes and
+52 source bindings are preserved.
+The 47 honest-correctness cases add 40 semantic negatives and seven equivalent
+controls. They cover actual forest positions, special final-leaf/compression
+handling, selected randomizer replies/counters, ordered chains, H_msg/signature
+inputs and the composed PMF's cache threading and failure outcome. The endpoint
+controls re-run the complete honest-replay and distribution proof bodies against
+the changed definitions, retaining actual keygen and successful signing. The
+slot consumer derives actual forest recovery from the changed record predicate.
+Value-preserving `b && true` and `root ++ []` controls pass with elementary
+normalization in the same baseline/mutant proof, despite not being definitionally
+equal to their variable inputs. These are sensitivity checks for the selected
+consuming proofs, not proofs that every changed program falsifies the theorem.
+The preceding 870 fixture objects, 1505 theorem statements, old proof-module
+bytes and 52 source bindings are preserved.
+The 40 returned-authentication cases add 36 semantic negatives and four
+equivalent controls; the preceding 830 fixture objects, 1448 theorem statements,
+old proof-module bytes and 52 source bindings are preserved.
 The 47 WOTS chain-binding cases cover the joint top opening, actual layer/C10
 signing witnesses, private routing, chain inputs and selected-node collision
 conditions, including four equivalent controls. The three witness-predicate
