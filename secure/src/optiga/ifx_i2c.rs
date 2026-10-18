@@ -217,6 +217,22 @@ impl IfxState {
         Err(IfxError::I2c)
     }
 
+    /// Bench probe only (`optiga-probe`): read an arbitrary IFX I2C register.
+    /// Thin, read-only pass-through to [`read_register`] so the deep probe
+    /// (6A.2) can map the register space without duplicating the NACK-retry
+    /// physical-layer logic. Never writes; `read_register` issues a bare
+    /// `[reg]` write followed by an I2C read. The register selector write is
+    /// the chip's documented read protocol, not a data write.
+    #[cfg(feature = "optiga-probe")]
+    pub(crate) unsafe fn probe_read_register(
+        &self,
+        reg: u8,
+        buf: &mut [u8],
+    ) -> Result<(), IfxError> {
+        // SAFETY: forwarded caller contract; single-threaded probe image.
+        unsafe { self.read_register(reg, buf) }
+    }
+
     /// Read `buf.len()` bytes from an IFX I2C register, retrying on NACK.
     ///
     /// On the wire: I2C write `[reg_addr]`, then I2C read `buf` (repeated START).

@@ -703,6 +703,28 @@ pub unsafe fn get_random(
     copy_exact_payload(payload, unsafe { resp.as_ptr().add(4) }, out)
 }
 
+/// Bench read-only probe (`optiga-probe`): plaintext `GetRandom` for the DVT
+/// 6A.7 TRNG-freshness checks. `GetRandom` is a read command — it cannot
+/// write a data object or key — so this is non-destructive despite bypassing
+/// the Shielded Connection. Mirrors [`get_random_plain`] but gated on the
+/// probe feature rather than `prodtest`. Not an entropy source for any
+/// production path (those must use the authenticated [`get_random`]).
+#[cfg(feature = "optiga-probe")]
+pub unsafe fn get_random_plain_probe(
+    ifx: &mut IfxState,
+    out: &mut [u8],
+) -> Result<usize, OptigaError> {
+    let length = out.len() as u16;
+    let mut ab = ApduBuf::new(CMD_GET_RANDOM, 0x00);
+    ab.write_u16(length);
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 512];
+    let n = ifx.transceive(apdu, &mut resp)?;
+    let payload = parse_response(&resp, n)?;
+    copy_exact_payload(payload, unsafe { resp.as_ptr().add(4) }, out)
+}
+
 /// Reversible factory-line transport probe. This deliberately bypasses the
 /// Shielded Connection before a PBS exists and is compiled only into prodtest.
 /// Production entropy must use [`get_random`] instead.
