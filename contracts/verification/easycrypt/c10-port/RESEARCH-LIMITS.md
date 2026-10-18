@@ -308,7 +308,22 @@ earlier-chain alternatives. Eight finite boundary examples and 45 complete-proof
 controls accompany this structural descent. Adaptive coverage/private-opening
 charges and the final six-case PMF partition/bound remain open, alongside the
 existing codec, unbounded-adversary, repeated-freshness and implementation limits.
-The PMF inventory now has 1663 theorem closures and 1040 typed sensitivity cases.
+The fixed-sample quantitative dependency is now derived separately in Lean.
+A full 256-bit equivalence retains 95 high bits, 18 hypertree bits, the actual
+11-bit guard and twelve ordinary 11-bit indices. The uniform accepted-digest
+PMF equals conditioning on that guard; joint address/opening-set masses and
+bounded independent search retain the exact success/failure factor. Assigning
+all twelve ordinary coordinates to `j` independent accepted witnesses gives
+exact mass `2^-(132+18*j)`, including a full hypertree match for every group.
+The target is fixed or independently sampled. Selecting a target and witnesses
+from a larger independent accepted pool preserves this mass only with distinct
+positions fixed before sampling. Nine examples distinguish reused positions,
+rejected guards, changed addresses and unused high bits; 41 complete-proof
+controls include seven equivalent forms. This does not yet transfer adaptive
+accepted histories to an independent pool or sum over canonical/Stirling
+witnesses. Those steps, private-opening charges and the final six-case PMF
+bound remain open. No EasyCrypt theorem is imported or treated as a Lean premise.
+The PMF inventory now has 1705 theorem closures and 1081 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

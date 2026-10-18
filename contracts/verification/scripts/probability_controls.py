@@ -2997,4 +2997,142 @@ def cases(project: Path) -> list[dict]:
         ("forest-endpoint-lower-equivalent", "RepeatedLowerForest encode table cfg entries sig records top lower", "RepeatedLowerForest encode table cfg entries sig records top (id lower)", True)]:
         add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
 
+
+    # Fixed accepted-FORS probability laws: entire consuming proofs are retained.
+    # Typed rejection is proof sensitivity, not universal mutant falsity.
+    def bw_alias(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|instance|end)\b)", src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing FORS mass definition " + name)
+        replacement = name + "BWCandidate"
+        declaration = re.sub(r"\b" + name + r"\b", replacement,
+                             match.group(0).split("\n/--", 1)[0])
+        key = replacement + "Slice"
+        src[key] = ("import C10Probability.ForsCoverageMassExamples\n"
+            "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n" +
+            declaration + "\nend\nend C10Probability\n")
+        return key, {name: replacement}
+
+    def bw_check(module, name, renames):
+        check = theorem(src[module], name)
+        for old, new in renames.items():
+            check = re.sub(r"\b" + old + r"\b", new, check)
+        return check
+
+    key, names = bw_alias("ForsCoordinateLaw", "forsCoordinates")
+    for label, old, new, consumer in [
+        ("address-zero", "(forsDigestEquiv d).1.1.2", "0", "fors_coordinates_address"),
+        ("address-reverse", "(forsDigestEquiv d).1.1.2", "(forsDigestEquiv d).1.1.2.rev", "fors_coordinates_address"),
+        ("ordinary-zero", "(forsDigestEquiv d).2", "fun _ => 0", "fors_coordinates_index"),
+        ("ordinary-reverse", "(forsDigestEquiv d).2", "fun i => (forsDigestEquiv d).2 i.rev", "fors_coordinates_index"),
+        ("ordinary-first-only", "(forsDigestEquiv d).2", "fun _ => (forsDigestEquiv d).2 0", "fors_coordinates_index"),
+    ]:
+        add("fors-mass-" + label, key, old, new, bw_check("ForsCoordinateLaw", consumer, names))
+    add("fors-mass-coordinate-id", key, "(forsDigestEquiv d).2", "id ((forsDigestEquiv d).2)",
+        bw_check("ForsCoordinateLaw", "accepted_fors_coordinates_uniform", names), True)
+
+    key, names = bw_alias("ForsCoordinateLaw", "forsCoordinateSet")
+    check = bw_check("ForsCoordinateLaw", "fors_coordinate_set_member", names)
+    for label, old, new in [
+        ("set-address-ignored", "{address} ×ˢ", "Finset.univ ×ˢ"),
+        ("set-address-zero", "{address} ×ˢ", "{0} ×ˢ"),
+        ("set-openings-ignored", "Fintype.piFinset opened", "Fintype.piFinset (fun _ => Finset.univ)"),
+        ("set-openings-reversed", "Fintype.piFinset opened", "Fintype.piFinset (fun i => opened i.rev)"),
+    ]:
+        add("fors-mass-" + label, key, old, new, check)
+    add("fors-mass-set-id", key, "Fintype.piFinset opened", "Fintype.piFinset (fun i => opened i)", check, True)
+
+    key, names = bw_alias("ForsAccepted", "acceptedForsDraw")
+    check = bw_check("ForsAccepted", "accepted_fors_atom", names)
+    add("fors-mass-unconditioned", key,
+        "(PMF.uniformOfFintype AcceptedForsDigest).map Subtype.val", "digestDraw", check)
+    add("fors-mass-point-accepted", key,
+        "(PMF.uniformOfFintype AcceptedForsDigest).map Subtype.val", "PMF.pure 0", check)
+    add("fors-mass-subtype-id", key, "map Subtype.val", "map (fun d => d.val)", check, True)
+
+    key, names = bw_alias("ForsAssignment", "forsGroupOpened")
+    check = bw_check("ForsAssignment", "fors_group_event_coordinates", names)
+    # Consume the cloned opening sets through the actual group-event definition.
+    declaration = re.search(r"^def forsGroupEvent\b.*?(?=^def forsGroupMass\b)",
+                            src["ForsAssignment"], flags=re.M | re.S).group(0)
+    declaration = declaration.replace("forsGroupEvent", "forsGroupEventBWCandidate").replace(
+        "forsGroupOpened", names["forsGroupOpened"])
+    src[key] = append_check(src[key], declaration)
+    names["forsGroupEvent"] = "forsGroupEventBWCandidate"
+    check = bw_check("ForsAssignment", "fors_group_event_coordinates", names)
+    for label, old, new in [
+        ("assignment-inverted", "assignment i = group", "assignment i ≠ group"),
+        ("assignment-first-only", "assignment i = group", "assignment 0 = group"),
+        ("assignment-erased", "{(forsCoordinates target).2 i}", "Finset.univ"),
+        ("assignment-target-zero", "{(forsCoordinates target).2 i}", "{0}"),
+        ("assignment-target-first", "{(forsCoordinates target).2 i}", "{(forsCoordinates target).2 0}"),
+        ("assignment-unassigned-empty", "else Finset.univ", "else ∅"),
+    ]:
+        add("fors-mass-" + label, key, old, new, check)
+    add("fors-mass-assignment-id", key, "assignment i = group", "(fun x => assignment x) i = group", check, True)
+
+    key, names = bw_alias("ForsAssignment", "forsGroupEvent")
+    check = bw_check("ForsAssignment", "fors_group_event_coordinates", names)
+    add("fors-mass-group-address-zero", key, "(forsCoordinates target).1", "0", check)
+    add("fors-mass-group-address-reverse", key, "(forsCoordinates target).1", "(forsCoordinates target).1.rev", check)
+
+    key, names = bw_alias("ForsAssignment", "forsGroupMass")
+    check = bw_check("ForsAssignment", "fors_assignment_product_mass", names)
+    for label, old, new in [
+        ("group-no-address-charge", "/ 2 ^ 18", "/ 1"),
+        ("group-partial-address", "/ 2 ^ 18", "/ 2 ^ 9"),
+        ("group-short-field", "(2048 : ℝ≥0∞)⁻¹", "(1024 : ℝ≥0∞)⁻¹"),
+        ("group-no-field-charge", "(2048 : ℝ≥0∞)⁻¹", "1"),
+    ]:
+        add("fors-mass-" + label, key, old, new, check)
+    add("fors-mass-group-address-plus-zero", key, "/ 2 ^ 18", "/ 2 ^ (18 + 0)", check, True)
+
+    key, names = bw_alias("ForsWitnessMass", "acceptedForsSamples")
+    check = bw_check("ForsWitnessMass", "accepted_fors_samples_event", names)
+    add("fors-mass-samples-diagonal", key,
+        "(PMF.uniformOfFintype (Fin n → AcceptedForsDigest)).map\n    (fun samples i => (samples i).val)",
+        "acceptedForsDraw.map (fun d => fun _ => d)", check)
+    add("fors-mass-samples-zero", key, "(fun samples i => (samples i).val)",
+        "(fun _ _ => 0)", check)
+    add("fors-mass-samples-id", key, "(samples i).val", "id ((samples i).val)", check, True)
+
+    key, names = bw_alias("ForsWitnessMass", "targetForsWitnessSamples")
+    check = bw_check("ForsWitnessMass", "independent_target_fors_assignment_mass", names)
+    add("fors-mass-target-copied-to-witnesses", key,
+        "(acceptedForsSamples j).map fun samples => (d, samples)",
+        "PMF.pure (d, fun _ => d)", check)
+
+    # Premise/formula controls retain the entire theorem, including its proof.
+    # Their definition stage is the unchanged, typed import context.
+    def bw_statement(label, module, name, old, new, expected=False):
+        prefix = ("import C10Probability.ForsCoverageMassExamples\nnamespace C10Probability\n"
+                  "open scoped ENNReal\nnoncomputable section\n")
+        suffix = "\nend\nend C10Probability\n"
+        check = theorem(src[module], name)
+        if check.count(old) != 1:
+            raise ValueError("ambiguous FORS mass statement control " + label)
+        out.append({"name": "fors-mass-" + label, "definition": prefix + suffix,
+                    "baseline": prefix + check + suffix,
+                    "checked": prefix + check.replace(old, new, 1) + suffix,
+                    "expected": expected})
+
+    bw_statement("selection-injectivity-omitted", "UniformSelection", "uniform_samples_selection",
+                 "distinct : Function.Injective select", "distinct : True")
+    bw_statement("selected-injectivity-omitted", "ForsSelectedWitness", "selected_fors_assignment_mass",
+                 "distinct : Function.Injective select", "distinct : True")
+    bw_statement("selected-target-reused", "ForsSelectedWitness", "selected_fors_assignment_mass",
+                 "samples (select group.succ)", "samples (select 0)")
+    bw_statement("ordinary-exponent-143", "ForsWitnessMass", "fixed_fors_assignment_mass",
+                 "(132 + 18 * j)", "(143 + 18 * j)")
+    bw_statement("success-factor-removed", "ForsAcceptedSearch", "returned_fors_event_real",
+                 "(1 - (1 - (1 : ℝ) / 2048) ^ budget)", "1")
+    bw_statement("rejection-exponent-zero", "ForsAcceptedSearch", "returned_fors_event_real",
+                 "^ budget)", "^ 0)")
+    bw_statement("fresh-acceptance-charge-omitted", "ForsAcceptedSearch", "fresh_fors_event_factor",
+                 "(2048 : ℝ≥0∞)⁻¹ *", "1 *")
+    bw_statement("conditioned-atom-width", "ForsAccepted", "accepted_fors_atom",
+                 "((2 : ℝ≥0∞) ^ 245)⁻¹", "((2 : ℝ≥0∞) ^ 256)⁻¹")
+    bw_statement("selected-exponent-plus-zero", "ForsSelectedWitness", "selected_fors_assignment_mass",
+                 "(132 + 18 * j)", "(132 + 18 * j + 0)", True)
     return out

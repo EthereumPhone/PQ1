@@ -70,6 +70,32 @@ EasyCrypt's separate count is documented in
 [RAW-NUMERICAL-EUF.md](../easycrypt/c10-port/RAW-NUMERICAL-EUF.md#accepted-wots-encoding-collisions).
 Its theorem is not imported into Lean.
 
+`ForsCoordinates.lean` now retains all 256 bits in one mixed-radix
+bijection: 95 unused high bits, the full 18-bit hypertree address, the separate
+11-bit acceptance guard, and twelve ordinary 11-bit indices. `ForsAccepted.lean`
+derives the uniform accepted full-digest PMF and proves it equals conditioning
+`digestDraw` on the actual guard. Its atoms have mass `2^-245`; the joint
+hypertree/ordinary coordinate PMF is uniform. Fixed opening sets have exact
+mass `product(card(opened_i)) / (2^18 * 2048^12)`. Bounded independent search
+multiplies that conditional mass by `1-(1-1/2048)^budget`, retaining exhaustion.
+
+`ForsAssignment.lean` and `ForsWitnessMass.lean` assign all twelve ordinary
+coordinates to `j` independent accepted witnesses. Every witness must match
+the target's complete hypertree address, including groups assigned no ordinary
+coordinate. The resulting exact mass is `2^-(132+18*j)`. The target may be fixed
+or sampled independently. `ForsSelectedWitness.lean` derives the same law for
+a target and witnesses selected at distinct positions in a larger independent
+accepted pool. Positions and assignments are fixed before sampling; value-dependent
+selection, cached replies and adaptive histories gain no independence claim.
+Nine finite examples cover empty samples, zero search budget, one/two witnesses,
+a nonmonotone distinct selection, reused positions, guard rejection, changed
+hypertree address and retained unused high bits. Reusing the target position
+has mass one, demonstrating why injectivity is load-bearing.
+
+These are fixed-sample quantitative dependencies, not yet the adaptive FORS
+coverage bound. Accepted-pool prefix transfer, canonical/Stirling witness union
+enumeration, private-opening charges and the final six-case PMF bound remain open.
+
 ## Independence and correspondence boundary
 
 `Digest.lean` proves an explicit bijection between 32 big-endian bytes and
@@ -1013,16 +1039,16 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1663 theorem closures against
+The gate rebuilds every project module, checks all 1705 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1040 typed cases run 3120 compiler jobs: each baseline and changed
-definition must compile, 926 changed behaviors must reject at the
-consuming `checked` theorem, and 114 value-preserving changes must pass.
+1081 typed cases run 3243 compiler jobs: each baseline and changed
+definition must compile, 960 changed behaviors must reject at the
+consuming `checked` theorem, and 121 value-preserving changes must pass.
 The 45 FORS-descent cases add 38 negatives and seven equivalent controls. Full
 consuming proof bodies check actual ordered recovery/signing records, private
 opening coordinates and special last root, complete-history coverage/unmatched
@@ -1150,6 +1176,13 @@ Equivalent cache, set and arithmetic expressions must pass. Syntax
 errors, resource limits and failures before the consumer
 are not accepted as negative evidence. These are proof-sensitivity controls,
 not a general proof that every changed proposition is false.
+
+The 41 fixed-FORS-mass controls retain complete consuming proofs and cover
+joint coordinates, the accepted distribution, full address and opening sets,
+assignment routing, per-group probability factors, independent witness/target
+sampling, distinct-position premises, the exact exponent and bounded-search
+failure/acceptance factors. Seven equivalent forms must pass. All previous
+1040 fixture objects and 1663 theorem statements remain unchanged.
 
 The gate-enforcement reverse check derives source paths from every entry in
 `claims.json.bindings` and requires their declared coverage; the forward check
