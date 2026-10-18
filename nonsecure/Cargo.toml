@@ -89,6 +89,11 @@ idle-hold-test = ["nested-gate-test", "iwdg"]
 # 13.10 control: the parked handler does not bump the heartbeat, so the
 # IWDG busy cap (~30 s) must reset the device.
 idle-hold-nobump = ["idle-hold-test"]
+# DVT row 3.11: rewrite the caller's payload from an NS SysTick and from a
+# looping NS GPDMA channel while a sign is in flight; the signatures must cover
+# the original. Results over SWD (`tools/dvt/toctou.py`). Needs a mock-se +
+# e2e-test secure image. Not combinable with idle-hold-test.
+toctou-test = ["nested-gate-test"]
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
 # NS half of the IWDG USB-path hang watchdog. Mirrors the secure-side

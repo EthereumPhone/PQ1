@@ -65,6 +65,11 @@ fn u256_from_u64(v: u64) -> U256 {
 
 /// Rebuild the 32-byte digest the firmware signed, via its own code path.
 fn signed_digest(sender: [u8; 20]) -> [u8; 32] {
+    signed_digest_for(sender, TO_ADDRESS, VALUE_WEI)
+}
+
+/// The same digest for another `to`/`value` (the mutated-transaction control).
+fn signed_digest_for(sender: [u8; 20], to: [u8; 20], value_wei: u64) -> [u8; 32] {
     // reconstruct_execute_calldata reads ONLY tx.to and tx.value (verified at
     // aa/src/userop.rs:175-192); every other field is inert for the calldata,
     // so zeros here cannot perturb the digest.
@@ -74,8 +79,8 @@ fn signed_digest(sender: [u8; 20]) -> [u8; 32] {
         max_priority_fee_per_gas: u256_from_u64(MAX_PRIORITY_FEE),
         max_fee_per_gas: u256_from_u64(MAX_FEE),
         gas_limit: CALL_GAS,
-        to: Some(TO_ADDRESS),
-        value: u256_from_u64(VALUE_WEI),
+        to: Some(to),
+        value: u256_from_u64(value_wei),
         data_len: 0,
         access_list_count: 0,
         signing_hash: [0u8; 32],
@@ -158,6 +163,11 @@ fn main() {
     let mut bad_digest = digest;
     bad_digest[0] ^= 0x01;
 
+    // The transaction a non-secure TOCTOU attacker swaps in (DVT 3.11, the
+    // nested-gate runners' follow-up transaction): a valid digest of a
+    // different transaction, not a bit-flip.
+    let alt_digest = signed_digest_for(sender, [0xBB; 20], 2_000_000_000_000_000);
+
     let mut failures: Vec<String> = Vec::new();
     let mut verified = 0usize;
 
@@ -215,6 +225,15 @@ fn main() {
                  if k { "FAIL" } else { "OK  " });
         if k {
             failures.push(format!("{name}: CONTROL BROKEN — another slot's key verified it"));
+        }
+
+        // NEGATIVE 4: the alternate transaction (to 0xBB.., 2e15 wei) must not
+        // verify. For a TOCTOU run this is the attack succeeding.
+        let m = vk.verify(&alt_digest, &sig);
+        println!("   {}  verify(alternate tx 0xBB..) = {m}  (must be false)",
+                 if m { "FAIL" } else { "OK  " });
+        if m {
+            failures.push(format!("{name}: the ALTERNATE transaction verified"));
         }
     }
 
