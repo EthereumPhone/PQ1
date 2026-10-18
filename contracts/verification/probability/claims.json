@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Actual structured C10 keygen/sign/verify honest correctness: every successful bounded signature under the actually generated key verifies in its resulting cache and every consistent later cache. Actual accepted count and R/H_msg lookups, private-seeded WOTS prefixes, returned authentication paths, shuffled forest positions, special final leaf, ordered compression and both layers derive the actual keygen root. The composed PMF preserves signing failure and has zero rejection mass; no assumed correct signature/root, freshness, hash injectivity or collision exclusion. Prior 1505 theorem statements, 870 typed fixtures, 52 bindings and old proof-module bytes are preserved. Minimum repeated-address exposure, lower/FORS forgery descent, adaptive coverage/private-opening charges, final six-case PMF forgery partition/bound, unbounded adversaries, 4008-byte codec, repeated-grinder freshness, concrete hash/Rust/cross-kernel, QROM and physical claims remain open. Source bindings detect drift, not correspondence.",
+  "scope": "Complete repeated-address WOTS exposure for actual bounded structured C10 signing histories. Functional tree/forest uniqueness and count replay derive stable messages and accepted words at the same logical address; the complete chronological history retains both layers and duplicates. The actual winning top-chain opening either repeats a prior word and all its prefix values, or has a position below the exact minimum of every prior returned position, with actual chain suffixes to all matching values. Original selected-collision/public-zero alternatives remain. No secrecy, undisclosed-value, fresh-input, full-digest equality or probability charge follows. Prior 1545 theorem statements, 917 typed fixtures, 52 bindings and old proof-module bytes are preserved. Lower/FORS forgery descent, adaptive coverage/private-opening charges, final six-case PMF partition/bound, unbounded adversaries, 4008-byte codec, repeated-grinder freshness, concrete hash/Rust/cross-kernel, QROM and physical claims remain open. Source bindings detect drift, not correspondence.",
   "sources": {
-    "Audit.lean": "28aa4e2b1d8144838c041f36aaf032241f396f24c721457385c98d25ea23a9f7",
+    "Audit.lean": "57fb93b5960bcba88fc2c1283af155be30b179e866c3d3fd19bc62d429f59f8d",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -21,14 +21,19 @@
     "C10Probability/Boundaries.lean": "b2715545caea41d26f97145c73bee8c8a57adced252eb517d2a630a5424b2fd9",
     "C10Probability/BuilderRecoveryBinding.lean": "63f272a3ff9909008d2ed8bc061aa69e409b4cfd434615f2220f1ce59c9f7283",
     "C10Probability/C10Access.lean": "0adf6b407a4ca9501f8c0baa5efe6bb2ed674ae09a0353347132c202d60eab6c",
+    "C10Probability/C10AddressStability.lean": "bd898cd35605e8d1ec90c7d4278bda6dd5b1f61e9f0d0c355341b216e680287c",
     "C10Probability/C10Cached.lean": "acb5f939850ab840a628b9f5f194014ea1f980c012a2c19722fac3f86096b83d",
     "C10Probability/C10Charges.lean": "b8ab8b5fe78fb1d0bb9c91dc240ba9fd4f58123c20ca05874cd8c2b2a69e0d0e",
     "C10Probability/C10Examples.lean": "7f72b19deee4deb10081821bd4402e715f90b11e8d394853047522b124eb4140",
+    "C10Probability/C10ExposureHistory.lean": "ec53b2439e4295b661484f2dcd741fb824559b23a984559675c4a6a964376e12",
+    "C10Probability/C10ExposureMinimum.lean": "4145584b8c105c614c9dae84dd4a000e261ab689d6d9cc22c1c3135fba0a1cf7",
     "C10Probability/C10Finish.lean": "a49b599978868a5b4f8caea672c5d3b5846781bdffd424ef51ac3c180b9f8246",
     "C10Probability/C10Flow.lean": "b1e6025370f8a5b672f768b9290493b481ed9a4c6ac809fc6dc8fb67d8e8236d",
     "C10Probability/C10Honest.lean": "b750dd9212e476f9a30fb9578ceff4d76c56294a29e059f0e2eb4e9a4e220cfe",
     "C10Probability/C10Keygen.lean": "5e0f8c3aad010c65a2364ebba04bfaebd5e2893d2328433cd7af399cefd290ae",
+    "C10Probability/C10RecordStability.lean": "729d0ceacbf59722d1f48941ddeae54590a32795c23c30f2d9d8470e99062219",
     "C10Probability/C10Sign.lean": "99c4ed2f24d2b07b1a08c3ef461eb053cf7df785e7da8aecb7bf7d02a38e35f5",
+    "C10Probability/C10SigningRecord.lean": "a6909d42d05d13c74a1ba758733a13238fbdf2e29352fec8919d7579ae06dfa4",
     "C10Probability/C10SigningReplay.lean": "a74a3d16cad38eb0e5cf61e204b2ba674d1483426f2168c9a952f926b4ea47d9",
     "C10Probability/C10Verify.lean": "dca6a7709d6b12e3023673833be826aa063fa923f926d3da480de3ad48d7cad4",
     "C10Probability/ChainBindingExamples.lean": "e57a7e836a94703f211b76cd98968d55dccb46ee7ebdd538627ca489534cb2d4",
@@ -47,6 +52,9 @@
     "C10Probability/DomainExamples.lean": "22b0cbe43ae94afc08e5874593034a0a224cf33894e6d457b57fae362bacd37a",
     "C10Probability/DomainGrind.lean": "efba7c53280da6e7a08e8effd89de94edd43ee4960b78da5c06d70004503ff45",
     "C10Probability/DomainNodeCharges.lean": "9bbfd0bcabe42027380032455f0130bf4e5891ad6ede194befaaf40e7d0b3e24",
+    "C10Probability/ExposureExamples.lean": "dc576c75df758be7f29065954eeb818719876bd1c0dd4f752ebcc3904357961d",
+    "C10Probability/ExposureHistoryExamples.lean": "e5ef9b5b2516cf85055398bf81f27140c0e845570b20be17c539528cc02e49d2",
+    "C10Probability/ExposureMinimum.lean": "9dfef528dde31b44a3a0059953532983ab131058575680bc73ff8d92e3364e14",
     "C10Probability/ForestAccess.lean": "9c034627b1e0420573ada17b379d1608983082486fa1451425955b06464123be",
     "C10Probability/ForestCached.lean": "598351c36e4c190f353386ec3dec756b3b2b57121f079a8645742eb24b1b7042",
     "C10Probability/ForestCharges.lean": "15f581df9ef5ff9ab3e47c62b02f9ae1352d10061637f6d3003ca7fd728c9317",
@@ -57,6 +65,7 @@
     "C10Probability/ForestRecover.lean": "68e1ca77c13c71598cda4e05ba6a646a3cf75b7a8c30d8d10902d02621f230fb",
     "C10Probability/ForestShuffle.lean": "5b7bc367f1419f80809964d4e091a107f325b061e1fe3150ec0d955de39a3539",
     "C10Probability/ForestSign.lean": "01338ee418a4cdd7682147f3096f36ded84afa693de69c6aa749b40c86a50522",
+    "C10Probability/ForestStability.lean": "153b4c5efd0e7a0b54491cc9bb59699a327a328d698206a4608d9dcc30315d63",
     "C10Probability/ForsExamples.lean": "9781eb469c16ac5d50fd4023778736d5f292d83206f0208c8e938ab6e0039985",
     "C10Probability/ForsInputs.lean": "d038b78a26bc7a6647182cf657305d710d566ee11969fb5049a513065f0d3592",
     "C10Probability/ForsLeaf.lean": "9e2687686babbbc965bc270dfc21bad059b5ed6471be6c7f2be5d94e120d6096",
@@ -138,6 +147,7 @@
     "C10Probability/ReturnedAuthRecovery.lean": "3fbe568a5becd0d45bb6bbce87bf37c09edca56af7be77d91fa9908ecd5ed5b8",
     "C10Probability/ReturnedForsSigning.lean": "5255941ea4aefdc448533de2ce553d5090b0a16475bca13ce9a94b8022b03854",
     "C10Probability/RootReference.lean": "a5451aedfbe637ca0751d2c781c06dc98ce869bd9fbd97a6a307bab3677a426e",
+    "C10Probability/RootStability.lean": "227b774087115ed3e290922a1765d3ba2e1749f337e8b03411c13e8dce03f9dc",
     "C10Probability/Schedules.lean": "cfd4abef7f077e1fa21670dbb412c38bcd547ec25701b33ddab061320cf7135f",
     "C10Probability/SecretPrefix.lean": "02ce5bede98116369b8010cc65746e1fbff2db748063a4d26e5ddba9d11b921a",
     "C10Probability/SelectedBudget.lean": "6391b339fa09e7d1cff746edb7ba1080380fc1c589df610fd0a698a36919343f",
@@ -162,6 +172,8 @@
     "C10Probability/TargetExamples.lean": "6c08c145806583cf2a1d072cb109e9af89c99ea4f9f6b3e2cb8b0e96e19bdafe",
     "C10Probability/TargetSet.lean": "fb186ca6bef60fa866e8d5b441ff804ef1326229b80e05ed128e3523b81d7627",
     "C10Probability/TopChainOpening.lean": "01fb631a50d7ad44e5d384ce4cae60666dc24121b781c0cba093184de87b981e",
+    "C10Probability/TopChainRecord.lean": "5bb2344b1d6b08ecb5d1a97d20e3aa2d99fbaa59b4484e8fa0b276e05319ef0b",
+    "C10Probability/TopExposureOpening.lean": "6cff07c5d0951cc72c70a2a1bcdf11a34d2a7ccd3c3611e3ecf2cf9e7b239980",
     "C10Probability/TopTreeOpening.lean": "1d676abffc6f0487f1750495ae8afa22e5dada0d2ddc7904412a61d051367133",
     "C10Probability/Transfer.lean": "f3bfcc365888942c599d329662b8370495878e398868b383f521001a59f6a4c8",
     "C10Probability/TreeAccess.lean": "44da17bc887abc12b58bc840f9d76cac38a567e03af0138c174fdd3fc184fed4",
@@ -204,7 +216,8 @@
     "C10Probability/WotsSigning.lean": "092add3513664ccc85400af2bd9d27b4a05f4455f036760a66c6c0833a7df28a",
     "C10Probability/WotsSigningCharges.lean": "714be87e7b26c808bfbd79149e6e4bc9166fde1b884985c768274aa57abdaf11",
     "C10Probability/WotsSigningReplay.lean": "82f5beb5b9759c5d979015bc61833535e591ea0591fa15805bb223985f19cef2",
-    "C10Probability.lean": "9090e51067fcd96f3068f7218d83ec817a2302ecf757fcfb1542e13fdbcd2fdd"
+    "C10Probability/WotsStability.lean": "7298584f8026cfe4cf11ba95128a78edb3eff67a3cd4ffd5694a35c64efe7f41",
+    "C10Probability.lean": "3a194748817a2c686bda0ac964f22d441ef01c2185b3247d7a446e222318e587"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -747,6 +760,22 @@
       "file": "C10Probability/C10Access.lean",
       "statement_sha256": "85177beb58294e861946bf7b78caf21453d4cc406908095eaf38f0e657eb7811"
     },
+    "C10Probability.hypertree_equal_lower_coordinates": {
+      "file": "C10Probability/C10AddressStability.lean",
+      "statement_sha256": "802fb49d7229213188a3a396bbe9f47bbcc80f42b85d731395083886f9948260"
+    },
+    "C10Probability.hypertree_top_leaf_eq_parent": {
+      "file": "C10Probability/C10AddressStability.lean",
+      "statement_sha256": "c03cfe3e94ebae868a1e640edf792143098fa8017918edda696b9b68e2e8774a"
+    },
+    "C10Probability.c10_record_lower_message_eq": {
+      "file": "C10Probability/C10AddressStability.lean",
+      "statement_sha256": "f4252afcace5432d7522a995dec6c282a1998576c09f413e816bff5f29759487"
+    },
+    "C10Probability.c10_record_upper_message_eq": {
+      "file": "C10Probability/C10AddressStability.lean",
+      "statement_sha256": "0d688f8c3722d8cdfbfed7d6b78d5595645ee29836e2b652508d2c14764c48fd"
+    },
     "C10Probability.eval_program_full_cache": {
       "file": "C10Probability/C10Cached.lean",
       "statement_sha256": "88580c3d02a2d802e7a6b578cf7b4d8b465e445e7dded650f3a689329c825fc2"
@@ -879,6 +908,54 @@
       "file": "C10Probability/C10Examples.lean",
       "statement_sha256": "5ec0f49e4f6d657dc114dafe84e472570cc136a91c752050f79da0dac359fb8f"
     },
+    "C10Probability.exposure_history_exists": {
+      "file": "C10Probability/C10ExposureHistory.lean",
+      "statement_sha256": "480c4ae8466754736b860678917b559e9cebc8a90a14e2b8a3a55d844b409bb7"
+    },
+    "C10Probability.exposure_history_length": {
+      "file": "C10Probability/C10ExposureHistory.lean",
+      "statement_sha256": "dc85963d8871cc1a2a75ed9d89f567df7361eb36202cf76698711058e9b803b6"
+    },
+    "C10Probability.exposure_history_record_member": {
+      "file": "C10Probability/C10ExposureHistory.lean",
+      "statement_sha256": "6701599abfe1f84cca5c29f938c6c396c70e38cf7b8b7e1cce127c81f38d5d38"
+    },
+    "C10Probability.exposure_history_lower_word_eq": {
+      "file": "C10Probability/C10ExposureHistory.lean",
+      "statement_sha256": "44d90a24f0ad17224fd38e6c36fcc0d40348aed7491a4fc7ab03af5036adf4ce"
+    },
+    "C10Probability.exposure_history_upper_word_eq": {
+      "file": "C10Probability/C10ExposureHistory.lean",
+      "statement_sha256": "0cff2040c1cea0d706f9007736e6fc4d4d6822327cb46296a2cece0e9a8159c1"
+    },
+    "C10Probability.observed_output_signing_history": {
+      "file": "C10Probability/C10ExposureHistory.lean",
+      "statement_sha256": "04ad3bba3a4ab412b2421b8fa02fa4066a6f82d770b446e498bfabd892cc93a8"
+    },
+    "C10Probability.mem_lower_exposure_words": {
+      "file": "C10Probability/C10ExposureMinimum.lean",
+      "statement_sha256": "d7a19b25bcce2f1ac3dde8358aff40204b0c230b61611ef408803bf4bb40b573"
+    },
+    "C10Probability.mem_upper_exposure_words": {
+      "file": "C10Probability/C10ExposureMinimum.lean",
+      "statement_sha256": "9a1c15e5bb7417fb29bd4da992d81ee2fc0d8257253d8f73a3a281c4b3894817"
+    },
+    "C10Probability.lower_exposure_words_accepted_uniform": {
+      "file": "C10Probability/C10ExposureMinimum.lean",
+      "statement_sha256": "0be3692e68eb43a656495f33cb7b94f98a00bb0cff6a596c0269e4dc9f502210"
+    },
+    "C10Probability.upper_exposure_words_accepted_uniform": {
+      "file": "C10Probability/C10ExposureMinimum.lean",
+      "statement_sha256": "3f9303ba397ff7cdb7ded24fb212471e0673e382e713ebdf0070785b77366425"
+    },
+    "C10Probability.lower_exposure_minimum_comparison": {
+      "file": "C10Probability/C10ExposureMinimum.lean",
+      "statement_sha256": "4fbd02b083266d503dcb4d2dc879d4cc25272af4ecc7fa4b6f62264a14b77359"
+    },
+    "C10Probability.upper_exposure_minimum_comparison": {
+      "file": "C10Probability/C10ExposureMinimum.lean",
+      "statement_sha256": "a822740e753fab648e7b9487474a6ec0767e2e11fae8e15a5fa0effe89729501"
+    },
     "C10Probability.c10_finish_eval": {
       "file": "C10Probability/C10Finish.lean",
       "statement_sha256": "752baace3d06341e24469847a35fe23581117fac431dbf6149b6565348b3d3d3"
@@ -951,6 +1028,14 @@
       "file": "C10Probability/C10Keygen.lean",
       "statement_sha256": "964bd8fe51269752822dcc0b61d598bdedc7ed9046f6b9928c87fef37d22c66c"
     },
+    "C10Probability.c10_record_lower_wots_eq": {
+      "file": "C10Probability/C10RecordStability.lean",
+      "statement_sha256": "cbf919ee91b67eb6babddda73b68d19bee471355ead68bca6ae3e0a57c85efc4"
+    },
+    "C10Probability.c10_record_upper_wots_eq": {
+      "file": "C10Probability/C10RecordStability.lean",
+      "statement_sha256": "14fe6408d73ababb2c648fe57b87b746997da3ba208d88af3e38b082131656ad"
+    },
     "C10Probability.c10_sign_after_eval": {
       "file": "C10Probability/C10Sign.lean",
       "statement_sha256": "bbedb795ff1eb3316b016f0e5d8958c379e955cc959ab81bb9388ca3ad8d4b83"
@@ -978,6 +1063,14 @@
     "C10Probability.c10_sign_zero_r_budget": {
       "file": "C10Probability/C10Sign.lean",
       "statement_sha256": "0517c6951e506619243a6ec638b9dcbea88350417cd1104e00642b03be979830"
+    },
+    "C10Probability.replay_c10_signing_record": {
+      "file": "C10Probability/C10SigningRecord.lean",
+      "statement_sha256": "7bcdf293dcc8e9b54c6928ea7f176d18da56f66f30d2a3fa02d1827b09076e38"
+    },
+    "C10Probability.exposure_supported_signing_record": {
+      "file": "C10Probability/C10SigningRecord.lean",
+      "statement_sha256": "5039d2308e59b7bbbc5e416a28a255fb10c5e834bf34ed25b64fd6b196da3c6c"
     },
     "C10Probability.replay_c10_finish_witness": {
       "file": "C10Probability/C10SigningReplay.lean",
@@ -1639,6 +1732,94 @@
       "file": "C10Probability/DomainNodeCharges.lean",
       "statement_sha256": "b1b5ed2fbc40369e17631abcd77017d171689f41a9650481d8cd6733d7056880"
     },
+    "C10Probability.exposure_three_words_accepted": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "2abb17156050abf52cd35155555336645795bbb2c049544888177e5a35f8df90"
+    },
+    "C10Probability.exposure_mixed_minimum_sum": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "9690857578ca9d26f99226747915e8986133e5504f2d91488ec3ad3f121e6065"
+    },
+    "C10Probability.exposure_mixture_never_below_minimum": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "906ed168f54b3cf65ca233f53ef650f987b6d6ed291bb8aff5073f1401123532"
+    },
+    "C10Probability.exposure_mixture_differs_from_both": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "574f5efe87d541bdbbf0433d4ebb76e6eb8864fc653b1e5c729e6891f6b0c6f1"
+    },
+    "C10Probability.exposure_comparison_needs_uniformity": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "9b58379ad699d457e701385e0f355bb858b8fa3c1fed66edabfe3716befe396e"
+    },
+    "C10Probability.exposure_minimum_retains_all_words": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "cbbe72199e2bdd5d12bd6037ef4c7790122fbdb4af69e63c69e4dac3bb2313eb"
+    },
+    "C10Probability.exposure_repeated_word_minimum": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "0c305d24fd99e6fa28646941e0f6551b6d0e03ce3e9128438370fe0f7de92756"
+    },
+    "C10Probability.exposure_empty_minimum_endpoint": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "f614d0e839f813d32aeee183b3dd8d84c89714490e10e455892772aac72a1681"
+    },
+    "C10Probability.exposure_lower_filter_keeps_tree_leaf_and_order": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "c7e21580ae51249d3e4594695c6203982af0734a74dc1d098a74936cf39c2d03"
+    },
+    "C10Probability.exposure_upper_filter_uses_parent_coordinate": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "6c8684e7abe0cc2d8dbb5b39ce99a722e9c6cacb83b204fd92e9b742db540a3c"
+    },
+    "C10Probability.exposure_filter_retains_repeated_occurrences": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "870097870b696bb3a568a4aa5f8446af7b93e509351d67089af55789f5d28658"
+    },
+    "C10Probability.exposure_unseen_address_has_endpoint_minimum": {
+      "file": "C10Probability/ExposureExamples.lean",
+      "statement_sha256": "056bafbb3a0523651659eed9ba9108b0e3f26b6ba6375b4bd3d17d6cad7c3c6e"
+    },
+    "C10Probability.exposure_actual_duplicate_history": {
+      "file": "C10Probability/ExposureHistoryExamples.lean",
+      "statement_sha256": "d614f346c5fa4f1a3abadf5dd9f06c08b2674c9643ae6f5ec6c7bad355082989"
+    },
+    "C10Probability.exposure_duplicate_history_cannot_drop": {
+      "file": "C10Probability/ExposureHistoryExamples.lean",
+      "statement_sha256": "ace66caec67e1d16e90a9a579785aa1e91747a80c221572390314395d4e909a7"
+    },
+    "C10Probability.exposure_overwrite_changes_actual_wots": {
+      "file": "C10Probability/ExposureHistoryExamples.lean",
+      "statement_sha256": "e6064381ab5b66a3bd7d09e61df3b8b41145b2c32e6f2d09c5bc025b31876757"
+    },
+    "C10Probability.wots_exposure_minimum_nil": {
+      "file": "C10Probability/ExposureMinimum.lean",
+      "statement_sha256": "0a8140aaf746636ea68f7b0e0da86f7f05eb1a2a563e44e39123d675924dbef0"
+    },
+    "C10Probability.wots_exposure_minimum_cons": {
+      "file": "C10Probability/ExposureMinimum.lean",
+      "statement_sha256": "b0eba2a94d64248e60ea37ce2575e7008f8bc0f237cca23158e7056d8a6b0eb3"
+    },
+    "C10Probability.wots_exposure_minimum_le_endpoint": {
+      "file": "C10Probability/ExposureMinimum.lean",
+      "statement_sha256": "352505f5459cb12545831829425a66133473c324fe29903632bbc49425c4c748"
+    },
+    "C10Probability.wots_exposure_minimum_le_member": {
+      "file": "C10Probability/ExposureMinimum.lean",
+      "statement_sha256": "0bf6eefb6949045ccb948550f45954c85bdf7e8ba90a36b6b0f3aa5c9baacffe"
+    },
+    "C10Probability.wots_exposure_minimum_uniform": {
+      "file": "C10Probability/ExposureMinimum.lean",
+      "statement_sha256": "565d89ddefb1f01d6d395eea2694693b77dade89c168c131d0e0e457d648c1ac"
+    },
+    "C10Probability.wots_below_exposure_minimum_iff": {
+      "file": "C10Probability/ExposureMinimum.lean",
+      "statement_sha256": "47e7e3a8c93a98d964c5df6b0240d6fc6e4fcb9fdb7c9c6b12895249ae8014a8"
+    },
+    "C10Probability.wots_accepted_exposure_comparison": {
+      "file": "C10Probability/ExposureMinimum.lean",
+      "statement_sha256": "5bab92e19939676a42f4db4e5b1e2948cd36314cb7dbca1329d93f8175e48b0d"
+    },
     "C10Probability.empty_forest_shape": {
       "file": "C10Probability/ForestAccess.lean",
       "statement_sha256": "2c9e1eda32189eb8baf246d5fccc7445a219c1f9a4dc4b7e816ebfd025a88d5e"
@@ -1994,6 +2175,26 @@
     "C10Probability.forest_sign_public": {
       "file": "C10Probability/ForestSign.lean",
       "statement_sha256": "f4704fae99fb7aa3ee4ae694010fc9c249ad77528abd3f69e0456ff07940214a"
+    },
+    "C10Probability.recorded_forest_slot_roots_eq": {
+      "file": "C10Probability/ForestStability.lean",
+      "statement_sha256": "97861831042510a99128973ac6b51c5123865ca10ea19de7d9175cc3a915e1d5"
+    },
+    "C10Probability.replay_forest_ordered_compression_roots_eq": {
+      "file": "C10Probability/ForestStability.lean",
+      "statement_sha256": "6a973cfb617b227b74a129fbb4da9b1978222f68c1817bee7a8b5a019c65f2db"
+    },
+    "C10Probability.replay_forest_finish_lookup_witness": {
+      "file": "C10Probability/ForestStability.lean",
+      "statement_sha256": "ba19bf836a6307b913222678449349413567f35339af76726287954af196b02e"
+    },
+    "C10Probability.replay_forest_finish_pk_eq": {
+      "file": "C10Probability/ForestStability.lean",
+      "statement_sha256": "e337376a72a70e5a3b59a2fa11cd96a1a6b926cec20631a8a7c1d603396faab9"
+    },
+    "C10Probability.replay_forest_sign_pk_eq": {
+      "file": "C10Probability/ForestStability.lean",
+      "statement_sha256": "7d054d53fd14b7a30f547232c1a40ce235cbab2c9b8f1325385ce8f8acf6ca50"
     },
     "C10Probability.fors_private_byte_vector": {
       "file": "C10Probability/ForsExamples.lean",
@@ -4323,6 +4524,22 @@
       "file": "C10Probability/RootReference.lean",
       "statement_sha256": "f9dbe100720750f20337946d537fedab9544179feb2266a4adcd2355fb8aed41"
     },
+    "C10Probability.replay_merkle_build_roots_eq": {
+      "file": "C10Probability/RootStability.lean",
+      "statement_sha256": "ce5f0ff87fec82ed9ee755a32a81442426c7e508173aa1c044f3507db275c55f"
+    },
+    "C10Probability.replay_layer_sign_roots_eq": {
+      "file": "C10Probability/RootStability.lean",
+      "statement_sha256": "0da2b478e13d58a9c5cb032c9539dac344fd7ddcfdba81cc58582c47ea623ea4"
+    },
+    "C10Probability.replay_fors_tree_roots_eq": {
+      "file": "C10Probability/RootStability.lean",
+      "statement_sha256": "389bcfdad4a1e545c6e51943132df72189931230304ced15778151c8d76fd2f0"
+    },
+    "C10Probability.replay_forest_one_roots_eq": {
+      "file": "C10Probability/RootStability.lean",
+      "statement_sha256": "9114862d70692e43718616041438c67b71052fbd6592ffca5c344a8406c0f790"
+    },
     "C10Probability.drawList_length": {
       "file": "C10Probability/Schedules.lean",
       "statement_sha256": "30b29e528c69b02ad1843c702cd78bed0223ae4ab867207497759cfcda89e8f9"
@@ -5042,6 +5259,30 @@
     "C10Probability.c10_observed_initialized_independent_top_chain_cases": {
       "file": "C10Probability/TopChainOpening.lean",
       "statement_sha256": "2cdfbffe66280e94a3d68c1bdde74985f74036f0f1c41bb2f78beb4a0a264700"
+    },
+    "C10Probability.top_chain_opening_record": {
+      "file": "C10Probability/TopChainRecord.lean",
+      "statement_sha256": "6c329ad7905fd88042994955974b9fa0c328a52a75d48c05e004295ec02105e6"
+    },
+    "C10Probability.top_chain_record_opening": {
+      "file": "C10Probability/TopChainRecord.lean",
+      "statement_sha256": "9c622c930c2f6c451c7ea7da0d5828899300f005da89ea5cb72fba809bbc5f76"
+    },
+    "C10Probability.top_chain_exposure_comparison": {
+      "file": "C10Probability/TopExposureOpening.lean",
+      "statement_sha256": "3f8b76c8cf72124f24c233c0b954587ee669da730f5887dc47ccbcd3e13dca34"
+    },
+    "C10Probability.observed_output_top_exposure_cases": {
+      "file": "C10Probability/TopExposureOpening.lean",
+      "statement_sha256": "fc76aa7d6fcbc0c8dcdc4811e013ce7397de92da8237eb47b46938c3e22f9914"
+    },
+    "C10Probability.c10_observed_game_top_exposure_cases": {
+      "file": "C10Probability/TopExposureOpening.lean",
+      "statement_sha256": "da49a16d60f107c98111588d65b1023e98508fe973f305c6ec7350ad5b67521a"
+    },
+    "C10Probability.c10_initialized_independent_top_exposure_cases": {
+      "file": "C10Probability/TopExposureOpening.lean",
+      "statement_sha256": "32e7f1e6ea617d0ef2754b90cf8be7a84b1bf87492aab9c2be428ae4f997d5ec"
     },
     "C10Probability.verifier_top_tree_opening": {
       "file": "C10Probability/TopTreeOpening.lean",
@@ -6386,6 +6627,18 @@
     "C10Probability.replay_wots_sign_witness": {
       "file": "C10Probability/WotsSigningReplay.lean",
       "statement_sha256": "fdb270c0755cfe828230095b415b016eea75da1176a67965dac63cb5451e2bee"
+    },
+    "C10Probability.replay_wots_sign_values_eq": {
+      "file": "C10Probability/WotsStability.lean",
+      "statement_sha256": "6e0edec27cbb6c6e947ab4c9a1f717b01697a6d8a0112016176854cbd60c6a9b"
+    },
+    "C10Probability.replay_layer_sign_wots_eq": {
+      "file": "C10Probability/WotsStability.lean",
+      "statement_sha256": "ceb98c74af9df098882e517c931f6f4bf25e0a7cc4ed296d31dcdccd88c80065"
+    },
+    "C10Probability.replay_layer_sign_result_eq": {
+      "file": "C10Probability/WotsStability.lean",
+      "statement_sha256": "99eae6e12dae5397995300c3221462169649189143b24e68d6ea0a03b22d2a39"
     }
   },
   "bindings": {

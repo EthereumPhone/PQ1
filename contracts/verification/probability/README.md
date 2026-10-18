@@ -787,9 +787,9 @@ root. `WotsPrefixComparison.lean` and `LayerPrefixComparison.lean` compare accep
 sum-205 words at a common address: equal words give equal prefix values; otherwise
 some recovered position is earlier, with an actual suffix to the signed value.
 An earlier position is not necessarily undisclosed, and equal words need not
-mean equal messages or full digests. Minimum exposure across repeated addresses,
-lower-layer/FORS descent, adaptive coverage and private-opening charges, and the
-complete six-case partition/final forgery bound remain open.
+mean equal messages or full digests. The complete repeated-address minimum is derived below. Lower-layer/FORS
+descent, adaptive coverage and private-opening charges, and the complete
+six-case partition/final forgery bound remain open.
 
 The 21 additional finite examples in `ChainBindingExamples.lean` and
 `WotsOpeningExamples.lean` cover split chains, binding failures without the
@@ -850,6 +850,45 @@ whole-signature witness uses a populated constant cache and gives no empty-cache
 success probability. The structured result does not include the 4,008-byte
 codec or establish Rust, EasyCrypt, backend or cross-kernel equivalence.
 
+`RootStability.lean`, `ForestStability.lean` and `WotsStability.lean` derive
+functional root and signing-result uniqueness in one memo table, including
+different selected paths and shuffles. `C10AddressStability.lean` and
+`C10RecordStability.lean` use the actual 18-bit hypertree coordinates to prove
+that successful C10 signatures at a repeated logical WOTS address have the
+same signed message, accepted count digest and returned word. This uses actual
+replay; stable messages or words are not additional assumptions.
+
+`C10SigningRecord.lean` retains the actual request/signature replay, R/H_msg,
+forest, both layer signatures, accepted count lookups and all private-seeded
+prefixes. `C10ExposureHistory.lean` derives a complete chronological record
+list from every successful observed exposure, including duplicate calls, and
+proves its length is bounded by the signing allowance. `C10ExposureMinimum.lean`
+filters all occurrences by the full logical lower or upper address. Its
+accepted-word uniformity follows from the actual records.
+
+`ExposureMinimum.lean` takes the coordinatewise minimum of all returned words,
+using endpoint seven for an empty history. `TopChainRecord.lean` preserves every
+witness of the existing top-chain opening in both directions.
+`TopExposureOpening.lean` connects that actual winning opening to the complete
+history: either it repeats a prior word and all returned prefix values, or a
+coordinate lies strictly below the exact minimum of every prior returned
+position at that address. The latter retains the actual private-seeded prefix
+and an actual chain suffix to every matching prior value. Initialized independent
+winning-game endpoints retain the original collision and public-zero alternatives.
+An earlier position is not a secrecy claim, absence from raw queries, or a
+private-opening probability charge; equal words do not imply equal full digests.
+Lower/FORS forgery descent and the final six-case PMF bound remain open.
+
+The fifteen finite examples in `ExposureExamples.lean` and
+`ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
+their mixed minimum has sum 203, and a third accepted word is distinct from both
+without falling below that minimum. This demonstrates why actual same-address
+uniformity is necessary. Synthetic records test logical coordinates, order and
+duplicates; separate actual cached executions establish duplicate histories and
+the failure of cache consistency after an overwrite. These populated-cache
+witnesses make no initialized empty-cache probability claim.
+
+
 These programs and integer formulas are manually transcribed from the existing
 EasyCrypt and Rust source specifications and bound to them by hashes. Those
 pins detect drift; they do not prove extraction, cross-kernel correspondence,
@@ -893,16 +932,23 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1545 theorem closures against
+The gate rebuilds every project module, checks all 1605 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-917 typed cases run 2751 compiler jobs: each baseline and changed
-definition must compile, 821 changed behaviors must reject at the
-consuming `checked` theorem, and ninety-six value-preserving changes must pass.
+963 typed cases run 2889 compiler jobs: each baseline and changed
+definition must compile, 861 changed behaviors must reject at the
+consuming `checked` theorem, and 102 value-preserving changes must pass.
+The 46 repeated-exposure cases add 40 negatives and six mathematical equivalents.
+They exercise minimum selection, empty-history endpoint, complete logical-address
+filtering and occurrence order, history length, every retained top-opening
+witness and the complete winning-exposure comparison proof. Full consuming proof
+bodies or asymmetric kernel computations use the changed definitions; the
+previous 917 fixture objects, 1545 theorem statements, old proof-module bytes and
+52 source bindings are preserved.
 The 47 honest-correctness cases add 40 semantic negatives and seven equivalent
 controls. They cover actual forest positions, special final-leaf/compression
 handling, selected randomizer replies/counters, ordered chains, H_msg/signature

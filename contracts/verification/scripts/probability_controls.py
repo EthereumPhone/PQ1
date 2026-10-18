@@ -2700,4 +2700,108 @@ def cases(project: Path) -> list[dict]:
         ("honest-check-result-equivalent", "some verified.1", "some (verified.1 && true)", True)]:
         add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
 
+
+    # Complete repeated-address exposure: asymmetric finite computations and
+    # complete consuming proofs. Rejection establishes selected proof sensitivity;
+    # positive equivalents guard against accidental definitional-identity tests.
+    def bt_alias(module, name):
+        match = re.search(r"^(?:def|abbrev|structure) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+            src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing repeated-exposure definition " + name)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        alias = name + "BTCandidate"
+        key = alias + "Slice"
+        src[key] = ("import C10Probability.ExposureExamples\n"
+            "import C10Probability.ExposureHistoryExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "set_option maxRecDepth 4096\nvariable {K : Type*}\n" +
+            re.sub(r"\b" + re.escape(name) + r"\b", alias, declaration) +
+            "\nend\nend C10Probability\n")
+        return key, alias
+
+    key, alias = bt_alias("ExposureMinimum", "wotsExposureMinimum")
+    check = theorem(src["ExposureExamples"], "exposure_minimum_retains_all_words").replace("wotsExposureMinimum", alias)
+    for row in [
+        ("exposure-minimum-max", "min (word i).val value", "max (word i).val value"),
+        ("exposure-minimum-ignore-head", "min (word i).val value", "value"),
+        ("exposure-minimum-ignore-tail", "min (word i).val value", "(word i).val"),
+        ("exposure-minimum-drop-middle", "words.foldr", "(words.take 1 ++ words.drop 2).foldr"),
+        ("exposure-minimum-wrong-position", "(word i).val", "(word 29).val"),
+        ("exposure-minimum-zero-cap", "value) 7", "value) 0"),
+        ("exposure-minimum-commuted", "min (word i).val value", "min value (word i).val", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+    empty = theorem(src["ExposureExamples"], "exposure_empty_minimum_endpoint").replace("wotsExposureMinimum", alias)
+    add("exposure-empty-endpoint", key, "value) 7", "value) 6", empty)
+
+    key, alias = bt_alias("C10ExposureMinimum", "lowerExposureWords")
+    check = theorem(src["ExposureExamples"], "exposure_lower_filter_keeps_tree_leaf_and_order").replace("lowerExposureWords", alias)
+    for row in [
+        ("exposure-lower-ignore-tree", "hypertreeParent (hypertreeIndex record.digest) = tree", "True"),
+        ("exposure-lower-ignore-leaf", "hypertreeLeaf (hypertreeIndex record.digest) = kp", "True"),
+        ("exposure-lower-either-coordinate", "= tree ∧", "= tree ∨"),
+        ("exposure-lower-wrong-tree", "= tree ∧", "= (tree + 1) ∧"),
+        ("exposure-lower-upper-word", "record.lowerDigest", "record.upperDigest"),
+        ("exposure-lower-drop-first", "records.filter", "(records.drop 1).filter"),
+        ("exposure-lower-reverse-history", "records.filter", "records.reverse.filter"),
+        ("exposure-lower-list-equivalent", "records.filter", "(records ++ [] : List C10SigningRecord).filter", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bt_alias("C10ExposureMinimum", "upperExposureWords")
+    check = theorem(src["ExposureExamples"], "exposure_upper_filter_uses_parent_coordinate").replace("upperExposureWords", alias)
+    for row in [
+        ("exposure-upper-leaf-coordinate", "hypertreeLeaf (hypertreeParent (hypertreeIndex record.digest))", "hypertreeLeaf (hypertreeIndex record.digest)"),
+        ("exposure-upper-wrong-address", "= kp", "= kp + 1"),
+        ("exposure-upper-ignore-address", "hypertreeLeaf (hypertreeParent (hypertreeIndex record.digest)) = kp", "True"),
+        ("exposure-upper-lower-word", "record.upperDigest", "record.lowerDigest"),
+        ("exposure-upper-drop-last", "records.filter", "(records.take (records.length - 1)).filter"),
+        ("exposure-upper-reverse-history", "records.filter", "records.reverse.filter"),
+        ("exposure-upper-predicate-equivalent", "= kp", "= kp ∧ True", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+    duplicate = theorem(src["ExposureExamples"], "exposure_filter_retains_repeated_occurrences").replace("upperExposureWords", alias)
+    add("exposure-upper-drop-duplicate", key, "records.filter", "(records.take 1).filter", duplicate)
+
+    key, alias = bt_alias("C10ExposureHistory", "C10SigningHistory")
+    check = theorem(src["C10ExposureHistory"], "exposure_history_length").replace("C10SigningHistory", alias)
+    check = check.replace("  induction history with",
+        "  simp only [" + alias + ", List.append_nil] at history\n  induction history with")
+    for row in [
+        ("exposure-history-drop-entry", "entries records", "(entries.drop 1) records"),
+        ("exposure-history-drop-record", "entries records", "entries (records.drop 1)"),
+        ("exposure-history-duplicate-entries", "entries records", "(entries ++ entries) records"),
+        ("exposure-history-duplicate-records", "entries records", "entries (records ++ records)"),
+        ("exposure-history-list-equivalent", "entries records", "(entries ++ []) records", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bt_alias("TopChainRecord", "TopChainRecordValid")
+    check = theorem(src["TopChainRecord"], "top_chain_record_opening").replace("TopChainRecordValid", alias)
+    check = check.replace("valid.root, valid.prefixes", "(by simpa only [List.append_nil] using valid.root), valid.prefixes")
+    for row in [
+        ("exposure-opening-hmsg-message", "hmsgRandomizerInput seed root message", "hmsgRandomizerInput seed root []"),
+        ("exposure-opening-hmsg-randomizer", "message sig.randomizer", "message 0"),
+        ("exposure-opening-fors-acceptance", "forsAccept (forsOfDigest record.digest) = true", "True"),
+        ("exposure-opening-forest-secrets", "record.digest sig.secrets sig.auths", "record.digest [] sig.auths"),
+        ("exposure-opening-lower-message", "record.forest ((sig.layers[0]?)", "0 ((sig.layers[0]?)"),
+        ("exposure-opening-generated-leaf", "wotsLeafProgram encode seed 1 0 record.kp", "wotsLeafProgram encode seed 1 0 0"),
+        ("exposure-opening-count-message", "wotsRecoverCountInput seed 1 0 record.kp (nodeValueBytes record.middle)", "wotsRecoverCountInput seed 1 0 record.kp []"),
+        ("exposure-opening-acceptance", "wotsAccept record.word = true", "True"),
+        ("exposure-opening-root", "nodeBlock record.top = root", "True"),
+        ("exposure-opening-prefix-position", "(record.word i).val)", "0)"),
+        ("exposure-opening-root-equivalent", "nodeBlock record.top = root", "nodeBlock record.top = root ++ []", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, alias = bt_alias("TopExposureOpening", "TopExposureCase")
+    check = theorem(src["TopExposureOpening"], "top_chain_exposure_comparison").replace("TopExposureCase", alias)
+    check = check.replace("  rcases upper_exposure_minimum_comparison",
+        "  unfold " + alias + "\n  simp (config := { failIfUnchanged := false }) only [Nat.add_zero]\n  rcases upper_exposure_minimum_comparison")
+    for row in [
+        ("exposure-case-equal-word-is-full-digest", "opening.word = wotsOfDigest prior.upperDigest", "opening.countDigest = prior.upperDigest"),
+        ("exposure-case-wrong-minimum-address", "upperExposureWords records opening.kp", "upperExposureWords records (opening.kp + 1)"),
+        ("exposure-case-wrong-suffix-start", "randomizerOfDigest\n        (opening.word i).val", "randomizerOfDigest\n        0"),
+        ("exposure-case-suffix-length", "(wotsOfDigest prior.upperDigest i).val - (opening.word i).val", "(wotsOfDigest prior.upperDigest i).val"),
+        ("exposure-case-lower-returned-value", "some (prior.upper.sigma i)", "some (prior.lower.sigma i)"),
+        ("exposure-case-endpoint-equivalent", "(opening.word i).val < 7", "(opening.word i).val < 7 + 0", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
     return out
