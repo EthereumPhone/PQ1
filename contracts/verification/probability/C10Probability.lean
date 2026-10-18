@@ -71,3 +71,12 @@ import C10Probability.LowerChainOpening
 import C10Probability.LowerExposureOpening
 import C10Probability.LowerDescent
 import C10Probability.LowerDescentExamples
+import C10Probability.RepeatedLowerBinding
+import C10Probability.ForestRecoveryRecord
+import C10Probability.ForestSigningRecord
+import C10Probability.ForestCompressionBinding
+import C10Probability.ForestPrivateOpening
+import C10Probability.ForestHistoryOpening
+import C10Probability.ForestDescent
+import C10Probability.ObservedForestDescent
+import C10Probability.ForestDescentExamples

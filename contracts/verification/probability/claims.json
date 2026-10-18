@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Actual lower-layer WOTS descent for bounded structured C10 winning sessions. The actual repeated upper word either yields two distinct public count inputs with the same accepted word or binds the lower root to an actual prior signing builder certificate. Reverse Merkle and WOTS binding derive the submitted lower leaf, accepted count and all private-seeded prefixes. The complete lower exposure history then yields a repeated lower word/all prefix values or a position below the exact minimum of all prior returned positions, with suffix replay to every matching value. The original top-earlier, selected-node collision and public-zero alternatives remain. No secrecy, fresh-input, full-digest equality or probability charge follows. Prior 1605 theorem statements, 963 typed fixtures, 52 bindings and old proof-module bytes are preserved. FORS forgery descent, adaptive coverage/private-opening charges, final six-case PMF partition/bound, unbounded adversaries, 4008-byte codec, repeated-grinder freshness, concrete hash/Rust/cross-kernel, QROM and physical claims remain open. Source bindings detect drift, not correspondence.",
+  "scope": "Actual FORS descent for bounded structured C10 winning sessions. Repeated lower WOTS words retain accepted-word collisions or bind the forest public key and complete hypertree address. Actual shuffled signing/recovery executions supply ordered thirteen-root compression, twelve ordinary tree certificates, and the separate transmitted last root. Selected-node collision exclusion derives all twelve submitted private values. Complete duplicate-preserving successful-signing history yields per-tree coordinate coverage with equal actual returned secrets or an explicitly unmatched coordinate with its private lookup. Observed and independently initialized winning outputs retain the history, signing cap, collision/zero, and both earlier-chain alternatives. Unmatched in signing history is not absence from raw queries, secrecy, freshness or a probability charge. Prior 1629 theorem statements, 995 typed fixtures, 52 bindings and old proof-module bytes are preserved. Adaptive coverage/private-opening charges, final six-case PMF partition/bound, unbounded adversaries, 4008-byte codec, repeated-grinder freshness, concrete hash/Rust/EasyCrypt/cross-kernel, QROM and physical claims remain open. Source bindings detect drift, not correspondence.",
   "sources": {
-    "Audit.lean": "3265492d4ed347ab0cd42859542a10c591116eb578080fc7a29935996ac412cc",
+    "Audit.lean": "b2169373af45c48c8fa4ef1442b4b4474343cd25abbd00cb0ec376ef8a556ebf",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -59,13 +59,20 @@
     "C10Probability/ForestAccess.lean": "9c034627b1e0420573ada17b379d1608983082486fa1451425955b06464123be",
     "C10Probability/ForestCached.lean": "598351c36e4c190f353386ec3dec756b3b2b57121f079a8645742eb24b1b7042",
     "C10Probability/ForestCharges.lean": "15f581df9ef5ff9ab3e47c62b02f9ae1352d10061637f6d3003ca7fd728c9317",
+    "C10Probability/ForestCompressionBinding.lean": "da5a6c457e497b34e609da8f2405c0dfbd5b1e4cdd5d47db86f8dea7cf805d13",
+    "C10Probability/ForestDescent.lean": "651da5f1bc9f1291da1c0a405106a50fcfed4cda5109ce29fc2d6104a1fcb455",
+    "C10Probability/ForestDescentExamples.lean": "3a344572272ee0086aa226934c9422fe6521a2f9802443a7dd31df3edb3bdc09",
     "C10Probability/ForestFill.lean": "58a731efdbed9edc560c15a87a04ff7cc1714f103f48389bfb387fe59f545713",
+    "C10Probability/ForestHistoryOpening.lean": "d7e16ccd2cddfe3b5dff359d1246e57de53cb3a4cb07ece0c76fbe7b9a976b48",
     "C10Probability/ForestHonest.lean": "975f14417e22c86f377905022e8a48f568e0185e84cf5861981429c5e6e2f391",
     "C10Probability/ForestOne.lean": "7c47f503df2de27b27305253bda606989939c33982e73adca7d70b622a7d25f1",
+    "C10Probability/ForestPrivateOpening.lean": "4f7029720f31bca464652d99441ce6d658f85f59f6d024fd278736119bc1df22",
     "C10Probability/ForestRecords.lean": "941b11b559d3025321ebe9c3e35eb3ca63c6d02078506b3f9509ff315eca3f0d",
     "C10Probability/ForestRecover.lean": "68e1ca77c13c71598cda4e05ba6a646a3cf75b7a8c30d8d10902d02621f230fb",
+    "C10Probability/ForestRecoveryRecord.lean": "56b7693eb5128b913ba1597bc39477bc2a1ebef91ae38c947c22456e4306b777",
     "C10Probability/ForestShuffle.lean": "5b7bc367f1419f80809964d4e091a107f325b061e1fe3150ec0d955de39a3539",
     "C10Probability/ForestSign.lean": "01338ee418a4cdd7682147f3096f36ded84afa693de69c6aa749b40c86a50522",
+    "C10Probability/ForestSigningRecord.lean": "50fce2e32df31b4306805b73a1ae70d5d347686c96c8551caa4fbb35c9405452",
     "C10Probability/ForestStability.lean": "153b4c5efd0e7a0b54491cc9bb59699a327a328d698206a4608d9dcc30315d63",
     "C10Probability/ForsExamples.lean": "9781eb469c16ac5d50fd4023778736d5f292d83206f0208c8e938ab6e0039985",
     "C10Probability/ForsInputs.lean": "d038b78a26bc7a6647182cf657305d710d566ee11969fb5049a513065f0d3592",
@@ -118,6 +125,7 @@
     "C10Probability/ObservedDriver.lean": "da82d60feee30fcaee1b090fc7ef2930e25b6dbc33929e037abdbec8f0248e8c",
     "C10Probability/ObservedDriverSupport.lean": "42c770d9a5689d4e7dbc1afe0043d7ce9e2a7c52009523b6cfa13ed4ddb6c8ee",
     "C10Probability/ObservedExamples.lean": "ccf6f5dfb529f558193a7cbfcdcbae24b2cca1c349890bc617a400467189be14",
+    "C10Probability/ObservedForestDescent.lean": "5a62419810046e0d1636075861178742555d797101aa140c8b9ce5c26075a02d",
     "C10Probability/ObservedGame.lean": "ee32429f4718403a61ac3aa0a2fb032bf26b74593a63ad7c91a217e8b66e17b2",
     "C10Probability/ObservedHistory.lean": "f89fcd023f6c995631e683bca8b77e0b79517b34eacb608e9d80dd818bd48393",
     "C10Probability/ObservedInitialized.lean": "1030b07738dc2b1758acf3b345ff389becbc9e92f28655c3dd098bcda80dab1a",
@@ -147,6 +155,7 @@
     "C10Probability/RandomizerUnder.lean": "f5da74803306dc170d7fed025c916f8ee46d9a9d51c42abc417b1f57dda9e057",
     "C10Probability/RecoveryRelabel.lean": "1efa9acc36f266366ddb9be6e19f2c989d8b2a519f61a04eccd1503ee1ab7d1b",
     "C10Probability/RecoveryWitness.lean": "3b77fd86e9fcc2a4910e10460f7158c2f38a4a66c446d9852a2ba52f807bad08",
+    "C10Probability/RepeatedLowerBinding.lean": "83decfb5057a61799cead6cd7f2891d58428de871fb9a00fa5d9382dd25e19ca",
     "C10Probability/RepeatedUpperBinding.lean": "d1ddba4f5c0a4331fa06b6515609619f5de04908f97f23a5a02551666f225875",
     "C10Probability/Returned.lean": "bfff3d01a295f769809a757cea3b63baea09040c5f8feb940384df2482b711c6",
     "C10Probability/ReturnedAuth.lean": "455b21143b0b281708bd40f63b277f6c6830ea4ab0fc7a9c506b6f6dfb44a901",
@@ -223,7 +232,7 @@
     "C10Probability/WotsSigningCharges.lean": "714be87e7b26c808bfbd79149e6e4bc9166fde1b884985c768274aa57abdaf11",
     "C10Probability/WotsSigningReplay.lean": "82f5beb5b9759c5d979015bc61833535e591ea0591fa15805bb223985f19cef2",
     "C10Probability/WotsStability.lean": "7298584f8026cfe4cf11ba95128a78edb3eff67a3cd4ffd5694a35c64efe7f41",
-    "C10Probability.lean": "a2bbd43dbf292c3a78ced02b9a9dfe271a6ddc5bc496ed0e2471da6a6db0da5a"
+    "C10Probability.lean": "171976f68fdfb1b9806a010c1b1a33692057d2f1c38dada459354f31425b0ca9"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -1998,6 +2007,62 @@
       "file": "C10Probability/ForestCharges.lean",
       "statement_sha256": "e7272e18660fa65c0331ac8dc5f3e44d9bc059c6db73b494d15a23f8bab29f06"
     },
+    "C10Probability.fors_pk_input_injective": {
+      "file": "C10Probability/ForestCompressionBinding.lean",
+      "statement_sha256": "9899fc179f68119554af8404644832f36b8f3dd06a7edb82a880502c6a6649dd"
+    },
+    "C10Probability.forest_compression_roots_eq": {
+      "file": "C10Probability/ForestCompressionBinding.lean",
+      "statement_sha256": "9238c0ecee153f128fb31f361fb8f261cd758fd61ee4b9d3b34386125576dd21"
+    },
+    "C10Probability.forest_compression_components": {
+      "file": "C10Probability/ForestCompressionBinding.lean",
+      "statement_sha256": "11feeef5f9b693a40bafaaf015b9b600e0c4b756062c2171100c9981f143a00a"
+    },
+    "C10Probability.forest_recovery_last_root": {
+      "file": "C10Probability/ForestCompressionBinding.lean",
+      "statement_sha256": "2f3f33aaf7123b6ddfdc76b4e5fbcdbc3b2bb1599bca17c0d3653214f5a5d32c"
+    },
+    "C10Probability.lower_exposure_forest_descent": {
+      "file": "C10Probability/ForestDescent.lean",
+      "statement_sha256": "65420fe74dc1f377a091873533d7770892beb3f5c15de7d0caba88440cc30cdf"
+    },
+    "C10Probability.top_chain_forest_descent": {
+      "file": "C10Probability/ForestDescent.lean",
+      "statement_sha256": "927bff539125474f9a1bf99e5578dd64a95dce6349c1b5c904253f8eac534bdb"
+    },
+    "C10Probability.forest_coverage_empty": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "6e63b213d306bdec6b7093a35fa4d18d748ffd5da4b97e642d48612e93c7e209"
+    },
+    "C10Probability.forest_coverage_duplicates": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "cbc7b739ddb98526f445e6e7a7300f8bea6f64dff194bea43e45112abcb3bbad"
+    },
+    "C10Probability.forest_coverage_can_mix_prior_signatures": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "b5dacbe6b4cc5efd4687702dae29ed0c0ca42c701a1cf3bdfc373f2fd373482b"
+    },
+    "C10Probability.forest_coverage_needs_full_hypertree": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "4da3bfc212a9552bc1a87f4b6f1fc626a40a84ec474bfb4f03e41edc36e1604a"
+    },
+    "C10Probability.forest_compression_preserves_order": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "1af418033ef9c1ab280ed8d099095bde93413e06bb1ba9f4859c8c51064dcccc"
+    },
+    "C10Probability.forest_last_root_is_separate_position": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "ef93c1a6bce2b97afa7959b08128d8f89761a777b48225f79f2707a8272b0691"
+    },
+    "C10Probability.forest_missing_arrays_use_defaults": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "d453683a39deba0b805f3c8c2dd137dcad9811daccca5fa644279f3b448beab3"
+    },
+    "C10Probability.forest_unmatched_can_have_populated_cache": {
+      "file": "C10Probability/ForestDescentExamples.lean",
+      "statement_sha256": "8d4e2c298f5aca48adb0ce982300540dff4b53ff3a9c97c3efb2f05e04796b5e"
+    },
     "C10Probability.forest_write_lengths": {
       "file": "C10Probability/ForestFill.lean",
       "statement_sha256": "c53b78127b8e27036ef1776d507ccddce46b23182bc82ac5621dd22e86a7d40d"
@@ -2038,6 +2103,26 @@
       "file": "C10Probability/ForestFill.lean",
       "statement_sha256": "1273e04d89ec9e2600ce04be363e112c62920df7478744b7fb2e86d32326b587"
     },
+    "C10Probability.replay_fors_sign_private_value": {
+      "file": "C10Probability/ForestHistoryOpening.lean",
+      "statement_sha256": "182e82d1bc072903c02a0b3426c18df571b85e309a7584dbe25b202f3ebc4378"
+    },
+    "C10Probability.forest_sign_record_private_values": {
+      "file": "C10Probability/ForestHistoryOpening.lean",
+      "statement_sha256": "7efba4b017c1154b8ac7688d29cfd2be5bf06ee3a987df9fd52858461ab3907c"
+    },
+    "C10Probability.c10_signing_forest_private_values": {
+      "file": "C10Probability/ForestHistoryOpening.lean",
+      "statement_sha256": "d4b5edcc3c5cef81443a373a1bde62781c33c963545e5526eaae034698c60034"
+    },
+    "C10Probability.forest_history_private_comparison": {
+      "file": "C10Probability/ForestHistoryOpening.lean",
+      "statement_sha256": "b613c0aa739810a95d966fe129ff29528670b599ad3e1ff9667298970c7547bf"
+    },
+    "C10Probability.forest_opening_history_comparison": {
+      "file": "C10Probability/ForestHistoryOpening.lean",
+      "statement_sha256": "49acaa452d6b7153c11ab0ea847ed1b8a9535a88cb1ac86e15fba188a00026e2"
+    },
     "C10Probability.replay_forest_recovery_assemble": {
       "file": "C10Probability/ForestHonest.lean",
       "statement_sha256": "64389350594469c8d68656b7a51fbe02f8c01d804e7082a18c9b84eeafd231a3"
@@ -2073,6 +2158,22 @@
     "C10Probability.forest_one_auth_length": {
       "file": "C10Probability/ForestOne.lean",
       "statement_sha256": "174fcd188dcc189d3bd2e8b8d43616445d7118003898f6ce0ac08ca6117663f2"
+    },
+    "C10Probability.forest_compression_position": {
+      "file": "C10Probability/ForestPrivateOpening.lean",
+      "statement_sha256": "a42619be4a4df4f6070c2e035793c3da651305efc977000d842f13dbadac68e1"
+    },
+    "C10Probability.forest_recovery_private_values": {
+      "file": "C10Probability/ForestPrivateOpening.lean",
+      "statement_sha256": "b70a6c1f0ecf1817cc8cbfd791cfce22e46110d4a854ae7c50dea7b8a1f2f226"
+    },
+    "C10Probability.forest_opening_of_equal_pk": {
+      "file": "C10Probability/ForestPrivateOpening.lean",
+      "statement_sha256": "2cc6d6bd722d52c4fb6bb2764a990e6b35eba3bc06a00a5230382a7deb60e2cc"
+    },
+    "C10Probability.repeated_lower_forest_opening": {
+      "file": "C10Probability/ForestPrivateOpening.lean",
+      "statement_sha256": "562d8c79d12fee92d4e033141fe08b020c940b63b38f3c4e2ce370f270161e13"
     },
     "C10Probability.replay_forest_one_recorded": {
       "file": "C10Probability/ForestRecords.lean",
@@ -2117,6 +2218,18 @@
     "C10Probability.forest_recover_map": {
       "file": "C10Probability/ForestRecover.lean",
       "statement_sha256": "aa60aeb38d4af076484aeddce81b50c66e7641cd99b7140c111a18886f6fa2c4"
+    },
+    "C10Probability.replay_forest_recovery_records": {
+      "file": "C10Probability/ForestRecoveryRecord.lean",
+      "statement_sha256": "c6e63ef8db34f1238df0120107fc5bdd8cf8730b7e4c066ec03ab0c9cae5a51d"
+    },
+    "C10Probability.replay_forest_recovery_positions": {
+      "file": "C10Probability/ForestRecoveryRecord.lean",
+      "statement_sha256": "90b99e57ea050383ff59468c0a11b59fc54a0c369e80b8c92c413c97d1209533"
+    },
+    "C10Probability.replay_forest_recover_record": {
+      "file": "C10Probability/ForestRecoveryRecord.lean",
+      "statement_sha256": "33ea29b34111e1d7842bf600d98f8385e99487db5e18d17b1d7e57083f2d89f4"
     },
     "C10Probability.forest_tree_indices_length": {
       "file": "C10Probability/ForestShuffle.lean",
@@ -2201,6 +2314,14 @@
     "C10Probability.forest_sign_public": {
       "file": "C10Probability/ForestSign.lean",
       "statement_sha256": "f4704fae99fb7aa3ee4ae694010fc9c249ad77528abd3f69e0456ff07940214a"
+    },
+    "C10Probability.recorded_forest_slot_certificate": {
+      "file": "C10Probability/ForestSigningRecord.lean",
+      "statement_sha256": "2074b69f5771cdbd6f005948a72c7734c7fdf6177ceaf721f15493c6a19730f7"
+    },
+    "C10Probability.replay_forest_sign_record": {
+      "file": "C10Probability/ForestSigningRecord.lean",
+      "statement_sha256": "7fbf4e81e3825eaf7e61ab6285453563cdccb5c41871a911c812c6e1fe41c2e0"
     },
     "C10Probability.recorded_forest_slot_roots_eq": {
       "file": "C10Probability/ForestStability.lean",
@@ -3686,6 +3807,18 @@
       "file": "C10Probability/ObservedExamples.lean",
       "statement_sha256": "99f53c5e18d75b0baa3d1c976c18883483fb488b6830ef81e6ce474eeda2cabd"
     },
+    "C10Probability.observed_output_forest_descent": {
+      "file": "C10Probability/ObservedForestDescent.lean",
+      "statement_sha256": "a25a52fe14144d0584c4ea85eaa3138bf4cc2f55b12aa2bf90f23fd352883b64"
+    },
+    "C10Probability.c10_observed_game_forest_descent": {
+      "file": "C10Probability/ObservedForestDescent.lean",
+      "statement_sha256": "c40785c23f09a383cddc94bb5a90dc71f94ab27c0b021481ac136fcae71eacc5"
+    },
+    "C10Probability.c10_initialized_independent_forest_descent": {
+      "file": "C10Probability/ObservedForestDescent.lean",
+      "statement_sha256": "41473b2b81f34401bed9f753a5dd9c1472cde6a4388341bd768a874418324527"
+    },
     "C10Probability.c10_observed_game_erases": {
       "file": "C10Probability/ObservedGame.lean",
       "statement_sha256": "a4229452df4543e6679e034183a41189602bd5b12b05d01991bd2977a158dab0"
@@ -4513,6 +4646,18 @@
     "C10Probability.replay_keygen_witness": {
       "file": "C10Probability/RecoveryWitness.lean",
       "statement_sha256": "3691fef510417ed04453adab81cc6495e92dfbb3e56c111f4074111cf3951de2"
+    },
+    "C10Probability.repeated_lower_message_cases": {
+      "file": "C10Probability/RepeatedLowerBinding.lean",
+      "statement_sha256": "969ea324348992b36c16b4a724fc92d5d3e2cf09929a522992951b88b0a8a0d1"
+    },
+    "C10Probability.repeated_lower_hypertree_eq": {
+      "file": "C10Probability/RepeatedLowerBinding.lean",
+      "statement_sha256": "8e946a1867578a3dff2a0304f789e4eb4129f6a7b3ec0c9045c8bd98c1867627"
+    },
+    "C10Probability.repeated_lower_forest_binding": {
+      "file": "C10Probability/RepeatedLowerBinding.lean",
+      "statement_sha256": "caa879ccfd7d62e2821f0f82283fd96279869014f261ecc44170b7fdeac3fb9a"
     },
     "C10Probability.signing_record_upper_count_lookup": {
       "file": "C10Probability/RepeatedUpperBinding.lean",

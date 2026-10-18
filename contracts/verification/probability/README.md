@@ -877,8 +877,8 @@ and an actual chain suffix to every matching prior value. Initialized independen
 winning-game endpoints retain the original collision and public-zero alternatives.
 An earlier position is not a secrecy claim, absence from raw queries, or a
 private-opening probability charge; equal words do not imply equal full digests.
-The repeated upper-word branch is descended into the lower tree below. FORS
-forgery descent and the final six-case PMF bound remain open.
+The repeated upper-word branch is descended into the lower tree below. The repeated lower-word branch descends into FORS below; adaptive coverage and
+private-opening charges and the final six-case PMF bound remain open.
 
 The fifteen finite examples in `ExposureExamples.lean` and
 `ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
@@ -916,7 +916,7 @@ the actual top opening, the prior upper-word/signature occurrence and equal
 lower root, plus the lower opening and comparison. The top-earlier, selected-node
 collision, public-zero and accepted-word-collision alternatives remain explicit.
 A lower earlier position still makes no secrecy or private-opening probability
-claim. The repeated lower-word branch still needs FORS descent; adaptive coverage,
+claim. The repeated lower-word branch descends into FORS below; adaptive coverage,
 private-opening charging and the final six-case PMF bound remain open.
 
 The seven kernel-checked examples in `LowerDescentExamples.lean` exercise distinct
@@ -926,6 +926,48 @@ address, different lower trees sharing a leaf coordinate, and an unseen lower
 address. Populated caches and synthetic coordinate records are labelled as such;
 these examples do not claim initialized-game probability or valid synthetic
 signing executions.
+
+
+`RepeatedLowerBinding.lean` retrieves the actual lower count lookups. Equal
+accepted words retain the distinct-input collision alternative before binding
+the forest public key. Both lower coordinates identify the complete hypertree
+index, linking the prior actual forest signing program to the candidate address.
+
+`ForestRecoveryRecord.lean` and `ForestSigningRecord.lean` derive ordered recovery
+and shuffled signing records from the actual programs. They retain all twelve
+ordinary slots, the thirteen-position compression, the special last transmitted
+root, its separate leaf hash, and certificates for every actually built tree.
+`ForestCompressionBinding.lean` binds the ordered root vectors under the existing
+selected-node collision exclusion, then binds the special last root. It assumes
+neither global query-map injectivity nor equality of full output digests.
+`ForestPrivateOpening.lean` derives all twelve submitted private-value lookups
+from those certificates and actual recovery paths, including defaulted fields.
+The thirteenth transmitted value remains a built root, not a thirteenth ordinary
+private-leaf exposure.
+
+`ForestHistoryOpening.lean` compares the ordinary coordinates with the complete
+successful-signing list. Either each tree's hypertree/leaf coordinate matches an
+actual earlier occurrence and its returned secret, or some coordinate is absent
+from every signing record at that hypertree index while retaining its actual
+private lookup. Different trees may match different prior signatures; coverage
+does not imply one repeated full digest. Duplicate occurrences stay in the list.
+Unmatched in signing history does not mean absent from the raw-query transcript,
+undisclosed, fresh, or probabilistically bounded.
+
+`ForestDescent.lean` and `ObservedForestDescent.lean` compose these results for
+actual observed, supported, and independently initialized winning sessions.
+They retain the complete history and cap, actual top/lower openings, prior
+upper/lower occurrences, both earlier-chain alternatives, and all original
+node-collision/public-zero/accepted-word-collision alternatives. This closes the
+structural repeated-lower-word FORS descent. Adaptive coverage and private-opening
+charges and the final six-case PMF partition/bound remain open.
+
+The eight kernel-checked examples in `ForestDescentExamples.lean` cover empty and
+duplicate histories, coverage mixed across distinct prior digests, the need for
+the complete hypertree coordinate, compression order, the separate last-root
+position, actual recovery of missing arrays using defaults, and compatibility of
+an unmatched history coordinate with a populated private cache. Synthetic
+coordinate records are not claimed to be valid signatures or winning games.
 
 
 These programs and integer formulas are manually transcribed from the existing
@@ -971,16 +1013,23 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1629 theorem closures against
+The gate rebuilds every project module, checks all 1663 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-995 typed cases run 2985 compiler jobs: each baseline and changed
-definition must compile, 888 changed behaviors must reject at the
-consuming `checked` theorem, and 107 value-preserving changes must pass.
+1040 typed cases run 3120 compiler jobs: each baseline and changed
+definition must compile, 926 changed behaviors must reject at the
+consuming `checked` theorem, and 114 value-preserving changes must pass.
+The 45 FORS-descent cases add 38 negatives and seven equivalent controls. Full
+consuming proof bodies check actual ordered recovery/signing records, private
+opening coordinates and special last root, complete-history coverage/unmatched
+lookups, actual repeated lower occurrences, and the composed endpoint's history
+links. The previous 995 fixture objects, 1629 statements, old proof-module bytes
+and all 52 source bindings remain unchanged. These are selected proof-sensitivity
+checks, not proofs that every changed statement is false.
 The 32 lower-descent cases add 27 negatives and five equivalent controls. They
 exercise count-message binding, the distinct-input accepted-collision predicate,
 actual lower builder/recovery/count/prefix witnesses, full lower-address and suffix

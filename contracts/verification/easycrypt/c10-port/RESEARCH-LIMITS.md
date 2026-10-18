@@ -233,9 +233,8 @@ their actual accepted counts and prefixes in that same final cache. Comparing
 accepted words at a common address gives equal words/values or an earlier
 position with a suffix to the signed value. This closes chain-opening extraction;
 it does not establish that the earlier value is undisclosed or that equal words
-mean equal messages. The complete repeated-address minimum is now derived below. FORS
-descent, adaptive coverage/private-opening charges and the complete six-case
-partition/final bound remain open. Forward correctness is now derived for the
+mean equal messages. The complete repeated-address minimum is now derived below. The structural FORS descent is derived below; adaptive coverage/private-opening
+charges and the complete six-case partition/final bound remain open. Forward correctness is now derived for the
 actual returned Merkle/FORS authentication arrays at every valid target, using
 certified stored siblings and the same cache; concrete merge alignment, bounds
 and kept-flag initialization are discharged. Recovery preserves the actual WOTS
@@ -254,9 +253,8 @@ zero mass at `some false`. This is honest correctness, not guaranteed signing
 success or a forgery bound. Eleven finite examples include asymmetric component
 executions and counterexamples for wrong supplied roots and overwritten caches;
 the inhabited whole-signature example uses a populated constant cache, not an
-empty-cache success-probability argument. FORS forgery descent,
-adaptive coverage/private-opening charges and the final six-case forgery
-partition/bound remain open. The structured theorem
+empty-cache success-probability argument. The structural FORS descent is derived below; adaptive coverage/private-opening
+charges and the final six-case forgery partition/bound remain open. The structured theorem
 does not close the byte codec or concrete/hash/Rust/cross-kernel boundaries.
 The repeated-address minimum component is now structurally derived from actual
 signing: functional tree/forest root uniqueness, bounded count replay and the
@@ -273,8 +271,8 @@ remain. No stable-word or completeness premise is assumed. The mixed accepted-wo
 counterexample shows why uniformity must be derived: an arbitrary minimum need
 not have sum 205. This closes positional comparison only; it does not prove
 secrecy, absence from raw queries or a private-opening probability charge.
-FORS forgery descent, adaptive coverage/private-opening charges and the
-complete six-case PMF partition/bound remain open. No byte-codec, concrete hash,
+The structural FORS descent is derived below; adaptive coverage/private-opening
+charges and the complete six-case PMF partition/bound remain open. No byte-codec, concrete hash,
 Rust, cross-kernel, unbounded-adversary or repeated-freshness claim follows.
 The repeated upper-word branch now descends into the actual lower tree. Actual
 selected count lookups either expose two distinct public inputs with the same
@@ -288,10 +286,29 @@ value. Both logical lower coordinates, duplicate history and the signing cap
 remain linked to the actual observed/initialized winning experiment. Original
 node-collision/public-zero, top-earlier and accepted-word-collision alternatives
 remain. This closes lower-layer structural descent only: the repeated lower-word
-branch still needs FORS descent, and no private-opening probability charge or
+branch descends into FORS below, and no private-opening probability charge or
 final six-case PMF bound follows. Seven finite examples and 32 complete-consuming-
 proof controls cover these boundaries without weakening prior evidence.
-The PMF inventory now has 1629 theorem closures and 995 typed sensitivity cases.
+The repeated lower-word branch now descends into actual FORS executions. Actual
+count lookups retain accepted-word collisions or bind the forest public key;
+both lower coordinates identify the complete hypertree address. Actual ordered
+recovery and shuffled signing records supply all twelve ordinary tree
+certificates, ordered thirteen-root compression, and the separate transmitted
+last root/leaf hash. Selected-node collision exclusion binds the ordered roots
+and derives every submitted ordinary private value from its real tree
+certificate. The special thirteenth value remains a built root, not an ordinary
+private-leaf exposure. Complete duplicate-preserving signing history then yields
+coverage at every ordinary hypertree/tree/leaf coordinate, with equality to an
+actual returned signing secret, or an unmatched coordinate with its actual
+private lookup. Coverage can mix different prior signatures. Unmatched in signing
+history does not establish absence from raw queries, secrecy, or a probability
+charge. The actual observed/support/initialized winning endpoints retain the
+complete history, cap, prior upper/lower occurrences and all collision/zero and
+earlier-chain alternatives. Eight finite boundary examples and 45 complete-proof
+controls accompany this structural descent. Adaptive coverage/private-opening
+charges and the final six-case PMF partition/bound remain open, alongside the
+existing codec, unbounded-adversary, repeated-freshness and implementation limits.
+The PMF inventory now has 1663 theorem closures and 1040 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

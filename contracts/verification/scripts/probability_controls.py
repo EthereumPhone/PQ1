@@ -2886,4 +2886,115 @@ def cases(project: Path) -> list[dict]:
         ("descent-endpoint-history-equivalent", "∃ prior ∈ records,", "∃ prior ∈ records ++ [],", True)]:
         add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
 
+
+    # FORS descent: complete consuming proofs, including equivalent controls.
+    # Failure demonstrates proof sensitivity, not universal mutant falsity.
+    def bv_alias(module, name, extra=()):
+        declarations = []
+        renames = {n: n + "BVCandidate" for n in (name, *extra)}
+        for n in (name, *extra):
+            match = re.search(r"^(?:def|abbrev|structure) " + re.escape(n) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|structure|inductive|end|attribute|set_option)\b)",
+                src[module], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing forest-descent definition " + n)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in renames.items():
+                declaration = re.sub(r"\b" + re.escape(old) + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = renames[name] + "Slice"
+        src[key] = ("import C10Probability.ForestDescentExamples\n"
+            "namespace C10Probability\nnoncomputable section\n"
+            "set_option maxRecDepth 4096\nvariable {K : Type*}\n" +
+            "\n".join(declarations) + "\nend\nend C10Probability\n")
+        return key, renames
+
+    def bv_check(module, name, renames):
+        check = theorem(src[module], name)
+        for old, new in renames.items():
+            check = re.sub(r"\b" + re.escape(old) + r"\b", new, check)
+        return check
+
+    key, names = bv_alias("ForestRecoveryRecord", "ForestRecoveryRecordValid")
+    check = bv_check("ForestRecoveryRecord", "replay_forest_recover_record", names)
+    for row in [
+        ("forest-recovery-root-count", "record.roots.length = 12", "record.roots.length = 13"),
+        ("forest-recovery-position-tree", "seed ht i.val", "seed ht (i.val + 1)"),
+        ("forest-recovery-position-secret", "((secrets[i.val]?).getD 0)", "((secrets[0]?).getD 0)"),
+        ("forest-recovery-last-tree", "seed ht 12 0", "seed ht 11 0"),
+        ("forest-recovery-last-secret", "(secrets[12]?).getD 0", "(secrets[11]?).getD 0"),
+        ("forest-recovery-compression-order", "record.roots ++ [randomizerOfDigest record.lastDigest]", "[randomizerOfDigest record.lastDigest] ++ record.roots"),
+        ("forest-recovery-tree-equivalent", "seed ht 12 0", "seed ht (12 + 0) 0", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, names = bv_alias("ForestSigningRecord", "ForestSigningRecordValid")
+    check = bv_check("ForestSigningRecord", "replay_forest_sign_record", names)
+    for row in [
+        ("forest-signing-shuffle", "key)) shuffle)", "key)) [])"),
+        ("forest-signing-slot-digest", "RecordedForestSlot encode table seed ht digest", "RecordedForestSlot encode table seed ht 0"),
+        ("forest-signing-certificate-tree", "seed ht i.val ((record.state.roots", "seed ht (i.val + 1) ((record.state.roots"),
+        ("forest-signing-last-root-tree", "forsRootProgram encode seed ht 12", "forsRootProgram encode seed ht 11"),
+        ("forest-signing-last-certificate", "seed ht 12 record.last", "seed ht 11 record.last"),
+        ("forest-signing-secret-write", "record.state.secrets.set 12 record.last", "record.state.secrets.set 11 record.last"),
+        ("forest-signing-compression-slot", "record.state.roots.set 12", "record.state.roots.set 11"),
+        ("forest-signing-slot-equivalent", "record.state.secrets.set 12 record.last", "record.state.secrets.set (12 + 0) record.last", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, names = bv_alias("ForestPrivateOpening", "ForestOpeningRecordValid")
+    check = bv_check("ForestPrivateOpening", "forest_opening_of_equal_pk", names)
+    for row in [
+        ("forest-opening-prior-digest", "seed ht priorDigest shuffle", "seed ht digest shuffle"),
+        ("forest-opening-public-key", "pk = prior.pk", "pk = 0"),
+        ("forest-opening-root-order", "opening.signing.state.roots[i.val]", "opening.signing.state.roots[i.rev.val]"),
+        ("forest-opening-private-tree", "forsPrivateTail ht i.val", "forsPrivateTail ht (i.val + 1)"),
+        ("forest-opening-private-index", "forestIndex digest i.val", "forestIndex priorDigest i.val"),
+        ("forest-opening-last-position", "(secrets[12]?).getD 0", "(secrets[11]?).getD 0"),
+        ("forest-opening-last-equivalent", "(secrets[12]?).getD 0", "(secrets[12 + 0]?).getD 0", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, names = bv_alias("ForestHistoryOpening", "ForestIndexCovered")
+    check = bv_check("ForestHistoryOpening", "forest_history_private_comparison", names)
+    check = check.replace("    rw [address, index] at priorLookup",
+        "    change forestIndex prior.digest i.val = forestIndex digest i.val at index\n    rw [address, index] at priorLookup")
+    for row in [
+        ("forest-coverage-ignore-hypertree", "hypertreeIndex prior.digest = hypertreeIndex digest", "True"),
+        ("forest-coverage-leaf-only", "hypertreeIndex prior.digest = hypertreeIndex digest", "hypertreeLeaf (hypertreeIndex prior.digest) = hypertreeLeaf (hypertreeIndex digest)"),
+        ("forest-coverage-ignore-index", "forestIndex prior.digest i.val = forestIndex digest i.val", "True"),
+        ("forest-coverage-wrong-tree", "forestIndex prior.digest i.val", "forestIndex prior.digest 12"),
+        ("forest-coverage-coordinate-equivalent", "forestIndex prior.digest i.val", "forestIndex prior.digest (i.val + 0)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, names = bv_alias("ForestHistoryOpening", "ForestHistoryUnmatched", ("ForestHistoryCase",))
+    check = bv_check("ForestHistoryOpening", "forest_history_private_comparison", names)
+    for row in [
+        ("forest-unmatched-reverse-inequality", "forestIndex prior.digest i.val ≠ forestIndex digest i.val", "forestIndex prior.digest i.val = forestIndex digest i.val"),
+        ("forest-unmatched-wrong-value", "randomizerOfDigest value = (secrets[i.val]?).getD 0", "randomizerOfDigest value = (secrets[12]?).getD 0"),
+        ("forest-unmatched-private-address", "forsPrivateTail (hypertreeIndex digest) i.val", "forsPrivateTail 0 i.val"),
+        ("forest-unmatched-private-index", "(forestIndex digest i.val))))", "(forestIndex digest 12))))"),
+        ("forest-unmatched-absence-not-lookup", "= some value ∧", "= none ∧"),
+        ("forest-unmatched-value-equivalent", "(secrets[i.val]?).getD 0", "(secrets[i.val + 0]?).getD 0", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, names = bv_alias("ForestDescent", "RepeatedLowerForest")
+    check = bv_check("ForestDescent", "lower_exposure_forest_descent", names)
+    for row in [
+        ("forest-descent-drop-signing-entry", "∃ entry ∈ entries,", "∃ entry ∈ entries.drop 1,"),
+        ("forest-descent-wrong-lower-tree", "= top.lowerTree ∧", "= top.lowerTree + 1 ∧"),
+        ("forest-descent-wrong-lower-leaf", "= top.lowerKp ∧", "= top.lowerKp + 1 ∧"),
+        ("forest-descent-upper-word", "lower.word = wotsOfDigest prior.lowerDigest", "lower.word = wotsOfDigest prior.upperDigest"),
+        ("forest-descent-wrong-forest-key", "top.forest = prior.forest.pk", "top.forest = prior.middle"),
+        ("forest-descent-prior-only-history", "entries records top.digest sig.secrets", "entries [prior] top.digest sig.secrets"),
+        ("forest-descent-leaf-equivalent", "= top.lowerKp ∧", "= top.lowerKp + 0 ∧", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
+    key, names = bv_alias("ForestDescent", "ForestDescentCase")
+    check = bv_check("ForestDescent", "top_chain_forest_descent", names)
+    for row in [
+        ("forest-endpoint-drop-upper-occurrence", "∃ prior ∈ records,", "∃ prior ∈ records.drop 1,"),
+        ("forest-endpoint-wrong-middle", "top.middle = prior.middle", "top.middle = prior.forest.pk"),
+        ("forest-endpoint-drop-lower-history", "RepeatedLowerForest encode table cfg entries sig records top lower", "RepeatedLowerForest encode table cfg entries sig [] top lower"),
+        ("forest-endpoint-drop-earlier-history", "LowerEarlierExposure encode table cfg.seed sig records top lower", "LowerEarlierExposure encode table cfg.seed sig [] top lower"),
+        ("forest-endpoint-lower-equivalent", "RepeatedLowerForest encode table cfg entries sig records top lower", "RepeatedLowerForest encode table cfg entries sig records top (id lower)", True)]:
+        add(row[0], key, row[1], row[2], check, row[3] if len(row) == 4 else False)
+
     return out
