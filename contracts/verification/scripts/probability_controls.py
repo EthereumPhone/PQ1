@@ -3135,4 +3135,155 @@ def cases(project: Path) -> list[dict]:
                  "((2 : ℝ≥0∞) ^ 245)⁻¹", "((2 : ℝ≥0∞) ^ 256)⁻¹")
     bw_statement("selected-exponent-plus-zero", "ForsSelectedWitness", "selected_fors_assignment_mass",
                  "(132 + 18 * j)", "(132 + 18 * j + 0)", True)
+
+    # Adaptive FORS pool coverage: retain the full consuming proof in each case.
+    # Typed rejection is sensitivity evidence, not universal mutant falsity.
+    bx_prefix = ("import C10Probability.ForsCoverageExamples\n"
+                 "import C10Probability.SamplePrefixExamples\n"
+                 "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n")
+    bx_suffix = "\nend\nend C10Probability\n"
+
+    def bx_alias(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|instance|end)\b)", src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing adaptive-coverage definition " + name)
+        replacement = name + "BXCandidate"
+        declaration = re.sub(r"\b" + name + r"\b", replacement, match.group(0).split("\n/--", 1)[0])
+        key = replacement + "Slice"
+        src[key] = bx_prefix + declaration + bx_suffix
+        return key, {name: replacement}
+
+    def bx_check(module, name, names):
+        check = theorem(src[module], name)
+        for old, new in names.items():
+            check = re.sub(r"\b" + old + r"\b", new, check)
+        return check
+
+    key, names = bx_alias("SamplePrefix", "SampleExtensionClosed")
+    add("fors-coverage-closure-erased", key, "event (before ++ after)", "event (before ++ (after : List α).take 0)",
+        bx_check("SamplePrefix", "iidSampleList_event_of_empty", names))
+    add("fors-coverage-closure-prepend", key, "before ++ after", "after ++ before",
+        bx_check("SamplePrefix", "sample_extension_cons", names))
+    add("fors-coverage-closure-id", key, "event (before ++ after)", "id (event (before ++ after))",
+        bx_check("SamplePrefix", "iidSampleList_event_of_empty", names), True)
+
+    key, names = bx_alias("SamplePrefix", "evalSampleProgram")
+    check = bx_check("SamplePrefixExamples", "adaptive_sample_one_cap_mass", names)
+    add("fors-coverage-trace-dropped", key, "(out.1, value :: out.2)", "(out.1, out.2)", check)
+    add("fors-coverage-trace-duplicated", key, "value :: out.2", "value :: value :: out.2", check)
+    add("fors-coverage-trace-id", key, "value :: out.2", "id (value :: out.2)", check, True)
+
+    key, names = bx_alias("SamplePrefix", "iidSampleList")
+    check = bx_check("SamplePrefix", "iidSampleList_length", names)
+    add("fors-coverage-iid-drop", key, "(List.cons value)", "(fun xs => xs)", check)
+    add("fors-coverage-iid-duplicate", key, "(List.cons value)", "(fun xs => value :: value :: xs)", check)
+    add("fors-coverage-iid-budget-zero", key, "iidSampleListBXCandidate p n", "iidSampleListBXCandidate p 0", check)
+    add("fors-coverage-iid-id", key, "(List.cons value)", "(fun xs => id (value :: xs))", check, True)
+
+    key, names = bx_alias("ForsPoolCoverage", "ForsPoolCoverage")
+    check = bx_check("ForsPoolCoverage", "fors_pool_coverage_canonical", names)
+    for label, old, new in [
+        ("target-not-excluded", "position ≠ target", "True"),
+        ("target-required", "position ≠ target", "position = target"),
+        ("address-erased", "hypertreeIndex (samples position)", "hypertreeIndex (samples target)"),
+        ("coordinate-first-only", "forestIndex (samples position) coordinate.val = forestIndex (samples target) coordinate.val",
+         "forestIndex (samples position) 0 = forestIndex (samples target) 0"),
+    ]:
+        add("fors-coverage-" + label, key, old, new, check)
+    add("fors-coverage-pool-address-id", key, "hypertreeIndex (samples position)",
+        "id (hypertreeIndex (samples position))", check, True)
+
+    key, names = bx_alias("ForsPoolCoverage", "ForsCoverageByGroups")
+    check = bx_check("ForsPoolCoverage", "fors_pool_coverage_canonical", names)
+    add("fors-coverage-group-target-reused", key, "samples (positions group).val", "samples target", check)
+    add("fors-coverage-group-constraints-erased", key,
+        "∀ group, samples (positions group).val ∈\n      forsGroupEvent (growthAssignment word) group (samples target)",
+        "∀ group : Fin j, samples target = samples target", check)
+    add("fors-coverage-group-assignment-id", key, "(growthAssignment word)",
+        "(fun i => growthAssignment word i)", check, True)
+
+    # Clone the recursive finite type together with its Fintype construction;
+    # matching edits at both type sites keep the definition stage well typed.
+    growth = re.search(r"^def GrowthWord\b.*?(?=^def growthEmpty\b)",
+                       src["GrowthWords"], flags=re.M | re.S).group(0)
+    growth_names = {"GrowthWord": "GrowthWordBXCandidate", "growthWordFintype": "growthWordFintypeBXCandidate"}
+    for old, new in growth_names.items():
+        growth = re.sub(r"\b" + old + r"\b", new, growth)
+    growth_base = bx_prefix + growth + bx_suffix
+    growth_check = bx_check("GrowthWords", "growth_word_card", growth_names)
+    for label, old, new, occurrences, expected in [
+        ("growth-empty-count", "| 0, 0 => Unit", "| 0, 0 => Bool", 1, False),
+        ("growth-outside-zero", "| 0, _ + 1 => Empty", "| 0, _ + 1 => Unit", 1, False),
+        ("growth-repeat-width", "GrowthWordBXCandidate n (j + 1)", "GrowthWordBXCandidate n j", 2, False),
+        ("growth-choice-count", "Fin (j + 1)", "Fin (j + 2)", 2, False),
+        ("growth-choice-plus-zero", "Fin (j + 1)", "Fin (j + 1 + 0)", 2, True),
+    ]:
+        if growth_base.count(old) != occurrences:
+            raise ValueError("ambiguous adaptive growth edit " + label)
+        changed = growth_base.replace(old, new)
+        out.append({"name": "fors-coverage-" + label, "definition": changed,
+                    "baseline": append_check(growth_base, growth_check),
+                    "checked": append_check(changed, growth_check), "expected": expected})
+
+    key, names = bx_alias("GrowthWords", "growthAssignment")
+    check = bx_check("GrowthWords", "growth_new_assignment", names)
+    add("fors-coverage-new-label-zero", key, "Fin.last j", "0", check)
+    add("fors-coverage-tail-label-shift", key, "(growthAssignmentBXCandidate word k).castSucc",
+        "(growthAssignmentBXCandidate word k).succ", check)
+    add("fors-coverage-reuse-label-reversed", key, "Fin.cases label (growthAssignmentBXCandidate word)",
+        "Fin.cases label.rev (growthAssignmentBXCandidate word)",
+        bx_check("GrowthWords", "growth_reuse_assignment", names))
+    add("fors-coverage-label-id", key, "(growthAssignmentBXCandidate word k).castSucc",
+        "id ((growthAssignmentBXCandidate word k).castSucc)", check, True)
+
+    key, names = bx_alias("GrowthWords", "growthReuse")
+    add("fors-coverage-reused-label-reversed", key, "Sum.inl (label, word)", "Sum.inl (label.rev, word)",
+        bx_check("GrowthWords", "growth_reuse_assignment", names))
+
+    key, names = bx_alias("ForsWitnessPositions", "ForsOtherPosition")
+    add("fors-coverage-position-complement-inverted", key, "i ≠ target", "i = target",
+        bx_check("ForsWitnessPositions", "fors_other_positions_card", names))
+
+    key, names = bx_alias("ForsCoverageBound", "forsCoverageCharge")
+    for label, old, new, module, consumer, expected in [
+        ("target-factor-missing", "(n : ℝ≥0∞)", "1", "ForsCoverageExamples", "fors_two_pool_charge", False),
+        ("falling-target-included", "(n - 1).descFactorial", "n.descFactorial", "ForsCoverageExamples", "fors_two_pool_charge", False),
+        ("stirling-eleven", "Nat.stirlingSecond 12 j", "Nat.stirlingSecond 11 j", "ForsCoverageBound", "iid_fors_coverage_bound", False),
+        ("one-group-omitted", "Finset.Icc 1 12", "Finset.Icc 2 12", "ForsCoverageExamples", "fors_two_pool_charge", False),
+        ("twelve-groups-omitted", "Finset.Icc 1 12", "Finset.Icc 1 11", "ForsCoverageBound", "iid_fors_coverage_bound", False),
+        ("ordinary-exponent-143", "132 + 18 * j", "143 + 18 * j", "ForsCoverageExamples", "fors_two_pool_charge", False),
+        ("address-exponent-36", "132 + 18 * j", "132 + 36 * j", "ForsCoverageExamples", "fors_two_pool_charge", False),
+        ("charge-inverse-erased", "((2 : ℝ≥0∞) ^ (132 + 18 * j))⁻¹", "((2 : ℝ≥0∞) ^ (132 + 18 * j))", "ForsCoverageExamples", "fors_two_pool_charge", False),
+        ("charge-exponent-plus-zero", "132 + 18 * j", "132 + 18 * j + 0", "ForsCoverageBound", "iid_fors_coverage_bound", True),
+    ]:
+        add("fors-coverage-" + label, key, old, new, bx_check(module, consumer, names), expected)
+
+    def bx_statement(label, module, name, old, new, expected=False):
+        check = theorem(src[module], name)
+        if check.count(old) != 1:
+            raise ValueError("ambiguous adaptive-coverage statement " + label)
+        out.append({"name": "fors-coverage-" + label, "definition": bx_prefix + bx_suffix,
+                    "baseline": bx_prefix + check + bx_suffix,
+                    "checked": bx_prefix + check.replace(old, new, 1) + bx_suffix,
+                    "expected": expected})
+
+    bx_statement("sample-observed-cap-omitted", "SamplePrefix", "evalSampleProgram_prefix_bound",
+                 "out.2.length ≤ cap ∧ event out.2", "True ∧ event out.2")
+    bx_statement("sample-extension-omitted", "SamplePrefix", "evalSampleProgram_prefix_bound",
+                 "closed : SampleExtensionClosed event", "closed : True")
+    bx_statement("adaptive-observed-cap-omitted", "ForsCoverageBound", "adaptive_fors_coverage_bound",
+                 "out.2.length ≤ cap ∧ ForsListCoverage out.2", "True ∧ ForsListCoverage out.2")
+    bx_statement("canonical-eleven-only", "ForsPoolCoverage", "fors_pool_coverage_canonical",
+                 "j ≤ 12", "j ≤ 11")
+    bx_statement("canonical-single-group-removed", "ForsPoolCoverage", "fors_pool_coverage_canonical",
+                 "0 < j", "1 < j")
+    bx_statement("position-count-shifted", "ForsWitnessPositions", "fors_witness_positions_card",
+                 "(n - 1).descFactorial j", "n.descFactorial j")
+    bx_statement("word-count-shifted", "GrowthWords", "growth_word_card",
+                 "Nat.stirlingSecond n j", "Nat.stirlingSecond (n + 1) j")
+    bx_statement("witness-address-charge-omitted", "ForsWitnessPositions", "distinct_fors_assignment_mass",
+                 "(132 + 18 * j)", "(132 + 0 * j)")
+    bx_statement("adaptive-cap-plus-zero", "ForsCoverageBound", "adaptive_fors_coverage_bound",
+                 "out.2.length ≤ cap ∧ ForsListCoverage out.2", "out.2.length ≤ cap + 0 ∧ ForsListCoverage out.2", True)
     return out

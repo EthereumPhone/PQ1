@@ -317,13 +317,31 @@ all twelve ordinary coordinates to `j` independent accepted witnesses gives
 exact mass `2^-(132+18*j)`, including a full hypertree match for every group.
 The target is fixed or independently sampled. Selecting a target and witnesses
 from a larger independent accepted pool preserves this mass only with distinct
-positions fixed before sampling. Nine examples distinguish reused positions,
-rejected guards, changed addresses and unused high bits; 41 complete-proof
-controls include seven equivalent forms. This does not yet transfer adaptive
-accepted histories to an independent pool or sum over canonical/Stirling
-witnesses. Those steps, private-opening charges and the final six-case PMF
-bound remain open. No EasyCrypt theorem is imported or treated as a Lean premise.
-The PMF inventory now has 1705 theorem closures and 1081 typed sensitivity cases.
+positions fixed before sampling. Eleven fixed-sample examples distinguish
+reused positions,
+rejected guards, changed addresses, unused high bits and unused-group address
+costs; the empty example now consumes the general product law.
+The separate Lean continuation now derives canonical coverage encodings and
+their exact Stirling cardinality, ordered distinct witness positions excluding
+the target with count `(n-1)_j`, and equivalence with ordinary-coordinate pool
+coverage. Appending samples preserves the event. Composing these facts with
+the existing fixed-assignment law proves the union upper bound
+`sum(j=1..12) n*(n-1)_j*S(12,j)/2^(132+18*j)` without replacing its coefficient
+by a looser count. A generic fresh-sampling completion argument transfers it to
+randomized finitely bounded adaptive accepted-sampler programs under an observed
+sample-length cap; the program work bound may exceed that cap. The list sampler
+is proved equal to the accepted function-space PMF, and both extended-real and
+real-valued bounds retain finiteness. Overlapping events are bounded by a union;
+no equality of union probability and charge is asserted.
+This closes those pool/sampler dependencies, not the refinement of actual
+memoized H_msg or full signer-session histories into that sampler. That
+refinement, private-opening charges and final six-case PMF composition remain
+open. Existing unbounded-adversary, codec, repeated-grinder freshness and
+implementation limits remain. No EasyCrypt theorem is imported into Lean.
+The continuation adds 55 theorem closures, nineteen boundary checks and 47
+complete-proof controls including nine equivalent forms. All 1705 preceding
+statements and 1081 fixture objects are preserved. The PMF inventory now has
+1760 theorem closures and 1128 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

@@ -13,9 +13,7 @@ def permutedForsSelection : Fin 3 → Fin 3 := ![1, 2, 0]
 
 theorem fors_empty_samples_mass :
     (acceptedForsSamples 0).toOuterMeasure {samples | ∀ i : Fin 0, samples i = 0} = 1 := by
-  apply (PMF.toOuterMeasure_apply_eq_one_iff _ _).2
-  intro samples _ i
-  exact Fin.elim0 i
+  simpa using accepted_fors_samples_event 0 (fun _ => ({0} : Set Digest))
 
 theorem fors_zero_budget_mass (event : Digest → Bool) :
     (returnedMass digestDraw (forsAccept ∘ forsOfDigest) event 0).toReal = 0 := by
@@ -33,6 +31,18 @@ theorem fors_split_witness_mass (target : Digest) :
       samples group ∈ forsGroupEvent splitForsAssignment group target} =
       ((2 : ℝ≥0∞) ^ 168)⁻¹ := by
   exact fixed_fors_assignment_mass splitForsAssignment target
+
+theorem fors_unused_group_joint_mass (target : Digest) :
+    (acceptedForsSamples 2).toOuterMeasure {samples | ∀ group,
+      samples group ∈ forsGroupEvent (fun _ => (0 : Fin 2)) group target} =
+      ((2 : ℝ≥0∞) ^ 168)⁻¹ := by
+  exact fixed_fors_assignment_mass (fun _ => (0 : Fin 2)) target
+
+theorem fors_unused_group_address_mass (target : Digest) :
+    acceptedForsDraw.toOuterMeasure
+      (forsGroupEvent (fun _ => (0 : Fin 2)) 1 target) = ((2 : ℝ≥0∞) ^ 18)⁻¹ := by
+  rw [accepted_fors_group_mass]
+  norm_num [forsGroupMass]
 
 theorem fors_reused_position_mass :
     (acceptedForsSamples 1).toOuterMeasure {samples | ∀ group : Fin 1,

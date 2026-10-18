@@ -87,14 +87,50 @@ or sampled independently. `ForsSelectedWitness.lean` derives the same law for
 a target and witnesses selected at distinct positions in a larger independent
 accepted pool. Positions and assignments are fixed before sampling; value-dependent
 selection, cached replies and adaptive histories gain no independence claim.
-Nine finite examples cover empty samples, zero search budget, one/two witnesses,
+Eleven finite examples cover empty samples, zero search budget, one/two witnesses,
 a nonmonotone distinct selection, reused positions, guard rejection, changed
-hypertree address and retained unused high bits. Reusing the target position
-has mass one, demonstrating why injectivity is load-bearing.
+hypertree address, retained unused high bits and the address cost of unused
+witness groups. The empty example consumes the general product law. Reusing the
+target position has mass one, demonstrating why injectivity is load-bearing.
 
-These are fixed-sample quantitative dependencies, not yet the adaptive FORS
-coverage bound. Accepted-pool prefix transfer, canonical/Stirling witness union
-enumeration, private-opening charges and the final six-case PMF bound remain open.
+`SamplePrefix.lean` proves a generic completion bound for fresh-sampling
+programs. The client may stop based on earlier replies; its initial random
+choice is independent of future samples. For any extension-closed event, the
+probability of that event together with an observed sample-length cap is at
+most its probability in a fixed pool of that size. The finite program work
+bound may exceed the observed cap. `ForsSamplePrefix.lean` connects the list
+sampler to the existing uniform accepted function-space PMF.
+
+`GrowthWords.lean` derives the cardinality of reverse restricted-growth
+encodings from their recursive construction: `S(k,j)`, the Stirling number of
+the second kind. Every label is used, and `GrowthFactorization.lean` factors
+any coordinate-to-witness map through one such encoding and an injective tuple.
+`ForsWitnessPositions.lean` derives the exact `(n-1)_j` count of ordered
+witness positions excluding the target. `ForsPoolCoverage.lean` proves that
+ordinary-coordinate coverage is equivalent to this canonical witness union
+and is preserved when more samples are appended. Every witness retains the
+complete hypertree address; coordinates may use different witnesses.
+
+`ForsCoverageBound.lean` composes these counts with the fixed-witness mass:
+
+```
+Pr[coverage in n independent accepted samples]
+  <= sum(j=1..12) n * (n-1)_j * S(12,j) / 2^(132+18*j).
+```
+
+The same charge bounds `observed length <= n AND coverage` for every finite
+adaptive accepted-sampling program, including a PMF over such programs.
+Both extended-nonnegative-real and real-valued bounds are proved. This is a
+union upper bound; overlapping witnesses do not make it an exact probability.
+Nineteen new boundary theorems cover empty/singleton pools, mixed witnesses,
+exact Stirling/falling-factorial counts, unused-group address costs, adaptive
+stopping, the observed cap, and the failure of extension closure for exact-length
+events.
+
+This closes the independent-pool and adaptive fresh-accepted-sampler coverage
+dependencies. It does not identify the accepted history of the actual memoized
+H_msg or full signer session with this sampler. That refinement, private-opening
+charges and the final six-case PMF bound remain open.
 
 ## Independence and correspondence boundary
 
@@ -1039,16 +1075,25 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1705 theorem closures against
+The gate rebuilds every project module, checks all 1760 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1081 typed cases run 3243 compiler jobs: each baseline and changed
-definition must compile, 960 changed behaviors must reject at the
-consuming `checked` theorem, and 121 value-preserving changes must pass.
+1128 typed cases run 3384 compiler jobs: each baseline and changed
+definition must compile, 998 changed behaviors must reject at the
+consuming `checked` theorem, and 130 value-preserving changes must pass.
+The 47 adaptive-coverage cases add 38 negatives and nine equivalent controls.
+Complete consuming proofs exercise fresh-sample traces, observed caps, extension
+closure, canonical counts, target exclusion, full-address and coordinate binding,
+and every factor of the coverage charge. All 1705 preceding statements, 1081
+fixture objects and 52 source bindings are preserved. The only prior proof-body
+change routes the empty-sample example through its general product law; two
+unused-group examples are additive. The probability CI timeout is 90 minutes
+for the larger replay; its command, workers, compiler limits and checks are
+unchanged.
 The 45 FORS-descent cases add 38 negatives and seven equivalent controls. Full
 consuming proof bodies check actual ordered recovery/signing records, private
 opening coordinates and special last root, complete-history coverage/unmatched

@@ -90,3 +90,12 @@ import C10Probability.ForsWitnessMass
 import C10Probability.UniformSelection
 import C10Probability.ForsSelectedWitness
 import C10Probability.ForsCoverageMassExamples
+import C10Probability.SamplePrefix
+import C10Probability.ForsSamplePrefix
+import C10Probability.GrowthWords
+import C10Probability.GrowthFactorization
+import C10Probability.ForsWitnessPositions
+import C10Probability.ForsPoolCoverage
+import C10Probability.ForsCoverageBound
+import C10Probability.ForsCoverageExamples
+import C10Probability.SamplePrefixExamples
