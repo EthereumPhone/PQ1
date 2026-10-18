@@ -1721,6 +1721,59 @@ mod timeout_tests {
             "post-clear guard drops must saturate at zero rather than underflow"
         );
     }
+
+    /// #981: the deferral limits are exact and the UI limit is the shorter.
+    #[test]
+    fn positive_wipe_defer_limits_are_exact() {
+        assert_eq!(t::WIPE_DEFER_LIMIT_TICKS, 30_000);
+        assert_eq!(t::WIPE_DEFER_UI_LIMIT_TICKS, 5_000);
+        for ui in [false, true] {
+            let limit = if ui { t::WIPE_DEFER_UI_LIMIT_TICKS } else { t::WIPE_DEFER_LIMIT_TICKS };
+            assert!(!t::wipe_defer_expired(0, ui));
+            assert!(!t::wipe_defer_expired(limit - 1, ui), "ui={ui}: one tick early");
+            assert!(t::wipe_defer_expired(limit, ui), "ui={ui}: at the limit");
+            assert!(t::wipe_defer_expired(u32::MAX, ui), "ui={ui}: saturated count");
+        }
+    }
+
+    /// #981, the EVT-3D21 shape: a handler busy past the idle deadline (the
+    /// parked case) is reset at exactly the limit, never later; any tick on
+    /// which the wipe is no longer deferred restarts the count.
+    #[test]
+    fn negative_parked_handler_cannot_defer_the_wipe_past_the_limit() {
+        let _guard = t::test_lock();
+        assert!(!t::wipe_defer_step(false, false));
+        assert_eq!(t::wipe_defer_ticks(), 0);
+
+        // Parked during compute (no dialog): fires on tick 30 000.
+        for i in 1..t::WIPE_DEFER_LIMIT_TICKS {
+            assert!(!t::wipe_defer_step(true, false), "fired early at tick {i}");
+        }
+        assert!(t::wipe_defer_step(true, false), "must fire at the limit");
+        assert!(t::wipe_defer_step(true, false), "and keep firing after it");
+
+        // The condition dropping (handler returned, or device locked)
+        // restarts the count, so a later legitimate straddle gets the full
+        // window again.
+        assert!(!t::wipe_defer_step(false, false));
+        assert_eq!(t::wipe_defer_ticks(), 0);
+
+        // Parked inside a dialog: fires after the short UI limit.
+        for i in 1..t::WIPE_DEFER_UI_LIMIT_TICKS {
+            assert!(!t::wipe_defer_step(true, true), "UI: fired early at tick {i}");
+        }
+        assert!(t::wipe_defer_step(true, true), "UI: must fire at the limit");
+        assert!(!t::wipe_defer_step(false, true));
+
+        // Ticks counted without a dialog still count when the dialog guard
+        // appears: the bound is on total deferral, not per UI state.
+        for _ in 0..(t::WIPE_DEFER_UI_LIMIT_TICKS - 1) {
+            assert!(!t::wipe_defer_step(true, false));
+        }
+        assert!(t::wipe_defer_step(true, true));
+        assert!(!t::wipe_defer_step(false, false));
+        assert_eq!(t::wipe_defer_ticks(), 0);
+    }
 }
 
 mod timeout_source_text {

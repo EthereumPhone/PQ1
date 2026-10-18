@@ -405,6 +405,18 @@ mod stm32 {
     const SECCFGR3_RNG_BIT:  u32 = 1 << 13;
     const SECCFGR3_PKA_BIT:  u32 = 1 << 14;
     const SECCFGR3_SAES_BIT: u32 = 1 << 15;
+    // The three TZSC-attributable bus MASTERS on U575/585 (RM0456 Table 1,
+    // p.129; bit positions from the STM32U585 SVD — the RM text swaps the two
+    // SDMMC labels on p.210/p.218). A master made secure-only in TZSC "issues
+    // secure transactions" (RM0456 p.158), so only secure code can program it,
+    // and its RCC enable/reset bits become secure with it (§11.5.1). Nothing on
+    // either board uses them (no DMA2D/SDMMC code anywhere in the tree), but
+    // left NS each one is a DMA engine the non-secure world could point at the
+    // OTP and UID, which no flash or MPC option protects (RM0456 Table 71,
+    // p.327: OTP is NS-readable by design). #982.
+    const SECCFGR3_DMA2D_BIT: u32 = 1 << 5;
+    const SECCFGR3_SDMMC1_BIT: u32 = 1 << 17;
+    const SECCFGR3_SDMMC2_BIT: u32 = 1 << 18;
 
     /// Unconditional post-write readback verifier (finding F6).
     ///
@@ -475,9 +487,13 @@ mod stm32 {
         //     covers them. (SPI1 is now
         //     secured above; SPI2 stays NS on the non-LCD Tropic bench build)
         //
-        // Other peripherals (SDMMC, OCTOSPI, FDCAN, etc.) keep their
-        // NS reset default; we don't currently use them from the
-        // secure side, and they're irrelevant to the threat model.
+        // Bus MASTERS are secured whether or not anything uses them (#982):
+        //   - SECCFGR3: DMA2D, SDMMC1, SDMMC2 (the TZSC-attributable masters)
+        //   - GPDMA1 / LPDMA1 are not TZSC peripherals; every channel is made
+        //     secure + privileged and locked by `secure_dma_masters()` below.
+        // Other peripherals (OCTOSPI, FDCAN, etc.) keep their NS reset
+        // default; they are slaves only, we don't use them from the secure
+        // side, and they're irrelevant to the threat model.
         //
         // RCC, PWR, TAMP, RTC and EXTI are NOT TZSC peripherals: each
         // carries its own `*_SECCFGR`. They are secured separately, by
@@ -561,15 +577,20 @@ mod stm32 {
             SECCFGR2_SPI1_BIT == 1 << 1,
             "TZSC_SECCFGR2 shipping image drifted (SPI1 = the trusted-display bus)"
         );
-        const SECCFGR3_IMAGE: u32 = SECCFGR3_AES_BIT
+        const SECCFGR3_IMAGE: u32 = SECCFGR3_DMA2D_BIT
+            | SECCFGR3_AES_BIT
             | SECCFGR3_HASH_BIT
             | SECCFGR3_RNG_BIT
             | SECCFGR3_PKA_BIT
-            | SECCFGR3_SAES_BIT;
+            | SECCFGR3_SAES_BIT
+            | SECCFGR3_SDMMC1_BIT
+            | SECCFGR3_SDMMC2_BIT;
         const _: () = assert!(
-            SECCFGR3_IMAGE == (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15),
-            "TZSC_SECCFGR3 image drifted — AES/HASH/RNG/PKA/SAES secure, OTG stays NS. \
-             These are 5 of the 7 peripherals gtzc-enforcement-hw covers."
+            SECCFGR3_IMAGE
+                == (1 << 5) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18),
+            "TZSC_SECCFGR3 image drifted — DMA2D/SDMMC1/SDMMC2 (bus masters, #982) and \
+             AES/HASH/RNG/PKA/SAES secure, OTG (bit 10) stays NS. AES..SAES are 5 of the 7 \
+             peripherals gtzc-enforcement-hw covers."
         );
 
         let seccfgr1 = SECCFGR1_IMAGE;
@@ -617,7 +638,8 @@ mod stm32 {
         // that into NVIC IRQ 8, dispatched in
         // `main::DefaultHandler` to `hw::tzic::on_violation()`.
         //
-        // IER4 = 0 (sweep F8 / TZGW-4): the U585 TZSC bank stops at
+        // IER4 = GPDMA1IE only (#982; was 0 under sweep F8 / TZGW-4).
+        // The U585 TZSC bank stops at
         // SECCFGR3 — there is NO SECCFGR4 (CMSIS/PAC
         // `GTZC1_TZSC_TypeDef`: SECCFGR1..3 at 0x10..0x18; 0x1C
         // reserved). TZIC IER4 nonetheless exists and covers the
@@ -634,8 +656,21 @@ mod stm32 {
         // our SECCFGR image); if AHB3 forensics become a requirement,
         // set the matching IER4 bits — no TZSC write is possible or
         // needed for that.
-        crate::hw::tzic::configure(seccfgr1, seccfgr2, seccfgr3, 0);
+        //
+        // GPDMA1 is the exception, since #982: `secure_dma_masters()` makes
+        // every channel secure, so ANY non-secure access to a channel
+        // register is now an attempt to program a DMA engine the non-secure
+        // world does not own (NS reads of SECCFGR/PRIVCFGR/RCFGLOCKR stay
+        // legal and raise nothing — RM0456 §17.4.14, p.727). The stock NS
+        // image has no DMA code at all, so the bit cannot false-fire; under
+        // `tzic-wipe` such a probe escalates like a probe of the SE buses.
+        // LPDMA1's event is in GTZC2_TZIC (IER2 bit 5), which this branch
+        // does not configure; LPDMA1 reaches only SRAM4 and AHB3 anyway.
+        crate::hw::tzic::configure(seccfgr1, seccfgr2, seccfgr3, TZIC_IER4_GPDMA1IE);
     }
+
+    /// GTZC1_TZIC_IER4 bit 0, `GPDMA1IE` (STM32U585 SVD; RM0456 p.235).
+    const TZIC_IER4_GPDMA1IE: u32 = 1 << 0;
 
     // ---- System controllers: RCC / PWR / TAMP / RTC / EXTI (DVT1 row 3.5) ----
     //
@@ -741,6 +776,99 @@ mod stm32 {
         exti_lockr.set_bits(EXTI_LOCKR_LOCK);
         cortex_m::asm::dsb();
         verify_or_halt(exti_lockr.read() & EXTI_LOCKR_LOCK, EXTI_LOCKR_LOCK);
+    }
+
+    // ---- GPDMA1 / LPDMA1: every channel secure, privileged, locked (#982) ----
+    //
+    // The SAU filters only the CPU. On EVT-3D21 (2026-10-18, DVT row 3.9) a
+    // privileged non-secure GPDMA1 channel read the UID (0x0BFA_0700), the OTP
+    // (0x0BFA_0000, which holds the factory transport master at 0x0BFA_0080)
+    // and the system ROM verbatim. Nothing in the flash interface or the MPCs
+    // can firewall that area (RM0456 Table 71, p.327: OTP reads are allowed
+    // to secure and non-secure alike), so the fix is to leave the non-secure
+    // world no DMA engine to point at it.
+    //
+    // RM0456 §17.8.1-17.8.3 / §18.8.1-18.8.3 (p.734-736, p.803-805):
+    //   SECCFGR  @ +0x00  SECx: write secure+privileged only, EN=0 only.
+    //   PRIVCFGR @ +0x04  PRIVx: once SECx=1, writable by secure only.
+    //   RCFGLOCKR@ +0x08  LOCKx (rs): freezes SECx/PRIVx "until a global
+    //                     GPDMA reset"; only secure privileged can set it.
+    // A non-secure access to a secure channel's registers reads 0 and its
+    // writes "have no impact" (§17.4.14, p.727). Once ANY channel is secure,
+    // the controller's RCC clock-enable and reset bits become secure too
+    // (§3.5.5, p.164; §11.5.1: NS write ignored), so NS cannot pulse
+    // GPDMA1RST/LPDMA1RST to clear the lock. The non-secure image has no DMA
+    // code (`nonsecure/src` uses DMA only in the DVT probes), so it loses
+    // nothing. The secure blit channel (`hw::gpdma`, channel 0) keeps working:
+    // it is secure code programming a secure channel.
+    const GPDMA1_S: u32 = 0x5002_0000;
+    const LPDMA1_S: u32 = 0x5602_5000;
+    /// 16 GPDMA1 channels (RM0456 Table 135, p.687): SEC/PRIV/LOCK 0..15.
+    const GPDMA1_ALL_CH: u32 = 0xFFFF;
+    /// 4 LPDMA1 channels (RM0456 Table 145, p.766): SEC/PRIV/LOCK 0..3.
+    const LPDMA1_ALL_CH: u32 = 0xF;
+    const RCC_AHB1ENR_GPDMA1EN: u32 = 1 << 0; // RCC_AHB1ENR @ +0x88
+    const RCC_AHB3ENR_LPDMA1EN: u32 = 1 << 9; // RCC_AHB3ENR @ +0x94
+
+    const _: () = assert!(
+        GPDMA1_ALL_CH == (1 << 16) - 1 && LPDMA1_ALL_CH == (1 << 4) - 1,
+        "every DMA channel must be claimed: 16 on GPDMA1, 4 on LPDMA1 (#982)"
+    );
+
+    /// Make every GPDMA1 and LPDMA1 channel secure and privileged, lock that
+    /// attribution, and verify it (#982). Called from [`super::init`] after
+    /// the TZSC image and before the TZSC lock, so it precedes NS boot.
+    ///
+    /// Order per controller is SEC, then PRIV (writable by secure only once
+    /// SEC is set), then LOCK. A channel left enabled would make its SEC write
+    /// "read-only when EN=1" and the readback halts the boot (fail closed);
+    /// after any reset every channel is disabled, and the only earlier DMA user
+    /// (`hw::gpdma` under `ui-px-dma` on non-se050 builds) leaves EN=0 when
+    /// its blit completes. Both DMA clocks are left RUNNING, as the SYSCFG
+    /// clock is in [`lock_security_config`]: with the clock gated the
+    /// controller's registers are not accessible (RM0456 p.553), so the lock
+    /// state would read 0 to everyone, and the non-secure RCC alias can no
+    /// longer turn it on (the enable bit is secure now). Left on, the
+    /// attribution stays readable — NS may read SECCFGR/PRIVCFGR/RCFGLOCKR —
+    /// which is what the DVT probe (`nonsecure/src/dma_probe.rs`) checks. An
+    /// idle DMA controller's clock draw is negligible.
+    pub fn secure_dma_masters() {
+        // SAFETY: each address is a 4-byte-aligned RCC / GPDMA1 / LPDMA1
+        // register on the secure alias, owned by the single-threaded boot path.
+        let rcc_ahb1enr = unsafe { Reg32::new(RCC_S + 0x88) };
+        let rcc_ahb3enr = unsafe { Reg32::new(RCC_S + 0x94) };
+        let gp_seccfgr = unsafe { Reg32::new(GPDMA1_S + 0x00) };
+        let gp_privcfgr = unsafe { Reg32::new(GPDMA1_S + 0x04) };
+        let gp_rcfglockr = unsafe { Reg32::new(GPDMA1_S + 0x08) };
+        let lp_seccfgr = unsafe { Reg32::new(LPDMA1_S + 0x00) };
+        let lp_privcfgr = unsafe { Reg32::new(LPDMA1_S + 0x04) };
+        let lp_rcfglockr = unsafe { Reg32::new(LPDMA1_S + 0x08) };
+
+        rcc_ahb1enr.set_bits(RCC_AHB1ENR_GPDMA1EN);
+        rcc_ahb3enr.set_bits(RCC_AHB3ENR_LPDMA1EN);
+        cortex_m::asm::dsb();
+
+        gp_seccfgr.write(GPDMA1_ALL_CH);
+        gp_privcfgr.write(GPDMA1_ALL_CH);
+        lp_seccfgr.write(LPDMA1_ALL_CH);
+        lp_privcfgr.write(LPDMA1_ALL_CH);
+        cortex_m::asm::dsb();
+        // Lock only an attribution that reads back: a lock over a wrong
+        // image would freeze the hole until reset.
+        verify_or_halt(gp_seccfgr.read(), GPDMA1_ALL_CH);
+        verify_or_halt(gp_privcfgr.read(), GPDMA1_ALL_CH);
+        verify_or_halt(lp_seccfgr.read(), LPDMA1_ALL_CH);
+        verify_or_halt(lp_privcfgr.read(), LPDMA1_ALL_CH);
+
+        gp_rcfglockr.write(GPDMA1_ALL_CH);
+        lp_rcfglockr.write(LPDMA1_ALL_CH);
+        cortex_m::asm::dsb();
+        verify_or_halt(gp_rcfglockr.read(), GPDMA1_ALL_CH);
+        verify_or_halt(lp_rcfglockr.read(), LPDMA1_ALL_CH);
+        // Re-read the attribution under the lock: one faulted check above
+        // must not be the only thing standing between NS and a channel.
+        verify_or_halt(gp_seccfgr.read() & gp_privcfgr.read(), GPDMA1_ALL_CH);
+        verify_or_halt(lp_seccfgr.read() & lp_privcfgr.read(), LPDMA1_ALL_CH);
     }
 
     // ---- tz-2 (Trezor-port) lock registers ----
@@ -883,6 +1011,11 @@ pub fn init() {
     // (DVT1 row 3.5); secure them before NS can ever run.
     #[cfg(feature = "stm32u585")]
     stm32::secure_system_controllers();
+
+    // GPDMA1 / LPDMA1 have no TZSC bit; claim and lock every channel so the
+    // non-secure world has no DMA master to aim at the OTP/UID (#982).
+    #[cfg(feature = "stm32u585")]
+    stm32::secure_dma_masters();
 
     // Disable SAU while configuring.
     SAU.ctrl.write(0);

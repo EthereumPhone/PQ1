@@ -326,6 +326,84 @@ pub fn is_idle() -> bool {
     idle_for() > TIMEOUT_TICKS
 }
 
+// ---- Bounded idle-wipe deferral (#981) ----
+//
+// The SysTick idle wipe skips while a gateway handler is busy (HIGH-7: the
+// handler holds stack copies of the secrets, and zeroing the BSS copy under it
+// would leave it signing for a session the user no longer has). A healthy
+// handler reaches its own idle check point and returns within milliseconds of
+// the deadline, so the deferral is short. A non-secure exception that
+// preempts the handler and parks keeps it "busy" for as long as it likes: on
+// EVT-3D21 (2026-10-18, DVT row 13.10) that held an unlocked session 206 s
+// past the 120 s deadline. The IWDG busy cap (`hw::iwdg`) bounds that on
+// `iwdg` builds, but only through the watchdog, only after the trusted-UI
+// exception has run out, and only for as long as nothing fakes its inputs.
+// This bound is the idle wipe's own: once the deferral runs past its limit the
+// SysTick handler zeroizes and resets the core instead of waiting. A reset
+// never returns to the parked handler, so the HIGH-7 aliasing hazard does not
+// arise, and the handler's own stack frames are cleared by the reset path
+// (`zero-init-ram`, the `SRAM_RST` option bit, and the Software-reset scrub in
+// `reset_cause`).
+
+/// Deferral limit while no trusted dialog is waiting: the same ~30 s as the
+/// IWDG busy cap, above any legitimate non-interactive handler that can
+/// straddle the idle deadline (the longest is one cold first sign, 12-17 s on
+/// pq1, and it can only straddle if it began without a button press).
+pub const WIPE_DEFER_LIMIT_TICKS: u32 = 30_000;
+
+/// Deferral limit while a trusted dialog is (supposedly) waiting for a button.
+/// A dialog that is actually running polls [`is_idle`] in its wait loop and
+/// returns as soon as the deadline passes, so one still "waiting" 5 s later has
+/// been preempted or is wedged. Without this shorter limit a dialog parked by
+/// a non-secure exception would hold the wipe off for the full 30 s above,
+/// after the 120 s that the IWDG's trusted-UI exception already allows.
+pub const WIPE_DEFER_UI_LIMIT_TICKS: u32 = 5_000;
+
+const _: () = assert!(
+    WIPE_DEFER_UI_LIMIT_TICKS < WIPE_DEFER_LIMIT_TICKS && WIPE_DEFER_LIMIT_TICKS <= 30_000,
+    "the idle-wipe deferral bound must stay short (#981)"
+);
+
+/// Consecutive SysTicks on which the idle wipe was due but deferred because a
+/// handler was busy. Sole writer: the non-reentrant SysTick handler. Read over
+/// SWD by `tools/dvt/idle_hold.py`.
+static WIPE_DEFER_TICKS: AtomicU32 = AtomicU32::new(0);
+
+/// Pure limit test, separated for the host tests.
+#[inline]
+#[must_use]
+pub fn wipe_defer_expired(deferred_ticks: u32, ui_waiting: bool) -> bool {
+    let limit = if ui_waiting { WIPE_DEFER_UI_LIMIT_TICKS } else { WIPE_DEFER_LIMIT_TICKS };
+    deferred_ticks >= limit
+}
+
+/// One SysTick of the deferral bound. `deferred` is "the idle wipe is due and
+/// a busy handler is the only thing stopping it" (`is_idle() &&
+/// handler_is_busy() && !is_definitely_locked()`); any tick on which it is
+/// false restarts the count. Returns `true` once the deferral has run past its
+/// limit: the caller must then zeroize and reset, and never return to the
+/// handler.
+///
+/// Evaluated every tick on purpose, like the wipe itself: suppressing the
+/// reset means faulting every tick of the window, not one.
+#[inline(never)]
+pub fn wipe_defer_step(deferred: bool, ui_waiting: bool) -> bool {
+    if !deferred {
+        WIPE_DEFER_TICKS.store(0, Ordering::SeqCst);
+        return false;
+    }
+    let n = WIPE_DEFER_TICKS.load(Ordering::SeqCst).saturating_add(1);
+    WIPE_DEFER_TICKS.store(n, Ordering::SeqCst);
+    wipe_defer_expired(n, ui_waiting)
+}
+
+/// Current deferral count (host tests only; on silicon read the static over
+/// SWD).
+#[cfg(test)]
+pub fn wipe_defer_ticks() -> u32 {
+    WIPE_DEFER_TICKS.load(Ordering::SeqCst)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

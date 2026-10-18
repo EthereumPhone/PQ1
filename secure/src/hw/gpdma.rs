@@ -167,6 +167,14 @@ pub enum DmaErr {
 /// writable only from secure privileged code, and a secure write to `DSEC`/
 /// `SSEC` is *ignored* while `SECCFGR.SECx` is 0 (RM0456 §17.8.10). Getting
 /// this backwards yields a working channel that performs NON-SECURE accesses.
+///
+/// Since #982 `sau::stm32::secure_dma_masters` makes EVERY channel secure and
+/// privileged and locks that (`RCFGLOCKR`), before NS boot. On builds whose
+/// `ui::init` runs after SAU (every se050 build, i.e. every ship profile) the
+/// two `set_bits` below therefore land on bits that are already set and
+/// locked, and are harmless no-ops. They stay for the non-se050 `ui-px-dma`
+/// builds whose `ui::init` runs BEFORE SAU, where they are what makes the
+/// first blits secure.
 pub fn init() {
     // AHB1ENR has a non-zero reset value, so this must be read-modify-write.
     REG.rcc_ahb1enr.set_bits(1 << 0); // GPDMA1EN

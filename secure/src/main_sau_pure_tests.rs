@@ -827,15 +827,21 @@ fn negative_stm32_gtzc_seccfgr3_protects_full_crypto_block() {
     // compile-time pin (work-todo C3, 2026-07-17) rather than an inline
     // expression — strictly stronger, because the `const _: () = assert!(..)`
     // below fails the BUILD, not just this test, if the composition drifts.
-    assert!(SAU_SRC.contains("const SECCFGR3_IMAGE: u32 = SECCFGR3_AES_BIT"));
+    // Since #982 the image also carries the three TZSC bus masters
+    // (DMA2D first, SDMMC1/2 last); the crypto five stay in the middle.
+    assert!(SAU_SRC.contains("const SECCFGR3_IMAGE: u32 = SECCFGR3_DMA2D_BIT"));
+    assert!(SAU_SRC.contains("| SECCFGR3_AES_BIT"));
     assert!(SAU_SRC.contains("| SECCFGR3_HASH_BIT"));
     assert!(SAU_SRC.contains("| SECCFGR3_RNG_BIT"));
     assert!(SAU_SRC.contains("| SECCFGR3_PKA_BIT"));
-    assert!(SAU_SRC.contains("| SECCFGR3_SAES_BIT;"));
+    assert!(SAU_SRC.contains("| SECCFGR3_SAES_BIT"));
     assert!(SAU_SRC.contains("let seccfgr3 = SECCFGR3_IMAGE;"));
     assert!(
-        SAU_SRC.contains("SECCFGR3_IMAGE == (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15)"),
-        "the SECCFGR3 image must stay compile-time-pinned to the five crypto peripherals"
+        SAU_SRC.contains(
+            "== (1 << 5) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18),"
+        ),
+        "the SECCFGR3 image must stay compile-time-pinned to the five crypto peripherals \
+         plus the DMA2D/SDMMC1/SDMMC2 masters (#982)"
     );
 }
 
@@ -1073,9 +1079,12 @@ fn negative_tzic_is_armed_with_same_masks_as_tzsc() {
     // blocks but nobody notices" — fatal for the SCA validation
     // path that's the whole point of the GTZC config.
     assert!(
-        SAU_SRC.contains("crate::hw::tzic::configure(seccfgr1, seccfgr2, seccfgr3, 0);"),
-        "TZIC must be armed with the same SECCFGR masks as TZSC"
+        SAU_SRC.contains(
+            "crate::hw::tzic::configure(seccfgr1, seccfgr2, seccfgr3, TZIC_IER4_GPDMA1IE);"
+        ),
+        "TZIC must be armed with the same SECCFGR masks as TZSC, plus GPDMA1 in IER4 (#982)"
     );
+    assert!(SAU_SRC.contains("const TZIC_IER4_GPDMA1IE: u32 = 1 << 0;"));
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -1640,6 +1649,92 @@ fn negative_iwdg_ui_wait_never_disables_the_noninteractive_busy_bound() {
     );
 }
 
+/// #981 (EVT-3D21, DVT row 13.10): a non-secure exception that preempts a
+/// gateway handler, parks and bumps the registered heartbeat held the IWDG
+/// and the idle wipe off for 206 s, because the `hb != last` branch ran
+/// BEFORE the busy cap and reset `BUSY_TICKS`. While a handler is busy the
+/// heartbeat is not progress: the busy branch must be classified first, and
+/// nothing in it may reset `BUSY_TICKS` or advance `LAST_HEARTBEAT`.
+#[test]
+fn negative_iwdg_heartbeat_is_not_progress_while_a_handler_is_busy() {
+    let fn_start = IWDG_SRC
+        .find("pub fn systick_watch_and_kick(")
+        .expect("IWDG progress function missing");
+    let fn_body = &IWDG_SRC[fn_start..];
+    let fn_body = &fn_body[..fn_body.find("\n}\n").expect("watcher must close")];
+    let busy_pos = fn_body
+        .find("} else if handler_busy {")
+        .expect("busy branch missing");
+    let hb_pos = fn_body
+        .find("} else if hb != last {")
+        .expect("heartbeat-progress branch must be an `else if` after the busy branch");
+    assert!(
+        busy_pos < hb_pos,
+        "the busy cap must be classified before NS heartbeat progress (#981)"
+    );
+    assert!(
+        !fn_body[..busy_pos].contains("hb != last"),
+        "no heartbeat test may precede the busy branch (#981)"
+    );
+    let busy_branch = &fn_body[busy_pos..hb_pos];
+    for forbidden in [
+        "addr_of_mut!(BUSY_TICKS), 0",
+        "addr_of_mut!(LAST_HEARTBEAT)",
+    ] {
+        assert!(
+            !busy_branch.contains(forbidden),
+            "the busy branch must not contain `{forbidden}`: a foreign heartbeat \
+             bump would again reset the busy cap (#981)"
+        );
+    }
+    assert!(
+        busy_branch.contains("addr_of_mut!(HB_WHILE_BUSY)"),
+        "the busy branch must count heartbeat changes as evidence (#981)"
+    );
+    // Heartbeat progress still resets the counters once no handler is busy.
+    let hb_branch = &fn_body[hb_pos..];
+    assert!(hb_branch.contains("addr_of_mut!(LAST_HEARTBEAT), hb"));
+    assert!(hb_branch.contains("addr_of_mut!(BUSY_TICKS), 0"));
+}
+
+/// #981 Layer B: the SysTick idle-wipe deferral is bounded independently of
+/// the IWDG. Pinned: the step runs every tick with the wipe's own predicate
+/// (busy instead of not-busy), and on expiry the ISR zeroizes BEFORE the
+/// reset and never takes the in-place wipe path under a busy handler.
+#[test]
+fn negative_systick_idle_wipe_deferral_is_bounded_by_a_reset() {
+    let systick_start = MAIN_SRC.find("fn SysTick()").expect("SysTick must exist");
+    let systick = &MAIN_SRC[systick_start..];
+    let body = &systick[..systick
+        .find("\n/// Catch-all device-IRQ handler.")
+        .expect("SysTick must close before DefaultHandler doc")];
+    let wipe_at = body
+        .find("if timeout::is_idle() && !nsc::handler_is_busy() && !nsc::is_definitely_locked() {")
+        .expect("idle wipe gate");
+    let deferred_at = body
+        .find("timeout::is_idle() && nsc::handler_is_busy() && !nsc::is_definitely_locked();")
+        .expect("the deferral predicate must be the wipe predicate with the busy guard inverted");
+    assert!(wipe_at < deferred_at, "deferral bound follows the wipe");
+    let step_at = body
+        .find("if timeout::wipe_defer_step(wipe_deferred, timeout::trusted_ui_is_waiting()) {")
+        .expect("deferral step must run every tick, with the trusted-UI state");
+    let tail = &body[step_at..];
+    let zero = tail.find("nsc::zeroize_sensitive_state();").expect("zeroize on expiry");
+    let barrier = tail.find("crate::fi::zeroize_barrier();").expect("barrier on expiry");
+    let reset = tail
+        .find("cortex_m::peripheral::SCB::sys_reset();")
+        .expect("expiry must reset, never return to the parked handler");
+    assert!(zero < barrier && barrier < reset, "zeroize, barrier, then reset");
+    assert!(
+        !tail[..reset].contains("trigger_intrusion_wipe"),
+        "a late idle timeout is not a tamper event: no destructive SE wipe"
+    );
+    assert!(
+        !tail[..reset].contains("PENDSVSET"),
+        "the deferral path must not resume the in-place wipe + re-unlock flow"
+    );
+}
+
 #[test]
 fn negative_systick_idle_wipe_pends_pendsv_for_reunlock() {
     // The idle-wipe ISR is too short to drive the PIN UI; it pends
@@ -2128,6 +2223,67 @@ fn negative_system_controllers_secured_rcc_pwr_tamp_rtc_exti() {
         .expect("init() must call stm32::secure_system_controllers() (DVT1 row 3.5)");
     let lock = init.find("stm32::lock_security_config();").expect("lock call");
     assert!(gtzc < sys && sys < lock);
+}
+
+/// #982 (EVT-3D21, DVT row 3.9): a privileged non-secure GPDMA1 channel read
+/// the OTP, the UID and the system ROM verbatim; the SAU filters only the CPU
+/// and RM0456 Table 71 gives the OTP no secure-only option. Every DMA master
+/// must therefore be denied to the non-secure world before it boots:
+/// GPDMA1 (16 channels) and LPDMA1 (4) through their own SECCFGR/PRIVCFGR,
+/// locked by RCFGLOCKR and read back; DMA2D/SDMMC1/SDMMC2 through TZSC.
+#[test]
+fn negative_every_dma_master_is_secure_and_locked_before_ns_boot() {
+    for needle in [
+        "const GPDMA1_S: u32 = 0x5002_0000;",
+        "const LPDMA1_S: u32 = 0x5602_5000;",
+        "const GPDMA1_ALL_CH: u32 = 0xFFFF;",
+        "const LPDMA1_ALL_CH: u32 = 0xF;",
+        "const RCC_AHB1ENR_GPDMA1EN: u32 = 1 << 0;",
+        "const RCC_AHB3ENR_LPDMA1EN: u32 = 1 << 9;",
+        "Reg32::new(GPDMA1_S + 0x00)",
+        "Reg32::new(GPDMA1_S + 0x04)",
+        "Reg32::new(GPDMA1_S + 0x08)",
+        "Reg32::new(LPDMA1_S + 0x00)",
+        "Reg32::new(LPDMA1_S + 0x04)",
+        "Reg32::new(LPDMA1_S + 0x08)",
+        "verify_or_halt(gp_rcfglockr.read(), GPDMA1_ALL_CH);",
+        "verify_or_halt(lp_rcfglockr.read(), LPDMA1_ALL_CH);",
+        "verify_or_halt(gp_seccfgr.read() & gp_privcfgr.read(), GPDMA1_ALL_CH);",
+        "verify_or_halt(lp_seccfgr.read() & lp_privcfgr.read(), LPDMA1_ALL_CH);",
+        // TZSC-attributable masters (SVD bit positions).
+        "const SECCFGR3_DMA2D_BIT: u32 = 1 << 5;",
+        "const SECCFGR3_SDMMC1_BIT: u32 = 1 << 17;",
+        "const SECCFGR3_SDMMC2_BIT: u32 = 1 << 18;",
+        "| SECCFGR3_SDMMC1_BIT",
+        "| SECCFGR3_SDMMC2_BIT;",
+    ] {
+        assert!(SAU_SRC.contains(needle), "sau.rs must contain `{needle}`");
+    }
+    // OTG FS (SECCFGR3 bit 10) must stay non-secure: USB is the NS transport.
+    assert!(!SAU_SRC.contains("SECCFGR3_OTG"), "OTG FS must not be secured");
+
+    let body = fn_body(SAU_SRC, "pub fn secure_dma_masters()", "\n    }\n");
+    let pos = |n: &str| body.find(n).unwrap_or_else(|| panic!("missing `{n}`"));
+    // Clocks first (no register access without them), SEC before PRIV
+    // (PRIV is secure-writable only once SEC is set), attribution verified
+    // before the lock, lock verified after.
+    assert!(pos("rcc_ahb1enr.set_bits(RCC_AHB1ENR_GPDMA1EN);") < pos("gp_seccfgr.write("));
+    assert!(pos("rcc_ahb3enr.set_bits(RCC_AHB3ENR_LPDMA1EN);") < pos("lp_seccfgr.write("));
+    assert!(pos("gp_seccfgr.write(GPDMA1_ALL_CH);") < pos("gp_privcfgr.write(GPDMA1_ALL_CH);"));
+    assert!(pos("lp_seccfgr.write(LPDMA1_ALL_CH);") < pos("lp_privcfgr.write(LPDMA1_ALL_CH);"));
+    assert!(pos("verify_or_halt(gp_privcfgr.read(), GPDMA1_ALL_CH);") < pos("gp_rcfglockr.write("));
+    assert!(pos("verify_or_halt(lp_privcfgr.read(), LPDMA1_ALL_CH);") < pos("lp_rcfglockr.write("));
+    assert!(pos("gp_rcfglockr.write(GPDMA1_ALL_CH);") < pos("verify_or_halt(gp_rcfglockr.read()"));
+    assert!(pos("lp_rcfglockr.write(LPDMA1_ALL_CH);") < pos("verify_or_halt(lp_rcfglockr.read()"));
+
+    // init(): after the system controllers, before the TZSC/SAU lock.
+    let init = fn_body(SAU_SRC, "pub fn init()", "\n}\n");
+    let sys = init.find("stm32::secure_system_controllers();").expect("sys call");
+    let dma = init
+        .find("stm32::secure_dma_masters();")
+        .expect("init() must call stm32::secure_dma_masters() (#982)");
+    let lock = init.find("stm32::lock_security_config();").expect("lock call");
+    assert!(sys < dma && dma < lock);
 }
 
 #[test]

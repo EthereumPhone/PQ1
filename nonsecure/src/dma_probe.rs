@@ -14,8 +14,19 @@
 //! changes. The NS-to-NS controls complete (`TCF`) with the source bytes.
 //!
 //! The secure image needs nothing from this runner (no gateway call beyond
-//! `is_unlocked`). Channel 5 is used so the secure pixel blit (channel 0,
-//! `ui-px` only) is never touched.
+//! `is_unlocked`, and `tzic_status`, which needs an `e2e-test` secure image).
+//! Channel 5 is used so the secure pixel blit (channel 0, `ui-px` only) is
+//! never touched.
+//!
+//! Since #982 the secure boot makes every GPDMA1/LPDMA1 channel secure and
+//! privileged and locks that. Before the passes this runner therefore also
+//! tries to UNDO the lock the only way the non-secure world could: pulsing
+//! `GPDMA1RST`/`LPDMA1RST` and toggling the clock enables through the
+//! non-secure RCC alias (RM0456 §3.5.5 says those bits turn secure once a
+//! channel is). It then records the attribution registers as NS sees them
+//! (they stay NS-readable, §17.8.1) and the TZIC violation count before and
+//! after the passes. Against a fixed image every case must move nothing:
+//! `tools/dvt/dma_probe.py --expect-locked`.
 
 #![allow(static_mut_refs)]
 
@@ -23,6 +34,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 unsafe extern "C" {
     fn nsc_is_unlocked() -> u32;
+    fn nsc_tzic_status() -> u32;
 }
 
 /// GPDMA1, non-secure alias.
@@ -41,6 +53,16 @@ const CLLR: u32 = GPDMA1_NS + 0xCC + 0x80 * CH;
 const RCC_AHB1ENR_NS: u32 = 0x4602_0C00 + 0x088;
 /// `GPDMA_PRIVCFGR`: bit `CH` makes the channel's bus accesses privileged.
 const PRIVCFGR: u32 = GPDMA1_NS + 0x04;
+const SECCFGR: u32 = GPDMA1_NS + 0x00;
+const RCFGLOCKR: u32 = GPDMA1_NS + 0x08;
+/// LPDMA1, non-secure alias, and its attribution registers.
+const LPDMA1_NS: u32 = 0x4602_5000;
+/// RCC, non-secure alias: AHB1RSTR (GPDMA1RST bit 0), AHB3RSTR (LPDMA1RST
+/// bit 9), AHB1ENR (GPDMA1EN bit 0), AHB3ENR (LPDMA1EN bit 9).
+const RCC_NS: u32 = 0x4602_0C00;
+const RCC_AHB1RSTR_NS: u32 = RCC_NS + 0x060;
+const RCC_AHB3RSTR_NS: u32 = RCC_NS + 0x06C;
+const RCC_AHB3ENR_NS: u32 = RCC_NS + 0x094;
 
 /// Word source and destination, both incrementing (SDW_LOG2 = DDW_LOG2 = 2,
 /// SINC, DINC). SSEC/DSEC stay 0: a non-secure channel cannot set them.
@@ -89,12 +111,15 @@ const CASES: [(u32, u32); 14] = [
 #[used]
 #[no_mangle]
 pub static mut DMA_PROBE_RES: [[u32; 6]; 2 * CASES.len()] = [[0; 6]; 2 * CASES.len()];
-/// `[magic 0xD3A9_0309, cases done, RCC_AHB1ENR read-back after the NS set,
-/// unlocked, GPDMA_PRIVCFGR read-back after the NS set]`.
+/// `[0 magic 0xD3A9_0982, 1 cases done, 2 RCC_AHB1ENR read-back after the NS
+/// set, 3 unlocked, 4 GPDMA_PRIVCFGR read-back after the NS set,
+/// 5..7 GPDMA1 SECCFGR/PRIVCFGR/RCFGLOCKR and 8..10 LPDMA1 SECCFGR/PRIVCFGR/
+/// RCFGLOCKR as read by NS AFTER the RCC reset/clock attempt, 11/12 TZIC
+/// violation count before/after the passes, 13 GPDMA1 SECCFGR BEFORE the RCC
+/// attempt]`.
 #[used]
 #[no_mangle]
-pub static DMA_PROBE_HDR: [AtomicU32; 5] =
-    [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
+pub static DMA_PROBE_HDR: [AtomicU32; 14] = [const { AtomicU32::new(0) }; 14];
 
 fn rd(a: u32) -> u32 {
     // SAFETY: a GPDMA1/RCC non-secure register address from the constants above.
@@ -152,7 +177,31 @@ fn main() -> ! {
     wr(RCC_AHB1ENR_NS, rd(RCC_AHB1ENR_NS) | 1);
     cortex_m::asm::dsb();
     DMA_PROBE_HDR[2].store(rd(RCC_AHB1ENR_NS), Ordering::Relaxed);
-    DMA_PROBE_HDR[0].store(0xD3A9_0309, Ordering::Relaxed);
+    DMA_PROBE_HDR[13].store(rd(SECCFGR), Ordering::Relaxed);
+
+    // #982: try to clear the lock from the non-secure side. A controller reset
+    // is the only thing that clears RCFGLOCKR; once a channel is secure the
+    // RCC bits are secure and these writes must be ignored.
+    for (rstr, bit) in [(RCC_AHB1RSTR_NS, 1u32 << 0), (RCC_AHB3RSTR_NS, 1 << 9)] {
+        wr(rstr, rd(rstr) | bit);
+        cortex_m::asm::dsb();
+        wr(rstr, rd(rstr) & !bit);
+        cortex_m::asm::dsb();
+    }
+    wr(RCC_AHB1ENR_NS, rd(RCC_AHB1ENR_NS) & !1);
+    cortex_m::asm::dsb();
+    wr(RCC_AHB1ENR_NS, rd(RCC_AHB1ENR_NS) | 1);
+    wr(RCC_AHB3ENR_NS, rd(RCC_AHB3ENR_NS) | 1 << 9);
+    cortex_m::asm::dsb();
+    for (i, a) in [SECCFGR, PRIVCFGR, RCFGLOCKR, LPDMA1_NS, LPDMA1_NS + 0x04, LPDMA1_NS + 0x08]
+        .into_iter()
+        .enumerate()
+    {
+        DMA_PROBE_HDR[5 + i].store(rd(a), Ordering::Relaxed);
+    }
+    // SAFETY: plain query veneer (e2e-test secure images).
+    DMA_PROBE_HDR[11].store(unsafe { nsc_tzic_status() }, Ordering::Relaxed);
+    DMA_PROBE_HDR[0].store(0xD3A9_0982, Ordering::Relaxed);
     for pass in 0..2 {
         if pass == 1 {
             wr(PRIVCFGR, rd(PRIVCFGR) | 1 << CH);
@@ -164,6 +213,10 @@ fn main() -> ! {
             let r = run_case(s, d);
             // SAFETY: single-threaded; the host reads below the done count.
             unsafe { DMA_PROBE_RES[n] = r };
+            if n + 1 == 2 * CASES.len() {
+                // SAFETY: as above.
+                DMA_PROBE_HDR[12].store(unsafe { nsc_tzic_status() }, Ordering::Relaxed);
+            }
             DMA_PROBE_HDR[1].store(n as u32 + 1, Ordering::Release);
         }
     }

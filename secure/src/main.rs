@@ -4899,6 +4899,27 @@ fn SysTick() {
         ARCH.icsr.write(1 << 28); // PENDSVSET
     }
 
+    // #981: the deferral above is bounded. A busy handler may hold the wipe
+    // off only until it reaches its own idle check point; one that has not
+    // returned `WIPE_DEFER_*_LIMIT_TICKS` after the deadline was preempted by
+    // a non-secure exception that parked (EVT-3D21, DVT row 13.10: 206 s
+    // unlocked) or is wedged. Then zeroize and RESET rather than wipe under
+    // it: the core never returns to the handler, so its stack copies cannot
+    // be used against the zeroed state (HIGH-7), and the reset path clears
+    // those frames. Independent of the `iwdg` feature and of anything the
+    // non-secure world can write. Same `&&` order as the wipe, so before the
+    // deadline this costs one comparison per tick (#802).
+    let wipe_deferred =
+        timeout::is_idle() && nsc::handler_is_busy() && !nsc::is_definitely_locked();
+    if timeout::wipe_defer_step(wipe_deferred, timeout::trusted_ui_is_waiting()) {
+        nsc::zeroize_sensitive_state();
+        stack_scrub::scrub_dead_stack();
+        crate::fi::zeroize_barrier();
+        // Full system reset (AIRCR.SYSRESETREQ) — diverges. NOT the SE wipe:
+        // this is the idle timeout firing late, not a tamper event.
+        cortex_m::peripheral::SCB::sys_reset();
+    }
+
     // QEMU-only: drain the shared-memory mailbox. On STM32U585 the
     // gateway is driven synchronously by CMSE veneers, so SysTick only
     // services the timeout/idle-wipe bookkeeping above.

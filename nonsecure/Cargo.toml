@@ -84,8 +84,11 @@ gtzc-ship = ["e2e-test", "stm32u585"]
 nested-gate-expect-admit = ["nested-gate-test"]
 # DVT row 13.10: a parked NS SysTick holds an outer sign open past the 120 s
 # idle timeout while bumping the IWDG heartbeat. Results over SWD
-# (`tools/dvt/idle_hold.py`). Needs an e2e-test + mock-se + iwdg secure image.
-idle-hold-test = ["nested-gate-test", "iwdg"]
+# (`tools/dvt/idle_hold.py`). Needs an e2e-test + mock-se secure image. Add
+# `iwdg` (on both sides) to register the heartbeat; `tools/dvt/idle_hold.sh`
+# does, except under SFEAT_NO_IWDG=1, which exercises the #981 idle-wipe
+# deferral bound with no watchdog at all.
+idle-hold-test = ["nested-gate-test"]
 # 13.10 control: the parked handler does not bump the heartbeat, so the
 # IWDG busy cap (~30 s) must reset the device.
 idle-hold-nobump = ["idle-hold-test"]

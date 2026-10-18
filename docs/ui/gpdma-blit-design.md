@@ -88,6 +88,12 @@ Two options, and the obvious one is wrong:
    because of a real erratum we already hit once.
 4. **Security.** Set the channel secure in GPDMA `SECCFGR` (and privileged in
    `PRIVCFGR`). No GTZC/TZSC change is possible or needed — see `sau.rs`.
+   **UPDATE 2026-10-18 (#982):** secure boot now claims and LOCKS all 16
+   channels (`sau::stm32::secure_dma_masters`) before NS runs, because a
+   non-secure channel could read the OTP and UID. `hw::gpdma::init`'s own
+   `SECCFGR`/`PRIVCFGR` writes are therefore no-ops on se050 builds and only
+   matter on non-se050 builds whose `ui::init` runs before SAU. The blit is
+   unaffected: it is secure code driving a secure channel.
 5. **The overlay changes meaning.** Once the blit is asynchronous, the `blit`
    field of `<render>/<blit>/<period>` measures *wait* time, not work. Only
    `period` stays comparable across builds. Say so wherever numbers are quoted.

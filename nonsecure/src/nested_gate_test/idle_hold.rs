@@ -169,7 +169,12 @@ fn main() -> ! {
     rep(7, u32::from(BUMP));
     rep(11, u32::MAX);
     rep(13, boots);
+    // Without `iwdg` the secure image has no heartbeat veneer; 0xFFFF_FFFF
+    // records "not registered" (the #981 no-watchdog variant).
+    #[cfg(feature = "iwdg")]
     rep(8, nsc_api::register_heartbeat(core::ptr::addr_of!(HB) as u32));
+    #[cfg(not(feature = "iwdg"))]
+    rep(8, u32::MAX);
     rep(5, u32::from(nsc_api::is_unlocked()));
 
     let mut sender = [0u8; 20];

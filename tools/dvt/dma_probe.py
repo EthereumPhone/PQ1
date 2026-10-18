@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """Read the `dma-probe` NS fixture's results over SWD (DVT row 3.9).
 
-    tools/dvt/dma_probe.py --ns-elf <NS ELF> [--out results.json]
+    tools/dvt/dma_probe.py --ns-elf <NS ELF> [--expect-locked] [--out results.json]
 
-PASS when both NS->NS controls complete with the source pattern, every case
-that touches secure memory ends in a transfer error or leaves the sentinel /
-zeros in the destination, and neither write target holds the source pattern.
+Default (a pre-#982 secure image): PASS when both NS->NS controls complete with
+the source pattern, every case that touches secure memory ends in a transfer
+error or leaves the sentinel / zeros in the destination, and neither write
+target holds the source pattern. The OTP/UID cases are reported, not judged.
+
+--expect-locked (#982, a secure image that claims every DMA channel): PASS only
+when the GPDMA1/LPDMA1 attribution registers read all-secure, all-privileged
+and all-locked to the non-secure world AFTER its RCC reset/clock attempt,
+EVERY case in both passes (controls, OTP and UID included) leaves the
+destination sentinel untouched with no completion flag, neither write target
+holds the source pattern, and the TZIC counted the non-secure channel writes.
 """
 import argparse, json, subprocess, sys, time
 
@@ -46,24 +54,45 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ns-elf", required=True)
     ap.add_argument("--out")
+    ap.add_argument("--expect-locked", action="store_true",
+                    help="judge against a #982-fixed secure image (every channel secure+locked)")
     ap.add_argument("--chip", default="STM32U585CIUx")
     a = ap.parse_args()
     s = syms(a.ns_elf)
-    for _ in range(60):
-        hdr = rw(a.chip, s["DMA_PROBE_HDR"], 5)
-        if hdr[0] == 0xD3A90309 and hdr[1] == 2 * len(NAMES):
+    for _ in range(120):
+        hdr = rw(a.chip, s["DMA_PROBE_HDR"], 14)
+        if hdr[0] == 0xD3A90982 and hdr[1] == 2 * len(NAMES):
             break
         time.sleep(1)
     print(f"hdr magic={hdr[0]:#x} done={hdr[1]} RCC_AHB1ENR(NS read)={hdr[2]:#010x} unlocked={hdr[3]} PRIVCFGR={hdr[4]:#x}")
+    print(f"NS view after RCC reset/clock attempt: GPDMA1 SEC={hdr[5]:#06x} PRIV={hdr[6]:#06x} LOCK={hdr[7]:#06x}"
+          f"  LPDMA1 SEC={hdr[8]:#x} PRIV={hdr[9]:#x} LOCK={hdr[10]:#x}  (GPDMA1 SEC before attempt={hdr[13]:#06x})")
+    print(f"TZIC violations: before passes={hdr[11]} after={hdr[12]}")
     res = rw(a.chip, s["DMA_PROBE_RES"], 12 * len(NAMES))
     rows, ok = [], hdr[1] == 2 * len(NAMES)
+    if a.expect_locked:
+        lock_ok = (hdr[5:8] == [0xFFFF] * 3 and hdr[8:11] == [0xF] * 3 and hdr[13] == 0xFFFF)
+        tzic_ok = hdr[12] > hdr[11]
+        print(f"attribution locked and survives the NS RCC attempt: {'ok' if lock_ok else 'UNEXPECTED'}")
+        print(f"TZIC counted the NS channel writes: {'ok' if tzic_ok else 'UNEXPECTED'}")
+        ok &= lock_ok and tzic_ok
     for n in range(2 * len(NAMES)):
         i, name = n % len(NAMES), ("PRIV " if n >= len(NAMES) else "unpr ") + NAMES[n % len(NAMES)]
         if i == 0:
             print("--- pass:", "privileged channel" if n else "unprivileged channel (reset state)")
         csr, d, spins = res[6 * n], res[6 * n + 1:6 * n + 5], res[6 * n + 5]
         err = bool(csr & 0x1C00)
-        if i in (0, 11):
+        if a.expect_locked:
+            # A secure channel's registers read 0 to NS and its writes are
+            # ignored: no case may complete or touch its destination.
+            if i in WRITE_TARGETS:
+                d = rw(a.chip, WRITE_TARGETS[i], 4)
+                good = d != SRC
+            else:
+                good = not (csr >> 8 & 1) and d == [SENT] * 4
+                if i in OTP_AREA:
+                    name += "  [" + ("blocked" if good else "READ: NOT BLOCKED") + "]"
+        elif i in (0, 11):
             # The unprivileged pass's controls are informational (see the row).
             good = ((csr >> 8 & 1) and not err and d == SRC) or n < len(NAMES)
         elif i in WRITE_TARGETS:

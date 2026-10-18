@@ -291,6 +291,10 @@ On every boot, before trusting the SE050:
 - **GTZC configuration is the #1 source of TrustZone-M leaks.** Budget real time for it and have it reviewed.
 - Mark as Secure: I²C to SE050, TIM used for inactivity timer, TAMP, SAES, PKA, HASH, TRNG, BKPSRAM holding secrets.
 - Block **all** DMA controllers from mastering into Secure SRAM unless the DMA instance is itself Secure.
+  **UPDATE 2026-10-18 (#982):** stronger than this line asked for. The SAU filters only the CPU, and the
+  OTP/UID/system-memory area cannot be made secure-only at all (RM0456 Table 71), so the non-secure world must
+  own **no** DMA master: every GPDMA1/LPDMA1 channel is made secure + privileged and locked (`RCFGLOCKR`) at boot,
+  and DMA2D/SDMMC1/SDMMC2 are secured in TZSC (`sau::stm32::secure_dma_masters`). Silicon receipt: DVT row 3.9.
 - MPU regions covering Secret SRAM must be enforced in both S and NS worlds.
 
 ### 4.2 Debug & Readout Protection

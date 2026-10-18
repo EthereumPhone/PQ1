@@ -16,10 +16,21 @@
 //! [`systick_watch_and_kick`] every tick. It keeps the watchdog fed
 //! while any of three progress signals holds:
 //!
-//!   1. **NS heartbeat advanced** — NS bumps a counter (a `static mut`
-//!      in NS SRAM, registered with us once at boot via
-//!      [`register_ns_heartbeat`]) on every poll-loop iteration. A
-//!      live NS loop keeps this advancing even when idle-polling.
+//!   1. **NS heartbeat advanced, with no gateway handler busy** — NS bumps
+//!      a counter (a `static mut` in NS SRAM, registered with us once at
+//!      boot via [`register_ns_heartbeat`]) on every poll-loop iteration.
+//!      A live NS loop keeps this advancing even when idle-polling. While a
+//!      handler is busy the heartbeat is NOT a progress signal (#981): the
+//!      NS thread that owns it is blocked in the veneer and cannot loop, so
+//!      a change can only come from a non-secure exception that preempted
+//!      the secure handler (or from an NS DMA write, or a re-registered
+//!      address). On EVT-3D21 (2026-10-18, DVT row 13.10) such an exception
+//!      parked inside a sign and bumped the heartbeat every 100 ms; because
+//!      this signal used to be checked first and reset `BUSY_TICKS`, the
+//!      busy cap below never bound and the session stayed unlocked for as
+//!      long as NS liked. The stock NS image installs no exception handlers
+//!      and bumps from its poll loop only (`nonsecure/src/main.rs`), so
+//!      ignoring the heartbeat while busy costs a legitimate image nothing.
 //!   2. **A gateway handler is busy** — `nsc::handler_is_busy()` is
 //!      true whenever a CMSE veneer is mid-flight. This covers the
 //!      multi-second secure operations (first-sign ~3 s, batch sign,
@@ -126,13 +137,18 @@ const RLR_2S: u32 = 250;
 const NS_STALL_LIMIT_TICKS: u32 = 4000;
 
 // rr-2 (Trezor-port): max consecutive ticks a *busy handler* alone may feed
-// the watchdog. `handler_busy` legitimately holds across a bounded window (a
-// full CMD_SIGN_USEROP_BATCH: per-UserOp keygen + two FI-double-compute signs
-// each) — but a handler that spins forever with its `HandlerGuard` held would
-// otherwise feed the IWDG forever (the hole flagged in the module doc above)
-// AND suppress the 120 s idle-wipe (which shares the `handler_busy` gate). Set
-// generously (~30 s at 1 kHz SysTick) above the worst legit continuous-busy
-// window so a real batch never trips it, but a wedged handler does.
+// the watchdog. `handler_busy` legitimately holds across a bounded window —
+// the longest after the last button press is one cold first sign (slot
+// keygen + Type-1 + Type-2, 12-17 s measured on pq1, DVT row 1.10; a batch
+// of up to `MAX_BATCH_TXS` members still produces ONE Type-2, so it is the
+// same bound) — but a handler that spins forever with its `HandlerGuard` held
+// would otherwise feed the IWDG forever (the hole flagged in the module doc
+// above) AND suppress the 120 s idle-wipe (which shares the `handler_busy`
+// gate). Set generously (~30 s at 1 kHz SysTick) above the worst legit
+// continuous-busy window so a real sign never trips it, but a wedged or
+// preempted-and-parked handler does. Since #981 nothing the non-secure world
+// does can reset this count while a handler is busy: only the trusted-UI
+// exception (secure-only, idle-bounded) and the handler going idle do.
 #[cfg(feature = "iwdg")]
 const MAX_BUSY_TICKS: u32 = 30_000;
 
@@ -144,10 +160,21 @@ static mut NS_HEARTBEAT_ADDR: u32 = 0; // 0 = NS hasn't registered yet
 static mut LAST_HEARTBEAT: u32 = 0;
 #[cfg(feature = "iwdg")]
 static mut STALL_TICKS: u32 = 0;
-// rr-2: consecutive ticks fed on `handler_busy` alone (no NS heartbeat
-// advance). Reset on real NS progress or when the handler goes idle.
+// rr-2: consecutive ticks fed on `handler_busy` alone. Reset when the
+// handler goes idle or a trusted dialog is genuinely waiting — never by the
+// NS heartbeat (#981).
 #[cfg(feature = "iwdg")]
 static mut BUSY_TICKS: u32 = 0;
+// #981 diagnostic: busy ticks on which the NS heartbeat differed from the
+// last value seen while no handler was busy (LAST_HEARTBEAT is frozen during
+// a busy window, so after the first foreign bump every busy tick counts).
+// The stock NS image cannot produce one (its only bump is in the thread-mode
+// poll loop, which is blocked in the veneer), so a nonzero value means a
+// non-secure exception preempted a secure handler and is feeding the
+// heartbeat. Read over SWD by `tools/dvt/idle_hold.py`; it gates
+// nothing. Saturating.
+#[cfg(feature = "iwdg")]
+static mut HB_WHILE_BUSY: u32 = 0;
 
 /// Start the IWDG with a ~2 s timeout. Once started it CANNOT be
 /// stopped (hardware property) — that's the point. Call from secure
@@ -267,13 +294,7 @@ pub fn systick_watch_and_kick(
         let hb = core::ptr::read_volatile(addr as *const u32);
         let last = core::ptr::read_volatile(core::ptr::addr_of!(LAST_HEARTBEAT));
 
-        if hb != last {
-            // Genuine NS forward progress (NS looped) — reset both timers.
-            core::ptr::write_volatile(core::ptr::addr_of_mut!(LAST_HEARTBEAT), hb);
-            core::ptr::write_volatile(core::ptr::addr_of_mut!(STALL_TICKS), 0);
-            core::ptr::write_volatile(core::ptr::addr_of_mut!(BUSY_TICKS), 0);
-            kick();
-        } else if trusted_ui_waiting && !idle_timed_out {
+        if trusted_ui_waiting && !idle_timed_out {
             // A secure confirmation dialog is making intentional progress by
             // waiting for a human. Reset both machine-stall counters so the
             // 30 s compute deadline cannot false-fire during the documented
@@ -281,6 +302,9 @@ pub fn systick_watch_and_kick(
             // and it does not reset LAST_ACTIVITY; once the inactivity timer
             // expires this branch becomes unreachable and a wedged input
             // backend is reset by the normal handler/NS bound below.
+            // (The SysTick idle-wipe deferral cap, `timeout::wipe_defer_step`,
+            // bounds the case where the dialog itself was preempted and
+            // parked by a non-secure exception — #981.)
             core::ptr::write_volatile(core::ptr::addr_of_mut!(STALL_TICKS), 0);
             core::ptr::write_volatile(core::ptr::addr_of_mut!(BUSY_TICKS), 0);
             kick();
@@ -290,6 +314,16 @@ pub fn systick_watch_and_kick(
             // but rr-2: cap it, or a wedged handler holding its `HandlerGuard`
             // feeds the watchdog forever. `handler_busy` is NOT an NS stall,
             // so reset STALL_TICKS; count busy ticks separately.
+            //
+            // #981: this branch is checked BEFORE the heartbeat. A heartbeat
+            // change here is not progress (module doc, signal 1) and must not
+            // reset BUSY_TICKS; LAST_HEARTBEAT is deliberately left alone so
+            // the first tick after the handler returns sees ordinary NS
+            // progress. The change is only counted, as evidence.
+            if hb != last {
+                let n = core::ptr::read_volatile(core::ptr::addr_of!(HB_WHILE_BUSY)).saturating_add(1);
+                core::ptr::write_volatile(core::ptr::addr_of_mut!(HB_WHILE_BUSY), n);
+            }
             core::ptr::write_volatile(core::ptr::addr_of_mut!(STALL_TICKS), 0);
             let b = core::ptr::read_volatile(core::ptr::addr_of!(BUSY_TICKS)).saturating_add(1);
             core::ptr::write_volatile(core::ptr::addr_of_mut!(BUSY_TICKS), b);
@@ -302,6 +336,13 @@ pub fn systick_watch_and_kick(
                 );
             }
             // else: busy past the cap → stop feeding → IWDG fires.
+        } else if hb != last {
+            // Genuine NS forward progress (NS looped, no handler in flight)
+            // — reset both timers.
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(LAST_HEARTBEAT), hb);
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(STALL_TICKS), 0);
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(BUSY_TICKS), 0);
+            kick();
         } else {
             // No NS progress and no busy handler → NS-loop stall.
             core::ptr::write_volatile(core::ptr::addr_of_mut!(BUSY_TICKS), 0);
