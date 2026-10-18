@@ -71,10 +71,24 @@ nested-gate-test = ["stm32u585"]
 # DVT row 3.8: NS pointer-validation boundary table. Owns main(); results
 # over SWD (`tools/dvt/ns_ptr_probe.py`). Needs an e2e-test + mock-se secure image.
 ns-ptr-probe = ["stm32u585"]
+# DVT row 3.9: non-secure GPDMA reads/writes against secure memory. Owns main();
+# results over SWD (`tools/dvt/dma_probe.py`). Pairs with any mock-se secure image.
+dma-probe = ["stm32u585"]
+# DVT row 3.2: NS read + write probes of every TZSC-secured peripheral, SPI1 and
+# IWDG included. Owns main(); results over SWD (`tools/dvt/gtzc_ship.py`). Needs a
+# `mock-se,ui-lcd,iwdg,e2e-test` secure image (e2e-test for the tzic_status veneer).
+gtzc-ship = ["e2e-test", "stm32u585"]
 # Flips the runner's PASS condition for the negative-control build (paired
 # with the secure crate's `gateway-gate-off`): the nested call must be
 # ADMITTED, not refused. Use `make nested-gate-test-nctl-hw`.
 nested-gate-expect-admit = ["nested-gate-test"]
+# DVT row 13.10: a parked NS SysTick holds an outer sign open past the 120 s
+# idle timeout while bumping the IWDG heartbeat. Results over SWD
+# (`tools/dvt/idle_hold.py`). Needs an e2e-test + mock-se + iwdg secure image.
+idle-hold-test = ["nested-gate-test", "iwdg"]
+# 13.10 control: the parked handler does not bump the heartbeat, so the
+# IWDG busy cap (~30 s) must reset the device.
+idle-hold-nobump = ["idle-hold-test"]
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
 # NS half of the IWDG USB-path hang watchdog. Mirrors the secure-side

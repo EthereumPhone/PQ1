@@ -63,6 +63,12 @@
 //! present) and `make nested-gate-test-nctl-hw` (negative control).
 
 #![allow(static_mut_refs)]
+// DVT row 13.10 reuses the payload and timing helpers below with its own
+// entry and SysTick, which leaves the #896 statics unused in that build.
+#![cfg_attr(feature = "idle-hold-test", allow(dead_code))]
+
+#[cfg(feature = "idle-hold-test")]
+mod idle_hold;
 
 use crate::nsc_api;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -153,6 +159,7 @@ fn systick_stop() {
 /// make exactly one nested gateway call after `FIRE_AFTER` ticks and record
 /// the result and when the call started and finished. The call is
 /// `is_unlocked`, the cheapest gateway entry; it never makes a nested sign.
+#[cfg(not(feature = "idle-hold-test"))]
 #[cortex_m_rt::exception]
 fn SysTick() {
     let t = TICKS.fetch_add(1, Ordering::SeqCst) + 1;
@@ -261,6 +268,7 @@ fn response_shape(sig: &[u8]) -> Option<(usize, usize)> {
 
 // === Runner ================================================================
 
+#[cfg(not(feature = "idle-hold-test"))]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     hprintln!("[NS][ngt] === nested-gateway test (#896) ===");
