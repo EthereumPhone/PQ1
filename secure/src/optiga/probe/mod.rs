@@ -54,6 +54,7 @@ pub(crate) fn mute_driver_logs(on: bool) {
 }
 
 pub(crate) mod inventory;
+mod deep;
 mod readonly;
 
 use inventory::{Class, Obj, INVENTORY};
@@ -421,8 +422,15 @@ pub(crate) unsafe fn run() -> bool {
     enable_cycle_counter();
     let mut p = Probe::new();
 
-    out!("BEGIN mode=readonly ver=1 board={} sweep={}", board_name(), readonly::sweep_enabled() as u8);
-    let ok = unsafe { readonly::run(&mut p) };
+    out!("BEGIN mode=readonly ver=1 board={} sweep={} deep={}", board_name(), readonly::sweep_enabled() as u8, deep::deep_enabled() as u8);
+    let mut ok = unsafe { readonly::run(&mut p) };
+    // Deep read-only steps R10–R12 run after R9 when OPTIGA_PROBE_DEEP=1.
+    // They only read registers/objects, draw GetRandom, soft-reset and
+    // power-cycle; never a write. Gated behind the read-only completion so a
+    // failed R9 still reports an abort.
+    if ok && deep::deep_enabled() {
+        ok = unsafe { deep::run(&mut p) };
+    }
     out!("END findings={} ok={}", p.findings, ok as u8);
     if ok {
         marker!("=== OPROBE DONE ===");

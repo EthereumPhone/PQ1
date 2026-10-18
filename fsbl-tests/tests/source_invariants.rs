@@ -1017,6 +1017,7 @@ fn optiga_probe_readonly_names_no_write_path() {
         "secure/src/optiga/probe/mod.rs",
         "secure/src/optiga/probe/readonly.rs",
         "secure/src/optiga/probe/inventory.rs",
+        "secure/src/optiga/probe/deep.rs",
     ] {
         let src = code_only(&read_workspace_file(rel));
         for f in FORBIDDEN {
@@ -1028,7 +1029,7 @@ fn optiga_probe_readonly_names_no_write_path() {
         }
         checked += 1;
     }
-    assert_eq!(checked, 3);
+    assert_eq!(checked, 4);
     // Non-vacuous: the read-only path does exist and reads.
     let ro = code_only(&read_workspace_file("secure/src/optiga/probe/readonly.rs"));
     assert!(ro.contains("dump_metadata") && ro.contains("read_object"));
