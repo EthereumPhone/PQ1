@@ -16,11 +16,13 @@ import C10Probability
 #print axioms C10Probability.accepted_charge_ne_top
 #print axioms C10Probability.accepted_charge_step
 #print axioms C10Probability.accepted_charge_zero
+#print axioms C10Probability.accepted_count_message_cases
 #print axioms C10Probability.accepted_history_charge_tight
 #print axioms C10Probability.accepted_history_collision_mass
 #print axioms C10Probability.accepted_prior_collision
 #print axioms C10Probability.accepted_weight_mass
 #print axioms C10Probability.accepted_wots_card_exact
+#print axioms C10Probability.accepted_wots_collision_iff
 #print axioms C10Probability.adaptiveBool_accepted_observer_mass
 #print axioms C10Probability.adaptiveBool_cached_branch
 #print axioms C10Probability.adaptiveBool_observer_mass
@@ -119,6 +121,7 @@ import C10Probability
 #print axioms C10Probability.c10_honest_zero_budget_failure
 #print axioms C10Probability.c10_initialized_forge_transfer_real
 #print axioms C10Probability.c10_initialized_independent_eq
+#print axioms C10Probability.c10_initialized_independent_lower_descent
 #print axioms C10Probability.c10_initialized_independent_top_exposure_cases
 #print axioms C10Probability.c10_initialized_prefix_bounds
 #print axioms C10Probability.c10_initialized_prefix_error_real
@@ -147,6 +150,7 @@ import C10Probability
 #print axioms C10Probability.c10_observed_game_erases
 #print axioms C10Probability.c10_observed_game_extends
 #print axioms C10Probability.c10_observed_game_keygen
+#print axioms C10Probability.c10_observed_game_lower_descent
 #print axioms C10Probability.c10_observed_game_result
 #print axioms C10Probability.c10_observed_game_support
 #print axioms C10Probability.c10_observed_game_top_chain_cases
@@ -277,17 +281,21 @@ import C10Probability
 #print axioms C10Probability.count_basis_zero
 #print axioms C10Probability.count_cached_advances
 #print axioms C10Probability.count_cached_exhausts
+#print axioms C10Probability.count_distinct_node_messages_distinct_inputs
 #print axioms C10Probability.count_early_cache
 #print axioms C10Probability.count_empty_alphabet_empty_word
 #print axioms C10Probability.count_empty_alphabet_nonempty_word
 #print axioms C10Probability.count_empty_nonzero
 #print axioms C10Probability.count_empty_retains
 #print axioms C10Probability.count_empty_zero
+#print axioms C10Probability.count_equal_accepted_words_need_collision_branch
 #print axioms C10Probability.count_excluded_zero_allowance
 #print axioms C10Probability.count_lookup_beyond
+#print axioms C10Probability.count_nat_encoding_can_wrap
 #print axioms C10Probability.count_negative_target
 #print axioms C10Probability.count_program_fresh
 #print axioms C10Probability.count_repeat_failure
+#print axioms C10Probability.count_repeated_same_input_is_not_collision
 #print axioms C10Probability.count_run_rep
 #print axioms C10Probability.count_selected_early_allowance
 #print axioms C10Probability.count_selected_zero_rejected
@@ -325,6 +333,9 @@ import C10Probability
 #print axioms C10Probability.derived_prefilled_differs
 #print axioms C10Probability.derived_prefilled_label
 #print axioms C10Probability.derived_program_zero
+#print axioms C10Probability.descent_lower_empty_history_retains_endpoint
+#print axioms C10Probability.descent_same_lower_leaf_does_not_bind_tree
+#print axioms C10Probability.descent_upper_address_allows_distinct_lower_leaves
 #print axioms C10Probability.digest_atom_real
 #print axioms C10Probability.digest_byte_value
 #print axioms C10Probability.digest_bytes_roundtrip
@@ -737,6 +748,8 @@ import C10Probability
 #print axioms C10Probability.leaked_private_shared_mass
 #print axioms C10Probability.leaked_secret_certain
 #print axioms C10Probability.leaked_secret_exceeds_one_guess
+#print axioms C10Probability.lower_chain_exposure_comparison
+#print axioms C10Probability.lower_chain_opening_of_certificate
 #print axioms C10Probability.lower_exposure_minimum_comparison
 #print axioms C10Probability.lower_exposure_words_accepted_uniform
 #print axioms C10Probability.mapProgram_bind
@@ -855,6 +868,7 @@ import C10Probability
 #print axioms C10Probability.node_query_pair
 #print axioms C10Probability.node_query_r_input
 #print axioms C10Probability.node_value_block
+#print axioms C10Probability.node_value_bytes_injective
 #print axioms C10Probability.node_value_bytes_length
 #print axioms C10Probability.node_zero_iff
 #print axioms C10Probability.node_zero_low_bit
@@ -891,6 +905,7 @@ import C10Probability
 #print axioms C10Probability.observed_hash_order
 #print axioms C10Probability.observed_malformed_signature_refused
 #print axioms C10Probability.observed_output_chain_witnesses
+#print axioms C10Probability.observed_output_lower_descent
 #print axioms C10Probability.observed_output_signing_history
 #print axioms C10Probability.observed_output_top_chain_cases
 #print axioms C10Probability.observed_output_top_exposure_cases
@@ -1090,6 +1105,10 @@ import C10Probability
 #print axioms C10Probability.repeated_prefix_single_candidate
 #print axioms C10Probability.repeated_private_grind_cached
 #print axioms C10Probability.repeated_reply_not_iid
+#print axioms C10Probability.repeated_upper_lower_certificate
+#print axioms C10Probability.repeated_upper_lower_opening
+#print axioms C10Probability.repeated_upper_lower_tree_eq
+#print axioms C10Probability.repeated_upper_message_cases
 #print axioms C10Probability.replay_c10_chain_witness
 #print axioms C10Probability.replay_c10_finish_witness
 #print axioms C10Probability.replay_c10_honest_verification
@@ -1307,6 +1326,8 @@ import C10Probability
 #print axioms C10Probability.sibling_right
 #print axioms C10Probability.signing_budget_arithmetic
 #print axioms C10Probability.signing_counter_fits
+#print axioms C10Probability.signing_record_lower_count_lookup
+#print axioms C10Probability.signing_record_upper_count_lookup
 #print axioms C10Probability.singleton_zero_collision_free
 #print axioms C10Probability.state_fold_accumulated_cache
 #print axioms C10Probability.state_fold_order
@@ -1342,6 +1363,7 @@ import C10Probability
 #print axioms C10Probability.target_membership_nonvacuous
 #print axioms C10Probability.three_selected_collision
 #print axioms C10Probability.top_chain_exposure_comparison
+#print axioms C10Probability.top_chain_lower_descent
 #print axioms C10Probability.top_chain_opening_record
 #print axioms C10Probability.top_chain_record_opening
 #print axioms C10Probability.top_tree_chain_opening
@@ -1466,6 +1488,8 @@ import C10Probability
 #print axioms C10Probability.wots_count_continuation_budget
 #print axioms C10Probability.wots_count_domain_bad_bound
 #print axioms C10Probability.wots_count_domain_bad_bound_real
+#print axioms C10Probability.wots_count_input_message_eq
+#print axioms C10Probability.wots_count_input_node_eq
 #print axioms C10Probability.wots_count_key_excluded
 #print axioms C10Probability.wots_count_key_layout
 #print axioms C10Probability.wots_count_key_length

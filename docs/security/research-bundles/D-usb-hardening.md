@@ -835,13 +835,27 @@ pub unsafe fn harden_otg() {
 pub fn usb_frame_number() -> u16 {
     // OTG_DSTS @ device-base (0x800) + 0x08 = OTG_FS base + 0x808.
     const OTG_DSTS: *const u32 = (USB_OTG_BASE + 0x808) as *const u32;
+    use sphincs_tz_shared::apdu_framing::USB_FS_FRAME_MASK;
+    let frame = |dsts: u32| ((dsts >> 8) as u16) & USB_FS_FRAME_MASK;
     // SAFETY: read-only access to an NS-mapped USB OTG register; no
     // side effects, races, or aliasing concerns for a volatile load.
-    let dsts = unsafe { core::ptr::read_volatile(OTG_DSTS) };
+    let read = || frame(unsafe { core::ptr::read_volatile(OTG_DSTS) });
+    // Read until two consecutive reads agree (bounded). The EVT-3D21 trace
+    // (2026-10-17) caught torn reads such as 0x7BF -> 0x780 whose immediate
+    // re-read differed; `apdu_framing::frame_step` drops the backward step
+    // either way, this only keeps one torn value from becoming the reference.
+    let mut f = read();
+    for _ in 0..3 {
+        let g = read();
+        if g == f {
+            break;
+        }
+        f = g;
+    }
     // Full speed: an 11-bit frame number, wrapping every 2.048 s
-    // (`USB_FS_FRAME_MASK`; DVT1 row 11.2). Callers take deltas with
-    // `apdu_framing::frame_delta`, never a raw subtraction.
-    ((dsts >> 8) as u16) & sphincs_tz_shared::apdu_framing::USB_FS_FRAME_MASK
+    // (`USB_FS_FRAME_MASK`; DVT1 row 11.2). Callers accumulate with
+    // `apdu_framing::frame_step`, never a raw subtraction.
+    f
 }
 
 /// Initialize the USB stack.  Returns a fully-configured `UsbStack` ready
@@ -913,7 +927,7 @@ pub unsafe fn init() -> UsbStack {
 
 use sphincs_tz_shared::{HID_REPORT_SIZE, HID_TAG_APDU};
 use sphincs_tz_shared::apdu_framing::{
-    frame_delta, FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
+    frame_step, FrameOutcome, HidFrameAssembler, HID_CONT_DATA, HID_FIRST_DATA, MAX_APDU_RX,
 };
 use super::hid::PqSignerHid;
 use super::UsbBusType;
@@ -972,7 +986,7 @@ pub struct Transport {
     // USB frame number (OTG_DSTS.FNSOF) at the last reassembly-clock
     // sample, or `None` when idle. `Some` precisely while the assembler is
     // mid-APDU (between a seq=0 NeedMore and the matching
-    // ApduComplete/Dropped). `rx_elapsed` accumulates `frame_delta`s from
+    // ApduComplete/Dropped). `rx_elapsed` accumulates `frame_step`s from
     // it: the full-speed frame number wraps every 2.048 s, shorter than
     // the 5 s bound, so a single start→now difference cannot measure it
     // (DVT1 row 11.2 — that difference falsely expired APDUs at every wrap).
@@ -991,7 +1005,7 @@ pub struct Transport {
 }
 
 /// 5 s reassembly timeout in USB frames (1 frame = 1 ms SOF), measured by
-/// accumulating `frame_delta`s because the full-speed frame number wraps
+/// accumulating `frame_step`s because the full-speed frame number wraps
 /// every 2.048 s. §19 P0 "Bounded APDU reassembly".
 pub const RX_REASSEMBLY_TIMEOUT_FRAMES: u16 = 5000;
 
@@ -1090,8 +1104,11 @@ impl Transport {
         };
         // Accumulate per-sample deltas on the 11-bit full-speed frame clock.
         // The NS loop samples at kHz, so each delta is a few frames.
-        self.rx_elapsed = self.rx_elapsed.saturating_add(frame_delta(now_frame, last));
-        self.rx_last_frame = Some(now_frame);
+        let mut last_counted = last;
+        self.rx_elapsed = self
+            .rx_elapsed
+            .saturating_add(frame_step(now_frame, &mut last_counted));
+        self.rx_last_frame = Some(last_counted);
         if self.rx_elapsed >= u32::from(RX_REASSEMBLY_TIMEOUT_FRAMES) {
             diag::bump(&diag::USB_DIAG_RX_TIMEOUTS);
             diag::USB_DIAG_RX_TIMEOUT_LAST.store(
@@ -1361,7 +1378,7 @@ impl<B: UsbBus> UsbClass<B> for PqSignerHid<'_, B> {
 
 use sphincs_tz_shared::*;
 use sphincs_tz_shared::apdu_framing::{
-    frame_delta, parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
+    frame_step, parse_apdu_header, route_v2, router_lease_allows, ChainState, ChainStepOutcome,
 };
 
 use crate::nsc_api;
@@ -1481,7 +1498,7 @@ static mut ROUTER_OWNER: Option<u16> = None;
 /// Accumulating per-iteration deltas (rather than a single start→now
 /// delta) sidesteps the FNSOF wrap: on this full-speed core the frame
 /// number is 11 bits and wraps every 2.048 s, the NS loop polls at kHz,
-/// so each `frame_delta(now, last)` is tiny and wrap-correct, and 30 s
+/// so each `frame_step(now, &mut last)` is tiny and wrap-correct, and 30 s
 /// spans many wraps by summation. (This used `& 0x3FFF`, the high-speed
 /// width: every wrap then added ~14,337 frames, so these 30 s / 120 s
 /// bounds expired after about two wraps — DVT1 row 11.2.)
@@ -2257,8 +2274,9 @@ impl CommandRouter {
             PENDING_LAST_FRAME = now_frame;
             return;
         }
-        let delta = frame_delta(now_frame, PENDING_LAST_FRAME);
-        PENDING_LAST_FRAME = now_frame;
+        let mut last = PENDING_LAST_FRAME;
+        let delta = frame_step(now_frame, &mut last);
+        PENDING_LAST_FRAME = last;
         PENDING_ELAPSED_FRAMES = PENDING_ELAPSED_FRAMES.saturating_add(delta);
         // Activity resets the idle accumulator in `get_response` but
         // never this absolute one.
@@ -2291,8 +2309,9 @@ impl CommandRouter {
     /// Touches the module `ROUTER_OWNER` static-mut state under the
     /// single-threaded NS dispatcher invariant (same as `dispatch`).
     pub unsafe fn check_chain_timeout(&mut self, now_frame: u16) {
-        let delta = frame_delta(now_frame, CHAIN_LAST_FRAME);
-        CHAIN_LAST_FRAME = now_frame;
+        let mut last = CHAIN_LAST_FRAME;
+        let delta = frame_step(now_frame, &mut last);
+        CHAIN_LAST_FRAME = last;
         if self.chain.tick_timeout(delta) {
             // Chain lifetime expired — `tick_timeout` already reset the
             // chain state. A live chain and a pending drain are mutually

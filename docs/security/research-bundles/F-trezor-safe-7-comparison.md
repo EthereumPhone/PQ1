@@ -5113,6 +5113,9 @@ compile_error!(
         // TRNG dump for SP 800-90B (DVT 4.8): parks after TRNG init and
         // exposes TRNG output in SRAM for the debugger. Terminal bench image.
         feature = "trng-dump",
+        // DVT 16.4/16.6 timing bench: parks after TRNG init, holds random test
+        // keys in SRAM and exposes timing over SWD. Terminal bench image.
+        feature = "sign-timing",
         // DVT 4.12 measurement opt-in: keeps `fi::wait_random` live under
         // `e2e-test`. Inert without `e2e-test`, but test-only by name.
         feature = "fi-live-delays",

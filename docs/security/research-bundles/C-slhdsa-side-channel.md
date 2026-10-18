@@ -4660,6 +4660,11 @@ bench-masked-sha = ["stm32u585", "dep:masked-sha2"]
 # init, fills a 64 KB SRAM buffer via `hw::rng::fill`, and hands it to the
 # host over SWD (`tools/dvt/trng_dump.py`). Bench only; never ship.
 trng-dump = ["stm32u585"]
+# On-core timing bench (DVT rows 16.4 and 16.6). Parks after TRNG init, runs a
+# fixed-vs-random dudect on the C10 PRFs, the slot KDF, the master HMAC and
+# ct_eq, then times whole C10 signs; the host reads the results over SWD
+# (`tools/dvt/sign_timing.py`). Bench only; never ship.
+sign-timing = ["stm32u585", "sphincs-c10/sim-internals"]
 # Strong-RNG composition probe (DVT checklist row 4.9 + the three-source XOR
 # check). Terminal bench image: records each rng_strong source contribution
 # and holds one SE in reset to prove fail-closed. Writes nothing to either SE

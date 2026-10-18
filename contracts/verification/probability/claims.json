@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Complete repeated-address WOTS exposure for actual bounded structured C10 signing histories. Functional tree/forest uniqueness and count replay derive stable messages and accepted words at the same logical address; the complete chronological history retains both layers and duplicates. The actual winning top-chain opening either repeats a prior word and all its prefix values, or has a position below the exact minimum of every prior returned position, with actual chain suffixes to all matching values. Original selected-collision/public-zero alternatives remain. No secrecy, undisclosed-value, fresh-input, full-digest equality or probability charge follows. Prior 1545 theorem statements, 917 typed fixtures, 52 bindings and old proof-module bytes are preserved. Lower/FORS forgery descent, adaptive coverage/private-opening charges, final six-case PMF partition/bound, unbounded adversaries, 4008-byte codec, repeated-grinder freshness, concrete hash/Rust/cross-kernel, QROM and physical claims remain open. Source bindings detect drift, not correspondence.",
+  "scope": "Actual lower-layer WOTS descent for bounded structured C10 winning sessions. The actual repeated upper word either yields two distinct public count inputs with the same accepted word or binds the lower root to an actual prior signing builder certificate. Reverse Merkle and WOTS binding derive the submitted lower leaf, accepted count and all private-seeded prefixes. The complete lower exposure history then yields a repeated lower word/all prefix values or a position below the exact minimum of all prior returned positions, with suffix replay to every matching value. The original top-earlier, selected-node collision and public-zero alternatives remain. No secrecy, fresh-input, full-digest equality or probability charge follows. Prior 1605 theorem statements, 963 typed fixtures, 52 bindings and old proof-module bytes are preserved. FORS forgery descent, adaptive coverage/private-opening charges, final six-case PMF partition/bound, unbounded adversaries, 4008-byte codec, repeated-grinder freshness, concrete hash/Rust/cross-kernel, QROM and physical claims remain open. Source bindings detect drift, not correspondence.",
   "sources": {
-    "Audit.lean": "57fb93b5960bcba88fc2c1283af155be30b179e866c3d3fd19bc62d429f59f8d",
+    "Audit.lean": "3265492d4ed347ab0cd42859542a10c591116eb578080fc7a29935996ac412cc",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -42,6 +42,7 @@
     "C10Probability/ChainReplay.lean": "4b9c7b6cf00b4ec1a47c26c7f57a8b8ec4a9feeb3bfacf56e8048ab930d720e7",
     "C10Probability/CollisionObserver.lean": "1b5a94598a603d5df0aebf9ef974bd38075f7a7dc6b6d8cebcab063d94843f23",
     "C10Probability/CountExamples.lean": "3ab36b2977d682c9f8cd17f51ca8859a07c7c1f99e0a1f50be387f05143f46c3",
+    "C10Probability/CountMessageBinding.lean": "45b72b9d94ae505fab2d8b0785bfdf301b6b009334487404705afed621884000",
     "C10Probability/CountProgram.lean": "f3e268ffdb4d4bfdf9c78d02f73ddef1348716a660ec8b119d8bbb55ca3bee55",
     "C10Probability/CountReplay.lean": "932862e5cadd54c77533d53730e21c5caa61658a026659d1a7b2a0018a5d753e",
     "C10Probability/CountVector.lean": "9a813ef7b90df15b8957c0644ef494ff4b2e800981369fb68462dafd6e3e9bdf",
@@ -94,6 +95,10 @@
     "C10Probability/LayerRecover.lean": "e60a74676c033aea1f67e15142be58e2b1300c6900e8da630563b3dd3e107c4a",
     "C10Probability/LayerSign.lean": "0a6b613ddef0325c31fa4d6ba8ecdf8b7f713fc7fbe0e9964d35c31745ac7c62",
     "C10Probability/LayerSigningReplay.lean": "d4d40687eaa997c05765a68f394008834c249b777980c5553c3d0a930ed3d92a",
+    "C10Probability/LowerChainOpening.lean": "de4606e438c406b4939ee591c2d56ae72d3401b687cf0424947101d5d58ad1f7",
+    "C10Probability/LowerDescent.lean": "70c2deddd039e68cc2e6423c0f59840842f224bdc8500114b5a328fc3195b7ba",
+    "C10Probability/LowerDescentExamples.lean": "ae7b580698809410cc424597c843febf0648070cc41d79d0824a77ca6cdafad8",
+    "C10Probability/LowerExposureOpening.lean": "bfc0eadd2c1054405546706ddb93cb765d3dcae5d9693dc2ce6b6016cfbcf7cd",
     "C10Probability/Memo.lean": "b91558cc183d9b0cf195de3c7a64b29c3057219acb1b451bff4b5b19aaee53c4",
     "C10Probability/MemoRelabel.lean": "52ec0afa4da94f66ac9a6b260e32700c622b4139a88d3c781a289406982770e9",
     "C10Probability/MemoView.lean": "c6533833c6d5a60cd713e15d96e81610dad15790e497789ab1d7870eef1ae133",
@@ -142,6 +147,7 @@
     "C10Probability/RandomizerUnder.lean": "f5da74803306dc170d7fed025c916f8ee46d9a9d51c42abc417b1f57dda9e057",
     "C10Probability/RecoveryRelabel.lean": "1efa9acc36f266366ddb9be6e19f2c989d8b2a519f61a04eccd1503ee1ab7d1b",
     "C10Probability/RecoveryWitness.lean": "3b77fd86e9fcc2a4910e10460f7158c2f38a4a66c446d9852a2ba52f807bad08",
+    "C10Probability/RepeatedUpperBinding.lean": "d1ddba4f5c0a4331fa06b6515609619f5de04908f97f23a5a02551666f225875",
     "C10Probability/Returned.lean": "bfff3d01a295f769809a757cea3b63baea09040c5f8feb940384df2482b711c6",
     "C10Probability/ReturnedAuth.lean": "455b21143b0b281708bd40f63b277f6c6830ea4ab0fc7a9c506b6f6dfb44a901",
     "C10Probability/ReturnedAuthRecovery.lean": "3fbe568a5becd0d45bb6bbce87bf37c09edca56af7be77d91fa9908ecd5ed5b8",
@@ -217,7 +223,7 @@
     "C10Probability/WotsSigningCharges.lean": "714be87e7b26c808bfbd79149e6e4bc9166fde1b884985c768274aa57abdaf11",
     "C10Probability/WotsSigningReplay.lean": "82f5beb5b9759c5d979015bc61833535e591ea0591fa15805bb223985f19cef2",
     "C10Probability/WotsStability.lean": "7298584f8026cfe4cf11ba95128a78edb3eff67a3cd4ffd5694a35c64efe7f41",
-    "C10Probability.lean": "3a194748817a2c686bda0ac964f22d441ef01c2185b3247d7a446e222318e587"
+    "C10Probability.lean": "a2bbd43dbf292c3a78ced02b9a9dfe271a6ddc5bc496ed0e2471da6a6db0da5a"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -1323,6 +1329,26 @@
     "C10Probability.count_lookup_beyond": {
       "file": "C10Probability/CountExamples.lean",
       "statement_sha256": "aa1b5fd58239b6bd7b1ccfb39e8dd0c0e721fcdf4b5e936e7a7c70bfa571b0a6"
+    },
+    "C10Probability.accepted_wots_collision_iff": {
+      "file": "C10Probability/CountMessageBinding.lean",
+      "statement_sha256": "9c7caa45a21e50ad39ce2a079d2554cb1d2d6ff6797cd5251f2beb387ea07a0c"
+    },
+    "C10Probability.node_value_bytes_injective": {
+      "file": "C10Probability/CountMessageBinding.lean",
+      "statement_sha256": "f3250d00bdc695ed4609f6f0011a20a80b3ae290aa9c5d0c56004ddda0fa2aed"
+    },
+    "C10Probability.wots_count_input_message_eq": {
+      "file": "C10Probability/CountMessageBinding.lean",
+      "statement_sha256": "e0f85f515f777fb3f45e53b77384b91f9fcbf6076c0d0533d8b55621428ce465"
+    },
+    "C10Probability.wots_count_input_node_eq": {
+      "file": "C10Probability/CountMessageBinding.lean",
+      "statement_sha256": "9d5ae38b2a7e339ae434877605b7cb34e2ac6af2cf17c3fccf61bbcd3dc2d01b"
+    },
+    "C10Probability.accepted_count_message_cases": {
+      "file": "C10Probability/CountMessageBinding.lean",
+      "statement_sha256": "b75792f26c11954e09f8be1e0e8a8c7d84f2ca3ced00986540979e36dfb2d3cd"
     },
     "C10Probability.evalProgram_mapped_count": {
       "file": "C10Probability/CountProgram.lean",
@@ -3048,6 +3074,66 @@
       "file": "C10Probability/LayerSigningReplay.lean",
       "statement_sha256": "e131b8aa4214967fd46ffe9bc1aaeea785861ae397c28a7e4f36a66bc70ffab4"
     },
+    "C10Probability.repeated_upper_lower_certificate": {
+      "file": "C10Probability/LowerChainOpening.lean",
+      "statement_sha256": "96b8d287a3b121624f48e5ce8d77f305addb163c8d6e5a79a578b469c42d860e"
+    },
+    "C10Probability.lower_chain_opening_of_certificate": {
+      "file": "C10Probability/LowerChainOpening.lean",
+      "statement_sha256": "e691393efde83c12ae7f5eea2b038498d9b306476e46d99d68b620d743ed0741"
+    },
+    "C10Probability.repeated_upper_lower_opening": {
+      "file": "C10Probability/LowerChainOpening.lean",
+      "statement_sha256": "a4d8719cac6bb8b677ec3cdfbfe36cb4f3297a2782674d128adb6f4b4b66720b"
+    },
+    "C10Probability.top_chain_lower_descent": {
+      "file": "C10Probability/LowerDescent.lean",
+      "statement_sha256": "1130065eaf1432b8f9e17d887ffe2acacdbb966dd9ce954c4dc8ed322d8a1668"
+    },
+    "C10Probability.observed_output_lower_descent": {
+      "file": "C10Probability/LowerDescent.lean",
+      "statement_sha256": "22e92dd46dba581d6df595fb47578aca6c72c1415c07b14ea325e15a192cb430"
+    },
+    "C10Probability.c10_observed_game_lower_descent": {
+      "file": "C10Probability/LowerDescent.lean",
+      "statement_sha256": "c7e714afe19b4b2a79d69fc8fa7b6a9d49329b2375eeb5fe01dfab7dc13d4a28"
+    },
+    "C10Probability.c10_initialized_independent_lower_descent": {
+      "file": "C10Probability/LowerDescent.lean",
+      "statement_sha256": "19b29508e1b19dda879bc768aae3b30ac4b5cc7b8f6abb9c86ce9f7662ea1a42"
+    },
+    "C10Probability.count_distinct_node_messages_distinct_inputs": {
+      "file": "C10Probability/LowerDescentExamples.lean",
+      "statement_sha256": "6f071ae6c2860bc22557b1f15601148cec05c5f5c48e34698b2d7fa18fbe9ac6"
+    },
+    "C10Probability.count_equal_accepted_words_need_collision_branch": {
+      "file": "C10Probability/LowerDescentExamples.lean",
+      "statement_sha256": "4ac44d60c4deca2dc02f3cb5c6efd2f9612a00ff3266e7a038e81400073f27f8"
+    },
+    "C10Probability.count_repeated_same_input_is_not_collision": {
+      "file": "C10Probability/LowerDescentExamples.lean",
+      "statement_sha256": "1b9456afd28b49085a1cfa4f92363c00225b87b9937359d274e9c35c8f70667c"
+    },
+    "C10Probability.count_nat_encoding_can_wrap": {
+      "file": "C10Probability/LowerDescentExamples.lean",
+      "statement_sha256": "886503b8b6cf2814ca338a797b6467db5565cddb64388963fe549dc691bef3ec"
+    },
+    "C10Probability.descent_upper_address_allows_distinct_lower_leaves": {
+      "file": "C10Probability/LowerDescentExamples.lean",
+      "statement_sha256": "ce9f27b85a05c8d403a3e8ff05824516422fac37b784292ef782255801ecb2a3"
+    },
+    "C10Probability.descent_same_lower_leaf_does_not_bind_tree": {
+      "file": "C10Probability/LowerDescentExamples.lean",
+      "statement_sha256": "550bdd02804640264330d7d2c284f0df33e80afd73099c747e22cf4ff6b9fa7e"
+    },
+    "C10Probability.descent_lower_empty_history_retains_endpoint": {
+      "file": "C10Probability/LowerDescentExamples.lean",
+      "statement_sha256": "784d842632f2f32e36c58a43433db439c4aa2a0f71c89464176c3efd24c47e70"
+    },
+    "C10Probability.lower_chain_exposure_comparison": {
+      "file": "C10Probability/LowerExposureOpening.lean",
+      "statement_sha256": "cac6bffc0c5021b8007d1cf6fd0edc560ae0122cddcb416c57f8fd74824393e7"
+    },
     "C10Probability.memoQuery_cached": {
       "file": "C10Probability/Memo.lean",
       "statement_sha256": "a0ada9771442dfc8814b7ca291dca1afb28551179bc802a6abed31bc69f1c4de"
@@ -4427,6 +4513,22 @@
     "C10Probability.replay_keygen_witness": {
       "file": "C10Probability/RecoveryWitness.lean",
       "statement_sha256": "3691fef510417ed04453adab81cc6495e92dfbb3e56c111f4074111cf3951de2"
+    },
+    "C10Probability.signing_record_upper_count_lookup": {
+      "file": "C10Probability/RepeatedUpperBinding.lean",
+      "statement_sha256": "0c08cf7c2b087767757db62e6e0f18b7137db02c32e8726b209ae2ebcd832604"
+    },
+    "C10Probability.signing_record_lower_count_lookup": {
+      "file": "C10Probability/RepeatedUpperBinding.lean",
+      "statement_sha256": "1f33eb697284d1de0302e64b13e01b406786bfe6877333292119966ad5e36e19"
+    },
+    "C10Probability.repeated_upper_message_cases": {
+      "file": "C10Probability/RepeatedUpperBinding.lean",
+      "statement_sha256": "42b7bf25f19ab697eec3b280c4ede028fad5fb82c042ce80aec8dd71f518f3b2"
+    },
+    "C10Probability.repeated_upper_lower_tree_eq": {
+      "file": "C10Probability/RepeatedUpperBinding.lean",
+      "statement_sha256": "bdb669e8e8c169f13c4e151d6a94e8055e8873f99b9f9b7112f415fd12d064f9"
     },
     "C10Probability.returnedMass_exact": {
       "file": "C10Probability/Returned.lean",

@@ -787,7 +787,7 @@ root. `WotsPrefixComparison.lean` and `LayerPrefixComparison.lean` compare accep
 sum-205 words at a common address: equal words give equal prefix values; otherwise
 some recovered position is earlier, with an actual suffix to the signed value.
 An earlier position is not necessarily undisclosed, and equal words need not
-mean equal messages or full digests. The complete repeated-address minimum is derived below. Lower-layer/FORS
+mean equal messages or full digests. The complete repeated-address minimum is derived below. FORS
 descent, adaptive coverage and private-opening charges, and the complete
 six-case partition/final forgery bound remain open.
 
@@ -877,7 +877,8 @@ and an actual chain suffix to every matching prior value. Initialized independen
 winning-game endpoints retain the original collision and public-zero alternatives.
 An earlier position is not a secrecy claim, absence from raw queries, or a
 private-opening probability charge; equal words do not imply equal full digests.
-Lower/FORS forgery descent and the final six-case PMF bound remain open.
+The repeated upper-word branch is descended into the lower tree below. FORS
+forgery descent and the final six-case PMF bound remain open.
 
 The fifteen finite examples in `ExposureExamples.lean` and
 `ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
@@ -887,6 +888,44 @@ uniformity is necessary. Synthetic records test logical coordinates, order and
 duplicates; separate actual cached executions establish duplicate histories and
 the failure of cache consistency after an overwrite. These populated-cache
 witnesses make no initialized empty-cache probability claim.
+
+
+`CountMessageBinding.lean` binds fixed-address serialized count inputs to their
+16-byte node messages. It does not infer message equality from equal accepted
+words: distinct actual inputs with the same accepted word give an explicit
+`AcceptedWotsCollision`, equivalent to failure of the existing acceptance-filtered
+collision-free predicate on the public input cache. No global input-map or
+full-digest injectivity is assumed, and arbitrary natural counts retain the
+32-byte serialization boundary.
+
+`RepeatedUpperBinding.lean` retrieves the prior signature's actual successful
+count lookup. A repeated upper word therefore yields either that collision or
+equality with the prior signature's lower root. Its upper-address equality
+identifies the entire lower tree, even when the submitted lower leaf differs
+from the prior selected leaf. `LowerChainOpening.lean` derives the certificate
+from the prior actual lower builder, uses reverse Merkle binding to obtain the
+submitted actual WOTS leaf, excludes rejected-count zero only in the retained
+nonzero branch, and derives all 43 private-seeded prefixes.
+
+`LowerExposureOpening.lean` compares that lower opening with the complete lower
+history, preserving both tree and leaf coordinates, duplicates, the empty-history
+endpoint seven, and actual suffix replay to every matching prior value.
+`LowerDescent.lean` composes the result for actual observed and independently
+initialized winning sessions. It retains the complete signing history and cap,
+the actual top opening, the prior upper-word/signature occurrence and equal
+lower root, plus the lower opening and comparison. The top-earlier, selected-node
+collision, public-zero and accepted-word-collision alternatives remain explicit.
+A lower earlier position still makes no secrecy or private-opening probability
+claim. The repeated lower-word branch still needs FORS descent; adaptive coverage,
+private-opening charging and the final six-case PMF bound remain open.
+
+The seven kernel-checked examples in `LowerDescentExamples.lean` exercise distinct
+node messages, actual accepted collisions, harmless repeated use of one input,
+natural-count serialization wrap, different lower leaves within the same upper
+address, different lower trees sharing a leaf coordinate, and an unseen lower
+address. Populated caches and synthetic coordinate records are labelled as such;
+these examples do not claim initialized-game probability or valid synthetic
+signing executions.
 
 
 These programs and integer formulas are manually transcribed from the existing
@@ -932,16 +971,25 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1605 theorem closures against
+The gate rebuilds every project module, checks all 1629 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-963 typed cases run 2889 compiler jobs: each baseline and changed
-definition must compile, 861 changed behaviors must reject at the
-consuming `checked` theorem, and 102 value-preserving changes must pass.
+995 typed cases run 2985 compiler jobs: each baseline and changed
+definition must compile, 888 changed behaviors must reject at the
+consuming `checked` theorem, and 107 value-preserving changes must pass.
+The 32 lower-descent cases add 27 negatives and five equivalent controls. They
+exercise count-message binding, the distinct-input accepted-collision predicate,
+actual lower builder/recovery/count/prefix witnesses, full lower-address and suffix
+comparison, and the composed descent's prior occurrence/root/word/value links.
+The unchanged complete consuming proofs reject the changed definitions; elementary
+normalization allows equivalent message/list/conjunction forms to pass. These are
+proof-sensitivity checks, not claims that every changed statement is false.
+All previous 963 fixture objects, 1605 theorem statements, proof-module bytes and
+52 source bindings are preserved.
 The 46 repeated-exposure cases add 40 negatives and six mathematical equivalents.
 They exercise minimum selection, empty-history endpoint, complete logical-address
 filtering and occurrence order, history length, every retained top-opening
