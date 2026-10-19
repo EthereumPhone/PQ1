@@ -4343,6 +4343,21 @@ optiga-probe = ["optiga-trust-m"]
 # Run it as `make se050-probe-hw BOARD=pq1`. NEVER SHIP — in PROD_FORBIDDEN.
 se050-probe = ["se050"]
 
+# #989: enforce SCP_REQUIRED on the SE050 applet (AN12413 §4.6.2). Every boot,
+# before any secret is loaded, measures the platform-SCP requirement with one
+# fixed plain CheckExists and, if the chip still answers plain commands,
+# creates the RESERVED_ID_PLATFORM_SCP (0x7FFF0207) credential and sets
+# SCP_REQUIRED; failure halts with an SE050 FAULT code (E0871..E0874).
+# REQUIRED in production (`nsc/mod.rs` fence, `PROD_REQUIRED`).
+se050-platform-scp-required = ["se050"]
+
+# #989 bench tool: `make se050-platform-scp-hw ACTION=status|require|release|cycle`.
+# Standalone SE050 terminal image that measures, sets (through the production
+# path) and clears the platform-SCP requirement on ONE die, bound to the
+# compiled-in PQ_SE050_PSCP_UID. `release` is the only code that can turn the
+# requirement off. NEVER SHIP — in PROD_FORBIDDEN.
+se050-platform-scp-tool = ["se050"]
+
 # LCD-only secure-element diagnostic for a probe-less board (EVT over DFU):
 # after the panel is up, runs TRNG / SE050 init+random / OPTIGA init+pair+
 # shield+random / rng_strong one step at a time, shows each result on the

@@ -1011,6 +1011,12 @@ fn optiga_probe_readonly_names_no_write_path() {
         "duress_read_half",
         "probe_hmac",
         ".unlock(",
+        // #991: the pre-shield allowlist writes E140; the AC probe's
+        // plaintext legs authenticate. Neither belongs in the read-only probe.
+        "send_preshield",
+        "PreShieldCmd",
+        "plain_ac_probe",
+        "AcProbePlainCmd",
     ];
     let mut checked = 0;
     for rel in [
@@ -1047,6 +1053,40 @@ fn optiga_probe_readonly_names_no_write_path() {
     }
 }
 
+/// #991: with the OPTIGA typed helpers now refusing without a session, the
+/// read-only probe reads its no-session steps through `apdu::plain_read_probe`.
+/// That helper must stay read-class by construction: a typed command enum with
+/// no raw header byte, and a body that can only build GetDataObject reads.
+#[test]
+fn optiga_plain_read_probe_is_read_class_only() {
+    let apdu = code_only(&read_workspace_file("secure/src/optiga/apdu.rs"));
+    let en_at = apdu.find("pub enum PlainReadCmd {").expect("PlainReadCmd present");
+    let en = &apdu[en_at..en_at + apdu[en_at..].find("\n}").unwrap()];
+    assert!(!en.contains("u8"), "PlainReadCmd must not carry a raw header/command byte");
+    let at = apdu.find("pub unsafe fn plain_read_probe(").expect("plain_read_probe present");
+    let body = &apdu[at..at + apdu[at..].find("\n}\n").unwrap()];
+    assert!(body.contains("cmd: PlainReadCmd"));
+    for f in ["CMD_SET_", "CMD_DECRYPT_SYM", "CMD_GET_RANDOM", "PARAM_ERASE_WRITE", "CMD_SET_OBJECT_PROTECTED"] {
+        assert!(!body.contains(f), "plain_read_probe must not build `{f}`");
+    }
+    assert_eq!(body.matches("PlainReadCmd::").count(), 3, "exactly the three read arms");
+    let cfg = &apdu[..at];
+    assert!(cfg[cfg.len().saturating_sub(120)..].contains("#[cfg(feature = \"optiga-probe\")]"));
+
+    // The AC probe's plaintext enum names no OID; its body names only the
+    // probe spares and the session slot.
+    let en_at = apdu.find("pub enum AcProbePlainCmd<'a> {").expect("AcProbePlainCmd present");
+    let en = &apdu[en_at..en_at + apdu[en_at..].find("\n}").unwrap()];
+    assert!(!en.contains("u16"), "AcProbePlainCmd must not carry an OID");
+    let at = apdu.find("pub unsafe fn plain_ac_probe(").expect("plain_ac_probe present");
+    let body = &apdu[at..at + apdu[at..].find("\n}\n").unwrap()];
+    for f in ["OID_AUTH_REF", "OID_ENTROPY", "OID_MASTER_SECRET", "OID_VK", "OID_PIN_CTR", "OID_DURESS", "OID_PBS"] {
+        assert!(!body.contains(f), "plain_ac_probe must not name `{f}`");
+    }
+    let cfg = &apdu[..at];
+    assert!(cfg[cfg.len().saturating_sub(160)..].contains("#[cfg(feature = \"optiga-ac-probe\")]"));
+}
+
 /// The SE050 read-only probe (`se050-probe`, DVT §6B) must not name any
 /// write / create / delete / authenticate / rotate / provision path. Mirrors
 /// `optiga_probe_readonly_names_no_write_path`. The typed read helpers the
@@ -1080,6 +1120,12 @@ fn se050_probe_readonly_names_no_write_path() {
         "transceive",
         "run_admin_wipe",
         "run_factory_reset",
+        // #989: the probe measures the platform-SCP state; it must never set it.
+        "set_platform_scp",
+        "ensure_platform_scp",
+        "release_platform_scp",
+        "platform_scp_credential",
+        "plain_mutate",
     ];
     let rel = "secure/src/se050/probe/mod.rs";
     let src = code_only(&read_workspace_file(rel));

@@ -322,6 +322,32 @@ compile_error!(
     "`se050-probe` requires `otp-hardcoded-master-key`: any other key root can \
      burn OTP on a blank die"
 );
+#[cfg(all(feature = "se050-platform-scp-tool", feature = "mock-se"))]
+compile_error!("`se050-platform-scp-tool` requires real SE050 silicon — drop `mock-se`");
+#[cfg(all(feature = "se050-platform-scp-tool", feature = "dual-se"))]
+compile_error!("`se050-platform-scp-tool` is a standalone SE050 image — drop `dual-se`");
+#[cfg(all(feature = "se050-platform-scp-tool", not(feature = "stm32u585")))]
+compile_error!("`se050-platform-scp-tool` is a hardware tool — build with `stm32u585`");
+#[cfg(all(feature = "se050-platform-scp-tool", not(feature = "debug-log")))]
+compile_error!("`se050-platform-scp-tool` reports over semihosting — build with `debug-log`");
+#[cfg(all(feature = "se050-platform-scp-tool", not(feature = "otp-hardcoded-master-key")))]
+compile_error!(
+    "`se050-platform-scp-tool` requires `otp-hardcoded-master-key`: its credential and \
+     SCP03 keys must be the reproducible bench ones, and no other root may burn OTP"
+);
+#[cfg(all(
+    feature = "se050-platform-scp-tool",
+    any(feature = "se050-probe", feature = "se050-stress", feature = "se050-platform-scp-required")
+))]
+compile_error!(
+    "`se050-platform-scp-tool` is its own terminal image — drop `se050-probe` / \
+     `se050-stress` / `se050-platform-scp-required`"
+);
+#[cfg(all(feature = "se050-platform-scp-required", feature = "se050-probe"))]
+compile_error!(
+    "`se050-platform-scp-required` would change the chip state the read-only \
+     `se050-probe` measures — build the probe without it"
+);
 #[cfg(not(test))]
 mod timeout;
 #[cfg(all(feature = "optiga-trust-m", not(test)))]
@@ -1012,6 +1038,27 @@ fn setup_systick() {
     ARCH.syst_rvr.write(reload);
     ARCH.syst_cvr.write(0);
     ARCH.syst_csr.write(0x07);
+}
+
+/// #989: the SE050 platform-SCP enforcement failed. Show "SE050 FAULT /
+/// EXXXX HALT" (code from `PlatformScpError::code`, first-boot code space,
+/// `first-boot-provisioning.md`) and stop before any secret is loaded.
+#[cfg(all(feature = "se050-platform-scp-required", feature = "stm32u585", not(test)))]
+fn halt_se050_platform_scp(e: se050::PlatformScpError) -> ! {
+    secure_log!("[S] SE050 platform-SCP enforcement FAILED: {:?} — HALT", e);
+    let raw = e.code();
+    let hex = b"0123456789ABCDEF";
+    let mut line = [0u8; 10];
+    line[0] = b'E';
+    line[1] = hex[((raw >> 12) & 0xF) as usize];
+    line[2] = hex[((raw >> 8) & 0xF) as usize];
+    line[3] = hex[((raw >> 4) & 0xF) as usize];
+    line[4] = hex[(raw & 0xF) as usize];
+    line[5..10].copy_from_slice(b" HALT");
+    ui::show_status("SE050 FAULT", ui::ascii_str(&line));
+    loop {
+        cortex_m::asm::wfi();
+    }
 }
 
 /// Returns true if the SE backend has been provisioned.
@@ -1951,6 +1998,25 @@ fn main() -> ! {
                 cortex_m::asm::wfe();
             }
         }
+
+        // Bench SE050 platform-SCP tool (#989): measure, set or clear the
+        // applet's SCP_REQUIRED state on ONE die (UID-bound). TERMINAL like the
+        // probes above; standalone `se050` build, so `SE` is a bare `Se050`.
+        #[cfg(feature = "se050-platform-scp-tool")]
+        {
+            // SAFETY: single-threaded boot path; nothing else holds SE, and
+            // nothing will after this block (SYS_EXIT / wfe).
+            let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
+            let ok = unsafe { se050::pscp_tool::run(se) };
+            cortex_m_semihosting::debug::exit(if ok {
+                cortex_m_semihosting::debug::EXIT_SUCCESS
+            } else {
+                cortex_m_semihosting::debug::EXIT_FAILURE
+            });
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
     }
 
     ui::init();
@@ -2059,6 +2125,37 @@ fn main() -> ! {
     unsafe {
         let se = &mut *core::ptr::addr_of_mut!(SE);
         first_boot::run_post_lock_provisioning(se);
+    }
+
+    // #989 — SE050 platform-SCP enforcement, every boot, before any secret is
+    // loaded (PBS, PIN reconcile, wipe resume, wizard, unlock). The SE050E2
+    // ships SCP_NOT_REQUIRED: a keyless bus party gets the version, the full
+    // object inventory and SE randomness in plaintext, and `half_E` rests on
+    // per-object policy alone. Measure once with a plain probe (fresh link, no
+    // session); unless the chip already refuses AND our 0x7FFF0207 credential
+    // is in place, set SCP_REQUIRED. Runs after Phase B so the BHK the
+    // credential derives from is loaded, and the SCP03 keys are the final
+    // ones. A definitive failure halts with "SE050 FAULT / E087x" and no
+    // secret ever leaves the chips.
+    #[cfg(all(
+        feature = "se050-platform-scp-required",
+        feature = "stm32u585",
+        not(feature = "prodtest"),
+        not(feature = "factory-provisioning"),
+        not(test)
+    ))]
+    unsafe {
+        #[cfg(feature = "dual-se")]
+        let se050 = &mut (*core::ptr::addr_of_mut!(SE)).se050;
+        #[cfg(not(feature = "dual-se"))]
+        let se050 = &mut *core::ptr::addr_of_mut!(SE);
+        let measured = se050.measure_platform_scp();
+        match se050.ensure_platform_scp_required(measured) {
+            Ok(_outcome) => {
+                secure_log!("[S] SE050 platform SCP required ({:?}, probe {:?})", _outcome, measured);
+            }
+            Err(e) => halt_se050_platform_scp(e),
+        }
     }
 
     // Load the Platform Binding Secret for OPTIGA Trust M from secure flash.
@@ -2953,7 +3050,7 @@ fn main() -> ! {
         secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 1: provision OK");
 
         // ── Step 2: E120 initial state = (0, HW_PIN_CTR_LIMIT) ───
-        let (c0, limit) = match se.read_hw_pin_counter() {
+        let (c0, limit) = match se.read_hw_pin_counter_shielded() {
             Some(p) => p,
             None => fail!("read_hw_pin_counter returned None"),
         };
@@ -2968,7 +3065,7 @@ fn main() -> ! {
             Err(UnlockError::PinIncorrect) => {}
             other => { secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 3: wrong PIN got {:?}", other.as_ref().err()); fail!("wrong PIN not rejected"); }
         }
-        let (c1, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        let (c1, _) = se.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
         if c1 != 1 {
             secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 3: E120.current={} expected 1", c1);
             fail!("E120 did not bump after wrong PIN");
@@ -2980,7 +3077,7 @@ fn main() -> ! {
             Ok(_) => {}
             other => { secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 4: correct PIN got {:?}", other.as_ref().err()); fail!("correct PIN rejected"); }
         }
-        let (c4, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        let (c4, _) = se.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
         if c4 != 0 {
             secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 4: E120.current={} expected 0", c4);
             fail!("E120 not reset after correct PIN");
@@ -2992,7 +3089,7 @@ fn main() -> ! {
             if !matches!(se.unlock(&wrong_pin), Err(UnlockError::PinIncorrect)) {
                 fail!("wrong PIN not rejected in burst");
             }
-            let (c, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+            let (c, _) = se.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
             if c != i {
                 secure_log!("[S] [E2E-OPTIGA-HW-CTR] step 5.{}: E120.current={} expected {}", i, c, i);
                 fail!("E120 mismatch during burst");
@@ -3004,7 +3101,7 @@ fn main() -> ! {
         if !matches!(se.unlock(&correct_pin), Ok(_)) {
             fail!("second correct PIN rejected");
         }
-        let (c6, _) = se.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        let (c6, _) = se.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
         if c6 != 0 {
             fail!("E120 not reset on repeat correct PIN");
         }
@@ -3085,7 +3182,7 @@ fn main() -> ! {
         secure_log!("[S] [DURESS-PROBE] step 1: real provision OK");
 
         // ===== OPTIGA: second AuthRef at F1D8, no E120 binding =====
-        let (e0, _) = match se.optiga.read_hw_pin_counter() {
+        let (e0, _) = match se.optiga.read_hw_pin_counter_shielded() {
             Some(p) => p,
             None => fail!("E120 read returned None"),
         };
@@ -3100,7 +3197,7 @@ fn main() -> ! {
         }
         secure_log!("[S] [DURESS-PROBE] step 3: OPTIGA F1D8 duress AuthRef provisioned (Execute=ALW, no lock) OK");
 
-        let (e1, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        let (e1, _) = se.optiga.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
         if e1 != e0 {
             secure_log!("[S] [DURESS-PROBE] step 4: E120 {}→{} during F1D8 provision", e0, e1);
             fail!("E120 moved while provisioning F1D8");
@@ -3116,7 +3213,7 @@ fn main() -> ! {
         }
         secure_log!("[S] [DURESS-PROBE] step 5: OPTIGA F1D8 duress auth OK");
 
-        let (e2, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        let (e2, _) = se.optiga.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
         if e2 != e0 {
             secure_log!("[S] [DURESS-PROBE] step 6: E120={} expected {} — F1D8 auth BUMPED E120", e2, e0);
             fail!("F1D8 auth touched E120 (unexpected LUC coupling)");
@@ -3131,7 +3228,7 @@ fn main() -> ! {
                 fail!("real F1D0 wrong-PIN not rejected after F1D8 added");
             }
         }
-        let (e3, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        let (e3, _) = se.optiga.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
         if e3 != e0 + 1 {
             secure_log!("[S] [DURESS-PROBE] step 7: E120={} expected {}", e3, e0 + 1);
             fail!("real F1D0 wrong PIN didn't bump E120 with F1D8 present");
@@ -3142,7 +3239,7 @@ fn main() -> ! {
         if se.optiga.unlock(&real_pin).is_err() {
             fail!("real F1D0 correct PIN rejected after F1D8 added");
         }
-        let (e4, _) = se.optiga.read_hw_pin_counter().unwrap_or((0xFFFF_FFFF, 0));
+        let (e4, _) = se.optiga.read_hw_pin_counter_shielded().unwrap_or((0xFFFF_FFFF, 0));
         if e4 != 0 {
             fail!("E120 not reset after real correct PIN");
         }
@@ -3308,7 +3405,7 @@ fn main() -> ! {
 
         // Read both counters pre-verify (a correct real PIN in step 8
         // already reset E120 to 0; the timing block then bumped it by NT).
-        let e120_pre = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_pre = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         let e121_pre = se.optiga.probe_read_counter(DURESS_CTR_OID).map(|(c, _)| c).unwrap_or(u32::MAX);
         secure_log!("[S] [DURESS-PROBE] step 10: pre-verify E120={} E121={}", e120_pre, e121_pre);
         if e120_pre == u32::MAX || e121_pre == u32::MAX {
@@ -3324,7 +3421,7 @@ fn main() -> ! {
             fail!("matched-LUC duress auto-state verify (F1D8) failed");
         }
 
-        let e120_post = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_post = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         let e121_post = se.optiga.probe_read_counter(DURESS_CTR_OID).map(|(c, _)| c).unwrap_or(u32::MAX);
         secure_log!("[S] [DURESS-PROBE] step 10: post-verify E120={} E121={}", e120_post, e121_post);
         if e120_post != e120_pre {
@@ -3431,7 +3528,7 @@ fn main() -> ! {
         secure_log!("[S] [DURESS-PROV] step 3: is_provisioned + duress_is_provisioned both true OK");
 
         // 4. Counter baselines before the OPTIGA decoy read.
-        let e120_pre = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_pre = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         let e121_pre = se.optiga.probe_read_counter(optiga::apdu::OID_PIN_CTR_DURESS).map(|(c, _)| c).unwrap_or(u32::MAX);
         if e120_pre == u32::MAX || e121_pre == u32::MAX { fail!("counter read failed pre decoy-read"); }
         secure_log!("[S] [DURESS-PROV] step 4: pre-read E120={} E121={}", e120_pre, e121_pre);
@@ -3453,7 +3550,7 @@ fn main() -> ! {
         };
 
         // 6. Isolation: E120 untouched, E121 bumped by exactly 1.
-        let e120_post = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_post = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         let e121_post = se.optiga.probe_read_counter(optiga::apdu::OID_PIN_CTR_DURESS).map(|(c, _)| c).unwrap_or(u32::MAX);
         secure_log!("[S] [DURESS-PROV] step 6: post-read E120={} E121={}", e120_post, e121_post);
         if e120_post != e120_pre { fail!("decoy read drifted real E120"); }
@@ -3497,7 +3594,7 @@ fn main() -> ! {
         let _ = crate::hw::flash::pin_attempts_reset_bench();
 
         // 10. Duress PIN through the dispatch → decoy master, E120 untouched.
-        let e120_before_duress = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_before_duress = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         match crate::nsc::gated_unlock(se, &duress_pin) {
             Ok(m) if m == decoy_master => {
                 secure_log!("[S] [DURESS-PROV] step 10: gated_unlock(duress) → decoy master OK");
@@ -3505,7 +3602,7 @@ fn main() -> ! {
             Ok(_) => fail!("gated_unlock(duress) returned wrong master (not decoy)"),
             Err(e) => { secure_log!("[S] [DURESS-PROV] gated_unlock(duress) err {:?}", e); fail!("gated_unlock(duress) failed"); }
         }
-        let e120_after_duress = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_after_duress = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         if e120_after_duress != e120_before_duress {
             secure_log!("[S] [DURESS-PROV] step 11: E120 {}→{} on duress dispatch", e120_before_duress, e120_after_duress);
             fail!("duress dispatch drifted real E120 (no-skip of real verify?)");
@@ -3697,7 +3794,7 @@ fn main() -> ! {
         macro_rules! check_sync {
             ($phase:expr, $mcu_exp:expr, $e120_exp:expr, $se050_rem_exp:expr) => {{
                 let mcu = hw::flash::pin_attempts_read();
-                let e120_curr = se.optiga.read_hw_pin_counter()
+                let e120_curr = se.optiga.read_hw_pin_counter_shielded()
                     .map(|(c, _)| c)
                     .unwrap_or(u32::MAX);
                 let se050_rem = {
@@ -4035,7 +4132,7 @@ fn main() -> ! {
         // prior runs left non-zero silicon state on E120 / SE050.
         // Iteration deltas below compare relative to these baselines.
         let mcu_init = hw::flash::pin_attempts_read();
-        let e120_init = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_init = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         let se050_init = se.se050.remaining_attempts();
         secure_log!(
             "[SYNC] wipe-e2e setup-init: MCU={} E120.curr={} SE050.rem={} (baseline)",
@@ -4062,7 +4159,7 @@ fn main() -> ! {
                 }
             }
             let mcu = hw::flash::pin_attempts_read();
-            let e120 = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+            let e120 = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
             let se050 = se.se050.remaining_attempts();
             secure_log!(
                 "[E2E-WIPE] iter {}/{}: MCU={} E120.curr={} SE050.rem={}",
@@ -4085,7 +4182,7 @@ fn main() -> ! {
 
         // ── Verify counters saturated at expected values ──
         let mcu_end = hw::flash::pin_attempts_read();
-        let e120_end = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_end = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         let se050_end = se.se050.remaining_attempts();
         let expected_e120_end = e120_init + max as u32;
         secure_log!(
@@ -4132,7 +4229,7 @@ fn main() -> ! {
         // cycles eventually saturate the silicon LUC counter at
         // HW_PIN_CTR_LIMIT → soft-brick DoS. A post-wipe value of 0 proves
         // the transient-auth reset ran and succeeded.
-        let e120_post = se.optiga.read_hw_pin_counter().map(|(c, _)| c).unwrap_or(u32::MAX);
+        let e120_post = se.optiga.read_hw_pin_counter_shielded().map(|(c, _)| c).unwrap_or(u32::MAX);
         secure_log!(
             "[SYNC] wipe-e2e post-wipe E120: {} (expected 0, pre-wipe was {})",
             e120_post, expected_e120_end

@@ -663,9 +663,15 @@ impl OptigaTrustM {
         self.init()?;
         let mut pbs = [0u8; 64];
         // SAFETY: single-threaded boot; the shield is not active yet, so this
-        // is a plaintext GetDataObject on this driver's own IFX state.
+        // is a plaintext GetDataObject on this driver's own IFX state — via
+        // the fixed pre-shield allowlist, since the typed helpers refuse
+        // without a session (#991).
         let n = unsafe {
-            apdu::get_data_object(&mut self.ifx, &mut self.shield, apdu::OID_PBS, 0, 64, &mut pbs)
+            apdu::send_preshield(
+                &mut self.ifx, &mut self.shield,
+                apdu::PreShieldCmd::ReadPbsBench,
+                &mut pbs,
+            )
         };
         match n {
             Ok(64) => {}
@@ -949,16 +955,43 @@ impl OptigaTrustM {
             p
         };
 
+        // After the first-boot rotation (#36), `current_pbs()` is the salted
+        // FINAL PBS, and this function is still reached after a wipe
+        // (`pair_for_first_boot`, the wizard's `store_objects`). Writing it
+        // below would put the final shield root on the I2C bus in plaintext
+        // (#991 review). E140 already holds it after a completed rotation, so
+        // prove that with a handshake instead and write nothing; if the
+        // handshake fails, refuse rather than fall back to the plaintext
+        // write.
+        #[cfg(all(feature = "stm32u585", feature = "rdp2-self-lock"))]
+        if crate::first_boot::journal_all_done() {
+            self.shield.load_pbs(&pbs);
+            pbs.zeroize();
+            return match self.ensure_shield() {
+                Ok(()) => {
+                    secure_log!("[OPTIGA] final PBS already at E140 (handshake OK); no write");
+                    Ok(())
+                }
+                Err(e) => {
+                    secure_log!("[OPTIGA] final-PBS handshake FAILED ({:?}); refusing plaintext E140 write", e);
+                    Err(e)
+                }
+            };
+        }
+
+        // Plaintext only through the fixed pre-shield allowlist (#991); if a
+        // session is already up, the same commands go shielded.
         unsafe {
-            apdu::set_data_object(
+            apdu::send_preshield(
                 &mut self.ifx, &mut self.shield,
-                apdu::OID_PBS, &pbs,
+                apdu::PreShieldCmd::WritePbs(&pbs),
+                &mut [],
             )?;
 
-            let (meta, meta_len) = apdu::build_metadata_pbs_final();
-            apdu::set_metadata(
+            apdu::send_preshield(
                 &mut self.ifx, &mut self.shield,
-                apdu::OID_PBS, &meta[..meta_len],
+                apdu::PreShieldCmd::WritePbsMetadata,
+                &mut [],
             )?;
 
             // Do not couple ordinary pairing to lifecycle authority.  The
@@ -994,9 +1027,9 @@ impl OptigaTrustM {
     ///
     /// Reads metadata first and only writes when needed so we don't burn
     /// an NVM cycle on every boot once the chip is already Operational.
-    /// Metadata reads are Change=ALW on the LcsO tag (SRM §"Metadata
-    /// associated with data and key objects"), no shielded connection
-    /// required.
+    /// The chip would serve the metadata read without a shield (Read=ALW),
+    /// but since #991 the typed helpers refuse without one, so a future
+    /// caller must `ensure_shield()` first.
     #[allow(dead_code)] // retained for explicit gated validation/future reviewed ceremony
     unsafe fn ensure_pbs_lcso_operational(&mut self) -> Result<(), OptigaError> {
         let mut meta = [0u8; 64];
@@ -1061,13 +1094,16 @@ impl OptigaTrustM {
                 continue;
             }
             let mut buf = [0u8; 4];
+            // #991: the strict dispatcher refuses without a shield, and this
+            // read runs at boot before one exists. A refusal would land in
+            // the transport arm below and report a fresh chip as provisioned,
+            // so the boot read goes through the fixed pre-shield allowlist
+            // (F1E1 is Read=ALW; shielded when a session is up).
             match unsafe {
-                apdu::get_data_object(
+                apdu::send_preshield(
                     &mut self.ifx,
                     &mut self.shield,
-                    apdu::OID_COUNTER,
-                    0,
-                    1,
+                    apdu::PreShieldCmd::ReadCounter,
                     &mut buf,
                 )
             } {
@@ -1263,9 +1299,18 @@ impl OptigaTrustM {
                 );
                 n
             }
-            Err(e) => {
+            // A chip verdict (Status) means "no usable metadata yet" and keeps
+            // the write path below. Anything else — a transport fault, or a
+            // shield refusal (the session dropped) — is propagated: carrying
+            // on would only fail the `set_metadata` one APDU later with a
+            // less useful error (#991).
+            Err(e @ OptigaError::Status(_)) => {
                 secure_log!("[OPTIGA/prov] F1D0 get_metadata FAILED: {:?}", e);
                 0
+            }
+            Err(e) => {
+                secure_log!("[OPTIGA/prov] F1D0 get_metadata FAILED: {:?} (not a chip verdict; aborting)", e);
+                return Err(e);
             }
         };
 
@@ -1926,6 +1971,20 @@ impl OptigaTrustM {
     /// `None` if the OID is unprovisioned / the read fails.
     /// Remaining attempts = `limit.saturating_sub(current)`.
     #[cfg(feature = "optiga-hw-counter")]
+    pub unsafe fn read_hw_pin_counter_shielded(&mut self) -> Option<(u32, u32)> {
+        // For callers outside an OPTIGA operation (the e2e harnesses in
+        // `main.rs`): bring the session up first. Since #991 the read below
+        // refuses without one instead of going out in plaintext. Not used
+        // inside `authenticate_and_read`, where a renegotiating
+        // `ensure_shield` would drop the PIN auto-state mid-operation.
+        self.ensure_shield().ok()?;
+        self.read_hw_pin_counter()
+    }
+
+    /// [`Self::read_hw_pin_counter_shielded`] without the session bring-up,
+    /// for callers that already hold a live session. Strict: `None` if the
+    /// shield is down.
+    #[cfg(feature = "optiga-hw-counter")]
     pub unsafe fn read_hw_pin_counter(&mut self) -> Option<(u32, u32)> {
         let mut buf = [0u8; 8];
         match apdu::get_data_object(
@@ -2043,7 +2102,10 @@ impl OptigaTrustM {
         )?;
         // Reset E121 (F1D8 auth-state active → Change=Auto(F1D8) satisfied).
         // Best-effort: the unlock already succeeded; a failed reset only
-        // means E121 keeps climbing toward its (very high) limit.
+        // means E121 keeps climbing toward its (very high) limit. A failure
+        // here can no longer leave a dropped session that the next APDU
+        // silently sends in plaintext: since #991 every typed helper refuses
+        // without a session, and every later OPTIGA flow ensures the shield.
         let ctr = apdu::encode_pin_ctr(0, Self::DURESS_CTR_LIMIT);
         let _ = apdu::set_data_object(
             &mut self.ifx, &mut self.shield, apdu::OID_PIN_CTR_DURESS, &ctr,
@@ -2290,8 +2352,8 @@ impl OptigaTrustM {
 
         // Bring the Shielded Connection up now — every subsequent APDU
         // (auth_ref + user OIDs + counter) needs `Conf(E140)` satisfied
-        // on re-provisioning. `send_command` auto-wraps once shield is
-        // active. On a fresh chip the Change ACs on F1D1..F1D4 default
+        // on re-provisioning. Since #991 `send_command` refuses without a
+        // shield rather than sending plaintext. On a fresh chip the Change ACs on F1D1..F1D4 default
         // to ALW so the shield is technically optional, but bringing it
         // up unconditionally makes the flow identical on fresh and
         // partially-provisioned chips — and idempotency is the
@@ -2528,6 +2590,23 @@ impl OptigaTrustM {
         match apdu::get_data_object(
             &mut self.ifx, &mut self.shield,
             apdu::OID_COUNTER, 0, 1, &mut buf,
+        ) {
+            Ok(n) if n > 0 => Some(buf[0]),
+            _ => None,
+        }
+    }
+
+    /// [`Self::read_counter_raw`] for callers that run before any shield
+    /// exists (the legacy boot reconcile, the post-wipe e2e check): F1E1 is
+    /// Read=ALW, so it goes through the fixed pre-shield allowlist — shielded
+    /// when a session is up, plaintext otherwise (#991). `read_counter_raw`
+    /// itself stays strict: it is the CRIT-6 readback inside
+    /// `authenticate_and_read`, where a plaintext answer must not count.
+    unsafe fn read_counter_preshield(&mut self) -> Option<u8> {
+        let mut buf = [0u8; 4];
+        match apdu::send_preshield(
+            &mut self.ifx, &mut self.shield,
+            apdu::PreShieldCmd::ReadCounter, &mut buf,
         ) {
             Ok(n) if n > 0 => Some(buf[0]),
             _ => None,
@@ -2969,7 +3048,16 @@ impl OptigaTrustM {
                          counter will carry over, next wipe cycle will retry",
                         e
                     );
-                    // Fall through — do not abort the wipe.
+                    // Fall through — do not abort the wipe — but on a fresh,
+                    // shielded session (#991). A failed wrap clears
+                    // `shield.active`, and a DecryptFailed leaves it set but
+                    // desynced; the blank writes below would otherwise fail
+                    // closed (or, before #991, go out in plaintext). If the
+                    // resync itself fails, the wipe leg aborts here, the wipe
+                    // flag stays armed and the next boot resumes it.
+                    #[cfg(feature = "stm32u585")]
+                    self.hard_reset_and_reinit()?;
+                    self.ensure_shield()?;
                 }
             } else {
                 secure_log!(
@@ -3199,7 +3287,7 @@ impl OptigaTrustM {
 
         // ---- 4. Counter must now read RESET_SENTINEL (0xFF) ----
         //    Read AC on F1E1 is ALW, no shield or PIN required.
-        let counter = unsafe { self.read_counter_raw() };
+        let counter = unsafe { self.read_counter_preshield() };
         match counter {
             Some(v) if v == RESET_SENTINEL => {
                 secure_log!("[OPTIGA-E2E-ADMIN] step 4: counter = RESET_SENTINEL OK");
@@ -3571,9 +3659,11 @@ impl WalletStore for OptigaTrustM {
         }
         #[cfg(not(feature = "optiga-hw-counter"))]
         {
-            // SAFETY: `read_counter_raw` touches the OPTIGA APDU stack;
-            // we hold `&mut self` so exclusive access is established.
-            unsafe { self.read_counter_raw() }
+            // SAFETY: `read_counter_preshield` touches the OPTIGA APDU stack;
+            // we hold `&mut self` so exclusive access is established. Boot
+            // reconcile runs before any shield (#991: the strict dispatcher
+            // would refuse `read_counter_raw` here).
+            unsafe { self.read_counter_preshield() }
         }
     }
 

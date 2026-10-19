@@ -155,9 +155,10 @@ pub use crate::scp03_logic::{
     PLATFORM_DEK, PLATFORM_ENC, PLATFORM_MAC, PUT_KEY_APDU_LEN,
 };
 use crate::scp03_logic::{
-    build_derivation_data, kdf, DD_CARD_CRYPTOGRAM, DD_HOST_CRYPTOGRAM, DD_S_ENC, DD_S_MAC,
-    DD_S_RMAC,
+    build_derivation_data, command_apdu_layout, kdf, DD_CARD_CRYPTOGRAM, DD_HOST_CRYPTOGRAM,
+    DD_S_ENC, DD_S_MAC, DD_S_RMAC,
 };
+pub use crate::scp03_logic::WrapError;
 
 use super::apdu::Se050Error;
 use zeroize::Zeroizing;
@@ -527,33 +528,39 @@ fn response_icv(session: &Scp03Session) -> [u8; 16] {
 /// a transport-level loss of the response keeps host/card counters in
 /// sync (the card also only advances after successfully sending the
 /// response).
+///
+/// **Fails closed (#991).** There is no unwrapped outcome: no session →
+/// `Err(Inactive)`; a shape `command_apdu_layout` does not accept (shorter
+/// than a header, Lc disagreeing with the bytes present) → `Err(Malformed)`;
+/// data or output that does not fit → `Err(TooLong)`. This used to copy the
+/// APDU into `out` unchanged when the session was down or the APDU was
+/// shorter than 4 bytes, so invariant #3 rested on `send_apdu` refusing
+/// first. The refusal now lives where the bytes are produced; `send_apdu`'s
+/// own `!scp03.active` guard stays as the first gate.
 pub fn wrap_apdu(
     session: &mut Scp03Session,
     apdu: &[u8],
     out: &mut [u8],
-) -> usize {
-    if !session.active || apdu.len() < 4 {
-        out[..apdu.len()].copy_from_slice(apdu);
-        return apdu.len();
+) -> Result<usize, WrapError> {
+    if !session.active {
+        return Err(WrapError::Inactive);
     }
 
-    // Parse incoming APDU to locate header and data
-    let extended = apdu.len() >= 7 && apdu[4] == 0x00;
-    let (hdr_len, data_len) = if extended {
-        let lc = ((apdu[5] as usize) << 8) | (apdu[6] as usize);
-        (7, lc)
-    } else if apdu.len() > 5 {
-        (5, apdu.len() - 5)
-    } else {
-        (apdu.len(), 0)
-    };
+    // Parse incoming APDU to locate header and data (exact framing only).
+    let layout = command_apdu_layout(apdu)?;
+    if out.len() < layout.wrapped_len() {
+        return Err(WrapError::TooLong);
+    }
+    let extended = layout.extended;
+    let (hdr_len, data_len) = (layout.hdr_len, layout.data_len);
     let has_data = data_len > 0;
 
     // --- C-DEC: encrypt command data ---
     let enc_len = if has_data {
         // LCR-F4: holds plaintext command data (PIN / provisioned-object bytes)
         // before + after in-place encryption — wipe on scope exit.
-        let mut enc_buf = Zeroizing::new([0u8; 1024]);
+        // Sized by the same constant `command_apdu_layout` bounds `padded_len` against.
+        let mut enc_buf = Zeroizing::new([0u8; crate::scp03_logic::WRAP_ENC_BUF_LEN]);
         enc_buf[..data_len].copy_from_slice(&apdu[hdr_len..hdr_len + data_len]);
         // ISO 7816-4 padding: 0x80 then zeros to next 16-byte boundary
         let mut padded_len = data_len;
@@ -612,7 +619,13 @@ pub fn wrap_apdu(
     out[mac_offset..mac_offset + 8].copy_from_slice(&mac_full[..8]);
     session.mcv = mac_full;
 
-    mac_offset + 8
+    Ok(mac_offset + 8)
+}
+
+impl From<WrapError> for super::apdu::Se050Error {
+    fn from(_: WrapError) -> Self {
+        super::apdu::Se050Error::Scp03
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1500,7 +1513,17 @@ impl ShieldedConnection {
         plaintext: &[u8],
         out: &mut [u8],
     ) -> Result<usize, ShieldError> {
-        if !self.active {
+        // Double-checked (#991): this is now the only thing standing between
+        // the OPTIGA typed helpers and the bus. After `zeroize_session` a
+        // single skipped check would CCM-encrypt under the all-zero session
+        // key — plaintext-equivalent to anyone who knows that.
+        // SAFETY: volatile reads of this session's own `bool` field.
+        if unsafe { !core::ptr::read_volatile(&self.active) } {
+            return Err(ShieldError::NotActive);
+        }
+        crate::fi::wait_random();
+        // SAFETY: as above.
+        if unsafe { !core::ptr::read_volatile(&self.active) } {
             return Err(ShieldError::NotActive);
         }
 

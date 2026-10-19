@@ -530,7 +530,17 @@ impl ShieldedConnection {
         plaintext: &[u8],
         out: &mut [u8],
     ) -> Result<usize, ShieldError> {
-        if !self.active {
+        // Double-checked (#991): this is now the only thing standing between
+        // the OPTIGA typed helpers and the bus. After `zeroize_session` a
+        // single skipped check would CCM-encrypt under the all-zero session
+        // key — plaintext-equivalent to anyone who knows that.
+        // SAFETY: volatile reads of this session's own `bool` field.
+        if unsafe { !core::ptr::read_volatile(&self.active) } {
+            return Err(ShieldError::NotActive);
+        }
+        crate::fi::wait_random();
+        // SAFETY: as above.
+        if unsafe { !core::ptr::read_volatile(&self.active) } {
             return Err(ShieldError::NotActive);
         }
 

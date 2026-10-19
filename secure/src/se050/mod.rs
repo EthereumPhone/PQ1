@@ -9,6 +9,8 @@
 pub mod i2c;
 #[cfg(feature = "se050-probe")]
 pub mod probe;
+#[cfg(feature = "se050-platform-scp-tool")]
+pub mod pscp_tool;
 pub mod t1oi2c;
 pub mod apdu;
 pub mod scp03;
@@ -16,6 +18,64 @@ pub mod scp03;
 use apdu::Se050Error;
 use scp03::Scp03Session;
 use t1oi2c::{T1Error, T1State};
+
+// ---------------------------------------------------------------------------
+// Platform-SCP enforcement (#989)
+// ---------------------------------------------------------------------------
+
+#[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+pub use crate::scp03_logic::PlatformScpState;
+
+/// Why the platform-SCP enforcement (#989) failed. [`Self::code`] is the
+/// field-visible `SE050 FAULT / EXXXX` value; it shares the first-boot code
+/// space (`first_boot::state::FirstBootError`, `0x08xx`).
+#[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlatformScpError {
+    /// Link, SCP03 or transport fault left after the bounded retries.
+    Link,
+    /// `0x7FFF0207` exists, does not open with our credential, and could not
+    /// be removed: squatted or tampered.
+    ForeignCredential,
+    /// The applet refused to create the credential.
+    CredentialCreateRefused,
+    /// The applet refused `SetPlatformSCPRequest` from our session.
+    SetRefused,
+}
+
+#[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+impl PlatformScpError {
+    /// Stable field code (documented in `first-boot-provisioning.md`).
+    pub const fn code(self) -> u16 {
+        match self {
+            PlatformScpError::Link => 0x0871,
+            PlatformScpError::ForeignCredential => 0x0872,
+            PlatformScpError::CredentialCreateRefused => 0x0873,
+            PlatformScpError::SetRefused => 0x0874,
+        }
+    }
+}
+
+/// What [`Se050::ensure_platform_scp_required`] found or did.
+#[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlatformScpOutcome {
+    /// The chip refused the plain probe and our credential is in place.
+    AlreadyRequired,
+    /// `SetPlatformSCPRequest(SCP_REQUIRED)` returned `9000` this boot.
+    Enforced,
+}
+
+/// Full fresh-link attempts before a transient fault becomes `Link`.
+#[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+const PLATFORM_SCP_ATTEMPTS: u32 = 3;
+
+/// Errors that say nothing about the credential and are retried with a fresh
+/// link: transport, an SCP03 desync, and the A3 session-pending `0x6982`.
+#[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+fn platform_scp_transient(e: &Se050Error) -> bool {
+    e.is_inconclusive() || matches!(e, Se050Error::Scp03 | Se050Error::Status(0x6982))
+}
 
 // ---------------------------------------------------------------------------
 // Object IDs on the SE050
@@ -275,7 +335,7 @@ impl Se050 {
     /// use `&mut self.t1` / `&mut self.scp03` directly for the same
     /// reason). Production code MUST go through the typed helpers;
     /// this exists for in-tree testing only.
-    #[cfg(any(feature = "se050-stress", feature = "se050-probe"))]
+    #[cfg(any(feature = "se050-stress", feature = "se050-probe", feature = "se050-platform-scp-tool"))]
     pub(crate) fn t1_scp03_mut(&mut self) -> (&mut T1State, &mut Scp03Session) {
         (&mut self.t1, &mut self.scp03)
     }
@@ -737,6 +797,220 @@ impl Se050 {
     /// Iteratively delete every user-created object on the SE050 via
     /// `Se05x_API_DeleteAll_Iterative` semantics.
     ///
+    /// One plain measurement of the applet's platform-SCP requirement (#989).
+    ///
+    /// Brings the link up from scratch (T=1 interface reset + plain SELECT,
+    /// no SCP03), sends the fixed `apdu::platform_scp_plain_probe`, and
+    /// leaves the driver un-ready so the next `init()` re-runs the full
+    /// bring-up and handshake — the sequence the probe image proved on
+    /// silicon. Call it once per boot, before anything opens a session: the
+    /// chip refuses plain commands while an SCP03 session is up whatever the
+    /// requirement, so a measurement taken then proves nothing. Never call it
+    /// from `link_bringup`/`init`: the A3 recovery paths re-init after a
+    /// failed verify, when the chip answers `0x6982` regardless.
+    #[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+    pub fn measure_platform_scp(&mut self) -> PlatformScpState {
+        self.ready = false;
+        self.scp03 = Scp03Session::new();
+        // SAFETY: single-threaded secure world; T=1 reset, plain SELECT and
+        // one fixed read-class APDU on this driver's own `t1` state.
+        let r = unsafe {
+            self.link_bringup()
+                .and_then(|()| apdu::platform_scp_plain_probe(&mut self.t1))
+        };
+        self.ready = false;
+        match r {
+            Ok((sw, body, n)) => {
+                let state = crate::scp03_logic::classify_platform_scp_probe(sw, &body[..n]);
+                #[cfg(feature = "debug-log")]
+                secure_log!("[SE050] platform-SCP probe SW=0x{:04x} body_len={} -> {:?}", sw, n, state);
+                state
+            }
+            Err(_e) => {
+                #[cfg(feature = "debug-log")]
+                secure_log!("[SE050] platform-SCP probe failed ({:?}) -> Unknown", _e);
+                PlatformScpState::Unknown
+            }
+        }
+    }
+
+    /// Make the applet refuse every plain command (#989): `SCP_REQUIRED`
+    /// (AN12413 §4.6.2), set from a session opened with our
+    /// `RESERVED_ID_PLATFORM_SCP` (`0x7FFF0207`) credential.
+    ///
+    /// `measured` is this boot's [`Self::measure_platform_scp`]. Decision:
+    ///
+    /// | `0x7FFF0207` | measured           | action                                   |
+    /// |--------------|--------------------|------------------------------------------|
+    /// | absent       | any                | create ours, session, set, close         |
+    /// | present      | NotRequired/Unknown| verify ours, set, close (foreign → E0872)|
+    /// | present      | Refused            | done; not re-verified                    |
+    ///
+    /// "Credential absent" forces enforcement whatever the probe said, so a
+    /// probe misled by a session left over from before a warm reset cannot
+    /// skip it. The credential is kept, not deleted: its policy lets only
+    /// itself delete it, the wipe sweep skips `0x7FFF*`, and its presence is
+    /// the durable "enforced at least once" marker. A present credential on a
+    /// refusing chip is not re-verified, so a future label change cannot turn
+    /// our own credential into a boot halt.
+    ///
+    /// Success means `SetPlatformSCPRequest` returned `9000` under R-MAC; a
+    /// plain re-probe inside the same power cycle would prove nothing.
+    /// Transient faults (transport, SCP03 desync, the A3 `0x6982`) are
+    /// retried with a fresh link; verdicts are not.
+    #[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+    pub fn ensure_platform_scp_required(
+        &mut self,
+        measured: PlatformScpState,
+    ) -> Result<PlatformScpOutcome, PlatformScpError> {
+        let mut last = PlatformScpError::Link;
+        for _ in 0..PLATFORM_SCP_ATTEMPTS {
+            match self.ensure_platform_scp_once(measured) {
+                Ok(outcome) => return Ok(outcome),
+                Err(PlatformScpError::Link) => {
+                    last = PlatformScpError::Link;
+                    self.ready = false;
+                    self.scp03 = Scp03Session::new();
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Err(last)
+    }
+
+    #[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+    fn ensure_platform_scp_once(
+        &mut self,
+        measured: PlatformScpState,
+    ) -> Result<PlatformScpOutcome, PlatformScpError> {
+        use zeroize::Zeroize;
+        self.init().map_err(|_| PlatformScpError::Link)?;
+        // SAFETY: single-threaded secure world; one SCP03 APDU.
+        let present = unsafe {
+            apdu::check_exists(&mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ)
+        }
+        .map_err(|_| PlatformScpError::Link)?;
+        if present && matches!(measured, PlatformScpState::Refused(_)) {
+            return Ok(PlatformScpOutcome::AlreadyRequired);
+        }
+        let mut scp_cred = crate::hw::secret_keys::se050_platform_scp_credential()
+            .map_err(|_| PlatformScpError::Link)?;
+        let r = self.set_platform_scp_with(
+            &scp_cred,
+            present,
+            apdu::PlatformScpRequest::Required,
+        );
+        scp_cred.zeroize();
+        r.map(|()| PlatformScpOutcome::Enforced)
+    }
+
+    /// Create the credential if `!present`, open a session with it and send
+    /// `SetPlatformSCPRequest(req)`. Foreign credential handling: on an
+    /// authoritative wrong-value verdict, try one session-less delete (a
+    /// squatter's permissive policy may allow it) and report `Link` so the
+    /// caller retries and recreates ours; otherwise `ForeignCredential`.
+    #[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+    fn set_platform_scp_with(
+        &mut self,
+        scp_cred: &[u8; 16],
+        present: bool,
+        req: apdu::PlatformScpRequest,
+    ) -> Result<(), PlatformScpError> {
+        let value = apdu::UserIdValue::DeviceSecret(scp_cred);
+        // SAFETY (whole block): single-threaded secure world; SCP03 APDUs on
+        // this driver's own T=1 / SCP03 state.
+        unsafe {
+            if !present {
+                match apdu::write_userid_unlimited(
+                    &mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ, value, None,
+                ) {
+                    Ok(()) => {}
+                    Err(e) if platform_scp_transient(&e) => return Err(PlatformScpError::Link),
+                    Err(_) => return Err(PlatformScpError::CredentialCreateRefused),
+                }
+            }
+            let sid = match apdu::create_session(&mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ) {
+                Ok(sid) => sid,
+                Err(e) if platform_scp_transient(&e) => return Err(PlatformScpError::Link),
+                Err(_) => return Err(self.platform_scp_foreign()),
+            };
+            match apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, value) {
+                Ok(()) => {}
+                Err(e) if platform_scp_transient(&e) => return Err(PlatformScpError::Link),
+                Err(_) => return Err(self.platform_scp_foreign()),
+            }
+            match apdu::set_platform_scp_request(&mut self.t1, &mut self.scp03, &sid, req) {
+                Ok(()) => {}
+                Err(e) if platform_scp_transient(&e) => return Err(PlatformScpError::Link),
+                Err(_) => {
+                    let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+                    return Err(PlatformScpError::SetRefused);
+                }
+            }
+            let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+        }
+        Ok(())
+    }
+
+    /// `0x7FFF0207` exists but our credential does not open it. Fresh link
+    /// (the failed verify leaves the A3 session-pending state), then one
+    /// session-less delete. `Link` = deleted, retry and recreate ours.
+    #[cfg(any(feature = "se050-platform-scp-required", feature = "se050-platform-scp-tool"))]
+    fn platform_scp_foreign(&mut self) -> PlatformScpError {
+        #[cfg(feature = "debug-log")]
+        secure_log!("[SE050] 0x7FFF0207 does not open with our credential (foreign?)");
+        if self.reinit().is_err() {
+            return PlatformScpError::Link;
+        }
+        // SAFETY: single-threaded secure world; one SCP03 APDU.
+        match unsafe { apdu::delete_object(&mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ) } {
+            Ok(()) => PlatformScpError::Link,
+            Err(_) => PlatformScpError::ForeignCredential,
+        }
+    }
+
+    /// Bench tool only: turn the requirement back off (`SCP_NOT_REQUIRED`)
+    /// and delete the credential, returning the die to its factory state.
+    /// The only code that can do so; absent from every other image.
+    #[cfg(feature = "se050-platform-scp-tool")]
+    pub fn release_platform_scp(&mut self) -> Result<(), PlatformScpError> {
+        use zeroize::Zeroize;
+        self.init().map_err(|_| PlatformScpError::Link)?;
+        // SAFETY: single-threaded secure world; SCP03 APDUs on this driver.
+        let present = unsafe {
+            apdu::check_exists(&mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ)
+        }
+        .map_err(|_| PlatformScpError::Link)?;
+        let mut scp_cred = crate::hw::secret_keys::se050_platform_scp_credential()
+            .map_err(|_| PlatformScpError::Link)?;
+        let r = self.set_platform_scp_with(
+            &scp_cred,
+            present,
+            apdu::PlatformScpRequest::NotRequired,
+        );
+        let deleted = r.and_then(|()| {
+            let value = apdu::UserIdValue::DeviceSecret(&scp_cred);
+            // SAFETY: as above. Deleting the session's own auth object closes
+            // the session after the response (AN12413 §3.6.4).
+            unsafe {
+                let sid = apdu::create_session(&mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ)
+                    .map_err(|_| PlatformScpError::Link)?;
+                apdu::verify_session(&mut self.t1, &mut self.scp03, &sid, value)
+                    .map_err(|_| PlatformScpError::Link)?;
+                apdu::delete_object_authed(&mut self.t1, &mut self.scp03, &sid, apdu::PLATFORM_SCP_OBJ)
+                    .map_err(|_| PlatformScpError::Link)
+            }
+        });
+        scp_cred.zeroize();
+        deleted?;
+        self.reinit().map_err(|_| PlatformScpError::Link)?;
+        // SAFETY: as above.
+        match unsafe { apdu::check_exists(&mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ) } {
+            Ok(false) => Ok(()),
+            _ => Err(PlatformScpError::Link),
+        }
+    }
+
     /// Check whether the admin-wipe UserID object exists on the chip.
     /// Used by the dual-SE pre-clean cascade to decide whether it's
     /// safe to erase secure-flash page 125 (don't erase if the admin

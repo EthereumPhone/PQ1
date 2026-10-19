@@ -125,6 +125,36 @@ class Report(unittest.TestCase):
     def test_abort_is_inconclusive(self) -> None:
         self.assertEqual(report.exit_code(report.analyse(build_log(CLEAN, done="") + "=== SPROBE ABORT ===\n")), 2)
 
+    # ---- #989: 6B.5 platform-SCP lines ----
+
+    NOT_REQ = "6B.5 [pre-session] platform_scp=not_required sw=0x9000 body=410101"
+    REQ = "6B.5 [pre-session] platform_scp=required sw=0x6985 body="
+
+    def test_platform_scp_line_is_parsed_and_informational_by_default(self) -> None:
+        r = report.analyse(build_log(CLEAN, [self.NOT_REQ]))
+        self.assertEqual(r["platform_scp"], {"pre-session": "not_required"})
+        self.assertEqual(r["findings"], [])
+
+    def test_expect_required_flags_a_not_required_chip(self) -> None:
+        r = report.analyse(build_log(CLEAN, [self.NOT_REQ]), expect_required=True)
+        self.assertTrue(any("expected SCP_REQUIRED" in f for f in r["findings"]))
+        self.assertEqual(report.exit_code(r), 1)
+
+    def test_expect_required_flags_a_missing_line(self) -> None:
+        r = report.analyse(build_log(CLEAN), expect_required=True)
+        self.assertTrue(any("platform_scp=missing" in f for f in r["findings"]))
+
+    def test_expect_required_passes_a_required_chip(self) -> None:
+        r = report.analyse(build_log(CLEAN, [self.REQ]), expect_required=True)
+        self.assertEqual(r["findings"], [])
+
+    def test_reselect_masking_a_not_required_chip_is_a_finding(self) -> None:
+        r = report.analyse(build_log(CLEAN, [
+            self.NOT_REQ,
+            "6B.5 [reselect] platform_scp=required sw=0x6985 body=",
+        ]))
+        self.assertTrue(any("does not end the SCP03 session" in f for f in r["findings"]))
+
 
 if __name__ == "__main__":
     unittest.main()

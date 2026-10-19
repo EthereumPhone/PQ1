@@ -410,6 +410,22 @@ pub fn se050_admin_pin() -> Result<[u8; 16], OtpError> {
     Ok(out)
 }
 
+/// The value of the SE050 `RESERVED_ID_PLATFORM_SCP` (`0x7FFF0207`) UserID
+/// credential (#989). A session opened with it is the only one the applet
+/// accepts `SetPlatformSCPRequest` from (AN12413 §4.6.2); the firmware uses it
+/// to set `SCP_REQUIRED`.
+///
+/// Same BHK axis as the SCP03 keys and the admin UserID: losing the BHK
+/// already makes the SE050 unreachable, so this adds no new way to lose the
+/// chip. Deterministic, so a power cut between creating the credential and
+/// using it is resumable. Keep the label distinct from the admin one — a
+/// shared value would let either credential stand in for the other.
+pub fn se050_platform_scp_credential() -> Result<[u8; 16], OtpError> {
+    let mut out = [0u8; 16];
+    derive_into_bhk(b"pqsigner/se050-platform-scp-v1", &mut out)?;
+    Ok(out)
+}
+
 /// The PRF behind the die-bound PIN credentials and seed-half masks (#855).
 ///
 /// `info` is `label || salt || PIN` (62 bytes), assembled and wiped by

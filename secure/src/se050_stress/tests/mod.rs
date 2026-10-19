@@ -19,6 +19,7 @@ pub mod userid;
 pub mod trng;
 pub mod object;
 pub mod audit;
+pub mod policy;
 
 /// The runner-visible test catalog. Order shown to the user (BEGIN
 /// 001/0NN, …) matches order here. Safe-tier first, destructive last.
@@ -45,4 +46,10 @@ pub static ALL_TESTS: &[&StressTest] = &[
     &userid::PIN_LOCKOUT_PERSISTS_ACROSS_REINIT,
     &userid::PIN_UNLIMITED_NO_LOCKOUT,
     &userid::SILICON_LOCKOUT,
+    // ----- #989 (appended, not slotted in by tier: a test's scratch OIDs
+    // follow its catalog index, so inserting would move every later
+    // test's carve-out) -----
+    &policy::POLICY_HALFE_PLAIN_REFUSED,
+    &policy::PLATFORM_SCP_SET_REFUSED_WITHOUT_SESSION,
+    &policy::PLATFORM_SCP_SET_REFUSED_FROM_CARVEOUT_SESSION,
 ];

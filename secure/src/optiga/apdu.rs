@@ -79,7 +79,9 @@ impl OptigaError {
     /// from the steady-state `DecryptFailed`/`NotActive` paths, which are
     /// programming errors or an already-established session rather than probe
     /// verdicts — neither is a transport fault, so treating them as
-    /// authoritative is correct.
+    /// authoritative is correct. Since #991 `NotActive` is also what every
+    /// typed helper returns when called without a session (the dispatcher
+    /// refuses instead of sending plaintext): a caller bug, not a bus fault.
     #[must_use]
     pub const fn is_inconclusive(&self) -> bool {
         matches!(
@@ -321,7 +323,7 @@ const OPTIGA_STATUS_SUCCESS: u8 = 0x00;
 /// cleared when read, and implicitly flushed by any Cmd byte with the MSB
 /// set — which is every command this driver sends except the dedicated
 /// reader below.
-#[cfg(feature = "debug-log")]
+#[cfg(any(feature = "debug-log", feature = "optiga-probe"))]
 const OID_LAST_ERROR: u16 = 0xF1C2;
 
 // ---------------------------------------------------------------------------
@@ -464,7 +466,7 @@ pub(crate) fn parse_response_for_test(resp: &[u8], len: usize) -> Result<&[u8], 
 }
 
 // ---------------------------------------------------------------------------
-// Core send helper (transparently wraps in shielded connection when active)
+// Core send helpers: protected-only, plus the fixed pre-shield allowlist (#991)
 // ---------------------------------------------------------------------------
 
 /// Send one APDU over an already-authenticated Shielded Connection. There is
@@ -520,6 +522,39 @@ unsafe fn send_command_protected(
     Ok(dec_len)
 }
 
+/// Typed-helper dispatcher. **Fails closed (#991):** there is no plaintext
+/// arm. With no live Shielded Connection, `wrap_command` refuses
+/// (`NotActive`) before any byte reaches the bus, and this returns
+/// `OptigaError::Shield`.
+///
+/// It used to fall back to `ifx.transceive` whenever `!shield.active`. Since
+/// `wrap_command` clears `active` on any error, a caller that swallowed one
+/// `Err` and sent another APDU silently downgraded that APDU to plaintext.
+/// Every secret path called `ensure_shield()` first, so this was latent —
+/// the SE050 `wrap_apdu` twin of the same shape.
+///
+/// In a shielded build, plaintext APDUs exist only in:
+/// [`open_application`], the cfg-gated GetRandom probes, [`send_preshield`]
+/// (fixed E140-write / F1E1-read allowlist), and the cfg-gated bench probes
+/// [`plain_read_probe`] / [`plain_ac_probe`].
+#[cfg(not(feature = "optiga-no-shield"))]
+#[inline(always)]
+unsafe fn send_command(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    apdu: &[u8],
+    resp_buf: &mut [u8],
+) -> Result<usize, OptigaError> {
+    #[cfg(feature = "debug-log")]
+    if !shield.active {
+        secure_log!("[OPTIGA] send_command REFUSED: no Shielded Connection (ensure_shield first)");
+    }
+    send_command_protected(ifx, shield, apdu, resp_buf)
+}
+
+/// `optiga-no-shield` (dev-only; production-fenced in `nsc/mod.rs`): the PRL
+/// is disabled by design, so every APDU is plaintext.
+#[cfg(feature = "optiga-no-shield")]
 unsafe fn send_command(
     ifx: &mut IfxState,
     shield: &mut ShieldedConnection,
@@ -531,6 +566,233 @@ unsafe fn send_command(
     } else {
         Ok(ifx.transceive(apdu, resp_buf)?)
     }
+}
+
+/// The only commands that may reach the OPTIGA in plaintext in a shielded
+/// build (besides `OpenApplication` and the cfg-gated GetRandom probes).
+///
+/// Each variant binds a FIXED command header and OID inside
+/// [`send_preshield`]; no variant carries an OID, header byte or metadata
+/// bytes, so a secret-bearing OID (F1D0..F1D4, the duress twins, E120)
+/// cannot be named here.
+pub enum PreShieldCmd<'a> {
+    /// `SetDataObject(E140, erase-write)`. The PBS is the shield's own root,
+    /// so first pairing at LcsO=Creation is plaintext by construction.
+    WritePbs(&'a [u8; 64]),
+    /// `SetDataObject(E140, metadata = build_metadata_pbs_final())`.
+    WritePbsMetadata,
+    /// `GetDataObject(F1E1, 0, 1)`: the Read=ALW provisioning / reset
+    /// sentinel, read at boot before any shield exists.
+    ReadCounter,
+    /// `GetDataObject(E140, 0, 64)`: bench `rng-xor-probe` only.
+    #[cfg(feature = "rng-xor-probe")]
+    ReadPbsBench,
+}
+
+/// Send one [`PreShieldCmd`]. With a live session it goes through the
+/// protected path (never downgraded); otherwise it is sent in plaintext,
+/// behind two volatile re-reads of `shield.active` separated by a random
+/// delay, so a single fault cannot turn a live session's command into a
+/// plaintext frame. Returns the response payload length copied to `out`.
+pub unsafe fn send_preshield(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    cmd: PreShieldCmd<'_>,
+    out: &mut [u8],
+) -> Result<usize, OptigaError> {
+    use zeroize::Zeroize;
+
+    let (code, param) = match cmd {
+        PreShieldCmd::WritePbs(_) => (CMD_SET_DATA_OBJECT, PARAM_ERASE_WRITE),
+        PreShieldCmd::WritePbsMetadata => (CMD_SET_DATA_OBJECT, PARAM_METADATA),
+        PreShieldCmd::ReadCounter => (CMD_GET_DATA_OBJECT, PARAM_DATA),
+        #[cfg(feature = "rng-xor-probe")]
+        PreShieldCmd::ReadPbsBench => (CMD_GET_DATA_OBJECT, PARAM_DATA),
+    };
+    let mut ab = ApduBuf::new(code, param);
+    match cmd {
+        PreShieldCmd::WritePbs(pbs) => {
+            ab.write_u16(OID_PBS);
+            ab.write_u16(0x0000);
+            ab.write(pbs);
+        }
+        PreShieldCmd::WritePbsMetadata => {
+            let (meta, meta_len) = build_metadata_pbs_final();
+            ab.write_u16(OID_PBS);
+            ab.write_u16(0x0000);
+            ab.write(&meta[..meta_len]);
+        }
+        PreShieldCmd::ReadCounter => {
+            ab.write_u16(OID_COUNTER);
+            ab.write_u16(0x0000);
+            ab.write_u16(0x0001);
+        }
+        #[cfg(feature = "rng-xor-probe")]
+        PreShieldCmd::ReadPbsBench => {
+            ab.write_u16(OID_PBS);
+            ab.write_u16(0x0000);
+            ab.write_u16(0x0040);
+        }
+    }
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 128];
+    let sent = if shield.active {
+        send_command_protected(ifx, shield, apdu, &mut resp)
+    } else if core::ptr::read_volatile(&shield.active) {
+        Err(OptigaError::Shield)
+    } else {
+        crate::fi::wait_random();
+        if core::ptr::read_volatile(&shield.active) {
+            Err(OptigaError::Shield)
+        } else {
+            ifx.transceive(apdu, &mut resp).map_err(OptigaError::from)
+        }
+    };
+    let result = sent.and_then(|n| {
+        let payload = parse_response(&resp, n)?;
+        if payload.len() > out.len() {
+            return Err(OptigaError::BufferOverflow);
+        }
+        out[..payload.len()].copy_from_slice(payload);
+        Ok(payload.len())
+    });
+    resp.zeroize();
+    result
+}
+
+/// What the read-only OPTIGA probe may read in plaintext (`optiga-probe`).
+/// Read-class by construction: no variant can name a write, a crypto command
+/// or a protected update.
+#[cfg(feature = "optiga-probe")]
+pub enum PlainReadCmd {
+    /// `GetDataObject(oid, metadata)`.
+    Metadata { oid: u16 },
+    /// `GetDataObject(oid, offset, len)`.
+    Data { oid: u16, offset: u16, len: u16 },
+    /// The Last Error Code object, read without the clear flag.
+    LastError,
+}
+
+/// Bench read-only probe (`optiga-probe`): one plaintext read-class command,
+/// for the probe's no-session steps (R0–R6, R8, R9) now that the typed
+/// helpers refuse without a session. Returns the payload length.
+#[cfg(feature = "optiga-probe")]
+pub unsafe fn plain_read_probe(
+    ifx: &mut IfxState,
+    cmd: PlainReadCmd,
+    out: &mut [u8],
+) -> Result<usize, OptigaError> {
+    let mut ab = match cmd {
+        PlainReadCmd::Metadata { oid } => {
+            let mut ab = ApduBuf::new(CMD_GET_DATA_OBJECT, PARAM_METADATA);
+            ab.write_u16(oid);
+            ab
+        }
+        PlainReadCmd::Data { oid, offset, len } => {
+            let mut ab = ApduBuf::new(CMD_GET_DATA_OBJECT, PARAM_DATA);
+            ab.write_u16(oid);
+            ab.write_u16(offset);
+            ab.write_u16(len);
+            ab
+        }
+        PlainReadCmd::LastError => {
+            let mut ab = ApduBuf::new(CMD_GET_DATA_OBJECT & !CMD_CLEAR_LAST_ERROR, PARAM_DATA);
+            ab.write_u16(OID_LAST_ERROR);
+            ab.write_u16(0x0000);
+            ab.write_u16(0x0001);
+            ab
+        }
+    };
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 512];
+    let n = ifx.transceive(apdu, &mut resp)?;
+    let payload = parse_response(&resp, n)?;
+    if payload.len() > out.len() {
+        return Err(OptigaError::BufferOverflow);
+    }
+    out[..payload.len()].copy_from_slice(payload);
+    Ok(payload.len())
+}
+
+/// #116 AC probe (`optiga-ac-probe`): the throwaway PIN-style AuthRef.
+#[cfg(feature = "optiga-ac-probe")]
+pub const AC_PROBE_AUTHREF: u16 = 0xF1D5;
+/// #116 AC probe: the strict-AC spare (`Auto(F1D5) AND Conf(E140)`).
+#[cfg(feature = "optiga-ac-probe")]
+pub const AC_PROBE_STRICT: u16 = 0xF1D7;
+/// #116 AC probe: the weak-AC control spare.
+#[cfg(feature = "optiga-ac-probe")]
+pub const AC_PROBE_CONTROL: u16 = 0xF1E0;
+
+/// The plaintext legs of the #116 negative-B attack simulation. No variant
+/// carries an OID: the auth code always targets `OID_SESSION`, the verify
+/// always targets [`AC_PROBE_AUTHREF`], and the reads name only the two
+/// probe spares.
+#[cfg(feature = "optiga-ac-probe")]
+pub enum AcProbePlainCmd<'a> {
+    /// `GenerateAuthCode` into `OID_SESSION`; 32 chip-random bytes to `out`.
+    AuthCode { host_nonce: &'a [u8; 16] },
+    /// `DecryptSym` HMAC verify against [`AC_PROBE_AUTHREF`].
+    HmacVerify { input: &'a [u8; 64], mac: &'a [u8; 32] },
+    /// `GetDataObject(AC_PROBE_STRICT, 0, 32)`.
+    ReadStrict,
+    /// `GetDataObject(AC_PROBE_CONTROL, 0, 32)`.
+    ReadControl,
+}
+
+/// Send one [`AcProbePlainCmd`] in plaintext (`optiga-ac-probe` only — the
+/// #116 attack shape is plaintext by definition). Returns the payload length.
+#[cfg(feature = "optiga-ac-probe")]
+pub unsafe fn plain_ac_probe(
+    ifx: &mut IfxState,
+    cmd: AcProbePlainCmd<'_>,
+    out: &mut [u8],
+) -> Result<usize, OptigaError> {
+    let mut ab = match cmd {
+        AcProbePlainCmd::AuthCode { host_nonce } => {
+            let mut ab = ApduBuf::new(CMD_GET_RANDOM, 0x00);
+            ab.write_u16(32);
+            ab.write_u16(OID_SESSION);
+            ab.write_tlv(0x41, host_nonce);
+            ab
+        }
+        AcProbePlainCmd::HmacVerify { input, mac } => {
+            let mut ab = ApduBuf::new(CMD_DECRYPT_SYM, PARAM_HMAC_MODE);
+            ab.write_u16(AC_PROBE_AUTHREF);
+            ab.write_u8(SYM_SEQ_START_FINAL);
+            ab.write_u16((input.len() as u16) + 2);
+            ab.write_u16(OID_SESSION);
+            ab.write(input);
+            ab.write_tlv(TAG_VERIFICATION_DATA, mac);
+            ab
+        }
+        AcProbePlainCmd::ReadStrict => {
+            let mut ab = ApduBuf::new(CMD_GET_DATA_OBJECT, PARAM_DATA);
+            ab.write_u16(AC_PROBE_STRICT);
+            ab.write_u16(0x0000);
+            ab.write_u16(32);
+            ab
+        }
+        AcProbePlainCmd::ReadControl => {
+            let mut ab = ApduBuf::new(CMD_GET_DATA_OBJECT, PARAM_DATA);
+            ab.write_u16(AC_PROBE_CONTROL);
+            ab.write_u16(0x0000);
+            ab.write_u16(32);
+            ab
+        }
+    };
+    let apdu = ab.finish();
+
+    let mut resp = [0u8; 512];
+    let n = ifx.transceive(apdu, &mut resp)?;
+    let payload = parse_response(&resp, n)?;
+    if payload.len() > out.len() {
+        return Err(OptigaError::BufferOverflow);
+    }
+    out[..payload.len()].copy_from_slice(payload);
+    Ok(payload.len())
 }
 
 // ---------------------------------------------------------------------------
@@ -694,9 +956,9 @@ pub unsafe fn get_random(
     let apdu = ab.finish();
 
     let mut resp = [0u8; 512];
-    // Entropy provenance requires authenticated PRL transport. Never call the
-    // transparent helper here: its inactive branch is intentionally available
-    // to provisioning-era APDUs and would be a silent RNG downgrade.
+    // Entropy provenance requires authenticated PRL transport. Call the
+    // protected path directly: under `optiga-no-shield` `send_command` still
+    // has a plaintext arm, and that would be a silent RNG downgrade.
     let n = send_command_protected(ifx, shield, apdu, &mut resp)?;
     let payload = parse_response(&resp, n)?;
 
