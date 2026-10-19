@@ -1394,6 +1394,39 @@ pub unsafe fn plain_readclass_probe(
     Ok((sw, data_len))
 }
 
+/// The applet SELECT, for the §6B.6 pre-session leg: the same fixed
+/// `SELECT BY NAME (SE050_AID)` [`select_applet`] sends, but returning the SW
+/// and the response data instead of failing on a non-`9000` SW, so the probe
+/// can record what a keyless bus party gets back. Takes no header or AID from
+/// the caller. SELECT is plain by design (it precedes SCP03 in every
+/// session), so this exposes nothing `select_applet` does not.
+#[cfg(feature = "se050-probe")]
+pub unsafe fn select_applet_probe(
+    t1: &mut T1State,
+    out: &mut [u8],
+) -> Result<(u16, usize), Se050Error> {
+    let mut apdu = [0u8; 64];
+    apdu[0] = 0x00; // CLA
+    apdu[1] = 0xA4; // INS = SELECT
+    apdu[2] = 0x04; // P1 = select by name
+    apdu[3] = 0x00; // P2
+    apdu[4] = SE050_AID.len() as u8; // Lc
+    apdu[5..5 + SE050_AID.len()].copy_from_slice(SE050_AID);
+    let total = 5 + SE050_AID.len();
+
+    let mut resp = [0u8; 256];
+    let n = t1
+        .transceive(&apdu[..total], &mut resp)
+        .map_err(|_| Se050Error::Transport)?;
+    if n < 2 {
+        return Err(Se050Error::Transport);
+    }
+    let sw = ((resp[n - 2] as u16) << 8) | (resp[n - 1] as u16);
+    let data_len = (n - 2).min(out.len());
+    out[..data_len].copy_from_slice(&resp[..data_len]);
+    Ok((sw, data_len))
+}
+
 /// Iteratively delete every user-created object on the SE050, mirroring
 /// the NXP SDK's `Se05x_API_DeleteAll_Iterative`.
 ///

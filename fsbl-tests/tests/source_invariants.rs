@@ -1147,4 +1147,21 @@ fn se050_probe_readonly_names_no_write_path() {
         !enum_body.contains("u8"),
         "{apdu_rel}: PlainReadCmd must not carry a u8 (a header byte would bypass the allowlist)"
     );
+
+    // The pre-session SELECT helper sends one fixed SELECT BY NAME of the
+    // SE050 applet: it takes no header bytes and no AID from its caller.
+    let sel_start = apdu_src
+        .find("pub unsafe fn select_applet_probe(")
+        .unwrap_or_else(|| panic!("{apdu_rel}: select_applet_probe not found"));
+    let sel = &apdu_src[sel_start..];
+    let sel = &sel[..sel.find("\n}\n").expect("select_applet_probe has no end")];
+    let sel_sig = &sel[..sel.find(") ->").expect("select_applet_probe signature")];
+    assert!(
+        !sel_sig.contains(": u8") && !sel_sig.contains("&[u8]") && sel_sig.contains("out: &mut [u8]"),
+        "{apdu_rel}: select_applet_probe must take only the T=1 state and an output buffer"
+    );
+    assert!(
+        sel.contains("apdu[1] = 0xA4;") && sel.contains("SE050_AID") && sel.matches("transceive").count() == 1,
+        "{apdu_rel}: select_applet_probe must send exactly one fixed SELECT of SE050_AID"
+    );
 }

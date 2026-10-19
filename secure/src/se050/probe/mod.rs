@@ -5,7 +5,8 @@
 //! what the firmware and the DVT checklist (§6B) claim, by asking the chip
 //! directly — and it never creates, writes, deletes or authenticates an
 //! object. The only writes the whole image performs are the T=1 and SCP03
-//! handshake frames the driver sends to bring the link up; no application
+//! handshake frames the driver sends to bring the link up, plus one SE rail
+//! power cycle (pq1 `LDO2_EN`) before the pre-session leg; no application
 //! command mutates chip state.
 //!
 //! It covers the read-only §6B rows: 6B.1 (identity + GetVersionExt `Le`
@@ -13,7 +14,11 @@
 //! (full `ReadIDList` inventory with per-object type/size; 6B.3b settles
 //! whether the `ReadIDList` offset counts entries or bytes), 6B.4 (free
 //! memory), 6B.5 (platform-SCP presence), 6B.6 (the plain / no-SCP03
-//! read-class acceptance matrix — the bus attacker's free surface).
+//! read-class acceptance matrix — the bus attacker's free surface — in three
+//! link states: power-on before SELECT, after a plain SELECT with no session
+//! ever opened, and with the probe's SCP03 session up). EVT-3D21 2026-10-19:
+//! the SE050E2 answers the plain commands in the second state, i.e. platform
+//! SCP is not mandatory (default `SCP_NOT_REQUIRED`, AN12413 §4.6.2).
 //!
 //! It emits one `[SPROBE] …` line per fact over semihosting; the host parser
 //! `tools/se050_probe/report.py` decodes them. Entry is from `main.rs`, in the
@@ -27,6 +32,7 @@
 //! `t1.transceive`), never here.
 
 use super::apdu;
+use super::t1oi2c::T1State;
 use super::Se050;
 
 /// Emit one probe line. Every line the host parses starts with `[SPROBE]`.
@@ -93,6 +99,71 @@ fn is_leftover(class: &str) -> bool {
 /// cannot show a leak.
 const FREE_MEMORY_CAP: u16 = 0x7FFF;
 
+/// Rail-off time for the pre-session power cycle. The OPTIGA probe uses the
+/// same 100 ms; the SE050 datasheet's Deep Power-Down needs far less.
+const PRE_SESSION_POWER_OFF_MS: u32 = 100;
+/// Interface-reset attempts after the power cycle (~50 ms apart). A cold SE050
+/// answers by attempt 3–5 (`Se050::link_bringup`); 20 is that loop's bound.
+const RESET_ATTEMPTS: u32 = 20;
+
+/// T=1 interface reset with the cold-boot retry `Se050::link_bringup` uses.
+/// Returns the 1-based attempt that succeeded.
+///
+/// # Safety
+/// Single-threaded boot path; drives only this driver's T=1 state.
+unsafe fn link_reset_with_retry(t1: &mut T1State) -> Result<u32, ()> {
+    for attempt in 1..=RESET_ATTEMPTS {
+        // SAFETY: caller's contract.
+        if unsafe { t1.interface_reset() }.is_ok() {
+            return Ok(attempt);
+        }
+        cortex_m::asm::delay(8_000_000); // ~50 ms @ 160 MHz
+    }
+    Err(())
+}
+
+/// The §6B.6 matrix: five plain (no-SCP03) read-class commands, one
+/// `[SPROBE] 6B.6 plain[<leg>] …` line each. `leg` names the link state
+/// (`pre-select`, `pre-session`, `session`). Read-class only by type: the
+/// helper takes an `apdu::PlainReadCmd`, so this file cannot name a
+/// write/delete/auth header. CheckExists targets the production USERID_OBJ
+/// (expected absent); Read targets the user-gated ENTROPY_OBJ, which must
+/// never come back in clear.
+///
+/// # Safety
+/// Single-threaded boot path; drives only this driver's T=1 state.
+unsafe fn plain_matrix(t1: &mut T1State, leg: &str, ok: &mut bool, hb: &mut [u8; 128]) {
+    use apdu::PlainReadCmd as P;
+    const CMDS: [(P, &str); 5] = [
+        (P::GetVersionExt, "GetVersionExt"),
+        (P::GetRandom(8), "GetRandom(8)"),
+        (P::ReadIdList, "ReadIDList"),
+        (P::CheckExists(super::USERID_OBJ), "CheckExists(USERID_OBJ)"),
+        (P::Read(super::ENTROPY_OBJ), "Read(ENTROPY_OBJ)"),
+    ];
+    let mut o = [0u8; 64];
+    for (cmd, name) in CMDS {
+        // SAFETY: caller's contract.
+        match unsafe { apdu::plain_readclass_probe(t1, cmd, &mut o) } {
+            Ok((sw, n)) => {
+                if matches!(cmd, P::Read(_)) {
+                    out!("6B.6 plain[{}] {} SW=0x{:04x} datalen={}", leg, name, sw, n);
+                    if sw == 0x9000 && n > 0 {
+                        out!("6B.6 FINDING: a plain [{}] read of the production entropy object returned {} bytes", leg, n);
+                        *ok = false;
+                    }
+                } else {
+                    out!("6B.6 plain[{}] {} SW=0x{:04x} datalen={} data={}", leg, name, sw, n, hex(&o[..n], hb));
+                }
+            }
+            Err(e) => {
+                out!("6B.6 plain[{}] {} ERR {:?}", leg, name, e);
+                *ok = false;
+            }
+        }
+    }
+}
+
 /// Run the read-only SE050 probe. Returns `true` if no finding fired.
 ///
 /// # Safety
@@ -102,6 +173,47 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
     marker!("=== SPROBE START ===");
     let mut ok = true;
     let mut hb = [0u8; 128];
+
+    // -- 6B.6 pre-session legs: power-on, no SCP03 session ever opened -------
+    // The in-session matrix (end of `run`) cannot tell "platform SCP is
+    // mandatory" from "a session is up, so plain commands are refused". This
+    // leg removes the session: drop the SE rail (no SCP03 state survives a
+    // power loss; a probe-rs reset alone does not power-cycle the SE), bring
+    // only the T=1 link up, and send the same five plain read-class commands
+    // twice — before the applet SELECT and after it — then the SELECT
+    // response itself, which is plain by design. Nothing here authenticates.
+    marker!("=== SPROBE 6B.6 pre-session ===");
+    {
+        let cycled = crate::hw::se_power::power_cycle(PRE_SESSION_POWER_OFF_MS);
+        crate::hw::i2c_hw::init();
+        out!("6B.6 pre-session power_cycled={} off_ms={}", cycled as u8, PRE_SESSION_POWER_OFF_MS);
+        if !cycled {
+            out!("6B.6 FINDING: no SE rail enable on this board, so the pre-session legs cannot rule out a session left by an earlier image");
+            ok = false;
+        }
+        let (t1, _scp) = se.t1_scp03_mut();
+        match link_reset_with_retry(t1) {
+            Ok(attempt) => {
+                out!("6B.6 pre-session interface reset OK attempt={}", attempt);
+                plain_matrix(t1, "pre-select", &mut ok, &mut hb);
+                let mut o = [0u8; 64];
+                match apdu::select_applet_probe(t1, &mut o) {
+                    Ok((sw, n)) => {
+                        out!("6B.6 plain[pre-session] SELECT(applet) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb));
+                        plain_matrix(t1, "pre-session", &mut ok, &mut hb);
+                    }
+                    Err(e) => {
+                        out!("6B.6 plain[pre-session] SELECT(applet) ERR {:?}", e);
+                        ok = false;
+                    }
+                }
+            }
+            Err(()) => {
+                out!("6B.6 pre-session interface reset FAILED after {} attempts", RESET_ATTEMPTS);
+                ok = false;
+            }
+        }
+    }
 
     // -- bring the link + SCP03 up (handshake frames only) -----------------
     if let Err(e) = se.init() {
@@ -353,62 +465,14 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
         }
     }
 
-    // -- 6B.6 plain (no-SCP03) read-class acceptance matrix ----------------
-    // Every command here is sent OUTSIDE the SCP03 channel, straight down the
-    // T=1 link. A chip that requires platform SCP refuses all of them; a chip
-    // that does not exposes exactly this surface to a keyless bus attacker.
-    // Read-class only, by type: the helper takes an `apdu::PlainReadCmd`, so
-    // this file cannot name a write/delete/auth header. GetVersionExt,
-    // GetRandom, ReadIDList, CheckExists on the production USERID_OBJ
-    // (expected absent) and a Read of the user-gated ENTROPY_OBJ.
-    marker!("=== SPROBE 6B.6 plain matrix ===");
+    // -- 6B.6 plain (no-SCP03) read-class acceptance matrix, in-session -----
+    // The same five commands as the pre-session legs at the top of `run`,
+    // sent OUTSIDE the SCP03 channel while the probe's own session is up.
+    // Kept so the two states can be compared line by line.
+    marker!("=== SPROBE 6B.6 plain matrix (session up) ===");
     {
-        use apdu::PlainReadCmd as P;
         let (t1, _scp) = se.t1_scp03_mut();
-        let mut o = [0u8; 64];
-        match apdu::plain_readclass_probe(t1, P::GetVersionExt, &mut o) {
-            Ok((sw, n)) => out!("6B.6 plain GetVersionExt SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
-            Err(e) => {
-                out!("6B.6 plain GetVersionExt ERR {:?}", e);
-                ok = false;
-            }
-        }
-        match apdu::plain_readclass_probe(t1, P::GetRandom(8), &mut o) {
-            Ok((sw, n)) => out!("6B.6 plain GetRandom(8) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
-            Err(e) => {
-                out!("6B.6 plain GetRandom ERR {:?}", e);
-                ok = false;
-            }
-        }
-        match apdu::plain_readclass_probe(t1, P::ReadIdList, &mut o) {
-            Ok((sw, n)) => out!("6B.6 plain ReadIDList SW=0x{:04x} datalen={}", sw, n),
-            Err(e) => {
-                out!("6B.6 plain ReadIDList ERR {:?}", e);
-                ok = false;
-            }
-        }
-        match apdu::plain_readclass_probe(t1, P::CheckExists(super::USERID_OBJ), &mut o) {
-            Ok((sw, n)) => out!("6B.6 plain CheckExists(USERID_OBJ) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
-            Err(e) => {
-                out!("6B.6 plain CheckExists ERR {:?}", e);
-                ok = false;
-            }
-        }
-        // Plain Read of the production entropy object (user-gated): must be
-        // refused if present, absent otherwise — never return half_E in clear.
-        match apdu::plain_readclass_probe(t1, P::Read(super::ENTROPY_OBJ), &mut o) {
-            Ok((sw, n)) => {
-                out!("6B.6 plain Read(ENTROPY_OBJ) SW=0x{:04x} datalen={}", sw, n);
-                if sw == 0x9000 && n > 0 {
-                    out!("6B.6 FINDING: a plain read of the production entropy object returned {} bytes", n);
-                    ok = false;
-                }
-            }
-            Err(e) => {
-                out!("6B.6 plain Read(ENTROPY_OBJ) ERR {:?}", e);
-                ok = false;
-            }
-        }
+        plain_matrix(t1, "session", &mut ok, &mut hb);
     }
 
     if ok {

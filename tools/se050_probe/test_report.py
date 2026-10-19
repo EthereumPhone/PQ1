@@ -100,6 +100,20 @@ class Report(unittest.TestCase):
         self.assertTrue(any("free-memory" in f for f in r["findings"]))
         self.assertEqual(report.exit_code(r), 1)
 
+    def test_pre_session_9000_is_surface_not_finding(self) -> None:
+        r = report.analyse(build_log(CLEAN, [
+            "6B.6 plain[pre-session] SELECT(applet) SW=0x9000 data=070200",
+            "6B.6 plain[pre-session] GetRandom(8) SW=0x9000 datalen=8 data=0011223344556677",
+            "6B.6 plain[session] GetRandom(8) SW=0x9000 datalen=8 data=0011223344556677",
+            "6B.6 plain[pre-select] GetVersionExt SW=0x6d00 datalen=0 data=",
+        ]))
+        self.assertEqual(r["pre_session_open"], ["pre-session SELECT(applet)", "pre-session GetRandom(8)"])
+        self.assertEqual(r["findings"], [])
+
+    def test_pre_session_entropy_read_with_data_is_a_finding(self) -> None:
+        r = report.analyse(build_log(CLEAN, ["6B.6 plain[pre-session] Read(ENTROPY_OBJ) SW=0x9000 datalen=40"]))
+        self.assertTrue(any("ENTROPY_OBJ" in f for f in r["findings"]))
+
     def test_plain_matrix_transport_error_is_a_finding(self) -> None:
         r = report.analyse(build_log(CLEAN, ["6B.6 plain GetRandom ERR Transport"], done="FINDINGS"))
         self.assertTrue(any("unverified" in f for f in r["findings"]))

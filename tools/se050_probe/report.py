@@ -30,6 +30,10 @@ SPROBE = re.compile(r"\[SPROBE\]\s*(.*)")
 INVENTORY = re.compile(r"id=0x([0-9a-f]+) class=(\S+).*size=(\d+|err)")
 FREE = re.compile(r"\[(\S+)\]\s*=\s*(\d+)")
 PLAIN_READ = re.compile(r"SW=0x([0-9a-f]+) datalen=(\d+)")
+# `6B.6 plain[<leg>] <cmd> SW=0x....` — leg is the link state the row ran in.
+PLAIN_LEG = re.compile(r"^6B\.6 plain\[([a-z-]+)\] (\S+) SW=0x([0-9a-f]+)")
+# Legs with no SCP03 session alive: what a keyless bus party gets.
+PRE_SESSION_LEGS = ("pre-select", "pre-session")
 
 # Classes the firmware assigns (`se050::probe::classify`) that are findings:
 # production or unknown objects on a bench die, and objects an e2e run or a
@@ -90,6 +94,15 @@ def analyse(raw: str) -> dict:
             if m and m.group(1) == "9000" and int(m.group(2)) > 0:
                 findings.append("host: plain read of ENTROPY_OBJ returned data (half_E in clear)")
 
+    # Pre-session surface: every plain command a power-on chip answered with
+    # 9000 before any SCP03 session existed. Not a finding by itself (GetRandom
+    # or SELECT data is not secret); the ENTROPY_OBJ rule above is the fatal one.
+    pre_session_open: list[str] = []
+    for p in plain:
+        m = PLAIN_LEG.search(p)
+        if m and m.group(1) in PRE_SESSION_LEGS and m.group(3) == "9000":
+            pre_session_open.append(f"{m.group(1)} {m.group(2)}")
+
     saturated = sorted(k for k, v in free.items() if v >= FREE_MEMORY_CAP)
 
     if "=== SPROBE DONE OK ===" in raw:
@@ -108,6 +121,7 @@ def analyse(raw: str) -> dict:
         "free": free,
         "saturated": saturated,
         "plain": plain,
+        "pre_session_open": pre_session_open,
         "paging": paging,
         "findings": findings,
     }
@@ -132,6 +146,8 @@ def render(log: str, r: dict) -> str:
     lines += [f"- {p}" for p in r["paging"]] or ["- (none)"]
     lines.append("\n## Plain (no-SCP03) read-class matrix (6B.6)")
     lines += [f"- {p}" for p in r["plain"]] or ["- (none)"]
+    lines.append("\n### Answered 9000 with no session alive (pre-select / pre-session legs)")
+    lines += [f"- {p}" for p in r["pre_session_open"]] or ["- none"]
     lines.append("\n## Findings")
     lines += [f"- {x}" for x in r["findings"]] or ["- none"]
     return "\n".join(lines) + "\n"
