@@ -2338,7 +2338,7 @@ fn main() -> ! {
                 }
             }
             let mut w = W(&mut errs, 0);
-            if let Some(e) = err { let _ = write!(w, "{:?}", e); }
+            if let Some(ref e) = err { let _ = write!(w, "{:?}", e); }
             w.1
         };
         secure_log!(

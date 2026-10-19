@@ -183,6 +183,14 @@ impl OptigaTrustM {
             crate::pin_diag::run();
             #[cfg(all(feature = "stm32u585", feature = "board-pq1"))]
             reset_pin::hard_pulse();
+            // The pulse and the soft reset below wipe the chip's PRL session.
+            // A session can be up while `ready` is false: boot reconciliation
+            // reads E120 through `ensure_shield` without calling `init()`. If
+            // the host kept `shield.active`, the next pre-shield command (the
+            // E140 pairing write in `store_objects`) would go out encrypted
+            // to a chip with no session and bounce with the `08 40` alert
+            // (EVT-3D21 2026-10-19, `optiga-hw-counter-e2e`).
+            self.shield.active = false;
 
             // Post-reset settle: datasheet v3.70 Tables 13/14 require the
             // host to wait tSTARTUP ≥ 15 ms after power-on or the RST
