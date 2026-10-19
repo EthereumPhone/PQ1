@@ -4043,4 +4043,156 @@ def cases(project: Path) -> list[dict]:
         ("example-grind-id", "signingBudget, signingBudget, by decide, by decide", "id signingBudget, signingBudget, by decide, by decide", True),
     ])
 
+    # Byte codec/session: preserve the complete consumer proof and typecheck
+    # every altered definition before testing proof sensitivity.
+    cc_prefix = ("import C10Probability.ByteForgeBound\nimport C10Probability.ByteSessionExamples\n"
+                 "import C10Probability.SignatureCodecExamples\nnamespace C10Probability\n"
+                 "open scoped ENNReal\nnoncomputable section\nvariable {K R S : Type*}\n"
+                 "local instance (sig : C10Signature) : Decidable (C10SignatureWellFormed sig) := by\n"
+                 "  unfold C10SignatureWellFormed LayerSignatureWellFormed\n  infer_instance\n")
+    cc_suffix = "\nend\nend C10Probability\n"
+
+    def cc_variants(pairs, module, consumer, variants):
+        names = {name: name + "CCCandidate" for _, name in pairs}
+        declarations = []
+        for owner, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|attribute|end|set_option|local instance)\b)",
+                src[owner], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing byte definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "CCSlice"
+        src[key] = cc_prefix + "\n".join(declarations) + cc_suffix
+        check = theorem(src[module], consumer).split("\nlocal instance ", 1)[0]
+        for before, after in names.items():
+            check = re.sub(r"\b" + before + r"\b", after, check)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("byte-codec-session-" + label, key, old, new, check, expected)
+
+    cc_variants([("ByteCodec", "codecSlice")], "ByteCodec", "codec_slice_eq_take", [
+        ("slice-offset-lost", "offset + i.val", "i.val", False),
+        ("slice-order-reversed", "offset + i.val", "offset + i.rev.val", False),
+        ("slice-offset-id", "offset + i.val", "(fun x => x) (offset + i.val)", True),
+    ])
+    cc_variants([("ByteCodec", "codecRead")], "ByteCodec", "codec_bytes_read", [
+        ("read-offset-lost", "offset + i.val", "i.val", False),
+        ("read-order-reversed", "offset + i.val", "offset + i.rev.val", False),
+    ])
+    cc_variants([("ByteCodec", "codecBytes")], "ByteCodec", "codec_bytes_read", [
+        ("encoding-order-reversed", "List.ofFn (encoding.symm value)", "List.ofFn (fun i => encoding.symm value i.rev)", False),
+        ("encoding-id", "encoding.symm value", "encoding.symm ((fun x => x) value)", True),
+    ])
+    cc_variants([("ByteCodec", "counter4BytesEquiv")], "ByteCodec", "counter4_byte_value", [
+        ("counter-little-endian", "reverseCounterBytes.trans", "(Equiv.refl _).trans", False),
+    ])
+    cc_variants([("ByteCodec", "codecNode")], "ByteCodec", "codec_node_slice", [
+        ("node-offset-lost", "bytes offset", "bytes 0", False),
+        ("node-offset-shifted", "bytes offset", "bytes (offset + 1)", False),
+    ])
+    cc_variants([("ByteCodec", "codecCounter")], "ByteCodec", "codec_counter_roundtrip", [
+        ("counter-offset-lost", "bytes offset", "bytes 0", False),
+    ])
+    cc_variants([("SignatureCodec", "wireLayerEquiv")], "SignatureCodec", "wire_layer_layout", [
+        ("wots-endian-reversed", "codecArrayEquiv 43 16 randomizerBytesEquiv", "codecArrayEquiv 43 16 (reverseRandomizerBytes.trans randomizerBytesEquiv)", False),
+        ("layer-counter-endian-reversed", "4 144 counter4BytesEquiv", "4 144 (reverseCounterBytes.trans counter4BytesEquiv)", False),
+        ("xmss-endian-reversed", "codecArrayEquiv 9 16 randomizerBytesEquiv", "codecArrayEquiv 9 16 (reverseRandomizerBytes.trans randomizerBytesEquiv)", False),
+    ])
+    cc_variants([("SignatureCodec", "wireSignatureEquiv"), ("SignatureCodec", "wireEncode")], "SignatureCodec", "wire_signature_layout", [
+        ("randomizer-endian-reversed", "16 3992 randomizerBytesEquiv", "16 3992 (reverseRandomizerBytes.trans randomizerBytesEquiv)", False),
+        ("secret-endian-reversed", "codecArrayEquiv 13 16 randomizerBytesEquiv", "codecArrayEquiv 13 16 (reverseRandomizerBytes.trans randomizerBytesEquiv)", False),
+        ("fors-endian-reversed", "codecArrayEquiv 11 16 randomizerBytesEquiv", "codecArrayEquiv 11 16 (reverseRandomizerBytes.trans randomizerBytesEquiv)", False),
+    ])
+    cc_variants([("SignatureFields", "wireLayerToStructured")], "SignatureFields", "wire_layer_fields_roundtrip", [
+        ("counter-truncated", "fields.2.1.val", "fields.2.1.val % 256", False),
+    ])
+    cc_variants([("SignatureFields", "wireSignatureToStructured")], "SignatureFields", "wire_signature_structured_roundtrip", [
+        ("second-layer-lost", "fun l => wireLayerToStructured (fields.2.2.2 l)", "fun _ : Fin 2 => wireLayerToStructured (fields.2.2.2 0)", False),
+        ("randomizer-zero", "⟨fields.1,", "⟨0,", False),
+    ])
+    cc_variants([("SignatureCodec", "c10EncodeSignature")], "SignatureCodec", "c10_encode_signature_malformed", [
+        ("malformed-encode-accepted", "else none", "else some []", False),
+    ])
+    cc_variants([("SignatureCodec", "c10EncodeSignature")], "SignatureCodec", "c10_encode_signature_wellformed", [
+        ("encoded-byte-order-reversed", "some (wireEncode (wireSignatureFromStructured sig shape))", "some (wireEncode (wireSignatureFromStructured sig shape)).reverse", False),
+    ])
+    cc_variants([("SignatureCodec", "c10DecodeSignature")], "SignatureCodec", "c10_decode_signature_bad_length", [
+        ("short-signature-accepted", "bytes.length = 4008", "bytes.length = 4007", False),
+        ("long-signature-accepted", "bytes.length = 4008", "bytes.length = 4009", False),
+        ("signature-trailing-bytes-accepted", "bytes.length = 4008", "bytes.length ≥ 4008", False),
+    ])
+    cc_variants([("SignatureCodec", "c10DecodeSignature")], "SignatureCodec", "c10_signature_decode_encode", [
+        ("decoded-byte-order-reversed", "wireDecode bytes", "wireDecode bytes.reverse", False),
+        ("decoder-input-id", "wireDecode bytes", "wireDecode ((fun x => x) bytes)", True),
+    ])
+    cc_variants([("ByteSessionTypes", "byteSignReply")], "ByteSessionTypes", "byte_sign_reply_some", [
+        ("sign-reply-lost", "reply.bind c10EncodeSignature", "none", False),
+    ])
+    cc_variants([("ByteSessionTypes", "byteAfterSign")], "ByteSessionTypes", "byte_after_sign_eq", [
+        ("exhaustion-not-absorbed", "⟨ledger.signedMessages, true⟩", "⟨ledger.signedMessages, false⟩", False),
+        ("signed-message-not-recorded", "ledger.signedMessages ++ [message]", "ledger.signedMessages", False),
+        ("previous-messages-lost", "ledger.signedMessages ++ [message]", "[message]", False),
+        ("sign-clears-failure", "[message], ledger.failed", "[message], false", False),
+    ])
+    cc_variants([("ByteSessionTypes", "mapSessionValue")], "ByteSessionTypes", "map_session_value_fields", [
+        ("translation-ledger-lost", "out.ledger, out.rawRemaining", "emptySessionLedger, out.rawRemaining", False),
+        ("translation-raw-cap-lost", "out.rawRemaining, out.signRemaining", "0, out.signRemaining", False),
+        ("translation-sign-cap-lost", "out.signRemaining⟩", "0⟩", False),
+        ("translation-value-id", "finish out.value", "finish (id out.value)", True),
+    ])
+    cc_variants([("ByteSessionTypes", "byteClientToStructured")], "ByteSession", "c10_byte_session_refinement", [
+        ("adaptive-sign-reply-lost", "next (byteSignReply reply)", "next none", False),
+        ("adaptive-hash-reply-lost", "finish (next reply)", "finish (next 0)", False),
+    ])
+    cc_variants([("ByteSession", "c10SignBytes"), ("ByteSession", "c10ByteSession")], "ByteSession", "c10_byte_session_refinement", [
+        ("sign-cache-lost", "(byteSignReply reply.1, reply.2)", "(byteSignReply reply.1, table)", False),
+        ("sign-byte-output-lost", "(byteSignReply reply.1, reply.2)", "(none, reply.2)", False),
+    ])
+    cc_variants([("ByteSession", "c10ByteSession")], "ByteSession", "c10_byte_session_refinement", [
+        ("hash-cap-default-changed", "(next 0) 0 qs", "(next 1) 0 qs", False),
+        ("hash-cap-not-spent", "(next reply.1) qr qs ledger reply.2", "(next reply.1) (qr + 1) qs ledger reply.2", False),
+        ("hash-query-key-lost", "encode (.inl key)", "encode (.inl [])", False),
+        ("hash-cache-lost", "qr qs ledger reply.2", "qr qs ledger table", False),
+        ("refusal-spends-sign-cap", "(next none) qr (qs + 1) ledger table", "(next none) qr qs ledger table", False),
+        ("admitted-sign-cap-not-spent", "(next reply.1) qr qs\n", "(next reply.1) qr (qs + 1)\n", False),
+        ("sign-admission-bypassed", "if sessionAdmits ledger req then", "if true then", False),
+        ("sign-ledger-update-lost", "(byteAfterSign ledger req.message reply.1) reply.2", "ledger reply.2", False),
+    ])
+    cc_variants([("ByteDriver", "byteFinalAdmits")], "ByteDriver", "byte_final_admits_iff", [
+        ("final-failure-check-lost", "!out.ledger.failed", "true", False),
+        ("final-message-width-lost", "decide (out.value.1.length = 32)", "true", False),
+        ("final-signature-width-lost", "decide (out.value.2.length = 4008)", "true", False),
+        ("final-new-message-check-lost", "decide (out.value.1 ∉ out.ledger.signedMessages)", "true", False),
+    ])
+    cc_variants([("ByteDriver", "invalidByteSignature"), ("ByteDriver", "byteForgeryToStructured")], "ByteDriver", "byte_forgery_shape_iff", [
+        ("malformed-placeholder-equivalent", "⟨0, [], [], []⟩", "⟨1, [], [], []⟩", True),
+    ])
+    cc_variants([("ByteDriver", "c10ByteFinal")], "ByteDriver", "c10_byte_final_refinement", [
+        ("final-verification-bypassed", "c10Verify (encode ∘ Sum.inl) table cfg.seed cfg.root out.value.1 sig", "PMF.pure (true, table)", False),
+        ("final-refusal-accepted", "else PMF.pure (false, table)", "else PMF.pure (true, table)", False),
+    ])
+    cc_variants([("ByteGame", "c10ByteGame")], "ByteGame", "c10_byte_game_refinement", [
+        ("keygen-key-config-lost", "(sessionConfigAt cfg key.1)", "cfg", False),
+        ("keygen-root-not-delivered", "adversary key.1.1 key.1.2", "adversary key.1.1 []", False),
+        ("keygen-cache-lost", "qr qs key.2", "qr qs table", False),
+    ])
+    cc_variants([("ByteGame", "c10ByteInitializedShared")], "ByteGame", "c10_byte_initialized_shared_eq", [
+        ("initialized-secret-fixed", "prefixedPrivateInput secret", "prefixedPrivateInput 0", False),
+        ("initialized-cache-prefilled", "fun _ => none", "fun _ => some 0", False),
+        ("initialized-public-seed-fixed", "cfg input.1 input.2", "cfg 0 input.2", False),
+    ])
+    cc_variants([("ByteGame", "c10ByteInitializedIndependent")], "ByteGame", "c10_byte_initialized_independent_eq", [
+        ("independent-cache-prefilled", "fun _ => none", "fun _ => some 0", False),
+    ])
+    cc_variants([("ByteGame", "structuredByteSampler")], "ByteGame", "c10_byte_initialized_shared_eq", [
+        ("sampler-public-seed-lost", "(input.1, byteAdversaryToStructured", "(0, byteAdversaryToStructured", False),
+        ("sampler-public-seed-id", "(input.1, byteAdversaryToStructured", "((fun x => x) input.1, byteAdversaryToStructured", True),
+    ])
+
     return out

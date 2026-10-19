@@ -17,9 +17,9 @@ executions through one shared memo table and separate memo tables, including
 queries chosen from earlier private replies.
 The actual two-query FORS grinder now has an exact client compilation and a
 prefix-error comparison with bounded adaptive work before and after the call.
-**The finite initialized structured forgery bound is now composed below,
-including the returned-Boolean shared-oracle transfer. Concrete signer-session
-correspondence remains open.** The existing
+**The finite initialized forgery bound now also covers the separately defined
+byte game below, through an exact 4,008-byte codec and full-session refinement.
+Concrete signer-session correspondence remains open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
 ## What is checked
@@ -272,7 +272,8 @@ those obligations are proved from the actual programs and complete history.
 A kernel arithmetic example gives a charge below `2^-64` at `qr = 2^32` and
 `qs = 65536`. This is a conservative branch bound, not a tight 128-bit margin
 or a full forgery theorem. The six-case probability composition is proved next. The concrete-backend,
-codec, unbounded-adversary, repeated-grinder freshness, QROM and physical limits remain. These cache-visible events
+unbounded-adversary, repeated-grinder freshness, QROM and physical limits remain.
+The separate PMF codec is closed in the byte-game extension below. These cache-visible events
 are not transferred to the physical shared oracle; only the existing Boolean
 result transfer has that interface.
 
@@ -336,11 +337,70 @@ charges every admitted raw query as potentially accepted. Tightening either
 requires further proofs and is outside this composition.
 
 This closes the finite structured PMF successful-output composition and its
-quantitative bound under #295. The 4,008-byte codec, representation of arbitrary
-unbounded/lossless adversaries, repeated-grinder freshness, concrete SHA/Rust
+quantitative bound under #295. The byte-game extension below closes the PMF
+codec boundary. Representation of arbitrary unbounded/lossless adversaries,
+repeated-grinder freshness, concrete SHA/Rust
 and EasyCrypt execution correspondence, cross-kernel transfer, QROM and physical
 claims remain outside this result. The existing qualitative crypto assumptions
 and the separate mathlib-free `lean/` project are unchanged.
+
+## Exact byte codec and finite byte game
+
+The separate PMF model now has an exact 4,008-byte signature codec and an
+independently defined finite adaptive byte session. `ByteCodec.lean` and
+`ByteCodecBlocks.lean` compose fixed-width node and big-endian u32 bijections;
+`SignatureFields.lean` relates their fixed-size fields to the existing
+structured well-formedness predicate. `SignatureCodec.lean` proves both
+roundtrips: every well-formed structured signature survives encode/decode, and
+every 4,008-byte vector survives decode/encode. Zero and maximum counters and
+all node values remain representable. Decoding establishes shape, not
+cryptographic acceptance. Other byte lengths return `none`.
+
+`SignatureLayout.lean` proves the positional formulas, with zero-based indices:
+
+| Field | Offset | Width |
+|---|---|---|
+| R | `0` | `16` |
+| Secret `i < 13` | `16 + 16*i` | `16` |
+| FORS path node `t < 12, h < 11` | `224 + 176*t + 16*h` | `16` |
+| Layer `l < 2` | `2336 + 836*l` | `836` |
+| WOTS node `c < 43` in layer `l` | `2336 + 836*l + 16*c` | `16` |
+| Big-endian u32 counter in layer `l` | `3024 + 836*l` | `4` |
+| XMSS path node `h < 9` in layer `l` | `3028 + 836*l + 16*h` | `16` |
+
+The thirteen secrets are contiguous, followed by the twelve FORS paths.
+Boundary consumers check both counter byte orders with distinct values,
+last fields, all-FF input, maximum u32, and 4,007/4,009-byte refusal.
+
+`C10ByteClient` receives optional byte signatures and can choose every later
+request from earlier replies. `ByteSession.lean` defines its PMF execution
+directly, then proves equality to the translated structured execution while
+preserving the complete session result, ledger, remaining caps and oracle
+cache. Refusal, admitted exhaustion, persistent failure, duplicate successful
+messages, capped defaults and repeated cached reads retain the existing rules.
+No new success, freshness or independence premise is added.
+
+`ByteDriver.lean` checks failure, message width, signature length and new-message
+admission before final verification. Malformed byte signatures translate to a
+provably malformed structured value only inside the correspondence proof;
+the direct byte semantics refuse them. `ByteGame.lean` executes actual keygen,
+passes its seed/root and complete cache to the client, and proves full-game
+refinement and the existing query budgets. Its initialized shared and
+independent final Boolean PMFs equal the corresponding structured PMFs.
+
+`ByteForgeBound.lean` consequently proves
+`Pr[byte forge] <= min(1, sharedForgeCharge cfg qr qs)`, including real-valued
+forms. Serialization adds no loss. `ByteGameExamples.lean` applies the existing
+numeric bounds below `2^-50` and `2^-34` to arbitrary PMFs of finite byte clients.
+The constant-cache acceptance witness is inhabited functional evidence, not an
+initialized random-oracle history. The conservative bound at `2^32` raw queries
+remains uninformative.
+
+This closes the separate PMF byte-codec and finite byte-session boundary.
+It does not establish concrete SHA, Rust or EasyCrypt execution equivalence,
+cross-kernel transfer, representation of all lossless/unbounded adversaries,
+repeated-grinder freshness, QROM or physical security. The existing manual
+source pins, including `RawSignature.ec`, remain drift checks only.
 
 ## Independence and correspondence boundary
 
@@ -944,11 +1004,10 @@ and `C10Examples.lean` supply complete cached signing success/failure, verificat
 literal bytes, field placement, root-padding refusal and ordered two-layer traces.
 Populated constant-cache witnesses are not fresh-oracle or honest-correctness claims.
 
-This is a manually transcribed structured-signature model, not the 4008-byte
-codec or a Rust execution-equivalence theorem. The structured finite adaptive
-session and honest structured-signature correctness are composed below;
-successful-output/forgery partition, final forgery PMF bound,
-repeated-grinder freshness and concrete backends remain open.
+This is a manually transcribed structured-signature model. The exact byte codec,
+finite session, honest structured-signature correctness, successful-output
+partition and finite forgery PMF bound are now composed in this project.
+Repeated-grinder freshness and concrete backend execution remain open.
 Rust panic/retry/callback/erasure behavior, natural-number address truncation,
 cross-language correspondence and physical execution retain their existing boundaries.
 
@@ -987,7 +1046,7 @@ residual event. `SessionBranches.lean` characterizes successful driver support,
 and `SessionExamples.lean` checks refused calls, repeated cache reads, admitted
 exhaustion, duplicate successful messages, replay rejection and a populated-cache
 initialized success. These are finite structured clients, not a representation
-theorem for every lossless or unbounded EasyCrypt adversary. The byte codec remains open. The supported successful-output alternatives
+theorem for every lossless or unbounded EasyCrypt adversary. The exact byte-codec extension is proved above. The supported successful-output alternatives
 and final finite-model forgery bound are composed above.
 
 The passive observed interpreter in `ObservedSession.lean` now retains each
@@ -1284,16 +1343,22 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2449 theorem closures against
+The gate rebuilds every project module, checks all 2550 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1407 typed cases run 4221 compiler jobs: each baseline and changed
-definition must compile, 1233 changed behaviors must reject at the
-consuming `checked` theorem, and 174 value-preserving changes must pass.
+1471 typed cases run 4413 compiler jobs: each baseline and changed
+definition must compile, 1291 changed behaviors must reject at the
+consuming `checked` theorem, and 180 value-preserving changes must pass.
+The byte-codec/session extension adds 101 closures in thirteen modules and
+64 controls (58 negative, six equivalent). Complete consumers cover byte order,
+full counters, malformed lengths, reply translation, all admission checks,
+ledger/cap/cache preservation, keygen and initialized Boolean correspondence.
+All 2449 preceding statements, 1407 fixture objects, non-umbrella proof-module
+bytes and 52 manual bindings are preserved. Compiler resource policy is unchanged.
 The six-case composition adds 48 theorem closures in eight modules and
 31 controls (26 negative, five equivalent). Its complete consumers retain all
 six charges, public/selected/total budgets, the accepted-word alphabet,

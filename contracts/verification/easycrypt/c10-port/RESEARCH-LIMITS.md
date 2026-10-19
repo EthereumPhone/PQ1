@@ -1,13 +1,13 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-19, following the initialized classical byte-game
+Research checkpoint: 2026-10-20, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Work remains tracked under PQ1 #100 and #295.
 
 ## Quantitative loss
 
-**Current separate Lean frontier (2026-10-19):** the
+**Current separate Lean frontier (2026-10-20):** the
 [six-case composition](../../probability/README.md#six-case-initialized-forgery-bound)
 now proves the finite initialized structured `Pr[forge] <= epsilon`, including
 real-valued conversion and the final Boolean shared-oracle transfer. All six
@@ -16,7 +16,13 @@ ten-million-trial grinders and 65,536 signing requests, the kernel checks bounds
 below `2^-50` for `2^20` raw queries and `2^-34` for `2^24`. At `2^32` raw
 queries the coverage union exceeds one and the capped bound is exactly one.
 These conservative ideal-model figures add no concrete implementation margin.
-The codec, unbounded-adversary representation, repeated-grinder freshness,
+The [exact PMF codec and finite byte-game extension](../../probability/README.md#exact-byte-codec-and-finite-byte-game)
+now proves two-way roundtrips for all well-formed structured signatures and all
+4,008-byte vectors, with full big-endian u32 counters and wrong-length refusal.
+Its independently defined adaptive byte session preserves result, ledger,
+caps and full cache through actual keygen and final verification. Exact
+initialized Boolean equality carries the same capped bound without an added
+loss or premise. Unbounded-adversary representation, repeated-grinder freshness,
 concrete backend/Rust/EasyCrypt and physical/QROM boundaries remain open.
 
 The [separate mathlib PMF project](../../probability/README.md) proves bounded
@@ -411,7 +417,10 @@ retaining all 2102 prior statements, 1283 fixtures and 52 manual bindings.
 That preceding inventory had 2401 theorem closures and 1376 typed cases.
 The six-case composition adds 48 closures in eight modules and 31 typed controls,
 preserving every prior statement, fixture and non-umbrella proof module. The
-current inventory is 2449 closures and 1407 typed cases. The combined bound
+six-case inventory was 2449 closures and 1407 typed cases. The byte-codec/session
+extension adds 101 closures in thirteen modules and 64 controls, preserving all
+preceding statements, fixtures, proof-module bytes and 52 bindings. The current
+inventory is 2550 closures and 1471 typed cases. The combined bound
 retains all six events, uses exact tagged-cache erasure for collision/zero
 charges, and transfers only the final Boolean with the public-prefix charge. These separate Lean
 results import no EasyCrypt theorem and establish no concrete hash, Rust

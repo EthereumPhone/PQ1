@@ -182,15 +182,18 @@ backend interpretation and the separate secure-wrapper experiment remain open.
 See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
 and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 
-**Separate C10 probability frontier (2026-10-19):** the authoritative
+**Separate C10 probability frontier (2026-10-20):** the authoritative
 [PMF project](../contracts/verification/probability/README.md#six-case-initialized-forgery-bound)
 now composes all six actual winning-output alternatives into a finite
 initialized forgery probability bound. Only the final Boolean event transfers
 to the shared oracle. Kernel examples at 65,536 signing requests give bounds
 below `2^-50` for `2^20` raw queries and below `2^-34` for `2^24`; at `2^32`
 the conservative coverage union makes the capped bound uninformative (`1`).
-The codec, unbounded-adversary representation and concrete correspondence
-remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
+The [exact PMF byte codec and finite byte session](../contracts/verification/probability/README.md#exact-byte-codec-and-finite-byte-game)
+now carry that bound to byte clients without added loss: both codec roundtrips,
+all u32 counters, wrong-length refusal, and full session/keygen/cache refinement
+are proved. Unbounded-adversary representation, repeated-grinder freshness and
+concrete correspondence remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
 QROM or hardware claim. The dated development history below is not the current
 proof inventory; use the linked owner for counts, gates and remaining limits.
 
