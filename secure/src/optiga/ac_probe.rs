@@ -22,9 +22,11 @@ use super::apdu::{self, OptigaError};
 use super::OptigaTrustM;
 use zeroize::Zeroize;
 
-const PROBE_AUTHREF: u16 = 0xF1D5;
-const PROBE_STRICT: u16 = 0xF1D7;
-const PROBE_CONTROL: u16 = 0xF1E0;
+// The spare OIDs live next to the typed plaintext probe that may name them
+// (`apdu::plain_ac_probe`, #991).
+const PROBE_AUTHREF: u16 = apdu::AC_PROBE_AUTHREF;
+const PROBE_STRICT: u16 = apdu::AC_PROBE_STRICT;
+const PROBE_CONTROL: u16 = apdu::AC_PROBE_CONTROL;
 
 const STRICT_PATTERN: [u8; 32] = [0xA5; 32];
 const CONTROL_PATTERN: [u8; 32] = [0x5A; 32];
@@ -83,26 +85,52 @@ impl OptigaTrustM {
     }
 
     /// PIN-style HMAC auth against the throwaway F1D5 (non-LUC Infineon
-    /// 64-B shape). Runs over whatever transport is current: shielded if
-    /// the session is up, plaintext otherwise.
-    unsafe fn ac_probe_auth(&mut self, secret: &[u8; 32]) -> Result<(), (&'static str, Option<OptigaError>)> {
+    /// 64-B shape). `plain = false` runs it shielded through the typed
+    /// helpers (which refuse without a session); `plain = true` is the #116
+    /// negative-B attack shape and goes through the typed plaintext probe.
+    unsafe fn ac_probe_auth(
+        &mut self,
+        secret: &[u8; 32],
+        plain: bool,
+    ) -> Result<(), (&'static str, Option<OptigaError>)> {
         let mut host_nonce = [0u8; 16];
         let mut host_tag = [0u8; 16];
         crate::rng::fill(&mut host_nonce).map_err(|_| ("rng", None))?;
         crate::rng::fill(&mut host_tag).map_err(|_| ("rng", None))?;
         let mut chip_random = [0u8; 32];
-        apdu::generate_auth_code(
-            &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &host_nonce, &mut chip_random,
-        )
-        .map_err(|e| ("auth-code", Some(e)))?;
+        if plain {
+            let n = apdu::plain_ac_probe(
+                &mut self.ifx,
+                apdu::AcProbePlainCmd::AuthCode { host_nonce: &host_nonce },
+                &mut chip_random,
+            )
+            .map_err(|e| ("auth-code", Some(e)))?;
+            if n != chip_random.len() {
+                return Err(("auth-code", None));
+            }
+        } else {
+            apdu::generate_auth_code(
+                &mut self.ifx, &mut self.shield, apdu::OID_SESSION, &host_nonce, &mut chip_random,
+            )
+            .map_err(|e| ("auth-code", Some(e)))?;
+        }
         let mut input = [0u8; 64];
         input[..16].copy_from_slice(&host_nonce);
         input[16..48].copy_from_slice(&chip_random);
         input[48..].copy_from_slice(&host_tag);
         let mut mac = Self::hmac_sha256(secret, &input);
-        let v = apdu::hmac_verify(
-            &mut self.ifx, &mut self.shield, PROBE_AUTHREF, apdu::OID_SESSION, &input, &mac,
-        );
+        let v = if plain {
+            apdu::plain_ac_probe(
+                &mut self.ifx,
+                apdu::AcProbePlainCmd::HmacVerify { input: &input, mac: &mac },
+                &mut [],
+            )
+            .map(|_| ())
+        } else {
+            apdu::hmac_verify(
+                &mut self.ifx, &mut self.shield, PROBE_AUTHREF, apdu::OID_SESSION, &input, &mac,
+            )
+        };
         mac.zeroize();
         input.zeroize();
         v.map_err(|e| ("auth-verify", Some(e)))
@@ -178,7 +206,7 @@ impl OptigaTrustM {
             self.ac_probe_fresh_session()?;
 
             // 5. Auth against F1D5 over the shielded session.
-            self.ac_probe_auth(&secret)?;
+            self.ac_probe_auth(&secret, false)?;
 
             // 6. Positive: shielded read after auth → the pattern.
             buf = [0u8; 32];
@@ -200,13 +228,13 @@ impl OptigaTrustM {
             if self.shield.active {
                 return Err(("negB-shield-up", None));
             }
-            self.ac_probe_auth(&secret)
+            self.ac_probe_auth(&secret, true)
                 .map_err(|(s, e)| (if s == "auth-verify" { "negB-plain-auth" } else { s }, e))?;
             //    Control first: weak-AC object, same plaintext auth state.
             //    Must be served — reproduces the pre-#116 leak and proves
             //    the plaintext path + auto-state are live.
             let mut cbuf = [0u8; 32];
-            match apdu::get_data_object(&mut self.ifx, &mut self.shield, PROBE_CONTROL, 0, 32, &mut cbuf) {
+            match apdu::plain_ac_probe(&mut self.ifx, apdu::AcProbePlainCmd::ReadControl, &mut cbuf) {
                 Ok(_) if cbuf == CONTROL_PATTERN => {}
                 Ok(_) => return Err(("control-wrong", None)),
                 Err(e) => return Err(("control-read", Some(e))),
@@ -214,7 +242,7 @@ impl OptigaTrustM {
             //    Strict object: must be refused BY THE CHIP (a Status
             //    answer). A transport-level error is inconclusive → FAIL.
             buf = [0u8; 32];
-            match apdu::get_data_object(&mut self.ifx, &mut self.shield, PROBE_STRICT, 0, 32, &mut buf) {
+            match apdu::plain_ac_probe(&mut self.ifx, apdu::AcProbePlainCmd::ReadStrict, &mut buf) {
                 Ok(_) => return Err(("negB-plain-read", None)),
                 Err(e @ OptigaError::Status(_)) => *neg_b = Some(e),
                 Err(e) => return Err(("negB-inconclusive", Some(e))),

@@ -880,7 +880,8 @@ compile_error!(
 
 // MEDIUM-1 ship-blocker (audit se-tunnels 20260611): `optiga-no-shield` turns
 // `ensure_shield()` into a no-op and routes every OPTIGA APDU through the
-// plaintext `send_command` branch, so `half_O` (the OPTIGA seed share) and the
+// `optiga-no-shield` variant of `send_command` (the only one with a plaintext
+// arm since #991), so `half_O` (the OPTIGA seed share) and the
 // PIN-auth HMAC challenge/response transit I2C in cleartext — a bus attacker
 // reads the OPTIGA seed share directly off the wire (invariant #3 break, weakens
 // #1). It is a dev affordance for a bricked/unreachable E140 and must never reach

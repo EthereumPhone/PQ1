@@ -1368,7 +1368,7 @@ fn negative_get_random_has_no_plaintext_transport_branch() {
         .expect("protected-only transport helper missing")..];
     let transparent = protected
         .find("unsafe fn send_command(")
-        .expect("transparent provisioning transport helper missing");
+        .expect("strict typed-helper dispatcher missing (#991: no plaintext arm)");
     assert!(!protected[..transparent].contains("if shield.active"));
     assert!(!protected[..transparent].contains("ifx.transceive(apdu"));
     assert!(
@@ -1379,6 +1379,7 @@ fn negative_get_random_has_no_plaintext_transport_branch() {
         "protected transport must double-check the authenticated unwrap receipt"
     );
     assert!(MOD_SRC.contains("apdu::get_random_plain(&mut self.ifx, out)"));
+    assert!(!APDU_SRC.contains("its inactive branch is intentionally available"));
 }
 
 #[test]
@@ -2718,6 +2719,247 @@ fn negative_get_random_transport_fault_surfaces_transport() {
         [0xA5u8; 16],
         "no partial bytes reach the caller on a bus fault"
     );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// #991 — the typed-helper dispatcher fails closed; plaintext only via the
+// fixed pre-shield allowlist
+// ═════════════════════════════════════════════════════════════════════
+
+use super::ifx_i2c::{last_plain_apdu, plain_tx_count};
+
+#[test]
+fn negative_typed_helpers_refuse_without_session_and_emit_no_plaintext() {
+    // ASSUMPTION ATTACKED: with no Shielded Connection, a typed helper
+    // either refuses or sends plaintext. Before #991 `send_command` sent
+    // plaintext; now every typed helper must refuse with an authoritative
+    // `Shield` and put nothing on the bus.
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let mut sc = shield::ShieldedConnection::new();
+    let before = plain_tx_count();
+    let mut out = [0u8; 64];
+    let secret = [0x5Au8; 32];
+    let results = unsafe {
+        [
+            apdu::get_data_object(&mut ifx, &mut sc, apdu::OID_ENTROPY, 0, 32, &mut out).map(|_| ()),
+            apdu::get_metadata(&mut ifx, &mut sc, apdu::OID_AUTH_REF, &mut out).map(|_| ()),
+            apdu::set_data_object(&mut ifx, &mut sc, apdu::OID_AUTH_REF, &secret),
+            apdu::set_metadata(&mut ifx, &mut sc, apdu::OID_ENTROPY, &[0x20, 0x00]),
+            apdu::generate_auth_code(&mut ifx, &mut sc, apdu::OID_SESSION, &[0u8; 16], &mut out[..32])
+                .map(|_| ()),
+            apdu::hmac_verify(&mut ifx, &mut sc, apdu::OID_AUTH_REF, apdu::OID_SESSION, &[0u8; 64], &secret),
+        ]
+    };
+    for (i, r) in results.into_iter().enumerate() {
+        let e = r.expect_err("no session => typed helper must refuse");
+        assert!(matches!(e, apdu::OptigaError::Shield), "helper {i}: {e:?}");
+        assert!(!e.is_inconclusive(), "helper {i}: Shield is a verdict, not a bus fault");
+    }
+    assert_eq!(unsafe { apdu::read_last_error(&mut ifx, &mut sc) }, None);
+    assert_eq!(plain_tx_count(), before, "no plaintext frame may reach the bus");
+}
+
+#[test]
+fn negative_wrap_failure_then_next_secret_write_does_not_downgrade() {
+    // The swallowed-error shape: a wrap failure clears `active`; a caller
+    // that ignores that Err and sends a secret next must get a refusal, not
+    // a plaintext frame.
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x31; 16], [0x31; 4], 0xad87, 0x8f97);
+    sc.set_handshake_sequences_for_test(0xad87, 0x8f97);
+    let mut meta = [0u8; 64];
+    let first = unsafe { apdu::get_metadata(&mut ifx, &mut sc, apdu::OID_AUTH_REF, &mut meta) };
+    assert!(matches!(first, Err(apdu::OptigaError::Shield)));
+    assert!(!sc.active, "the nonce backstop must close the session");
+    let before = plain_tx_count();
+    let second = unsafe { apdu::set_data_object(&mut ifx, &mut sc, apdu::OID_ENTROPY, &[0x77; 32]) };
+    assert!(matches!(second, Err(apdu::OptigaError::Shield)));
+    assert_eq!(plain_tx_count(), before, "the secret write must not go out in plaintext");
+}
+
+#[test]
+fn positive_preshield_sends_fixed_golden_apdus_only_when_inactive() {
+    // The allowlist emits exactly the bytes the old typed-helper calls did
+    // (byte-identical wire format), and nothing else.
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let mut sc = shield::ShieldedConnection::new();
+
+    let before = plain_tx_count();
+    let mut buf = [0u8; 4];
+    let r = unsafe { apdu::send_preshield(&mut ifx, &mut sc, apdu::PreShieldCmd::ReadCounter, &mut buf) };
+    assert!(matches!(r, Err(apdu::OptigaError::Transport)), "stub transceive fails as Transport");
+    assert_eq!(plain_tx_count(), before + 1);
+    assert_eq!(last_plain_apdu(), [0x81, 0x00, 0x00, 0x06, 0xF1, 0xE1, 0x00, 0x00, 0x00, 0x01]);
+
+    let pbs = [0x5Au8; 64];
+    let _ = unsafe { apdu::send_preshield(&mut ifx, &mut sc, apdu::PreShieldCmd::WritePbs(&pbs), &mut []) };
+    assert_eq!(plain_tx_count(), before + 2);
+    let mut want = vec![0x82, 0x40, 0x00, 0x44, 0xE1, 0x40, 0x00, 0x00];
+    want.extend_from_slice(&pbs);
+    assert_eq!(last_plain_apdu(), want);
+
+    let _ = unsafe { apdu::send_preshield(&mut ifx, &mut sc, apdu::PreShieldCmd::WritePbsMetadata, &mut []) };
+    assert_eq!(plain_tx_count(), before + 3);
+    let (meta, meta_len) = apdu::build_metadata_pbs_final();
+    let in_len = (4 + meta_len) as u16;
+    let mut want = vec![0x82, 0x01, (in_len >> 8) as u8, in_len as u8, 0xE1, 0x40, 0x00, 0x00];
+    want.extend_from_slice(&meta[..meta_len]);
+    assert_eq!(last_plain_apdu(), want);
+}
+
+#[test]
+fn positive_preshield_never_downgrades_a_live_session() {
+    // With a session up, the allowlisted commands go through the protected
+    // path: no plaintext frame, and the stub PRL fault surfaces.
+    let mut ifx = super::ifx_i2c::IfxState::new();
+    let mut sc = shield::ShieldedConnection::new();
+    sc.activate_for_test([0x33; 16], [0x33; 4], 7, 100);
+    let before = plain_tx_count();
+    let mut buf = [0u8; 4];
+    let r = unsafe { apdu::send_preshield(&mut ifx, &mut sc, apdu::PreShieldCmd::ReadCounter, &mut buf) };
+    assert!(matches!(r, Err(apdu::OptigaError::Transport)), "went via transceive_prl");
+    assert_eq!(plain_tx_count(), before, "a live session is never downgraded");
+}
+
+/// `name`'s body: from `fn name(` to the first line that is exactly `}`.
+fn fn_body<'a>(src: &'a str, sig: &str) -> &'a str {
+    let start = src.find(sig).unwrap_or_else(|| panic!("{sig} missing"));
+    let len = src[start..].find("\n}\n").expect("body end");
+    &src[start..start + len]
+}
+
+/// `src` with `//` comments removed, line by line.
+fn code_only(src: &str) -> String {
+    src.lines()
+        .map(|l| match l.find("//") {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn negative_strict_send_command_has_no_plaintext_arm() {
+    // S1: the shielded-build `send_command` cannot reach `ifx.transceive`.
+    let strict_at = APDU_SRC
+        .find("#[cfg(not(feature = \"optiga-no-shield\"))]\n#[inline(always)]\nunsafe fn send_command(")
+        .expect("strict send_command must be the not(optiga-no-shield) variant");
+    let strict = code_only(fn_body(&APDU_SRC[strict_at..], "unsafe fn send_command("));
+    assert!(strict.contains("send_command_protected(ifx, shield, apdu, resp_buf)"));
+    assert!(!strict.contains("transceive"), "strict dispatcher must have no plaintext arm");
+    assert!(!strict.contains("else"), "strict dispatcher must have no fallback branch");
+    // The two-arm body survives only under optiga-no-shield.
+    let lax_at = APDU_SRC
+        .find("#[cfg(feature = \"optiga-no-shield\")]\nunsafe fn send_command(")
+        .expect("the plaintext-capable send_command is optiga-no-shield only");
+    assert!(fn_body(&APDU_SRC[lax_at..], "unsafe fn send_command(").contains("ifx.transceive(apdu, resp_buf)"));
+    assert_eq!(APDU_SRC.matches("unsafe fn send_command(").count(), 2);
+}
+
+#[test]
+fn negative_plaintext_transceive_only_in_allowlisted_functions() {
+    // S2: every `ifx.transceive(` in apdu.rs sits in a function that is
+    // allowed to send plaintext, under its expected cfg.
+    let code = code_only(APDU_SRC);
+    let allowed: &[(&str, Option<&str>)] = &[
+        ("pub unsafe fn open_application(", None),
+        ("pub unsafe fn get_random_plain_probe(", Some("#[cfg(feature = \"optiga-probe\")]")),
+        ("pub unsafe fn get_random_plain(", Some("#[cfg(feature = \"prodtest\")]")),
+        ("unsafe fn send_command(", Some("#[cfg(feature = \"optiga-no-shield\")]")),
+        ("pub unsafe fn send_preshield(", None),
+        ("pub unsafe fn plain_read_probe(", Some("#[cfg(feature = \"optiga-probe\")]")),
+        ("pub unsafe fn plain_ac_probe(", Some("#[cfg(feature = \"optiga-ac-probe\")]")),
+    ];
+    let mut seen = 0;
+    for (at, _) in code.match_indices("ifx.transceive(") {
+        let fn_at = code[..at].rfind("fn ").expect("enclosing fn");
+        let line_start = code[..fn_at].rfind('\n').map_or(0, |i| i + 1);
+        let sig_line = &code[line_start..];
+        let (sig, cfg) = allowed
+            .iter()
+            .find(|(sig, _)| sig_line.starts_with(sig))
+            .unwrap_or_else(|| panic!("plaintext transceive in a non-allowlisted fn: {}", &sig_line[..60]));
+        if let Some(cfg) = cfg {
+            let prev = &code[..line_start];
+            let attrs = &prev[prev.len().saturating_sub(200)..];
+            assert!(attrs.contains(cfg), "{sig} must sit under {cfg}");
+        }
+        seen += 1;
+    }
+    assert_eq!(seen, allowed.len(), "exactly one plaintext transceive per allowlisted fn");
+}
+
+#[test]
+fn negative_preshield_allowlist_names_only_fixed_oids() {
+    // S3/S4: no variant can carry an OID or raw bytes beyond the 64-byte
+    // PBS; the body names only E140 / F1E1; a live session is checked
+    // twice (volatile) before any plaintext frame.
+    let en = fn_body(APDU_SRC, "pub enum PreShieldCmd<'a> {");
+    let en = code_only(en);
+    assert!(!en.contains("u16"), "PreShieldCmd must not carry an OID");
+    assert_eq!(en.matches("[u8").count(), 1);
+    assert!(en.contains("WritePbs(&'a [u8; 64])"));
+    let body = code_only(fn_body(APDU_SRC, "pub unsafe fn send_preshield("));
+    for forbidden in ["OID_AUTH_REF", "OID_ENTROPY", "OID_MASTER_SECRET", "OID_VK", "OID_BOOTSTRAP_VK",
+                      "OID_PIN_CTR", "OID_DURESS", "CMD_DECRYPT_SYM", "CMD_GET_RANDOM"] {
+        assert!(!body.contains(forbidden), "send_preshield must not name {forbidden}");
+    }
+    let active = body.find("if shield.active {").expect("live-session check");
+    let protected = body.find("send_command_protected(").expect("protected path");
+    let plain = body.find("ifx.transceive(").expect("plaintext arm");
+    assert!(active < protected && protected < plain);
+    assert!(body[..plain].matches("core::ptr::read_volatile(&shield.active)").count() >= 2);
+}
+
+#[test]
+fn negative_preshield_called_only_from_the_pre_shield_sites() {
+    // S5: the allowlist is used only by the boot/pairing/bench reads and
+    // writes, never by a secret-bearing flow.
+    let code = code_only(MOD_SRC);
+    let mut sites = Vec::new();
+    for (at, _) in code.match_indices("apdu::send_preshield(") {
+        let fn_at = code[..at].rfind(" fn ").expect("enclosing fn");
+        let name_end = code[fn_at + 4..].find('(').unwrap() + fn_at + 4;
+        sites.push(code[fn_at + 4..name_end].to_string());
+    }
+    sites.sort();
+    assert_eq!(
+        sites,
+        [
+            "bench_load_pbs_in_place",
+            "check_provisioned",
+            "read_counter_preshield",
+            "setup_pbs_no_handshake",
+            "setup_pbs_no_handshake",
+        ]
+    );
+    // The CRIT-6 readback stays strict.
+    assert!(fn_body(MOD_SRC, "unsafe fn read_counter_raw(").contains("apdu::get_data_object("));
+}
+
+#[test]
+fn negative_factory_reset_resyncs_shield_after_transient_auth_failure() {
+    // S6: after a logged transient-auth error, the wipe re-establishes the
+    // session before its blank writes instead of carrying on with a session
+    // the failed wrap may have dropped.
+    let body = fn_body(MOD_SRC, "fn factory_reset_body(");
+    let err = body.find("self.reset_e120_via_transient_auth(secret)").expect("transient call");
+    let resync = body[err..].find("self.ensure_shield()?;").expect("resync after the error") + err;
+    let first_write = body.find("apdu::OID_COUNTER").expect("first blank write");
+    assert!(resync < first_write);
+}
+
+#[test]
+fn negative_final_pbs_is_never_written_in_plaintext_after_rotation() {
+    // After the #36 rotation, `setup_pbs_no_handshake` must prove E140 by
+    // handshake instead of writing the salted final PBS in plaintext.
+    let body = fn_body(MOD_SRC, "fn setup_pbs_no_handshake(");
+    let gate = body.find("if crate::first_boot::journal_all_done() {").expect("rotation gate");
+    let write = body.find("apdu::PreShieldCmd::WritePbs(&pbs)").expect("pairing write");
+    assert!(gate < write, "the post-rotation gate must precede the plaintext write");
+    assert!(body[gate..write].contains("return match self.ensure_shield() {"));
 }
 
 /// The OPTIGA silicon reset must never reach a hardcoded iota2 pin on pq1.

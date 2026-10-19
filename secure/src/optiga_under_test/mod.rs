@@ -64,19 +64,39 @@ pub mod ifx_i2c {
 
     pub struct IfxState;
 
+    std::thread_local! {
+        /// Plaintext frames handed to `transceive` on this test thread (#991).
+        static PLAIN_TX: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+        /// The last plaintext frame, byte for byte.
+        static LAST_PLAIN: core::cell::RefCell<Vec<u8>> = const { core::cell::RefCell::new(Vec::new()) };
+    }
+
+    /// How many plaintext frames this test thread has sent so far.
+    pub fn plain_tx_count() -> usize {
+        PLAIN_TX.with(|c| c.get())
+    }
+
+    /// The last plaintext frame this test thread sent.
+    pub fn last_plain_apdu() -> Vec<u8> {
+        LAST_PLAIN.with(|l| l.borrow().clone())
+    }
+
     impl IfxState {
         pub const fn new() -> Self {
             Self
         }
 
         /// # Safety
-        /// Stub. The real implementation drives I²C MMIO; on host this is
-        /// a never-call no-op.
+        /// Stub. The real implementation drives I²C MMIO; on host it only
+        /// records the plaintext frame it was handed (so tests can prove a
+        /// path emitted none) and fails as a transport timeout.
         pub unsafe fn transceive(
             &mut self,
-            _apdu: &[u8],
+            apdu: &[u8],
             _resp: &mut [u8],
         ) -> Result<usize, IfxError> {
+            PLAIN_TX.with(|c| c.set(c.get() + 1));
+            LAST_PLAIN.with(|l| *l.borrow_mut() = apdu.to_vec());
             Err(IfxError::Timeout)
         }
 

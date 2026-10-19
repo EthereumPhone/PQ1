@@ -165,7 +165,19 @@ impl Probe {
         match e {
             OptigaError::Status(sta) => {
                 // SAFETY: caller holds `&mut self`; one APDU on the OPTIGA bus.
-                let lec = unsafe { apdu::read_last_error(&mut self.dev.ifx, &mut self.dev.shield) };
+                let lec = if self.dev.shield.active {
+                    unsafe { apdu::read_last_error(&mut self.dev.ifx, &mut self.dev.shield) }
+                } else {
+                    // No session: the typed helper refuses (#991), so read
+                    // through the read-class-only plaintext probe.
+                    let mut b = [0u8; 4];
+                    match unsafe {
+                        apdu::plain_read_probe(&mut self.dev.ifx, apdu::PlainReadCmd::LastError, &mut b)
+                    } {
+                        Ok(n) if n > 0 => Some(b[0]),
+                        _ => None,
+                    }
+                };
                 Res::Chip { sta, lec }
             }
             OptigaError::I2c => Res::Link("i2c"),
@@ -180,21 +192,42 @@ impl Probe {
     }
 
     /// GetDataObject(metadata).
+    /// Shielded when a session is up (R7); otherwise the read-class-only
+    /// plaintext probe, since the typed helpers refuse without one (#991).
     pub(crate) unsafe fn meta(&mut self, oid: u16, out: &mut [u8; 256]) -> Res {
         // SAFETY: caller holds `&mut self`.
-        match unsafe { apdu::get_metadata(&mut self.dev.ifx, &mut self.dev.shield, oid, out) } {
+        let r = if self.dev.shield.active {
+            unsafe { apdu::get_metadata(&mut self.dev.ifx, &mut self.dev.shield, oid, out) }
+        } else {
+            unsafe {
+                apdu::plain_read_probe(&mut self.dev.ifx, apdu::PlainReadCmd::Metadata { oid }, out)
+            }
+        };
+        match r {
             Ok(n) => Res::Ok(n),
             Err(e) => unsafe { self.classify(e) },
         }
     }
 
-    /// GetDataObject(data) of up to `out.len()` bytes at `offset`.
+    /// GetDataObject(data) of up to `out.len()` bytes at `offset`; transport
+    /// chosen as in [`Self::meta`].
     pub(crate) unsafe fn data(&mut self, oid: u16, offset: u16, out: &mut [u8]) -> Res {
         let len = core::cmp::min(out.len(), 256) as u16;
         // SAFETY: caller holds `&mut self`.
-        match unsafe {
-            apdu::get_data_object(&mut self.dev.ifx, &mut self.dev.shield, oid, offset, len, out)
-        } {
+        let r = if self.dev.shield.active {
+            unsafe {
+                apdu::get_data_object(&mut self.dev.ifx, &mut self.dev.shield, oid, offset, len, out)
+            }
+        } else {
+            unsafe {
+                apdu::plain_read_probe(
+                    &mut self.dev.ifx,
+                    apdu::PlainReadCmd::Data { oid, offset, len },
+                    out,
+                )
+            }
+        };
+        match r {
             Ok(n) => Res::Ok(n),
             Err(e) => unsafe { self.classify(e) },
         }
