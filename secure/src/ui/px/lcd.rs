@@ -1047,8 +1047,9 @@ pub fn film_start_with(s: &Screen) {
 /// from an ISR.
 static mut FILM_SIGS: (pqsigner_ui_px::damage::FrameSigs, u32) = (pqsigner_ui_px::damage::FrameSigs::UNKNOWN, 0);
 
-/// Whether the film may redraw partially. Always, except that the dev bench
-/// (`ui-px-film-bench`) alternates it to compare the two on the glass.
+/// Whether the film may redraw partially. Always; the dev bench
+/// (`ui-px-film-bench`) can switch it off to compare. Measured on the EVT
+/// 2026-10-16: 20.6 fps partial against 18.2 full, no tearing seen.
 #[cfg(feature = "ui-px-film-bench")]
 static FILM_PARTIAL: AtomicBool = AtomicBool::new(true);
 
@@ -1096,36 +1097,104 @@ fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) ->
 }
 
 /// Dev bench (`ui-px-film-bench`, NEVER ships): the setup busy film at boot,
-/// with no wallet, no secure element and no wizard, so the partial redraw
-/// can be judged on the glass without a provisioning run (owner 2026-10-16).
-/// Alternates partial and full redraw. Each run: 6 s of CPU-bound slices
-/// with a tick between (provisioning's key-derivation cadence), then 6 s of
-/// 1 ms waits with a tick each (its chip-wait cadence), then a 16x4 page:
-/// the mode, frames per second, the longest pause, and the frame count.
+/// with no wallet, no secure element and no wizard, so the film can be judged
+/// on the glass without a provisioning run (owner 2026-10-16).
+///
+/// 2026-10-16 it compared partial and full redraw (20.6 vs 18.2 fps, no
+/// tearing; partial kept). Now it alternates the chip waits' pacing: PAUSED
+/// (the signer's: a 16 ms pause after each frame) and BACK TO BACK
+/// ([`film_tick_chip`] starting a frame as soon as one ends). Each run plays
+/// the film for 12 s:
+/// - 6 s of 8 ms CPU slices with the signer's tick between (key derivation,
+///   signing): frames per second, and how many times longer the slices took
+///   than their own CPU time (`x1.0` = the film cost nothing);
+/// - 6 s of simulated chip operations with [`film_tick_chip`] (each busy for
+///   2, 5, 10 or 30 ms, polled every 1 ms like the OPTIGA driver): frames per
+///   second, and how many times longer the operations took than the chip was
+///   busy;
+/// - then a 16x4 page: the mode; `cpu` fps and slowdown; `chip` fps and
+///   slowdown; the mean frame time and the longest pause between two frames
+///   (ms, both halves).
 /// A press (or 15 s) starts the next run. Never returns.
 #[cfg(feature = "ui-px-film-bench")]
 pub fn film_bench() -> ! {
     use pqsigner_ui_px::{Icon, ResultMark, ScreenBuilder, State};
+
+    /// Frames drawn, time inside them, and the longest pause, over one half.
+    #[derive(Default)]
+    struct Half {
+        frames: u32,
+        busy: u32,
+        gap: u32,
+        last_end: u32,
+    }
+    impl Half {
+        fn new(t0: u32) -> Self {
+            Self { last_end: t0, ..Self::default() }
+        }
+        /// Run one tick; a moved panel write count means it drew a frame.
+        fn tick(&mut self, f: impl FnOnce()) {
+            let w = lcd::glass_writes();
+            let a = timeout::now();
+            f();
+            if lcd::glass_writes() != w {
+                let b = timeout::now();
+                self.frames += 1;
+                self.busy += b.wrapping_sub(a);
+                self.gap = self.gap.max(b.wrapping_sub(self.last_end));
+                self.last_end = b;
+            }
+        }
+    }
+
     let screen = ScreenBuilder::status(b"SETUP", Icon::Dots, b"SETTING UP YOUR PQ1", State::Awaiting, ResultMark::None)
         .finish()
         .unwrap_or(Screen::BLANK);
-    let mut partial = true;
+    let mut back_to_back = false;
     loop {
-        FILM_PARTIAL.store(partial, Ordering::Relaxed);
-        super::film_gaps::start();
+        FILM_CHIP_BACK_TO_BACK.store(back_to_back, Ordering::Relaxed);
         film_start_with(&screen);
+
+        // CPU half: 8 ms slices (1,280,000 cycles at 160 MHz), the signer's tick.
         let t0 = timeout::now();
+        let mut cpu = Half::new(t0);
+        let mut slices = 0u32;
         while timeout::now().wrapping_sub(t0) < 6_000 {
             cortex_m::asm::delay(1_280_000);
-            film_tick(0);
+            slices += 1;
+            cpu.tick(|| film_tick(0));
         }
-        while timeout::now().wrapping_sub(t0) < 12_000 {
-            cortex_m::asm::delay(160_000);
-            film_tick(0);
+        let cpu_ms = timeout::now().wrapping_sub(t0);
+
+        // Chip half: operations busy for a set time, polled every 1 ms with
+        // the tick `ui::busy_poll` gives the drivers. (Called directly: only
+        // provisioning raises `ChipWaitTicks`.)
+        const BUSY_MS: [u32; 4] = [2, 5, 10, 30];
+        let t1 = timeout::now();
+        let mut chip = Half::new(t1);
+        let mut chip_busy = 0u32;
+        let mut op = 0usize;
+        while timeout::now().wrapping_sub(t1) < 6_000 {
+            let busy = BUSY_MS[op % BUSY_MS.len()];
+            let s = timeout::now();
+            while timeout::now().wrapping_sub(s) < busy {
+                cortex_m::asm::delay(160_000);
+                chip.tick(film_tick_chip);
+            }
+            chip_busy += busy;
+            op += 1;
         }
-        super::film_gaps::stop();
+        let chip_ms = timeout::now().wrapping_sub(t1);
         film_abort();
-        let (frames, total, gap) = super::film_gaps::summary();
+
+        let tenths = |num: u32, den: u32| if den > 0 { num * 10 / den } else { 0 };
+        let cpu_fps = tenths(cpu.frames * 1000, cpu_ms);
+        let cpu_x = tenths(cpu_ms, slices * 8);
+        let chip_fps = tenths(chip.frames * 1000, chip_ms);
+        let chip_x = tenths(chip_ms, chip_busy);
+        let frames = cpu.frames + chip.frames;
+        let mean = if frames > 0 { (cpu.busy + chip.busy) / frames } else { 0 };
+
         let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
         let put = |row: &mut [u8; crate::ui::DISPLAY_COLS], parts: &[&[u8]], nums: &[u32]| {
             let mut n = 0;
@@ -1158,15 +1227,14 @@ pub fn film_bench() -> ! {
                 }
             }
         };
-        put(&mut rows[0], &[if partial { b"PARTIAL REDRAW" } else { b"FULL REDRAW" }], &[]);
-        let tenths = if total > 0 { frames * 10_000 / total } else { 0 };
-        put(&mut rows[1], &[b"fps ", b"."], &[tenths / 10, tenths % 10]);
-        put(&mut rows[2], &[b"max gap ", b"ms"], &[gap]);
-        put(&mut rows[3], &[b"frames "], &[frames]);
+        put(&mut rows[0], &[if back_to_back { b"BACK TO BACK" } else { b"PAUSED" }], &[]);
+        put(&mut rows[1], &[b"cpu ", b".", b" x", b"."], &[cpu_fps / 10, cpu_fps % 10, cpu_x / 10, cpu_x % 10]);
+        put(&mut rows[2], &[b"chip ", b".", b" x", b"."], &[chip_fps / 10, chip_fps % 10, chip_x / 10, chip_x % 10]);
+        put(&mut rows[3], &[b"frame ", b" gap "], &[mean, cpu.gap.max(chip.gap)]);
         let _ = paint_legacy(&rows);
         let t = timeout::now();
         let _ = crate::ui::input().wait_button(&mut || timeout::now().wrapping_sub(t) >= 15_000);
-        partial = !partial;
+        back_to_back = !back_to_back;
     }
 }
 
@@ -1176,6 +1244,36 @@ pub fn film_bench() -> ! {
 /// `FRAME_PERIOD_MS`, and a frame that overran 50 ms skips the next slot, so
 /// the sign chain is never delayed by more than one frame per call.
 pub fn film_tick(_percent: u8) {
+    film_tick_paced(false);
+}
+
+/// Whether a chip wait's tick ([`film_tick_chip`]) draws back to back. Off
+/// (the signer's pacing) until the owner picks it; the dev bench
+/// (`ui-px-film-bench`) alternates it to measure both (2026-10-19).
+#[cfg(feature = "ui-px-film-bench")]
+static FILM_CHIP_BACK_TO_BACK: AtomicBool = AtomicBool::new(false);
+
+fn film_chip_back_to_back() -> bool {
+    #[cfg(feature = "ui-px-film-bench")]
+    {
+        FILM_CHIP_BACK_TO_BACK.load(Ordering::Relaxed)
+    }
+    #[cfg(not(feature = "ui-px-film-bench"))]
+    {
+        false
+    }
+}
+
+/// One frame of the running film, if one is due, from a wait on a busy
+/// secure element (`ui::busy_poll`). There the CPU only polls the chip, so
+/// the film may start its next frame as soon as one ends (paced start to
+/// start) instead of leaving the signer's pause; the cost is that the wait
+/// returns up to one frame late.
+pub fn film_tick_chip() {
+    film_tick_paced(film_chip_back_to_back());
+}
+
+fn film_tick_paced(back_to_back: bool) {
     if !FILM_LIVE.load(Ordering::Relaxed) {
         return;
     }
@@ -1197,7 +1295,13 @@ pub fn film_tick(_percent: u8) {
     let after = timeout::now();
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::frame(after);
-    *last = if after.wrapping_sub(now) > 50 { after.wrapping_add(FRAME_PERIOD_MS) } else { after };
+    *last = if back_to_back {
+        now
+    } else if after.wrapping_sub(now) > 50 {
+        after.wrapping_add(FRAME_PERIOD_MS)
+    } else {
+        after
+    };
 }
 
 /// The work answered: land the running film on `e` (the current turn

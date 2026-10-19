@@ -1557,7 +1557,7 @@ fn positive_busy_poll_draws_only_under_the_provisioning_flag() {
         .find("if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {")
         .expect("busy_poll must test the provisioning flag");
     let tick = body
-        .find("px::lcd::film_tick(0);")
+        .find("px::lcd::film_tick_chip();")
         .expect("busy_poll must advance the film");
     assert!(guard < tick, "the film tick must sit inside the flag test");
     assert_eq!(body.matches("film_tick").count(), 1, "one tick per poll");

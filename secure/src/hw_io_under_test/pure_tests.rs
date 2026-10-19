@@ -2558,9 +2558,16 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
     let start = UI_PX_LCD_SRC.split("pub fn film_start_with(").nth(1).expect("film_start_with");
     let start = &start[..start.find("\n}\n").unwrap_or(start.len())];
     assert!(start.contains("present_film(&anim, &atlas.marks(), &atlas.font(), true)"), "a film opens on a full frame");
-    let tick = UI_PX_LCD_SRC.split("pub fn film_tick(").nth(1).expect("film_tick");
+    let tick = UI_PX_LCD_SRC.split("fn film_tick_paced(").nth(1).expect("film_tick_paced");
     let tick = &tick[..tick.find("\n}\n").unwrap_or(tick.len())];
     assert!(tick.contains("present_film(anim, &atlas.marks(), &atlas.font(), false)"));
+    // The signer's hook keeps its pause after each frame; only a chip wait
+    // may draw back to back, and only where the switch says so.
+    let hook = UI_PX_LCD_SRC.split("pub fn film_tick(_percent: u8) {").nth(1).expect("film_tick");
+    assert!(hook.starts_with("\n    film_tick_paced(false);\n}"));
+    let chip = UI_PX_LCD_SRC.split("pub fn film_tick_chip() {").nth(1).expect("film_tick_chip");
+    assert!(chip.starts_with("\n    film_tick_paced(film_chip_back_to_back());\n}"));
+    assert!(tick.contains("*last = if back_to_back {\n        now\n    } else if after.wrapping_sub(now) > 50 {"));
 }
 
 #[test]

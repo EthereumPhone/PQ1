@@ -324,12 +324,12 @@ pub fn chip_wait_ticks_active() -> bool {
 
 /// The OPTIGA and SE050 drivers call this each time they wait on a busy
 /// chip. Under [`ChipWaitTicks`] it draws at most one film frame
-/// (`film_tick` is rate-limited and a no-op with no film running); otherwise
+/// (`film_tick_chip` is rate-limited and a no-op with no film running); otherwise
 /// it does nothing.
 #[inline]
 pub fn busy_poll() {
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {
-        px::lcd::film_tick(0);
+        px::lcd::film_tick_chip();
     }
 }
