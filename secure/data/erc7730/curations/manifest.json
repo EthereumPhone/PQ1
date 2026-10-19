@@ -25,8 +25,8 @@
   "curated_corpus": {
     "domain": "pqsigner/erc7730-vendor-corpus-v1",
     "files": 387,
-    "bytes": 979277,
-    "sha256": "e87406e66d897ea90653134d8850fbd7fe0c9ca7d02857a057feb501c86b306c"
+    "bytes": 980337,
+    "sha256": "5f302e3b591205102ab787834253032c1247f655768555e8af68ded4cceac28f"
   },
   "policy": {
     "path": "secure/data/erc7730/policy.toml",
@@ -461,8 +461,8 @@
       "path": "dbgen",
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 50,
-      "bytes": 2941156,
-      "sha256": "d5fbd33dd8fc592f6fc84cc46d63d7e859ddeab299a5a717229c20305adae33b"
+      "bytes": 2953412,
+      "sha256": "8bcac781ce8f608b54371910b7ccb6e71a62f93a87c288f9a4d188ae83e15407"
     },
     {
       "path": "pqsigner-erc7730",
@@ -511,7 +511,7 @@
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 6,
       "bytes": 320273,
-      "sha256": "f0b5ebd1046a9a19671ff4f58aa13714e76c08babc59b5ea636b963126d82b5a"
+      "sha256": "950a68d076835513187eab14d332712d31b09d1f36f9808843e625024e2e24af"
     }
   ],
   "capability_inputs": [
@@ -1204,8 +1204,8 @@
       "path": "registry/tether/calldata-usdt.json",
       "upstream_bytes": 1464,
       "upstream_sha256": "d85a4d940529b3c4e9343eb30ac185d3a7f94849c87cdccabc11a40af040c9d3",
-      "replacement_bytes": 1381,
-      "replacement_sha256": "8507a19d2667cf914c7d035c3451826276b1f165f80589c4777a5c9c4c3f3e96"
+      "replacement_bytes": 2441,
+      "replacement_sha256": "4a422f64ec2c5e32aead428a2d625c1aceeb5d6ab206c9cb62e6ef051ab18942"
     },
     {
       "path": "registry/threshold/calldata-L1BitcoinDepositor-address.json",

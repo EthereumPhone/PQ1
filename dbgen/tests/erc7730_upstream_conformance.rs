@@ -53,7 +53,7 @@ const V2_SUBSET_PATHS: [&str; 7] = [
 ];
 // The upstream fixture bytes remain test-only and outside the catalogue. This
 // root changes only when the separately curated production descriptors do.
-const PROD_ROOT_HEX: &str = "c3f20eca651c3d147dddcc48ca27a5ae464839e84181ca3849eb501681d6a08b";
+const PROD_ROOT_HEX: &str = "8c3dc4b2b1789106a1043aed08114b7827d56052dd920eb0dd6671a84db643e6";
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

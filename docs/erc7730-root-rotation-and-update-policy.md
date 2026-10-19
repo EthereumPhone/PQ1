@@ -193,6 +193,16 @@ upstream-movement ceremony.
    safely derivable; that diagnostics-only probe has a fresh pool, cloned
    context, and throw-away output and therefore cannot emit a leaf or grant
    fallback authority.
+   **UPDATE 2026-10-19:** a replacement may also use
+   `_pqsigner.thresholdOmissions` (`[{chainId, address, format, path}]`,
+   contract context only) to compile one declared deployment's IR without a
+   `tokenAmount` field's `threshold`/`message` shorthand. It is narrowing
+   only — it can remove an infinity claim from a deployment whose
+   implementation does not honour it (Polygon USDT), never add one — and it
+   changes no deployment, format, selector or known-call tuple. The compiler
+   rejects an undeclared deployment, an unknown format, a path that is not
+   exactly one direct `tokenAmount` field carrying a threshold, a duplicate,
+   or EIP-712 context.
 5. `cargo run -p dbgen --features nested-calldata-test-fixture` — regenerate
    the blobs, known-call Blooms, production/E2E `erc7730_status*.bin` receipts,
    canonical production/E2E `P73K` refused-known sets, `db_roots.rs`

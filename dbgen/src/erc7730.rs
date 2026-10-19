@@ -1046,7 +1046,33 @@ struct PqsignerCuration {
     /// an IR format, including through a later deployment allowlist edit.
     #[serde(rename = "refusalOnlyFormats", default)]
     refusal_only_formats: Vec<String>,
+    /// Narrowing-only, per-deployment removal of a `tokenAmount` field's
+    /// `threshold` / `message` shorthand. A descriptor shared by several
+    /// deployments may carry an exact-max "Unlimited" claim that is source-true
+    /// for one implementation but not another (Ethereum USDT keeps an exact-max
+    /// allowance; Polygon USDT decrements it). Listing a deployment here
+    /// compiles that deployment's IR without the claim, so it renders the exact
+    /// value (or refuses) instead. It never adds a deployment, format, field,
+    /// selector, or runtime interpretation; every entry must name a declared
+    /// contract deployment and an existing direct `tokenAmount` field that
+    /// really carries a threshold.
+    #[serde(rename = "thresholdOmissions", default)]
+    threshold_omissions: Vec<ThresholdOmission>,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ThresholdOmission {
+    #[serde(rename = "chainId")]
+    chain_id: u64,
+    address: String,
+    format: String,
+    path: String,
+}
+
+/// Per-deployment `(format signature, field path)` pairs whose
+/// threshold/message shorthand is removed (see [`ThresholdOmission`]).
+type ThresholdOmissions = BTreeMap<(u64, [u8; 20]), BTreeSet<(String, String)>>;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1146,7 +1172,7 @@ struct Metadata {
     contract_name: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct Display {
     formats: BTreeMap<String, Format>,
     /// `$.display.definitions` — reusable field-format specs referenced by
@@ -1159,7 +1185,7 @@ struct Display {
     definitions: Option<BTreeMap<String, FieldDef>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct Format {
     #[serde(rename = "$id", default)]
     _id: Option<String>,
@@ -4154,6 +4180,12 @@ fn compile_resolved_descriptor_with_nested_calldata_enrollments(
         context_kind,
         &descriptor.display,
     )?;
+    let threshold_omissions = validate_threshold_omissions(
+        descriptor.pqsigner.as_ref(),
+        context_kind,
+        &deployments,
+        &descriptor.display,
+    )?;
 
     // Resolve constants and enums into the IR pool (lazily, only
     // entries actually referenced get emitted).
@@ -4208,9 +4240,12 @@ fn compile_resolved_descriptor_with_nested_calldata_enrollments(
         };
         let mut ctx = base_ctx.clone();
         let mut deployment_drops = Vec::new();
+        let narrowed_display = threshold_omissions
+            .get(&(chain_id, contract_addr))
+            .map(|omitted| display_without_thresholds(&descriptor.display, omitted));
         let (formats_section, pool_initial) =
             compile_formats_reporting_with_nested_calldata_enrollments(
-                &descriptor.display,
+                narrowed_display.as_ref().unwrap_or(&descriptor.display),
                 context_kind,
                 &mut ctx,
                 tolerant,
@@ -4364,9 +4399,12 @@ fn validate_deployment_format_admissions(
     let Some(pqsigner) = pqsigner else {
         return Ok(None);
     };
-    if pqsigner.deployment_formats.is_empty() && pqsigner.refusal_only_formats.is_empty() {
+    if pqsigner.deployment_formats.is_empty()
+        && pqsigner.refusal_only_formats.is_empty()
+        && pqsigner.threshold_omissions.is_empty()
+    {
         return Err(
-            "_pqsigner.deploymentFormats must not be empty unless refusalOnlyFormats is non-empty"
+            "_pqsigner.deploymentFormats must not be empty unless refusalOnlyFormats or thresholdOmissions is non-empty"
                 .to_string(),
         );
     }
@@ -4550,6 +4588,116 @@ fn validate_deployment_format_admissions(
 /// this set is removed before IR compilation. An overlap with
 /// `deploymentFormats` is rejected so no later reader has to resolve
 /// contradictory local policy.
+/// Validate `_pqsigner.thresholdOmissions` against the exact resolved source
+/// declarations. Contract context only; every entry must name a declared
+/// deployment, an existing format, and a direct (non-`$ref`, non-group) field
+/// of that format with `tokenAmount` format whose params carry `threshold`.
+/// Duplicates are refused so a review receipt cannot double-count an entry.
+fn validate_threshold_omissions(
+    pqsigner: Option<&PqsignerCuration>,
+    context_kind: u8,
+    deployments: &[Deployment],
+    display: &Display,
+) -> Result<ThresholdOmissions, String> {
+    let mut out = ThresholdOmissions::new();
+    let Some(pqsigner) = pqsigner else {
+        return Ok(out);
+    };
+    if pqsigner.threshold_omissions.is_empty() {
+        return Ok(out);
+    }
+    if context_kind != CTX_CONTRACT {
+        return Err("_pqsigner.thresholdOmissions is contract-context only".to_string());
+    }
+    let mut declared_deployments = BTreeSet::new();
+    for (index, deployment) in deployments.iter().enumerate() {
+        let address = parse_address(&deployment.address).map_err(|error| {
+            format!(
+                "context.contract.deployments[{index}] address is invalid while validating _pqsigner.thresholdOmissions: {error}"
+            )
+        })?;
+        declared_deployments.insert((deployment.chain_id, address));
+    }
+    for (index, omission) in pqsigner.threshold_omissions.iter().enumerate() {
+        let address = parse_address(&omission.address).map_err(|error| {
+            format!("_pqsigner.thresholdOmissions[{index}].address is invalid: {error}")
+        })?;
+        let binding = (omission.chain_id, address);
+        if !declared_deployments.contains(&binding) {
+            return Err(format!(
+                "_pqsigner.thresholdOmissions[{index}] chain_id={} contract=0x{} is not a declared contract deployment",
+                omission.chain_id,
+                hex::encode(address)
+            ));
+        }
+        let Some(format) = display.formats.get(&omission.format) else {
+            return Err(format!(
+                "_pqsigner.thresholdOmissions[{index}] names unknown format `{}`",
+                omission.format
+            ));
+        };
+        let mut matches = format
+            .fields
+            .iter()
+            .filter(|field| field.path.as_deref() == Some(omission.path.as_str()));
+        let (Some(field), None) = (matches.next(), matches.next()) else {
+            return Err(format!(
+                "_pqsigner.thresholdOmissions[{index}] must name exactly one direct field `{}` in `{}`",
+                omission.path, omission.format
+            ));
+        };
+        if field.ref_def.is_some()
+            || field.fields.is_some()
+            || field.format.as_deref() != Some("tokenAmount")
+            || !field
+                .params
+                .as_ref()
+                .and_then(|params| params.as_object())
+                .is_some_and(|params| params.contains_key("threshold"))
+        {
+            return Err(format!(
+                "_pqsigner.thresholdOmissions[{index}] field `{}` in `{}` is not a direct tokenAmount field carrying a threshold",
+                omission.path, omission.format
+            ));
+        }
+        if !out
+            .entry(binding)
+            .or_default()
+            .insert((omission.format.clone(), omission.path.clone()))
+        {
+            return Err(format!(
+                "_pqsigner.thresholdOmissions duplicates chain_id={} contract=0x{} `{}` `{}`",
+                omission.chain_id,
+                hex::encode(address),
+                omission.format,
+                omission.path
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// A copy of `display` with the validated threshold/message shorthand removed
+/// from each omitted `(format, path)` field. Narrowing only: no other key moves.
+fn display_without_thresholds(display: &Display, omitted: &BTreeSet<(String, String)>) -> Display {
+    let mut narrowed = display.clone();
+    for (signature, format) in &mut narrowed.formats {
+        for field in &mut format.fields {
+            let Some(path) = field.path.as_deref() else {
+                continue;
+            };
+            if !omitted.contains(&(signature.clone(), path.to_string())) {
+                continue;
+            }
+            if let Some(params) = field.params.as_mut().and_then(|p| p.as_object_mut()) {
+                params.remove("threshold");
+                params.remove("message");
+            }
+        }
+    }
+    narrowed
+}
+
 fn validate_refusal_only_formats(
     pqsigner: Option<&PqsignerCuration>,
     context_kind: u8,

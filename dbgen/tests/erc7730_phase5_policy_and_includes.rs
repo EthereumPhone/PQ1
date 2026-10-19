@@ -889,6 +889,123 @@ fn pqsigner_refusal_only_formats_reject_unknown_duplicate_and_overlap() {
 }
 
 #[test]
+fn pqsigner_threshold_omissions_narrow_one_deployment_and_reject_bad_shapes() {
+    // A shared descriptor whose exact-max allowance claim holds on chain 1 but
+    // not chain 137 (the Ethereum/Polygon USDT shape): the omission strips the
+    // threshold from the chain-137 IR only and changes nothing else.
+    let base: serde_json::Value = serde_json::from_str(
+        r#"{
+  "_pqsigner": { "thresholdOmissions": [{
+    "chainId": 137,
+    "address": "0x0000000000000000000000000000000000000002",
+    "format": "approve(address spender,uint256 amount)",
+    "path": "amount"
+  }] },
+  "context": { "contract": { "deployments": [
+    { "chainId": 1, "address": "0x0000000000000000000000000000000000000001" },
+    { "chainId": 137, "address": "0x0000000000000000000000000000000000000002" }
+  ] } },
+  "metadata": { "owner": "Omission Test", "contractName": "OmissionTest" },
+  "display": { "formats": {
+    "approve(address spender,uint256 amount)": {
+      "intent": "Approve",
+      "fields": [
+        { "path": "spender", "format": "addressName", "label": "Spender" },
+        { "path": "amount", "format": "tokenAmount", "label": "Amount",
+          "params": { "tokenPath": "@.to",
+                      "threshold": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" } }
+      ]
+    }
+  } }
+}"#,
+    )
+    .unwrap();
+
+    let dir = make_tempdir("threshold_omissions_ok");
+    fs::write(dir.join("policy.toml"), POLICY_DEV).unwrap();
+    let path = dir.join("calldata-omission.json");
+    fs::write(&path, serde_json::to_vec_pretty(&base).unwrap()).unwrap();
+    let policy = load_policy(&dir.join("policy.toml")).unwrap();
+    let emitted = try_compile_one(&path, &policy, Some(&dir)).expect("omission compiles");
+    assert_eq!(emitted.len(), 2, "both deployments still emit a leaf");
+    for entry in &emitted {
+        let ir = Erc7730Ir::parse(&entry.ir_bytes).expect("IR parses");
+        let format = ir
+            .format_iter()
+            .next()
+            .expect("one format")
+            .expect("format parses");
+        let amount = format
+            .fields()
+            .map(|field| field.expect("field parses"))
+            .find(|field| field.label == b"Amount")
+            .expect("amount field");
+        let params = pqsigner_erc7730::render::params::parse(&ir, amount.param_off)
+            .expect("amount params parse");
+        match entry.chain_id {
+            1 => assert_eq!(params.threshold.copied(), Some([0xff; 32])),
+            137 => assert!(
+                params.threshold.is_none(),
+                "omitted deployment kept its threshold"
+            ),
+            other => panic!("unexpected chain {other}"),
+        }
+        assert!(params.message.is_none());
+    }
+
+    let mut cases = Vec::new();
+    let mut undeclared = base.clone();
+    undeclared["_pqsigner"]["thresholdOmissions"][0]["chainId"] = serde_json::json!(56);
+    cases.push((
+        "undeclared",
+        undeclared,
+        "is not a declared contract deployment",
+    ));
+
+    let mut unknown_format = base.clone();
+    unknown_format["_pqsigner"]["thresholdOmissions"][0]["format"] =
+        serde_json::json!("burn(uint256 amount)");
+    cases.push(("unknown_format", unknown_format, "names unknown format"));
+
+    let mut no_threshold = base.clone();
+    no_threshold["_pqsigner"]["thresholdOmissions"][0]["path"] = serde_json::json!("spender");
+    cases.push((
+        "no_threshold",
+        no_threshold,
+        "is not a direct tokenAmount field carrying a threshold",
+    ));
+
+    let mut missing_path = base.clone();
+    missing_path["_pqsigner"]["thresholdOmissions"][0]["path"] = serde_json::json!("value");
+    cases.push((
+        "missing_path",
+        missing_path,
+        "must name exactly one direct field",
+    ));
+
+    let mut duplicate = base.clone();
+    let entry = duplicate["_pqsigner"]["thresholdOmissions"][0].clone();
+    duplicate["_pqsigner"]["thresholdOmissions"] = serde_json::json!([entry.clone(), entry]);
+    cases.push(("duplicate", duplicate, "thresholdOmissions duplicates"));
+
+    for (name, descriptor, expected) in cases {
+        let dir = make_tempdir(&format!("threshold_omissions_{name}"));
+        fs::write(dir.join("policy.toml"), POLICY_DEV).unwrap();
+        let path = dir.join("calldata-omission.json");
+        fs::write(&path, serde_json::to_vec_pretty(&descriptor).unwrap()).unwrap();
+        let policy = load_policy(&dir.join("policy.toml")).unwrap();
+        let error = expect_err(
+            try_compile_one(&path, &policy, Some(&dir)),
+            "invalid thresholdOmissions shape must fail closed",
+        );
+        assert!(
+            error.contains(expected),
+            "{name}: expected `{expected}` in `{error}`"
+        );
+    }
+}
+
+#[test]
 fn pqsigner_deployment_formats_rejects_every_nonrestrictive_or_ambiguous_shape() {
     let base: serde_json::Value = serde_json::from_str(
         r#"{
@@ -925,7 +1042,7 @@ fn pqsigner_deployment_formats_rejects_every_nonrestrictive_or_ambiguous_shape()
     cases.push((
         "missing_admissions",
         missing_admissions,
-        "deploymentFormats must not be empty unless refusalOnlyFormats is non-empty",
+        "deploymentFormats must not be empty unless refusalOnlyFormats or thresholdOmissions is non-empty",
     ));
 
     let mut null_extension = base.clone();

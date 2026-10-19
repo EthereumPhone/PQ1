@@ -3986,7 +3986,12 @@ fn flyingtulip_dynamic_token_path_keeps_static_intent_and_exact_token_identity()
 }
 
 #[test]
-fn usdt_shared_descriptor_never_claims_unlimited_on_either_deployment() {
+fn usdt_unlimited_claim_is_ethereum_only() {
+    // One descriptor covers both USDT deployments, but only Ethereum USDT keeps
+    // an exact-max allowance (Polygon always decrements). The shared descriptor
+    // carries the exact-max threshold and `_pqsigner.thresholdOmissions`
+    // compiles the Polygon IR without it: exact max is `unlimited` on chain 1
+    // only, and every finite overwide value refuses on both chains.
     let res = build_registry();
     let resolver = NameResolver::new();
     let spender = [0x44u8; 20];
@@ -4033,7 +4038,6 @@ fn usdt_shared_descriptor_never_claims_unlimited_on_either_deployment() {
             ("old threshold minus one", old_threshold_minus_one),
             ("old threshold", old_threshold),
             ("max minus one", max_minus_one),
-            ("max", [0xff; 32]),
         ] {
             assert!(
                 matches!(
@@ -4042,7 +4046,32 @@ fn usdt_shared_descriptor_never_claims_unlimited_on_either_deployment() {
                         "7730 inexact scaled value"
                     ))
                 ),
-                "overwide {name} must refuse rather than inherit a shared infinity claim on chain {chain_id}"
+                "finite overwide {name} must refuse rather than inherit the max-only label on chain {chain_id}"
+            );
+        }
+
+        if chain_id == 1 {
+            let max = render([0xff; 32]).expect("Ethereum USDT exact max renders as unlimited");
+            assert_eq!(
+                page_strs(&max, find_page_by_label(&max, "Amount")),
+                [
+                    "Amount".to_string(),
+                    "unlimited USDT".to_string(),
+                    "".to_string(),
+                    "> next".to_string(),
+                ]
+            );
+            assert_full_address_field_page(&max, "Spender", &spender);
+            assert_full_contract_identity_page(&max, &entry.contract);
+        } else {
+            assert!(
+                matches!(
+                    render([0xff; 32]),
+                    Err(crate::tx::erc7730_render::RenderErr::Reject(
+                        "7730 inexact scaled value"
+                    ))
+                ),
+                "Polygon USDT max must refuse rather than inherit the Ethereum infinity claim"
             );
         }
     }
@@ -4616,10 +4645,34 @@ fn positive_unlimited_uses_descriptor_message_param() {
 }
 
 #[test]
-fn usdt_approve_max_unbound_renders_the_exact_raw_word() {
-    // The shared Ethereum/Polygon descriptor has no implementation-wide
-    // infinity sentinel. Without a matching metadata proof, max therefore
+fn usdt_approve_max_unbound_renders_the_exact_raw_word_on_polygon() {
+    // Polygon USDT has no infinity sentinel (its IR is compiled without the
+    // shared threshold). Without a matching metadata proof, max therefore
     // remains an exact raw integer rather than acquiring semantic wording.
+    let res = build_registry();
+    let entry = find_leaf(res, "calldata-usdt.json", 137);
+    let bundle = synth_bundle(&res.blob, &entry.ir_bytes, entry.leaf_index);
+    let verified = verify_erc7730_bundle(&bundle, &res.root).expect("verify");
+
+    let calldata = calldata_approve([0x44u8; 20], u256_max());
+    let tx = envelope(137, entry.contract);
+    let resolver = NameResolver::new();
+    let pages = render_erc7730_pages(&tx, &calldata, &verified, None, &resolver).expect("render");
+    assert_all_pages_printable(&pages);
+    let dump = dump_pages(&pages);
+    assert!(
+        !dump.to_ascii_lowercase().contains("unlimited"),
+        "unbound Polygon approve(MAX) must not invent an infinity claim:\n{dump}"
+    );
+    assert_raw_word_pages(&pages, "Amount", &[0xff; 32]);
+    assert_full_unverified_token_identity_page(&pages, &entry.contract);
+}
+
+#[test]
+fn usdt_approve_max_unbound_is_unlimited_on_ethereum_with_unverified_identity() {
+    // Ethereum USDT's exact-max threshold is descriptor-authenticated, so the
+    // unlimited wording does not depend on the ERC-20 metadata proof; without
+    // that proof the token identity still renders loudly as UNVERIFIED.
     let res = build_registry();
     let entry = find_leaf(res, "calldata-usdt.json", 1);
     let bundle = synth_bundle(&res.blob, &entry.ir_bytes, entry.leaf_index);
@@ -4632,10 +4685,18 @@ fn usdt_approve_max_unbound_renders_the_exact_raw_word() {
     assert_all_pages_printable(&pages);
     let dump = dump_pages(&pages);
     assert!(
-        !dump.to_ascii_lowercase().contains("unlimited"),
-        "unbound approve(MAX) must not invent an infinity claim:\n{dump}"
+        dump.to_ascii_lowercase().contains("unlimited"),
+        "Ethereum approve(MAX) must carry the authenticated unlimited wording:\n{dump}"
     );
-    assert_raw_word_pages(&pages, "Amount", &[0xff; 32]);
+    assert_eq!(
+        page_strs(&pages, find_page_by_label(&pages, "Amount")),
+        [
+            "Amount".to_string(),
+            "unlimited".to_string(),
+            "(unverified)".to_string(),
+            "> next".to_string(),
+        ]
+    );
     assert_full_unverified_token_identity_page(&pages, &entry.contract);
 }
 
@@ -4671,23 +4732,24 @@ fn positive_erc7730_golden_grid_hash() {
         "golden hash must bind rendered content (spender change did not move it)"
     );
 
-    // Re-blessed after inspecting the full grid: the shared Ethereum/Polygon
-    // USDT descriptor can no longer claim one implementation-wide infinity
-    // sentinel, so MAX is shown as the exact raw 256-bit word instead of the
-    // semantic `unlimited` shorthand. The signed spender and every envelope
-    // page remain bound by this digest.
+    // Re-blessed 2026-10-19 after inspecting the full grid: the Ethereum USDT
+    // leaf now carries the exact-max threshold (Polygon's is omitted via
+    // `_pqsigner.thresholdOmissions`), so MAX on chain 1 renders the
+    // authenticated `unlimited` row with the UNVERIFIED token identity page
+    // (no metadata proof here). The signed spender and every envelope page
+    // remain bound by this digest.
     #[cfg(not(feature = "erc7730-dev-unattested"))]
     const GOLDEN: [u8; 32] = [
-        0xba, 0x87, 0x66, 0xce, 0x54, 0xb3, 0x40, 0x79, 0x33, 0x2c, 0x3b, 0x95, 0xaf, 0x30, 0x4d,
-        0xc3, 0x08, 0x36, 0x68, 0xb1, 0x6c, 0x18, 0x39, 0xbd, 0x39, 0x14, 0x1b, 0x07, 0x2b, 0x31,
-        0x71, 0xef,
+        0x4b, 0xa2, 0x70, 0x68, 0xd8, 0x81, 0xed, 0xb6, 0xe9, 0x51, 0x08, 0x02, 0x30, 0x02, 0xf1,
+        0xc8, 0xad, 0xae, 0xfb, 0x8c, 0x36, 0x30, 0x63, 0xde, 0x00, 0xab, 0xa6, 0x07, 0x55, 0xa4,
+        0x4c, 0x61,
     ];
     // Same reviewed grid with the mandatory dev-unattested warning prepended.
     #[cfg(feature = "erc7730-dev-unattested")]
     const GOLDEN: [u8; 32] = [
-        0xae, 0xfe, 0xc8, 0x69, 0x32, 0xba, 0xae, 0x83, 0xb4, 0x6d, 0xfd, 0x7d, 0xae, 0x7f, 0x9e,
-        0x05, 0x90, 0xba, 0x85, 0x7d, 0x18, 0x96, 0x45, 0x3f, 0x93, 0x17, 0xa1, 0xd6, 0xa8, 0x0f,
-        0x25, 0x61,
+        0xc1, 0x3d, 0x17, 0x94, 0x49, 0x46, 0x08, 0xf9, 0x2e, 0xf7, 0x55, 0xca, 0x09, 0x79, 0xf2,
+        0xcd, 0x08, 0x4f, 0x77, 0x21, 0x3f, 0x0d, 0x75, 0xd8, 0x6a, 0xad, 0x3b, 0xe7, 0x64, 0x4c,
+        0xbe, 0x7b,
     ];
     assert_eq!(
         h, GOLDEN,

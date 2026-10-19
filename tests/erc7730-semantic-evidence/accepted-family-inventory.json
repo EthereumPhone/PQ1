@@ -5,11 +5,11 @@
   "catalogue_snapshot": {
     "upstream_commit": "784c87c925e8438e7b4736b2af85a501f8d2a265",
     "upstream_tree": "8da8dba78c3e581bbd06c15cc681d07e570dcfb1",
-    "curated_corpus_sha256": "e87406e66d897ea90653134d8850fbd7fe0c9ca7d02857a057feb501c86b306c",
-    "merkle_root": "c3f20eca651c3d147dddcc48ca27a5ae464839e84181ca3849eb501681d6a08b",
+    "curated_corpus_sha256": "5f302e3b591205102ab787834253032c1247f655768555e8af68ded4cceac28f",
+    "merkle_root": "8c3dc4b2b1789106a1043aed08114b7827d56052dd920eb0dd6671a84db643e6",
     "accepted_leaf_count": 365,
     "accepted_source_descriptor_count": 214,
-    "compiled_blob_bytes": 330929,
+    "compiled_blob_bytes": 330976,
     "known_call_count": 4615,
     "category_source_counts": {
       "pinned-evidence": 81,

@@ -401,7 +401,18 @@ fn registry_allowance_threshold_curations_are_structurally_exact() {
             .collect();
         assert_eq!(fields.len(), 2);
         let amount = parse_params(&ir, fields[1].param_off).expect("USDT amount params parse");
-        assert!(amount.threshold.is_none());
+        // Ethereum USDT keeps an exact-max allowance, so only its IR carries
+        // the exact-max threshold (default "unlimited" wording). Polygon USDT
+        // always decrements, and `_pqsigner.thresholdOmissions` compiles its IR
+        // without the claim.
+        match entry.chain_id {
+            1 => assert_eq!(amount.threshold.copied(), Some([0xff; 32])),
+            137 => assert!(
+                amount.threshold.is_none(),
+                "Polygon USDT gained an Unlimited claim"
+            ),
+            other => panic!("unexpected USDT deployment chain {other}"),
+        }
         assert!(amount.message.is_none());
     }
 }
@@ -3108,7 +3119,7 @@ fn registry_weth9_deposit_and_withdraw_bind_exact_values_and_deployments() {
     assert_eq!(
         hex::encode(result.root),
         // Re-derived after the bounded Phase-4 semantic curations.
-        "c3f20eca651c3d147dddcc48ca27a5ae464839e84181ca3849eb501681d6a08b"
+        "8c3dc4b2b1789106a1043aed08114b7827d56052dd920eb0dd6671a84db643e6"
     );
 }
 

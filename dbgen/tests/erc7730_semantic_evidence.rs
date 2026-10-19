@@ -5304,9 +5304,13 @@ fn allowance_sources_fixed_deployments_descriptors_and_ir_agree() {
     )
     .expect("build production ERC-7730 registry");
 
-    for (source, signature, label, threshold, message, expected_entries) in [
+    // `chain` narrows a row to one deployment: the shared USDT descriptor
+    // carries the exact-max threshold, and `_pqsigner.thresholdOmissions`
+    // removes it from the Polygon IR, where the allowance always decrements.
+    for (source, chain, signature, label, threshold, message, expected_entries) in [
         (
             "calldata-wct.json",
+            None,
             "approve(address,uint256)",
             b"Amount".as_slice(),
             Some([0xff; 32]),
@@ -5315,14 +5319,25 @@ fn allowance_sources_fixed_deployments_descriptors_and_ir_agree() {
         ),
         (
             "calldata-usdt.json",
+            Some(1u64),
+            "approve(address,uint256)",
+            b"Amount".as_slice(),
+            Some([0xff; 32]),
+            None,
+            1usize,
+        ),
+        (
+            "calldata-usdt.json",
+            Some(137u64),
             "approve(address,uint256)",
             b"Amount".as_slice(),
             None,
             None,
-            2usize,
+            1usize,
         ),
         (
             "calldata-PositionsManager.json",
+            None,
             "approveBorrow(address,address,uint256)",
             b"Allowance".as_slice(),
             None,
@@ -5331,6 +5346,7 @@ fn allowance_sources_fixed_deployments_descriptors_and_ir_agree() {
         ),
         (
             "calldata-PositionsManager.json",
+            None,
             "approveEngine(address,address,uint256)",
             b"Allowance".as_slice(),
             Some([0xff; 32]),
@@ -5342,6 +5358,7 @@ fn allowance_sources_fixed_deployments_descriptors_and_ir_agree() {
             .entries
             .iter()
             .filter(|entry| entry.source.file_name().and_then(|name| name.to_str()) == Some(source))
+            .filter(|entry| chain.is_none_or(|chain| entry.chain_id == chain))
             .collect();
         assert_eq!(
             entries.len(),

@@ -259,7 +259,7 @@ fn eip712_curation_rejects_unknown_duplicate_overlap_and_malformed_shapes() {
     cases.push((
         "empty",
         empty,
-        "must not be empty unless refusalOnlyFormats is non-empty",
+        "must not be empty unless refusalOnlyFormats or thresholdOmissions is non-empty",
     ));
 
     let mut outside = base.clone();

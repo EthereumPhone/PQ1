@@ -49,7 +49,7 @@ order they will bite you.
    - [6.5 CMD_SIGN_OFFCHAIN — kind=3 EIP-712 typed with display witnesses](#65-cmd_sign_offchain--kind3-eip-712-typed-with-display-witnesses)
 7. [Worked examples](#7-worked-examples)
    - [7.1 USDT transfer on mainnet](#71-usdt-transfer-on-mainnet)
-   - [7.2 USDT approve max (exact, not unlimited)](#72-usdt-approve-max-exact-not-unlimited)
+   - [7.2 USDT approve max (Unlimited on Ethereum only)](#72-usdt-approve-max-unlimited-on-ethereum-only)
    - [7.3 WETH deposit (zero-arg, value from envelope)](#73-weth-deposit-zero-arg-value-from-envelope)
    - [7.4 USDC TransferWithAuthorization (currently refused)](#74-usdc-transferwithauthorization-currently-refused)
    - [7.5 Batch signing and the current slot-rotation blocker](#75-batch-signing-and-the-current-slot-rotation-blocker)
@@ -208,11 +208,11 @@ is mandatory before a companion may request the selected forced-blind flow:
    hand-authored seed corpus used by older bring-up snapshots.
 
    <!-- BEGIN XTASK-VERIFIED ERC7730 CATALOGUE SUMMARY -->
-   - Development catalogue: 330,929 B, 365 compiled leaves, 4,615
+   - Development catalogue: 330,976 B, 365 compiled leaves, 4,615
      exact registry-declared known-call tuples, provenance `dev-unattested`.
      The tuple-set SHA-256 receipt is
      `50dfa0f52c76efc27c7110e9703595d8e1afc2195ffeb847b3567817ced421e6`.
-   - E2E fixture: 5,472 B, 11 compiled leaves.
+   - E2E fixture: 5,519 B, 11 compiled leaves.
    <!-- END XTASK-VERIFIED ERC7730 CATALOGUE SUMMARY -->
 
    The blob does **not** embed its Merkle root. Bytes 0..31 are the catalogue
@@ -860,7 +860,7 @@ Companion-side flow:
    `callData = executeWithOffchainCount(1, new_offchain_count, USDT, 0, data)`,
    then ship it to the bundler.
 
-### 7.2 USDT approve max (exact, not unlimited)
+### 7.2 USDT approve max (Unlimited on Ethereum only)
 
 Dapp request:
 
@@ -873,32 +873,28 @@ eth_sendTransaction({
 })
 ```
 
-Lookup hits the same `registry/tether/calldata-usdt.json` entry. That descriptor
-is shared by the Ethereum and Polygon deployments and intentionally carries no
-`threshold` for the approval amount. Ethereum USDT treats the exact maximum as
-a non-decrementing allowance, while Polygon USDT decrements it. A shared
-descriptor therefore cannot safely call that value unlimited on both chains,
-and the renderer makes no infinity assumption for it. Because this example
-still supplies no ERC-20 metadata bundle, the token cannot be authenticated and
-no ticker is claimed.
+Lookup hits the `registry/tether/calldata-usdt.json` entry, which is shared by
+the Ethereum and Polygon deployments. **UPDATE 2026-10-19:** the approval
+amount now carries an exact-max `threshold`, and the narrowing-only
+`_pqsigner.thresholdOmissions` curation key compiles the Polygon IR without it.
+Ethereum USDT treats the exact maximum as a non-decrementing allowance (fixed
+block, `deprecated == false`), so only the Ethereum leaf renders exact max as
+unlimited; Polygon USDT decrements it, so its leaf makes no infinity claim.
+Values below max, including values at or above `2^255`, stay finite on both
+chains.
 
-Expected display:
+Expected display on Ethereum:
 
-```
-Page 0: "** DEV BUILD **" / "Unattested" / "descriptor" / "> next"
-Page 1: "Approve" / "Tether Limited" / "Tether USD" / "> next"
-Page 2: "Spender" / "0x444444…" / "..." / "> next"
-Page 3: "Amount" / "ffffffffffffffff" / "ffffffffffffffff" / "1/2 > next"
-Page 4: "Amount" / "ffffffffffffffff" / "ffffffffffffffff" / "2/2 > next"
-Page 5+: exact "Token (UNVERIFIED)" identity and renderer envelope, followed
-         append-only by signer, target, conditional nonce lane, exact gas,
-         fingerprint and confirm
-```
+- With matching Merkle-verified USDT ERC-20 metadata (the companion attaches
+  it for any ERC-20 `approve`): the Amount page reads `unlimited` with the
+  authenticated `USDT` ticker, followed by the token identity page.
+- Without the metadata: the threshold row still reads `unlimited`, with the
+  exact `Token (UNVERIFIED)` identity page.
 
-Supplying matching Merkle-verified USDT metadata authenticates the token
-identity and ticker, but it does not add infinity semantics. The maximum
-allowance remains exact raw data and is never labelled unlimited by this shared
-descriptor.
+On Polygon, `approve(..., U256::MAX)` is unchanged: without metadata the exact
+raw word is shown across two pages; with USDT metadata the 6-decimal value does
+not fit the 32-cell amount row, so the render hard-refuses
+(`7730 inexact scaled value`) rather than rounding.
 
 ### 7.3 WETH deposit (zero-arg, value from envelope)
 
@@ -1080,8 +1076,8 @@ provenance remains blocked):
 <!-- BEGIN XTASK-VERIFIED ERC7730 CATALOGUE ROOTS -->
 | Variant | Root | Catalog blob bytes | Compiled leaves |
 |---------|------|-------------------:|----------------:|
-| development (non-e2e) | `0xc3f20eca651c3d147dddcc48ca27a5ae464839e84181ca3849eb501681d6a08b` | 330 929 | 365 |
-| e2e | `0xbc5573d447e5a96e243464eabb6ccaa303d9897fc6a9cdf3af684cae31cc5ed2` | 5 472 | 11 |
+| development (non-e2e) | `0x8c3dc4b2b1789106a1043aed08114b7827d56052dd920eb0dd6671a84db643e6` | 330 976 | 365 |
+| e2e | `0x72cb8ce0f1e6c26b286d68df71cef824c3f0c3de5dbcbe8986f6503cd72c6bd1` | 5 519 | 11 |
 <!-- END XTASK-VERIFIED ERC7730 CATALOGUE ROOTS -->
 
 Source of truth: fresh compiler output checked against `secure/src/db_roots.rs`

@@ -60,7 +60,7 @@
     },
     {
       "path": "secure/data/erc7730-registry/registry/tether/calldata-usdt.json",
-      "sha256": "8507a19d2667cf914c7d035c3451826276b1f165f80589c4777a5c9c4c3f3e96"
+      "sha256": "4a422f64ec2c5e32aead428a2d625c1aceeb5d6ab206c9cb62e6ef051ab18942"
     },
     {
       "path": "secure/data/erc7730-registry/registry/walletconnect/calldata-wct.json",

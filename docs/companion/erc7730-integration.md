@@ -33,8 +33,10 @@ Current security contract:
 - Allowance-threshold wording is descriptor-authenticated and
   contract-specific, never inferred from the generic ERC-20 operation. WCT and
   FlyingTulip `approveEngine` use an exact-`uint256.MAX` threshold, so only max
-  is labelled unlimited. FlyingTulip `approveBorrow`, the shared
-  Ethereum/Polygon USDT descriptor, and the generic ERC-20 descriptor carry no
+  is labelled unlimited. The shared USDT descriptor carries the same threshold,
+  but `_pqsigner.thresholdOmissions` removes it from the Polygon IR, so only
+  Ethereum USDT labels exact max unlimited (2026-10-19). FlyingTulip
+  `approveBorrow`, Polygon USDT, and the generic ERC-20 descriptor carry no
   threshold; their signed allowance remains exact and receives no infinity
   label.
 - The vendored security corpus also produces a pinned known-call filter over
@@ -73,7 +75,7 @@ Current security contract:
   exact signed words and hard-refuses missing, reordered, mismatched, non-ASCII,
   over-128-byte, trailing, or page-overflow display evidence without fallback.
 - The current regenerated development catalogue has **365 leaves**, root
-  `c3f20eca651c3d147dddcc48ca27a5ae464839e84181ca3849eb501681d6a08b`,
+  `8c3dc4b2b1789106a1043aed08114b7827d56052dd920eb0dd6671a84db643e6`,
   and **4,615 exact known-call tuples**. The tuple-set receipt is SHA-256
   `50dfa0f52c76efc27c7110e9703595d8e1afc2195ffeb847b3567817ced421e6`;
   Bloom occupancy is 28,646 / 131,072 bits under the compiler-enforced generation cap.
