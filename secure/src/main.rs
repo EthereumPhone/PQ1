@@ -322,6 +322,32 @@ compile_error!(
     "`se050-probe` requires `otp-hardcoded-master-key`: any other key root can \
      burn OTP on a blank die"
 );
+#[cfg(all(feature = "se050-platform-scp-tool", feature = "mock-se"))]
+compile_error!("`se050-platform-scp-tool` requires real SE050 silicon — drop `mock-se`");
+#[cfg(all(feature = "se050-platform-scp-tool", feature = "dual-se"))]
+compile_error!("`se050-platform-scp-tool` is a standalone SE050 image — drop `dual-se`");
+#[cfg(all(feature = "se050-platform-scp-tool", not(feature = "stm32u585")))]
+compile_error!("`se050-platform-scp-tool` is a hardware tool — build with `stm32u585`");
+#[cfg(all(feature = "se050-platform-scp-tool", not(feature = "debug-log")))]
+compile_error!("`se050-platform-scp-tool` reports over semihosting — build with `debug-log`");
+#[cfg(all(feature = "se050-platform-scp-tool", not(feature = "otp-hardcoded-master-key")))]
+compile_error!(
+    "`se050-platform-scp-tool` requires `otp-hardcoded-master-key`: its credential and \
+     SCP03 keys must be the reproducible bench ones, and no other root may burn OTP"
+);
+#[cfg(all(
+    feature = "se050-platform-scp-tool",
+    any(feature = "se050-probe", feature = "se050-stress", feature = "se050-platform-scp-required")
+))]
+compile_error!(
+    "`se050-platform-scp-tool` is its own terminal image — drop `se050-probe` / \
+     `se050-stress` / `se050-platform-scp-required`"
+);
+#[cfg(all(feature = "se050-platform-scp-required", feature = "se050-probe"))]
+compile_error!(
+    "`se050-platform-scp-required` would change the chip state the read-only \
+     `se050-probe` measures — build the probe without it"
+);
 #[cfg(not(test))]
 mod timeout;
 #[cfg(all(feature = "optiga-trust-m", not(test)))]
@@ -1012,6 +1038,27 @@ fn setup_systick() {
     ARCH.syst_rvr.write(reload);
     ARCH.syst_cvr.write(0);
     ARCH.syst_csr.write(0x07);
+}
+
+/// #989: the SE050 platform-SCP enforcement failed. Show "SE050 FAULT /
+/// EXXXX HALT" (code from `PlatformScpError::code`, first-boot code space,
+/// `first-boot-provisioning.md`) and stop before any secret is loaded.
+#[cfg(all(feature = "se050-platform-scp-required", feature = "stm32u585", not(test)))]
+fn halt_se050_platform_scp(e: se050::PlatformScpError) -> ! {
+    secure_log!("[S] SE050 platform-SCP enforcement FAILED: {:?} — HALT", e);
+    let raw = e.code();
+    let hex = b"0123456789ABCDEF";
+    let mut line = [0u8; 10];
+    line[0] = b'E';
+    line[1] = hex[((raw >> 12) & 0xF) as usize];
+    line[2] = hex[((raw >> 8) & 0xF) as usize];
+    line[3] = hex[((raw >> 4) & 0xF) as usize];
+    line[4] = hex[(raw & 0xF) as usize];
+    line[5..10].copy_from_slice(b" HALT");
+    ui::show_status("SE050 FAULT", ui::ascii_str(&line));
+    loop {
+        cortex_m::asm::wfi();
+    }
 }
 
 /// Returns true if the SE backend has been provisioned.
@@ -1951,6 +1998,25 @@ fn main() -> ! {
                 cortex_m::asm::wfe();
             }
         }
+
+        // Bench SE050 platform-SCP tool (#989): measure, set or clear the
+        // applet's SCP_REQUIRED state on ONE die (UID-bound). TERMINAL like the
+        // probes above; standalone `se050` build, so `SE` is a bare `Se050`.
+        #[cfg(feature = "se050-platform-scp-tool")]
+        {
+            // SAFETY: single-threaded boot path; nothing else holds SE, and
+            // nothing will after this block (SYS_EXIT / wfe).
+            let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
+            let ok = unsafe { se050::pscp_tool::run(se) };
+            cortex_m_semihosting::debug::exit(if ok {
+                cortex_m_semihosting::debug::EXIT_SUCCESS
+            } else {
+                cortex_m_semihosting::debug::EXIT_FAILURE
+            });
+            loop {
+                cortex_m::asm::wfe();
+            }
+        }
     }
 
     ui::init();
@@ -2059,6 +2125,37 @@ fn main() -> ! {
     unsafe {
         let se = &mut *core::ptr::addr_of_mut!(SE);
         first_boot::run_post_lock_provisioning(se);
+    }
+
+    // #989 — SE050 platform-SCP enforcement, every boot, before any secret is
+    // loaded (PBS, PIN reconcile, wipe resume, wizard, unlock). The SE050E2
+    // ships SCP_NOT_REQUIRED: a keyless bus party gets the version, the full
+    // object inventory and SE randomness in plaintext, and `half_E` rests on
+    // per-object policy alone. Measure once with a plain probe (fresh link, no
+    // session); unless the chip already refuses AND our 0x7FFF0207 credential
+    // is in place, set SCP_REQUIRED. Runs after Phase B so the BHK the
+    // credential derives from is loaded, and the SCP03 keys are the final
+    // ones. A definitive failure halts with "SE050 FAULT / E087x" and no
+    // secret ever leaves the chips.
+    #[cfg(all(
+        feature = "se050-platform-scp-required",
+        feature = "stm32u585",
+        not(feature = "prodtest"),
+        not(feature = "factory-provisioning"),
+        not(test)
+    ))]
+    unsafe {
+        #[cfg(feature = "dual-se")]
+        let se050 = &mut (*core::ptr::addr_of_mut!(SE)).se050;
+        #[cfg(not(feature = "dual-se"))]
+        let se050 = &mut *core::ptr::addr_of_mut!(SE);
+        let measured = se050.measure_platform_scp();
+        match se050.ensure_platform_scp_required(measured) {
+            Ok(_outcome) => {
+                secure_log!("[S] SE050 platform SCP required ({:?}, probe {:?})", _outcome, measured);
+            }
+            Err(e) => halt_se050_platform_scp(e),
+        }
     }
 
     // Load the Platform Binding Secret for OPTIGA Trust M from secure flash.

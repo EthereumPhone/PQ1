@@ -69,6 +69,9 @@ fn hex<'a>(data: &[u8], buf: &'a mut [u8]) -> &'a str {
 fn classify(id: u32) -> &'static str {
     match id {
         0 => "zero",
+        // #989: the RESERVED_ID_PLATFORM_SCP credential the firmware creates
+        // to set SCP_REQUIRED. Absent on a factory E2.
+        super::apdu::PLATFORM_SCP_OBJ => "platform-scp-cred",
         _ if (id & 0xFFFF_0000) == 0x7FFF_0000 => "nxp-reserved",
         _ if (id & 0xFFF0_0000) == 0x7DA0_0000 => "demo-auth",
         _ if id >= 0xF000_0000 => "iot-trust-prov",
@@ -105,6 +108,31 @@ const PRE_SESSION_POWER_OFF_MS: u32 = 100;
 /// Interface-reset attempts after the power cycle (~50 ms apart). A cold SE050
 /// answers by attempt 3–5 (`Se050::link_bringup`); 20 is that loop's bound.
 const RESET_ATTEMPTS: u32 = 20;
+
+/// The 6B.5 line: one fixed plain `CheckExists(UNIQUE_ID)` (the same APDU the
+/// production every-boot measurement sends, #989), classified exactly as
+/// production classifies it.
+///
+/// # Safety
+/// Single-threaded boot path; drives only this driver's T=1 state.
+unsafe fn platform_scp_line(t1: &mut T1State, leg: &str, ok: &mut bool, hb: &mut [u8; 128]) {
+    use crate::scp03_logic::{classify_platform_scp_probe, PlatformScpState};
+    // SAFETY: caller's contract.
+    match unsafe { apdu::platform_scp_plain_probe(t1) } {
+        Ok((sw, body, n)) => {
+            let state = match classify_platform_scp_probe(sw, &body[..n]) {
+                PlatformScpState::NotRequired => "not_required",
+                PlatformScpState::Refused(_) => "required",
+                PlatformScpState::Unknown => "unknown",
+            };
+            out!("6B.5 [{}] platform_scp={} sw=0x{:04x} body={}", leg, state, sw, hex(&body[..n], hb));
+        }
+        Err(e) => {
+            out!("6B.5 [{}] platform_scp=unknown ERR {:?}", leg, e);
+            *ok = false;
+        }
+    }
+}
 
 /// T=1 interface reset with the cold-boot retry `Se050::link_bringup` uses.
 /// Returns the 1-based attempt that succeeded.
@@ -201,6 +229,7 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
                     Ok((sw, n)) => {
                         out!("6B.6 plain[pre-session] SELECT(applet) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb));
                         plain_matrix(t1, "pre-session", &mut ok, &mut hb);
+                        platform_scp_line(t1, "pre-session", &mut ok, &mut hb);
                     }
                     Err(e) => {
                         out!("6B.6 plain[pre-session] SELECT(applet) ERR {:?}", e);
@@ -473,6 +502,38 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
     {
         let (t1, _scp) = se.t1_scp03_mut();
         plain_matrix(t1, "session", &mut ok, &mut hb);
+    }
+
+    // -- 6B.6 reselect leg: does a T=1 reset + plain SELECT end the session? --
+    // #989 review: the production measurement runs after a fresh link
+    // bring-up (T=1 reset + SELECT) but WITHOUT a power cycle. If that left
+    // an SCP03 session from an earlier boot alive, a warm reset could make a
+    // chip that still answers plain commands look "required". The answer
+    // here, compared with the pre-session leg, settles it read-only.
+    marker!("=== SPROBE 6B.6 reselect (T=1 reset + plain SELECT, no power cycle) ===");
+    {
+        let (t1, _scp) = se.t1_scp03_mut();
+        match link_reset_with_retry(t1) {
+            Ok(attempt) => {
+                out!("6B.6 reselect interface reset OK attempt={}", attempt);
+                let mut o = [0u8; 64];
+                match apdu::select_applet_probe(t1, &mut o) {
+                    Ok((sw, n)) => {
+                        out!("6B.6 plain[reselect] SELECT(applet) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb));
+                        plain_matrix(t1, "reselect", &mut ok, &mut hb);
+                        platform_scp_line(t1, "reselect", &mut ok, &mut hb);
+                    }
+                    Err(e) => {
+                        out!("6B.6 plain[reselect] SELECT(applet) ERR {:?}", e);
+                        ok = false;
+                    }
+                }
+            }
+            Err(()) => {
+                out!("6B.6 reselect interface reset FAILED after {} attempts", RESET_ATTEMPTS);
+                ok = false;
+            }
+        }
     }
 
     if ok {

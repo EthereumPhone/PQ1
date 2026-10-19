@@ -1164,11 +1164,44 @@ se050-probe-hw: ## Read-only SE050 config/inventory/plain-surface probe (HW)
 	if grep -q "=== SPROBE DONE OK ===" "$$log"; then echo "==> se050-probe firmware marker: DONE OK (verdict: report below)"; \
 	elif grep -q "=== SPROBE DONE FINDINGS ===" "$$log"; then echo "==> se050-probe firmware marker: DONE FINDINGS"; \
 	else echo "==> se050-probe: INCONCLUSIVE (no DONE marker; log=$$log)"; fi; \
-	python3 -I tools/se050_probe/report.py "$$log" --out target/se050-probe
+	python3 -I tools/se050_probe/report.py "$$log" --out target/se050-probe $(if $(filter 1,$(EXPECT_REQUIRED)),--expect-required)
 
 se050-probe-report: ## Re-analyse a saved SE050 probe log (LOG=path)
 	@test -n "$(LOG)" || { echo "usage: make se050-probe-report LOG=path/to.log"; exit 1; }
-	@python3 -I tools/se050_probe/report.py "$(LOG)" --out target/se050-probe
+	@python3 -I tools/se050_probe/report.py "$(LOG)" --out target/se050-probe $(if $(filter 1,$(EXPECT_REQUIRED)),--expect-required)
+
+# SE050 platform-SCP bench tool (#989, DVT 6B.5). Measures the applet's
+# SCP_REQUIRED state after an SE rail power cycle and — on ONE die, bound by
+# its SE050 unique ID — sets it through the production path or clears it.
+# Standalone SE050 image, terminal (SYS_EXIT), secure ELF only, factory SCP03
+# keyset (same as se050-probe). NEVER SHIP — in PROD_FORBIDDEN.
+#
+#   make se050-platform-scp-hw BOARD=pq1                          # ACTION=status
+#   make se050-platform-scp-hw BOARD=pq1 ACTION=require SE050_UID=<6B.2 hex>
+#   make se050-platform-scp-hw BOARD=pq1 ACTION=release SE050_UID=<6B.2 hex>
+#   make se050-platform-scp-hw BOARD=pq1 ACTION=cycle   SE050_UID=<6B.2 hex>
+#
+# While a die is at SCP_REQUIRED, only images with its SCP03 keys can reach it;
+# run `make se050-probe-hw EXPECT_REQUIRED=1` to check the plain surface.
+SE050_PSCP_FEATURES = se050,se050-platform-scp-tool,ui-semihosting,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,usb,$(BOARD_FEATURE)
+ACTION ?= status
+
+se050-platform-scp-hw: ## SE050 platform-SCP status/require/release/cycle on one die (HW, UID-bound)
+	@echo "==> Building SE050 platform-SCP tool ($(BOARD_FEATURE), ACTION=$(ACTION))..."
+	@touch secure/src/se050/pscp_tool.rs
+	@PQ_SE050_PSCP_ACTION=$(ACTION) $(if $(SE050_UID),PQ_SE050_PSCP_UID=$(SE050_UID)) \
+		FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features --features $(SE050_PSCP_FEATURES)
+	@echo "==> Flashing SE050 platform-SCP tool (secure ELF only; option bytes assumed set)..."
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@mkdir -p target/se050-pscp
+	@log=target/se050-pscp/last-run-$(ACTION).log; \
+	timeout 600 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log"; \
+	echo "===================================="; \
+	if grep -q "=== PSCP DONE OK ===" "$$log"; then echo "==> se050-platform-scp: DONE OK"; \
+	elif grep -q "=== PSCP DONE FAIL ===" "$$log"; then echo "==> se050-platform-scp: DONE FAIL"; exit 1; \
+	else echo "==> se050-platform-scp: INCONCLUSIVE (no DONE marker; log=$$log)"; exit 2; fi
 
 test-se050-probe: ## Host tests for the SE050 probe report tool
 	@python3 -I -m unittest discover -s tools/se050_probe -v
@@ -2907,7 +2940,7 @@ _repro_one:
 # wizard), so the earlier "bhk yields zero-keyed derivations without phase-2B"
 # caveat no longer applies. It is not correct-to-ship evidence: handoff,
 # recovery/KVN, E140 ordering, and silicon gates remain open.
-RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,$(BOARD_FEATURE)
+RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,se050-platform-scp-required,$(BOARD_FEATURE)
 
 # MED-2 ship gate (audits/tz-tamper-debug-20260611). Resolve the ACTUAL feature
 # set cargo would compile for the shipping image and fail if any never-ship
@@ -2929,7 +2962,8 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e optiga-ac-probe duress-provision-e2e \
                  pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime ui-px-film-gaps \
-                 ui-px-bench ui-px-te-probe gateway-gate-off optiga-probe se050-probe
+                 ui-px-bench ui-px-te-probe gateway-gate-off optiga-probe se050-probe \
+                 se050-platform-scp-tool
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required
@@ -2951,7 +2985,8 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
 override PROD_REQUIRED := mode-production stm32u585 se050 optiga-trust-m dual-se \
                 optiga-lock-operational optiga-hw-counter \
                 consumption-mask tamp tamp-wipe tzic-wipe iwdg \
-                saes-dhuk se050-derived-scp03 bhk rdp2-self-lock
+                saes-dhuk se050-derived-scp03 bhk rdp2-self-lock \
+                se050-platform-scp-required
 
 # Candidate production feature envelope used by the negative ship-quarantine
 # gates. It is necessary but explicitly not sufficient for a real shipping
@@ -2964,7 +2999,7 @@ override PROD_REQUIRED := mode-production stm32u585 se050 optiga-trust-m dual-se
 # exact actor/order relative to the final pairing rotation is OPEN, so this
 # feature list grants no authority to flash or ratchet hardware. See
 # secure/Cargo.toml and docs/archive/production-todo-retired-2026-07-19.md.
-override PROD_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,$(BOARD_FEATURE)
+override PROD_SHIP_FEATURES := stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-dhuk,se050-derived-scp03,mode-production,optiga-lock-operational,optiga-hw-counter,consumption-mask,tamp,tamp-wipe,tzic-wipe,bhk,rdp2-self-lock,se050-platform-scp-required,$(BOARD_FEATURE)
 
 # Exact machine-readable provenance string emitted by dbgen only after a real
 # ERC-8176 EAS verification implementation has authenticated every leaf.

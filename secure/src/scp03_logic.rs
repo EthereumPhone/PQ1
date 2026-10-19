@@ -697,6 +697,49 @@ pub fn command_apdu_layout(apdu: &[u8]) -> Result<CmdLayout, WrapError> {
 }
 
 // ---------------------------------------------------------------------------
+// Platform-SCP state from one plain probe (#989)
+// ---------------------------------------------------------------------------
+
+/// What one plain (no-SCP03) `CheckObjectExists(UNIQUE_ID 0x7FFF0206)` after
+/// a fresh link bring-up says about the applet's platform-SCP requirement
+/// (AN12413 §4.6.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlatformScpState {
+    /// The applet answered a plain command: `SCP_NOT_REQUIRED` (the E2's
+    /// default, EVT-3D21 2026-10-19).
+    NotRequired,
+    /// The applet refused the plain command with one of
+    /// [`PLATFORM_SCP_REFUSED_SWS`].
+    Refused(u16),
+    /// Anything else, including a transport failure. Never read as
+    /// "required": callers treat it like `NotRequired` and enforce.
+    Unknown,
+}
+
+/// Status words that count as "the applet refused a plain command". Starts
+/// as the set observed for plain commands while a session is up (EVT-3D21:
+/// `0x6982`, `0x6985`) plus the policy-denial code; tighten to the exact
+/// silicon answer once 6B.5 has run under `SCP_REQUIRED`.
+pub const PLATFORM_SCP_REFUSED_SWS: [u16; 3] = [0x6982, 0x6985, 0x6986];
+
+/// Classify the plain probe reply. Only an exact success — `9000` with the
+/// body `41 01 01` (TAG_1, len 1, `SE05x_Result_SUCCESS`: the unique-ID object
+/// exists) — reads as `NotRequired`; a short or different body is `Unknown`.
+pub fn classify_platform_scp_probe(sw: u16, body: &[u8]) -> PlatformScpState {
+    if sw == 0x9000 {
+        if body == [0x41, 0x01, 0x01] {
+            PlatformScpState::NotRequired
+        } else {
+            PlatformScpState::Unknown
+        }
+    } else if PLATFORM_SCP_REFUSED_SWS.contains(&sw) {
+        PlatformScpState::Refused(sw)
+    } else {
+        PlatformScpState::Unknown
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests — these now actually run under `cargo test -p sphincs-tz-secure`
 // because `scp03_logic` (unlike `se050::scp03`) is not `not(test)`-gated.
 // ---------------------------------------------------------------------------
@@ -1797,5 +1840,30 @@ mod tests {
         // An extended input stays extended even when it would fit short.
         let l = command_apdu_layout(&extended(16, 16)).unwrap();
         assert_eq!(l.wrapped_len(), 7 + 32 + 8);
+    }
+
+    // ----- #989: platform-SCP probe classification -----
+
+    #[test]
+    fn platform_scp_probe_not_required_only_on_exact_success() {
+        // EVT-3D21 pre-session: CheckExists of an existing object answers
+        // `41 01 01` with 9000.
+        assert_eq!(classify_platform_scp_probe(0x9000, &[0x41, 0x01, 0x01]), PlatformScpState::NotRequired);
+        // "Absent" or a mangled body is not proof of anything.
+        assert_eq!(classify_platform_scp_probe(0x9000, &[0x41, 0x01, 0x02]), PlatformScpState::Unknown);
+        assert_eq!(classify_platform_scp_probe(0x9000, &[]), PlatformScpState::Unknown);
+        assert_eq!(classify_platform_scp_probe(0x9000, &[0x41, 0x01, 0x01, 0x00]), PlatformScpState::Unknown);
+    }
+
+    #[test]
+    fn platform_scp_probe_refused_only_for_the_pinned_sws() {
+        for sw in PLATFORM_SCP_REFUSED_SWS {
+            assert_eq!(classify_platform_scp_probe(sw, &[]), PlatformScpState::Refused(sw));
+        }
+        // Not-selected (pre-SELECT 0x6D00) and anything unlisted must not be
+        // mistaken for an enforced requirement.
+        for sw in [0x6D00, 0x6A80, 0x6F00, 0x0000, 0x9001] {
+            assert_eq!(classify_platform_scp_probe(sw, &[]), PlatformScpState::Unknown, "{sw:04x}");
+        }
     }
 }

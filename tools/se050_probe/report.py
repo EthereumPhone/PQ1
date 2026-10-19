@@ -2,7 +2,10 @@
 """Analyse an SE050 read-only probe log (`make se050-probe-hw`) and give a verdict.
 
 Usage:
-    report.py LOG [--out DIR]
+    report.py LOG [--out DIR] [--expect-required]
+
+`--expect-required` (#989): the die is supposed to be at SCP_REQUIRED, so a
+pre-session `6B.5 platform_scp=not_required` (or `unknown`) is a finding.
 
 Reads the semihosting log the `se050-probe` image printed (`[SPROBE] …` lines),
 decodes the identity, inventory, free-memory and plain-command-matrix facts,
@@ -34,6 +37,8 @@ PLAIN_READ = re.compile(r"SW=0x([0-9a-f]+) datalen=(\d+)")
 PLAIN_LEG = re.compile(r"^6B\.6 plain\[([a-z-]+)\] (\S+) SW=0x([0-9a-f]+)")
 # Legs with no SCP03 session alive: what a keyless bus party gets.
 PRE_SESSION_LEGS = ("pre-select", "pre-session")
+# `6B.5 [<leg>] platform_scp=<state> sw=0x....` (#989).
+PLATFORM_SCP = re.compile(r"^6B\.5 \[([a-z-]+)\] platform_scp=([a-z_]+)")
 
 # Classes the firmware assigns (`se050::probe::classify`) that are findings:
 # production or unknown objects on a bench die, and objects an e2e run or a
@@ -49,7 +54,7 @@ FINDING_CLASSES = {
 FREE_MEMORY_CAP = 0x7FFF
 
 
-def analyse(raw: str) -> dict:
+def analyse(raw: str, expect_required: bool = False) -> dict:
     facts = [m.group(1).strip() for m in map(SPROBE.search, raw.splitlines()) if m]
 
     findings: list[str] = []
@@ -58,6 +63,7 @@ def analyse(raw: str) -> dict:
     free: dict[str, int] = {}
     plain: list[str] = []
     paging: list[str] = []
+    platform_scp: dict[str, str] = {}
 
     for f in facts:
         if f.startswith("6B.1 applet") or f.startswith("6B.1 GetVersionExt"):
@@ -79,6 +85,10 @@ def analyse(raw: str) -> dict:
                 findings.append(f"host: {f} (matrix row unverified)")
         elif f.startswith("6B.3b"):
             paging.append(f)
+        elif f.startswith("6B.5 ["):
+            m = PLATFORM_SCP.search(f)
+            if m:
+                platform_scp[m.group(1)] = m.group(2)
         if "FINDING:" in f:
             findings.append(f)
 
@@ -105,6 +115,24 @@ def analyse(raw: str) -> dict:
 
     saturated = sorted(k for k, v in free.items() if v >= FREE_MEMORY_CAP)
 
+    # #989: the pre-session leg is the authoritative platform-SCP reading (no
+    # session can survive the rail power cycle before it).
+    pre = platform_scp.get("pre-session")
+    if expect_required and pre != "required":
+        findings.append(
+            f"host: expected SCP_REQUIRED but the pre-session probe read platform_scp={pre or 'missing'}"
+        )
+    # The reselect leg (T=1 reset + SELECT, no power cycle) is what the
+    # production every-boot measurement sees on a warm reset. If it reads
+    # "required" while the cold reading says "not_required", a leftover
+    # session can mask the state and the production code must rely on the
+    # credential-presence rule.
+    if pre == "not_required" and platform_scp.get("reselect") == "required":
+        findings.append(
+            "host: reselect leg reads required on a not_required chip — a T=1 reset + SELECT does "
+            "not end the SCP03 session (production relies on the credential-presence rule)"
+        )
+
     if "=== SPROBE DONE OK ===" in raw:
         verdict = "DONE OK"
     elif "=== SPROBE DONE FINDINGS ===" in raw:
@@ -123,6 +151,7 @@ def analyse(raw: str) -> dict:
         "plain": plain,
         "pre_session_open": pre_session_open,
         "paging": paging,
+        "platform_scp": platform_scp,
         "findings": findings,
     }
 
@@ -144,6 +173,8 @@ def render(log: str, r: dict) -> str:
     ] or ["- (none)"]
     lines.append("\n## ReadIDList offset unit (6B.3b)")
     lines += [f"- {p}" for p in r["paging"]] or ["- (none)"]
+    lines.append("\n## Platform SCP requirement (6B.5)")
+    lines += [f"- {leg}: {st}" for leg, st in r["platform_scp"].items()] or ["- (none)"]
     lines.append("\n## Plain (no-SCP03) read-class matrix (6B.6)")
     lines += [f"- {p}" for p in r["plain"]] or ["- (none)"]
     lines.append("\n### Answered 9000 with no session alive (pre-select / pre-session legs)")
@@ -163,6 +194,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("log")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--expect-required", action="store_true")
     args = ap.parse_args()
 
     try:
@@ -172,7 +204,7 @@ def main() -> int:
         print(f"se050-probe report: cannot read {args.log}: {e}", file=sys.stderr)
         return 2
 
-    r = analyse(raw)
+    r = analyse(raw, expect_required=args.expect_required)
     report = render(args.log, r)
     print(report)
     if args.out:

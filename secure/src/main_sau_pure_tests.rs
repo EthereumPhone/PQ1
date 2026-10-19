@@ -1574,6 +1574,31 @@ fn negative_forced_blind_production_fence_and_bundle_quarantine_are_present() {
 }
 
 #[test]
+fn negative_se050_platform_scp_is_required_in_production_and_tool_is_forbidden() {
+    // #989: production must enforce SCP_REQUIRED on the SE050, and the bench
+    // tool (the only code that can turn it off) must never ship. Both the
+    // compile fences and the Makefile allow/deny lists carry it.
+    const NSC_SRC: &str = include_str!("nsc/mod.rs");
+    const MAKE_SRC: &str = include_str!("../../Makefile");
+    assert!(NSC_SRC.contains("SE050_PLATFORM_SCP_REQUIRED"));
+    assert!(NSC_SRC.contains(
+        "    feature = \"mode-production\",\n    feature = \"se050\",\n    not(feature = \"se050-platform-scp-required\")"
+    ));
+    let block = |name: &str| -> &str {
+        MAKE_SRC
+            .split_once(name)
+            .unwrap_or_else(|| panic!("{name} definition missing"))
+            .1
+            .split_once("\n\n")
+            .expect("definition must remain a separate block")
+            .0
+    };
+    assert!(block("override PROD_FORBIDDEN :=").contains("se050-platform-scp-tool"));
+    assert!(block("override PROD_REQUIRED :=").contains("se050-platform-scp-required"));
+    assert!(block("override PROD_SHIP_FEATURES :=").contains("se050-platform-scp-required"));
+}
+
+#[test]
 fn negative_iwdg_init_kr_sequence_is_atomic() {
     // F32/RUN-4: `iwdg::init` runs with SysTick already live, and the
     // SysTick boot-grace path writes `KR=0xAAAA` every tick. A kick

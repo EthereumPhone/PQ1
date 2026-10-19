@@ -372,6 +372,9 @@ compile_error!(
         feature = "rdp-enforce-halt",
         feature = "tamp-wipe",
         feature = "tzic-wipe",
+        // #989: both persistently change the SE050 applet state.
+        feature = "se050-platform-scp-required",
+        feature = "se050-platform-scp-tool",
         not(any(feature = "dev-testkey", feature = "otp-hardcoded-master-key")),
     )
 ))]
@@ -456,6 +459,10 @@ compile_error!(
         feature = "duress-ui-test",
         // Dev diagnostic: names the failing unlock step on the display.
         feature = "unlock-diag",
+        // #989 bench tool: sets AND clears the SE050 platform-SCP
+        // requirement. A shipping image must have no path that turns
+        // SCP_REQUIRED off.
+        feature = "se050-platform-scp-tool",
     )
 ))]
 compile_error!(
@@ -692,6 +699,22 @@ compile_error!(
 // (debug open) forever and keep the public transport keysets as its live
 // pairing secrets.
 //
+// #989 ship gate: the SE050E2 ships SCP_NOT_REQUIRED, so without the every-boot
+// enforcement a keyless I2C party reads the version, the full object inventory
+// and SE randomness in plaintext, can create the absent reserved credentials
+// (0x7FFF0205 FACTORY_RESET → DeleteAll), and `half_E` rests on per-object
+// policy alone. Production must set SCP_REQUIRED before any secret is loaded.
+#[cfg(all(
+    feature = "mode-production",
+    feature = "se050",
+    not(feature = "se050-platform-scp-required")
+))]
+compile_error!(
+    "SE050_PLATFORM_SCP_REQUIRED: production builds must enable \
+     `se050-platform-scp-required` (#989): the SE050E2 defaults to \
+     SCP_NOT_REQUIRED and answers plain commands to anyone on the bus."
+);
+
 // Keyed to `mode-production` rather than `not(debug_assertions)`: release-mode
 // bench builds are not shipping images. The converse guard immediately below
 // also rejects `rdp2-self-lock` without `mode-production`, so the two features

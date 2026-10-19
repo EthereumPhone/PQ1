@@ -143,6 +143,38 @@ const P2_RANDOM: u8 = 0x49;
 /// GetVersion (extended) — returns 37-byte VersionInfo. AN12413 §4.x;
 /// `kSE05x_P2_VERSION_EXT = 0x21` in NXP plug-and-trust `se05x_enums.h`.
 const P2_VERSION_EXT: u8 = 0x21;
+/// SetPlatformSCPRequest (AN12413 §4.6.2; `kSE05x_P2_SCP = 0x52`).
+#[cfg(any(
+    feature = "se050-platform-scp-required",
+    feature = "se050-platform-scp-tool",
+    feature = "se050-stress"
+))]
+const P2_SCP: u8 = 0x52;
+
+/// `RESERVED_ID_PLATFORM_SCP` (AN12413 §3.2.5.7): the credential a session
+/// must be opened with for `SetPlatformSCPRequest`. Absent on a factory E2
+/// (EVT-3D21 inventory, 2026-10-19), so the firmware creates it (#989). The
+/// wipe sweep skips the whole `0x7FFF*` range, so it is a device-level object
+/// that survives wallet wipes.
+pub const PLATFORM_SCP_OBJ: u32 = 0x7FFF_0207;
+
+/// The `PlatformSCPRequest` byte (AN12413 Table 48). A production image can
+/// only name `Required`: there is no path that turns the requirement off.
+#[cfg(any(
+    feature = "se050-platform-scp-required",
+    feature = "se050-platform-scp-tool",
+    feature = "se050-stress"
+))]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlatformScpRequest {
+    /// `SCP_REQUIRED`: every applet APDU not under full C+R MAC+ENC platform
+    /// SCP03 is refused.
+    Required = 0x01,
+    /// `SCP_NOT_REQUIRED` (the default). Bench tool / stress only.
+    #[cfg(any(feature = "se050-platform-scp-tool", feature = "se050-stress"))]
+    NotRequired = 0x02,
+}
 
 // TLV tags
 const TAG_SESSION_ID: u8 = 0x10;
@@ -1074,6 +1106,127 @@ pub unsafe fn delete_object_authed(
     send_apdu(t1, scp03, cmd, &mut resp).map(|_| ())
 }
 
+/// `SetPlatformSCPRequest` inside a session opened with
+/// [`PLATFORM_SCP_OBJ`] (#989, AN12413 §4.6.2): a persistent applet state.
+///
+/// Framing as [`delete_object_authed`]: the outer `INS_PROCESS` carries
+/// `TAG_SESSION_ID` and is SCP03-wrapped by `send_apdu`; the inner command is
+/// `80 04 00 52 03 41 01 <req>` (Case 3, no Le), as plug-and-trust's
+/// `Se05x_API_SetPlatformSCPRequest` sends it over a UserID session. The
+/// applet refuses it from any session not authenticated with
+/// `RESERVED_ID_PLATFORM_SCP`.
+#[cfg(any(
+    feature = "se050-platform-scp-required",
+    feature = "se050-platform-scp-tool",
+    feature = "se050-stress"
+))]
+pub unsafe fn set_platform_scp_request(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    session_id: &[u8; 8],
+    req: PlatformScpRequest,
+) -> Result<(), Se050Error> {
+    let inner: [u8; 8] = [0x80, INS_MGMT, P1_DEFAULT, P2_SCP, 0x03, TAG_1, 0x01, req as u8];
+
+    let mut apdu = ApduBuf::new(0x80, INS_PROCESS, P1_DEFAULT, P2_DEFAULT);
+    apdu.tlv(TAG_SESSION_ID, session_id);
+    apdu.tlv(TAG_1, &inner);
+    let cmd = apdu.finish(false);
+
+    let mut resp = [0u8; 64];
+    send_apdu(t1, scp03, cmd, &mut resp).map(|_| ())
+}
+
+/// The same command with NO session (platform SCP03 only). Stress-only: the
+/// negative test that the applet refuses it outside a
+/// `RESERVED_ID_PLATFORM_SCP` session. Only `NotRequired` can be sent, so the
+/// test is a no-op even if the chip wrongly accepted it.
+#[cfg(feature = "se050-stress")]
+pub unsafe fn set_platform_scp_request_no_session_stress(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+) -> Result<(), Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_MGMT, P1_DEFAULT, P2_SCP);
+    let cmd = apdu.tlv(TAG_1, &[PlatformScpRequest::NotRequired as u8]).finish(false);
+    let mut resp = [0u8; 64];
+    send_apdu(t1, scp03, cmd, &mut resp).map(|_| ())
+}
+
+/// The one plain applet APDU a production image sends (#989): a fixed
+/// `CheckObjectExists(UNIQUE_ID 0x7FFF0206)`, after a fresh link bring-up and
+/// before SCP03, to measure the platform-SCP requirement. The answer is
+/// public (the unique-ID object exists on every SE050). Takes no caller bytes.
+/// Returns the SW and up to 3 body bytes (`41 01 01` = exists).
+#[cfg(any(
+    feature = "se050-platform-scp-required",
+    feature = "se050-platform-scp-tool",
+    feature = "se050-probe",
+    feature = "se050-stress"
+))]
+pub unsafe fn platform_scp_plain_probe(
+    t1: &mut T1State,
+) -> Result<(u16, [u8; 3], usize), Se050Error> {
+    let apdu: [u8; 12] = [
+        0x80, INS_MGMT, P1_DEFAULT, P2_EXIST, 0x06, TAG_1, 0x04, 0x7F, 0xFF, 0x02, 0x06, 0x00,
+    ];
+    let mut resp = [0u8; 16];
+    let n = t1
+        .transceive(&apdu, &mut resp)
+        .map_err(|_| Se050Error::Transport)?;
+    if n < 2 {
+        return Err(Se050Error::Transport);
+    }
+    let sw = ((resp[n - 2] as u16) << 8) | (resp[n - 1] as u16);
+    let mut body = [0u8; 3];
+    let body_len = (n - 2).min(3);
+    body[..body_len].copy_from_slice(&resp[..body_len]);
+    Ok((sw, body, body_len))
+}
+
+/// What the 6B.23 stress test may send in plaintext to probe a carve-out
+/// object's policy (#989). Stress-only; the OID must sit in the stress
+/// carve-out (`0x7B5E_*`), checked at run time, so it cannot touch a
+/// production object.
+#[cfg(feature = "se050-stress")]
+pub enum PlainMutateCmd<'a> {
+    /// `WriteBinary(oid, offset 0, data)`.
+    Write(u32, &'a [u8]),
+    /// `DeleteSecureObject(oid)`.
+    Delete(u32),
+}
+
+/// Send one [`PlainMutateCmd`] without SCP03. Returns the SW.
+#[cfg(feature = "se050-stress")]
+pub unsafe fn plain_mutate_stress(t1: &mut T1State, cmd: PlainMutateCmd<'_>) -> Result<u16, Se050Error> {
+    let oid = match cmd {
+        PlainMutateCmd::Write(oid, _) | PlainMutateCmd::Delete(oid) => oid,
+    };
+    if oid & 0xFFFF_0000 != 0x7B5E_0000 {
+        return Err(Se050Error::InvalidParam);
+    }
+    let mut apdu = match cmd {
+        PlainMutateCmd::Write(oid, data) => {
+            let mut a = ApduBuf::new(0x80, INS_WRITE, P1_BINARY, P2_DEFAULT);
+            a.tlv_u32(TAG_1, oid);
+            a.tlv(TAG_2, &[0x00, 0x00]);
+            a.tlv(TAG_4, data);
+            a
+        }
+        PlainMutateCmd::Delete(oid) => {
+            let mut a = ApduBuf::new(0x80, INS_MGMT, P1_DEFAULT, 0x28);
+            a.tlv_u32(TAG_1, oid);
+            a
+        }
+    };
+    let cmd = apdu.finish(false);
+    let mut resp = [0u8; 64];
+    let n = t1.transceive(cmd, &mut resp).map_err(|_| Se050Error::Transport)?;
+    if n < 2 {
+        return Err(Se050Error::Transport);
+    }
+    Ok(((resp[n - 2] as u16) << 8) | (resp[n - 1] as u16))
+}
+
 /// P2 for ReadIDList (kSE05x_P2_LIST).
 const P2_LIST: u8 = 0x25;
 
@@ -1148,7 +1301,7 @@ pub const MEM_TRANSIENT_DESELECT: u8 = 0x03;
 
 /// The reserved applet object that holds the 18-byte device unique ID
 /// (`kSE05x_AppletResID_UNIQUE_ID`).
-#[cfg(feature = "se050-probe")]
+#[cfg(any(feature = "se050-probe", feature = "se050-platform-scp-tool"))]
 pub const UNIQUE_ID_OBJ: u32 = 0x7FFF_0206;
 
 /// One page of `ReadIDList` over SCP03. Writes up to `ids.len()` object IDs
@@ -1291,7 +1444,7 @@ pub unsafe fn get_free_memory_probe(
 /// Read an object over platform SCP03 with no UserID session (INS_READ /
 /// P2_DEFAULT, Le). Copies the data into `out`. The probe uses it for the
 /// unique-ID object (6B.2). Read-only.
-#[cfg(feature = "se050-probe")]
+#[cfg(any(feature = "se050-probe", feature = "se050-platform-scp-tool"))]
 pub unsafe fn read_object_scp03_probe(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
@@ -1318,7 +1471,7 @@ pub unsafe fn read_object_scp03_probe(
 /// or authenticates. (A raw `ins/p1/p2` interface would not be read-only:
 /// `INS_MGMT` also carries DeleteAll, and the probe file's name-based pin
 /// cannot see header bytes.)
-#[cfg(feature = "se050-probe")]
+#[cfg(any(feature = "se050-probe", feature = "se050-stress"))]
 #[derive(Clone, Copy)]
 pub enum PlainReadCmd {
     /// GetVersionExt (INS_MGMT / P2_VERSION_EXT), Case 2.
@@ -1340,7 +1493,7 @@ pub enum PlainReadCmd {
 ///
 /// Read-class only by construction: the header and body come from
 /// [`PlainReadCmd`], so a caller cannot name a write, delete or auth command.
-#[cfg(feature = "se050-probe")]
+#[cfg(any(feature = "se050-probe", feature = "se050-stress"))]
 pub unsafe fn plain_readclass_probe(
     t1: &mut T1State,
     cmd: PlainReadCmd,
@@ -1405,7 +1558,7 @@ pub unsafe fn plain_readclass_probe(
 /// can record what a keyless bus party gets back. Takes no header or AID from
 /// the caller. SELECT is plain by design (it precedes SCP03 in every
 /// session), so this exposes nothing `select_applet` does not.
-#[cfg(feature = "se050-probe")]
+#[cfg(any(feature = "se050-probe", feature = "se050-stress", feature = "se050-platform-scp-tool"))]
 pub unsafe fn select_applet_probe(
     t1: &mut T1State,
     out: &mut [u8],

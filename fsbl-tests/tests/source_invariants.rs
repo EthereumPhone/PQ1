@@ -1120,6 +1120,12 @@ fn se050_probe_readonly_names_no_write_path() {
         "transceive",
         "run_admin_wipe",
         "run_factory_reset",
+        // #989: the probe measures the platform-SCP state; it must never set it.
+        "set_platform_scp",
+        "ensure_platform_scp",
+        "release_platform_scp",
+        "platform_scp_credential",
+        "plain_mutate",
     ];
     let rel = "secure/src/se050/probe/mod.rs";
     let src = code_only(&read_workspace_file(rel));

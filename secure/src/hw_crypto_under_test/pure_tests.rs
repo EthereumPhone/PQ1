@@ -332,6 +332,7 @@ fn positive_secret_keys_labels_present() {
     assert!(SECRET_KEYS_SRC.contains(r#"b"pqsigner/se050-scp03-mac-v1""#));
     assert!(SECRET_KEYS_SRC.contains(r#"b"pqsigner/se050-scp03-dek-v1""#));
     assert!(SECRET_KEYS_SRC.contains(r#"b"pqsigner/se050-admin-pin-v1""#));
+    assert!(SECRET_KEYS_SRC.contains(r#"b"pqsigner/se050-platform-scp-v1""#));
 }
 
 #[test]
@@ -643,6 +644,20 @@ fn negative_secret_keys_se050_admin_pin_v1_label_unchanged() {
 }
 
 #[test]
+fn negative_secret_keys_se050_platform_scp_v1_label_unchanged() {
+    // #989: the 0x7FFF0207 credential is created once and kept. A label drift
+    // would make the next boot's verify fail and read our own credential as
+    // a foreign (squatted) one.
+    assert!(
+        SECRET_KEYS_SRC.contains(
+            "pub fn se050_platform_scp_credential() -> Result<[u8; 16], OtpError> {\n    let mut out = [0u8; 16];\n    derive_into_bhk(b\"pqsigner/se050-platform-scp-v1\", &mut out)?;"
+        ),
+        "platform-SCP credential must stay on the BHK axis under its v1 label"
+    );
+    assert_ne!("pqsigner/se050-platform-scp-v1", "pqsigner/se050-admin-pin-v1");
+}
+
+#[test]
 fn negative_secret_keys_labels_are_versioned_with_v1_suffix() {
     // Bumping a label without on-chip rotation is a silent
     // data-corruption bug; module docstring requires `-v1`. Catch a
@@ -653,6 +668,7 @@ fn negative_secret_keys_labels_are_versioned_with_v1_suffix() {
         "pqsigner/se050-scp03-mac",
         "pqsigner/se050-scp03-dek",
         "pqsigner/se050-admin-pin",
+        "pqsigner/se050-platform-scp",
     ] {
         let unversioned = format!(r#"b"{}""#, label);
         assert!(

@@ -2162,6 +2162,9 @@ fn negative_apdu_command_wrappers_remain_unsafe() {
         "pub unsafe fn iterative_delete_all(",
         "pub unsafe fn get_random(",
         "pub unsafe fn close_session(",
+        // #989
+        "pub unsafe fn set_platform_scp_request(",
+        "pub unsafe fn platform_scp_plain_probe(",
     ];
     for line in must_be_unsafe {
         assert!(
@@ -2531,4 +2534,101 @@ fn source_pin_i2c_timeout_software_resets_peripheral() {
     let clear = fbody.find("v & !CR1_PE").expect("PE cleared");
     let set = fbody.find("v | CR1_PE").expect("PE set again");
     assert!(clear < set);
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// #989 — SE050 platform-SCP enforcement (SCP_REQUIRED)
+// ═════════════════════════════════════════════════════════════════════
+
+const MAIN_SRC_FOR_PSCP: &str = include_str!("../main.rs");
+
+/// Slice `src` from `sig` to the end of that item's body (`\n}\n` or
+/// `\n    }\n` for methods).
+fn item_src<'a>(src: &'a str, sig: &str, end: &str) -> &'a str {
+    let start = src.find(sig).unwrap_or_else(|| panic!("{sig} missing"));
+    let len = src[start..].find(end).expect("item end");
+    &src[start..start + len]
+}
+
+#[test]
+fn positive_platform_scp_constants_match_an12413() {
+    // AN12413 §3.2.5.7 / §4.6.2 Table 48; plug-and-trust se05x_enums.h.
+    assert!(APDU_SRC.contains("const P2_SCP: u8 = 0x52;"));
+    assert!(APDU_SRC.contains("pub const PLATFORM_SCP_OBJ: u32 = 0x7FFF_0207;"));
+    assert!(APDU_SRC.contains("    Required = 0x01,"));
+    // NotRequired exists only in the bench tool / stress images.
+    let at = APDU_SRC.find("    NotRequired = 0x02,").expect("NotRequired variant");
+    let attrs = &APDU_SRC[at.saturating_sub(160)..at];
+    assert!(attrs.contains(
+        "#[cfg(any(feature = \"se050-platform-scp-tool\", feature = \"se050-stress\"))]"
+    ), "a production image must not be able to name SCP_NOT_REQUIRED");
+}
+
+#[test]
+fn positive_set_platform_scp_request_framing() {
+    // Inner Case-3 `80 04 00 52 03 41 01 <req>` inside the INS_PROCESS
+    // session envelope, like delete_object_authed; no Le.
+    let body = item_src(APDU_SRC, "pub unsafe fn set_platform_scp_request(", "\n}\n");
+    assert!(body.contains(
+        "let inner: [u8; 8] = [0x80, INS_MGMT, P1_DEFAULT, P2_SCP, 0x03, TAG_1, 0x01, req as u8];"
+    ));
+    assert!(body.contains("ApduBuf::new(0x80, INS_PROCESS, P1_DEFAULT, P2_DEFAULT);"));
+    assert!(body.contains("apdu.tlv(TAG_SESSION_ID, session_id);"));
+    assert!(body.contains("let cmd = apdu.finish(false);"));
+    assert!(body.contains("send_apdu(t1, scp03, cmd, &mut resp)"));
+}
+
+#[test]
+fn negative_platform_scp_plain_probe_is_one_fixed_read() {
+    // The only plain applet APDU a production image sends: a fixed
+    // CheckExists(0x7FFF0206), no caller bytes, no write/process INS.
+    let body = item_src(APDU_SRC, "pub unsafe fn platform_scp_plain_probe(", "\n}\n");
+    assert!(body.contains("t1: &mut T1State,\n) -> Result<(u16, [u8; 3], usize), Se050Error>"));
+    assert!(body.contains(
+        "0x80, INS_MGMT, P1_DEFAULT, P2_EXIST, 0x06, TAG_1, 0x04, 0x7F, 0xFF, 0x02, 0x06, 0x00,"
+    ));
+    for f in ["INS_WRITE", "INS_PROCESS", "INS_AUTH_OBJECT", "P2_SCP", "scp03"] {
+        assert!(!contains_in_code(body, f), "plain probe must not use {f}");
+    }
+    assert_eq!(body.matches(".transceive(").count(), 1);
+}
+
+#[test]
+fn negative_platform_scp_enforcement_decision_table() {
+    // Absent credential forces enforcement whatever the probe said; only a
+    // present credential on a refusing chip skips (and is not re-verified).
+    let once = item_src(MOD_SRC, "fn ensure_platform_scp_once(", "\n    }\n");
+    assert!(once.contains(
+        "if present && matches!(measured, PlatformScpState::Refused(_)) {\n            return Ok(PlatformScpOutcome::AlreadyRequired);"
+    ));
+    assert!(!contains_in_code(once, "unwrap_or"), "a credential check must never default (D1)");
+    assert!(once.contains("apdu::PlatformScpRequest::Required"));
+    // Credential creation is self-only (no admin entry) and unlimited.
+    let with = item_src(MOD_SRC, "fn set_platform_scp_with(", "\n    }\n");
+    assert!(with.contains("apdu::write_userid_unlimited(\n                    &mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ, value, None,"));
+    let create = with.find("apdu::create_session(").unwrap();
+    let verify = with.find("apdu::verify_session(").unwrap();
+    let set = with.find("apdu::set_platform_scp_request(").unwrap();
+    assert!(create < verify && verify < set, "set only from a verified session");
+    // The measurement is never taken from link_bringup / init.
+    let bringup = item_src(MOD_SRC, "unsafe fn link_bringup(", "\n    }\n");
+    assert!(!bringup.contains("platform_scp"));
+    let init = item_src(MOD_SRC, "pub fn init(&mut self)", "\n    }\n");
+    assert!(!init.contains("platform_scp"));
+}
+
+#[test]
+fn negative_platform_scp_enforced_before_any_secret_is_loaded() {
+    // main.rs: the every-boot block runs after Phase B and before the PBS
+    // load, the PIN reconcile and every unlock / wizard path.
+    let m = MAIN_SRC_FOR_PSCP;
+    let block = m.find("se050.ensure_platform_scp_required(measured)").expect("boot enforcement");
+    let phase_b = m.find("first_boot::run_post_lock_provisioning(se);").expect("Phase B");
+    let pbs = m.find(").load_pbs();").expect("load_pbs");
+    let reconcile = m.find("nsc::reconcile_pin_attempts(").expect("reconcile");
+    assert!(phase_b < block && block < pbs && block < reconcile);
+    assert!(m[block..pbs].contains("Err(e) => halt_se050_platform_scp(e),"));
+    let gate = &m[m[..block].rfind("#[cfg(all(").unwrap()..block];
+    assert!(gate.contains("feature = \"se050-platform-scp-required\""));
+    assert!(gate.contains("not(feature = \"prodtest\")"));
 }
