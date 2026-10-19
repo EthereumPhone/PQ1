@@ -141,6 +141,8 @@ In both modes the wallet recomputes `replaySafeHash(rawHash)` (Solady-nested EIP
 
 `RAW32` remains intentionally opaque: replay-safe nesting prevents the UserOp-forgery oracle, but it cannot prove how a dapp obtained `H`. A hostile companion can submit the final hash of otherwise-supported typed data as `RAW32` and suppress its semantic pages; the device therefore shows `! BLIND RAW32` plus the complete hash. Companions MUST preserve the dapp-requested method and MUST NOT downgrade typed data to `RAW32`. Disabling `RAW32` in production remains the preferred policy unless an explicit compatibility decision accepts this residual.
 
+**Structured off-chain kinds (2026-10-19).** `kind = SAFE_TX` (4) and `kind = COW_ORDER` (5) clear-sign an EIP-712 `SafeTx` (this wallet as a Safe owner) and a CoW `GPv2Order` (CoW's `eip1271` scheme, owner = this wallet) with the native Safe / CoW verifiers and painters of the UserOp path (`nsc/cmd_sign_offchain_structured.rs`). The payloads are the on-chain `safe_v1` and CoW-order trailer encodings (`docs/companion/usb-protocol-v2.md` §0x62); the device recomputes `H` (`safeTxHash` / order digest) and signs `replay_safe_hash(H)` — the same value RAW32 signs for `H` (host-proven, `tx::eip712::offchain_structured`). Gated by `GET_DEVICE_INFO` capability bits 3 / 4; deployed wallets only; under `ui-px` `Confirm?` follows the whole body. A kind-4 signature verifies only on Safe ≥ v1.5.0 (v1.3.0 / v1.4.1 call the legacy `isValidSignature(bytes,bytes)`, which `PQSmartWallet` does not implement).
+
 ### On-chain validation
 
 `PQSmartWallet.validateUserOp` ABI-decodes `SignatureWrapper(uint256 ownerIndex, bytes signatureData)`:

@@ -226,6 +226,30 @@ pub(crate) fn emit_direct(out: &mut Screens, v3: &VerifiedCowswapV3) -> Result<B
     })
 }
 
+/// A CoW order this wallet signs OFF-CHAIN (`SIGN_OFFCHAIN` kind 5): hero
+/// `SIGNCOW` (which also moves `Confirm?` past the whole order —
+/// `pqsigner_ui_px::screen::confirm_index`), NETWORK, ORDER, then the shared
+/// order body with a zero receiver named as this wallet (the order owner).
+pub(crate) fn emit_offchain(out: &mut Screens, v3: &VerifiedCowswapV3) -> Result<BodyReceipt, ()> {
+    let mut e = Emit::new(out, chain_id(&v3.canonical), FAMILY.look);
+    e.hero(b"SIGNCOW", b"SIGN COW ORDER?")?;
+    e.network()?;
+    e.detail(b"ORDER", b"ORDER", &[(kind_line(v3), Weight::Regular)], false)?;
+    emit_order_body(&mut e, v3, Some(b"= this wallet"))?;
+    if e.n != 3 + order_body_screens(&v3.sell, &v3.buy) {
+        return Err(());
+    }
+    Ok(BodyReceipt {
+        screens: e.n,
+        legacy_pages: direct_legacy_pages(v3),
+    })
+}
+
+/// The off-chain route's binding witness: its page painter, re-run.
+pub(crate) fn render_offchain_pages(v3: &VerifiedCowswapV3) -> super::Pages {
+    crate::tx::eip712::cowswap_display::render_cowswap_offchain_pages(&v3.canonical, &v3.sell, &v3.buy)
+}
+
 /// The binding witness: the direct route's page painter, re-run.
 pub(crate) fn render_direct_pages(v3: &VerifiedCowswapV3) -> super::Pages {
     render_cowswap_pages(&v3.canonical, &v3.sell, &v3.buy)

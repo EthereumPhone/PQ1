@@ -90,6 +90,20 @@ pub(crate) enum Body<'a> {
     /// An off-chain `personal_sign` / RAW32 body (`offchain_screens`), bound
     /// like a single-UserOp body.
     Offchain(super::offchain_screens::OffchainBody<'a>),
+    /// An off-chain EIP-712 `SafeTx` (`SIGN_OFFCHAIN` kind 4): the Safe body
+    /// under the `SIGN SAFE TX?` hero. `erc20` is already address-matched to
+    /// the verified inner call (`dispatch::safe_route_meta`). Bound by
+    /// re-running its page painter (stricter than the on-chain Safe body's
+    /// footer check).
+    SafeOffchain {
+        safe: &'a VerifiedSafeV1<'a>,
+        cow: Option<&'a VerifiedCowswapV3>,
+        erc20: Option<&'a Erc20Metadata<'a>>,
+        resolver: &'a NameResolver<'a>,
+    },
+    /// An off-chain CoW order (`SIGN_OFFCHAIN` kind 5), bound by re-running
+    /// its page painter.
+    CowOffchain { v3: &'a VerifiedCowswapV3 },
     /// One member of an atomic batch: the `BATCH SIGN / Tx i of N` banner
     /// page, then the member's own route body (`batch_screens`).
     BatchMember {
@@ -160,6 +174,11 @@ fn emit_body(screens: &mut Screens, body: &Body<'_>) -> Result<(BodyReceipt, Fam
             let family = super::offchain_screens::family(b);
             (super::offchain_screens::emit(screens, b, family)?, family)
         }
+        Body::SafeOffchain { safe, cow, erc20, resolver } => (
+            super::safe_screens::emit_safe_offchain(screens, safe, *cow, *erc20, resolver)?,
+            Family::SAFE,
+        ),
+        Body::CowOffchain { v3 } => (super::cowswap_screens::emit_offchain(screens, v3)?, super::cowswap_screens::FAMILY),
         Body::BatchMember { index, total, inner } => {
             if matches!(inner, Body::BatchMember { .. } | Body::BatchSummary { .. }) {
                 return Err(());
@@ -266,6 +285,11 @@ fn body_bound(body: &Body<'_>, pages: &Pages, start: usize, len: usize) -> bool 
                 && super::erc7730_screens::is_confirm_page_at(pages, end - 1)
         }
         Body::Offchain(b) => prefix_matches(&super::offchain_screens::render_pages(b), pages, start, len),
+        Body::SafeOffchain { safe, cow, erc20, resolver } => {
+            super::safe_display::render_safe_offchain_pages(safe, *cow, *erc20, resolver)
+                .is_ok_and(|rendered| prefix_matches(&rendered, pages, start, len))
+        }
+        Body::CowOffchain { v3 } => prefix_matches(&super::cowswap_screens::render_offchain_pages(v3), pages, start, len),
         // The banner page, then the member's own body right after it.
         Body::BatchMember { index, total, inner } => {
             pages.buf[start] == super::batch::build_batch_banner_page(*index, *total)

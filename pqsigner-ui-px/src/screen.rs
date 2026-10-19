@@ -1355,8 +1355,8 @@ impl ScreenBuilder {
 }
 
 /// `Confirm?` sits here when the rule inserts it (DESIGN.md § Flow shape) —
-/// unless [`confirm_index`] moves it later (past a CoW order's legs, or past
-/// an off-chain flow's content).
+/// unless [`confirm_index`] moves it later (past a CoW order's legs, past
+/// an off-chain flow's content, or past a structured off-chain body).
 pub const CONFIRM_INDEX: usize = 5;
 /// … and the rule inserts it from this many detail-like screens.
 pub const CONFIRM_MIN_DETAILS: usize = 7;
@@ -1413,6 +1413,27 @@ fn first_fingerprint(visible: &[Screen]) -> Option<usize> {
     visible.iter().filter(|s| s.kind() != Some(Kind::Confirm)).position(|s| s.id() == FINGERPRINT_ID)
 }
 
+/// The hero ids of the structured off-chain signs (`SIGN_OFFCHAIN` kinds 4
+/// and 5: an EIP-712 `SafeTx`, a CoW `GPv2Order`). Their whole body is the
+/// substance being signed, so `Confirm?` follows it.
+const STRUCTURED_OFFCHAIN_HERO_IDS: [&[u8]; 2] = [b"SIGNSAFE", b"SIGNCOW"];
+
+/// `Confirm?` for a structured off-chain sign: immediately before the first
+/// `FP8213` screen, i.e. after the complete SafeTx / order body, so only the
+/// fingerprint and the account / wallet / mode context can be skipped from it
+/// (owner decision 2026-10-19). The same answer with or without the
+/// `Confirm?` already in `visible` (a `Confirm` before the banner is not
+/// counted). `None` for every other flow.
+fn structured_offchain_anchor(visible: &[Screen]) -> Option<usize> {
+    let hero = visible.first()?;
+    if hero.kind() != Some(Kind::Hero) || !STRUCTURED_OFFCHAIN_HERO_IDS.contains(&hero.id()) {
+        return None;
+    }
+    let banner = visible.iter().position(|s| s.id() == FINGERPRINT_ID)?;
+    let confirm_before = visible[..banner].iter().any(|s| s.kind() == Some(Kind::Confirm));
+    Some(banner - usize::from(confirm_before))
+}
+
 /// Where the `Confirm?` belongs in `visible` (when the detail count earns
 /// one): [`CONFIRM_INDEX`], except in a flow carrying a CoW order — a Safe
 /// flow (Safe hero) or the direct order route (CoW hero) — where it follows
@@ -1430,7 +1451,7 @@ fn first_fingerprint(visible: &[Screen]) -> Option<usize> {
 /// either way.
 #[must_use]
 pub fn confirm_index(visible: &[Screen]) -> usize {
-    if let Some(at) = offchain_anchor(visible) {
+    if let Some(at) = structured_offchain_anchor(visible).or_else(|| offchain_anchor(visible)) {
         return at.max(CONFIRM_INDEX);
     }
     let cow_host = visible
@@ -1983,6 +2004,26 @@ mod tests {
         ss
     }
 
+    /// A structured off-chain sign: hero, `n_body` body details, then the
+    /// off-chain trailers (fingerprint + context) and the returning hero.
+    fn structured_offchain_flow(hero_id: &[u8], icon: Icon, n_body: usize) -> Screens {
+        let detail = |id: &[u8]| {
+            ScreenBuilder::detail(id, icon, Side::Left, b"LABEL").tier(Tier::T22).line(b"value", Weight::Regular).finish().unwrap()
+        };
+        let mut ss = Screens::blank();
+        let hero = ScreenBuilder::hero(hero_id, icon, b"SIGN IT?").finish().unwrap();
+        ss.push(&hero).unwrap();
+        for i in 0..n_body {
+            let id = [b'B', b'0' + (i / 10) as u8, b'0' + (i % 10) as u8];
+            ss.push(&detail(&id)).unwrap();
+        }
+        for id in [b"FP8213".as_slice(), b"DIGEST", b"OFFSIGNR", b"WALLET", b"MODE"] {
+            ss.push(&detail(id)).unwrap();
+        }
+        ss.push(&hero).unwrap();
+        ss
+    }
+
     /// Insert, then check the index is the checker's and the same with the
     /// `Confirm?` in the transcript as without it.
     fn insert_offchain(ss: &mut Screens, icon: Icon) -> usize {
@@ -2043,6 +2084,45 @@ mod tests {
         // A SIGN hero without off-chain content or context keeps index 5.
         let mut plain = offchain_flow(Icon::Eth, &["INTENT", "F2", "F3", "F4", "F5", "F6", "FP8213", "DIGEST"]);
         assert_eq!(insert_offchain(&mut plain, Icon::Eth), CONFIRM_INDEX);
+    }
+
+    #[test]
+    fn structured_offchain_confirm_follows_the_whole_body() {
+        for (hero_id, icon) in [(b"SIGNSAFE".as_slice(), Icon::Safe), (b"SIGNCOW", Icon::Cowswap)] {
+            // A long body: Confirm? lands right before the fingerprint banner.
+            let mut ss = structured_offchain_flow(hero_id, icon, 12);
+            assert_eq!(ss.insert_confirm(icon), Ok(Some(13)));
+            assert_eq!(ss.as_slice()[12].id(), b"B11");
+            assert_eq!(ss.as_slice()[13].kind(), Some(Kind::Confirm));
+            assert_eq!(ss.as_slice()[14].id(), b"FP8213");
+            // Same answer with the Confirm? present (the checker's view).
+            assert_eq!(confirm_index(ss.as_slice()), 13);
+            assert_eq!(crate::check::check_flow(&ss), Ok(()));
+            // The checker rejects the index-5 placement for this hero.
+            let mut early = structured_offchain_flow(hero_id, icon, 12);
+            let len = early.len();
+            early.buf.copy_within(CONFIRM_INDEX..len, CONFIRM_INDEX + 1);
+            early.buf[CONFIRM_INDEX] = ScreenBuilder::confirm(icon).finish().unwrap();
+            early.set_len(len + 1);
+            assert!(matches!(
+                crate::check::check_flow(&early),
+                Err(crate::check::Violation::ConfirmMisplaced { at: Some(5), .. })
+            ));
+            // A short body never moves it before the design's index.
+            let mut short = structured_offchain_flow(hero_id, icon, 3);
+            assert_eq!(short.insert_confirm(icon), Ok(Some(CONFIRM_INDEX)));
+            assert_eq!(crate::check::check_flow(&short), Ok(()));
+        }
+        // A plain SIGN hero with the off-chain context trailer is typed data
+        // (`offchain_anchor`): the exit also takes the fingerprint's place.
+        let mut other = structured_offchain_flow(b"SIGN", Icon::Eth, 12);
+        assert_eq!(other.insert_confirm(Icon::Eth), Ok(Some(13)));
+        // A hero id outside both rules keeps index 5.
+        let mut ask = structured_offchain_flow(b"ASK", Icon::Eth, 12);
+        assert_eq!(ask.insert_confirm(Icon::Eth), Ok(Some(CONFIRM_INDEX)));
+        // ... including the Safe icon under an on-chain hero id.
+        let mut approve = structured_offchain_flow(b"APPROVE", Icon::Safe, 12);
+        assert_eq!(approve.insert_confirm(Icon::Safe), Ok(Some(CONFIRM_INDEX)));
     }
 
     #[test]

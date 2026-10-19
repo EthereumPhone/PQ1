@@ -37,7 +37,19 @@ one first, then pass `-` as the fixture and hand over the three pieces:
       --trailer /tmp/permit2_base.trailer.bin \
       --domain-separator 0x3b6f35e4... --primary-type-hash 0xaf1b0d30...
 
-(`--eip712-v3 -` for kind 3.) `--list` on the trailer tool shows every
+(`--eip712-v3 -` for kind 3.)
+
+Structured kinds 4 (SafeTx) and 5 (CoW order): build the payload with
+`tools/companion-stub/structured_offchain.py` (or take one from its
+`--emit-goldens` file) and pass it as hex or a binary file:
+
+  ./hid_sign_offchain.py --chain 1 --deployed --safe-tx PAYLOAD
+  ./hid_sign_offchain.py --chain 1 --deployed --cow-order PAYLOAD
+
+The tool recomputes H (safeTxHash / order digest) on the host with that
+module and records it as `structuredDigest` for fork_verify_offchain.py. Both
+kinds need --deployed (the device refuses an undeployed wallet) and a device
+advertising CAP_OFFCHAIN_SAFE_TX / CAP_OFFCHAIN_COW_ORDER. `--list` on the trailer tool shows every
 descriptor; Permit2 is entry [241] on Base. The packed `--eip712 FIXTURE`
 form — `domain_separator(32) || primary_type_hash(32) || trailer` in one
 file — still works.
@@ -63,6 +75,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from hid_sign import (
@@ -80,6 +93,8 @@ OFFCHAIN_KIND_RAW32 = 0
 OFFCHAIN_KIND_PERSONAL_SIGN = 1
 OFFCHAIN_KIND_EIP712_TYPED = 2
 OFFCHAIN_KIND_EIP712_TYPED_V3 = 3
+OFFCHAIN_KIND_SAFE_TX = 4
+OFFCHAIN_KIND_COW_ORDER = 5
 OFFCHAIN_FLAG_ACCOUNT_DEPLOYED = 0x01
 
 # proto/src/lib.rs bounds. The device refuses a payload past these, so building
@@ -179,6 +194,11 @@ def main() -> int:
                       help="same fixture layout as --eip712, sent as kind 3 "
                            "(EIP712_TYPED_V3): inserts the descriptor-selected "
                            "display-witness section before the trailer")
+    kind.add_argument("--safe-tx", default=None, metavar="PAYLOAD",
+                      help="kind 4 (EIP-712 SafeTx): payload hex or a binary file "
+                           "(tools/companion-stub/structured_offchain.py)")
+    kind.add_argument("--cow-order", default=None, metavar="PAYLOAD",
+                      help="kind 5 (CoW GPv2Order, eip1271): payload hex or a binary file")
     ap.add_argument("--encoded-data", default=None,
                     help="hex EIP-712 encodeData body for --eip712 (no type hash); default is the "
                          "e2e Delegation body abi.encode(0x42*20, 7, 2000000000)")
@@ -193,7 +213,7 @@ def main() -> int:
     ap.add_argument("--out", default="offchain_response.bin")
     args = ap.parse_args()
 
-    domain_separator = primary_type_hash = encoded_data = None
+    domain_separator = primary_type_hash = encoded_data = structured_digest = None
     if args.raw32 is not None:
         k = OFFCHAIN_KIND_RAW32
         payload = bytes.fromhex(args.raw32.removeprefix("0x"))
@@ -203,6 +223,21 @@ def main() -> int:
     elif args.personal is not None:
         k = OFFCHAIN_KIND_PERSONAL_SIGN
         payload = args.personal.encode()
+    elif args.safe_tx is not None or args.cow_order is not None:
+        k = OFFCHAIN_KIND_SAFE_TX if args.safe_tx is not None else OFFCHAIN_KIND_COW_ORDER
+        src = args.safe_tx if args.safe_tx is not None else args.cow_order
+        payload = (open(src, "rb").read() if os.path.exists(src)
+                   else bytes.fromhex(src.removeprefix("0x")))
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "companion-stub"))
+        import structured_offchain
+        try:
+            structured_digest = structured_offchain.structured_digest(k, payload, args.chain)
+        except (ValueError, KeyError) as e:
+            print(f"!! the device would refuse this payload: {e}")
+            return 2
+        if not args.deployed:
+            print("!! kinds 4/5 need --deployed")
+            return 2
     else:
         # usb-protocol-v2.md §0x62 kind 2:
         #   [u16 BE = 1][domain_separator 32][primary_type_hash 32]
@@ -270,7 +305,8 @@ def main() -> int:
             print(f"!! GET_WALLET_ADDRESS failed (SW=0x{sw:04x}, {len(data)} B)")
             return 1
         sender = data
-        kind_name = {0: "raw32", 1: "personal", 2: "eip712", 3: "eip712-v3"}[k]
+        kind_name = {0: "raw32", 1: "personal", 2: "eip712", 3: "eip712-v3",
+                     4: "safe-tx", 5: "cow-order"}[k]
         print(f"==> wallet 0x{sender.hex()}  chain {args.chain}  slot {args.slot}  "
               f"kind {kind_name}  payload {len(payload)} B  "
               f"{'deployed' if args.deployed else 'counterfactual (ERC-6492)'}")
@@ -304,6 +340,10 @@ def main() -> int:
         rec["domainSeparator"] = "0x" + domain_separator.hex()
         rec["primaryTypeHash"] = "0x" + primary_type_hash.hex()
         rec["encodedData"] = "0x" + encoded_data.hex()
+    if structured_digest is not None:
+        # H recomputed on the host (tools/companion-stub/structured_offchain.py),
+        # independently of the firmware: the device signs replay_safe_hash(H).
+        rec["structuredDigest"] = "0x" + structured_digest.hex()
     if args.deployed:
         rec["c10Sig"] = "0x" + body.hex()
         nonzero = sum(1 for b in body if b)

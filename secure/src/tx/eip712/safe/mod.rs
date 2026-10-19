@@ -41,7 +41,7 @@ use subtle::ConstantTimeEq;
 // Like the native CoW path, the Safe verifier depends only on keccak and
 // our own decode + digest helpers, all available on host.
 pub mod verify;
-pub use verify::{verify_and_bind_trailer, VerifiedSafeV1};
+pub use verify::{verify_and_bind_trailer, verify_offchain_safe_tx, VerifiedSafeV1};
 
 // Pure-logic Safe-mgmt decoder. Host-runnable; renderer lives in the
 // `#[cfg(not(test))]`-gated `crate::tx::display::safe_mgmt` shim.

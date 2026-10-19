@@ -831,6 +831,51 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 14 | `MODE` | 1 | id=MODE lab="MODE" cap="" \| r:DEPLOYED EIP1271 \| r:Use 6/65536 \| r:Gap: 6 | ![MODE](scenario-5p-raw32/14-mode-p0.png) |
 | 15 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN BLIND HASH?" | ![SIGN](scenario-5p-raw32/15-sign-p0.png) |
 
+## Scenario 5p-safe: EIP-712 SafeTx off-chain clear-sign
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGNSAFE` | 1 | id=SIGNSAFE lab="" cap="SIGN SAFE TX?" | ![SIGNSAFE](scenario-5p-safe/00-signsafe-p0.png) |
+| 1 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-safe/01-network-p0.png) |
+| 2 | `SAFEACCT` | 1 | id=SAFEACCT lab="SAFE ACCT" cap="" \| r:0x5a5A5a5a5A5a5a5a5a5 \| r:A5a5A5A5a5a5A5A5A5A5A | ![SAFEACCT](scenario-5p-safe/02-safeacct-p0.png) |
+| 3 | `TO` | 1 | id=TO lab="TO" cap="" \| r:0xABaBaBaBABab \| r:ABabAbAbABAbAB \| r:abababaBaBABaB | ![TO](scenario-5p-safe/03-to-p0.png) |
+| 4 | `RAWAMT` | 1 | id=RAWAMT lab="RAW AMOUNT" cap="" \| r:250000000 units | ![RAWAMT](scenario-5p-safe/04-rawamt-p0.png) |
+| 5 | `UNVERIF` | 1 | id=UNVERIF lab="UNVERIFIED" cap="" \| r:ERC-20 call \| r:token unknown | ![UNVERIF](scenario-5p-safe/05-unverif-p0.png) |
+| 6 | `CONTRACT` | 1 | id=CONTRACT lab="CONTRACT" cap="" \| r:0x7070707070707070707 \| r:070707070707070707070 | ![CONTRACT](scenario-5p-safe/06-contract-p0.png) |
+| 7 | `TXINFO` | 1 | id=TXINFO lab="TX INFO" cap="" \| r:Nonce: 7 \| r:Op: Call | ![TXINFO](scenario-5p-safe/07-txinfo-p0.png) |
+| 8 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-safe/08-confirm-p0.png) |
+| 9 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:SafeTxHash | ![FP8213](scenario-5p-safe/09-fp8213-p0.png) |
+| 10 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xe1d24ce6a7ab701a03db5a \| r:6d41b6a4013ff5e02de954 \| r:42a4903926184ff1b83f | ![DIGEST](scenario-5p-safe/10-digest-p0.png) |
+| 11 | `OFFSIGNR` | 1 | id=OFFSIGNR lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![OFFSIGNR](scenario-5p-safe/11-offsignr-p0.png) |
+| 12 | `WALLET` | 1 | id=WALLET lab="WALLET" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![WALLET](scenario-5p-safe/12-wallet-p0.png) |
+| 13 | `MODE` | 1 | id=MODE lab="MODE" cap="" \| r:DEPLOYED EIP1271 \| r:Use 4/65536 \| r:Gap: 4 | ![MODE](scenario-5p-safe/13-mode-p0.png) |
+| 14 | `SIGNSAFE` | 1 | id=SIGNSAFE lab="" cap="SIGN SAFE TX?" | ![SIGNSAFE](scenario-5p-safe/14-signsafe-p0.png) |
+
+## Scenario 5p-cow: CoW order off-chain clear-sign
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGNCOW` | 1 | id=SIGNCOW lab="" cap="SIGN COW ORDER?" | ![SIGNCOW](scenario-5p-cow/00-signcow-p0.png) |
+| 1 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-cow/01-network-p0.png) |
+| 2 | `ORDER` | 1 | id=ORDER lab="ORDER" cap="" \| r:SELL order | ![ORDER](scenario-5p-cow/02-order-p0.png) |
+| 3 | `SELLTOK` | 1 | id=SELLTOK lab="SELL TOKEN" cap="" \| r:0x1111111111111111111 \| r:111111111111111111111 | ![SELLTOK](scenario-5p-cow/03-selltok-p0.png) |
+| 4 | `SELLAMT` | 1 | id=SELLAMT lab="SELL" cap="" \| r:0x0000000000000000000000 \| r:0000000000000000000000 \| r:0000000000003b9aca00 | ![SELLAMT](scenario-5p-cow/04-sellamt-p0.png) |
+| 5 | `BUYTOK` | 1 | id=BUYTOK lab="BUY TOKEN" cap="" \| r:0x2222222222222222222 \| r:222222222222222222222 | ![BUYTOK](scenario-5p-cow/05-buytok-p0.png) |
+| 6 | `BUYAMT` | 1 | id=BUYAMT lab="BUY MIN" cap="" \| r:0x0000000000000000000000 \| r:0000000000000000000000 \| r:000006f05b59d3b20000 | ![BUYAMT](scenario-5p-cow/06-buyamt-p0.png) |
+| 7 | `RECEIVER` | 1 | id=RECEIVER lab="RECEIVER" cap="" \| r:= this wallet | ![RECEIVER](scenario-5p-cow/07-receiver-p0.png) |
+| 8 | `EXPIRES` | 1 | id=EXPIRES lab="EXPIRES" cap="" \| r:unix 1893456000 \| r:Partial: no | ![EXPIRES](scenario-5p-cow/08-expires-p0.png) |
+| 9 | `FEE` | 1 | id=FEE lab="FEE (SELL)" cap="" \| r:1000 units | ![FEE](scenario-5p-cow/09-fee-p0.png) |
+| 10 | `SOURCES` | 1 | id=SOURCES lab="SOURCES" cap="" \| r:sell: erc20 \| r:buy: erc20 | ![SOURCES](scenario-5p-cow/10-sources-p0.png) |
+| 11 | `APPDATA` | 1 | id=APPDATA lab="APP DATA" cap="" \| r:0x0000000000000000 \| r:0000000000000000 | ![APPDATA](scenario-5p-cow/11-appdata-p0.png) |
+| 11 | `APPDATA` | 2 | id=APPDATA lab="APP DATA" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![APPDATA](scenario-5p-cow/11-appdata-p1.png) |
+| 12 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-cow/12-confirm-p0.png) |
+| 13 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:EIP-712 Final | ![FP8213](scenario-5p-cow/13-fp8213-p0.png) |
+| 14 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x1805f253f3d2e2924406cc \| r:0bdf49a5a63a78af9bd129 \| r:ccb8a2725fc341568f0c | ![DIGEST](scenario-5p-cow/14-digest-p0.png) |
+| 15 | `OFFSIGNR` | 1 | id=OFFSIGNR lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![OFFSIGNR](scenario-5p-cow/15-offsignr-p0.png) |
+| 16 | `WALLET` | 1 | id=WALLET lab="WALLET" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![WALLET](scenario-5p-cow/16-wallet-p0.png) |
+| 17 | `MODE` | 1 | id=MODE lab="MODE" cap="" \| r:DEPLOYED EIP1271 \| r:Use 5/65536 \| r:Gap: 5 | ![MODE](scenario-5p-cow/17-mode-p0.png) |
+| 18 | `SIGNCOW` | 1 | id=SIGNCOW lab="" cap="SIGN COW ORDER?" | ![SIGNCOW](scenario-5p-cow/18-signcow-p0.png) |
+
 ## Scenario 5q: Safe-wrapped CoW presign clear-sign
 
 | # | id | page | record text | frame |

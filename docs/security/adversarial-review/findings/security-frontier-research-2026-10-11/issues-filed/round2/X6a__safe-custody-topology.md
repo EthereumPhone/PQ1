@@ -60,3 +60,6 @@ Documentation and a contract test. No firmware, no board change. A companion-sid
 
 ---
 <sub>**Provenance.** Security frontier research, 2026-10-11 (report items X6a and X6b, section 12). Report priority P2 is a research rating, not an owner decision. Code lines re-read at master `c2fab970` on 2026-10-12. Evidence: code reading and public sources; nothing was run on silicon. Report: `docs/security/adversarial-review/findings/security-frontier-research-2026-10-11.md`, committed on branch `docs/security-frontier-research-2026-10` and not yet on master when this was written, so this text is meant to stand alone.</sub>
+
+---
+**UPDATE 2026-10-19.** The "deferred" statement for the off-chain co-signature route is superseded: `SIGN_OFFCHAIN` kind 4 (`OFFCHAIN_KIND_SAFE_TX`) clear-signs an EIP-712 SafeTx off-chain with the native Safe verifier and painters (see the X6b update). The on-chain `approveHash` route remains the recommended custody route here: it works on Safe 1.3.0 / 1.4.1 / 1.5.0, while a kind-4 signature verifies only on Safe ≥ v1.5.0 and consumes one of the `MAX_OFFCHAIN_GAP` unbacked off-chain signatures (#179 still applies).

@@ -645,6 +645,14 @@ companion can therefore suppress semantic pages by relabelling such a hash as
 RAW32; the device warns `! BLIND RAW32` and shows the complete hash. Production
 should disable RAW32 unless compatibility explicitly accepts that residual.
 
+UPDATE 2026-10-19: two typed shapes no longer need a descriptor. An EIP-712
+`SafeTx` (Safe ≥ v1.3.0 domain) and a CoW `GPv2Order` (the `eip1271` scheme)
+have native off-chain kinds — `kind=4` / `kind=5`, gated by
+`GET_DEVICE_INFO` capability bits 3 / 4 — that render them with the Safe /
+CoW decoders of the UserOp path and sign exactly what RAW32 would sign for
+the same hash (`docs/companion/usb-protocol-v2.md` §0x62). Route those two
+shapes there before the descriptor lookup when the device advertises the bit.
+
 ### 6.4 CMD_SIGN_OFFCHAIN — kind=0 / kind=1 fingerprint pages
 
 For `kind=0` (raw32) and `kind=1` (personal_sign), no ERC-7730

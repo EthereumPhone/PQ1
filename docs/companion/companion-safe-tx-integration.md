@@ -390,6 +390,21 @@ so your wire shape doesn't need to change when they ship:
   EIP-712 message". A future trailer will carry the original typed
   data so the prompt can be semantic.
 
+**UPDATE 2026-10-19 — off-chain SafeTx signatures ship.** A Safe
+*transaction* this wallet co-signs off-chain (EIP-712 `SafeTx`, the
+Safe{Wallet} / Transaction Service "sign" flow for a contract owner) is
+clear-signed by `SIGN_OFFCHAIN` kind 4 (`OFFCHAIN_KIND_SAFE_TX`, gated by
+capability bit 3). Send the same `safe_v1` bytes as the approveHash trailer
+(canonical SafeTx + raw inner data) plus the optional ERC-20, CoW-order and
+name evidence (`docs/companion/usb-protocol-v2.md` §0x62); the device shows
+the full Safe transaction — the approveHash screens under a
+`SIGN SAFE TX?` banner — and signs `replay_safe_hash(safeTxHash)`, the same
+value RAW32 would sign. Do not send a SafeTx hash as RAW32 to a device that
+advertises the bit, and never fall back to RAW32 after a kind-4 refusal.
+Only Safe ≥ v1.5.0 can verify the signature (v1.3.0 / v1.4.1 call the legacy
+`isValidSignature(bytes,bytes)`); the on-chain approveHash route works on all
+three. Safe *messages* (`SafeMessage`) are not covered.
+
 When in doubt about whether a Safe surface is in scope, check the
 selector table above and the companion test fixtures in
 [`secure/src/tx/eip712/safe/extra_tests.rs`](../../secure/src/tx/eip712/safe/extra_tests.rs).

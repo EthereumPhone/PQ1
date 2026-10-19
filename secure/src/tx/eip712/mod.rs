@@ -17,6 +17,9 @@ use sha3::{Digest, Keccak256};
 
 pub mod cowswap;
 pub mod safe;
+// The signed value of the structured off-chain kinds (SafeTx, CoW order),
+// recomputed from the wire payload — pure, host-tested against RAW32.
+pub mod offchain_structured;
 // cowswap_display / safe_display pull in `crate::ui` (hardware display
 // primitives), so they're gated out of host test builds. Pure EIP-712
 // logic (`cowswap`, `safe`, keccak primitives above) is always compiled

@@ -157,19 +157,41 @@ pub fn amounts_are_exactly_renderable(canonical: &[u8; 204], sell: &CowLeg, buy:
 /// is 2 pages in both modes, so the body is a constant 8 pages and the
 /// full flow is 10 pages (header + 8 + confirm).
 pub fn render_cowswap_pages(canonical: &[u8; 204], sell: &CowLeg, buy: &CowLeg) -> Pages {
+    render_framed(canonical, sell, buy, "Sign CowSwap?", None)
+}
+
+/// The zero-receiver wording of an off-chain (`eip1271`) order: the
+/// signing wallet is the order owner, so GPv2 pays the proceeds to it.
+pub const OFFCHAIN_OWNER_LABEL: &str = "(= this wallet)";
+
+/// Produce the confirmation flow for a CoW order this wallet signs
+/// OFF-CHAIN (`SIGN_OFFCHAIN` kind 5, the CoW `eip1271` scheme). Same pages
+/// as [`render_cowswap_pages`] except the banner and the zero-receiver row,
+/// which names this wallet (the order owner) instead of the zero address.
+pub fn render_cowswap_offchain_pages(canonical: &[u8; 204], sell: &CowLeg, buy: &CowLeg) -> Pages {
+    render_framed(canonical, sell, buy, "Sign CoW order?", Some(OFFCHAIN_OWNER_LABEL))
+}
+
+fn render_framed(
+    canonical: &[u8; 204],
+    sell: &CowLeg,
+    buy: &CowLeg,
+    banner: &str,
+    owner_label: Option<&str>,
+) -> Pages {
     let total = 1 + order_body_page_count(sell, buy) + 1;
     let mut pages = Pages::empty_with_len(total);
 
     let chain_id = read_chain_id(canonical);
 
     // ── Page 0: Header / chain / chain-name / kind ────────────────────
-    write_line(&mut pages.row_mut(0, 0), "Sign CowSwap?");
+    write_line(&mut pages.row_mut(0, 0), banner);
     let [_, chain_row, chain_continuation, _] = pages.page_mut(0);
     write_chain_rows(chain_row, chain_continuation, chain_id);
     write_line(&mut pages.row_mut(0, 3), order_kind_label(canonical));
 
     // ── Order body (shared with the Safe-wrapped flow) ───────────────
-    let next = append_order_body_pages(&mut pages, 1, canonical, sell, buy, None);
+    let next = append_order_body_pages(&mut pages, 1, canonical, sell, buy, owner_label);
     debug_assert_eq!(next, total - 1);
 
     // ── Final page: Confirm ──────────────────────────────────────────
