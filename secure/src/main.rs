@@ -1043,7 +1043,13 @@ fn setup_systick() {
 /// #989: the SE050 platform-SCP enforcement failed. Show "SE050 FAULT /
 /// EXXXX HALT" (code from `PlatformScpError::code`, first-boot code space,
 /// `first-boot-provisioning.md`) and stop before any secret is loaded.
-#[cfg(all(feature = "se050-platform-scp-required", feature = "stm32u585", not(test)))]
+#[cfg(all(
+    feature = "se050-platform-scp-required",
+    feature = "stm32u585",
+    not(feature = "prodtest"),
+    not(feature = "factory-provisioning"),
+    not(test)
+))]
 fn halt_se050_platform_scp(e: se050::PlatformScpError) -> ! {
     secure_log!("[S] SE050 platform-SCP enforcement FAILED: {:?} — HALT", e);
     let raw = e.code();
@@ -2127,16 +2133,17 @@ fn main() -> ! {
         first_boot::run_post_lock_provisioning(se);
     }
 
-    // #989 — SE050 platform-SCP enforcement, every boot, before any secret is
-    // loaded (PBS, PIN reconcile, wipe resume, wizard, unlock). The SE050E2
-    // ships SCP_NOT_REQUIRED: a keyless bus party gets the version, the full
-    // object inventory and SE randomness in plaintext, and `half_E` rests on
-    // per-object policy alone. Measure once with a plain probe (fresh link, no
-    // session); unless the chip already refuses AND our 0x7FFF0207 credential
-    // is in place, set SCP_REQUIRED. Runs after Phase B so the BHK the
-    // credential derives from is loaded, and the SCP03 keys are the final
-    // ones. A definitive failure halts with "SE050 FAULT / E087x" and no
-    // secret ever leaves the chips.
+    // #989 — SE050 platform-SCP enforcement, every boot, before the wallet
+    // path touches a secret (PBS load, PIN reconcile, wipe resume, wizard,
+    // unlock). The SE050E2 ships SCP_NOT_REQUIRED: a keyless bus party gets
+    // the version, the full object inventory and SE randomness in plaintext,
+    // and `half_E` rests on per-object policy alone. Every boot, over SCP03
+    // only: open a session with our 0x7FFF0207 credential (created if absent,
+    // verified otherwise — a squatter's credential never passes) and set
+    // SCP_REQUIRED. No decision rests on a plaintext reply. Runs after Phase B
+    // (whose SE050 traffic is all SCP03) so the BHK the credential derives
+    // from is loaded and the SCP03 keys are the final ones. A definitive
+    // failure halts with "SE050 FAULT / E087x".
     #[cfg(all(
         feature = "se050-platform-scp-required",
         feature = "stm32u585",
@@ -2149,10 +2156,9 @@ fn main() -> ! {
         let se050 = &mut (*core::ptr::addr_of_mut!(SE)).se050;
         #[cfg(not(feature = "dual-se"))]
         let se050 = &mut *core::ptr::addr_of_mut!(SE);
-        let measured = se050.measure_platform_scp();
-        match se050.ensure_platform_scp_required(measured) {
+        match se050.ensure_platform_scp_required() {
             Ok(_outcome) => {
-                secure_log!("[S] SE050 platform SCP required ({:?}, probe {:?})", _outcome, measured);
+                secure_log!("[S] SE050 platform SCP required ({:?})", _outcome);
             }
             Err(e) => halt_se050_platform_scp(e),
         }

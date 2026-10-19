@@ -2822,11 +2822,27 @@ fn positive_preshield_never_downgrades_a_live_session() {
     assert_eq!(plain_tx_count(), before, "a live session is never downgraded");
 }
 
-/// `name`'s body: from `fn name(` to the first line that is exactly `}`.
+/// `sig`'s item, from the signature to its matching closing brace (brace
+/// counting, so it also stops correctly at the end of an indented method).
+/// Braces inside string/char literals are rare in this code and would only
+/// make a pin fail loudly, never pass vacuously.
 fn fn_body<'a>(src: &'a str, sig: &str) -> &'a str {
     let start = src.find(sig).unwrap_or_else(|| panic!("{sig} missing"));
-    let len = src[start..].find("\n}\n").expect("body end");
-    &src[start..start + len]
+    let open = start + src[start..].find('{').expect("item body");
+    let mut depth = 0usize;
+    for (i, c) in src[open..].char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &src[start..open + i + 1];
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("{sig}: unbalanced braces")
 }
 
 /// `src` with `//` comments removed, line by line.

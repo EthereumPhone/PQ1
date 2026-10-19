@@ -283,6 +283,28 @@ the firmware's assumption is wrong on this chip.
 | P4 | **`pin_attribute_read_refused_on_user_userid`** | Safe | **A1 silicon regression check (renamed 2026-05-28).** Provision a user-PIN-gated UserID with the standard two-entry policy, then call `ReadObjectAttributes` and assert it is REFUSED (driver helper returns `None`). Codifies Finding A1: B-U585I-IOT02A treats attribute reads as policy-gated, so the boot-time MCU↔SE050 attempt-counter reconcile via `pin_attempt_count_raw` is correctly skipped. FAIL = chip honoured the read → re-enable the SE050 leg of the reconcile in `Se050::pin_attempt_count_raw`. Originally `pin_attribute_read_does_not_burn`, repurposed because A1 made the original probe untestable. |
 | P5 | **`pin_unlimited_no_lockout`** | Destructive | **S-7a silicon closure.** Provision a UserID via `write_userid_unlimited` (TAG_MAX_ATTEMPTS omitted per AN12413 §4.7.1.5), then burn 100 consecutive wrong PINs in a loop. EVERY attempt MUST return PinIncorrect; a post-loop correct PIN MUST still open a session (sanity that the chip didn't soft-lock). PASS = production unlimited-UserID code paths (`ADMIN_WIPE_OBJ`, `DURESS_USERID_OBJ`, E2E test admins per `mod.rs:482-510`) are silicon-validated. FAIL = a single `AuthMethodBlocked` anywhere in the loop, or post-loop correct PIN refused → silicon enforces an implicit cap and the omitted-TLV form is unsafe on this chip. (Behavioural inference only — `(max=0)` marker reads dropped per A1.) |
 
+### Platform-SCP additions (2026-10-19, #989) — `tests/policy.rs`
+
+Appended at the end of `ALL_TESTS` (not slotted in by tier): a test's scratch
+OIDs follow its catalog index, so inserting would move every later test's
+carve-out. Run 6B.23 while the die is still `SCP_NOT_REQUIRED` — under
+`SCP_REQUIRED` every plain command is refused and its plain leg proves nothing
+about the policy, so the test then FAILS as `6B.23 INCONCLUSIVE` rather than
+passing. The two negatives send `SCP_NOT_REQUIRED` (a no-op on a factory die
+even if wrongly accepted) and pass only on a policy refusal SW
+(`0x6982`/`0x6985`/`0x6986`), not on a framing error.
+
+| Name | Tier | What it asserts |
+|---|---|---|
+| **`policy_halfe_plain_refused`** (DVT 6B.23) | Safe | The exact production `half_E` policy (`write_binary_write_once`: user `READ\|DELETE\|REQUIRE_SM`, admin `DELETE\|REQUIRE_SM`) on a **present** carve-out object. After an SE rail power cycle, plain (no-SCP03) read / write / delete are refused and the object survives; a session-less SCP03 read is refused; an admin session cannot read; a user session reads the untouched value and cannot overwrite it; the admin path deletes it. Closes the gap the 2026-10-19 probe left (its plain `Read(ENTROPY_OBJ)` hit an absent object). |
+| **`platform_scp_set_refused_without_session`** (6B.5) | Safe | `SetPlatformSCPRequest` with only platform SCP03 (no session) is refused. |
+| **`platform_scp_set_refused_from_carveout_session`** (6B.5) | Safe | The same command from an ordinary UserID session is refused: only a `RESERVED_ID_PLATFORM_SCP` (`0x7FFF0207`) session may change the requirement. |
+
+Setting and clearing the requirement itself is NOT a stress test (it is
+persistent, device-level state outside the carve-out): use the UID-bound bench
+tool, `make se050-platform-scp-hw ACTION=status|require|release|cycle
+SE050_UID=<6B.2 hex>`.
+
 **Highest-priority first run after the S-5/S-6 commits:** tests #3
 and #7. Run individually:
 

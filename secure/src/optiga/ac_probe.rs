@@ -197,10 +197,12 @@ impl OptigaTrustM {
 
             // 4. Negative A: shielded read, NO auth → must be refused.
             let mut buf = [0u8; 32];
-            if apdu::get_data_object(&mut self.ifx, &mut self.shield, PROBE_STRICT, 0, 32, &mut buf)
-                .is_ok()
-            {
-                return Err(("negA-read-noauth", None));
+            // Only a chip verdict counts as "refused": a transport or shield
+            // error is inconclusive, not proof of the access condition.
+            match apdu::get_data_object(&mut self.ifx, &mut self.shield, PROBE_STRICT, 0, 32, &mut buf) {
+                Ok(_) => return Err(("negA-read-noauth", None)),
+                Err(OptigaError::Status(_)) => {}
+                Err(e) => return Err(("negA-inconclusive", Some(e))),
             }
             secure_log!("[AC-PROBE] negA OK: shielded read without auth refused");
             self.ac_probe_fresh_session()?;

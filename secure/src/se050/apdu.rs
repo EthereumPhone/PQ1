@@ -1152,17 +1152,14 @@ pub unsafe fn set_platform_scp_request_no_session_stress(
     send_apdu(t1, scp03, cmd, &mut resp).map(|_| ())
 }
 
-/// The one plain applet APDU a production image sends (#989): a fixed
-/// `CheckObjectExists(UNIQUE_ID 0x7FFF0206)`, after a fresh link bring-up and
-/// before SCP03, to measure the platform-SCP requirement. The answer is
-/// public (the unique-ID object exists on every SE050). Takes no caller bytes.
-/// Returns the SW and up to 3 body bytes (`41 01 01` = exists).
-#[cfg(any(
-    feature = "se050-platform-scp-required",
-    feature = "se050-platform-scp-tool",
-    feature = "se050-probe",
-    feature = "se050-stress"
-))]
+/// Bench measurement of the platform-SCP requirement (#989; probe, tool and
+/// stress images only — a production image sends no plain applet APDU): a
+/// fixed `CheckObjectExists(UNIQUE_ID 0x7FFF0206)` after a fresh link
+/// bring-up, before SCP03. The answer is public (the unique-ID object exists
+/// on every SE050) and unauthenticated, so it is evidence, never a decision
+/// input. Takes no caller bytes. Returns the SW and up to 3 body bytes
+/// (`41 01 01` = exists).
+#[cfg(any(feature = "se050-platform-scp-tool", feature = "se050-probe", feature = "se050-stress"))]
 pub unsafe fn platform_scp_plain_probe(
     t1: &mut T1State,
 ) -> Result<(u16, [u8; 3], usize), Se050Error> {

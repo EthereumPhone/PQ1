@@ -4344,10 +4344,10 @@ optiga-probe = ["optiga-trust-m"]
 se050-probe = ["se050"]
 
 # #989: enforce SCP_REQUIRED on the SE050 applet (AN12413 §4.6.2). Every boot,
-# before any secret is loaded, measures the platform-SCP requirement with one
-# fixed plain CheckExists and, if the chip still answers plain commands,
-# creates the RESERVED_ID_PLATFORM_SCP (0x7FFF0207) credential and sets
-# SCP_REQUIRED; failure halts with an SE050 FAULT code (E0871..E0874).
+# before the wallet path touches a secret, over SCP03 only: opens a session with
+# the RESERVED_ID_PLATFORM_SCP (0x7FFF0207) credential (created if absent,
+# verified otherwise) and sets SCP_REQUIRED. No plain APDU, no decision on an
+# unauthenticated reply; failure halts with an SE050 FAULT code (E0871..E0874).
 # REQUIRED in production (`nsc/mod.rs` fence, `PROD_REQUIRED`).
 se050-platform-scp-required = ["se050"]
 
