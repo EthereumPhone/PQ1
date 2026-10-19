@@ -1355,7 +1355,8 @@ impl ScreenBuilder {
 }
 
 /// `Confirm?` sits here when the rule inserts it (DESIGN.md § Flow shape) —
-/// unless [`confirm_index`] moves it past a CoW order's legs.
+/// unless [`confirm_index`] moves it later (past a CoW order's legs, or past
+/// an off-chain flow's content).
 pub const CONFIRM_INDEX: usize = 5;
 /// … and the rule inserts it from this many detail-like screens.
 pub const CONFIRM_MIN_DETAILS: usize = 7;
@@ -1363,6 +1364,54 @@ pub const CONFIRM_MIN_DETAILS: usize = 7;
 /// The ids of a CoW order's buy-leg screens (`cowswap_screens::emit_leg`):
 /// `BUY` / `BUYTOK` for a decoded leg, `BUYTOK` / `BUYAMT` for a hex one.
 const COW_BUY_LEG_IDS: [&[u8]; 2] = [b"BUYTOK", b"BUYAMT"];
+
+/// The first ERC-8213 fingerprint banner (`trailer_screens`).
+const FINGERPRINT_ID: &[u8] = b"FP8213";
+/// The off-chain signing-context trailer (`trailer_screens`, RAW32 and
+/// EIP-712 typed data only).
+const OFFCHAIN_CONTEXT_ID: &[u8] = b"OFFSIGNR";
+
+/// An off-chain message's content screen (`offchain_screens`): `MSG`,
+/// `MSG2`, … for a `personal_sign` message, `HASH` for a RAW32 hash.
+fn is_offchain_content_id(id: &[u8]) -> bool {
+    id == b"HASH" || id.strip_prefix(b"MSG").is_some_and(|n| n.iter().all(u8::is_ascii_digit))
+}
+
+/// Where an off-chain (EIP-1271) flow's `Confirm?` belongs, counted over
+/// the transcript with every `Confirm?` removed — so the answer is the same
+/// with or without it (it sits after everything counted here).
+///
+/// Off-chain flows open on a `SIGN` hero over the Eth or Blind disc. The
+/// position is the screen after the message (or the RAW32 hash) — and after
+/// the `MODE` screen that directly follows it, so a loud `! UNDEPLOYED` is
+/// seen before the early exit. Typed data carries no message screens; its
+/// fields are the whole body, so its `Confirm?` takes the first fingerprint's
+/// place (only an off-chain flow has the `OFFSIGNR` context trailer).
+/// `None` for every other flow.
+fn offchain_anchor(visible: &[Screen]) -> Option<usize> {
+    let hero = visible.first()?;
+    if hero.kind() != Some(Kind::Hero) || hero.id() != b"SIGN" || !matches!(hero.icon(), Some(Icon::Eth | Icon::Blind)) {
+        return None;
+    }
+    let mut after_content = None;
+    let mut context = false;
+    for (i, s) in visible.iter().filter(|s| s.kind() != Some(Kind::Confirm)).enumerate() {
+        let id = s.id();
+        let content = s.kind().is_some_and(Kind::is_detail_like) && is_offchain_content_id(id);
+        // The MODE screen right behind the content counts with it.
+        if content || (id == b"MODE" && after_content == Some(i)) {
+            after_content = Some(i + 1);
+        }
+        context |= id == OFFCHAIN_CONTEXT_ID;
+    }
+    after_content.or_else(|| if context { first_fingerprint(visible) } else { None })
+}
+
+/// The index of the first ERC-8213 fingerprint banner, counted over the
+/// transcript with every `Confirm?` removed (see [`offchain_anchor`]).
+fn first_fingerprint(visible: &[Screen]) -> Option<usize> {
+    visible.iter().filter(|s| s.kind() != Some(Kind::Confirm)).position(|s| s.id() == FINGERPRINT_ID)
+}
 
 /// Where the `Confirm?` belongs in `visible` (when the detail count earns
 /// one): [`CONFIRM_INDEX`], except in a flow carrying a CoW order — a Safe
@@ -1372,11 +1421,18 @@ const COW_BUY_LEG_IDS: [&[u8]; 2] = [b"BUYTOK", b"BUYAMT"];
 /// then direct; a deliberate departure from the upstream "always the 6th
 /// screen" rule, CoW orders only).
 ///
+/// An off-chain (EIP-1271) flow puts it after the content being signed —
+/// the message, the RAW32 hash, or a typed-data body ([`offchain_anchor`];
+/// owner decision 2026-10-19: the substance is read before the early exit).
+///
 /// Computed over a transcript with or without the `Confirm?` in it: a
 /// correctly placed one sits after the leg, so the leg's index is the same
 /// either way.
 #[must_use]
 pub fn confirm_index(visible: &[Screen]) -> usize {
+    if let Some(at) = offchain_anchor(visible) {
+        return at.max(CONFIRM_INDEX);
+    }
     let cow_host = visible
         .first()
         .is_some_and(|h| h.kind() == Some(Kind::Hero) && matches!(h.icon(), Some(Icon::Safe | Icon::Cowswap)));
@@ -1532,7 +1588,8 @@ impl Screens {
     /// Insert the mid-flow `Confirm?` per DESIGN.md § Flow shape: when the
     /// transcript carries at least seven detail-like screens, a `Confirm`
     /// screen becomes index 5 (the sixth screen) — or, in a CoW order (direct
-    /// or Safe-wrapped), the screen after the buy leg ([`confirm_index`]). Returns the index inserted
+    /// or Safe-wrapped), the screen after the buy leg, and in an off-chain
+    /// flow the screen after its content ([`confirm_index`]). Returns the index inserted
     /// at, `None` when the rule does not apply, `Err` when the buffer is full
     /// or a confirm screen is already present.
     pub fn insert_confirm(&mut self, icon: Icon) -> Result<Option<usize>, ()> {
@@ -1906,6 +1963,86 @@ mod tests {
         let mut other = safe_cow_flow(Icon::Eth, [b"SELL", b"SELLTOK", b"BUY", b"BUYTOK"]);
         assert_eq!(other.insert_confirm(Icon::Eth), Ok(Some(CONFIRM_INDEX)));
         assert_eq!(crate::check::check_flow(&other), Ok(()));
+    }
+
+    /// An off-chain flow: `SIGN` hero over `icon`, then `ids`, then the
+    /// returning hero.
+    fn offchain_flow(icon: Icon, ids: &[&str]) -> Screens {
+        let mut ss = Screens::blank();
+        let hero = ScreenBuilder::hero(b"SIGN", icon, b"SIGN EIP-1271?").finish().unwrap();
+        ss.push(&hero).unwrap();
+        for id in ids {
+            let s = ScreenBuilder::detail(id.as_bytes(), icon, Side::Left, b"LABEL")
+                .tier(Tier::T22)
+                .line(b"value", Weight::Regular)
+                .finish()
+                .unwrap();
+            ss.push(&s).unwrap();
+        }
+        ss.push(&hero).unwrap();
+        ss
+    }
+
+    /// Insert, then check the index is the checker's and the same with the
+    /// `Confirm?` in the transcript as without it.
+    fn insert_offchain(ss: &mut Screens, icon: Icon) -> usize {
+        let before = confirm_index(ss.as_slice());
+        let at = ss.insert_confirm(icon).unwrap().expect("inserted");
+        assert_eq!(at, before);
+        assert_eq!(confirm_index(ss.as_slice()), at);
+        assert_eq!(crate::check::check_flow(ss), Ok(()));
+        at
+    }
+
+    const SIX_MSG: [&str; 13] = [
+        "MSG", "MSG2", "MSG3", "MSG4", "MSG5", "MSG6", "MODE", "NETWORK", "ACCOUNT", "SIGNER", "KEYS", "FP8213", "DIGEST",
+    ];
+
+    #[test]
+    fn offchain_confirm_follows_the_content() {
+        // One message screen: the content ends early, so index 5 holds.
+        let mut one = offchain_flow(Icon::Eth, &["MSG", "MODE", "NETWORK", "ACCOUNT", "SIGNER", "KEYS", "FP8213", "DIGEST"]);
+        assert_eq!(insert_offchain(&mut one, Icon::Eth), CONFIRM_INDEX);
+        // Six message screens: after the last one and the MODE behind it.
+        let mut six = offchain_flow(Icon::Eth, &SIX_MSG);
+        assert_eq!(insert_offchain(&mut six, Icon::Eth), 8);
+        assert_eq!(six.as_slice()[7].id(), b"MODE");
+        // A hex message opens on its NOT TEXT warning; same rule.
+        let mut hex = offchain_flow(
+            Icon::Eth,
+            &["NOTTEXT", "MSG", "MSG2", "MSG3", "MSG4", "MSG5", "MODE", "NETWORK", "ACCOUNT", "SIGNER", "KEYS", "FP8213", "DIGEST"],
+        );
+        assert_eq!(insert_offchain(&mut hex, Icon::Eth), 8);
+        // RAW32: the hash is read before the exit.
+        let mut raw = offchain_flow(
+            Icon::Blind,
+            &["BLIND", "HASH", "MODE", "NETWORK", "ACCOUNT", "KEYS", "FP8213", "DIGEST", "OFFSIGNR", "WALLET", "MODE"],
+        );
+        assert_eq!(insert_offchain(&mut raw, Icon::Blind), CONFIRM_INDEX);
+        // Typed data: every field before the exit, which takes the first
+        // fingerprint's place.
+        let mut typed = offchain_flow(
+            Icon::Eth,
+            &["DEV", "INTENT", "F2", "F3", "F4", "F5", "NETWORK", "FP8213", "DIGEST", "OFFSIGNR", "WALLET", "MODE"],
+        );
+        assert_eq!(insert_offchain(&mut typed, Icon::Eth), 8);
+        assert_eq!(typed.as_slice()[9].id(), b"FP8213");
+        // The checker rejects the old index-5 placement.
+        let mut old = offchain_flow(Icon::Eth, &SIX_MSG);
+        let len = old.len();
+        old.buf.copy_within(CONFIRM_INDEX..len, CONFIRM_INDEX + 1);
+        old.buf[CONFIRM_INDEX] = ScreenBuilder::confirm(Icon::Eth).finish().unwrap();
+        old.set_len(len + 1);
+        assert!(matches!(
+            crate::check::check_flow(&old),
+            Err(crate::check::Violation::ConfirmMisplaced { at: Some(5), .. })
+        ));
+        // Message ids under any other hero (a Safe ask) do not move it.
+        let mut safe = safe_cow_flow(Icon::Safe, [b"MSG", b"MSG2", b"MSG3", b"MSG4"]);
+        assert_eq!(safe.insert_confirm(Icon::Safe), Ok(Some(CONFIRM_INDEX)));
+        // A SIGN hero without off-chain content or context keeps index 5.
+        let mut plain = offchain_flow(Icon::Eth, &["INTENT", "F2", "F3", "F4", "F5", "F6", "FP8213", "DIGEST"]);
+        assert_eq!(insert_offchain(&mut plain, Icon::Eth), CONFIRM_INDEX);
     }
 
     #[test]

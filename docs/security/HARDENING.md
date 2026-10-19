@@ -178,7 +178,7 @@ screen-golden hashes in `secure/src/display_under_test/` on 2026-10-14):
 | ERC-7730 (`erc7730/uniswap_*`) | dev-build warning, intent, native value, swap input | **both tokens, minimum out, beneficiary**, pool fee, price limit, network, fees, signer, ERC-8213 |
 | Named blind call (`blind_sign/unknown_call_named`) | network, blind banner, function, target | **native value**, calldata, data hash, fees, signer, ERC-8213 |
 | Typed call (`typed_call/stake`) | network, function, first two arguments | **third argument, target**, fees, signer, ERC-8213 |
-| RAW32 off-chain (`eip1271/raw32`) | network, blind banner, mode, account | **the hash being signed**, key usage, ERC-8213 digests, wallet |
+| RAW32 off-chain (`eip1271/raw32`) — superseded 2026-10-19, see below | network, blind banner, mode, account | ~~**the hash being signed**~~ key usage, ERC-8213 digests, wallet |
 | Batch member (`batch/member_*`) | batch banner, network, recipient, amount | contract, fees, signer, ERC-8213 |
 
 The bold entries are the substance of the request, not trailers. What still
@@ -189,6 +189,38 @@ what is decoded and drawn — it can only bet that the user stops looking at
 substance (the bold entries) so that only trailers are skippable, and stop
 drawing the sign hint on the opening ask, where a chord still does nothing
 and gives no feedback.
+
+UPDATE 2026-10-19 (off-chain flows; owner decision after the Ambire device
+harness run): the candidate follow-up above is done for the three off-chain
+kinds. `confirm_index` now places `Confirm?` after the content being signed
+for a `SIGN` hero over the Eth or Blind disc (`screen::offchain_anchor`): the
+`personal_sign` message — every `MSG` screen — and the `MODE` screen right
+behind it (so a loud `! UNDEPLOYED` is seen too), the RAW32 hash, and for
+EIP-712 typed data (recognised by its `OFFSIGNR` context trailer) every
+field, `Confirm?` taking the first fingerprint's place. The emitter
+(`offchain_screens::emit`) now opens on the content. Never earlier than
+index 5. Counted with every `Confirm?` removed, so the inserter and the two
+checkers (`check_flow`, `px_lift::structure_ok`) agree. Pinned by
+`screen::tests::offchain_confirm_follows_the_content` and the id-order
+asserts in `structured_screens_render_pure_tests.rs`.
+
+| Flow (fixture) | Shown before `Confirm?` | Skipped when signing from it |
+|---|---|---|
+| `personal_sign` (`eip1271/personal_counterfactual`, `personal_siwe`, `personal_hex`) | the whole message (`! NOT TEXT` + hex for a non-text one), mode, network, account | signer, key usage, ERC-8213 digest |
+| RAW32 off-chain (`eip1271/raw32`) | blind banner, **the hash being signed**, mode, network | account, key usage, ERC-8213 digests, signing context |
+| EIP-712 typed (`eip1271/typed_ballot`) | dev-build warning, intent, every field, network | ERC-8213 digest, signing context (account, wallet, mode) |
+
+Same day, `personal_sign` display (both painters, one classifier
+`eip1271::personal_sign_view`): a message whose bytes are all printable ASCII
+or a line feed is text, and a line feed now starts a new line (SIWE is
+readable; it used to show `?`). Anything else — CR, TAB, other controls, DEL,
+any byte >= 0x80, so all non-ASCII UTF-8 — is shown as hex (8 bytes a line)
+behind a pulsing `! NOT TEXT` screen / a `! NOT TEXT (HEX)` banner, instead of
+the old `?` substitution that hid which bytes were signed. Budget: 72 text
+rows or 512 hex bytes (`MAX_OFFCHAIN_PERSONAL_SIGN_{TEXT_ROWS,HEX_LEN}`); a
+message over it is refused before the first page-123 write (source pin
+`negative_sign_offchain_display_budget_gate_precedes_first_flash_write`). A
+companion sends a longer message as RAW32.
 
 CORRECTION to the 2026-09-24 UPDATE: the pin was never in
 `fsbl-tests/tests/paired_constants.rs`, which recorded the pair as

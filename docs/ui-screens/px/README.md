@@ -733,10 +733,10 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | 3 | `F2` | 1 | id=F2 lab="DELEGATEE" cap="" \| r:0x4242424242424242424 \| r:242424242424242424242 | ![F2](scenario-5p/03-f2-p0.png) |
 | 4 | `F3` | 1 | id=F3 lab="NONCE" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F3](scenario-5p/04-f3-p0.png) |
 | 4 | `F3` | 2 | id=F3 lab="NONCE" cap="" \| r:0000000000000000 \| r:0000000000000007 | ![F3](scenario-5p/04-f3-p1.png) |
-| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p/05-confirm-p0.png) |
-| 6 | `F5` | 1 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F5](scenario-5p/06-f5-p0.png) |
-| 6 | `F5` | 2 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000077359400 | ![F5](scenario-5p/06-f5-p1.png) |
-| 7 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p/07-network-p0.png) |
+| 5 | `F5` | 1 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000000000000 | ![F5](scenario-5p/05-f5-p0.png) |
+| 5 | `F5` | 2 | id=F5 lab="EXPIRY" cap="" \| r:0000000000000000 \| r:0000000077359400 | ![F5](scenario-5p/05-f5-p1.png) |
+| 6 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p/06-network-p0.png) |
+| 7 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p/07-confirm-p0.png) |
 | 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:EIP-712 Final | ![FP8213](scenario-5p/08-fp8213-p0.png) |
 | 9 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xea57cad152799a4828cc58 \| r:866ebd967a28c63b836c79 \| r:88c373a904ded022e9ed | ![DIGEST](scenario-5p/09-digest-p0.png) |
 | 10 | `OFFSIGNR` | 1 | id=OFFSIGNR lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![OFFSIGNR](scenario-5p/10-offsignr-p0.png) |
@@ -749,36 +749,86 @@ Regenerate with `E2E_LOG_KEEP=/tmp/e2e.log make e2e-px && python3 tools/ui_scree
 | # | id | page | record text | frame |
 |---|----|------|-------------|-------|
 | 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal/00-sign-p0.png) |
-| 1 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-personal/01-network-p0.png) |
+| 1 | `MSG` | 1 | id=MSG lab="MESSAGE" cap="" \| r:Login to app.example. \| r:com? Nonce: \| r:8f3a9c2e1b | ![MSG](scenario-5p-personal/01-msg-p0.png) |
 | 2 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-personal/02-mode-p0.png) |
-| 3 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-personal/03-account-p0.png) |
-| 4 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5p-personal/04-signer-p0.png) |
+| 3 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-personal/03-network-p0.png) |
+| 4 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-personal/04-account-p0.png) |
 | 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-personal/05-confirm-p0.png) |
-| 6 | `MSG` | 1 | id=MSG lab="MESSAGE" cap="" \| r:Login to app.example. \| r:com? Nonce: \| r:8f3a9c2e1b | ![MSG](scenario-5p-personal/06-msg-p0.png) |
+| 6 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5p-personal/06-signer-p0.png) |
 | 7 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:2/65536 keys used \| r:Gap: 2 | ![KEYS](scenario-5p-personal/07-keys-p0.png) |
 | 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5p-personal/08-fp8213-p0.png) |
 | 9 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xa72199a4ddd6ba427bb621 \| r:6846cb41412c6c5fcdaffe \| r:53454d121bacefb42a98 | ![DIGEST](scenario-5p-personal/09-digest-p0.png) |
 | 10 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal/10-sign-p0.png) |
+
+## Scenario 5p-personal-siwe: multi-line SIWE personal_sign
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal-siwe/00-sign-p0.png) |
+| 1 | `MSG` | 1 | id=MSG lab="MESSAGE" cap="" \| r:app.example.com \| r:wants you to sign in \| r:with your Ethereum | ![MSG](scenario-5p-personal-siwe/01-msg-p0.png) |
+| 1 | `MSG` | 2 | id=MSG lab="MESSAGE" cap="" \| r:account: \| r:0x1234567890AbcdEF123 \| r:4567890aBcdef12345678 | ![MSG](scenario-5p-personal-siwe/01-msg-p1.png) |
+| 2 | `MSG2` | 1 | id=MSG2 lab="MESSAGE" cap="" \| r: \| r:Sign in to Example. \| r: | ![MSG2](scenario-5p-personal-siwe/02-msg2-p0.png) |
+| 2 | `MSG2` | 2 | id=MSG2 lab="MESSAGE" cap="" \| r:URI: https://app.exam \| r:ple.com \| r:Version: 1 | ![MSG2](scenario-5p-personal-siwe/02-msg2-p1.png) |
+| 3 | `MSG3` | 1 | id=MSG3 lab="MESSAGE" cap="" \| r:Chain ID: 11155111 \| r:Nonce: 32891756 \| r:Issued At: | ![MSG3](scenario-5p-personal-siwe/03-msg3-p0.png) |
+| 3 | `MSG3` | 2 | id=MSG3 lab="MESSAGE" cap="" \| r:2026-10-19T12:00:00Z | ![MSG3](scenario-5p-personal-siwe/03-msg3-p1.png) |
+| 4 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-personal-siwe/04-mode-p0.png) |
+| 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-personal-siwe/05-confirm-p0.png) |
+| 6 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-personal-siwe/06-network-p0.png) |
+| 7 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-personal-siwe/07-account-p0.png) |
+| 8 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5p-personal-siwe/08-signer-p0.png) |
+| 9 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:3/65536 keys used \| r:Gap: 3 | ![KEYS](scenario-5p-personal-siwe/09-keys-p0.png) |
+| 10 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5p-personal-siwe/10-fp8213-p0.png) |
+| 11 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xb7bb8e40d3cab39aafc7fd \| r:4dff93204f9bc4f04da8ef \| r:599447063e0b8960a6f9 | ![DIGEST](scenario-5p-personal-siwe/11-digest-p0.png) |
+| 12 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal-siwe/12-sign-p0.png) |
+
+## Scenario 5p-personal-hex: non-text personal_sign shown as hex
+
+| # | id | page | record text | frame |
+|---|----|------|-------------|-------|
+| 1.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal-hex/d1-00-sign-p0.png) |
+| 1.1 | `NOTTEXT` | 1 | id=NOTTEXT lab="! NOT TEXT" cap="" \| r:Message is not text \| r:Shown as hex bytes \| r:Check it on the dapp | ![NOTTEXT](scenario-5p-personal-hex/d1-01-nottext-p0.png) |
+| 1.2 | `MSG` | 1 | id=MSG lab="MESSAGE HEX" cap="" \| r:deadbeef 00ff10e2 \| r:c3a4b5c6 | ![MSG](scenario-5p-personal-hex/d1-02-msg-p0.png) |
+| 1.3 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-personal-hex/d1-03-mode-p0.png) |
+| 1.4 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-personal-hex/d1-04-network-p0.png) |
+| 1.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-personal-hex/d1-05-confirm-p0.png) |
+| 1.6 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-personal-hex/d1-06-account-p0.png) |
+| 1.7 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5p-personal-hex/d1-07-signer-p0.png) |
+| 1.8 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:4/65536 keys used \| r:Gap: 4 | ![KEYS](scenario-5p-personal-hex/d1-08-keys-p0.png) |
+| 1.9 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5p-personal-hex/d1-09-fp8213-p0.png) |
+| 1.10 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xa993c53ecafef0fcf6efc5 \| r:a09390d8cb85bca074d6c3 \| r:fac3da39accd74c57951 | ![DIGEST](scenario-5p-personal-hex/d1-10-digest-p0.png) |
+| 1.11 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal-hex/d1-11-sign-p0.png) |
+| 2.0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal-hex/d2-00-sign-p0.png) |
+| 2.1 | `NOTTEXT` | 1 | id=NOTTEXT lab="! NOT TEXT" cap="" \| r:Message is not text \| r:Shown as hex bytes \| r:Check it on the dapp | ![NOTTEXT](scenario-5p-personal-hex/d2-01-nottext-p0.png) |
+| 2.2 | `MSG` | 1 | id=MSG lab="MESSAGE HEX" cap="" \| r:deadbeef 00ff10e2 \| r:c3a4b5c6 | ![MSG](scenario-5p-personal-hex/d2-02-msg-p0.png) |
+| 2.3 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-personal-hex/d2-03-mode-p0.png) |
+| 2.4 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-personal-hex/d2-04-network-p0.png) |
+| 2.5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-personal-hex/d2-05-confirm-p0.png) |
+| 2.6 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-personal-hex/d2-06-account-p0.png) |
+| 2.7 | `SIGNER` | 1 | id=SIGNER lab="SIGNER" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![SIGNER](scenario-5p-personal-hex/d2-07-signer-p0.png) |
+| 2.8 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:5/65536 keys used \| r:Gap: 5 | ![KEYS](scenario-5p-personal-hex/d2-08-keys-p0.png) |
+| 2.9 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:CalldataDigest | ![FP8213](scenario-5p-personal-hex/d2-09-fp8213-p0.png) |
+| 2.10 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0xa993c53ecafef0fcf6efc5 \| r:a09390d8cb85bca074d6c3 \| r:fac3da39accd74c57951 | ![DIGEST](scenario-5p-personal-hex/d2-10-digest-p0.png) |
+| 2.11 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN EIP-1271?" | ![SIGN](scenario-5p-personal-hex/d2-11-sign-p0.png) |
 
 ## Scenario 5p-raw32: RAW32 off-chain signature
 
 | # | id | page | record text | frame |
 |---|----|------|-------------|-------|
 | 0 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN BLIND HASH?" | ![SIGN](scenario-5p-raw32/00-sign-p0.png) |
-| 1 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-raw32/01-network-p0.png) |
-| 2 | `BLIND` | 1 | id=BLIND lab="BLIND" cap="" \| s:! BLIND RAW32 \| r:Hash only, no text \| r:Check it on the dapp | ![BLIND](scenario-5p-raw32/02-blind-p0.png) |
+| 1 | `BLIND` | 1 | id=BLIND lab="BLIND" cap="" \| s:! BLIND RAW32 \| r:Hash only, no text \| r:Check it on the dapp | ![BLIND](scenario-5p-raw32/01-blind-p0.png) |
+| 2 | `HASH` | 1 | id=HASH lab="HASH" cap="" \| r:0x7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d | ![HASH](scenario-5p-raw32/02-hash-p0.png) |
 | 3 | `MODE` | 1 | id=MODE lab="DETAILS" cap="" \| r:Account contract \| r:is deployed \| r:Verify on dapp | ![MODE](scenario-5p-raw32/03-mode-p0.png) |
-| 4 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-raw32/04-account-p0.png) |
+| 4 | `NETWORK` | 1 | id=NETWORK lab="" cap="" \| r:on Sepolia | ![NETWORK](scenario-5p-raw32/04-network-p0.png) |
 | 5 | `CONFIRM` | 1 | id=CONFIRM lab="" cap="Confirm?" | ![CONFIRM](scenario-5p-raw32/05-confirm-p0.png) |
-| 6 | `HASH` | 1 | id=HASH lab="HASH" cap="" \| r:0x7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d | ![HASH](scenario-5p-raw32/06-hash-p0.png) |
-| 7 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:3/65536 keys used \| r:Gap: 3 | ![KEYS](scenario-5p-raw32/07-keys-p0.png) |
+| 6 | `ACCOUNT` | 1 | id=ACCOUNT lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![ACCOUNT](scenario-5p-raw32/06-account-p0.png) |
+| 7 | `KEYS` | 1 | id=KEYS lab="KEYS" cap="" \| r:6/65536 keys used \| r:Gap: 6 | ![KEYS](scenario-5p-raw32/07-keys-p0.png) |
 | 8 | `FP8213` | 1 | id=FP8213 lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:Raw32 Hash | ![FP8213](scenario-5p-raw32/08-fp8213-p0.png) |
 | 9 | `DIGEST` | 1 | id=DIGEST lab="DIGEST" cap="" \| r:0x7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d7d \| r:7d7d7d7d7d7d7d7d7d7d | ![DIGEST](scenario-5p-raw32/09-digest-p0.png) |
 | 10 | `FP8213B` | 1 | id=FP8213B lab="ERC-8213" cap="" \| r:8213 Fingerprint \| r:ReplaySafe Hash | ![FP8213B](scenario-5p-raw32/10-fp8213b-p0.png) |
 | 11 | `DIGEST2` | 1 | id=DIGEST2 lab="DIGEST" cap="" \| r:0xe73b69fffa2632cdf49b8f \| r:e320b4dc2c4ff98b0132c2 \| r:8395360b7d8f9d63ee65 | ![DIGEST2](scenario-5p-raw32/11-digest2-p0.png) |
 | 12 | `OFFSIGNR` | 1 | id=OFFSIGNR lab="ACCOUNT" cap="" \| r:Account: 0 \| r:Slot: 1 | ![OFFSIGNR](scenario-5p-raw32/12-offsignr-p0.png) |
 | 13 | `WALLET` | 1 | id=WALLET lab="WALLET" cap="" \| r:0xBEe6A6E73E418D42eF3 \| r:82ECF8E8025740e97c2fE | ![WALLET](scenario-5p-raw32/13-wallet-p0.png) |
-| 14 | `MODE` | 1 | id=MODE lab="MODE" cap="" \| r:DEPLOYED EIP1271 \| r:Use 3/65536 \| r:Gap: 3 | ![MODE](scenario-5p-raw32/14-mode-p0.png) |
+| 14 | `MODE` | 1 | id=MODE lab="MODE" cap="" \| r:DEPLOYED EIP1271 \| r:Use 6/65536 \| r:Gap: 6 | ![MODE](scenario-5p-raw32/14-mode-p0.png) |
 | 15 | `SIGN` | 1 | id=SIGN lab="" cap="SIGN BLIND HASH?" | ![SIGN](scenario-5p-raw32/15-sign-p0.png) |
 
 ## Scenario 5q: Safe-wrapped CoW presign clear-sign

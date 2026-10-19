@@ -5,17 +5,22 @@
 //! through the ERC-7730 page lift (`erc7730_screens`, `Surface::Typed`).
 //!
 //! ```text
-//!  SIGN EIP-1271?           | SIGN BLIND HASH?          hero
+//!  SIGN EIP-1271?                 | SIGN BLIND HASH?          hero
+//!  [! NOT TEXT, pulse]            | ! BLIND RAW32, pulse
+//!  MSG … (the whole message)      | HASH (full width)
 //!  MODE (deployed / ! undeployed, pulse)
-//!  [! BLIND RAW32, pulse]
-//!  NETWORK · ACCOUNT · SIGNER | HASH (full width)
-//!  MSG … (the whole message, wrapped)
+//!  NETWORK · ACCOUNT · SIGNER     | NETWORK · ACCOUNT
 //!  KEYS (used / cap, gap)
 //! ```
 //!
-//! The message is the page painter's own byte view (printable ASCII as
-//! itself, anything else `?`), wrapped at the 22 px floor and split six
-//! lines to a screen — never truncated.
+//! The content being signed comes first, and `Confirm?` follows it (and the
+//! `MODE` screen right behind it — `screen::confirm_index`): the message or
+//! the hash is read before the early exit (owner decision 2026-10-19).
+//!
+//! The message is shown the page painter's way (`eip1271::personal_sign_view`):
+//! text — printable ASCII, each line feed starting a new line, wrapped at the
+//! 22 px floor — or, for anything else, hex (8 bytes a line) behind a loud
+//! `! NOT TEXT` screen. Six lines to a screen, never truncated.
 
 use super::screen_kit::{address_look, addr42, fits_at_22, BodyReceipt, Emit, Text};
 use super::userop_screens::Family;
@@ -45,8 +50,8 @@ pub(crate) enum OffchainBody<'a> {
     Raw32 { facts: OffchainFacts<'a>, hash: &'a [u8; 32] },
 }
 
-/// `personal_sign` message bytes per legacy page (3 rows × 16 columns).
-const CHARS_PER_PAGE: usize = 48;
+/// Message bytes on one hex line: `0011aabb 0011aabb`.
+const HEX_BYTES_PER_LINE: usize = 8;
 
 pub(crate) fn family(body: &OffchainBody<'_>) -> Family {
     match body {
@@ -94,64 +99,147 @@ pub(crate) fn render_pages(body: &OffchainBody<'_>) -> super::Pages {
 
 fn legacy_pages(body: &OffchainBody<'_>) -> usize {
     match body {
-        OffchainBody::Personal { msg, .. } => 5 + msg.len().div_ceil(CHARS_PER_PAGE).max(1),
+        // An over-budget message has no pages (the handler refuses it
+        // first); 0 then fails the lift's body check.
+        OffchainBody::Personal { msg, .. } => super::eip1271::personal_sign_msg_pages(msg).map_or(0, |n| 5 + n),
         OffchainBody::Raw32 { .. } => 6,
     }
 }
 
-/// The page painter's byte view: printable ASCII as itself, else `?`.
-fn sanitise(b: u8) -> u8 {
-    if (0x20..=0x7E).contains(&b) {
-        b
-    } else {
-        b'?'
+/// Fills `MSG`, `MSG2`, … screens six lines at a time.
+struct MsgScreens {
+    lines: [Line; 2 * LINES_PER_PAGE],
+    n: usize,
+    part: u64,
+    label: &'static [u8],
+}
+
+impl MsgScreens {
+    fn new(label: &'static [u8]) -> Self {
+        Self {
+            lines: [Line::EMPTY; 2 * LINES_PER_PAGE],
+            n: 0,
+            part: 0,
+            label,
+        }
+    }
+
+    fn room(&self) -> usize {
+        self.lines.len() - self.n
+    }
+
+    fn push(&mut self, e: &mut Emit<'_>, line: Line) -> Result<(), ()> {
+        if self.room() == 0 {
+            self.flush(e)?;
+        }
+        self.lines[self.n] = line;
+        self.n += 1;
+        Ok(())
+    }
+
+    fn flush(&mut self, e: &mut Emit<'_>) -> Result<(), ()> {
+        if self.n == 0 {
+            return Ok(());
+        }
+        self.part += 1;
+        let id = if self.part == 1 { Text::new().push(b"MSG") } else { Text::new().push(b"MSG").push_u64(self.part) };
+        let l: [(&[u8], Weight); 2 * LINES_PER_PAGE] = core::array::from_fn(|i| (self.lines[i].as_bytes(), Weight::Regular));
+        e.detail_multi(id.as_bytes(), self.label, &l[..self.n], false)?;
+        self.n = 0;
+        Ok(())
     }
 }
 
-/// Emit the whole message, wrapped at the 22 px floor (preferring a break
-/// after a space or comma in the second half of a line), six lines to a
-/// `MSG` screen.
-fn emit_message(e: &mut Emit<'_>, msg: &[u8]) -> Result<(), ()> {
-    if msg.is_empty() {
-        return e.detail(b"MSG", b"MESSAGE", &[(b"(empty message)", Weight::Regular)], false);
+/// The length of the next screen line of `rest` (non-empty): the longest
+/// prefix that fits at the 22 px floor, preferring a break after a space or
+/// comma in the second half of the line. `None` when a byte has no glyph.
+fn next_line_len(rest: &[u8]) -> Option<usize> {
+    let mut k = rest.len();
+    while k > 0 && !fits_at_22(&rest[..k], Region::Docked) {
+        k -= 1;
     }
-    let mut clean = [0u8; sphincs_tz_shared::MAX_OFFCHAIN_PERSONAL_SIGN_LEN];
-    if msg.len() > clean.len() {
+    if k == 0 {
+        return None;
+    }
+    if k < rest.len() {
+        if let Some(b) = rest[..k].iter().rposition(|c| matches!(c, b',' | b' ')) {
+            if b + 1 >= k / 2 {
+                k = b + 1;
+            }
+        }
+    }
+    Some(k)
+}
+
+/// The screen lines one line-feed-separated text line takes (an empty line
+/// is one blank line).
+fn wrapped_lines(line: &[u8]) -> Option<usize> {
+    let (mut rest, mut n) = (line, 0);
+    while !rest.is_empty() {
+        let k = next_line_len(rest)?;
+        rest = &rest[k..];
+        n += 1;
+    }
+    Some(n.max(1))
+}
+
+/// Emit the whole message — never truncated. Text: each line feed starts a
+/// new line, and a wrapped line of up to three screen lines is kept on one
+/// screen (an address, a nonce) rather than split across two. Hex: a loud
+/// `! NOT TEXT` screen, then 8 bytes a line.
+fn emit_message(e: &mut Emit<'_>, msg: &[u8]) -> Result<(), ()> {
+    if msg.len() > sphincs_tz_shared::MAX_OFFCHAIN_PERSONAL_SIGN_LEN {
         return Err(());
     }
-    for (d, s) in clean.iter_mut().zip(msg) {
-        *d = sanitise(*s);
-    }
-    let mut rest = &clean[..msg.len()];
-    let mut part = 0u64;
-    while !rest.is_empty() {
-        let mut lines = [Line::EMPTY; 2 * LINES_PER_PAGE];
-        let mut n = 0;
-        while n < lines.len() && !rest.is_empty() {
-            let mut k = rest.len();
-            while k > 0 && !fits_at_22(&rest[..k], Region::Docked) {
-                k -= 1;
+    match super::eip1271::personal_sign_view(msg) {
+        super::eip1271::MsgView::Text => {
+            if msg.is_empty() {
+                return e.detail(b"MSG", b"MESSAGE", &[(b"(empty message)", Weight::Regular)], false);
             }
-            if k == 0 {
-                return Err(());
-            }
-            if k < rest.len() {
-                if let Some(b) = rest[..k].iter().rposition(|c| matches!(c, b',' | b' ')) {
-                    if b + 1 >= k / 2 {
-                        k = b + 1;
-                    }
+            let mut screens = MsgScreens::new(b"MESSAGE");
+            for line in msg.split(|&b| b == b'\n') {
+                let n = wrapped_lines(line).ok_or(())?;
+                if n <= LINES_PER_PAGE && n > screens.room() {
+                    screens.flush(e)?;
+                }
+                if line.is_empty() {
+                    screens.push(e, Line::EMPTY)?;
+                }
+                let mut rest = line;
+                while !rest.is_empty() {
+                    let k = next_line_len(rest).ok_or(())?;
+                    screens.push(e, Line::new(&rest[..k]).ok_or(())?)?;
+                    rest = &rest[k..];
                 }
             }
-            lines[n] = Line::new(&rest[..k]).ok_or(())?;
-            n += 1;
-            rest = &rest[k..];
+            screens.flush(e)
         }
-        part += 1;
-        let id = if part == 1 { Text::new().push(b"MSG") } else { Text::new().push(b"MSG").push_u64(part) };
-        let l: [(&[u8], Weight); 2 * LINES_PER_PAGE] = core::array::from_fn(|i| (lines[i].as_bytes(), Weight::Regular));
-        e.detail_multi(id.as_bytes(), b"MESSAGE", &l[..n], false)?;
+        super::eip1271::MsgView::Hex => {
+            e.detail(
+                b"NOTTEXT",
+                b"! NOT TEXT",
+                &[
+                    (b"Message is not text", Weight::Regular),
+                    (b"Shown as hex bytes", Weight::Regular),
+                    (b"Check it on the dapp", Weight::Regular),
+                ],
+                true,
+            )?;
+            let mut screens = MsgScreens::new(b"MESSAGE HEX");
+            for chunk in msg.chunks(HEX_BYTES_PER_LINE) {
+                let (a, b) = chunk.split_at(chunk.len().min(HEX_BYTES_PER_LINE / 2));
+                let mut t = Text::new().push_hex(a);
+                if !b.is_empty() {
+                    t = t.push(b" ").push_hex(b);
+                }
+                if !t.ok() || !fits_at_22(t.as_bytes(), Region::Docked) {
+                    return Err(());
+                }
+                screens.push(e, Line::new(t.as_bytes()).ok_or(())?)?;
+            }
+            screens.flush(e)
+        }
     }
-    Ok(())
 }
 
 fn emit_common_head(e: &mut Emit<'_>, f: &OffchainFacts<'_>) -> Result<(), ()> {
@@ -198,15 +286,14 @@ pub(crate) fn emit(out: &mut Screens, body: &OffchainBody<'_>, fam: Family) -> R
     match body {
         OffchainBody::Personal { msg, .. } => {
             e.hero(b"SIGN", b"SIGN EIP-1271?")?;
-            e.network()?;
+            emit_message(&mut e, msg)?;
             emit_common_head(&mut e, f)?;
+            e.network()?;
             emit_account(&mut e, f)?;
             e.addr_lines(b"SIGNER", b"SIGNER", &layout_address(&addr42(f.wallet)), None)?;
-            emit_message(&mut e, msg)?;
         }
         OffchainBody::Raw32 { hash, .. } => {
             e.hero(b"SIGN", b"SIGN BLIND HASH?")?;
-            e.network()?;
             e.detail(
                 b"BLIND",
                 b"BLIND",
@@ -217,9 +304,10 @@ pub(crate) fn emit(out: &mut Screens, body: &OffchainBody<'_>, fam: Family) -> R
                 ],
                 true,
             )?;
-            emit_common_head(&mut e, f)?;
-            emit_account(&mut e, f)?;
             e.word_value(b"HASH", b"HASH", hash)?;
+            emit_common_head(&mut e, f)?;
+            e.network()?;
+            emit_account(&mut e, f)?;
         }
     }
     emit_keys(&mut e, f)?;

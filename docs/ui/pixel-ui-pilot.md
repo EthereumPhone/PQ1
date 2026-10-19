@@ -71,6 +71,20 @@ direct order reads `SIGN COWSWAP?, NETWORK, ORDER, SELL, SELL TOKEN, BUY MIN,
 BUY TOKEN, Confirm?` (index 7; hex legs end on `BUYAMT`). Every other flow
 keeps index 5.
 
+**UPDATE 2026-10-19 — off-chain flows show their content before `Confirm?`
+(owner decision, Ambire device-harness run).** The off-chain emitter opens on
+what is being signed: `SIGN EIP-1271?, [NOTTEXT], MSG…, MODE, NETWORK,
+ACCOUNT, SIGNER, KEYS` and `SIGN BLIND HASH?, BLIND, HASH, MODE, NETWORK,
+ACCOUNT, KEYS`. `confirm_index` (via `offchain_anchor`, a `SIGN` hero over the
+Eth or Blind disc) puts `Confirm?` after the last `MSG`/`HASH` screen and the
+`MODE` right behind it, or — for EIP-712 typed data, which carries the
+`OFFSIGNR` context trailer — in the first fingerprint's place; never before
+index 5. `personal_sign` text now honours line feeds (SIWE), and a message
+that is not text is shown as hex (`MESSAGE HEX`, 8 bytes a line) behind a
+pulsing `! NOT TEXT` screen. Goldens: `eip1271/{personal_counterfactual,
+personal_siwe, personal_hex, raw32, typed_ballot}`. The vendored `tools/pq-ui`
+reference was not changed.
+
 Host goldens: `secure/src/display_under_test/safe_screens_render_pure_tests.rs`
 (per-scenario record hashes + the legacy→screens fact differential) and
 `pqsigner-ui-px/tests/golden.rs` (frame hashes; `UI_PX_PNG=1` writes PNGs to

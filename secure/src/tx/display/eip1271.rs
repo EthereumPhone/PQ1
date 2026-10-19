@@ -3,7 +3,8 @@
 //! Two flows:
 //!
 //!   * `render_eip1271_personal_sign_pages` — surfaces the actual
-//!     `personal_sign` message text (paginated as printable ASCII)
+//!     `personal_sign` message (paginated as text, a line feed starting a
+//!     new row, or — for anything not printable ASCII — as hex)
 //!     plus the wallet address that will be doing the signing. The
 //!     firmware itself recomputes the replay-safe hash from this
 //!     message, so what the user reads here is byte-equivalent to
@@ -20,6 +21,10 @@
 use super::primitives::{hex_nibble, write_addr_full, write_chain, write_line};
 use super::Pages;
 use crate::ui::{DISPLAY_COLS, DISPLAY_ROWS};
+use sphincs_tz_shared::{
+    MAX_OFFCHAIN_PERSONAL_SIGN_HEX_LEN, MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
+    MAX_OFFCHAIN_PERSONAL_SIGN_TEXT_ROWS,
+};
 use sha2::{Digest, Sha256};
 
 type ContextPage = [[u8; DISPLAY_COLS]; DISPLAY_ROWS];
@@ -322,12 +327,90 @@ fn context_matches(
     true
 }
 
+/// Legacy text rows on a `personal_sign` message page; the 4th row is the
+/// `Msg N/M` / `Hex N/M` footer.
+const MSG_ROWS_PER_PAGE: usize = 3;
+/// Message bytes on one hex row: two digits a byte, 16 columns.
+const HEX_BYTES_PER_ROW: usize = DISPLAY_COLS / 2;
+
+// The worst case of either view fits the page budget with the fingerprint
+// pages the handler appends (5 fixed pages + the message + ERC-8213).
+const _: () = assert!(
+    5 + MAX_OFFCHAIN_PERSONAL_SIGN_TEXT_ROWS.div_ceil(MSG_ROWS_PER_PAGE)
+        + pqsigner_erc7730::display::erc8213_contract::FINGERPRINT_PAGES
+        <= super::MAX_PAGES
+);
+const _: () = assert!(
+    5 + MAX_OFFCHAIN_PERSONAL_SIGN_HEX_LEN.div_ceil(HEX_BYTES_PER_ROW * MSG_ROWS_PER_PAGE)
+        + pqsigner_erc7730::display::erc8213_contract::FINGERPRINT_PAGES
+        <= super::MAX_PAGES
+);
+
+/// How a `personal_sign` message is shown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MsgView {
+    /// Every byte is printable ASCII or a line feed: shown as itself, a line
+    /// feed starting a new row.
+    Text,
+    /// Anything else (control bytes, CR, TAB, DEL, any byte >= 0x80 — so all
+    /// non-ASCII UTF-8): shown as hex, behind a loud `! NOT TEXT` banner.
+    /// The display never paints a glyph the dapp's bytes do not literally
+    /// spell, and never decodes UTF-8 (homoglyphs, bidi overrides).
+    Hex,
+}
+
+/// The one classification both painters (pages and pixel screens) use.
+pub(crate) fn personal_sign_view(msg: &[u8]) -> MsgView {
+    if msg.iter().all(|&b| (0x20..=0x7E).contains(&b) || b == b'\n') {
+        MsgView::Text
+    } else {
+        MsgView::Hex
+    }
+}
+
+/// The 16-column rows of a text message: each line-feed-separated line
+/// split at 16 columns, an empty line (and the empty message) one blank row.
+pub(crate) fn personal_sign_text_rows(msg: &[u8]) -> impl Iterator<Item = &[u8]> {
+    msg.split(|&b| b == b'\n').flat_map(|line| {
+        let n = line.len().div_ceil(DISPLAY_COLS).max(1);
+        (0..n).map(move |i| &line[(i * DISPLAY_COLS).min(line.len())..((i + 1) * DISPLAY_COLS).min(line.len())])
+    })
+}
+
+/// The message pages `render_eip1271_personal_sign_pages` paints for `msg`,
+/// or `None` when the message is over the display budget: more than
+/// `MAX_OFFCHAIN_PERSONAL_SIGN_LEN` bytes, a text message over
+/// `MAX_OFFCHAIN_PERSONAL_SIGN_TEXT_ROWS` rows, or a non-text message over
+/// `MAX_OFFCHAIN_PERSONAL_SIGN_HEX_LEN` bytes. The handler refuses such a
+/// request before any flash write.
+pub(crate) fn personal_sign_msg_pages(msg: &[u8]) -> Option<usize> {
+    if msg.len() > MAX_OFFCHAIN_PERSONAL_SIGN_LEN {
+        return None;
+    }
+    let rows = match personal_sign_view(msg) {
+        MsgView::Text => personal_sign_text_rows(msg).count(),
+        MsgView::Hex => {
+            if msg.len() > MAX_OFFCHAIN_PERSONAL_SIGN_HEX_LEN {
+                return None;
+            }
+            msg.len().div_ceil(HEX_BYTES_PER_ROW)
+        }
+    };
+    if rows > MAX_OFFCHAIN_PERSONAL_SIGN_TEXT_ROWS {
+        return None;
+    }
+    Some(rows.div_ceil(MSG_ROWS_PER_PAGE).max(1))
+}
+
 /// Render the PersonalSign EIP-1271 confirmation flow.
 ///
 /// `wallet_addr` is the on-chain proxy address signing the message
 /// (the verifying contract bound into the EIP-712 domain separator).
-/// `msg` is the raw `personal_sign` message — printable ASCII bytes
-/// render as themselves; non-printable bytes render as `?`.
+/// `msg` is the raw `personal_sign` message, shown per
+/// [`personal_sign_view`]: text (printable ASCII, a line feed starting a
+/// new row) or, for anything else, hex under a `! NOT TEXT (HEX)` banner.
+/// The caller gates `msg` with [`personal_sign_msg_pages`]; a message over
+/// the budget renders no pages at all (never a truncation).
 pub fn render_eip1271_personal_sign_pages(
     chain_id: u64,
     account_index: u32,
@@ -340,25 +423,24 @@ pub fn render_eip1271_personal_sign_pages(
     account_deployed: bool,
 ) -> Pages {
     // 5 fixed pages (banner / chain / account / wallet addr / final
-    // confirm) + the message body. Each message page surfaces 3 rows
-    // × 16 cols = 48 chars; the 4th row is a "Msg N/M > next" footer.
-    const TEXT_ROWS_PER_PAGE: usize = 3;
-    const CHARS_PER_PAGE: usize = TEXT_ROWS_PER_PAGE * DISPLAY_COLS;
-
-    let msg_pages = if msg.is_empty() {
-        1
-    } else {
-        (msg.len() + CHARS_PER_PAGE - 1) / CHARS_PER_PAGE
+    // confirm) + the message body: 3 rows a page, the 4th row a
+    // "Msg N/M > next" (text) or "Hex N/M > next" footer.
+    let Some(msg_pages) = personal_sign_msg_pages(msg) else {
+        return Pages::with_len(0);
     };
+    let view = personal_sign_view(msg);
     let total = 5 + msg_pages;
-    // `Pages::with_len` will assert if MAX_PAGES is too small. The
-    // bound matches the static cap on `MAX_OFFCHAIN_PERSONAL_SIGN_LEN`
-    // / CHARS_PER_PAGE + 5 fixed pages.
     let mut pages = Pages::with_len(total);
 
     // ── Page 0: banner ─────────────────────────────────────────────
     write_line(&mut pages.buf[0][0], "EIP-1271 Sign?");
-    write_line(&mut pages.buf[0][1], "personal_sign");
+    write_line(
+        &mut pages.buf[0][1],
+        match view {
+            MsgView::Text => "personal_sign",
+            MsgView::Hex => "! NOT TEXT (HEX)",
+        },
+    );
     if account_deployed {
         write_line(&mut pages.buf[0][2], "Verify on dapp");
     } else {
@@ -398,28 +480,30 @@ pub fn render_eip1271_personal_sign_pages(
         write_addr_full(a, b, c, wallet_addr);
     }
 
-    // ── Pages 4..4+msg_pages: message text ─────────────────────────
+    // ── Pages 4..4+msg_pages: the message ──────────────────────────
     for p in 0..msg_pages {
-        let page_idx = 4 + p;
-        let off = p * CHARS_PER_PAGE;
-        let end = core::cmp::min(off + CHARS_PER_PAGE, msg.len());
-        let chunk = &msg[off..end];
-        for r in 0..TEXT_ROWS_PER_PAGE {
-            let row_off = r * DISPLAY_COLS;
-            let row_end = core::cmp::min(row_off + DISPLAY_COLS, chunk.len());
-            let row = &mut pages.buf[page_idx][r];
-            *row = [b' '; DISPLAY_COLS];
-            if row_off < chunk.len() {
-                let slice = &chunk[row_off..row_end];
-                for (i, &b) in slice.iter().enumerate() {
-                    row[i] = sanitise_byte(b);
-                }
+        for r in 0..MSG_ROWS_PER_PAGE {
+            pages.buf[4 + p][r] = [b' '; DISPLAY_COLS];
+        }
+    }
+    match view {
+        MsgView::Text => {
+            for (i, row) in personal_sign_text_rows(msg).enumerate() {
+                pages.buf[4 + i / MSG_ROWS_PER_PAGE][i % MSG_ROWS_PER_PAGE][..row.len()].copy_from_slice(row);
             }
         }
-        // Footer: "Msg N/M  > next" or "Msg N/M  > sign" on the last
-        // text page; the very last page (final confirm) has its own
-        // L=Cancel / R=Confirm prompts.
-        write_msg_footer(&mut pages.buf[page_idx][3], p + 1, msg_pages);
+        MsgView::Hex => {
+            for (i, chunk) in msg.chunks(HEX_BYTES_PER_ROW).enumerate() {
+                write_hex_row(&mut pages.buf[4 + i / MSG_ROWS_PER_PAGE][i % MSG_ROWS_PER_PAGE], chunk);
+            }
+        }
+    }
+    let footer = match view {
+        MsgView::Text => "Msg ",
+        MsgView::Hex => "Hex ",
+    };
+    for p in 0..msg_pages {
+        write_msg_footer(&mut pages.buf[4 + p][3], footer, p + 1, msg_pages);
     }
 
     // ── Final page: budget + confirm ───────────────────────────────
@@ -500,18 +584,6 @@ pub fn render_eip1271_raw32_pages(
 
 // ───────────────────────────── helpers ──────────────────────────────
 
-fn sanitise_byte(b: u8) -> u8 {
-    // Render printable ASCII as-is; everything else (control bytes, hi-
-    // bit / UTF-8 continuation bytes) becomes '?' so the trusted
-    // display can never paint a glyph the user couldn't read on a
-    // standard ASCII rendering of the dapp's message.
-    if (0x20..=0x7E).contains(&b) {
-        b
-    } else {
-        b'?'
-    }
-}
-
 fn write_hex_row(row: &mut [u8; DISPLAY_COLS], bytes: &[u8]) {
     *row = [b' '; DISPLAY_COLS];
     let n = core::cmp::min(bytes.len(), DISPLAY_COLS / 2);
@@ -587,11 +659,10 @@ fn write_gap_row(row: &mut [u8; DISPLAY_COLS], local_after: u64, last_userop: u6
     let _ = pos;
 }
 
-fn write_msg_footer(row: &mut [u8; DISPLAY_COLS], page: usize, total: usize) {
+fn write_msg_footer(row: &mut [u8; DISPLAY_COLS], prefix: &str, page: usize, total: usize) {
     *row = [b' '; DISPLAY_COLS];
     let mut pos = 0;
-    let prefix = b"Msg ";
-    for &b in prefix {
+    for &b in prefix.as_bytes() {
         if pos < DISPLAY_COLS {
             row[pos] = b;
             pos += 1;

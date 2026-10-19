@@ -1531,25 +1531,87 @@ fn negative_blind_sign_zero_value_uses_quiet_line() {
 // --- EIP-1271 sanitisation + provenance affordances ------------------------
 
 #[test]
-fn negative_eip1271_personal_sign_sanitises_non_printable() {
-    // Assumption: the OLED is a trusted display; non-printable bytes
-    // and high-bit / UTF-8 continuation bytes must render as '?' so a
-    // dapp can't get the firmware to paint a glyph that doesn't appear
-    // in a plain ASCII rendering of the same message text.
+fn negative_eip1271_personal_sign_non_text_renders_as_hex() {
+    // Assumption: the display is trusted; a message that is not plain text
+    // (control bytes, DEL, any byte >= 0x80 — so all non-ASCII UTF-8) is
+    // shown as hex under a loud banner, never as glyphs the dapp's bytes do
+    // not literally spell, and never with bytes replaced or dropped.
     let wallet = [0x55u8; 20];
-    // Use control byte 0x1F (US, just below printable range), DEL 0x7F,
+    // Control byte 0x1F (US, just below printable range), DEL 0x7F,
     // high-bit 0xC3 (UTF-8 lead).
     let msg = b"a\x1Fb\x7Fc\xC3d";
     let pages = render_eip1271_personal_sign_pages(1, 0, 1, &wallet, msg, 5, 4, 100, true);
-    // First message page is index 4. Bytes 0..7 are the rendered text.
-    let row = &pages.buf[4][0];
-    assert_eq!(row[0], b'a');
-    assert_eq!(row[1], b'?', "0x1F (control) must become '?'");
-    assert_eq!(row[2], b'b');
-    assert_eq!(row[3], b'?', "0x7F (DEL) must become '?'");
-    assert_eq!(row[4], b'c');
-    assert_eq!(row[5], b'?', "0xC3 (UTF-8 lead) must become '?'");
-    assert_eq!(row[6], b'd');
+    assert_eq!(row_str(&pages.buf[0][1]), "! NOT TEXT (HEX)");
+    assert_eq!(pages.len, 5 + 1);
+    // First message page is index 4: every byte, two digits each.
+    assert_eq!(row_str(&pages.buf[4][0]), "611f627f63c364");
+    assert_eq!(row_str(&pages.buf[4][3]), "Hex 1/1  > next");
+}
+
+#[test]
+fn eip1271_personal_sign_view_classification() {
+    use super::eip1271::{personal_sign_view, MsgView};
+    for (msg, want) in [
+        (&b""[..], MsgView::Text),
+        (b"hello", MsgView::Text),
+        (b"line one\nline two\n", MsgView::Text),
+        (b"0x1234 is text", MsgView::Text),
+        (b" ~", MsgView::Text),
+        (b"a\r\nb", MsgView::Hex),
+        (b"a\rb", MsgView::Hex),
+        (b"a\tb", MsgView::Hex),
+        (b"\x7f", MsgView::Hex),
+        (b"\x80", MsgView::Hex),
+        ("caf\u{e9}".as_bytes(), MsgView::Hex),
+        (b"\x00", MsgView::Hex),
+    ] {
+        assert_eq!(personal_sign_view(msg), want, "{msg:?}");
+    }
+}
+
+#[test]
+fn eip1271_personal_sign_line_feeds_start_new_rows() {
+    // SIWE: each line feed starts a new row, a long line wraps at 16
+    // columns, an empty line is a blank row.
+    let wallet = [0x55u8; 20];
+    let msg = b"app.example.com wants you\n0xAbc\n\nNonce: 32891756";
+    let pages = render_eip1271_personal_sign_pages(1, 0, 1, &wallet, msg, 5, 4, 100, true);
+    assert_eq!(row_str(&pages.buf[0][1]), "personal_sign");
+    // Rows: "app.example.com " / "wants you" / "0xAbc" / "" / "Nonce: 32891756".
+    assert_eq!(pages.len, 5 + 2);
+    assert_eq!(row_str(&pages.buf[4][0]), "app.example.com");
+    assert_eq!(row_str(&pages.buf[4][1]), "wants you");
+    assert_eq!(row_str(&pages.buf[4][2]), "0xAbc");
+    assert_eq!(row_str(&pages.buf[5][0]), "");
+    assert_eq!(row_str(&pages.buf[5][1]), "Nonce: 32891756");
+    assert_eq!(row_str(&pages.buf[5][3]), "Msg 2/2  > next");
+}
+
+#[test]
+fn eip1271_personal_sign_budget_boundaries() {
+    use super::eip1271::personal_sign_msg_pages;
+    // Hex: 512 bytes fit (22 pages), 513 do not.
+    assert_eq!(personal_sign_msg_pages(&[0xffu8; 512]), Some(22));
+    assert_eq!(personal_sign_msg_pages(&[0xffu8; 513]), None);
+    // Text: 72 rows fit (24 pages), 73 do not.
+    let rows72 = b"\n".repeat(71);
+    assert_eq!(personal_sign_msg_pages(&rows72), Some(24));
+    let rows73 = b"\n".repeat(72);
+    assert_eq!(personal_sign_msg_pages(&rows73), None);
+    // A plain 700-byte line: 44 rows, 15 pages.
+    assert_eq!(personal_sign_msg_pages(&[b'A'; 700]), Some(15));
+    assert_eq!(personal_sign_msg_pages(&[b'A'; 701]), None);
+    // An over-budget message paints no pages (never a truncation).
+    let wallet = [0x55u8; 20];
+    let p = render_eip1271_personal_sign_pages(1, 0, 1, &wallet, &[0xffu8; 513], 5, 4, 100, true);
+    assert_eq!(p.len, 0);
+    // The worst case of each view fits MAX_PAGES with the fingerprint.
+    let fp = pqsigner_erc7730::display::erc8213_contract::FINGERPRINT_PAGES;
+    for msg in [&[0xffu8; 512][..], &rows72[..], &[b'A'; 700][..]] {
+        let p = render_eip1271_personal_sign_pages(1, 0, 1, &wallet, msg, 5, 4, 100, true);
+        assert_eq!(p.len, 5 + personal_sign_msg_pages(msg).unwrap());
+        assert!(p.len + fp <= MAX_PAGES);
+    }
 }
 
 #[test]

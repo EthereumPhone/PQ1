@@ -999,6 +999,17 @@ Header (17 bytes):
   [17..   )  payload          (32 B for RAW32, raw message bytes ≤700 for PERSONAL_SIGN)
 ```
 
+**PERSONAL_SIGN display budget (2026-10-19).** The device shows the whole
+message or refuses it (before any state write). A message whose bytes are all
+printable ASCII (`0x20..=0x7E`) or line feed is text: each line feed starts a
+new row, each line wraps at 16 columns, and the message may take at most
+`MAX_OFFCHAIN_PERSONAL_SIGN_TEXT_ROWS` (72) rows. Anything else (CR, TAB, other
+control bytes, DEL, any byte ≥ 0x80 — so all non-ASCII UTF-8) is shown as hex
+under a `! NOT TEXT` warning and may be at most
+`MAX_OFFCHAIN_PERSONAL_SIGN_HEX_LEN` (512) bytes. A companion that would
+exceed either budget sends the message's EIP-191 digest as RAW32 instead
+(the device then shows only the hash).
+
 **RAW32 sends the dapp's *raw* hash, not a pre-wrapped one.** For
 `kind = RAW32` the 32-byte payload is the exact `rawHash` the dapp passes
 to `wallet.isValidSignature(rawHash, …)`. The firmware itself applies the

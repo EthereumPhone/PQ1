@@ -2568,6 +2568,75 @@ fn main() -> ! {
         hprintln!("[NS][e2e]   → personal_sign signed");
     }
 
+    // Scenario 5p-personal-siwe: a multi-line Sign-In-With-Ethereum message.
+    // Every line feed starts a new line on the display, and the message is
+    // read before the early-exit Confirm? (owner decision 2026-10-19).
+    hprintln!("[NS][e2e] Scenario 5p-personal-siwe: multi-line SIWE personal_sign");
+    {
+        const OFFCHAIN_KIND_PERSONAL_SIGN: u8 = 1;
+        let msg: &[u8] = b"app.example.com wants you to sign in with your Ethereum account:\n\
+0x1234567890AbcdEF1234567890aBcdef12345678\n\
+\n\
+Sign in to Example.\n\
+\n\
+URI: https://app.example.com\n\
+Version: 1\n\
+Chain ID: 11155111\n\
+Nonce: 32891756\n\
+Issued At: 2026-10-19T12:00:00Z";
+        let mut offchain_input = [0u8; 17 + 512];
+        offchain_input[0] = 0;
+        offchain_input[1..9].copy_from_slice(&11_155_111u64.to_be_bytes());
+        offchain_input[9..13].copy_from_slice(&1u32.to_be_bytes());
+        offchain_input[13] = OFFCHAIN_KIND_PERSONAL_SIGN;
+        offchain_input[14..16].copy_from_slice(&(msg.len() as u16).to_be_bytes());
+        offchain_input[16] = 1; // ACCOUNT_DEPLOYED
+        offchain_input[17..17 + msg.len()].copy_from_slice(msg);
+        let mut offchain_out = [0u8; 4016];
+        let status = nsc_api::sign_offchain(&offchain_input[..17 + msg.len()], &mut offchain_out);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-personal-siwe must sign (got {})", status);
+        hprintln!("[NS][e2e]   → SIWE personal_sign signed");
+    }
+
+    // Scenario 5p-personal-hex: a message that is not text is shown as hex
+    // behind a loud NOT TEXT screen; one past the 512-byte hex budget is
+    // refused before any dialog or flash write.
+    hprintln!("[NS][e2e] Scenario 5p-personal-hex: non-text personal_sign shown as hex");
+    {
+        const OFFCHAIN_KIND_PERSONAL_SIGN: u8 = 1;
+        let msg: &[u8] = &[0xde, 0xad, 0xbe, 0xef, 0x00, 0xff, 0x10, 0xe2, 0xc3, 0xa4, 0xb5, 0xc6];
+        let mut offchain_input = [0u8; 17 + 513];
+        offchain_input[0] = 0;
+        offchain_input[1..9].copy_from_slice(&11_155_111u64.to_be_bytes());
+        offchain_input[9..13].copy_from_slice(&1u32.to_be_bytes());
+        offchain_input[13] = OFFCHAIN_KIND_PERSONAL_SIGN;
+        offchain_input[14..16].copy_from_slice(&(msg.len() as u16).to_be_bytes());
+        offchain_input[16] = 1; // ACCOUNT_DEPLOYED
+        offchain_input[17..17 + msg.len()].copy_from_slice(msg);
+        let mut offchain_out = [0u8; 4016];
+        let status = nsc_api::sign_offchain(&offchain_input[..17 + msg.len()], &mut offchain_out);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-personal-hex must sign (got {})", status);
+        let signed_count = u64::from_be_bytes(offchain_out[..8].try_into().unwrap());
+
+        offchain_input[14..16].copy_from_slice(&513u16.to_be_bytes());
+        offchain_input[17..].fill(0xff);
+        let status = nsc_api::sign_offchain(&offchain_input, &mut offchain_out);
+        assert_eq!(
+            status,
+            NscStatus::InvalidPointer as u32,
+            "scenario 5p-personal-hex: 513 non-text bytes must be refused (got {})",
+            status
+        );
+        // Nothing was written: the next signature advances from the same count.
+        offchain_input[14..16].copy_from_slice(&(msg.len() as u16).to_be_bytes());
+        offchain_input[17..17 + msg.len()].copy_from_slice(msg);
+        let status = nsc_api::sign_offchain(&offchain_input[..17 + msg.len()], &mut offchain_out);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-personal-hex re-sign (got {})", status);
+        let next_count = u64::from_be_bytes(offchain_out[..8].try_into().unwrap());
+        assert_eq!(next_count, signed_count + 1, "the refused request must not advance the counter");
+        hprintln!("[NS][e2e]   → hex personal_sign signed; 513-byte non-text refused, counter unchanged");
+    }
+
     // Scenario 5p-raw32: the loudly-labelled blind RAW32 tier.
     hprintln!("[NS][e2e] Scenario 5p-raw32: RAW32 off-chain signature");
     {

@@ -258,6 +258,16 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let payload =
         &snap[SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF..SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF + payload_len];
 
+    // A personal_sign message must fit the trusted display in full — text
+    // rows, or hex for a message that is not text — or nothing is shown and
+    // nothing is written: refused here, before the first flash write below.
+    if kind == OFFCHAIN_KIND_PERSONAL_SIGN
+        && crate::tx::display::personal_sign_msg_pages(payload).is_none()
+    {
+        crate::ui::show_status("EIP-1271", "msg too long");
+        return NscStatus::InvalidPointer as u32;
+    }
+
     // ── 5. Slot key + registration probe ────────────────────────────
     let slot_flash_key =
         crate::offchain_state::slot_key_compute(account_index as u8, chain_id, slot_index);

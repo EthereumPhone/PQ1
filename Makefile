@@ -466,7 +466,8 @@ e2e-px: E2E_EXTRA_FEATURES = ,ui-px
 # (port steps 1-3).
 E2E_PX_TRANSCRIPTS ?= 0
 # 50 = 47 + Scenario 5e-rot (batch rotation consent, its member, final ask).
-e2e-px: E2E_PX_TRANSCRIPTS = 50
+# 53 = 50 + Scenarios 5p-personal-siwe and 5p-personal-hex (two hex signs).
+e2e-px: E2E_PX_TRANSCRIPTS = 53
 e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
 
 e2e: ## Automated unified-sign E2E (QEMU)

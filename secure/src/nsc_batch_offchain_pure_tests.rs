@@ -1087,6 +1087,24 @@ fn negative_sign_offchain_caps_personal_sign_payload_len() {
 }
 
 #[test]
+fn negative_sign_offchain_display_budget_gate_precedes_first_flash_write() {
+    // A personal_sign message the display cannot show in full (text rows,
+    // or hex for a non-text message) is refused before the first page-123
+    // write — the counter-floor repair — so an unshowable request leaves no
+    // durable trace.
+    let gate = CMD_SIGN_OFFCHAIN_SRC
+        .find("crate::tx::display::personal_sign_msg_pages(payload).is_none()")
+        .expect("display-budget gate present");
+    let first_write = CMD_SIGN_OFFCHAIN_SRC
+        .find("offchain_count_promote_to(")
+        .expect("counter-floor repair present");
+    let slot_probe = CMD_SIGN_OFFCHAIN_SRC.find("// ── 5. Slot key + registration probe").expect("§5 present");
+    assert!(gate < slot_probe && slot_probe < first_write);
+    assert!(CMD_SIGN_OFFCHAIN_SRC[gate - 80..gate].contains("kind == OFFCHAIN_KIND_PERSONAL_SIGN"));
+    assert!(CMD_SIGN_OFFCHAIN_SRC[gate..slot_probe].contains("return NscStatus::InvalidPointer as u32;"));
+}
+
+#[test]
 fn negative_sign_offchain_rejects_unknown_flag_bits() {
     // `flags & !OFFCHAIN_FLAGS_MASK != 0` is the canonical rejection
     // of bits the firmware does not yet implement. Without this, a

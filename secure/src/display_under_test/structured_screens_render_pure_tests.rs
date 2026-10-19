@@ -21,6 +21,8 @@ use super::userop_screens_render_pure_tests::{
 };
 use super::Pages;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
+use alloc::{vec, vec::Vec as _};
 use crate::names::NameResolver;
 use crate::tx::eip712::cowswap::{CowLeg, VerifiedCowswapV3};
 use pqsigner_ui_px::Icon;
@@ -290,9 +292,8 @@ fn offchain_trailers<'a>(
     }
 }
 
-#[test]
-fn offchain_personal_sign_counterfactual_screens() {
-    let msg = b"Login to app.example.com? Nonce: 8f3a9c2e1b, issued 2026-09-23T10:00:00Z";
+/// The lifted personal_sign dialog for `msg` (counterfactual wallet).
+fn personal_lift(msg: &'static [u8], name: &'static str) -> Lifted {
     let body = OffchainBody::Personal { facts: offchain_facts(false), msg };
     let mut pages = super::offchain_screens::render_pages(&body);
     let t = crate::tx::eip1559::Eip1559Tx::default();
@@ -302,12 +303,103 @@ fn offchain_personal_sign_counterfactual_screens() {
         body: Body::Offchain(body),
         trailers: &facts,
     };
-    let l = finish(pages, &inputs, "personal");
+    finish(pages, &inputs, name)
+}
+
+#[test]
+fn offchain_personal_sign_counterfactual_screens() {
+    let msg = b"Login to app.example.com? Nonce: 8f3a9c2e1b, issued 2026-09-23T10:00:00Z";
+    let l = personal_lift(msg, "personal");
     assert_eq!(hero_caption(&l), "SIGN EIP-1271?");
     let text = screen_text(&l.screens).replace('\n', "");
     assert!(text.contains("app.example.com?") && text.contains("8f3a9c2e1b"), "{text}");
     assert!(l.screens.as_slice().iter().any(|s| s.label() == b"! UNDEPLOYED" && s.pulse()));
-    check("eip1271", "personal_counterfactual", &l, 8453, "personal", "1076b83796a6e168c2ff56da3033152cf8687539cd058ced5927e9dfe204341c");
+    // The message (and the loud MODE behind it) before the early exit.
+    assert_eq!(
+        ids(&l.screens),
+        ["SIGN", "MSG", "MODE", "NETWORK", "ACCOUNT", "CONFIRM", "SIGNER", "KEYS", "FP8213", "DIGEST", "SIGN"]
+    );
+    check("eip1271", "personal_counterfactual", &l, 8453, "personal", "d5d57a861d18a434ea0ce9f4fb38ead486dc7215bcc0594a5e6bff3cc3a46450");
+}
+
+#[test]
+fn offchain_personal_sign_siwe_screens() {
+    // A full SIWE message: every line feed starts a new line, the address is
+    // kept whole on one screen, and Confirm? follows the last message screen.
+    let msg: &'static [u8] = b"app.example.com wants you to sign in with your Ethereum account:\n\
+0x1234567890AbcdEF1234567890aBcdef12345678\n\
+\n\
+Sign in to Example.\n\
+\n\
+URI: https://app.example.com\n\
+Version: 1\n\
+Chain ID: 1\n\
+Nonce: 32891756\n\
+Issued At: 2026-10-19T12:00:00Z";
+    let l = personal_lift(msg, "personal");
+    let ids = ids(&l.screens);
+    let last_msg = ids.iter().rposition(|i| i.starts_with("MSG")).unwrap();
+    assert!(last_msg >= 2, "{ids:?}");
+    assert_eq!(ids[last_msg + 1], "MODE");
+    assert_eq!(ids[last_msg + 2], "CONFIRM");
+    let squash = |t: &str| t.chars().filter(|c| !c.is_whitespace()).collect::<alloc::string::String>();
+    let text = squash(&screen_text(&l.screens));
+    for line in msg.split(|&b| b == b'\n') {
+        let line = squash(core::str::from_utf8(line).unwrap());
+        assert!(text.contains(&line), "{line} missing:\n{text}");
+    }
+    check("eip1271", "personal_siwe", &l, 8453, "personal", "5fc61dba79050662e2929a76a1d3a5ae011f88fda2d73274768f71a71db7a1f2");
+}
+
+#[test]
+fn offchain_personal_sign_hex_screens() {
+    let msg: &'static [u8] = &[0xde, 0xad, 0xbe, 0xef, 0x00, 0xff, 0x10, 0xe2, 0xc3, 0xa4, 0xb5, 0xc6];
+    let l = personal_lift(msg, "personal");
+    let ids = ids(&l.screens);
+    assert_eq!(&ids[..3], ["SIGN", "NOTTEXT", "MSG"]);
+    let nottext = &l.screens.as_slice()[1];
+    assert!(nottext.pulse() && nottext.label() == b"! NOT TEXT");
+    assert_eq!(l.screens.as_slice()[2].label(), b"MESSAGE HEX");
+    let text = screen_text(&l.screens);
+    assert!(text.contains("deadbeef 00ff10e2") && text.contains("c3a4b5c6"), "{text}");
+    // Legacy and pixel agree on the view.
+    assert_eq!(String::from_utf8_lossy(&l.pages.buf[0][1]).trim_end(), "! NOT TEXT (HEX)");
+    check("eip1271", "personal_hex", &l, 8453, "personal", "c9cc0eed34fa34a4710dd4e471d7083cd7f5637d21839712a3995055f509737d");
+}
+
+#[test]
+fn offchain_personal_sign_worst_cases_fit_the_transcript() {
+    // Every view at its budget edge lifts (no emitter refusal), with the
+    // message whole before Confirm?.
+    let mut cases: Vec<Vec<u8>> = vec![vec![0xff; 512], b"\n".repeat(71), vec![b'W'; 700], vec![b'@'; 700]];
+    // LF-dense wide lines: 72 rows of 16 wide glyphs ending on a space.
+    let mut dense = Vec::new();
+    for i in 0..43 {
+        if i > 0 {
+            dense.push(b'\n');
+        }
+        dense.extend_from_slice(b"WWWWWWW WWWWWWW");
+    }
+    cases.push(dense);
+    // Lines that each wrap to four screen lines (kept apart), mixed with
+    // three-line ones.
+    let mut mixed = Vec::new();
+    for i in 0..20 {
+        if i > 0 {
+            mixed.push(b'\n');
+        }
+        mixed.extend_from_slice(if i % 2 == 0 { &b"W W W W W W W W W W W W W W W W W W W W W"[..] } else { &b"WWWWWWWWWWWWWWWWWWWWWWWWWW"[..] });
+    }
+    cases.push(mixed);
+    for msg in cases {
+        assert!(super::eip1271::personal_sign_msg_pages(&msg).is_some(), "{} B in budget", msg.len());
+        let msg: &'static [u8] = Box::leak(msg.into_boxed_slice());
+        let l = personal_lift(msg, "personal");
+        assert!(l.screens.len() <= pqsigner_ui_px::screen::MAX_SCREENS);
+        let ids = ids(&l.screens);
+        let confirm = ids.iter().position(|i| i == "CONFIRM").unwrap();
+        assert!(ids.iter().rposition(|i| i.starts_with("MSG")).unwrap() < confirm, "{ids:?}");
+    }
 }
 
 #[test]
@@ -330,7 +422,9 @@ fn offchain_raw32_screens() {
     for want in ["BLIND", "HASH", "FP8213", "DIGEST", "FP8213B", "DIGEST2", "OFFSIGNR", "WALLET", "MODE", "KEYS"] {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
-    check("eip1271", "raw32", &l, 8453, "raw32", "319fe0f92bff425107c70872279f9ed92721801c19be37d7a2f0ecd8e19fb6d1");
+    // The hash is read before the early exit.
+    assert_eq!(&ids[..7], ["SIGN", "BLIND", "HASH", "MODE", "NETWORK", "CONFIRM", "ACCOUNT"]);
+    check("eip1271", "raw32", &l, 8453, "raw32", "e64cf866c7665606779917b46a8dabfecb2ad575e746c978ee06f6869292faa5");
 }
 
 #[test]
@@ -373,7 +467,12 @@ fn offchain_eip712_typed_screens() {
     };
     let l = finish_ref(pinned, &inputs, "typed");
     assert!(hero_caption(&l).starts_with("SIGN "));
-    check("eip1271", "typed_ballot", &l, 1, "typed", "911fc4760b31cc9ebb9fe042b88022cb9acc29eaf8b22e779ed0cd0103d032b5");
+    // Every field before the early exit, which takes the first fingerprint's
+    // place.
+    let ids = ids(&l.screens);
+    let confirm = ids.iter().position(|i| i == "CONFIRM").unwrap();
+    assert_eq!(ids[confirm + 1], "FP8213", "{ids:?}");
+    check("eip1271", "typed_ballot", &l, 1, "typed", "99c95fcc050e7cf3359e28418495489a97db7c9d170c022fa516c76e0beabd28");
 }
 
 

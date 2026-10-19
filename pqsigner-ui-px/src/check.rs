@@ -27,8 +27,9 @@
 //! * a chain screen (`CHAIN`) follows the `TO` or `AMOUNT` it qualifies;
 //! * flow shape: hero first (committing), last byte-equal to it, exactly
 //!   two heroes; `Confirm?` exactly at index 5 iff ≥ 7 detail-like screens,
-//!   else none (a CoW order, direct or Safe-wrapped, moves it past the buy leg —
-//!   [`confirm_index`]); no `Legacy` record.
+//!   else none (a CoW order, direct or Safe-wrapped, moves it past the buy leg,
+//!   an off-chain flow past its content — [`confirm_index`]); no `Legacy`
+//!   record.
 
 use crate::fit::{measure_q6, Region};
 use crate::screen::{screen_exact, Kind, Screen, Screens, Tier, Weight};

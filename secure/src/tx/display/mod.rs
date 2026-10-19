@@ -120,8 +120,8 @@ pub use blind_sign::render_blind_sign_pages;
 pub use eip1271::{render_eip1271_personal_sign_pages, render_eip1271_raw32_pages};
 pub(crate) use eip1271::{
     append_eip1271_context_pages, eip1271_context_final_set_proof,
-    eip1271_context_page_proof, OffchainConfirmContext, OffchainConfirmReceipt,
-    OFFCHAIN_CONTEXT_CFI_EXPECTED, OFFCHAIN_CONTEXT_PAGES,
+    eip1271_context_page_proof, personal_sign_msg_pages, OffchainConfirmContext,
+    OffchainConfirmReceipt, OFFCHAIN_CONTEXT_CFI_EXPECTED, OFFCHAIN_CONTEXT_PAGES,
 };
 pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;

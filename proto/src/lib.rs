@@ -1257,6 +1257,19 @@ pub const OFFCHAIN_FLAGS_MASK: u8 = OFFCHAIN_FLAG_ACCOUNT_DEPLOYED;
 /// audit.
 pub const MAX_OFFCHAIN_PERSONAL_SIGN_LEN: usize = 700;
 
+/// Maximum personal-sign message length when the message is NOT text —
+/// any byte outside printable ASCII (`0x20..=0x7E`) and line feed. Such a
+/// message is shown as hex, 8 bytes per 16-column row, three rows a page,
+/// so 512 bytes take 22 of the 24 message pages the page budget leaves.
+/// Longer non-text messages are refused; a companion signs them as RAW32.
+pub const MAX_OFFCHAIN_PERSONAL_SIGN_HEX_LEN: usize = 512;
+
+/// Maximum 16-column display rows a text personal-sign message may take:
+/// each line-feed-separated line wraps at 16 columns, and an empty line is
+/// one blank row. 72 rows fill the 24 message pages exactly. A companion
+/// counts the same rows (see `MAX_OFFCHAIN_PERSONAL_SIGN_HEX_LEN`).
+pub const MAX_OFFCHAIN_PERSONAL_SIGN_TEXT_ROWS: usize = 72;
+
 /// Maximum `encoded_data` length carried inside a
 /// `OFFCHAIN_KIND_EIP712_TYPED` payload — bounded so the secure-side
 /// hash construction never sees an unreasonable struct body. 512 B
