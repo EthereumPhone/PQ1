@@ -46,7 +46,7 @@ use super::{eip712_domain_separator, final_digest, keccak, Eip712Error};
 // `verify` compiles under host tests, letting `test_vectors` exercise the
 // full trailer→cross-check→leg-decode pipeline, not just the primitives.
 pub mod verify;
-pub use verify::{verify_and_bind_trailer, CowLeg, VerifiedCowswapV3};
+pub use verify::{verify_and_bind_trailer, verify_offchain_cow_order, CowLeg, VerifiedCowswapV3};
 
 #[cfg(test)]
 mod test_vectors;

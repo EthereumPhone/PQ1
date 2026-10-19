@@ -84,7 +84,7 @@ mod trailer_screens;
 pub(crate) use trailer_screens::{TrailerFacts, TrailerSet};
 #[cfg(all(not(test), feature = "ui-px"))]
 pub(crate) use trailer_screens::expected_trailer_count;
-#[cfg(feature = "ui-px")]
+#[cfg(not(test))]
 pub(crate) use dispatch::safe_route_meta;
 #[cfg(not(test))]
 mod safe_mgmt;
@@ -127,7 +127,7 @@ pub use erc20_known::render_erc20_known_pages;
 pub use erc20_unknown::render_erc20_unknown_pages;
 #[cfg(not(test))]
 pub use safe_display::{
-    multisend_sign_gate, render_safe_exec_pages, render_safe_v1_pages, MultisendGate,
+    multisend_sign_gate, render_safe_exec_pages, render_safe_offchain_pages, render_safe_v1_pages, MultisendGate,
 };
 pub use offchain_sync::{build_offchain_sync_pages, OFFCHAIN_SYNC_PAGES, OFFCHAIN_SYNC_PAGES_WARN};
 pub use slot_rotation::build_slot_rotation_pages;

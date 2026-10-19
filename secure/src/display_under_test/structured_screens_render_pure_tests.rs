@@ -477,6 +477,125 @@ fn offchain_eip712_typed_screens() {
 
 
 // ---------------------------------------------------------------------------
+// Structured off-chain signs: SIGN_OFFCHAIN kinds 4 (SafeTx) and 5 (CoW order)
+// ---------------------------------------------------------------------------
+
+use super::safe_display_render_pure_tests::{build_raw_trailer, erc20_transfer, usdc_meta, TOKEN};
+use crate::erc20::bundle::Erc20Metadata;
+
+fn structured_context(kind: u8, chain_id: u64) -> OffchainConfirmContext {
+    OffchainConfirmContext::new(kind, chain_id, 1, 3, WALLET, true, 7, 6, 65_536, [0x4b; 32])
+}
+
+/// The ids up to and including the `Confirm?`, and the id right after it.
+fn confirm_neighbourhood(l: &Lifted) -> (usize, String) {
+    let ids = ids(&l.screens);
+    let at = ids.iter().position(|i| i == "CONFIRM").expect("a Confirm? is inserted");
+    (at, ids[at + 1].clone())
+}
+
+/// A kind-4 dialog: the off-chain Safe body + fingerprint(SafeTxHash) +
+/// context, lifted and proven.
+fn lift_safe_offchain(
+    to: [u8; 20],
+    operation: u8,
+    raw: &[u8],
+    cow: Option<&VerifiedCowswapV3>,
+    erc20: Option<&Erc20Metadata<'_>>,
+) -> Lifted {
+    let (bundle, _) = build_raw_trailer(to, operation, raw);
+    let (verified, h) =
+        crate::tx::eip712::safe::verify_offchain_safe_tx(&bundle, 1).expect("SafeTx verifies off-chain");
+    let r = NameResolver::new();
+    let mut pages = super::safe_display::render_safe_offchain_pages(&verified, cow, erc20, &r).expect("renders");
+    let t = crate::tx::eip1559::Eip1559Tx::default();
+    let ctx = structured_context(4, 1);
+    let facts = offchain_trailers(&mut pages, &t, &[0u8; 32], &WALLET, FpKind::SafeTxHash(h), None, Some(&ctx));
+    let inputs = ContentInputs {
+        body: Body::SafeOffchain {
+            safe: &verified,
+            cow,
+            erc20,
+            resolver: &r,
+        },
+        trailers: &facts,
+    };
+    finish(pages, &inputs, "safe_offchain")
+}
+
+#[test]
+fn offchain_safe_tx_erc20_screens() {
+    let meta = usdc_meta();
+    let l = lift_safe_offchain(TOKEN, 0, &erc20_transfer([0xab; 20], 250_000_000), None, Some(&meta));
+    assert_eq!(hero_caption(&l), "SIGN SAFE TX?");
+    assert_eq!(l.screens.as_slice()[0].icon(), Some(Icon::Safe));
+    let text = screen_text(&l.screens);
+    assert!(text.contains("250.000000\nUSDC"), "{text}");
+    assert!(text.contains("Nonce: 42"), "{text}");
+    // Owner decision 2026-10-19: the whole SafeTx before the `Confirm?`.
+    let (at, next) = confirm_neighbourhood(&l);
+    assert_eq!(next, "FP8213");
+    assert!(ids(&l.screens)[..at].iter().any(|i| i == "TXINFO"));
+    check("eip1271", "safe_tx_erc20", &l, 1, "safe_offchain", "01935bb4d455ec51cca91db53399f3565d91abb2b9177728292b019598853618");
+}
+
+#[test]
+fn offchain_safe_tx_cow_presign_screens() {
+    use crate::tx::eip712::safe::multi_send::test_util::presign_calldata_stub;
+    let cow = super::safe_display_render_pure_tests::bound_cow_stub();
+    let l = lift_safe_offchain(sphincs_tz_shared::GPV2_SETTLEMENT_ADDRESS, 0, &presign_calldata_stub(), Some(&cow), None);
+    assert_eq!(hero_caption(&l), "SIGN SAFE TX?");
+    let text = screen_text(&l.screens);
+    assert!(text.contains("COW ORDER") && text.contains("= the Safe"), "{text}");
+    // The order legs, receiver, expiry, fee and appData all come first.
+    let (at, next) = confirm_neighbourhood(&l);
+    assert_eq!(next, "FP8213");
+    for want in ["BUYAMT", "RECEIVER", "EXPIRES", "FEE", "APPDATA", "TXINFO"] {
+        assert!(ids(&l.screens)[..at].iter().any(|i| i == want), "{want} after the Confirm?");
+    }
+    check("eip1271", "safe_tx_cow_presign", &l, 1, "safe_offchain", "66a7d42a50d2ffe7c14863b0f17f210bf7f132641da0e448278ad807e4a70e6c");
+}
+
+fn lift_cow_offchain(v3: &VerifiedCowswapV3) -> Lifted {
+    let mut pages = crate::tx::eip712::cowswap_display::render_cowswap_offchain_pages(&v3.canonical, &v3.sell, &v3.buy);
+    let t = crate::tx::eip1559::Eip1559Tx::default();
+    let ctx = structured_context(5, MAINNET);
+    let facts = offchain_trailers(&mut pages, &t, &[0u8; 32], &WALLET, FpKind::Eip712Final([0x5d; 32]), None, Some(&ctx));
+    let inputs = ContentInputs {
+        body: Body::CowOffchain { v3 },
+        trailers: &facts,
+    };
+    finish(pages, &inputs, "cow_offchain")
+}
+
+#[test]
+fn offchain_cow_order_screens() {
+    let v3 = cow_order(true);
+    let l = lift_cow_offchain(&v3);
+    assert_eq!(hero_caption(&l), "SIGN COW ORDER?");
+    assert_eq!(l.screens.as_slice()[0].icon(), Some(Icon::Cowswap));
+    let (at, next) = confirm_neighbourhood(&l);
+    assert_eq!(next, "FP8213");
+    for want in ["SELL", "BUY", "RECEIVER", "EXPIRES", "FEE", "SOURCES", "APPDATA"] {
+        assert!(ids(&l.screens)[..at].iter().any(|i| i == want), "{want} after the Confirm?");
+    }
+    check("eip1271", "cow_order", &l, MAINNET, "cow_offchain", "3d7c59c6191532ba2a4e07b6c1258451c4130246f5c1a4a3038ef11464c09e35");
+}
+
+#[test]
+fn offchain_cow_order_zero_receiver_names_this_wallet() {
+    let mut v3 = cow_order(true);
+    v3.canonical[48..68].fill(0);
+    let l = lift_cow_offchain(&v3);
+    let text = screen_text(&l.screens);
+    assert!(text.contains("= this wallet"), "{text}");
+    assert!(super::safe_screens_render_pure_tests::screen_text(&l.screens).contains("RECEIVER"));
+    let legacy = (0..l.pages.len).any(|i| l.pages.buf[i][1].starts_with(b"(= this wallet)"));
+    assert!(legacy, "the page painter names this wallet too");
+    check("eip1271", "cow_order_zero_receiver", &l, MAINNET, "cow_offchain", "f5db3c306c246b14178eb040515c89c71c39460ddacf90238b3724bf2520ed24");
+}
+
+// ---------------------------------------------------------------------------
 // Batch (atomic multi-UserOp: N member asks + the whole-batch ask)
 // ---------------------------------------------------------------------------
 

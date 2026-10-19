@@ -88,6 +88,34 @@ pub(crate) fn emit_safe_v1(
     emit_inner(out, &input, cow, erc20, resolver)
 }
 
+/// Emit the screens for a verified off-chain `SafeTx` (`SIGN_OFFCHAIN`
+/// kind 4) — the twin of `safe_display::render_safe_offchain_pages`.
+pub(crate) fn emit_safe_offchain(
+    out: &mut Screens,
+    safe: &VerifiedSafeV1<'_>,
+    cow: Option<&VerifiedCowswapV3>,
+    erc20: Option<&Erc20Metadata<'_>>,
+    resolver: &NameResolver<'_>,
+) -> Result<SafeBodyReceipt, ()> {
+    let tx = decode_canonical(&safe.canonical).map_err(|_| ())?;
+    let input = SafeRenderInput {
+        flavour: SafeRenderFlavour::OffchainSign { nonce: tx.nonce },
+        chain_id: tx.chain_id,
+        safe_address: tx.safe_address,
+        to: tx.to,
+        operation: tx.operation,
+        value: tx.value,
+        raw_data: safe.raw_data,
+        data_hash: tx.data_hash,
+        gas_price: tx.gas_price,
+        gas_token: tx.gas_token,
+        refund_receiver: tx.refund_receiver,
+        base_gas: tx.base_gas,
+        safe_tx_gas: tx.safe_tx_gas,
+    };
+    emit_inner(out, &input, cow, erc20, resolver)
+}
+
 /// Emit the screens for a verified `execTransaction(...)` UserOp.
 pub(crate) fn emit_safe_exec(
     out: &mut Screens,
@@ -198,6 +226,9 @@ fn emit_inner(
     let (hero_id, ask): (&[u8], &[u8]) = match input.flavour {
         SafeRenderFlavour::ApproveHash { .. } => (b"APPROVE", b"APPROVE SAFE TX?"),
         SafeRenderFlavour::ExecTransaction => (b"EXECUTE", b"EXECUTE SAFE TX?"),
+        // `SIGNSAFE` also moves `Confirm?` past the whole body
+        // (`pqsigner_ui_px::screen::confirm_index`).
+        SafeRenderFlavour::OffchainSign { .. } => (b"SIGNSAFE", b"SIGN SAFE TX?"),
     };
     e.push(ScreenBuilder::hero(hero_id, Icon::Safe, ask).finish().map_err(|_| ())?)?;
 
@@ -238,7 +269,7 @@ fn emit_inner(
 
     // ── TX INFO: nonce / execute-now + honest op row ────────────────
     let first = match input.flavour {
-        SafeRenderFlavour::ApproveHash { nonce } => nonce_line(&nonce),
+        SafeRenderFlavour::ApproveHash { nonce } | SafeRenderFlavour::OffchainSign { nonce } => nonce_line(&nonce),
         SafeRenderFlavour::ExecTransaction => Text::new().push(b"Execute now"),
     };
     let (op, op_loud) = if input.operation == 0 {

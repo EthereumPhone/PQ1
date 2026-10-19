@@ -440,6 +440,12 @@ pub(super) enum SafeRenderFlavour {
     /// refundReceiver) ride in [`SafeRenderInput`] for both flavours,
     /// so the renderer surfaces them identically regardless of flow.
     ExecTransaction,
+    /// An EIP-712 `SafeTx` signed OFF-CHAIN by this wallet as a Safe owner
+    /// (`SIGN_OFFCHAIN` kind 4). The firmware recomputed the `safeTxHash`
+    /// from the canonical it renders and signs `replay_safe_hash` of it;
+    /// nothing is sent on-chain by this signature. Carries the SafeTx nonce
+    /// like the approveHash flavour.
+    OffchainSign { nonce: [u8; 32] },
 }
 
 /// Normalised input to the shared Safe rendering body. Approve-hash and
@@ -549,6 +555,38 @@ pub fn render_safe_v1_pages(
     render_safe_pages_inner(&input, cow, erc20, resolver)
 }
 
+/// Render a verified off-chain `SafeTx` (`SIGN_OFFCHAIN` kind 4).
+///
+/// Same body as [`render_safe_v1_pages`] — the canonical and raw data are
+/// the same trailer encoding — with the `Sign Safe TX` banner. `erc20` must
+/// already be address-matched to the verified inner call
+/// (`dispatch::safe_route_meta`); `cow` is the CoW order the handler bound
+/// to a Safe-wrapped `setPreSignature` inner call (owner = the Safe).
+pub fn render_safe_offchain_pages(
+    safe: &VerifiedSafeV1<'_>,
+    cow: Option<&VerifiedCowswapV3>,
+    erc20: Option<&Erc20Metadata<'_>>,
+    resolver: &NameResolver<'_>,
+) -> Result<Pages, ()> {
+    let tx = decode_canonical(&safe.canonical).map_err(|_| ())?;
+    let input = SafeRenderInput {
+        flavour: SafeRenderFlavour::OffchainSign { nonce: tx.nonce },
+        chain_id: tx.chain_id,
+        safe_address: tx.safe_address,
+        to: tx.to,
+        operation: tx.operation,
+        value: tx.value,
+        raw_data: safe.raw_data,
+        data_hash: tx.data_hash,
+        gas_price: tx.gas_price,
+        gas_token: tx.gas_token,
+        refund_receiver: tx.refund_receiver,
+        base_gas: tx.base_gas,
+        safe_tx_gas: tx.safe_tx_gas,
+    };
+    render_safe_pages_inner(&input, cow, erc20, resolver)
+}
+
 /// Render a verified `execTransaction(...)` UserOp.
 ///
 /// Mirrors `render_safe_v1_pages` but for the direct-execution flow:
@@ -639,6 +677,7 @@ fn render_safe_pages_inner(
     let banner = match input.flavour {
         SafeRenderFlavour::ApproveHash { .. } => "Approve Safe TX",
         SafeRenderFlavour::ExecTransaction => "Execute Safe TX",
+        SafeRenderFlavour::OffchainSign { .. } => "Sign Safe TX",
     };
     write_line(&mut pages.buf[0][0], banner);
     {
@@ -657,7 +696,7 @@ fn render_safe_pages_inner(
     // ── Page 2: Safe-level metadata (flavour-specific top row + op +
     //          inner-kind hint) ──────────────────────────────────────
     match input.flavour {
-        SafeRenderFlavour::ApproveHash { nonce } => {
+        SafeRenderFlavour::ApproveHash { nonce } | SafeRenderFlavour::OffchainSign { nonce } => {
             write_safe_nonce_row(&mut pages.buf[2][0], &nonce);
         }
         SafeRenderFlavour::ExecTransaction => {

@@ -160,3 +160,54 @@ pub fn verify_and_bind_trailer<'a>(
         raw_data,
     })
 }
+
+/// Verify an off-chain `SafeTx` (`SIGN_OFFCHAIN` kind 4) and return it with
+/// the `safeTxHash` the device recomputed from it.
+///
+/// `safe_bundle` is the same `canonical(281) || raw_len(2) || raw_data`
+/// encoding as the on-chain `approveHash` trailer, and must be consumed
+/// EXACTLY. There is no calldata to bind to: the signature itself commits to
+/// the recomputed hash (the handler signs `replay_safe_hash(H)`), and the
+/// EIP-712 domain inside `H` binds the Safe address and chain. The checks
+/// kept from [`verify_and_bind_trailer`] are framing, chain pinning
+/// (`canonical.chain_id == chain_id`: the Safe and this wallet live on the
+/// same chain), the operation gate, and the data-hash bind; in addition the
+/// Safe address must not be zero. Safes older than v1.3.0 use a domain
+/// without `chainId`, so their `safeTxHash` differs from `H` and their
+/// owners' signatures cannot verify — the companion keeps those on RAW32.
+pub fn verify_offchain_safe_tx(
+    safe_bundle: &[u8],
+    chain_id: u64,
+) -> Option<(VerifiedSafeV1<'_>, [u8; 32])> {
+    if safe_bundle.len() < SAFE_V1_CANONICAL_LEN + 2 {
+        return None;
+    }
+    let canonical_bytes: &[u8; SAFE_V1_CANONICAL_LEN] =
+        safe_bundle[..SAFE_V1_CANONICAL_LEN].try_into().ok()?;
+    let raw_len = u16::from_be_bytes([
+        safe_bundle[SAFE_V1_CANONICAL_LEN],
+        safe_bundle[SAFE_V1_CANONICAL_LEN + 1],
+    ]) as usize;
+    if raw_len > SAFE_V1_RAW_DATA_MAX || SAFE_V1_CANONICAL_LEN + 2 + raw_len != safe_bundle.len() {
+        return None;
+    }
+    let raw_data = &safe_bundle[SAFE_V1_CANONICAL_LEN + 2..];
+
+    let tx = decode_canonical(canonical_bytes).ok()?;
+    if tx.chain_id != chain_id || tx.safe_address == [0u8; 20] {
+        return None;
+    }
+    if tx.operation != 0
+        && !super::multi_send::is_multisend_claim(tx.operation, &tx.to, raw_data)
+    {
+        return None;
+    }
+    if keccak(raw_data) != tx.data_hash {
+        return None;
+    }
+    let safe_tx_hash = compute_safe_tx_hash(canonical_bytes).ok()?;
+
+    let mut canonical = [0u8; SAFE_V1_CANONICAL_LEN];
+    canonical.copy_from_slice(canonical_bytes);
+    Some((VerifiedSafeV1 { canonical, raw_data }, safe_tx_hash))
+}

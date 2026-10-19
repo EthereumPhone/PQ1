@@ -1028,8 +1028,17 @@ pub const CAP_SIGN_USEROP: u32 = 1 << 0;
 /// remain clear. Companions must gate the envelope on this bit rather than the
 /// placeholder firmware-version bytes.
 pub const CAP_ERC7730_PROOF_SET: u32 = 1 << 2;
+/// `GET_DEVICE_INFO.capabilities` bit 3: `CMD_SIGN_OFFCHAIN` accepts
+/// [`OFFCHAIN_KIND_SAFE_TX`]. Companions MUST gate the kind on this bit and
+/// never on an error: falling back to RAW32 after a refusal would turn every
+/// structured refusal into a blind signature.
+pub const CAP_OFFCHAIN_SAFE_TX: u32 = 1 << 3;
+/// `GET_DEVICE_INFO.capabilities` bit 4: `CMD_SIGN_OFFCHAIN` accepts
+/// [`OFFCHAIN_KIND_COW_ORDER`]. Same gating rule as [`CAP_OFFCHAIN_SAFE_TX`].
+pub const CAP_OFFCHAIN_COW_ORDER: u32 = 1 << 4;
 /// Capability bitmap emitted by the current firmware.
-pub const DEVICE_CAPABILITIES: u32 = CAP_SIGN_USEROP | CAP_ERC7730_PROOF_SET;
+pub const DEVICE_CAPABILITIES: u32 =
+    CAP_SIGN_USEROP | CAP_ERC7730_PROOF_SET | CAP_OFFCHAIN_SAFE_TX | CAP_OFFCHAIN_COW_ORDER;
 
 // -- Session management (0x10-0x1F) --
 pub const INS_V2_UNLOCK: u8 = 0x10;
@@ -1307,13 +1316,64 @@ pub const MAX_OFFCHAIN_EIP712_TYPED_V3_LEN: usize =
         + 2 + MAX_OFFCHAIN_EIP712_NESTED_LEN
         + 2 + ERC7730_LEGACY_BUNDLE_MAX_LEN;
 
+/// Per-bundle cap of a kind-8 name bundle carried in an
+/// `OFFCHAIN_KIND_SAFE_TX` payload. Mirrors `pqsigner_tx::names::bundle::
+/// MAX_NAME_BUNDLE_LEN` (`8 + 20 + 1 + NAMES_MAX_LEN(32) + 4 + 4 + 32 * 32`
+/// = 1093); proto has no dependencies, so the secure world const-asserts the
+/// two are equal (`cmd_sign_offchain_structured.rs`).
+pub const OFFCHAIN_NAME_BUNDLE_MAX_LEN: usize = 8 + 20 + 1 + 32 + 4 + 4 + 32 * 32;
+
+/// Maximum name bundles in an `OFFCHAIN_KIND_SAFE_TX` payload. Mirrors
+/// `pqsigner_tx::names::MAX_NAME_BUNDLES` (const-asserted secure-side).
+pub const OFFCHAIN_MAX_NAME_BUNDLES: usize = 4;
+
+/// Minimum `OFFCHAIN_KIND_SAFE_TX` payload: `safe_len(2) +
+/// safe_v1(canonical 281 + raw_len 2, empty data) + erc20_len(2) +
+/// cow_len(2) + names_count(1)`.
+pub const MIN_OFFCHAIN_SAFE_TX_LEN: usize = 2 + SAFE_V1_CANONICAL_LEN + 2 + 2 + 2 + 1;
+
+/// Maximum `OFFCHAIN_KIND_SAFE_TX` payload. Layout (all lengths `u16` BE):
+/// ```text
+///   [safe_len:2][safe_v1: canonical(281) || raw_len(2) || raw_data]   safe_len ≤ SAFE_V1_PAYLOAD_MAX
+///   [erc20_len:2][erc20 bundle]                                      ≤ COW_ORDER_BUNDLE_MAX (1120)
+///   [cow_len:2][CoW order trailer]                                   ≤ COW_ORDER_TRAILER_MAX_LEN
+///   [names_count:1]{[name_len:2][name bundle]}×names_count           ≤ 4 × (2 + 1093)
+/// ```
+/// The `safe_v1` section is byte-identical to the on-chain `approveHash`
+/// trailer; the CoW section (present iff the SafeTx's inner call is a
+/// GPv2 `setPreSignature`, directly or as a MultiSendCallOnly record) is
+/// byte-identical to the on-chain CoW order trailer.
+pub const MAX_OFFCHAIN_SAFE_TX_LEN: usize = 2
+    + SAFE_V1_PAYLOAD_MAX
+    + 2
+    + COW_ORDER_BUNDLE_MAX
+    + 2
+    + COW_ORDER_TRAILER_MAX_LEN
+    + 1
+    + OFFCHAIN_MAX_NAME_BUNDLES * (2 + OFFCHAIN_NAME_BUNDLE_MAX_LEN);
+
+/// Minimum `OFFCHAIN_KIND_COW_ORDER` payload: the 204-byte canonical
+/// GPv2Order plus the two (possibly zero) leg-bundle length words.
+pub const MIN_OFFCHAIN_COW_ORDER_LEN: usize = EIP712_CANONICAL_LEN + 2 + 2;
+
+/// Maximum `OFFCHAIN_KIND_COW_ORDER` payload: `canonical(204) ||
+/// sell_len(2) || sell_bundle || buy_len(2) || buy_bundle` — byte-identical
+/// to the on-chain CoW order trailer, consumed EXACTLY.
+pub const MAX_OFFCHAIN_COW_ORDER_LEN: usize = COW_ORDER_TRAILER_MAX_LEN;
+
 /// Maximum input length the gateway will accept for `CMD_SIGN_OFFCHAIN`.
 /// Sized for the largest valid request across all kinds.
 pub const SIGN_OFFCHAIN_INPUT_MAX_LEN: usize = SIGN_OFFCHAIN_HEADER_LEN
     + max_usize(
-        MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
-        max_usize(MAX_OFFCHAIN_EIP712_TYPED_LEN, MAX_OFFCHAIN_EIP712_TYPED_V3_LEN),
+        max_usize(
+            MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
+            max_usize(MAX_OFFCHAIN_EIP712_TYPED_LEN, MAX_OFFCHAIN_EIP712_TYPED_V3_LEN),
+        ),
+        max_usize(MAX_OFFCHAIN_SAFE_TX_LEN, MAX_OFFCHAIN_COW_ORDER_LEN),
     );
+
+// Every kind's payload length must fit the header's `u16 payload_len`.
+const _: () = assert!(SIGN_OFFCHAIN_INPUT_MAX_LEN - SIGN_OFFCHAIN_HEADER_LEN <= u16::MAX as usize);
 
 /// `const`-evaluable `max` over `usize`. Not in core::cmp yet.
 const fn max_usize(a: usize, b: usize) -> usize {
@@ -1345,6 +1405,27 @@ pub const OFFCHAIN_KIND_EIP712_TYPED: u8 = 2;
 /// `trailer_len`, WITHOUT first reading the not-yet-reached trailer (design §10
 /// E3). v0x02 companions stay on `OFFCHAIN_KIND_EIP712_TYPED` unchanged.
 pub const OFFCHAIN_KIND_EIP712_TYPED_V3: u8 = 3;
+/// An EIP-712 `SafeTx` (Safe ≥ v1.3.0 domain `{chainId, verifyingContract}`)
+/// signed off-chain by this wallet as a Safe owner. The companion sends the
+/// on-chain `safe_v1` trailer encoding (canonical SafeTx + raw inner data,
+/// see [`MAX_OFFCHAIN_SAFE_TX_LEN`]); the device recomputes `safeTxHash`,
+/// renders the Safe transaction, and signs
+/// `replay_safe_hash(chain, wallet, safeTxHash)` — byte-identical to what
+/// `OFFCHAIN_KIND_RAW32` signs for the same hash, so the signature verifies
+/// exactly where a RAW32 one would (a Safe ≥ v1.5.0, whose `checkSignatures`
+/// calls the bytes32 `isValidSignature`; v1.3.0 / v1.4.1 call the legacy
+/// `isValidSignature(bytes,bytes)`, which `PQSmartWallet` does not
+/// implement). Requires a deployed wallet. Gated by [`CAP_OFFCHAIN_SAFE_TX`].
+pub const OFFCHAIN_KIND_SAFE_TX: u8 = 4;
+/// A CoW Protocol `GPv2Order` signed off-chain by this wallet (the CoW
+/// `eip1271` signing scheme, owner = this wallet). The companion sends the
+/// on-chain CoW order trailer encoding (canonical order + two ERC-20 leg
+/// bundles, see [`MAX_OFFCHAIN_COW_ORDER_LEN`]); the device recomputes the
+/// order digest under the GPv2Settlement domain, renders the order, and
+/// signs `replay_safe_hash(chain, wallet, orderDigest)` — byte-identical to
+/// `OFFCHAIN_KIND_RAW32` over the same digest. Requires a deployed wallet.
+/// Gated by [`CAP_OFFCHAIN_COW_ORDER`].
+pub const OFFCHAIN_KIND_COW_ORDER: u8 = 5;
 
 // ─── ERC-7730 clear-signing descriptor trailer ───────────────────────
 //

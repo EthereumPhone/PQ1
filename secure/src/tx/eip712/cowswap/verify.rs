@@ -222,3 +222,29 @@ pub fn verify_and_bind_trailer(
         buy,
     })
 }
+
+/// Verify an off-chain CoW order (`SIGN_OFFCHAIN` kind 5, the CoW `eip1271`
+/// signing scheme with this wallet as the owner) and return it with the
+/// order digest the device recomputed from it.
+///
+/// There is no `setPreSignature` calldata to bind to: the signature itself
+/// commits to the recomputed digest (the handler signs
+/// `replay_safe_hash(digest)`), and the digest's GPv2Settlement domain binds
+/// the chain. [`super::compute_digest`] decodes the canonical (enum ranges)
+/// and refuses `canonical.chain_id != chain_id`. Each leg bundle is decoded
+/// exactly as on the on-chain route: an empty, unverifiable or mismatched
+/// bundle degrades that leg to `AddrHex`, never a refusal.
+pub fn verify_offchain_cow_order(
+    canonical_bytes: &[u8; EIP712_CANONICAL_LEN],
+    sell_bundle: &[u8],
+    buy_bundle: &[u8],
+    chain_id: u64,
+) -> Option<(VerifiedCowswapV3, [u8; 32])> {
+    let digest = super::compute_digest(canonical_bytes, chain_id).ok()?;
+    let order = decode_canonical(canonical_bytes).ok()?;
+    let sell = decode_leg(Some(sell_bundle).filter(|b| !b.is_empty()), &order.sell_token, order.chain_id);
+    let buy = decode_leg(Some(buy_bundle).filter(|b| !b.is_empty()), &order.buy_token, order.chain_id);
+    let mut canonical = [0u8; EIP712_CANONICAL_LEN];
+    canonical.copy_from_slice(canonical_bytes);
+    Some((VerifiedCowswapV3 { canonical, sell, buy }, digest))
+}

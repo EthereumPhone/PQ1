@@ -167,6 +167,296 @@ pub fn parse_eip712_typed_frame(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Structured off-chain kinds: SafeTx (4) and CoW order (5)
+// ---------------------------------------------------------------------------
+
+use pqsigner_proto::{
+    COW_ORDER_BUNDLE_MAX, COW_ORDER_TRAILER_MAX_LEN, EIP712_CANONICAL_LEN,
+    OFFCHAIN_MAX_NAME_BUNDLES, OFFCHAIN_NAME_BUNDLE_MAX_LEN, SAFE_V1_CANONICAL_LEN,
+    SAFE_V1_PAYLOAD_MAX,
+};
+
+/// The sections of an `OFFCHAIN_KIND_SAFE_TX` payload. Every slice borrows
+/// from the input payload.
+#[derive(Debug)]
+pub struct SafeTxFrame<'a> {
+    /// The on-chain `safe_v1` trailer encoding: `canonical(281) ||
+    /// raw_len(2) || raw_data`, with `raw_data` ending EXACTLY at the end of
+    /// this slice.
+    pub safe_bundle: &'a [u8],
+    /// Optional ERC-20 metadata bundle for the SafeTx inner call (empty =
+    /// none).
+    pub erc20: &'a [u8],
+    /// Optional CoW order trailer for a Safe-wrapped `setPreSignature`
+    /// (empty = none). Required-iff is decided by the secure world.
+    pub cow: &'a [u8],
+    /// Name bundles; only the first `names_count` are meaningful.
+    pub names: [&'a [u8]; OFFCHAIN_MAX_NAME_BUNDLES],
+    /// How many entries of `names` are present.
+    pub names_count: usize,
+}
+
+/// The sections of an `OFFCHAIN_KIND_COW_ORDER` payload.
+#[derive(Debug)]
+pub struct CowOrderFrame<'a> {
+    /// The 204-byte canonical GPv2Order.
+    pub canonical: &'a [u8; EIP712_CANONICAL_LEN],
+    /// Sell-leg ERC-20 bundle (empty = none).
+    pub sell: &'a [u8],
+    /// Buy-leg ERC-20 bundle (empty = none).
+    pub buy: &'a [u8],
+}
+
+/// Why a structured off-chain frame was refused. `status_str` is the
+/// ≤16-column banner the secure world shows.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum StructuredFrameError {
+    /// A length word or its section runs past the payload end.
+    Truncated,
+    /// The Safe section is shorter than canonical + raw_len, or over the cap.
+    BadSafeLen,
+    /// The Safe section's `raw_len` does not end exactly at its end.
+    BadSafeRawLen,
+    /// The ERC-20 bundle is over the cap.
+    BadErc20Len,
+    /// The CoW section is non-empty but outside the trailer bounds.
+    BadCowLen,
+    /// More name bundles than the cap.
+    BadNamesCount,
+    /// A name bundle is empty or over the cap.
+    BadNameLen,
+    /// A CoW leg bundle is over the cap.
+    BadLegLen,
+    /// Bytes remain after the last section (hidden trailing data).
+    TrailingBytes,
+}
+
+impl StructuredFrameError {
+    /// The exact `show_status` banner for this reason.
+    #[must_use]
+    pub fn status_str(self) -> &'static str {
+        match self {
+            StructuredFrameError::Truncated => "struct truncated",
+            StructuredFrameError::BadSafeLen => "bad safe len",
+            StructuredFrameError::BadSafeRawLen => "bad safe raw len",
+            StructuredFrameError::BadErc20Len => "bad erc20 len",
+            StructuredFrameError::BadCowLen => "bad cow len",
+            StructuredFrameError::BadNamesCount => "bad names count",
+            StructuredFrameError::BadNameLen => "bad name len",
+            StructuredFrameError::BadLegLen => "bad leg len",
+            StructuredFrameError::TrailingBytes => "struct trailing",
+        }
+    }
+}
+
+/// Read `[u16 len][len bytes]` at `*p`, bounded by `max`; advances `*p`.
+#[inline]
+fn take_u16_prefixed<'a>(
+    payload: &'a [u8],
+    p: &mut usize,
+    max: usize,
+    too_long: StructuredFrameError,
+) -> Result<&'a [u8], StructuredFrameError> {
+    if *p > payload.len() || payload.len() - *p < 2 {
+        return Err(StructuredFrameError::Truncated);
+    }
+    let len = read_u16(payload, *p) as usize;
+    *p += 2;
+    if len > max {
+        return Err(too_long);
+    }
+    if payload.len() - *p < len {
+        return Err(StructuredFrameError::Truncated);
+    }
+    let out = &payload[*p..*p + len];
+    *p += len;
+    Ok(out)
+}
+
+/// Strictly decode an `OFFCHAIN_KIND_SAFE_TX` payload (layout in
+/// `pqsigner_proto::MAX_OFFCHAIN_SAFE_TX_LEN`). Panic/OOB-free for ANY
+/// input; `Ok` guarantees every byte is consumed (no hidden trailing data)
+/// and that the Safe section's `raw_data` ends exactly at the section end.
+pub fn parse_safe_tx_frame(payload: &[u8]) -> Result<SafeTxFrame<'_>, StructuredFrameError> {
+    let mut p = 0usize;
+    let safe_bundle = take_u16_prefixed(
+        payload,
+        &mut p,
+        SAFE_V1_PAYLOAD_MAX,
+        StructuredFrameError::BadSafeLen,
+    )?;
+    if safe_bundle.len() < SAFE_V1_CANONICAL_LEN + 2 {
+        return Err(StructuredFrameError::BadSafeLen);
+    }
+    let raw_len = read_u16(safe_bundle, SAFE_V1_CANONICAL_LEN) as usize;
+    if SAFE_V1_CANONICAL_LEN + 2 + raw_len != safe_bundle.len() {
+        return Err(StructuredFrameError::BadSafeRawLen);
+    }
+    let erc20 = take_u16_prefixed(
+        payload,
+        &mut p,
+        COW_ORDER_BUNDLE_MAX,
+        StructuredFrameError::BadErc20Len,
+    )?;
+    let cow = take_u16_prefixed(
+        payload,
+        &mut p,
+        COW_ORDER_TRAILER_MAX_LEN,
+        StructuredFrameError::BadCowLen,
+    )?;
+    if !cow.is_empty() && cow.len() < EIP712_CANONICAL_LEN {
+        return Err(StructuredFrameError::BadCowLen);
+    }
+    if p >= payload.len() {
+        return Err(StructuredFrameError::Truncated);
+    }
+    let names_count = payload[p] as usize;
+    p += 1;
+    if names_count > OFFCHAIN_MAX_NAME_BUNDLES {
+        return Err(StructuredFrameError::BadNamesCount);
+    }
+    let mut names: [&[u8]; OFFCHAIN_MAX_NAME_BUNDLES] = [&[]; OFFCHAIN_MAX_NAME_BUNDLES];
+    for slot in names.iter_mut().take(names_count) {
+        let n = take_u16_prefixed(
+            payload,
+            &mut p,
+            OFFCHAIN_NAME_BUNDLE_MAX_LEN,
+            StructuredFrameError::BadNameLen,
+        )?;
+        if n.is_empty() {
+            return Err(StructuredFrameError::BadNameLen);
+        }
+        *slot = n;
+    }
+    if p != payload.len() {
+        return Err(StructuredFrameError::TrailingBytes);
+    }
+    Ok(SafeTxFrame {
+        safe_bundle,
+        erc20,
+        cow,
+        names,
+        names_count,
+    })
+}
+
+/// Strictly decode an `OFFCHAIN_KIND_COW_ORDER` payload: `canonical(204) ||
+/// sell_len(2) || sell || buy_len(2) || buy`, consumed EXACTLY. Panic/OOB-
+/// free for ANY input.
+pub fn parse_cow_order_frame(payload: &[u8]) -> Result<CowOrderFrame<'_>, StructuredFrameError> {
+    if payload.len() < EIP712_CANONICAL_LEN {
+        return Err(StructuredFrameError::Truncated);
+    }
+    let Ok(canonical) = <&[u8; EIP712_CANONICAL_LEN]>::try_from(&payload[..EIP712_CANONICAL_LEN])
+    else {
+        return Err(StructuredFrameError::Truncated);
+    };
+    let mut p = EIP712_CANONICAL_LEN;
+    let sell = take_u16_prefixed(payload, &mut p, COW_ORDER_BUNDLE_MAX, StructuredFrameError::BadLegLen)?;
+    let buy = take_u16_prefixed(payload, &mut p, COW_ORDER_BUNDLE_MAX, StructuredFrameError::BadLegLen)?;
+    if p != payload.len() {
+        return Err(StructuredFrameError::TrailingBytes);
+    }
+    Ok(CowOrderFrame { canonical, sell, buy })
+}
+
+#[cfg(test)]
+mod structured_tests {
+    extern crate std;
+    use super::*;
+    use std::vec::Vec;
+
+    fn safe_payload(raw: &[u8], erc20: &[u8], cow: &[u8], names: &[&[u8]]) -> Vec<u8> {
+        let mut v = Vec::new();
+        let safe_len = SAFE_V1_CANONICAL_LEN + 2 + raw.len();
+        v.extend_from_slice(&(safe_len as u16).to_be_bytes());
+        v.extend_from_slice(&[0x11; SAFE_V1_CANONICAL_LEN]);
+        v.extend_from_slice(&(raw.len() as u16).to_be_bytes());
+        v.extend_from_slice(raw);
+        v.extend_from_slice(&(erc20.len() as u16).to_be_bytes());
+        v.extend_from_slice(erc20);
+        v.extend_from_slice(&(cow.len() as u16).to_be_bytes());
+        v.extend_from_slice(cow);
+        v.push(names.len() as u8);
+        for n in names {
+            v.extend_from_slice(&(n.len() as u16).to_be_bytes());
+            v.extend_from_slice(n);
+        }
+        v
+    }
+
+    #[test]
+    fn safe_frame_minimal_and_full_accept() {
+        let p = safe_payload(&[], &[], &[], &[]);
+        assert_eq!(p.len(), pqsigner_proto::MIN_OFFCHAIN_SAFE_TX_LEN);
+        let f = parse_safe_tx_frame(&p).unwrap();
+        assert_eq!(f.safe_bundle.len(), SAFE_V1_CANONICAL_LEN + 2);
+        assert!(f.erc20.is_empty() && f.cow.is_empty() && f.names_count == 0);
+
+        let cow = [0x22; EIP712_CANONICAL_LEN + 4];
+        let p = safe_payload(&[1, 2, 3], &[9; 10], &cow, &[&[7; 5], &[8; 6]]);
+        let f = parse_safe_tx_frame(&p).unwrap();
+        assert_eq!(&f.safe_bundle[SAFE_V1_CANONICAL_LEN + 2..], &[1, 2, 3]);
+        assert_eq!(f.erc20, &[9; 10]);
+        assert_eq!(f.cow, &cow);
+        assert_eq!((f.names_count, f.names[0], f.names[1]), (2, &[7u8; 5][..], &[8u8; 6][..]));
+    }
+
+    #[test]
+    fn safe_frame_refusals() {
+        let good = safe_payload(&[1, 2, 3], &[], &[], &[]);
+        let mut t = good.clone();
+        t.push(0);
+        assert_eq!(parse_safe_tx_frame(&t).unwrap_err(), StructuredFrameError::TrailingBytes);
+        for cut in 0..good.len() {
+            assert!(parse_safe_tx_frame(&good[..cut]).is_err(), "cut {cut}");
+        }
+        // raw_len that does not end at the Safe section end.
+        let mut r = good.clone();
+        r[2 + SAFE_V1_CANONICAL_LEN + 1] = 2;
+        assert_eq!(parse_safe_tx_frame(&r).unwrap_err(), StructuredFrameError::BadSafeRawLen);
+        // A CoW section shorter than the canonical.
+        let short_cow = safe_payload(&[], &[], &[0; 10], &[]);
+        assert_eq!(parse_safe_tx_frame(&short_cow).unwrap_err(), StructuredFrameError::BadCowLen);
+        // Too many names; an empty name.
+        let five: [&[u8]; 5] = [&[1], &[1], &[1], &[1], &[1]];
+        assert_eq!(
+            parse_safe_tx_frame(&safe_payload(&[], &[], &[], &five)).unwrap_err(),
+            StructuredFrameError::BadNamesCount
+        );
+        assert_eq!(
+            parse_safe_tx_frame(&safe_payload(&[], &[], &[], &[&[]])).unwrap_err(),
+            StructuredFrameError::BadNameLen
+        );
+        // An over-cap ERC-20 bundle.
+        let big = std::vec![0u8; COW_ORDER_BUNDLE_MAX + 1];
+        assert_eq!(
+            parse_safe_tx_frame(&safe_payload(&[], &big, &[], &[])).unwrap_err(),
+            StructuredFrameError::BadErc20Len
+        );
+    }
+
+    #[test]
+    fn cow_frame_exact() {
+        let mut p = std::vec![0x33u8; EIP712_CANONICAL_LEN];
+        p.extend_from_slice(&3u16.to_be_bytes());
+        p.extend_from_slice(&[1, 2, 3]);
+        p.extend_from_slice(&0u16.to_be_bytes());
+        let f = parse_cow_order_frame(&p).unwrap();
+        assert_eq!((f.sell, f.buy), (&[1u8, 2, 3][..], &[][..]));
+        assert_eq!(f.canonical, &[0x33; EIP712_CANONICAL_LEN]);
+        let mut t = p.clone();
+        t.push(0);
+        assert_eq!(parse_cow_order_frame(&t).unwrap_err(), StructuredFrameError::TrailingBytes);
+        for cut in 0..p.len() {
+            assert!(parse_cow_order_frame(&p[..cut]).is_err(), "cut {cut}");
+        }
+        // The bare 204-byte canonical (no leg words) is NOT the kind-5 shape.
+        assert!(parse_cow_order_frame(&p[..EIP712_CANONICAL_LEN]).is_err());
+    }
+}
+
 #[cfg(kani)]
 mod verification {
     use super::*;
@@ -220,5 +510,66 @@ mod verification {
         let f = parse_eip712_typed_frame(&buf, false).expect("minimal frame accepts");
         assert_eq!(f.trailer, &[0xAB]);
         assert!(f.encoded_data.is_empty() && f.nested_blob.is_empty());
+    }
+
+    /// Sum of the lengths of a Safe frame's sections plus their length words.
+    fn safe_frame_consumed(f: &SafeTxFrame<'_>) -> usize {
+        let mut n = 2 + f.safe_bundle.len() + 2 + f.erc20.len() + 2 + f.cow.len() + 1;
+        let mut i = 0;
+        while i < f.names_count {
+            n += 2 + f.names[i].len();
+            i += 1;
+        }
+        n
+    }
+
+    /// `OFFCHAIN_KIND_SAFE_TX` framing: panic/OOB-free over symbolic payloads
+    /// of length ≤ N, and on ACCEPT every byte is consumed (sections + length
+    /// words == payload length), the Safe section's `raw_len` ends exactly at
+    /// its end, and the name count is within the cap. N=300 admits the
+    /// 290-byte minimum plus short variable sections; every section is the
+    /// same `take_u16_prefixed` gate, so the bound is representative.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn parse_safe_tx_frame_panic_free_and_exact() {
+        const N: usize = 300;
+        let buf: [u8; N] = kani::any();
+        let len: usize = kani::any();
+        kani::assume(len <= N);
+        let payload = &buf[..len];
+        if let Ok(f) = parse_safe_tx_frame(payload) {
+            assert_eq!(safe_frame_consumed(&f), len);
+            assert!(f.names_count <= OFFCHAIN_MAX_NAME_BUNDLES);
+            let raw_len = read_u16(f.safe_bundle, SAFE_V1_CANONICAL_LEN) as usize;
+            assert_eq!(SAFE_V1_CANONICAL_LEN + 2 + raw_len, f.safe_bundle.len());
+        }
+    }
+
+    /// `OFFCHAIN_KIND_COW_ORDER` framing: panic/OOB-free, and on ACCEPT the
+    /// canonical + both length-prefixed legs consume the payload EXACTLY.
+    #[kani::proof]
+    #[kani::unwind(4)]
+    fn parse_cow_order_frame_panic_free_and_exact() {
+        const N: usize = EIP712_CANONICAL_LEN + 12;
+        let buf: [u8; N] = kani::any();
+        let len: usize = kani::any();
+        kani::assume(len <= N);
+        let payload = &buf[..len];
+        if let Ok(f) = parse_cow_order_frame(payload) {
+            assert_eq!(EIP712_CANONICAL_LEN + 2 + f.sell.len() + 2 + f.buy.len(), len);
+        }
+    }
+
+    /// Non-vacuity: the minimal well-formed frames are ACCEPTED.
+    #[kani::proof]
+    fn structured_frames_accept_minimal() {
+        let mut safe = [0u8; pqsigner_proto::MIN_OFFCHAIN_SAFE_TX_LEN];
+        let safe_len = (SAFE_V1_CANONICAL_LEN + 2) as u16;
+        safe[..2].copy_from_slice(&safe_len.to_be_bytes());
+        let f = parse_safe_tx_frame(&safe).expect("minimal SafeTx frame accepts");
+        assert_eq!(f.names_count, 0);
+        let cow = [0u8; pqsigner_proto::MIN_OFFCHAIN_COW_ORDER_LEN];
+        let f = parse_cow_order_frame(&cow).expect("minimal CoW frame accepts");
+        assert!(f.sell.is_empty() && f.buy.is_empty());
     }
 }

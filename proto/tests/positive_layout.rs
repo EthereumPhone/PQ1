@@ -105,7 +105,9 @@ fn positive_erc7730_proof_set_caps_match_exact_wire() {
 fn positive_device_capabilities_advertise_proof_set_without_reusing_retired_bit() {
     assert_eq!(CAP_SIGN_USEROP, 1 << 0);
     assert_eq!(CAP_ERC7730_PROOF_SET, 1 << 2);
-    assert_eq!(DEVICE_CAPABILITIES, (1 << 0) | (1 << 2));
+    assert_eq!(CAP_OFFCHAIN_SAFE_TX, 1 << 3);
+    assert_eq!(CAP_OFFCHAIN_COW_ORDER, 1 << 4);
+    assert_eq!(DEVICE_CAPABILITIES, (1 << 0) | (1 << 2) | (1 << 3) | (1 << 4));
     assert_eq!(DEVICE_CAPABILITIES & (1 << 1), 0, "bit 1 stays retired");
 }
 
@@ -256,17 +258,29 @@ fn positive_sign_offchain_max_input_bounds_personal_sign() {
     // max-input bound is the longest of the THREE payload shapes:
     //   header + max(personal_sign, eip712_typed, eip712_typed_v3).
     // (The V3 variant is the largest, so it sets the ceiling.)
+    // 2026-10-19: the structured SafeTx / CoW-order kinds (4, 5) join the
+    // max; the SafeTx kind is now the ceiling.
     assert_eq!(
         SIGN_OFFCHAIN_INPUT_MAX_LEN,
         SIGN_OFFCHAIN_HEADER_LEN
-            + core::cmp::max(
+            + [
                 MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
-                core::cmp::max(
-                    MAX_OFFCHAIN_EIP712_TYPED_LEN,
-                    MAX_OFFCHAIN_EIP712_TYPED_V3_LEN,
-                ),
-            )
+                MAX_OFFCHAIN_EIP712_TYPED_LEN,
+                MAX_OFFCHAIN_EIP712_TYPED_V3_LEN,
+                MAX_OFFCHAIN_SAFE_TX_LEN,
+                MAX_OFFCHAIN_COW_ORDER_LEN,
+            ]
+            .into_iter()
+            .max()
+            .unwrap()
     );
+    assert_eq!(MAX_OFFCHAIN_SAFE_TX_LEN, 12_334);
+    assert_eq!(SIGN_OFFCHAIN_INPUT_MAX_LEN, 12_351);
+    assert_eq!(MAX_OFFCHAIN_COW_ORDER_LEN, 2_448);
+    assert_eq!(MIN_OFFCHAIN_SAFE_TX_LEN, 290);
+    assert_eq!(MIN_OFFCHAIN_COW_ORDER_LEN, 208);
+    assert_eq!(OFFCHAIN_NAME_BUNDLE_MAX_LEN, 1_093);
+    assert_eq!((OFFCHAIN_KIND_SAFE_TX, OFFCHAIN_KIND_COW_ORDER), (4, 5));
     assert_eq!(MAX_OFFCHAIN_PERSONAL_SIGN_LEN, 700);
     // V3 (nested) is the ceiling — guards against a future refactor that
     // drops it from the SIGN_OFFCHAIN_INPUT_MAX_LEN formula.

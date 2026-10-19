@@ -480,6 +480,9 @@ mod nsc_sign_userop_pure_tests;
 mod nsc_batch_offchain_pure_tests;
 
 #[cfg(test)]
+mod nsc_offchain_structured_pure_tests;
+
+#[cfg(test)]
 mod nsc_small_cmds_pure_tests;
 
 #[cfg(test)]

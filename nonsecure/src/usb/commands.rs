@@ -84,6 +84,10 @@ const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN_OR_BATCH > CHAIN_BUF_LEN_FW {
     CHAIN_BUF_LEN_FW
 };
 
+// The largest `CMD_SIGN_OFFCHAIN` request (the structured SafeTx kind, 2026-10-19)
+// must fit the shared chain buffer its bound below indexes.
+const _: () = assert!(SIGN_OFFCHAIN_INPUT_MAX_LEN <= CHAIN_BUF_LEN);
+
 /// Per-CMD upper bound on accumulated chain payload. The global
 /// `CHAIN_BUF_LEN` is the max of all chained CMDs; passing it to
 /// `ChainState::step` would let a hostile host accumulate up to that

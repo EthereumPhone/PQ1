@@ -228,17 +228,21 @@ fn negative_sign_offchain_input_max_len_equals_header_plus_max_personal_sign() {
     // v0x03 nested variant (MAX_OFFCHAIN_EIP712_TYPED_V3_LEN), which is now
     // the largest shape and sets the ceiling — this assertion omitted it
     // (stale two-way max, fixed 2026-07-02, the secure-crate mirror of the
-    // same proto/tests drift).
+    // same proto/tests drift). 2026-10-19: the structured SafeTx / CoW-order
+    // kinds (4, 5) joined the max; SafeTx is now the ceiling.
     assert_eq!(
         SIGN_OFFCHAIN_INPUT_MAX_LEN,
         SIGN_OFFCHAIN_HEADER_LEN
-            + core::cmp::max(
+            + [
                 MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
-                core::cmp::max(
-                    MAX_OFFCHAIN_EIP712_TYPED_LEN,
-                    MAX_OFFCHAIN_EIP712_TYPED_V3_LEN,
-                ),
-            )
+                MAX_OFFCHAIN_EIP712_TYPED_LEN,
+                MAX_OFFCHAIN_EIP712_TYPED_V3_LEN,
+                sphincs_tz_shared::MAX_OFFCHAIN_SAFE_TX_LEN,
+                sphincs_tz_shared::MAX_OFFCHAIN_COW_ORDER_LEN,
+            ]
+            .into_iter()
+            .max()
+            .unwrap()
     );
 }
 
