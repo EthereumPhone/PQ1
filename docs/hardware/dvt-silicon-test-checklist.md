@@ -23,6 +23,9 @@ is a prediction from source that the test exists to confirm or refute; it is not
 - Rows cite the index as `EVT n.m` and the hardware-assumption ledger as `HW-ASSUME-*`
   (`docs/verification/hardware-assumption-boundary-2026-07-17.md` §6).
 - **Do not copy procedures here.** Fix them in the owning doc.
+- **UPDATE 2026-10-19:** [`evt-3d21-burn-down-runsheet.md`](evt-3d21-burn-down-runsheet.md)
+  puts these rows in the order needed to take EVT-3D21 from bench state to a provisioned
+  RDP-2 unit, with the code and owner gates. Record results here as usual.
 
 ---
 
