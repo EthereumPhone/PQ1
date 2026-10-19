@@ -1959,6 +1959,8 @@ pub fn film_abort() {
     film_reap(true);
     FILM_LIVE.store(false, Ordering::Relaxed);
     crate::hw::lcd_te::stamps(false);
+    #[cfg(feature = "ui-px-film-gaps")]
+    film_gaps_end();
     // Forget the film; it needs no drop (asserted at `FILM`).
     FILM_SET.store(false, Ordering::Relaxed);
 }
