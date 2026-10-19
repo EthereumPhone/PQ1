@@ -29,7 +29,9 @@ const RESET_ATTEMPTS: u32 = 20;
 /// The plain (no-SCP03) leg: SE rail power cycle (no session survives),
 /// T=1 reset, plain SELECT, then plain Read / Write / Delete of `obj`.
 /// Returns `(read_sw, read_len, write_sw, delete_sw)`. Leaves the driver
-/// re-initialised over SCP03.
+/// re-initialised over SCP03. Fails as INCONCLUSIVE when the chip already
+/// refuses every plain command (`SCP_REQUIRED`): the policy is then untested,
+/// and a PASS would overclaim.
 fn plain_leg(ctx: &mut StressCtx, obj: u32) -> Result<(u16, usize, u16, u16), StressError> {
     let cycled = crate::hw::se_power::power_cycle(100);
     crate::hw::i2c_hw::init();
@@ -58,16 +60,13 @@ fn plain_leg(ctx: &mut StressCtx, obj: u32) -> Result<(u16, usize, u16, u16), St
                 return Err(StressError::UnexpectedSw { what: "6B.23 plain SELECT", sw: sel });
             }
             let (psw, pbody, pn) = apdu::platform_scp_plain_probe(t1)?;
-            secure_log!(
-                "[S][stress][6B.23] chip platform-SCP probe SW=0x{:04x} body_len={} ({})",
-                psw,
-                pn,
-                if psw == 0x9000 && pbody[..pn] == [0x41, 0x01, 0x01] {
-                    "SCP_NOT_REQUIRED: plain leg tests the object policy"
-                } else {
-                    "chip refuses plain commands: plain leg is vacuous for the policy"
-                },
-            );
+            secure_log!("[S][stress][6B.23] chip platform-SCP probe SW=0x{:04x} body_len={}", psw, pn);
+            if !(psw == 0x9000 && pbody[..pn] == [0x41, 0x01, 0x01]) {
+                return Err(StressError::Assertion {
+                    what: "6B.23 INCONCLUSIVE: the chip refuses plain commands (SCP_REQUIRED?) — run before `require`",
+                    iter: 0,
+                });
+            }
             let (rsw, rn) = apdu::plain_readclass_probe(t1, apdu::PlainReadCmd::Read(obj), &mut o)?;
             let wsw = apdu::plain_mutate_stress(t1, apdu::PlainMutateCmd::Write(obj, &[0x00; 32]))?;
             let dsw = apdu::plain_mutate_stress(t1, apdu::PlainMutateCmd::Delete(obj))?;
@@ -77,6 +76,11 @@ fn plain_leg(ctx: &mut StressCtx, obj: u32) -> Result<(u16, usize, u16, u16), St
     ctx.se().reinit()?;
     Ok(r)
 }
+
+/// SWs that mean "the applet refused this command on policy / session
+/// grounds" (AN12413 §4.3.1: 6982 security status, 6985 conditions, 6986
+/// not allowed). A framing refusal (6A80, 6700, 6D00…) is not a pass.
+const POLICY_REFUSAL_SWS: [u16; 3] = [0x6982, 0x6985, 0x6986];
 
 // ---------------------------------------------------------------------------
 // 6B.23 — the production half_E policy on a present object
@@ -191,10 +195,14 @@ fn platform_scp_set_refused_without_session(ctx: &mut StressCtx) -> StressResult
             what: "SetPlatformSCPRequest accepted without a RESERVED_ID_PLATFORM_SCP session",
             iter: 0,
         }),
-        Err(Se050Error::Status(sw)) => {
+        Err(Se050Error::Status(sw)) if POLICY_REFUSAL_SWS.contains(&sw) => {
             secure_log!("[S][stress][6B.5] session-less SetPlatformSCPRequest refused SW=0x{:04x}", sw);
             Ok(())
         }
+        Err(Se050Error::Status(sw)) => Err(StressError::UnexpectedSw {
+            what: "session-less SetPlatformSCPRequest refused for a non-policy reason (framing?)",
+            sw,
+        }),
         Err(e) => Err(e.into()),
     }
 }
@@ -226,10 +234,14 @@ fn platform_scp_set_refused_from_carveout_session(ctx: &mut StressCtx) -> Stress
             what: "SetPlatformSCPRequest accepted from an ordinary UserID session",
             iter: 0,
         }),
-        Err(Se050Error::Status(sw)) => {
+        Err(Se050Error::Status(sw)) if POLICY_REFUSAL_SWS.contains(&sw) => {
             secure_log!("[S][stress][6B.5] carve-out-session SetPlatformSCPRequest refused SW=0x{:04x}", sw);
             Ok(())
         }
+        Err(Se050Error::Status(sw)) => Err(StressError::UnexpectedSw {
+            what: "carve-out-session SetPlatformSCPRequest refused for a non-policy reason (framing?)",
+            sw,
+        }),
         Err(e) => Err(e.into()),
     }
 }

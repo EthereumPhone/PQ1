@@ -31,6 +31,24 @@ Last updated: 2026-04-16. Tracks the state of the OPTIGA Trust M V3 driver again
 > certificate; the helper was a no-op and the run returned uniform status
 > failures. The candidate type-0x11 pool is E0E8/E0E9/E0EF and remains OPEN.
 > No instruction in the historical snapshot below authorizes a write.
+>
+> **Fail-closed dispatcher (2026-10-19, #991, commit `5f868288`).** The typed
+> helpers' `apdu::send_command` used to send plaintext whenever the Shielded
+> Connection was inactive; since `wrap_command` clears `active` on any error,
+> a swallowed `Err` followed by another APDU went out unencrypted. In every
+> shielded build it is now protected-only (`Err(Shield)`, nothing on the bus,
+> without a session). The only plaintext APDUs left are `OpenApplication`, the
+> handshake, the cfg-gated GetRandom probes, and `apdu::send_preshield` with a
+> fixed allowlist — E140 PBS write, E140 metadata write, F1E1 counter read (and
+> a bench-only E140 read) — which takes the protected path when a session is
+> up. The read-only probe and the #116 AC probe use typed, cfg-gated plaintext
+> helpers. `optiga-no-shield` (production-fenced) keeps the old two-arm body.
+> After the #36 rotation, `setup_pbs_no_handshake` no longer rewrites the
+> salted final PBS in plaintext after a wipe; it proves E140 by handshake.
+> **Silicon: owed.** The provision / wipe / unlock / duress e2e flows have not
+> been re-run under the strict dispatcher; a path that silently relied on the
+> old fallback now fails with `Shield` (grep logs for
+> `send_command REFUSED`).
 
 ---
 

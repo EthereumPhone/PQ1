@@ -2580,7 +2580,7 @@ fn positive_set_platform_scp_request_framing() {
 
 #[test]
 fn negative_platform_scp_plain_probe_is_one_fixed_read() {
-    // The only plain applet APDU a production image sends: a fixed
+    // The bench measurement (probe / tool / stress only): a fixed
     // CheckExists(0x7FFF0206), no caller bytes, no write/process INS.
     let body = item_src(APDU_SRC, "pub unsafe fn platform_scp_plain_probe(", "\n}\n");
     assert!(body.contains("t1: &mut T1State,\n) -> Result<(u16, [u8; 3], usize), Se050Error>"));
@@ -2595,14 +2595,16 @@ fn negative_platform_scp_plain_probe_is_one_fixed_read() {
 
 #[test]
 fn negative_platform_scp_enforcement_decision_table() {
-    // Absent credential forces enforcement whatever the probe said; only a
-    // present credential on a refusing chip skips (and is not re-verified).
+    // #989 review: nothing is decided on a plaintext reply. Every boot the
+    // credential is verified (ownership) and SCP_REQUIRED is (re)asserted
+    // over SCP03; there is no "already required, skip" branch.
     let once = item_src(MOD_SRC, "fn ensure_platform_scp_once(", "\n    }\n");
-    assert!(once.contains(
-        "if present && matches!(measured, PlatformScpState::Refused(_)) {\n            return Ok(PlatformScpOutcome::AlreadyRequired);"
-    ));
+    assert!(!contains_in_code(once, "measured"), "enforcement must not depend on a plain probe");
+    assert!(!contains_in_code(once, "PlatformScpState"));
+    assert!(!contains_in_code(once, "return Ok("), "no skip path before the authenticated set");
     assert!(!contains_in_code(once, "unwrap_or"), "a credential check must never default (D1)");
     assert!(once.contains("apdu::PlatformScpRequest::Required"));
+    assert!(!contains_in_code(MOD_SRC, "AlreadyRequired"));
     // Credential creation is self-only (no admin entry) and unlimited.
     let with = item_src(MOD_SRC, "fn set_platform_scp_with(", "\n    }\n");
     assert!(with.contains("apdu::write_userid_unlimited(\n                    &mut self.t1, &mut self.scp03, apdu::PLATFORM_SCP_OBJ, value, None,"));
@@ -2610,11 +2612,17 @@ fn negative_platform_scp_enforcement_decision_table() {
     let verify = with.find("apdu::verify_session(").unwrap();
     let set = with.find("apdu::set_platform_scp_request(").unwrap();
     assert!(create < verify && verify < set, "set only from a verified session");
-    // The measurement is never taken from link_bringup / init.
-    let bringup = item_src(MOD_SRC, "unsafe fn link_bringup(", "\n    }\n");
-    assert!(!bringup.contains("platform_scp"));
-    let init = item_src(MOD_SRC, "pub fn init(&mut self)", "\n    }\n");
-    assert!(!init.contains("platform_scp"));
+    // "Foreign" only on a verdict about the value, never on a transient.
+    assert!(MOD_SRC.contains(
+        "matches!(e, Se050Error::PinIncorrect | Se050Error::AuthMethodBlocked)"
+    ));
+    assert_eq!(with.matches("platform_scp_credential_verdict(&e) => return Err(self.platform_scp_foreign())").count(), 2);
+    // The plain measurement exists only in the bench tool.
+    let at = MOD_SRC.find("pub fn measure_platform_scp(").expect("measure");
+    assert!(MOD_SRC[at.saturating_sub(120)..at].contains("#[cfg(feature = \"se050-platform-scp-tool\")]"));
+    let at = APDU_SRC.find("pub unsafe fn platform_scp_plain_probe(").expect("plain probe");
+    let attrs = &APDU_SRC[at.saturating_sub(200)..at];
+    assert!(!attrs.contains("se050-platform-scp-required"), "production sends no plain applet APDU");
 }
 
 #[test]
@@ -2622,7 +2630,7 @@ fn negative_platform_scp_enforced_before_any_secret_is_loaded() {
     // main.rs: the every-boot block runs after Phase B and before the PBS
     // load, the PIN reconcile and every unlock / wizard path.
     let m = MAIN_SRC_FOR_PSCP;
-    let block = m.find("se050.ensure_platform_scp_required(measured)").expect("boot enforcement");
+    let block = m.find("se050.ensure_platform_scp_required()").expect("boot enforcement");
     let phase_b = m.find("first_boot::run_post_lock_provisioning(se);").expect("Phase B");
     let pbs = m.find(").load_pbs();").expect("load_pbs");
     let reconcile = m.find("nsc::reconcile_pin_attempts(").expect("reconcile");
@@ -2631,4 +2639,20 @@ fn negative_platform_scp_enforced_before_any_secret_is_loaded() {
     let gate = &m[m[..block].rfind("#[cfg(all(").unwrap()..block];
     assert!(gate.contains("feature = \"se050-platform-scp-required\""));
     assert!(gate.contains("not(feature = \"prodtest\")"));
+}
+
+#[test]
+fn negative_wrapped_len_mirrors_wrap_apdu_framing() {
+    // #991 review: `wrap_apdu` is not host-compiled, so the host-tested
+    // `CmdLayout::wrapped_len` (which `wrap_apdu` uses to refuse an output
+    // that does not fit) must use the same padding, MAC and Lc-form rules.
+    let wrap = wrap_apdu_src();
+    assert!(wrap.contains("let new_lc = enc_len + 8;"));
+    assert!(wrap.contains("let use_extended = extended || new_lc >= 256;"));
+    assert!(wrap.contains("enc_buf[padded_len] = 0x80;"));
+    assert!(wrap.contains("while padded_len % 16 != 0 {"));
+    assert!(SCP03_LOGIC_SRC.contains("if self.data_len == 0 { 0 } else { (self.data_len / 16 + 1) * 16 }"));
+    assert!(SCP03_LOGIC_SRC.contains("let new_lc = self.padded_len() + 8;"));
+    assert!(SCP03_LOGIC_SRC.contains("let hdr = if self.extended || new_lc >= 256 { 7 } else { 5 };"));
+    assert!(wrap.contains("Zeroizing::new([0u8; crate::scp03_logic::WRAP_ENC_BUF_LEN])"));
 }

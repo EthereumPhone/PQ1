@@ -113,8 +113,8 @@ fn uid_bound(se: &mut Se050) -> bool {
     ok
 }
 
-fn require(se: &mut Se050, measured: PlatformScpState) -> bool {
-    match se.ensure_platform_scp_required(measured) {
+fn require(se: &mut Se050) -> bool {
+    match se.ensure_platform_scp_required() {
         Ok(o) => {
             out!("require result={:?}", o);
             true
@@ -157,7 +157,7 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
         "status" => !matches!(before, PlatformScpState::Unknown),
         "require" => {
             uid_bound(se)
-                && require(se, before)
+                && require(se)
                 && matches!(measure_cold(se, "after-require"), PlatformScpState::Refused(_))
         }
         "release" => {
@@ -167,7 +167,7 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
         }
         "cycle" => {
             uid_bound(se)
-                && require(se, before)
+                && require(se)
                 && matches!(measure_cold(se, "after-require"), PlatformScpState::Refused(_))
                 && release(se)
                 && measure_cold(se, "after-release") == PlatformScpState::NotRequired

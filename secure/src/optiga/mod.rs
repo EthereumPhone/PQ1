@@ -3048,16 +3048,21 @@ impl OptigaTrustM {
                          counter will carry over, next wipe cycle will retry",
                         e
                     );
-                    // Fall through — do not abort the wipe — but on a fresh,
-                    // shielded session (#991). A failed wrap clears
-                    // `shield.active`, and a DecryptFailed leaves it set but
-                    // desynced; the blank writes below would otherwise fail
-                    // closed (or, before #991, go out in plaintext). If the
-                    // resync itself fails, the wipe leg aborts here, the wipe
-                    // flag stays armed and the next boot resumes it.
-                    #[cfg(feature = "stm32u585")]
-                    self.hard_reset_and_reinit()?;
-                    self.ensure_shield()?;
+                    // Fall through — do not abort the wipe. If the failure
+                    // took the session down (a failed wrap clears
+                    // `shield.active`; a DecryptFailed leaves it set but
+                    // desynced, surfacing as a non-`Status` error), resync
+                    // first (#991): the blank writes below would otherwise
+                    // fail closed (or, before #991, go out in plaintext). A
+                    // plain chip verdict (`Status`, e.g. a saturated E120)
+                    // leaves the session usable and needs no reset. If the
+                    // resync fails, the wipe leg aborts here, the wipe flag
+                    // stays armed and the next boot resumes it.
+                    if !self.shield.active || !matches!(e, OptigaError::Status(_)) {
+                        #[cfg(feature = "stm32u585")]
+                        self.hard_reset_and_reinit()?;
+                        self.ensure_shield()?;
+                    }
                 }
             } else {
                 secure_log!(

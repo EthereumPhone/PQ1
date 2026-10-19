@@ -217,11 +217,36 @@ RDP-2 lock (→ RMA).
 | `E0854` | 3-source TRNG salt **draw** failed (a platform/OPTIGA/SE050 leg or the all-zero gate) | halt |
 | `E0855` | Pre-salt OPTIGA **transport-PBS handshake** failed (#443; doubles as authenticate-before-rotate) | halt |
 | `E0861` | Journal step-marker write failed | RMA |
+| `E0871` | SE050 platform-SCP enforcement: link / SCP03 / transport fault after the bounded retries (#989). Shown as `SE050 FAULT`, **every boot**, not only the first | retry (power-cycle) / RMA |
+| `E0872` | SE050 `0x7FFF0207` (`RESERVED_ID_PLATFORM_SCP`) exists, does not open with this device's credential, and could not be deleted: squatted / tampered part (#989) | RMA (tamper) |
+| `E0873` | SE050 refused to create the `0x7FFF0207` credential (#989) | RMA |
+| `E0874` | SE050 refused `SetPlatformSCPRequest(SCP_REQUIRED)` from the credential's session (#989) | RMA |
 | `E08F0` | SEs not in the expected factory transport state (pre-rotated?) | RMA |
 
-(Source of truth: `secure/src/first_boot/state.rs` `FirstBootError`. The code
-space `0x08xx–0x0Fxx` is disjoint from the factory ceremony's
-`FactoryErrorCode` `0x01xx–0x07xx`.)
+(Source of truth: `secure/src/first_boot/state.rs` `FirstBootError`; the
+`E087x` platform-SCP codes come from `se050::PlatformScpError::code` and share
+this code space. The code space `0x08xx–0x0Fxx` is disjoint from the factory
+ceremony's `FactoryErrorCode` `0x01xx–0x07xx`.)
+
+> **UPDATE 2026-10-19 (#989): SE050 `SCP_REQUIRED` is enforced every boot.**
+> The SE050E2 ships `SCP_NOT_REQUIRED` (AN12413 §4.6.2), so a keyless I2C party
+> can read the version, the full object inventory and SE randomness, and could
+> create the absent reserved credentials (e.g. `0x7FFF0205` FACTORY_RESET →
+> DeleteAll). Production images (`se050-platform-scp-required`, in
+> `PROD_REQUIRED`) run, right after Phase B and before the wallet path touches
+> a secret, over SCP03 only: create our `0x7FFF0207` credential (BHK-derived,
+> `pqsigner/se050-platform-scp-v1`) if absent, open a session with it, verify
+> it (a squatter's credential never passes: `E0872`), and send
+> `SetPlatformSCPRequest(SCP_REQUIRED)` — every boot, one NVM write (SE050
+> flash endurance 20–100 × 10⁶ cycles). No decision rests on a plaintext reply:
+> a first design skipped enforcement when a plain probe looked refused, and the
+> 2026-10-19 review showed an interposer or a leftover session could fake that.
+> The credential is kept (self-delete-only policy, skipped by the wipe sweep). It is
+> deliberately not a journal step: units whose journal is already `ALL_DONE`
+> would never run a new step. The factory may run the same step earlier on its
+> transport keyset; doing so closes the supply-chain window in which the
+> credential slot is open to a squatter (`E0872` catches one). Silicon status:
+> see `dvt-silicon-test-checklist.md` 6B.5.
 
 > **Operator note (2026-07-21):** two ship-profile checks are **fail-closed
 > until silicon-pinned**, so a genuine first boot halts before the burn until
