@@ -1916,14 +1916,53 @@ fn negative_scp03_session_state_zeroed_on_new() {
 }
 
 #[test]
-fn negative_scp03_wrap_apdu_no_op_when_inactive() {
-    // Before `establish()` runs, `wrap_apdu` must passthrough — wrapping
-    // under all-zero session keys would emit a recognisable garbage
-    // pattern on the bus that's a known fingerprint of "we hold no
-    // session yet".
-    assert!(SCP03_SRC.contains("if !session.active || apdu.len() < 4 {"));
-    assert!(SCP03_SRC.contains("out[..apdu.len()].copy_from_slice(apdu);"));
-    assert!(SCP03_SRC.contains("return apdu.len();"));
+fn negative_scp03_wrap_apdu_refuses_when_inactive() {
+    // #991: before `establish()` runs (or after the lock-path zeroize),
+    // `wrap_apdu` must REFUSE — not wrap under the all-zero keys, and not
+    // copy the APDU through in cleartext. It used to do the latter
+    // (`if !session.active || apdu.len() < 4 { out[..] = apdu; return
+    // apdu.len() }`), so invariant #3 rested on `send_apdu` checking first,
+    // and an APDU shorter than a header went out unwrapped even with a live
+    // session.
+    let body = wrap_apdu_src();
+    assert!(
+        body.contains("if !session.active {\n        return Err(WrapError::Inactive);\n    }"),
+        "wrap_apdu must refuse an inactive session before touching `out`"
+    );
+    assert!(body.contains("let layout = command_apdu_layout(apdu)?;"));
+    assert!(body.contains("if out.len() < layout.wrapped_len() {"));
+    assert!(SCP03_SRC.contains(") -> Result<usize, WrapError> {"));
+    // The copy-through shape is gone and must not come back.
+    assert!(!contains_in_code(SCP03_SRC, "out[..apdu.len()].copy_from_slice(apdu);"));
+    assert!(!contains_in_code(body, "return apdu.len();"));
+    assert!(!contains_in_code(body, "apdu.len() < 4"));
+    // The refusal reaches the caller as an SE050 error, never as a length.
+    assert!(SCP03_SRC.contains("impl From<WrapError> for super::apdu::Se050Error {"));
+}
+
+/// `wrap_apdu`'s body, from its signature to the closing brace.
+fn wrap_apdu_src() -> &'static str {
+    let start = SCP03_SRC.find("pub fn wrap_apdu(").expect("wrap_apdu present");
+    let len = SCP03_SRC[start..].find("\n}\n").expect("wrap_apdu body ends");
+    &SCP03_SRC[start..start + len]
+}
+
+#[test]
+fn negative_send_apdu_refuses_without_session_and_propagates_wrap_refusal() {
+    // The first gate (no SCP03 session → no APDU at all) was unpinned before
+    // #991; the second is that a wrap refusal propagates with `?` instead
+    // of being turned into a length.
+    let start = APDU_SRC.find("pub unsafe fn send_apdu(").expect("send_apdu present");
+    let body = &APDU_SRC[start..];
+    let guard = body.find("if !scp03.active {").expect("send_apdu session guard");
+    let wrap = body
+        .find("super::scp03::wrap_apdu(scp03, apdu_no_le, &mut wrapped)?;")
+        .expect("send_apdu propagates the wrap refusal");
+    assert!(guard < wrap, "the session guard must run before the wrap");
+    assert!(body[guard..wrap].contains("return Err(Se050Error::Scp03);"));
+    // Le is only appended after a bounds check (the old code could index
+    // one past `wrapped` for a 1023-byte wrap).
+    assert!(body.contains("if wlen + 2 > wrapped.len() {"));
 }
 
 #[test]

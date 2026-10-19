@@ -10,7 +10,10 @@
 //!
 //! The session state machine (`Scp03Session`, `establish`, `wrap_apdu`,
 //! `load_platform_keys`) stays in `se050::scp03` because it depends on
-//! the I2C transport + `secret_keys` derivation — see that module.
+//! the I2C transport + `secret_keys` derivation — see that module. The
+//! command-APDU framing `wrap_apdu` trusts ([`command_apdu_layout`],
+//! [`WrapError`]) lives here so its accept/refuse table is host-tested
+//! (#991).
 //!
 //! ## Why this module exists
 //!
@@ -596,6 +599,101 @@ impl TransportAuthProof {
         let c = crate::fi::read_volatile_voted(core::ptr::addr_of!(self.context)).unwrap_or(0);
         crate::fi::check_true_into_sentinel(|| v == crate::fi::OK_SENTINEL && c == expect_ctx)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Command-APDU framing for `se050::scp03::wrap_apdu` (#991)
+// ---------------------------------------------------------------------------
+
+/// Why `wrap_apdu` refused to wrap. Every variant is a refusal: nothing is
+/// written to the bus, and there is no "send it unwrapped" outcome (#991 —
+/// the old wrap copied the APDU through in cleartext when the session was
+/// down or the APDU was shorter than a header).
+#[derive(Debug, PartialEq, Eq)]
+pub enum WrapError {
+    /// No SCP03 session. Wrapping under the all-zero pre-`establish` keys
+    /// would be plaintext-equivalent, and copying the APDU through would be
+    /// plaintext.
+    Inactive,
+    /// Not one of the command shapes `send_apdu` hands over (see
+    /// [`command_apdu_layout`]).
+    Malformed,
+    /// The command data or the wrapped output does not fit the wrap buffers.
+    TooLong,
+}
+
+/// Capacity of `wrap_apdu`'s C-DEC staging buffer.
+pub const WRAP_ENC_BUF_LEN: usize = 1024;
+
+/// Header, data length and Lc form of a command APDU, as `wrap_apdu` needs
+/// them.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub struct CmdLayout {
+    /// 4 (no Lc), 5 (short Lc, or a lone Le byte) or 7 (extended Lc).
+    pub hdr_len: usize,
+    /// Command data bytes following the header.
+    pub data_len: usize,
+    /// The input used the extended `00 hi lo` Lc form.
+    pub extended: bool,
+}
+
+impl CmdLayout {
+    /// ISO 7816-4 padded C-DEC length (`0x80` then zeros to 16), or 0 when
+    /// there is no data to encrypt.
+    pub const fn padded_len(&self) -> usize {
+        if self.data_len == 0 { 0 } else { (self.data_len / 16 + 1) * 16 }
+    }
+
+    /// Exact length `wrap_apdu` writes: header, padded ciphertext, C-MAC.
+    pub const fn wrapped_len(&self) -> usize {
+        let new_lc = self.padded_len() + 8;
+        let hdr = if self.extended || new_lc >= 256 { 7 } else { 5 };
+        hdr + new_lc
+    }
+}
+
+/// Parse the command APDU `send_apdu` passes to `wrap_apdu` (Le already
+/// stripped). Exactly these shapes are accepted:
+///
+/// - 4 bytes: header only (ISO case 1);
+/// - 5 bytes `hdr ‖ 00`: header plus a lone Le that `send_apdu` leaves in
+///   place (`get_version_ext`); wrapped as no data;
+/// - short Lc: `hdr ‖ Lc ‖ data`, `Lc ≥ 1`, total exactly `5 + Lc`;
+/// - extended Lc: `hdr ‖ 00 hi lo ‖ data`, `Lc ≥ 1`, total exactly `7 + Lc`.
+///
+/// Anything else — shorter than a header, an Lc that disagrees with the
+/// bytes present — is [`WrapError::Malformed`]: the old parse sliced by Lc
+/// and panicked when Lc overran the buffer, or silently dropped (never
+/// MAC'd) bytes past it. Data that would overflow the C-DEC buffer is
+/// [`WrapError::TooLong`].
+pub fn command_apdu_layout(apdu: &[u8]) -> Result<CmdLayout, WrapError> {
+    let layout = match apdu.len() {
+        0..=3 => return Err(WrapError::Malformed),
+        4 => CmdLayout { hdr_len: 4, data_len: 0, extended: false },
+        5 if apdu[4] == 0x00 => CmdLayout { hdr_len: 5, data_len: 0, extended: false },
+        5 => return Err(WrapError::Malformed),
+        n if apdu[4] == 0x00 => {
+            if n < 7 {
+                return Err(WrapError::Malformed);
+            }
+            let lc = ((apdu[5] as usize) << 8) | (apdu[6] as usize);
+            if lc == 0 || n != 7 + lc {
+                return Err(WrapError::Malformed);
+            }
+            CmdLayout { hdr_len: 7, data_len: lc, extended: true }
+        }
+        n => {
+            let lc = apdu[4] as usize;
+            if n != 5 + lc {
+                return Err(WrapError::Malformed);
+            }
+            CmdLayout { hdr_len: 5, data_len: lc, extended: false }
+        }
+    };
+    if layout.padded_len() > WRAP_ENC_BUF_LEN {
+        return Err(WrapError::TooLong);
+    }
+    Ok(layout)
 }
 
 // ---------------------------------------------------------------------------
@@ -1596,5 +1694,108 @@ mod tests {
         assert_ne!(AUTH_CTX_SCP03_TRANSPORT, AUTH_CTX_ADMIN_TRANSPORT);
         assert_ne!(AUTH_CTX_SCP03_TRANSPORT, AUTH_CTX_PBS_TRANSPORT);
         assert_ne!(AUTH_CTX_ADMIN_TRANSPORT, AUTH_CTX_PBS_TRANSPORT);
+    }
+
+    // ----- #991: command-APDU framing that `wrap_apdu` trusts -----
+
+    const HDR: [u8; 4] = [0x80, 0x04, 0x00, 0x20];
+
+    fn short(data_len: usize) -> Vec<u8> {
+        let mut a = HDR.to_vec();
+        a.push(data_len as u8);
+        a.extend(core::iter::repeat(0xA5).take(data_len));
+        a
+    }
+
+    fn extended(lc: usize, actual: usize) -> Vec<u8> {
+        let mut a = HDR.to_vec();
+        a.extend([0x00, (lc >> 8) as u8, lc as u8]);
+        a.extend(core::iter::repeat(0xA5).take(actual));
+        a
+    }
+
+    #[test]
+    fn layout_refuses_anything_shorter_than_a_header() {
+        // The old wrap copied these through in cleartext even with a live
+        // session (`apdu.len() < 4`).
+        for n in 0..4 {
+            assert_eq!(command_apdu_layout(&HDR[..n]), Err(WrapError::Malformed), "len {n}");
+        }
+    }
+
+    #[test]
+    fn layout_accepts_header_only_and_lone_le() {
+        assert_eq!(
+            command_apdu_layout(&HDR),
+            Ok(CmdLayout { hdr_len: 4, data_len: 0, extended: false })
+        );
+        // `get_version_ext`: `80 04 00 P2 00` reaches wrap with its Le.
+        assert_eq!(
+            command_apdu_layout(&[0x80, 0x04, 0x00, 0x20, 0x00]),
+            Ok(CmdLayout { hdr_len: 5, data_len: 0, extended: false })
+        );
+        // A 5-byte APDU whose fifth byte is a non-zero Lc has no data.
+        assert_eq!(command_apdu_layout(&[0x80, 0x04, 0x00, 0x20, 0x03]), Err(WrapError::Malformed));
+    }
+
+    #[test]
+    fn layout_short_lc_must_match_the_bytes_present() {
+        for n in [1usize, 15, 16, 200, 255] {
+            assert_eq!(
+                command_apdu_layout(&short(n)),
+                Ok(CmdLayout { hdr_len: 5, data_len: n, extended: false })
+            );
+        }
+        let mut too_few = short(10);
+        too_few.pop();
+        assert_eq!(command_apdu_layout(&too_few), Err(WrapError::Malformed));
+        let mut too_many = short(10);
+        too_many.push(0x00); // a stray trailing byte would have been dropped unMAC'd
+        assert_eq!(command_apdu_layout(&too_many), Err(WrapError::Malformed));
+    }
+
+    #[test]
+    fn layout_extended_lc_must_match_the_bytes_present() {
+        assert_eq!(
+            command_apdu_layout(&extended(300, 300)),
+            Ok(CmdLayout { hdr_len: 7, data_len: 300, extended: true })
+        );
+        // Lc past the buffer used to panic on the slice; Lc short of it
+        // silently left bytes out of the MAC.
+        assert_eq!(command_apdu_layout(&extended(301, 300)), Err(WrapError::Malformed));
+        assert_eq!(command_apdu_layout(&extended(299, 300)), Err(WrapError::Malformed));
+        assert_eq!(command_apdu_layout(&extended(0, 0)), Err(WrapError::Malformed));
+        // `hdr 00 xx` (6 bytes) is neither a lone Le nor a full extended Lc.
+        assert_eq!(command_apdu_layout(&[0x80, 0x04, 0x00, 0x20, 0x00, 0x01]), Err(WrapError::Malformed));
+    }
+
+    #[test]
+    fn layout_refuses_data_that_overflows_the_cdec_buffer() {
+        // padded = (n/16 + 1) * 16 must fit the 1024-byte staging buffer.
+        assert_eq!(command_apdu_layout(&extended(1023, 1023)).unwrap().padded_len(), 1024);
+        assert_eq!(command_apdu_layout(&extended(1024, 1024)), Err(WrapError::TooLong));
+        assert_eq!(command_apdu_layout(&extended(0xFFFF, 0xFFFF)), Err(WrapError::TooLong));
+        // `send_apdu`'s 1024-byte `wrapped` buffer is the tighter bound:
+        // `wrap_apdu` refuses when `wrapped_len` exceeds `out`, so 1007 data
+        // bytes (7 + 1008 + 8 = 1023) is the largest command that is sent.
+        assert_eq!(command_apdu_layout(&extended(1007, 1007)).unwrap().wrapped_len(), 1023);
+        assert!(command_apdu_layout(&extended(1008, 1008)).unwrap().wrapped_len() > 1024);
+    }
+
+    #[test]
+    fn wrapped_len_matches_the_wrap_output_rule() {
+        // No data: header + Lc(=8) + C-MAC, short form.
+        let l = command_apdu_layout(&HDR).unwrap();
+        assert_eq!(l.wrapped_len(), 5 + 8);
+        // 32 data bytes pad to 48: short Lc 56.
+        let l = command_apdu_layout(&short(32)).unwrap();
+        assert_eq!(l.padded_len(), 48);
+        assert_eq!(l.wrapped_len(), 5 + 48 + 8);
+        // 255 data bytes pad to 256: new Lc 264 forces the extended form.
+        let l = command_apdu_layout(&short(255)).unwrap();
+        assert_eq!(l.wrapped_len(), 7 + 256 + 8);
+        // An extended input stays extended even when it would fit short.
+        let l = command_apdu_layout(&extended(16, 16)).unwrap();
+        assert_eq!(l.wrapped_len(), 7 + 32 + 8);
     }
 }

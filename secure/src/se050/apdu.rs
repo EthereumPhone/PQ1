@@ -327,14 +327,19 @@ pub unsafe fn send_apdu(
         };
 
         let mut wrapped = [0u8; MAX_APDU];
-        let mut wlen = super::scp03::wrap_apdu(scp03, apdu_no_le, &mut wrapped);
+        // #991: `wrap_apdu` refuses (no session, malformed framing, too long)
+        // rather than ever handing back the APDU unwrapped.
+        let mut wlen = super::scp03::wrap_apdu(scp03, apdu_no_le, &mut wrapped)?;
 
         // S-7c fix — extended-Lc commands take a 2-byte Le per ISO 7816-4
-        // (and per NXP plug-and-trust `se05x_tlv.c:1055-1059`). At SCP03
-        // level 0x33 wrap_apdu always produces extended-Lc output because
-        // it appends an 8-byte C-MAC, pushing the body well past the
-        // 255-byte short-Lc cap on every command with a payload.
+        // (and per NXP plug-and-trust `se05x_tlv.c:1055-1059`). wrap_apdu
+        // emits extended Lc when its input was extended or when padding +
+        // the 8-byte C-MAC push the body to 256 bytes or more; small
+        // commands stay short-Lc, so the Le form follows what it chose.
         if has_le {
+            if wlen + 2 > wrapped.len() {
+                return Err(Se050Error::BufferOverflow);
+            }
             let wrapped_extended = wlen >= 7 && wrapped[4] == 0x00;
             if wrapped_extended {
                 wrapped[wlen] = 0x00;
