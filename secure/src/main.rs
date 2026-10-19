@@ -5683,6 +5683,43 @@ unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {
     cortex_m::peripheral::SCB::sys_reset()
 }
 
+/// `"<file tail>:<line>"` for the fatal screen's last row (dev,
+/// `unlock-diag`). Panic-free: byte copies within bounds, no formatting
+/// machinery, and a non-ASCII byte becomes `?`.
+#[cfg(all(not(test), feature = "unlock-diag"))]
+fn panic_where<'a>(info: &core::panic::PanicInfo, buf: &'a mut [u8; ui::DISPLAY_COLS]) -> &'a str {
+    let Some(loc) = info.location() else { return "to retry" };
+    let mut digits = [0u8; 10];
+    let mut n = 0;
+    let mut line = loc.line();
+    loop {
+        digits[n] = b'0' + (line % 10) as u8;
+        n += 1;
+        line /= 10;
+        if line == 0 || n == digits.len() {
+            break;
+        }
+    }
+    let room = buf.len().saturating_sub(n + 1);
+    let file = loc.file().as_bytes();
+    let tail = &file[file.len().saturating_sub(room)..];
+    let mut i = 0;
+    for &b in tail {
+        buf[i] = if b.is_ascii_graphic() { b } else { b'?' };
+        i += 1;
+    }
+    if i < buf.len() {
+        buf[i] = b':';
+        i += 1;
+    }
+    while n > 0 && i < buf.len() {
+        n -= 1;
+        buf[i] = digits[n];
+        i += 1;
+    }
+    core::str::from_utf8(&buf[..i]).unwrap_or("to retry")
+}
+
 /// Custom panic handler: zeroizes all sensitive state before halting.
 /// This ensures secrets don't persist in RAM after a crash.
 ///
@@ -5721,12 +5758,20 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     // Issue #484 fatal screen. Secrets are already wiped, so row 1 is
     // truthful. Every call on this path is panic-free by construction
     // (see the handler doc + `ui::display_if_ready`).
+    // Dev (`unlock-diag`, never ships): the last row names where it panicked
+    // (the source file's tail and the line), since the EVT has no SWD.
+    #[cfg(feature = "unlock-diag")]
+    let mut where_buf = [b' '; ui::DISPLAY_COLS];
+    #[cfg(feature = "unlock-diag")]
+    let last_row = panic_where(_info, &mut where_buf);
+    #[cfg(not(feature = "unlock-diag"))]
+    let last_row = "to retry";
     if let Some(d) = ui::display_if_ready() {
         d.clear();
         d.draw_line(0, "! FATAL ERROR");
         d.draw_line(1, "Secrets wiped");
         d.draw_line(2, "Power-cycle");
-        d.draw_line(3, "to retry");
+        d.draw_line(3, last_row);
         d.flush();
     }
 

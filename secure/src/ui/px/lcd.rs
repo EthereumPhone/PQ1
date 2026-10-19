@@ -490,57 +490,16 @@ fn present_frame_ex(frame: &Frame<'_>, font: &Font<'_>, force: bool) -> FrameCos
     present_frame_cols(frame, font, force, None, false)
 }
 
-/// The panel's tear scanline (DCS 0x44 in `lcd_nv3007`): the beam's row at
-/// the TE edge.
-const TE_SCANLINE: i32 = 16;
+// The panel's tear scanline (DCS 0x44 in `lcd_nv3007`): the beam's row at
+// the TE edge.
+use pqsigner_ui_px::stream::phase::TE_SCANLINE;
 
 // ---- Starting a partial film frame from the TE stamps (#934 stage 1) -------
 //
-// The scan model is the one `present_frame_cols` states its tear-free start
-// in and that the glass confirmed (no split seen, partial and full,
-// 2026-10-16): the beam is at row `TE_SCANLINE` at the TE edge and moves
-// 26.75 rows/ms (428 rows per 16.0 ms); the write moves 15.3 rows/ms. A
-// window [xa, xend) may start streaming while the beam's row r satisfies
-//   r >= xa                              (the write trails the beam), and
-//   r <  W + xend - 26.75/15.3 * (xend - xa)   (the beam does not lap the
-//                                         write before its end, next refresh)
-// — the same two conditions the edge-plus-wait path meets with its fixed
-// wait. `PHASE_MARGIN_ROWS` is kept off both ends.
-//
-// 2026-10-19 the panel was seen to move its TE pulse by 3.6 ms for 200 tear
-// scanlines (`ui-px-film-bench`'s probe), not the 7.5 ms this model predicts,
-// so the scanline register's unit is not a row of this model (half-rows
-// would fit). Nothing here depends on that register: the scanline stays at
-// `TE_SCANLINE`, as validated.
-
-/// Beam rows per cycle at 160 MHz: 26.75 rows/ms = 107 / 640,000.
-const BEAM_ROWS_NUM: u32 = 107;
-const BEAM_ROWS_DEN: u32 = 640_000;
-
-/// One refresh, 16.0 ms, in cycles.
-const REFRESH_CYC: u32 = 2_560_000;
-
-/// Kept off both ends of the start range: 1 ms of beam, as the
-/// millisecond-clock wait allowed for its own granularity.
-const PHASE_MARGIN_ROWS: i32 = 27;
-
-/// A stamp older than this means no edge for over a refresh (TE stopped, the
-/// counter was reset, the ISR could not run): use the edge-synchronised path.
-const STAMP_STALE_CYC: u32 = REFRESH_CYC + REFRESH_CYC / 8;
-
-/// The cycles after a TE edge during which a window [xa, xend) may start
-/// streaming, or `None` if the range is empty.
-fn start_window(xa: i32, xend: i32) -> Option<(u32, u32)> {
-    let w = xend - xa;
-    let lo = xa.max(TE_SCANLINE) + PHASE_MARGIN_ROWS;
-    // 26.75 / 15.3 = 1.7484 beam rows per written row, rounded up.
-    let hi = (W + xend - (w * 1749 + 999) / 1000 - PHASE_MARGIN_ROWS).min(W - 1);
-    if hi < lo {
-        return None;
-    }
-    let cyc = |row: i32| (row - TE_SCANLINE) as u32 * BEAM_ROWS_DEN / BEAM_ROWS_NUM;
-    Some((cyc(lo), cyc(hi)))
-}
+// The arithmetic (the start range, the wait for it) is
+// `pqsigner_ui_px::stream::phase`, host-checked over every window and time
+// since an edge, overflow included.
+use pqsigner_ui_px::stream::phase::{start_window, REFRESH_CYC, STAMP_STALE_CYC};
 
 /// Spin until the beam is inside [xa, xend)'s start range, from the TE
 /// stamps. `false` (nothing waited for) when there is no fresh stamp or the
@@ -558,11 +517,10 @@ fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
         if since > STAMP_STALE_CYC {
             return false;
         }
-        if (lo..=hi).contains(&since) {
-            return true;
-        }
         // Until the range opens, in this refresh or the next.
-        let wait = if since < lo { lo - since } else { REFRESH_CYC - since + lo };
+        let Some(wait) = pqsigner_ui_px::stream::phase::wait(since, lo, hi) else {
+            return true;
+        };
         if wait > BAND_RENDER_CYC && work() {
             continue;
         }
@@ -1412,7 +1370,7 @@ fn film_phase_ok() -> bool {
     }
     // Starting at `at` cycles after an edge is fine if it is inside the start
     // range or a short spin before it, in this refresh or the next.
-    let ok = |at: u32| (at <= hi && at + FILM_SPIN_OK_CYC >= lo) || at + FILM_SPIN_OK_CYC >= REFRESH_CYC + lo;
+    let ok = |at: u32| pqsigner_ui_px::stream::phase::start_ok(at, lo, hi, FILM_SPIN_OK_CYC);
     // Where the beam will be when the stream could start.
     let at = (since + FILM_LEAD_CYC) % REFRESH_CYC;
     if ok(at) {

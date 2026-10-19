@@ -103,6 +103,83 @@ impl BandQueue {
     }
 }
 
+/// When a partial frame may start streaming, from the time since the panel's
+/// last TE edge (#934 stage 1). Pure arithmetic on cycle counts at 160 MHz,
+/// so every input is host-checked, overflow included (release builds keep
+/// `overflow-checks`: an overflow here is a panic on the device).
+///
+/// The scan model is the one the firmware's presenter states its tear-free
+/// start in and that the glass confirmed (no split seen, partial and full,
+/// 2026-10-16): the beam is at row [`TE_SCANLINE`] at the TE edge and moves
+/// 26.75 rows/ms (428 rows per 16.0 ms); the write moves 15.3 rows/ms. A
+/// window [xa, xend) may start while the beam's row r satisfies
+///   r >= xa                                   (the write trails the beam)
+///   r <  W + xend - 26.75/15.3 * (xend - xa)  (the beam does not lap the
+///                                              write before it ends)
+/// with [`PHASE_MARGIN_ROWS`] kept off both ends.
+///
+/// 2026-10-19 the panel moved its TE pulse by 3.6 ms for 200 tear scanlines
+/// (the film bench's probe), not the 7.5 ms this model predicts, so the
+/// scanline register's unit is not a row of this model. Nothing here depends
+/// on that register; the firmware keeps it at [`TE_SCANLINE`].
+pub mod phase {
+    use crate::raster::W;
+
+    /// The panel's tear scanline: the beam's row at the TE edge.
+    pub const TE_SCANLINE: i32 = 16;
+    /// Beam rows per cycle: 26.75 rows/ms = 107 / 640,000 at 160 MHz.
+    pub const BEAM_ROWS_NUM: u32 = 107;
+    pub const BEAM_ROWS_DEN: u32 = 640_000;
+    /// One refresh, 16.0 ms, in cycles.
+    pub const REFRESH_CYC: u32 = 2_560_000;
+    /// Kept off both ends of the start range: 1 ms of beam.
+    pub const PHASE_MARGIN_ROWS: i32 = 27;
+    /// A stamp older than this means no edge for over a refresh: the caller
+    /// falls back to waiting for the edge.
+    pub const STAMP_STALE_CYC: u32 = REFRESH_CYC + REFRESH_CYC / 8;
+
+    /// The cycles after a TE edge during which window [xa, xend) may start
+    /// streaming, or `None` if the range is empty or the window is not one
+    /// (`0 <= xa < xend <= W` is required).
+    #[must_use]
+    pub fn start_window(xa: i32, xend: i32) -> Option<(u32, u32)> {
+        if !(0 <= xa && xa < xend && xend <= W) {
+            return None;
+        }
+        let w = xend - xa;
+        let lo = xa.max(TE_SCANLINE) + PHASE_MARGIN_ROWS;
+        // 26.75 / 15.3 = 1.7484 beam rows per written row, rounded up.
+        let hi = (W + xend - (w * 1749 + 999) / 1000 - PHASE_MARGIN_ROWS).min(W - 1);
+        if hi < lo {
+            return None;
+        }
+        let cyc = |row: i32| (row - TE_SCANLINE) as u32 * BEAM_ROWS_DEN / BEAM_ROWS_NUM;
+        Some((cyc(lo), cyc(hi)))
+    }
+
+    /// Cycles until the start range [lo, hi] opens, `since` cycles after the
+    /// last edge: `None` when it is open now. Past `hi` it is the next
+    /// refresh's `lo`; an edge that is late (`since` beyond that) gives 0.
+    #[must_use]
+    pub fn wait(since: u32, lo: u32, hi: u32) -> Option<u32> {
+        if (lo..=hi).contains(&since) {
+            None
+        } else if since < lo {
+            Some(lo - since)
+        } else {
+            Some((REFRESH_CYC + lo).saturating_sub(since))
+        }
+    }
+
+    /// Whether a stream that could start `at` cycles after an edge (taken
+    /// modulo the refresh) is in range, or at most `spin_ok` before it, in
+    /// this refresh or the next.
+    #[must_use]
+    pub fn start_ok(at: u32, lo: u32, hi: u32, spin_ok: u32) -> bool {
+        (at <= hi && at.saturating_add(spin_ok) >= lo) || at.saturating_add(spin_ok) >= REFRESH_CYC.saturating_add(lo)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +287,63 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every window the film can stream and every time since an edge up to
+    /// the stale limit: no arithmetic overflows (tests build with overflow
+    /// checks, as the device does), the range keeps the presenter's
+    /// tear-free conditions, and `wait` is `None` exactly inside it.
+    #[test]
+    fn phase_math_never_overflows_and_keeps_the_start_conditions() {
+        use super::phase::*;
+        use crate::raster::W;
+        let mut windows = 0;
+        for xa in (0..W).step_by(48) {
+            for xend in (xa + 1)..=W {
+                let Some((lo, hi)) = start_window(xa, xend) else { continue };
+                windows += 1;
+                assert!(lo <= hi && hi < REFRESH_CYC);
+                // Back to beam rows (rounding down): the start conditions hold.
+                let row = |c: u32| TE_SCANLINE + (c * BEAM_ROWS_NUM / BEAM_ROWS_DEN) as i32;
+                assert!(row(lo) >= xa, "the write trails the beam ({xa}..{xend})");
+                let w = f64::from(xend - xa);
+                let lap = f64::from(W + xend) - 26.75 / 15.3 * w;
+                assert!(f64::from(row(hi)) < lap, "no lap before the end ({xa}..{xend})");
+                for since in (0..=STAMP_STALE_CYC).step_by(997).chain([0, lo, hi, REFRESH_CYC, REFRESH_CYC + 1, STAMP_STALE_CYC]) {
+                    match wait(since, lo, hi) {
+                        None => assert!((lo..=hi).contains(&since)),
+                        Some(d) => {
+                            assert!(!(lo..=hi).contains(&since));
+                            assert!(d <= REFRESH_CYC + lo);
+                        }
+                    }
+                    for spin in [0, 320_000, REFRESH_CYC] {
+                        let _ = start_ok(since % REFRESH_CYC, lo, hi, spin);
+                        let _ = start_ok(since, lo, hi, spin);
+                    }
+                }
+            }
+        }
+        assert!(windows > 1000, "the sweep reached the real windows ({windows})");
+        // Not a window: refused rather than computed.
+        assert_eq!(start_window(10, 10), None);
+        assert_eq!(start_window(-48, 48), None);
+        assert_eq!(start_window(0, W + 1), None);
+    }
+
+    /// The device panic of 2026-10-19: a TE edge arriving a little after
+    /// 16.0 ms put `since` past the refresh while waiting for the next start
+    /// range, and `REFRESH_CYC - since + lo` underflowed.
+    #[test]
+    fn a_late_edge_is_a_zero_wait_not_an_underflow() {
+        use super::phase::*;
+        let (lo, hi) = start_window(96, 336).expect("a real window");
+        // The crashing input: one cycle past the refresh, before the next
+        // range opens. The old `REFRESH_CYC - since + lo` underflowed here.
+        assert_eq!(wait(REFRESH_CYC + 1, lo, hi), Some(lo - 1));
+        assert_eq!(wait(STAMP_STALE_CYC, lo, hi), Some(REFRESH_CYC + lo - STAMP_STALE_CYC));
+        // Later than the next range's opening (a very late edge): no wait.
+        assert_eq!(wait(REFRESH_CYC + lo + 5, lo, hi), Some(0));
+        assert_eq!(wait(hi + 1, lo, hi), Some(REFRESH_CYC + lo - hi - 1));
     }
 }

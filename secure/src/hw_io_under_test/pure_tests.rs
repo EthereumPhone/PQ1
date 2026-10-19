@@ -2797,9 +2797,13 @@ fn negative_te_stamps_are_the_busy_films_alone() {
     assert!(UI_PX_LCD_SRC.contains("if wait > BAND_RENDER_CYC && work() {"));
     assert!(UI_PX_LCD_SRC.contains("if !phased {\n        let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);"));
     assert!(UI_PX_LCD_SRC.contains("if !phased && xa > TE_SCANLINE {"));
-    // And the start range is the presenter's own tear-free condition.
-    assert!(UI_PX_LCD_SRC.contains("let lo = xa.max(TE_SCANLINE) + PHASE_MARGIN_ROWS;"));
-    assert!(UI_PX_LCD_SRC.contains("let hi = (W + xend - (w * 1749 + 999) / 1000 - PHASE_MARGIN_ROWS).min(W - 1);"));
+    // And the start range and the wait for it are the host-checked
+    // `pqsigner_ui_px::stream::phase` (the presenter's own tear-free
+    // conditions, every window, no overflow), not a local copy.
+    assert!(UI_PX_LCD_SRC.contains("use pqsigner_ui_px::stream::phase::{start_window, REFRESH_CYC, STAMP_STALE_CYC};"));
+    assert!(UI_PX_LCD_SRC.contains("let Some(wait) = pqsigner_ui_px::stream::phase::wait(since, lo, hi) else {"));
+    assert!(!UI_PX_LCD_SRC.contains("fn start_window("), "no second copy of the range");
+    assert!(!UI_PX_LCD_SRC.contains("REFRESH_CYC - since"), "the 2026-10-19 underflow");
 }
 
 #[test]
