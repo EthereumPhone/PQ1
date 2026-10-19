@@ -317,7 +317,10 @@ pub fn parse_safe_tx_frame(payload: &[u8]) -> Result<SafeTxFrame<'_>, Structured
         return Err(StructuredFrameError::BadNamesCount);
     }
     let mut names: [&[u8]; OFFCHAIN_MAX_NAME_BUNDLES] = [&[]; OFFCHAIN_MAX_NAME_BUNDLES];
-    for slot in names.iter_mut().take(names_count) {
+    // An index loop bounded by `names_count <= 4` (not an iterator chain), so
+    // a bounded model checker unwinds it in at most five steps.
+    let mut i = 0usize;
+    while i < names_count {
         let n = take_u16_prefixed(
             payload,
             &mut p,
@@ -327,7 +330,8 @@ pub fn parse_safe_tx_frame(payload: &[u8]) -> Result<SafeTxFrame<'_>, Structured
         if n.is_empty() {
             return Err(StructuredFrameError::BadNameLen);
         }
-        *slot = n;
+        names[i] = n;
+        i += 1;
     }
     if p != payload.len() {
         return Err(StructuredFrameError::TrailingBytes);
@@ -528,7 +532,9 @@ mod verification {
     /// words == payload length), the Safe section's `raw_len` ends exactly at
     /// its end, and the name count is within the cap. N=300 admits the
     /// 290-byte minimum plus short variable sections; every section is the
-    /// same `take_u16_prefixed` gate, so the bound is representative.
+    /// same `take_u16_prefixed` gate, so the bound is representative. (The
+    /// name loop is an index loop on purpose: as an iterator chain CBMC did
+    /// not bound it and this harness never finished.)
     #[kani::proof]
     #[kani::unwind(6)]
     fn parse_safe_tx_frame_panic_free_and_exact() {
@@ -562,6 +568,7 @@ mod verification {
 
     /// Non-vacuity: the minimal well-formed frames are ACCEPTED.
     #[kani::proof]
+    #[kani::unwind(6)]
     fn structured_frames_accept_minimal() {
         let mut safe = [0u8; pqsigner_proto::MIN_OFFCHAIN_SAFE_TX_LEN];
         let safe_len = (SAFE_V1_CANONICAL_LEN + 2) as u16;

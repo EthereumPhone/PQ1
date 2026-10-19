@@ -235,6 +235,42 @@
       "harness_path": "offchain_header::verification::parse_frame_panic_free_and_exact"
     },
     {
+      "id": "offchain_safe_tx_exact_consumption",
+      "tier": "default",
+      "crate": "pqsigner-aa",
+      "harness": "parse_safe_tx_frame_panic_free_and_exact",
+      "file": "aa/src/offchain_header.rs",
+      "find": "    if p != payload.len() {\n        return Err(StructuredFrameError::TrailingBytes);\n    }\n    Ok(SafeTxFrame {",
+      "replace": "    if p > payload.len() {\n        return Err(StructuredFrameError::TrailingBytes);\n    }\n    Ok(SafeTxFrame {",
+      "expect": "kani_fails",
+      "note": "weaken the SIGN_OFFCHAIN kind-4 (SafeTx) EXACT-consumption guard (`!=` -> `>`) so hidden bytes after the names section are accepted -> parse_safe_tx_frame_panic_free_and_exact's `sections + length words == payload length` assertion MUST break. Verified 2026-10-19 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
+      "harness_path": "offchain_header::verification::parse_safe_tx_frame_panic_free_and_exact"
+    },
+    {
+      "id": "offchain_safe_tx_raw_len_exact",
+      "tier": "default",
+      "crate": "pqsigner-aa",
+      "harness": "parse_safe_tx_frame_panic_free_and_exact",
+      "file": "aa/src/offchain_header.rs",
+      "find": "    if SAFE_V1_CANONICAL_LEN + 2 + raw_len != safe_bundle.len() {",
+      "replace": "    if SAFE_V1_CANONICAL_LEN + 2 + raw_len > safe_bundle.len() {",
+      "expect": "kani_fails",
+      "note": "weaken the kind-4 Safe-section raw_len guard (`!=` -> `>`) so raw_data may end before the Safe section (unbound trailing bytes inside it) -> the harness's `raw_len ends the Safe section exactly` assertion MUST break. Verified 2026-10-19 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
+      "harness_path": "offchain_header::verification::parse_safe_tx_frame_panic_free_and_exact"
+    },
+    {
+      "id": "offchain_cow_order_exact_consumption",
+      "tier": "default",
+      "crate": "pqsigner-aa",
+      "harness": "parse_cow_order_frame_panic_free_and_exact",
+      "file": "aa/src/offchain_header.rs",
+      "find": "    if p != payload.len() {\n        return Err(StructuredFrameError::TrailingBytes);\n    }\n    Ok(CowOrderFrame {",
+      "replace": "    if p > payload.len() {\n        return Err(StructuredFrameError::TrailingBytes);\n    }\n    Ok(CowOrderFrame {",
+      "expect": "kani_fails",
+      "note": "weaken the SIGN_OFFCHAIN kind-5 (CoW order) EXACT-consumption guard (`!=` -> `>`) -> parse_cow_order_frame_panic_free_and_exact's `canonical + both legs == payload length` assertion MUST break. Verified 2026-10-19 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL.",
+      "harness_path": "offchain_header::verification::parse_cow_order_frame_panic_free_and_exact"
+    },
+    {
       "id": "usb_apdu_reassembly_bounds",
       "tier": "default",
       "crate": "sphincs-tz-shared",
