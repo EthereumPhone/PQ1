@@ -36,9 +36,14 @@ history and failed requests. Its derived charge is
 The different work constants follow that project's structured keygen/sign/verify
 programs and possible reveal step; this does not identify the Lean and EasyCrypt
 execution models. Its event requires a valid full signing history and an
-unmatched cached ordinary opening, with no accepted-forgery guard. WOTS opening
-charges and final six-case PMF composition remain open. The EasyCrypt statements
-and numerical results below are unchanged.
+unmatched cached ordinary opening, with no accepted-forgery guard.
+The separate Lean continuation now also bounds both WOTS earlier-exposure
+branches by `316237824*(155867+2*qr+qs*364076)/2^128`. It retains complete
+successful histories, exact adaptive prefix/cache restoration, full C10
+refinement, raw/final-verifier disclosures and the seven-cut recurrence.
+Final six-case PMF composition remains open. These are original observed
+independent-game events, with no cache-visible shared-oracle transfer claim.
+The EasyCrypt statements and numerical results below are unchanged.
 
 ## Repeated fixed candidates
 

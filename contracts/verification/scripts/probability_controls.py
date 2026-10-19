@@ -3711,4 +3711,257 @@ def cases(project: Path) -> list[dict]:
     liftOpening, mergeProgram, evalOpening, PMF.pure_map]
 """)
 
+    # WOTS selected-cut opening: full consumers and exact semantic boundaries.
+    ca_prefix = ("import C10Probability.WotsDisclosureExamples\nnamespace C10Probability\n"
+                 "open scoped ENNReal\nnoncomputable section\n"
+                 "variable {K P α H S R T U V N L I : Type*} [DecidableEq K]\n"
+                 "attribute [local instance] Classical.propDecidable\n"
+                 "set_option maxRecDepth 80000\n")
+    ca_suffix = "\nend\nend C10Probability\n"
+
+    def ca_alias(*pairs):
+        names = {name: name + "CACandidate" for _, name in pairs}
+        declarations = []
+        for module, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|attribute|end|set_option)\b)",
+                src[module], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing WOTS opening definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "CASlice"
+        src[key] = ca_prefix + "\n".join(declarations) + ca_suffix
+        return key, names
+
+    def ca_check(module, name, names):
+        check = theorem(src[module], name)
+        for old, new in names.items():
+            check = re.sub(r"\b" + old + r"\b", new, check)
+        return check
+
+    def ca_variants(pairs, module, consumer, variants):
+        key, names = ca_alias(*pairs)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("wots-opening-" + label, key, old, new, ca_check(module, consumer, names), expected)
+
+    ca_variants([("AdaptivePresample", "restoreQueries")], "PresampleProbeExamples", "restored_unused_baseline_example", [
+        ("restore-warm-cache-leaked", "else baseline key", "else out.cache key", False),
+        ("restore-baseline-cleared", "else baseline key", "else none", False),
+        ("restore-baseline-id", "else baseline key", "else id (baseline key)", True),
+    ])
+    ca_variants([("AdaptivePresample", "restoreQueries")], "PresampleProbeExamples", "restored_queried_duplicate_example", [
+        ("restore-membership-inverted", "if key ∈ out.queries", "if key ∉ out.queries", False),
+        ("restore-actual-cache-lost", "then out.cache key", "then baseline key", False),
+        ("restore-query-history-lost", "baseline key, out.queries", "baseline key, []", False),
+    ])
+    ca_variants([("AdaptivePresample", "restoreQueries")], "PresampleProbeExamples", "restored_other_baseline_example", [
+        ("restore-unqueried-entry-kept", "key ∈ out.queries", "key ∉ out.queries", False),
+    ])
+    ca_variants([("WotsTarget", "wotsTargetKey")], "WotsCutExamples", "wots_high_address_bit_example", [
+        ("private-tree-truncated", "wotsTargetTree target", "wotsTargetTree target % 256", False),
+        ("private-kp-truncated", "wotsTargetKp target", "wotsTargetKp target % 256", False),
+        ("private-address-id", "wotsTargetTree target", "wotsTargetTree (id target)", True),
+    ])
+    ca_variants([("WotsTarget", "wotsTargetKey")], "WotsCutExamples", "wots_layer_separation_example", [
+        ("private-layer-zero", "wotsTargetLayer target", "0", False),
+    ])
+    ca_variants([("WotsTarget", "wotsTargetKey")], "WotsCutExamples", "wots_chain_last_separation_example", [
+        ("private-chain-zero", "target.2.val", "0", False),
+    ])
+    ca_variants([("WotsTarget", "WotsLogicalAddress"), ("WotsTarget", "WotsTarget")], "WotsTarget", "wots_target_card", [
+        ("lower-tree-high-bit-lost", "Fin 512 × Fin 512", "Fin 256 × Fin 512", False),
+        ("last-chain-lost", "× Fin 43", "× Fin 42", False),
+    ])
+    ca_variants([("WotsTarget", "WotsCutTarget")], "WotsTarget", "wots_cut_target_card", [
+        ("cut-six-lost", "× Fin 7", "× Fin 6", False),
+        ("public-endpoint-included", "× Fin 7", "× Fin 8", False),
+    ])
+    ca_variants([("WotsCutInputs", "wotsCutIncoming")], "WotsCutExamples", "wots_first_cut_private_example", [
+        ("zero-incoming-public", "target.2.val = 0", "target.2.val = 1", False),
+        ("zero-incoming-condition-id", "target.2.val = 0", "id target.2.val = 0", True),
+    ])
+    ca_variants([("WotsCutInputs", "wotsCutIncoming")], "WotsCutExamples", "wots_last_cut_incoming_example", [
+        ("incoming-current-position", "target.2.val - 1", "target.2.val", False),
+        ("incoming-two-positions-back", "target.2.val - 1", "target.2.val - 2", False),
+        ("incoming-predecessor-zero", "- 1) previous", "- 1) 0", False),
+    ])
+    ca_variants([("WotsCutInputs", "wotsCutCommit")], "WotsCutExamples", "wots_last_cut_outgoing_example", [
+        ("commit-previous-position", "target.2.val node", "(target.2.val - 1) node", False),
+        ("commit-node-zero", "target.2.val node", "target.2.val 0", False),
+    ])
+    ca_variants([("WotsCutPrefix", "wotsBeforeCutProgram")], "WotsCutExamples", "wots_zero_prefix_no_query", [
+        ("zero-prefix-value-one", "| 0 => .done 0", "| 0 => .done 1", False),
+    ])
+    ca_variants([("WotsDeferredNode", "wotsDeferredValue")], "WotsCutExamples", "wots_hidden_full_digest_projection", [
+        ("hidden-full-digest-lost", "deferredNode secret node.val", "deferredNode 0 node.val", False),
+        ("hidden-digest-id", "deferredNode secret node.val", "deferredNode (id secret) node.val", True),
+    ])
+    ca_variants([("ProbeProgram", "probeProgram")], "PresampleProbeExamples", "repeated_probe_cached_example", [
+        ("probe-query-omitted", "key :: out.2", "out.2", False),
+        ("probe-query-duplicated", "key :: out.2", "key :: key :: out.2", False),
+        ("probe-order-cons", "key :: out.2", "List.cons key out.2", True),
+    ])
+    ca_variants([("ProbeProgram", "probeProgram")], "ProbeProgram", "probe_program_eval", [
+        ("probe-order-reversed", "key :: out.2", "out.2 ++ [key]", False),
+    ])
+    ca_variants([("WotsReleaseOpening", "WotsResultExposes")], "WotsDisclosureExamples", "known_earlier_node_exposes_example", [
+        ("earlier-known-release-lost", "≤ target.2.val", "= target.2.val", False),
+    ])
+    ca_variants([("WotsReleaseOpening", "WotsResultExposes")], "WotsDisclosureExamples", "exact_cut_node_exposes_example", [
+        ("exact-release-lost", "≤ target.2.val", "< target.2.val", False),
+        ("exposure-digit-id", "≤ target.2.val", "≤ id target.2.val", True),
+    ])
+    ca_variants([("WotsReleaseOpening", "WotsResultExposes")], "WotsDisclosureExamples", "later_node_unexposed_example", [
+        ("later-release-included", "≤ target.2.val", "≤ target.2.val + 1", False),
+    ])
+    ca_variants([("WotsReleaseOpening", "WotsResultExposes")], "WotsDisclosureExamples", "other_address_unexposed_example", [
+        ("release-address-discarded", "address = target.1.1", "True", False),
+    ])
+    ca_variants([("WotsC10Release", "wotsC10Release")], "WotsDisclosureExamples", "failed_c10_release_retains_example", [
+        ("failed-c10-reveals", "| none => .done none", "| none => .reveal (fun _ => .done none)", False),
+    ])
+    ca_variants([("WotsC10Release", "wotsC10Release")], "WotsDisclosureExamples", "known_c10_earlier_release_example", [
+        ("successful-release-flag-lost", ".reveal (fun secret => .done (some (wotsDeferredC10Signature secret result)))", ".done (some (wotsDeferredC10Signature 0 result))", False),
+        ("release-condition-inverted", "if WotsHypertreeExposes result.signed then", "if ¬ WotsHypertreeExposes result.signed then", False),
+    ])
+    ca_variants([("WotsSessionOpening", "wotsObservedSessionOpening")], "WotsSessionOpening", "wots_observed_session_refines", [
+        ("raw-refusal-reply-changed", "cfg (next 0) 0 qs ledger", "cfg (next 1) 0 qs ledger", False),
+        ("sign-exposure-lost", "mapOpeningReturn (observeSign req reply)", "mapOpeningReturn id", False),
+        ("session-failure-ledger-lost", "(sessionAfterSign ledger req.message reply)", "ledger", False),
+        ("session-refusal-inverted", "if sessionAdmits ledger req then", "if !sessionAdmits ledger req then", False),
+        ("session-ledger-id", "(sessionAfterSign ledger req.message reply)", "(id (sessionAfterSign ledger req.message reply))", True),
+    ])
+    ca_variants([("WotsSessionOpening", "wotsObservedSessionOpening")], "WotsSessionOpening", "wots_observed_session_avoids", [
+        ("raw-incoming-unmarked", ".reveal (fun reply => mapOpeningReturn", ".query (.inl key) (fun reply => mapOpeningReturn", False),
+    ])
+    ca_variants([("WotsDriverOpening", "wotsProbedDriverOpening")], "WotsDriverOpening", "wots_probed_driver_refines", [
+        ("final-acceptance-inverted", "⟨observed, final.1⟩", "⟨observed, !final.1⟩", False),
+        ("final-probes-omitted", "⟨observed, final.1⟩, final.2", "⟨observed, final.1⟩, []", False),
+    ])
+    ca_variants([("WotsGameOpening", "wotsGameSeed")], "ObservedWotsEvent", "c10_probed_game_seed", [
+        ("public-seed-full-digest", "nodeBlock (randomizerOfDigest publicSeed)", "secretBytes publicSeed", False),
+        ("public-seed-zero", "nodeBlock (randomizerOfDigest publicSeed)", "nodeBlock 0", False),
+        ("public-seed-id", "randomizerOfDigest publicSeed", "randomizerOfDigest (id publicSeed)", True),
+    ])
+    ca_variants([("C10Probes", "c10ProbeQueries")], "C10Probes", "c10_probed_game_query_bound", [
+        ("probe-double-final-budget", "++ out.2", "++ out.2 ++ out.2", False),
+    ])
+    ca_variants([("WotsProbeEvents", "wotsProbeCandidates")], "WotsProbeEvents", "wots_forged_upper_candidate", [
+        ("upper-forged-candidate-lost", "wotsForgedCoordinate out 1 chain", "wotsForgedCoordinate out 0 chain", False),
+    ])
+    ca_variants([("WotsProbeEvents", "wotsProbeCandidates")], "WotsProbeEvents", "wots_forged_lower_candidate", [
+        ("lower-forged-candidate-lost", "wotsForgedCoordinate out 0 chain", "wotsForgedCoordinate out 1 chain", False),
+    ])
+    ca_variants([("WotsProbeEvents", "wotsProbeCandidates")], "WotsProbeEvents", "wots_probe_value_candidate", [
+        ("all-raw-probes-lost", "((c10ProbeQueries out).take limit)", "([] : List WotsQuery)", False),
+        ("probe-bound-application", "((c10ProbeQueries out).take limit)", "(List.take limit (c10ProbeQueries out))", True),
+    ])
+    ca_variants([("WotsProbeEvents", "wotsProbeCandidates")], "WotsProbeEvents", "wots_probe_candidates_card", [
+        ("probe-truncation-lost", "((c10ProbeQueries out).take limit)", "(c10ProbeQueries out)", False),
+    ])
+    ca_variants([("WotsProbeEvents", "WotsProbeHit")], "WotsProbeEvents", "wots_probe_hit_zero", [
+        ("zero-cut-probe-included", "0 < target.2.val", "0 ≤ target.2.val", False),
+    ])
+    ca_variants([("WotsCutRecurrence", "wotsPreviousCut")], "WotsCutExamples", "wots_last_cut_previous_example", [
+        ("cut-recurrence-self", "target.2.val - 1", "target.2.val - 0", False),
+        ("cut-recurrence-skips", "target.2.val - 1", "target.2.val - 2", False),
+    ])
+    ca_variants([("ObservedWotsEvent", "observedWotsSelectedOpening")], "WotsDisclosureExamples", "wots_returned_excluded_example", [
+        ("returned-exclusion-erased", "¬ WotsReturned target (sessionConfigAt cfg out.1.key) out.1.driver.session.exposures out.2", "True", False),
+    ])
+    ca_variants([("ObservedWotsEvent", "observedWotsCoordinate")], "ObservedWotsEvent", "observed_wots_selected_probed", [
+        ("final-coordinate-zero", ").sigma chain", ").sigma 0", False),
+    ])
+    ca_variants([("WotsProbedBound", "wotsCutCharge")], "WotsCutExamples", "wots_one_request_charge", [
+        ("fixed-single-charge-understated", "155867", "155866", False),
+        ("signing-charge-understated", "364076", "364075", False),
+        ("charge-numerator-id", "155867 + 2 * qr", "155867 + 2 * qr + 0", True),
+    ])
+    ca_variants([("WotsProbedBound", "wotsCutCharge")], "WotsCutExamples", "wots_no_request_charge", [
+        ("raw-double-charge-lost", "2 * qr", "qr", False),
+    ])
+    ca_variants([("ObservedWotsBound", "ordinaryWotsOpeningCharge")], "ObservedWotsBound", "wots_target_weight_sum", [
+        ("target-union-understated", "316237824", "316237823", False),
+        ("target-union-id", "316237824 *", "(316237824 + 0) *", True),
+    ])
+
+    def ca_statement(label, module, name, old, new, expected=False):
+        check = theorem(src[module], name)
+        if check.count(old) != 1:
+            raise ValueError("WOTS opening statement site " + label + ": " + str(check.count(old)))
+        marker = re.search(r"\s*:=\s*by\b", check)
+        if not marker or check.index(old) >= marker.start():
+            raise ValueError("WOTS control must mutate a statement and retain its complete proof: " + label)
+        out.append({"name": "wots-opening-" + label, "definition": ca_prefix + ca_suffix,
+                    "baseline": ca_prefix + check + ca_suffix,
+                    "checked": ca_prefix + check.replace(old, new, 1) + ca_suffix, "expected": expected})
+
+    ca_statement("prefilled-avoidance-erased", "StagedOpeningComparison", "opening_prefilled_candidate_le",
+        "avoids : OpeningAvoids target instrumented", "avoids : True")
+    ca_statement("prefilled-separation-erased", "StagedOpeningComparison", "opening_prefilled_candidate_le",
+        "separate : ∀ label, encode (project secret) label ≠ target", "separate : True")
+    ca_statement("prefilled-disclosure-erased", "StagedOpeningComparison", "opening_prefilled_candidate_le",
+        "out.opened = true → excluded out.value out.cache", "out.opened = true → True")
+    ca_statement("prefix-freshness-erased", "OpeningTargetSetup", "opening_target_setup_fresh",
+        "before.2 (target before.1) = none", "True")
+    ca_statement("prefix-replay-erased", "ReplayedOpeningEvent", "replayed_opening_presample_le",
+        "(replayedOpeningEvent setup candidates returned)", "{out | ¬ returned out.1 out.2}")
+    ca_statement("sign-provenance-count-bound-erased", "WotsSignProvenance", "wots_sign_opening_count_lookup",
+        "result.count < n", "result.count + 1 < n")
+    ca_statement("recurrence-factor-understated", "WotsCutRecurrence", "wots_probed_opening_bound",
+        "((target.2.val + 1 : ℕ) : ℝ≥0∞) *", "((target.2.val : ℕ) : ℝ≥0∞) *")
+    ca_statement("cut-six-union-weight-understated", "ObservedWotsBound", "wots_cut_weight_sum",
+        "= 28", "= 27")
+    ca_statement("original-game-bound-understated", "ObservedWotsBound", "c10_observed_wots_opening_bound_real",
+        "(316237824 : ℝ) *", "(316237823 : ℝ) *")
+    ca_statement("actual-earlier-bound-understated", "ObservedWotsExposure", "c10_observed_wots_earlier_bound_real",
+        "(316237824 : ℝ) *", "(316237823 : ℝ) *")
+
+    ca_variants([("WotsTreeOpening", "wotsAddressWithKp")], "WotsTreeOpening", "wots_address_with_kp_fields", [
+        ("builder-lower-tree-zero", ".inl (lower.1, kp)", ".inl (0, kp)", False),
+        ("builder-upper-leaf-zero", ".inr kp", ".inr 0", False),
+    ])
+    ca_variants([("WotsLeafOpening", "wotsKnownSigma")], "WotsLeafOpening", "wots_known_sigma", [
+        ("leaf-coordinate-zero", "wotsKnownValue (sigma i)", "wotsKnownValue (sigma 0)", False),
+    ])
+    ca_variants([("WotsC10Provenance", "WotsC10MetadataReplay")], "WotsRecordProvenance", "wots_c10_metadata_record_equal", [
+        ("provenance-r-digest-zero", "trial, result.randomizer, result.digest", "trial, result.randomizer, 0", False),
+    ])
+    ca_variants([("WotsRecordProvenance", "WotsRecordExposes")], "WotsRecordProvenance", "wots_record_metadata_exposure", [
+        ("record-lower-exact-cut-lost", "record.lowerDigest target.1.2).val ≤", "record.lowerDigest target.1.2).val <", False),
+        ("record-upper-exact-cut-lost", "record.upperDigest target.1.2).val ≤", "record.upperDigest target.1.2).val <", False),
+    ])
+    ca_variants([("WotsProbeEvents", "WotsProbeHit")], "WotsCutRecurrence", "wots_probed_opening_split", [
+        ("probe-prefix-replay-erased", "replayProgram table (wotsBeforeCutProgram seed target.1 target.2.val) = some previous", "True", False),
+    ])
+    ca_variants([("WotsProbeEvents", "wotsProbedExcluded")], "WotsProbedBound", "wots_probed_staged_disclosure", [
+        ("probe-disclosure-not-charged", "wotsProbedReturned target cfg out table ∨ WotsProbeHit seed target out table", "wotsProbedReturned target cfg out table", False),
+    ])
+    ca_variants([("ObservedWotsEvent", "observedWotsSelectedOpening")], "ObservedWotsEvent", "observed_wots_selected_probed", [
+        ("actual-prefix-replay-erased", "replayProgram out.2 (wotsCutProgram out.1.key.1 target) =\n      some (observedWotsCoordinate out.1 (wotsTargetLayer target.1) target.1.2)", "True", False),
+    ])
+    ca_statement("selected-history-erased", "WotsExposureSelection", "wots_history_unreturned",
+        "history : C10SigningHistory id table cfg entries records", "history : True")
+    ca_statement("selected-earlier-record-erased", "WotsExposureSelection", "wots_history_unreturned",
+        "earlier : ∀ record ∈ records, ¬ WotsRecordExposes target record", "earlier : True")
+    ca_statement("top-earlier-prefix-erased", "WotsExposureSelection", "observed_top_earlier_opening",
+        "= some (observedWotsCoordinate out.1 1 i)", "= replayProgram out.2 (wotsSeedChainProgram id out.1.key.1 1 0 opening.kp i.val (opening.word i).val)")
+    ca_statement("lower-earlier-prefix-erased", "WotsExposureSelection", "observed_lower_earlier_opening",
+        "= some (observedWotsCoordinate out.1 0 i)", "= replayProgram out.2 (wotsSeedChainProgram id out.1.key.1 0 opening.lowerTree opening.lowerKp i.val (lower.word i).val)")
+    ca_statement("metadata-cache-extension-erased", "WotsC10Provenance", "wots_c10_metadata_replay_extends",
+        "extension : MemoExtends before after", "extension : True")
+    ca_statement("count-metadata-bound-understated", "WotsOrdinaryOpening", "forest_sign_wots_opening_budget",
+        "53386", "53385")
+
+    ca_statement("subtree-work-budget-understated", "WotsSubtreeOpening", "wots_subtree_opening_budget",
+        "155135", "155134")
+    ca_statement("keygen-work-budget-understated", "WotsSubtreeOpening", "wots_subtree_root_opening_budget",
+        "155135", "155134")
+
     return out

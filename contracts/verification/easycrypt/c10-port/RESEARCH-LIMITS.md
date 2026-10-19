@@ -233,8 +233,8 @@ their actual accepted counts and prefixes in that same final cache. Comparing
 accepted words at a common address gives equal words/values or an earlier
 position with a suffix to the signed value. This closes chain-opening extraction;
 it does not establish that the earlier value is undisclosed or that equal words
-mean equal messages. The complete repeated-address minimum is now derived below. The structural FORS descent and adaptive coverage are derived below; WOTS private-opening
-charges and the complete six-case partition/final bound remain open. Forward correctness is now derived for the
+mean equal messages. The complete repeated-address minimum is now derived below. The structural FORS descent, adaptive coverage and WOTS opening charges are
+derived below; the complete six-case partition/final bound remains open. Forward correctness is now derived for the
 actual returned Merkle/FORS authentication arrays at every valid target, using
 certified stored siblings and the same cache; concrete merge alignment, bounds
 and kept-flag initialization are discharged. Recovery preserves the actual WOTS
@@ -253,8 +253,8 @@ zero mass at `some false`. This is honest correctness, not guaranteed signing
 success or a forgery bound. Eleven finite examples include asymmetric component
 executions and counterexamples for wrong supplied roots and overwritten caches;
 the inhabited whole-signature example uses a populated constant cache, not an
-empty-cache success-probability argument. The structural FORS descent and adaptive coverage are derived below; WOTS private-opening
-charges and the final six-case forgery partition/bound remain open. The structured theorem
+empty-cache success-probability argument. The structural FORS descent, adaptive coverage and WOTS opening charges are
+derived below; the final six-case forgery partition/bound remains open. The structured theorem
 does not close the byte codec or concrete/hash/Rust/cross-kernel boundaries.
 The repeated-address minimum component is now structurally derived from actual
 signing: functional tree/forest root uniqueness, bounded count replay and the
@@ -271,8 +271,8 @@ remain. No stable-word or completeness premise is assumed. The mixed accepted-wo
 counterexample shows why uniformity must be derived: an arbitrary minimum need
 not have sum 205. This closes positional comparison only; it does not prove
 secrecy, absence from raw queries or a private-opening probability charge.
-The structural FORS descent and adaptive coverage are derived below; WOTS private-opening
-charges and the complete six-case PMF partition/bound remain open. No byte-codec, concrete hash,
+The structural FORS descent, adaptive coverage and WOTS opening charges are
+derived below; the complete six-case PMF partition/bound remains open. No byte-codec, concrete hash,
 Rust, cross-kernel, unbounded-adversary or repeated-freshness claim follows.
 The repeated upper-word branch now descends into the actual lower tree. Actual
 selected count lookups either expose two distinct public inputs with the same
@@ -306,8 +306,8 @@ charge. The actual observed/support/initialized winning endpoints retain the
 complete history, cap, prior upper/lower occurrences and all collision/zero and
 earlier-chain alternatives. Eight finite boundary examples and 45 complete-proof
 controls accompany this structural descent. The adaptive coverage charge is
-derived below; WOTS private-opening charges and final six-case PMF composition remain
-open, alongside the existing codec, unbounded-adversary, repeated-freshness and implementation limits.
+derived below, together with WOTS opening charges; final six-case PMF composition
+remains open, alongside the existing codec, unbounded-adversary, repeated-freshness and implementation limits.
 The fixed-sample quantitative dependency is now derived separately in Lean.
 A full 256-bit equivalence retains 95 high bits, 18 hypertree bits, the actual
 11-bit guard and twelve ordinary 11-bit indices. The uniform accepted-digest
@@ -350,8 +350,7 @@ hypertree address. Coordinates may use different prior signatures. Thus
 independently initialized observed PMF by the exact existing Stirling charge at
 `qr + qs + 1`; its real-valued form is also derived. This proves that branch's
 upper bound without declaring cache hits independent or assuming the cap.
-The ordinary FORS opening charge is derived next; WOTS private-opening
-charges and final six-case PMF composition remain open. Existing unbounded-adversary, codec, repeated-grinder freshness and
+The ordinary FORS and WOTS opening charges are derived next; final six-case PMF composition remains open. Existing unbounded-adversary, codec, repeated-grinder freshness and
 implementation limits remain. No EasyCrypt theorem is imported into Lean.
 This continuation adds 107 theorem closures, nine boundary examples and 58
 complete-proof controls including eleven equivalent forms. All 1760 preceding
@@ -377,10 +376,30 @@ This event needs no accepted-forgery guard, so it also covers the narrower
 unmatched branch; the complete history and actual cached opening remain required.
 The 235 new closures, 23 boundary examples and 97 full-consuming controls retain
 all 1867 previous statements, 1186 fixtures and 52 manual source bindings.
-The PMF inventory now has 2102 theorem closures and 1283 typed sensitivity cases.
-WOTS private-opening charges and final six-case probability composition remain
-open. This separate Lean result imports no EasyCrypt theorem and establishes
-no concrete hash, Rust execution, QROM or hardware correspondence.
+The subsequent WOTS continuation proves both earlier-than-all-exposures
+branches in the original initialized observed independent PMF game. Exact
+adaptive prefix precomputation restores every unused cache entry to its
+baseline. Typed deferred chains retain all 43 coordinates, both layers and
+cuts zero through six; position seven remains public. Full-cache refinements
+cover actual keygen, builders, signer, sessions and final verification. Complete
+successful-history provenance justifies legitimate releases at or before the
+cut, including known earlier nodes. Failed and absorbed requests retain their
+actual behavior. Passive raw/verifier probes erase exactly to the original
+game; incoming reads are charged to preceding-cut openings, rather than
+silently excluded. All staged freshness, disclosure and budget premises are
+discharged for the actual game. The seven-cut recurrence weights sum to 28;
+the finite union over 11294208 chains and initialized averaging give
+`316237824*(155867+2*qr+qs*364076)/2^128` for `ObservedWotsOpening` and both existing
+earlier-exposure branches. A kernel example proves this charge is below
+`2^-64` at `qr=2^32, qs=65536`; it is not a full signer security margin.
+The batch adds 299 closures in 57 modules, 34 boundary examples and 93 controls,
+retaining all 2102 prior statements, 1283 fixtures and 52 manual bindings.
+The inventory now has 2401 theorem closures and 1376 typed sensitivity cases.
+Final six-case probability composition remains open. These separate Lean
+results import no EasyCrypt theorem and establish no concrete hash, Rust
+execution, cross-kernel, QROM or hardware correspondence. Cache-visible events
+have no shared/independent transfer; the existing transfer concerns Boolean
+results only.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

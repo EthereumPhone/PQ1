@@ -167,8 +167,8 @@ event. This is the FORS coverage branch's upper bound, not a full forgery bound.
 Nine kernel-checked examples cover accepted/rejected/unselected entries,
 159/160/161-byte and private query domains, repeated cached/fresh calls, charged
 cache hits, refusal and admitted exhaustion. The ordinary FORS private-opening
-charge is now derived below. WOTS private-opening charges and final six-case
-PMF composition remain open.
+charge and both WOTS earlier-opening charges are derived below. Final six-case
+PMF composition remains open.
 
 `OpeningProgram.lean` gives a selected node an explicit commitment interface:
 public calls and commitments share one cache, while an adaptive reveal returns
@@ -219,9 +219,64 @@ history and a cached ordinary private opening. The union factor is
 `2^18 * 12 * 2048 = 6442450944`; this is a conservative upper bound, not an exact
 probability or a tight 128-bit security claim.
 
-This retires the separate PMF ordinary FORS opening charge. WOTS private-opening
-charges and final six-case probability composition remain open. No EasyCrypt
-execution, concrete SHA/Rust correspondence, QROM or physical claim is added.
+This retires the separate PMF ordinary FORS opening charge. The WOTS
+continuation below supplies the other opening charge. Final six-case probability
+composition remains open. No EasyCrypt execution, concrete SHA/Rust
+correspondence, QROM or physical claim is added.
+
+### WOTS earlier-than-all-exposures opening charge
+
+`AdaptivePresample.lean` proves exact precomputation of an arbitrary adaptive
+prefix: restore every entry the later client never queried to its original
+baseline. The law preserves the full result, query trace and cache, including
+pre-existing entries and duplicate queries. `WotsCutPrefix.lean` instantiates
+this with the actual predecessor prefix. Its next input is fresh in that
+precomputation; freshness is not assumed of the later adversary execution.
+
+A typed deferred node identifies one actual address, one of 43 chains and one
+cut in 0 through 6. The incoming key is private at cut zero and public at higher
+cuts. Its outgoing commitment uses the next position, with proved input
+separation. The actual leaf, 512-leaf builder, signer, both layers and keygen
+retain all other calls and the entire cache. Position seven is a public endpoint.
+Recovery uses proved cached replay of the actual generated signature and path.
+
+`WotsC10Provenance.lean`, `WotsRecordProvenance.lean` and the disclosure modules
+connect deferred metadata to every valid record in the actual complete signing
+history. A legitimate release requires complete C10 success at the selected
+address and a digit at or before the cut, including a known earlier node.
+Exhausted, refused and incomplete requests do not create successful exposures;
+their accumulated caches and ledger effects are retained.
+
+`C10Probes.lean` records only admitted raw adversary inputs and final-verifier
+queries. Its erasure is exactly the original observed game, including the full
+cache. Honest secret-bearing inputs are not included as guessed candidates.
+The proved bound is `qr + 361` probes, plus the two actual forged coordinates.
+A public read of the incoming key reveals the selected full digest and contains
+the preceding node. `WotsCutRecurrence.lean` explicitly charges that event to the
+preceding cut, retaining its prefix replay and absence of a legitimate release.
+The cut-zero incoming key cannot be read by the public probe interface.
+
+`ObservedWotsBound.lean` sums the recurrence weights `1+...+7 = 28` over
+`(512*512+512)*43 = 11294208` chains and averages over the initialized sampler.
+`ObservedWotsExposure.lean` maps both existing complete-history earlier-exposure
+branches into this event. The real-valued endpoint is
+
+```
+Pr[ObservedWotsEarlierExposure cfg in c10ObservedInitializedIndependent cfg sampler qr qs]
+ <= 316237824 * (155867 + 2*qr + qs*364076) / 2^128.
+```
+
+The same bound holds for the broader original-game `ObservedWotsOpening` event.
+It needs no accepted-forgery guard. The final endpoints have no assumed
+freshness, transcript independence, session budget or disclosure implication:
+those obligations are proved from the actual programs and complete history.
+A kernel arithmetic example gives a charge below `2^-64` at `qr = 2^32` and
+`qs = 65536`. This is a conservative branch bound, not a tight 128-bit margin
+or a full forgery theorem. The final six-case probability composition remains
+open, together with the existing concrete-backend, codec, unbounded-adversary,
+repeated-grinder freshness, QROM and physical limits. These cache-visible events
+are not transferred to the physical shared oracle; only the existing Boolean
+result transfer has that interface.
 
 ## Independence and correspondence boundary
 
@@ -941,8 +996,8 @@ sum-205 words at a common address: equal words give equal prefix values; otherwi
 some recovered position is earlier, with an actual suffix to the signed value.
 An earlier position is not necessarily undisclosed, and equal words need not
 mean equal messages or full digests. The complete repeated-address minimum is derived below. FORS
-descent is derived below and adaptive coverage above. WOTS private-opening charges and
-the complete six-case partition/final forgery bound remain open.
+descent is derived below and adaptive coverage above. WOTS opening charges are derived above;
+the complete six-case partition/final forgery bound remains open.
 
 The 21 additional finite examples in `ChainBindingExamples.lean` and
 `WotsOpeningExamples.lean` cover split chains, binding failures without the
@@ -1031,7 +1086,7 @@ winning-game endpoints retain the original collision and public-zero alternative
 An earlier position is not a secrecy claim, absence from raw queries, or a
 private-opening probability charge; equal words do not imply equal full digests.
 The repeated upper-word branch is descended into the lower tree below. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
-WOTS private-opening charges and the final six-case PMF bound remain open.
+WOTS opening charges are derived above; the final six-case PMF bound remains open.
 
 The fifteen finite examples in `ExposureExamples.lean` and
 `ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
@@ -1070,7 +1125,7 @@ lower root, plus the lower opening and comparison. The top-earlier, selected-nod
 collision, public-zero and accepted-word-collision alternatives remain explicit.
 A lower earlier position still makes no secrecy or private-opening probability
 claim. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
-WOTS private-opening charging and the final six-case PMF bound remain open.
+WOTS opening charging is derived above; the final six-case PMF bound remains open.
 
 The seven kernel-checked examples in `LowerDescentExamples.lean` exercise distinct
 node messages, actual accepted collisions, harmless repeated use of one input,
@@ -1113,7 +1168,7 @@ They retain the complete history and cap, actual top/lower openings, prior
 upper/lower occurrences, both earlier-chain alternatives, and all original
 node-collision/public-zero/accepted-word-collision alternatives. This closes the
 structural repeated-lower-word FORS descent. The adaptive coverage charge is
-derived above; WOTS private-opening charges and final six-case PMF composition remain open.
+derived above, together with WOTS opening charges; final six-case PMF composition remains open.
 
 The eight kernel-checked examples in `ForestDescentExamples.lean` cover empty and
 duplicate histories, coverage mixed across distinct prior digests, the need for
@@ -1166,16 +1221,27 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2102 theorem closures against
+The gate rebuilds every project module, checks all 2401 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1283 typed cases run 3849 compiler jobs: each baseline and changed
-definition must compile, 1125 changed behaviors must reject at the
-consuming `checked` theorem, and 158 value-preserving changes must pass.
+1376 typed cases run 4128 compiler jobs: each baseline and changed
+definition must compile, 1207 changed behaviors must reject at the
+consuming `checked` theorem, and 169 value-preserving changes must pass.
+The 93 WOTS opening controls add 82 negatives and 11 equivalent forms. They
+exercise baseline-cache restoration, query multiplicity/order, full-digest
+probes, actual address/cut boundaries, endpoint exclusion, successful release
+at or before the cut, session failures/ledger effects, original-game erasure,
+provenance, complete histories, predecessor charging and the finite union.
+Thirty-four boundary theorems include the last address/chain/cut, an earlier
+known-node release, incomplete two-layer signing, duplicate exposures, absent
+final layers and a concrete numerical charge. All 2102 preceding theorem
+statements, 1283 fixture objects, prior proof-module bytes and 52 manual source
+bindings are preserved. The batch adds 299 theorem closures in 57 modules;
+toolchain and compiler resource policy are unchanged.
 The 97 ordinary-opening controls add 80 negatives and 17 equivalent forms.
 Their complete consumers cover cache threading, adaptive full-digest revelation,
 unused-target restoration, candidate decoding and fixed charges, actual private

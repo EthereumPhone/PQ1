@@ -4334,6 +4334,15 @@ se-i2c-probe = []
 # `make optiga-probe-hw BOARD=pq1`. NEVER SHIP — listed in PROD_FORBIDDEN.
 optiga-probe = ["optiga-trust-m"]
 
+# Bench-only SE050 read-only deep probe (`se050::probe`, terminal, DVT §6B).
+# Reads identity, the full ReadIDList inventory (with per-object type/size),
+# free memory, the unique ID, and the plain (no-SCP03) read-class acceptance
+# matrix. Never creates, writes, deletes or authenticates an object; the
+# read-only `source_invariants` pin enforces that. Standalone SE050 (no OPTIGA,
+# no dual-se). Requires the dev OTP root so key derivation can never burn OTP.
+# Run it as `make se050-probe-hw BOARD=pq1`. NEVER SHIP — in PROD_FORBIDDEN.
+se050-probe = ["se050"]
+
 # LCD-only secure-element diagnostic for a probe-less board (EVT over DFU):
 # after the panel is up, runs TRNG / SE050 init+random / OPTIGA init+pair+
 # shield+random / rng_strong one step at a time, shows each result on the
@@ -4920,29 +4929,13 @@ se050-scp03-allow-factory-fallback = ["se050-derived-scp03"]
 # the forbidden rotate⊕fallback compile_error: the rotation tool legitimately
 # needs the fallback; only the runtime-signing image must omit it.)
 se050-rotate-scp03 = ["se050-derived-scp03", "se050-scp03-allow-factory-fallback"]
-# Which SE050 VARIANT is fitted, and therefore which published factory SCP03
-# keyset `scp03_logic::PLATFORM_*` must present. OFF = SE050E2 / OEF `0xA921`
-# (the default, because every board we physically have is an E2: the
-# `AL_A66_MB_V10` pq1 board per its schematic, and the OM-SE050ARD-E bench
-# shield). ON = SE050C2 / OEF `0xA201` (`SE050C2HQ1/Z01SDZ`).
-#
-# Getting this wrong is NOT subtle and NOT dangerous — it fails closed with
-# `[SCP03] Card cryptogram MISMATCH` on every `establish()`, because the static
-# keys simply don't match the chip. It is, however, easy to misdiagnose: the
-# `admin_factory_reset` recovery path needs SCP03 too, so a wrong keyset locks
-# the door and the key in the same motion (observed on pq1 silicon 2026-09-17,
-# 11 consecutive mismatches ending in a provisioning panic).
-#
-# Only affects builds that use the PUBLISHED keys, i.e. those WITHOUT
-# `se050-derived-scp03`: every bench HW target (`se050-stress`,
-# `pin-gate-hw-*`, any `e2e-test` image). Shipping builds derive per-device
-# keys and are unaffected by this flag — EXCEPT the rotation tooling
-# (`se050-rotate-scp03`), which must open a factory-key session against a
-# still-factory chip and therefore must name the correct part.
-#
-# A C2 on a plain OM-SE050ARD dev kit is a third case: it presents the separate
-# A375 "Development Board" keyset (ENC `35C25645…`), which is not encoded here.
-se050-part-c2 = []
+# There is NO SE050 variant flag. The fitted and production part is the
+# SE050E2 (`SE050E2HQ1/Z01Z3Z`, OEF `0xA921`, owner-confirmed 2026-10-19, #697),
+# and `scp03_logic::PLATFORM_*` holds only its published factory keyset. The
+# `se050-part-c2` flag (2026-09-17 .. 2026-10-19) selected the SE050C2 / `A201`
+# keyset for a production decision that was later reversed; it was removed so
+# no build can present the wrong keyset. Part facts:
+# `docs/secure-elements/se050-silicon-findings.md` § "Part identity".
 se050-factory-reset = ["se050"]  # Wipe all SE050 objects on boot, then halt. Use `make se050-reset`.
 se050-reset-e2e = ["se050"]  # Self-contained factory-reset roundtrip test. Use `make se050-reset-e2e`.
 se050-admin-wipe-e2e = ["se050"]  # Admin-auth wipe roundtrip test on isolated OID range. Use `make se050-admin-wipe-e2e`.

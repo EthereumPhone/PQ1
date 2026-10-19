@@ -182,6 +182,15 @@ backend interpretation and the separate secure-wrapper experiment remain open.
 See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
 and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 
+**Separate C10 probability frontier (2026-10-19):** the authoritative
+[PMF project](../contracts/verification/probability/README.md#wots-earlier-than-all-exposures-opening-charge)
+now derives ordinary FORS and both WOTS earlier-exposure opening charges in the
+actual initialized observed independent game, including complete histories and
+raw/verifier disclosures. Final six-case probability composition remains open
+under #295. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
+QROM or hardware claim. The dated development history below is not the current
+proof inventory; use the linked owner for counts, gates and remaining limits.
+
 **Separate C10 probability project (2026-10-16):** the
 [mathlib PMF project](../contracts/verification/probability/README.md) proves
 bounded first-hit, returned-event and exhaustion laws. It derives C10 WOTS/FORS
