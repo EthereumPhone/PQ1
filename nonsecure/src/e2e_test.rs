@@ -2655,6 +2655,140 @@ Issued At: 2026-10-19T12:00:00Z";
         hprintln!("[NS][e2e]   → RAW32 signed");
     }
 
+    // Scenario 5p-safe: an EIP-712 SafeTx this wallet co-signs off-chain
+    // (SIGN_OFFCHAIN kind 4). The device recomputes safeTxHash from the
+    // canonical it renders; every refusal below happens before any
+    // page-123 write, so OFFCHAIN_STATUS must not move.
+    hprintln!("[NS][e2e] Scenario 5p-safe: EIP-712 SafeTx off-chain clear-sign");
+    {
+        const OFFCHAIN_KIND_SAFE_TX: u8 = 4;
+        const SEPOLIA: u64 = 11_155_111;
+        let safe = [0x5au8; 20];
+        let token = [0x70u8; 20];
+        let mut raw = [0u8; 68];
+        raw[0..4].copy_from_slice(&[0xa9, 0x05, 0x9c, 0xbb]); // transfer(address,uint256)
+        raw[16..36].copy_from_slice(&[0xab; 20]);
+        raw[60..68].copy_from_slice(&250_000_000u64.to_be_bytes());
+
+        // [safe_len][canonical || raw_len || raw][erc20_len=0][cow_len=0][names=0]
+        fn safe_tx_input(
+            out: &mut [u8; 17 + 512],
+            chain: u64,
+            slot: u32,
+            deployed: bool,
+            canonical: &[u8; SAFE_V1_CANONICAL_LEN],
+            raw: &[u8],
+        ) -> usize {
+            out.fill(0);
+            out[1..9].copy_from_slice(&chain.to_be_bytes());
+            out[9..13].copy_from_slice(&slot.to_be_bytes());
+            out[13] = OFFCHAIN_KIND_SAFE_TX;
+            out[16] = u8::from(deployed);
+            let mut p = 17;
+            out[p..p + 2].copy_from_slice(&((SAFE_V1_CANONICAL_LEN + 2 + raw.len()) as u16).to_be_bytes());
+            p += 2;
+            out[p..p + SAFE_V1_CANONICAL_LEN].copy_from_slice(canonical);
+            p += SAFE_V1_CANONICAL_LEN;
+            out[p..p + 2].copy_from_slice(&(raw.len() as u16).to_be_bytes());
+            p += 2;
+            out[p..p + raw.len()].copy_from_slice(raw);
+            p += raw.len() + 2 + 2 + 1; // erc20_len, cow_len, names_count all zero
+            out[14..16].copy_from_slice(&((p - 17) as u16).to_be_bytes());
+            p
+        }
+        let local_count = || -> u64 {
+            let mut q = [0u8; 13];
+            q[1..9].copy_from_slice(&SEPOLIA.to_be_bytes());
+            q[9..13].copy_from_slice(&1u32.to_be_bytes());
+            let mut r = [0u8; 24];
+            assert_eq!(nsc_api::offchain_status(&q, &mut r), NscStatus::Ok as u32);
+            u64::from_be_bytes(r[..8].try_into().unwrap())
+        };
+
+        let canonical = build_safe_canonical(SEPOLIA, &safe, &token, &raw, 7, 0);
+        let h = compute_safe_tx_hash(&canonical);
+        hprintln!("[NS][e2e]   safeTxHash 0x{:02x}{:02x}{:02x}{:02x}..", h[0], h[1], h[2], h[3]);
+        let mut input = [0u8; 17 + 512];
+        let mut out = [0u8; 4016];
+        let before = local_count();
+        let n = safe_tx_input(&mut input, SEPOLIA, 1, true, &canonical, &raw);
+        let status = nsc_api::sign_offchain(&input[..n], &mut out);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-safe must sign (got {})", status);
+        assert_eq!(u64::from_be_bytes(out[..8].try_into().unwrap()), before + 1);
+        assert_eq!(local_count(), before + 1, "a signed SafeTx advances the off-chain count once");
+
+        // Refusals: none of these may touch page 123.
+        let after = local_count();
+        // (a) the inner data no longer hashes to the signed dataHash.
+        let mut flipped = raw;
+        flipped[67] ^= 1;
+        let n = safe_tx_input(&mut input, SEPOLIA, 1, true, &canonical, &flipped);
+        assert_eq!(nsc_api::sign_offchain(&input[..n], &mut out), NscStatus::InvalidPointer as u32, "5p-safe: data flip");
+        // (b) a SafeTx for another chain than the request.
+        let mainnet = build_safe_canonical(1, &safe, &token, &raw, 7, 0);
+        let n = safe_tx_input(&mut input, SEPOLIA, 1, true, &mainnet, &raw);
+        assert_eq!(nsc_api::sign_offchain(&input[..n], &mut out), NscStatus::InvalidPointer as u32, "5p-safe: chain");
+        // (c) DELEGATECALL to anything but a pinned MultiSendCallOnly.
+        let delegate = build_safe_canonical(SEPOLIA, &safe, &token, &raw, 7, 1);
+        let n = safe_tx_input(&mut input, SEPOLIA, 1, true, &delegate, &raw);
+        assert_eq!(nsc_api::sign_offchain(&input[..n], &mut out), NscStatus::InvalidPointer as u32, "5p-safe: delegatecall");
+        // (d) an undeployed wallet (slot 0 so the kind gate, not the 6492
+        //     slot rule, is what refuses).
+        let n = safe_tx_input(&mut input, SEPOLIA, 0, false, &canonical, &raw);
+        assert_eq!(nsc_api::sign_offchain(&input[..n], &mut out), NscStatus::InvalidPointer as u32, "5p-safe: undeployed");
+        // (e) a trailing byte after the names count.
+        let n = safe_tx_input(&mut input, SEPOLIA, 1, true, &canonical, &raw);
+        input[14..16].copy_from_slice(&((n + 1 - 17) as u16).to_be_bytes());
+        assert_eq!(nsc_api::sign_offchain(&input[..n + 1], &mut out), NscStatus::InvalidPointer as u32, "5p-safe: trailing");
+        assert_eq!(local_count(), after, "5p-safe: a refusal must not touch page 123");
+        hprintln!("[NS][e2e]   → SafeTx signed; data flip / chain / delegatecall / undeployed / trailing refused");
+    }
+
+    // Scenario 5p-cow: a CoW GPv2Order this wallet signs off-chain (CoW's
+    // eip1271 scheme, SIGN_OFFCHAIN kind 5). The device recomputes the
+    // order digest under the GPv2Settlement domain.
+    hprintln!("[NS][e2e] Scenario 5p-cow: CoW order off-chain clear-sign");
+    {
+        const OFFCHAIN_KIND_COW_ORDER: u8 = 5;
+        const SEPOLIA: u64 = 11_155_111;
+        fn cow_input(out: &mut [u8; 17 + 212], chain: u64, canonical: &[u8; 204], extra: usize) -> usize {
+            out.fill(0);
+            out[1..9].copy_from_slice(&chain.to_be_bytes());
+            out[9..13].copy_from_slice(&1u32.to_be_bytes());
+            out[13] = OFFCHAIN_KIND_COW_ORDER;
+            out[16] = 1; // ACCOUNT_DEPLOYED
+            out[17..17 + 204].copy_from_slice(canonical);
+            // sell_len = 0, buy_len = 0 (both legs render as address + raw amount)
+            let n = 17 + 204 + 4 + extra;
+            out[14..16].copy_from_slice(&((n - 17) as u16).to_be_bytes());
+            n
+        }
+        let mut c = [0u8; 204];
+        c[..8].copy_from_slice(&SEPOLIA.to_be_bytes());
+        c[8..28].copy_from_slice(&[0x11; 20]); // sellToken
+        c[28..48].copy_from_slice(&[0x22; 20]); // buyToken
+        // receiver = 0: proceeds go to the owner, this wallet
+        c[68 + 24..100].copy_from_slice(&1_000_000_000u64.to_be_bytes()); // sellAmount
+        c[100 + 24..132].copy_from_slice(&500_000_000_000_000_000u64.to_be_bytes()); // buyAmount
+        c[132 + 24..164].copy_from_slice(&1_000u64.to_be_bytes()); // feeAmount
+        c[164..168].copy_from_slice(&1_893_456_000u32.to_be_bytes()); // validTo
+        let digest = compute_cow_order_digest(&c);
+        hprintln!("[NS][e2e]   orderDigest 0x{:02x}{:02x}{:02x}{:02x}..", digest[0], digest[1], digest[2], digest[3]);
+        let mut input = [0u8; 17 + 212];
+        let mut out = [0u8; 4016];
+        let n = cow_input(&mut input, SEPOLIA, &c, 0);
+        let status = nsc_api::sign_offchain(&input[..n], &mut out);
+        assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-cow must sign (got {})", status);
+        // A trailing byte, and an order for another chain, are refused.
+        let n = cow_input(&mut input, SEPOLIA, &c, 1);
+        assert_eq!(nsc_api::sign_offchain(&input[..n], &mut out), NscStatus::InvalidPointer as u32, "5p-cow: trailing");
+        let mut other = c;
+        other[..8].copy_from_slice(&1u64.to_be_bytes());
+        let n = cow_input(&mut input, SEPOLIA, &other, 0);
+        assert_eq!(nsc_api::sign_offchain(&input[..n], &mut out), NscStatus::InvalidPointer as u32, "5p-cow: chain");
+        hprintln!("[NS][e2e]   → CoW order signed; trailing byte / chain mismatch refused");
+    }
+
     // Scenario 5n: a cryptographically-valid trailer for the wrong deployment
     // must not restore blind signing for a firmware-known call. The UserOp is
     // WETH Sepolia deposit(), while the attached proof is WETH mainnet. Bundle

@@ -344,6 +344,15 @@ pub const CMD_GET_INIT_CODE: u32 = 15;
 ///     with the bare SHA-256 `sphincsDigest` the on-chain Type-1/Type-2
 ///     UserOp path verifies (raw32 UserOp-forgery fix, 2026-06-11).
 ///
+///   * **`OFFCHAIN_KIND_EIP712_TYPED` (2) / `_V3` (3)** — EIP-712 typed data
+///     rendered from an authenticated ERC-7730 descriptor.
+///
+///   * **`OFFCHAIN_KIND_SAFE_TX` (4) / `OFFCHAIN_KIND_COW_ORDER` (5)** —
+///     an EIP-712 SafeTx / CoW GPv2Order rendered by the native Safe / CoW
+///     decoders; the firmware recomputes the digest `H` and signs
+///     `replay_safe_hash(H)`, exactly what RAW32 signs for `H`
+///     (2026-10-19; see [`MAX_OFFCHAIN_SAFE_TX_LEN`]).
+///
 /// In every mode, on-chain verification works because Solady's
 /// `_erc1271IsValidSignatureViaNestedEIP712` first attempts the
 /// TypedDataSign branch and falls back to PersonalSign when no

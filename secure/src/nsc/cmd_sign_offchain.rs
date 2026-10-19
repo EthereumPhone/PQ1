@@ -267,7 +267,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InvalidPointer as u32;
             }
             if !account_deployed {
-                crate::ui::show_status("EIP-1271", "struct needs deploy");
+                crate::ui::show_status("EIP-1271", "needs deployed");
                 return NscStatus::InvalidPointer as u32;
             }
         }

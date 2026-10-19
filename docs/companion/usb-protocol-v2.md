@@ -287,7 +287,11 @@ currently **0x0203** (see §Protocol version history below). Reports
 (SPHINCS+C10, `C10_SIG_LEN = 4008`). Capability bit 0 is
 `CAP_SIGN_USEROP`; bit 1 is retired and remains clear; bit 2 is
 `CAP_ERC7730_PROOF_SET`. A companion may emit the versioned two-bundle
-ERC-7730 envelope only when bit 2 is set. Do not infer that support from the
+ERC-7730 envelope only when bit 2 is set. Bit 3 is `CAP_OFFCHAIN_SAFE_TX` and
+bit 4 is `CAP_OFFCHAIN_COW_ORDER` (UPDATE 2026-10-19): `0x62 SIGN_OFFCHAIN`
+accepts kinds 4 / 5 only when the matching bit is set. The capability word is
+bytes 21–24 (u32 BE) of the response, after `protocol_version` (2),
+`fw_version` (3) and the 16-byte `device_uid` placeholder. Do not infer that support from the
 three `fw_version` bytes: they are currently a fixed placeholder rather than
 the running image identity.
 
@@ -342,6 +346,8 @@ format:
 | `OFFCHAIN_KIND_PERSONAL_SIGN`   | 1     | UTF-8 message ≤ `MAX_OFFCHAIN_PERSONAL_SIGN_LEN`; firmware applies EIP-191 prefix + wraps.    |
 | `OFFCHAIN_KIND_EIP712_TYPED`    | 2     | EIP-712 typed-data (see below) — Phase 4 of the ERC-7730 rollout.                              |
 | `OFFCHAIN_KIND_EIP712_TYPED_V3` | 3     | EIP-712 typed-data plus descriptor-selected nested/string display witnesses; see the canonical companion guide §6.5. |
+| `OFFCHAIN_KIND_SAFE_TX`         | 4     | EIP-712 `SafeTx` (Safe ≥ v1.3.0) this wallet co-signs as an owner; see below. Gated by `CAP_OFFCHAIN_SAFE_TX`. |
+| `OFFCHAIN_KIND_COW_ORDER`       | 5     | CoW `GPv2Order` under CoW's `eip1271` scheme (owner = this wallet); see below. Gated by `CAP_OFFCHAIN_COW_ORDER`. |
 
 `RAW32` is a deliberately loud blind-sign tier, not evidence that the device
 understands a user's intent. A hostile companion can submit the final hash of
@@ -396,6 +402,60 @@ Secure-side processing:
 Output format is selected by the same deployed/counterfactual flag as kinds 0
 and 1: 4016-byte count+C10 for deployed wallets, or 8616-byte
 count+ERC-6492 blob for counterfactual slot 0.
+
+#### `kind = OFFCHAIN_KIND_SAFE_TX` (4) and `OFFCHAIN_KIND_COW_ORDER` (5)
+
+UPDATE 2026-10-19. Typed data whose meaning the firmware already decodes on the
+UserOp path, clear-signed off-chain: the device renders the Safe transaction /
+the order instead of a blind hash. **The signed value is unchanged from RAW32**:
+the device recomputes `H` (the `safeTxHash` under the Safe ≥ v1.3.0 domain
+`{chainId, verifyingContract}`, or the GPv2 order digest under the
+`"Gnosis Protocol"` / `"v2"` / GPv2Settlement domain) from the bytes it shows
+and signs `replay_safe_hash(chain, wallet, H)` — byte-identical to what kind 0
+signs when given `H`. The companion's own hash is never used. Golden vectors:
+`tools/companion-stub/structured_offchain_goldens.json` (generator
+`tools/companion-stub/structured_offchain.py`, pinned against the firmware by
+`secure/src/tx/eip712/offchain_structured.rs`).
+
+Kind 4 payload (all lengths `u16` BE), consumed exactly:
+
+```
+[safe_len][canonical SafeTx (281) || raw_len (2) || raw_data]   the on-chain approveHash safe_v1 trailer;
+                                                                 raw_len must end exactly at safe_len;
+                                                                 safe_len ≤ SAFE_V1_PAYLOAD_MAX (4379)
+[erc20_len][ERC-20 bundle]        ≤ 1120, may be 0   token metadata for the inner call / a MultiSend record
+[cow_len][CoW order trailer]      ≤ 2448, may be 0   REQUIRED iff the SafeTx inner call is GPv2
+                                                      setPreSignature (direct or one MultiSendCallOnly record,
+                                                      owner = the Safe); MUST be 0 otherwise
+[names_count u8]{[len][name bundle]}×n   n ≤ 4, 0 < len ≤ 1093
+```
+
+`MIN_OFFCHAIN_SAFE_TX_LEN = 290`, `MAX_OFFCHAIN_SAFE_TX_LEN = 12,334`. The
+device refuses: chain ≠ `canonical.chain_id`, a zero Safe address,
+`keccak(raw_data) ≠ dataHash`, a DELEGATECALL to anything but a pinned
+MultiSendCallOnly deployment (each record `operation = 0`, the usual record
+cap), a missing or unexpected CoW section, any framing error.
+
+Kind 5 payload: `canonical GPv2Order (204) || sell_len || sell_bundle ||
+buy_len || buy_bundle` — byte-identical to the on-chain CoW order trailer,
+consumed exactly (`208 ≤ len ≤ 2,448`). A leg bundle that is absent or does
+not verify renders that leg as address + raw amount; an amount that cannot be
+rendered exactly is refused. A zero `receiver` is shown as this wallet (the
+order owner).
+
+Both kinds require `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED = 1` (refused before any
+flash write otherwise: neither Safe's `checkSignatures` nor GPv2Settlement
+unwraps ERC-6492) and use the same page-123 gap/cap gate, confirmation gate and
+4016-byte response as the other kinds.
+
+Consumers: **SafeTx signatures verify only on Safe ≥ v1.5.0**, whose
+`checkSignatures` calls the bytes32 `isValidSignature`; Safe v1.3.0 / v1.4.1
+call the legacy `isValidSignature(bytes,bytes)`, which `PQSmartWallet` does not
+implement (true of a RAW32 signature over the same hash too). Older Safes
+(< v1.3.0, domain without `chainId`) produce a different hash and cannot use
+kind 4. Companions MUST gate kinds 4 / 5 on the capability bits and MUST NOT
+fall back to RAW32 after a kind-4/5 refusal — that would turn every structured
+refusal into a blind signature.
 
 ### 0x63 OFFCHAIN_STATUS
 

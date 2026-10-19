@@ -93,6 +93,12 @@ def main() -> int:
         H = rec["payload"].lower()
     elif rec["kind"] == "personal":
         H = cast("hash-message", rec["message"]).stdout.strip().lower()
+    elif rec["kind"] in ("safe-tx", "cow-order"):
+        # Kinds 4/5: H = safeTxHash / GPv2 order digest, recomputed on the
+        # host by tools/companion-stub/structured_offchain.py from the payload
+        # the device rendered. The device signs replay_safe_hash(H), exactly
+        # what RAW32 signs for H, so the same isValidSignature check applies.
+        H = rec["structuredDigest"].lower()
     else:
         # EIP-712: H = keccak(0x1901 || domainSeparator || structHash),
         # structHash = keccak(primaryTypeHash || encodeData). Derived here from

@@ -172,6 +172,33 @@ mod offchain_structured_tests {
         assert_eq!(structured_digest(0, &good, 1), None);
     }
 
+    /// The golden vectors the companion tests consume
+    /// (`tools/companion-stub/structured_offchain.py --emit-goldens`, an
+    /// independent Python implementation) reproduce here byte-for-byte:
+    /// same payload → same `H` → same signed value.
+    #[test]
+    fn shared_golden_payloads_match_the_independent_host_implementation() {
+        const GOLDENS: &str = include_str!("../../../../tools/companion-stub/structured_offchain_goldens.json");
+        fn field<'a>(obj: &'a str, key: &str) -> &'a str {
+            let k = alloc::format!("\"{key}\": ");
+            let at = obj.find(&k).unwrap_or_else(|| panic!("{key}")) + k.len();
+            let rest = &obj[at..];
+            let end = rest.find([',', '\n', '}']).unwrap();
+            rest[..end].trim().trim_matches('"')
+        }
+        let mut n = 0;
+        for obj in GOLDENS.split("{\n   \"name\"").skip(1) {
+            let kind: u8 = field(obj, "kind").parse().unwrap();
+            let payload = unhex(field(obj, "payload").trim_start_matches("0x"));
+            let digest = h32(field(obj, "digest").trim_start_matches("0x"));
+            let signed = h32(field(obj, "signedValue").trim_start_matches("0x"));
+            assert_eq!(structured_digest(kind, &payload, 1), Some(digest), "vector {n}");
+            assert_eq!(structured_signed_value(kind, &payload, 1, &WALLET), Some(signed), "vector {n}");
+            n += 1;
+        }
+        assert_eq!(n, 2, "both golden vectors were checked");
+    }
+
     /// Verifier parity: the off-chain verifier accepts a SafeTx exactly when
     /// the on-chain approveHash verifier accepts it bound to the same hash.
     #[test]

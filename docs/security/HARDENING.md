@@ -222,6 +222,24 @@ message over it is refused before the first page-123 write (source pin
 `negative_sign_offchain_display_budget_gate_precedes_first_flash_write`). A
 companion sends a longer message as RAW32.
 
+**UPDATE 2026-10-19 — structured off-chain signs put `Confirm?` after the
+whole body.** The two new `SIGN_OFFCHAIN` kinds (4 = EIP-712 SafeTx, hero
+`SIGN SAFE TX?`; 5 = CoW order, hero `SIGN COW ORDER?`) are the first flows
+where `confirm_index` places `Confirm?` immediately before the first
+`FP8213` screen (hero ids `SIGNSAFE` / `SIGNCOW`, owner decision
+2026-10-19). Their rows, from `eip1271/safe_tx_*` and `eip1271/cow_order*`:
+
+| Flow (fixture) | Shown before `Confirm?` | Skipped when signing from it |
+|---|---|---|
+| Off-chain SafeTx (`eip1271/safe_tx_erc20`, `eip1271/safe_tx_cow_presign`) | network, Safe account, the whole inner call (recipient, amount, token, contract — or the full CoW order / every MultiSend record), Safe nonce + operation, refund block, SafeTx gas | ERC-8213 fingerprint + digest (the `safeTxHash`), signer account, signing wallet, response mode / key usage |
+| Off-chain CoW order (`eip1271/cow_order`, `eip1271/cow_order_zero_receiver`) | network, order kind, both legs, receiver, expiry, fee, balance sources, app data | ERC-8213 fingerprint + digest, signer account, signing wallet, response mode / key usage |
+
+Only trailers are skippable there. Both kinds sign
+`replay_safe_hash(H)` with `H` recomputed on-device — exactly what RAW32
+would sign for the same typed data — so they move a SafeTx / CoW order off
+the blind tier for an honest companion; a hostile companion can still send
+the hash as RAW32 (#381).
+
 CORRECTION to the 2026-09-24 UPDATE: the pin was never in
 `fsbl-tests/tests/paired_constants.rs`, which recorded the pair as
 deliberately absent. It was `fsbl-tests/tests/source_invariants.rs`

@@ -180,7 +180,7 @@ pub(super) unsafe fn confirm(
 ) -> Result<Confirmed, u32> {
     // Belt for the §4 gate in the caller: never on an undeployed wallet.
     if !account_deployed {
-        crate::ui::show_status("EIP-1271", "struct needs deploy");
+        crate::ui::show_status("EIP-1271", "needs deployed");
         return Err(NscStatus::InvalidPointer as u32);
     }
     #[cfg(not(feature = "ui-px"))]

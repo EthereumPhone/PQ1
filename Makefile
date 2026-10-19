@@ -467,7 +467,8 @@ e2e-px: E2E_EXTRA_FEATURES = ,ui-px
 E2E_PX_TRANSCRIPTS ?= 0
 # 50 = 47 + Scenario 5e-rot (batch rotation consent, its member, final ask).
 # 53 = 50 + Scenarios 5p-personal-siwe and 5p-personal-hex (two hex signs).
-e2e-px: E2E_PX_TRANSCRIPTS = 53
+# 55 = 53 + Scenarios 5p-safe and 5p-cow (structured off-chain SafeTx / CoW order).
+e2e-px: E2E_PX_TRANSCRIPTS = 55
 e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
 
 e2e: ## Automated unified-sign E2E (QEMU)
@@ -540,6 +541,8 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 5p: EIP-712 typed sign + binding differential" \
 		"\\[NS\\]\\[e2e\\] Scenario 5p-personal: personal_sign off-chain signature" \
 		"\\[NS\\]\\[e2e\\] Scenario 5p-raw32: RAW32 off-chain signature" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-safe: EIP-712 SafeTx off-chain clear-sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-cow: CoW order off-chain clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5n: known-call mis-bound descriptor is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5q: Safe-wrapped CoW presign clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5q-direct: direct CoW order clear-sign" \
@@ -604,7 +607,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		done; \
 		if grep -q '^\[UI-PX\] .* id=DEPLOY ' $$log; then echo "  PASS  ui-px: deployment trailer twin (Scenario 4c)"; \
 		else echo "  FAIL  ui-px: no DEPLOY trailer screen"; fail=1; fi; \
-		for want in 'cap="SIGN COWSWAP[?]"' 'cap="SIGN EIP-1271[?]"' 'cap="SIGN BLIND HASH[?]"' 'id=INTENT ' 'id=BATCH ' 'cap="SIGN [0-9] TXS[?]"' 'id=OFFSIGNR '; do \
+		for want in 'cap="SIGN COWSWAP[?]"' 'cap="SIGN EIP-1271[?]"' 'cap="SIGN BLIND HASH[?]"' 'cap="SIGN SAFE TX[?]"' 'cap="SIGN COW ORDER[?]"' 'id=INTENT ' 'id=BATCH ' 'cap="SIGN [0-9] TXS[?]"' 'id=OFFSIGNR '; do \
 			if grep -Eq "^\[UI-PX\] .* $$want" $$log; then echo "  PASS  ui-px: structured route screen $$want"; \
 			else echo "  FAIL  ui-px: no $$want screen (port step 3)"; fail=1; fi; \
 		done; \

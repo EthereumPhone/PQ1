@@ -85,12 +85,12 @@ fn safe_wrapped_presign_requires_its_order_and_nothing_else_carries_one() {
 fn undeployed_wallets_are_refused_before_any_flash_write() {
     let c = code(OFFCHAIN_SRC);
     let gate = pos(&c, "OFFCHAIN_KIND_SAFE_TX | OFFCHAIN_KIND_COW_ORDER => {");
-    let refusal = gate + pos(&c[gate..], "\"struct needs deploy\"");
+    let refusal = gate + pos(&c[gate..], "\"needs deployed\"");
     let probe = pos(&c, "offchain_count_is_registered(");
     let promote = pos(&c, "offchain_count_promote_to(");
     assert!(refusal < probe && refusal < promote);
     // The module re-checks (belt).
-    assert!(code(STRUCTURED_SRC).contains("\"struct needs deploy\""));
+    assert!(code(STRUCTURED_SRC).contains("\"needs deployed\""));
     // Unknown kinds are still refused.
     assert!(c.contains("\"bad kind\""));
 }
