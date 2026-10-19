@@ -785,7 +785,7 @@ stress_test!(AUDIT_ADMIN_CANNOT_ROTATE_USER_PIN, "audit_admin_cannot_rotate_user
 ///
 /// **Why this is not the system's final defense — pointer for the
 /// auditor.** The actual barrier against a substitution-attack
-/// payoff lives at `secure/src/dual_se.rs:378-382`: after both
+/// payoff lives in `secure/src/dual_se.rs`'s unlock path (`[DUAL] CRITICAL: reconstructed entropy…`): after both
 /// halves are read and XORed, the firmware re-derives
 /// `kdf("sphincs-master", full_entropy, 0)` and compares against
 /// OPTIGA's independently-stored `master_o`. A single-SE substitution
@@ -892,7 +892,7 @@ fn audit_data_substitution_chip_level(ctx: &mut StressCtx) -> StressResult {
                 && read_buf[..m].iter().zip(ORIGINAL.iter()).all(|(a, b)| a == b);
             if is_attacker {
                 secure_log!(
-                    "[S][stress][audit-a2] step 4: user-auth read returns ATTACKER ({} B) — chip-layer substitution chain complete. Firmware-layer mitigation (dual_se.rs:378 consistency check) is the systemic backstop.",
+                    "[S][stress][audit-a2] step 4: user-auth read returns ATTACKER ({} B) — chip-layer substitution chain complete. Firmware-layer mitigation (dual_se.rs unlock kdf(entropy)==master consistency check) is the systemic backstop.",
                     m,
                 );
                 Ok(())

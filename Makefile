@@ -1161,8 +1161,8 @@ se050-probe-hw: ## Read-only SE050 config/inventory/plain-surface probe (HW)
 	@log=target/se050-probe/last-run.log; \
 	timeout 600 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log"; \
 	echo "===================================="; \
-	if grep -q "=== SPROBE DONE OK ===" "$$log"; then echo "==> se050-probe: OK"; \
-	elif grep -q "=== SPROBE DONE FINDINGS ===" "$$log"; then echo "==> se050-probe: FINDINGS (see log)"; \
+	if grep -q "=== SPROBE DONE OK ===" "$$log"; then echo "==> se050-probe firmware marker: DONE OK (verdict: report below)"; \
+	elif grep -q "=== SPROBE DONE FINDINGS ===" "$$log"; then echo "==> se050-probe firmware marker: DONE FINDINGS"; \
 	else echo "==> se050-probe: INCONCLUSIVE (no DONE marker; log=$$log)"; fi; \
 	python3 -I tools/se050_probe/report.py "$$log" --out target/se050-probe
 

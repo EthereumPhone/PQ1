@@ -301,6 +301,27 @@ fn positive_apdu_p2_values_pin() {
     assert!(APDU_SRC.contains("const P2_ATTRIBUTES: u8 = 0x3B;"));
 }
 
+/// The ReadIDList more-indicator is NXP's `kSE05x_MoreIndicator_*`
+/// (0x01 NO_MORE, 0x02 MORE), not a boolean, and the wipe sweep pages by
+/// entry index. Both were wrong until 2026-10-19 (paged on NO_MORE, stopped
+/// on MORE; advanced by bytes); 6B.3 on EVT-3D21 confirmed 0x01 on a
+/// complete list and entry-index offsets.
+#[test]
+fn negative_sweep_readidlist_paging_pin() {
+    assert!(APDU_SRC.contains("pub const MORE_INDICATOR_NO_MORE: u8 = 0x01;"));
+    assert!(APDU_SRC.contains("pub const MORE_INDICATOR_MORE: u8 = 0x02;"));
+    assert!(contains_in_code(APDU_SRC, "if more != MORE_INDICATOR_MORE || list_byte_len == 0 {"));
+    assert!(!contains_in_code(APDU_SRC, "more != 0x01"));
+    assert!(contains_in_code(
+        APDU_SRC,
+        "output_offset = output_offset.saturating_add((list_byte_len / 4) as u16);"
+    ));
+    assert!(!contains_in_code(
+        APDU_SRC,
+        "output_offset = output_offset.saturating_add(list_byte_len as u16);"
+    ));
+}
+
 #[test]
 fn positive_apdu_p2_delete_object_inline_is_0x28() {
     // DELETE_OBJECT P2 is inlined in both `delete_object` and

@@ -1072,6 +1072,17 @@ pub unsafe fn delete_object_authed(
 /// P2 for ReadIDList (kSE05x_P2_LIST).
 const P2_LIST: u8 = 0x25;
 
+/// ReadIDList response TAG_1, `kSE05x_MoreIndicator_*` (NXP `se05x_enums.h`):
+/// `0x01` is NO_MORE and `0x02` is MORE. Not a boolean. NXP's ReadIDList
+/// prose (`se05x_APDU_apis.h`) says the applet signals more "by setting
+/// TLV[TAG_1] to 0x01"; the enum, NXP's own DeleteAll loop
+/// (`while (pmore == kSE05x_MoreIndicator_MORE)`) and silicon disagree — on
+/// EVT-3D21 (2026-10-19) a complete 20-object list and an empty page past
+/// its end both return `0x01`, and an empty page cannot mean "more".
+pub const MORE_INDICATOR_NO_MORE: u8 = 0x01;
+/// See [`MORE_INDICATOR_NO_MORE`].
+pub const MORE_INDICATOR_MORE: u8 = 0x02;
+
 /// P2 for ReadObjectAttributes (kSE05x_P2_ATTRIBUTES) — diagnostic.
 const P2_ATTRIBUTES: u8 = 0x3B;
 
@@ -1136,7 +1147,8 @@ pub const MEM_TRANSIENT_DESELECT: u8 = 0x03;
 pub const UNIQUE_ID_OBJ: u32 = 0x7FFF_0206;
 
 /// One page of `ReadIDList` over SCP03. Writes up to `ids.len()` object IDs
-/// into `ids` and returns `(more, listed, copied)`: `listed` is how many IDs
+/// into `ids` and returns `(more, listed, copied)`: `more` is the raw
+/// `MORE_INDICATOR_*` byte, `listed` is how many IDs
 /// the chip put on this page, `copied` how many fit in `ids`. A page with
 /// `copied < listed` was truncated and the caller must say so. `offset` is a
 /// 0-based index into the object list, NOT a byte offset: start at 0 and add
@@ -1148,7 +1160,7 @@ pub unsafe fn read_id_list_probe(
     scp03: &mut Scp03Session,
     offset: u16,
     ids: &mut [u32],
-) -> Result<(bool, usize, usize), Se050Error> {
+) -> Result<(u8, usize, usize), Se050Error> {
     let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_LIST);
     apdu.tlv(TAG_1, &offset.to_be_bytes());
     apdu.tlv(TAG_2, &[0xFF]);
@@ -1201,7 +1213,7 @@ pub unsafe fn read_id_list_probe(
         n += 1;
         i += 4;
     }
-    Ok((more != 0, listed, n))
+    Ok((more, listed, n))
 }
 
 /// `ReadType` of an object (INS_READ / P2_TYPE). Copies the raw response
@@ -1463,11 +1475,12 @@ pub unsafe fn iterative_delete_all(
 }
 
 /// Hard cap on ReadIDList pages per sweep cycle. The SE050 holds at most a few
-/// hundred objects and an honest chip terminates the page walk via `more ==
-/// 0x00` after a handful of pages (each page carries up to ~256 4-byte IDs), so
-/// 64 is unreachable on real hardware. Without it the inner loop's only exit is
-/// the chip-controlled `more`/`list_byte_len` fields, so a glitching or hostile
-/// SE could hold `more == 0x01` forever and hang the wipe. Same uncapped-
+/// hundred objects and an honest chip terminates the page walk with
+/// `MORE_INDICATOR_NO_MORE` after a handful of pages (each page carries up to
+/// ~256 4-byte IDs), so 64 is unreachable on real hardware. Without it the
+/// inner loop's only exit is the chip-controlled `more`/`list_byte_len`
+/// fields, so a glitching or hostile SE could hold `MORE_INDICATOR_MORE`
+/// forever and hang the wipe. Same uncapped-
 /// peripheral-loop class already bounded in `t1oi2c` (`MAX_RESP_FRAMES`) and
 /// `ifx_i2c` (`MAX_RX_FRAMES`).
 const MAX_LIST_PAGES: usize = 64;
@@ -1495,16 +1508,25 @@ unsafe fn sweep(
             cycle_failed = cycle_failed.saturating_add(f);
             // TAG_1 is a 0-based index into the object list, so advance by
             // the number of IDs on this page, not their byte length (NXP
-            // `se05x_APDU_apis.h`, `Se05x_API_ReadIDList`; NXP's own
+            // `se05x_APDU_apis.h`, `Se05x_API_ReadIDList`; confirmed on
+            // silicon by probe row 6B.3b; NXP's own
             // `Se05x_API_DeleteAll_Iterative` sample passes bytes, against its
             // doc). Deletions inside the page shift later IDs down, so this
             // page walk can still skip some; the outer cycle restarts at 0 and
             // only stops after a cycle that deleted nothing, i.e. shifted
-            // nothing, which with index paging has seen every object. A byte
-            // offset broke that: a zero-deletion cycle could jump past
-            // deletable objects on later pages and end the wipe early.
+            // nothing, which with index paging and an honest MORE indicator
+            // has seen every object. That holds only for an exit through
+            // "a cycle deleted nothing": if the 10-cycle or MAX_LIST_PAGES cap
+            // ends the walk, objects never attempted appear in neither
+            // `deleted` nor `failed`.
             output_offset = output_offset.saturating_add((list_byte_len / 4) as u16);
-            if more != 0x01 || list_byte_len == 0 {
+            // Page on only while the chip says MORE (0x02). This read
+            // `more != 0x01` until 2026-10-19, i.e. it paged on NO_MORE (one
+            // wasted, empty request) and stopped on MORE: a list longer than
+            // one page was never walked past page 1, so a cycle whose first
+            // page held only skipped objects deleted nothing and ended the
+            // wipe with deletable objects left on later pages.
+            if more != MORE_INDICATOR_MORE || list_byte_len == 0 {
                 break;
             }
         }

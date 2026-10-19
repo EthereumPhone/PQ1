@@ -1111,7 +1111,7 @@ fn se050_probe_readonly_names_no_write_path() {
     let body = &body[..body.find("\n}\n").expect("plain_readclass_probe has no end")];
     let sig = &body[..body.find(") ->").expect("plain_readclass_probe signature")];
     assert!(
-        sig.contains("cmd: PlainReadCmd") && !sig.contains("u8,"),
+        sig.contains("cmd: PlainReadCmd") && !sig.contains(": u8"),
         "{apdu_rel}: plain_readclass_probe must take a PlainReadCmd, not raw header bytes"
     );
     for f in ["INS_WRITE", "INS_PROCESS", "INS_AUTH_OBJECT", "INS_CRYPTO", "P2_DELETE"] {
@@ -1120,4 +1120,31 @@ fn se050_probe_readonly_names_no_write_path() {
             "{apdu_rel}: plain_readclass_probe names `{f}`; it must send read-class commands only"
         );
     }
+    // Every arm must map to one of the five read-class headers, and there
+    // must be exactly five arms: a sixth (or a raw-byte arm) fails here.
+    const HEADERS: &[&str] = &[
+        "(INS_MGMT, P2_VERSION_EXT,",
+        "(INS_MGMT, P2_RANDOM,",
+        "(INS_READ, P2_LIST,",
+        "(INS_MGMT, P2_EXIST,",
+        "(INS_READ, P2_DEFAULT,",
+    ];
+    for h in HEADERS {
+        assert_eq!(body.matches(h).count(), 1, "{apdu_rel}: plain_readclass_probe header `{h}`");
+    }
+    assert_eq!(
+        body.matches("PlainReadCmd::").count(),
+        HEADERS.len(),
+        "{apdu_rel}: plain_readclass_probe must have exactly the five read-class arms"
+    );
+    // ...and the enum cannot smuggle a raw header byte in through a variant.
+    let enum_start = apdu_src
+        .find("pub enum PlainReadCmd {")
+        .unwrap_or_else(|| panic!("{apdu_rel}: PlainReadCmd not found"));
+    let enum_body = &apdu_src[enum_start..];
+    let enum_body = &enum_body[..enum_body.find("\n}\n").expect("PlainReadCmd has no end")];
+    assert!(
+        !enum_body.contains("u8"),
+        "{apdu_rel}: PlainReadCmd must not carry a u8 (a header byte would bypass the allowlist)"
+    );
 }

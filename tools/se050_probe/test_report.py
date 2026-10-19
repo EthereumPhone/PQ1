@@ -82,6 +82,29 @@ class Report(unittest.TestCase):
         self.assertEqual(r["saturated"], ["persistent"])
         self.assertIn("saturated", report.render("x.log", r))
 
+    def test_offset_unit_entries_passes(self) -> None:
+        r = report.analyse(build_log(CLEAN, ["6B.3b ReadIDList offset unit = ENTRIES (matches apdu::sweep paging)"]))
+        self.assertEqual(len(r["paging"]), 1)
+        self.assertEqual(report.exit_code(r), 0)
+
+    def test_offset_unit_bytes_is_a_finding(self) -> None:
+        r = report.analyse(build_log(
+            CLEAN,
+            ["6B.3b FINDING: ReadIDList offset unit is not entries (entries=0/2 bytes=2/2) — apdu::sweep paging is wrong"],
+            done="FINDINGS"))
+        self.assertEqual(report.exit_code(r), 1)
+        self.assertIn("6B.3b", report.render("x.log", r))
+
+    def test_free_memory_error_is_a_finding(self) -> None:
+        r = report.analyse(build_log(CLEAN, ["6B.4 free-memory[transient-deselect] ERR Transport"], done="FINDINGS"))
+        self.assertTrue(any("free-memory" in f for f in r["findings"]))
+        self.assertEqual(report.exit_code(r), 1)
+
+    def test_plain_matrix_transport_error_is_a_finding(self) -> None:
+        r = report.analyse(build_log(CLEAN, ["6B.6 plain GetRandom ERR Transport"], done="FINDINGS"))
+        self.assertTrue(any("unverified" in f for f in r["findings"]))
+        self.assertEqual(report.exit_code(r), 1)
+
     def test_no_marker_is_inconclusive(self) -> None:
         self.assertEqual(report.exit_code(report.analyse(build_log(CLEAN, done=""))), 2)
 

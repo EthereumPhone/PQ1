@@ -56,7 +56,7 @@ The four tests that probe the actual security claim all PASS:
 |---|---|
 | `audit_admin_passive_read_refused` | Admin session + READ of user-PIN-gated object → SW=0x6982 (refused). A BHK-leak attacker who derives `se050_admin_pin()` CANNOT read `half_E` via the chip's policy mechanism. |
 | `audit_unauth_read_refused` | Pure-SCP03 transport (no UserID session) READ on user-gated object → refused. Default-deny holds; transport SCP03 is NOT a wildcard auth context. |
-| `audit_data_substitution_chip_level` | SE050 has no CREATE-ACL on freed OIDs — admin DELETE + transport write at freed OID + user-PIN read → returns attacker bytes. **Documented as expected**: the systemic backstop is the firmware-layer dual-SE consistency check (`dual_se.rs:378-382`), validated separately. |
+| `audit_data_substitution_chip_level` | SE050 has no CREATE-ACL on freed OIDs — admin DELETE + transport write at freed OID + user-PIN read → returns attacker bytes. **Documented as expected**: the systemic backstop is the firmware-layer dual-SE consistency check (`kdf(entropy) == master_o` in `dual_se.rs` unlock), validated separately. |
 | `scp03_response_encryption_verify` | S-5 closure: `[0xDE; 32]` round-trip through `unwrap_response` at SCP03 P1=0x33. Bus capture not yet performed but Rust-side round-trip is silicon-verified — closes the "logic-analyzer verification still pending" qualifier in CLAUDE.md. |
 
 Plus two protocol-mechanics tests (`scp03_handshake_repeat`,

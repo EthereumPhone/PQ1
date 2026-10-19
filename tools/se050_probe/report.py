@@ -53,6 +53,7 @@ def analyse(raw: str) -> dict:
     inventory: list[tuple[int, str, int | None]] = []
     free: dict[str, int] = {}
     plain: list[str] = []
+    paging: list[str] = []
 
     for f in facts:
         if f.startswith("6B.1 applet") or f.startswith("6B.1 GetVersionExt"):
@@ -66,8 +67,14 @@ def analyse(raw: str) -> dict:
             m = FREE.search(f)
             if m:
                 free[m.group(1)] = int(m.group(2))
+            elif " ERR " in f:
+                findings.append(f"host: {f}")
         elif f.startswith("6B.6 plain"):
             plain.append(f)
+            if " ERR " in f:
+                findings.append(f"host: {f} (matrix row unverified)")
+        elif f.startswith("6B.3b"):
+            paging.append(f)
         if "FINDING:" in f:
             findings.append(f)
 
@@ -101,6 +108,7 @@ def analyse(raw: str) -> dict:
         "free": free,
         "saturated": saturated,
         "plain": plain,
+        "paging": paging,
         "findings": findings,
     }
 
@@ -120,6 +128,8 @@ def render(log: str, r: dict) -> str:
     lines += [
         f"- 0x{oid:08x}  {cls}  size={'err' if sz is None else sz}" for oid, cls, sz in r["inventory"]
     ] or ["- (none)"]
+    lines.append("\n## ReadIDList offset unit (6B.3b)")
+    lines += [f"- {p}" for p in r["paging"]] or ["- (none)"]
     lines.append("\n## Plain (no-SCP03) read-class matrix (6B.6)")
     lines += [f"- {p}" for p in r["plain"]] or ["- (none)"]
     lines.append("\n## Findings")

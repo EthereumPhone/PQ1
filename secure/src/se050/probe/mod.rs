@@ -10,7 +10,8 @@
 //!
 //! It covers the read-only §6B rows: 6B.1 (identity + GetVersionExt `Le`
 //! variants, #444/F-10), 6B.2 (unique ID + stability across a reset), 6B.3
-//! (full `ReadIDList` inventory with per-object type/size), 6B.4 (free
+//! (full `ReadIDList` inventory with per-object type/size; 6B.3b settles
+//! whether the `ReadIDList` offset counts entries or bytes), 6B.4 (free
 //! memory), 6B.5 (platform-SCP presence), 6B.6 (the plain / no-SCP03
 //! read-class acceptance matrix — the bus attacker's free surface).
 //!
@@ -86,8 +87,10 @@ fn is_leftover(class: &str) -> bool {
     matches!(class, "e2e-test" | "retired-prod")
 }
 
-/// `GetFreeMemory` reports at most `0x7FFF`; the chip has more persistent
-/// memory than that, so this value is a floor and cannot show a leak.
+/// `GetFreeMemory` reports at most `0x7FFF` ("0x7FFF as response means at
+/// least 32768 bytes are available", NXP `Se05x_API_GetFreeMemory`), and an
+/// E2 has up to 50 kB of user memory, so at the cap the value is a floor and
+/// cannot show a leak.
 const FREE_MEMORY_CAP: u16 = 0x7FFF;
 
 /// Run the read-only SE050 probe. Returns `true` if no finding fired.
@@ -146,11 +149,17 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
                 name, free
             ),
             Ok(free) => out!("6B.4 free-memory[{}] = {} bytes", name, free),
-            Err(e) => out!("6B.4 free-memory[{}] ERR {:?}", name, e),
+            Err(e) => {
+                out!("6B.4 free-memory[{}] ERR {:?}", name, e);
+                ok = false;
+            }
         }
     }
 
     // -- 6B.3 inventory: ReadIDList (paged) + ReadType/ReadSize ------------
+    // The first page is kept for the 6B.3b offset-unit check below.
+    let mut first = [0u32; 64];
+    let mut first_n = 0usize;
     {
         let mut offset: u16 = 0u16;
         let mut page = 0u32;
@@ -171,7 +180,11 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
                     }
                 }
             };
-            out!("6B.3 ReadIDList page={} listed={} more={}", page, listed, more);
+            out!("6B.3 ReadIDList page={} listed={} more=0x{:02x}", page, listed, more);
+            if more != apdu::MORE_INDICATOR_MORE && more != apdu::MORE_INDICATOR_NO_MORE {
+                out!("6B.3 FINDING: page {} more-indicator 0x{:02x} is neither NO_MORE nor MORE", page, more);
+                ok = false;
+            }
             if count < listed {
                 out!(
                     "6B.3 FINDING: page {} listed {} IDs but only {} fit — inventory incomplete",
@@ -179,6 +192,10 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
                 );
                 truncated = true;
                 ok = false;
+            }
+            if page == 0 {
+                first = ids;
+                first_n = count;
             }
             for &id in &ids[..count] {
                 let class = classify(id);
@@ -215,7 +232,13 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
             // what the chip listed, even if `ids` could not hold all of it.
             offset = offset.saturating_add(listed as u16);
             page += 1;
-            if !more || listed == 0 || page > 8 {
+            if more != apdu::MORE_INDICATOR_MORE || listed == 0 {
+                break;
+            }
+            if page > 8 {
+                out!("6B.3 FINDING: still MORE after {} pages — page cap hit, inventory incomplete", page);
+                truncated = true;
+                ok = false;
                 break;
             }
         }
@@ -223,6 +246,9 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
             "6B.3 inventory total={} unexpected/production={} leftover={} complete={}",
             total, unexpected, leftover, !truncated
         );
+        // Like the unexpected-range FINDING below, a leftover does not clear
+        // `ok`: the probe itself worked and the die is known. `report.py`
+        // turns both into a failing exit; the firmware marker stays DONE OK.
         if leftover != 0 {
             out!(
                 "6B.3 FINDING: {} stale e2e/retired object(s) — a run that should have deleted them did not",
@@ -237,6 +263,52 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
             // Not a probe failure by itself (could be a known leftover); the
             // host report decides. Record it loudly.
         }
+    }
+
+    // -- 6B.3b ReadIDList offset unit (entries vs bytes) -------------------
+    // The wipe (`apdu::sweep`) and the loop above page by ENTRY index, per
+    // NXP's `Se05x_API_ReadIDList` doc; NXP's own DeleteAll sample passes a
+    // BYTE count. Settle it read-only: re-list from offsets 4 and 8. Entry
+    // semantics start those lists at first[4] / first[8]; byte semantics at
+    // first[1] / first[2].
+    if first_n >= 9 {
+        let mut agree_entries = 0u32;
+        let mut agree_bytes = 0u32;
+        for off in [4u16, 8] {
+            let o = off as usize;
+            let mut ids = [0u32; 4];
+            let r = {
+                let (t1, scp) = se.t1_scp03_mut();
+                apdu::read_id_list_probe(t1, scp, off, &mut ids)
+            };
+            match r {
+                Ok((_, listed, count)) if count > 0 => {
+                    out!(
+                        "6B.3b ReadIDList offset={} listed={} first=0x{:08x} entries-expect=0x{:08x} bytes-expect=0x{:08x}",
+                        off, listed, ids[0], first[o], first[o / 4]
+                    );
+                    if ids[0] == first[o] {
+                        agree_entries += 1;
+                    }
+                    if ids[0] == first[o / 4] {
+                        agree_bytes += 1;
+                    }
+                }
+                Ok((_, listed, _)) => out!("6B.3b ReadIDList offset={} listed={} (empty)", off, listed),
+                Err(e) => out!("6B.3b ReadIDList offset={} ERR {:?}", off, e),
+            }
+        }
+        if agree_entries == 2 && agree_bytes == 0 {
+            out!("6B.3b ReadIDList offset unit = ENTRIES (matches apdu::sweep paging)");
+        } else {
+            out!(
+                "6B.3b FINDING: ReadIDList offset unit is not entries (entries={}/2 bytes={}/2) — apdu::sweep paging is wrong",
+                agree_entries, agree_bytes
+            );
+            ok = false;
+        }
+    } else {
+        out!("6B.3b skipped: only {} IDs on the first page (need 9)", first_n);
     }
 
     // -- 6B.2 unique ID + stability across a soft reset --------------------
@@ -296,19 +368,31 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
         let mut o = [0u8; 64];
         match apdu::plain_readclass_probe(t1, P::GetVersionExt, &mut o) {
             Ok((sw, n)) => out!("6B.6 plain GetVersionExt SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
-            Err(e) => out!("6B.6 plain GetVersionExt ERR {:?}", e),
+            Err(e) => {
+                out!("6B.6 plain GetVersionExt ERR {:?}", e);
+                ok = false;
+            }
         }
         match apdu::plain_readclass_probe(t1, P::GetRandom(8), &mut o) {
             Ok((sw, n)) => out!("6B.6 plain GetRandom(8) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
-            Err(e) => out!("6B.6 plain GetRandom ERR {:?}", e),
+            Err(e) => {
+                out!("6B.6 plain GetRandom ERR {:?}", e);
+                ok = false;
+            }
         }
         match apdu::plain_readclass_probe(t1, P::ReadIdList, &mut o) {
             Ok((sw, n)) => out!("6B.6 plain ReadIDList SW=0x{:04x} datalen={}", sw, n),
-            Err(e) => out!("6B.6 plain ReadIDList ERR {:?}", e),
+            Err(e) => {
+                out!("6B.6 plain ReadIDList ERR {:?}", e);
+                ok = false;
+            }
         }
         match apdu::plain_readclass_probe(t1, P::CheckExists(super::USERID_OBJ), &mut o) {
             Ok((sw, n)) => out!("6B.6 plain CheckExists(USERID_OBJ) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
-            Err(e) => out!("6B.6 plain CheckExists ERR {:?}", e),
+            Err(e) => {
+                out!("6B.6 plain CheckExists ERR {:?}", e);
+                ok = false;
+            }
         }
         // Plain Read of the production entropy object (user-gated): must be
         // refused if present, absent otherwise — never return half_E in clear.
@@ -320,7 +404,10 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
                     ok = false;
                 }
             }
-            Err(e) => out!("6B.6 plain Read(ENTROPY_OBJ) ERR {:?}", e),
+            Err(e) => {
+                out!("6B.6 plain Read(ENTROPY_OBJ) ERR {:?}", e);
+                ok = false;
+            }
         }
     }
 
