@@ -716,11 +716,12 @@ pub enum PlatformScpState {
     Unknown,
 }
 
-/// Status words that count as "the applet refused a plain command". Starts
-/// as the set observed for plain commands while a session is up (EVT-3D21:
-/// `0x6982`, `0x6985`) plus the policy-denial code; tighten to the exact
-/// silicon answer once 6B.5 has run under `SCP_REQUIRED`.
-pub const PLATFORM_SCP_REFUSED_SWS: [u16; 3] = [0x6982, 0x6985, 0x6986];
+/// Status words that count as "the applet refused a plain command". Exactly
+/// the silicon answer: EVT-3D21 (SE050E2, applet 7.2.0), 2026-10-19, after
+/// `SetPlatformSCPRequest(SCP_REQUIRED)` and an SE rail power cycle, a plain
+/// `CheckExists(0x7FFF0206)` (and GetRandom / ReadIDList / Read) answers
+/// `0x6985`. Bench evidence only: production never decides on this reply.
+pub const PLATFORM_SCP_REFUSED_SWS: [u16; 1] = [0x6985];
 
 /// Classify the plain probe reply. Only an exact success — `9000` with the
 /// body `41 01 01` (TAG_1, len 1, `SE05x_Result_SUCCESS`: the unique-ID object
@@ -1860,9 +1861,9 @@ mod tests {
         for sw in PLATFORM_SCP_REFUSED_SWS {
             assert_eq!(classify_platform_scp_probe(sw, &[]), PlatformScpState::Refused(sw));
         }
-        // Not-selected (pre-SELECT 0x6D00) and anything unlisted must not be
-        // mistaken for an enforced requirement.
-        for sw in [0x6D00, 0x6A80, 0x6F00, 0x0000, 0x9001] {
+        // Not-selected (pre-SELECT 0x6D00), the in-session 0x6982 and anything
+        // unlisted must not be mistaken for an enforced requirement.
+        for sw in [0x6D00, 0x6982, 0x6986, 0x6A80, 0x6F00, 0x0000, 0x9001] {
             assert_eq!(classify_platform_scp_probe(sw, &[]), PlatformScpState::Unknown, "{sw:04x}");
         }
     }

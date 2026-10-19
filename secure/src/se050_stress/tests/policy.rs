@@ -61,20 +61,34 @@ fn plain_leg(ctx: &mut StressCtx, obj: u32) -> Result<(u16, usize, u16, u16), St
             }
             let (psw, pbody, pn) = apdu::platform_scp_plain_probe(t1)?;
             secure_log!("[S][stress][6B.23] chip platform-SCP probe SW=0x{:04x} body_len={}", psw, pn);
-            if !(psw == 0x9000 && pbody[..pn] == [0x41, 0x01, 0x01]) {
-                return Err(StressError::Assertion {
-                    what: "6B.23 INCONCLUSIVE: the chip refuses plain commands (SCP_REQUIRED?) — run before `require`",
-                    iter: 0,
-                });
+            if psw == 0x9000 && pbody[..pn] == [0x41, 0x01, 0x01] {
+                let (rsw, rn) = apdu::plain_readclass_probe(t1, apdu::PlainReadCmd::Read(obj), &mut o)?;
+                let wsw = apdu::plain_mutate_stress(t1, apdu::PlainMutateCmd::Write(obj, &[0x00; 32]))?;
+                let dsw = apdu::plain_mutate_stress(t1, apdu::PlainMutateCmd::Delete(obj))?;
+                Some((rsw, rn, wsw, dsw))
+            } else {
+                None
             }
-            let (rsw, rn) = apdu::plain_readclass_probe(t1, apdu::PlainReadCmd::Read(obj), &mut o)?;
-            let wsw = apdu::plain_mutate_stress(t1, apdu::PlainMutateCmd::Write(obj, &[0x00; 32]))?;
-            let dsw = apdu::plain_mutate_stress(t1, apdu::PlainMutateCmd::Delete(obj))?;
-            (rsw, rn, wsw, dsw)
         }
     };
     ctx.se().reinit()?;
-    Ok(r)
+    r.ok_or(StressError::Assertion {
+        what: "6B.23 INCONCLUSIVE: the chip refuses plain commands (SCP_REQUIRED?) — run before `require`",
+        iter: 0,
+    })
+}
+
+/// Remove the 6B.23 carve-out objects through the admin path (the
+/// production wipe path), user UserID last.
+fn cleanup(ctx: &mut StressCtx, obj: u32, user: u32) -> StressResult {
+    if ctx.check_exists(obj)? {
+        let sid = ctx.open_admin_session()?;
+        let r = ctx.delete_authed(&sid, obj);
+        ctx.close_session(&sid);
+        ctx.se().reinit()?;
+        r?;
+    }
+    ctx.delete_scratch(user)
 }
 
 /// SWs that mean "the applet refused this command on policy / session
@@ -108,8 +122,16 @@ fn policy_halfe_plain_refused(ctx: &mut StressCtx) -> StressResult {
     ctx.provision_test_userid(user, &pin, 10, AdminPolicy::WithAdminDelete)?;
     ctx.try_write_user_gated_data_write_once(obj, &V, user, Some(STRESS_ADMIN_USERID))?;
 
-    // 1. Plain bus party.
-    let (rsw, rn, wsw, dsw) = plain_leg(ctx, obj)?;
+    // 1. Plain bus party. On any failure here (including INCONCLUSIVE on a
+    // chip at SCP_REQUIRED) remove the carve-out objects before reporting.
+    let (rsw, rn, wsw, dsw) = match plain_leg(ctx, obj) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = ctx.se().reinit();
+            let _ = cleanup(ctx, obj, user);
+            return Err(e);
+        }
+    };
     secure_log!(
         "[S][stress][6B.23] plain read SW=0x{:04x} len={} write SW=0x{:04x} delete SW=0x{:04x}",
         rsw, rn, wsw, dsw,
@@ -166,13 +188,9 @@ fn policy_halfe_plain_refused(ctx: &mut StressCtx) -> StressResult {
     }
 
     // 5. Cleanup through the admin path (the production wipe path).
-    let sid = ctx.open_admin_session()?;
-    ctx.delete_authed(&sid, obj)?;
-    ctx.close_session(&sid);
-    ctx.se().reinit()?;
+    cleanup(ctx, obj, user)?;
     let gone = !ctx.check_exists(obj)?;
     ctx.assert_true("admin deleted the object", gone)?;
-    ctx.delete_scratch(user)?;
     secure_log!("[S][stress][6B.23] half_E policy matrix holds on a present object");
     Ok(())
 }
