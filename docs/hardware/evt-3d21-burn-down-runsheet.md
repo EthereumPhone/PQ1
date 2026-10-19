@@ -14,6 +14,48 @@ the Evidence log there.
 
 ---
 
+## Permanent changes to this unit (read before using the board)
+
+Every 🟡 step, and anything else that a restore cannot undo, is listed here as it happens.
+If you pick up EVT-3D21, this table is what differs from a factory-fresh unit.
+
+| Date | Step | What changed | Undo? |
+|---|---|---|---|
+| 2026-10-15 | (before this sheet) | SE050 UserID `0x7B5E_00A0` (stress admin, self-delete only); stale e2e objects `0x7B0A_0000`, `0x7B0A_00A0` | the `0x7B0A_*` pair is deleted in G1 |
+| 2026-10-15 | (before this sheet) | Option bytes TZEN=1, SECWM2 bank 2 NS, SRAM_RST=0 (factory: TZEN=0) | RDP 0→1→0 with TZEN=0 |
+| 2026-10-19 | F (pairing) | OPTIGA E140 = the bench PBS (`otp-hardcoded-master-key`, fp `9aea9d57…`), written by a `se-lcd-diag` boot. Factory value (Infineon's public sample PBS) backed up in `evt-burn/A/` | rewritable while LcsO=creation |
+| 2026-10-19 | F3 | OPTIGA F1D0 metadata = hw-counter variant (`Execute=Luc(E120)`, `Change=ALW`); E120 provisioned as the LUC (`Change=Auto(F1D0)`, limit 32) and **lifetime attempts consumed by F3/F4** | metadata rewritable while LcsO=creation; E120 reset needs F1D0 auth |
+| 2026-10-19 | F2 (AC probe) | OPTIGA spares now differ from factory: F1D5 = a throwaway AuthRef (`AUTOREF`, `Execute=ALW`, `Read=NEV`, 32 B of TRNG nobody kept); F1D7 and F1E0 = 32 B, `Change=ALW Read=ALW Execute=NEV` (were 100 B / 1500 B of zeros, `Change=LcsO<op`) | rewritable while LcsO=creation |
+| 2026-10-19 | F4b (`pin-gate-wipe`) | Ends by re-provisioning a **test wallet** (fixed e2e mnemonic, PIN `00000000`) on both chips: OPTIGA F1D0–F1D4 + F1E1, SE050 `0x7B10_*` objects, page 125 salt | G1 (`wipe-for-wizard`) removes it |
+| 2026-10-19 | F7a (`se050-stress-destructive`, 23 PASS / 0 FAIL) | Carve-out UserIDs/objects in `0x7B5E_*`; **exact list not yet taken** (the follow-up `se050-probe` was stopped) | locked/no-admin UserIDs are permanent; run `make se050-probe-hw BOARD=pq1` and list them here |
+| 2026-10-19 | F7b (`se050-admin-extract-attempt-e2e`, PASS) | possibly one undeletable carve-out UserID (row 8.3) — same probe owed | — |
+
+### State at stop (2026-10-19 17:18, owner stopped the run)
+
+- **Flash is NOT the baseline:** last image = `se050-probe` secure ELF over a dual-SE e2e
+  NS image. **Page 123 is erased** (it held 512 B of records; something in F4 erased it),
+  page 125 holds 48 B (the test wallet's salt), pages 124/126/127 erased. Restore with
+  `evt-burn/bin/restore.sh <dir>` (mass erase, then the A2 image, page 123 records-only)
+  — but only after G1, because page 125 must match the SEs until they are wiped.
+- OTP blank (`9f56cda7…`, read at stop). Option bytes unchanged from A2.
+- Both SEs hold the F4b test wallet (see table). Next: `sprobe` to list the F7 leftovers,
+  then F8, then G1.
+
+## Run log
+
+**2026-10-19 (afternoon), ST-LINK V3SET on J210 + USB-C only** (no panel, buttons, J211
+UART, LA or relay). Commit `43dad543`, then `e02471e9` from F3 on. Runners in
+`~/Documents/PQ1/evt-burn/bin/` (`b1.sh`, `f.sh`, `build_pair.sh`, `restore.sh`);
+evidence in `~/Documents/PQ1/evt-burn/<part>/`.
+
+Harness lessons from this run: `pkill -f <pattern>` kills your own shell when the
+pattern appears in its command line (kill by PID); a stale `probe-rs run` holds the
+ST-LINK (`interface is busy`); a PASS regex must be anchored to the firmware's `[E2E-…]`
+line, because the Makefile's own `echo "(watch for … PASS)"` line matches otherwise
+(three false PASSes before this was caught; the images had never run).
+
+---
+
 ## 0. Read first
 
 ### 0.1 You cannot run this sheet end to end today
@@ -62,7 +104,11 @@ inconvenient. See [§1](#1-equipment-and-board-mods).
 1. **OTP stays blank until H2.** Every image flashed before H2 must include
    `otp-hardcoded-master-key`, `dev-testkey` (which implies it) or `saes-dhuk`. Otherwise
    `otp::ensure_device_master()` burns the master on first boot (DVT bench rule 1). After
-   each image, re-read the OTP under reset and expect `9f56cda7…`.
+   each image, re-read the OTP under reset and expect `9f56cda7…`. *(10-19: `mock-se`
+   images are exempt by construction: they build neither `pin_gate` nor an SE driver
+   (`main.rs` gates `pin_gate` on `se050`/`optiga-trust-m`), and nothing else reaches
+   `secret_keys::derive_into`. `test-key-speed`, `fw-rollback-hw`, `fwup-transport-hw`
+   and friends rely on this.)*
 2. **No SE050 image with the AN12436 default keys after H3.** Once the SE050 keyset has
    moved off the factory keys, any bench image that still uses them (`se050-stress*`,
    `se050-probe`, `se050-platform-scp-hw`, all `*-e2e`) sends a **wrong host cryptogram**.
@@ -111,13 +157,19 @@ inconvenient. See [§1](#1-equipment-and-board-mods).
 
 ## Part A: Intake and baseline 🟢
 
-- [ ] **A1. Identity.** Read DBGMCU `0xE0044000` and the UID, and confirm that this is
+- [x] **A1. Identity.** Read DBGMCU `0xE0044000` and the UID, and confirm that this is
       EVT-3D21. Record the OPTIGA UID (`cd1633ca…`) and the SE050 UID
       (`0400500157990ff53d289104261f22df1390`). Rows: DVT 1.2, 6B.2.
-- [ ] **A2. Snapshot.** Expect flash `50b0ec89…`, OTP `9f56cda7…` and option bytes equal
+      *10-19: `0x30076482`, UID `003D0021 30465002 2033314C`, both SE UIDs as above.*
+- [x] **A2. Snapshot.** Expect flash `50b0ec89…`, OTP `9f56cda7…` and option bytes equal
       to the golden table. If anything differs, stop and explain it. Rows: DVT 1.1, 1.3,
-      1.4.
-- [ ] **A3. SE baselines.**
+      1.4. *10-19: flash `50b0ec89…` ×2, OTP `9f56cda7…` ×2 (blank), all 44 `-ob displ`
+      fields identical to the 10-17 intake; pages 124–127 erased, page 123 = 512 B of
+      records. `evt-burn/A/`.*
+- [x] **A3. SE baselines.** *10-19: OPTIGA report identical to the 13:43 run (43
+      factory-blank findings, SEC 0 throughout, E120 0/0); SE050 20 objects, 0
+      production-range, the two stale `0x7B0A_*` objects still present; platform SCP
+      `not_required`, `0x7FFF0207` absent.*
   - `make optiga-probe-hw BOARD=pq1 SWEEP=0` (keep the report).
   - `make se050-probe-hw BOARD=pq1` (expect 20 objects).
   - `make se050-platform-scp-hw BOARD=pq1 ACTION=status SE050_UID=0400500157990ff53d289104261f22df1390`
@@ -130,7 +182,15 @@ inconvenient. See [§1](#1-equipment-and-board-mods).
     its fingerprint `20a7ec84684f7fe1` is the same on two chips.
   - (b) Accept the loss.
 
-  Owner choice: ______
+  Owner choice: **(a), 2026-10-19.** ✅ Backed up through a one-off, uncommitted
+  `PBSDUMP` line in the read-only probe (patch reverted, dump line scrubbed from
+  `target/`). Stored as `evt-burn/A/e140-factory-pbs.{bin,hex}` (mode 600, not in git);
+  SHA-256 prefix `20a7ec84684f7fe1` matches the probe fingerprint. **Finding: it is
+  Infineon's public sample PBS:** byte-identical to `optiga_platform_binding_shared_secret`
+  in `Infineon/optiga-trust-m` `extras/pal/linux/pal_os_datastore.c` after its 2-byte
+  `0x0040` length prefix. That explains the same fingerprint on two chips: every unpaired
+  OPTIGA ships with a public PBS, so the factory transport-PBS write (H4) is what closes
+  it, and losing the backup would have cost nothing.
 - [ ] **A5. Board mods work.** Use a mock-SE `ui-lcd,debug-log` image
   (`make play-hw-px BOARD=pq1`). Check that:
   - both buttons, and the chord, register in the log;
@@ -138,6 +198,8 @@ inconvenient. See [§1](#1-equipment-and-board-mods).
   - a `uart-console` image prints on J211.
 
   Then restore the snapshot.
+
+  ⛔ *10-19: no buttons, panel or J211 UART fitted (§1 board mods not done).*
 
 ---
 
@@ -164,6 +226,18 @@ the Part.
   All `BOARD=pq1`. Rows: DVT 1.5, 1.10, 1.11, 3.1–3.3, 3.5–3.7, 3.9–3.11, 4.1, 4.2, 4.7,
   5.8, 11.1, 11.2, 11.6, 11.7, 13.9, 13.10. Re-run this whole set on the Part-H commit
   (rule 6).
+
+  ✅ *10-19 on `43dad543` (runner `evt-burn/bin/b1.sh`, logs `evt-burn/B/b1/`), OTP
+  re-read blank after every image:* `test-key-speed` PASS · `gtzc-enforcement-hw` PASS ·
+  `gtzc-sys` SWD verdict 22/22 · `gtzc-ship` PASS · `dma-probe --expect-locked` PASS ·
+  `nested-gate-test-hw` REFUSED · `-nctl-hw` PASS · `ns-ptr-probe` ◐ 223/228, the same five
+  sign-entry positive-control rows as 10-18 (B16) · `toctou` phases 0/1 pass (2/3 move no
+  data since #982, as expected) · `idle_hold.sh` bump / no-bump / no-`iwdg` PASS ·
+  `fw-rollback-hw` PASS · `test-update-hw` PASS · `fwup-transport-hw` and `-iwdg` PASS ·
+  `saes-self-test-hw` PASS, DHUK fp `117d822a62a50830` (RDP 0) · `verify-ship-state`
+  17/17. *Harness note: right after `fwup-transport-hw` one OTP read returned no file and
+  the runner stopped on "OTP CHANGED"; two re-reads were blank. The runner now retries
+  and reports a failed read separately (exit 98) from a changed OTP (exit 99).*
 - [ ] **B2. GPIO lockdown, fully.**
   - Clock GPIOC and read `GPIOC_SECCFGR` (PC13).
   - Write-probe the SE buses PB6–9, the LCD pins and PA0/PA1 through both ODR and BSRR,
@@ -175,6 +249,9 @@ the Part.
       `WRP1A_PSTRT=0 WRP1A_PEND=3 UNLOCK_1A=1`. Then run a firmware
       `erase_secure_page(0)` and a raw `SECCR` PER/STRT erase, and expect `WRPERR` on
       both. Restore `0xFF80FFFF`. 🛠 bench hook. Row: DVT 2.3.
+      ⛔ *10-19: the option-byte write + raw erase was refused by the Claude Code auto-mode
+      permission gate ("irreversible local destruction"), as on 10-15. Needs an explicit
+      owner permission rule, or a human at the keyboard.*
 - [ ] **B4. MP strap.** Tie TP103 to GND and power up through the SBU adapter. Expect no
       `0483:df11`. Row: DVT 2.11.
 - [ ] **B5. Torn flash writes, reset sweep** on pages 123, 124, 125 and 127. Apply the
@@ -376,6 +453,23 @@ before the first write, and compare byte for byte after restoring it.
 
 Before starting, write the owner decision for A4: from here on E140 holds the bench PBS.
 All images include `otp-hardcoded-master-key`, so the OTP stays blank.
+
+**Pairing first (found 10-19).** The dual-SE e2e harnesses assume the OPTIGA is already
+paired to the bench PBS. On a chip that still holds its factory PBS, every pre-clean
+fails (`factory_reset` → `ensure_shield` → handshake rejected → `InternalError`;
+the AC probe fails at `step=shield`). Pair once first: a `se-lcd-diag` image
+(`se-lcd-diag,dual-se,stm32u585,ui-lcd,debug-log,e2e-test,otp-hardcoded-master-key,board-pq1`)
+calls `pair_for_first_boot()`.
+
+*10-19 results (`evt-burn/F/summary.txt`):* F1 ✅ ALL 3 BOOTS PASS (after pairing) ·
+F2 ✅ AC-PROBE PASS (stored Read AC `23 F1 D5 FD 20 E1 40`, plaintext read → `Status(0xFF)`),
+and the wallet probe shows F1D1–F1D4 `Read=Auto(F1D0) && Conf(E140)`, plaintext refused
+(`lec=07`) — row 8.2 · F3 ❌→✅: first run failed `setup_pbs FAILED: Shield` (driver bug:
+`init()` reset the chip but kept `shield.active`; fixed `e02471e9`), then HW-COUNTER
+ROUNDTRIP PASS — row 7.3 · F4 ✅ `pin-gate-hw-counter` SYNC+DESYNC PASS, `pin-gate-wipe`
+WIPE+RECOVERY PASS — rows 7.4, 7.5 · F7 ✅ `se050-stress-destructive` 23 PASS / 0 FAIL / 0
+SKIP, `se050-admin-extract-attempt-e2e` PASS — row 8.3 (leftover list owed) · F8 not
+run (stopped). No `send_command REFUSED` in any log.
 
 - [ ] **F1. Multi-unlock** with the LA on both buses:
   `make dual-se-multi-unlock-e2e BOARD=pq1`.
