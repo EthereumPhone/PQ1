@@ -2553,7 +2553,9 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
     assert!(film.contains(
         "if first || glass != lcd::glass_writes() || !film_partial_allowed() {\n        Damage::All"
     ));
-    assert!(film.contains("Damage::Cols(x0, x1) => present_frame_cols(&frame, font, false, Some((x0, x1))),"));
+    assert!(film.contains(
+        "Damage::Cols(x0, x1) => {\n            FILM_WIN.store(band_window(x0, x1), Ordering::Relaxed);\n            present_frame_cols(&frame, font, false, Some((x0, x1)))\n        }"
+    ));
     assert!(film.contains("let kept = if cost.streamed { sigs } else { FrameSigs::UNKNOWN };"));
     let start = UI_PX_LCD_SRC.split("pub fn film_start_with(").nth(1).expect("film_start_with");
     let start = &start[..start.find("\n}\n").unwrap_or(start.len())];
@@ -2738,4 +2740,61 @@ fn positive_ui_lcd_implies_gpio_buttons() {
         line.contains("gpio-buttons"),
         "ui-lcd must imply gpio-buttons, or the animated chooser has no tick: {line}"
     );
+}
+
+#[test]
+fn negative_te_stamps_are_the_busy_films_alone() {
+    // #934 stage 1. ASSUMPTION ATTACKED: the TE interrupt is unmasked in the
+    // NVIC without a dispatch arm (an unmatched IRQ wipes and resets), stays
+    // on after the film, or the phase start (no edge wait) reaches a frame
+    // that is not the film's partial redraw.
+    let dh = MAIN_SRC
+        .split("unsafe fn DefaultHandler(irqn: i16)")
+        .nth(1)
+        .expect("DefaultHandler");
+    let dh = &dh[..dh.find("\n}\n").unwrap_or(dh.len())];
+    // The arm is compiled exactly when `hw::lcd_te` is (stm32u585 + ui-lcd;
+    // DefaultHandler itself is stm32u585-only), and precedes the catch-all.
+    let arm = "#[cfg(feature = \"ui-lcd\")]\n        n if hw::lcd_te::owns_irq(n) => unsafe { hw::lcd_te::on_irq() },";
+    let at = dh.find(arm).expect("DefaultHandler must dispatch the TE line");
+    assert!(at < dh.find("_ => {").expect("catch-all"), "the TE arm must precede the catch-all");
+
+    // One NVIC enable, inside `stamps`, after the ISR's state is ready.
+    assert_eq!(LCD_TE_SRC.matches("Reg32::new(NVIC_ISER0).write(bit);").count(), 1);
+    let stamps = LCD_TE_SRC.split("pub fn stamps(on: bool) {").nth(1).expect("stamps");
+    let stamps = &stamps[..stamps.find("\n}\n").unwrap_or(stamps.len())];
+    let itns = stamps.find("Reg32::new(NVIC_ITNS0).modify(|v| v & !bit);").expect("secure target");
+    let on = stamps.find("STAMPS_ON.store(true, Ordering::Release);").expect("flag");
+    let iser = stamps.find("Reg32::new(NVIC_ISER0).write(bit);").expect("enable");
+    assert!(itns < iser && on < iser, "secure target and flag before the enable");
+    assert!(stamps.contains("Reg32::new(NVIC_ICER0).write(bit);"), "and a disable");
+    // RM0456 vector table: EXTI line n is IRQ 11 + n.
+    assert!(LCD_TE_SRC.contains("const EXTI0_IRQN: u32 = 11;"));
+    // The ISR clears the flag (level request) and stamps; nothing else.
+    let isr = LCD_TE_SRC.split("pub unsafe fn on_irq() {").nth(1).expect("on_irq");
+    let isr = &isr[..isr.find("\n}\n").unwrap_or(isr.len())];
+    assert!(isr.contains("take_edge(&rpr, exti_line(pin));"));
+    let take = LCD_TE_SRC.split("fn take_edge(rpr: &Reg32, line: u32) {").nth(1).expect("take_edge");
+    assert!(take.trim_start().starts_with("rpr.write(line);"), "clear the latch first");
+
+    // Switched on only by a film's start, off by both of its ends.
+    let srcs = [UI_PX_LCD_SRC, MAIN_SRC, LCD_TE_SRC];
+    assert_eq!(srcs.iter().map(|s| s.matches("lcd_te::stamps(true)").count()).sum::<usize>(), 1);
+    let start = UI_PX_LCD_SRC.split("pub fn film_start_with(").nth(1).expect("film_start_with");
+    let start = &start[..start.find("\n}\n").unwrap_or(start.len())];
+    assert!(start.contains("crate::hw::lcd_te::stamps(true);"));
+    for end in ["pub fn film_abort() {", "pub fn film_resolve(e: Ending) {"] {
+        let body = UI_PX_LCD_SRC.split(end).nth(1).expect(end);
+        let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
+        assert!(body.contains("crate::hw::lcd_te::stamps(false);"), "{end} must switch the stamps off");
+    }
+
+    // The phase start is reached only for a partial (`cols`) frame, and the
+    // edge wait and the beam wait both still run when it is not taken.
+    assert!(UI_PX_LCD_SRC.contains("let phased = cols.is_some() && phase_start(xa, xend);"));
+    assert!(UI_PX_LCD_SRC.contains("if !phased {\n        let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);"));
+    assert!(UI_PX_LCD_SRC.contains("if !phased && xa > TE_SCANLINE {"));
+    // And the start range is the presenter's own tear-free condition.
+    assert!(UI_PX_LCD_SRC.contains("let lo = xa.max(TE_SCANLINE) + PHASE_MARGIN_ROWS;"));
+    assert!(UI_PX_LCD_SRC.contains("let hi = (W + xend - (w * 1749 + 999) / 1000 - PHASE_MARGIN_ROWS).min(W - 1);"));
 }

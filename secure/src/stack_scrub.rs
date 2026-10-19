@@ -130,6 +130,32 @@ impl Drop for ScrubOnDrop {
     }
 }
 
+/// Dev bench (`ui-px-film-bench`): bytes at the bottom of the secure stack
+/// still zero since the last [`scrub_dead_stack`], i.e. the headroom the
+/// deepest frame since then (exceptions included) left. Exact up to the zero
+/// words a frame may itself have stored at its lowest addresses.
+#[cfg(all(target_arch = "arm", feature = "ui-px-film-bench"))]
+pub fn untouched_since_scrub() -> u32 {
+    let start = core::ptr::addr_of!(_stack_end) as usize;
+    let sp = cortex_m::register::msp::read() as usize;
+    let mut p = start;
+    // SAFETY: reads only `[_stack_end, SP)`, word-aligned RAM reserved for
+    // the stack (see `scrub_dead_stack`).
+    while p < sp && unsafe { core::ptr::read_volatile(p as *const u32) } == 0 {
+        p += 4;
+    }
+    (p - start) as u32
+}
+
+/// Dev bench: the secure stack region's size in bytes.
+#[cfg(all(target_arch = "arm", feature = "ui-px-film-bench"))]
+pub fn stack_size() -> u32 {
+    extern "C" {
+        static _stack_start: u32;
+    }
+    (core::ptr::addr_of!(_stack_start) as usize - core::ptr::addr_of!(_stack_end) as usize) as u32
+}
+
 /// Host and QEMU-model builds have no linker-provided secure stack to scrub.
 #[cfg(not(target_arch = "arm"))]
 pub fn scrub_dead_stack() {}

@@ -256,6 +256,142 @@ pub fn exti_in_use() -> bool {
     unsafe { core::ptr::read_volatile(core::ptr::addr_of!(EXTI_USABLE)) }
 }
 
+// ---- Edge timestamps for the busy film (#934 stage 1) ----------------------
+//
+// While a busy film runs, an interrupt on the TE line records the DWT cycle
+// count of every rising edge, so the film can tell where the panel's scan is
+// without waiting for the next edge: a frame then starts at a tick that falls
+// in the scan window it needs, instead of spinning up to a whole refresh for
+// the edge and then for the beam (9.1 + 3.5 ms of a 28 ms frame, measured on
+// the EVT 2026-10-19).
+//
+// Off outside the film: `IMR1` is already unmasked for the latch (see
+// `exti_init`), and only the NVIC line is switched here. With it off, every
+// path behaves exactly as before. The ISR is a few instructions (clear the
+// flag, stamp, count) and touches nothing else.
+
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+/// RM0456 Rev 7, Table "STM32U5 series vector table": EXTI line n is IRQ 11 + n
+/// (EXTI0 = 11 ... EXTI15 = 26).
+const EXTI0_IRQN: u32 = 11;
+
+/// NVIC set-enable / clear-enable / clear-pending / target-non-secure, word 0
+/// (IRQ 0..31: every EXTI line is in it).
+const NVIC_ISER0: u32 = 0xE000_E100;
+const NVIC_ICER0: u32 = 0xE000_E180;
+const NVIC_ICPR0: u32 = 0xE000_E280;
+const NVIC_ITNS0: u32 = 0xE000_E380;
+
+/// DWT cycle counter (ARMv8-M core debug block).
+const DEMCR: u32 = 0xE000_EDFC;
+const DWT_CTRL: u32 = 0xE000_1000;
+const DWT_CYCCNT: u32 = 0xE000_1004;
+const DWT_LAR: u32 = 0xE000_1FB0;
+
+static STAMPS_ON: AtomicBool = AtomicBool::new(false);
+/// Edges taken since boot (wraps).
+static EDGES: AtomicU32 = AtomicU32::new(0);
+/// `DWT_CYCCNT` at the latest edge.
+static EDGE_AT: AtomicU32 = AtomicU32::new(0);
+
+/// The TE line's IRQ number, if the board has one.
+const fn te_irqn() -> Option<u32> {
+    match TE {
+        Some((_, pin)) => Some(EXTI0_IRQN + pin),
+        None => None,
+    }
+}
+
+/// Whether `irqn` is the TE line's interrupt (`DefaultHandler`'s dispatch).
+#[must_use]
+pub fn owns_irq(irqn: i16) -> bool {
+    matches!(te_irqn(), Some(n) if i32::from(irqn) == n as i32)
+}
+
+/// The cycle counter. Armed by [`stamps`]; on a build that never armed it
+/// this reads a stopped counter, which [`last_edge`]'s callers treat as stale.
+#[must_use]
+pub fn cycles() -> u32 {
+    // SAFETY: real, aligned core debug register; a plain load.
+    unsafe { RoReg32::new(DWT_CYCCNT) }.read()
+}
+
+/// Switch the edge timestamps on (a film starts) or off (it ended). A no-op
+/// on a board with no TE line or when the EXTI latch is not in use.
+pub fn stamps(on: bool) {
+    let Some(irqn) = te_irqn() else { return };
+    if on && !exti_in_use() {
+        return;
+    }
+    let bit = 1u32 << irqn;
+    // SAFETY: NVIC and DWT registers are real, aligned core registers; the
+    // secure world is single-threaded apart from the ISR, which reads none of
+    // them.
+    unsafe {
+        if on {
+            // The stamps need a running counter; `main` arms it only just
+            // before booting NS, and provisioning's film runs earlier. Never
+            // reset it here: NS may be timing with it.
+            let ctrl = Reg32::new(DWT_CTRL);
+            if ctrl.read() & 1 == 0 {
+                Reg32::new(DEMCR).set_bits(1 << 24); // TRCENA
+                Reg32::new(DWT_LAR).write(0xC5AC_CE55);
+                ctrl.set_bits(1); // CYCCNTENA
+            }
+            // Secure target (ITNS = 0), so the line can never be retargeted to
+            // the non-secure handler table; it is 0 at reset, written anyway.
+            Reg32::new(NVIC_ITNS0).modify(|v| v & !bit);
+            // Drop an edge latched before now, so the first stamp is fresh.
+            if let Some((_, pin)) = TE {
+                Reg32::new(EXTI_S + EXTI_RPR1).write(exti_line(pin));
+            }
+            Reg32::new(NVIC_ICPR0).write(bit);
+            STAMPS_ON.store(true, Ordering::Release);
+            Reg32::new(NVIC_ISER0).write(bit);
+        } else {
+            Reg32::new(NVIC_ICER0).write(bit);
+            cortex_m::asm::dsb();
+            cortex_m::asm::isb();
+            STAMPS_ON.store(false, Ordering::Release);
+            Reg32::new(NVIC_ICPR0).write(bit);
+        }
+    }
+}
+
+/// Whether the TE interrupt is stamping edges.
+#[must_use]
+pub fn stamps_on() -> bool {
+    STAMPS_ON.load(Ordering::Acquire)
+}
+
+/// The cycle count of the latest TE edge, while the stamps are on and at
+/// least one edge has been taken.
+#[must_use]
+pub fn last_edge() -> Option<u32> {
+    if !stamps_on() || EDGES.load(Ordering::Acquire) == 0 {
+        return None;
+    }
+    Some(EDGE_AT.load(Ordering::Acquire))
+}
+
+fn take_edge(rpr: &Reg32, line: u32) {
+    rpr.write(line);
+    EDGE_AT.store(cycles(), Ordering::Release);
+    EDGES.fetch_add(1, Ordering::AcqRel);
+}
+
+/// The TE line's interrupt: clear the flag, stamp the edge.
+///
+/// # Safety
+/// Called only from `DefaultHandler` for [`owns_irq`]'s IRQ.
+pub unsafe fn on_irq() {
+    let Some((_, pin)) = TE else { return };
+    // SAFETY: real, 4-byte-aligned EXTI register on the secure alias.
+    let rpr = unsafe { Reg32::new(EXTI_S + EXTI_RPR1) };
+    take_edge(&rpr, exti_line(pin));
+}
+
 /// Current TE level. `false` when the board has no TE line.
 #[must_use]
 pub fn level() -> bool {
@@ -533,6 +669,28 @@ pub fn wait_rising(spin_cap: u32) -> bool {
     let line = exti_line(pin);
     // SAFETY: real, 4-byte-aligned EXTI registers on the secure alias.
     let rpr = unsafe { Reg32::new(EXTI_S + EXTI_RPR1) };
+    if stamps_on() {
+        // The ISR takes every edge (and clears the flag), so wait for its
+        // count to move. An edge still latched means the ISR cannot run from
+        // here (interrupts masked, or a handler at or above its priority —
+        // the panic screen): take it here instead.
+        let n0 = EDGES.load(Ordering::Acquire);
+        let mut spins = 0u32;
+        loop {
+            if EDGES.load(Ordering::Acquire) != n0 {
+                return true;
+            }
+            if rpr.read() & line != 0 {
+                take_edge(&rpr, line);
+                return true;
+            }
+            spins += 1;
+            if spins >= spin_cap {
+                return false;
+            }
+            core::hint::spin_loop();
+        }
+    }
     // Clear first, so what we wait for is the NEXT edge and not one latched
     // while the previous frame was still streaming. Write-1-to-clear.
     rpr.write(line);

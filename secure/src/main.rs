@@ -5336,6 +5336,12 @@ unsafe fn DefaultHandler(irqn: i16) {
         // counter to confirm enforcement is working.
         8 => unsafe { hw::tzic::on_violation() }, // GTZC_IRQn
 
+        // The panel's TE line (pq1: EXTI2 = IRQ 13), enabled only while a
+        // busy film runs (`lcd_te::stamps`): stamps the edge so the film can
+        // start a frame without waiting for one (#934 stage 1).
+        #[cfg(feature = "ui-lcd")]
+        n if hw::lcd_te::owns_irq(n) => unsafe { hw::lcd_te::on_irq() },
+
         // Unmatched — log, wipe secrets, reset (F33/RUN-5). NOT a
         // panic so the host semihosting backend gets a chance to
         // flush the log line before the chip resets. Reachability
