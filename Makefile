@@ -1142,8 +1142,10 @@ test-optiga-probe: ## Host tests for the OPTIGA probe report tool
 # already being set (as `se050-stress` does). NEVER SHIP — in PROD_FORBIDDEN.
 #
 #   make se050-probe-hw BOARD=pq1                  # ~1-2 min
+#   make se050-probe-report LOG=path/to.log        # re-analyse a saved log
 #
-# Exit status follows probe-rs; scrape `=== SPROBE DONE OK ===` from the log.
+# The run ends with `tools/se050_probe/report.py`, whose exit status is the
+# verdict (0 OK, 1 findings — incl. stale e2e objects — 2 inconclusive).
 SE050_PROBE_FEATURES = se050,se050-probe,ui-semihosting,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,usb,$(BOARD_FEATURE)
 
 se050-probe-hw: ## Read-only SE050 config/inventory/plain-surface probe (HW)
@@ -1161,7 +1163,15 @@ se050-probe-hw: ## Read-only SE050 config/inventory/plain-surface probe (HW)
 	echo "===================================="; \
 	if grep -q "=== SPROBE DONE OK ===" "$$log"; then echo "==> se050-probe: OK"; \
 	elif grep -q "=== SPROBE DONE FINDINGS ===" "$$log"; then echo "==> se050-probe: FINDINGS (see log)"; \
-	else echo "==> se050-probe: INCONCLUSIVE (no DONE marker; log=$$log)"; fi
+	else echo "==> se050-probe: INCONCLUSIVE (no DONE marker; log=$$log)"; fi; \
+	python3 -I tools/se050_probe/report.py "$$log" --out target/se050-probe
+
+se050-probe-report: ## Re-analyse a saved SE050 probe log (LOG=path)
+	@test -n "$(LOG)" || { echo "usage: make se050-probe-report LOG=path/to.log"; exit 1; }
+	@python3 -I tools/se050_probe/report.py "$(LOG)" --out target/se050-probe
+
+test-se050-probe: ## Host tests for the SE050 probe report tool
+	@python3 -I -m unittest discover -s tools/se050_probe -v
 
 # GTZC_NS_EXTRA=,gtzc-sys adds the DVT 3.3-3.6 NS system-register write probes
 # (phase 2, after the TZSC receipt); GTZC_FAULT_ADDR=0x... (env) appends one

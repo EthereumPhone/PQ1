@@ -78,6 +78,18 @@ fn classify(id: u32) -> &'static str {
     }
 }
 
+/// Classes that should never survive on a die: an e2e run or a retired
+/// firmware generation was meant to delete them. Not unexpected (we know what
+/// wrote them) but still a cleanup finding, so the probe reports them instead
+/// of leaving them for a human to spot in the listing.
+fn is_leftover(class: &str) -> bool {
+    matches!(class, "e2e-test" | "retired-prod")
+}
+
+/// `GetFreeMemory` reports at most `0x7FFF`; the chip has more persistent
+/// memory than that, so this value is a floor and cannot show a leak.
+const FREE_MEMORY_CAP: u16 = 0x7FFF;
+
 /// Run the read-only SE050 probe. Returns `true` if no finding fired.
 ///
 /// # Safety
@@ -129,6 +141,10 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
     ] {
         let (t1, scp) = se.t1_scp03_mut();
         match apdu::get_free_memory_probe(t1, scp, kind) {
+            Ok(free) if free == FREE_MEMORY_CAP => out!(
+                "6B.4 free-memory[{}] = {} bytes (SATURATED at 0x7FFF: a floor, blind to leaks)",
+                name, free
+            ),
             Ok(free) => out!("6B.4 free-memory[{}] = {} bytes", name, free),
             Err(e) => out!("6B.4 free-memory[{}] ERR {:?}", name, e),
         }
@@ -140,9 +156,11 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
         let mut page = 0u32;
         let mut total = 0u32;
         let mut unexpected = 0u32;
+        let mut leftover = 0u32;
+        let mut truncated = false;
         loop {
             let mut ids = [0u32; 64];
-            let (more, count) = {
+            let (more, listed, count) = {
                 let (t1, scp) = se.t1_scp03_mut();
                 match apdu::read_id_list_probe(t1, scp, offset, &mut ids) {
                     Ok(r) => r,
@@ -153,11 +171,22 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
                     }
                 }
             };
-            out!("6B.3 ReadIDList page={} count={} more={}", page, count, more);
+            out!("6B.3 ReadIDList page={} listed={} more={}", page, listed, more);
+            if count < listed {
+                out!(
+                    "6B.3 FINDING: page {} listed {} IDs but only {} fit — inventory incomplete",
+                    page, listed, count
+                );
+                truncated = true;
+                ok = false;
+            }
             for &id in &ids[..count] {
                 let class = classify(id);
                 if class == "UNEXPECTED" || class == "PRODUCTION(v6)" {
                     unexpected += 1;
+                }
+                if is_leftover(class) {
+                    leftover += 1;
                 }
                 let mut ty = [0u8; 16];
                 let (t1, scp) = se.t1_scp03_mut();
@@ -168,21 +197,38 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
                 // ReadSize wants its own borrow after the hex() above.
                 let size = {
                     let (t1, scp) = se.t1_scp03_mut();
-                    apdu::read_object_size_probe(t1, scp, id).unwrap_or(0xFFFF)
+                    apdu::read_object_size_probe(t1, scp, id)
                 };
-                out!(
-                    "6B.3   id=0x{:08x} class={} type={} size={}",
-                    id, class, tystr, size
-                );
+                match size {
+                    Ok(size) => out!(
+                        "6B.3   id=0x{:08x} class={} type={} size={}",
+                        id, class, tystr, size
+                    ),
+                    Err(_) => out!(
+                        "6B.3   id=0x{:08x} class={} type={} size=err",
+                        id, class, tystr
+                    ),
+                }
                 total += 1;
             }
-            offset = offset.saturating_add(count as u16);
+            // The offset is an index into the list (not bytes): advance by
+            // what the chip listed, even if `ids` could not hold all of it.
+            offset = offset.saturating_add(listed as u16);
             page += 1;
-            if !more || count == 0 || page > 8 {
+            if !more || listed == 0 || page > 8 {
                 break;
             }
         }
-        out!("6B.3 inventory total={} unexpected/production={}", total, unexpected);
+        out!(
+            "6B.3 inventory total={} unexpected/production={} leftover={} complete={}",
+            total, unexpected, leftover, !truncated
+        );
+        if leftover != 0 {
+            out!(
+                "6B.3 FINDING: {} stale e2e/retired object(s) — a run that should have deleted them did not",
+                leftover
+            );
+        }
         if unexpected != 0 {
             out!(
                 "6B.3 FINDING: {} object(s) in a production/unexpected range — classify before trusting this die",
@@ -198,7 +244,7 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
     let mut uid1_len = 0usize;
     {
         let (t1, scp) = se.t1_scp03_mut();
-        match apdu::read_object_plain_probe(t1, scp, apdu::UNIQUE_ID_OBJ, &mut uid1) {
+        match apdu::read_object_scp03_probe(t1, scp, apdu::UNIQUE_ID_OBJ, &mut uid1) {
             Ok(n) => {
                 uid1_len = n;
                 out!("6B.2 UniqueID(0x7FFF0206) len={} = {}", n, hex(&uid1[..n], &mut hb));
@@ -214,7 +260,7 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
         Ok(()) => {
             let (t1, scp) = se.t1_scp03_mut();
             let mut uid2 = [0u8; 32];
-            match apdu::read_object_plain_probe(t1, scp, apdu::UNIQUE_ID_OBJ, &mut uid2) {
+            match apdu::read_object_scp03_probe(t1, scp, apdu::UNIQUE_ID_OBJ, &mut uid2) {
                 Ok(n) => {
                     let stable = n == uid1_len && uid2[..n] == uid1[..uid1_len];
                     out!("6B.2 UniqueID after reinit stable={} = {}", stable, hex(&uid2[..n], &mut hb));
@@ -239,45 +285,34 @@ pub(crate) unsafe fn run(se: &mut Se050) -> bool {
     // Every command here is sent OUTSIDE the SCP03 channel, straight down the
     // T=1 link. A chip that requires platform SCP refuses all of them; a chip
     // that does not exposes exactly this surface to a keyless bus attacker.
-    // Read-class only: GetVersion, GetRandom, ReadIDList, CheckExists,
-    // ReadSize, and a Read of two objects (the production USERID_OBJ, expected
-    // absent, and a user-gated read attempt).
+    // Read-class only, by type: the helper takes an `apdu::PlainReadCmd`, so
+    // this file cannot name a write/delete/auth header. GetVersionExt,
+    // GetRandom, ReadIDList, CheckExists on the production USERID_OBJ
+    // (expected absent) and a Read of the user-gated ENTROPY_OBJ.
     marker!("=== SPROBE 6B.6 plain matrix ===");
     {
+        use apdu::PlainReadCmd as P;
         let (t1, _scp) = se.t1_scp03_mut();
         let mut o = [0u8; 64];
-        // GetVersionExt, Case 2 (no body, Le=0).
-        match apdu::plain_readclass_probe(t1, 0x04, 0x00, 0x21, &[], &mut o) {
+        match apdu::plain_readclass_probe(t1, P::GetVersionExt, &mut o) {
             Ok((sw, n)) => out!("6B.6 plain GetVersionExt SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
             Err(e) => out!("6B.6 plain GetVersionExt ERR {:?}", e),
         }
-        // GetRandom(8): body TAG_1(0x41) len2 = 0x0008.
-        match apdu::plain_readclass_probe(t1, 0x04, 0x00, 0x49, &[0x41, 0x02, 0x00, 0x08], &mut o) {
+        match apdu::plain_readclass_probe(t1, P::GetRandom(8), &mut o) {
             Ok((sw, n)) => out!("6B.6 plain GetRandom(8) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
             Err(e) => out!("6B.6 plain GetRandom ERR {:?}", e),
         }
-        // ReadIDList from offset 0, all types.
-        match apdu::plain_readclass_probe(t1, 0x02, 0x00, 0x25, &[0x41, 0x02, 0x00, 0x00, 0x42, 0x01, 0xFF], &mut o) {
+        match apdu::plain_readclass_probe(t1, P::ReadIdList, &mut o) {
             Ok((sw, n)) => out!("6B.6 plain ReadIDList SW=0x{:04x} datalen={}", sw, n),
             Err(e) => out!("6B.6 plain ReadIDList ERR {:?}", e),
         }
-        // CheckExists on the production USERID object (should be absent on this die).
-        let uid_oid = super::USERID_OBJ.to_be_bytes();
-        let mut body = [0u8; 6];
-        body[0] = 0x41;
-        body[1] = 0x04;
-        body[2..6].copy_from_slice(&uid_oid);
-        match apdu::plain_readclass_probe(t1, 0x04, 0x00, 0x27, &body, &mut o) {
+        match apdu::plain_readclass_probe(t1, P::CheckExists(super::USERID_OBJ), &mut o) {
             Ok((sw, n)) => out!("6B.6 plain CheckExists(USERID_OBJ) SW=0x{:04x} data={}", sw, hex(&o[..n], &mut hb)),
             Err(e) => out!("6B.6 plain CheckExists ERR {:?}", e),
         }
         // Plain Read of the production entropy object (user-gated): must be
         // refused if present, absent otherwise — never return half_E in clear.
-        let ent = super::ENTROPY_OBJ.to_be_bytes();
-        body[0] = 0x41;
-        body[1] = 0x04;
-        body[2..6].copy_from_slice(&ent);
-        match apdu::plain_readclass_probe(t1, 0x02, 0x00, 0x00, &body, &mut o) {
+        match apdu::plain_readclass_probe(t1, P::Read(super::ENTROPY_OBJ), &mut o) {
             Ok((sw, n)) => {
                 out!("6B.6 plain Read(ENTROPY_OBJ) SW=0x{:04x} datalen={}", sw, n);
                 if sw == 0x9000 && n > 0 {

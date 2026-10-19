@@ -1136,15 +1136,19 @@ pub const MEM_TRANSIENT_DESELECT: u8 = 0x03;
 pub const UNIQUE_ID_OBJ: u32 = 0x7FFF_0206;
 
 /// One page of `ReadIDList` over SCP03. Writes up to `ids.len()` object IDs
-/// into `ids`, returns `(more, count)`. `offset` is the output offset the
-/// previous page returned; start at 0. Read-only (INS_READ / P2_LIST).
+/// into `ids` and returns `(more, listed, copied)`: `listed` is how many IDs
+/// the chip put on this page, `copied` how many fit in `ids`. A page with
+/// `copied < listed` was truncated and the caller must say so. `offset` is a
+/// 0-based index into the object list, NOT a byte offset: start at 0 and add
+/// each page's `listed` (NXP `se05x_APDU_apis.h`, `Se05x_API_ReadIDList`).
+/// Read-only (INS_READ / P2_LIST).
 #[cfg(feature = "se050-probe")]
 pub unsafe fn read_id_list_probe(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     offset: u16,
     ids: &mut [u32],
-) -> Result<(bool, usize), Se050Error> {
+) -> Result<(bool, usize, usize), Se050Error> {
     let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_LIST);
     apdu.tlv(TAG_1, &offset.to_be_bytes());
     apdu.tlv(TAG_2, &[0xFF]);
@@ -1186,6 +1190,7 @@ pub unsafe fn read_id_list_probe(
     }
 
     let list_end = list_start.saturating_add(list_len).min(resp_len);
+    let listed = list_end.saturating_sub(list_start) / 4;
     let mut n = 0usize;
     let mut i = list_start;
     while i + 3 < list_end && n < ids.len() {
@@ -1196,7 +1201,7 @@ pub unsafe fn read_id_list_probe(
         n += 1;
         i += 4;
     }
-    Ok((more != 0, n))
+    Ok((more != 0, listed, n))
 }
 
 /// `ReadType` of an object (INS_READ / P2_TYPE). Copies the raw response
@@ -1266,11 +1271,11 @@ pub unsafe fn get_free_memory_probe(
     }
 }
 
-/// Read a binary/data object with no UserID session, over platform SCP03
-/// (INS_READ / P2_DEFAULT, Le). Copies the data into `out`. Used to prove a
-/// user-gated object refuses a sessionless read. Read-only.
+/// Read an object over platform SCP03 with no UserID session (INS_READ /
+/// P2_DEFAULT, Le). Copies the data into `out`. The probe uses it for the
+/// unique-ID object (6B.2). Read-only.
 #[cfg(feature = "se050-probe")]
-pub unsafe fn read_object_plain_probe(
+pub unsafe fn read_object_scp03_probe(
     t1: &mut T1State,
     scp03: &mut Scp03Session,
     obj_id: u32,
@@ -1291,30 +1296,68 @@ pub unsafe fn read_object_plain_probe(
     Ok(take)
 }
 
+/// The only commands [`plain_readclass_probe`] can send. Each variant maps to
+/// one fixed read-class header inside the helper; no variant writes, deletes
+/// or authenticates. (A raw `ins/p1/p2` interface would not be read-only:
+/// `INS_MGMT` also carries DeleteAll, and the probe file's name-based pin
+/// cannot see header bytes.)
+#[cfg(feature = "se050-probe")]
+#[derive(Clone, Copy)]
+pub enum PlainReadCmd {
+    /// GetVersionExt (INS_MGMT / P2_VERSION_EXT), Case 2.
+    GetVersionExt,
+    /// GetRandom of `n` bytes (INS_MGMT / P2_RANDOM).
+    GetRandom(u16),
+    /// ReadIDList from index 0, all types (INS_READ / P2_LIST).
+    ReadIdList,
+    /// CheckObjectExists (INS_MGMT / P2_EXIST).
+    CheckExists(u32),
+    /// Read of one object (INS_READ / P2_DEFAULT).
+    Read(u32),
+}
+
 /// Send one read-class APDU **without SCP03** (plaintext on the wire), for the
 /// §6B.6 "is platform SCP mandatory?" matrix. Drives `t1.transceive` directly,
 /// so it never goes through the `send_apdu` SCP03 guard. Returns the raw SW and
 /// copies any response data (minus SW) into `out`.
 ///
-/// Read-class only by construction: the caller passes a fixed header and the
-/// probe only ever builds GetVersion / GetRandom / ReadIDList / CheckExists /
-/// ReadSize / Read headers with it. It intentionally cannot create, write,
-/// delete or authenticate — those take TLV bodies the probe never assembles
-/// here, and the read-only `source_invariants` pin forbids the write/auth
-/// builders in the probe file.
+/// Read-class only by construction: the header and body come from
+/// [`PlainReadCmd`], so a caller cannot name a write, delete or auth command.
 #[cfg(feature = "se050-probe")]
 pub unsafe fn plain_readclass_probe(
     t1: &mut T1State,
-    ins: u8,
-    p1: u8,
-    p2: u8,
-    body: &[u8],
+    cmd: PlainReadCmd,
     out: &mut [u8],
 ) -> Result<(u16, usize), Se050Error> {
-    let mut apdu = [0u8; 64];
+    let mut body_buf = [0u8; 7];
+    let (ins, p2, body_len) = match cmd {
+        PlainReadCmd::GetVersionExt => (INS_MGMT, P2_VERSION_EXT, 0),
+        PlainReadCmd::GetRandom(n) => {
+            body_buf[..2].copy_from_slice(&[TAG_1, 0x02]);
+            body_buf[2..4].copy_from_slice(&n.to_be_bytes());
+            (INS_MGMT, P2_RANDOM, 4)
+        }
+        PlainReadCmd::ReadIdList => {
+            body_buf.copy_from_slice(&[TAG_1, 0x02, 0x00, 0x00, TAG_2, 0x01, 0xFF]);
+            (INS_READ, P2_LIST, 7)
+        }
+        PlainReadCmd::CheckExists(obj_id) => {
+            body_buf[..2].copy_from_slice(&[TAG_1, 0x04]);
+            body_buf[2..6].copy_from_slice(&obj_id.to_be_bytes());
+            (INS_MGMT, P2_EXIST, 6)
+        }
+        PlainReadCmd::Read(obj_id) => {
+            body_buf[..2].copy_from_slice(&[TAG_1, 0x04]);
+            body_buf[2..6].copy_from_slice(&obj_id.to_be_bytes());
+            (INS_READ, P2_DEFAULT, 6)
+        }
+    };
+    let body = &body_buf[..body_len];
+
+    let mut apdu = [0u8; 16];
     apdu[0] = 0x80;
     apdu[1] = ins;
-    apdu[2] = p1;
+    apdu[2] = P1_DEFAULT;
     apdu[3] = p2;
     let total;
     if body.is_empty() {
@@ -1450,7 +1493,17 @@ unsafe fn sweep(
             // MAX_LIST_PAGES) and panic under `overflow-checks = true`.
             cycle_deleted = cycle_deleted.saturating_add(d);
             cycle_failed = cycle_failed.saturating_add(f);
-            output_offset = output_offset.saturating_add(list_byte_len as u16);
+            // TAG_1 is a 0-based index into the object list, so advance by
+            // the number of IDs on this page, not their byte length (NXP
+            // `se05x_APDU_apis.h`, `Se05x_API_ReadIDList`; NXP's own
+            // `Se05x_API_DeleteAll_Iterative` sample passes bytes, against its
+            // doc). Deletions inside the page shift later IDs down, so this
+            // page walk can still skip some; the outer cycle restarts at 0 and
+            // only stops after a cycle that deleted nothing, i.e. shifted
+            // nothing, which with index paging has seen every object. A byte
+            // offset broke that: a zero-deletion cycle could jump past
+            // deletable objects on later pages and end the wipe early.
+            output_offset = output_offset.saturating_add((list_byte_len / 4) as u16);
             if more != 0x01 || list_byte_len == 0 {
                 break;
             }

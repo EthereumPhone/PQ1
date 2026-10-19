@@ -1092,7 +1092,32 @@ fn se050_probe_readonly_names_no_write_path() {
     }
     // Non-vacuous: the read-only path does exist and reads.
     assert!(
-        src.contains("read_id_list_probe") && src.contains("read_object_plain_probe"),
+        src.contains("read_id_list_probe")
+            && src.contains("read_object_scp03_probe")
+            && src.contains("plain_readclass_probe"),
         "se050 probe must call the read helpers (else this pin is vacuous)"
     );
+
+    // The name check above cannot see APDU header bytes, so the one helper
+    // that bypasses SCP03 must not take them from its caller: it takes a
+    // `PlainReadCmd` and builds a read-class header itself. A raw `ins: u8`
+    // would let the probe send INS_WRITE, or DeleteAll under INS_MGMT.
+    let apdu_rel = "secure/src/se050/apdu.rs";
+    let apdu_src = code_only(&read_workspace_file(apdu_rel));
+    let start = apdu_src
+        .find("pub unsafe fn plain_readclass_probe(")
+        .unwrap_or_else(|| panic!("{apdu_rel}: plain_readclass_probe not found"));
+    let body = &apdu_src[start..];
+    let body = &body[..body.find("\n}\n").expect("plain_readclass_probe has no end")];
+    let sig = &body[..body.find(") ->").expect("plain_readclass_probe signature")];
+    assert!(
+        sig.contains("cmd: PlainReadCmd") && !sig.contains("u8,"),
+        "{apdu_rel}: plain_readclass_probe must take a PlainReadCmd, not raw header bytes"
+    );
+    for f in ["INS_WRITE", "INS_PROCESS", "INS_AUTH_OBJECT", "INS_CRYPTO", "P2_DELETE"] {
+        assert!(
+            !body.contains(f),
+            "{apdu_rel}: plain_readclass_probe names `{f}`; it must send read-class commands only"
+        );
+    }
 }
