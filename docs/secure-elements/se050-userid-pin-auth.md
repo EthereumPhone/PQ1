@@ -1,5 +1,19 @@
 # SE050 Native UserID PIN Authentication
 
+> **UPDATE 2026-10-19 (#989): per-object policy is no longer the only gate.**
+> The SE050E2 ships `SCP_NOT_REQUIRED` (AN12413 §4.6.2): a keyless bus party
+> could send plain applet commands, so the `REQUIRE_SM` + UserID policy below
+> was the only thing between it and `half_E`. Production images
+> (`se050-platform-scp-required`) now set `SCP_REQUIRED` every boot: they
+> create a fourth UserID, the `RESERVED_ID_PLATFORM_SCP` credential at
+> `0x7FFF0207` (value `secret_keys::se050_platform_scp_credential`, BHK axis;
+> unlimited attempts; self-delete only; skipped by the wipe sweep, so it is a
+> device-level object), open a session with it and send
+> `SetPlatformSCPRequest(REQUIRED)` inside `INS_PROCESS`. Afterwards the applet
+> refuses every APDU that is not under full C+R MAC+ENC platform SCP03. The
+> object policies below still apply underneath, and DVT 6B.23
+> (`policy_halfe_plain_refused`) proves them on a present object independently.
+
 > **UPDATE 2026-10-13 (#855, Ledger Donjon report).** Everywhere this document
 > says the UserID object holds, or is verified against, "the PIN", read **"the
 > die-bound PIN credential"**. Until this date the firmware wrote the raw eight
