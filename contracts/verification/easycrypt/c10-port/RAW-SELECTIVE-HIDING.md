@@ -41,8 +41,11 @@ The separate Lean continuation now also bounds both WOTS earlier-exposure
 branches by `316237824*(155867+2*qr+qs*364076)/2^128`. It retains complete
 successful histories, exact adaptive prefix/cache restoration, full C10
 refinement, raw/final-verifier disclosures and the seven-cut recurrence.
-Final six-case PMF composition remains open. These are original observed
-independent-game events, with no cache-visible shared-oracle transfer claim.
+The [six-case PMF composition](../../probability/README.md#six-case-initialized-forgery-bound)
+now bounds the actual finite initialized forgery event. These opening events
+remain on the original observed independent cache; only the final Boolean
+forge event receives the existing shared-oracle prefix transfer. No cache-visible
+shared-oracle equivalence is asserted.
 The EasyCrypt statements and numerical results below are unchanged.
 
 ## Repeated fixed candidates

@@ -3964,4 +3964,83 @@ def cases(project: Path) -> list[dict]:
     ca_statement("keygen-work-budget-understated", "WotsSubtreeOpening", "wots_subtree_root_opening_budget",
         "155135", "155134")
 
+    # Six-case composition: definitions must typecheck; unchanged full consumers
+    # reject semantic changes. Rejection is sensitivity, not mutant falsity.
+    cb_prefix = ("import C10Probability.ForgeExamples\nimport C10Probability.ForgeNumeric\n"
+                 "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n"
+                 "set_option exponentiation.threshold 512\nset_option maxRecDepth 80000\n")
+    cb_suffix = "\nend\nend C10Probability\n"
+
+    def cb_variants(pairs, module, consumer, variants):
+        names = {name: name + "CBCandidate" for _, name in pairs}
+        declarations = []
+        for owner, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|attribute|end|set_option)\b)",
+                src[owner], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing six-case definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "CBSlice"
+        src[key] = cb_prefix + "\n".join(declarations) + cb_suffix
+        check = theorem(src[module], consumer)
+        for before, after in names.items():
+            check = re.sub(r"\b" + before + r"\b", after, check)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("forge-composition-" + label, key, old, new, check, expected)
+
+    cb_variants([("ForgeBound", "independentForgeCharge")], "ForgeBound", "c10_observed_independent_forge_bound", [
+        ("node-collision-lost", "((sessionGameSelected cfg qr qs).choose 2 : ℝ≥0∞) / 2 ^ 128", "0", False),
+        ("public-zero-lost", "(sessionGameRaw cfg qr qs : ℝ≥0∞) / 2 ^ 128", "0", False),
+        ("accepted-collision-lost", "acceptedWotsGameCharge (sessionGameRaw cfg qr qs)", "0", False),
+        ("earlier-wots-lost", "ordinaryWotsOpeningCharge qr qs", "0", False),
+        ("fors-opening-lost", "ordinaryForsOpeningCharge cfg qr qs", "0", False),
+        ("fors-coverage-lost", "forsCoverageCharge (qr + qs + 1)", "0", False),
+        ("node-denominator-doubled", "choose 2 : ℝ≥0∞) / 2 ^ 128", "choose 2 : ℝ≥0∞) / 2 ^ 129", False),
+        ("zero-denominator-doubled", "sessionGameRaw cfg qr qs : ℝ≥0∞) / 2 ^ 128", "sessionGameRaw cfg qr qs : ℝ≥0∞) / 2 ^ 129", False),
+        ("coverage-final-query-lost", "forsCoverageCharge (qr + qs + 1)", "forsCoverageCharge (qr + qs)", False),
+        ("coverage-signatures-lost", "forsCoverageCharge (qr + qs + 1)", "forsCoverageCharge (qr + 1)", False),
+        ("coverage-raw-queries-lost", "forsCoverageCharge (qr + qs + 1)", "forsCoverageCharge (qs + 1)", False),
+        ("opening-raw-queries-lost", "ordinaryWotsOpeningCharge qr qs", "ordinaryWotsOpeningCharge 0 qs", False),
+        ("coverage-id", "forsCoverageCharge (qr + qs + 1)", "forsCoverageCharge (id (qr + qs + 1))", True),
+    ])
+    cb_variants([("SharedForgeBound", "sharedForgeCharge")], "SharedForgeBound", "c10_shared_forge_bound", [
+        ("shared-prefix-lost", "(sessionGamePublic cfg qr qs : ℝ≥0∞) / 2 ^ 256", "0", False),
+        ("shared-independent-lost", "independentForgeCharge cfg qr qs", "0", False),
+        ("prefix-denominator-doubled", "/ 2 ^ 256", "/ 2 ^ 257", False),
+        ("prefix-raw-queries-lost", "sessionGamePublic cfg qr qs", "sessionGamePublic cfg 0 qs", False),
+        ("shared-charge-id", "independentForgeCharge cfg qr qs", "id (independentForgeCharge cfg qr qs)", True),
+    ])
+    cb_variants([("ForgeBound", "independentForgeCharge")], "ForgeArithmetic", "independent_forge_charge_real", [
+        ("opening-signatures-lost", "ordinaryForsOpeningCharge cfg qr qs", "ordinaryForsOpeningCharge cfg qr 0", False),
+    ])
+    cb_variants([("SharedForgeBound", "sharedForgeCharge")], "SharedForgeBound", "shared_forge_charge_real", [
+        ("prefix-signatures-lost", "sessionGamePublic cfg qr qs", "sessionGamePublic cfg qr 0", False),
+    ])
+    cb_variants([("TaggedCacheCharges", "acceptedWotsGameCharge")], "TaggedCacheCharges", "tagged_program_accepted_bound", [
+        ("accepted-pairs-arity", "n.choose 2", "n.choose 3", False),
+        ("accepted-mass-removed", "22169393903687611906220091621190388", "1", False),
+        ("accepted-target-alphabet", "/ 8 ^ 43) / 8 ^ 43", "/ 8 ^ 43) / 8 ^ 44", False),
+        ("accepted-pairs-id", "n.choose 2", "(id n).choose 2", True),
+    ])
+    cb_variants([("TaggedCacheCharges", "nodeBudgetSelector")], "ForgeExamples", "node_budget_public_domains_example", [
+        ("node-domain-all-excluded", "nodeQuery ∘ privateKey prefixedPrivateInput 0", "fun _ => false", False),
+        ("node-domain-all-included", "nodeQuery ∘ privateKey prefixedPrivateInput 0", "fun _ => true", False),
+        ("node-domain-id", "nodeQuery ∘ privateKey prefixedPrivateInput 0", "(fun key => nodeQuery key) ∘ privateKey prefixedPrivateInput 0", True),
+    ])
+    cb_variants([("TaggedCacheCharges", "nodeBudgetSelector")], "TaggedCacheCharges", "c10_independent_game_selected", [
+        ("node-budget-charges-all-grinding", "nodeQuery ∘ privateKey prefixedPrivateInput 0", "fun _ => true", False),
+    ])
+    cb_variants([("ForgeNumeric", "forgeExampleConfig")], "ForgeNumeric", "forge_example_costs", [
+        ("example-r-grind-zero", "signingBudget, signingBudget, by decide, by decide", "0, signingBudget, by decide, by decide", False),
+        ("example-w-grind-zero", "signingBudget, signingBudget, by decide, by decide", "signingBudget, 0, by decide, by decide", False),
+        ("example-grind-id", "signingBudget, signingBudget, by decide, by decide", "id signingBudget, signingBudget, by decide, by decide", True),
+    ])
+
     return out

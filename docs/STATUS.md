@@ -183,11 +183,14 @@ See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMER
 and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 
 **Separate C10 probability frontier (2026-10-19):** the authoritative
-[PMF project](../contracts/verification/probability/README.md#wots-earlier-than-all-exposures-opening-charge)
-now derives ordinary FORS and both WOTS earlier-exposure opening charges in the
-actual initialized observed independent game, including complete histories and
-raw/verifier disclosures. Final six-case probability composition remains open
-under #295. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
+[PMF project](../contracts/verification/probability/README.md#six-case-initialized-forgery-bound)
+now composes all six actual winning-output alternatives into a finite
+initialized forgery probability bound. Only the final Boolean event transfers
+to the shared oracle. Kernel examples at 65,536 signing requests give bounds
+below `2^-50` for `2^20` raw queries and below `2^-34` for `2^24`; at `2^32`
+the conservative coverage union makes the capped bound uninformative (`1`).
+The codec, unbounded-adversary representation and concrete correspondence
+remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
 QROM or hardware claim. The dated development history below is not the current
 proof inventory; use the linked owner for counts, gates and remaining limits.
 

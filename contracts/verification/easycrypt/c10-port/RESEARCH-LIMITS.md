@@ -7,6 +7,18 @@ status label. Work remains tracked under PQ1 #100 and #295.
 
 ## Quantitative loss
 
+**Current separate Lean frontier (2026-10-19):** the
+[six-case composition](../../probability/README.md#six-case-initialized-forgery-bound)
+now proves the finite initialized structured `Pr[forge] <= epsilon`, including
+real-valued conversion and the final Boolean shared-oracle transfer. All six
+alternatives remain charged; cache-visible events are not transferred. At
+ten-million-trial grinders and 65,536 signing requests, the kernel checks bounds
+below `2^-50` for `2^20` raw queries and `2^-34` for `2^24`. At `2^32` raw
+queries the coverage union exceeds one and the capped bound is exactly one.
+These conservative ideal-model figures add no concrete implementation margin.
+The codec, unbounded-adversary representation, repeated-grinder freshness,
+concrete backend/Rust/EasyCrypt and physical/QROM boundaries remain open.
+
 The [separate mathlib PMF project](../../probability/README.md) proves bounded
 independent sampling, including exact first-hit, returned-event and exhaustion
 probabilities. It now derives the C10 WOTS/FORS projection PMFs from a full
@@ -28,8 +40,9 @@ and exact domain separation: deterministic/hedged R inputs occupy 103/119 bytes,
 while H_msg inputs occupy 160 bytes. Its selected R, full digest, counter and
 observed table are retained; only an explicit later projection forgets R for
 the digest-result event bound. The empty-cache exhaustion bound follows at the
-ten-million cap. Global initial R-input freshness, the full probability-monad
-forgery-game theorem and shared signer-session transfer remain open. Neither
+ten-million cap. Global initial R-input freshness remains open. The finite structured
+forgery-game bound and Boolean shared-oracle transfer are now composed below;
+concrete signer-session correspondence remains open. Neither
 nonce uniqueness nor a secret prefix proves absence from arbitrary prior
 queries or earlier signing calls.
 A bounded adaptive oracle interpreter additionally proves the final-table
@@ -90,7 +103,7 @@ This closes the grinder's application to the private-prefix interface and
 its bounded-continuation restriction. It does not make repeated private inputs
 fresh or transfer the earlier independent-R exhaustion bound to arbitrary
 repeated calls. The manual structured C10 clients are now composed below;
-adaptive session/PMF forgery composition and concrete backend correspondence remain open.
+finite adaptive session/PMF forgery composition is now proved below; concrete backend correspondence remains open.
 The accepted WOTS encoding collision component now also has a separate PMF
 proof over the actual adaptive memoized interpreter. Its acceptance-filtered
 observer preserves the full cache and result, and its derived history bound is
@@ -132,8 +145,9 @@ is `(q.choose 2+n)/2^128`: the zero term still uses the full total index `n`.
 The actual physical R/H_msg grinder proves at most one selected and two raw
 calls per trial, yielding `(trials.choose 2+2*trials)/2^128`; this needs no
 freshness or successful-grinding premise. The complete EasyCrypt C10 node-cost
-formula, selected successful-output witnesses and full PMF forgery partition
-remain unported. The R query is retained in this physical one-cache program;
+formula remains unported. The separate Lean structured game has its own proved
+budgets and final bound below; concrete implementation correspondence remains
+open. The R query is retained in this physical one-cache program;
 the separate-private-cache experiment is not silently substituted.
 The ordinary WOTS count and chain components now have separate PMF client
 compilations. Exact address/count/chain bytes, counters, early success, failure,
@@ -201,12 +215,12 @@ one full cache. For raw/sign caps `qr,qs`, initialized costs are
 fuel. R inputs remain selected. The empty-cache physical node charge is
 `(choose(selected,2)+total)/2^128`; with an independent uniform hidden secret,
 initialized shared/independent returned-event error is at most `public/2^256`.
-The real-valued forgery-transfer theorem retains the independent game's forgery
-probability as an unresolved term. This closes finite structured session
+The component real-valued forgery-transfer theorem retains the independent
+game's probability as a term; the combined bound below now charges it. This closes finite structured session
 composition and cost; honest structured correctness is now proved below.
 It does not close the 4008-byte PMF codec,
-arbitrary lossless/unbounded-adversary representation, successful-output/forgery
-partition, final forgery bound or repeated-grinder freshness. The `none` exhaustion model does not prove runtime panic/retry,
+arbitrary lossless/unbounded-adversary representation or repeated-grinder
+freshness. The supported forgery alternatives and finite bound are now composed below. The `none` exhaustion model does not prove runtime panic/retry,
 callback or erasure semantics. Passive observations now retain actual successful
 request/signature exposures and admitted client hash inputs, with exact
 session/game result-and-cache erasure. Lookup-only replay in the actual final
@@ -214,7 +228,7 @@ cache supports joint keygen, exposure, ledger/cap, freshness and verifier
 witnesses, including ordered layers and rejected WOTS zero branches.
 Initialized returned-Boolean erasure inherits the existing transfer; it does
 not compare cache-visible events. This supplies a dependency for the six-case
-cryptographic partition, which remains open with the final numerical bound.
+cryptographic alternatives and finite numerical bound now composed below.
 Actual indexed tree builders now supply recorded Merkle/FORS root certificates
 in the PMF model. Every valid coordinate chosen later has a derived reference
 leaf and path; actual recovery at that coordinate binds to the actual WOTS leaf
@@ -234,7 +248,7 @@ accepted words at a common address gives equal words/values or an earlier
 position with a suffix to the signed value. This closes chain-opening extraction;
 it does not establish that the earlier value is undisclosed or that equal words
 mean equal messages. The complete repeated-address minimum is now derived below. The structural FORS descent, adaptive coverage and WOTS opening charges are
-derived below; the complete six-case partition/final bound remains open. Forward correctness is now derived for the
+derived below; the complete six-case finite bound is now composed below. Forward correctness is now derived for the
 actual returned Merkle/FORS authentication arrays at every valid target, using
 certified stored siblings and the same cache; concrete merge alignment, bounds
 and kept-flag initialization are discharged. Recovery preserves the actual WOTS
@@ -254,7 +268,7 @@ success or a forgery bound. Eleven finite examples include asymmetric component
 executions and counterexamples for wrong supplied roots and overwritten caches;
 the inhabited whole-signature example uses a populated constant cache, not an
 empty-cache success-probability argument. The structural FORS descent, adaptive coverage and WOTS opening charges are
-derived below; the final six-case forgery partition/bound remains open. The structured theorem
+derived below; the final six-case finite forgery bound is now composed below. The structured theorem
 does not close the byte codec or concrete/hash/Rust/cross-kernel boundaries.
 The repeated-address minimum component is now structurally derived from actual
 signing: functional tree/forest root uniqueness, bounded count replay and the
@@ -272,7 +286,7 @@ counterexample shows why uniformity must be derived: an arbitrary minimum need
 not have sum 205. This closes positional comparison only; it does not prove
 secrecy, absence from raw queries or a private-opening probability charge.
 The structural FORS descent, adaptive coverage and WOTS opening charges are
-derived below; the complete six-case PMF partition/bound remains open. No byte-codec, concrete hash,
+derived below; the complete six-case finite PMF bound is now composed below. No byte-codec, concrete hash,
 Rust, cross-kernel, unbounded-adversary or repeated-freshness claim follows.
 The repeated upper-word branch now descends into the actual lower tree. Actual
 selected count lookups either expose two distinct public inputs with the same
@@ -306,8 +320,8 @@ charge. The actual observed/support/initialized winning endpoints retain the
 complete history, cap, prior upper/lower occurrences and all collision/zero and
 earlier-chain alternatives. Eight finite boundary examples and 45 complete-proof
 controls accompany this structural descent. The adaptive coverage charge is
-derived below, together with WOTS opening charges; final six-case PMF composition
-remains open, alongside the existing codec, unbounded-adversary, repeated-freshness and implementation limits.
+derived below, together with WOTS opening charges and the six-case PMF composition.
+The codec, unbounded-adversary, repeated-freshness and implementation limits remain.
 The fixed-sample quantitative dependency is now derived separately in Lean.
 A full 256-bit equivalence retains 95 high bits, 18 hypertree bits, the actual
 11-bit guard and twelve ordinary 11-bit indices. The uniform accepted-digest
@@ -350,7 +364,7 @@ hypertree address. Coordinates may use different prior signatures. Thus
 independently initialized observed PMF by the exact existing Stirling charge at
 `qr + qs + 1`; its real-valued form is also derived. This proves that branch's
 upper bound without declaring cache hits independent or assuming the cap.
-The ordinary FORS and WOTS opening charges are derived next; final six-case PMF composition remains open. Existing unbounded-adversary, codec, repeated-grinder freshness and
+The ordinary FORS and WOTS opening charges are derived next; six-case PMF composition is now proved below. Existing unbounded-adversary, codec, repeated-grinder freshness and
 implementation limits remain. No EasyCrypt theorem is imported into Lean.
 This continuation adds 107 theorem closures, nine boundary examples and 58
 complete-proof controls including eleven equivalent forms. All 1760 preceding
@@ -394,8 +408,12 @@ earlier-exposure branches. A kernel example proves this charge is below
 `2^-64` at `qr=2^32, qs=65536`; it is not a full signer security margin.
 The batch adds 299 closures in 57 modules, 34 boundary examples and 93 controls,
 retaining all 2102 prior statements, 1283 fixtures and 52 manual bindings.
-The inventory now has 2401 theorem closures and 1376 typed sensitivity cases.
-Final six-case probability composition remains open. These separate Lean
+That preceding inventory had 2401 theorem closures and 1376 typed cases.
+The six-case composition adds 48 closures in eight modules and 31 typed controls,
+preserving every prior statement, fixture and non-umbrella proof module. The
+current inventory is 2449 closures and 1407 typed cases. The combined bound
+retains all six events, uses exact tagged-cache erasure for collision/zero
+charges, and transfers only the final Boolean with the public-prefix charge. These separate Lean
 results import no EasyCrypt theorem and establish no concrete hash, Rust
 execution, cross-kernel, QROM or hardware correspondence. Cache-visible events
 have no shared/independent transfer; the existing transfer concerns Boolean

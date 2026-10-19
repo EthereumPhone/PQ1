@@ -17,8 +17,9 @@ executions through one shared memo table and separate memo tables, including
 queries chosen from earlier private replies.
 The actual two-query FORS grinder now has an exact client compilation and a
 prefix-error comparison with bounded adaptive work before and after the call.
-**The probability-monad forgery-game theorem
-and full signer-session transfer remain open.** The existing
+**The finite initialized structured forgery bound is now composed below,
+including the returned-Boolean shared-oracle transfer. Concrete signer-session
+correspondence remains open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
 ## What is checked
@@ -167,8 +168,7 @@ event. This is the FORS coverage branch's upper bound, not a full forgery bound.
 Nine kernel-checked examples cover accepted/rejected/unselected entries,
 159/160/161-byte and private query domains, repeated cached/fresh calls, charged
 cache hits, refusal and admitted exhaustion. The ordinary FORS private-opening
-charge and both WOTS earlier-opening charges are derived below. Final six-case
-PMF composition remains open.
+charge and both WOTS earlier-opening charges are derived below. The six-case composition is proved below.
 
 `OpeningProgram.lean` gives a selected node an explicit commitment interface:
 public calls and commitments share one cache, while an adaptive reveal returns
@@ -220,8 +220,7 @@ history and a cached ordinary private opening. The union factor is
 probability or a tight 128-bit security claim.
 
 This retires the separate PMF ordinary FORS opening charge. The WOTS
-continuation below supplies the other opening charge. Final six-case probability
-composition remains open. No EasyCrypt execution, concrete SHA/Rust
+continuation below supplies the other opening charge. The six-case composition is proved below. No EasyCrypt execution, concrete SHA/Rust
 correspondence, QROM or physical claim is added.
 
 ### WOTS earlier-than-all-exposures opening charge
@@ -272,11 +271,76 @@ freshness, transcript independence, session budget or disclosure implication:
 those obligations are proved from the actual programs and complete history.
 A kernel arithmetic example gives a charge below `2^-64` at `qr = 2^32` and
 `qs = 65536`. This is a conservative branch bound, not a tight 128-bit margin
-or a full forgery theorem. The final six-case probability composition remains
-open, together with the existing concrete-backend, codec, unbounded-adversary,
-repeated-grinder freshness, QROM and physical limits. These cache-visible events
+or a full forgery theorem. The six-case probability composition is proved next. The concrete-backend,
+codec, unbounded-adversary, repeated-grinder freshness, QROM and physical limits remain. These cache-visible events
 are not transferred to the physical shared oracle; only the existing Boolean
 result transfer has that interface.
+
+## Six-case initialized forgery bound
+
+`ObservedForgeCases.lean` now maps every supported accepted forgery in the
+original initialized independent game into six alternatives: selected public
+node collision, public zero, accepted WOTS-word collision, earlier WOTS
+exposure, unmatched ordinary FORS opening, or FORS coverage. These events may
+overlap. No disjointness or hidden-history independence is assumed.
+
+`TaggedCacheCharges.lean` and `ObservedCacheCharges.lean` derive the first
+three charges in that same tagged cache. The node selector reuses the existing
+syntactic budget by mapping query labels only; it does not equate independent
+and physical caches. Exact observed-game erasure preserves the full cache.
+`ForgeBound.lean` then combines those charges with the existing opening and
+coverage bounds. All statements quantify over arbitrary PMFs of finite
+adaptive clients, with empty initial caches, actual keygen, signing failures,
+caps, complete successful histories and final verification retained.
+
+For raw-query cap `qr`, signing cap `qs`, and grinder limits `r` and `w`, write
+
+```
+N = qr + qs*(2*r + 2*w + 435044) + 177512
+S = qr + qs*(r + 435042) + 177509
+P = qr + qs*(r + 2*w + 364290) + 155496
+A = 22169393903687611906220091621190388
+```
+
+The independent charge is
+
+```
+choose(S,2)/2^128 + N/2^128 + choose(N,2)*A/8^86
++ ordinaryWotsOpeningCharge(qr,qs)
++ ordinaryForsOpeningCharge(cfg,qr,qs)
++ forsCoverageCharge(qr+qs+1).
+```
+
+`SharedForgeBound.lean` transfers only the final Boolean event with the existing
+`P/2^256` secret-prefix charge. The main endpoints are
+`c10_shared_forge_bound_real` and `c10_shared_forge_bound_real_capped`:
+`Pr[forge] <= min(1, independent charge + P/2^256)`. The observed shared game
+has the same bound through exact Boolean erasure. No cache-visible event
+transfer is needed. `ForgeArithmetic.lean` proves the expanded real formula,
+including the FORS opening minimum and every Stirling/falling-factorial term.
+
+At `r=w=10000000` and `qs=65536`, `ForgeNumeric.lean` checks:
+
+| Raw-query cap | Bound for the actual initialized shared model |
+|---|---|
+| `2^20` | strictly below `2^-50` |
+| `2^24` | strictly below `2^-34` |
+| `2^32` | capped bound is `1`; the coverage charge alone exceeds `1` |
+
+The first two examples consume the general shared-game theorem. The third
+is a proved limitation of this conservative union bound, not a forgery attack
+or a claim that the actual success probability is one. These figures are
+budget-specific ideal-model upper bounds, not concrete wallet security levels.
+The node budget still charges worst-case grinder work; the coverage pool cap
+charges every admitted raw query as potentially accepted. Tightening either
+requires further proofs and is outside this composition.
+
+This closes the finite structured PMF successful-output composition and its
+quantitative bound under #295. The 4,008-byte codec, representation of arbitrary
+unbounded/lossless adversaries, repeated-grinder freshness, concrete SHA/Rust
+and EasyCrypt execution correspondence, cross-kernel transfer, QROM and physical
+claims remain outside this result. The existing qualitative crypto assumptions
+and the separate mathlib-free `lean/` project are unchanged.
 
 ## Independence and correspondence boundary
 
@@ -923,8 +987,8 @@ residual event. `SessionBranches.lean` characterizes successful driver support,
 and `SessionExamples.lean` checks refused calls, repeated cache reads, admitted
 exhaustion, duplicate successful messages, replay rejection and a populated-cache
 initialized success. These are finite structured clients, not a representation
-theorem for every lossless or unbounded EasyCrypt adversary. The byte codec,
-successful-output partition and final forgery bound remain open.
+theorem for every lossless or unbounded EasyCrypt adversary. The byte codec remains open. The supported successful-output alternatives
+and final finite-model forgery bound are composed above.
 
 The passive observed interpreter in `ObservedSession.lean` now retains each
 successful request/signature exposure and each admitted client hash input in
@@ -945,8 +1009,7 @@ root equality does not establish acceptance of every WOTS count.
 
 `ObservedInitialized.lean` proves exact returned-Boolean erasure for both
 initialized games and inherits their existing `P/2^256` transfer. It does not
-compare cache-visible events across the two oracle interfaces. The six-case
-cryptographic forgery partition and final numerical bound still need proofs.
+compare cache-visible events across the two oracle interfaces. The six-case alternatives and finite numerical bound are composed above.
 Finite examples check refusal, order, repeated cached queries, exhaustion,
 duplicate signatures, replay rejection and populated-cache success; that last
 witness supplies no empty-cache success probability.
@@ -997,7 +1060,7 @@ some recovered position is earlier, with an actual suffix to the signed value.
 An earlier position is not necessarily undisclosed, and equal words need not
 mean equal messages or full digests. The complete repeated-address minimum is derived below. FORS
 descent is derived below and adaptive coverage above. WOTS opening charges are derived above;
-the complete six-case partition/final forgery bound remains open.
+the complete six-case finite-model forgery bound is composed above.
 
 The 21 additional finite examples in `ChainBindingExamples.lean` and
 `WotsOpeningExamples.lean` cover split chains, binding failures without the
@@ -1086,7 +1149,7 @@ winning-game endpoints retain the original collision and public-zero alternative
 An earlier position is not a secrecy claim, absence from raw queries, or a
 private-opening probability charge; equal words do not imply equal full digests.
 The repeated upper-word branch is descended into the lower tree below. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
-WOTS opening charges are derived above; the final six-case PMF bound remains open.
+WOTS opening charges are derived above; the six-case PMF bound is composed above.
 
 The fifteen finite examples in `ExposureExamples.lean` and
 `ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
@@ -1125,7 +1188,7 @@ lower root, plus the lower opening and comparison. The top-earlier, selected-nod
 collision, public-zero and accepted-word-collision alternatives remain explicit.
 A lower earlier position still makes no secrecy or private-opening probability
 claim. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
-WOTS opening charging is derived above; the final six-case PMF bound remains open.
+WOTS opening charging is derived above; the six-case PMF bound is composed above.
 
 The seven kernel-checked examples in `LowerDescentExamples.lean` exercise distinct
 node messages, actual accepted collisions, harmless repeated use of one input,
@@ -1168,7 +1231,7 @@ They retain the complete history and cap, actual top/lower openings, prior
 upper/lower occurrences, both earlier-chain alternatives, and all original
 node-collision/public-zero/accepted-word-collision alternatives. This closes the
 structural repeated-lower-word FORS descent. The adaptive coverage charge is
-derived above, together with WOTS opening charges; final six-case PMF composition remains open.
+derived above, together with WOTS opening charges; six-case PMF composition is proved above.
 
 The eight kernel-checked examples in `ForestDescentExamples.lean` cover empty and
 duplicate histories, coverage mixed across distinct prior digests, the need for
@@ -1221,16 +1284,26 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2401 theorem closures against
+The gate rebuilds every project module, checks all 2449 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1376 typed cases run 4128 compiler jobs: each baseline and changed
-definition must compile, 1207 changed behaviors must reject at the
-consuming `checked` theorem, and 169 value-preserving changes must pass.
+1407 typed cases run 4221 compiler jobs: each baseline and changed
+definition must compile, 1233 changed behaviors must reject at the
+consuming `checked` theorem, and 174 value-preserving changes must pass.
+The six-case composition adds 48 theorem closures in eight modules and
+31 controls (26 negative, five equivalent). Its complete consumers retain all
+six charges, public/selected/total budgets, the accepted-word alphabet,
+coverage's final query and signing/raw caps, and the Boolean prefix-transfer
+charge. Examples cover overlapping events, every alternative, private-only
+zero entries, a public zero without a collision, no-signature work, and the
+informative and saturated numerical bounds. All 2401 preceding statements,
+1376 fixture objects, non-umbrella proof-module bytes and 52 manual bindings
+are preserved. The compiler heartbeat and memory policy is unchanged; numeric
+examples locally permit exponentiation through 512 for the 2^348 denominator.
 The 93 WOTS opening controls add 82 negatives and 11 equivalent forms. They
 exercise baseline-cache restoration, query multiplicity/order, full-digest
 probes, actual address/cut boundaries, endpoint exclusion, successful release
