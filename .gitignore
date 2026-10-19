@@ -42,7 +42,7 @@ contracts/verification/easycrypt/**/*.eco
 !docs/hardware/pcb/*.pdf
 !docs/hardware/schematics/*.pdf
 docs/secure-elements/SE050/SE-PLUG-TRUST-MW_04.07.01/
-docs/SE050C2HQ1_Z01SDZ/
+docs/SE050E2HQ1_Z01Z3Z/
 docs/SLS32AIA010MKUSON10XTMA2/
 
 # Bench photos / local artifacts

@@ -291,7 +291,10 @@ divergence falsifies. Guard-time violation injection on the bench.
     — so it does **not** discharge SCP03 — and "Not all key sizes... have sufficient
     cryptographic strength to satisfy the AVA_VAN.5 'high attack potential'". It also covers
     only JCOP 4 SE050 v4.7 R2.00.11/R2.03.11; **we have not confirmed our bench part matches
-    that version.** SecureBox permits "execution of non-certified native software within the
+    that version.** *(UPDATE 2026-10-19: the bench and production part is the same SE050E2,
+    `SE050E2HQ1/Z01Z3Z`, IoT applet 7.2.0. Whether its JCOP release is inside this TOE, or is
+    covered by a separate SE050E certificate, is still unchecked; it needs the card-manager CPLC
+    read, DVT checklist 6B.1.)* SecureBox permits "execution of non-certified native software within the
     TOE" (D6).
   - At EAL6 a formal security policy model **is** mandatory (ADV_SPM.1 is in the EAL6/EAL7
     packages). But under CC 3.1 its scope was an ST-author *assignment*, and under the

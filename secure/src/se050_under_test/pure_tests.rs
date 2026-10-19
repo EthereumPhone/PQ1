@@ -409,8 +409,8 @@ fn positive_write_binary_data_uses_plain_ins_write() {
 
 #[test]
 fn positive_scp03_key_version_is_0x0b() {
-    // SE050 platform keyset is KVN 0x0B (generic across SE05X variants,
-    // incl. SE050C2); PUT KEY replaces it in place,
+    // SE050 platform keyset is KVN 0x0B (generic across SE05X variants;
+    // silicon-confirmed on the fitted SE050E2); PUT KEY replaces it in place,
     // so a refactor that bumped the constant to 0x0C would silently
     // open the wrong keyset and the chip would reject EXTERNAL AUTH.
     assert!(SCP03_SRC.contains("init_update[2] = KEY_VERSION;"));

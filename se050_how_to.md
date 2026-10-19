@@ -1,5 +1,15 @@
 # Minimal SE050 seed-storage design for STM32 + OM-SE050ARD-E
 
+> **Status note (2026-10-19).** This is an early design note for a Plug & Trust Nano
+> PoC, not a description of the shipped driver (`secure/src/se050/`). The part it
+> targets, the SE050E2 on the OM-SE050ARD-E, **is** the production part
+> (`SE050E2HQ1/Z01Z3Z`); canonical part facts are in
+> `docs/secure-elements/se050-silicon-findings.md` § "Part identity". **One error
+> below:** `RESERVED_ID_FACTORY_RESET` is `0x7FFF0205`, not `0x7FFF0201` (that is
+> `kSE05x_AppletResID_KP_ECKEY_USER`, NXP `se05x_enums.h`), and customer writes to it
+> are refused with `0x6985` on this part (`docs/secure-elements/se050-factory-reset.md`),
+> so the public-DeleteAll design here does not work as written.
+
 The simplest implementation that satisfies every requirement uses **two NXP UserID authentication objects and one Binary File**, all driven from the `Se05x_API_*` layer of the **NXP Plug & Trust Nano package**. The 32-byte seed lives in a Binary File whose policy grants `ALLOW_READ` only to a PIN-gated UserID (`max_attempts = 10`); a second UserID provisioned at the reserved slot `RESERVED_ID_FACTORY_RESET` with a **publicly-known, hardcoded value** unlocks `DeleteAll`, giving the user an always-available factory reset. This keeps the design to one object type (UserID + BinaryFile), one policy set, and two top-level APDUs per operation — the minimum the SE050 applet allows.
 
 The catch the user's requirements imply does not exist cleanly: the SE050 applet **has no unauthenticated factory-reset path**. DeleteAll is always gated by a session authenticated against the reserved object `RESERVED_ID_FACTORY_RESET`. The design therefore treats that object as a *public* gate — its UserID value is a compiled-in constant, so anyone running the firmware's factory-reset routine can invoke it without the user-facing PIN. That achieves the spirit of requirement #4 (no PIN needed to recover a bricked device) while being honest about the chip's constraints.

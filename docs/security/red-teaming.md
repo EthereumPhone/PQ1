@@ -1,7 +1,7 @@
 # PQ1 / PQSigner OS — EVT Red-Teaming Plan
 
 **Status:** draft for the first EVT (engineering validation test) hardware build
-**Target:** PQ1 hardware wallet — STM32U585 (Cortex-M33, TrustZone) + OPTIGA Trust M V3 + SE050, SPHINCS+C10-only, ERC-4337 v0.6
+**Target:** PQ1 hardware wallet — STM32U585 (Cortex-M33, TrustZone) + OPTIGA Trust M V3 + SE050E2 (`SE050E2HQ1/Z01Z3Z`, the production part), SPHINCS+C10-only, ERC-4337 v0.6
 **Author:** generated from a codebase deep-dive (2026-06-12)
 **Scope:** what to attack, how, with which instrument, and the pass/fail bar — once the EVT board is provisioned and bumped to RDP-2.
 
@@ -74,7 +74,7 @@ Highest-value targets, in order:
 
 | Instrument | Proves | Cannot prove |
 |---|---|---|
-| **Logic analyzer / scope on I²C1, I²C2, LCD SPI, USB** | Channel confidentiality (ciphertext + MAC on the wire), protocol sequencing, "no plaintext secret on any bus", timing of phases | RNG quality (entropy is encrypted or internal), key values, anything inside the die |
+| **Logic analyzer / scope on I²C1 (OPTIGA), the SE050 bus (I²C4 on pq1), LCD SPI, USB** | Channel confidentiality (ciphertext + MAC on the wire), protocol sequencing, "no plaintext secret on any bus", timing of phases | RNG quality (entropy is encrypted or internal), key values, anything inside the die |
 | **Instrumented RDP-0 build + entropy dump → NIST/AIS-31 suites** | TRNG statistical health, per-source independence | Nothing about the production-config device's runtime behaviour |
 | **Voltage/clock/EM glitch rig (ChipWhisperer / NewAE Scaffold / EMFI probe)** | Fault-injection resistance (gate skips, sentinel bypass, counter rollback) | Confidentiality; needs the `sca-trigger` GPIO or a power-signature trigger to sync |
 | **Power/EM CPA-DPA rig (current probe + scope + capture tooling)** | Side-channel leakage of WOTS/FORS secrets during signing | Logic-level behaviour; this is analog, not a digital LA |
@@ -314,11 +314,11 @@ a DPA barrier — masking is the only SCA mitigation today.
 ### 5.1 SE050 SCP03 confidentiality — **closes the pending S-5 silicon item**
 
 **Property.** SCP03 negotiated at `P1=0x33` (C-MAC + C-DEC + R-MAC + R-ENC); the response phase
-is ciphertext + 8-byte R-MAC, so `half_E` is never plaintext on I²C2. `secure/src/se050/scp03.rs`,
+is ciphertext + 8-byte R-MAC, so `half_E` is never plaintext on the SE050 bus (I²C4 on PB6/PB7 on pq1; I²C1 on the iota2 dev kit). `secure/src/se050/scp03.rs`,
 `secure/src/se050/apdu.rs`. **This is the explicit "still pending" verification in CLAUDE.md.**
 
 **Test (logic analyzer — this is the LA's sweet spot).**
-- Capture I²C2 across a full unlock cycle (`read_authed(ENTROPY_OBJ)`).
+- Capture the SE050 bus across a full unlock cycle (`read_authed(ENTROPY_OBJ)`).
 - Confirm the **command** phase: header plaintext, body encrypted + C-MAC.
 - Confirm the **response** phase: 8-byte MCV/R-MAC + ciphertext body + SW — **no `half_E`
   plaintext anywhere**. Decrypt offline with the session S-ENC key to prove the entropy is only
@@ -473,7 +473,7 @@ transport root**, and the resume path reports "already rotated" over it.
 **Property.** An SE050 PUT KEY (`P1=0x0B`, `P2=0x81`, three key blocks, in-place KVN) is
 all-or-nothing across the SE050's internal NVM commit.
 
-**Setup.** Bench image that drives one PUT KEY and halts. Instrument I²C2 (Scaffold or the MHO934's
+**Setup.** Bench image that drives one PUT KEY and halts. Instrument the SE050 bus (Scaffold or the MHO934's
 LA) to detect the PUT KEY command bytes; the crowbar target is the **SE050's own Vdd rail** (it is a
 separate package — glitch its supply, not the STM32's). The commit window is after the last APDU byte
 is ACKed and before the SE050's success SW; sweep the crowbar `delay` across it.
@@ -871,7 +871,7 @@ Confirm on the actual EVT image / unit:
 - [ ] **S-2** exact E0E8/E0E9/E0EF type-0x11 inventory is closed under the reviewed factory
       policy; E0E1..E0E3 remain type-0x12 and cannot be retyped; attacker manifests are rejected.
 - [ ] **S-3** `optiga-hw-counter` compiled in (fence present); E120 LUC (not F1E1) bounds attempts.
-- [ ] **S-5** SE050 SCP03 response is ciphertext + R-MAC on I²C2 (LA-confirmed) — **retire the
+- [ ] **S-5** SE050 SCP03 response is ciphertext + R-MAC on the SE050 bus (LA-confirmed) — **retire the
       pending item**.
 - [ ] **S-6** Admin cannot delete-substitute the user UserID (`SW=0x6986`).
 - [ ] **S-7d** Empirical lockout SW matches the `AuthMethodBlocked` mapping (LA-captured).

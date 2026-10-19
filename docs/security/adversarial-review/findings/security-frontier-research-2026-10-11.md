@@ -578,6 +578,7 @@ Four recorded texts contradict each other. The board cannot be specified until t
 - **Corrections folded in.** The merger said the variant decides whether attestation key 0xF0000012 exists. The skeptic calls that overstated: per #249 the C, E and F variants carry it, and #697 is about which SCP03 keyset ships. The OPTIGA certificate slot is unconfirmed: the repository records 0xE0E3 as a full device certificate (`secure/src/optiga/reset.rs:33`), while the merger and #27 assume E0E0. Confirm on silicon.
 - **Cost.** BOM and process.
 - **Status.** PARTLY LISTED (HR:183-186 names the stockout risk; EVT:838-843 lists the C2 fingerprint as uncaptured).
+- **UPDATE 2026-10-19.** SE050 half resolved: the owner confirmed the production SE050 is the **SE050E2** (`SE050E2HQ1/Z01Z3Z`, OEF `A921`), the part already on the bench. #697 closed, `se050-part-c2` removed, and the pinned `AppletConfig=0x3F9F` is the production value. The OPTIGA certificate half (#27) is unchanged.
 
 #### G1-11. Sacrificial parts for one-way work (P0 for the fault-injection campaign, P1 otherwise)
 
@@ -1641,7 +1642,7 @@ No item written here is rejected outright. Facts that killed parts and constrain
 - Unconfirmed on silicon: a 16-byte user UserID at `max_attempts=10`; an all-zero reprogram of a programmed flash quad-word (page-125 salt option); two counters in one Execute expression; E0C2, E0E0 and E0F0 access at the shipping lifecycle state.
 - No bench replay of #117 and no silicon demonstration of the forged-`0x6986` wipe exist.
 - #104, #105, #120 and #126 are "candidate, pre-adjudication" issues; the cited triggers of #120 and #126 no longer match current code.
-- Production SE050 variant, E2 or C2 (#697).
+- ~~Production SE050 variant, E2 or C2 (#697).~~ Resolved 2026-10-19: SE050E2 (`SE050E2HQ1/Z01Z3Z`).
 - Owner decisions needed: the M16 salt page, the SE-06 sentinel home, the #87 brick tradeoff, whether firmware may relay an SE-produced ECDSA attestation signature, and #371.
 
 ---

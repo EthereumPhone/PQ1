@@ -1,7 +1,10 @@
 # EVT silicon-validation checklist — everything that must be proven on real hardware
 
 **Created 2026-07-24. Snapshot as of that date.** Compiled ahead of the first custom
-**PQSigner EVT** PCBs (STM32U585 + OPTIGA Trust M V3 + SE050C2 + NV3007 LCD + 2 buttons).
+**PQSigner EVT** PCBs (STM32U585 + OPTIGA Trust M V3 + SE050E2 + NV3007 LCD + 2 buttons).
+*(Corrected 2026-10-19: this doc originally named the SE050**C2**; the fitted and
+production part is the SE050**E2**, `SE050E2HQ1/Z01Z3Z`, owner-confirmed, #697. See
+`docs/secure-elements/se050-silicon-findings.md` § "Part identity".)*
 
 ## What this document is
 
@@ -51,7 +54,7 @@ moves.
   Electronic Cats FaultyCat (EMFI), Rigol MHO934. **Absent, needed for on-silicon
   power/EM SCA:** ChipWhisperer-Husky / ChipSHOUTER (`docs/tooling-and-systems.md:71,95`).
 - **Sacrificial-part budget** (from `docs/provisioning/first-boot-hardware-bringup.md:47-49`,
-  `docs/security/red-teaming.md:52-53`): ≥5 STM32U585, ≥5 SE050C2 (OEF A201),
+  `docs/security/red-teaming.md:52-53`): ≥5 STM32U585, ≥5 SE050E2 (OEF A921),
   ≥1 TRUSTMV3SHIELDTOBO1, plus ≥3 units beyond the one RDP-2 "production-config" unit.
 
 ### The one-line honest status
@@ -85,7 +88,7 @@ board: the irreversible lockdown ceremony, end to end.
    Carries all daily firmware development **and** every non-destructive validation
    item below.
 2. **Loose parts / dev kit (0 EVT boards) — the destruction sink.** ≥5 loose
-   STM32U585 (incl. the B-U585I dev kits), ≥5 loose SE050C2/A201, ≥1 OPTIGA
+   STM32U585 (incl. the B-U585I dev kits), ≥5 loose SE050E2/A921, ≥1 OPTIGA
    TRUSTMV3SHIELDTOBO1 shield, + Scaffold/FaultyCat rigs. Absorbs every
    crowbar / glitch / atomicity / torn-write test.
 3. **S1 + S2 (exactly 2 EVT boards) — the golden ceremony proof.** Chosen **late**,
@@ -114,12 +117,12 @@ verdicts exist *before* any EVT board is at risk.
 *Gate: ceremony offsets/ordering/timings known; crowbar verdicts in hand; firmware frozen.*
 
 **Phase 1 — Fleet bring-up (all EVT boards, RDP-0, non-dest).** §1 pin-map, §2
-clock/bus/timing, §4.4 flash-page health, §6.1 SE050C2 fingerprint capture,
+clock/bus/timing, §4.4 flash-page health, §6.1 SE050E2 fingerprint re-check,
 §5.5/§5.6 OPTIGA handshake + sign, §3.9/§3.11 readbacks, §10 non-dest platform checks.
 *Gate: every board is a known-good RDP-0 dev board. Daily dev proceeds on all of them indefinitely.*
 
 **Phase 2 — Rehearse + select (loose parts + dev kit).** Full dry-run on loose
-STM32 + SE050C2 + OPTIGA shield: power-cut/torn-write durability matrices
+STM32 + SE050E2 + OPTIGA shield: power-cut/torn-write durability matrices
 (§7.3, §4.2), OPTIGA lifecycle ratchet + brick-recovery (§5), SE rotation
 (§6.2/§6.6), RDP-2 downgrade campaign (§9.6). Designate the 2 best-behaving fleet
 boards as S1/S2.
@@ -141,7 +144,7 @@ surface distinct on-board bugs, that means Phase-2 rehearsal was insufficient �
 
 ### Hard dependency (the plan fails without it)
 
-This plan holds **only if loose SE050C2/A201 samples and OPTIGA shields are
+This plan holds **only if loose SE050E2/A921 samples and OPTIGA shields are
 obtainable.** The ship-blocker crowbars (§6.3 PUT-KEY atomicity, §6.8 admin-delete,
 §4.2 OTP torn-burn) destroy the chip and need many parts for statistical
 confidence; they cannot fit inside 2 boards. If loose production-part SEs cannot be
@@ -855,15 +858,21 @@ and runs the negative case with no session.
 
 ---
 
-## §6 — SE050C2 (OEF 0xA201) production-part validation (MIXED)
+## §6 — SE050E2 (OEF 0xA921) production-part validation (MIXED)
 
-The final part migrated E2→C2/A201 on 2026-07-20 but **has never run on silicon.**
-Several SCP03 paths were fixed 2026-07-21 after being found never-executed.
+**UPDATE 2026-10-19 — the production part is the SE050E2 (`SE050E2HQ1/Z01Z3Z`),
+owner-confirmed (#697).** From 2026-07-20 this section described an E2→C2/A201
+migration. That decision was reversed and no C2 ever ran on silicon; the
+`se050-part-c2` flag and the C2 keyset were removed. The E2 has run on silicon: the
+OM-SE050ARD-E bench shield (2026-05/06), pq1 provisioning (2026-09-17), DVT #1
+(2026-10-15) and the EVT-3D21 §6B probe (2026-10-19, `dvt-silicon-test-checklist.md`
+§6B). Several SCP03 paths were fixed 2026-07-21 after being found never-executed; the
+rotation rows below remain silicon-unvalidated.
 
 | # | Item | Destructive? | Ref |
 |---|---|---|---|
-| 6.1 | **`TODO(C2-silicon)`: SE050C2 AppletConfig fingerprint not captured.** Anti-substitution gate only knows the E2 bench value `0x3F9F`; capture + pin the C2 `AppletConfig` on first bring-up (a C2 run fails the gate loudly until then) | NON-DEST (unauthenticated identity read) | `secure/src/se050_stress/tests/audit.rs:429`; `docs/SE050C2HQ1_Z01SDZ/README.md`; issue **#61** |
-| 6.2 | **SCP03 transport→final `PUT KEY` migration on C2 silicon** — two paths that "had never run on silicon" fixed 2026-07-21, still silicon-unvalidated | DESTRUCTIVE (in-place PUT KEY under transport DEK; torn write → dead keyset) | `first-boot-provisioning.md:249-254`; `secure/src/scp03_logic.rs:27-47,789`; issue **#55** |
+| 6.1 | **SE050E2 AppletConfig fingerprint** — ✅ captured and pinned (`0x3F9F`, applet 7.2.0) on the bench shield 2026-06-02 and re-measured on pq1 silicon (DVT #1 2026-10-15, EVT-3D21 2026-10-19). The gate accepts only the E2 value. *(Was a C2-capture TODO until 2026-10-19.)* | NON-DEST (identity read over SCP03) | `secure/src/se050_stress/tests/audit.rs` `ACCEPTED_APPLET_CONFIGS`; `docs/secure-elements/se050-silicon-findings.md` § "Part identity"; issue **#61** |
+| 6.2 | **SCP03 transport→final `PUT KEY` migration on SE050E2 silicon** — two paths that "had never run on silicon" fixed 2026-07-21, still silicon-unvalidated | DESTRUCTIVE (in-place PUT KEY under transport DEK; torn write → dead keyset) | `first-boot-provisioning.md:249-254`; `secure/src/scp03_logic.rs:27-47,789`; issue **#55** |
 | 6.3 | **`HW-ASSUME-PUTKEY-ATOMIC` — highest-leverage bench test (ship-blocker).** Scaffold crowbar across the PUT KEY commit window; probe ENC/MAC and DEK independently. A confirmed `ENC/MAC-final + DEK-transport` is a ship-blocker. | DESTRUCTIVE (sacrificial SE050s, Vdd crowbar) | `red-teaming.md:460-503`; `first-boot-hardware-bringup.md:101-120`; issue **#398** |
 | 6.4 | **`HW-ASSUME-PUTKEY-KCV-RESP`** — does the GP applet echo per-key KCVs? If yes, make the 0-length case fail-closed | NON-DEST | `first-boot-provisioning.md:272-276`; issue **#398** |
 | 6.5 | **`HW-ASSUME-PUTKEY-REPUT-IDEMPOTENT` / DEK-liveness** — torn-write safety net not shipped until re-PUT idempotency confirmed | DESTRUCTIVE | `first-boot-provisioning.md:277-292` |
@@ -873,7 +882,7 @@ Several SCP03 paths were fixed 2026-07-21 after being found never-executed.
 | 6.9 | **S-7 lower-severity SE050 items** — close in the S-5/S-6 hardening pass | MIXED | issue **#9** |
 | 6.10 | **Boot-time SE050 attempt-counter reconcile leg silently skipped** (`ReadObjectAttributes` policy-gated `SW=0x6986`); regression test fires if a future rev honors the read | NON-DEST | `se050-silicon-findings.md:71-114`; `se050/mod.rs:485` |
 | 6.11 | **Five A3-recovery sites** (`reinit`, `authenticate_and_read`, `admin_factory_reset`, duress read/verify, `user_factory_reset`) — on-silicon re-run of `se050-stress-destructive` + `pin-gate-hw-counter-e2e` pending | MIXED | `se050-silicon-findings.md:313-364` |
-| 6.12 | **SE050 variant/GetVersion assertion** — expect OEF `0xA201`, fail-closed (anti-substitution) | NON-DEST | issue **#61**; `first-boot-provisioning.md` |
+| 6.12 | **SE050 variant/GetVersion assertion** — the OEF is not in the GetVersion reply, so the boot-path gate must pin `AppletConfig=0x3F9F` (SE050E2 / OEF `0xA921`), fail-closed (anti-substitution); today only the stress audit checks it | NON-DEST | issue **#61**; `first-boot-provisioning.md` |
 | 6.13 | **Case-2 read bug** — `send_apdu` mangles payload-less reads (`get_version_ext` goes on the wire with no Le) | NON-DEST | issue **#444** |
 | 6.14 | **half_E: drop ALLOW_WRITE at first provisioning; user/admin UserID final ship policy** | DESTRUCTIVE | issues **#59, #56, #57** |
 

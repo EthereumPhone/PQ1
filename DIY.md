@@ -31,7 +31,7 @@ make play        # interactive wallet in QEMU — arrow keys, PIN entry, seed wi
 |---|------|------------------------|-----|---------|
 | 1 | **ST B-U585I-IOT02A** Discovery kit | The wallet itself — STM32U585 (Cortex-M33, TrustZone), hardware SHA-256/SAES/TRNG. The on-board ST-LINK/V3E is your programmer, so no extra probe needed. | [Mouser](https://www.mouser.com/ProductDetail/STMicroelectronics/B-U585I-IOT02A) | $70 |
 | 2 | **Infineon OPTIGA™ Trust M Shield** (`TRUSTMV3SHIELDTOBO1`) | Secure element #1 (Trust M V3, CC EAL6+). Holds one XOR half of your seed entropy; talks encrypted I²C (Shielded Connection). | [Mouser](https://www.mouser.com/ProductDetail/Infineon-Technologies/TRUSTMV3SHIELDTOBO1) | $15 |
-| 3 | **NXP OM-SE050ARD-E** dev kit | Secure element #2 (EdgeLock SE050E, CC EAL6+). Holds the other entropy half + silicon PIN counter; talks SCP03. Get the `-E` variant — it's the SE050 you can actually buy on a dev board, and the firmware's anti-substitution check currently pins its fingerprint. ⚠ Needs the two-minute SCP03 keyset swap described under "Flash it" before the build will talk to it. | [Mouser](https://www.mouser.com/ProductDetail/NXP-Semiconductors/OM-SE050ARD-E) | $40 |
+| 3 | **NXP OM-SE050ARD-E** dev kit | Secure element #2 (EdgeLock SE050E, CC EAL6+). Holds the other entropy half + silicon PIN counter; talks SCP03. Get the `-E` variant: it carries the SE050E2, the same chip variant as the production board (`SE050E2HQ1/Z01Z3Z`), so the default build's factory SCP03 keys and the anti-substitution fingerprint (`AppletConfig=0x3F9F`) match it. The plain `OM-SE050ARD` (no `-E`) carries a previous-generation part and will **not** work. | [Mouser](https://www.mouser.com/ProductDetail/NXP-Semiconductors/OM-SE050ARD-E) | $40 |
 | 4 | **NV3007 1.65″ IPS display module**, 142×428, 8-pin SPI header (`GND·VCC·SCK·MOS·RES·DC·CS·BLK`) | The trusted display — PIN entry, seed words, and every transaction render here, inside the secure world. Get the breakout-board version, not the bare FPC panel. | [AliExpress — the exact breakout we use](https://www.aliexpress.com/item/1005008894658602.html) · reference module: [EastRising ER-TFTM1.65-2](https://www.buydisplay.com/1-65-inch-142x428-ips-tft-lcd-display-module-for-arduino-raspberry-pi) | $10 |
 | 5 | Solderless breadboard, 400-point (1×) | Holds the OPTIGA shield, the two buttons, and the 3V3/GND rails. | [Mouser (BB400T)](https://www.mouser.com/ProductDetail/BusBoard-Prototype-Systems/BB400T) | $7 |
 | 6 | Jumper wires — one 40-pack **M–F** + one 40-pack **M–M** (~20 actually used) | Everything below is point-to-point 2.54 mm jumpers. | [Mouser (Adafruit 826, M–F)](https://www.mouser.com/ProductDetail/Adafruit/826) · [Mouser (Adafruit 758, M–M)](https://www.mouser.com/ProductDetail/Adafruit/758) | $9 |
@@ -115,18 +115,12 @@ cargo install probe-rs-tools
 # + STM32CubeProgrammer from st.com (writes the TrustZone option bytes; free account)
 ```
 
-> ⚠ **One code tweak first — SE050 SCP03 keyset (as of 2026-07-20).** The production
-> part was finalized as the SE050**C2** (`SE050C2HQ1/Z01SDZ`), and the factory SCP03
-> platform keys in `secure/src/scp03_logic.rs` were retargeted to it (commit
-> `66a9926f`). The dev kit above carries an SE050**E2**, which ships with a
-> *different* published keyset (OEF `A921`) — so an unmodified build fails SCP03 with
-> a card-cryptogram mismatch and the wallet never provisions. Fix: restore the three
-> `PLATFORM_{ENC,MAC,DEK}` constants to the E2 values before building —
-> `git show 66a9926f^:secure/src/scp03_logic.rs` prints them (they're the published
-> AN12436 factory keys, also in NXP's plug-and-trust `ex_sss_tp_scp03_keys.h`). Keep
-> it as a local edit; don't commit it. Both keysets are public — on a bench build the
-> SCP03 channel is structural, not confidential, either way (see the caveat at the
-> bottom).
+> **SE050 keyset: no tweak needed (since 2026-10-19).** The OM-SE050ARD-E carries the
+> SE050**E2** (OEF `A921`), which is also the production part, and the firmware holds
+> only that part's published factory SCP03 keys (AN12436 Table 5). Older copies of this
+> guide told you to swap the keys back from the SE050**C2**; that C2 decision was reversed
+> and the C2 keys are gone. If SCP03 still fails with `Card cryptogram MISMATCH`, the chip
+> is not an E2 — check that the kit is the `-E` variant.
 
 Then, with the Micro-USB cable on the ST-LINK port:
 

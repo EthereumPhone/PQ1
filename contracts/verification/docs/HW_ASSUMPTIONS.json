@@ -416,8 +416,8 @@
       "consumed_by": [
         "HW-ASSUME-SE-INTERNALS (the certificate is the only third-party evidence we have)"
       ],
-      "note": "UNCONFIRMED — the certificate covers nothing else. The SE050 cert is genuinely stronger than the OPTIGA one (its TOE includes the JCVM/JCRE/JCAPI, i.e. the layer enforcing our UserID PIN policy), but it explicitly does NOT rate cryptographic protocol strength, so it does not cover SCP03-as-deployed.",
-      "last_reviewed": "2026-07-17"
+      "note": "UNCONFIRMED — the certificate covers nothing else. The SE050 cert is genuinely stronger than the OPTIGA one (its TOE includes the JCVM/JCRE/JCAPI, i.e. the layer enforcing our UserID PIN policy), but it explicitly does NOT rate cryptographic protocol strength, so it does not cover SCP03-as-deployed. UPDATE 2026-10-19: the bench and production part is the SE050E2 (SE050E2HQ1/Z01Z3Z, OEF A921), measured on silicon as IoT applet 7.2.0, AppletConfig 0x3F9F. The applet version is not the JCOP TOE identifier, so this stays UNCONFIRMED until the card-manager CPLC is read (DVT checklist 6B.1) and compared with this certificate or with an SE050E-specific one.",
+      "last_reviewed": "2026-10-19"
     },
     {
       "id": "HW-ASSUME-SE-INTERNALS",

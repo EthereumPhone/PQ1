@@ -45,7 +45,7 @@ It consolidates the silicon items scattered across
       non-shippable boot banner, excluded from release packaging). **Needs owner
       sign-off — it touches the rollback quarantine.**
 - [ ] Sacrificial-parts inventory: ≥5 STM32U585 dev boards (B-U585I-IOT02A) for
-      the RDP burn; ≥5 SE050C2 (OEF `A201`, matching `PLATFORM_*`) for PUT KEY;
+      the RDP burn; ≥5 SE050E2 (`SE050E2HQ1/Z01Z3Z`, OEF `A921`, matching `PLATFORM_*`; the production part) for PUT KEY;
       the TRUSTMV3SHIELDTOBO1 for OPTIGA.
 - [ ] Rigs: probe-rs/SWD; Ledger Donjon Scaffold (Vdd crowbar); a logic analyzer
       on I2C1/I2C2; FaultyCat/EMFI for the RDP-2 downgrade campaign.

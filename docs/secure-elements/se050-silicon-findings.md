@@ -13,6 +13,61 @@ they are documented but **not ship blockers** under this threat model.
 
 ---
 
+## Part identity — read this first (canonical; owner-confirmed 2026-10-19)
+
+**The production SE050 is the SE050E2: orderable part `SE050E2HQ1/Z01Z3Z`** (type
+`SE050E2HQ1/Z01Z3`, 12NC `9354 343 82472`, SE050 datasheet Rev 3.8 Table 3). The
+owner confirmed it 2026-10-19, closing #697. It is the part on the pq1 schematic
+(`docs/hardware/schematics/README.md`, `secure/src/board/pq1.rs`), on EVT-3D21
+and DVT #1, and the same variant as the OM-SE050ARD-E bench shield. Every SE050
+silicon result in this repo was taken on an SE050E2, so it applies to the
+production part directly.
+
+**It is NOT the SE050C2.** From 2026-07-20 to 2026-10-19 the repo recorded the
+production part as `SE050C2HQ1/Z01SDZ` (OEF `A201`, applet 3.x). That decision was
+reversed, no C2 ever ran on silicon, and the `se050-part-c2` build flag that
+selected the C2 keyset was removed. Any C2 reference left in an archived audit, a
+research bundle or a findings JSON is history, not current state.
+
+| Property | SE050E2 (fitted) | Source |
+|---|---|---|
+| Generation | "New generation" SE050E (2022), IoT applet **7.2** | AN12436 Rev 2.4 §3.5 |
+| Variant identifier (OEF) | **`A921`**, shared with the "SE050E Development Board" | AN12436 Table 2 |
+| Silicon identity | applet **7.2.0**, `AppletConfig=0x3F9F`, `SecureBox=0xFFFF`; 37-byte VersionInfo over SCP03 | OM-SE050ARD-E 2026-06-02, DVT #1 2026-10-15, EVT-3D21 2026-10-19 (UniqueID `0400500157990ff53d289104261f22df1390`) |
+| Runtime anti-substitution | The OEF is **not** in the GetVersion reply, so the gate pins `AppletConfig` (`secure/src/se050_stress/tests/audit.rs`, `ACCEPTED_APPLET_CONFIGS = [0x3F9F]`) | silicon 2026-06-02 |
+| Factory Platform SCP03 keys | ENC `d2db63e7a0a5aed72a6460c4dfdcaf64`, MAC `738d5b798ed241b0b24768514bfba95b`, DEK `6702dac30942b2c85e7f47b42ced4e7f`, KVN `0x0B`. **Published, so transport-only; they must be rotated** (#55) | AN12436 **Table 5** (new generation), not Table 6; `secure/src/scp03_logic.rs` `PLATFORM_*` |
+| Crypto set | ECC NIST / Brainpool / Koblitz, Ed25519, Curve25519, Curve448, ECDSA/ECDH/EdDSA, AES incl. **CCM/GCM**, GMAC, HMAC/CMAC, SHA-1…512, PBKDF2. **No RSA.** None of it signs anything for the wallet (invariant #5); the firmware uses the chip for storage, UserID auth, GetRandom and SCP03 | AN12436 Table 1 |
+| I2C target | Clock stretching **disabled by default** on SE050E; max SCL **1 MHz** (A/B/C/D/F stretch above 600 kHz, up to 3.4 MHz). The firmware runs 400 kHz | datasheet Rev 3.8 §4.1.1; AN12436 Table 1 |
+| Power saving | **Deep Power-Down only** (no state retention, < 5 µA), entered by pulling `ENA` low. The E2 column lacks "Power-Down with state retention". On pq1 `ENA` is `SE1_EN` (PB5, `secure/src/hw/se_power.rs`) | AN12436 Table 1; datasheet §5.2 |
+| Forced platform SCP | **No.** Chip-forced SCP (`0x7FFF0207`) and FIPS 140 are SE050**F** properties. Confidentiality rests on per-object `REQUIRE_SM` policies plus firmware that always uses SCP03 (EVT 6B.5/6B.6: plain read-class commands refused, measured with a session up; a pre-session run is owed) | AN12436 §2.1; `dvt-silicon-test-checklist.md` §6B |
+| Factory objects | NXP EdgeLock 2GO / attestation objects at `0xF000_0000`+ (connectivity key `0xF0000000`, cert `0xF0000001`, …), outside every firmware OID range and skipped by the wipe sweep | AN12436 §3.6 Table 8; EVT 6B.3 inventory |
+| Certificate | **Unconfirmed** whether the E2's JCOP release is inside the TOE of the certificate the repo cites (NSCIB-CC-180212-CR5 names JCOP 4 SE050 v4.7 R2.00.11/R2.03.11). Needs the card-manager CPLC read (6B.1) and the E2's own certificate | `HW-ASSUME-SE050-CERT-VERSION` |
+
+**Which NXP document governs what.** Read every NXP citation in this repo through
+this table.
+
+| Document | Applies to the E2? |
+|---|---|
+| SE050 datasheet Rev 3.8 | Yes. It covers all variants and names the E where it differs (§1, §4.1.1, Table 3) |
+| AN12436 Rev 2.4 (configurations, default keys, reserved objects) | Yes. Use the **SE050E2 / A921** rows (Table 2, **Table 5**, §3.6 Table 8) |
+| UM11225 (T=1 over I2C) and GP SCP03 Amendment D v1.1.2 | Yes, family-wide. The firmware's T=1oI2C (GP 1.0 2-byte LEN) and SCP03 are silicon-proven on this part |
+| **AN12413** Rev 2.12 (IoT applet APDU spec) | **Only partly.** It specifies applet **3.x** (the A/B/C/D generation). The driver and most code comments cite it because it is the APDU spec on disk. On the E2's applet 7.2 an AN12413 statement holds only where silicon confirms it |
+| AN12543 (SE051 IoT applet APDU spec) and AN13483 (SE050E User Guidelines) | Listed by AN12436 §4 as references [6] and [2]. **Neither is in the repo or has been checked against the E2**; obtain them before relying on applet-7-specific behaviour |
+
+**Applet 7.2 behaviour measured on silicon, where AN12413 is silent or wrong:**
+- `ReadIDList` more-indicator is the enum `0x01` NO_MORE / `0x02` MORE, not a boolean (AN12413's prose says the opposite), and the offset counts **entries**, not bytes (EVT 6B.3, 2026-10-19).
+- `GetVersionExt` returns 37 bytes over SCP03 with `Le` present (6B.1).
+- `GetFreeMemory` saturates at `0x7FFF`, so it reports "at least 32768" on the persistent leg (6B.4).
+- `ReadObjectAttributes` on a UserID is refused with `0x6986` (§2 below, A1). That is why the SE050 is not a boot-reconciliation input (invariant #2).
+- Customer writes to `FACTORY_RESET 0x7FFF_0205` are refused with `0x6985` (`se050-factory-reset.md`).
+
+Open E2 silicon questions are tracked in `docs/hardware/dvt-silicon-test-checklist.md` §6B.
+
+**Vendor PDFs** are not redistributable (licence), so they are gitignored. The local
+copy lives in `docs/SE050E2HQ1_Z01Z3Z/`, with a README and SHA256SUMS.
+
+---
+
 ## 0. How to reproduce — `timeout` is mandatory
 
 `probe-rs run` **never exits on its own**, even after the stress

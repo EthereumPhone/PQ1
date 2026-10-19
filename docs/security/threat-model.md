@@ -450,8 +450,9 @@ USB is the only external interface and the primary T0 attack vector. The host is
   certificate version, not V4-2019, which **expired 2024-12-17**.
 - **SE050 is genuinely stronger.** NSCIB-CC-180212-CR5's TOE includes the JCVM/JCRE/JCAPI — the layer
   that enforces our UserID PIN policy. It explicitly does **not** rate cryptographic protocol
-  strength, so it does not cover SCP03-as-deployed. And which configuration we actually hold is
-  itself unconfirmed (`HW-ASSUME-SE050-CERT-VERSION`).
+  strength, so it does not cover SCP03-as-deployed. The part is the SE050E2 (`SE050E2HQ1/Z01Z3Z`, applet
+  7.2.0, confirmed 2026-10-19), but whether its JCOP release is inside the certified TOE is
+  unconfirmed (`HW-ASSUME-SE050-CERT-VERSION`).
 - **A certificate is bounded expert effort, not a proof.** EUCLEAK is the standing refutation: a
   non-constant-time modular inversion in the Infineon cryptolib went unnoticed for *"14 years and
   about 80 highest-level Common Criteria certification evaluations"* (NinjaLab). Demonstrated on a
