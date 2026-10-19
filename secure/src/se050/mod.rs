@@ -1917,8 +1917,10 @@ impl Se050 {
     /// Every user object (UserID + three data blobs) gets a two-entry
     /// TAG_POLICY: (user auth → full access) + (admin auth → DELETE only).
     /// The admin UserID has unlimited attempts (max_attempts=0) — its PIN
-    /// is a 16-byte random derived from the OPTIGA PBS, so brute force is
-    /// infeasible and the wipe path must not lock itself out.
+    /// is a 16-byte value derived from the device root axis
+    /// (`secret_keys::se050_admin_pin` → `derive_into_bhk`; BHK/DHUK/OTP,
+    /// never the OPTIGA PBS), so brute force is infeasible and the wipe
+    /// path must not lock itself out.
     ///
     /// Re-provisioning semantics: on the `admin_pin = Some(..)` path (real
     /// hardware), any stale user objects (USERID + 3 data blobs) from a
