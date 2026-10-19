@@ -1131,6 +1131,38 @@ optiga-probe-report: ## Re-analyse a saved OPTIGA probe log (LOG=path)
 test-optiga-probe: ## Host tests for the OPTIGA probe report tool
 	@python3 -I -m unittest discover -s tools/optiga_probe -v
 
+# SE050 read-only deep probe (`secure/src/se050/probe/`, DVT §6B).
+#
+# Reads identity (GetVersionExt), the full ReadIDList inventory with per-object
+# type/size, free memory, the unique ID (stable across a reinit), and the plain
+# (no-SCP03) read-class acceptance matrix. Sends no write/create/delete/auth
+# command; the read-only `source_invariants` pin enforces that. Standalone
+# SE050 image (no OPTIGA, no dual-se); terminal — it SYS_EXITs before NS boot,
+# so it flashes only the secure ELF and relies on the board's option bytes
+# already being set (as `se050-stress` does). NEVER SHIP — in PROD_FORBIDDEN.
+#
+#   make se050-probe-hw BOARD=pq1                  # ~1-2 min
+#
+# Exit status follows probe-rs; scrape `=== SPROBE DONE OK ===` from the log.
+SE050_PROBE_FEATURES = se050,se050-probe,ui-semihosting,stm32u585,debug-log,e2e-test,otp-hardcoded-master-key,usb,$(BOARD_FEATURE)
+
+se050-probe-hw: ## Read-only SE050 config/inventory/plain-surface probe (HW)
+	@echo "==> Building SE050 probe ($(BOARD_FEATURE))..."
+	@touch secure/src/se050/probe/mod.rs
+	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
+		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
+			-p sphincs-tz-secure --no-default-features --features $(SE050_PROBE_FEATURES)
+	@echo "==> Flashing SE050 probe (secure ELF only; option bytes assumed set)..."
+	@probe-rs download --chip $(CHIP) $(SECURE_ELF)
+	@mkdir -p target/se050-probe
+	@echo "==> Running SE050 probe (timeout 600 s; watch [SPROBE] lines)..."
+	@log=target/se050-probe/last-run.log; \
+	timeout 600 probe-rs run --chip $(CHIP) $(SECURE_ELF) 2>&1 | tee "$$log"; \
+	echo "===================================="; \
+	if grep -q "=== SPROBE DONE OK ===" "$$log"; then echo "==> se050-probe: OK"; \
+	elif grep -q "=== SPROBE DONE FINDINGS ===" "$$log"; then echo "==> se050-probe: FINDINGS (see log)"; \
+	else echo "==> se050-probe: INCONCLUSIVE (no DONE marker; log=$$log)"; fi
+
 # GTZC_NS_EXTRA=,gtzc-sys adds the DVT 3.3-3.6 NS system-register write probes
 # (phase 2, after the TZSC receipt); GTZC_FAULT_ADDR=0x... (env) appends one
 # NS read of that address, expected to SecureFault. See gtzc_test.rs.
@@ -2887,7 +2919,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  optiga-admin-wipe-e2e optiga-nuclear-reset dual-se-admin-wipe-e2e \
                  optiga-hw-counter-e2e duress-probe-e2e optiga-ac-probe duress-provision-e2e \
                  pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime ui-px-film-gaps \
-                 ui-px-bench ui-px-te-probe gateway-gate-off optiga-probe
+                 ui-px-bench ui-px-te-probe gateway-gate-off optiga-probe se050-probe
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required

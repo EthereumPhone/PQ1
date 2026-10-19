@@ -7,6 +7,8 @@
 //! all wrapped in an SCP03 authenticated/encrypted channel.
 
 pub mod i2c;
+#[cfg(feature = "se050-probe")]
+pub mod probe;
 pub mod t1oi2c;
 pub mod apdu;
 pub mod scp03;
@@ -273,7 +275,7 @@ impl Se050 {
     /// use `&mut self.t1` / `&mut self.scp03` directly for the same
     /// reason). Production code MUST go through the typed helpers;
     /// this exists for in-tree testing only.
-    #[cfg(feature = "se050-stress")]
+    #[cfg(any(feature = "se050-stress", feature = "se050-probe"))]
     pub(crate) fn t1_scp03_mut(&mut self) -> (&mut T1State, &mut Scp03Session) {
         (&mut self.t1, &mut self.scp03)
     }

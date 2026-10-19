@@ -90,9 +90,9 @@ Unit tiers follow the EVT sacrificial plan (`evt-silicon-validation.md` "Sacrifi
 
 | Unit | Die UID / REV_ID | OTP | OPTIGA | SE050 part | Current state | Backup |
 |---|---|---|---|---|---|---|
-| DVT #1 | REV_ID `0x3007` (CubeProg: "Rev U"); OPTIGA UID `cd1633ca01001c00…` | blank (all `0xFF`) | factory-blank: LcsO=creation; factory PBS in E140, fp `20a7ec84684f7fe1` | ACKs at `0x48`; part (E2/C2) **unverified** | RDP 0, TZEN=1, bank 2 non-secure, WRP off, **SRAM_RST=0 (set 10-15 evening, row 5.4)**, OTP blank (re-read 10-15 PM); flash = `fwup-transport-hw` test image; pages 123–127 as before the session; OPTIGA/SE050 untouched except SE050 stress UserIDs | `~/Documents/PQ1/dvt1-backup-2026-10-15/` (flash sha256 `a9ab0052…`) |
+| DVT #1 | REV_ID `0x3007` (CubeProg: "Rev U"); OPTIGA UID `cd1633ca01001c00…` | blank (all `0xFF`) | factory-blank: LcsO=creation; factory PBS in E140, fp `20a7ec84684f7fe1` | ACKs at `0x48`; **part = SE050E2** (applet 7.2.0, `AppletConfig=0x3F9F`, E2/A921 keyset — row 1.8, 10-15); production is the C2 | RDP 0, TZEN=1, bank 2 non-secure, WRP off, **SRAM_RST=0 (set 10-15 evening, row 5.4)**, OTP blank (re-read 10-15 PM); flash = `fwup-transport-hw` test image; pages 123–127 as before the session; OPTIGA/SE050 untouched except SE050 stress UserIDs | `~/Documents/PQ1/dvt1-backup-2026-10-15/` (flash sha256 `a9ab0052…`) |
 | DVT #2 | | | | | | |
-| EVT-3D21 (EVT board, no panel or buttons; not "EVT #1", which is the sealed screen unit `003B0022…`) | DEV_ID `0x482`, REV_ID `0x3007`; UID `003D0021 30465002 2033314C` | blank (all `0xFF`), re-read after every image on 10-17 | not touched | not touched | RDP 0, TZEN=1, SRAM_RST=0, WRP off; option bytes equal DVT1's golden-table column. Flash = 10-17 `bootproof` stage-marker image (FSBL + slot A, throwaway key `5c22d991…`), marker page 5 currently **holds markers** (not erased). Does not enumerate on USB in this image. | `~/Documents/PQ1/evt-backup-2026-10-17/` (`flash1.bin` = `flash2.bin`, sha256 `5629985b…`) |
+| EVT-3D21 (EVT board, no panel or buttons; not "EVT #1", which is the sealed screen unit `003B0022…`) | DEV_ID `0x482`, REV_ID `0x3007`; UID `003D0021 30465002 2033314C` | blank (all `0xFF`), re-read after every image on 10-17 | not touched | **SE050E2** (applet 7.2.0, `AppletConfig=0x3f9f`, E2/A921; SE050 UniqueID `0400500157990ff53d289104261f22df1390`, 10-19 §6B) | RDP 0, TZEN=1, SRAM_RST=0, WRP off; option bytes equal DVT1's golden-table column. **Flash = `50b0ec89…`** (restored at the end of the 10-18 evening OPTIGA session; pages 124–127 erased, page 123 holds 32 record QWs). Does not enumerate on USB in this image. On-chip SE050 carries the 10-15 stress-admin UserID `0x7B5E_00A0` (self-delete only). | `~/Documents/PQ1/evt-backup-2026-10-17/` (`flash1.bin` = `flash2.bin`, sha256 `5629985b…`) |
 
 ## Equipment
 
@@ -291,6 +291,36 @@ Three things ran:
 **Still not run in §6A (need either a fenced probe, a logic analyser, or counter-consuming writes):** 6A.3/6A.4 (opcode/param sweep), 6A.5 (read-bounds matrix), 6A.6 chip-challenge, 6A.9 (handshake `random_S` uniqueness — needs the shield to expose it), 6A.10 (error-frame authentication), 6A.11 (response timing), 6A.12 (reset-retention matrix), and all of §B (6A.13+, which write spare objects / consume E122).
 
 **Raw logs (local, not in git):** `~/Documents/PQ1/evt-backup-2026-10-17/run-2026-10-18-optiga6a/` (`reprobe-sweep0.log`, `deep-run.log`, `pre-*`/`final-*` flash+OTP+OB, `restore*.log`).
+
+## EVT-3D21 run 2026-10-19 — SE050 deep probe (§6B) — summary
+
+**Non-destructive SE050 probing on EVT-3D21, ST-LINK V3 over J210, master `0b0db127` + the new `se050-probe` harness (committed with this update).** Claude Code, no human at the bench, class **N + reversible R** throughout. The SE050 is the bench **E2** part (applet 7.2.0, `AppletConfig=0x3f9f`); the production C2 is still unrun, so **every result is E2-only, C2 owed**. Pre-session snapshot under reset: flash `50b0ec89…` (byte-identical to the 10-18 evening end state — board untouched since), OTP blank `9f56cda7…`, option bytes saved (RDP 0, TZEN=1, SRAM_RST=0, SECWM1 full / SECWM2 none). Pages 124–127 confirmed erased, page 123 = 32 record QWs. **No PUT KEY, no wrong cryptogram, no attempt burned, no production/e2e OID written.** The probe never writes; the stress images create and delete only `0x7B5E_*` carve-out objects (plus the already-present stress-admin UserID `0x7B5E_00A0`).
+
+Ran:
+1. **6B.1 identity** (`se050-stress-only-audit_se050_version_identity`, then the probe's `GetVersionExt`): applet **v7.2.0**, `AppletConfig=0x3f9f`, `SecureBox=0xffff` → **SE050E2**, regression-matching 10-15. The 37-byte VersionInfo decodes cleanly over SCP03 with Le present (one data point against #444/F-10 on the SCP03 path).
+2. **6B.21 Safe stress catalog** (`se050-stress`): **10 PASS / 0 FAIL / 10 SKIP**. Folds in `scp03_handshake_repeat`, `scp03_response_encryption_verify` (S-5 round-trip), `audit_unauth_read_refused`, `object_extended_lc_boundary` (≤32 B), `get_random_size_boundary`, `scp03_wtx_endurance`, `pin_attribute_read_refused_on_user_userid`, and **6B.29** `trng_quality_basic` (χ²×100 over 4096 B, PASS).
+3. **The new read-only `se050-probe` image** (`make se050-probe-hw`, DONE OK), covering 6B.2/6B.3/6B.4/6B.6.
+4. **6B.22** the three reviewed Destructive-named confidentiality tests, run by name (self-cleaning; no attempt burned): see the table.
+
+| Row | Result |
+|---|---|
+| 6B.1 | ✅ SE050E2, applet 7.2.0, `AppletConfig=0x3f9f`, `SecureBox=0xffff`; VersionInfo 37 B decodes over SCP03+Le |
+| 6B.2 | ✅ UniqueID `0400500157990ff53d289104261f22df1390` (18 B), stable across a `reinit` |
+| 6B.3 | ◐ inventory = 20 objects, **0 production-range, 0 unexpected**. Factory NXP IoT-trust objects `0xF00000xx`/`0xF0003394` present (certs 549/470/467 B + EC keypairs — expected on an E2). **Finding: two stale e2e crash-test objects `0x7B0A_0000` and `0x7B0A_00A0` remain** — the 10-15 crash-safety run left them; the "`0x7B0A_*` deleted" note (Evidence-log) was incomplete. Plus the stress-admin UserID `0x7B5E_00A0`. `ReadType`/`ReadSize` return err on the UserID/auth objects (consistent with A1 attribute-read refusal) |
+| 6B.4 | ✅ free memory persistent 32767 / transient-reset 796 / transient-deselect 784 B |
+| 6B.6 | ✅ (with caveat) **every plain, no-SCP03 read-class command is refused** — GetVersionExt `0x6982`, GetRandom/ReadIDList/CheckExists/Read(ENTROPY_OBJ) `0x6985`. A keyless bus attacker gets nothing, not even GetVersion. **Caveat:** the plain matrix ran with an SCP03 session already active, so this does not isolate "platform SCP mandatory from power-on" from "session active, use the channel" — a pre-session plain matrix is still owed |
+| 6B.21 | ✅ Safe stress 10 PASS / 0 FAIL |
+| 6B.22 | (see Evidence log — run in this session) |
+| 6B.29 | ✅ `trng_quality_basic` χ² PASS over 4096 B (SE050 leg of 6.8; no min-entropy estimate yet — SP 800-90B owed) |
+
+**Three things worth keeping:**
+1. **The plain-command surface is empty on the E2** (0x6982/0x6985 for every read-class command outside SCP03) — but only measured with a session already up; isolate it from power-on before banking it.
+2. **This die carries factory NXP IoT-trust-provisioned objects** (`0xF0000000`+). They are expected on an EdgeLock E2 dev part and are *not* in the firmware's sweep/skip ranges (`apdu.rs:1292-1296` skips `≥0xF000_0000`), so they are left alone — consistent. The production C2 inventory is unknown and owed.
+3. **Two `0x7B0A_*` crash-test objects survived** a prior "deleted" claim — a reminder that bench carve-outs strand, exactly the pattern the stress harness's OID-bump policy exists for.
+
+**Not run in §6B (need a loose part, an LA, owner OK, or just the harness that isn't written yet):** the transport/reset-retention and handshake-field rows (6B.9–6B.16 except what the stress run covered), the fault-hook rows (6B.14/17/19), 6B.23–6B.28 (new Safe policy tests — not yet written), 6B.30 (200× reseed), 6B.31 (timing), 6B.33–6B.35 (firmware-integration), 6B.20 (LA), and all of §H. Every C2 re-run.
+
+**Raw logs (local, not in git):** `~/Documents/PQ1/evt-backup-2026-10-17/run-2026-10-19-se050-6b/` (`6B1-version-identity.log`, `6B21-stress-safe-full.log`, `6B-probe.log`, `se050-probe-report.md`, `6B22-*.log`, `pre-*` flash+OTP+OB).
 
 ## Highest-risk untested assumptions — run these first
 
@@ -499,6 +529,98 @@ Section 6 checks that the OPTIGA does what the firmware relies on. This section 
 | 6A.31 | Configuration objects `E0C3` (sleep delay) and `E0C4` (current limit) do not break the shield or auth | set the minimum current limit and the shortest sleep delay; rerun a 6A.13 auth leg and a 1,000-draw `GetRandom` soak; restore both | no failure; latencies recorded | R | never | ☐ |
 
 **Needs the O-13 decision (overwrites E140):** 6.5, 7.2–7.5, 8.1–8.4, and a 6A.16 rerun on a provisioned wallet. **Never on this unit:** 9.1–9.3, any LcsO ratchet, any trust-anchor write, and Protected Update parser fuzzing; those are loose-part rows.
+
+## 6B. SE050 deep probe on EVT-3D21 (written 2026-10-19)
+
+Section 6 checks that the SE050 does what the firmware relies on. §6B attacks the chip itself, from the position of someone on its I2C4 bus (PB6 SCL / PB7 SDA) or holding it desoldered, and the role each stored object plays in the seed split and the PIN gate. **Part is the SE050E2** (applet `7.2.0`, `AppletConfig=0x3F9F`, factory E2/A921 SCP03 keyset — row 1.8). **The production part is the SE050C2** (applet 3.x, A201), which has never run on silicon, so **every result below is "E2 only; C2 owed"** — every C2 behaviour stays open (EVT §6, #61/#697 and `HW-ASSUME-SE050-CERT-VERSION`).
+
+Unlike §6A, there is **no read-only SE050 probe in the tree today**: the closest is `se-i2c-probe` (zero-byte address check only) and `rng-xor-probe` (reads random over a factory-key SCP03 session, no Makefile target). Every `se050-stress` test opens SCP03 and writes at least the stress-admin UserID `0x7B5E_00A0`. §6B therefore lands a `se050-probe` image mirroring `optiga::probe` (feature-gated, `[SPROBE]` lines, terminal, covered by a `source_invariants` read-only pin), plus a few new Safe self-cleaning stress tests.
+
+**Why now.** No row has ever *deliberately* exercised the SE050 on this board (every prior SE050 cell is a side effect of the 10-15 stress run or the 10-17 `rng-xor-probe`). The code review found load-bearing assumptions with no silicon evidence, and one code-level defect class worth confirming on the wire: `scp03.rs:615-635` accepts **any bare 2-byte status word, even `9000`, with no R-MAC** and advances the counter (SE-03, #104/#105); several `unwrap_or(false)` "couldn't-ask-means-no" paths (F-2/3/4); the #444/F-10 Case-2 `Le` loss; and no genuine-part check anywhere.
+
+**Rules for every 6B image.** These hold even where the chip would allow more.
+- **Objects:** only the stress carve-out `0x7B5E_*`, and only objects with a delete path we already hold (self-delete with the deterministic bench PIN, or an admin-delete entry under `STRESS_ADMIN_USERID 0x7B5E_00A0`). **Never touched:** the production range `0x7B10_*`, the retired ranges (`0x7B00/06/0C/0E_*`), and the e2e ranges (`0x7B07/09/0A/0B/0D_*`).
+- **Never sent:** a PUT KEY (any `se050-derived-scp03`/`se050-rotate-scp03` image), a deliberately wrong SCP03 host cryptogram or MAC (a GP keyset failure counter could block the platform keyset for the life of the chip — that is an X/L row, not here), or a wrong UserID value against a *limited* UserID (that burns an attempt → class C, declined this run).
+- **Keyset:** default **E2/A921** factory keys. **Never set `se050-part-c2`** on this board — the wrong keyset fails the handshake with a cryptogram mismatch and the chip cannot be unlocked or wiped until it is reverted.
+- **Inventory + free memory** (`GetFreeMemory`) are read before and after every R block; Δ = 0 is the reversibility receipt.
+- **Boot-wipe hazard:** every SE050 image runs the boot reconciliation/wipe block (`main.rs:2232-2296`) before the probe is reached. Confirm MCU flash pages 124 (attempt counter) and 125 (wipe flag / salt) are erased before flashing, or that block can `factory_reset_admin()` the chip.
+- **Class here:** N = reads, SCP03 handshakes, GetRandom, reset cycling. R = creates and then deletes `0x7B5E_*` objects, restored and inventory-confirmed. C (declined this run) = burns a UserID attempt or strands an object. X (loose part) = PUT KEY, factory reset, wrong-cryptogram, parser fuzzing.
+
+**Run order.** A (identity/inventory) → B (transport/reset) → C (SCP03 channel) → D (policy, Safe) → E (TRNG) → F (timing) → G (firmware integration). The H rows are listed-only (C/X). Rows marked ★ test an open finding or a claim the product makes.
+
+### A. Identity, configuration, inventory (N)
+
+| ID | Assumption | How | Pass | Cls | Prior | Status |
+|---|---|---|---|---|---|---|
+| 6B.1 ★ | The part and its OS version are what we think, so `HW-ASSUME-SE050-CERT-VERSION` and the TOE boundary can be judged | `GetVersion`; `GetVersionExt` with and without `Le` (#444/F-10); select the card manager and read CPLC (`GET DATA 9F7F`) for the JCOP OS id/release; settle the 37-B vs 7-B reply-size doc conflict | versions recorded; OS release compared with the certified TOE; E2 vs C2 explicit; the `Le` variant behaviour recorded | N | 1.8 (E2, applet 7.2.0, `0x3F9F`) | ⚠ **EVT-3D21 10-19:** applet **v7.2.0**, `AppletConfig=0x3f9f`, `SecureBox=0xffff`; the **37-byte** VersionInfo decodes cleanly over SCP03 with Le present (37-B reply is the real one — resolves the doc conflict on the SCP03 path). Owed: the plain/no-Le variant (the plain call was refused — see 6B.6), the card-manager **CPLC/OS release** (needs an ISD select the probe does not do), and the whole C2 answer. `HW-ASSUME-SE050-CERT-VERSION` stays open (version is not the JCOP TOE id). |
+| 6B.2 | The chip has a stable unique identity | read `0x7FFF0206`; re-read across soft / interface / `SE1_EN` / `LDO2_EN` reset; record in the Units table | 18 B, identical every read | N | never | ✅ **EVT-3D21 10-19:** UniqueID `0400500157990ff53d289104261f22df1390` (18 B), stable across a `reinit` (SELECT + fresh SCP03). The `SE1_EN`/`LDO2_EN`/interface-reset legs owed (the probe does a reinit only). Recorded in the Units table. |
+| 6B.3 ★ | Nothing unexpected lives on the chip, and the sweep skip-list is right | paged `ReadIDList`, then `ReadType`/`ReadSize` per OID; classify NXP-reserved (`0x7FFF_*`) / attestation / stress (`0x7B5E_*`) / e2e / retired / production; settle whether the 10-14 dual-SE provision/wipe was this die | every object classified; no production-range object present, or it is explained; skip-list (`apdu.rs:1292-1296`) matches what is actually reserved | N | never (no deliberate SE050 run on this board) | ◐ **EVT-3D21 10-19:** 20 objects, **0 production-range (`0x7B10_*`), 0 unexpected.** Factory NXP IoT-trust objects `0xF0000000`–`0xF0003394` (certs 549/470/467 B + EC keypairs — expected on an EdgeLock E2; covered by the `≥0xF000_0000` skip). NXP-reserved `0x7FFF02xx` (keypairs + the UID object). **Finding: two stale e2e crash-test objects `0x7B0A_0000` and `0x7B0A_00A0` survived** — the 10-15 crash-safety run on this die left them; the Evidence-log "`0x7B0A_*` deleted" note was incomplete. Plus the stress-admin UserID `0x7B5E_00A0`. `ReadType`/`ReadSize` return err on auth/UserID objects (A1). |
+| 6B.4 | An R block leaves the chip exactly as it found it | `GetFreeMemory` (persistent, transient-reset, transient-deselect) before and after every R block | Δ = 0 after cleanup | N | never | ✅ **EVT-3D21 10-19:** free memory persistent **32767** / transient-reset **796** / transient-deselect **784** B. (The probe is read-only, so this is the baseline; the stress R runs self-clean and 6B.3 shows no residue beyond the known leftovers.) |
+| 6B.5 ★ | We know whether the applet requires the platform SCP channel at all | read the applet lock / restrict state and the `0x7FFF0207` platform-SCP feature/state | state recorded; if SCP is not mandatory, filed with a proposed production policy | N | never | ◐ **EVT-3D21 10-19:** inferred from 6B.6 — **every plain command is refused**, so platform SCP behaves as effectively required in this session. Not isolated from an active-session effect (see 6B.6 caveat); the explicit `0x7FFF0207` state read is owed. |
+| 6B.6 ★ | A bus attacker with no keys gets only what plain read-class commands give | send, **plaintext (no SCP03)**, only read-class commands: `GetVersion`, `GetRandom`, `ReadIDList`, `CheckObjectExists`, `ReadSize`, and a `Read` of a user-gated carve-out object | every secret-bearing read refused without SM; the rest recorded as the attacker's free surface | N | never | ⚠ **EVT-3D21 10-19:** **all five plain read-class commands refused** — GetVersionExt `0x6982`, GetRandom(8)/ReadIDList/CheckExists(USERID_OBJ)/Read(ENTROPY_OBJ) `0x6985`; **no data returned by any.** The keyless-bus-attacker surface is empty. **Caveat (why ⚠ not ✅):** the matrix ran with an SCP03 session already established, so `0x6982/0x6985` could mean "mid-session, use the channel" rather than "platform SCP mandatory from power-on". A pre-session plain matrix (plain commands on a fresh link, before SCP03 establish) is owed to isolate it. |
+| 6B.7 ★ | The part is genuine (evidence half of 6.7; design gap is O-9) | dump the NXP device cert / attestation objects; verify the chain to NXP's root on the host; `ReadWithAttestation` of the UID over a fresh host nonce, verified on the host (chip key-possession, not a wallet signature — invariant #5 untouched) | chain valid; UID bound; signature verifies | N | never (no SE050 attestation read exists in `secure/src`) | ☐ (the probe found the factory NXP IoT-trust certs at `0xF0000001/0003/0013` (470/467 B) + EC keypairs `0xF0000000/0002/0012` — the raw material for a host-side chain check, not yet dumped/verified) |
+| 6B.8 | A per-boot config audit (M17) has a fingerprint to pin against | read curve list, crypto-object list, timestamp | recorded | N | never | ☐ |
+
+### B. Transport, T=1oI2C, power and reset (N)
+
+| ID | Assumption | How | Pass | Cls | Prior | Status |
+|---|---|---|---|---|---|---|
+| 6B.9 | I2C4 really runs at ≤ 400 kHz | read `I2C4_TIMINGR` over SWD and derive the SCL frequency (LA confirmation on PB6/PB7 listed, not run this session) | ≤ 400 kHz, recorded; closes the 6.1 bus-speed caveat | N | 6.1 (speed not confirmed) | ☐ |
+| 6B.10 ★ | The driver's un-negotiated transport constants match the chip | after an interface reset, capture the ATR/CIP and compare: IFSC (driver fixes 254), `MAX_FRAME=260`, 1024-B host buffers vs the chip's 894, "any CRC-valid reset reply PCB accepted" (`t1oi2c.rs:41-44,156`) | constants consistent, or each mismatch recorded | N | never (ATR never parsed) | ☐ |
+| 6B.11 ★ | Every SE op answers or sends WTX inside the ~0.3 s poll budget | per command class (create/write/delete NVM, handshake, GetRandom): record worst-case latency and WTX count vs the 500-WTX / 1524-frame caps (`t1oi2c.rs:47-63,299-320`) | within budget, recorded | N | never | ☐ |
+| 6B.12 ★ | The §4d sustained-large-response fault is understood after the 10-17 I2C fix | sustained 128-B `GetRandom` stream; find the exact failure point; test the fixed 259-B over-read hypothesis (`t1oi2c.rs:293-337`) | ≥ 1000 clean, or the root cause named | N | §4d (faults at ~31 calls, open) | ☐ |
+| 6B.13 ★ | We know exactly what survives each reset, and what `SE1_EN` gates | open an SCP03 session, then apply each of: T=1 soft reset, interface reset, `SE1_EN` (PB5) low, `LDO2_EN` (PA8) cycle, deselect; after each, probe whether the session is alive | the session never survives any; the `SE1_EN` effect (4.9: "does not silence the chip") explained against the schematic | N | 4.9 (SE1_EN does not silence) | ☐ |
+| 6B.14 | The I2C link layer and the driver both recover from bad frames | driver-side fault hooks: bad CRC, wrong N(S), truncated/overlong frame, an error R-block in the chained ACK gate (F-9), SDA held low; at 400 kHz | chip recovers with no power cycle; driver recovers without a reboot (mirrors 6A.28) | N | SE050 `wait_flag` timeout reset fixed 10-17 | ☐ |
+| 6B.15 ★ | The §4b large-read ceiling is known | `read_authed` of 33…256 B on a carve-out object | ceiling + failure mode recorded | R | §4b (32..64 B, hard-hang above) | ☐ |
+
+### C. SCP03 channel (N)
+
+| ID | Assumption | How | Pass | Cls | Prior | Status |
+|---|---|---|---|---|---|---|
+| 6B.16 ★ | The handshake fields the driver trusts (and ignores) are what it assumes | ≥ 1000 `INITIALIZE UPDATE`; log the card challenge, echoed KVN, SCP `i`-parameter and KeyDivData — the driver parses fixed offsets and checks none of these (`scp03.rs:266-279`) | no card-challenge repeat; KVN `0x0B` and the SCP `i` as `scp03_logic.rs` assumes (feeds 9.4/9.5/6B.1) | N | never | ☐ |
+| 6B.17 ★ | A downgraded command inside a 0x33 session is refused | a read-class APDU with no C-MAC, C-MAC only, or a stale counter | refused; session closed; host re-handshakes | N (fault hook) | never | ☐ |
+| 6B.18 ★ | Error status words really do come back unprotected on silicon (the SE-03 premise) | trigger a chip error inside a session; capture the raw frame; confirm the `len==2` accept path (`scp03.rs:615-635`) | the error SW is an un-MAC'd 2-byte reply; confirms SE-03 is reachable on this part | N | SE-03 (#104/#105, code read) | ☐ |
+| 6B.19 | The driver never acts on a tampered response | RX-side fault hook: flip a bit in the R-MAC, then in the ciphertext | rejected, fail-closed; no stored change | N (fault hook) | never | ☐ |
+| 6B.20 | S-5 on the wire: only ciphertext + MAC on I2C4 | LA on PB6/PB7 during a stress run with a known `0xDE` pattern | ciphertext + MAC only | N | never | ☐ **listed, not run (no LA this session)** |
+
+### D. Policy and object semantics on carve-out objects (R, Safe)
+
+| ID | Assumption | How | Pass | Cls | Prior | Status |
+|---|---|---|---|---|---|---|
+| 6B.21 | The Safe stress catalog still passes on current master | `make se050-stress BOARD=pq1` | 0 FAIL | R | DVT1 10-15 (10/0/10) | ✅ **EVT-3D21 10-19: 10 PASS / 0 FAIL / 10 SKIP.** |
+| 6B.22 | The three Destructive-named tests that neither burn attempts nor strand objects hold | `se050-stress-only-{audit_admin_passive_read_refused,audit_write_once_enforced,audit_data_substitution_chip_level}` | PASS; inventory Δ 0 | R | dev kit 05-28 | ☐ |
+| 6B.23 ★ | The production UserID + `half_E` policy behaves as designed | new Safe test: a carve-out UserID with the production policy **plus an admin-delete entry**, and a data object with the exact `half_E` policy; exercise read/write/delete by user / admin / plain / wrong session | matches the matrix in `se050-userid-pin-auth.md` | R | never (production policy only ever on `0x7B10_*`) | ☐ |
+| 6B.24 | Reads stay inside the object | offsets 0, size−1, size, max−1, max, `0xFFFF`; lengths 0, 1, 255, 256 | out-of-range refused or truncated; no neighbour bytes (mirrors 6A.5) | R | never | ☐ |
+| 6B.25 | Writes stay inside the object | past max size, zero length, overlapping writes | refused; size correct; neighbours intact | R | never | ☐ |
+| 6B.26 | Sessions are isolated and die on reset | one UserID session cannot authorise another's object; closed/expired sessions refused; the session drops on each 6B.13 reset | as stated | R | never | ☐ |
+| 6B.28 | The 16-B #855 credential and the length variants behave as `apdu::UserIdValue` assumes | create carve-out UserIDs with 1/8/16/32-byte values | accepted/refused as the type assumes | R | never | ☐ |
+
+### E. TRNG (N)
+
+| ID | Assumption | How | Pass | Cls | Prior | Status |
+|---|---|---|---|---|---|---|
+| 6B.29 | The SE050 leg of 6.8 | ≥ 1 MB of 32-B `GetRandom` over SCP03; SP 800-90B `ea_non_iid` + repeat scan. Caveat: DRBG output, bounds nothing about the raw noise source | no repeat; estimate recorded with that caveat | N | 6.8 (χ²×100 = 22937, no min-entropy) | ◐ **EVT-3D21 10-19:** `trng_quality_basic` χ² PASS over 4096 B (via 6B.21). The ≥1 MB draw + SP 800-90B `ea_non_iid` estimate still owed (the tool is not installed). |
+| 6B.30 ★ | The DRBG is reseeded across every reset kind | 32 B straight after each of 200 soft / interface / `SE1_EN` / `LDO2_EN` resets | no repeat; no shared prefix | N | never | ☐ |
+
+### F. Timing (N)
+
+| ID | Assumption | How | Pass | Cls | Prior | Status |
+|---|---|---|---|---|---|---|
+| 6B.31 | Response time does not reveal whether an object exists vs is merely refused | 1000 timed `CheckObjectExists`/`Read` each for present, absent and policy-refused; DWT cycles, Welch t-test | gap within bus resolution, or recorded | N | never | ☐ |
+
+### G. Firmware-path integration (N)
+
+| ID | Assumption | How | Pass | Cls | Prior | Status |
+|---|---|---|---|---|---|---|
+| 6B.33 ★ | `check_provisioned` fails open under a bus fault (F-2/6.6) | hold the SE050 unreachable, read the predicate only — no wizard entry | returns false; recorded, feeds #111/#121/#169 | N | F-2 (code read) | ☐ |
+| 6B.34 | `rng_strong`'s SE050 leg fails closed and recovers after the 10-17 fix | SE050 absent → `Err` + zeroed buffer; restore → recovers | as stated | N | 4.9 (fixed 10-17) | ☐ |
+| 6B.35 | `admin_exists()` / `pin_attempt_count_raw()` behave as the code expects on silicon | call both on a carve-out object | `pin_attempt_count_raw` returns `None` (A1); recorded | N | A1 (attribute read `0x6986`) | ☐ |
+
+### H. Listed, NOT run this session (C / X — loose part or owner OK)
+
+UserID lockout surfacing (`0x6986` at CreateSession, persistence across reinit and power, the `0x63Cx` format); S-6 admin cannot delete a no-admin UserID; wrong-value verify timing (6B.27/6B.32); the wrong-cryptogram keyset failure counter; PUT KEY transport→final and the atomicity crowbar (9.4–9.6, `HW-ASSUME-PUTKEY-*`); a power cut during an object write (tearing); metadata/policy parser fuzzing; factory reset / DeleteAll; setting the restrict/lock state; the SE-03 interposer end-to-end (needs an LA injector on PB6/PB7); and **the entire C2 re-run** — every row above is E2-only.
+
+**Needs a loose SE050 part:** 6B.22's lockout cousins, all of §H, and anything that could strand a `0x7B5E_*` object or block the keyset. **Needs the O-13 decision / a provisioned wallet:** the production-OID legs of 8.1–8.4 (6B.23 uses a carve-out clone of the policy to avoid it).
 
 ## 7. PIN credential (#855), attempt lockstep, wipe
 
@@ -837,3 +959,9 @@ Append one line per run (newest last): `date · unit · commit · target/feature
 - 2026-10-18 (evening) · EVT-3D21 · same + `OPTIGA_PROBE_DEEP=1` (`secure/src/optiga/probe/deep.rs`, `ifx_i2c::probe_read_register`, `apdu::get_random_plain_probe`) · R10 (6A.2) + R12 (6A.7), read-only + GetRandom + resets only · ✅ R10 no hidden register (content ≠ 0xFF only on documented regs); ✅ R12 distinct across soft/power reset, 64 bulk blocks 0 repeat/0 stuck. **No SE writes** (no SetData/SetObjectProtected/counter/key-gen; E140/F1Dx/E120 untouched; SE050 not addressed) · `run-2026-10-18-optiga6a/deep-run.log`
 - 2026-10-18 (evening) · EVT-3D21 · host-side cert parse of E0E0 hex (from the R0–R9 log) · 6A.6 host half · ✅ genuine Infineon leaf, issuer *Infineon OPTIGA(TM) Trust M CA 300*, secp256r1, serial `0x6f1ac6d3`, valid 2025-12-05→2045-12-05; E0E1–E0E3 zero filler. Chip `CalcSign` challenge + CA-sig verify deferred
 - **EVT-3D21 state (end of the 10-18 evening OPTIGA session):** RDP 0 (`0xAA`), TZEN=1, SRAM_RST=0, OTP blank (`9f56cda7…`, read under reset). Flash restored byte-identical to the pre-session snapshot `50b0ec89…` (changed pages 0–54 + 128–133 erased and rewritten from `pre-flash1.bin`, verified); option bytes identical; pages 123–127 never touched (diff-confirmed). **Neither SE written** — the OPTIGA saw only reads, GetRandom and resets; the SE050 was never addressed.
+- 2026-10-19 · EVT-3D21 · `0b0db127` · `make se050-stress-only-audit_se050_version_identity BOARD=pq1` · ✅ 6B.1 applet v7.2.0, `AppletConfig=0x3f9f`, `SecureBox=0xffff` (SE050E2) · `run-2026-10-19-se050-6b/6B1-version-identity.log`
+- 2026-10-19 · EVT-3D21 · `0b0db127` · `make se050-stress BOARD=pq1` · ✅ 6B.21/6B.29 Safe catalog **10 PASS / 0 FAIL / 10 SKIP** (incl. `scp03_response_encryption_verify`, `audit_unauth_read_refused`, `trng_quality_basic`) · `run-2026-10-19-se050-6b/6B21-stress-safe-full.log`
+- 2026-10-19 · EVT-3D21 · `0b0db127` + new `se050-probe` harness (`secure/src/se050/probe/`, `apdu::*_probe`, `Makefile se050-probe-hw`, `source_invariants::se050_probe_readonly_names_no_write_path`) · `make se050-probe-hw BOARD=pq1` · ✅ **SPROBE DONE OK.** 6B.2 UniqueID `0400500157990ff53d289104261f22df1390` stable; 6B.3 inventory 20 objects (0 production, 2 stale `0x7B0A_*` e2e leftovers, factory NXP IoT-trust `0xF*`); 6B.4 free 32767/796/784 B; 6B.6 all plain/no-SCP03 reads refused `0x6982`/`0x6985` · `run-2026-10-19-se050-6b/6B-probe.log`, `se050-probe-report.md`
+- 2026-10-19 · EVT-3D21 · `0b0db127` · `se050-stress-only-{audit_admin_passive_read_refused,audit_write_once_enforced,audit_data_substitution_chip_level} BOARD=pq1` · ✅ 6B.22 each **1 PASS / 0 FAIL**: admin read refused `0x6986`; write-once update refused `0x6986` (create w/o ALLOW_WRITE ok, no brick); chip-level substitution returns attacker bytes (expected; dual_se.rs:378 backstop) · `run-2026-10-19-se050-6b/6B22-*.log`
+- 2026-10-19 · EVT-3D21 · post-6B.22 `se050-probe` re-run · 6B.3/6B.4 inventory **byte-identical** to the pre-6B.22 probe (same 20 objects, free 32767/796/784 B) → the R tests self-cleaned, SE050 Δ=0 · `run-2026-10-19-se050-6b/6B-probe-post.log`
+- **EVT-3D21 state (end of the 10-19 SE050 §6B session):** RDP 0 (`0xAA`), TZEN=1, SRAM_RST=0, OTP blank (`9f56cda7…`, read under reset). Flash restored byte-identical to the pre-session snapshot `50b0ec89…` (pages 0–55 erased + rewritten from `pre-flash1.bin`, full-2MB re-read verified); option bytes identical; pages 123–127 never written (page-diff confirmed). **SE050:** no PUT KEY, no wrong cryptogram, no attempt burned; the Safe/6B.22 stress runs created and deleted only `0x7B5E_*` carve-out objects and the post-run inventory equals the pre-run inventory. The two `0x7B0A_*` e2e leftovers and the `0x7B5E_00A0` stress-admin UserID (all pre-existing) remain. **No production/e2e OID written, nothing provisioned.**

@@ -1046,3 +1046,53 @@ fn optiga_probe_readonly_names_no_write_path() {
         );
     }
 }
+
+/// The SE050 read-only probe (`se050-probe`, DVT §6B) must not name any
+/// write / create / delete / authenticate / rotate / provision path. Mirrors
+/// `optiga_probe_readonly_names_no_write_path`. The typed read helpers the
+/// probe calls live in `se050::apdu` (which legitimately reaches `send_apdu`
+/// and `t1.transceive`), never in the probe file itself.
+#[test]
+fn se050_probe_readonly_names_no_write_path() {
+    const FORBIDDEN: &[&str] = &[
+        "write_binary",
+        "write_userid",
+        "write_authed",
+        "write_once",
+        "delete_object",
+        "delete_id_list",
+        "iterative_delete",
+        "iterative_wipe",
+        "create_session",
+        "verify_session",
+        "put_key",
+        "rotate_scp03",
+        "rotate_pbs",
+        "rekey_admin",
+        "provision",
+        "factory_reset",
+        "admin_factory_reset",
+        "store_objects",
+        "store_duress",
+        "duress_verify",
+        "duress_read_half",
+        "send_apdu",
+        "transceive",
+        "run_admin_wipe",
+        "run_factory_reset",
+    ];
+    let rel = "secure/src/se050/probe/mod.rs";
+    let src = code_only(&read_workspace_file(rel));
+    for f in FORBIDDEN {
+        assert!(
+            !src.contains(f),
+            "{rel} names `{f}`: the read-only SE050 probe must not reach a write path. \
+             Call a typed read helper in se050::apdu instead."
+        );
+    }
+    // Non-vacuous: the read-only path does exist and reads.
+    assert!(
+        src.contains("read_id_list_probe") && src.contains("read_object_plain_probe"),
+        "se050 probe must call the read helpers (else this pin is vacuous)"
+    );
+}

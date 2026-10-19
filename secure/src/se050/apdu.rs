@@ -1100,6 +1100,245 @@ pub unsafe fn read_object_attributes(
     Ok(take)
 }
 
+// ===========================================================================
+// §6B read-only probe helpers (`se050-probe`, bench-only).
+//
+// Typed read-class commands used only by `se050::probe`. They live here, not
+// in the probe module, because they legitimately go through `send_apdu`
+// (SCP03) or `t1.transceive` (plain) — names the probe's read-only
+// `source_invariants` pin forbids inside the probe files. Each one is
+// read-class (GetVersion, ReadIDList, ReadType, ReadSize, GetFreeMemory, a
+// plain object read) and never creates, writes, deletes or authenticates an
+// object. AN12413 §4 / NXP `se05x_enums.h` P2 codes.
+// ===========================================================================
+
+/// `kSE05x_P2_SIZE`.
+#[cfg(feature = "se050-probe")]
+const P2_SIZE: u8 = 0x07;
+/// `kSE05x_P2_MEMORY` — GetFreeMemory.
+#[cfg(feature = "se050-probe")]
+const P2_MEMORY: u8 = 0x22;
+/// `kSE05x_P2_TYPE`.
+#[cfg(feature = "se050-probe")]
+const P2_TYPE: u8 = 0x26;
+
+/// Memory kinds for `get_free_memory_probe` (`kSE05x_MemoryType_*`).
+#[cfg(feature = "se050-probe")]
+pub const MEM_PERSISTENT: u8 = 0x01;
+#[cfg(feature = "se050-probe")]
+pub const MEM_TRANSIENT_RESET: u8 = 0x02;
+#[cfg(feature = "se050-probe")]
+pub const MEM_TRANSIENT_DESELECT: u8 = 0x03;
+
+/// The reserved applet object that holds the 18-byte device unique ID
+/// (`kSE05x_AppletResID_UNIQUE_ID`).
+#[cfg(feature = "se050-probe")]
+pub const UNIQUE_ID_OBJ: u32 = 0x7FFF_0206;
+
+/// One page of `ReadIDList` over SCP03. Writes up to `ids.len()` object IDs
+/// into `ids`, returns `(more, count)`. `offset` is the output offset the
+/// previous page returned; start at 0. Read-only (INS_READ / P2_LIST).
+#[cfg(feature = "se050-probe")]
+pub unsafe fn read_id_list_probe(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    offset: u16,
+    ids: &mut [u32],
+) -> Result<(bool, usize), Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_LIST);
+    apdu.tlv(TAG_1, &offset.to_be_bytes());
+    apdu.tlv(TAG_2, &[0xFF]);
+    let cmd = apdu.finish(true);
+
+    let mut resp = [0u8; 1024];
+    let resp_len = send_apdu(t1, scp03, cmd, &mut resp)?;
+
+    // TAG_1(more:1) + TAG_2(id_list: N*4), BER lengths (0x81/0x82 prefixes).
+    let mut more = 0u8;
+    let mut list_start = 0usize;
+    let mut list_len = 0usize;
+    let mut idx = 0usize;
+    while idx + 1 < resp_len {
+        let tag = resp[idx];
+        idx += 1;
+        let len_byte = resp[idx];
+        idx += 1;
+        let len: usize = if len_byte < 0x80 {
+            len_byte as usize
+        } else if len_byte == 0x81 && idx < resp_len {
+            let l = resp[idx] as usize;
+            idx += 1;
+            l
+        } else if len_byte == 0x82 && idx + 1 < resp_len {
+            let l = ((resp[idx] as usize) << 8) | (resp[idx + 1] as usize);
+            idx += 2;
+            l
+        } else {
+            break;
+        };
+        if tag == TAG_1 && len == 1 && idx < resp_len {
+            more = resp[idx];
+        } else if tag == TAG_2 {
+            list_start = idx;
+            list_len = len;
+        }
+        idx = idx.saturating_add(len);
+    }
+
+    let list_end = list_start.saturating_add(list_len).min(resp_len);
+    let mut n = 0usize;
+    let mut i = list_start;
+    while i + 3 < list_end && n < ids.len() {
+        ids[n] = ((resp[i] as u32) << 24)
+            | ((resp[i + 1] as u32) << 16)
+            | ((resp[i + 2] as u32) << 8)
+            | (resp[i + 3] as u32);
+        n += 1;
+        i += 4;
+    }
+    Ok((more != 0, n))
+}
+
+/// `ReadType` of an object (INS_READ / P2_TYPE). Copies the raw response
+/// (object type byte + transient indicator) into `out`.
+#[cfg(feature = "se050-probe")]
+pub unsafe fn read_object_type_probe(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    obj_id: u32,
+    out: &mut [u8],
+) -> Result<usize, Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_TYPE);
+    apdu.tlv_u32(TAG_1, obj_id);
+    let cmd = apdu.finish(true);
+    let mut resp = [0u8; 64];
+    let n = send_apdu(t1, scp03, cmd, &mut resp)?;
+    if let Some((_, val, _)) = tlv_parse(&resp[..n]) {
+        let take = val.len().min(out.len());
+        out[..take].copy_from_slice(&val[..take]);
+        return Ok(take);
+    }
+    let take = n.min(out.len());
+    out[..take].copy_from_slice(&resp[..take]);
+    Ok(take)
+}
+
+/// `ReadSize` of an object (INS_READ / P2_SIZE). Returns the u16 size.
+#[cfg(feature = "se050-probe")]
+pub unsafe fn read_object_size_probe(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    obj_id: u32,
+) -> Result<u16, Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_SIZE);
+    apdu.tlv_u32(TAG_1, obj_id);
+    let cmd = apdu.finish(true);
+    let mut resp = [0u8; 64];
+    let n = send_apdu(t1, scp03, cmd, &mut resp)?;
+    let val = tlv_parse(&resp[..n]).map(|(_, v, _)| v).unwrap_or(&resp[..n]);
+    if val.len() >= 2 {
+        Ok(((val[val.len() - 2] as u16) << 8) | (val[val.len() - 1] as u16))
+    } else if val.len() == 1 {
+        Ok(val[0] as u16)
+    } else {
+        Ok(0)
+    }
+}
+
+/// `GetFreeMemory` (INS_MGMT / P2_MEMORY). `mem_type` is one of the
+/// `MEM_*` kinds. Returns the u16 free-byte count. Read-only.
+#[cfg(feature = "se050-probe")]
+pub unsafe fn get_free_memory_probe(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    mem_type: u8,
+) -> Result<u16, Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_MGMT, P1_DEFAULT, P2_MEMORY);
+    apdu.tlv(TAG_1, &[mem_type]);
+    let cmd = apdu.finish(true);
+    let mut resp = [0u8; 64];
+    let n = send_apdu(t1, scp03, cmd, &mut resp)?;
+    let val = tlv_parse(&resp[..n]).map(|(_, v, _)| v).unwrap_or(&resp[..n]);
+    if val.len() >= 2 {
+        Ok(((val[0] as u16) << 8) | (val[1] as u16))
+    } else {
+        Ok(0)
+    }
+}
+
+/// Read a binary/data object with no UserID session, over platform SCP03
+/// (INS_READ / P2_DEFAULT, Le). Copies the data into `out`. Used to prove a
+/// user-gated object refuses a sessionless read. Read-only.
+#[cfg(feature = "se050-probe")]
+pub unsafe fn read_object_plain_probe(
+    t1: &mut T1State,
+    scp03: &mut Scp03Session,
+    obj_id: u32,
+    out: &mut [u8],
+) -> Result<usize, Se050Error> {
+    let mut apdu = ApduBuf::new(0x80, INS_READ, P1_DEFAULT, P2_DEFAULT);
+    apdu.tlv_u32(TAG_1, obj_id);
+    let cmd = apdu.finish(true);
+    let mut resp = [0u8; 256];
+    let n = send_apdu(t1, scp03, cmd, &mut resp)?;
+    if let Some((_, val, _)) = tlv_parse(&resp[..n]) {
+        let take = val.len().min(out.len());
+        out[..take].copy_from_slice(&val[..take]);
+        return Ok(take);
+    }
+    let take = n.min(out.len());
+    out[..take].copy_from_slice(&resp[..take]);
+    Ok(take)
+}
+
+/// Send one read-class APDU **without SCP03** (plaintext on the wire), for the
+/// §6B.6 "is platform SCP mandatory?" matrix. Drives `t1.transceive` directly,
+/// so it never goes through the `send_apdu` SCP03 guard. Returns the raw SW and
+/// copies any response data (minus SW) into `out`.
+///
+/// Read-class only by construction: the caller passes a fixed header and the
+/// probe only ever builds GetVersion / GetRandom / ReadIDList / CheckExists /
+/// ReadSize / Read headers with it. It intentionally cannot create, write,
+/// delete or authenticate — those take TLV bodies the probe never assembles
+/// here, and the read-only `source_invariants` pin forbids the write/auth
+/// builders in the probe file.
+#[cfg(feature = "se050-probe")]
+pub unsafe fn plain_readclass_probe(
+    t1: &mut T1State,
+    ins: u8,
+    p1: u8,
+    p2: u8,
+    body: &[u8],
+    out: &mut [u8],
+) -> Result<(u16, usize), Se050Error> {
+    let mut apdu = [0u8; 64];
+    apdu[0] = 0x80;
+    apdu[1] = ins;
+    apdu[2] = p1;
+    apdu[3] = p2;
+    let total;
+    if body.is_empty() {
+        apdu[4] = 0x00; // Le only (Case 2)
+        total = 5;
+    } else {
+        apdu[4] = body.len() as u8;
+        apdu[5..5 + body.len()].copy_from_slice(body);
+        apdu[5 + body.len()] = 0x00; // Le
+        total = 6 + body.len();
+    }
+    let mut resp = [0u8; 256];
+    let n = t1
+        .transceive(&apdu[..total], &mut resp)
+        .map_err(|_| Se050Error::Transport)?;
+    if n < 2 {
+        return Err(Se050Error::Transport);
+    }
+    let sw = ((resp[n - 2] as u16) << 8) | (resp[n - 1] as u16);
+    let data_len = (n - 2).min(out.len());
+    out[..data_len].copy_from_slice(&resp[..data_len]);
+    Ok((sw, data_len))
+}
+
 /// Iteratively delete every user-created object on the SE050, mirroring
 /// the NXP SDK's `Se05x_API_DeleteAll_Iterative`.
 ///

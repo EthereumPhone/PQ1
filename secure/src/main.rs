@@ -308,6 +308,21 @@ compile_error!(
     "`optiga-probe` requires `otp-hardcoded-master-key`: any other PBS root can \
      burn OTP or touch SAES state on a blank die"
 );
+#[cfg(all(feature = "se050-probe", feature = "mock-se"))]
+compile_error!("`se050-probe` requires real SE050 silicon — drop `mock-se`");
+#[cfg(all(feature = "se050-probe", not(feature = "se050")))]
+compile_error!("`se050-probe` drives the SE050 driver — build with `se050`");
+#[cfg(all(feature = "se050-probe", feature = "dual-se"))]
+compile_error!("`se050-probe` is a standalone SE050 image — drop `dual-se` (it only probes the SE050)");
+#[cfg(all(feature = "se050-probe", not(feature = "stm32u585")))]
+compile_error!("`se050-probe` is a hardware probe — build with `stm32u585`");
+#[cfg(all(feature = "se050-probe", not(feature = "debug-log")))]
+compile_error!("`se050-probe` reports over semihosting — build with `debug-log`");
+#[cfg(all(feature = "se050-probe", not(feature = "otp-hardcoded-master-key")))]
+compile_error!(
+    "`se050-probe` requires `otp-hardcoded-master-key`: any other key root can \
+     burn OTP on a blank die"
+);
 #[cfg(not(test))]
 mod timeout;
 #[cfg(all(feature = "optiga-trust-m", not(test)))]
@@ -1912,6 +1927,30 @@ fn main() -> ! {
             // SAFETY: single-threaded boot path; nothing else holds SE.
             let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
             rng_xor_probe::run_and_halt(se);
+        }
+
+        // Bench SE050 read-only deep probe (`se050::probe`, DVT §6B). TERMINAL
+        // for the same reason as the probes above: everything after this point
+        // writes to the secure elements, and this build must not. The probe
+        // itself only reads (identity, inventory, free memory, the plain-
+        // command surface); the read-only `source_invariants` pin enforces
+        // that it names no write path. Standalone `se050` build (no OPTIGA),
+        // so `SE` is a bare `Se050`.
+        #[cfg(feature = "se050-probe")]
+        {
+            // SAFETY: single-threaded boot path; nothing else holds SE, and
+            // nothing will after this block (SYS_EXIT / wfe).
+            let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
+            let ok = unsafe { se050::probe::run(se) };
+            secure_log!("[SPROBE] halting — this build never touches the SEs again");
+            cortex_m_semihosting::debug::exit(if ok {
+                cortex_m_semihosting::debug::EXIT_SUCCESS
+            } else {
+                cortex_m_semihosting::debug::EXIT_FAILURE
+            });
+            loop {
+                cortex_m::asm::wfe();
+            }
         }
     }
 
