@@ -70,6 +70,7 @@ pub mod raster;
 pub mod rows;
 pub mod scene;
 pub mod screen;
+pub mod stream;
 pub mod verdict;
 #[allow(clippy::unreadable_literal, missing_docs)]
 pub mod verdict_geom;

@@ -2544,7 +2544,7 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
         4,
         "the fn, present_frame_ex's full call and present_film's two calls"
     );
-    assert_eq!(UI_PX_LCD_SRC.matches("Some((x0, x1)))").count(), 1, "one partial call site");
+    assert_eq!(UI_PX_LCD_SRC.matches("Some((x0, x1)), film_bg_allowed())").count(), 1, "one partial call site");
     let film = UI_PX_LCD_SRC
         .split("fn present_film(")
         .nth(1)
@@ -2554,7 +2554,7 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
         "if first || glass != lcd::glass_writes() || !film_partial_allowed() {\n        Damage::All"
     ));
     assert!(film.contains(
-        "Damage::Cols(x0, x1) => {\n            FILM_WIN.store(band_window(x0, x1), Ordering::Relaxed);\n            present_frame_cols(&frame, font, false, Some((x0, x1)))\n        }"
+        "Damage::Cols(x0, x1) => {\n            FILM_WIN.store(band_window(x0, x1), Ordering::Relaxed);\n            present_frame_cols(&frame, font, false, Some((x0, x1)), film_bg_allowed())\n        }"
     ));
     assert!(film.contains("let kept = if cost.streamed { sigs } else { FrameSigs::UNKNOWN };"));
     let start = UI_PX_LCD_SRC.split("pub fn film_start_with(").nth(1).expect("film_start_with");
@@ -2791,10 +2791,85 @@ fn negative_te_stamps_are_the_busy_films_alone() {
 
     // The phase start is reached only for a partial (`cols`) frame, and the
     // edge wait and the beam wait both still run when it is not taken.
-    assert!(UI_PX_LCD_SRC.contains("let phased = cols.is_some() && phase_start(xa, xend);"));
+    assert!(UI_PX_LCD_SRC.contains("let phased = cols.is_some() && {"));
+    assert!(UI_PX_LCD_SRC.contains("        phase_start(xa, xend, &mut work)\n    };"));
+    // Work done while waiting never pushes the start past the range.
+    assert!(UI_PX_LCD_SRC.contains("if wait > BAND_RENDER_CYC && work() {"));
     assert!(UI_PX_LCD_SRC.contains("if !phased {\n        let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);"));
     assert!(UI_PX_LCD_SRC.contains("if !phased && xa > TE_SCANLINE {"));
     // And the start range is the presenter's own tear-free condition.
     assert!(UI_PX_LCD_SRC.contains("let lo = xa.max(TE_SCANLINE) + PHASE_MARGIN_ROWS;"));
     assert!(UI_PX_LCD_SRC.contains("let hi = (W + xend - (w * 1749 + 999) / 1000 - PHASE_MARGIN_ROWS).min(W - 1);"));
+}
+
+#[test]
+fn negative_background_stream_is_the_busy_films_alone() {
+    // #934 stage 2. ASSUMPTION ATTACKED: a frame other than the film's
+    // partial redraw streams in the background (a consent screen returning
+    // before it is on the glass); something draws while a background stream
+    // is on the wire, or is silently skipped behind its latch; the GPDMA
+    // interrupt is unmasked without a dispatch arm (wipe + reset); or the
+    // interrupt does a read-modify-write on a GPIO port the thread also uses.
+    //
+    // Only the film's partial frames may: every other call passes `false`.
+    assert!(UI_PX_LCD_SRC.contains("    present_frame_cols(frame, font, force, None, false)\n"));
+    assert!(UI_PX_LCD_SRC.contains("Damage::All => present_frame_cols(&frame, font, false, None, false),"));
+    assert_eq!(UI_PX_LCD_SRC.matches("present_frame_cols(").count(), 4);
+    // A background frame is collected before any frame takes the latch.
+    let pfc = UI_PX_LCD_SRC.split("fn present_frame_cols(").nth(1).expect("present_frame_cols");
+    let reap = pfc.find("film_reap(true);").expect("reap first");
+    let latch = pfc.find("if FRAME_IN_FLIGHT.swap(true, Ordering::Acquire) {").expect("latch");
+    assert!(reap < latch, "collect a background frame before taking the latch");
+    // Only a successful queue keeps the latch; anything else aborts.
+    assert!(pfc.contains(
+        "if present_bg(frame, font, bands, xa, xend, (pre, pre_x), &mut cost) {\n            core::mem::forget(_guard);"
+    ));
+    assert!(pfc.contains("} else {\n            lcd::async_abort();\n        }\n        return cost;"));
+    // The film's own entry points collect it too, and a tick skips while it
+    // streams.
+    for f in ["pub fn film_start_with(", "pub fn film_abort() {", "pub fn film_resolve(e: Ending) {"] {
+        let body = UI_PX_LCD_SRC.split(f).nth(1).expect(f);
+        let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
+        assert!(body.contains("film_reap(true);"), "{f} must collect a background frame");
+    }
+    assert!(UI_PX_LCD_SRC.contains("    if !film_reap(false) {\n        return;\n    }"));
+    let reap_fn = UI_PX_LCD_SRC.split("fn film_reap(wait: bool) -> bool {").nth(1).expect("film_reap");
+    let reap_fn = &reap_fn[..reap_fn.find("\n}\n").unwrap_or(reap_fn.len())];
+    assert!(reap_fn.contains("wipe_scratch();") && reap_fn.contains("FRAME_IN_FLIGHT.store(false, Ordering::Release);"));
+    assert!(reap_fn.contains("if !lcd::async_ok() {"), "a failed stream forgets the glass");
+
+    // Every new transaction the panel driver starts waits for (or aborts) a
+    // background stream first.
+    assert!(LCD_NV3007_SRC.contains("use crate::hw::spi_hw::{cs_deassert, SPI_BASE};"));
+    assert!(LCD_NV3007_SRC.contains(
+        "fn cs_assert() {\n    #[cfg(feature = \"ui-px-dma\")]\n    let _ = async_drain();\n    crate::hw::spi_hw::cs_assert();\n}"
+    ));
+    assert!(!LCD_NV3007_SRC.contains("spi_hw::cs_assert;"), "no path around the drain");
+
+    // The interrupt: dispatched under the cfg that sets its enables, before
+    // the catch-all; only `start_px_irq` sets them, only the background
+    // stream calls it; secure target, priority below SysTick.
+    let dh = MAIN_SRC.split("unsafe fn DefaultHandler(irqn: i16)").nth(1).expect("DefaultHandler");
+    let dh = &dh[..dh.find("\n}\n").unwrap_or(dh.len())];
+    let arm = "#[cfg(feature = \"ui-px-dma\")]\n        n if i32::from(n) == hw::gpdma::IRQN as i32 => unsafe { hw::lcd_nv3007::on_dma_irq() },";
+    let at = dh.find(arm).expect("DefaultHandler must dispatch GPDMA1 CH0");
+    assert!(at < dh.find("_ => {").expect("catch-all"));
+    assert!(GPDMA_SRC.contains("pub const IRQN: u32 = 29;"));
+    assert!(GPDMA_SRC.contains("pub fn start_px(px: &[u16]) {\n    arm(px, CR_EN);\n}"), "the polled path raises no interrupt");
+    assert_eq!(GPDMA_SRC.matches("CR_EN | CR_IRQ").count(), 1);
+    assert_eq!(LCD_NV3007_SRC.matches("gpdma::start_px_irq(").count(), 1);
+    assert!(GPDMA_SRC.contains("Reg32::new(0xE000_E380 + 4 * (IRQN / 32)).modify(|v| v & !bit);"));
+    assert!(GPDMA_SRC.contains("ipr.modify(|v| (v & !(0xFF << shift)) | (0x40 << shift));"));
+    assert!(GPDMA_SRC.contains("const CR_TCIE: u32 = 1 << 8;") && GPDMA_SRC.contains("const CR_USEIE: u32 = 1 << 12;"));
+
+    // What the interrupt drives on the GPIO ports: DC and CS through BSRR
+    // only (atomic), so a thread-side MODER/ODR update on the same port can
+    // never be lost to it.
+    let isr = LCD_NV3007_SRC.split("pub unsafe fn on_dma_irq() {").nth(1).expect("on_dma_irq");
+    let isr = &isr[..isr.find("\n}\n").unwrap_or(isr.len())];
+    for call in ["bg_start(", "bg_finish(", "spi_end()", "spi_force_down()"] {
+        assert!(isr.contains(call), "{call}");
+    }
+    assert!(LCD_NV3007_SRC.contains("fn dc_high() {\n    REG.dc_bsrr.write(DC_HIGH_BS);"));
+    assert!(SPI_HW_SRC.contains("REG.gpio_bsrr.write(1 << CS_PIN); // BS12 = set"));
 }

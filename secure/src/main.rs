@@ -5342,6 +5342,12 @@ unsafe fn DefaultHandler(irqn: i16) {
         #[cfg(feature = "ui-lcd")]
         n if hw::lcd_te::owns_irq(n) => unsafe { hw::lcd_te::on_irq() },
 
+        // GPDMA1 channel 0 (IRQ 29): the busy film's background stream
+        // (#934 stage 2). Only `gpdma::start_px_irq` sets the channel's
+        // interrupt enables, under the same cfg.
+        #[cfg(feature = "ui-px-dma")]
+        n if i32::from(n) == hw::gpdma::IRQN as i32 => unsafe { hw::lcd_nv3007::on_dma_irq() },
+
         // Unmatched — log, wipe secrets, reset (F33/RUN-5). NOT a
         // panic so the host semihosting backend gets a chance to
         // flush the log line before the chip resets. Reachability
