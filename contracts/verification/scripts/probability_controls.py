@@ -3449,4 +3449,266 @@ def cases(project: Path) -> list[dict]:
         "≤ forsCoverageCharge (qr + qs + 1)", "≤ forsCoverageCharge (qr + qs)")
     by_statement("observed-charge-plus-zero", "ObservedCoverage", "c10_observed_forest_coverage_bound",
         "≤ forsCoverageCharge (qr + qs + 1)", "≤ forsCoverageCharge (qr + qs + 1 + 0)", True)
+
+    # Ordinary FORS opening: complete consumers of cloned semantic boundaries.
+    # Every negative has a compiling definition and an unchanged passing baseline.
+    bz_prefix = ("import C10Probability.OpeningExamples\nimport C10Probability.ForsOpeningExamples\n"
+                 "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n"
+                 "variable {K P α H S R T U V N L I : Type*} [DecidableEq K]\n"
+                 "attribute [local instance] Classical.propDecidable\n")
+    bz_suffix = "\nend\nend C10Probability\n"
+
+    def bz_alias(*pairs):
+        names = {name: name + "BZCandidate" for _, name in pairs}
+        declarations = []
+        for module, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|attribute|end|set_option)\b)",
+                src[module], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing opening definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "BZSlice"
+        src[key] = bz_prefix + "\n".join(declarations) + bz_suffix
+        return key, names
+
+    def bz_check(module, name, names):
+        check = theorem(src[module], name)
+        for old, new in names.items():
+            check = re.sub(r"\b" + old + r"\b", new, check)
+        return check
+
+    def bz_variants(pairs, module, consumer, variants):
+        key, names = bz_alias(*pairs)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("fors-opening-" + label, key, old, new, bz_check(module, consumer, names), expected)
+
+    bz_variants([("OpeningProgram", "evalOpening")], "OpeningExamples", "opening_repeated_cached", [
+        ("commit-cache-reset", "(memoQuery p table (encode (project secret) label))", "(memoQuery p (fun _ => none) (encode (project secret) label))", False),
+        ("commit-cache-thread-id", "reply.2 opened\n  | _, .reveal", "(id reply.2) opened\n  | _, .reveal", True),
+    ])
+    bz_variants([("OpeningProgram", "evalOpening"), ("OpeningGuess", "openingGame"), ("OpeningExamples", "openingSuccess")],
+        "OpeningExamples", "opening_commit_first_mass", [
+        ("public-cache-reset", "(memoQuery p table key)", "(memoQuery p (fun _ => none) key)", False),
+        ("commit-cache-update-lost", "(next reply.1) reply.2 opened\n  | _, .reveal", "(next reply.1) table opened\n  | _, .reveal", False),
+        ("commit-key-eta", "(encode (project secret) label)", "((fun value => encode value label) (project secret))", True),
+    ])
+    bz_variants([("OpeningProgram", "evalOpening")], "OpeningExamples", "opening_reveal_retains_full", [
+        ("reveal-flag-lost", "(next secret) table true", "(next secret) table false", False),
+        ("reveal-cache-cleared", "(next secret) table true", "(next secret) (fun _ => none) true", False),
+        ("reveal-secret-id", "(next secret) table true", "(next (id secret)) table true", True),
+    ])
+    bz_variants([("OpeningProgram", "openingRetain"), ("OpeningGuess", "openingGame"), ("OpeningExamples", "openingSuccess")],
+        "OpeningExamples", "opening_reveal_cannot_guess", [
+        ("revealed-candidate-retained", "if out.opened then none else some out.value", "some out.value", False),
+        ("reveal-retain-flag-inverted", "if out.opened then", "if !out.opened then", False),
+        ("reveal-retain-id", "then none else", "then id none else", True),
+    ])
+    bz_variants([("OpeningGuess", "openingCandidates")], "OpeningGuess", "opening_candidates_count", [
+        ("candidate-set-id", "| some value => candidates value", "| some value => id (candidates value)", True),
+    ])
+    bz_variants([("MemoPresample", "restoreTarget")], "OpeningExamples", "opening_unused_presample_removed", [
+        ("unused-prefill-visible", "if target ∈ out.queries then out.cache else Function.update out.cache target none", "out.cache", False),
+        ("presample-membership-inverted", "if target ∈ out.queries then", "if target ∉ out.queries then", False),
+        ("presample-erasure-id", "Function.update out.cache target none", "id (Function.update out.cache target none)", True),
+    ])
+    bz_variants([("MemoPresample", "restoreTarget")], "OpeningExamples", "opening_used_presample_retained", [
+        ("queried-prefill-erased", "then out.cache else", "then Function.update out.cache target none else", False),
+    ])
+    bz_variants([("MemoPresample", "restoreTarget")], "OpeningExamples", "opening_other_presample_preserved", [
+        ("unrelated-cache-erased", "else Function.update out.cache target none", "else fun _ => none", False),
+    ])
+    bz_variants([("CandidateBudget", "variableCandidate")], "OpeningExamples", "opening_fixed_candidates_still_hit", [
+        ("fixed-membership-inverted", "value ∉ fixed", "value ∈ fixed", False),
+        ("fixed-candidates-recharged", "decide (value ∉ fixed)", "true", False),
+        ("fixed-membership-id", "value ∉ fixed", "id value ∉ fixed", True),
+    ])
+    bz_variants([("CandidateBudget", "variableCandidate")], "NodeCommitment", "node_private_candidate_excluded", [
+        ("private-candidate-charged", "| none => false", "| none => true", False),
+    ])
+    bz_variants([("NodeCommitment", "decodeNodeSlot")], "NodeCommitment", "decode_node_slot_append", [
+        ("node-threshold-strict", "if 32 ≤ key.length", "if 32 < key.length", False),
+        ("node-block-wrong-offset", "key.length - 32", "key.length - 31", False),
+        ("node-block-first-not-last", "key.drop (key.length - 32)", "key.take 32", False),
+        ("node-threshold-plus-zero", "if 32 ≤ key.length", "if 32 + 0 ≤ key.length", True),
+    ])
+    bz_variants([("NodeCommitment", "decodeNodeSlot")], "ForsOpeningExamples", "short_node_candidate_excluded", [
+        ("short-input-admitted", "if 32 ≤ key.length", "if 31 ≤ key.length", False),
+    ])
+    bz_variants([("NodeCommitment", "nodeOfBlock")], "NodeCommitment", "node_of_block_node", [
+        ("node-bytes-reversed", "bytes[i.val]?", "bytes[15 - i.val]?", False),
+        ("node-bytes-shifted", "bytes[i.val]?", "bytes[i.val + 1]?", False),
+    ])
+    bz_variants([("NodeCommitment", "nodeCommitEncode")], "NodeCommitment", "node_commit_decodes", [
+        ("commit-node-zero", "nodeBlock secret", "nodeBlock 0", False),
+        ("commit-private-domain", ".inl (label ++", ".inr (label ++", False),
+        ("commit-node-id", ".inl (label ++ nodeBlock secret)", "Sum.inl (label ++ nodeBlock secret)", True),
+    ])
+    bz_variants([("ForsLeafOpening", "deferredNode"), ("ForestSignOpening", "deferredForestOutput"), ("C10FinishOpening", "c10ReleaseOpening")], "ForsOpeningExamples", "fors_selected_release_opens", [
+        ("deferred-node-zero", "node.getD (randomizerOfDigest secret)", "node.getD 0", False),
+    ])
+    bz_variants([("ForsLeafOpening", "forsSecretOpening")], "ForsLeafOpening", "fors_secret_opening_refines", [
+        ("selected-node-zero", "then .done none", "then .done (some 0)", False),
+        ("other-private-node-dropped", "some (randomizerOfDigest value)", "none", False),
+        ("selected-coordinate-identity", "forsTargetKey target", "forsTargetKey (id target)", True),
+    ])
+    bz_variants([("ForsLeafOpening", "nodeHashOpening")], "ForsLeafOpening", "node_hash_opening_refines", [
+        ("known-node-zero", "nodeBlock node", "nodeBlock 0", False),
+        ("node-reply-zero", "| none => .commit label (fun reply => .done (randomizerOfDigest reply))", "| none => .commit label (fun _ => .done 0)", False),
+    ])
+    bz_variants([("ForsLeafOpening", "forsLeafOpening")], "ForsLeafOpening", "fors_leaf_opening_refines", [
+        ("leaf-address-tree-zero", "c10Address 0 ht 3 tree 0 0 leaf", "c10Address 0 ht 3 0 0 0 leaf", False),
+        ("leaf-address-height-shift", "c10Address 0 ht 3 tree 0 0 leaf", "c10Address 0 ht 3 tree 0 1 leaf", False),
+    ])
+    bz_variants([("ForsRecoverOpening", "forsRecoverOpening")], "ForsRecoverOpening", "fors_recover_opening_refines", [
+        ("recovery-auth-discarded", "seed ht tree auth 11", "seed ht tree [] 11", False),
+        ("recovery-index-zero", "auth 11 0 leaf current", "auth 11 0 0 current", False),
+        ("recovery-auth-id", "seed ht tree auth 11", "seed ht tree (id auth) 11", True),
+    ])
+    bz_variants([("ForestFillOpening", "deferredForestWrite")], "ForestFillOpening", "deferred_forest_write", [
+        ("forest-secret-slot-zero", "state.secrets.set tree out.secret", "state.secrets.set 0 out.secret", False),
+        ("forest-auth-write-dropped", "state.auths.set tree out.auth", "state.auths", False),
+        ("forest-root-write-dropped", "state.roots.set tree out.root", "state.roots", False),
+    ])
+    bz_variants([("ForestSignOpening", "forestLastOpening")], "ForestSignOpening", "forest_last_opening_refines", [
+        ("special-tree-changed", "forsLeafInput seed ht 12 0 last", "forsLeafInput seed ht 11 0 last", False),
+        ("special-root-write-zero", "state.roots.set 12", "state.roots.set 0", False),
+    ])
+    bz_variants([("C10FinishOpening", "c10ReleaseOpening")], "ForsOpeningExamples", "fors_selected_release_opens", [
+        ("release-selection-inverted", "if none ∈ forest.secrets then", "if none ∉ forest.secrets then", False),
+        ("release-substitutes-zero", "deferredForestOutput secret forest", "deferredForestOutput 0 forest", False),
+        ("release-candidate-identity", "none ∈ forest.secrets", "none ∈ id forest.secrets", True),
+    ])
+    bz_variants([("C10FinishOpening", "c10ReleaseOpening")], "C10FinishOpening", "c10_release_failure_retains", [
+        ("failed-request-reveals", "| none => .done none", "| none => .reveal (fun _ => .done none)", False),
+    ])
+    bz_variants([("C10SignOpening", "c10SignOpening")], "C10SignOpening", "c10_sign_opening_refines", [
+        ("rgrind-message-zero", "random message seed root m hm", "random [] seed root m hm", False),
+        ("rgrind-root-zero", "random message seed root m hm", "random message seed [] m hm", False),
+    ])
+    bz_variants([("ObservedOpening", "c10ObservedSessionOpening")], "ObservedOpening", "c10_observed_session_opening_refines", [
+        ("raw-history-lost", "mapOpeningReturn (observeHash key)", "mapOpeningReturn id", False),
+        ("successful-exposure-lost", "mapOpeningReturn (observeSign req reply)", "mapOpeningReturn id", False),
+        ("failure-ledger-lost", "(sessionAfterSign ledger req.message reply)", "ledger", False),
+        ("absorbed-raw-reply-changed", "cfg (next 0) 0 qs ledger", "cfg (next 1) 0 qs ledger", False),
+        ("session-refusal-inverted", "if sessionAdmits ledger req then", "if !sessionAdmits ledger req then", False),
+        ("session-ledger-id", "(sessionAfterSign ledger req.message reply)", "(id (sessionAfterSign ledger req.message reply))", True),
+    ])
+    bz_variants([("ObservedOpening", "c10ObservedDriverOpening")], "ObservedOpening", "c10_observed_driver_opening_refines", [
+        ("final-accepted-inverted", "⟨observed, accepted⟩", "⟨observed, !accepted⟩", False),
+    ])
+    bz_variants([("ObservedOpeningDisclosure", "ForsReturned")], "ObservedOpeningDisclosure", "c10_observed_game_opened", [
+        ("returned-empty-history", "∃ entry ∈ entries,", "∃ entry ∈ ([] : List C10Exposure),", False),
+        ("returned-digest-zero", "ForestSelected target (hypertreeIndex digest) digest", "ForestSelected target (hypertreeIndex digest) 0", False),
+        ("returned-history-id", "∃ entry ∈ entries,", "∃ entry ∈ id entries,", True),
+    ])
+    bz_variants([("SelectedOpeningEvent", "selectedOpeningEvent"), ("ObservedOpeningBound", "observedSelectedOpening")],
+        "ForsOpeningExamples", "fors_returned_not_selected", [
+        ("returned-exclusion-dropped", "¬ returned out.1 out.2", "True", False),
+    ])
+    bz_variants([("ObservedOpeningBound", "forgedForsCandidates"), ("ObservedOpeningBound", "observedSelectedOpening")], "ObservedForestOpening", "observed_forest_opening_selected", [
+        ("final-slot-omitted", "i : Fin 12", "i : Fin 11", False),
+        ("final-slots-forced-zero", "(out.driver.session.session.value.2.secrets[i.val]?).getD 0", "(0 : Randomizer)", False),
+    ])
+    bz_variants([("ObservedOpeningBound", "forgedForsCandidates")], "ObservedOpeningBound", "forged_fors_candidates_card", [
+        ("special-slot-included", "i : Fin 12", "i : Fin 13", False),
+    ])
+    bz_variants([("ObservedOpeningBound", "forsOpeningCharge")], "ObservedOpeningBound", "c10_observed_selected_opening_bound", [
+        ("fixed-charge-one-lost", "177526 + qr", "177525 + qr", False),
+        ("final-slot-undercharge", "177524 + qr", "177523 + qr", False),
+        ("charge-plus-zero", "177526 + qr", "177526 + qr + 0", True),
+    ])
+
+    def bz_statement(label, module, name, old, new, expected=False, variables=""):
+        check = theorem(src[module], name)
+        if check.count(old) != 1:
+            raise ValueError("opening statement site " + label)
+        match = re.search(r"\s*:=\s*by\b", check)
+        if not match:
+            raise ValueError("opening consumer must have a full proof " + name)
+        prefix = bz_prefix + variables + "\n"
+        changed = check.replace(old, new, 1)
+        out.append({"name": "fors-opening-" + label, "definition": prefix + bz_suffix,
+                    "baseline": prefix + check + bz_suffix,
+                    "checked": prefix + changed + bz_suffix, "expected": expected})
+
+    bz_statement("presample-freshness-erased", "MemoPresample", "eval_program_presample",
+        "fresh : table target = none", "fresh : True", variables="variable [DecidableEq K]")
+    bz_statement("uniform-projection-erased", "OpeningGuess", "opening_candidate_bound",
+        "uniform : secretDraw.map project = PMF.uniformOfFintype S", "uniform : True")
+    bz_statement("selected-avoidance-erased", "SelectedOpeningEvent", "selected_opening_comparison",
+        "avoids : OpeningAvoids target instrumented", "avoids : True", variables="variable [DecidableEq K]")
+    bz_statement("selected-disclosure-erased", "SelectedOpeningEvent", "selected_opening_comparison",
+        "out.opened = true → returned out.value out.cache", "out.opened = true → True", variables="variable [DecidableEq K]")
+    bz_statement("node-label-injectivity-erased", "OpeningGuess", "opening_candidate_bound",
+        "labels : ∀ secret, Function.Injective (encode secret)", "labels : True")
+    bz_statement("node-decoding-law-erased", "OpeningGuess", "opening_candidate_bound",
+        "prefixLaw : ∀ secret label, decode (encode secret label) = some secret", "prefixLaw : True")
+    bz_statement("finite-union-one-target-lost", "ObservedForestOpening", "c10_observed_forest_opening_bound_real",
+        "(6442450944 : ℝ) *", "(6442450943 : ℝ) *")
+    bz_variants([("OpeningProgram", "evalOpening"), ("OpeningGuess", "openingGame"), ("OpeningExamples", "openingSuccess")],
+        "OpeningExamples", "opening_public_first_mass", [
+        ("public-cache-update-lost", "(next reply.1) reply.2 opened\n  | _, .commit", "(next reply.1) table opened\n  | _, .commit", False),
+    ])
+    bz_variants([("OpeningCache", "OpeningAvoids")], "OpeningCache", "eval_opening_update_avoided", [
+        ("avoidance-query-dropped", "key ≠ target ∧", "True ∧", False),
+    ])
+    bz_variants([("OpeningSealed", "OpeningSealed")], "OpeningSealed", "opening_sealed_flag", [
+        ("sealed-reveal-admitted", "| _, .reveal _ => False", "| _, .reveal _ => True", False),
+    ])
+    bz_variants([("OpeningPost", "OpeningPost")], "OpeningPost", "opening_post_support", [
+        ("post-result-forgotten", "| _, .done value => post value", "| _, .done _ => True", False),
+    ])
+    bz_variants([("OpeningRefinement", "openingProject"), ("OpeningRefinement", "OpeningRefines")],
+        "OpeningRefinement", "opening_refines_done", [
+        ("refinement-cache-erased", "(interpret out.value, out.cache)", "(interpret out.value, fun _ => none)", False),
+    ])
+    bz_variants([("OpeningTree", "openingTreeProgram")], "OpeningTree", "opening_tree_refines", [
+        ("tree-leaf-counter-stalled", "n (start + 1)", "n start", False),
+        ("tree-remembered-state-lost", "(nextShape shape) merged.1 merged.2", "(nextShape shape) merged.1 state", False),
+        ("tree-leaf-counter-identity", "n (start + 1)", "n ((fun x => x) (start + 1))", True),
+    ])
+    bz_variants([("ForsTreeOpening", "forsTreeOpening")], "ForsTreeOpening", "fors_tree_opening_refines", [
+        ("tree-auth-target-zero", "(forsRemember leaf)", "(forsRemember 0)", False),
+    ])
+    bz_variants([("ForestFillOpening", "forestFillStepOpening")], "ForestFillOpening", "forest_fill_step_opening_refines", [
+        ("forest-selected-leaf-zero", "(forestIndex digest tree.val)", "0", False),
+    ])
+    bz_variants([("ObservedOpening", "c10ObservedGameOpening")], "ObservedOpening", "c10_observed_game_opening_refines", [
+        ("adversary-root-changed", "adversary key.1 key.2", "adversary key.1 []", False),
+        ("initialized-config-root-lost", "(sessionConfigAt cfg key)", "cfg", False),
+    ])
+    bz_variants([("ObservedOpeningBound", "forsOpeningCharge")], "ForsOpeningExamples", "fors_one_signature_charge", [
+        ("signing-variable-undercharge", "qs * 408408", "qs * 408407", False),
+    ])
+    bz_variants([("ForsTarget", "ForsTarget")], "ForsTarget", "fors_target_card", [
+        ("target-address-truncated", "Fin (2 ^ 18)", "Fin (2 ^ 17)", False),
+        ("target-tree-omitted", "Fin 12", "Fin 11", False),
+        ("target-leaf-omitted", "Fin 2048", "Fin 2047", False),
+        ("target-cardinality-identity", "Fin 2048", "Fin (2048 + 0)", True),
+    ])
+    bz_variants([("ObservedForestOpening", "ObservedForestOpening")], "ObservedForestOpening", "observed_forest_opening_selected", [
+        ("full-history-erased", "out.1.driver.session.exposures records", "[] records", False),
+    ])
+    bz_statement("commit-domain-separation-erased", "SelectedOpeningEvent", "selected_opening_comparison",
+        "separate : ∀ secret label, encode (project secret) label ≠ target", "separate : True")
+
+    key, names = bz_alias(("OpeningTree", "openingTreeProgram"))
+    add("fors-opening-tree-leaf-zero", key, "(leaf start)", "(leaf 0)",
+        """theorem checked :
+    (evalOpening (PMF.pure true) (fun value (_ : Unit) => value) id false
+      (openingTreeProgramBZCandidate 0 (fun i => .done (decide (i = 0)))
+        (fun _ _ _ _ => false) id (fun _ _ _ _ (_ : Unit) => ())
+        1 1 [] PUnit.unit ()) (fun _ => none) false).map
+          (fun out => out.value.1.1) = PMF.pure false := by
+  simp [openingTreeProgramBZCandidate, bindOpening, castOpening, reserveOpening,
+    liftOpening, mergeProgram, evalOpening, PMF.pure_map]
+""")
+
     return out

@@ -166,8 +166,62 @@ All twelve ordinary coordinates and complete hypertree addresses remain in the
 event. This is the FORS coverage branch's upper bound, not a full forgery bound.
 Nine kernel-checked examples cover accepted/rejected/unselected entries,
 159/160/161-byte and private query domains, repeated cached/fresh calls, charged
-cache hits, refusal and admitted exhaustion. Private-opening probability charges
-and final six-case PMF composition remain open.
+cache hits, refusal and admitted exhaustion. The ordinary FORS private-opening
+charge is now derived below. WOTS private-opening charges and final six-case
+PMF composition remain open.
+
+`OpeningProgram.lean` gives a selected node an explicit commitment interface:
+public calls and commitments share one cache, while an adaptive reveal returns
+the full private digest and keeps executing. Only the unopened-result view is
+redacted. `CommitmentGuess.lean`, `OpeningGuess.lean` and `CandidateBudget.lean`
+derive its candidate bound without assuming that the real transcript is
+independent of the node. Zero and all-FF candidates are charged once each;
+every other decodable raw input is charged, including malformed padding and
+cached or repeated calls. Twelve final ordinary slots are retained, with default
+zero values and duplicates.
+
+`MemoPresample.lean` preserves the actual result and full cache when sampling
+one initially absent private digest early: an unused entry is removed again.
+`SelectedOpeningEvent.lean` observes that an actual cached opening must have
+queried that target, so restoration preserves its full table on the event.
+The selected private digest is uniform over all 256 bits; only its high 128-bit
+node is used by commitments. Proved coordinate injectivity and domain separation
+retain all 18 hypertree bits, twelve ordinary trees and all 2048 leaves.
+
+The `Fors*Opening`, `Forest*Opening`, `C10*Opening` and `ObservedOpening*`
+modules factor that selected leaf through the existing actual keygen, forest,
+WOTS layers, signer, session and final verifier. Full-cache refinement retains
+all other private calls, raw queries, refusals, failed requests and successful
+exposures. Internal forest use does not reveal the selected node; a successful
+signature containing its placeholder does. A failed WOTS phase does not reveal
+it. The disclosure proof uses the actual complete signing history and final
+cache, rather than a presumed hidden-history invariant.
+
+`ObservedForestOpening.lean` maps the existing `ForestHistoryUnmatched` branch
+with a valid complete signing history into this selected unreturned event and
+takes the proved finite coordinate union. Its theorem
+`c10_observed_forest_opening_bound_real` gives
+
+```
+Pr[ObservedForestOpening cfg in c10ObservedInitializedIndependent cfg sampler qr qs]
+ <= 6442450944 * min((177526 + qr + qs * 408408) / 2^128,
+                    (177524 + qr + qs * (sessionSignCost cfg + 1)) / 2^128).
+```
+
+The first term uses the derived variable-candidate budget plus two fixed values
+and twelve final slots. It is independent of the R/WOTS grinding limits. The
+second retains the conservative total-work charge, which is smaller at zero
+signing budget. The additional one per signature is the observer's possible
+reveal step. `ObservedForestOpening` deliberately requires no accepted-forgery
+or final-H_msg guard, so its bound also covers the narrower unmatched branch
+that supplies those guards. It still requires the actual complete signing
+history and a cached ordinary private opening. The union factor is
+`2^18 * 12 * 2048 = 6442450944`; this is a conservative upper bound, not an exact
+probability or a tight 128-bit security claim.
+
+This retires the separate PMF ordinary FORS opening charge. WOTS private-opening
+charges and final six-case probability composition remain open. No EasyCrypt
+execution, concrete SHA/Rust correspondence, QROM or physical claim is added.
 
 ## Independence and correspondence boundary
 
@@ -887,7 +941,7 @@ sum-205 words at a common address: equal words give equal prefix values; otherwi
 some recovered position is earlier, with an actual suffix to the signed value.
 An earlier position is not necessarily undisclosed, and equal words need not
 mean equal messages or full digests. The complete repeated-address minimum is derived below. FORS
-descent is derived below and adaptive coverage above. Private-opening charges and
+descent is derived below and adaptive coverage above. WOTS private-opening charges and
 the complete six-case partition/final forgery bound remain open.
 
 The 21 additional finite examples in `ChainBindingExamples.lean` and
@@ -977,7 +1031,7 @@ winning-game endpoints retain the original collision and public-zero alternative
 An earlier position is not a secrecy claim, absence from raw queries, or a
 private-opening probability charge; equal words do not imply equal full digests.
 The repeated upper-word branch is descended into the lower tree below. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
-Private-opening charges and the final six-case PMF bound remain open.
+WOTS private-opening charges and the final six-case PMF bound remain open.
 
 The fifteen finite examples in `ExposureExamples.lean` and
 `ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
@@ -1016,7 +1070,7 @@ lower root, plus the lower opening and comparison. The top-earlier, selected-nod
 collision, public-zero and accepted-word-collision alternatives remain explicit.
 A lower earlier position still makes no secrecy or private-opening probability
 claim. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
-Private-opening charging and the final six-case PMF bound remain open.
+WOTS private-opening charging and the final six-case PMF bound remain open.
 
 The seven kernel-checked examples in `LowerDescentExamples.lean` exercise distinct
 node messages, actual accepted collisions, harmless repeated use of one input,
@@ -1059,7 +1113,7 @@ They retain the complete history and cap, actual top/lower openings, prior
 upper/lower occurrences, both earlier-chain alternatives, and all original
 node-collision/public-zero/accepted-word-collision alternatives. This closes the
 structural repeated-lower-word FORS descent. The adaptive coverage charge is
-derived above; private-opening charges and final six-case PMF composition remain open.
+derived above; WOTS private-opening charges and final six-case PMF composition remain open.
 
 The eight kernel-checked examples in `ForestDescentExamples.lean` cover empty and
 duplicate histories, coverage mixed across distinct prior digests, the need for
@@ -1112,16 +1166,26 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1867 theorem closures against
+The gate rebuilds every project module, checks all 2102 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1186 typed cases run 3558 compiler jobs: each baseline and changed
-definition must compile, 1045 changed behaviors must reject at the
-consuming `checked` theorem, and 141 value-preserving changes must pass.
+1283 typed cases run 3849 compiler jobs: each baseline and changed
+definition must compile, 1125 changed behaviors must reject at the
+consuming `checked` theorem, and 158 value-preserving changes must pass.
+The 97 ordinary-opening controls add 80 negatives and 17 equivalent forms.
+Their complete consumers cover cache threading, adaptive full-digest revelation,
+unused-target restoration, candidate decoding and fixed charges, actual private
+leaf/tree/signing and observed-session composition, final slots, target bounds,
+full histories, and the uniformity, avoidance and domain-separation premises.
+Twenty-three boundary theorems exercise these behaviors independently, including
+the 3/4 shared-cache guessing example, zero signing budget and malformed padding.
+All 1867 preceding theorem statements, 1186 fixture objects, prior proof-module
+bytes and 52 source bindings are preserved. The batch adds 235 theorem closures
+in 30 modules; no toolchain or compiler resource policy changes.
 The 58 actual-pool controls add 47 negatives and eleven equivalent forms.
 Complete consuming proofs check the acceptance mixture, selected fresh entries,
 cache updates/reuse, completion potential, reply-dependent costs, input-domain

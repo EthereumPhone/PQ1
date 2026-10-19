@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Separate Lean PMF actual memoized H_msg accepted-pool coverage. A derived accepted/rejected full-digest mixture and completion induction preserve arbitrary cached replies and complete final tables. Only fresh accepted 160-byte public queries enter the passive pool; exact erasure preserves the existing interpreter. Reply-dependent budgets derived through actual keygen, signing, verification and observed sessions bound its length by qr+qs+1 independently of total work. Valid full-history ordinary FORS coverage in the initialized independent-interface game embeds into distinct target/witness pool positions with all12coordinates and full18-bit hypertree addresses. The existing Stirling charge sum(j=1..12) n*(n-1)_j*S(12,j)/2^(132+18*j), n=qr+qs+1, bounds this event in extended-real and real-valued forms. No independence premise is assigned to cache hits. The1760prior theorem statements,1128typed fixture objects and52manual source bindings are preserved. Private-opening probability charges and final six-case PMF composition remain open, along with unbounded-adversary,4008-byte codec,repeated-grinder freshness,concrete hash/Rust/EasyCrypt/cross-kernel,QROM and physical limits. Source pins detect drift, not correspondence.",
+  "scope": "Separate Lean PMF actual initialized ordinary FORS private-opening probability. One uniform full private digest is presampled with exact unused-target cache restoration. Shared public/commitment memoization and full-digest adaptive reveals have exact unopened-result redaction; no real transcript-independence premise is assumed. Full-cache refinement factors the selected private leaf through actual keygen, forest, WOTS layers, signing, observed sessions and verification, retaining failures, absorbed requests, other private calls and complete successful exposures. The existing full-history unmatched ordinary opening embeds into a selected unreturned cached opening. Proved coordinate/domain separation and the finite universe2^18*12*2048 give the extended-real and real-valued upper bound6442450944*min((177526+qr+qs*408408)/2^128,(177524+qr+qs*(sessionSignCost cfg+1))/2^128). The event needs no accepted-forgery guard, while retaining complete history and cached lookup requirements. Zero/all-FF candidates, malformed raw inputs, duplicate/default final slots and all18 address bits are covered. All1867 prior theorem statements,1186 typed fixtures, prior proof-module bytes and52 manual source bindings are preserved. WOTS private-opening charges and final six-case PMF composition remain open, as do unbounded-adversary,4008-byte codec,repeated-grinder freshness,concrete hash/Rust/EasyCrypt/cross-kernel,QROM and physical limits. Source pins detect drift, not correspondence.",
   "sources": {
-    "Audit.lean": "7cf3858b6be09d0809bfb20b0f307f0e7f6f33ceff3eca03ba98569ab134d33f",
+    "Audit.lean": "7d3bb4356536d13bbbb7ed0967b8875e5a3f1be8bfe4a9670b92aecd3b57e7b0",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -28,19 +28,23 @@
     "C10Probability/C10ExposureHistory.lean": "ec53b2439e4295b661484f2dcd741fb824559b23a984559675c4a6a964376e12",
     "C10Probability/C10ExposureMinimum.lean": "4145584b8c105c614c9dae84dd4a000e261ab689d6d9cc22c1c3135fba0a1cf7",
     "C10Probability/C10Finish.lean": "a49b599978868a5b4f8caea672c5d3b5846781bdffd424ef51ac3c180b9f8246",
+    "C10Probability/C10FinishOpening.lean": "f43860e4f6d48d4c9cca2c1b724edb1bb139f1165c4611059571365579c3c8b1",
     "C10Probability/C10Flow.lean": "b1e6025370f8a5b672f768b9290493b481ed9a4c6ac809fc6dc8fb67d8e8236d",
     "C10Probability/C10Honest.lean": "b750dd9212e476f9a30fb9578ceff4d76c56294a29e059f0e2eb4e9a4e220cfe",
     "C10Probability/C10Keygen.lean": "5e0f8c3aad010c65a2364ebba04bfaebd5e2893d2328433cd7af399cefd290ae",
     "C10Probability/C10RecordStability.lean": "729d0ceacbf59722d1f48941ddeae54590a32795c23c30f2d9d8470e99062219",
     "C10Probability/C10Sign.lean": "99c4ed2f24d2b07b1a08c3ef461eb053cf7df785e7da8aecb7bf7d02a38e35f5",
+    "C10Probability/C10SignOpening.lean": "1c03ea1b2c8a0ea89de31deaf6ce851cf1961c71480a849fb508c871d4692073",
     "C10Probability/C10SigningRecord.lean": "a6909d42d05d13c74a1ba758733a13238fbdf2e29352fec8919d7579ae06dfa4",
     "C10Probability/C10SigningReplay.lean": "a74a3d16cad38eb0e5cf61e204b2ba674d1483426f2168c9a952f926b4ea47d9",
     "C10Probability/C10Verify.lean": "dca6a7709d6b12e3023673833be826aa063fa923f926d3da480de3ad48d7cad4",
+    "C10Probability/CandidateBudget.lean": "37985aa40c654f9934daaf0b45b9aa86b4b2b27377623c6795814eefb1a3992c",
     "C10Probability/ChainBindingExamples.lean": "e57a7e836a94703f211b76cd98968d55dccb46ee7ebdd538627ca489534cb2d4",
     "C10Probability/ChainCollection.lean": "83433c0d087f817e5476b40c0a889aea201d4e0f89ba072947c8ba0699ff2082",
     "C10Probability/ChainProgram.lean": "eec2ad4a0be715db6be4e06e55385d9a26525edcfe48395d56e60907c18c2ada",
     "C10Probability/ChainReplay.lean": "4b9c7b6cf00b4ec1a47c26c7f57a8b8ec4a9feeb3bfacf56e8048ab930d720e7",
     "C10Probability/CollisionObserver.lean": "1b5a94598a603d5df0aebf9ef974bd38075f7a7dc6b6d8cebcab063d94843f23",
+    "C10Probability/CommitmentGuess.lean": "c436ac5450d6ec4761e12b9480fae0eb0cbf8ba4199636e21c0de3b68ff3bbae",
     "C10Probability/CountExamples.lean": "3ab36b2977d682c9f8cd17f51ca8859a07c7c1f99e0a1f50be387f05143f46c3",
     "C10Probability/CountMessageBinding.lean": "45b72b9d94ae505fab2d8b0785bfdf301b6b009334487404705afed621884000",
     "C10Probability/CountProgram.lean": "f3e268ffdb4d4bfdf9c78d02f73ddef1348716a660ec8b119d8bbb55ca3bee55",
@@ -63,15 +67,18 @@
     "C10Probability/ForestDescent.lean": "651da5f1bc9f1291da1c0a405106a50fcfed4cda5109ce29fc2d6104a1fcb455",
     "C10Probability/ForestDescentExamples.lean": "3a344572272ee0086aa226934c9422fe6521a2f9802443a7dd31df3edb3bdc09",
     "C10Probability/ForestFill.lean": "58a731efdbed9edc560c15a87a04ff7cc1714f103f48389bfb387fe59f545713",
+    "C10Probability/ForestFillOpening.lean": "9d4e08b8102e060d8ff5947ebcce645cb9eb44fa0dfc56cc08e8ac8e9e432a49",
     "C10Probability/ForestHistoryOpening.lean": "d7e16ccd2cddfe3b5dff359d1246e57de53cb3a4cb07ece0c76fbe7b9a976b48",
     "C10Probability/ForestHonest.lean": "975f14417e22c86f377905022e8a48f568e0185e84cf5861981429c5e6e2f391",
     "C10Probability/ForestOne.lean": "7c47f503df2de27b27305253bda606989939c33982e73adca7d70b622a7d25f1",
+    "C10Probability/ForestOpeningProvenance.lean": "d11034526d3404c4b79877f828a0d3e9000780bf17b858d49d31dba110b51c32",
     "C10Probability/ForestPrivateOpening.lean": "4f7029720f31bca464652d99441ce6d658f85f59f6d024fd278736119bc1df22",
     "C10Probability/ForestRecords.lean": "941b11b559d3025321ebe9c3e35eb3ca63c6d02078506b3f9509ff315eca3f0d",
     "C10Probability/ForestRecover.lean": "68e1ca77c13c71598cda4e05ba6a646a3cf75b7a8c30d8d10902d02621f230fb",
     "C10Probability/ForestRecoveryRecord.lean": "56b7693eb5128b913ba1597bc39477bc2a1ebef91ae38c947c22456e4306b777",
     "C10Probability/ForestShuffle.lean": "5b7bc367f1419f80809964d4e091a107f325b061e1fe3150ec0d955de39a3539",
     "C10Probability/ForestSign.lean": "01338ee418a4cdd7682147f3096f36ded84afa693de69c6aa749b40c86a50522",
+    "C10Probability/ForestSignOpening.lean": "47832f6d76663b0b88a7c657c2e35af2311d092ca7b6447e91b898154afc90f1",
     "C10Probability/ForestSigningRecord.lean": "50fce2e32df31b4306805b73a1ae70d5d347686c96c8551caa4fbb35c9405452",
     "C10Probability/ForestStability.lean": "153b4c5efd0e7a0b54491cc9bb59699a327a328d698206a4608d9dcc30315d63",
     "C10Probability/ForsAccepted.lean": "0d99015f3938a6f562f87f485a084b1a73757d36cfda3c8b25f1028a242e59f8",
@@ -85,13 +92,19 @@
     "C10Probability/ForsExamples.lean": "9781eb469c16ac5d50fd4023778736d5f292d83206f0208c8e938ab6e0039985",
     "C10Probability/ForsInputs.lean": "d038b78a26bc7a6647182cf657305d710d566ee11969fb5049a513065f0d3592",
     "C10Probability/ForsLeaf.lean": "9e2687686babbbc965bc270dfc21bad059b5ed6471be6c7f2be5d94e120d6096",
+    "C10Probability/ForsLeafOpening.lean": "6e22a9fb8787157725dcce24d4534e8a4a029158c162e8aa275f42880f4784d4",
+    "C10Probability/ForsOpeningExamples.lean": "00625a56c47c6757339e8097b7209ee5193202152a2f353fa6eb34285fb79711",
     "C10Probability/ForsPoolCoverage.lean": "6282ff812788c8964a1c15047ba953a9f5f698d79781ae8d540db069dbace6ec",
+    "C10Probability/ForsQuerySeparation.lean": "7d2cc095659d2e9abda3c50703ac21cb2887c93e0e0f111e55e479acf6348337",
     "C10Probability/ForsRecover.lean": "746ea43d7bcd9639ad98ccba8b87324567ed5a8614923dfd3beb09d4d16e359a",
+    "C10Probability/ForsRecoverOpening.lean": "8d9cc9e507c887072028e6e314ac87583bc89fbffff6aab609f3393158412f3a",
     "C10Probability/ForsSamplePrefix.lean": "e9c81dd3f6dca08a6d057518fe6ea05436e6ee85fcec839e26751348915de077",
     "C10Probability/ForsSelectedWitness.lean": "17ac57d66527e9477f6dec40e3612d7453727d0ca2f0d8e0e2591fe829f1ebaf",
     "C10Probability/ForsShape.lean": "8395c005489e23fbcc10ff6735b134dcf0439c0dab825afdba060696f93b412b",
     "C10Probability/ForsSplit.lean": "280cf37fa898ca1c31641b6e39820b9c9e4430e3b0ad9e1b993a0c20e2a91416",
+    "C10Probability/ForsTarget.lean": "14ab53e02d4fa08926ddf61efbb6ad0b14ea3324a3a7240ba3b1dd0b4eb721a7",
     "C10Probability/ForsTree.lean": "b939e5df2ce5225a1ea4c1373e0d517289a99c2dec32db3d40c41620874c3362",
+    "C10Probability/ForsTreeOpening.lean": "675d1af15a1d8f8c97a1ba688a8adf593b2e715c47ab2538fc6acb0b129beacb",
     "C10Probability/ForsWitnessMass.lean": "f142721e48643009f1ada162e97112cfb0378deea6f8df1d11d03c0710e01703",
     "C10Probability/ForsWitnessPositions.lean": "4b54f180a91ce447d88f5e43bf7ed40f15b74181861c44516bc84037346a05df",
     "C10Probability/Grind.lean": "0798b393b52a313213d8be2d4079ffa462dd860595b7760d2d7a836bc76557ad",
@@ -133,6 +146,7 @@
     "C10Probability/LowerDescentExamples.lean": "ae7b580698809410cc424597c843febf0648070cc41d79d0824a77ca6cdafad8",
     "C10Probability/LowerExposureOpening.lean": "bfc0eadd2c1054405546706ddb93cb765d3dcae5d9693dc2ce6b6016cfbcf7cd",
     "C10Probability/Memo.lean": "b91558cc183d9b0cf195de3c7a64b29c3057219acb1b451bff4b5b19aaee53c4",
+    "C10Probability/MemoPresample.lean": "385fca0a8d66c4996baaf388fe647dd1e130688980b3ecafa2cbe6a3d2fb383d",
     "C10Probability/MemoRelabel.lean": "52ec0afa4da94f66ac9a6b260e32700c622b4139a88d3c781a289406982770e9",
     "C10Probability/MemoView.lean": "c6533833c6d5a60cd713e15d96e81610dad15790e497789ab1d7870eef1ae133",
     "C10Probability/MerkleBuild.lean": "4eafb1a323be0f17e7731aa22ea5df2b076ef6dc7ed20c9c0cfaa6ade373b002",
@@ -141,6 +155,7 @@
     "C10Probability/MerkleInputs.lean": "23ab3f35f7677ced56c46898004edafc348bad90431ab4c9a363bdd968e24079",
     "C10Probability/MerkleRecover.lean": "a015f19c6b308631f5b5441c149db4862388a522294f2bd8951173347b231c17",
     "C10Probability/NodeCharges.lean": "0ea856433767a453448496fa13f21407859d767f1bc6ff56606f104d9b206c52",
+    "C10Probability/NodeCommitment.lean": "5752c9cfcec4f4e24c44e412645384f692dd83a51b91d56ea2a4981e34f7acfc",
     "C10Probability/NodeDomain.lean": "a0c2de1e52b4abd3bfd302a0fc77101350465e73c203a7153af32dcd15df8da7",
     "C10Probability/NodeInputBinding.lean": "25e031f06a3397e42588152e811344f5602da54d69bda7cd3d03ec27318d7e99",
     "C10Probability/NodePathBinding.lean": "21ed1d787322abd47ba53ac39b13aea4b051cb199aec19d644a232cd83c7ba9d",
@@ -153,12 +168,26 @@
     "C10Probability/ObservedDriverSupport.lean": "42c770d9a5689d4e7dbc1afe0043d7ce9e2a7c52009523b6cfa13ed4ddb6c8ee",
     "C10Probability/ObservedExamples.lean": "ccf6f5dfb529f558193a7cbfcdcbae24b2cca1c349890bc617a400467189be14",
     "C10Probability/ObservedForestDescent.lean": "5a62419810046e0d1636075861178742555d797101aa140c8b9ce5c26075a02d",
+    "C10Probability/ObservedForestOpening.lean": "b39175cc4cc3e5fd021f0aded18a82d0d5d0a566a0c345a250f7fba8e2866cf2",
     "C10Probability/ObservedGame.lean": "ee32429f4718403a61ac3aa0a2fb032bf26b74593a63ad7c91a217e8b66e17b2",
     "C10Probability/ObservedHistory.lean": "f89fcd023f6c995631e683bca8b77e0b79517b34eacb608e9d80dd818bd48393",
     "C10Probability/ObservedInitialized.lean": "1030b07738dc2b1758acf3b345ff389becbc9e92f28655c3dd098bcda80dab1a",
+    "C10Probability/ObservedOpening.lean": "988779f6c5329232071f08946ce038c5cd0ba29c7719c150ddb8515c6c67da30",
+    "C10Probability/ObservedOpeningBound.lean": "cd385c362225380f79d4d497302c29bd1f53d56d83bd675c8d93899b54769927",
+    "C10Probability/ObservedOpeningDisclosure.lean": "5d11b452add3d7ef6df3791340f761d117ef0f97ac5df3e7832d483e4d64b989",
     "C10Probability/ObservedOutput.lean": "3f05e233c27dbd5661c04a5e192a00022e29b66fe2338b4be7fa077890a34166",
     "C10Probability/ObservedProgram.lean": "4c48bb96d83c9b3379d399ebe95dfd8c48c77899ca933fef022308b7483b5bbe",
     "C10Probability/ObservedSession.lean": "b8f030eec0e8a764bd9b520a6fac083d56ca0ffb5d6c98f178a983ce6ada313b",
+    "C10Probability/OpeningCache.lean": "fbc16ecb3a9c5ff4f277e4ed0e6869929b58baab731bee2e00871a3c62ddbad7",
+    "C10Probability/OpeningComposition.lean": "0d9e65fe54aa7e91d04af339bd20bad70142de6a436c8edf7e5ba8230467f140",
+    "C10Probability/OpeningExamples.lean": "7b57175b1ddba33fee4392bb57b6ee2a3d9cc258104eaaea4456aa4595759339",
+    "C10Probability/OpeningGrind.lean": "75112b6f21cacbd3c59149ec625360ffc1b09ce6ed52e539207e71a89cc9ff7f",
+    "C10Probability/OpeningGuess.lean": "96005d21d0a8ad1044b171069baddef817f9e2932cf41faa7744424931297fcc",
+    "C10Probability/OpeningPost.lean": "39bd60afe04112464d790e06b8b41fc7754156514742bd24503f9caac437cf8e",
+    "C10Probability/OpeningProgram.lean": "6b7a97a9d16e4c224269399752b07a1039c3b9c00620d18a50184d724f2ce80a",
+    "C10Probability/OpeningRefinement.lean": "f4bf0fde1a19a93f78b5baf9daf40a4603ffead80068b1d9d0bafc49c967a24f",
+    "C10Probability/OpeningSealed.lean": "b8ce4a60a3fe98d87740355d33c1631d34207fb936b66248b86119f763918001",
+    "C10Probability/OpeningTree.lean": "86ab1da9d3994e4bc12fdf04ce905f43fde020d9046e5ed279d9ac8d651dca87",
     "C10Probability/PathBinding.lean": "66dc6bb85ec0dabedf01f8fda815ee919a949ad775aa28e0c0f0b7c54feb84c5",
     "C10Probability/PathRecovery.lean": "28a32776a72f54d4f8e6a6245024477dcbde01b2cc736c92a084022834398c05",
     "C10Probability/PathReplay.lean": "ac2c1b94ce42ecd963ecea4066dcb6d867c9cebfaf890831ac7524667b2e1d79",
@@ -202,6 +231,7 @@
     "C10Probability/SelectedCollision.lean": "269f4b16a001f84a2a1517b5a40b6103297d1628d9c20fc99a88f527577fac41",
     "C10Probability/SelectedComposition.lean": "5ae8d6e7eb36d60f0182e259cd77a330ef4571396139ad7622c60c2f4093464e",
     "C10Probability/SelectedObserver.lean": "190f3bd4f861942f45ab35dddb79ebb11b7fb2278ad226e12cef82f9cb182a1f",
+    "C10Probability/SelectedOpeningEvent.lean": "cb68b4193552a19606dadf71ab2c41e289c3520d52b856ca628599998010b41a",
     "C10Probability/SessionBranches.lean": "2eca060c3b18df81d3a4ac84b10955b58b41a081d70374de94c66dc9ef44510c",
     "C10Probability/SessionBudget.lean": "b22a82689402501cf4fb4782b48a116e2de96426dc1cfb6728e08ed22500b6cc",
     "C10Probability/SessionCharges.lean": "c10dcd0c0b840da49e4beda2085e4ea4909a1fc564b177ae8b99a82509d9546e",
@@ -267,7 +297,7 @@
     "C10Probability/WotsSigningCharges.lean": "714be87e7b26c808bfbd79149e6e4bc9166fde1b884985c768274aa57abdaf11",
     "C10Probability/WotsSigningReplay.lean": "82f5beb5b9759c5d979015bc61833535e591ea0591fa15805bb223985f19cef2",
     "C10Probability/WotsStability.lean": "7298584f8026cfe4cf11ba95128a78edb3eff67a3cd4ffd5694a35c64efe7f41",
-    "C10Probability.lean": "8f14a7299ca030e982f7d6a25b978227063571652f99ece5b7b3646b2d522139"
+    "C10Probability.lean": "6b63313790cd16f8f73dd4621731fbd3b90ae0a31fe3ec1c0587d360d3af0d81"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -1022,6 +1052,50 @@
       "file": "C10Probability/C10Finish.lean",
       "statement_sha256": "21e532886720700ec27ab11010033a71a79f8e263c7148d225e880f81fbe3c0e"
     },
+    "C10Probability.opening_avoids_cast": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "738f1ba67eb1ede9a3868771f3188aae48e1365bf5d5a12942f09f2c7d913c8b"
+    },
+    "C10Probability.opening_avoids_reserve": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "f5bcd7f049a7cefc56f9b1d61bb7729b6e9c0aa905a9bf3d7257660c00c4b940"
+    },
+    "C10Probability.opening_avoids_bind": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "dd6682561fc5bd5f20eddd642c123eb94d2447df0bd257a41c7f9886d75bb70b"
+    },
+    "C10Probability.opening_refines_bind_done": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "b87ce6d57a0dea8f757174e927613bbc4cd33f9216c54589bcb3896447ff6f0e"
+    },
+    "C10Probability.c10_release_opening_refines": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "13f892e7cd17bc03a9cc68d983579de79938065cb53c252fca16bef063326c59"
+    },
+    "C10Probability.c10_finish_opening_refines": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "9774731bb4cd7f84a9abc9844021c49df49ced0e55c93acccd340b5f99cc16bd"
+    },
+    "C10Probability.c10_release_opening_avoids": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "354faa54888fc06d59b54bf038c37bde27180d3eba492ffafa1e0c48c7ffc139"
+    },
+    "C10Probability.c10_finish_opening_avoids": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "049dbf7f5a877673eee423b9bd96daab26c2804f25d1fb1f1ade682e8d9441c8"
+    },
+    "C10Probability.c10_release_opening_budget": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "14a0b46d0b50d0e0a96b43dbe1488672db89a1d1f2f6e0c1145202a09ae0575f"
+    },
+    "C10Probability.c10_finish_opening_budget": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "4de857f98d6226770390fbb01551c433e3761884a60247d38787cebf71524ba5"
+    },
+    "C10Probability.c10_release_failure_retains": {
+      "file": "C10Probability/C10FinishOpening.lean",
+      "statement_sha256": "e1caad09b640d1fbf51aae79bac055b9ee34739f78b7bf2e4c9cdcb2d683a043"
+    },
     "C10Probability.hypertree_first_failure": {
       "file": "C10Probability/C10Flow.lean",
       "statement_sha256": "62bcbe153dee0e12b79add1bbaf64385aac485af80c5989417a19d35b1c80911"
@@ -1114,6 +1188,30 @@
       "file": "C10Probability/C10Sign.lean",
       "statement_sha256": "0517c6951e506619243a6ec638b9dcbea88350417cd1104e00642b03be979830"
     },
+    "C10Probability.c10_sign_opening_refines": {
+      "file": "C10Probability/C10SignOpening.lean",
+      "statement_sha256": "5807fcc9fcbcc62293b492e0eda12041bc9f57c735f4b81765049b87d158c06f"
+    },
+    "C10Probability.c10_sign_opening_avoids": {
+      "file": "C10Probability/C10SignOpening.lean",
+      "statement_sha256": "fd85b6611316ae2887540ddd750cdddf23a1c0a02cc4437699a5ba20efd1170f"
+    },
+    "C10Probability.c10_sign_opening_budget": {
+      "file": "C10Probability/C10SignOpening.lean",
+      "statement_sha256": "f0764f9e41ee45c0733c0e83791de07029cb5472cde6bcd7db809508f0b5e4e5"
+    },
+    "C10Probability.c10_release_opened": {
+      "file": "C10Probability/C10SignOpening.lean",
+      "statement_sha256": "1470fd422df6c2ea11286bcd98cbfaa6d46fcbb58ec904368881dbcf07fcedc3"
+    },
+    "C10Probability.c10_finish_opened": {
+      "file": "C10Probability/C10SignOpening.lean",
+      "statement_sha256": "b099f968ccaf3d6cb8ccdb75dd9505e6ecb47347b7ea569bccf2ff36182a4fa9"
+    },
+    "C10Probability.c10_sign_opened": {
+      "file": "C10Probability/C10SignOpening.lean",
+      "statement_sha256": "90d1d968ee55944c1d44f7479a7856bf73f49e61b151782ddb5772542c348b57"
+    },
     "C10Probability.replay_c10_signing_record": {
       "file": "C10Probability/C10SigningRecord.lean",
       "statement_sha256": "7bcdf293dcc8e9b54c6928ea7f176d18da56f66f30d2a3fa02d1827b09076e38"
@@ -1161,6 +1259,30 @@
     "C10Probability.c10_verify_after_rejected": {
       "file": "C10Probability/C10Verify.lean",
       "statement_sha256": "4dfdb439cbe8fed085818a6a63997435cf9edb27e24723732ca219a106310f67"
+    },
+    "C10Probability.prefix_candidates_variable_cover": {
+      "file": "C10Probability/CandidateBudget.lean",
+      "statement_sha256": "5c976f0f9df33d75818eb200474870d56e6daecddc158f686b0db6e31e6e2a62"
+    },
+    "C10Probability.prefix_candidates_variable_card": {
+      "file": "C10Probability/CandidateBudget.lean",
+      "statement_sha256": "53cd3216159d88acd2cd7e852210ebbcc12843fdb950f66933517b83861ce09f"
+    },
+    "C10Probability.secretPrelude_variable_bound": {
+      "file": "C10Probability/CandidateBudget.lean",
+      "statement_sha256": "4159402495d396816d6786f8c8e40d50cbb2e6a3db2142ec74580f315f74ebea"
+    },
+    "C10Probability.commitment_variable_candidate_bound": {
+      "file": "C10Probability/CandidateBudget.lean",
+      "statement_sha256": "68c8380ac7e846aa13bebcf3309a239d0963657d64b612e3ecdfdcfb93645dad"
+    },
+    "C10Probability.opening_variable_candidate_bound": {
+      "file": "C10Probability/CandidateBudget.lean",
+      "statement_sha256": "30c119c8f6024d37bdd2f9afee3d885ade579be07b7d95e6b497500884f6808e"
+    },
+    "C10Probability.opening_variable_candidate_bound_real": {
+      "file": "C10Probability/CandidateBudget.lean",
+      "statement_sha256": "c3a8c2e5648a43c08f2b36c14057efbe3a7746fea6419f24f093fc185392510f"
     },
     "C10Probability.binding_chain_table_collision_free": {
       "file": "C10Probability/ChainBindingExamples.lean",
@@ -1305,6 +1427,34 @@
     "C10Probability.observeProgram_bad_persists": {
       "file": "C10Probability/CollisionObserver.lean",
       "statement_sha256": "5e356c8cd2598630c50794bdd57b1783a203151496436c257f2cd3a1afbaf987"
+    },
+    "C10Probability.independent_candidate_late": {
+      "file": "C10Probability/CommitmentGuess.lean",
+      "statement_sha256": "462fc52baecda222dc38ea91f6aa6d855e1a12d7d62d830616c2b444076f038a"
+    },
+    "C10Probability.event_decide_mass": {
+      "file": "C10Probability/CommitmentGuess.lean",
+      "statement_sha256": "21b99a5057b5dabd2a84c94498f69bd23d6031268a6f7898f378cbe307362e70"
+    },
+    "C10Probability.uniform_candidate_mass": {
+      "file": "C10Probability/CommitmentGuess.lean",
+      "statement_sha256": "c856ac2c30f23cbc937e37e305a8a1796fc0d62ccc79877e1de0ab91dc85c90f"
+    },
+    "C10Probability.independent_candidate_bound": {
+      "file": "C10Probability/CommitmentGuess.lean",
+      "statement_sha256": "f898e8eb4a53c747eca7280254396c6702df9bb4ca1d15f1f4b9a928ece87879"
+    },
+    "C10Probability.commitment_candidate_comparison": {
+      "file": "C10Probability/CommitmentGuess.lean",
+      "statement_sha256": "13228a6e305f7f07d5db18f95c81237be637caffa7a6ccb6052dbb13b0bfdd3b"
+    },
+    "C10Probability.commitment_candidate_bound": {
+      "file": "C10Probability/CommitmentGuess.lean",
+      "statement_sha256": "262b843ba7a1cbc683f6a2abf001fcd9f6c658e7736a3f6a8dadf6262fdf0035"
+    },
+    "C10Probability.commitment_candidate_bound_real": {
+      "file": "C10Probability/CommitmentGuess.lean",
+      "statement_sha256": "eaaba7170df4e9bd2aa47f1ce72f6901e8b0aab5730b9eca74c3c60380b15314"
     },
     "C10Probability.count_empty_zero": {
       "file": "C10Probability/CountExamples.lean",
@@ -2138,6 +2288,50 @@
       "file": "C10Probability/ForestFill.lean",
       "statement_sha256": "1273e04d89ec9e2600ce04be363e112c62920df7478744b7fb2e86d32326b587"
     },
+    "C10Probability.opening_fold_refines": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "8a535a373a21ee11509e7f971b2b5bd84d2d62c81585c47b4fa6e18d45ccffd0"
+    },
+    "C10Probability.opening_fold_sealed": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "8fb04753dbd4db8bbd5badb55d74a330b85a91f67baef6bf672cdb4667517c69"
+    },
+    "C10Probability.opening_fold_budget": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "b3c42db1590144fe7425005641ef5b216c67024c62463a937ef5df9dfd8c48ac"
+    },
+    "C10Probability.deferred_forest_write": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "a44484cab61028151a0df7a9bf31e33527a148f18ba9d889267654b80fec6cf9"
+    },
+    "C10Probability.forest_fill_step_opening_refines": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "a59cde31093fb819be7e5520d22e9c31eea1fdc42ea8826517e8c224ebc1236a"
+    },
+    "C10Probability.forest_fill_opening_refines": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "360f80aa5469b09ccbb76829c71c581aae0f1f93441a6be296701222867f2a73"
+    },
+    "C10Probability.forest_ordered_opening_refines": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "d47706730af2eefab10b8967354942963adea1ba6b523a01289f45d058b243c6"
+    },
+    "C10Probability.forest_fill_opening_sealed": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "df982ab2fdf343e74c7f754bfd1bb8f305f606fa66ac690f08e8f4822e5a7977"
+    },
+    "C10Probability.forest_ordered_opening_sealed": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "6def53b8d0835659e11c95f3e67677ab5a548c8a9f726f928b5da0d5299062a7"
+    },
+    "C10Probability.forest_fill_opening_budget": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "69870ba01c2f1ddf3841f5bb3cb831f8850d6f120d23133368c97f552132ab95"
+    },
+    "C10Probability.forest_ordered_opening_budget": {
+      "file": "C10Probability/ForestFillOpening.lean",
+      "statement_sha256": "08bfaa64b8d9eef30c84d0bf943c6ea43e54504df38908fb32eeefc7d78c23c5"
+    },
     "C10Probability.replay_fors_sign_private_value": {
       "file": "C10Probability/ForestHistoryOpening.lean",
       "statement_sha256": "182e82d1bc072903c02a0b3426c18df571b85e309a7584dbe25b202f3ebc4378"
@@ -2193,6 +2387,42 @@
     "C10Probability.forest_one_auth_length": {
       "file": "C10Probability/ForestOne.lean",
       "statement_sha256": "174fcd188dcc189d3bd2e8b8d43616445d7118003898f6ce0ac08ca6117663f2"
+    },
+    "C10Probability.fors_secret_opening_marked": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "0a489620b2928da47a9a0563e17aec2b5d43bc478f48c467ed25937145535a17"
+    },
+    "C10Probability.fors_sign_opening_marked": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "8a30796c8e29111bc924de43bee4f960617d5cad9ebbd3bf6b3f6bdc48b9dea3"
+    },
+    "C10Probability.forest_one_opening_marked": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "b2b9b0fa744a36484981a61a2944a8a92441857945ce3504e9eca67a99464fb9"
+    },
+    "C10Probability.forest_fill_opening_marked": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "21206f372d9251234a99314f7131b7773bf7dd048b1b0ff27ebfc77eca913a86"
+    },
+    "C10Probability.forest_ordered_opening_marked": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "e7e6265cf9162bc00a320ec11379e8126293bec4ad97c7773e56ddaeec720c98"
+    },
+    "C10Probability.forest_finish_opening_marked": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "403e58b8d950ee08efe6aaaacfde39899c965adec34582828d8140ea24405336"
+    },
+    "C10Probability.forest_sign_opening_marked": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "338893e6f7d081b79041d2ea37681cf9857f489f4353e6f3710d49fbb945487b"
+    },
+    "C10Probability.deferred_nodes_known": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "895298a5b8dd390f3cc74696e8cbc5c93fb1b1215f899a6711f8ab7aad569544"
+    },
+    "C10Probability.deferred_forest_known": {
+      "file": "C10Probability/ForestOpeningProvenance.lean",
+      "statement_sha256": "8707cfd5347c4ffb113362ff78f303134df93c79ead6979635f7e20b413a13ef"
     },
     "C10Probability.forest_compression_position": {
       "file": "C10Probability/ForestPrivateOpening.lean",
@@ -2349,6 +2579,38 @@
     "C10Probability.forest_sign_public": {
       "file": "C10Probability/ForestSign.lean",
       "statement_sha256": "f4704fae99fb7aa3ee4ae694010fc9c249ad77528abd3f69e0456ff07940214a"
+    },
+    "C10Probability.forest_last_opening_refines": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "935033c5b7ed0230674b72131ba1979c426957f6613301fcf3f5b90c00f2b50d"
+    },
+    "C10Probability.forest_finish_opening_refines": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "0a2ed8ffdaa69b86cb6d101bd5c9793a6726555dd149a52d1e294b8f2212c2e6"
+    },
+    "C10Probability.forest_sign_opening_refines": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "8f39a83694b7fd4c55b69bb16c1a800766a5103a22f9f774d5c4a49ef3c74834"
+    },
+    "C10Probability.forest_last_opening_sealed": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "a9992c53f75966e13d6eda2a378ded402f9177159d95ac02546659be0a45454e"
+    },
+    "C10Probability.forest_finish_opening_sealed": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "5611ff6029f7baa72d8793272e21687b275672e65a9fb5fcf824410e300a71f4"
+    },
+    "C10Probability.forest_sign_opening_sealed": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "065c06b0151c190c02d30bdb0bcb495b3166fcdc9f7adab5856e26d03ef90c02"
+    },
+    "C10Probability.forest_finish_opening_budget": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "eb2d01040ec6881059c2d43be8e81637576bd3647146ad1d6884640152c165f3"
+    },
+    "C10Probability.forest_sign_opening_budget": {
+      "file": "C10Probability/ForestSignOpening.lean",
+      "statement_sha256": "073d6a81ae4867e62643e083fded36c39bebe4544105a4ec37019f8d3068fcfd"
     },
     "C10Probability.recorded_forest_slot_certificate": {
       "file": "C10Probability/ForestSigningRecord.lean",
@@ -2774,6 +3036,86 @@
       "file": "C10Probability/ForsLeaf.lean",
       "statement_sha256": "b55351cfec975fdfbb155df7afc20fd6d2b5b380020719df00dc57d27512ab8b"
     },
+    "C10Probability.fors_secret_opening_refines": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "6ae2b42a1e55dd1fbc16e1ed1f7a39786d4a32d727e076e8fa156a973709d45a"
+    },
+    "C10Probability.node_hash_opening_refines": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "ef71d829f9e9d524d9470d34d3cb260161d4c2309690f34926d9a37978633b7d"
+    },
+    "C10Probability.fors_leaf_opening_refines": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "c97032552720ca67201eddac5dbfd3955bb3c5085801ccf34f3abd68c236e141"
+    },
+    "C10Probability.fors_secret_opening_sealed": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "962126c7e0a1e18ee8a15e968f650f86ea0a37641fb2ba7bb2827f738e0580cc"
+    },
+    "C10Probability.node_hash_opening_sealed": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "4c6ec5c53e0a6d62a1b9c55c7be7da33daa9af0624abad77858ca0031a30252f"
+    },
+    "C10Probability.fors_leaf_opening_sealed": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "951913b485ed94b9076590fb6a1396e11ae7f113a35aa9bf36cec46a4c9becf0"
+    },
+    "C10Probability.fors_secret_opening_budget": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "06cfcf39b0b3387fd1e32599fd253af1ddc473e59deacfd9c3b7bb93c556edd9"
+    },
+    "C10Probability.fors_leaf_opening_budget": {
+      "file": "C10Probability/ForsLeafOpening.lean",
+      "statement_sha256": "c89e8797d8de98449cd5b6545e2c562d05f37ca4283f482745f6cb7b8ece6359"
+    },
+    "C10Probability.malformed_node_candidate_counted": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "e1ebabc1c093730afea291bc533f9f82d77ba3f8f575428eba50875e98641972"
+    },
+    "C10Probability.short_node_candidate_excluded": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "a7b46a76ee194aab7f4388bf521aec61b107ed9df823e88a0571697b94e08f28"
+    },
+    "C10Probability.full_digest_node_projection_example": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "0992672b03d3399d1974480c87aaa6ae67fb35116d9c2cc0783433f1e3b8c4ce"
+    },
+    "C10Probability.fors_coordinate_boundaries_example": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "ae3a1c8ac86426417ce1f430c96b422c780b7b144231307bac17072519cb8eca"
+    },
+    "C10Probability.fors_unbounded_encoding_alias_example": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "c40244f05971976a8b01d7ce91d3c159dad894674b2b9cd4c059451067f1cbc7"
+    },
+    "C10Probability.fors_selected_release_opens": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "aff382026ea6e10b6b26c9b6138a5048128a1dff1b4e45ac985cfe72b1436830"
+    },
+    "C10Probability.fors_known_release_unopened": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "8170dc7558c6dd6aecb7e9c3459fed23addf58cfaf76099eb590f35b678db123"
+    },
+    "C10Probability.fors_empty_cache_not_selected": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "2f0971206efbf4718b2bf3307ccf2a5849f390493bb876eb1ebb752dd95d7a1b"
+    },
+    "C10Probability.fors_returned_not_selected": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "7962712746f5d500f4305cf3a783008ff001838a70d2f41ac44660fae74151c6"
+    },
+    "C10Probability.fors_missing_final_candidates": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "82ca0424c01d47690e9192c8d6cf72552b89c5216f0681dea278869312123b79"
+    },
+    "C10Probability.fors_zero_signature_charge": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "ce86f2b8f4d5cac50ff788380e65f65494b06548f81e219048c2ddb560584ff2"
+    },
+    "C10Probability.fors_one_signature_charge": {
+      "file": "C10Probability/ForsOpeningExamples.lean",
+      "statement_sha256": "3a917777d34828980ef377db50491ef54844bce671ca097f9ee12f3b17ab9c00"
+    },
     "C10Probability.fors_pool_coverage_canonical": {
       "file": "C10Probability/ForsPoolCoverage.lean",
       "statement_sha256": "7c795c6e43bf8ff3c6c12b6a18e3d37ce0b9e37fb7c415ac3f5185396619e0f9"
@@ -2789,6 +3131,46 @@
     "C10Probability.fors_list_coverage_ofFn": {
       "file": "C10Probability/ForsPoolCoverage.lean",
       "statement_sha256": "1600ad5b73f07b5fde831edc7b96ec0ea0b8c76143fb28884123779be519e806"
+    },
+    "C10Probability.query_exclusion_all_mapped": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "5216b6a5c16428edf5b856a1d015ca1baf7b750c692095fd9c57a22bf28a12cf"
+    },
+    "C10Probability.query_exclusion_sealed": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "92c5e866157249f98c00a43e6c92381274efab4825ff0e8f7f3800be6204fdb7"
+    },
+    "C10Probability.fors_public_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "69a2be0908f5821ceb302b14d40489df6a1e9ebe238ade6e1b1265bdbf074e63"
+    },
+    "C10Probability.wots_fill_fors_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "41dc4983dfe8681343c8af3877a5e6b90265b8601fa8720321dc5dd4ad91a45b"
+    },
+    "C10Probability.wots_leaf_fors_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "b27ebcc416aec35513d9b825361e92e305194148a8678ad1c94c11d98dfc98aa"
+    },
+    "C10Probability.subtree_fors_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "2e022313e13ee383fdfcfa0ffd0c94c1d83b1d1c45a8c2550ca80485c347c8af"
+    },
+    "C10Probability.wots_sign_fors_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "c6cbe4cab2d7a2cc33697cc5bf851dfc03d944feba5a56a2da43b4e9aed03077"
+    },
+    "C10Probability.layer_sign_fors_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "f9b675731f292b0eec1c1ad9cf17c7dc45d05af4ae963a94738d5051c35fd094"
+    },
+    "C10Probability.hypertree_sign_fors_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "f8877b5e5325749a09e71993fae97e1b0222d6bb3dc1f31ed14d5bec4f438a79"
+    },
+    "C10Probability.c10_keygen_fors_excluded": {
+      "file": "C10Probability/ForsQuerySeparation.lean",
+      "statement_sha256": "3e03700f434921d81763375fc63d0f67b21bb4a0d8b61197a6eee15177f9deed"
     },
     "C10Probability.fors_recovery_program_eval": {
       "file": "C10Probability/ForsRecover.lean",
@@ -2813,6 +3195,30 @@
     "C10Probability.fors_recover_reads_bound": {
       "file": "C10Probability/ForsRecover.lean",
       "statement_sha256": "1d2c62b5d562a84903e577a8ff50c52594185400078f74ea3b2f8e44ddfcecee"
+    },
+    "C10Probability.fors_recover_opening_refines": {
+      "file": "C10Probability/ForsRecoverOpening.lean",
+      "statement_sha256": "145d1a54ee12ac5370b8c25d7a13462e6a3f359b555f459f40015b8ef1672373"
+    },
+    "C10Probability.fors_recover_opening_sealed": {
+      "file": "C10Probability/ForsRecoverOpening.lean",
+      "statement_sha256": "9f05fe5eef4f68f53cabb243bf624a6a78d63bd909bdee80ebfb4d92f293d453"
+    },
+    "C10Probability.fors_recover_opening_budget": {
+      "file": "C10Probability/ForsRecoverOpening.lean",
+      "statement_sha256": "8de3d5aab987d5234b0f325ce011bda01127238441c4a02180d7fe2b6709e5d6"
+    },
+    "C10Probability.forest_one_opening_refines": {
+      "file": "C10Probability/ForsRecoverOpening.lean",
+      "statement_sha256": "d79c7eec3ec9767c63423695fb0ac4094fa566255dfa5ba2d8936a27c49cc401"
+    },
+    "C10Probability.forest_one_opening_sealed": {
+      "file": "C10Probability/ForsRecoverOpening.lean",
+      "statement_sha256": "3b0d4b341db86b10a441118151824fdae096c32a5b9280d26e6d3d5c270bb19f"
+    },
+    "C10Probability.forest_one_opening_budget": {
+      "file": "C10Probability/ForsRecoverOpening.lean",
+      "statement_sha256": "21dc8b0a7cbad8871f3bf3ca6d2b2f579202c4c5ee2875505144dfc7047f9a37"
     },
     "C10Probability.iidSampleList_map": {
       "file": "C10Probability/ForsSamplePrefix.lean",
@@ -2902,6 +3308,38 @@
       "file": "C10Probability/ForsSplit.lean",
       "statement_sha256": "feba90495b123d0f16e54819bf42596f06005ba0ba25d108604b9b51096f9170"
     },
+    "C10Probability.be_bytes_four_injective": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "40bd6218b1105e602e8d728c19250e4d585b47a415df236ecacf0390d200b899"
+    },
+    "C10Probability.fors_tail_fields": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "3aa233e059eec166c1514de3fc323e8fe82b2780411d98e9a07c2b56621248db"
+    },
+    "C10Probability.fors_target_key_injective": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "6a1f650d4d6ff3ad471c5157785d094fcb2d9ba4e57bf0da2cc61638aa5e66c0"
+    },
+    "C10Probability.fors_target_card": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "716ea97bbcfea12eaaee9c4c4cc590ad85c003c9ceb66fcec84b6e187148a331"
+    },
+    "C10Probability.fors_target_not_public": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "853d99c40af9de28c32fe4579e16d0a38ae5981678baf193ada827377eac7a3a"
+    },
+    "C10Probability.fors_target_not_wots": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "d5d08bafd5070bd96e68f34c422fa393a9c891c023424fb00d0ed2f8a3584485"
+    },
+    "C10Probability.fors_target_not_counter": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "8dd11fb83265a7e7c4e2ae8082e8ac0b0e7cefe873fdc7ff0d0801bd6e639c1c"
+    },
+    "C10Probability.fors_target_not_last": {
+      "file": "C10Probability/ForsTarget.lean",
+      "statement_sha256": "deac555bdff077d2d8fd0467f33c35103cadf0bc226b7ba5a70c0b0b8d9729fd"
+    },
     "C10Probability.fors_remember_length": {
       "file": "C10Probability/ForsTree.lean",
       "statement_sha256": "8c148087998fd512ef1cf60a946391347ed9fda1d6bb5c62b447b90e33fd802f"
@@ -2957,6 +3395,54 @@
     "C10Probability.fors_sign_public": {
       "file": "C10Probability/ForsTree.lean",
       "statement_sha256": "ed2cdddccd28b64006072e124cb23819d32d767be62e89fb4d2c6d18aba822b9"
+    },
+    "C10Probability.fors_tree_state_opening_refines": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "076be3b26d06dc65926a58686ec7eb32e9f26d7beba3cf93d592d680bcfbc9bf"
+    },
+    "C10Probability.fors_tree_opening_refines": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "9009bf40ef9c586a8c918a8ea7a2f672aaa5264d7ceab83c47e08399782ab094"
+    },
+    "C10Probability.fors_root_opening_refines": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "7bdd0cb5d8e8d629e594ee9f6f648167dc377fad99a8751a5952295f93deb6d4"
+    },
+    "C10Probability.fors_sign_opening_refines": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "93b5c0c6ae5a9d1d19b4af575c46b4cea2718d53e641f10abaf9ea2c5f8b0372"
+    },
+    "C10Probability.fors_tree_state_opening_sealed": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "66719c7771f76ce0491ba4dcbdefedd956091508ebf768e7356dfcaf47b129f9"
+    },
+    "C10Probability.fors_tree_opening_sealed": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "d3b410207e1485452db5d3e0c802d9c65e100d094af98888da879072edbe4c34"
+    },
+    "C10Probability.fors_root_opening_sealed": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "46208d125d79a4a6e6e30a96a988aa249f9fe8349b5cd8b3f682cc758a0ce5ea"
+    },
+    "C10Probability.fors_sign_opening_sealed": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "a749559e72e77e21cea949596271e7848b39f0fa9d946077d4f09ac02e784463"
+    },
+    "C10Probability.fors_tree_state_opening_budget": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "0c72010b79893ffb14350a423d0bca2dcce66d7ae014ec68cb7f4cb5f580820e"
+    },
+    "C10Probability.fors_tree_opening_budget": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "e5080566fd3e135ca288e4398d21f8d961029ca79cbd25c6495c826ab4aa9913"
+    },
+    "C10Probability.fors_root_opening_budget": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "b8a015aa057a1af0d0538ae92167053557c7c53af96daddae9f989e95434890f"
+    },
+    "C10Probability.fors_sign_opening_budget": {
+      "file": "C10Probability/ForsTreeOpening.lean",
+      "statement_sha256": "60b202f520306bc53d7038d17da431a2fc6556acbefb273f9e4e58e1526e9272"
     },
     "C10Probability.accepted_fors_samples_event": {
       "file": "C10Probability/ForsWitnessMass.lean",
@@ -3958,6 +4444,26 @@
       "file": "C10Probability/Memo.lean",
       "statement_sha256": "326822241a7caf9e1543e6c6472fec85946318ab75e7ea38c5f48d5db9849d03"
     },
+    "C10Probability.restore_target_selected": {
+      "file": "C10Probability/MemoPresample.lean",
+      "statement_sha256": "e1057cba11a4567ed28e414ac82e80a5ad1437cd568df951c8df70feaf872642"
+    },
+    "C10Probability.restore_target_other": {
+      "file": "C10Probability/MemoPresample.lean",
+      "statement_sha256": "955ceb84c64a537b35cd859f59adea556d4d0b734f5b4ec1f6f121c8cfcca9d2"
+    },
+    "C10Probability.eval_program_presample": {
+      "file": "C10Probability/MemoPresample.lean",
+      "statement_sha256": "d70660e05269b820cbf6b615d7367299a0788cf946e0c576e8f811206dcf2c19"
+    },
+    "C10Probability.restore_target_hit": {
+      "file": "C10Probability/MemoPresample.lean",
+      "statement_sha256": "c9fac35c6e8659d614cb7d82fc73dd28dc3b74421cf2be56de79049d53d1d0b4"
+    },
+    "C10Probability.eval_program_presample_support": {
+      "file": "C10Probability/MemoPresample.lean",
+      "statement_sha256": "a5674d82928783e684724b68d0f664909cfaac1f97a35479053170462ca92ae1"
+    },
     "C10Probability.tablesRelate_empty": {
       "file": "C10Probability/MemoRelabel.lean",
       "statement_sha256": "4d3da9d6258de6923330425f58874c0a6f7d677579e76f2cd21e14ae2e27bf15"
@@ -4213,6 +4719,70 @@
     "C10Probability.digest_program_node_bad_bound_real": {
       "file": "C10Probability/NodeCharges.lean",
       "statement_sha256": "45797bc0aef5526b2876c98af2a130acd695bcb884a66fee1d73ee0f97ca6e67"
+    },
+    "C10Probability.decode_node_slot_short": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "5788bdb795ff3c25a8565e3fd90d936665a5bab45c439b124769252346d4a062"
+    },
+    "C10Probability.decode_node_slot_append": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "9fddd331dfbee49846bd4204897a52b41ba4d044d62fce084f90ce4e581af7dd"
+    },
+    "C10Probability.node_of_block_node": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "8a46b5326d8e6bba7dc2b416da40051782a5533c9193ea5a5a80dc49cfc58ae9"
+    },
+    "C10Probability.node_of_block_replicate": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "768d6d8f49c2a8547f28473a97e629d454f08b8f7b2df28e2478ffdf5f83663c"
+    },
+    "C10Probability.randomizer_zero_bytes": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "74142c18f8e8f60180a51dd0556101b91c15f0aa462e0c85b7dc969e184f3c20"
+    },
+    "C10Probability.node_of_block_counter": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "b014c007f469530c1b3670969d0633b010a9a3d6ae469826ecc30658f3513f7c"
+    },
+    "C10Probability.decode_node_slot_counter": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "b0f56d66b7d7582fb6198c7dd0989ac33ee4bc49c75e08b8bf5b61f7bc32285c"
+    },
+    "C10Probability.all_ff_node_value": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "8f6e20204841e76cf779fa57f929fb7ecdb5d364c30ebead5b15e2693d99d55e"
+    },
+    "C10Probability.decode_node_slot_hmsg": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "e992c27498589b002f9fdbd6555b5c7808b565ca487cb55cc85497a9c476ae55"
+    },
+    "C10Probability.fixed_node_candidates_card": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "d9555f3bb3c04f62eacab848fa4636d046eab55e4afcbff9074bcd24441648bd"
+    },
+    "C10Probability.node_commit_decodes": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "0600ada72e58e7e53d67e3f302034cd645348ba458aaf1ac0c4ec2812d96e992"
+    },
+    "C10Probability.node_commit_labels_injective": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "f455e76e104c36068ab44fbbc9f3020d1d819208b489a45532078de77e39a010"
+    },
+    "C10Probability.node_private_candidate_excluded": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "78cbda1eed59ad119689198aac7d65fceab2eeb75220890c2e701c436186ec9b"
+    },
+    "C10Probability.node_counter_candidate_fixed": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "da920f9ba94d182313a7ce5655755480e1902eb4ad1090d47ddffcc8fbf84429"
+    },
+    "C10Probability.node_hmsg_candidate_fixed": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "dff9f3366bd9bb441632061711376707d76751ef48f9ad057d974cdc18464396"
+    },
+    "C10Probability.node_opening_candidate_bound": {
+      "file": "C10Probability/NodeCommitment.lean",
+      "statement_sha256": "54feb40b1c950ca2370088ddf830b9ea781d7e549fcc83bc47de8a1093084bbe"
     },
     "C10Probability.node_query_other_width": {
       "file": "C10Probability/NodeDomain.lean",
@@ -4490,6 +5060,30 @@
       "file": "C10Probability/ObservedForestDescent.lean",
       "statement_sha256": "41473b2b81f34401bed9f753a5dd9c1472cde6a4388341bd768a874418324527"
     },
+    "C10Probability.exposure_history_entry_member": {
+      "file": "C10Probability/ObservedForestOpening.lean",
+      "statement_sha256": "054c6f1ae64d835a1579e9962159ba51e1ed716c0da2846b4d85d688954afc0b"
+    },
+    "C10Probability.forest_selected_coordinates": {
+      "file": "C10Probability/ObservedForestOpening.lean",
+      "statement_sha256": "4dd7cd17d47a1255d859e8393cbf308727b86ef1eb7e80eb82f52c508313b720"
+    },
+    "C10Probability.observed_forest_opening_selected": {
+      "file": "C10Probability/ObservedForestOpening.lean",
+      "statement_sha256": "cc2abe19f2733ef1f7d17399557233925488a767fb03f20a35ab21d8ebf3ab0d"
+    },
+    "C10Probability.c10_observed_forest_opening_bound": {
+      "file": "C10Probability/ObservedForestOpening.lean",
+      "statement_sha256": "a8b6d33397c671753010b4fc31a25db9595420df9dbdee71cf3907c3ac4bee91"
+    },
+    "C10Probability.ordinary_fors_opening_charge_ne_top": {
+      "file": "C10Probability/ObservedForestOpening.lean",
+      "statement_sha256": "6f33fe7fa278b75961fd1b18ffe4b762938c12bfd9a489d0cbb88b45ae6c03b5"
+    },
+    "C10Probability.c10_observed_forest_opening_bound_real": {
+      "file": "C10Probability/ObservedForestOpening.lean",
+      "statement_sha256": "f469113ded1dafa55c863f9c7e1124a619715f1e4762e2777bd6b610e3d260f5"
+    },
     "C10Probability.c10_observed_game_erases": {
       "file": "C10Probability/ObservedGame.lean",
       "statement_sha256": "a4229452df4543e6679e034183a41189602bd5b12b05d01991bd2977a158dab0"
@@ -4550,6 +5144,78 @@
       "file": "C10Probability/ObservedInitialized.lean",
       "statement_sha256": "00d58a18455543606e0b5a80e1fc0226e2ebe6ea8989ff4b92e47f4aea3787e6"
     },
+    "C10Probability.opening_avoids_map": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "7557dbee55105c3ca3bf862108dbcce98f3e6f8f4b79eb6efee6e75fe6d477bf"
+    },
+    "C10Probability.c10_observed_session_opening_refines": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "134defe5bad51171e6437c26117781458080266637bc7a870cb6e2a0aac4ad70"
+    },
+    "C10Probability.c10_observed_driver_opening_refines": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "bb42bc9c72e01f42ce57291c49fc805f0025239f55db0685205682a34d620625"
+    },
+    "C10Probability.c10_observed_game_opening_refines": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "c004045931ee825da2780451971f5e975214d2cd41eeed949442c80a82717387"
+    },
+    "C10Probability.c10_observed_session_opening_avoids": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "bb85dc5f4258cee3092612ca8b250361031f0ac15f52daa6e4c5a22ee54869a2"
+    },
+    "C10Probability.c10_final_opening_sealed": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "390ef641cb8d42aa031282cb992fe97701ed413c51848ed6c055dd58bc616b53"
+    },
+    "C10Probability.c10_observed_driver_opening_avoids": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "b451503bea525953f4f46bdf50a17dfd3986a5f18b2d03678024cc6e22ad5fdd"
+    },
+    "C10Probability.c10_observed_game_opening_avoids": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "aab57f045e5e901e330eafacad39ce24eb0a53fd6151465df8673ce25f2afdaf"
+    },
+    "C10Probability.c10_observed_session_opening_budget": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "2995f95f18d4a8751dc37b4150730f71d7b49f1a49532f7b7c42fc34db2ab412"
+    },
+    "C10Probability.c10_observed_game_opening_budget": {
+      "file": "C10Probability/ObservedOpening.lean",
+      "statement_sha256": "18cb44768e95b9c03e4ab5333886f1f70d61781cfb63ae8d9bdd315230385756"
+    },
+    "C10Probability.forged_fors_candidates_card": {
+      "file": "C10Probability/ObservedOpeningBound.lean",
+      "statement_sha256": "60cc700ce0bb92e192972c317c7f9e2a9d1bbaf12d5faf2bfedc52e475e0e3e8"
+    },
+    "C10Probability.c10_observed_selected_opening_bound": {
+      "file": "C10Probability/ObservedOpeningBound.lean",
+      "statement_sha256": "effb863fd091e32d8472b0ffbc0288a211e5ae877b25b30e7d03e07192697117"
+    },
+    "C10Probability.c10_initialized_selected_opening_bound": {
+      "file": "C10Probability/ObservedOpeningBound.lean",
+      "statement_sha256": "05c812ab415c2591bf1824bcde3cfeed30e35e23a7248d8f66dfe6865d7ae281"
+    },
+    "C10Probability.fors_opening_charge_ne_top": {
+      "file": "C10Probability/ObservedOpeningBound.lean",
+      "statement_sha256": "a043c5b8cc4d13f17e7a21fe4ab357df8f8971b3c69355d8e912fa125259a72f"
+    },
+    "C10Probability.fors_returned_extends": {
+      "file": "C10Probability/ObservedOpeningDisclosure.lean",
+      "statement_sha256": "354417724e1c7ab4064af72e3a9f4573370a5639a3d5ed8dca96e1865fc00cc6"
+    },
+    "C10Probability.c10_observed_session_opened": {
+      "file": "C10Probability/ObservedOpeningDisclosure.lean",
+      "statement_sha256": "a1079cdac829605ac9165e9e89ade52e10301e6f58ef3e496bdcd17fad63f134"
+    },
+    "C10Probability.c10_observed_driver_opened": {
+      "file": "C10Probability/ObservedOpeningDisclosure.lean",
+      "statement_sha256": "34da8364fc4e708bbac74152f42941a51d6dd293d32c15719d3308214033e229"
+    },
+    "C10Probability.c10_observed_game_opened": {
+      "file": "C10Probability/ObservedOpeningDisclosure.lean",
+      "statement_sha256": "af60e1ae4511615b71bc0fcbd7f2b6a66d160b6d7f468154cb930ff9f39385d3"
+    },
     "C10Probability.c10_observed_output_witness": {
       "file": "C10Probability/ObservedOutput.lean",
       "statement_sha256": "3c7a1f47fe39fa03882af4aed909d7c3580a6c8d181e63cb11568718634794f3"
@@ -4601,6 +5267,302 @@
     "C10Probability.c10_observed_session_extends": {
       "file": "C10Probability/ObservedSession.lean",
       "statement_sha256": "d408d57ca36c741057c82963255a84aa211fa3727e6c1acdbf5b65631d1f92b7"
+    },
+    "C10Probability.memo_query_update_other": {
+      "file": "C10Probability/OpeningCache.lean",
+      "statement_sha256": "bb7d3221e0ddcc0fffc788b1bd38ca78a1dee2c00d2421858ebb90c324c476d6"
+    },
+    "C10Probability.eval_opening_preserves": {
+      "file": "C10Probability/OpeningCache.lean",
+      "statement_sha256": "eb975e488a11d9efbc3821293f56f23df350571f4fdbe15f9cc09ee1e0d53405"
+    },
+    "C10Probability.eval_opening_update_avoided": {
+      "file": "C10Probability/OpeningCache.lean",
+      "statement_sha256": "10184e4bbcd0c574598b263b80bb8e56956afd3fb1ec32aa8e4d72dd49840b56"
+    },
+    "C10Probability.eval_opening_erase_flag": {
+      "file": "C10Probability/OpeningCache.lean",
+      "statement_sha256": "44acc7e4f3d562b22e56e31a036d130fc408e980fe3646faef543ea88f06cda1"
+    },
+    "C10Probability.reveal_lift_avoids": {
+      "file": "C10Probability/OpeningCache.lean",
+      "statement_sha256": "a06e65be35b6afccc062199893fe65c8974ea277f468f2f1594056ec8430c7e3"
+    },
+    "C10Probability.eval_reveal_lift": {
+      "file": "C10Probability/OpeningCache.lean",
+      "statement_sha256": "8822afc9359a44762ed54769599297272ef1bffc1fe2fbda66c0d319dea68003"
+    },
+    "C10Probability.reveal_lift_selected": {
+      "file": "C10Probability/OpeningCache.lean",
+      "statement_sha256": "f2362ba63382e10ca661b0bafb8176b488997fd61884dea0baecd25476a10d65"
+    },
+    "C10Probability.eval_opening_cast": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "06cfd4e873c956637ef353d4c391c25055e7e44ea53c3c353a9152a6d6c18562"
+    },
+    "C10Probability.redact_opening_cast": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "a7d54fe20b476ea589959335f72858fea898620dbbd692bd0dd761e3afd7033c"
+    },
+    "C10Probability.eval_opening_reserve": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "f1ff7744defd3028ec2abe61c2409b2a9c32bf6f349fffe2fbbaef1722d56609"
+    },
+    "C10Probability.redact_opening_reserve": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "995c8cce4a715025d7ec6659818b41c35f4c4f5ed7329fc83be86314d3720e37"
+    },
+    "C10Probability.eval_opening_bind": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "75bcb3fb079b937ce101c7687e1d7d1ff5ad549a45b1dcb1aee5a11da009458d"
+    },
+    "C10Probability.cast_query_done": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "a3bb5cd79f004e3da1872ab50fb3f5100b073a9a64704bde01a21058a8c186a2"
+    },
+    "C10Probability.redact_opening_bind": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "20c5890287199599c9b9616f2c95a82461a2ae9a4800309c44de714c587d2614"
+    },
+    "C10Probability.opening_selected_bind": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "7f6cef5a02d7dc4f8cc6f86244a4bc3898f734cd3c1a0e39e5a72b5e10f0105b"
+    },
+    "C10Probability.redact_opening_mapReturn": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "b0cab2240b8aff393090c59cbe2510cb1c69e2fe12d8162d6c9cc000b97964ad"
+    },
+    "C10Probability.eval_opening_mapReturn": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "59dc119f849ad551d853c69aa2862cfb8f8b7452e6c99a0e3901a77bdb9f4ec0"
+    },
+    "C10Probability.eval_opening_lift": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "9ce0a97f314216c354a7f30f30eed939cea17d989ef8a7682f9d51851bc32820"
+    },
+    "C10Probability.redact_opening_lift": {
+      "file": "C10Probability/OpeningComposition.lean",
+      "statement_sha256": "45b6599ac0d292f0a270a3e786f992fb99ca6311b52e3979103258b842e103b1"
+    },
+    "C10Probability.opening_public_first_mass": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "2e9ba3f99d2373224f58a695b2f2949b8bc63c6c6637be6321b321d10d1f62ee"
+    },
+    "C10Probability.opening_commit_first_mass": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "17a60046269ea569b3ea76346bef16d19332fd66d57b51fae68668d9b4f2ffc7"
+    },
+    "C10Probability.opening_repeated_cached": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "d4196d3456d2cf19621e7751acfa4ac1a9e54ff37306392d61e806145e3b0e9e"
+    },
+    "C10Probability.opening_constant_guess_mass": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "5893578563bb5c329ee3dc0a86d096e233d2704de18aaa054dfbe90bb8fbf3ba"
+    },
+    "C10Probability.opening_reveal_retains_full": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "9696eff12ac4e9d090dda80fddcdd21f6f6c3085127252ee67d99969dfc25d11"
+    },
+    "C10Probability.opening_reveal_cannot_guess": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "2af4bd456bac95329da026988803b95a519535d91357d919bffdac48dc02b600"
+    },
+    "C10Probability.opening_commit_then_reveal_cannot_guess": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "3cb841e17d97feb3fb4012cb3212a3ebcfc86fc9029fbf58362f46f9fe34838c"
+    },
+    "C10Probability.opening_fixed_candidates_still_hit": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "89a0237f0d3b744c0db87cdfd8300a8956ad2e5506199c42b6249531844936ec"
+    },
+    "C10Probability.opening_unused_presample_removed": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "a582290d4edbfb83e86f3e261b20176829328120b26ac2d0fbb509c8dce5b47d"
+    },
+    "C10Probability.opening_used_presample_retained": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "79a2acedc4e0076c3ea419504c8d8d80746c5c6f1fcce987cf7dcacd2a87af09"
+    },
+    "C10Probability.opening_other_presample_preserved": {
+      "file": "C10Probability/OpeningExamples.lean",
+      "statement_sha256": "2bfc215509ac76bd9f806b3fb96a313faef6321d569fe3248e89478ae9df97d9"
+    },
+    "C10Probability.query_exclusion_selected": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "d687ef2b3722f01a059915e67ebcb2758be1edf6fe48e1064fd47a71a26048ec"
+    },
+    "C10Probability.query_exclusion_derived": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "2b9db8040d2ffd92e5df83c021e9d0938784012b07149b6b1d8a5589acb849b8"
+    },
+    "C10Probability.randomizer_fors_excluded": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "fe381ca89484d4330da6cf57c10ecc9124dced717a6b691b3482dfefce926252"
+    },
+    "C10Probability.randomizer_variable_budget": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "2b88fc4ac8918314f5850e5f39bf4eda2dc5fa658564c158ff6c6a801da3a809"
+    },
+    "C10Probability.opening_lift_variable_budget": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "5e7ee1f0ba0ec0451cdb7446c38e0fbc1833ad3673c89612b1570d6b2b3c095b"
+    },
+    "C10Probability.wots_sign_variable_budget": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "1b73771449010bee2048b486bb0706eef25f1907877ee3741646ddbbd8894167"
+    },
+    "C10Probability.layer_sign_variable_budget": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "c90dde9eff41f6e8d765eaad38d433e5b6f87bc3b39eb63babe8c66fb536bd7f"
+    },
+    "C10Probability.hypertree_sign_variable_budget": {
+      "file": "C10Probability/OpeningGrind.lean",
+      "statement_sha256": "2626862ed3d1c52510cf5779ad4bfb0624b335d1ac9a562af870f8b5f794ebb5"
+    },
+    "C10Probability.opening_game_redaction": {
+      "file": "C10Probability/OpeningGuess.lean",
+      "statement_sha256": "b80b035b4d00f80a1fa4c263a52488c0e0dd254c4ccdda42ef352088f35fdd6c"
+    },
+    "C10Probability.opening_candidates_count": {
+      "file": "C10Probability/OpeningGuess.lean",
+      "statement_sha256": "163c83a2040881d60496b54468effd91e8175eb68138f91933d5ec8994bbbbb9"
+    },
+    "C10Probability.opening_candidate_bound": {
+      "file": "C10Probability/OpeningGuess.lean",
+      "statement_sha256": "2f0be954b749d114921e5052f94741c9c6e0a880b640e50afb68ea571ea24729"
+    },
+    "C10Probability.opening_candidate_bound_real": {
+      "file": "C10Probability/OpeningGuess.lean",
+      "statement_sha256": "fdbdc1a1229d206b47d27f496cbe2a60be7eaed7abe04cdec35ae0a26a99f273"
+    },
+    "C10Probability.opening_reveal_no_candidate": {
+      "file": "C10Probability/OpeningGuess.lean",
+      "statement_sha256": "0f044325aaf6316e6a75df4fec8d27890eefde44151532562c08f1726e92e0fd"
+    },
+    "C10Probability.opening_post_support": {
+      "file": "C10Probability/OpeningPost.lean",
+      "statement_sha256": "655951fa62d2c8f0548b40f17817c71eb683eccb423ef296693b9e3c4c8a135e"
+    },
+    "C10Probability.opening_post_constant": {
+      "file": "C10Probability/OpeningPost.lean",
+      "statement_sha256": "f73b58d54fd794aee4f1b7ed6853da9dd3bc4e7ffe9ff24cc652ac1b0f209f1f"
+    },
+    "C10Probability.opening_post_cast": {
+      "file": "C10Probability/OpeningPost.lean",
+      "statement_sha256": "a9186cdd04f063fe2faa514dff3ecd95e116427e04c6c220eeef24f1e93c9c10"
+    },
+    "C10Probability.opening_post_reserve": {
+      "file": "C10Probability/OpeningPost.lean",
+      "statement_sha256": "3dc78a2ea71be589588f5856f7c78f8114bde609456a9c3b5c171ca2b0803acd"
+    },
+    "C10Probability.opening_post_map": {
+      "file": "C10Probability/OpeningPost.lean",
+      "statement_sha256": "223c441310efa5e7e01a3411e4573531b9405854d373c3bbdf98b07d2f5a9e61"
+    },
+    "C10Probability.opening_post_bind": {
+      "file": "C10Probability/OpeningPost.lean",
+      "statement_sha256": "059c6c490567901b9b1637c2ba9145fb79ae617059d1923a028bf10ea777c5b3"
+    },
+    "C10Probability.opening_post_fold": {
+      "file": "C10Probability/OpeningPost.lean",
+      "statement_sha256": "71b5463a31a1be1ed69f3a5cf05c654b456c5da72f252ffdaad65cfce9e38c48"
+    },
+    "C10Probability.eval_opening_revealed": {
+      "file": "C10Probability/OpeningProgram.lean",
+      "statement_sha256": "9d9f0405ca58c28dad96c5bfa509d72490c0226fad7685f639d863c8b117acd3"
+    },
+    "C10Probability.eval_opening_redaction": {
+      "file": "C10Probability/OpeningProgram.lean",
+      "statement_sha256": "e1476be469907b294aaa4674c0b6cc74386dccc9d7e80b2ffa8143481cd052a7"
+    },
+    "C10Probability.eval_opening_commit_cached": {
+      "file": "C10Probability/OpeningProgram.lean",
+      "statement_sha256": "1b77ea36b9559e935a2f333ea8b7ff0b689579f52a711004f557dc8ea1b1315a"
+    },
+    "C10Probability.eval_opening_reveal_continues": {
+      "file": "C10Probability/OpeningProgram.lean",
+      "statement_sha256": "cbe393d56e668e7ae9455aa980c593362f80ead53b3c4445cd3cbb50a6fd11a1"
+    },
+    "C10Probability.redact_opening_reveal": {
+      "file": "C10Probability/OpeningProgram.lean",
+      "statement_sha256": "01234df4b0f4af1adb2d2caeefe3f868eab1154edf8a3e7bf86265526623abd2"
+    },
+    "C10Probability.opening_refines_done": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "6f7e69e48226e6b4d232e1e3ba857aacbb4e01a540133003ab7690ccd901ba7a"
+    },
+    "C10Probability.opening_refines_lift": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "5f54c9aa823f39378a18870c7190e3caaa134004702c36b0528ac54bc3a24ad6"
+    },
+    "C10Probability.opening_refines_cast": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "79f34d53a2d3e6545bb4e3da001aa802a95ff79c9b2bab983c3f8554f73155ab"
+    },
+    "C10Probability.opening_refines_reserve": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "a1b9ca0a77ca882e58ea874157136a968cc817c9f7d6dbe2dc46f06ddc47d3e4"
+    },
+    "C10Probability.opening_refines_bind": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "d4d3ff2891045cf38690525da50fe2a7d70f8802e7d2c0a238f4ed342547a1e2"
+    },
+    "C10Probability.opening_refines_map": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "5fb4f5db627ef8c75a67887976989b4708be4b425dd4626c37a8c5346b432d2c"
+    },
+    "C10Probability.opening_refines_query": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "2a87201c7235b9eac9138cc8c2f9f749504cee25e2b02e6e14eb6f2afc252910"
+    },
+    "C10Probability.opening_refines_reveal": {
+      "file": "C10Probability/OpeningRefinement.lean",
+      "statement_sha256": "913f303e67c4e4da3585991b6aec8ac27144f1f2291815af824a6b5c1ed67f58"
+    },
+    "C10Probability.opening_sealed_avoids": {
+      "file": "C10Probability/OpeningSealed.lean",
+      "statement_sha256": "c9c36a52195940348cbeae06079acbf27ad845fe8d7ba62f1ae243aa7cf1f1c6"
+    },
+    "C10Probability.opening_sealed_flag": {
+      "file": "C10Probability/OpeningSealed.lean",
+      "statement_sha256": "b7d32d47c6b331a8c2501b848c5d3bb4c2ae126eb7cc619e2f6dcbaa15724670"
+    },
+    "C10Probability.opening_sealed_cast": {
+      "file": "C10Probability/OpeningSealed.lean",
+      "statement_sha256": "725f6f48914b0b503e35352b05b4ab880851f4dca5c8907e698e37b5591e074c"
+    },
+    "C10Probability.opening_sealed_reserve": {
+      "file": "C10Probability/OpeningSealed.lean",
+      "statement_sha256": "26d5eeb21f02933dc2e49c5b958376980c98778876feb2b1b1deee6f03dbe8c5"
+    },
+    "C10Probability.opening_sealed_bind": {
+      "file": "C10Probability/OpeningSealed.lean",
+      "statement_sha256": "05e749b56461593b780c78413bc7f10a26ab54e6eb6952d502a6f1710e561dfa"
+    },
+    "C10Probability.opening_sealed_map": {
+      "file": "C10Probability/OpeningSealed.lean",
+      "statement_sha256": "78330e3da03ed9c7d154058044164287ad6e23319459c2daabaeca9a38372948"
+    },
+    "C10Probability.opening_sealed_lift_mapped": {
+      "file": "C10Probability/OpeningSealed.lean",
+      "statement_sha256": "ab4854fb551d75dffb6862f3f9b14da76570c01ea0cdef5482ee0776a2e64155"
+    },
+    "C10Probability.opening_tree_refines": {
+      "file": "C10Probability/OpeningTree.lean",
+      "statement_sha256": "ac8d5fd14ba89cf7c7e661bc77f4281e97048dbae758c9c62ee6af756581d9cf"
+    },
+    "C10Probability.opening_merge_sealed": {
+      "file": "C10Probability/OpeningTree.lean",
+      "statement_sha256": "de05d1163a99987d70ea42530491cf4a4b8f4d9cd4ca30efb3f69a3317e5da72"
+    },
+    "C10Probability.opening_tree_sealed": {
+      "file": "C10Probability/OpeningTree.lean",
+      "statement_sha256": "994030381691abce51c86c88575bb4d2bc8484e720d6cf904eb5ef90902dfcfa"
+    },
+    "C10Probability.opening_tree_budget": {
+      "file": "C10Probability/OpeningTree.lean",
+      "statement_sha256": "79ceb6aa547baddb2cf73141a90439904f438585139ecaac634771761bcc3e39"
     },
     "C10Probability.replay_path_leaf_eq": {
       "file": "C10Probability/PathBinding.lean",
@@ -5785,6 +6747,14 @@
     "C10Probability.observeSelected_collision_flag": {
       "file": "C10Probability/SelectedObserver.lean",
       "statement_sha256": "343a95fba4feca84089343993c9f266872bacc7b6cb309f0a27700e537621607"
+    },
+    "C10Probability.selected_opening_presample_le": {
+      "file": "C10Probability/SelectedOpeningEvent.lean",
+      "statement_sha256": "04dd88ec4f3064a07b3f857b89903a7f9ae5b843a2b6643e712216a8f5f0ceaa"
+    },
+    "C10Probability.selected_opening_comparison": {
+      "file": "C10Probability/SelectedOpeningEvent.lean",
+      "statement_sha256": "114f237091d49b04f715e6d0a670b7db48d79108bd4adef2d01f0bcc00faecaf"
     },
     "C10Probability.c10_session_hash_capped": {
       "file": "C10Probability/SessionBranches.lean",

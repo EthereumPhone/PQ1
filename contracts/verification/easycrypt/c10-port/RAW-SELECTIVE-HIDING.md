@@ -24,6 +24,22 @@ budget or private-independence premise. Its finite-universe factor is
 128-bit security claim. It charges this event only, not complete EUF success.
 The special thirteenth tree is not an ordinary private-value candidate.
 
+## Separate Lean PMF continuation
+
+The [probability project](../../probability/README.md) now independently derives
+an ordinary FORS opening charge for its actual initialized observed game in
+`c10_observed_forest_opening_bound_real`. It retains the full selected private
+digest, shared public/commitment cache, adaptive reveals, complete successful
+history and failed requests. Its derived charge is
+`6442450944 * min((177526+qr+qs*408408)/2^128,
+(177524+qr+qs*(sessionSignCost cfg+1))/2^128)`.
+The different work constants follow that project's structured keygen/sign/verify
+programs and possible reveal step; this does not identify the Lean and EasyCrypt
+execution models. Its event requires a valid full signing history and an
+unmatched cached ordinary opening, with no accepted-forgery guard. WOTS opening
+charges and final six-case PMF composition remain open. The EasyCrypt statements
+and numerical results below are unchanged.
+
 ## Repeated fixed candidates
 
 `LeafForsOpeningBound.original_byte_fors_candidate_bound` proves the same
