@@ -233,7 +233,7 @@ their actual accepted counts and prefixes in that same final cache. Comparing
 accepted words at a common address gives equal words/values or an earlier
 position with a suffix to the signed value. This closes chain-opening extraction;
 it does not establish that the earlier value is undisclosed or that equal words
-mean equal messages. The complete repeated-address minimum is now derived below. The structural FORS descent is derived below; adaptive coverage/private-opening
+mean equal messages. The complete repeated-address minimum is now derived below. The structural FORS descent and adaptive coverage are derived below; private-opening
 charges and the complete six-case partition/final bound remain open. Forward correctness is now derived for the
 actual returned Merkle/FORS authentication arrays at every valid target, using
 certified stored siblings and the same cache; concrete merge alignment, bounds
@@ -253,7 +253,7 @@ zero mass at `some false`. This is honest correctness, not guaranteed signing
 success or a forgery bound. Eleven finite examples include asymmetric component
 executions and counterexamples for wrong supplied roots and overwritten caches;
 the inhabited whole-signature example uses a populated constant cache, not an
-empty-cache success-probability argument. The structural FORS descent is derived below; adaptive coverage/private-opening
+empty-cache success-probability argument. The structural FORS descent and adaptive coverage are derived below; private-opening
 charges and the final six-case forgery partition/bound remain open. The structured theorem
 does not close the byte codec or concrete/hash/Rust/cross-kernel boundaries.
 The repeated-address minimum component is now structurally derived from actual
@@ -271,7 +271,7 @@ remain. No stable-word or completeness premise is assumed. The mixed accepted-wo
 counterexample shows why uniformity must be derived: an arbitrary minimum need
 not have sum 205. This closes positional comparison only; it does not prove
 secrecy, absence from raw queries or a private-opening probability charge.
-The structural FORS descent is derived below; adaptive coverage/private-opening
+The structural FORS descent and adaptive coverage are derived below; private-opening
 charges and the complete six-case PMF partition/bound remain open. No byte-codec, concrete hash,
 Rust, cross-kernel, unbounded-adversary or repeated-freshness claim follows.
 The repeated upper-word branch now descends into the actual lower tree. Actual
@@ -305,9 +305,9 @@ history does not establish absence from raw queries, secrecy, or a probability
 charge. The actual observed/support/initialized winning endpoints retain the
 complete history, cap, prior upper/lower occurrences and all collision/zero and
 earlier-chain alternatives. Eight finite boundary examples and 45 complete-proof
-controls accompany this structural descent. Adaptive coverage/private-opening
-charges and the final six-case PMF partition/bound remain open, alongside the
-existing codec, unbounded-adversary, repeated-freshness and implementation limits.
+controls accompany this structural descent. The adaptive coverage charge is
+derived below; private-opening charges and final six-case PMF composition remain
+open, alongside the existing codec, unbounded-adversary, repeated-freshness and implementation limits.
 The fixed-sample quantitative dependency is now derived separately in Lean.
 A full 256-bit equivalence retains 95 high bits, 18 hypertree bits, the actual
 11-bit guard and twelve ordinary 11-bit indices. The uniform accepted-digest
@@ -333,15 +333,30 @@ sample-length cap; the program work bound may exceed that cap. The list sampler
 is proved equal to the accepted function-space PMF, and both extended-real and
 real-valued bounds retain finiteness. Overlapping events are bounded by a union;
 no equality of union probability and charge is asserted.
-This closes those pool/sampler dependencies, not the refinement of actual
-memoized H_msg or full signer-session histories into that sampler. That
-refinement, private-opening charges and final six-case PMF composition remain
+The next continuation derives the actual memoized H_msg transfer. It splits a
+fresh full digest by the real acceptance guard and uses a completion potential
+over the existing query interpreter. A passive observer records only fresh
+accepted 160-byte public queries; cache hits retain their stored replies and add
+no sample. Exact erasure preserves result and full cache, and empty-cache origins
+identify every selected accepted final lookup with a pool entry. Reply-dependent
+call budgets, result-width invariants and actual keygen/sign/verify control flow
+derive the fresh accepted pool cap `qr + qs + 1`, independently of total work.
+The actual observed session/driver/game compiler preserves queries, exposures,
+refusals, failed-signing ledgers and final tables. Actual successful forgery
+coverage maps through its valid complete signing history to distinct target and
+witness pool positions, retaining all twelve ordinary coordinates and the full
+hypertree address. Coordinates may use different prior signatures. Thus
+`c10_observed_forest_coverage_bound` bounds `ObservedForestCoverage` in the
+independently initialized observed PMF by the exact existing Stirling charge at
+`qr + qs + 1`; its real-valued form is also derived. This proves that branch's
+upper bound without declaring cache hits independent or assuming the cap.
+Private-opening probability charges and final six-case PMF composition remain
 open. Existing unbounded-adversary, codec, repeated-grinder freshness and
 implementation limits remain. No EasyCrypt theorem is imported into Lean.
-The continuation adds 55 theorem closures, nineteen boundary checks and 47
-complete-proof controls including nine equivalent forms. All 1705 preceding
-statements and 1081 fixture objects are preserved. The PMF inventory now has
-1760 theorem closures and 1128 typed sensitivity cases.
+This continuation adds 107 theorem closures, nine boundary examples and 58
+complete-proof controls including eleven equivalent forms. All 1760 preceding
+statements, 1128 fixture objects and prior proof-module bytes are preserved.
+The PMF inventory now has 1867 theorem closures and 1186 typed sensitivity cases.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

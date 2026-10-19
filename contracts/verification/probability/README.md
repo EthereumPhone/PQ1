@@ -127,10 +127,47 @@ exact Stirling/falling-factorial counts, unused-group address costs, adaptive
 stopping, the observed cap, and the failure of extension closure for exact-length
 events.
 
-This closes the independent-pool and adaptive fresh-accepted-sampler coverage
-dependencies. It does not identify the accepted history of the actual memoized
-H_msg or full signer session with this sampler. That refinement, private-opening
-charges and the final six-case PMF bound remain open.
+The actual memoized transfer is now derived in `ForsSplit.lean`,
+`SampleCompletion.lean` and the `HmsgPool*` modules. A fresh full digest is split
+by its actual acceptance guard into normalized accepted and rejected laws.
+Completion induction over the existing `QueryProgram` interpreter bounds the
+fresh accepted pool while preserving cache hits, unselected queries and rejected
+replies. `hmsg_pool_program_erases` recovers the exact result and full cache for
+arbitrary initial tables. The observer records only fresh selected accepted
+keys; their final-cache origins and uniqueness are proved. Completeness requires
+initial absence, and the initialized application starts with an empty cache.
+
+`ReplyBudget.lean` counts accepted calls even when a call hits the cache, so it
+bounds the smaller pool of fresh entries. `QueryExclusion.lean` retains result
+widths through loops and trees. `HmsgWots.lean`, `HmsgTrees.lean`,
+`HmsgForest.lean` and `HmsgSigner.lean` derive separation of private queries and
+public inputs whose lengths differ from 160 bytes. Actual key generation adds
+no H_msg calls; signing adds at most one accepted H_msg call, including grinder
+exhaustion, and final verification adds at most one. This derives the pool cap
+`qr + qs + 1` from the actual structured session, independently of total work.
+
+`ObservedProgram.lean` compiles the existing observed session/driver/game with
+exact evaluation equalities. It preserves refusals, failed-signing ledgers,
+forwarded raw queries, duplicate signing histories and final tables.
+`HmsgSession.lean` proves exact erasure to the independently initialized game.
+`HmsgCacheCoverage.lean` maps selected accepted final-cache keys into pool
+positions; witness keys differ from the target, while coordinates may share a
+witness or use different prior signatures. `ObservedCoverage.lean` connects the
+actual successful forgery and valid complete-history FORS records to that event.
+Fresh-message admission separates its H_msg key from each prior signing key.
+Thus `c10_observed_forest_coverage_bound` and its real-valued version prove
+
+```
+Pr[ObservedForestCoverage in c10ObservedInitializedIndependent cfg sampler qr qs]
+  <= forsCoverageCharge (qr + qs + 1).
+```
+
+All twelve ordinary coordinates and complete hypertree addresses remain in the
+event. This is the FORS coverage branch's upper bound, not a full forgery bound.
+Nine kernel-checked examples cover accepted/rejected/unselected entries,
+159/160/161-byte and private query domains, repeated cached/fresh calls, charged
+cache hits, refusal and admitted exhaustion. Private-opening probability charges
+and final six-case PMF composition remain open.
 
 ## Independence and correspondence boundary
 
@@ -850,8 +887,8 @@ sum-205 words at a common address: equal words give equal prefix values; otherwi
 some recovered position is earlier, with an actual suffix to the signed value.
 An earlier position is not necessarily undisclosed, and equal words need not
 mean equal messages or full digests. The complete repeated-address minimum is derived below. FORS
-descent, adaptive coverage and private-opening charges, and the complete
-six-case partition/final forgery bound remain open.
+descent is derived below and adaptive coverage above. Private-opening charges and
+the complete six-case partition/final forgery bound remain open.
 
 The 21 additional finite examples in `ChainBindingExamples.lean` and
 `WotsOpeningExamples.lean` cover split chains, binding failures without the
@@ -939,8 +976,8 @@ and an actual chain suffix to every matching prior value. Initialized independen
 winning-game endpoints retain the original collision and public-zero alternatives.
 An earlier position is not a secrecy claim, absence from raw queries, or a
 private-opening probability charge; equal words do not imply equal full digests.
-The repeated upper-word branch is descended into the lower tree below. The repeated lower-word branch descends into FORS below; adaptive coverage and
-private-opening charges and the final six-case PMF bound remain open.
+The repeated upper-word branch is descended into the lower tree below. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
+Private-opening charges and the final six-case PMF bound remain open.
 
 The fifteen finite examples in `ExposureExamples.lean` and
 `ExposureHistoryExamples.lean` include three nonconstant accepted sum-205 words:
@@ -978,8 +1015,8 @@ the actual top opening, the prior upper-word/signature occurrence and equal
 lower root, plus the lower opening and comparison. The top-earlier, selected-node
 collision, public-zero and accepted-word-collision alternatives remain explicit.
 A lower earlier position still makes no secrecy or private-opening probability
-claim. The repeated lower-word branch descends into FORS below; adaptive coverage,
-private-opening charging and the final six-case PMF bound remain open.
+claim. The repeated lower-word branch descends into FORS below; adaptive coverage is derived above.
+Private-opening charging and the final six-case PMF bound remain open.
 
 The seven kernel-checked examples in `LowerDescentExamples.lean` exercise distinct
 node messages, actual accepted collisions, harmless repeated use of one input,
@@ -1021,8 +1058,8 @@ actual observed, supported, and independently initialized winning sessions.
 They retain the complete history and cap, actual top/lower openings, prior
 upper/lower occurrences, both earlier-chain alternatives, and all original
 node-collision/public-zero/accepted-word-collision alternatives. This closes the
-structural repeated-lower-word FORS descent. Adaptive coverage and private-opening
-charges and the final six-case PMF partition/bound remain open.
+structural repeated-lower-word FORS descent. The adaptive coverage charge is
+derived above; private-opening charges and final six-case PMF composition remain open.
 
 The eight kernel-checked examples in `ForestDescentExamples.lean` cover empty and
 duplicate histories, coverage mixed across distinct prior digests, the need for
@@ -1075,16 +1112,25 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 1760 theorem closures against
+The gate rebuilds every project module, checks all 1867 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1128 typed cases run 3384 compiler jobs: each baseline and changed
-definition must compile, 998 changed behaviors must reject at the
-consuming `checked` theorem, and 130 value-preserving changes must pass.
+1186 typed cases run 3558 compiler jobs: each baseline and changed
+definition must compile, 1045 changed behaviors must reject at the
+consuming `checked` theorem, and 141 value-preserving changes must pass.
+The 58 actual-pool controls add 47 negatives and eleven equivalent forms.
+Complete consuming proofs check the acceptance mixture, selected fresh entries,
+cache updates/reuse, completion potential, reply-dependent costs, input-domain
+separation, result invariants, full observed histories, target distinction,
+ordinary coordinates and complete hypertree addresses. They also check initial
+freshness, the observed cap, width premises and the final verification allowance.
+All 1760 preceding theorem statements, 1128 fixture objects, prior proof-module
+bytes and 52 source bindings are preserved. No compiler limit or gate execution
+policy is changed.
 The 47 adaptive-coverage cases add 38 negatives and nine equivalent controls.
 Complete consuming proofs exercise fresh-sample traces, observed caps, extension
 closure, canonical counts, target exclusion, full-address and coordinate binding,

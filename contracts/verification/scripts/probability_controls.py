@@ -3286,4 +3286,167 @@ def cases(project: Path) -> list[dict]:
                  "(132 + 18 * j)", "(132 + 0 * j)")
     bx_statement("adaptive-cap-plus-zero", "ForsCoverageBound", "adaptive_fors_coverage_bound",
                  "out.2.length ≤ cap ∧ ForsListCoverage out.2", "out.2.length ≤ cap + 0 ∧ ForsListCoverage out.2", True)
+
+    # Actual memoized H_msg pool: complete consuming proofs, including cached
+    # replies and full observed histories. Rejection is sensitivity evidence.
+    by_prefix = ("import C10Probability.HmsgPoolExamples\n"
+                 "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n"
+                 "variable {K α R T : Type*}\n"
+                 "attribute [local instance] Classical.propDecidable\n")
+    by_suffix = "\nend\nend C10Probability\n"
+
+    def by_alias(module, name):
+        match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|instance|end)\b)", src[module], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing accepted-pool definition " + name)
+        replacement = name + "BYCandidate"
+        declaration = re.sub(r"\b" + name + r"\b", replacement, match.group(0).split("\n/--", 1)[0])
+        key = replacement + "Slice"
+        src[key] = by_prefix + declaration + by_suffix
+        return key, {name: replacement}
+
+    def by_check(module, name, names):
+        check = theorem(src[module], name)
+        for old, new in names.items():
+            check = re.sub(r"\b" + old + r"\b", new, check)
+        return check
+
+    key, names = by_alias("ForsSplit", "forsAcceptanceCoin")
+    coin_body = "PMF.bernoulli (1 / 2048) (by exact_mod_cast (show (1 : ℝ) / 2048 ≤ 1 by norm_num))"
+    for label, replacement in [("coin-always-accepted", "PMF.pure true"), ("coin-always-rejected", "PMF.pure false")]:
+        add("hmsg-pool-" + label, key, coin_body, replacement,
+            by_check("ForsSplit", "fors_acceptance_coin_true", names))
+    add("hmsg-pool-coin-eta", key, "PMF.bernoulli (1 / 2048)",
+        "(fun p => PMF.bernoulli p) (1 / 2048)",
+        by_check("ForsSplit", "fors_acceptance_coin_true", names), True)
+
+    key, names = by_alias("HmsgPool", "hmsgPoolPrepend")
+    selected = by_check("HmsgPool", "hmsg_pool_prepend_selected", names)
+    for label, old, new, check, expected in [
+        ("acceptance-inverted", "forsAccept (forsOfDigest value)", "!forsAccept (forsOfDigest value)", selected, False),
+        ("selection-inverted", "select key &&", "!select key &&", selected, False),
+        ("selected-entry-dropped", "(key, value) :: out.entries", "out.entries", selected, False),
+        ("selected-entry-duplicated", "(key, value) :: out.entries", "(key, value) :: (key, value) :: out.entries", selected, False),
+        ("prior-entries-dropped", "(key, value) :: out.entries", "[(key, value)]", selected, False),
+        ("digest-replaced", "(key, value) :: out.entries", "(key, (0 : Digest)) :: out.entries", selected, False),
+        ("selection-erased", "select key &&", "true &&", by_check("HmsgPoolExamples", "hmsg_prepend_unselected_example", names), False),
+        ("rejection-erased", "forsAccept (forsOfDigest value)", "true", by_check("HmsgPoolExamples", "hmsg_prepend_rejected_example", names), False),
+        ("cache-erased", "entries := (key, value) :: out.entries", "entries := (key, value) :: out.entries, cache := fun _ => none", by_check("HmsgPool", "hmsg_pool_prepend_erases", names), False),
+        ("prepend-id", "(key, value) :: out.entries", "id ((key, value) :: out.entries)", selected, True),
+    ]:
+        add("hmsg-pool-" + label, key, old, new, check, expected)
+
+    key, names = by_alias("HmsgPool", "hmsgPoolProgram")
+    for label, old, new, consumer, expected in [
+        ("cached-counted-again", "| some value => hmsgPoolProgramBYCandidate select (next value) table",
+         "| some value => (hmsgPoolProgramBYCandidate select (next value) table).map (hmsgPoolPrepend select key value)", "hmsg_cached_duplicate_pool_example", False),
+        ("fresh-cache-update-dropped", "(Function.update table key (some value))", "table", "hmsg_fresh_duplicate_pool_example", False),
+        ("fresh-record-dropped", ".map (hmsgPoolPrepend select key value)", ".map id", "hmsg_fresh_duplicate_pool_example", False),
+        ("fresh-record-duplicated", ".map (hmsgPoolPrepend select key value)", ".map (hmsgPoolPrepend select key value ∘ hmsgPoolPrepend select key value)", "hmsg_fresh_duplicate_pool_example", False),
+        ("fresh-update-id", "(Function.update table key (some value))", "(id (Function.update table key (some value)))", "hmsg_fresh_duplicate_pool_example", True),
+    ]:
+        add("hmsg-pool-" + label, key, old, new, by_check("HmsgPoolExamples", consumer, names) if consumer == "hmsg_cached_duplicate_pool_example" else
+            by_check("HmsgPool", "hmsg_pool_program_fresh", names), expected)
+
+    key, names = by_alias("SampleCompletion", "sampleCompletion")
+    for label, old, new, consumer, expected in [
+        ("completion-over-cap-one", "else 0", "else 1", "sample_completion_over_cap", False),
+        ("completion-full-excluded", "pool.length ≤ cap", "pool.length < cap", "sample_completion_full", False),
+        ("completion-remaining-extra", "cap - pool.length", "cap - pool.length + 1", "sample_completion_full", False),
+        ("completion-pool-dropped", "pool ++ more", "more", "sample_completion_full", False),
+        ("completion-id", "pool ++ more", "id (pool ++ more)", "sample_completion_full", True),
+    ]:
+        add("hmsg-pool-" + label, key, old, new, by_check("SampleCompletion", consumer, names), expected)
+
+    key, names = by_alias("ReplyBudget", "ReplyBudget")
+    for label, old, new, consumer, expected in [
+        ("reply-cost-dropped", "(q - 1)", "q", "hmsg_reply_budget_counts_cached_calls", False),
+        ("reply-zero-admitted", "0 < q", "0 ≤ q", "hmsg_reply_budget_counts_cached_calls", False),
+        ("reply-charge-inverted", "if charge key reply then", "if !charge key reply then", "hmsg_reply_budget_counts_cached_calls", False),
+        ("reply-cost-plus-zero", "(q - 1)", "(q - 1 + 0)", "hmsg_reply_budget_counts_cached_calls", True),
+    ]:
+        add("hmsg-pool-" + label, key, old, new, by_check("HmsgPoolExamples", consumer, names), expected)
+
+    key, names = by_alias("HmsgWots", "hmsgWidth")
+    # Clone the selector as well so the finite domain witness consumes the alias.
+    selector = re.search(r"^def hmsgQuery\b.*?(?=^theorem\b)", src["HmsgWots"], flags=re.M | re.S).group(0)
+    names["hmsgQuery"] = "hmsgQueryBYCandidate"
+    for old, new in names.items():
+        selector = re.sub(r"\b" + old + r"\b", new, selector)
+    src[key] = append_check(src[key], selector)
+    for width in (159, 161):
+        add("hmsg-pool-width-" + str(width), key, "key.length = 160", "key.length = " + str(width),
+            by_check("HmsgPoolExamples", "hmsg_query_width_examples", names))
+    add("hmsg-pool-private-domain-included", key, "| .inr _ => false", "| .inr _ => true",
+        by_check("HmsgPoolExamples", "hmsg_query_width_examples", names))
+    add("hmsg-pool-width-plus-zero", key, "key.length = 160", "key.length = 160 + 0",
+        by_check("HmsgPoolExamples", "hmsg_query_width_examples", names), True)
+
+    key, names = by_alias("QueryExclusion", "QueryExclusion")
+    add("hmsg-pool-exclusion-inverted", key, "select key = false", "select key = true",
+        by_check("QueryExclusion", "queryExclusion_budget", names))
+    add("hmsg-pool-result-invariant-dropped", key, "| _, .done value => post value", "| _, .done value => True",
+        by_check("QueryExclusion", "queryExclusion_reply_bind", names))
+    add("hmsg-pool-exclusion-id", key, "select key = false", "(fun k => select k) key = false",
+        by_check("QueryExclusion", "queryExclusion_budget", names), True)
+
+    key, names = by_alias("ObservedProgram", "c10ObservedSessionProgram")
+    consumer = by_check("ObservedProgram", "c10_observed_session_program_eval", names)
+    for label, old, new, expected in [
+        ("observed-query-history-dropped", "mapReturnProgram (observeHash key)", "mapReturnProgram id", False),
+        ("observed-exposure-history-dropped", "mapReturnProgram (observeSign req reply)", "mapReturnProgram id", False),
+        ("observed-failure-ledger-dropped", "(sessionAfterSign ledger req.message reply)", "ledger", False),
+        ("observed-refusal-inverted", "if sessionAdmits ledger req then", "if !sessionAdmits ledger req then", False),
+        ("observed-empty-raw-reply-changed", "cfg (next 0) 0 qs ledger", "cfg (next 1) 0 qs ledger", False),
+        ("observed-ledger-id", "(sessionAfterSign ledger req.message reply)", "((fun state => state) (sessionAfterSign ledger req.message reply))", True),
+    ]:
+        add("hmsg-pool-" + label, key, old, new, consumer, expected)
+
+    key, names = by_alias("HmsgCacheCoverage", "HmsgCacheCoverage")
+    consumer = by_check("HmsgCacheCoverage", "hmsg_pool_cache_coverage", names)
+    for label, old, new, expected in [
+        ("target-distinction-erased", "key ≠ targetKey", "True", False),
+        ("target-selection-erased", "select targetKey = true", "True", False),
+        ("target-acceptance-erased", "forsAccept (forsOfDigest target) = true", "True", False),
+        ("witness-acceptance-erased", "forsAccept (forsOfDigest value) = true", "True", False),
+        ("witness-address-erased", "hypertreeIndex value = hypertreeIndex target", "True", False),
+        ("witness-coordinate-zero", "forestIndex value coordinate.val = forestIndex target coordinate.val", "forestIndex value 0 = forestIndex target 0", False),
+        ("witness-address-id", "hypertreeIndex value = hypertreeIndex target", "id (hypertreeIndex value) = hypertreeIndex target", True),
+    ]:
+        add("hmsg-pool-" + label, key, old, new, consumer, expected)
+
+    key, names = by_alias("ObservedCoverage", "ObservedForestCoverage")
+    add("hmsg-pool-observed-acceptance-erased", key, "out.1.driver.accepted = true", "True",
+        by_check("ObservedCoverage", "observed_forest_cache_coverage", names))
+    add("hmsg-pool-observed-acceptance-id", key, "out.1.driver.accepted = true", "id (out.1.driver.accepted) = true",
+        by_check("ObservedCoverage", "observed_forest_cache_coverage", names), True)
+
+    def by_statement(label, module, name, old, new, expected=False):
+        check = theorem(src[module], name)
+        if check.count(old) != 1:
+            raise ValueError("ambiguous accepted-pool statement " + label)
+        out.append({"name": "hmsg-pool-" + label, "definition": by_prefix + by_suffix,
+                    "baseline": by_prefix + check + by_suffix,
+                    "checked": by_prefix + check.replace(old, new, 1) + by_suffix,
+                    "expected": expected})
+
+    by_statement("split-branches-swapped", "ForsSplit", "digest_fors_acceptance_split",
+        "if accepted then acceptedForsDraw else rejectedForsDraw", "if accepted then rejectedForsDraw else acceptedForsDraw")
+    by_statement("initial-freshness-erased", "HmsgPoolOrigin", "hmsg_pool_program_complete",
+        "fresh : table key = none", "fresh : True")
+    by_statement("prefix-extension-erased", "HmsgPoolBound", "hmsg_pool_prefix_bound",
+        "closed : SampleExtensionClosed event", "closed : True")
+    by_statement("prefix-cap-erased", "HmsgPoolBound", "hmsg_pool_prefix_bound",
+        "out.entries.length ≤ cap ∧ event", "True ∧ event")
+    by_statement("coverage-cap-erased", "HmsgPoolBound", "hmsg_pool_coverage_bound",
+        "out.entries.length ≤ cap ∧ ForsListCoverage", "True ∧ ForsListCoverage")
+    by_statement("session-width-erased", "HmsgSession", "c10_observed_session_hmsg_budget",
+        "width : cfg.seed.length = 32", "width : True")
+    by_statement("driver-final-allowance-erased", "HmsgSession", "c10_observed_driver_hmsg_budget",
+        "qr qs) (qr + qs + 1) := by", "qr qs) (qr + qs) := by")
+    by_statement("observed-final-charge-erased", "ObservedCoverage", "c10_observed_forest_coverage_bound",
+        "≤ forsCoverageCharge (qr + qs + 1)", "≤ forsCoverageCharge (qr + qs)")
+    by_statement("observed-charge-plus-zero", "ObservedCoverage", "c10_observed_forest_coverage_bound",
+        "≤ forsCoverageCharge (qr + qs + 1)", "≤ forsCoverageCharge (qr + qs + 1 + 0)", True)
     return out
