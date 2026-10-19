@@ -107,15 +107,17 @@ const _: () = assert!(
 /// without a copy. The 2.7 ms endian pass measured on glass is not optimised
 /// here, it is deleted (#790).
 ///
-/// FOUR under DMA since #934 stage 2: the busy film renders a partial frame's
-/// bands ahead of the wire and returns while the last ones stream in the
-/// background (`present_bg`), so up to four rendered bands wait their turn
-/// (a 6-band window renders in ~6 ms against ~16 ms of wire). The polled
-/// path just cycles through them. 4 x 13,632 B; the secure stack kept 85 KB
-/// untouched through a C10 sign with the film on before this (EVT,
-/// 2026-10-19).
+/// THREE under DMA since #934 stage 2: the busy film renders a partial
+/// frame's bands ahead of the wire and returns while the last ones stream in
+/// the background (`present_bg`), so rendered bands wait their turn. Three
+/// lets the render run 144 columns ahead of the wire: a 240-column window
+/// (the setup film's mean) then costs ~0.4 ms more than four would, and the
+/// signing film's ~100-column windows fit outright. Not four: with four the
+/// real sign path (unlock, address, sign) left only 27,300 B of the 85,244 B
+/// stack untouched (EVT, `stack-hwm`, 2026-10-19), too thin for paths not
+/// yet measured; the polled path just cycles through them. 3 x 13,632 B.
 #[cfg(feature = "ui-px-dma")]
-const N_BANDBUF: usize = 4;
+const N_BANDBUF: usize = 3;
 #[cfg(not(feature = "ui-px-dma"))]
 const N_BANDBUF: usize = 1;
 
@@ -982,7 +984,7 @@ fn film_bg_allowed() -> bool {
 /// 384) against a 48-column buffer — so 568 pixels of the tail are never
 /// touched by that clear and still hold an EARLIER band's ink. Which band's
 /// depends on the buffer rotation (two buffers until #934 stage 2: bands
-/// 0,2,4,6,8 in `BANDS[0]`; four since, under DMA: bands 0,4,8). Zeroizing
+/// 0,2,4,6,8 in `BANDS[0]`; three since, under DMA: bands 0,3,6). Zeroizing
 /// the array rather than the used prefix is what makes that irrelevant.
 ///
 /// A busy-film frame streaming in the background is wiped when `film_reap`
@@ -1276,6 +1278,8 @@ pub fn film_start_with(s: &Screen) {
     // `film_abort`), and forget the previous film's window.
     crate::hw::lcd_te::stamps(true);
     FILM_WIN.store(0, Ordering::Relaxed);
+    #[cfg(feature = "ui-px-film-gaps")]
+    film_gaps_begin();
     let now = timeout::now();
     #[cfg(all(feature = "stack-hwm", target_arch = "arm"))]
     {
@@ -1706,7 +1710,39 @@ fn bench_page(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS], m
 /// `FRAME_PERIOD_MS`, and a frame that overran 50 ms skips the next slot, so
 /// the sign chain is never delayed by more than one frame per call.
 pub fn film_tick(_percent: u8) {
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::note_pct(_percent);
     film_tick_paced(false);
+}
+
+/// Dev: the running film started the pause recorder itself.
+#[cfg(feature = "ui-px-film-gaps")]
+static FILM_GAPS_OWN: AtomicBool = AtomicBool::new(false);
+
+/// Dev: record this film's pauses, unless a caller (provisioning) already
+/// records a longer run.
+#[cfg(feature = "ui-px-film-gaps")]
+fn film_gaps_begin() {
+    if !super::film_gaps::recording() {
+        super::film_gaps::start();
+        FILM_GAPS_OWN.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Dev: stop the recorder if this film started it.
+#[cfg(feature = "ui-px-film-gaps")]
+fn film_gaps_end() {
+    if FILM_GAPS_OWN.swap(false, Ordering::Relaxed) {
+        super::film_gaps::stop();
+    }
+}
+
+/// Dev: the film's longest pauses, `<ms>@<percent>`, until a press.
+#[cfg(feature = "ui-px-film-gaps")]
+fn film_gaps_page() {
+    let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
+    super::film_gaps::rows(&mut rows);
+    dev_page(&rows);
 }
 
 /// Whether a chip wait's tick ([`film_tick_chip`]) draws back to back. On
@@ -1798,6 +1834,8 @@ pub fn film_resolve(e: Ending) {
     );
     FILM_LIVE.store(false, Ordering::Relaxed);
     crate::hw::lcd_te::stamps(false);
+    #[cfg(feature = "ui-px-film-gaps")]
+    film_gaps_end();
     // SAFETY: single-threaded driver state; `FILM_SET` says it was written,
     // and clearing it first makes the move-out the last read, so a later
     // tick is a no-op.
@@ -1886,10 +1924,18 @@ impl Drop for FilmLanding {
     }
 }
 
+/// Dev readout page: shown until a press, or 60 s.
+#[cfg(any(feature = "stack-hwm", feature = "ui-px-film-gaps"))]
+fn dev_page(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS]) {
+    let _ = paint_legacy(rows);
+    let t = timeout::now();
+    let _ = crate::ui::input().wait_button(&mut || timeout::now().wrapping_sub(t) >= 60_000);
+}
+
 /// Dev (`stack-hwm`, DVT row 5.9, never ships): after a film lands, show
 /// the secure stack's headroom so far — the deepest any frame (a sign
 /// request's whole path, the film's frames, interrupts) has reached since
-/// boot — for 6 s. The EVT has no SWD to read `STACK_HWM_LOW` from.
+/// boot — until a press. The EVT has no SWD to read `STACK_HWM_LOW` from.
 /// With it, how long the film ran before it landed and its frame rate
 /// (`ms`, `frames`), i.e. the work it played over.
 #[cfg(all(feature = "stack-hwm", target_arch = "arm"))]
@@ -1902,11 +1948,10 @@ fn show_stack_hwm(ms: u32, frames: u32) {
     bench_row(&mut rows[1], &[b"free ", b" B"], &[free]);
     bench_row(&mut rows[2], &[b"used ", b"/"], &[size.saturating_sub(free), size]);
     bench_row(&mut rows[3], &[b"film ", b".", b"s ", b"."], &[ms / 1000, ms % 1000 / 100, fps / 10, fps % 10]);
-    let _ = paint_legacy(&rows);
-    let t = timeout::now();
-    while timeout::now().wrapping_sub(t) < 6_000 {
-        core::hint::spin_loop();
-    }
+    dev_page(&rows);
+    // And the film's longest pauses (dev, film-gaps).
+    #[cfg(feature = "ui-px-film-gaps")]
+    film_gaps_page();
 }
 
 /// Drop a running film without landing it (error paths).

@@ -115,6 +115,11 @@ pub fn start() {
     };
 }
 
+/// Whether a run is being recorded.
+pub fn recording() -> bool {
+    rec().on
+}
+
 /// The progress callback's percent.
 pub fn note_pct(percent: u8) {
     let r = rec();

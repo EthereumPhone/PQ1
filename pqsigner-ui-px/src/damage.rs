@@ -6,9 +6,11 @@
 //! item, a 64-bit fingerprint of every field that reaches the rasteriser and
 //! the columns the item can touch; [`FrameSigs::damage`] compares two such
 //! lists index by index and unions the columns of every item that differs,
-//! old and new position both. Anything it cannot bound is a full repaint:
-//! a different item count, or a changed item of a kind whose columns are not
-//! computed here (`Item::cols` returns `None`).
+//! old and new position both. When the item count changes (the film's dots
+//! popping in, its caption fading in and out), it unions the columns of
+//! every item of both frames: outside them both frames are background.
+//! Anything it cannot bound is a full repaint: an item of a kind whose
+//! columns are not computed here, in either frame.
 //!
 //! Display only. Nothing here decides what is signed; the film carries no
 //! consent. Callers restrict it to the busy film, start every film with a
@@ -180,11 +182,25 @@ impl FrameSigs {
     /// What changes from `prev` (on the glass) to `self`.
     #[must_use]
     pub fn damage(&self, prev: &Self) -> Damage {
-        if self.n != prev.n || self.n > MAX_ITEMS {
+        if self.n > MAX_ITEMS || prev.n > MAX_ITEMS {
             return Damage::All;
         }
         let mut lo = i32::MAX;
         let mut hi = i32::MIN;
+        if self.n != prev.n {
+            // Items came or went, so index-by-index comparison means nothing:
+            // every item of both frames may have changed. A pixel outside all
+            // of their columns is background in both frames.
+            for sig in self.sigs[..self.n].iter().chain(&prev.sigs[..prev.n]) {
+                let Some((x0, x1)) = sig.cols else { return Damage::All };
+                lo = lo.min(x0);
+                hi = hi.max(x1);
+            }
+            if lo > hi {
+                return Damage::Nothing;
+            }
+            return Damage::Cols(lo.max(0), hi.min(W - 1));
+        }
         for (a, b) in self.sigs[..self.n].iter().zip(&prev.sigs[..self.n]) {
             // An unbounded kind anywhere, changed or not, repaints everything:
             // its fields are not fingerprinted, so "equal" would only mean

@@ -109,7 +109,10 @@ fn every_pixel_outside_the_damage_is_unchanged() {
             }
             let avg = if partial > 0 { cols_total / i64::from(partial) } else { 0 };
             println!("{name} step {step_ms}: partial {partial} (avg {avg} cols), nothing {nothing}, all {all}");
-            assert!(partial > all, "{name}: the film should mostly redraw partially");
+            // Every film item is a bounded kind: nothing after the opening
+            // frame needs a full repaint (they were the visible hitches,
+            // EVT 2026-10-19).
+            assert_eq!(all, 0, "{name}: a full repaint mid-film");
         }
     }
 }
@@ -129,6 +132,15 @@ fn damage_reports_moved_items_and_refuses_unbounded_kinds() {
     assert!(x0 <= 90 && x1 >= 210, "both the old and the new position: {x0}..={x1}");
     assert_eq!(FrameSigs::of(&a, &font).damage(&FrameSigs::of(&a, &font)), Damage::Nothing);
     assert_eq!(FrameSigs::of(&a, &font).damage(&FrameSigs::UNKNOWN), Damage::All);
+    // An item appearing: the union of every item of both frames, not a full
+    // repaint (the film's dots popping in, its caption fading in).
+    let mut two = Frame::new();
+    two.push(Item::Disc { cx: 100 << 8, cy: 70 << 8, r: 10 << 8, color: Rgb::WHITE });
+    two.push(Item::Disc { cx: 300 << 8, cy: 70 << 8, r: 10 << 8, color: Rgb::WHITE });
+    let d = FrameSigs::of(&two, &font).damage(&FrameSigs::of(&a, &font));
+    let Damage::Cols(x0, x1) = d else { panic!("{d:?}") };
+    assert!(x0 <= 90 && x1 >= 310 && x1 < 330, "both discs, nothing far beyond: {x0}..={x1}");
+    assert_eq!(FrameSigs::of(&a, &font).damage(&FrameSigs::of(&two, &font)), d, "and an item going");
     let mut c = Frame::new();
     c.push(Item::Check { cx: 100 << 8, cy: 70 << 8, r: 10 << 8, color: Rgb::WHITE, k: 0 });
     assert_eq!(FrameSigs::of(&c, &font).damage(&FrameSigs::of(&c, &font)), Damage::All);
