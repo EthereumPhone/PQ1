@@ -5360,7 +5360,11 @@ SE050 admin session:
   DeleteSecureObject_authed(ENTROPY_OBJ)
   DeleteSecureObject_authed(VK_OBJ)
   DeleteSecureObject_authed(BOOTSTRAP_VK_OBJ)
-  DeleteSecureObject_authed(USERID_OBJ)       ← user UserID
+  DeleteSecureObject_authed(USERID_OBJ)       ← user UserID — post-S-6
+    shipping builds: FAILS 0x6986 BY DESIGN (the user/duress UserIDs
+    carry no admin-delete entry; the wipe removes the data objects and
+    the UserID stays locked). Bench images (#912) keep the admin-delete
+    entry so this delete succeeds there.
   DeleteSecureObject_authed(ADMIN_WIPE_OBJ)   ← self-delete
   CloseSession
   ↓
@@ -5478,10 +5482,7 @@ itself does not depend on the OID range.
 
 ## What NOT to do
 
-- **Do NOT remove the admin-delete policy entry.** Every object the
-  firmware creates on SE050 must have two TAG_POLICY entries. Objects
-  without entry 2 cannot be recovered from PIN lockout and are
-  orphans-by-design.
+- **Do NOT remove the admin-delete policy entry from the DATA objects.** The entropy/VK/bootstrap-VK blobs must keep two TAG_POLICY entries (user + admin); objects without entry 2 cannot be recovered from PIN lockout and are orphans-by-design. **UPDATE 2026-10-19 (S-6 exception):** the user and duress UserIDs are the deliberate exception — on shipping builds they carry NO admin-delete entry (admin delete fails `0x6986` by design; that *is* the S-6 fix). Bench images (#912) keep the two-entry UserID so `se050-factory-reset` can remove them.
 - **Do NOT change the admin-PIN domain/root without a coordinated SE050
   reprovisioning ceremony.** Page 125 does not carry the PIN; erasing it only
   clears wipe/legacy state and cannot rotate the root-derived credential.

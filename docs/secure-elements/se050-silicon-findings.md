@@ -302,7 +302,7 @@ path runs an explicit `ctx.reinit()` before its next probe.
 |---|---|
 | `object_extended_lc_boundary` (#5) | Writes 1024-byte payloads but the static APDU buffer `ApduBuf` in `apdu.rs:127` is 1024 bytes total — TLV overhead overflows. Fix: cap the test's max payload at ≤960 B. |
 | `scp03_wtx_endurance` (#6), `trng_quality_basic` (#7) | Chained from #5 — the SCP03 state is desynced after the buffer overflow. Reinit between tests should already cover this; the runner does call reinit, so this needs a closer look. Possibly the buffer overflow caused a probe-rs-side stream corruption that persisted. |
-| `userid_silicon_lockout` (#17) | 4th wrong PIN returned SW=0x6982 rather than the expected 0x6985/0x6986/0x63Cx. The driver's `AuthMethodBlocked` mapping at `apdu.rs:42-54` was "documented by deduction" per CLAUDE.md S-7d — this run is the silicon evidence the deduction is wrong. Fix: add 0x6982 to the `AuthMethodBlocked` mapping arm in `verify_session`. |
+| `userid_silicon_lockout` (#17) | 4th wrong PIN returned SW=0x6982 rather than the expected 0x6985/0x6986/0x63Cx. The driver's `AuthMethodBlocked` mapping at `apdu.rs:42-54` was "documented by deduction" per CLAUDE.md S-7d — this run is the silicon evidence the deduction is wrong. Fix: add 0x6982 to the `AuthMethodBlocked` mapping arm in `verify_session`. **SUPERSEDED — see §4a:** the lockout SW is `0x6986` at `create_session`; this `0x6982` was the A3 session-pending transient, and the `0x6982` arm was reverted. |
 
 ---
 
@@ -323,6 +323,10 @@ previously-failing tests without changing chip behavior. Re-run
    disambiguation between the verify-context lockout meaning and
    the session-pending-state meaning that surfaces on non-session
    APDUs (`check_exists`, attribute reads).
+   **SUPERSEDED 2026-10-19 note — see §4a:** the `0x6982` half of this
+   item was wrong and has been reverted; the driver maps
+   only `0x6986` (at `create_session` and `verify_session`) to
+   `AuthMethodBlocked`, and `0x6982` stays an unmapped A3 transient.
 3. **DONE — `audit_admin_cannot_rotate_user_pin` rewritten** to assert
    silicon-truth A2: failed transport-SCP03 UPDATE refuses the request
    AND destroys the existing UserID AND does not install the attacker

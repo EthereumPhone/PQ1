@@ -1914,11 +1914,15 @@ impl Se050 {
     /// the admin-wipe UserID that protects the PIN-lockout factory-reset
     /// path.
     ///
-    /// Every user object (UserID + three data blobs) gets a two-entry
-    /// TAG_POLICY: (user auth → full access) + (admin auth → DELETE only).
-    /// The admin UserID has unlimited attempts (max_attempts=0) — its PIN
-    /// is a 16-byte random derived from the OPTIGA PBS, so brute force is
-    /// infeasible and the wipe path must not lock itself out.
+    /// The three data blobs get a two-entry TAG_POLICY: (user auth → full
+    /// access) + (admin auth → DELETE only). The user UserID gets the admin
+    /// DELETE entry only on bench images (`USERID_ADMIN_DELETE`, #912); on
+    /// shipping builds it has none (S-6), so the admin wipe cannot remove
+    /// it. The admin UserID has unlimited attempts (max_attempts=0) — its PIN
+    /// is a 16-byte value derived from the device root axis
+    /// (`secret_keys::se050_admin_pin` → `derive_into_bhk`; BHK/DHUK/OTP,
+    /// never the OPTIGA PBS), so brute force is infeasible and the wipe
+    /// path must not lock itself out.
     ///
     /// Re-provisioning semantics: on the `admin_pin = Some(..)` path (real
     /// hardware), any stale user objects (USERID + 3 data blobs) from a
@@ -3136,8 +3140,10 @@ impl Se050 {
         //   3. Run a canary round-trip selftest proving the admin-delete
         //      policy actually works (guardrail against TLV byte-order
         //      regressions).
-        //   4. Provision user UserID + data objects with two-entry
-        //      TAG_POLICY (user auth → full; admin auth → DELETE).
+        //   4. Provision data objects with two-entry TAG_POLICY (user
+        //      auth → full; admin auth → DELETE) and the user UserID
+        //      with the admin DELETE entry only on bench images (S-6,
+        //      `USERID_ADMIN_DELETE`).
         //
         // On QEMU: step 1-3 are skipped; objects get single-entry
         // policies. PIN-lockout recovery is N/A on QEMU since there's

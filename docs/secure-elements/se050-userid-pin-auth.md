@@ -171,8 +171,9 @@ SCP03 uses factory-provisioned platform keys specific to the SE050E variant
 (OEF 0xA921). Session keys are derived via NIST SP 800-108 KDF, so even if
 one session's keys leak, past/future sessions remain secure.
 
-Security level: P1=0x03 (C-MAC + C-DEC). The SE050E requires this for
-administrative operations like creating auth objects.
+Security level: P1=0x33 (C-MAC + C-DEC + R-MAC + R-ENC) since S-5
+(2026-05-28); early bring-up used P1=0x03. The SE050E requires C-DEC
+for administrative operations like creating auth objects.
 
 Platform keys are in:
 `plug-and-trust/sss/ex/inc/ex_sss_tp_scp03_keys.h`
@@ -226,7 +227,7 @@ protection to AES-GCM encryption.
 
 ### `secure/src/se050/scp03.rs` — SCP03 session
 
-- `establish()` — INITIALIZE UPDATE + EXTERNAL AUTHENTICATE (P1=0x03).
+- `establish()` — INITIALIZE UPDATE + EXTERNAL AUTHENTICATE (P1=0x33; P1=0x03 during early bring-up, pre-S-5).
 - `wrap_apdu()` — C-MAC + C-DEC wrapping for all commands.
 
 ### `secure/src/crypto.rs` — Provisioning, unlock, and caching
@@ -355,14 +356,23 @@ bring-up. Future developers should be aware of them.
    allowed). This is a security feature. Reprovisioning with a different
    PIN requires an SE050 factory reset.
 
+   **UPDATE 2026-10-19:** true for shipping builds — post-S-6 the
+   user/duress UserIDs carry NO admin-delete policy entry, so the admin
+   wipe removes the data objects (entropy/VK/BVK) but not the UserID,
+   and a locked-out UserID stays locked (#168). Bench images (#912)
+   create the UserIDs with an admin-delete entry
+   (`se050::USERID_ADMIN_DELETE`) so the admin wipe can remove them for
+   reprovisioning.
+
 5. **TAG_2/TAG_3 in session reads cause 0x6985.** Regular ReadObject uses
    TAG_2 (offset) and TAG_3 (length) to specify which part of a file to
    read. Inside an INS_PROCESS wrapper, these tags cause "conditions not
    satisfied." Use TAG_1 (object ID) only.
 
-6. **C-DEC (P1=0x03) is required.** The SE050E rejects auth object
-   creation with C-MAC-only (P1=0x01). Upgrading to C-MAC + C-DEC
-   (P1=0x03) in the EXTERNAL AUTHENTICATE command resolves this.
+6. **C-DEC is required.** The SE050E rejects auth object creation with
+   C-MAC-only (P1=0x01). C-MAC + C-DEC (P1=0x03) resolves this; since
+   S-5 (2026-05-28) the driver runs the full P1=0x33 (C-MAC + C-DEC +
+   R-MAC + R-ENC).
 
 7. **Stale objects are permanent.** If you create a binary object with a
    wrong policy (e.g., referencing a non-existent auth object), that
