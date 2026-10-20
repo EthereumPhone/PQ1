@@ -112,7 +112,7 @@ jobs:
       - name: fetch pinned mathlib probability cache
         if: ${{ github.event_name == 'push' && vars.PROBABILITY_FORCE_COLD != 'true' }}
         working-directory: contracts/verification/probability
-        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+        run: lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
       - name: select eligible original run
         id: select
         env:
@@ -164,7 +164,7 @@ jobs:
         run: test ! -e contracts/verification/probability/.lake/packages
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
-        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+        run: lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
       - name: runner regression controls
         run: |
           /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
@@ -235,7 +235,7 @@ jobs:
         run: test ! -e contracts/verification/probability/.lake/packages
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
-        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+        run: lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
       - name: download this attempt's shard evidence
         if: ${{ needs.controls.result == 'success' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

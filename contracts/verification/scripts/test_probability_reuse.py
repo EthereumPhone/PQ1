@@ -5,6 +5,7 @@ import copy
 import io
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import tempfile
@@ -254,6 +255,19 @@ class ReuseTests(unittest.TestCase):
 
 
 class BoundaryTests(unittest.TestCase):
+    def test_probe_and_producer_fetch_cover_proof_imports(self):
+        # A missing root gets compiled only by the full project build, making
+        # the early probe's package identity differ on every otherwise valid run.
+        manifest = json.loads(gate.MANIFEST.read_text())
+        roots = {name for source in manifest['sources']
+                 for name in re.findall(r'^import (Mathlib\.\S+)\s*$',
+                                        (gate.PROJECT/source).read_text(), re.M)}
+        commands = re.findall(r'^        run: lake exe cache get (.*)$',
+                              (gate.ROOT/reuse.WORKFLOW).read_text(), re.M)
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(len(set(commands)), 1)
+        self.assertTrue(roots <= set(commands[0].split()), roots-set(commands[0].split()))
+
     def test_dependency_routing_truth_table(self):
         states = ['success','failure','skipped','cancelled','', 'in_progress']
         for probe in states:

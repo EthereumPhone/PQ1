@@ -86,7 +86,11 @@ A probe job attempts metadata/aggregate admission on push. It installs the
 pinned toolchain and fetches dependencies from absent packages, then compares
 every existing identity field except `project_libraries_sha256` against the
 origin. It does not build project proofs. Any such mismatch selects sharding
-early. It outputs only a candidate run ID, not a verification pass. PR/manual/forced-cold runs
+early. The probe, shards and final job fetch the same explicit set covering
+every direct Mathlib import in the pinned proof inventory; a regression guard
+checks this wiring. Hosted feasibility compares the fourteen fields before
+and after building, as well as both complete fifteen-field identities. The
+probe outputs only a candidate run ID, not a verification pass. PR/manual/forced-cold runs
 select the existing eight fresh shards immediately. Probe error, skip or
 failure also selects those shards, using explicit `always()` dependency logic.
 
