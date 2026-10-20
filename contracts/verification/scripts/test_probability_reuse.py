@@ -262,7 +262,7 @@ class BoundaryTests(unittest.TestCase):
         roots = {name for source in manifest['sources']
                  for name in re.findall(r'^import (Mathlib\.\S+)\s*$',
                                         (gate.PROJECT/source).read_text(), re.M)}
-        commands = re.findall(r'^        run: lake exe cache get (.*)$',
+        commands = re.findall(r'^          lake exe cache get (.*)\n          lake build proofwidgets/widgetJsAll$',
                               (gate.ROOT/reuse.WORKFLOW).read_text(), re.M)
         self.assertEqual(len(commands), 3)
         self.assertEqual(len(set(commands)), 1)
