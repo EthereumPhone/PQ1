@@ -17,7 +17,7 @@ import warnings
 
 import check_probability as gate
 import probability_reuse as reuse
-from probability_execution import canonical, digest, read_json
+from probability_execution import canonical, digest, producer_context, read_json
 from test_probability_execution import AggregateTests
 
 
@@ -300,6 +300,30 @@ class BoundaryTests(unittest.TestCase):
             env=gate.proof_environment()
             self.assertTrue({'GH_TOKEN','GITHUB_TOKEN','LEAN_PATH'}.isdisjoint(env))
             self.assertEqual(os.environ['GH_TOKEN'],'example')
+
+    def test_context_git_commands_do_not_inherit_api_tokens(self):
+        env = {
+            "GITHUB_ACTIONS": "true", "GH_TOKEN": "example", "GITHUB_TOKEN": "example",
+            "GITHUB_REPOSITORY": reuse.REPOSITORY, "GITHUB_RUN_ID": "1",
+            "GITHUB_RUN_ATTEMPT": "1", "GITHUB_SHA": "a" * 40,
+            "GITHUB_EVENT_NAME": "push", "GITHUB_WORKFLOW_SHA": "a" * 40,
+            "GITHUB_WORKFLOW_REF": f"{reuse.REPOSITORY}/{reuse.WORKFLOW}@refs/heads/master",
+            "CONTEXT_ENV_SENTINEL": "preserved",
+        }
+        with patch.dict(os.environ, env), patch(
+                "probability_execution.subprocess.check_output",
+                side_effect=["a" * 40 + "\n", "b" * 40 + "\n", ""]) as git:
+            context = producer_context(Path("/source"))
+            self.assertEqual(context["commit"], "a" * 40)
+            self.assertEqual(context["tree"], "b" * 40)
+            self.assertEqual(git.call_count, 3)
+            for call in git.call_args_list:
+                child_env = call.kwargs["env"]
+                self.assertTrue({"GH_TOKEN", "GITHUB_TOKEN"}.isdisjoint(child_env))
+                self.assertEqual(child_env["CONTEXT_ENV_SENTINEL"], "preserved")
+                self.assertEqual(call.kwargs["cwd"], Path("/source"))
+            self.assertEqual(os.environ["GH_TOKEN"], "example")
+            self.assertEqual(os.environ["GITHUB_TOKEN"], "example")
 
     def test_modes_cannot_drop_controls(self):
         for args in (['--reuse-run','0'],['--reuse-run','1','--aggregate','/x'],

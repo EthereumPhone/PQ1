@@ -146,7 +146,9 @@ def producer_context(root: Path) -> dict:
     # caller-chosen local group IDs would create an unauthenticated reuse path.
     require(os.environ.get("GITHUB_ACTIONS") == "true",
             "shard production/aggregation requires the current GitHub workflow run")
-    git = lambda *args: subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+    env = {key: value for key, value in os.environ.items()
+           if key not in {"GH_TOKEN", "GITHUB_TOKEN"}}
+    git = lambda *args: subprocess.check_output(["git", *args], cwd=root, env=env, text=True).strip()
     context = {"commit": git("rev-parse", "HEAD"), "tree": git("rev-parse", "HEAD^{tree}")}
     keys = ("GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA",
             "GITHUB_EVENT_NAME", "GITHUB_WORKFLOW_REF", "GITHUB_WORKFLOW_SHA")
