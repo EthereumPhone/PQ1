@@ -119,9 +119,16 @@ the eight-shard path. No probe output or skipped/failed job can green the final
 check. Repository variable `PROBABILITY_FORCE_COLD=true` and a manual dispatch
 which always runs cold retain explicit cold routes; local full replay is
 unchanged. Only the probe and final jobs receive actions:read and
-pull-requests:read alongside contents:read. Tokens are supplied only to the probe/gate parent processes that call the API;
-remove GH_TOKEN and GITHUB_TOKEN from every proof/tool/control subprocess
-environment. Downloaded evidence remains data only.
+pull-requests:read alongside contents:read. Tokens enter the probe/gate parent
+processes that call the API. A short-lived worker running the same trusted
+transport module receives each request through stdin; credentials and signed
+URLs never enter its command line. Remove GH_TOKEN and GITHUB_TOKEN from
+every child environment, including this transport worker and every
+proof/tool/control subprocess. The parent enforces the remaining shared
+five-minute network budget with a subprocess timeout that kills and reaps
+the worker, covering connection establishment, headers and body reads even
+when a peer keeps making slow progress. Ordinary host process creation and
+cleanup still rely on the OS scheduler. Downloaded evidence remains data only.
 
 ## Bounded delivery and acceptance
 

@@ -3,12 +3,15 @@
 import base64
 import copy
 import io
+import http.server
 import json
 import os
 import re
 from pathlib import Path
 import stat
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 import urllib.error
@@ -370,17 +373,104 @@ class BoundaryTests(unittest.TestCase):
 
     def test_redirect_does_not_forward_token(self):
         api=reuse.GitHub('example-token');calls=[]
+        def request(url,headers,remaining):
+            calls.append((url,headers,remaining))
+            if len(calls)==1:
+                return {'status':302,'location':'https://example.blob.core.windows.net/signed'}
+            return {'status':200,'data':base64.b64encode(b'bytes').decode()}
+        with patch.object(reuse,'_transport',side_effect=request):
+            self.assertEqual(api.binary('actions/artifacts/1/zip'),b'bytes')
+        self.assertEqual(calls[0][1]['Authorization'],'Bearer example-token')
+        self.assertNotIn('Authorization',calls[1][1])
+        self.assertLessEqual(calls[1][2],calls[0][2])
+
+    def test_transport_worker_has_private_request_and_clean_environment(self):
+        response = canonical({'status':200,'data':base64.b64encode(b'{}').decode()})
+        completed = reuse.subprocess.CompletedProcess([], 0, response)
+        with patch.dict(os.environ, {'GH_TOKEN':'ambient','GITHUB_TOKEN':'ambient'}), patch.object(
+                reuse.subprocess,'run',return_value=completed) as run:
+            api = reuse.GitHub('explicit-token')
+            self.assertEqual(api.get('actions/runs/1'), {})
+            call = run.call_args
+            self.assertNotIn('explicit-token', ' '.join(call.args[0]))
+            self.assertNotIn('GH_TOKEN',call.kwargs['env'])
+            self.assertNotIn('GITHUB_TOKEN',call.kwargs['env'])
+            self.assertEqual(json.loads(call.kwargs['input'])['headers']['Authorization'],
+                             'Bearer explicit-token')
+            self.assertEqual(call.args[0][1:3],['-E','-S'])
+            self.assertGreater(call.kwargs['timeout'],0)
+            self.assertEqual(os.environ['GH_TOKEN'],'ambient')
+
+    def test_transport_deadline_stops_slow_body_and_headers_and_reaches_full_fallback(self):
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self,*args): pass
+            def do_GET(self):
+                try:
+                    if self.path == '/headers':
+                        # A complete header never arrives, despite steady traffic.
+                        for byte in b'HTTP/1.1 200 OK\r\nX-Slow: ' + b'x'*120:
+                            self.wfile.write(bytes([byte]));self.wfile.flush();time.sleep(.025)
+                    else:
+                        self.send_response(200);self.send_header('Content-Length','120')
+                        self.end_headers()
+                        for _ in range(120):
+                            self.wfile.write(b'x');self.wfile.flush();time.sleep(.025)
+                except (BrokenPipeError,ConnectionResetError):
+                    pass
+        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
+        server.daemon_threads=True
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        real_popen=reuse.subprocess.Popen
+        children=[]
+        def track(*args,**kwargs):
+            child=real_popen(*args,**kwargs);children.append(child);return child
+        try:
+            for path in ['/body','/headers']:
+                api=reuse.GitHub('local-placeholder',timeout=.5)
+                def authenticate(*args,**kwargs):
+                    return api._read(f'http://127.0.0.1:{server.server_port}{path}',False)
+                started=time.monotonic()
+                with self.subTest(path=path), patch.object(reuse.subprocess,'Popen',side_effect=track), patch.object(
+                        gate,'authenticate_origin',side_effect=authenticate), patch.object(
+                        gate,'run_controls',return_value=['complete-census']) as cold:
+                    result=gate.reuse_or_cold(api,{}, {},[],{},Path('/unused'),'10','lean',{},4)
+                    self.assertEqual(result['reuse'],{'accepted':False,'reason':
+                        'RuntimeError: GitHub request time budget exhausted'})
+                    self.assertEqual(result['controls'],['complete-census'])
+                    cold.assert_called_once_with(Path('/unused'),'lean',{},4,0,1)
+                    self.assertLess(time.monotonic()-started,2)
+                    self.assertIsNotNone(children[-1].poll())
+                    self.assertLess(children[-1].returncode,0)
+        finally:
+            server.shutdown();server.server_close();thread.join()
+
+    def test_worker_response_bounds_and_no_automatic_redirect(self):
         class Response(io.BytesIO):
             headers={}
-        def request(req,timeout):
-            calls.append(req)
-            if len(calls)==1:
-                raise urllib.error.HTTPError(req.full_url,302,'redirect',{'Location':'https://example.blob.core.windows.net/signed'},None)
-            return Response(b'bytes')
-        with patch.object(api.opener,'open',side_effect=request):
-            self.assertEqual(api.binary('actions/artifacts/1/zip'),b'bytes')
-        self.assertEqual(calls[0].get_header('Authorization'),'Bearer example-token')
-        self.assertIsNone(calls[1].get_header('Authorization'))
+            status=200
+        request={'url':'https://api.github.com/repos/EthereumPhone/PQ1/example',
+                 'headers':{},'timeout':1}
+        with patch.object(reuse.urllib.request.OpenerDirector,'open',return_value=Response(b'bytes')):
+            self.assertEqual(base64.b64decode(reuse._fetch(request)['data']),b'bytes')
+        with patch.object(reuse,'MAX_RESPONSE',2), patch.object(
+                reuse.urllib.request.OpenerDirector,'open',return_value=Response(b'bytes')):
+            with self.assertRaisesRegex(RuntimeError,'exceeds limit'):reuse._fetch(request)
+        response=Response(b'{}');response.headers={'Link':'<next>; rel="next"'}
+        with patch.object(reuse.urllib.request.OpenerDirector,'open',return_value=response):
+            with self.assertRaisesRegex(RuntimeError,'bounded page'):reuse._fetch(request)
+        error=urllib.error.HTTPError(request['url'],302,'redirect',
+                                     {'Location':'https://example.blob.core.windows.net/signed'},None)
+        with patch.object(reuse.urllib.request.OpenerDirector,'open',side_effect=error) as opener:
+            self.assertEqual(reuse._fetch(request),{'status':302,'location':error.headers['Location']})
+            self.assertEqual(opener.call_count,1)
+
+    def test_transport_request_and_time_budgets_refuse_before_io(self):
+        with patch.object(reuse,'_transport') as transport:
+            api=reuse.GitHub('example');api.requests=100
+            with self.assertRaisesRegex(RuntimeError,'request budget'):api.get('example')
+            api=reuse.GitHub('example',timeout=0)
+            with self.assertRaisesRegex(RuntimeError,'time budget'):api.get('example')
+            transport.assert_not_called()
 
 
 if __name__ == '__main__':

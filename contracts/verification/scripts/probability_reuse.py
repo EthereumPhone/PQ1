@@ -13,6 +13,8 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -37,11 +39,50 @@ MAX_ARCHIVE = 32 * 1024**2
 MAX_EXPANDED = 128 * 1024**2
 MAX_MEMBER = 16 * 1024**2
 MAX_RESPONSE = 32 * 1024**2
+MAX_REQUEST = 128 * 1024
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+def _fetch(request: dict) -> dict:
+    """One transaction in the trusted transport worker; never follow redirects."""
+    try:
+        response = urllib.request.build_opener(NoRedirect).open(
+            urllib.request.Request(request["url"], headers=request["headers"]),
+            timeout=min(30, request["timeout"]))
+    except urllib.error.HTTPError as exc:
+        with exc:
+            return {"status": exc.code, "location": exc.headers.get("Location", "")}
+    with response:
+        require('rel="next"' not in response.headers.get("Link", ""),
+                "GitHub result listing exceeds bounded page")
+        data = response.read(MAX_RESPONSE + 1)
+        require(len(data) <= MAX_RESPONSE, "GitHub response exceeds limit")
+        return {"status": response.status, "data": base64.b64encode(data).decode("ascii")}
+
+
+def _transport(url: str, headers: dict, remaining: float) -> dict:
+    # Socket timeouts bound individual operations, not a progressing response.
+    # The parent bounds connection, headers and body together and kills/reaps
+    # the worker on expiry. Only this same trusted module runs in the worker;
+    # the credential/request travels through stdin, never argv or environment.
+    request = canonical({"url": url, "headers": headers, "timeout": remaining})
+    require(len(request) <= MAX_REQUEST, "GitHub request exceeds limit")
+    env = {k: v for k, v in os.environ.items() if k not in {"GH_TOKEN", "GITHUB_TOKEN"}}
+    try:
+        result = subprocess.run(
+            [sys.executable, "-E", "-S", str(Path(__file__).resolve()), "--fetch"],
+            input=request, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env=env, timeout=remaining)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("GitHub request time budget exhausted") from None
+    except OSError:
+        raise RuntimeError("GitHub request transport failure") from None
+    require(result.returncode == 0, "GitHub request transport failure")
+    return decode_json(result.stdout.decode("ascii"))
 
 
 class GitHub:
@@ -50,7 +91,6 @@ class GitHub:
         require(bool(token), "missing read-only GitHub token")
         self.token = token
         self.deadline = time.monotonic() + timeout
-        self.opener = urllib.request.build_opener(NoRedirect)
         self.requests = 0
 
     def _read(self, url: str, authorized: bool, binary: bool = False) -> bytes:
@@ -64,26 +104,21 @@ class GitHub:
             require(url.startswith("https://api.github.com/repos/" + REPOSITORY + "/"),
                     "API request outside repository")
             headers["Authorization"] = "Bearer " + self.token
-        try:
-            response = self.opener.open(urllib.request.Request(url, headers=headers),
-                                        timeout=min(30, remaining))
-        except urllib.error.HTTPError as exc:
-            if authorized and binary and exc.code == 302:
-                location = exc.headers.get("Location", "")
-                parsed = urllib.parse.urlsplit(location)
-                require(parsed.scheme == "https" and bool(parsed.hostname)
-                        and parsed.username is None and parsed.password is None
-                        and (parsed.hostname.endswith(".blob.core.windows.net")
-                             or parsed.hostname.endswith(".actions.githubusercontent.com")),
-                        "unexpected GitHub artifact/log redirect")
-                return self._read(location, False, True)
-            raise RuntimeError(f"GitHub request failed (HTTP {exc.code})") from None
-        except (OSError, ValueError):
-            raise RuntimeError("GitHub request transport failure") from None
-        with response:
-            require('rel="next"' not in response.headers.get("Link", ""),
-                    "GitHub result listing exceeds bounded page")
-            data = response.read(MAX_RESPONSE + 1)
+        response = _transport(url, headers, remaining)
+        require(isinstance(response, dict) and type(response.get("status")) is int,
+                "invalid transport response")
+        status = response["status"]
+        if authorized and binary and status == 302:
+            location = response.get("location", "")
+            parsed = urllib.parse.urlsplit(location)
+            require(parsed.scheme == "https" and bool(parsed.hostname)
+                    and parsed.username is None and parsed.password is None
+                    and (parsed.hostname.endswith(".blob.core.windows.net")
+                         or parsed.hostname.endswith(".actions.githubusercontent.com")),
+                    "unexpected GitHub artifact/log redirect")
+            return self._read(location, False, True)
+        require(200 <= status < 300, f"GitHub request failed (HTTP {status})")
+        data = base64.b64decode(response["data"], validate=True)
         require(len(data) <= MAX_RESPONSE, "GitHub response exceeds limit")
         require(time.monotonic() <= self.deadline, "GitHub request time budget exhausted")
         return data
@@ -383,3 +418,15 @@ def authenticate_origin(api, root: Path, target: dict, identity: dict, selected:
                           for a in artifacts],
             "aggregate_result_sha256": digest((out / "aggregate/result.json").read_bytes()),
             "coverage": coverage}
+
+
+if __name__ == "__main__":
+    try:
+        require(sys.argv[1:] == ["--fetch"], "transport worker arguments")
+        raw = sys.stdin.buffer.read(MAX_REQUEST + 1)
+        require(len(raw) <= MAX_REQUEST, "transport request exceeds limit")
+        sys.stdout.buffer.write(canonical(_fetch(decode_json(raw.decode("utf-8")))))
+    except Exception:
+        # The parent treats every failed worker as an origin refusal. Do not
+        # put request headers, signed URLs or credentials in diagnostics.
+        sys.exit(1)
