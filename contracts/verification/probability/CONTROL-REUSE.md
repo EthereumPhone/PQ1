@@ -17,8 +17,15 @@ or compiler libraries from evidence. `authenticate_shards` keeps its current
 same-run/attempt context rule unchanged.
 
 GitHub's authenticated API, workflow service, hosted runners, pinned actions,
-repository maintainer control of the landed workflow, dependency caches and
-installed toolchain remain explicit trusted boundaries. A compromised trusted
+repository maintainer control of the landed workflow, the upstream pinned
+mathlib artifact service and installed toolchain remain explicit trusted
+boundaries. Remove Actions dependency-cache restore/save from this workflow
+for all jobs, including probe, PR producers and push consumer. Every hosted
+job starts from absent `.lake/packages`, resolves pinned dependency source and
+uses the existing upstream mathlib fetch command. Earlier PR revisions and
+other workflows cannot supply a branch-scoped executable cache to an eligible
+producer. Same workflow-byte equality and admission of the exact required step
+set enforce this policy; no cache step is permitted in an eligible producer. A compromised trusted
 runner/API is outside this mechanism's claim. No new privileged event, write
 permission, self-reported digest trust or attestation service is introduced.
 
@@ -72,8 +79,11 @@ It never edits original contexts. Repeat input/context drift checks at exit.
 
 ## Workflow and cold fallback
 
-A small probe job attempts metadata/aggregate admission on push. It outputs
-only a candidate run ID, not a verification pass. PR/manual/forced-cold runs
+A probe job attempts metadata/aggregate admission on push. It installs the
+pinned toolchain and fetches dependencies from absent packages, then compares
+every existing identity field except `project_libraries_sha256` against the
+origin. It does not build project proofs. Any such mismatch selects sharding
+early. It outputs only a candidate run ID, not a verification pass. PR/manual/forced-cold runs
 select the existing eight fresh shards immediately. Probe error, skip or
 failure also selects those shards, using explicit `always()` dependency logic.
 
@@ -84,8 +94,10 @@ states fail. With a candidate, it freshly builds/audits the target then fetches
 and authenticates the origin independently; probe data cannot grant acceptance.
 If any origin, artifact, target-identity or eligibility check fails, record the
 reason and execute the existing complete cold control runner locally in this
-job. Only successful fresh controls can then pass. Its timeout must accommodate
-that cold path. Fresh build/axiom/binding failures remain failures.
+job, without repeating the already-successful project build. Only successful
+fresh controls can then pass. Set its timeout to 180 minutes for the fresh
+build, network/identity checks and complete single-runner cold controls, and
+measure the cold path before declaring the issue complete. Fresh build/axiom/binding failures remain failures.
 
 This avoids a second fresh target build on the successful reuse path. A late
 rejection runs the full controls on one hosted runner and can be slower than
@@ -100,8 +112,10 @@ pull-requests:read alongside contents:read. Tokens are scoped to API steps.
 
 Base: `4bca0e86c67d1a86acda7783bb05ea97216246a7`. Preserve all 422 Lean source
 files, 2,824 theorem statements/closures, 52 manual bindings, 1,655 existing
-fixtures, compiler limits and negative-control classification. No changes to
-EasyCrypt, Rust sources, theorem assumptions or cache trust.
+fixtures, compiler limits and negative-control classification. Removing branch-scoped
+Actions caches narrows dependency trust; upstream mathlib artifacts remain the
+existing tool TCB. No changes to
+EasyCrypt, Rust sources or theorem assumptions.
 
 - R1: pure producer/receipt admission plus bounded GitHub transport and target
   linking. Negative tests cover repository/run/attempt/PR source/workflow/tree,
@@ -137,3 +151,5 @@ API assumptions are checked against GitHub's official
 [workflow runs](https://docs.github.com/en/rest/actions/workflow-runs),
 [artifact IDs/digests](https://docs.github.com/en/rest/actions/artifacts), and
 [secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
+
+Dependency scope follows the documented [GitHub cache isolation](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
