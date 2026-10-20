@@ -40,7 +40,9 @@ jobs:
         run: test ! -e contracts/verification/probability/.lake/packages
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
-        run: lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
+        run: |
+          lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
+          lake build proofwidgets/widgetJsAll
       - name: measure fresh proof and complete identity (not a full control gate)
         env:
           EXPERIMENT_OUTPUT: ${{ runner.temp }}/cold-identity
@@ -67,6 +69,7 @@ jobs:
           with patch.object(execution, 'tree_hash', side_effect=before_project):
               prepared = gate.input_identity(gate.ROOT, gate.PROJECT, manifest, lean, gate.cases(gate.PROJECT), lake)
           del prepared['project_libraries_sha256']
+          (out/'prepared.json').write_text(json.dumps(prepared, indent=2)+'\n')
           build = gate.command([lake, 'build'], out, 'build', env)
           assert build['exit'] == 0 and 'warning:' not in (out/'build.log').read_text()
           audit = gate.command([lake, 'env', 'lean', 'Audit.lean'], out, 'axioms', env)
@@ -74,12 +77,15 @@ jobs:
           closures = gate.check_closures((out/'axioms.log').read_text(), set(manifest['theorems']))
           lean = subprocess.check_output([str(Path(lake).with_name('elan')), 'which', 'lean'], cwd=gate.PROJECT, env=env, text=True).strip()
           identity = gate.input_identity(gate.ROOT, gate.PROJECT, manifest, lean, gate.cases(gate.PROJECT), lake)
-          assert prepared == {k:v for k,v in identity.items() if k != 'project_libraries_sha256'}
+          (out/'built.json').write_text(json.dumps(identity, indent=2)+'\n')
+          changed = [k for k in prepared if prepared[k] != identity[k]]
+          assert not changed, changed
           receipt = dict(prepared_identity=prepared, identity=identity, context=gate.producer_context(gate.ROOT), build=build, audit=audit, closures=len(closures), seconds=time.monotonic()-start, scope='Feasibility only: no semantic controls or canaries; not a full gate pass')
           (out/'identity.json').write_text(json.dumps(receipt, indent=2)+'\n')
           print(json.dumps(identity, indent=2))
           PYCODE
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: cold-identity-${{ matrix.index }}
           path: ${{ runner.temp }}/cold-identity
