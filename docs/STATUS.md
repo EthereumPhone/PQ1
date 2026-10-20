@@ -207,7 +207,11 @@ and finite union over the actual serialized input fields, retaining arbitrary
 adaptive cache prefill. Actual WOTS/layer/signer/session failure provenance
 composes keygen and final verification; the returned failed-ledger bound is
 at most `2^-38` at the same quotas. This closes finite structured-model signing
-availability; it leaves the existing forgery bounds unchanged. Unbounded-adversary representation and concrete
+availability. The [direct byte-model extension](../contracts/verification/probability/README.md#byte-model-signing-availability)
+now preserves that same failed-ledger law and bound through byte replies,
+actual keygen and final verification, including any joint public-seed/client
+PMF independent of the hidden prefix. This closes finite byte-model signing
+availability; existing forgery bounds are unchanged. Unbounded-adversary representation and concrete
 correspondence remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
 QROM or hardware claim. The dated development history below is not the current
 proof inventory; use the linked owner for counts, gates and remaining limits.

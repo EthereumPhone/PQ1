@@ -30,7 +30,9 @@ initialized endpoint has no caller-supplied freshness premise. The
 now composes the other private callers and actual keygen. The
 [complete signing-availability bound](#complete-structured-signing-availability)
 below adds WOTS-count exhaustion with arbitrary adaptive cache prefill, then
-charges the actual failed signing ledger in the initialized structured game.
+charges the actual failed signing ledger in the initialized structured game. The
+[byte-model availability extension](#byte-model-signing-availability) carries
+the same bound through the direct byte session and joint public initialization.
 
 ## What is checked
 
@@ -584,6 +586,41 @@ SHA/Rust/EasyCrypt execution, cross-kernel correspondence, arbitrary unbounded
 adversary representation, QROM or physical security. The exact byte-session
 refinement remains a separate existing result; this endpoint is stated for
 the structured game.
+
+## Byte-model signing availability
+
+`ByteObservedDriver.lean` independently observes the existing byte session and
+final verifier, retaining the actual session result, ordered ledger, remaining
+caps, verification Boolean and full final cache. Its erasure is exactly the
+original byte driver. Translation of the returned byte forgery and session
+result agrees with the structured R observer after forgetting only its
+auxiliary R-exhaustion flag. `ByteObservedGame.lean` composes actual key generation
+and preserves both the final verification law and the failed-ledger event.
+
+`ByteAvailability.lean` initializes an empty physical oracle with a uniform
+hidden prefix. It permits any joint PMF of public seed and finite adaptive byte
+adversary, independent of that hidden prefix; the seed and adversary need not
+be independent of each other. The observation erases exactly to the previously
+defined initialized byte game. Its actual signing-failure law equals the
+structured returned-ledger law, so serialization adds no charge or premise:
+
+```text
+Pr[an admitted byte-session signing request fails] <=
+  min(1, c10RCharge(cfg, qr, qs) + wotsDomainCharge(cfg.wTrials)).
+```
+
+The ENNReal and finite real bounds use the unchanged structured charge.
+`ByteAvailabilityReal.lean` proves at most `2^-38` for both ten-million-trial
+grinders, `qr=2^32` and `qs=2^20`. Nine direct witnesses distinguish admitted
+R/WOTS exhaustion, malformed and cap refusal, healthy completion and cached
+signing success. Constant prefilled caches in the witnesses are functional
+examples, not asserted reachable initialized histories.
+
+This closes finite initialized **byte-model signing availability**. The event
+is the session's persistent failed ledger, not every refused request and not
+forgery success. No cache-visible event is transferred between oracle models.
+Existing forgery bounds and concrete SHA/Rust/EasyCrypt, cross-kernel,
+unbounded-adversary, QROM and physical boundaries remain unchanged.
 
 ## Independence and correspondence boundary
 
@@ -1526,7 +1563,7 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2824 theorem closures against
+The gate rebuilds every project module, checks all 2852 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
@@ -1608,9 +1645,15 @@ cold. Run the focused provenance/fallback regressions with
 and acceptance receipts. This does not separate or inherit Rust correspondence,
 prove a new theorem, or weaken any control/census/closure requirement.
 
-1655 typed cases run 4965 compiler jobs: each baseline and changed
-definition must compile, 1451 changed behaviors must reject at the
-consuming `checked` theorem, and 204 value-preserving changes must pass.
+1695 typed cases run 5085 compiler jobs: each baseline and changed
+definition must compile, 1485 changed behaviors must reject at the
+consuming `checked` theorem, and 210 value-preserving changes must pass.
+The byte-availability extension adds 28 closures in five modules and 40
+controls (34 negative, six equivalent). All 2824 preceding statements, 1655
+fixture objects, prior non-umbrella proof-module bytes and 52 bindings remain
+unchanged. Consumers cover the failed bit, full returned observation, caps,
+cache threading, key-generation initialization, public seed/adversary mapping,
+hidden-prefix sampling and the exact initialized event law.
 The complete signing-availability extension adds 72 closures in fifteen modules
 and 56 controls (46 negative, ten equivalent), preserving all 2752 preceding
 statements, 1599 fixture objects, non-umbrella proof-module bytes and 52 manual

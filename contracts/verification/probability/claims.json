@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Separate Lean PMF finite initialized C10 forgery and structured signing-availability bounds. All prior structured/byte forgery, byte codec/session refinement and R-exhaustion results are unchanged. A fixed-key rejection completion potential bounds arbitrary finite adaptive memoized query programs from an empty physical oracle, retaining public prefill, cached replies and repeated requests. Actual serialized WOTS layer/tree/keypair/message fields form a finite2^256-context cover at a fixed public seed. Complete rejection of a distinct n-key schedule has probability at mostr^n, yielding the conservative2^256*r^n cache-event bound and kernel-checked2^-64 at ten-million trials. Actual WOTS/layer/hypertree/full-sign/session failure provenance composes keygen and final verification. An initially healthy session failed ledger implies R exhaustion or a complete rejected WOTS schedule. The existing independent R observer erases to original semantics; its retained ledger defines the returned signing-failure event. WOTS is bounded directly in the physical cache; no cache-visible prefix-event transfer is asserted. The combined charge is c10RCharge+wotsDomainCharge, with finite real and capped forms and a kernel2^-38 endpoint at both ten-million grinder limits,2^32rawqueries and2^20signingcalls. Public seed/configuration/adversary PMF remain independent of the uniform hidden prefix required by the R component. All2752prior statements,1599fixtureobjects,52manual bindings and prior non-umbrella proof-module bytes are preserved. No concrete hash/Rust/EasyCrypt, cross-kernel, unbounded-adversary, QROM, physical or stronger forgery-margin claim is made.",
+  "scope": "Separate Lean PMF finite initialized C10 forgery and structured/byte signing-availability bounds. The direct byte observer retains the actual session result, ledger, caps, final verification and full physical cache. Exact erasure recovers the original byte game; full returned observation refinement to the existing structured R observer transports the unchanged failed-ledger event. Actual key generation and arbitrary joint public-seed/finite-byte-adversary PMFs independent of the uniform hidden prefix remain in initialization. The unchanged combined R/WOTS signing charge has ENNReal, finite real and capped bounds, with a kernel2^-38 endpoint at both ten-million grinder limits,2^32rawqueries and2^20signingcalls. Malformed/capped refusal is distinct from admitted signing failure. No cached-event transfer or new freshness assumption is introduced. All2824prior statements,1655fixtureobjects,52manualbindings and prior non-umbrella proof-module bytes are preserved. No concrete SHA/Rust/EasyCrypt execution, cross-kernel, unbounded-adversary, QROM, physical or stronger forgery-margin claim is made. Main lean/ stays mathlib-free.",
   "sources": {
-    "Audit.lean": "6ff8ac860b7876c876490bba4f3d8c0a1428682aff74da1a240a60f91f684d91",
+    "Audit.lean": "6a507e032f9d4918353b8d6100b88be75c32081e1bce7ae94de09dbc928e4715",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -21,12 +21,17 @@
     "C10Probability/AuthSchedule.lean": "e877fce4d254e5c97301cef332d83b0525dd8a5ca93ceace7699847e0d9938b1",
     "C10Probability/Boundaries.lean": "b2715545caea41d26f97145c73bee8c8a57adced252eb517d2a630a5424b2fd9",
     "C10Probability/BuilderRecoveryBinding.lean": "63f272a3ff9909008d2ed8bc061aa69e409b4cfd434615f2220f1ce59c9f7283",
+    "C10Probability/ByteAvailability.lean": "7a267358ac37d39c290b73f98f2482a8a3d4c1f3cd5742c7f92ba26421490973",
+    "C10Probability/ByteAvailabilityExamples.lean": "d40efdcb62025561a880f6ee28f773541d773b551430ff87b2150b7e9abbf69c",
+    "C10Probability/ByteAvailabilityReal.lean": "b57cea2b6ac8d78dd3cc4f4fc6e6b0a6d387abba6e1bb0f818940caa15caedc5",
     "C10Probability/ByteCodec.lean": "8ea4a08e2264ab11e9518486a0deae63c98b02332414d95bf9c7323074552f34",
     "C10Probability/ByteCodecBlocks.lean": "704984ce382b3d8d0b22edeaed0e2db49a4341dd8bb982810be63d18ae4e327f",
     "C10Probability/ByteDriver.lean": "442bc489da07589fe7e14bc2381238ced4a2ba8c07a788abb7e7750a5ea2ce6a",
     "C10Probability/ByteForgeBound.lean": "abc5c65617d30290bbb48678c59b6528b12005c79b3ea4ca8746e725c50d4dcb",
     "C10Probability/ByteGame.lean": "6695ac0733d2a9afe5149c520d2ce5381b0c9c24d015ec8b10f87ffcab32ad57",
     "C10Probability/ByteGameExamples.lean": "128dc19dafb147fb8e40991028d27868cc27c355965b80b0121d525047803359",
+    "C10Probability/ByteObservedDriver.lean": "699103a589a9fe606148c8cac56fef9329a28f5a807595c2b516c219d53189b5",
+    "C10Probability/ByteObservedGame.lean": "96166b626864f4422512bdf0a64038790155ae9b21f22a7f64df3f65eab38ca3",
     "C10Probability/ByteSession.lean": "969ce6e1141457d2e663d73285dfc5cb2d7846f644bfd4370317732956c61b91",
     "C10Probability/ByteSessionExamples.lean": "1c423bc7e78edb664cb9e6519fa8800cc2d26f53ae95e1969e85dd4339157ef5",
     "C10Probability/ByteSessionTypes.lean": "57427791fb76da7bb6c5278208565016b8b5e616eac67abcb0ee96a7a2deadf4",
@@ -423,7 +428,7 @@
     "C10Probability/WotsTarget.lean": "6e5cea220033931af9b2dd3bbc4982751f5a1d979ec34c7f671e47de7cc7349b",
     "C10Probability/WotsTreeOpening.lean": "024e8aef89c4e6ab9b3484bea5ae614bf0850e3faa59304654fa5a8a13187cdc",
     "C10Probability/WotsTwoLayers.lean": "59535f358a648cf44a39c11a5b3080430bdcfadb9ed98a5dcbcf56cea4d21a0b",
-    "C10Probability.lean": "75c51f628b4db5bfdd038b1a8a9555e13ef0e1cc45ce7e91e9738fabb901e3ec"
+    "C10Probability.lean": "066dc2ecf4c51784e7796ac9268c01f1c7cbbf7e8e62b4501fa04c206b14881e"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -990,6 +995,82 @@
       "file": "C10Probability/BuilderRecoveryBinding.lean",
       "statement_sha256": "d988b97675ceba8aeba690602d09b9c959407ec2945dc91499d82df210f90147"
     },
+    "C10Probability.c10_byte_shared_signing_failure_eq": {
+      "file": "C10Probability/ByteAvailability.lean",
+      "statement_sha256": "a9df36954029c19c521d95fbbd5cde0da559abc2a477b9a89d3d32d2aaec0d9f"
+    },
+    "C10Probability.c10_byte_observed_initialized_erases": {
+      "file": "C10Probability/ByteAvailability.lean",
+      "statement_sha256": "71a8ebc2aa5212f5f702d4acd7200de2bdb2897a9ac2e427971604349d373bec"
+    },
+    "C10Probability.c10_byte_initialized_signing_failure_eq": {
+      "file": "C10Probability/ByteAvailability.lean",
+      "statement_sha256": "cbb1bef31068a761b6a31a51ff5dd090eb1d5fda294876311d4bfdd27895cb6d"
+    },
+    "C10Probability.c10_byte_signing_failure_event": {
+      "file": "C10Probability/ByteAvailability.lean",
+      "statement_sha256": "77dcdbb6e2d5b77201fff46d64ec4daf93db09abb1596ee21412d2b59a0e0414"
+    },
+    "C10Probability.c10_byte_shared_signing_failure_bound": {
+      "file": "C10Probability/ByteAvailability.lean",
+      "statement_sha256": "99bbecd8cbe7aa7ec24744b78c2d749eb90d10bcff199d230bdb50594d4cdf57"
+    },
+    "C10Probability.c10_byte_initialized_signing_failure_bound": {
+      "file": "C10Probability/ByteAvailability.lean",
+      "statement_sha256": "25d08c26e6260021bed2d7692181d7b1f221b607945d3357a040cf35fead3a02"
+    },
+    "C10Probability.c10_byte_initialized_signing_failure_capped": {
+      "file": "C10Probability/ByteAvailability.lean",
+      "statement_sha256": "c55fc07f7dfe6aaa736e67502b5a5e70b907907ae4f2bb442105876ddc450a14"
+    },
+    "C10Probability.byte_signing_failure_event_branches": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "c6534f8ba87d9a2a4bb7f1150760c996cb71c0d32dbed23b655cac66903e77c2"
+    },
+    "C10Probability.byte_observed_done_bad_length": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "ccf8d45c79c3b54753e6fec3baa6d8c28ea1b6405b723e98e3479c0d522c2424"
+    },
+    "C10Probability.byte_observed_bad_request_failure": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "bc647ffebdd47ee4474037275275d006c3ab28987e9f645c26f8a1d56820c175"
+    },
+    "C10Probability.byte_observed_cap_refusal_failure": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "b827f655f4e20f6f3d55b459038c6f526c2afc39fba52379aac4e3578856df26"
+    },
+    "C10Probability.byte_observed_zero_r_failure": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "4b3e9636afcd0d72f0752643d922ea0d188638ad8827bb9d2c0f5c51a681e63a"
+    },
+    "C10Probability.byte_observed_wots_failure": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "f6cb980e922fdf7eb1df181d6d9bee9610b336bcb0a34b5d8009cd8241eab486"
+    },
+    "C10Probability.byte_observed_cached_success": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "b7f51bfbf3c435a8186af33e686472bf332ef322c7169efb37a0671577ce1857"
+    },
+    "C10Probability.byte_observed_game_done_healthy": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "ec7e2ca33a3a207571527a0be1cd85c21ce3a6b95f406a36429fba66e5b4320e"
+    },
+    "C10Probability.byte_observed_initialized_pure": {
+      "file": "C10Probability/ByteAvailabilityExamples.lean",
+      "statement_sha256": "a3164cc5314523d8d8ec00d24ab9f934d4116345a5f65f045ce4f961ead3d004"
+    },
+    "C10Probability.c10_byte_initialized_signing_failure_real": {
+      "file": "C10Probability/ByteAvailabilityReal.lean",
+      "statement_sha256": "7aac3f30c74c43f62e7479f6b6bd544f1d243c9535b9f70abb2158555c0ec4b1"
+    },
+    "C10Probability.c10_byte_initialized_signing_failure_real_capped": {
+      "file": "C10Probability/ByteAvailabilityReal.lean",
+      "statement_sha256": "2ffd9dc52f2e625ce70010585f5b35f614d56278bce0e05fba1e708e77f70b94"
+    },
+    "C10Probability.c10_byte_signing_concrete_failure_bound": {
+      "file": "C10Probability/ByteAvailabilityReal.lean",
+      "statement_sha256": "a45594583aab9c8139af5f62fa5e2aa6b642ec05d041d01e7c1148a52f9e97f8"
+    },
     "C10Probability.codec_slice_length": {
       "file": "C10Probability/ByteCodec.lean",
       "statement_sha256": "99ca73c823fade53cc23acfa50066d309ecf6ac2e3bcf5f77a4997a868fef4e5"
@@ -1157,6 +1238,42 @@
     "C10Probability.c10_byte_forge_example_medium": {
       "file": "C10Probability/ByteGameExamples.lean",
       "statement_sha256": "1f287b83f1083a973a7d1756fb4bd27bcaccc3da665fd9b336b0d356948b4ac8"
+    },
+    "C10Probability.byte_output_to_structured_fields": {
+      "file": "C10Probability/ByteObservedDriver.lean",
+      "statement_sha256": "6c595ea50cb84fb0c3fd6461c8ba8115f1dedb2202a4d4d5919134d73a33c776"
+    },
+    "C10Probability.c10_byte_observed_driver_erases": {
+      "file": "C10Probability/ByteObservedDriver.lean",
+      "statement_sha256": "12075e20ea150d9155596ec4d82f39fa90ead07176bc97339e11b8fdd7e3a4ad"
+    },
+    "C10Probability.c10_r_driver_session_observation": {
+      "file": "C10Probability/ByteObservedDriver.lean",
+      "statement_sha256": "70dce1bb95ad11c6dbda9247fc7190cba14680dfe88a125444c8312db3291307"
+    },
+    "C10Probability.c10_byte_observed_driver_refinement": {
+      "file": "C10Probability/ByteObservedDriver.lean",
+      "statement_sha256": "488aae90851f43b5d0ee7856b941ce4e3dd94d5532e0ad77ef7da6500f023830"
+    },
+    "C10Probability.c10_byte_observed_driver_failure": {
+      "file": "C10Probability/ByteObservedDriver.lean",
+      "statement_sha256": "fccee6576c57cae5b2eb2e8f667b7cba9fa2e16f73d8f48b8a2b0a56c2a506a2"
+    },
+    "C10Probability.c10_byte_observed_game_erases": {
+      "file": "C10Probability/ByteObservedGame.lean",
+      "statement_sha256": "27d5a5e69f3ab39886230cfe7bb8e688a87c757f296294e24f79d69db4f73088"
+    },
+    "C10Probability.c10_byte_observed_game_refinement": {
+      "file": "C10Probability/ByteObservedGame.lean",
+      "statement_sha256": "115da122aafe4360e40c9373de8fbeedc7ad1acbbc4c5f4af64703c50eb18a38"
+    },
+    "C10Probability.c10_byte_observed_game_verdict": {
+      "file": "C10Probability/ByteObservedGame.lean",
+      "statement_sha256": "98a649147bdb49b824fa92722108dccb2159c7d169ab01d8f2a366ed1aa38876"
+    },
+    "C10Probability.c10_byte_observed_game_failure": {
+      "file": "C10Probability/ByteObservedGame.lean",
+      "statement_sha256": "1c4e3c23217b407441b520520c10e4fafa295fcc300e1ede3ddcce0c7b393b55"
     },
     "C10Probability.c10_sign_bytes_width": {
       "file": "C10Probability/ByteSession.lean",

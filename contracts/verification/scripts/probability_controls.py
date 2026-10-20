@@ -4600,4 +4600,91 @@ def cases(project: Path) -> list[dict]:
         ("real-wots-charge-lost", "+ wotsDomainChargeReal cfg.wTrials", "+ 0", False),
     ])
 
+    # Direct byte observations and initialized signing-availability transfer.
+    cg_prefix = (
+        "import C10Probability.ByteAvailabilityExamples\n"
+        "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n"
+        "variable {K : Type*} {fuel : ℕ}\n"
+        "attribute [local irreducible] digestDraw c10ByteObservedGame c10RGame\n"
+    )
+    cg_suffix = "\nend\nend C10Probability\n"
+
+    def cg_variants(pairs, module, consumer, variants, check_override=None):
+        names = {name: name + "CGCandidate" for _, name in pairs}
+        declarations = []
+        for owner, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|inductive|attribute|omit|end|set_option|local instance)\b)",
+                src[owner], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing signing-availability definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "CGSlice"
+        src[key] = cg_prefix + "\n".join(declarations) + cg_suffix
+        check = check_override if check_override is not None else theorem(src[module], consumer)
+        for before, after in names.items():
+            check = re.sub(r"\b" + before + r"\b", after, check)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("byte-availability-" + label, key, old, new, check, expected)
+
+
+    cg_variants([("ByteObservedDriver", "c10ByteSigningFailure")], "ByteAvailabilityExamples", "byte_signing_failure_event_branches", [
+        ("event-hidden", "out.2.ledger.failed", "false", False),
+        ("event-forced", "out.2.ledger.failed", "true", False),
+        ("event-verdict", "out.2.ledger.failed", "out.1", False),
+        ("event-id", "out.2.ledger.failed", "id out.2.ledger.failed", True),
+    ])
+    cg_variants([("ByteObservedDriver", "byteOutputToStructured")], "ByteObservedDriver", "byte_output_to_structured_fields", [
+        ("output-verdict", "(out.1,", "(!out.1,", False),
+        ("output-forgery", "byteForgeryToStructured out.2", "(fun _ => byteForgeryToStructured ([], [])) out.2", False),
+        ("output-ledger", "byteForgeryToStructured out.2", "byteForgeryToStructured {out.2 with ledger := emptySessionLedger}", False),
+        ("output-raw-cap", "byteForgeryToStructured out.2", "byteForgeryToStructured {out.2 with rawRemaining := 0}", False),
+        ("output-sign-cap", "byteForgeryToStructured out.2", "byteForgeryToStructured {out.2 with signRemaining := 0}", False),
+        ("output-session-id", "byteForgeryToStructured out.2", "byteForgeryToStructured (id out.2)", True),
+    ])
+    cg_variants([("ByteObservedDriver", "c10ByteObservedDriver")], "ByteObservedDriver", "c10_byte_observed_driver_refinement", [
+        ("driver-raw-cap", "cfg client qr qs", "cfg client 0 qs", False),
+        ("driver-sign-cap", "cfg client qr qs", "cfg client qr 0", False),
+        ("driver-initial-failure", "qr qs emptySessionLedger table", "qr qs {emptySessionLedger with failed := true} table", False),
+        ("driver-initial-cache", "emptySessionLedger table", "emptySessionLedger (fun _ => none)", False),
+        ("driver-verdict", "((final.1, session.1)", "((!final.1, session.1)", False),
+        ("driver-final-cache", "session.1), final.2)", "session.1), session.2)", False),
+        ("driver-result-ledger", "((final.1, session.1)", "((final.1, {session.1 with ledger := emptySessionLedger})", False),
+        ("driver-result-cap", "((final.1, session.1)", "((final.1, {session.1 with signRemaining := 0})", False),
+        ("driver-cache-id", "session.1), final.2)", "session.1), (fun x => x) final.2)", True),
+    ])
+    cg_variants([("ByteObservedGame", "c10ByteObservedGame")], "ByteObservedGame", "c10_byte_observed_game_erases", [
+        ("game-keygen-seed", "encode table publicSeed", "encode table 0", False),
+        ("game-initial-cache", "encode table publicSeed", "encode (fun _ => none) publicSeed", False),
+        ("game-config-uninitialized", "(sessionConfigAt cfg key.1)", "cfg", False),
+        ("game-public-key-swapped", "adversary key.1.1 key.1.2", "adversary key.1.2 key.1.1", False),
+        ("game-raw-cap", "qr qs key.2", "0 qs key.2", False),
+        ("game-sign-cap", "qr qs key.2", "qr 0 key.2", False),
+        ("game-keygen-cache-lost", "qr qs key.2", "qr qs table", False),
+        ("game-keygen-cache-id", "qr qs key.2", "qr qs ((fun x => x) key.2)", True),
+    ])
+    cg_variants([("ByteAvailability", "c10ByteObservedShared")], "ByteAvailability", "c10_byte_shared_signing_failure_eq", [
+        ("shared-secret-unsampled", "digestDraw.bind", "(PMF.pure 0).bind", False),
+        ("shared-secret-fixed", "prefixedPrivateInput secret", "prefixedPrivateInput 0", False),
+        ("shared-public-seed-fixed", "cfg publicSeed adversary", "cfg 0 adversary", False),
+        ("shared-raw-cap", "adversary qr qs", "adversary 0 qs", False),
+        ("shared-sign-cap", "adversary qr qs", "adversary qr 0", False),
+        ("shared-prefilled-cache", "(fun _ => none)", "(fun _ => some 0)", False),
+        ("shared-config-reset", "secret) cfg publicSeed", "secret) {cfg with rTrials := 0, rBound := by decide} publicSeed", False),
+        ("shared-secret-id", "prefixedPrivateInput secret", "prefixedPrivateInput (id secret)", True),
+    ])
+    cg_variants([("ByteAvailability", "c10ByteObservedInitializedShared")], "ByteAvailabilityExamples", "byte_observed_initialized_pure", [
+        ("initialized-seed-fixed", "cfg input.1", "cfg 0", False),
+        ("initialized-adversary-key-swapped", "(PMF.pure input.2)", "(PMF.pure (fun seed root => input.2 root seed))", False),
+        ("initialized-raw-cap", "qr qs)", "0 qs)", False),
+        ("initialized-sign-cap", "qr qs)", "qr 0)", False),
+        ("initialized-seed-id", "cfg input.1", "cfg ((fun x => x) input.1)", True),
+    ])
+
     return out

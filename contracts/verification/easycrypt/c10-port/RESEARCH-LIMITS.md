@@ -66,6 +66,15 @@ This closes finite initialized structured-model signing availability, including
 adaptive public prefill and repeated requests. Refusal remains distinct from
 admitted exhaustion; existing forgery bounds remain unchanged. No concrete
 backend, unbounded-adversary, cross-kernel, physical or QROM claim follows.
+The [byte-model signing-availability extension](../../probability/README.md#byte-model-signing-availability)
+now transports that same bound to the independently observed byte session.
+Full result/ledger/cap/cache refinement preserves actual keygen and final
+verification. The initialized law allows any joint public-seed/finite-byte-client
+PMF independent of the uniform hidden prefix, with exact failed-event equality
+and no serialization loss. Its real/capped endpoint is the same `2^-38` at
+these quotas; malformed/capped refusal remains distinct from admitted failure.
+This closes finite byte-model signing availability, without changing the
+concrete correspondence, unbounded-adversary or physical boundaries above.
 No EasyCrypt theorem is imported into Lean.
 
 The [separate mathlib PMF project](../../probability/README.md) proves bounded
@@ -470,8 +479,11 @@ preserving all 2650 preceding statements, 1535 fixtures, prior non-umbrella
 proof-module bytes and 52 bindings.
 The signing-availability extension adds 72 closures in fifteen modules and
 56 typed controls (46 negative, ten equivalent), preserving all preceding
-statements, fixture objects and manual bindings. The current inventory is
-2824 closures and 1655 typed cases. The combined forgery bound
+statements, fixture objects and manual bindings. That inventory had
+2824 closures and 1655 typed cases. The byte-availability extension adds 28
+closures in five modules and 40 controls (34 negative, six equivalent),
+preserving every preceding statement, fixture and manual binding. The current
+inventory is 2852 closures and 1695 typed cases. The combined forgery bound
 retains all six events, uses exact tagged-cache erasure for collision/zero
 charges, and transfers only the final Boolean with the public-prefix charge. These separate Lean
 results import no EasyCrypt theorem and establish no concrete hash, Rust

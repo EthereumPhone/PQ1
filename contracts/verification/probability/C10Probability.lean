@@ -271,3 +271,8 @@ import C10Probability.WotsDomainExamples
 import C10Probability.WotsDomainNumeric
 import C10Probability.WotsDomainReal
 import C10Probability.WotsFailure
+import C10Probability.ByteAvailability
+import C10Probability.ByteAvailabilityExamples
+import C10Probability.ByteAvailabilityReal
+import C10Probability.ByteObservedDriver
+import C10Probability.ByteObservedGame
