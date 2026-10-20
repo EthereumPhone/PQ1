@@ -22,6 +22,7 @@ import time
 from check_axiom_closure import KERNEL, parse_dump_records
 from check_ledger_consistency import _pinned_lake, _pinned_tool_env, extract_statement
 from probability_controls import cases
+from probability_reuse import GitHub, authenticate_origin, consumer, final_route, forced_cold
 from probability_execution import (
     CONTROL_FLAGS, CONTROL_TIMEOUT, STAGES, authenticate_shards, input_identity,
     judge_control, producer_context, resource_limits, shard_cases, worker_count,
@@ -151,30 +152,97 @@ def arguments(argv=None):
     parser.add_argument("--workers", default=os.environ.get("PROBABILITY_WORKERS", "auto"))
     parser.add_argument("--shard-count", type=int, default=os.environ.get("PROBABILITY_SHARD_COUNT", "1"))
     parser.add_argument("--shard-index", type=int, default=os.environ.get("PROBABILITY_SHARD_INDEX"))
-    parser.add_argument("--aggregate", type=Path, default=os.environ.get("PROBABILITY_AGGREGATE"))
+    parser.add_argument("--aggregate", type=Path, default=os.environ.get("PROBABILITY_AGGREGATE") or None)
     parser.add_argument("--output", type=Path, default=os.environ.get("PROBABILITY_OUTPUT"))
+    parser.add_argument("--reuse-run", default=os.environ.get("PROBABILITY_REUSE_RUN") or None)
+    parser.add_argument("--reuse-probe", action="store_true")
     args = parser.parse_args(argv)
+    require(sum((bool(args.aggregate), args.shard_index is not None, bool(args.reuse_run),
+                 args.reuse_probe)) <= 1, "verification modes are mutually exclusive")
+    require(args.reuse_run is None or re.fullmatch(r"[1-9][0-9]*", args.reuse_run) is not None,
+            "invalid reuse run ID")
     require(1 <= args.shard_count <= 8, "shard count outside 1..8")
     require(not (args.aggregate and args.shard_index is not None), "aggregate cannot be a shard")
     require(args.shard_index is None or 0 <= args.shard_index < args.shard_count,
             "shard index outside range")
-    require(args.shard_count == 1 or args.aggregate or args.shard_index is not None,
+    require(args.shard_count == 1 or args.aggregate or args.shard_index is not None or args.reuse_run,
             "partial control count requires explicit shard or aggregate")
     return args
 
 
+def proof_environment() -> dict:
+    env = _pinned_tool_env()
+    for name in ("LEAN_PATH", "LEAN_SRC_PATH", "LAKE_HOME", "LAKE_PACKAGES_DIR",
+                 "GH_TOKEN", "GITHUB_TOKEN"):
+        env.pop(name, None)
+    return env
+
+
+def reuse_or_cold(api, context, identity, selected, manifest, out, requested,
+                  lean, control_env, workers) -> dict:
+    try:
+        evidence = authenticate_origin(api, ROOT, context, identity, selected, manifest,
+                                       check_closures, out / "origin", requested)
+    except Exception as exc:
+        # Origin failures never count as verification. This is the full census,
+        # on the already fresh build, never shard 0 of the eight-way matrix.
+        reason = f"{type(exc).__name__}: {exc}"
+        print("Reuse refused; executing complete cold controls: " + reason, flush=True)
+        return {"reuse": {"accepted": False, "reason": reason},
+                "controls": run_controls(out, lean, control_env, workers, 0, 1)}
+    return {"reuse": {"accepted": True, "evidence": evidence}, "aggregate": evidence["coverage"]}
+
+
+def reuse_probe(args) -> None:
+    candidate, reason = "", "not an eligible push or forced cold"
+    try:
+        context = producer_context(ROOT)
+        consumer(context)
+        require(not forced_cold(), "forced cold replay")
+        manifest = static_checks(); lake = _pinned_lake(); env = proof_environment()
+        lean = subprocess.check_output([str(Path(lake).with_name("elan")), "which", "lean"],
+                                       cwd=PROJECT, env=env, text=True).strip()
+        selected = cases(PROJECT)
+        identity = input_identity(ROOT, PROJECT, manifest, lean, selected, lake, include_project=False)
+        api = GitHub(os.environ.get("GH_TOKEN", ""))
+        require(args.output is not None, "probe requires isolated output")
+        evidence = authenticate_origin(api, ROOT, context, identity, selected, manifest,
+                                       check_closures, args.output, probe=True)
+        require(manifest == static_checks() and context == producer_context(ROOT)
+                and identity == input_identity(ROOT, PROJECT, manifest, lean, cases(PROJECT), lake,
+                                                include_project=False), "probe inputs changed")
+        candidate = str(evidence["origin"]["run"])
+        reason = "metadata and nonproject identity match; full final authentication still required"
+    except Exception as exc:
+        reason = f"{type(exc).__name__}: {exc}"
+    # A probe is never a successful proof receipt.
+    print(json.dumps({"candidate": candidate, "reason": reason, "admission_only": True}))
+    output = os.environ.get("GITHUB_OUTPUT")
+    require(output is not None, "probe requires GitHub step output file")
+    with open(output, "a") as stream:
+        stream.write("candidate=" + candidate + "\n")
+
+
 def main(args=None) -> None:
     args = arguments() if args is None else args
+    if args.reuse_probe:
+        reuse_probe(args)
+        return
     started = time.monotonic()
     limits = resource_limits()
     workers = worker_count(args.workers, limits)
-    mode = "aggregate" if args.aggregate else "shard" if args.shard_index is not None else "full"
+    mode = ("reuse" if args.reuse_run else "aggregate" if args.aggregate
+            else "shard" if args.shard_index is not None else "full")
     context = producer_context(ROOT) if mode != "full" else None
+    if os.environ.get("PROBABILITY_CI_FINAL") == "true":
+        route = final_route(os.environ.get("PROBABILITY_PROBE_RESULT", ""),
+                            os.environ.get("PROBABILITY_REUSE_RUN", ""),
+                            os.environ.get("PROBABILITY_PRODUCER_RESULT", ""))
+        require(mode == ("reuse" if route == "reuse" else "aggregate"),
+                "final gate mode differs from dependency route")
     manifest = static_checks()
     lake = _pinned_lake()
-    env = _pinned_tool_env()
-    for name in ("LEAN_PATH", "LEAN_SRC_PATH", "LAKE_HOME", "LAKE_PACKAGES_DIR"):
-        env.pop(name, None)
+    env = proof_environment()
     require(not (PROJECT / ".lake").is_symlink(), "symlinked build root")
     (PROJECT / ".lake").mkdir(exist_ok=True)
     if args.output:
@@ -237,7 +305,16 @@ def main(args=None) -> None:
             result["missing_closure_control"] = True
         else:
             raise RuntimeError("closure gate accepted missing proof records")
-        if mode == "aggregate":
+        if mode == "reuse":
+            # Constructing a client is also fallible; do not skip the cold path
+            # when a token is absent. A null client cannot authenticate anything.
+            try:
+                api = GitHub(os.environ.get("GH_TOKEN", ""))
+            except Exception:
+                api = None
+            result.update(reuse_or_cold(api, context, result["identity"], selected, manifest,
+                                       out, args.reuse_run, lean, control_env, workers))
+        elif mode == "aggregate":
             result["aggregate"] = authenticate_shards(
                 args.aggregate, args.shard_count, result["identity"], context, selected, manifest,
                 check_closures, os.environ.get("PROBABILITY_PRODUCER_RESULT", ""))

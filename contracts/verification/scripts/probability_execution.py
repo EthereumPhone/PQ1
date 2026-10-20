@@ -179,7 +179,7 @@ def tree_hash(root: Path, accept) -> str:
 
 
 def input_identity(root: Path, project: Path, manifest: dict, lean: str,
-                   selected: list[dict], lake: str) -> dict:
+                   selected: list[dict], lake: str, *, include_project: bool = True) -> dict:
     """Bind actual proof/policy/dependency bytes, not merely the checkout commit.
 
     Dependency caches and the Lean distribution remain the existing tool TCB.
@@ -205,7 +205,7 @@ def input_identity(root: Path, project: Path, manifest: dict, lean: str,
     # Include dependency configuration/support sources as well as actual
     # compiler-loadable artifacts. Exclude only generated non-library state.
     dependency = lambda p: library(p) or ".lake" not in p.relative_to(packages).parts
-    return {"schema": SCHEMA, "inputs_sha256": digest(canonical(pins)),
+    identity = {"schema": SCHEMA, "inputs_sha256": digest(canonical(pins)),
             "manifest_sha256": digest(canonical(manifest)),
             "manifest_file_sha256": digest((project / "claims.json").read_bytes()),
             "cases_sha256": digest(canonical(selected)),
@@ -218,9 +218,11 @@ def input_identity(root: Path, project: Path, manifest: dict, lean: str,
                              "no_site": sys.flags.no_site},
             "toolchain_sha256": tree_hash(Path(lean).parent.parent / "lib", library),
             "dependencies_sha256": tree_hash(packages, dependency),
-            "project_libraries_sha256": tree_hash(project / ".lake/build/lib/lean", library),
             "policy": {"control_flags": CONTROL_FLAGS, "timeout": CONTROL_TIMEOUT,
                        "stages": list(STAGES), "excluded": EXCLUDED}}
+    if include_project:
+        identity["project_libraries_sha256"] = tree_hash(project / ".lake/build/lib/lean", library)
+    return identity
 
 
 def check_file(bundle: Path, name: str, expected: str) -> str:

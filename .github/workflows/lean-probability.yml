@@ -9,6 +9,8 @@ on:
       - 'contracts/verification/scripts/check_probability.py'
       - 'contracts/verification/scripts/probability_execution.py'
       - 'contracts/verification/scripts/test_probability_execution.py'
+      - 'contracts/verification/scripts/probability_reuse.py'
+      - 'contracts/verification/scripts/test_probability_reuse.py'
       - 'scripts/gate_enforcement.json'
       - 'contracts/verification/scripts/probability_controls.py'
       - 'contracts/verification/scripts/check_axiom_closure.py'
@@ -66,12 +68,62 @@ on:
       - 'contracts/verification/easycrypt/c10-port/cdrafts-split/ExposureLog.ec'
   pull_request:
     paths: *probability_paths
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
+  probe:
+    name: PR control reuse eligibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      candidate: ${{ steps.select.outputs.candidate }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: install elan (toolchain pinned by lean-toolchain)
+        if: ${{ github.event_name == 'push' && vars.PROBABILITY_FORCE_COLD != 'true' }}
+        run: |
+          # Pinned + verified, not `curl | sh` from a moving branch. `master`
+          # is mutable: whoever controls that ref controls the toolchain
+          # installer on every FV runner, which is the trust root the
+          # verification Makefile builds on. Pin the commit, check the bytes,
+          # and only then execute. (#562)
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o elan-init.sh
+          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          rm -f elan-init.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: require no dependency cache
+        if: ${{ github.event_name == 'push' && vars.PROBABILITY_FORCE_COLD != 'true' }}
+        run: test ! -e contracts/verification/probability/.lake/packages
+      - name: fetch pinned mathlib probability cache
+        if: ${{ github.event_name == 'push' && vars.PROBABILITY_FORCE_COLD != 'true' }}
+        working-directory: contracts/verification/probability
+        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+      - name: select eligible original run
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROBABILITY_FORCE_COLD: ${{ (vars.PROBABILITY_FORCE_COLD == 'true' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
+          PROBABILITY_OUTPUT: ${{ runner.temp }}/probability-probe
+        run: /usr/bin/python3 -E -S contracts/verification/scripts/check_probability.py --reuse-probe
+
   controls:
+    needs: [probe]
+    if: ${{ always() && (needs.probe.result != 'success' || needs.probe.outputs.candidate == '') }}
     name: PMF controls (${{ matrix.index }}/${{ matrix.count }})
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -108,16 +160,15 @@ jobs:
           sh elan-init.sh -y --default-toolchain none
           rm -f elan-init.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-      - name: cache pinned probability dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: contracts/verification/probability/.lake/packages
-          key: lean-probability-deps-${{ hashFiles('contracts/verification/probability/lake-manifest.json', 'contracts/verification/probability/lean-toolchain') }}
+      - name: require no dependency cache
+        run: test ! -e contracts/verification/probability/.lake/packages
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
         run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
       - name: runner regression controls
-        run: /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
+        run: |
+          /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
+          /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_reuse.py
       - name: fresh proof build and control shard
         env:
           PROBABILITY_SHARD_INDEX: ${{ matrix.index }}
@@ -135,22 +186,34 @@ jobs:
 
   probability:
     name: PMF proofs and semantic controls
-    needs: [controls]
+    needs: [probe, controls]
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
         count: [8]
     steps:
-      - name: require successful complete producer matrix
-        env:
-          PRODUCER_RESULT: ${{ needs.controls.result }}
-        run: test "$PRODUCER_RESULT" = success
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      - name: require cold or reuse dependency state
+        env:
+          PROBE_RESULT: ${{ needs.probe.result }}
+          CANDIDATE: ${{ needs.probe.outputs.candidate }}
+          PRODUCER_RESULT: ${{ needs.controls.result }}
+        run: |
+          /usr/bin/python3 -E -S - <<'PYCODE'
+          import os, sys
+          sys.path.insert(0, 'contracts/verification/scripts')
+          from probability_reuse import final_route
+          print(final_route(os.environ['PROBE_RESULT'], os.environ['CANDIDATE'], os.environ['PRODUCER_RESULT']))
+          PYCODE
       - name: install elan (toolchain pinned by lean-toolchain)
         run: |
           # Pinned + verified, not `curl | sh` from a moving branch. `master`
@@ -168,20 +231,19 @@ jobs:
           sh elan-init.sh -y --default-toolchain none
           rm -f elan-init.sh
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-      - name: cache pinned probability dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: contracts/verification/probability/.lake/packages
-          key: lean-probability-deps-${{ hashFiles('contracts/verification/probability/lake-manifest.json', 'contracts/verification/probability/lean-toolchain') }}
+      - name: require no dependency cache
+        run: test ! -e contracts/verification/probability/.lake/packages
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
         run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
       - name: download this attempt's shard evidence
+        if: ${{ needs.controls.result == 'success' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: probability-${{ matrix.count }}-*-${{ github.run_attempt }}
           path: ${{ runner.temp }}/probability-downloads
       - name: require exact artifact set
+        if: ${{ needs.controls.result == 'success' }}
         env:
           SHARD_COUNT: ${{ matrix.count }}
           ATTEMPT: ${{ github.run_attempt }}
@@ -202,10 +264,17 @@ jobs:
               (incoming / f'probability-{count}-{i}-{attempt}').rename(receipts / f'shard-{i}')
           PY
       - name: runner regression controls
-        run: /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
+        run: |
+          /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
+          /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_reuse.py
       - name: verify-probability (fresh kernel build, claims and typed controls)
         env:
-          PROBABILITY_AGGREGATE: ${{ runner.temp }}/probability-receipts
+          GH_TOKEN: ${{ github.token }}
+          PROBABILITY_CI_FINAL: 'true'
+          PROBABILITY_PROBE_RESULT: ${{ needs.probe.result }}
+          PROBABILITY_REUSE_RUN: ${{ needs.controls.result == 'skipped' && needs.probe.outputs.candidate || '' }}
+          PROBABILITY_FORCE_COLD: ${{ (vars.PROBABILITY_FORCE_COLD == 'true' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
+          PROBABILITY_AGGREGATE: ${{ needs.controls.result == 'success' && format('{0}/probability-receipts', runner.temp) || '' }}
           PROBABILITY_SHARD_COUNT: ${{ matrix.count }}
           PROBABILITY_PRODUCER_RESULT: ${{ needs.controls.result }}
           PROBABILITY_OUTPUT: ${{ runner.temp }}/probability-aggregate

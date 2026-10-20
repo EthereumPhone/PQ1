@@ -1550,7 +1550,7 @@ The Lean invocation, per-control 90-second timeout and consuming-theorem
 judging rules are unchanged. Each compiler has its own fixture and log;
 imported project/dependency libraries have no concurrent writer.
 
-CI uses eight deterministic control shards, selected from a four/eight-shard
+Cold CI uses eight deterministic control shards, selected from a four/eight-shard
 comparison.
 Every shard freshly rebuilds all project proofs, audits all closures and
 runs both closure canaries before its assigned cases. All three stages of
@@ -1563,13 +1563,13 @@ run ID and run attempt. It rechecks raw closure/control logs and requires
 each expected case/stage exactly once. Missing, failed, cancelled, duplicate,
 unexpected, stale or mismatched evidence fails the gate.
 
-Artifact transport stays within the current workflow run and attempt; the
+Cold shard transport stays within the current workflow run and attempt; the
 reviewed producer workflow and GitHub runner/artifact service remain trusted.
 Sharding and receipt aggregation require that CI context; local runs use the
 full gate. Retry the whole workflow, since receipts from an earlier attempt
 cannot satisfy the current aggregate.
-This batch does not reuse PR evidence after landing or skip the push replay.
-That is a separate evidence-policy boundary coordinated with #789.
+The #1000 batch added no cross-run reuse. The #1002 contract below owns that
+separate boundary, coordinated with #789; push proof checks remain fresh.
 The [portable benchmark receipt](https://github.com/EthereumPhone/PQ1/issues/1000#issuecomment-6294566604)
 records frozen source identities, reproduction commands, hardware, wall time,
 CPU/memory observations, failures and subsequent PR/push measurements. The
@@ -1580,6 +1580,33 @@ time including aggregation was 153m42s versus 127m52s. Both aggregates waited
 for the experiment's shared producer matrix, so its derived 34m27s standalone
 eight-shard duration is an estimate, not an observed standalone workflow time.
 The receipt distinguishes that experiment from the selected-only workflow.
+
+**PR-to-master control reuse (#1002).** The [admission contract](CONTROL-REUSE.md)
+requires a successful, unambiguous same-repository PR run for the landed target,
+the same complete Git tree, all fifteen input/toolchain/policy identities and
+complete original aggregate/shard evidence. It authenticates GitHub run, job,
+checkout and artifact metadata, explicitly checks downloaded archives against
+API-recorded uploader digests, and judges every raw control result again under
+the original run context. The uploader, hosted runner and GitHub API remain
+trusted. No original context is rewritten and no artifact code is executed.
+
+All jobs fetch pinned dependencies without restoring Actions dependency caches.
+The probe compares the fourteen identity fields that need no project build;
+it cannot satisfy the verification gate. The final push job freshly rebuilds
+and audits all proofs, bindings and both canaries before comparing the remaining
+project-library identity. Its separate result links target and authenticated
+origin. An ineligible/failed probe retains eight fresh shards. A later refusal
+records its reason and runs all controls in the final process on the fresh
+build; that route can take longer than sharding and has a 180-minute job budget.
+Skipped or failed jobs cannot stand in for a successful required gate.
+
+Set repository variable `PROBABILITY_FORCE_COLD=true` or run the workflow's
+manual dispatch to force cold CI. The ordinary local command remains entirely
+cold. Run the focused provenance/fallback regressions with
+`/usr/bin/python3 -E -S contracts/verification/scripts/test_probability_reuse.py`.
+[#1002](https://github.com/EthereumPhone/PQ1/issues/1002) owns actual measurements
+and acceptance receipts. This does not separate or inherit Rust correspondence,
+prove a new theorem, or weaken any control/census/closure requirement.
 
 1655 typed cases run 4965 compiler jobs: each baseline and changed
 definition must compile, 1451 changed behaviors must reject at the

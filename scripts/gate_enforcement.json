@@ -1864,24 +1864,32 @@
         "contracts/verification/easycrypt/c10-port/cdrafts-split/ByteGameTopExtraction.ec",
         "contracts/verification/scripts/probability_execution.py",
         "contracts/verification/scripts/test_probability_execution.py",
-        "scripts/gate_enforcement.json"
+        "scripts/gate_enforcement.json",
+        "contracts/verification/scripts/probability_reuse.py",
+        "contracts/verification/scripts/test_probability_reuse.py"
       ],
       "runs_in": "lean-probability.yml",
       "enforcement": "per_pr_blocking",
       "required_context": {
         "step": {
           "name": "verify-probability (fresh kernel build, claims and typed controls)",
-          "run": "make -C contracts/verification verify-probability",
           "env": {
-            "PROBABILITY_AGGREGATE": "${{ runner.temp }}/probability-receipts",
+            "GH_TOKEN": "${{ github.token }}",
+            "PROBABILITY_CI_FINAL": "true",
+            "PROBABILITY_PROBE_RESULT": "${{ needs.probe.result }}",
+            "PROBABILITY_REUSE_RUN": "${{ needs.controls.result == 'skipped' && needs.probe.outputs.candidate || '' }}",
+            "PROBABILITY_FORCE_COLD": "${{ (vars.PROBABILITY_FORCE_COLD == 'true' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}",
+            "PROBABILITY_AGGREGATE": "${{ needs.controls.result == 'success' && format('{0}/probability-receipts', runner.temp) || '' }}",
             "PROBABILITY_SHARD_COUNT": "${{ matrix.count }}",
             "PROBABILITY_PRODUCER_RESULT": "${{ needs.controls.result }}",
             "PROBABILITY_OUTPUT": "${{ runner.temp }}/probability-aggregate"
-          }
+          },
+          "run": "make -C contracts/verification verify-probability"
         },
         "job_equals": {
           "runs-on": "ubuntu-latest",
           "needs": [
+            "probe",
             "controls"
           ],
           "if": "${{ always() }}",
@@ -1892,6 +1900,12 @@
                 8
               ]
             }
+          },
+          "timeout-minutes": 180,
+          "permissions": {
+            "contents": "read",
+            "actions": "read",
+            "pull-requests": "read"
           }
         },
         "job_absent": [
@@ -1902,7 +1916,7 @@
         ],
         "workflow_context": {}
       },
-      "note": "Separate pinned mathlib PMF project. Every shard freshly rebuilds all proofs and audits exact closures/canaries; required same-run aggregate freshly rebuilds proofs and authenticates every control stage, source/toolchain/policy/context and raw log. No cross-run reuse or concrete backend/correspondence credit."
+      "note": "Separate pinned mathlib PMF project. Every target freshly rebuilds proofs and audits exact closures/canaries/bindings. Cold shards retain same-run authentication. An eligible master push may reuse complete authenticated same-repository PR controls under original context, identical full inputs/toolchain/policy and Git tree, with clean dependency fetches and full cold fallback. No concrete backend/correspondence credit."
     }
   ],
   "_completeness_waived": {}

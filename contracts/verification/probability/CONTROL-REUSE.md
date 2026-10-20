@@ -1,7 +1,7 @@
 # PR-to-master control evidence reuse (#1002)
 
-Status: architecture candidate; reuse remains disabled until implementation,
-required review and actual CI pass. Owner: issue #1002; #789 retains ownership
+Status: implementation contract; issue #1002 owns the required review, actual
+CI and measured acceptance receipts. Owner: issue #1002; #789 retains ownership
 of EasyCrypt proof/Rust correspondence separation. This is a Lean control
 execution optimization, with no new mathematical or correspondence claim.
 
@@ -111,7 +111,7 @@ rejection runs the full controls on one hosted runner and can be slower than
 normal sharding; measure this cost explicitly. Earlier ineligibility retains
 the eight-shard path. No probe output or skipped/failed job can green the final
 check. Repository variable `PROBABILITY_FORCE_COLD=true` and a manual dispatch
-with force-cold default true retain explicit cold routes; local full replay is
+which always runs cold retain explicit cold routes; local full replay is
 unchanged. Only the probe and final jobs receive actions:read and
 pull-requests:read alongside contents:read. Tokens are supplied only to the probe/gate parent processes that call the API;
 remove GH_TOKEN and GITHUB_TOKEN from every proof/tool/control subprocess
