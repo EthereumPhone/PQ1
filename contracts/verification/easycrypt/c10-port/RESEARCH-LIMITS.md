@@ -22,8 +22,23 @@ now proves two-way roundtrips for all well-formed structured signatures and all
 Its independently defined adaptive byte session preserves result, ledger,
 caps and full cache through actual keygen and final verification. Exact
 initialized Boolean equality carries the same capped bound without an added
-loss or premise. Unbounded-adversary representation, repeated-grinder freshness,
-concrete backend/Rust/EasyCrypt and physical/QROM boundaries remain open.
+loss or premise. Unbounded-adversary representation, full C10 signing
+availability, concrete backend/Rust/EasyCrypt and physical/QROM boundaries
+remain open.
+
+The [context-aware adaptive R-grinding component](../../probability/README.md#context-aware-adaptive-r-grinding)
+now removes the caller-supplied freshness premise for a bounded initialized
+R/H_msg session. Actual private-cache provenance establishes freshness for a
+new valid context; an old successful context replays its cached result.
+The direct interpreter and compiler preserve the ordered ledger, caps, failure
+flag and full cache, including malformed refusal and public queries after
+failure. The shared returned-failure bound is
+`qs*((1-1/2048)^m + collisionPairs(qr+qs*m,m)/2^128) + (qr+qs*m)/2^256`,
+capped at one. At ten-million trials, `2^32` raw queries and `2^20` searches,
+the kernel proves it at most `2^-40`. This is a separate ideal-model
+availability bound, not a full C10 signing result or a stronger forgery bound.
+Composing the other keygen/sign private callers with this provenance invariant
+remains open. No EasyCrypt theorem is imported into Lean.
 
 The [separate mathlib PMF project](../../probability/README.md) proves bounded
 independent sampling, including exact first-hit, returned-event and exhaustion
@@ -419,14 +434,17 @@ The six-case composition adds 48 closures in eight modules and 31 typed controls
 preserving every prior statement, fixture and non-umbrella proof module. The
 six-case inventory was 2449 closures and 1407 typed cases. The byte-codec/session
 extension adds 101 closures in thirteen modules and 64 controls, preserving all
-preceding statements, fixtures, proof-module bytes and 52 bindings. The current
-inventory is 2550 closures and 1471 typed cases. The combined bound
+preceding statements, fixtures, proof-module bytes and 52 bindings. The
+repeated-R session adds 100 closures in seventeen modules and 64 controls,
+retaining that preceding inventory of 2550 closures and 1471 typed cases.
+The current inventory is 2650 closures and 1535 typed cases. The combined forgery bound
 retains all six events, uses exact tagged-cache erasure for collision/zero
 charges, and transfers only the final Boolean with the public-prefix charge. These separate Lean
 results import no EasyCrypt theorem and establish no concrete hash, Rust
 execution, cross-kernel, QROM or hardware correspondence. Cache-visible events
-have no shared/independent transfer; the existing transfer concerns Boolean
-results only.
+have no shared/independent transfer. The initialized forgery transfer concerns
+the final Boolean; the R-session availability result transfers its returned
+failure flag.
 All 52 manual source bindings are checked for
 declared and push/PR trigger coverage, retaining the future-drift check #961.
 No EasyCrypt theorem is imported into Lean; source pins on the manually

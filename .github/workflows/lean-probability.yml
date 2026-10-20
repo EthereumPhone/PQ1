@@ -71,9 +71,9 @@ jobs:
   probability:
     name: PMF proofs and semantic controls
     runs-on: ubuntu-latest
-    # The preceding 1081-case push took 59m10s. Preserve every check while
-    # allowing headroom for 1128 cases and nine additional proof modules.
-    timeout-minutes: 90
+    # The preceding 1471-case PR/push jobs took 86m52s/85m09s.
+    # Preserve every check and compiler limit while allowing the added census.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:

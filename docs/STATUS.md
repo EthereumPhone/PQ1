@@ -192,8 +192,13 @@ the conservative coverage union makes the capped bound uninformative (`1`).
 The [exact PMF byte codec and finite byte session](../contracts/verification/probability/README.md#exact-byte-codec-and-finite-byte-game)
 now carry that bound to byte clients without added loss: both codec roundtrips,
 all u32 counters, wrong-length refusal, and full session/keygen/cache refinement
-are proved. Unbounded-adversary representation, repeated-grinder freshness and
-concrete correspondence remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
+are proved. The [context-aware R-grinding session](../contracts/verification/probability/README.md#context-aware-adaptive-r-grinding)
+now derives freshness or cached success from actual histories and bounds first
+exhaustion, including caps, refusal, persistent failure and the shared-prefix
+charge. A kernel example gives `2^-40` at ten-million trials, `2^32` raw queries
+and `2^20` searches. Full C10 keygen/sign availability still requires composition
+with its other private callers; unbounded-adversary representation and concrete
+correspondence remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
 QROM or hardware claim. The dated development history below is not the current
 proof inventory; use the linked owner for counts, gates and remaining limits.
 

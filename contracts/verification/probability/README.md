@@ -22,6 +22,12 @@ byte game below, through an exact 4,008-byte codec and full-session refinement.
 Concrete signer-session correspondence remains open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
+The [finite adaptive R-grinding session](#context-aware-adaptive-r-grinding)
+now derives freshness or successful replay from actual execution history and
+bounds first exhaustion, including the shared secret-prefix transfer. Its
+initialized endpoint has no caller-supplied freshness premise. Full C10
+keygen/sign availability still needs composition with its other private callers.
+
 ## What is checked
 
 `grind p accept start n` draws from the PMF `p`, stops at the first accepted
@@ -401,6 +407,60 @@ It does not establish concrete SHA, Rust or EasyCrypt execution equivalence,
 cross-kernel transfer, representation of all lossless/unbounded adversaries,
 repeated-grinder freshness, QROM or physical security. The existing manual
 source pins, including `RawSignature.ec`, remain drift checks only.
+
+## Context-aware adaptive R grinding
+
+`RContext.lean` proves injectivity of the actual private R tail across request
+contexts and counters. Admission requires a 32-byte message and optional
+randomness of length zero or sixteen. The u32 nonce retains the existing
+32-byte big-endian derivation encoding. A malformed-width counterexample
+demonstrates why the message-width check is necessary.
+
+`RContextHistory.lean` derives private-cache provenance from supported public
+queries and actual memoized R/H_msg searches. `RContextReplay.lean` derives
+successful replay witnesses from execution and preserves them under memo
+extension. Thus an unseen valid context has fresh private inputs; an old
+successful context returns its cached counter, R and digest without resampling.
+`RPublicHistory.lean` bounds the public cache from actual query traces.
+
+`RSessionProgram.lean` separately defines a direct PMF interpreter and a
+query-program compiler, then proves equality of their complete outputs,
+ordered successful-context lists, remaining caps and memo tables. Clients may
+choose later public queries and searches from earlier replies. Refused calls
+spend no cap; admitted searches spend one even on exhaustion. The first
+exhaustion persistently refuses later searches while raw queries remain
+available. Duplicate successful contexts remain in the chronological list.
+Zero-trial searches and zero call caps are covered without a positivity premise.
+
+For `m` trials, admitted raw/search caps `qr, qs`, and
+`H = qr + qs*m`, the initialized independent session satisfies
+
+```text
+Pr[first exhaustion] <= qs * ((1 - 1/2048)^m
+                              + collisionPairs(H,m) / 2^128)
+collisionPairs(H,m) = m*H + m*(m-1)/2
+```
+
+`RSessionInvariant.lean` and `RSessionExhaustion.lean` discharge the history,
+freshness and successful-replay invariants from the empty initial state.
+The theorem permits arbitrary PMFs of finite adaptive clients. The bound
+counts admitted calls rather than attempted-interaction fuel.
+
+`RSessionTransfer.lean` refines the direct shared experiment through the
+existing one-secret private-prefix interface. It adds `H/2^256` to the
+returned-failure event and caps the result at one. The returned event includes
+the session failure flag; no cache-visible event is transferred. Session
+parameters and client randomness are independent of the sampled private-prefix
+secret. `RSessionReal.lean` establishes finiteness before real conversion.
+`RSessionNumeric.lean` proves a conservative bound of `2^-40` for ten-million-trial
+searches at caps `qr = 2^32` and `qs = 2^20`, using a block bound on the
+geometric tail instead of expanding the large exponent.
+
+This closes the repeated-context freshness premise for this bounded R/H_msg
+session. It does not yet prove availability of the complete C10 keygen/sign
+session: other private callers need explicit provenance composition. No
+concrete SHA/Rust/EasyCrypt execution, cross-kernel, unbounded-adversary, QROM
+or physical claim follows. The existing forgery bounds are unchanged.
 
 ## Independence and correspondence boundary
 
@@ -1343,16 +1403,24 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2550 theorem closures against
+The gate rebuilds every project module, checks all 2650 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1471 typed cases run 4413 compiler jobs: each baseline and changed
-definition must compile, 1291 changed behaviors must reject at the
-consuming `checked` theorem, and 180 value-preserving changes must pass.
+1535 typed cases run 4605 compiler jobs: each baseline and changed
+definition must compile, 1348 changed behaviors must reject at the
+consuming `checked` theorem, and 187 value-preserving changes must pass.
+The repeated-R session adds 100 closures in seventeen modules and 64 controls
+(57 negative, seven equivalent). Consumers cover context encoding, private and
+public history, successful replay, cap/refusal/failure behavior, full-cache
+refinement, initialized experiments and the exhaustion/prefix charges.
+All 2550 preceding statements, 1471 fixture objects, non-umbrella proof-module
+bytes and 52 manual bindings are preserved. The probability CI job receives
+120 minutes after the prior PR/push jobs took 86m52s/85m09s; compiler limits,
+worker count, toolchain and checks remain unchanged.
 The byte-codec/session extension adds 101 closures in thirteen modules and
 64 controls (58 negative, six equivalent). Complete consumers cover byte order,
 full counters, malformed lengths, reply translation, all admission checks,

@@ -4195,4 +4195,137 @@ def cases(project: Path) -> list[dict]:
         ("sampler-public-seed-id", "(input.1, byteAdversaryToStructured", "((fun x => x) input.1, byteAdversaryToStructured", True),
     ])
 
+    # Repeated R grinding: consuming proofs retain initialized-session
+    # semantics, context provenance, replay and the exact charged event.
+    cd_prefix = ("import C10Probability.RContextExamples\nnamespace C10Probability\n"
+                 "open scoped ENNReal\nnoncomputable section\n"
+                 "variable {K L R : Type*}\n")
+    cd_suffix = "\nend\nend C10Probability\n"
+
+    def cd_variants(pairs, module, consumer, variants, check_override=None):
+        names = {name: name + "CDCandidate" for _, name in pairs}
+        declarations = []
+        for owner, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|inductive|attribute|end|set_option|local instance)\b)",
+                src[owner], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing R-session definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "CDSlice"
+        src[key] = cd_prefix + "\n".join(declarations) + cd_suffix
+        check = check_override if check_override is not None else theorem(src[module], consumer)
+        for before, after in names.items():
+            check = re.sub(r"\b" + before + r"\b", after, check)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("repeat-grind-" + label, key, old, new, check, expected)
+
+    cd_variants([("RContext", "rContextTail")], "RContext", "r_context_tail_parts", [
+        ("tail-randomness-lost", "rTailStem context.1 context.2", "rTailStem [] context.2", False),
+        ("tail-message-lost", "rTailStem context.1 context.2", "rTailStem context.1 []", False),
+        ("tail-fields-swapped", "rTailStem context.1 context.2", "rTailStem context.2 context.1", False),
+        ("tail-tag-lost", "rTailStem context.1 context.2", "context.1 ++ context.2", False),
+        ("tail-counter-lost", ") nonce", ") 0", False),
+        ("tail-counter-id", ") nonce", ") (id nonce)", True),
+    ])
+    cd_variants([("RContext", "RContextHistory")], "RContext", "r_context_unseen_fresh", [
+        ("origin-domain-public", "table (.inr (rContextTail context nonce))", "table (.inl (rContextTail context nonce))", False),
+        ("origin-membership-lost", "context ∈ contexts", "True", False),
+    ])
+    cd_variants([("RContextReplay", "AcceptedRContexts")], "RContextReplay", "accepted_r_context_has_no_exhaustion", [
+        ("replay-accepts-exhaustion", "some (some result)", "some none", False),
+    ])
+    cd_variants([("RPublicHistory", "RPublicHistory")], "RPublicHistory", "r_public_history_hmsg_card", [
+        ("public-history-domain-private", "table (.inl key)", "table (.inr key)", False),
+        ("public-history-membership-lost", "key ∈ seen", "True", False),
+    ])
+    cd_variants([("RPublicHistory", "BoundedRPublicHistory")], "RPublicHistory", "bounded_r_public_history_hmsg_card", [
+        ("history-cover-lost", "RPublicHistory seen table", "((seen : Finset ByteKey) = seen)", False),
+        ("history-budget-undercounted", "seen.card ≤ budget", "seen.card ≤ budget + 1", False),
+    ])
+    cd_variants([("RContextExhaustion", "rExhaustionCharge")], "RSessionReal", "r_exhaustion_charge_real", [
+        ("exhaustion-tail-lost", "rejectMass digestDraw (forsAccept ∘ forsOfDigest) ^ trials", "0", False),
+        ("exhaustion-history-lost", "collisionPairs history trials", "collisionPairs 0 trials", False),
+        ("exhaustion-collision-lost", "(collisionPairs history trials : ℝ≥0∞) / 2 ^ 128", "0", False),
+        ("exhaustion-wrong-entropy", "/ 2 ^ 128", "/ 2 ^ 256", False),
+        ("exhaustion-history-id", "collisionPairs history trials", "collisionPairs ((fun x => x) history) trials", True),
+    ])
+    cd_variants([("RSessionTypes", "rSessionAdmits")], "RSessionTypes", "r_session_admits_iff", [
+        ("admission-failure-bypassed", "!ledger.failed", "true", False),
+        ("admission-message-short", "context.2.length = 32", "context.2.length = 31", False),
+        ("admission-message-long", "context.2.length = 32", "context.2.length = 33", False),
+        ("admission-randomness-short", "context.1.length = 16", "context.1.length = 15", False),
+        ("admission-empty-randomness-lost", "context.1.length = 0", "context.1.length = 1", False),
+    ])
+    cd_variants([("RSessionTypes", "rSessionAfterGrind")], "RSessionTypes", "r_session_none_absorbs", [
+        ("failure-not-recorded", "⟨ledger.contexts, true⟩", "⟨ledger.contexts, false⟩", False),
+        ("failed-history-erased", "⟨ledger.contexts, true⟩", "⟨[], true⟩", False),
+    ])
+    cd_variants([("RSessionTypes", "rSessionAfterGrind")], "RSessionTypes", "r_session_some_records", [
+        ("successful-context-lost", "ledger.contexts ++ [context]", "ledger.contexts", False),
+        ("earlier-contexts-lost", "ledger.contexts ++ [context]", "[context]", False),
+        ("successful-order-reversed", "ledger.contexts ++ [context]", "context :: ledger.contexts", False),
+        ("success-clears-failure", "[context], ledger.failed", "[context], false", False),
+        ("context-append-id", "ledger.contexts ++ [context]", "ledger.contexts ++ [id context]", True),
+    ])
+    cd_variants([("RSessionProgram", "rSession")], "RSessionProgram", "r_session_eval", [
+        ("raw-default-changed", "(next 0) 0 qs", "(next 1) 0 qs", False),
+        ("raw-query-key-lost", "encode (.inl key)", "encode (.inl [])", False),
+        ("raw-reply-lost", "(next reply.1) qr qs ledger reply.2", "(next 0) qr qs ledger reply.2", False),
+        ("raw-cap-not-spent", "(next reply.1) qr qs ledger reply.2", "(next reply.1) (qr + 1) qs ledger reply.2", False),
+        ("raw-cache-lost", "qr qs ledger reply.2", "qr qs ledger table", False),
+        ("refusal-spends-cap", "(next none) qr (qs + 1) ledger table", "(next none) qr qs ledger table", False),
+        ("admission-bypassed", "if rSessionAdmits ledger context then", "if true then", False),
+        ("search-context-randomness-lost", "randomizerUnder encode table context.1 context.2", "randomizerUnder encode table [] context.2", False),
+        ("search-context-message-lost", "randomizerUnder encode table context.1 context.2", "randomizerUnder encode table context.1 []", False),
+        ("search-reply-lost", "(next reply.1) qr qs\n", "(next none) qr qs\n", False),
+        ("search-cap-not-spent", "(next reply.1) qr qs\n", "(next reply.1) qr (qs + 1)\n", False),
+        ("search-ledger-lost", "(rSessionAfterGrind ledger context reply.1) reply.2", "ledger reply.2", False),
+        ("search-cache-lost", "(rSessionAfterGrind ledger context reply.1) reply.2", "(rSessionAfterGrind ledger context reply.1) table", False),
+        ("raw-key-id", "encode (.inl key)", "encode (.inl ((fun x => x) key))", True),
+    ])
+    cd_variants([("RSessionInvariant", "RSessionInvariant")], "RSessionExhaustion", "r_session_exhaustion_bound", [
+        ("session-history-premise-lost", "BoundedRPublicHistory history table", "True", False),
+        ("session-origin-premise-lost", "RContextHistory ledger.contexts.toFinset table", "True", False),
+        ("session-replay-premise-lost", "AcceptedRContexts ledger.contexts.toFinset table cfg.seed cfg.root cfg.trials\n        (by simpa using cfg.bound)", "True", False),
+    ])
+    cd_variants([("RSessionTransfer", "rIndependentSession")], "RSessionTransfer", "r_independent_session_refinement", [
+        ("independent-cache-prefilled", "fun _ => none", "fun _ => some 0", False),
+        ("independent-raw-cap-lost", "client qr qs emptyRGrindLedger", "client 0 qs emptyRGrindLedger", False),
+        ("independent-grind-cap-lost", "client qr qs emptyRGrindLedger", "client qr 0 emptyRGrindLedger", False),
+        ("independent-client-id", "id cfg client qr qs", "id cfg ((fun x => x) client) qr qs", True),
+    ])
+    cd_variants([("RSessionTransfer", "rSharedSessionAt")], "RSessionTransfer", "r_shared_session_at_refinement", [
+        ("shared-secret-fixed", "prefixedPrivateInput secret", "prefixedPrivateInput 0", False),
+        ("shared-cache-prefilled", "fun _ => none", "fun _ => some 0", False),
+        ("shared-raw-cap-lost", "cfg client qr qs", "cfg client 0 qs", False),
+        ("shared-grind-cap-lost", "cfg client qr qs", "cfg client qr 0", False),
+    ])
+    cd_variants([("RSessionTransfer", "rSharedSession")], "RSessionTransfer", "r_shared_session_refinement", [
+        ("shared-prefix-unsampled", "digestDraw.bind", "(PMF.pure 0).bind", False),
+    ])
+    cd_variants([("RSessionTransfer", "rSessionCharge")], "RSessionTransfer", "r_shared_session_exhaustion", [
+        ("session-call-union-lost", "(qs : ℝ≥0∞) *", "(1 : ℝ≥0∞) *", False),
+        ("session-prior-search-history-lost", "rExhaustionCharge (qr + qs * cfg.trials)", "rExhaustionCharge qr", False),
+        ("session-prefix-charge-lost", "((qr + qs * cfg.trials : ℕ) : ℝ≥0∞) / 2 ^ 256", "0", False),
+        ("session-prefix-budget-lost", "((qr + qs * cfg.trials : ℕ) : ℝ≥0∞) / 2 ^ 256", "(qr : ℝ≥0∞) / 2 ^ 256", False),
+        ("session-charge-cap-id", "(qs : ℝ≥0∞) *", "((id qs : ℕ) : ℝ≥0∞) *", True),
+    ])
+
+    cd_variants([("RSessionExhaustion", "rSessionFailure")], "RSessionExhaustion", "", [
+        ("returned-failure-hidden", "out.ledger.failed", "false", False),
+        ("returned-failure-forced", "out.ledger.failed", "true", False),
+        ("returned-failure-id", "out.ledger.failed", "id out.ledger.failed", True),
+    ], check_override="""theorem checked :
+    rSessionFailure (⟨(), ⟨[], true⟩, 0, 0⟩ : RGrindResult Unit) = true ∧
+    rSessionFailure (⟨(), ⟨[], false⟩, 0, 0⟩ : RGrindResult Unit) = false := by
+  exact ⟨rfl, rfl⟩
+""")
+
     return out

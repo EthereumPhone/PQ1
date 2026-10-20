@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Separate Lean PMF finite initialized byte-signature C10 forgery probability bound. The exact 4008-byte bijection preserves R,13 secrets,12x11 FORS paths and two43-node WOTS/full big-endian u32/9-node XMSS layers. Every well-formed structured signature and every4008-byte vector roundtrips; malformed lengths refuse before verification. An independently defined finite adaptive byte-session and direct keygen/driver refine the structured game with identical result,ledger,caps and full oracle cache. Initialized final Boolean PMFs agree exactly, inheriting the existing six-case real-valued and capped shared-oracle forgery bounds without additional loss or premises. Kernel examples retain bounds below2^-50 at2^20rawqueries and below2^-34 at2^24rawqueries with65536signatures and ten-million-trial grinders; the2^32rawquery bound remains uninformative. Preserve all2449prior statements,1407typed fixture objects,prior non-umbrella proof-module bytes and52manual bindings. These are conservative ideal-model bounds, not concrete C10 security levels. Unbounded-adversary representation,repeated-grinder freshness,concrete SHA/Rust/EasyCrypt execution,cross-kernel,QROM andphysical claims remain outside this result. Source pins detect drift,not correspondence.",
+  "scope": "Separate Lean PMF finite initialized C10 byte-forgery bound and context-aware adaptive R-grinding availability. The existing exact 4008-byte codec and finite byte-game refinement retain the six-case forgery bound unchanged. For the separate finite R/H_msg session, actual private-cache provenance derives freshness for new valid request contexts; successful old contexts replay their full cached counter/R/digest. An independent direct interpreter and compiler agree on the full result, chronological duplicate-preserving context ledger, caps, failure and cache. Malformed or capped searches refuse without spending a cap; admitted exhaustion spends one and persistently refuses later searches while raw calls remain available. The initialized first-exhaustion bound has no caller-supplied freshness premise and adds the existing public-prefix charge in the shared experiment, with finite real-valued and capped forms. A kernel example bounds exhaustion by2^-40 for ten-million trials at caps2^32rawqueries and2^20searches. Preserve all2550prior theorem statements,1471typed fixture objects,prior non-umbrella proof-module bytes and52manual bindings. Full C10 keygen/sign availability still needs explicit provenance composition with its other private callers. These are conservative ideal-model bounds, not concrete security levels. Unbounded-adversary representation, concrete SHA/Rust/EasyCrypt execution, cross-kernel, QROM and physical correspondence remain open. Source pins detect drift, not correspondence.",
   "sources": {
-    "Audit.lean": "fbdbeb28c61c6c7a99f7336f06bacb901bba2215494467792ad6f4cdfd7dcb52",
+    "Audit.lean": "bf4f5a512c891fcce4877f59af2cff675465813599aef5b9407dbd6d4bb6c242",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -235,6 +235,23 @@
     "C10Probability/QueryProgram.lean": "53a204aa3f00c8f2558bcfc68b3c21235eb9644b78f809b156b338375d74f697",
     "C10Probability/QueryReplay.lean": "94120c9e56a74c7041e6462292651238026e5141c9f8c76b837a61a3b30590b9",
     "C10Probability/QueryTrace.lean": "e696e8c73cf106f4664acdb8d706abe99906bd79320fa1e9e27bfb83de7e8afd",
+    "C10Probability/RContext.lean": "7724dcc028697d90c34e6cd54889db8a28fd9cfa96b455abc8e3baa6acc7ccdb",
+    "C10Probability/RContextExamples.lean": "0f9dc0b01be00d8e774e4a34cda5dac4efaa11af5893f24bca7447212595bdb6",
+    "C10Probability/RContextExhaustion.lean": "5c3e452b980801b167c23ceacce237b60be517f8597d3e97da06bc7169256899",
+    "C10Probability/RContextHistory.lean": "21a584d077a27a111681962a3d96dbd1bf3d3b369c74e0e88824f7eaa5da4d74",
+    "C10Probability/RContextReplay.lean": "2b0127aef11883b8087cbcb44950b21c517d30f11c4a74f4f0c1c1b4550a6d24",
+    "C10Probability/RPublicHistory.lean": "1ce711be5d4630da6d695ab05cb52d27f68c4c20d0924c038524bf717d658825",
+    "C10Probability/RSessionBranches.lean": "bec6e13f0d6e910b04a8fcd12899aefb98d70ea53431a0b3b2cc98b8a3773412",
+    "C10Probability/RSessionExamples.lean": "4d49300dc674457637bc3ab632b9ba877358ec56dfa4105a7cf1f49724865fe4",
+    "C10Probability/RSessionExhaustion.lean": "4853469e45611e534aa2a1f0e98518bf6f6da6d77c5addf62b0d19fdaa30702a",
+    "C10Probability/RSessionInvariant.lean": "ddf0ad3120a70c1e97ecd81d2f533aa6e182fa745f3a39fd15eada41ecf9b3b4",
+    "C10Probability/RSessionMass.lean": "b2279fe88078de5915a01b7f7ab4189d595ddcae5d2d66c8a267bb468f06d227",
+    "C10Probability/RSessionNumeric.lean": "07c994bb858829d2655f8e96dbe27286446ba1ff4e32ff92fc3ef69141219230",
+    "C10Probability/RSessionProgram.lean": "08af4481ac6421ecbe129439026ee0ec67d3f36d07616c3450627a8017c53d02",
+    "C10Probability/RSessionReal.lean": "1d2315fd7bdb2265c7e39626503f868cdbb8ebfe980640a9dbb6e1e64e1d15a4",
+    "C10Probability/RSessionState.lean": "e867881e2b7eecfad94d3af2a6d53cc14818cb64f7211aa49f60238936eb9b2a",
+    "C10Probability/RSessionTransfer.lean": "8cd1197c5480ca5296745413aa7369cde5ea24f43c0154be90f9355b01b4ee68",
+    "C10Probability/RSessionTypes.lean": "0a53239f0f4d9fce95e1e66f29d92ee0c60eaf1cf82532d8f24d5840e2cecc18",
     "C10Probability/RandomGrind.lean": "7f9c076e0c7ba2488795e34f122ee5f567137065f9c549130984f4b21e30b8a5",
     "C10Probability/Randomizer.lean": "7ccc0bfe613ba79995be833b2c746e24a41f038bb34848c506596d5c984f70d2",
     "C10Probability/RandomizerReplay.lean": "3aef67375c61d5d8ef6f3cad7354a15c5ed25ae37afbb21926bd6abeae048185",
@@ -375,7 +392,7 @@
     "C10Probability/WotsTarget.lean": "6e5cea220033931af9b2dd3bbc4982751f5a1d979ec34c7f671e47de7cc7349b",
     "C10Probability/WotsTreeOpening.lean": "024e8aef89c4e6ab9b3484bea5ae614bf0850e3faa59304654fa5a8a13187cdc",
     "C10Probability/WotsTwoLayers.lean": "59535f358a648cf44a39c11a5b3080430bdcfadb9ed98a5dcbcf56cea4d21a0b",
-    "C10Probability.lean": "d45b4139365fe935d72655e475b3d48fe064917f9e0e22cfd188000f18e46e42"
+    "C10Probability.lean": "aa5b16d1e92455f6167f2f7333e49df2a58329365d5f106f6ef2fe181c25bc21"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -6881,6 +6898,406 @@
     "C10Probability.randomizedTrace_empty_covered": {
       "file": "C10Probability/QueryTrace.lean",
       "statement_sha256": "172d71cd98298d727560eaab14691a2fb69a2d9625f7318d1c890190de34e1f7"
+    },
+    "C10Probability.r_context_tail_parts": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "3c3d392fa9e0094664ed53f04328f591e3e841c280a64e5a7b9df1720f4f217c"
+    },
+    "C10Probability.r_context_tail_length": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "4c17b7d2b95940a3839a17cb31cff81d962fc08e6cf5514938e3d937ed473b79"
+    },
+    "C10Probability.r_context_tail_width": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "a65716ec98788269fd9a7cf65666f6770620d24dd8586891651e0dd1ea41a658"
+    },
+    "C10Probability.r_context_tail_injective": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "cba659e8e4900923cb1091cb37f15151a4988ac4cdc0af81ec8200190e86b7d1"
+    },
+    "C10Probability.r_context_distinct_tails": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "9071650867fd986534b93ea41d770ac81f999e630b58012a9b24b0951a30fb3b"
+    },
+    "C10Probability.r_context_tail_counter_injective": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "2c119d4942f968c1bafb091fed88d1f985da16b0c97e8563fec8209a18f2877e"
+    },
+    "C10Probability.r_context_schedule_origin": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "9f6dbff41697c219497768421fcf3c7409b29117ad5c8f21d3336bf59e207028"
+    },
+    "C10Probability.r_context_history_empty": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "e0e800e1e76b6da9cd2dfba487cb9ae94f756a345910f4c3736099504503e27e"
+    },
+    "C10Probability.r_context_history_mono": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "921007a34a23e0003fbe042d23db2af41d2e913bb9a22ce5159de730d1a8f4d3"
+    },
+    "C10Probability.r_context_unseen_fresh": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "66bb3ca48ff4e3292771da66d7658cca5214dbca60b50ac07b1f1cdf606c5dbf"
+    },
+    "C10Probability.r_context_unseen_schedule_fresh": {
+      "file": "C10Probability/RContext.lean",
+      "statement_sha256": "f1195c5bf96095b4aebf03abfbdc2bad78a6addfc5239e674c234bef24e609d3"
+    },
+    "C10Probability.r_context_tail_zero_vector": {
+      "file": "C10Probability/RContextExamples.lean",
+      "statement_sha256": "166ca1fdb57984b92789b57d22521b30bcd8ebd4fe4683b5cf0676eeec0feec7"
+    },
+    "C10Probability.r_context_tail_max_vector": {
+      "file": "C10Probability/RContextExamples.lean",
+      "statement_sha256": "46dd7f4382d0ce32172c7c8250ed4e5e74745ccc71fefad8d488424daa69239d"
+    },
+    "C10Probability.r_context_optional_randomness_vectors": {
+      "file": "C10Probability/RContextExamples.lean",
+      "statement_sha256": "4f56ba31e6a5f7f08dd0211870cb3522c41bbb2ea92782ed289569c7ac30adb5"
+    },
+    "C10Probability.r_context_malformed_resegmentation": {
+      "file": "C10Probability/RContextExamples.lean",
+      "statement_sha256": "a41e9b32bf63d32ade234ebac69aab07bd2712a73df16e0b33aab4fbf11cfb32"
+    },
+    "C10Probability.r_context_distinct_message_vector": {
+      "file": "C10Probability/RContextExamples.lean",
+      "statement_sha256": "0884f966c5a27b38c591eee8870434f2f826df169a6da6d91b2951d64222e904"
+    },
+    "C10Probability.r_exhaustion_charge_mono": {
+      "file": "C10Probability/RContextExhaustion.lean",
+      "statement_sha256": "eed376a46e3d14ebccf75c0a63a2aa9ef5b21a12486de3869b3b6bbf74b15df9"
+    },
+    "C10Probability.r_private_fresh_result": {
+      "file": "C10Probability/RContextExhaustion.lean",
+      "statement_sha256": "79b56f8cdd75facab5ebbc3378ce81216540d26710519ac5982c16b1bc39673a"
+    },
+    "C10Probability.r_private_fresh_none": {
+      "file": "C10Probability/RContextExhaustion.lean",
+      "statement_sha256": "0ba85328d3598a895a91f85f118d50e71110687ef43892b178fb6bbe50cb7bee"
+    },
+    "C10Probability.r_private_fresh_exhaustion": {
+      "file": "C10Probability/RContextExhaustion.lean",
+      "statement_sha256": "d27bfaeecfbbbdaf825db3f626e11e683e6ec9fc5337459f4ec9fc7cd02c72a1"
+    },
+    "C10Probability.r_context_exhaustion_bound": {
+      "file": "C10Probability/RContextExhaustion.lean",
+      "statement_sha256": "5b4da07e9b56430da2de85a5193dfc76637637e57dd3a7c8eb9ea454891b91d3"
+    },
+    "C10Probability.r_context_history_public_query": {
+      "file": "C10Probability/RContextHistory.lean",
+      "statement_sha256": "626b4ef110f77ef5d13ca31f30a67e4806dec8a69811de876e51aa6f5216ff22"
+    },
+    "C10Probability.r_context_history_private_query": {
+      "file": "C10Probability/RContextHistory.lean",
+      "statement_sha256": "e5d04b0632a1c1920040cfd2ff7feb2d93c395405f4bcc74ef3cd47ed6f31de3"
+    },
+    "C10Probability.r_context_history_derived": {
+      "file": "C10Probability/RContextHistory.lean",
+      "statement_sha256": "e5d8e91113c59e4e40bab27f67dcb8f49f94c242b7725949330c2da6b25fded3"
+    },
+    "C10Probability.r_context_history_search": {
+      "file": "C10Probability/RContextHistory.lean",
+      "statement_sha256": "5ffc92efeb17112551ffed0e4219f6e1cc8f4abe0a3d89654aede553c9289f02"
+    },
+    "C10Probability.accepted_r_contexts_empty": {
+      "file": "C10Probability/RContextReplay.lean",
+      "statement_sha256": "5570d7fae6fd94c8d245a82568b80161f5cddf199bd54a4ee4a37623daf91cbd"
+    },
+    "C10Probability.accepted_r_contexts_extend": {
+      "file": "C10Probability/RContextReplay.lean",
+      "statement_sha256": "2a378761fa5614e650961422c868e6668a7577d14327ec5e481a930794938869"
+    },
+    "C10Probability.r_context_replay_exact": {
+      "file": "C10Probability/RContextReplay.lean",
+      "statement_sha256": "4e8a6e222e5a0ebedf880b0cba560a292537fee4191a3b1f0719570543cd3a96"
+    },
+    "C10Probability.r_context_replay_from_support": {
+      "file": "C10Probability/RContextReplay.lean",
+      "statement_sha256": "94f47769f60926b0fedf7159795c22aca176a1cb627aa9701b439fdd09a197c5"
+    },
+    "C10Probability.r_context_replay_later": {
+      "file": "C10Probability/RContextReplay.lean",
+      "statement_sha256": "7be902a40a9e78e4087e1e20e4016aef57eaadbba58ecba6aae62447bae1869b"
+    },
+    "C10Probability.accepted_r_contexts_insert_success": {
+      "file": "C10Probability/RContextReplay.lean",
+      "statement_sha256": "a4902f25d0187ecbe476f8ab19021c8256b30faa2b57fe3bab88a8553979a00e"
+    },
+    "C10Probability.accepted_r_context_has_no_exhaustion": {
+      "file": "C10Probability/RContextReplay.lean",
+      "statement_sha256": "116d33fdc416cfb88c71d5ac3aca98117243ae3fa9404fb1dc008b3bee780f1f"
+    },
+    "C10Probability.r_public_history_empty": {
+      "file": "C10Probability/RPublicHistory.lean",
+      "statement_sha256": "7e8e1dca40ce701774a7094765683247db944a16c6203b0760764dbcdef128ca"
+    },
+    "C10Probability.r_public_history_mono": {
+      "file": "C10Probability/RPublicHistory.lean",
+      "statement_sha256": "329ea225c331e16e55b821e00df5e00ea7890c5c134f65adedd99ed8b895f556"
+    },
+    "C10Probability.r_public_history_query": {
+      "file": "C10Probability/RPublicHistory.lean",
+      "statement_sha256": "98da172a89356a6e28fadf309252ebcfa0a892c98b045d2977d233361c417110"
+    },
+    "C10Probability.r_public_history_execution": {
+      "file": "C10Probability/RPublicHistory.lean",
+      "statement_sha256": "c9db95456a007e2945c6408863b2f78f689fc8d5e5ca5efdc032552975308f40"
+    },
+    "C10Probability.r_public_history_search": {
+      "file": "C10Probability/RPublicHistory.lean",
+      "statement_sha256": "f7cd7431a01928b2042916dfd0a0c620a0c6b2004c604483da7e55ded72a506f"
+    },
+    "C10Probability.r_public_history_hmsg_card": {
+      "file": "C10Probability/RPublicHistory.lean",
+      "statement_sha256": "3b506667c3d3490807a1e8f3ea5b44a90c678eb3c76a7fa434a7a675da4925c2"
+    },
+    "C10Probability.bounded_r_public_history_hmsg_card": {
+      "file": "C10Probability/RPublicHistory.lean",
+      "statement_sha256": "e5d2b9cacc3d273d38d31aa6af0fa231fd066348486afc48a25587c7bb1433ba"
+    },
+    "C10Probability.r_session_hash_capped": {
+      "file": "C10Probability/RSessionBranches.lean",
+      "statement_sha256": "9da2a39e464d3d3e34a9d55f482e4c039529bb892a282abfd89a359eaef13e2d"
+    },
+    "C10Probability.r_session_hash_live": {
+      "file": "C10Probability/RSessionBranches.lean",
+      "statement_sha256": "c1a19b739a0f34f415b91c7fe58d3aadb013072874cf9f19d86bd781f6b7b54c"
+    },
+    "C10Probability.r_session_grind_capped": {
+      "file": "C10Probability/RSessionBranches.lean",
+      "statement_sha256": "039b0d5d13e34b2a150b8e2b2bd55aad3f0e8add4897eac8c33131386e1cedcd"
+    },
+    "C10Probability.r_session_grind_refused": {
+      "file": "C10Probability/RSessionBranches.lean",
+      "statement_sha256": "fb90d69db14037bf314e102a9dba915f7692acf57beb5f7807f0494ac26ba4c0"
+    },
+    "C10Probability.r_session_grind_exhausted": {
+      "file": "C10Probability/RSessionBranches.lean",
+      "statement_sha256": "1bb9233d8901dd6bf6f4f3be329662ad72b98977ad01c8e678a08b880e1d45b0"
+    },
+    "C10Probability.r_session_grind_returned": {
+      "file": "C10Probability/RSessionBranches.lean",
+      "statement_sha256": "a23d3f1767cbb79e1c5a7f5a4964400182a63d5ab76f4a53878d9dca75279297"
+    },
+    "C10Probability.r_session_admission_vectors": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "dddb3b3e1b8a2685ab9832baee220cda4f35b822300e98e1794ae6daec12a912"
+    },
+    "C10Probability.r_session_hash_after_failure": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "8cebc9c4b2c90645aeb4c4ab203c9ebc1c38b3cbfda784032d29a9088b46c45a"
+    },
+    "C10Probability.r_session_hash_cap_default": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "53ad0bc93b20915d1fb585ccb1929d5228d809f82dc142259d171652767a2fc1"
+    },
+    "C10Probability.r_session_grind_cap_default": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "5352416b6d9c7c75fef2edc7a2234071789303840879b56f4af1a3a465fcdd20"
+    },
+    "C10Probability.r_session_bad_context_keeps_cap": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "856e2647a7c1d62a8e10d456b015fda9769d4643878b53750728fb1d40327169"
+    },
+    "C10Probability.r_session_zero_trials_absorb": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "aa62e19d801a14876d7062524c5d784a0c5a26e4c1051219fc5a9f9d10b861a6"
+    },
+    "C10Probability.r_example_cached_search": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "509d5599896f91bbd836057c0a63abf5f87b2071824e8ac43f22b89d034a2f39"
+    },
+    "C10Probability.r_session_two_cached_searches": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "69ab3dbc08fb7469ab9bc36ad824cfb136b9fefa15c07ab95357a29be96eb685"
+    },
+    "C10Probability.r_session_public_between_replays": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "38d670da1300821b8fc5cf892164e94c5833d0a92c8d01019c3d48bb6600f99c"
+    },
+    "C10Probability.r_session_zero_grind_cap_exhaustion": {
+      "file": "C10Probability/RSessionExamples.lean",
+      "statement_sha256": "3f22fc4f023aff40fc8700668020cb209e798b98bd5f9ab436b697ef60399f65"
+    },
+    "C10Probability.r_session_exhaustion_bound": {
+      "file": "C10Probability/RSessionExhaustion.lean",
+      "statement_sha256": "293fa3310f9982422ca7c5066e2999052668dd6d85dd791fda66bcff362230f1"
+    },
+    "C10Probability.r_session_initialized_exhaustion": {
+      "file": "C10Probability/RSessionExhaustion.lean",
+      "statement_sha256": "390815a1ae7d24e7dbb61f3ebda1b834d08020cc0383a09a16b6d24b6f6f0c0b"
+    },
+    "C10Probability.r_session_randomized_exhaustion": {
+      "file": "C10Probability/RSessionExhaustion.lean",
+      "statement_sha256": "9a9129f480b41b0ed62a2b5b390125fed1b3334e58982e33446bee4faf46a596"
+    },
+    "C10Probability.r_session_invariant_empty": {
+      "file": "C10Probability/RSessionInvariant.lean",
+      "statement_sha256": "c51a524f4f522c78096671323be73d73193e2f93f7ba0f862246bd441b830d11"
+    },
+    "C10Probability.r_session_invariant_mono": {
+      "file": "C10Probability/RSessionInvariant.lean",
+      "statement_sha256": "86b34f10b34352645b3f29a8acc77a2c03e98f4f1229c513025728f8216340dd"
+    },
+    "C10Probability.r_session_invariant_query": {
+      "file": "C10Probability/RSessionInvariant.lean",
+      "statement_sha256": "1c78e9aa82575e5491b9a12a84a39ac740c53dbd234fa998ee3bcf8d8dc90fed"
+    },
+    "C10Probability.r_session_invariant_search": {
+      "file": "C10Probability/RSessionInvariant.lean",
+      "statement_sha256": "858ec3f6dafea209456620fe6ae6d1a566c3ba62496f3d7b78ac0a84818a4a6d"
+    },
+    "C10Probability.r_session_preserves_invariant": {
+      "file": "C10Probability/RSessionInvariant.lean",
+      "statement_sha256": "e2b7ad7389335d4d6e9b7711287bc9fc77954e58ddb084fe188faff204dbb77a"
+    },
+    "C10Probability.r_bind_flag_bound": {
+      "file": "C10Probability/RSessionMass.lean",
+      "statement_sha256": "9b947e7780686e7e44d12ca8e320d98e1afeb73175a6c8a632a7033697c858ff"
+    },
+    "C10Probability.r_bind_first_none_bound": {
+      "file": "C10Probability/RSessionMass.lean",
+      "statement_sha256": "7c3b2207993348898dc8d897e1696dad17fcecf68d96c084ac1062d48806f552"
+    },
+    "C10Probability.r_rejection_block_bound": {
+      "file": "C10Probability/RSessionNumeric.lean",
+      "statement_sha256": "45be738cf560e357b9e08fd4b4a36b85b230c3d703002fd2d106345f9cd1206b"
+    },
+    "C10Probability.r_signing_geometric_bound": {
+      "file": "C10Probability/RSessionNumeric.lean",
+      "statement_sha256": "30eef9d54eeb231abb96cfa527121a1d14d099465de0b8631fe4396e649039fb"
+    },
+    "C10Probability.r_session_charge_of_tail_bound": {
+      "file": "C10Probability/RSessionNumeric.lean",
+      "statement_sha256": "d01f1426d414b0a7ea0400eb8e15ad066b1d3f753b710c6a1192a311beb9cfc7"
+    },
+    "C10Probability.r_session_charge_quota_bound": {
+      "file": "C10Probability/RSessionNumeric.lean",
+      "statement_sha256": "377eb4e4a187b00e2864ee526ca1afa64ac5d556b94672f83d4264b054a95dc9"
+    },
+    "C10Probability.r_signing_session_concrete_exhaustion": {
+      "file": "C10Probability/RSessionNumeric.lean",
+      "statement_sha256": "c812c17f271a676a236b4c58b03a0f881e67aec52c7852663f6e71555dbc7243"
+    },
+    "C10Probability.r_session_eval": {
+      "file": "C10Probability/RSessionProgram.lean",
+      "statement_sha256": "189a95482951ba04fdc932089e3fdf1fcecbb51e3c0337d236915a55a866cecd"
+    },
+    "C10Probability.r_session_map": {
+      "file": "C10Probability/RSessionProgram.lean",
+      "statement_sha256": "fb84d60d1476329a9d4afa2bafe6ba6df2ef0b4dfb0f427a0f9c33a66e9150d4"
+    },
+    "C10Probability.r_session_public": {
+      "file": "C10Probability/RSessionProgram.lean",
+      "statement_sha256": "8eea53b22b7a214ed5163d335ac939e5791d28f5bd2ff4aaaa99f32f3d36cd8e"
+    },
+    "C10Probability.randomizer_under_independent": {
+      "file": "C10Probability/RSessionProgram.lean",
+      "statement_sha256": "ab2dd421f22fa16e8804a7ed1fe173e7e1890e2cbb71d8ba32eae79042d8cf24"
+    },
+    "C10Probability.r_exhaustion_charge_ne_top": {
+      "file": "C10Probability/RSessionReal.lean",
+      "statement_sha256": "e74811c88bb89f1c71c41af70fe8d0a92b1e5fd0144d76b1074c5128026eb797"
+    },
+    "C10Probability.r_exhaustion_charge_real": {
+      "file": "C10Probability/RSessionReal.lean",
+      "statement_sha256": "5502773dbd1943aa8a82b1a68d4bb4d6a69946c2fa9858c595ffd5346b2ceafb"
+    },
+    "C10Probability.r_session_charge_ne_top": {
+      "file": "C10Probability/RSessionReal.lean",
+      "statement_sha256": "c66a98f68b3f8d2f74c3bbe75a1c104583786931b303c5d9b55de6209911c65c"
+    },
+    "C10Probability.r_session_charge_real": {
+      "file": "C10Probability/RSessionReal.lean",
+      "statement_sha256": "67f0022891166178d34210f3227780ff4f3a16c2377cc218d3a925260ee0263a"
+    },
+    "C10Probability.r_shared_session_exhaustion_real": {
+      "file": "C10Probability/RSessionReal.lean",
+      "statement_sha256": "d9a5ed5b0e3aed5489ae8f63207f952216004f07292869ca79d90d6201f66b5b"
+    },
+    "C10Probability.r_shared_session_exhaustion_real_capped": {
+      "file": "C10Probability/RSessionReal.lean",
+      "statement_sha256": "4fd2e80aba596e6c03bb68149ecc321a7884424fa6c5c21628e0814d4fa25e1f"
+    },
+    "C10Probability.r_signing_session_exhaustion_real": {
+      "file": "C10Probability/RSessionReal.lean",
+      "statement_sha256": "2dc333b3bdb92525f91f77cafed2cf9e174d7a0c0c92f2efce706ffb298ab845"
+    },
+    "C10Probability.r_session_after_grind_prefix": {
+      "file": "C10Probability/RSessionState.lean",
+      "statement_sha256": "53529dbf4a4d36f5f4abe36b6f0742cb85d3611de41cccdcc3da2fdb0fe1189f"
+    },
+    "C10Probability.r_session_after_grind_failed": {
+      "file": "C10Probability/RSessionState.lean",
+      "statement_sha256": "07c1c0af722034aec7836d4933db09de2f606bcd44b5978fcc51fbd63b944e96"
+    },
+    "C10Probability.r_session_after_grind_length": {
+      "file": "C10Probability/RSessionState.lean",
+      "statement_sha256": "26c68c580d06d84dfbd3161af753d8b89ca37a2160728baa177e861c574620c8"
+    },
+    "C10Probability.r_session_state": {
+      "file": "C10Probability/RSessionState.lean",
+      "statement_sha256": "52516d119dfb78fb36172ba992f3cea4c3402b45a69860e331dee56f19244f2e"
+    },
+    "C10Probability.r_session_context_validity": {
+      "file": "C10Probability/RSessionState.lean",
+      "statement_sha256": "21df410d9f292a102a3bda24315c69f4d913f7e006dc8c3ae2b7426d3437dc07"
+    },
+    "C10Probability.r_session_programs_public": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "a33394f72ac33b6415a2e1a75a20761d92358cc8db44a384c129a462f3b04e61"
+    },
+    "C10Probability.r_independent_session_refinement": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "ed837102d84fdf02c980d82dcc8c9a6d71aef5af955f414318d2a93eec31a3d6"
+    },
+    "C10Probability.r_shared_session_at_refinement": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "043bf37489c31e6777e6cf73c4c67676ea154baf16dad410eeb357509f2a5c6b"
+    },
+    "C10Probability.r_shared_session_refinement": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "818fffc95cd9b2bb819b45ca7292832603f5b2aed3897f366dca046e81ebcf55"
+    },
+    "C10Probability.r_session_returned_event_bounds": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "cac7f2368c6e9741185c4521f033e3e39dbff082eb70050d9810932d0a5f9fad"
+    },
+    "C10Probability.r_session_failure_event": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "d5a46de4d57ce30f8b4064d8d6d0f5abf21219908702d27cdecaf8beafe9fe5a"
+    },
+    "C10Probability.r_independent_session_exhaustion": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "5f39056b8ae241b51417fd0928fbf63d2ec0869786c851f5e5e45da70e93e447"
+    },
+    "C10Probability.r_shared_session_exhaustion": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "c8608cf0672db1b393dadc6c83520e21c73589958be7aca8537fb12feee69cce"
+    },
+    "C10Probability.r_shared_session_exhaustion_capped": {
+      "file": "C10Probability/RSessionTransfer.lean",
+      "statement_sha256": "540afa060982fa8f63ab79c3a9f0e4720a27a89a575a69573d1f0920685a7c1b"
+    },
+    "C10Probability.r_session_admits_iff": {
+      "file": "C10Probability/RSessionTypes.lean",
+      "statement_sha256": "a82b942e6c6b6e7e231412acf1bf9456a1908e9665976ac2b18967220c0ba11d"
+    },
+    "C10Probability.r_session_failed_refuses": {
+      "file": "C10Probability/RSessionTypes.lean",
+      "statement_sha256": "4d366afc6bcc5f58945164a4feb9b3d774ae4cdc03ab5903b84baab4272d2a61"
+    },
+    "C10Probability.r_session_malformed_refuses": {
+      "file": "C10Probability/RSessionTypes.lean",
+      "statement_sha256": "1eaf83e3dd0e1fd33aa8532128348bdbbc9066f90697891ba774676a3297b1b4"
+    },
+    "C10Probability.r_session_none_absorbs": {
+      "file": "C10Probability/RSessionTypes.lean",
+      "statement_sha256": "d79cd8a1a04377abe62c7b3566207f15126c4fbc509cb6cc750bfcfd73afe573"
+    },
+    "C10Probability.r_session_some_records": {
+      "file": "C10Probability/RSessionTypes.lean",
+      "statement_sha256": "0272b4a0cba8c594483dae9b0ab871db163fc45b957ead3583f2acc48eeb4202"
     },
     "C10Probability.randomMemoGrind_schedule": {
       "file": "C10Probability/RandomGrind.lean",
