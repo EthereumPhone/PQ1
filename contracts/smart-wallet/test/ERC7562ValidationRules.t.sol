@@ -208,8 +208,9 @@ contract ERC7562ValidationRulesTest is Test {
         _assertOnlySelfStorage("type2");
     }
 
-    /// Same for Type-1, which additionally INSTALLS an owner during the
-    /// validation phase — the write most likely to look alarming to a tracer.
+    /// Same for Type-1. Its validation phase writes only `bootstrapUses`;
+    /// the owner it authorises is installed later, in the execution phase
+    /// (pinned at the end of this test).
     function test_type1_validation_touches_only_own_storage() public {
         bytes memory slot1 = abi.encodePacked(SLOT1_PK_SEED, SLOT1_PK_ROOT);
         UserOperation06 memory op = _opFor(

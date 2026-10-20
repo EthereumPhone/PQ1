@@ -36,7 +36,7 @@ contract SPHINCsC10AsmTest is Test {
     /// Refresh paired with audit M-2 (drop misleading memory-safe
     /// annotation) and I-2 (add N-mask layout check on pkSeed/pkRoot).
     /// RE-PINNED 2026-05-27 to 0x919c…: the verifier SOURCE is UNCHANGED —
-    /// this is a metadata/toolchain-drift refresh, not a logic change (the
+    /// this was a metadata/toolchain-drift refresh, not a logic change.
     /// RE-PINNED (0x919c… → 0xf1ef…) for the FORS position-binding fix:
     /// the verifier now folds the hypertree leaf index `htIdx` into the
     /// four FORS ADRS words (leaf/auth-base/last-tree/roots) so each of the
@@ -46,16 +46,21 @@ contract SPHINCsC10AsmTest is Test {
     /// regenerated `c10_test_vectors.json` in the same commit.
     /// A3.1's Halmos/differential discharge is PENDING re-run against this
     /// codehash (AXIOM_STATUS.json).
+    /// RE-PINNED 2026-10-20 (0xf1ef… → 0x8fa6…, deploy 0xeb1e… → 0xfd55…):
+    /// the verifier SOURCE is UNCHANGED. The build now sets
+    /// `bytecode_hash = "none"` (foundry.toml), which drops the metadata hash
+    /// from the runtime code; the instructions are byte-identical.
     /// Any change here MUST be paired with a verifier source diff in
     /// the same commit + a justification in the commit message.
     /// Default profile (runs=200) verifier runtime codehash.
     bytes32 internal constant EXPECTED_RUNTIME_CODEHASH =
-        0xf1ef4ccee22e6b39446723232fe39761f089c7195941b2c12576956b38fcfef5;
+        0x8fa670d53df0fd63bc64505463f268256ffbb51e57f62d8a5a41f5bcec5cf2eb;
     /// Deploy profile (runs=999999) verifier runtime codehash — the
-    /// production build; byte-identical to the on-chain Base Mainnet verifier
-    /// at 0xdDE4D290… (see PINNED_CODEHASHES.md / DeployedBytecodeReproCheck).
+    /// production build the freeze-set verifier is deployed from (see
+    /// PINNED_CODEHASHES.md / DeployedBytecodeReproCheck). The 2026-06-12
+    /// Base Mainnet verifier at 0xdDE4D290… carries the older metadata hash.
     bytes32 internal constant EXPECTED_RUNTIME_CODEHASH_DEPLOY =
-        0xeb1e3fcd38c7cd5f7b08352c298b34bd114d83f7dbd755b122c41eda2aab2cc5;
+        0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989;
 
     /// The expected verifier codehash for the active optimiser profile, so
     /// `forge test` is clean under BOTH `default` and `deploy`.

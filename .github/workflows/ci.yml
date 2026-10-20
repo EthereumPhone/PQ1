@@ -11,18 +11,20 @@ name: CI
 #     contracts/smart-wallet/foundry.lock, but `lib/` is gitignored and they
 #     are NOT git submodules — so a clean CI checkout had nothing to compile
 #     against ("Unable to resolve imports"). The job now restores each lib at
-#     its EXACT foundry.lock rev, then runs the full default `forge test`
-#     (109 passed / 0 failed / 1 skipped — the skip is DeployedBytecodeReproCheck,
-#     which only runs under the deploy profile). The committed codehash pins
-#     (0xf1ef… verifier, 0x43c654… wallet) are canonical for exactly this
-#     foundry.lock lib set; an extra/missing lib perturbs solc metadata and
-#     therefore the codehash, so the restore must be lib-exact.
+#     its EXACT foundry.lock rev, then runs the full default `forge test`.
+#     Since 2026-10-20 the build sets `bytecode_hash = "none"`, so the
+#     committed codehash pins depend only on code and compiler settings; the
+#     restore stays lib-exact so CI compiles exactly what ships.
+#   * The same job then runs the deploy-profile (runs=999999) pin tests,
+#     including DeployedBytecodeReproCheck, which replays the production
+#     CREATE2 deploy and requires it to reproduce the firmware's CREATE2
+#     constants (proto/src/lib.rs → script/generated/PqsignerDeployment.sol).
+#     That makes contract/firmware address drift a red build (GitHub #672;
+#     docs/VULN-eth-mainnet-deployment-divergence.md).
 #
 # Intentionally NOT in CI (kept as local/manual gates — slow + need the
-# patched halmos toolchain): the `deploy` foundry profile (runs=999999) and
-# `make -C contracts/verification verify-bytecode` (the symbolic discharge).
-# Under the deploy profile DeployedBytecodeReproCheck reproduces the on-chain
-# Base Mainnet bytecode exactly (verified locally in a clean lib-exact tree).
+# patched halmos toolchain): `make -C contracts/verification verify-bytecode`
+# (the Halmos symbolic discharge) and `verify-kontrol`.
 
 on:
   push:
@@ -659,6 +661,14 @@ jobs:
       - name: forge test (default profile)
         working-directory: contracts/smart-wallet
         run: forge test
+      # Production build (runs=999999): codehash pins, the immutable-window
+      # lemma, and the deterministic-deploy replay against the firmware's
+      # CREATE2 constants. These self-skip under the default profile above.
+      - name: forge test (deploy profile pins + firmware CREATE2 constants)
+        working-directory: contracts/smart-wallet
+        env:
+          FOUNDRY_PROFILE: deploy
+        run: forge test --match-contract 'PinnedCodehashesTest|PinnedBytecodeImmutableLemmaTest|DeployedBytecodeReproCheckTest'
 
   gate-enforcement:
     name: G1 — gate-enforcement lint (every soundness gate fires on its surface)

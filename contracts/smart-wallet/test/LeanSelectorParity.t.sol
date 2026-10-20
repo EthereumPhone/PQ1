@@ -11,10 +11,11 @@ import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 ///
 ///         The Lean model in
 ///         `contracts/verification/lean/SphincsCVerify/Wallet/ValidateUserOp.lean`
-///         hard-codes four function selectors used by `_validateSignature`'s
+///         hard-codes the three function selectors used by `_validateSignature`'s
 ///         role-split enforcer (`bootstrap` ↔ `addOwnerBytes`, `slot` ↔ one
-///         of `executeWithOffchainCount` / `executeBatchWithOffchainCount` /
-///         `removeOwnerAtIndex`). Any ABI drift between Solidity and Lean
+///         of `executeWithOffchainCount` / `executeBatchWithOffchainCount`).
+///         Owner removal (`removeOwnerAtIndex`) was deleted before launch and
+///         is in neither model. Any ABI drift between Solidity and Lean
 ///         would invalidate the `solidityWallet_compiles_correctly`
 ///         bridge axiom — this test catches such drift at PR time.
 ///
@@ -44,8 +45,14 @@ contract LeanSelectorParityTest is Test {
         assertEq(impl.executeBatchWithOffchainCount.selector, bytes4(0x7a389933), "Lean selector drifted: executeBatchWithOffchainCount");
     }
 
-    /// `bytes4(keccak256("removeOwnerAtIndex(uint256,bytes)")) = 0x89625b57`.
-    function test_leanParity_removeOwnerAtIndex_selector() external view {
-        assertEq(impl.removeOwnerAtIndex.selector, bytes4(0x89625b57), "Lean selector drifted: removeOwnerAtIndex");
+    /// The deleted removal function, `bytes4(keccak256(
+    /// "removeOwnerAtIndex(uint256,bytes)")) = 0x89625b57`, must not
+    /// dispatch: the Lean `Selector` set no longer has it, and neither may
+    /// the bytecode. (The wallet has no fallback, so any unknown selector
+    /// reverts.)
+    function test_leanParity_removeOwnerAtIndex_selector_absent() external {
+        (bool ok,) =
+            address(impl).call(abi.encodeWithSelector(bytes4(0x89625b57), uint256(1), new bytes(64)));
+        assertFalse(ok, "removeOwnerAtIndex must not exist");
     }
 }

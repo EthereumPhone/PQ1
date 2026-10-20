@@ -20,15 +20,17 @@ import {PqsignerProto} from "./generated/PqsignerProto.sol";
 ///
 ///         **Deployment model**: this contract is the shared
 ///         *implementation* behind ERC-1967 proxies. Every user wallet is a
-///         ~55-byte proxy that `DELEGATECALL`s here. The impl is deployed
+///         61-byte proxy that `DELEGATECALL`s here. The impl is deployed
 ///         once per chain; per-user deploys cost ~50k gas instead of the
 ///         ~1.1M a direct-deploy would cost.
 ///
 ///         The per-proxy mutable state lives in `PQMultiOwnable`'s ERC-7201
 ///         storage slot:
 ///           * `ownerAtIndex[0]` — bootstrap C10 pubkey, immutable per wallet
-///           * `ownerAtIndex[i >= 1]` — slot C10 pubkeys, rotatable
-///           * `bootstrapUses` / `slotUses[i]` — per-chain usage counters
+///           * `ownerAtIndex[i >= 1]` — slot C10 pubkeys, append-only (the
+///             bootstrap key adds a new slot to rotate; nothing removes one)
+///           * `bootstrapUses` / `slotUses[i]` / `offchainSigCount[i]` —
+///             per-chain usage counters
 ///
 ///         `entryPoint` and `c10Verifier` are impl-level immutables (they
 ///         are the same for every wallet on a given chain), so proxies read
@@ -91,13 +93,10 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     // (liveness loss).
     //
     // Credits gate ONLY the slot offchain-count execute paths
-    // (`ownerIndex >= 1`):
-    //   * ownerIndex >= 1 (offchain-count execute paths): each validated
-    //     `execute*WithOffchainCount` increments credit[ownerIndex]; the
-    //     matching execute consumes one (anti-impersonation + one-shot
-    //     replay guard, audit H-3). `removeOwnerAtIndex` carries no
-    //     ownerIndex argument and is authorised by validation alone, so
-    //     it neither stamps nor consumes a credit.
+    // (`ownerIndex >= 1`): each validated `execute*WithOffchainCount`
+    // increments credit[ownerIndex]; the matching execute consumes one
+    // (anti-impersonation + one-shot replay guard, audit H-3). These two
+    // selectors are the only ones a slot key may sign.
     //
     // The bootstrap path (`ownerIndex == 0`) does NOT use a credit. Its
     // few-time-usage cap `bootstrapUses` is bumped directly in the
@@ -113,9 +112,9 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     // re-opening the few-time forgery surface the cap exists to close.
     //
     // H-3 parity (calldata ownerIndex == signed wrapper ownerIndex) is
-    // enforced in `_validateSignature` for the offchain-count paths so a
-    // credit is unambiguously owned by the slot that signed it, even when
-    // several slots share one bundle.
+    // enforced in `_validateSignature` for every slot op, so a credit is
+    // unambiguously owned by the slot that signed it, even when several
+    // slots share one bundle.
     //
     // Credits live at `keccak256(ownerIndex, _TS_CREDIT_NAMESPACE)` and
     // auto-clear at end of transaction (EIP-1153 semantics).
@@ -339,6 +338,11 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     ///         bootstrap key; a self-call cannot reach here anyway (every
     ///         `execute*` path rejects `target == address(this)`, audit H-2).
     ///
+    ///         The owner set is append-only: there is no removal, so a key
+    ///         that was ever installed can never be installed again
+    ///         (`AlreadyOwner`), and its per-chain budget can never be reset
+    ///         by re-installing it at a fresh index.
+    ///
     ///         The bootstrap few-time cap (`bootstrapUses`) is bumped in the
     ///         VALIDATION phase by `_validateSignature`, not here. An accepted
     ///         Type-1 signature has already spent a master-key few-time
@@ -350,15 +354,6 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     function addOwnerBytes(bytes calldata newOwner) external {
         if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
         _addOwner(newOwner);
-    }
-
-    /// @notice Remove a slot owner. Only callable by the EntryPoint — i.e.
-    ///         as the `callData` of a UserOp whose signature was validated
-    ///         against `ownerIndex >= 1`. Refuses to remove index 0 (see
-    ///         `PQMultiOwnable`).
-    function removeOwnerAtIndex(uint256 index, bytes calldata owner) external {
-        if (msg.sender != address(_entryPoint)) revert NotFromEntryPoint();
-        _removeOwnerAtIndex(index, owner);
     }
 
     // ── Signature validation ────────────────────────────────────────
@@ -457,19 +452,14 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
             if (!_isSlotAllowedSelector(selector)) {
                 return SIG_VALIDATION_FAILED;
             }
-            // Audit H-3 (now enforced at validation): the offchain-count
-            // execute paths carry the target slot as their first calldata
+            // Audit H-3 (enforced at validation): both slot-allowed
+            // selectors carry the target slot as their first calldata
             // argument. It MUST equal the signed wrapper `ownerIndex`, so the
             // credit stamped below is unambiguously owned by this slot even
             // when the bundle carries several slots' UserOps. Rejecting here
             // (rather than only at execution) is what keeps the per-index
             // credit from being stolen by a co-bundled victim op.
-            // `removeOwnerAtIndex` takes a removal index, not the signer's
-            // index, and is excluded.
-            if (
-                selector != this.removeOwnerAtIndex.selector &&
-                _calldataOwnerIndex(userOp.callData) != ownerIndex
-            ) {
+            if (_calldataOwnerIndex(userOp.callData) != ownerIndex) {
                 return SIG_VALIDATION_FAILED;
             }
             // Combined cap: this Type 2 sig will bump `slotUses[i]` by 1,
@@ -502,20 +492,15 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         //     count even if the subsequent `addOwnerBytes` execution reverts
         //     (a forced duplicate-owner). No execution-phase credit is
         //     stamped — `addOwnerBytes` is pure execution.
-        //   * ownerIndex >= 1 (slot): bump `slotUses[ownerIndex]`. The
-        //     offchain-count execute ops additionally get a per-`ownerIndex`
-        //     credit (audit H-3), consumed by `execute*WithOffchainCount`.
-        //     Counted (not a single token), so 2+ ops for this wallet in one
-        //     bundle are each honoured. `removeOwnerAtIndex` is authorised by
-        //     validation alone (no execution-phase credit), so it bumps
-        //     `slotUses` but stamps no credit.
+        //   * ownerIndex >= 1 (slot): bump `slotUses[ownerIndex]` and stamp
+        //     one per-`ownerIndex` credit (audit H-3), consumed by
+        //     `execute*WithOffchainCount`. Counted (not a single token), so
+        //     2+ ops for this wallet in one bundle are each honoured.
         if (ownerIndex == 0) {
             _bumpBootstrapUses(MAX_BOOTSTRAP_USES);
         } else {
             _bumpSlotUses(ownerIndex, MAX_SLOT_USES);
-            if (selector != this.removeOwnerAtIndex.selector) {
-                _stampValidatedCredit(ownerIndex);
-            }
+            _stampValidatedCredit(ownerIndex);
         }
         return SIG_VALIDATION_SUCCESS;
     }
@@ -544,24 +529,36 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     function _isSlotAllowedSelector(bytes4 s) private pure returns (bool) {
         return
             s == this.executeWithOffchainCount.selector ||
-            s == this.executeBatchWithOffchainCount.selector ||
-            s == this.removeOwnerAtIndex.selector;
+            s == this.executeBatchWithOffchainCount.selector;
     }
 
     // ── EIP-1271 (off-chain sig verification, stateless) ───────────
     //
     // Inherits Solady's ERC1271, which provides:
-    //   * `isValidSignature` (the EIP-1271 entry point) returning the
-    //     0x1626ba7e magic on success / 0xffffffff on failure.
-    //   * ERC-6492 unwrap so counterfactual sigs on un-deployed wallets
-    //     verify cleanly via static call replication.
+    //   * `isValidSignature(bytes32,bytes)` (the EIP-1271 entry point)
+    //     returning the 0x1626ba7e magic on success / 0xffffffff on failure.
+    //   * ERC-6492 unwrapping: a signature that ends in the 6492 magic is
+    //     reduced to its inner signature. Deploying the counterfactual
+    //     wallet first is the job of the ERC-6492-aware verifier calling
+    //     us; this contract only strips the wrapper.
     //   * Nested EIP-712 wrapping (TypedDataSign + PersonalSign) so a
     //     captured slot sig over hash H against this wallet on chain X
     //     does NOT verify against a different wallet (same seed, different
     //     `account_index`) or against this wallet on a different chain.
     //
-    // We override two hooks:
+    // We override four hooks and add one entry point:
     //   * `_domainNameAndVersion()` — for the EIP-712 domain.
+    //   * `_erc1271IsValidSignature()` — keeps ONLY the nested EIP-712
+    //     workflow. Solady also accepts two raw-hash workflows: a call from
+    //     its MulticallerWithSigner ("safe caller") and an `eth_call`-only
+    //     (`tx.gasprice == 0`) RPC path. Both check the bare `hash` with no
+    //     nesting. The firmware never bare-signs anything except UserOp
+    //     `sphincsDigest`s, which are public in on-chain calldata, so either
+    //     branch let anyone present a public UserOp signature as "this
+    //     wallet signed that 32-byte value" (GitHub #691), and the RPC
+    //     branch behaved differently per chain. With the override every
+    //     accepted signature is over a nested hash bound to this wallet and
+    //     chain: PersonalSign (what the firmware signs) or TypedDataSign.
     //   * `_erc1271IsValidSignatureNowCalldata` — does the SPHINCS+C10
     //     verification against the slot pubkey indicated by ownerIndex.
     //   * `_erc1271Signer()` — abstract on Solady's base; we have a
@@ -569,6 +566,9 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
     //     We override the only consumer (`_erc1271IsValidSignatureNowCalldata`)
     //     and make `_erc1271Signer()` itself revert as a tripwire
     //     against future refactors that drop the override (audit L-2).
+    //   * `isValidSignature(bytes,bytes)` — the legacy EIP-1271 form that
+    //     Safe v1.3.0 / v1.4.1 call on a contract owner (GitHub #995). It
+    //     hashes `data` and runs the nested check above on that hash.
     //
     // EIP-1271 is `view`-only. It NEVER bumps `slotUses` /
     // `offchainSigCount`. The firmware-side `local_offchain_count`
@@ -582,6 +582,36 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         returns (string memory name, string memory version)
     {
         return ("PQSmartWallet", "1");
+    }
+
+    /// @dev Only the nested EIP-712 workflow (PersonalSign / TypedDataSign,
+    ///      both bound to this wallet). Drops Solady's safe-caller and RPC
+    ///      raw-hash workflows; see the section comment above.
+    function _erc1271IsValidSignature(bytes32 hash, bytes calldata signature)
+        internal
+        view
+        override
+        returns (bool)
+    {
+        return _erc1271IsValidSignatureViaNestedEIP712(hash, signature);
+    }
+
+    /// @notice Legacy EIP-1271 entry point, `isValidSignature(bytes,bytes)`,
+    ///         selector `0x20c13b0b`. Safe v1.3.0 and v1.4.1 call it on a
+    ///         contract owner with `data` = the EIP-712 encoding whose
+    ///         keccak256 is the SafeTx (or SafeMessage) hash. Runs the same
+    ///         nested check as `isValidSignature(bytes32,bytes)` on
+    ///         `keccak256(data)`. Unlike that entry it does not unwrap
+    ///         ERC-6492 signatures: Safe never sends them, and a
+    ///         counterfactual (undeployed) wallet has no code to call.
+    /// @return result `0x20c13b0b` if the signature is valid, else `0xffffffff`.
+    function isValidSignature(bytes calldata data, bytes calldata signature)
+        public
+        view
+        returns (bytes4 result)
+    {
+        bool success = _erc1271IsValidSignature(keccak256(data), signature);
+        result = success ? bytes4(0x20c13b0b) : bytes4(0xffffffff);
     }
 
     /// @dev Solady's default `_erc1271IsValidSignatureNowCalldata` would
@@ -645,6 +675,50 @@ contract PQSmartWallet is IAccount06, PQMultiOwnable, ERC1271 {
         } catch {
             return false;
         }
+    }
+
+    // ── Token receiver hooks (ERC-721 / ERC-1155) ──────────────────
+    //
+    // ERC-721 `safeTransferFrom` / `_safeMint` and every ERC-1155 transfer
+    // call these on a contract recipient and revert unless the matching
+    // selector comes back, so without them the wallet could not receive
+    // ERC-1155 tokens at all, nor ERC-721 tokens sent by a safe transfer.
+    // They accept unconditionally and touch no state. Explicit functions
+    // rather than Solady's `Receiver`, which would add a payable fallback:
+    // calls to unknown selectors still revert.
+
+    /// @notice ERC-721 receiver hook. Returns `0x150b7a02`.
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return 0x150b7a02;
+    }
+
+    /// @notice ERC-1155 receiver hook. Returns `0xf23a6e61`.
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata)
+        external
+        pure
+        returns (bytes4)
+    {
+        return 0xf23a6e61;
+    }
+
+    /// @notice ERC-1155 batch receiver hook. Returns `0xbc197c81`.
+    function onERC1155BatchReceived(
+        address,
+        address,
+        uint256[] calldata,
+        uint256[] calldata,
+        bytes calldata
+    ) external pure returns (bytes4) {
+        return 0xbc197c81;
+    }
+
+    /// @notice ERC-165. EIP-1155 requires a contract that accepts ERC-1155
+    ///         transfers to report the `ERC1155TokenReceiver` interface here.
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return
+            interfaceId == 0x01ffc9a7 || // ERC-165
+            interfaceId == 0x150b7a02 || // ERC-721 token receiver
+            interfaceId == 0x4e2312e0; // ERC-1155 token receiver
     }
 
     receive() external payable {}

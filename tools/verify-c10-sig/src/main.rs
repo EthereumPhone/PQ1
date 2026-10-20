@@ -27,7 +27,10 @@ use pqsigner_aa::userop::{
     compute_sphincs_digest_v06, reconstruct_execute_calldata, sha256_bytes,
     AaUserOpParamsV06Sha256, ENTRY_POINT_V06, SHA256_EMPTY,
 };
-use pqsigner_domain::{derive_c10_slot_keypair, slot_master_entropy_from_bip39};
+use pqsigner_aa::eip1271::proxy_address;
+use pqsigner_domain::{
+    derive_c10_master_keypair_from_entropy, derive_c10_slot_keypair, slot_master_entropy_from_bip39,
+};
 use pqsigner_tx_core::eip1559::{Eip1559Tx, U256};
 use sphincs_c10::params::SIGNATURE_LEN;
 use sphincs_tz_bip39::Mnemonic;
@@ -46,8 +49,10 @@ const MAX_FEE: u64 = 1_000_000_000;
 const MAX_PRIORITY_FEE: u64 = 100_000_000;
 const VALUE_WEI: u64 = 1_000_000_000_000_000;
 const TO_ADDRESS: [u8; 20] = [0x11; 20];
-/// Device-reported CREATE2 prediction for account 0 (GET_WALLET_ADDRESS).
-const SENDER_HEX: &str = "bee6a6e73e418d42ef382ecf8e8025740e97c2fe";
+/// Account-0 sender the pre-2026-10-20 firmware reported (GET_WALLET_ADDRESS)
+/// under the superseded CREATE2 constants. Captures made with that firmware
+/// were signed for it: run with `PQ1_SENDER=bee6a6e73e418d42ef382ecf8e8025740e97c2fe`.
+/// Without `PQ1_SENDER` the sender is derived from this tree (`e2e_sender`).
 
 /// `e2e-test` auto-provisioning mnemonic (secure/src/main.rs:3607-3610) —
 /// the standard all-zeros BIP-39 vector. A published test vector, not a key.
@@ -56,6 +61,23 @@ const E2E_WORDS: [&str; 24] = [
     "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
     "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "abandon", "art",
 ];
+
+/// The account-0 e2e wallet address, computed the way GET_WALLET_ADDRESS
+/// computes it: master key from the fixed mnemonic, then CREATE2 with the
+/// factory address and proxy init-code hash compiled into `pqsigner-proto`.
+/// `PQ1_SENDER=<40 hex>` overrides it for captures made by firmware built
+/// with other CREATE2 constants.
+fn e2e_sender() -> [u8; 20] {
+    let mut sender = [0u8; 20];
+    if let Ok(v) = std::env::var("PQ1_SENDER") {
+        hex::decode_to_slice(v.trim_start_matches("0x"), &mut sender).expect("bad PQ1_SENDER hex");
+        return sender;
+    }
+    let mnemonic = Mnemonic::from_words(&E2E_WORDS).expect("e2e mnemonic rejected");
+    let entropy = mnemonic.to_entropy().expect("e2e mnemonic has no entropy");
+    let (_sk, pk_seed_32, pk_root_32) = derive_c10_master_keypair_from_entropy(&entropy, ACCOUNT_INDEX);
+    proxy_address(&pk_seed_32, &pk_root_32)
+}
 
 fn u256_from_u64(v: u64) -> U256 {
     let mut w = [0u8; 32];
@@ -137,8 +159,8 @@ fn main() {
         rotation::run(&argv[1..]);
     }
 
-    let mut sender = [0u8; 20];
-    hex::decode_to_slice(SENDER_HEX, &mut sender).expect("bad sender hex");
+    let sender = e2e_sender();
+    println!("==> sender {}", hex::encode(sender));
 
     // ── derive the expected slot public key from the fixed mnemonic ──
     let mnemonic = Mnemonic::from_words(&E2E_WORDS).expect("e2e mnemonic rejected");

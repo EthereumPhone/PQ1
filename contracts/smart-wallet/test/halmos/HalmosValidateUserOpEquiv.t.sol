@@ -93,9 +93,9 @@ contract HalmosValidateUserOpEquiv is SymTest, Test {
     /// the live getters in `_storeSymbolicCounters` (a wrong constant makes
     /// the parity asserts fail with a counterexample, so the stores are
     /// self-certifying). Field offsets per the struct declaration order in
-    /// PQMultiOwnable.sol: +0 nextOwnerIndex, +1 removedOwnersCount,
-    /// +2 ownerAtIndex, +3 isOwner, +4 bootstrapUses, +5 slotUses,
-    /// +6 offchainSigCount.
+    /// PQMultiOwnable.sol: +0 nextOwnerIndex, +1 removedOwnersCount (reserved,
+    /// always zero), +2 ownerAtIndex, +3 isOwner, +4 bootstrapUses,
+    /// +5 slotUses, +6 offchainSigCount.
     bytes32 internal constant PQ_SLOT_BASE =
         0x470749eea5ac4a541d6582e535445f94e7300bac9e0e4e5577fd3336b407d000;
 
@@ -122,7 +122,6 @@ contract HalmosValidateUserOpEquiv is SymTest, Test {
             model.SEL_EXECUTE_BATCH_WITH_OFFCHAIN_COUNT(),
             wallet.executeBatchWithOffchainCount.selector
         );
-        assertEq(model.SEL_REMOVE_OWNER_AT_INDEX(), wallet.removeOwnerAtIndex.selector);
     }
 
     /// @dev Owner-set bring-up, sha256-free (bare ERC-1967 proxy +

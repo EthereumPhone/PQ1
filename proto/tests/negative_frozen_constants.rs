@@ -41,19 +41,26 @@ fn negative_eip6492_magic_must_match_spec_byte_for_byte() {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Factory address — Arachnid-deterministic, mainnet-stable
+// Factory address — Arachnid-deterministic
 //
-// CLAUDE.md: "byte-identical on every chain that has the Arachnid
-// deployer and EntryPoint v0.6 live". The CREATE2 wallet address
-// formula bakes this in via `addr = keccak256(0xff || factory || salt
-// || PROXY_INIT_CODE_HASH)[12..]`.
+// The same on every chain where this exact contract set is deployed
+// through the Arachnid deployer. The CREATE2 wallet address formula
+// bakes it in via `addr = keccak256(0xff || factory || salt ||
+// PROXY_INIT_CODE_HASH)[12..]`.
+//
+// Re-pinned 2026-10-20 for the Trail of Bits audit freeze (pre-launch,
+// no wallets exist): the wallet contract changed, so the implementation,
+// factory and proxy init-code hash all moved. The values come from
+// `FOUNDRY_PROFILE=deploy forge script script/PrintProductionAddresses.s.sol`;
+// CI's deploy-profile `DeployedBytecodeReproCheck` fails if the contracts
+// stop producing them.
 // ───────────────────────────────────────────────────────────────────────
 
 #[test]
 fn negative_pq_smart_wallet_factory_address_frozen() {
     let expected: [u8; 20] = [
-        0xe8, 0xCE, 0x78, 0xCD, 0x97, 0x64, 0x97, 0x44, 0x7F, 0xF8,
-        0xB7, 0x6c, 0x71, 0xb5, 0x9a, 0xE4, 0x2A, 0xf0, 0xd4, 0x52,
+        0xE3, 0xdb, 0xA4, 0x04, 0xdC, 0xeC, 0x30, 0x09, 0x3D, 0xE2,
+        0x67, 0x64, 0x96, 0x5a, 0x51, 0x68, 0x9C, 0x16, 0x07, 0xBD,
     ];
     assert_eq!(
         PQ_SMART_WALLET_FACTORY, expected,
@@ -64,10 +71,10 @@ fn negative_pq_smart_wallet_factory_address_frozen() {
 #[test]
 fn negative_proxy_init_code_hash_frozen() {
     let expected: [u8; 32] = [
-        0xac, 0x0c, 0x44, 0xb6, 0xd0, 0x6f, 0x67, 0x8e,
-        0xb3, 0x50, 0x42, 0x6f, 0x4d, 0x0d, 0x7a, 0x89,
-        0xcc, 0x72, 0x9d, 0xcb, 0x15, 0x6d, 0xe3, 0x03,
-        0xfa, 0x77, 0xa7, 0x75, 0x2c, 0xcc, 0x22, 0xb6,
+        0x17, 0xca, 0x67, 0x40, 0x95, 0xaf, 0xe9, 0xdc,
+        0x82, 0xaa, 0x6f, 0x39, 0x6e, 0xe0, 0x1b, 0xd8,
+        0x37, 0x44, 0x9a, 0x12, 0x7b, 0x6b, 0xe5, 0x9a,
+        0x0d, 0x94, 0x73, 0x29, 0xf2, 0x9b, 0x25, 0x70,
     ];
     assert_eq!(
         PROXY_INIT_CODE_HASH, expected,

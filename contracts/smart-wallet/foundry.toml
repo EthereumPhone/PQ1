@@ -8,6 +8,12 @@ evm_version = "prague"
 via_ir = true
 optimizer = true
 optimizer_runs = 200
+# No metadata hash in the bytecode. With the default ("ipfs") the runtime
+# code embeds a hash of every source file's text, so a comment edit, a
+# path change or an extra lib directory (auto-remappings) moves every
+# codehash, the CREATE2 addresses, and the firmware's PROXY_INIT_CODE_HASH.
+# With "none" the bytecode depends only on the code and compiler settings.
+bytecode_hash = "none"
 memory_limit = 1073741824
 # Raised so the dense adversarial verifier sweep
 # (SPHINCsC10AsmAdversarial) — hundreds of full 4008-byte verify runs in
@@ -22,6 +28,7 @@ optimizer_runs = 999999
 via_ir = true
 evm_version = "prague"
 solc_version = "0.8.28"
+bytecode_hash = "none"
 
 [fmt]
 sort_imports = true

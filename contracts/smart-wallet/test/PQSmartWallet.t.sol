@@ -106,9 +106,9 @@ contract PQSmartWalletTest is Test {
 
     /// @dev Helper: drive a paired `validateUserOp + executeWithOffchainCount`
     ///      cycle the way EntryPoint v0.6 would in production. After H-3 the
-    ///      executed call requires a preceding validate to have stamped the
-    ///      transient ownerIndex token; tests that called execute directly
-    ///      now use this helper.
+    ///      executed call requires a preceding validate to have stamped a
+    ///      transient per-ownerIndex credit; tests that called execute
+    ///      directly now use this helper.
     function _validateAndExecute(
         PQSmartWallet w,
         uint256 ownerIndex,
@@ -153,8 +153,8 @@ contract PQSmartWalletTest is Test {
         );
     }
 
-    /// @dev Stamp the transient ownerIndex token without running real
-    ///      validation. Used by tests that want to drive `executeWith*`
+    /// @dev Stamp one transient per-ownerIndex credit via a real
+    ///      validation, without executing. Used by tests that want to drive `executeWith*`
     ///      revert paths in isolation (e.g. the `OffchainSigCountNotMonotonic`
     ///      regression) without re-validating between every step.
     function _primeValidatedOwnerIndex(PQSmartWallet w, uint256 ownerIndex) internal {
@@ -702,10 +702,10 @@ contract PQSmartWalletTest is Test {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
 
-        // Solady's ERC1271 has an RPC-simulation path that burns gas when
-        // `tx.gasprice == 0` to discourage replay outside RPC simulation.
-        // Foundry's default gasprice is 0 — set it non-zero so the RPC path
-        // is skipped and we exercise the normal on-chain semantics.
+        // Gas price is irrelevant since the 2026-10 freeze: PQSmartWallet
+        // drops Solady's `tx.gasprice == 0` RPC branch (see
+        // LegacyERC1271.t.sol for the gas-price-0 cases). Kept at 1 so this
+        // test reads as the on-chain path.
         vm.txGasPrice(1);
 
         bytes32 hash = bytes32(uint256(0x1234));
@@ -869,7 +869,7 @@ contract PQSmartWalletTest is Test {
         vals[0] = 0; vals[1] = 0;
         ds[0] = "";
 
-        // Validate first so `_consumeValidatedOwnerIndex` passes and we
+        // Validate first so `_consumeValidatedCredit` passes and we
         // exercise the L-3 custom-error path on the length-mismatch arm.
         bytes memory callData = abi.encodeCall(
             w.executeBatchWithOffchainCount, (1, 0, tos, vals, ds)
@@ -1087,54 +1087,62 @@ contract PQSmartWalletTest is Test {
         assertEq(w.offchainSigCount(99), 0, "victim slot must NOT be poisoned");
     }
 
-    // SOL6 (adversarial-review on-chain / work-todo #12c) — PINS CURRENT
-    // BEHAVIOR, does not ratify it. `removeOwnerAtIndex` is DELIBERATELY exempt
-    // from the H-3 ownerIndex-parity check (`selector !=
-    // this.removeOwnerAtIndex.selector` in `_validateSignature`), so a slot key
-    // at index i can sign a removal of a DIFFERENT non-bootstrap slot j — the
-    // mirror of `test_audit_h3_rejectsMismatchedOwnerIndex`, where the same
-    // slot-1 signer is REJECTED for `execute(99)`. Impact is intra-wallet
-    // AVAILABILITY, not fund theft: the bootstrap owner (index 0) is unremovable
-    // and can re-add any pruned slot. This test locks the current design so that
-    // binding i==j for the remove selector in future is a DELIBERATE flip (this
-    // test then fails and must be updated), never a silent regression. Whether
-    // the behavior is DESIRABLE is a threat-model decision — see
-    // docs/security/threat-model.md §8.
-    function test_sol6_crossSlotRemoveIsAcceptedByDesign() public {
+    // Owner removal was deleted before launch (GitHub #131, #213). It was
+    // reachable only by a slot key used outside the device (the firmware never
+    // builds that UserOp), it let any slot key remove any other slot (SOL6), and
+    // remove + re-add reset a key's per-chain budget (SOL9). These two tests pin
+    // the replacement semantics: the former selector buys a signer nothing, and
+    // the owner set is append-only.
+
+    /// A slot-signed UserOp carrying the former `removeOwnerAtIndex` selector
+    /// fails validation, burns no budget, and has no function to land on.
+    function test_removedRemoveOwnerSelectorFailsValidation() public {
         PQSmartWallet w = _deployWallet(); // owner 0 = bootstrap, owner 1 = slot0
         c10.setValid(true);
 
-        // Bootstrap installs a second removable slot at index 2 (the execute
-        // half of an addOwner pair; EntryPoint-gated direct call).
-        bytes memory slot1Bytes = abi.encodePacked(SLOT1_PK_SEED, SLOT1_PK_ROOT);
-        vm.prank(ENTRY_POINT_ADDR);
-        w.addOwnerBytes(slot1Bytes);
-        assertEq(w.ownerAtIndex(2), slot1Bytes, "slot at index 2 installed");
-
-        // Slot key at index 1 signs removal of the UNRELATED slot at index 2:
-        // wrapper ownerIndex = 1 (signer), calldata removal index = 2.
-        bytes memory callData = abi.encodeCall(w.removeOwnerAtIndex, (2, slot1Bytes));
+        bytes memory slot0Bytes = abi.encodePacked(SLOT0_PK_SEED, SLOT0_PK_ROOT);
+        bytes memory callData =
+            abi.encodeWithSelector(bytes4(0x89625b57), uint256(1), slot0Bytes);
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vd =
             w.validateUserOp(_packedOp(address(w), callData, sig), bytes32(uint256(0x5016)), 0);
-        assertEq(
-            vd, 0,
-            "SOL6: cross-slot removeOwnerAtIndex is accepted by design (remove is H-3-exempt)"
-        );
+        assertEq(vd, 1, "former removeOwnerAtIndex selector must fail validation");
+        assertEq(w.slotUses(1), 0, "rejected op must not burn slot 1's budget");
 
-        // Execute half: the removal actually lands, driven by the slot-1 signer.
         vm.prank(ENTRY_POINT_ADDR);
-        w.removeOwnerAtIndex(2, slot1Bytes);
-        assertEq(w.ownerAtIndex(2).length, 0, "slot 2 pruned by the slot-1 signer");
+        (bool ok,) = address(w).call(callData);
+        assertFalse(ok, "no removeOwnerAtIndex function to dispatch to");
+        assertEq(w.ownerAtIndex(1), slot0Bytes, "slot 0 key still installed");
+        assertEq(w.ownerCount(), 2, "owner count unchanged");
+    }
 
-        // Recovery holds: the (unremovable) bootstrap owner can re-add the slot.
-        vm.prank(ENTRY_POINT_ADDR);
-        w.addOwnerBytes(slot1Bytes);
-        assertEq(
-            w.ownerAtIndex(w.nextOwnerIndex() - 1), slot1Bytes,
-            "bootstrap re-adds the pruned slot (availability recovery)"
-        );
+    /// Append-only: an installed key can never be installed a second time,
+    /// so its per-chain counters can never be reset by re-adding it at a
+    /// fresh index (the #131 composition). Covers both a slot key and the
+    /// bootstrap key, through the full bootstrap-signed UserOp path.
+    function test_installedKeyCanNeverBeInstalledAgain() public {
+        PQSmartWallet w = _deployWallet();
+        c10.setValid(true);
+
+        bytes memory slot0Bytes = abi.encodePacked(SLOT0_PK_SEED, SLOT0_PK_ROOT);
+        bytes memory masterBytes = abi.encodePacked(MASTER_PK_SEED, MASTER_PK_ROOT);
+        bytes[2] memory installed = [slot0Bytes, masterBytes];
+        for (uint256 i; i < 2; ++i) {
+            bytes memory callData = abi.encodeCall(w.addOwnerBytes, (installed[i]));
+            (uint256 vd, bool execOk, bytes memory ret) = ep.validateThenTryExecute(
+                address(w), _packedOp(address(w), callData, _wrapSig(0, _fakeC10Sig())), bytes32(0), 0, callData
+            );
+            assertEq(vd, 0, "the bootstrap signature itself is valid");
+            assertFalse(execOk, "re-installing an installed key must revert");
+            assertEq(
+                ret,
+                abi.encodeWithSelector(PQMultiOwnable.AlreadyOwner.selector, installed[i]),
+                "AlreadyOwner"
+            );
+        }
+        assertEq(w.nextOwnerIndex(), 2, "no index was consumed");
+        assertEq(w.bootstrapUses(), 2, "each accepted bootstrap signature is still counted");
     }
 
     function test_audit_h3_acceptsMatchingOwnerIndex() public {
@@ -1171,7 +1179,8 @@ contract PQSmartWalletTest is Test {
 
     function test_audit_h3_executeFailsIfCalledOutsideValidatedFlow() public {
         // Direct call from EntryPoint without any prior `validateUserOp`
-        // — the transient ownerIndex is empty, so parity check fires.
+        // — no transient credit exists for index 1, so the execute
+        // guard fires.
         // (Also defends against a future EntryPoint-impersonator who
         // skips validate.)
         PQSmartWallet w = _deployWallet();
@@ -1184,10 +1193,9 @@ contract PQSmartWalletTest is Test {
 
     /// H-3 sibling — one-shot consumption. After a validated execute
     /// runs once, a SECOND execute in the same tx with identical
-    /// parameters must revert: the transient ownerIndex token was
-    /// consumed by the first execute's `_consumeValidatedOwnerIndex`
-    /// (`tstore(0)` clears it regardless of success). Confirms the
-    /// "one validate → one execute" semantics, ruling out a replay
+    /// parameters must revert: the single credit the validation stamped
+    /// was consumed by the first execute's `_consumeValidatedCredit`.
+    /// Confirms the "one validate → one execute" semantics, ruling out a replay
     /// attack where an attacker who controls the EntryPoint queues
     /// the same execute twice against one validated bundle.
     function test_audit_h3_validateConsumedByPriorExecute() public {
@@ -1333,7 +1341,7 @@ contract PQSmartWalletTest is Test {
     function test_audit_l1_isValidSignature_rejectsNonZeroWrapperPad() public {
         PQSmartWallet w = _deployWallet();
         c10.setValid(true);
-        vm.txGasPrice(1); // skip Solady's RPC-simulation gas burn
+        vm.txGasPrice(1); // on-chain semantics (gas price no longer matters)
 
         bytes memory sig = _wrapSig(1, _fakeC10Sig());
         sig[4127] = 0xFF;

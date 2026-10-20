@@ -37,7 +37,7 @@ import re
 import subprocess
 import sys
 
-FACTORY = "0xe8ce78cd976497447ff8b76c71b59ae42af0d452"   # proto::PQ_SMART_WALLET_FACTORY
+FACTORY = "0xe3dba404dcec30093de26764965a51689c1607bd"   # proto::PQ_SMART_WALLET_FACTORY (audit freeze, 2026-10-20)
 ENTRY_POINT = "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789"
 # anvil's well-known dev account 0 — only ever used against a local fork.
 ANVIL_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"

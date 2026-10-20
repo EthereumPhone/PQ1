@@ -3,8 +3,7 @@
 // Source of truth: `pqsigner-proto` crate (Rust).
 // Regenerate: `cargo run -p pqsigner-xtask -- gen-solidity-constants`.
 //
-// Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md
-// Phase 4 of the modularity refactor.
+// Background: docs/archive/handoff-modularity-refactor.md (Phase 4).
 pragma solidity ^0.8.28;
 
 /// @notice Cross-language protocol constants shared by the firmware

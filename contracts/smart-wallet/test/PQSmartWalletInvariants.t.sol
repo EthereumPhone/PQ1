@@ -40,6 +40,19 @@ contract WalletInvariantHandler is Test {
     // Cached pre-state for invariant comparisons.
     bytes32 public initialImplSlotValue;
 
+    /// GHOST OWNER TABLE. Every key the wallet has accepted, in index order.
+    /// The owner set is append-only (removal was deleted before launch), so
+    /// the wallet's table must equal this list forever, and no key may
+    /// appear in it twice.
+    bytes[] internal installedKeys;
+    /// Set if the wallet ever accepted a key that was already installed.
+    bool public duplicateInstalled;
+    /// Re-install attempts of an already-installed key, and how many the
+    /// wallet accepted (must stay 0: a re-install would give the key a
+    /// fresh index with fresh counters, the #131 budget reset).
+    uint256 public reinstallAttempts;
+    uint256 public reinstallAccepted;
+
     constructor(PQSmartWallet w, MockSPHINCSVerifier mock, MockEntryPoint06 entryPoint) {
         wallet = w;
         c10 = mock;
@@ -47,6 +60,17 @@ contract WalletInvariantHandler is Test {
         ENTRY_POINT_ADDR = address(entryPoint);
         bytes32 IMPL_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
         initialImplSlotValue = vm.load(address(wallet), IMPL_SLOT);
+        for (uint256 i = 0; i < wallet.nextOwnerIndex(); i++) {
+            installedKeys.push(wallet.ownerAtIndex(i));
+        }
+    }
+
+    function installedCount() external view returns (uint256) {
+        return installedKeys.length;
+    }
+
+    function installedKey(uint256 i) external view returns (bytes memory) {
+        return installedKeys[i];
     }
 
     // ── Handler functions exposed to the fuzzer ─────────────────────
@@ -105,9 +129,43 @@ contract WalletInvariantHandler is Test {
         bytes memory callData = abi.encodeCall(wallet.addOwnerBytes, (ownerBytes));
         UserOperation06 memory op = _packedOp(address(wallet), callData, wrappedSig);
 
+        uint256 before = wallet.nextOwnerIndex();
         try ep.validateThenExecute(address(wallet), op, bytes32(0), 0, callData) returns (uint256 result) {
             if (result == 0) _bumpMonotonic(0);
         } catch {}
+        if (wallet.nextOwnerIndex() != before) _recordInstall(ownerBytes);
+    }
+
+    /// Drive a bootstrap-keyed UserOp that tries to install an owner that is
+    /// ALREADY installed (any index, bootstrap included). Must never land.
+    function handler_reinstallOwner(uint256 pick) external {
+        bytes memory ownerBytes = installedKeys[bound(pick, 0, installedKeys.length - 1)];
+
+        c10.setValid(true);
+        bytes memory wrappedSig = abi.encode(uint256(0), new bytes(4008));
+        bytes memory callData = abi.encodeCall(wallet.addOwnerBytes, (ownerBytes));
+        UserOperation06 memory op = _packedOp(address(wallet), callData, wrappedSig);
+
+        uint256 before = wallet.nextOwnerIndex();
+        reinstallAttempts++;
+        try ep.validateThenTryExecute(address(wallet), op, bytes32(0), 0, callData) returns (
+            uint256 result, bool ok, bytes memory
+        ) {
+            if (result == 0) _bumpMonotonic(0);
+            if (ok) reinstallAccepted++;
+        } catch {}
+        if (wallet.nextOwnerIndex() != before) {
+            reinstallAccepted++;
+            _recordInstall(ownerBytes);
+        }
+    }
+
+    function _recordInstall(bytes memory ownerBytes) internal {
+        bytes32 h = keccak256(ownerBytes);
+        for (uint256 i = 0; i < installedKeys.length; i++) {
+            if (keccak256(installedKeys[i]) == h) duplicateInstalled = true;
+        }
+        installedKeys.push(ownerBytes);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────
@@ -239,6 +297,35 @@ contract PQSmartWalletInvariantsTest is StdInvariant, Test {
     function invariant_bootstrapUses_capped() external view {
         assertTrue(wallet.bootstrapUses() <= wallet.MAX_BOOTSTRAP_USES(),
             "Claim 2/3 violation: bootstrap cap exceeded");
+    }
+
+    /// **inv_owner_set_append_only.** The owner table only ever grows:
+    /// every key the wallet accepted is still at the index it got and still
+    /// flagged `isOwner`, no key was accepted twice, and no attempt to
+    /// re-install an installed key landed. So a key keeps one index, and one
+    /// set of per-chain counters, for the life of the wallet (#131).
+    function invariant_owner_set_append_only() external view {
+        assertFalse(handler.duplicateInstalled(), "a key was installed twice");
+        assertEq(handler.reinstallAccepted(), 0, "an installed key was installed again");
+        uint256 n = wallet.nextOwnerIndex();
+        assertEq(n, handler.installedCount(), "owner table and ghost diverged");
+        for (uint256 i = 0; i < n; i++) {
+            bytes memory k = wallet.ownerAtIndex(i);
+            assertEq(keccak256(k), keccak256(handler.installedKey(i)), "an owner moved or vanished");
+            assertTrue(wallet.isOwnerBytes(k), "isOwner was cleared");
+        }
+    }
+
+    /// Anti-vacuity for the invariant above: a re-install attempt really
+    /// reaches the wallet (validation succeeds) and really fails.
+    function test_handler_reinstall_path_is_live() public {
+        uint256 attempts = handler.reinstallAttempts();
+        uint256 bootUses = wallet.bootstrapUses();
+        handler.handler_reinstallOwner(1);
+        assertEq(handler.reinstallAttempts(), attempts + 1, "handler did not run");
+        assertEq(wallet.bootstrapUses(), bootUses + 1, "validation did not accept the bootstrap signature");
+        assertEq(handler.reinstallAccepted(), 0, "re-install of slot 0 landed");
+        assertEq(wallet.nextOwnerIndex(), 2, "owner table grew");
     }
 
     // --- Anti-vacuity: the fuzzed execute path must actually execute ---

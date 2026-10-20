@@ -39,18 +39,24 @@ contract PinnedCodehashesTest is PinnedCodehashSelector {
     // moved only because it imports the edited wallet into its compilation
     // unit (its CREATE2 / squat-defence logic is unchanged).
     //
-    // DISCHARGE STATUS: these were captured from a LOCAL `forge build`
-    // (solc 0.8.28, via_ir, runs=200). The A3.* bridge axioms are now
-    // DISCHARGED on the deployed bytecode by Halmos symbolic execution
-    // against these exact codehashes — 19 rules PASS (A3.2 wallet 14, A3.1
-    // verifier-gates 3, A3.3 factory 2). Reproduce:
-    // `make -C ../verification verify-bytecode` (which runs this test first
-    // to certify the codehashes, then the symbolic rules). The Lean model in
+    // RE-PINNED 2026-10-20 for the Trail of Bits audit freeze. Wallet logic
+    // changed: owner removal deleted (#131/#213), legacy EIP-1271
+    // `isValidSignature(bytes,bytes)` added (#995), Solady's raw-hash 1271
+    // workflows dropped (#691), ERC-721/1155 receiver hooks + ERC-165 added.
+    // The build also moved to `bytecode_hash = "none"` (foundry.toml), so the
+    // verifier pin moved too although its source and instruction bytes are
+    // unchanged (only the CBOR metadata tail shrank to the solc version);
+    // from here on comments and source paths no longer move any pin.
+    //
+    // DISCHARGE STATUS: captured with Foundry v1.8.3 and the exact
+    // `foundry.lock` lib set (the CI environment), solc 0.8.28, via_ir, for
+    // both profiles. The A3.* bridge axioms are discharged against these
+    // exact codehashes by `make -C ../verification verify-bytecode` (which
+    // runs this test first to certify the codehashes, then the symbolic
+    // rules) and `verify-kontrol`; see AXIOM_STATUS.json for the current
+    // receipts. The Lean model in
     // `verification/lean/SphincsCVerify/Wallet/ValidateUserOp.lean` is the
-    // kernel-checked source of the same properties (it bumps `bootstrapUses`
-    // in the validation phase: `bumpForOwner s 0 = Storage.bumpBootstrap`).
-    // See AXIOM_STATUS.json. Note the `bytecode_hash = "ipfs"` metadata makes
-    // these non-reproducible across toolchains.
+    // kernel-checked source of the same properties.
     //
     // Re-capture via `forge test --match-test test_codehash_pinned_or_print -vv`.
     // Each update must be accompanied by re-running the discharge artifact:
