@@ -79,10 +79,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {count: 4, index: 0}
-          - {count: 4, index: 1}
-          - {count: 4, index: 2}
-          - {count: 4, index: 3}
           - {count: 8, index: 0}
           - {count: 8, index: 1}
           - {count: 8, index: 2}
@@ -138,7 +134,7 @@ jobs:
           retention-days: 7
 
   probability:
-    name: PMF proofs and semantic controls (${{ matrix.count }} shards)
+    name: PMF proofs and semantic controls
     needs: [controls]
     if: ${{ always() }}
     runs-on: ubuntu-latest
@@ -146,7 +142,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        count: [4, 8]
+        count: [8]
     steps:
       - name: require successful complete producer matrix
         env:

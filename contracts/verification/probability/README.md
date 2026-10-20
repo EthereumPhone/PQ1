@@ -1550,7 +1550,8 @@ The Lean invocation, per-control 90-second timeout and consuming-theorem
 judging rules are unchanged. Each compiler has its own fixture and log;
 imported project/dependency libraries have no concurrent writer.
 
-The initial CI experiment compares four and eight deterministic shards.
+CI uses eight deterministic control shards, selected from a four/eight-shard
+comparison.
 Every shard freshly rebuilds all project proofs, audits all closures and
 runs both closure canaries before its assigned cases. All three stages of
 a case stay together. The required aggregate runs its own fresh proof and
@@ -1569,8 +1570,16 @@ full gate. Retry the whole workflow, since receipts from an earlier attempt
 cannot satisfy the current aggregate.
 This batch does not reuse PR evidence after landing or skip the push replay.
 That is a separate evidence-policy boundary coordinated with #789.
-Worker and shard measurements are pending; the experimental matrix is not
-a claim of measured savings.
+The [portable benchmark receipt](https://github.com/EthereumPhone/PQ1/issues/1000#issuecomment-6294566604)
+records frozen source identities, reproduction commands, hardware, wall time,
+CPU/memory observations, failures and subsequent PR/push measurements. The
+eight-worker local run took 24m42s versus 38m49s for the original four-worker
+runner, with all checks retained. In the initial CI experiment, eight shards
+completed their producer group in 24m20s versus 33m09s for four; total runner
+time including aggregation was 153m42s versus 127m52s. Both aggregates waited
+for the experiment's shared producer matrix, so its derived 34m27s standalone
+eight-shard duration is an estimate, not an observed standalone workflow time.
+The receipt distinguishes that experiment from the selected-only workflow.
 
 1655 typed cases run 4965 compiler jobs: each baseline and changed
 definition must compile, 1451 changed behaviors must reject at the
