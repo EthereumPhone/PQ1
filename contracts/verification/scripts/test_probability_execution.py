@@ -216,6 +216,33 @@ class AggregateTests(unittest.TestCase):
                     self.aggregate()
                 path.write_bytes(original)
 
+    def test_malformed_compiler_diagnostics(self):
+        bundle = self.directory / "shard-1"
+        path, log = bundle / "result.json", bundle / "controls/negative-checked.log"
+        result = json.loads(path.read_text())
+        row = next(row for row in result["controls"] if not row["expected_pass"])
+        original = log.read_text()
+        malformed = [
+            original.replace('"data":', '"data":"maximum heartbeats exceeded","data":', 1),
+            original.replace('"line": 2', '"line":1,"line":2', 1),
+            original + '{"severity":"error","severity":"information","data":"timeout"}\n',
+            *(original + '{"severity":"information","unused":' + value + '}\n'
+              for value in ("NaN", "Infinity", "-Infinity")),
+        ]
+        for text in malformed:
+            with self.subTest(diagnostic=text):
+                self.assertNotEqual(text, original)
+                log.write_text(text)
+                row["log_sha256"] = digest(text.encode())
+                path.write_bytes(canonical(result))
+                with self.assertRaisesRegex(
+                        RuntimeError, "duplicate JSON key|non-finite JSON constant"):
+                    self.aggregate()
+        log.write_text(original)
+        row["log_sha256"] = digest(original.encode())
+        path.write_bytes(canonical(result))
+        self.assertTrue(self.aggregate()["passed"])
+
     def test_duplicate_json_keys_and_symlink(self):
         path = self.directory / "shard-0/result.json"
         original = path.read_bytes()

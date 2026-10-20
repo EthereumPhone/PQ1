@@ -39,8 +39,8 @@ def canonical(value) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
-def read_json(path: Path):
-    require(path.is_file() and not path.is_symlink(), f"missing or symlinked JSON: {path}")
+def decode_json(text: str):
+    """Reject ambiguous JSON in both receipt documents and compiler diagnostics."""
     def pairs(items):
         result = {}
         for key, value in items:
@@ -49,7 +49,12 @@ def read_json(path: Path):
         return result
     def constant(value):
         raise RuntimeError(f"non-finite JSON constant: {value}")
-    return json.loads(path.read_text(), object_pairs_hook=pairs, parse_constant=constant)
+    return json.loads(text, object_pairs_hook=pairs, parse_constant=constant)
+
+
+def read_json(path: Path):
+    require(path.is_file() and not path.is_symlink(), f"missing or symlinked JSON: {path}")
+    return decode_json(path.read_text())
 
 
 def resource_limits() -> dict:
@@ -114,7 +119,7 @@ def shard_cases(selected: list[dict], index: int, count: int) -> list[dict]:
 def judge_control(row: dict, text: str, source: str, source_path: str, expected: bool) -> list:
     """The original consuming-theorem acceptance rule, shared by run and aggregate."""
     require(type(row["exit"]) is int, "non-integer compiler exit")
-    messages = [json.loads(line) for line in text.splitlines() if line.strip()]
+    messages = [decode_json(line) for line in text.splitlines() if line.strip()]
     require(all(isinstance(message, dict) for message in messages), "malformed compiler message")
     errors = [message for message in messages if message.get("severity") == "error"]
     if expected:
