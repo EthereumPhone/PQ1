@@ -27,8 +27,10 @@ now derives freshness or successful replay from actual execution history and
 bounds first exhaustion, including the shared secret-prefix transfer. Its
 initialized endpoint has no caller-supplied freshness premise. The
 [complete C10 R-exhaustion observer](#r-exhaustion-in-the-complete-c10-game)
-now composes the other private callers and actual keygen. WOTS-count exhaustion
-remains a separate obligation before claiming full C10 signing availability.
+now composes the other private callers and actual keygen. The
+[complete signing-availability bound](#complete-structured-signing-availability)
+below adds WOTS-count exhaustion with arbitrary adaptive cache prefill, then
+charges the actual failed signing ledger in the initialized structured game.
 
 ## What is checked
 
@@ -515,8 +517,73 @@ An initialized zero-R-trial experiment has failure flag true with probability
 one, without a prefilled-cache premise.
 
 The other-private-caller provenance obligation is closed for this R event.
-Full signing availability still needs a separate WOTS-count exhaustion bound.
+The complete signing-availability result below adds the WOTS-count component.
 These remain ideal-model results with the correspondence boundaries below.
+
+## Complete structured signing availability
+
+`RejectCompletion.lean` bounds complete rejection of a fixed finite set of
+oracle keys under any finite adaptive memoized query program started empty.
+Its potential assigns an absent key the fresh rejection mass, a cached
+rejection one, and a cached acceptance zero. A fresh query preserves the
+expected product; cache hits reuse their stored values. Thus complete rejection
+of `n` distinct keys has probability at most `r^n`, even when an adversary
+queries them out of order or interleaves unrelated work. An arbitrary prefilled
+table instead retains its explicit completion potential; repeated keys do not
+increase the exponent.
+
+`WotsCountDomain.lean` covers the actual serialized WOTS count stems at a fixed
+public seed. The variable fields are the four-byte layer, eight-byte tree,
+four-byte keypair and sixteen-byte message: exactly 256 bits. Kind, chain,
+position, hash-address and padding bytes retain their actual zero values.
+The finite cover includes all serialized field values, without assuming a
+logical-address restriction or fresh message. A union over its `2^256`
+contexts bounds the event that any complete count schedule is cached rejected:
+
+```text
+rW = 1 - 22169393903687611906220091621190388 / 8^43
+Pr[any fully rejected WOTS count schedule] <= 2^256 * rW^n.
+```
+
+This bound is deliberately independent of the finite query cap. It applies to
+the physical shared oracle directly, including public prefill, arbitrary
+private inputs, adaptive context selection and repeated requests. It is a
+cache-event bound, not an assertion that each search samples independently.
+At `n=10,000,000`, `WotsDomainNumeric.lean` proves it at most `2^-64`:
+the actual acceptance mass exceeds `1/30720`, and 320 conservative blocks
+absorb the finite-context union.
+
+`WotsFailure.lean` and `C10WotsFailure.lean` show that actual count exhaustion
+leaves every scheduled key rejected. Failure provenance composes through
+WOTS signing, both layers and the forest prework. `C10FailureSession.lean`
+then proves that an initially healthy session's failed ledger implies either
+the existing R observer flag or such a WOTS cache witness. Malformed requests
+and exhausted interaction caps refuse without setting that ledger; later raw
+queries preserve the witness. `C10FailureGame.lean` composes actual keygen and
+final verification, and proves that the ledger observation agrees exactly with
+the original session after erasing the R observer.
+
+`C10Availability.lean` uses that same initialized physical shared game and
+returns `c10SigningFailure`, the actual session ledger's failed bit. Its bound
+for arbitrary PMFs of finite adaptive adversaries is
+
+```text
+Pr[an admitted signing request fails] <=
+  min(1, c10RCharge(cfg, qr, qs) + 2^256 * rW^cfg.wTrials).
+```
+
+The R component retains its uniform hidden-prefix assumptions and actual
+keygen/signing/verification public-call charge. The WOTS cache event is bounded
+directly and is never transferred using the returned-event prefix theorem.
+Finiteness precedes real conversion. At both grinder limits of ten million,
+`qr=2^32` and `qs=2^20`, the kernel proves the combined bound at most `2^-38`.
+
+This closes finite initialized **structured-model signing availability** under
+#100. It does not change the existing forgery bounds or establish concrete
+SHA/Rust/EasyCrypt execution, cross-kernel correspondence, arbitrary unbounded
+adversary representation, QROM or physical security. The exact byte-session
+refinement remains a separate existing result; this endpoint is stated for
+the structured game.
 
 ## Independence and correspondence boundary
 
@@ -1459,16 +1526,22 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2752 theorem closures against
+The gate rebuilds every project module, checks all 2824 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1599 typed cases run 4797 compiler jobs: each baseline and changed
-definition must compile, 1405 changed behaviors must reject at the
-consuming `checked` theorem, and 194 value-preserving changes must pass.
+1655 typed cases run 4965 compiler jobs: each baseline and changed
+definition must compile, 1451 changed behaviors must reject at the
+consuming `checked` theorem, and 204 value-preserving changes must pass.
+The complete signing-availability extension adds 72 closures in fifteen modules
+and 56 controls (46 negative, ten equivalent), preserving all 2752 preceding
+statements, 1599 fixture objects, non-umbrella proof-module bytes and 52 manual
+bindings. Consumers cover completion factors, full rejected-key coverage,
+serialized context fields/cardinality, empty-cache initialization, physical
+shared-game identity, the actual failed ledger and both quantitative charges.
 The complete-C10 R observer adds 102 closures in sixteen modules and 64 controls
 (57 negative, seven equivalent), preserving all 2650 preceding statements,
 1535 fixture objects, non-umbrella proof-module bytes and 52 manual bindings.

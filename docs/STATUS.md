@@ -201,8 +201,13 @@ now proves that composition through actual keygen, WOTS/FORS private callers,
 complete signing and final verification. It erases to the original full game
 and bounds the returned R-exhaustion event by `2^-39` at ten-million trials for
 both grinders and the same raw/sign quotas. This closes R-context provenance
-in that game; WOTS-count exhaustion remains a separate signing-availability
-obligation. Unbounded-adversary representation and concrete
+in that game. The [complete structured signing-availability result](../contracts/verification/probability/README.md#complete-structured-signing-availability)
+now adds WOTS-count exhaustion through a fixed-schedule completion potential
+and finite union over the actual serialized input fields, retaining arbitrary
+adaptive cache prefill. Actual WOTS/layer/signer/session failure provenance
+composes keygen and final verification; the returned failed-ledger bound is
+at most `2^-38` at the same quotas. This closes finite structured-model signing
+availability; it leaves the existing forgery bounds unchanged. Unbounded-adversary representation and concrete
 correspondence remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
 QROM or hardware claim. The dated development history below is not the current
 proof inventory; use the linked owner for counts, gates and remaining limits.

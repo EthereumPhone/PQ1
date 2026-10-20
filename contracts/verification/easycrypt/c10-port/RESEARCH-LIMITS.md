@@ -22,9 +22,9 @@ now proves two-way roundtrips for all well-formed structured signatures and all
 Its independently defined adaptive byte session preserves result, ledger,
 caps and full cache through actual keygen and final verification. Exact
 initialized Boolean equality carries the same capped bound without an added
-loss or premise. Unbounded-adversary representation, full C10 signing
-availability, concrete backend/Rust/EasyCrypt and physical/QROM boundaries
-remain open.
+loss or premise. Finite structured signing availability is now composed below.
+Unbounded-adversary representation, concrete backend/Rust/EasyCrypt and
+physical/QROM boundaries remain open.
 
 The [context-aware adaptive R-grinding component](../../probability/README.md#context-aware-adaptive-r-grinding)
 now removes the caller-supplied freshness premise for a bounded initialized
@@ -48,8 +48,24 @@ Its initialized shared returned-event bound is
 where `H=155135+qr+qs*(m+2*n+364290)`, capped at one. Finiteness precedes real
 conversion; a kernel example gives `2^-39` at `m=n=10,000,000`,
 `qr=2^32`, `qs=2^20`. The observer distinguishes R exhaustion from subsequent
-WOTS-count failure. **The R private-caller provenance obligation is closed;
-WOTS-count exhaustion remains open for complete signing availability.**
+WOTS-count failure. **The R private-caller provenance obligation is closed.**
+The [complete structured signing-availability bound](../../probability/README.md#complete-structured-signing-availability)
+now adds WOTS-count failure. A fixed-schedule completion potential handles
+arbitrary adaptive queries and cached replies from an empty physical oracle.
+The actual serialized WOTS layer/tree/keypair/message fields have `2^256`
+possible contexts at a fixed public seed. Their finite union gives
+`2^256*(1-22169393903687611906220091621190388/8^43)^n`, at most `2^-64`
+at ten million trials, without a caller-supplied freshness premise. Actual
+WOTS/layer/signer/session traces show that a failed signing ledger implies R
+exhaustion or a fully rejected WOTS schedule in the final cache. Actual keygen
+and final verification preserve this result. The WOTS event is bounded directly
+in the physical oracle; only the returned R event uses prefix transfer.
+The combined returned-ledger bound is `min(1,c10RCharge+WotsDomainCharge)`;
+at both ten-million grinder limits, `qr=2^32`, `qs=2^20`, it is at most `2^-38`.
+This closes finite initialized structured-model signing availability, including
+adaptive public prefill and repeated requests. Refusal remains distinct from
+admitted exhaustion; existing forgery bounds remain unchanged. No concrete
+backend, unbounded-adversary, cross-kernel, physical or QROM claim follows.
 No EasyCrypt theorem is imported into Lean.
 
 The [separate mathlib PMF project](../../probability/README.md) proves bounded
@@ -452,7 +468,10 @@ retaining that preceding inventory of 2550 closures and 1471 typed cases.
 The complete-C10 R observer adds 102 closures in sixteen modules and 64 controls,
 preserving all 2650 preceding statements, 1535 fixtures, prior non-umbrella
 proof-module bytes and 52 bindings.
-The current inventory is 2752 closures and 1599 typed cases. The combined forgery bound
+The signing-availability extension adds 72 closures in fifteen modules and
+56 typed controls (46 negative, ten equivalent), preserving all preceding
+statements, fixture objects and manual bindings. The current inventory is
+2824 closures and 1655 typed cases. The combined forgery bound
 retains all six events, uses exact tagged-cache erasure for collision/zero
 charges, and transfers only the final Boolean with the public-prefix charge. These separate Lean
 results import no EasyCrypt theorem and establish no concrete hash, Rust

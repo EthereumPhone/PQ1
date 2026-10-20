@@ -4477,4 +4477,127 @@ def cases(project: Path) -> list[dict]:
   exact ⟨rfl, rfl⟩
 """)
 
+    # Complete C10 signing availability: fixed-schedule completion, actual
+    # serialized context cover, physical-cache bound and returned failed ledger.
+    cf_prefix = (
+        "import C10Probability.C10AvailabilityExamples\n"
+        "import C10Probability.RejectCompletionExamples\n"
+        "import C10Probability.WotsDomainExamples\n"
+        "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n"
+        "attribute [local instance] Classical.propDecidable\n"
+        "variable {K α R : Type*} [DecidableEq K] {fuel : ℕ}\n"
+    )
+    cf_suffix = "\nend\nend C10Probability\n"
+
+    def cf_variants(pairs, module, consumer, variants, check_override=None):
+        names = {name: name + "CFCandidate" for _, name in pairs}
+        declarations = []
+        for owner, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|inductive|attribute|omit|end|set_option|local instance)\b)",
+                src[owner], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing signing-availability definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "CFSlice"
+        src[key] = cf_prefix + "\n".join(declarations) + cf_suffix
+        check = check_override if check_override is not None else theorem(src[module], consumer)
+        for before, after in names.items():
+            check = re.sub(r"\b" + before + r"\b", after, check)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("c10-availability-" + label, key, old, new, check, expected)
+
+    cf_variants([("RejectCompletion", "rejectFactor")], "RejectCompletionExamples", "rejection_factor_branches", [
+        ("unknown-factor-zero", "| none => rejectMass p accept", "| none => 0", False),
+        ("unknown-factor-one", "| none => rejectMass p accept", "| none => 1", False),
+        ("cached-reject-zero", "if accept value then 0 else 1", "if accept value then 0 else 0", False),
+        ("cached-accept-one", "if accept value then 0 else 1", "if accept value then 1 else 1", False),
+        ("cached-branches-reversed", "if accept value then 0 else 1", "if accept value then 1 else 0", False),
+        ("cached-accept-id", "if accept value then 0 else 1", "if id (accept value) then 0 else 1", True),
+    ])
+    cf_variants([("RejectCompletion", "rejectCompletion")], "RejectCompletionExamples", "rejection_two_unknown_keys", [
+        ("completion-one-key-only", "∏ key ∈ keys,", "∏ key ∈ keys.filter (fun _ => false),", False),
+        ("completion-sum", "∏ key ∈ keys,", "∑ key ∈ keys,", False),
+        ("completion-zero", "rejectFactor p accept (table key)", "0", False),
+        ("completion-cache-id", "(table key)", "(id (table key))", True),
+    ])
+    cf_variants([("RejectCompletion", "CompleteRejection")], "RejectCompletionExamples", "rejection_one_missing_is_incomplete", [
+        ("complete-one-key-enough", "∀ key ∈ keys, ∃ value,", "∃ key ∈ keys, ∃ value,", False),
+        ("complete-domain-empty", "key ∈ keys", "key ∈ (∅ : Finset K)", False),
+        ("complete-missing-allowed", "table key = some value", "(table key = some value ∨ table key = none)", False),
+        ("complete-key-id", "table key = some value", "table (id key) = some value", True),
+    ])
+    cf_variants([("RejectCompletion", "CompleteRejection")], "RejectCompletionExamples", "rejection_one_accepted_is_incomplete", [
+        ("complete-acceptance-unchecked", "accept value = false", "True", False),
+    ])
+    cf_variants([("WotsCountDomain", "wotsContextStem")], "WotsDomainExamples", "wots_context_field_sensitivity", [
+        ("context-layer-lost", "List.ofFn context.1", "List.replicate 4 0", False),
+        ("context-tree-lost", "List.ofFn context.2.1", "List.replicate 8 0", False),
+        ("context-keypair-lost", "List.ofFn context.2.2.1", "List.replicate 4 0", False),
+        ("context-message-lost", "List.ofFn context.2.2.2", "List.replicate 16 0", False),
+        ("context-kind-changed", "List.ofFn context.2.1 ++ List.replicate 4 0", "List.ofFn context.2.1 ++ List.replicate 4 1", False),
+        ("context-chain-changed", "List.ofFn context.2.2.1 ++ List.replicate 4 0", "List.ofFn context.2.2.1 ++ List.replicate 4 1", False),
+        ("context-position-changed", "List.replicate 4 0 ++ List.replicate 4 0 ++", "List.replicate 4 0 ++ List.replicate 4 1 ++", False),
+        ("context-hash-address-changed", "List.replicate 4 0) ++", "List.replicate 4 1) ++", False),
+        ("context-padding-lost", "++ List.replicate 16 0", "++ []", False),
+        ("context-padding-nonzero", "++ List.replicate 16 0", "++ List.replicate 16 1", False),
+        ("context-message-id", "List.ofFn context.2.2.2", "List.ofFn (id context.2.2.2)", True),
+    ])
+    cf_variants([("WotsCountDomain", "wotsContextStem")], "WotsDomainExamples", "wots_context_zero_layout", [
+        ("context-public-seed-lost", "seed ++", "[] ++", False),
+        ("context-seed-id", "seed ++", "id seed ++", True),
+    ])
+    cf_variants([("WotsCountDomain", "WotsCountContext")], "WotsCountDomain", "wots_count_context_card", [
+        ("context-layer-width", "(Fin 4 → Fin 256) × (Fin 8", "(Fin 3 → Fin 256) × (Fin 8", False),
+        ("context-tree-width", "(Fin 8 → Fin 256)", "(Fin 7 → Fin 256)", False),
+        ("context-message-width", "(Fin 16 → Fin 256)", "(Fin 15 → Fin 256)", False),
+    ])
+    cf_variants([("WotsCountDomain", "WotsDomainExhausted")], "WotsDomainExamples", "wots_domain_empty_cache_nonzero", [
+        ("domain-prefilled-cache", ").toFinset table", ").toFinset (fun _ => some 0)", False),
+    ])
+    cf_variants([("WotsCountDomain", "WotsDomainExhausted")], "WotsDomainExamples", "wots_domain_rejecting_prefill", [
+        ("domain-accept-all", "(wotsAccept ∘ wotsOfDigest)", "(fun _ => true)", False),
+        ("domain-cache-cleared", ").toFinset table", ").toFinset (fun _ => none)", False),
+        ("domain-cache-id", ").toFinset table", ").toFinset (id table)", True),
+    ])
+    cf_variants([("WotsCountDomain", "WotsDomainExhausted")], "WotsDomainExamples", "wots_domain_accepting_prefill", [
+        ("domain-reject-all", "(wotsAccept ∘ wotsOfDigest)", "(fun _ => false)", False),
+    ])
+    cf_variants([("WotsCountDomain", "wotsDomainCharge")], "WotsDomainReal", "wots_domain_charge_real", [
+        ("charge-context-union-lost", "2 ^ 256 *", "1 *", False),
+        ("charge-trial-count-lost", "^ trials", "^ 0", False),
+        ("charge-rejection-replaced", "rejectMass digestDraw", "acceptMass digestDraw", False),
+        ("charge-trials-id", "^ trials", "^ ((fun x => x) trials)", True),
+    ])
+    cf_variants([("C10FailureGame", "c10SigningFailure")], "C10AvailabilityExamples", "c10_signing_failure_event_branches", [
+        ("event-failure-hidden", "out.2.1.ledger.failed", "false", False),
+        ("event-failure-forced", "out.2.1.ledger.failed", "true", False),
+        ("event-r-only", "out.2.1.ledger.failed", "out.2.2", False),
+        ("event-failure-id", "out.2.1.ledger.failed", "id out.2.1.ledger.failed", True),
+    ])
+    cf_variants([("C10Availability", "c10SigningTrace")], "C10Availability", "c10_signing_trace_refinement", [
+        ("trace-secret-unsampled", "digestDraw.bind", "(PMF.pure 0).bind", False),
+        ("trace-secret-fixed", "prefixedPrivateInput secret", "prefixedPrivateInput 0", False),
+        ("trace-seed-fixed", "cfg publicSeed adversary", "cfg 0 adversary", False),
+        ("trace-raw-cap-lost", "adversary qr qs", "adversary 0 qs", False),
+        ("trace-sign-cap-lost", "adversary qr qs", "adversary qr 0", False),
+        ("trace-initial-cache-prefilled", "(fun _ => none)", "(fun _ => some 0)", False),
+        ("trace-seed-id", "cfg publicSeed adversary", "cfg ((fun x => x) publicSeed) adversary", True),
+    ])
+    cf_variants([("C10Availability", "c10SigningCharge")], "C10AvailabilityReal", "c10_signing_charge_real", [
+        ("combined-r-charge-lost", "c10RCharge cfg qr qs +", "0 +", False),
+        ("combined-wots-charge-lost", "+ wotsDomainCharge cfg.wTrials", "+ 0", False),
+        ("combined-wots-count-id", "wotsDomainCharge cfg.wTrials", "wotsDomainCharge ((fun x => x) cfg.wTrials)", True),
+    ])
+    cf_variants([("C10AvailabilityReal", "c10SigningChargeReal")], "C10AvailabilityReal", "c10_signing_charge_real", [
+        ("real-r-charge-lost", "c10RChargeReal cfg qr qs +", "0 +", False),
+        ("real-wots-charge-lost", "+ wotsDomainChargeReal cfg.wTrials", "+ 0", False),
+    ])
+
     return out
