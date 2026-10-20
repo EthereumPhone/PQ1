@@ -1533,6 +1533,42 @@ proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
+**Throughput work (#1000, 2026-10-20).** The cold command above still performs
+every check. Local parallelism is configurable:
+
+```sh
+/usr/bin/python3 -E -S contracts/verification/scripts/check_probability.py --workers 8
+PROBABILITY_WORKERS=12 make -C contracts/verification verify-probability
+/usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
+```
+
+`auto` selects at most twelve workers, limited by CPU affinity/cgroup quota
+and available host/cgroup memory after a 2 GiB reserve and a 2 GiB admission
+allowance per worker. Explicit counts must be within 1–32 and that admission
+budget. This is a scheduling allowance, not a new compiler memory limit.
+The Lean invocation, per-control 90-second timeout and consuming-theorem
+judging rules are unchanged. Each compiler has its own fixture and log;
+imported project/dependency libraries have no concurrent writer.
+
+The initial CI experiment compares four and eight deterministic shards.
+Every shard freshly rebuilds all project proofs, audits all closures and
+runs both closure canaries before its assigned cases. All three stages of
+a case stay together. The required aggregate runs its own fresh proof and
+closure checks, then requires successful producers and an exact set of
+shard receipts. It authenticates current source/statement/binding inputs,
+generated fixtures, checking-policy bytes, actual Lean/Python and dependency
+library bytes, project libraries, checkout identity, workflow identity,
+run ID and run attempt. It rechecks raw closure/control logs and requires
+each expected case/stage exactly once. Missing, failed, cancelled, duplicate,
+unexpected, stale or mismatched evidence fails the gate.
+
+Artifact transport stays within the current workflow run and attempt; the
+reviewed producer workflow and GitHub runner/artifact service remain trusted.
+This batch does not reuse PR evidence after landing or skip the push replay.
+That is a separate evidence-policy boundary coordinated with #789.
+Worker and shard measurements are pending; the experimental matrix is not
+a claim of measured savings.
+
 1655 typed cases run 4965 compiler jobs: each baseline and changed
 definition must compile, 1451 changed behaviors must reject at the
 consuming `checked` theorem, and 204 value-preserving changes must pass.
@@ -1553,9 +1589,10 @@ The repeated-R session adds 100 closures in seventeen modules and 64 controls
 public history, successful replay, cap/refusal/failure behavior, full-cache
 refinement, initialized experiments and the exhaustion/prefix charges.
 All 2550 preceding statements, 1471 fixture objects, non-umbrella proof-module
-bytes and 52 manual bindings are preserved. The probability CI job receives
-120 minutes after the prior PR/push jobs took 86m52s/85m09s; compiler limits,
-worker count, toolchain and checks remain unchanged.
+bytes and 52 manual bindings are preserved. That batch raised the probability
+CI timeout to 120 minutes after prior PR/push jobs took 86m52s/85m09s, leaving
+its compiler limits, worker count, toolchain and checks unchanged. The later
+#1000 throughput work is described above.
 The byte-codec/session extension adds 101 closures in thirteen modules and
 64 controls (58 negative, six equivalent). Complete consumers cover byte order,
 full counters, malformed lengths, reply translation, all admission checks,

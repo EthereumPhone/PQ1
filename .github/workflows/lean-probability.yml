@@ -7,6 +7,9 @@ on:
     paths: &probability_paths
       - 'contracts/verification/probability/**'
       - 'contracts/verification/scripts/check_probability.py'
+      - 'contracts/verification/scripts/probability_execution.py'
+      - 'contracts/verification/scripts/test_probability_execution.py'
+      - 'scripts/gate_enforcement.json'
       - 'contracts/verification/scripts/probability_controls.py'
       - 'contracts/verification/scripts/check_axiom_closure.py'
       - 'contracts/verification/scripts/check_ledger_consistency.py'
@@ -68,12 +71,26 @@ permissions:
   contents: read
 
 jobs:
-  probability:
-    name: PMF proofs and semantic controls
+  controls:
+    name: PMF controls (${{ matrix.index }}/${{ matrix.count }})
     runs-on: ubuntu-latest
-    # The preceding 1471-case PR/push jobs took 86m52s/85m09s.
-    # Preserve every check and compiler limit while allowing the added census.
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {count: 4, index: 0}
+          - {count: 4, index: 1}
+          - {count: 4, index: 2}
+          - {count: 4, index: 3}
+          - {count: 8, index: 0}
+          - {count: 8, index: 1}
+          - {count: 8, index: 2}
+          - {count: 8, index: 3}
+          - {count: 8, index: 4}
+          - {count: 8, index: 5}
+          - {count: 8, index: 6}
+          - {count: 8, index: 7}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -103,5 +120,105 @@ jobs:
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
         run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+      - name: runner regression controls
+        run: /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
+      - name: fresh proof build and control shard
+        env:
+          PROBABILITY_SHARD_INDEX: ${{ matrix.index }}
+          PROBABILITY_SHARD_COUNT: ${{ matrix.count }}
+          PROBABILITY_OUTPUT: ${{ runner.temp }}/probability-shard
+        run: /usr/bin/python3 -E -S contracts/verification/scripts/check_probability.py
+      - name: preserve shard evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: probability-${{ matrix.count }}-${{ matrix.index }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/probability-shard
+          if-no-files-found: error
+          retention-days: 7
+
+  probability:
+    name: PMF proofs and semantic controls (${{ matrix.count }} shards)
+    needs: [controls]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        count: [4, 8]
+    steps:
+      - name: require successful complete producer matrix
+        env:
+          PRODUCER_RESULT: ${{ needs.controls.result }}
+        run: test "$PRODUCER_RESULT" = success
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: install elan (toolchain pinned by lean-toolchain)
+        run: |
+          # Pinned + verified, not `curl | sh` from a moving branch. `master`
+          # is mutable: whoever controls that ref controls the toolchain
+          # installer on every FV runner, which is the trust root the
+          # verification Makefile builds on. Pin the commit, check the bytes,
+          # and only then execute. (#562)
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o elan-init.sh
+          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          rm -f elan-init.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: cache pinned probability dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: contracts/verification/probability/.lake/packages
+          key: lean-probability-deps-${{ hashFiles('contracts/verification/probability/lake-manifest.json', 'contracts/verification/probability/lean-toolchain') }}
+      - name: fetch pinned mathlib probability cache
+        working-directory: contracts/verification/probability
+        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+      - name: download this attempt's shard evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: probability-${{ matrix.count }}-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/probability-downloads
+      - name: require exact artifact set
+        env:
+          SHARD_COUNT: ${{ matrix.count }}
+          ATTEMPT: ${{ github.run_attempt }}
+          INCOMING: ${{ runner.temp }}/probability-downloads
+          RECEIPTS: ${{ runner.temp }}/probability-receipts
+        run: |
+          /usr/bin/python3 -E -S - <<'PY'
+          import os
+          from pathlib import Path
+          count = int(os.environ['SHARD_COUNT'])
+          attempt = os.environ['ATTEMPT']
+          incoming, receipts = Path(os.environ['INCOMING']), Path(os.environ['RECEIPTS'])
+          expected = {f'probability-{count}-{i}-{attempt}' for i in range(count)}
+          if {p.name for p in incoming.iterdir()} != expected:
+              raise SystemExit('missing or unexpected artifact')
+          receipts.mkdir()
+          for i in range(count):
+              (incoming / f'probability-{count}-{i}-{attempt}').rename(receipts / f'shard-{i}')
+          PY
+      - name: runner regression controls
+        run: /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
       - name: verify-probability (fresh kernel build, claims and typed controls)
+        env:
+          PROBABILITY_AGGREGATE: ${{ runner.temp }}/probability-receipts
+          PROBABILITY_SHARD_COUNT: ${{ matrix.count }}
+          PROBABILITY_PRODUCER_RESULT: ${{ needs.controls.result }}
+          PROBABILITY_OUTPUT: ${{ runner.temp }}/probability-aggregate
         run: make -C contracts/verification verify-probability
+      - name: preserve aggregate evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: probability-aggregate-${{ matrix.count }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/probability-aggregate
+          if-no-files-found: error
+          retention-days: 7
