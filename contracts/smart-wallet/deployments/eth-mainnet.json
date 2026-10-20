@@ -1,0 +1,33 @@
+{
+  "chainId": 1,
+  "chainName": "ethereum-mainnet",
+  "status": "DO NOT USE",
+  "rpcUrl": "https://ethereum-rpc.publicnode.com",
+  "deployer": "0x3a4e6eD8B0F02BFBfaA3C6506Af2DB939eA5798c",
+  "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+  "salts": {
+    "verifier": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "impl": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "factory": "0x0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "contracts": {
+    "EntryPointV06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    "SPHINCsC10Asm": "0xb32e32a532d03a160ceb35af39b4a95ba4881fc7",
+    "PQSmartWalletImpl": "0xe178d7a4c48d91eef6b1a10e21a7faf9f9d501d1",
+    "PQSmartWalletFactory": "0x62b734349e5ad86fa41da904524f0f0b7b03db8b"
+  },
+  "runtimeCodehashes": {
+    "SPHINCsC10Asm": "0x92913b0bcebde44a81895fbdc0714b540d048bac3b29bd189c4fe0e119f0b75b",
+    "PQSmartWalletImpl": "0x52f0043959537e480fbbe6574ce19a90762cb117d1e4b16d7c8f2c82775515b4",
+    "PQSmartWalletFactory": "0xfe4b8fb75e9227709628921643ca9731bbd011410145897fb25899357d745a4e"
+  },
+  "deployedOn": "2026-05-13",
+  "blocks": [
+    25086009,
+    25086010,
+    25086011
+  ],
+  "broadcast": "broadcast/DeployImplAndFactoryEthMainnet.s.sol/1/run-1778672847.json",
+  "verified": false,
+  "note": "Orphaned deployment from a pre-2026-06-10 tree, recorded 2026-10-20 (codehashes read on chain that day). Its implementation predates the bootstrapUses cap-evasion fix and its verifier is in no pin file. No firmware has ever targeted this factory, and the contracts cannot be removed. The audit-freeze set is to be deployed on Ethereum Mainnet after the audit. See docs/VULN-eth-mainnet-deployment-divergence.md."
+}

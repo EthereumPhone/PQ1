@@ -27,9 +27,9 @@ is zero, so `countExec ≤ countValidate` (`exec_count_le_validate_count`).
 
 ## Honest scope (do NOT oversell)
 
-  * The headline counts **ALL** `validate` steps (including failed validates,
-    bootstrap `ownerIndex = 0` validates, and `removeOwnerAtIndex` validates —
-    none of which stamp a credit). It is therefore *looser* than
+  * The headline counts **ALL** `validate` steps (including failed validates
+    and bootstrap `ownerIndex = 0` validates — neither of which stamps a
+    credit). It is therefore *looser* than
     `#executes ≤ #stamping-validates`; a static `countP` cannot express
     "stamping" because that is state-dependent (it needs the decode + cap +
     verifier outcome at that step). The per-index exactly-once result remains
@@ -202,8 +202,8 @@ theorem applyStep_executeBatch_credits
   · rw [executeBatch_preserves_other_credits h hj]; simp [consumeCredit, hj]
 
 /-- A `validate` step either leaves `credits` untouched (failed / decode-fail /
-    bootstrap `ownerIndex = 0` / `removeOwnerAtIndex`) or STAMPS `+1` at a
-    decoded non-zero `ownerIndex`. Mirrors the case structure of
+    bootstrap `ownerIndex = 0`) or STAMPS `+1` at a decoded non-zero
+    `ownerIndex`. Mirrors the case structure of
     `applyStep_credit_lift_only_by_validate_success` but characterises the
     post-credits exactly (not just "lifted from zero"). -/
 theorem applyStep_validate_credits
@@ -227,11 +227,9 @@ theorem applyStep_validate_credits
         rw [hdec] at h; injection h with h
         by_cases hd0 : d.ownerIndex = 0
         · left; rw [← h]; unfold applyValidateSuccess; rw [if_pos hd0]
-        · by_cases hsel : op.selectorOf = Selector.removeOwnerAtIndex
-          · left; rw [← h]; unfold applyValidateSuccess; rw [if_neg hd0, if_pos hsel]
-          · right
-            refine ⟨d, rfl, hd0, ?_⟩
-            rw [← h]; unfold applyValidateSuccess; rw [if_neg hd0, if_neg hsel]
+        · right
+          refine ⟨d, rfl, hd0, ?_⟩
+          rw [← h]; unfold applyValidateSuccess; rw [if_neg hd0]
   · rw [if_neg hsucc] at h; injection h with h
     left; rw [← h]
 
@@ -244,8 +242,7 @@ def isExec : Step → Bool
   | .validate _ _ _ _ => false
 
 /-- A `validate` entry-point call (every credit stamp is one of these, but not
-    conversely — failed / bootstrap / `removeOwnerAtIndex` validates do not
-    stamp). -/
+    conversely — failed and bootstrap validates do not stamp). -/
 def isValidate : Step → Bool
   | .validate _ _ _ _ => true
   | .execute _ _ _ _ _ _ => false

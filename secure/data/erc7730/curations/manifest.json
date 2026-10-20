@@ -482,8 +482,8 @@
       "path": "proto",
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 9,
-      "bytes": 212615,
-      "sha256": "5c34a3340e948402d2b317ef2baa1e0effce09ef98a6fb8ae752780ba4ba29eb"
+      "bytes": 213574,
+      "sha256": "4c3b6bc12f138d632d62e3c6a784b0d161785bad5225c51dde48fbf9517db015"
     },
     {
       "path": "shared",
@@ -510,8 +510,8 @@
       "path": "xtask",
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 6,
-      "bytes": 320273,
-      "sha256": "950a68d076835513187eab14d332712d31b09d1f36f9808843e625024e2e24af"
+      "bytes": 326881,
+      "sha256": "937a57ac4f1c91ce3864ea978a738ca5f5156ef5b75c7a0fb1f9ca5c2248d336"
     }
   ],
   "capability_inputs": [

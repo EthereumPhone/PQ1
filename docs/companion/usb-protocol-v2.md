@@ -448,10 +448,12 @@ flash write otherwise: neither Safe's `checkSignatures` nor GPv2Settlement
 unwraps ERC-6492) and use the same page-123 gap/cap gate, confirmation gate and
 4016-byte response as the other kinds.
 
-Consumers: **SafeTx signatures verify only on Safe ≥ v1.5.0**, whose
-`checkSignatures` calls the bytes32 `isValidSignature`; Safe v1.3.0 / v1.4.1
-call the legacy `isValidSignature(bytes,bytes)`, which `PQSmartWallet` does not
-implement (true of a RAW32 signature over the same hash too). Older Safes
+Consumers: **SafeTx signatures verify on Safe v1.3.0, v1.4.1 and v1.5.0+**
+(UPDATE 2026-10-20, #995). Safe v1.5.0's `checkSignatures` calls the bytes32
+`isValidSignature`; v1.3.0 / v1.4.1 call the legacy
+`isValidSignature(bytes,bytes)`, which the audit-freeze `PQSmartWallet`
+implements and earlier deployments did not (the same holds for a RAW32
+signature over the same hash). Older Safes
 (< v1.3.0, domain without `chainId`) produce a different hash and cannot use
 kind 4. Companions MUST gate kinds 4 / 5 on the capability bits and MUST NOT
 fall back to RAW32 after a kind-4/5 refusal — that would turn every structured

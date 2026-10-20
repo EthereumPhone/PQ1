@@ -369,28 +369,71 @@ contract HalmosExecuteEquiv is HalmosWalletBase {
         }
     }
 
-    /// **A `removeOwnerAtIndex`-selector validate stamps NO execute
-    /// credit.** The bytecode stamps only for the offchain-count execute
-    /// selectors (`_validateSignature`); the Lean `TxFlow.applyValidateSuccess`
-    /// mirrors this — this rule is the bytecode witness for that model
-    /// clause (a validate that authorises a removal must not open the
-    /// money-moving execute gate).
-    function check_validate_remove_selector_stamps_no_credit(uint256 callIdx) public {
-        bytes memory vCallData =
-            abi.encodeCall(wallet.removeOwnerAtIndex, (uint256(1), abi.encodePacked(SLOT0_PK_SEED, SLOT0_PK_ROOT)));
+    /// **The deleted `removeOwnerAtIndex` selector fails validation and
+    /// opens nothing.** Owner removal was deleted before launch; a slot-
+    /// signed op carrying its selector (`0x89625b57`) is no longer in the
+    /// slot-allowed set, so validation fails, `slotUses` does not move,
+    /// and no execute credit exists for ANY index afterwards. Bytecode
+    /// witness for the Lean `Selector.isSlotAllowed` (two selectors only).
+    function check_validate_rejects_removed_selector(uint256 callIdx) public {
+        bytes memory vCallData = abi.encodeWithSelector(
+            bytes4(0x89625b57), uint256(1), abi.encodePacked(SLOT0_PK_SEED, SLOT0_PK_ROOT)
+        );
         c10.setValid(true);
+        uint256 preSlotUses = wallet.slotUses(1);
         vm.prank(ENTRY_POINT_ADDR);
         uint256 vres =
             wallet.validateUserOp(_op(vCallData, abi.encode(uint256(1), new bytes(4008))), bytes32(0), 0);
-        assertEq(vres, 0, "remove-selector validate should succeed");
+        assertEq(vres, 1, "removed-selector validate must fail");
+        assertEq(wallet.slotUses(1), preSlotUses, "failed validate bumped slotUses");
 
         vm.prank(ENTRY_POINT_ADDR);
         try wallet.executeWithOffchainCount(
             callIdx, 0, CODELESS_TARGET, 0, ""
         ) returns (bytes memory) {
-            assertTrue(false, "credit: remove-selector validate opened the execute gate");
+            assertTrue(false, "credit: a failed validate opened the execute gate");
         } catch {
             // expected: OwnerIndexMismatch — no credit was stamped
+        }
+    }
+
+    /// **A successful bootstrap validation stamps no credit.** Since the
+    /// 2026-10-20 freeze the only validation that succeeds without stamping
+    /// an execute credit is a bootstrap (`ownerIndex 0`) `addOwnerBytes` op
+    /// (before it, a slot-signed removal op was the other one). After it,
+    /// neither execute path may run for ANY index: the bytecode analogue of
+    /// the Lean `TxFlow.applyValidateSuccess` index-0 clause.
+    function check_validate_bootstrap_success_stamps_no_credit(uint256 callIdx) public {
+        bytes memory newOwner =
+            abi.encodePacked(bytes32(uint256(0x1111) << 240), bytes32(uint256(0x2222) << 240));
+        c10.setValid(true);
+        uint256 preBootstrapUses = wallet.bootstrapUses();
+        vm.prank(ENTRY_POINT_ADDR);
+        uint256 vres = wallet.validateUserOp(
+            _op(abi.encodeCall(wallet.addOwnerBytes, (newOwner)), abi.encode(uint256(0), new bytes(4008))),
+            bytes32(0),
+            0
+        );
+        assertEq(vres, 0, "bootstrap validate should succeed");
+        assertEq(wallet.bootstrapUses(), preBootstrapUses + 1, "bootstrap validate must count");
+
+        vm.prank(ENTRY_POINT_ADDR);
+        try wallet.executeWithOffchainCount(
+            callIdx, 0, CODELESS_TARGET, 0, ""
+        ) returns (bytes memory) {
+            assertTrue(false, "credit: a bootstrap validate opened the execute gate");
+        } catch {
+            // expected: OwnerIndexMismatch — bootstrap validation stamps no credit
+        }
+
+        address[] memory targets = new address[](0);
+        uint256[] memory values = new uint256[](0);
+        bytes[] memory datas = new bytes[](0);
+        vm.prank(ENTRY_POINT_ADDR);
+        try wallet.executeBatchWithOffchainCount(callIdx, 0, targets, values, datas) {
+            assertTrue(false, "credit: a bootstrap validate opened the batch gate");
+        } catch {
+            // expected: OwnerIndexMismatch — bootstrap validation stamps no credit
         }
     }
 

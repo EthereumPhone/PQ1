@@ -116,7 +116,17 @@ Specifically and defensibly:
    `theft_free_with_calldata_binding` now closes over the consistent
    `sha256_collision_resistance` and concludes the honest `preimage eq ∨
    BreaksHash` form — the false `sha256_injective` axiom is gone.)
-2. **Control-flow bytecode discharge.** 42 Halmos rules (38 at the 2026-06-11
+2. **Control-flow bytecode discharge.** *UPDATE 2026-10-20 (audit freeze):*
+   re-run on the freeze bytecode, which deleted owner removal and added the
+   legacy EIP-1271 entry: Halmos 43/43 on both profiles (owner-table now 5
+   rules — add/initialize pointwise, one-shot `initialize`, EntryPoint gate,
+   the deleted removal selector dispatching nothing; EIP-1271 now 5 rules
+   including the legacy entry; a new execute rule: a successful bootstrap
+   validation opens no execute path for any index), receipt
+   `halmos/sessions/halmos-session-2026-10-20.txt`; Kontrol 31/31 (A3.4 = 10:
+   the three removal proofs became one selector-absent proof), receipt
+   `kontrol/sessions/kontrol-session-2026-10-20.txt`. That bytecode is the
+   freeze build, not yet deployed (#6). Earlier text: 42 Halmos rules (38 at the 2026-06-11
    snapshot; +3 `HalmosIsValidSignature` for the EIP-1271 surface + Equiv rules
    since, 2026-06-29 — count re-tallied from the tree 2026-07-02) pass on **both**
    the `default` (runs=200) and `deploy` (runs=999999) profiles' deployed
@@ -163,8 +173,22 @@ Specifically and defensibly:
 5. **Verifier negative direction.** The deployed verifier bytecode rejects a
    ≈250-mutant wrong-accept battery and the 6 negative KAT vectors, and
    accepts the 4 valid vectors (`forge test`). Reproduced 2026-06-11.
-6. **Byte-bound to the deployed Base Mainnet contracts.** The bytecode the
-   control-flow discharge runs against is the bytecode on chain. The
+6. **Byte-bound to the production build; deployment pending since the
+   2026-10-20 audit freeze.** *UPDATE 2026-10-20:* the freeze changed the
+   contracts and the build metadata, which moved every codehash and address
+   (`PINNED_CODEHASHES.md`). The new set is not deployed on any chain, so
+   this item now reads **expected, deploy pending**:
+   `test/DeployedBytecodeReproCheck.t.sol` (deploy profile, chain 8453)
+   asserts that the production build lands at the predicted addresses with
+   the predicted runtime codehashes (verifier `0x7Ab9…`/`0xfd55ec…`, wallet
+   impl `0xEb64…`/`0x4be66f…`, factory `0xE3db…`/`0x711dff…`) and that the
+   factory address and proxy init-code hash equal the firmware's CREATE2
+   constants; CI runs it. It becomes a claim about code on chain only after
+   the owner deploys the set and the on-chain codehashes are compared. Until
+   then, **do not say the proofs are byte-bound to deployed contracts.** The
+   rest of this item describes the superseded 2026-06-12 Base Mainnet set and
+   is kept for history: the bytecode the
+   control-flow discharge runs against was the bytecode on chain. The
    deploy-time lib set is recorded in `foundry.lock` (account-abstraction
    `f54584e` = ERC-4337 v0.9 release; solady `90db92ce`, bytecode-irrelevant),
    and `test/DeployedBytecodeReproCheck.t.sol` replays the production CREATE2
@@ -307,7 +331,10 @@ Do **not** say any of the following:
   The verifier's **∀-signature** functional equivalence is still carried by
   testing + the executable Lean KAT differential, not a symbolic ∀ proof —
   see below.
-* **(RESOLVED 2026-06-13 — was a gap, now claimable.)** "The A3.2/A3.3/A3.4
+* **(UPDATE 2026-10-20 — NOT claimable again until the audit-freeze set is
+  deployed and its on-chain codehashes are compared; see Claimable #6.)**
+  **(RESOLVED 2026-06-13 — was a gap, then claimable for the 2026-06-12 Base
+  Mainnet set, which is now superseded.)** "The A3.2/A3.3/A3.4
   Halmos proofs are byte-bound to the *deployed* wallet/factory bytecode." A
   brief interim finding (lost-libs) was **overturned**: the deploy-time lib
   was recovered (`foundry.lock` pins account-abstraction `f54584e`, the

@@ -26,6 +26,11 @@ mod erc7730_curation;
 mod erc7730_diff;
 
 const SOLIDITY_OUT_PATH: &str = "contracts/smart-wallet/src/generated/PqsignerProto.sol";
+/// The firmware's CREATE2 constants, for the deploy scripts and the
+/// deploy-profile tests. Deliberately outside `src/`: the values are derived
+/// from the compiled contracts, so the contracts must not import them.
+const SOLIDITY_DEPLOYMENT_OUT_PATH: &str =
+    "contracts/smart-wallet/script/generated/PqsignerDeployment.sol";
 const ERC7730_VENDOR_MARKER: &str = ".pqsigner-erc7730-vendor";
 const ERC7730_VENDOR_MARKER_BYTES: &[u8] =
     b"PQSigner ERC-7730 tool-managed registry/ and ercs/ directories.\n";
@@ -59,10 +64,12 @@ fn print_help() {
         "pqsigner-xtask — host-side workspace tooling
 
 Subcommands:
-  gen-solidity-constants [--check]
-      Render `{SOLIDITY_OUT_PATH}` from `pqsigner-proto`.
-      With --check: print the rendered output to stdout instead of
-      writing the file (used by CI to diff against the checked-in copy).
+  gen-solidity-constants [--check | --check-deployment]
+      Render `{SOLIDITY_OUT_PATH}` and
+      `{SOLIDITY_DEPLOYMENT_OUT_PATH}` from `pqsigner-proto`.
+      With --check: print the first file's rendered output to stdout
+      instead of writing (used by CI to diff against the checked-in copy).
+      With --check-deployment: the same for the second file.
 
   gen-erc7730-descriptors [--check]
                           [--input-dir PATH] [--policy PATH] [--e2e-policy PATH]
@@ -141,30 +148,36 @@ Subcommands:
 }
 
 fn cmd_gen_solidity_constants(args: &[String]) -> ExitCode {
-    let check_mode = args.iter().any(|a| a == "--check");
-    let rendered = render_solidity_library();
-
-    if check_mode {
-        // CI uses this output for `diff /tmp/expected.sol <checked-in>`.
-        print!("{rendered}");
+    // CI uses each check output for `diff - <checked-in>`.
+    if args.iter().any(|a| a == "--check") {
+        print!("{}", render_solidity_library());
+        return ExitCode::SUCCESS;
+    }
+    if args.iter().any(|a| a == "--check-deployment") {
+        print!("{}", render_solidity_deployment_library());
         return ExitCode::SUCCESS;
     }
 
-    let out_path = workspace_root().join(SOLIDITY_OUT_PATH);
+    for (rel, rendered) in [
+        (SOLIDITY_OUT_PATH, render_solidity_library()),
+        (SOLIDITY_DEPLOYMENT_OUT_PATH, render_solidity_deployment_library()),
+    ] {
+        let out_path = workspace_root().join(rel);
 
-    if let Some(parent) = out_path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            eprintln!("error: cannot create {}: {e}", parent.display());
+        if let Some(parent) = out_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                eprintln!("error: cannot create {}: {e}", parent.display());
+                return ExitCode::FAILURE;
+            }
+        }
+
+        if let Err(e) = fs::write(&out_path, &rendered) {
+            eprintln!("error: cannot write {}: {e}", out_path.display());
             return ExitCode::FAILURE;
         }
-    }
 
-    if let Err(e) = fs::write(&out_path, &rendered) {
-        eprintln!("error: cannot write {}: {e}", out_path.display());
-        return ExitCode::FAILURE;
+        eprintln!("wrote {}", out_path.display());
     }
-
-    eprintln!("wrote {}", out_path.display());
     ExitCode::SUCCESS
 }
 
@@ -191,8 +204,7 @@ fn render_solidity_library() -> String {
     s.push_str("// Source of truth: `pqsigner-proto` crate (Rust).\n");
     s.push_str("// Regenerate: `cargo run -p pqsigner-xtask -- gen-solidity-constants`.\n");
     s.push_str("//\n");
-    s.push_str("// Reference: /home/markus/.claude/plans/ok-make-a-plan-logical-lobster.md\n");
-    s.push_str("// Phase 4 of the modularity refactor.\n");
+    s.push_str("// Background: docs/archive/handoff-modularity-refactor.md (Phase 4).\n");
     s.push_str("pragma solidity ^0.8.28;\n");
     s.push('\n');
     s.push_str("/// @notice Cross-language protocol constants shared by the firmware\n");
@@ -247,6 +259,46 @@ fn render_solidity_library() -> String {
         "FACTORY_ADD_SLOT_DOMAIN",
         proto::FACTORY_ADD_SLOT_DOMAIN,
     );
+
+    s.push_str("}\n");
+    s
+}
+
+/// Render the Solidity `PqsignerDeployment` library: the CREATE2 constants
+/// the firmware predicts wallet addresses with. The deploy scripts refuse
+/// to broadcast unless the contracts they are about to deploy produce
+/// exactly these, and `DeployedBytecodeReproCheck` (deploy profile, CI)
+/// fails when the contracts drift from them. Pure function.
+fn render_solidity_deployment_library() -> String {
+    let mut s = String::with_capacity(2 * 1024);
+
+    s.push_str("// SPDX-License-Identifier: MIT\n");
+    s.push_str("// AUTO-GENERATED — DO NOT EDIT.\n");
+    s.push_str("// Source of truth: `pqsigner-proto` crate (Rust).\n");
+    s.push_str("// Regenerate: `cargo run -p pqsigner-xtask -- gen-solidity-constants`.\n");
+    s.push_str("//\n");
+    s.push_str("// Kept outside `src/`: these values are derived from the compiled\n");
+    s.push_str("// contracts, so the contracts themselves must not import them.\n");
+    s.push_str("pragma solidity ^0.8.28;\n");
+    s.push('\n');
+    s.push_str("/// @notice The CREATE2 constants compiled into the device firmware\n");
+    s.push_str("///         (`proto/src/lib.rs`). The firmware predicts every wallet\n");
+    s.push_str("///         address from them, so a deployment that does not reproduce\n");
+    s.push_str("///         them exactly is unreachable from the device.\n");
+    s.push_str("library PqsignerDeployment {\n");
+
+    section_header(&mut s, "Firmware CREATE2 constants");
+    let factory = pqsigner_erc7730::display::primitives::eip55_hex(&proto::PQ_SMART_WALLET_FACTORY);
+    let factory = std::str::from_utf8(&factory).expect("EIP-55 hex is ASCII");
+    let _ = writeln!(
+        s,
+        "    address internal constant PQ_SMART_WALLET_FACTORY = 0x{factory};"
+    );
+    let mut hash = String::with_capacity(64);
+    for b in proto::PROXY_INIT_CODE_HASH {
+        let _ = write!(hash, "{b:02x}");
+    }
+    let _ = writeln!(s, "    bytes32 internal constant PROXY_INIT_CODE_HASH = 0x{hash};");
 
     s.push_str("}\n");
     s
@@ -3420,6 +3472,61 @@ mod generated_suffix {
             "rendered Solidity drifted from checked-in file — \
              regenerate with `cargo run -p pqsigner-xtask -- gen-solidity-constants`",
         );
+    }
+
+    /// Same contract for the firmware CREATE2 constants: the checked-in
+    /// `PqsignerDeployment.sol` the deploy scripts assert against must be
+    /// exactly what the current `proto` constants render to.
+    #[test]
+    fn negative_rendered_deployment_matches_checked_in_solidity_byte_for_byte() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let checked_in = manifest_dir
+            .parent()
+            .expect("xtask sits one dir below workspace root")
+            .join(SOLIDITY_DEPLOYMENT_OUT_PATH);
+        let checked_in_text = fs::read_to_string(&checked_in)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", checked_in.display()));
+        assert_eq!(
+            render_solidity_deployment_library(),
+            checked_in_text,
+            "rendered PqsignerDeployment.sol drifted from checked-in file — \
+             regenerate with `cargo run -p pqsigner-xtask -- gen-solidity-constants`",
+        );
+    }
+
+    #[test]
+    fn positive_render_deployment_library_is_deterministic_and_carries_proto_constants() {
+        let a = render_solidity_deployment_library();
+        assert_eq!(a, render_solidity_deployment_library());
+
+        let mut factory = String::new();
+        for b in proto::PQ_SMART_WALLET_FACTORY {
+            let _ = write!(factory, "{b:02x}");
+        }
+        let mut hash = String::new();
+        for b in proto::PROXY_INIT_CODE_HASH {
+            let _ = write!(hash, "{b:02x}");
+        }
+        let lower = a.to_ascii_lowercase();
+        assert!(lower.contains(&format!("pq_smart_wallet_factory = 0x{factory};")));
+        assert!(a.contains(&format!("PROXY_INIT_CODE_HASH = 0x{hash};")));
+        assert!(a.contains("AUTO-GENERATED — DO NOT EDIT."));
+    }
+
+    /// solc rejects an address literal that is not EIP-55 checksummed, so
+    /// the factory must render mixed-case, never all-lowercase hex.
+    #[test]
+    fn negative_render_deployment_factory_is_checksummed() {
+        let a = render_solidity_deployment_library();
+        let line = a
+            .lines()
+            .find(|l| l.contains("PQ_SMART_WALLET_FACTORY"))
+            .expect("factory line");
+        let hex = line.split("0x").nth(1).expect("hex literal");
+        let hex = &hex[..40];
+        let expected =
+            pqsigner_erc7730::display::primitives::eip55_hex(&proto::PQ_SMART_WALLET_FACTORY);
+        assert_eq!(hex.as_bytes(), &expected[..]);
     }
 
     /// Defensive: the rendered library must always include the

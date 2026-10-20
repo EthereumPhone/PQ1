@@ -1,121 +1,168 @@
-# Smart Wallet
+# PQSmartWallet
 
-This repository contains code for a new, [ERC-4337](https://eips.ethereum.org/EIPS/eip-4337) compliant smart contract wallet from Coinbase. 
+The on-chain half of **PQ1**, a post-quantum hardware wallet: an ERC-4337
+**EntryPoint v0.6** smart account whose only signature scheme is
+**SPHINCS+C10** (hash-based, SHA-256; 4008-byte signatures). There is no
+ECDSA, P-256 or other classical signer anywhere in the contracts. Signatures
+come from the PQ1 device; a companion app builds UserOps and a bundler submits
+them.
 
-It supports 
-- Multiple owners
-- Passkey owners and Ethereum address owners
-- Cross-chain replayability for owner updates and other actions: sign once, update everywhere. 
+Forked from [`coinbase/smart-wallet`](https://github.com/coinbase/smart-wallet)
+(upstream commit `503363d7`, "Add warning for safe 7702 upgrades (#156)"), with
+every classical owner type, the cross-chain replayable-nonce path and the UUPS
+upgrade path removed.
 
-## Multiple Owners
-Our smart wallet supports a practically unlimited number of concurrent owners (max 2^256). Each owner can transact independently, without sign off from any other owner. 
+## Contracts (`src/`)
 
-Owners are identified as `bytes` to allow both Ethereum address owners and passkey (Secp256r1) public key owners. 
+| File | Role |
+|---|---|
+| `PQSmartWallet.sol` | The account implementation behind every user's ERC-1967 proxy: `validateUserOp`, the two slot execute paths, `addOwnerBytes`, EIP-1271 (both forms), token receiver hooks |
+| `PQMultiOwnable.sol` | ERC-7201 storage: append-only owner table and the per-chain usage counters |
+| `PQSmartWalletFactory.sol` | CREATE2 factory for the proxies; requires a bootstrap-key signature over the slot-0 key (squat defence) |
+| `verifiers/SPHINCsC10Asm.sol` | Stateless SPHINCS+C10 verifier in Yul (uses the SHA-256 precompile) |
+| `verifiers/ISPHINCSVerifier.sol` | Verifier interface |
+| `generated/PqsignerProto.sol` | Constants generated from the firmware's `proto` crate (`cargo run -p pqsigner-xtask -- gen-solidity-constants`); CI fails on drift |
 
-## Passkey owners and Ethereum address owners
-Ethereum address owners can call directly to the smart contract wallet to transact and also transact via user operations. 
+## How it works
 
-In the ERC-4337 context, we expect `UserOperation.signature` to be the ABI encoding of a `SignatureWrapper` struct 
-```solidity
-struct SignatureWrapper {
-    uint8 ownerIndex;
-    bytes signatureData;
-}
-```
+**Owners.** Each owner is a C10 public key, 64 bytes = `pkSeed (32) ‖ pkRoot (32)`,
+both in the N-mask layout (low 16 bytes zero).
 
-Owner index identifies the owner who signed the user operation. This must be passed because secp256r1 verifiers require the public key as an input. This differs from `ecrecover`, which returns the signer address.
+- **Index 0, the bootstrap key**, is installed at deployment and never changes.
+  It may sign exactly one thing: `addOwnerBytes(newSlotKey)`. Its few-time
+  budget is `bootstrapUses ≤ 65,536` per chain, counted in the validation
+  phase.
+- **Indices ≥ 1, slot keys**, sign everything else, through exactly two
+  selectors: `executeWithOffchainCount` and `executeBatchWithOffchainCount`.
+  Each slot index has a combined per-chain budget
+  `slotUses[i] + offchainSigCount[i] ≤ 65,536`.
+- **The owner set is append-only.** There is no owner removal. The device
+  rotates to a new slot by having the bootstrap key add one. A key that was
+  ever installed can never be installed again (`AlreadyOwner`), so its
+  counters can never be reset.
 
-We pass an `ownerIndex` rather than the public key itself to optimize for calldata, which is currently the main cost driver on Ethereum layer 2 rollups, like Base. 
+**Validation.** `PQSmartWallet` ignores the EntryPoint's keccak `userOpHash`
+and verifies over `sphincsDigest(userOp)`, a SHA-256 hash of the UserOp fields
+plus the EntryPoint address and `block.chainid`, because the device has a
+SHA-256 accelerator and no keccak. The signature is
+`abi.encode(uint256 ownerIndex, bytes c10Sig)` with an exact 4128-byte layout
+(zero ABI tail pad enforced). For a slot op, the calldata's first argument
+must equal the signing `ownerIndex` (audit H-3); validation stamps a transient
+(EIP-1153) per-index credit that the matching execute consumes. Execute paths
+reject calls to the wallet itself (audit H-2).
 
-If the signer is an Ethereum address, `signatureData` should be the packed ABI encoding of the `r`, `s`, and `v` signature values. 
+**Off-chain signatures (EIP-1271).** Two entry points:
 
-If the signer is a secp256r1 public key, `signatureData` should be the the ABI encoding of a [`WebAuthnAuth`](https://github.com/base-org/webauthn-sol/blob/main/src/WebAuthn.sol#L15-L34) struct. See [webauthn-sol](https://github.com/base-org/webauthn-sol) for more details. 
+- `isValidSignature(bytes32 hash, bytes sig)`, returning `0x1626ba7e`; and
+- `isValidSignature(bytes data, bytes sig)`, the legacy form Safe v1.3.0 and
+  v1.4.1 call on a contract owner, returning `0x20c13b0b` for `hash = keccak256(data)`.
 
-## Cross-chain replayability 
-If a user changes an owner or upgrade their smart wallet, they likely want this change applied to all instances of your smart wallet, across various chains. Our smart wallet allows users to sign a single user operation which can be permissionlessly replayed on other chains. 
+Both verify the slot key's signature over one of Solady's two nested EIP-712
+forms, each bound to this wallet and `block.chainid`: the PersonalSign hash
+("replay-safe hash"), which is the only thing the device signs off-chain, and
+the TypedDataSign hash, which the device never produces. Solady's two raw-hash
+workflows are disabled. The bootstrap key is never accepted off-chain. EIP-1271 is `view`;
+it consumes no on-chain budget. The firmware reports its off-chain count on
+the next UserOp, where `offchainSigCount` enforces the combined cap.
 
-There is a special function, `executeWithoutChainIdValidation`, which can only be called by the `EntryPoint` contract (v0.6). 
+**Tokens.** `receive()` accepts ETH. `onERC721Received`, `onERC1155Received`
+and `onERC1155BatchReceived` accept every token, and `supportsInterface`
+reports ERC-165, ERC-721 receiver and ERC-1155 receiver. There is no fallback
+function, so calls to unknown selectors revert.
 
-In `validateUserOp` we check if this function is being called. If it is, we recompute the userOpHash (which will be used for signature validation) to exclude the chain ID. 
+**Deployment.** The verifier, implementation and factory are deployed through
+Arachnid's deterministic CREATE2 deployer (`0x4e59…956C`, salt 0) from the
+`deploy` Foundry profile. The build sets `bytecode_hash = "none"`, so the
+addresses depend only on the code and compiler settings, not on comments or
+paths. Every user wallet is a 61-byte ERC-1967 proxy at
+`CREATE2(factory, sha256(masterPkSeed ‖ masterPkRoot), proxyInitCode(impl))`;
+the device computes the same address from two constants compiled into its
+firmware (`proto/src/lib.rs`), mirrored in
+`script/generated/PqsignerDeployment.sol`. The same seed therefore yields the
+same wallet address on every chain where this exact contract set is deployed.
+That requires Cancun or later, EntryPoint v0.6 at its canonical address, and
+the Arachnid deployer.
 
-Code excerpt from validateUserOp
-```solidity
-// 0xbf6ba1fc = bytes4(keccak256("executeWithoutChainIdValidation(bytes)"))
-if (userOp.callData.length >= 4 && bytes4(userOp.callData[0:4]) == 0xbf6ba1fc) {
-    userOpHash = getUserOpHashWithoutChainId(userOp);
-    if (key != REPLAYABLE_NONCE_KEY) {
-        revert InvalidNonceKey(key);
-    }
-} else {
-    if (key == REPLAYABLE_NONCE_KEY) {
-        revert InvalidNonceKey(key);
-    }
-}
-```
+There is no upgrade path. A contract change means a new implementation, a
+new factory, new wallet addresses and new firmware constants.
 
-To help keep these cross-chain replayable user operations organized and sequential, we reserve a specific nonce key for only these user operations.
+**Do not delegate an EOA to the implementation with EIP-7702.** The EOA would
+run this code against its own empty storage, so anyone could call
+`initialize` and install their own keys.
 
-`executeWithoutChainIdValidation` can only be used for calls to self and can only call a whitelisted set of functions. 
+## Addresses
 
-```solidity
-function executeWithoutChainIdValidation(bytes calldata data) public payable virtual onlyEntryPoint {
-    bytes4 selector = bytes4(data[0:4]);
-    if (!canSkipChainIdValidation(selector)) {
-        revert SelectorNotAllowed(selector);
-    }
+The audit-freeze set (computed, not yet deployed on any chain):
 
-    _call(address(this), 0, data);
-}
-```
+| Contract | Address |
+|---|---|
+| `SPHINCsC10Asm` | `0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4` |
+| `PQSmartWallet` (implementation) | `0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011` |
+| `PQSmartWalletFactory` | `0xE3dbA404dCeC30093DE26764965a51689C1607BD` |
+| proxy init-code hash | `0x17ca674095afe9dc82aa6f396ee01bd837449a127b6be59a0d947329f29b2570` |
 
-`canSkipChainIdValidation` can be used to check which functions can be called.
+`deployments/` records what is actually on chain. The 2026-06 Base Mainnet set
+and the older Base Sepolia and Ethereum Mainnet sets are superseded; the
+firmware no longer targets them.
 
-Today, allowed are 
-- MultiOwnable.addOwnerPublicKey
-- MultiOwnable.addOwnerAddress
-- MultiOwnable.addOwnerAddressAtIndex
-- MultiOwnable.addOwnerPublicKeyAtIndex
-- MultiOwnable.removeOwnerAtIndex
-- UUPSUpgradeable.upgradeToAndCall
+## Build and test
 
-> [!WARNING]
-> ## EIP-7702 delegation safety
-> Do **not** directly delegate to a Coinbase Smart Wallet **implementation** contract via EIP-7702. Delegating directly to an implementation can create a security vulnerability.
-> 
-> Instead:
-> - Use the `EIP7702Proxy` pattern: [base/eip-7702-proxy](https://github.com/base/eip-7702-proxy)
-> - See Coinbase Developer Platform docs for further guidance on EIP-7702 upgrades: [EIP-7702](https://docs.cdp.coinbase.com/wallets/using-wallets/eip-7702)
+Requirements: Foundry **v1.8.3** (the version CI pins), git, jq. `lib/` is not
+a set of submodules: restore each dependency at its exact `foundry.lock`
+revision. CI does exactly this, and the codehash pins assume the exact set.
 
-## Deployments
-Factory and implementation are deployed via [Safe Singleton Factory](https://github.com/safe-global/safe-singleton-factory), which today will give the same address across 248 chains. See "Deploying" below for instructions on how to deploy to new chains. 
-| Version   | Factory Address                        |
-|-----------|-----------------------------------------|
-| 1.1 | [0xBA5ED110eFDBa3D005bfC882d75358ACBbB85842](https://basescan.org/address/0xBA5ED110eFDBa3D005bfC882d75358ACBbB85842) |
-| 1 | [0x0BA5ED0c6AA8c49038F819E587E2633c4A9F428a](https://basescan.org/address/0x0BA5ED0c6AA8c49038F819E587E2633c4A9F428a) |
-
-
-## Developing 
-After cloning the repo, run the tests using Forge, from [Foundry](https://github.com/foundry-rs/foundry?tab=readme-ov-file)
 ```bash
-forge test
+cd contracts/smart-wallet
+declare -A URL=(
+  [forge-std]=https://github.com/foundry-rs/forge-std
+  [solady]=https://github.com/vectorized/solady
+  [account-abstraction]=https://github.com/eth-infinitism/account-abstraction
+  [openzeppelin-contracts]=https://github.com/openzeppelin/openzeppelin-contracts
+  [p256-verifier]=https://github.com/daimo-eth/p256-verifier
+  [safe-singleton-deployer-sol]=https://github.com/wilsoncusack/safe-singleton-deployer-sol
+  [webauthn-sol]=https://github.com/base-org/webauthn-sol
+)
+for key in $(jq -r 'keys[]' foundry.lock); do
+  name="${key#lib/}"; rev=$(jq -r --arg k "$key" '.[$k].rev' foundry.lock)
+  git clone -q "${URL[$name]}" "lib/$name" && git -C "lib/$name" checkout -q "$rev"
+done
+
+forge build
+forge test                                   # unit, fuzz, invariant, real-signature tests
+FOUNDRY_PROFILE=deploy forge test \
+  --match-contract 'PinnedCodehashesTest|PinnedBytecodeImmutableLemmaTest|DeployedBytecodeReproCheckTest'
+                                             # production codehashes, addresses and firmware constants
+pip install slither-analyzer==0.11.6 && slither .   # config: slither.config.json
+FOUNDRY_PROFILE=deploy forge script script/PrintProductionAddresses.s.sol
 ```
 
-## Deploying
-To deploy on a new chain, in your `.env` set
-```bash
-#`cast wallet` name
-ACCOUNT=
-# Node RPC URL
-RPC_URL=
-# Optional Etherscan API key for contract verification
-ETHERSCAN_API_KEY=
-```
-See [here](https://getfoundry.sh/reference/cast/wallet/import) for more details on `cast wallet`.
+The sources import only `account-abstraction` (EntryPoint v0.6 interfaces
+under `contracts/legacy/v06/`) and `solady` (`ERC1271`, which pulls in
+`EIP712` and `SignatureCheckerLib`, and `LibClone`). OpenZeppelin and
+forge-std appear in tests only.
 
-Then run 
-```
-make deploy
-```
+Deploy with the chain-specific scripts, e.g.
+`FOUNDRY_PROFILE=deploy forge script script/DeployImplAndFactoryBaseMainnet.s.sol --rpc-url <rpc> --account <name> --broadcast`.
+`script/ProductionDeploy.sol` refuses to broadcast unless the predicted
+addresses equal the firmware's constants. It routes every deployment through
+the Arachnid deployer with an explicit call, because Foundry 1.8's
+`new X{salt}` bypasses it when the broadcaster is an EIP-7702-delegated
+account.
 
-## Influences
-Much of the code in this repository started from Solady's [ERC4337](https://github.com/Vectorized/solady/blob/main/src/accounts/ERC4337.sol) implementation. We were also influenced by [DaimoAccount](https://github.com/daimo-eth/daimo/blob/3236a41558bc39629d9466bcf3a7bc840ca54584/packages/contract/src/DaimoAccount.sol), which pioneered using passkey signers on ERC-4337 accounts, and [LightAccount](https://github.com/alchemyplatform/light-account).
+## Assurance
+
+- Tests: `test/` (unit, stateful invariants, ERC-4337/ERC-7562 validation
+  rules, ERC-6492, real firmware signatures, verifier KATs and a mutant
+  corpus, codehash pins).
+- Symbolic execution on the compiled bytecode:
+  - `test/halmos/` — run with `make -C ../verification verify-bytecode`.
+  - `../verification/kontrol/` — run with `make -C ../verification verify-kontrol`.
+- Lean 4 models and proofs: `../verification/lean/`. See
+  `../verification/docs/THE_CLAIM.md` for what is and is not proven.
+- Audit preparation: `AUDIT_SCOPE.md` (start here), `AUDIT_REVIEW_GOALS.md`,
+  `AUDIT_DIAGRAMS.md`, `AUDIT_STATIC_ANALYSIS.md`, `TOB_INTAKE.md`.
+  `AUDIT_2026-05-18.md` is an earlier internal review, not a third-party audit.
+
+## License
+
+MIT, see `LICENSE.md` (inherited from upstream Coinbase Smart Wallet).

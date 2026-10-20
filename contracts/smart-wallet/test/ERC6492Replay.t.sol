@@ -82,17 +82,16 @@ contract ERC6492ReplayTest is Test {
 
     function setUp() public {
         vm.chainId(CHAIN_A);
-        // MANDATORY, and subtle enough to be worth spelling out. Solady's
-        // ERC1271 keeps a `_erc1271IsValidSignatureViaRPC` branch for off-chain
-        // `eth_call` simulation, gated on `tx.gasprice == 0` — which is exactly
-        // Foundry's default. That branch routes to `_erc1271Signer()`, which
-        // PQSmartWallet deliberately makes REVERT as a tripwire against a
-        // future refactor dropping the multi-owner override (audit L-2). So on
-        // a default-gas-price test a FAILED signature check reverts instead of
-        // returning 0xffffffff, and every negative assertion in this file would
-        // die with an opaque `EvmError` instead of proving anything. Setting a
-        // non-zero gas price puts the wallet on its real on-chain path. The
-        // same line, for the same reason, is in PQSmartWallet.t.sol.
+        // History: Solady's ERC1271 has a `_erc1271IsValidSignatureViaRPC`
+        // branch for `eth_call` simulation, gated on `tx.gasprice == 0` —
+        // Foundry's default. It checked the BARE hash (through the overridden
+        // `_erc1271IsValidSignatureNowCalldata`, not `_erc1271Signer()`), and
+        // without Solady's Basefee helper on chain its gas-burn guard hit
+        // `invalid()`, so a failed check reverted instead of returning
+        // 0xffffffff. That is why this line was mandatory. Since the 2026-10
+        // freeze PQSmartWallet drops that branch (GitHub #691; the gas-price-0
+        // cases are in LegacyERC1271.t.sol), so the gas price no longer
+        // matters; it stays at 1 to read as the on-chain path.
         vm.txGasPrice(1);
         dbv = new DigestBoundVerifier();
         v6492 = new ERC6492Verifier();

@@ -21,8 +21,10 @@ Each theorem here corresponds to one of the non-negotiable invariants in
   (I-3) **No reset.** No state-transition function decreases any
         counter. Encoded structurally.
 
-  (I-4) **Bootstrap unremovability.** `removeOwner` always fails on
-        index 0.
+  (I-4) **Bootstrap unremovability.** There is no owner removal (deleted
+        before launch); `addOwner` never writes index 0 on an initialised
+        wallet and `tryInitialize` is one-shot, so the bootstrap key at
+        index 0 never changes.
 
   (I-5) **Combined cap.** `slotUses[i] + offchainSigCount[i] ≤
         MaxSlotUses` is an inductive invariant.
@@ -35,6 +37,12 @@ Each theorem here corresponds to one of the non-negotiable invariants in
 
   (I-8) **Squat-defence.** Without a valid bootstrap sig over the slot-0
         digest, no proxy is deployed.
+
+  (I-9) **Append-only owner set.** On every reachable state each installed
+        key is flagged `isOwner` and sits at exactly one index below
+        `nextOwnerIndex`, so `addOwner` refuses it: a key can never be
+        installed a second time with fresh per-index counters (the
+        remove + re-add budget reset, GitHub #131, is unreachable).
 -/
 
 import SphincsCVerify.Wallet.Storage
@@ -221,38 +229,6 @@ theorem addOwner_preserves_counters
     rw [← h]
     refine ⟨rfl, fun _ => rfl, fun _ => rfl⟩
 
-/-- `removeOwner` preserves all monotonic counters. -/
-theorem removeOwner_preserves_counters
-    (s : Storage) (i : Nat) (expected : OwnerBytes) (s' : Storage)
-    (h : Storage.removeOwner s i expected = some s') :
-    s.bootstrapUses = s'.bootstrapUses
-    ∧ (∀ j, s.slotUses j = s'.slotUses j)
-    ∧ (∀ j, s.offchainSigCount j = s'.offchainSigCount j) := by
-  unfold Storage.removeOwner at h
-  by_cases hi : i = 0
-  · simp [hi] at h
-  · rw [if_neg hi] at h
-    generalize hlookup : s.ownerAtIndex i = lookupRes at h
-    cases lookupRes with
-    | none => simp at h
-    | some o =>
-      try simp only at h
-      by_cases heq : o = expected
-      · have hdec_true : decide (o = expected) = true := decide_eq_true heq
-        -- h : (if decide (o = expected) = false then none else some _) = some s'
-        -- Substitute decide (o = expected) → true.
-        rw [hdec_true] at h
-        -- h : (if (true : Bool) = false then none else some _) = some s'.
-        -- Apply if_neg on (true = false) which is False.
-        have : ¬ ((true : Bool) = false) := by decide
-        rw [if_neg this] at h
-        injection h with hsome
-        rw [← hsome]
-        refine ⟨rfl, fun _ => rfl, fun _ => rfl⟩
-      · have hdec_false : decide (o = expected) = false := decide_eq_false heq
-        rw [hdec_false] at h
-        simp at h
-
 /-! ### (I-3) Cross-counter preservation (P3)
 
 The single-counter `*_no_decrease` lemmas above show each bump-style mutator
@@ -263,7 +239,7 @@ cross-counter preservation for `bumpBootstrap` / `bumpSlot` / `setOffchain`.
 They are trivially true of the model — each mutator updates exactly one record
 field — but stating them as theorems is what forbids a `setOffchainEvil` that
 also zeroed `slotUses` from satisfying the invariant suite. Mirrors the pattern
-the `addOwner`/`removeOwner` lemmas already establish (full three-counter
+the `addOwner` lemma already establishes (full three-counter
 preservation) and the `capOk_bootstrap_implies_strict` make-it-proof-load-bearing
 practice. -/
 
@@ -355,9 +331,10 @@ end Storage
 
 /-- **(I-3) No reset path.** The meta-statement: every state-mutating
     `Storage` method is monotonic — it never decreases `bootstrapUses`,
-    any `slotUses[j]`, or any `offchainSigCount[j]`. The five conjuncts
+    any `slotUses[j]`, or any `offchainSigCount[j]`. The four conjuncts
     cover every mutating method (`bumpBootstrap`, `bumpSlot`,
-    `setOffchain`, `addOwner`, `removeOwner`); together with the fact
+    `setOffchain`, `addOwner`; owner removal was deleted before launch);
+    together with the fact
     that these are the *only* mutators of the counter fields (no
     `reset*` / `decrease*` method exists in the API), this is the
     on-chain meaning of CLAUDE.md invariant #7 "per-chain caps
@@ -370,8 +347,9 @@ end Storage
     nominally touches. This makes the cross-counter preservation proof-load-
     bearing: a `setOffchainEvil` that bumped `offchainSigCount` while zeroing
     `slotUses` no longer satisfies the (now three-counter) `setOffchain`
-    conjunct. `addOwner`/`removeOwner` already carried full three-counter
-    preservation.
+    conjunct. `addOwner` already carried full three-counter preservation.
+    Per KEY (not just per index) the counters cannot be reset either: see
+    (I-9) `reachable_addOwner_refuses_installed_key`.
 
     Caveat (P10, scope): these are the only *counter* mutators; `tryInitialize`
     also writes the counter fields (it zeroes them at construction) but is gated
@@ -406,14 +384,8 @@ theorem no_reset_path :
         Storage.addOwner s o = some s' →
           s.bootstrapUses = s'.bootstrapUses
           ∧ (∀ j, s.slotUses j = s'.slotUses j)
-          ∧ (∀ j, s.offchainSigCount j = s'.offchainSigCount j))
-    -- `removeOwner` preserves all three counters.
-    ∧ (∀ (s : Storage) (i : Nat) (expected : OwnerBytes) (s' : Storage),
-        Storage.removeOwner s i expected = some s' →
-          s.bootstrapUses = s'.bootstrapUses
-          ∧ (∀ j, s.slotUses j = s'.slotUses j)
           ∧ (∀ j, s.offchainSigCount j = s'.offchainSigCount j)) := by
-  refine ⟨?_, ?_, ?_, Storage.addOwner_preserves_counters, Storage.removeOwner_preserves_counters⟩
+  refine ⟨?_, ?_, ?_, Storage.addOwner_preserves_counters⟩
   · intro s cap s' h
     exact ⟨Storage.bumpBootstrap_no_decrease s cap s' h,
            fun j => Storage.bumpBootstrap_preserves_slotUses s cap s' j h,
@@ -429,10 +401,19 @@ theorem no_reset_path :
 
 /-! ## (I-4) Bootstrap unremovability -/
 
+/-- **Claim 2: the bootstrap key cannot be removed or replaced.** Owner
+    removal does not exist (deleted before launch, GitHub #131 / #213), and
+    the only owner-table writer, `addOwner`, leaves index 0 untouched on an
+    initialised wallet. With `initialize_called_exactly_once` (no second
+    `tryInitialize`) and the counter-only transitions
+    (`*_preserves_ownerAtIndex`), index 0 never changes after
+    initialisation; `reachable_ownerTableWF` adds that it is never empty. -/
 theorem cannot_remove_bootstrap
-    (s : Storage) (expected : OwnerBytes) :
-    Storage.removeOwner s 0 expected = none :=
-  MultiOwnable.bootstrap_unremovable s expected
+    (s : Storage) (o : OwnerBytes) (s' : Storage)
+    (h : Storage.addOwner s o = some s')
+    (hinit : s.nextOwnerIndex ≠ 0) :
+    s'.ownerAtIndex 0 = s.ownerAtIndex 0 :=
+  MultiOwnable.bootstrap_unremovable s o s' h hinit
 
 /-! ## (I-4b) Initialization atomicity (Claim 2)
 
@@ -454,14 +435,15 @@ theorem initialize_called_exactly_once
   unfold Storage.tryInitialize
   simp [h]
 
-/-- **`initialize` post-state.** When the guard passes, the result is
-    exactly `Storage.initialised bootstrap slot0`. -/
+/-- **`initialize` post-state.** When both guards pass (fresh proxy, two
+    distinct owners), the result is exactly
+    `Storage.initialised bootstrap slot0`. -/
 theorem initialize_post_state
     (s : Storage) (bootstrap slot0 : OwnerBytes)
-    (h : s.nextOwnerIndex = 0) :
+    (h : s.nextOwnerIndex = 0) (hne : bootstrap ≠ slot0) :
     Storage.tryInitialize s bootstrap slot0 = some (Storage.initialised bootstrap slot0) := by
   unfold Storage.tryInitialize
-  simp [h]
+  simp [h, hne]
 
 /-- **Initialized state has bootstrap at index 0.** -/
 theorem initialised_has_bootstrap
@@ -488,7 +470,7 @@ theorem initialised_next_index_eq_2
 
 Composes `cannot_remove_bootstrap` + `initialised_has_bootstrap`:
 once initialized, index 0 always holds the bootstrap key. We prove
-this for each individual Storage mutator. -/
+this for each individual Storage mutator (there is no removal). -/
 
 /-- `addOwner` preserves `ownerAtIndex 0`. -/
 theorem addOwner_preserves_index0
@@ -506,35 +488,6 @@ theorem addOwner_preserves_index0
     show (if (0 : Nat) = s.nextOwnerIndex then some o else s.ownerAtIndex 0) = s.ownerAtIndex 0
     have : (0 : Nat) ≠ s.nextOwnerIndex := fun heq => hpre heq.symm
     simp [this]
-
-/-- `removeOwner` preserves `ownerAtIndex 0` (it refuses index 0 by
-    `cannot_remove_bootstrap`). -/
-theorem removeOwner_preserves_index0
-    (s : Storage) (i : Nat) (expected : OwnerBytes) (s' : Storage)
-    (h : Storage.removeOwner s i expected = some s') :
-    s'.ownerAtIndex 0 = s.ownerAtIndex 0 := by
-  unfold Storage.removeOwner at h
-  by_cases hi : i = 0
-  · subst hi; simp at h
-  · rw [if_neg hi] at h
-    generalize hlookup : s.ownerAtIndex i = lookupRes at h
-    cases lookupRes with
-    | none => simp at h
-    | some o =>
-      try simp only at h
-      by_cases heq : o = expected
-      · have hdec_true : decide (o = expected) = true := decide_eq_true heq
-        rw [hdec_true] at h
-        have : ¬ ((true : Bool) = false) := by decide
-        rw [if_neg this] at h
-        injection h with hsome
-        rw [← hsome]
-        show (if (0 : Nat) = i then none else s.ownerAtIndex 0) = s.ownerAtIndex 0
-        have : (0 : Nat) ≠ i := fun heq => hi heq.symm
-        simp [this]
-      · have hdec_false : decide (o = expected) = false := decide_eq_false heq
-        rw [hdec_false] at h
-        simp at h
 
 /-- `bumpBootstrap` preserves the entire owner table. -/
 theorem bumpBootstrap_preserves_ownerAtIndex
@@ -573,8 +526,8 @@ theorem setOffchain_preserves_ownerAtIndex
 
 /-- **Owner set never empty after initialize.** A storage state that
     has `ownerAtIndex 0 = some bootstrap` and is reachable only via
-    `addOwner`, `removeOwner`, `bumpBootstrap`, `bumpSlot`, or
-    `setOffchain` retains `ownerAtIndex 0 = some bootstrap`. The
+    `addOwner`, `bumpBootstrap`, `bumpSlot`, or `setOffchain` retains
+    `ownerAtIndex 0 = some bootstrap`. The
     statement is per-mutator above; this is the unified existential
     statement.
 
@@ -804,7 +757,8 @@ existing single-step preservation lemmas.
 EXACT set of operations that mutate `slotUses`/`offchainSigCount`/`bootstrapUses`:
 `validateSignature` (Type-1/2 sign → `bumpForOwner`), the `setOffchain` storage
 effect of `executeWithOffchainCount`, `tryInitialize` (factory init → zeroes),
-and `addOwner`/`removeOwner` (which don't touch the cap counters). The raw
+and `addOwner` (which doesn't touch the cap counters; owner removal was
+deleted before launch). The raw
 `bumpSlot`/`bumpBootstrap` primitives are NOT separate transitions — they are
 only ever called *gated* inside `validateSignature` (where `capOk` supplies the
 STRICT precondition `bumpSlot` preservation needs); exposing a raw bump would
@@ -844,9 +798,6 @@ inductive Reachable : Storage → Prop where
   | addOwnerStep (s s' : Storage) (o : OwnerBytes)
       (hr : Reachable s)
       (h : Storage.addOwner s o = some s') : Reachable s'
-  | removeOwnerStep (s s' : Storage) (idx : Nat) (expected : OwnerBytes)
-      (hr : Reachable s)
-      (h : Storage.removeOwner s idx expected = some s') : Reachable s'
 
 /-- **(I-5, P1) The combined cap holds on every reachable state.** The headline
     bytecode theorem's `hInv` hypothesis, discharged as a real inductive
@@ -860,9 +811,11 @@ theorem reachable_implies_combinedCap (s : Storage) (i : Nat) (h : Reachable s) 
       unfold Storage.tryInitialize at h
       by_cases hni : s.nextOwnerIndex ≠ 0
       · simp [hni] at h
-      · simp [hni] at h
-        rw [← h]
-        exact combinedCapInvariant_initialised bootstrap slot0 i MaxSlotUses
+      · by_cases heq : bootstrap = slot0
+        · simp [hni, heq] at h
+        · simp [hni, heq] at h
+          rw [← h]
+          exact combinedCapInvariant_initialised bootstrap slot0 i MaxSlotUses
   | validate s s' op ep cid vfn hr h ih =>
       exact combinedCap_inductive s op ep cid vfn s' i ih h
   | execStep s s' oi nc hr h ih =>
@@ -878,10 +831,169 @@ theorem reachable_implies_combinedCap (s : Storage) (i : Nat) (h : Reachable s) 
       unfold combinedCapInvariant at ih ⊢
       obtain ⟨_, hslot, hoff⟩ := Storage.addOwner_preserves_counters s o s' h
       rw [← hslot i, ← hoff i]; exact ih
-  | removeOwnerStep s s' idx expected hr h ih =>
-      unfold combinedCapInvariant at ih ⊢
-      obtain ⟨_, hslot, hoff⟩ := Storage.removeOwner_preserves_counters s idx expected s' h
-      rw [← hslot i, ← hoff i]; exact ih
+
+/-! ### (I-9) Append-only owner set (GitHub #131)
+
+Owner removal was deleted before launch. On every reachable state each
+installed key is flagged `isOwner`, lies below `nextOwnerIndex`, and sits at
+exactly one index, and `addOwner` refuses any flagged key. So a key, once
+installed, keeps its single index — and with it the per-index counters
+`slotUses` / `offchainSigCount` — for the life of the wallet: the
+remove + re-add budget reset (#131) has no transition that reaches it.
+Owner removal never existing in the model is what makes this inductive. -/
+
+/-- Well-formedness of the owner table: every installed key is flagged
+    `isOwner` and sits below `nextOwnerIndex`, and no key is installed at two
+    indices. -/
+def ownerTableWF (s : Storage) : Prop :=
+  (∀ i o, s.ownerAtIndex i = some o → s.isOwner o = true ∧ i < s.nextOwnerIndex)
+  ∧ (∀ i j o, s.ownerAtIndex i = some o → s.ownerAtIndex j = some o → i = j)
+
+/-- The counter bump of a successful validate leaves the owner table, the
+    `isOwner` flags and `nextOwnerIndex` untouched. -/
+private theorem bumpForOwner_preserves_owner_table
+    (s : Storage) (oi : Nat) (s' : Storage) (h : bumpForOwner s oi = some s') :
+    s'.ownerAtIndex = s.ownerAtIndex ∧ s'.isOwner = s.isOwner
+    ∧ s'.nextOwnerIndex = s.nextOwnerIndex := by
+  unfold bumpForOwner at h
+  by_cases h0 : oi = 0
+  · rw [if_pos h0] at h
+    unfold Storage.bumpBootstrap at h
+    by_cases hcap : s.bootstrapUses + 1 > MaxBootstrapUses
+    · simp [hcap] at h
+    · simp [hcap] at h
+      rw [← h]
+      exact ⟨rfl, rfl, rfl⟩
+  · rw [if_neg h0] at h
+    unfold Storage.bumpSlot at h
+    by_cases hcap : s.slotUses oi + 1 > MaxSlotUses
+    · simp [hcap] at h
+    · simp [hcap] at h
+      rw [← h]
+      exact ⟨rfl, rfl, rfl⟩
+
+/-- `setOffchain` leaves the owner table, the `isOwner` flags and
+    `nextOwnerIndex` untouched. -/
+private theorem setOffchain_preserves_owner_table
+    (s : Storage) (oi nc su cap : Nat) (s' : Storage)
+    (h : Storage.setOffchain s oi nc su cap = some s') :
+    s'.ownerAtIndex = s.ownerAtIndex ∧ s'.isOwner = s.isOwner
+    ∧ s'.nextOwnerIndex = s.nextOwnerIndex := by
+  unfold Storage.setOffchain at h
+  by_cases hlt : nc < s.offchainSigCount oi
+  · simp [hlt] at h
+  · by_cases hcap : su + nc > cap
+    · simp [hlt, hcap] at h
+    · simp [hlt, hcap] at h
+      rw [← h]
+      exact ⟨rfl, rfl, rfl⟩
+
+/-- **(I-9) The owner table is well-formed on every reachable state.** -/
+theorem reachable_ownerTableWF (s : Storage) (h : Reachable s) : ownerTableWF s := by
+  induction h with
+  | genesis =>
+      refine ⟨?_, ?_⟩
+      · intro i o hi
+        simp [Storage.empty] at hi
+      · intro i j o hi _
+        simp [Storage.empty] at hi
+  | init s s' bootstrap slot0 _ h _ =>
+      unfold Storage.tryInitialize at h
+      by_cases hni : s.nextOwnerIndex ≠ 0
+      · simp [hni] at h
+      · by_cases heq : bootstrap = slot0
+        · simp [hni, heq] at h
+        · simp [hni, heq] at h
+          subst h
+          refine ⟨?_, ?_⟩
+          · intro i o hi
+            by_cases h0 : i = 0
+            · subst h0
+              simp [Storage.initialised] at hi
+              subst hi
+              simp [Storage.initialised]
+            · by_cases h1 : i = 1
+              · subst h1
+                simp [Storage.initialised] at hi
+                subst hi
+                simp [Storage.initialised]
+              · simp [Storage.initialised, h0, h1] at hi
+          · intro i j o hi hj
+            by_cases hi0 : i = 0 <;> by_cases hi1 : i = 1 <;>
+              by_cases hj0 : j = 0 <;> by_cases hj1 : j = 1 <;>
+              simp_all [Storage.initialised]
+  | validate s s' op ep cid vfn _ h ih =>
+      obtain ⟨d, _owner, _hok, hbump⟩ := (validateSignature_success_iff s op ep cid vfn s').1 h
+      obtain ⟨hown, hisown, hnext⟩ := bumpForOwner_preserves_owner_table s d.ownerIndex s' hbump
+      unfold ownerTableWF at ih ⊢
+      rw [hown, hisown, hnext]
+      exact ih
+  | execStep s s' oi nc _ h ih =>
+      obtain ⟨hown, hisown, hnext⟩ :=
+        setOffchain_preserves_owner_table s oi nc (s.slotUses oi) MaxSlotUses s' h
+      unfold ownerTableWF at ih ⊢
+      rw [hown, hisown, hnext]
+      exact ih
+  | addOwnerStep s s' o _ h ih =>
+      unfold Storage.addOwner at h
+      by_cases hio : s.isOwner o = true
+      · simp [hio] at h
+      · simp [hio] at h
+        subst h
+        obtain ⟨hflag, hinj⟩ := ih
+        -- `o` is not installed anywhere yet (it is not flagged).
+        have hfresh : ∀ k, s.ownerAtIndex k ≠ some o := by
+          intro k hk
+          exact hio (hflag k o hk).1
+        -- Nothing is installed at the slot `addOwner` writes.
+        have hempty : s.ownerAtIndex s.nextOwnerIndex = none := by
+          cases hc : s.ownerAtIndex s.nextOwnerIndex with
+          | none => rfl
+          | some o' =>
+            have := (hflag _ o' hc).2
+            omega
+        refine ⟨?_, ?_⟩
+        · intro i o' hi
+          by_cases hin : i = s.nextOwnerIndex
+          · subst hin
+            simp at hi
+            subst hi
+            simp
+          · simp [hin] at hi
+            obtain ⟨hf, hlt⟩ := hflag i o' hi
+            simp [hf]
+            omega
+        · intro i j o' hi hj
+          by_cases hin : i = s.nextOwnerIndex <;> by_cases hjn : j = s.nextOwnerIndex
+          · rw [hin, hjn]
+          · simp [hin] at hi
+            simp [hjn] at hj
+            subst hi
+            exact absurd hj (hfresh j)
+          · simp [hjn] at hj
+            simp [hin] at hi
+            subst hj
+            exact absurd hi (hfresh i)
+          · simp [hin] at hi
+            simp [hjn] at hj
+            exact hinj i j o' hi hj
+
+/-- **(I-9) A key is installed at most once.** On a reachable state no key
+    sits at two indices. -/
+theorem reachable_key_installed_at_most_once
+    (s : Storage) (h : Reachable s) (i j : Nat) (o : OwnerBytes)
+    (hi : s.ownerAtIndex i = some o) (hj : s.ownerAtIndex j = some o) : i = j :=
+  (reachable_ownerTableWF s h).2 i j o hi hj
+
+/-- **(I-9) An installed key can never be installed again** (GitHub #131).
+    On a reachable state `addOwner` refuses every key already in the table,
+    so a key's per-index counters can never be swapped for fresh ones. -/
+theorem reachable_addOwner_refuses_installed_key
+    (s : Storage) (h : Reachable s) (i : Nat) (o : OwnerBytes)
+    (hi : s.ownerAtIndex i = some o) : Storage.addOwner s o = none := by
+  have hflag := ((reachable_ownerTableWF s h).1 i o hi).1
+  unfold Storage.addOwner
+  simp [hflag]
 
 /-! ## (I-6) EIP-1271 forbids bootstrap
 

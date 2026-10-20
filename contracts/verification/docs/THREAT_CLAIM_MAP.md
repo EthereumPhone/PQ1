@@ -14,6 +14,23 @@
 > and current [`FV_SURFACE_MAP.md`](FV_SURFACE_MAP.md). Until the table is
 > regenerated, these overrides take precedence over conflicting rows/counts.
 
+> **Controlling 2026-10-20 overrides (audit freeze), pending a table refresh:**
+> - `S-SOL6-CROSS-SLOT-REMOVE` is **eliminated**: `removeOwnerAtIndex` was
+>   deleted, so no key can remove an owner. Evidence: Halmos
+>   `HalmosMultiOwnable.check_removed_selector_does_not_dispatch` and
+>   `HalmosExecuteEquiv.check_validate_rejects_removed_selector`, Kontrol
+>   `KontrolOwnerTable.prove_removed_selector_does_not_dispatch`, Foundry
+>   `test_removedRemoveOwnerSelectorFailsValidation`.
+> - `S-CAP-RESET`: the per-key reset path (#131 — remove a key, re-add it at a
+>   fresh index with zero counters) is closed. The owner set is append-only and
+>   a key is installed at most once (`K` `reachable_key_installed_at_most_once`,
+>   `reachable_addOwner_refuses_installed_key`; fuzz
+>   `invariant_owner_set_append_only`). The verdict stays PARTIAL for the
+>   bytecode-bridge reason in [^2].
+> - Every "deployed" bytecode bridge in this map now refers to the audit-freeze
+>   build, which is pinned and re-discharged but **not deployed yet**
+>   (`THE_CLAIM.md` #6).
+
 It closes the coverage-completeness blind spot: per-theorem gates can only tell you a claim is *hollow*; they cannot tell you a threat has **no claim at all**, because there is no theorem to turn red. This map is that missing view.
 
 > **Not a source of truth for what is *claimable*** — that is [`THE_CLAIM.md`](THE_CLAIM.md). This is a coverage index; every COVERED/PARTIAL row routes to the artifact that owns the proof. Where it could drift from `ASSURANCE_CASE.md` / `THE_CLAIM.md`, defer to those.
@@ -73,7 +90,7 @@ Real but incomplete coverage — the honest majority. Each row has genuine evide
 | `S-SE-TUNNEL-SNOOP` | I2C bus snoop / MITM of SE channels (Inv #3)<br><sub>threat-model.md §7.2 rows 1-2 / §8.3 (nests SE1, SE5)</sub> | 🟡 PARTIAL | `C` proto-scp03-shield — tamarin/scp03_replay.spthy:40 + proverif optiga_shield_handshake_vendor.pv — abstract model (driver-derived optiga_shield_handshake.pv is banner-marked do-not-cite: it invents a host nonce); the 9ec109ad vendor re-derivation proves whole-session replay POSSIBLE (no host nonce → inj-agreement FALSE) — SE5 / OP17-2<br>`silicon-E2E` si-saes-selftest — make saes-self-test-hw — DHUK KDF root only, not the tunnel itself | FV-PROTOCOL-QUERYBODY-2026-07-02 · executing · 2026-07-02 |
 | `S-SEED-SPLIT` | Single-chip break reveals seed bits (dual-SE XOR split, Inv #1)<br><sub>threat-model.md §5 Claim 1 / §6.1 (nests SE2, SE9)</sub> | 🟡 PARTIAL | `K` G9-split-secrecy — SplitSecrecy.lean:121 (reconstruct) — IT 2-of-2, but needs HW TRNG uniform/indep; SE050-half statistical<br>`C` proto-dual-se-secrecy — proverif/dual_se_unlock.pv + tamarin/seed_split_xor.spthy:61 — abstract model, not deployed firmware | FV-PROTOCOL-QUERYBODY-2026-07-02 · executing · 2026-07-02 |
 | `S-SLOT-STATE-CORRUPT` | Per-signature flash slot-state corruption (Inv #8 stateless slot)<br><sub>threat-model.md §8.8 (nests UC6)</sub> | 🟡 PARTIAL [^8] | `audit` stateless-invariant — threat-model.md §8 Inv #8 — only per-sig flash state is the page-123 counter; SLOT_CACHE lives in SRAM only (nsc/state.rs:319)<br>`audit` f3-compaction — hw/flash.rs::compact_page:1557-1605 — replays USEROP_SIGS first; documented residual: single-page erase-then-replay, not two-phase | PLAYBOOK-USB-COMPANION · source-read · 2026-07-02 |
-| `S-SOL6-CROSS-SLOT-REMOVE` | Any slot key can removeOwnerAtIndex another non-bootstrap slot<br><sub>threat-model.md §8 'SOL6 design note' (availability, NOT theft; by-design, tighten-decision open)</sub> | 🟡 PARTIAL | `K` G6-owner-K — Invariants.lean I-4 cannot_remove_bootstrap — bounds blast radius (index 0 unremovable + re-addable; removed slot can't move funds). theft_free deliberately silent (not theft) | PLAYBOOK-ONCHAIN-CONTRACTS · source-read · 2026-07-02 |
+| `S-SOL6-CROSS-SLOT-REMOVE` | Any slot key can removeOwnerAtIndex another non-bootstrap slot<br><sub>threat-model.md §8 'SOL6 design note' (availability, NOT theft; by-design, tighten-decision open)</sub> | ⚪ ELIMINATED 2026-10-20 (function deleted; was 🟡 PARTIAL), see the override above | `K` G6-owner-K — Invariants.lean I-4 cannot_remove_bootstrap — bounds blast radius (index 0 unremovable + re-addable; removed slot can't move funds). theft_free deliberately silent (not theft) | PLAYBOOK-ONCHAIN-CONTRACTS · source-read · 2026-07-02 |
 | `S-SPOOF-TOKEN-META` | Spoofed ERC-20 token metadata / malicious ERC-7730 descriptor<br><sub>threat-model.md §7.6 rows 2&3 (nests CS3, CS4, CS10)</sub> | 🟡 PARTIAL | `host-test` host-render-erc7730 — erc7730_render_pure_tests.rs — pinned ERC7730_DESCRIPTORS_ROOT; DB decimals correctness is data-QA (WYSIWYS-ERC20-DECIMALS ea47a114 found+fixed real magnitude-hide) | PLAYBOOK-CLEAR-SIGNING · source-read · 2026-07-02 |
 | `S-SRAM-NS-READ` | Read Secure SRAM / DMA into S-SRAM from NS (TZSC)<br><sub>threat-model.md §7.3 rows 2-3 / §9.3 (nests TZ6, T-DMA-S-SRAM)</sub> | 🟡 PARTIAL | `silicon-E2E` si-gtzc-enforcement — make gtzc-enforcement-hw — 7/7 secure peripherals RAZ-fault; residual TZSC_SECCFGR4/GTZC2/TAMP + full DMA restore pending | PLAYBOOK-TRUSTZONE-GATEWAY · source-read · 2026-07-02 |
 | `S-USB-OVERFLOW` | Buffer overflow in APDU reassembly<br><sub>threat-model.md §7.13 'Buffer overflow' (UC1; fuzz coverage tracked gap)</sub> | 🟡 PARTIAL [^9] | `C` kani-usb-reassembly — shared/src/apdu_framing.rs kani_harnesses (process_frame continuation + first-frame/scrub, ChainState cursor, parse_apdu_header) — ∀ panic/OOB-free over arbitrary assembler state + symbolic frame; mutation-gated (kani_mutations.json: usb_apdu_reassembly_bounds) | FV-KANI-USB-2026-07-02 · mutation-verified · 2026-07-02 |

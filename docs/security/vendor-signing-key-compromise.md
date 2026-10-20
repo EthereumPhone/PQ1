@@ -133,10 +133,16 @@ the threat model either way.
       ship-blocker, not only in this note.
 - [ ] Option B **and** an immutable `FSBL_MIN_ACCEPTED_FW_VERSION` floor taken
       as ONE decision at the WRP freeze review (each is near-worthless alone).
-- [ ] **On-chain policy decision taken before wallet launch** — a *second*
+- [x] **On-chain policy decision taken before wallet launch** — a *second*
       expiring deadline, distinct from the WRP freeze: `PQSmartWallet` has no
       upgrade path, so in-wallet spend caps / timelocks / `validUntil` windows
-      are now-or-never.
+      are now-or-never. **Decided 2026-10-20 (owner, Trail of Bits audit
+      freeze, #867): declined.** The frozen wallet has no guard hook, spend
+      cap, timelock or `validUntil` window; funds at the wallet's own address
+      are not protected against a leaked seed or a malicious signed release. A
+      separate vault contract can still be added after launch without touching
+      the wallet. Recorded as an accepted residual in
+      `contracts/smart-wallet/AUDIT_REVIEW_GOALS.md` §4.
 - [ ] Post-personalization secure-update freeze costed, and the outcome
       recorded here even if declined.
 - [ ] Widen the FSBL boot fingerprint beyond the secure image, and **publish

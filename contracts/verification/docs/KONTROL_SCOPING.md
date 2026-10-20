@@ -1,5 +1,32 @@
 # Kontrol / KEVM scoping — closing the model-to-bytecode gap (D)
 
+> **UPDATE 2026-10-20 (audit freeze): 31 proofs, re-run on the freeze
+> bytecode.** `removeOwnerAtIndex` was deleted from the wallet, so every proof
+> about removal was replaced:
+> - `KontrolOwnerTable` (7): the three removal proofs (installed-pointwise,
+>   unset-index reject, EntryPoint gate on removal) became one,
+>   `prove_removed_selector_does_not_dispatch(address,uint256,bytes)`: a call
+>   carrying the old selector `0x89625b57` reverts for every caller and
+>   changes no storage.
+> - `KontrolBootstrapUnremovable` (3), restated:
+>   `prove_bootstrap_unchanged_by_addOwner(bytes)` (an EntryPoint-dispatched
+>   `addOwnerBytes` never writes index 0),
+>   `prove_bootstrap_removal_selector_does_not_dispatch(address,bytes)`, and
+>   `prove_bootstrap_reinitialize_rejected(bytes,bytes)`.
+> - Validate 7, Execute 8 and Factory 6 are unchanged in name; they ran on the
+>   new bytecode.
+>
+> A3.4 is now 10 proofs (12 before). Two of the three restated bootstrap
+> proofs overlap owner-table proofs (the removed selector, re-initialisation),
+> so the independent coverage is smaller than the count suggests; the third
+> (`addOwnerBytes` never writes index 0) is the bootstrap-specific one. The
+> runner pins all 31 identities
+> (`run_kontrol.sh` `EXPECTED_PROOFS`) and exports
+> `FOUNDRY_DYNAMIC_TEST_LINKING=false` (Foundry 1.8 links test libraries
+> dynamically by default, which the `deployCode` cheatcode path rejects).
+> Receipt: `kontrol/sessions/kontrol-session-2026-10-20.txt`. Sections 2 and
+> 4 below describe the removal proofs as they were and are kept for history.
+
 **Status: A3.2 + A3.3 + A3.4 FULLY DISCHARGED ON BYTECODE (2026-06-15; 33/33
 KEVM proofs as of 2026-07-17) — only A3.1 (verifier ∀-signature) remains, and is
 intractable under symbolic SHA-256 (out of scope).** **UPDATE 2026-07-19

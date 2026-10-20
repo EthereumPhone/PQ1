@@ -1,7 +1,7 @@
 /-
 PQMultiOwnable invariants — the access-control machinery underlying
 `PQSmartWallet`. The state-transition operations (`addOwner`,
-`removeOwner`, `bumpBootstrap`, `bumpSlot`, `setOffchain`) are all in
+`bumpBootstrap`, `bumpSlot`, `setOffchain`) are all in
 `Storage`; this module proves the *monotonicity* and *invariants* that
 the wallet relies on.
 
@@ -102,14 +102,25 @@ theorem combined_cap_invariant
 
 /-! ## Bootstrap key is unremovable
 
-`removeOwner s 0 _ = none` no matter what. This is the on-chain
-equivalent of the firmware-side bootstrap-immutability invariant
+Owner removal does not exist (deleted before launch, GitHub #131 / #213):
+the owner set is append-only. The only owner-table writer is `addOwner`,
+which installs at `nextOwnerIndex`; once the wallet is initialised that
+index is not 0, so the bootstrap key at index 0 never changes. This is the
+on-chain side of the firmware's bootstrap-immutability invariant
 (CLAUDE.md non-negotiable #6). -/
 
 theorem bootstrap_unremovable
-    (s : Storage) (expected : OwnerBytes) :
-    removeOwner s 0 expected = none := by
-  unfold removeOwner
-  simp
+    (s : Storage) (o : OwnerBytes) (s' : Storage)
+    (h : addOwner s o = some s')
+    (hinit : s.nextOwnerIndex ≠ 0) :
+    s'.ownerAtIndex 0 = s.ownerAtIndex 0 := by
+  unfold addOwner at h
+  by_cases hisOwner : s.isOwner o = true
+  · simp [hisOwner] at h
+  · simp [hisOwner] at h
+    rw [← h]
+    show (if (0 : Nat) = s.nextOwnerIndex then some o else s.ownerAtIndex 0) = s.ownerAtIndex 0
+    have : (0 : Nat) ≠ s.nextOwnerIndex := fun heq => hinit heq.symm
+    simp [this]
 
 end SphincsCVerify.Wallet.MultiOwnable

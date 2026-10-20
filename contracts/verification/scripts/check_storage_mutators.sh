@@ -7,14 +7,14 @@
 # WHY THIS EXISTS
 # ---------------
 # `Wallet/Invariants.lean : no_reset_path` is a kernel theorem that the
-# FIVE known counter-mutators (`bumpBootstrap`, `bumpSlot`, `setOffchain`,
-# `addOwner`, `removeOwner`) never decrease `bootstrapUses`, any
+# FOUR known counter-mutators (`bumpBootstrap`, `bumpSlot`, `setOffchain`,
+# `addOwner`; `removeOwner` was deleted 2026-10-20) never decrease `bootstrapUses`, any
 # `slotUses[j]`, or any `offchainSigCount[j]`. But "these are the ONLY
 # Storage-mutating functions" is an *out-of-Lean closed-world assertion*:
 # a future `def evilReset (s : Storage) : Storage := { s with bootstrapUses
 # := 0 }` added to Storage.lean — with no matching no-decrease lemma — would
 # escape the kernel entirely. `no_reset_path` would still type-check and
-# still be true about its five conjuncts, yet the new resetter sits
+# still be true about its four conjuncts, yet the new resetter sits
 # unverified beside it.
 #
 # This lint closes that gap structurally. It extracts the COMPLETE set of
@@ -71,10 +71,11 @@ fi
 #     bumpSlot      — no_reset_path conjunct 2 (bumpSlot_no_decrease)
 #     setOffchain   — no_reset_path conjunct 3 (setOffchain_no_decrease_offchain)
 #     addOwner      — no_reset_path conjunct 4 (addOwner_preserves_counters)
-#     removeOwner   — no_reset_path conjunct 5 (removeOwner_preserves_counters)
 #     tryInitialize — guarded wrapper over `initialised`; only fires when
 #                     nextOwnerIndex == 0 (one-shot), producing the all-zero
 #                     genesis state, so it cannot decrease a live counter.
+#     (removeOwner, formerly conjunct 5, was deleted with on-chain owner
+#      removal before launch, 2026-10-20.)
 ###############################################################################
 ALLOWLIST_RETURNS_STORAGE=$(cat <<'EOF'
 empty
@@ -83,7 +84,6 @@ bumpBootstrap
 bumpSlot
 setOffchain
 addOwner
-removeOwner
 tryInitialize
 EOF
 )
@@ -97,7 +97,6 @@ bumpBootstrap
 bumpSlot
 setOffchain
 addOwner
-removeOwner
 EOF
 )
 
@@ -111,8 +110,8 @@ EOF
 #     adversarial PoC demonstrated against filters (A)+(B), which key on
 #     return-type and `{ s with }` syntax respectively). Allow-list = exactly the
 #     defs that legitimately write a counter: the two all-zero genesis
-#     constructors + the three monotone bumpers. addOwner / removeOwner /
-#     tryInitialize do NOT write a cap-counter field.
+#     constructors + the three monotone bumpers. addOwner / tryInitialize do
+#     NOT write a cap-counter field.
 ALLOWLIST_COUNTER_ASSIGN=$(cat <<'EOF'
 empty
 initialised
@@ -126,8 +125,8 @@ EOF
 # EXTRACTION
 #
 # Lean def signatures can span multiple lines, e.g.
-#   def removeOwner
-#       (s : Storage) (index : Nat) (expected : OwnerBytes) : Option Storage :=
+#   def someMutator
+#       (s : Storage) (index : Nat) (o : OwnerBytes) : Option Storage :=
 # We join each `def NAME ... :=` declaration head into one logical line, then
 # match the return type that immediately precedes `:=`.
 ###############################################################################

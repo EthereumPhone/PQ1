@@ -158,7 +158,8 @@ contract HalmosValidateUserOp is HalmosWalletBase {
         bytes4 selector = bytes4(wrongCalldata);
         vm.assume(selector != wallet.executeWithOffchainCount.selector);
         vm.assume(selector != wallet.executeBatchWithOffchainCount.selector);
-        vm.assume(selector != wallet.removeOwnerAtIndex.selector);
+        // Every other selector — including the deleted
+        // `removeOwnerAtIndex` (0x89625b57) — must be rejected.
 
         c10.setValid(true);
         vm.prank(ENTRY_POINT_ADDR);

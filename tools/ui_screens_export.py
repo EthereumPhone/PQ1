@@ -271,7 +271,7 @@ def src_status(title: str, sub: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Sample data (kept consistent with the e2e captures)
 # ─────────────────────────────────────────────────────────────────────────────
-WALLET = "bee6a6e73e418d42ef382ecf8e8025740e97c2fe"   # account-0 test wallet in e2e
+WALLET = "0e03259cc1f9092478c89b5e1148f3e8682083a1"   # account-0 test wallet in e2e (audit-freeze CREATE2 constants)
 FACTORY = "e8ce78cd0000000000000000000000000000cafe"  # sample factory address
 FP_WORDS = ["close", "agent", "own", "deputy", "grape", "though", "sail", "simple"]
 

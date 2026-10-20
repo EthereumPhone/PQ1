@@ -9,20 +9,26 @@ import {PqsignerProto} from "./generated/PqsignerProto.sol";
 struct PQMultiOwnableStorage {
     /// @dev Next index to assign to an added owner.
     uint256 nextOwnerIndex;
-    /// @dev Number of owners removed (tracked so `ownerCount` stays correct
-    ///      without iterating `ownerAtIndex`).
+    /// @dev RESERVED, always zero. It counted removed owners while owner
+    ///      removal existed; removal was dropped before launch and nothing
+    ///      writes this field. It is kept so the fields below stay at their
+    ///      offsets from the ERC-7201 base (+4 `bootstrapUses`, +5
+    ///      `slotUses`, +6 `offchainSigCount`), which tests and the symbolic
+    ///      proofs address directly.
     uint256 removedOwnersCount;
     /// @dev Maps index to owner bytes (always 64 bytes = pkSeed || pkRoot).
     mapping(uint256 index => bytes owner) ownerAtIndex;
-    /// @dev Reverse index: owner bytes → bool.
+    /// @dev Reverse index: owner bytes → bool. Never cleared, so a key can
+    ///      be installed at most once and keeps one index, and one set of
+    ///      counters, for the life of the wallet.
     mapping(bytes owner => bool) isOwner;
     /// @dev Monotonic count of Type 1 (bootstrap / ownerIndex == 0)
     ///      signatures accepted on this chain. Capped at
     ///      `PQSmartWallet.MAX_BOOTSTRAP_USES`.
     uint256 bootstrapUses;
     /// @dev Per-slot monotonic count of Type 2 (slot / ownerIndex >= 1)
-    ///      signatures, keyed by owner index. Capped at
-    ///      `PQSmartWallet.MAX_SLOT_USES` each.
+    ///      signatures, keyed by owner index. Bounded together with
+    ///      `offchainSigCount` by `PQSmartWallet.MAX_SLOT_USES`.
     mapping(uint256 ownerIndex => uint256) slotUses;
     /// @dev Per-slot monotonic count of off-chain (EIP-1271) signatures
     ///      the firmware reports it has produced on this chain. Updated
@@ -46,13 +52,17 @@ struct PQMultiOwnableStorage {
 ///           * No EOA / address owners (would require ECDSA path).
 ///           * No WebAuthn / P-256 owners (would require WebAuthn path).
 ///           * Only 64-byte C10 owner bytes are accepted.
+///           * No owner removal: the owner set is append-only.
 ///
-///         Owner index 0 is the **bootstrap** key — immutable for the
-///         lifetime of the wallet: it cannot be removed, and it is the only
-///         owner authorized to add new owners via `addOwnerBytes`.
-///         Indices 1..N are **slot** keys — rotatable, each capped at
-///         `MAX_SLOT_USES` sigs on this chain. The role split is enforced
-///         by `PQSmartWallet._validateSignature`; this contract only holds
+///         Owner index 0 is the **bootstrap** key and the only owner
+///         authorized to add new owners via `addOwnerBytes`. Indices 1..N
+///         are **slot** keys; the device rotates to a new slot by adding
+///         one. Because nothing removes an owner, index 0 never changes, and
+///         a key, once installed, keeps its index and its counters for the
+///         life of the wallet: its per-chain budget (`slotUses[i] +
+///         offchainSigCount[i] <= MAX_SLOT_USES`) can never be reset by
+///         installing it again. The role split is enforced by
+///         `PQSmartWallet._validateSignature`; this contract only holds
 ///         storage.
 ///
 /// @author PQSigner OS
@@ -70,23 +80,11 @@ abstract contract PQMultiOwnable {
 
     // ── Errors ────────────────────────────────────────────────────────
 
-    /// @notice Caller is not authorized.
-    error Unauthorized();
-
     /// @notice Attempted to add an owner already present.
     error AlreadyOwner(bytes owner);
 
-    /// @notice `removeOwnerAtIndex` targeted an empty slot.
-    error NoOwnerAtIndex(uint256 index);
-
-    /// @notice `owner` argument in `removeOwnerAtIndex` does not match storage.
-    error WrongOwnerAtIndex(uint256 index, bytes expectedOwner, bytes actualOwner);
-
     /// @notice Owner bytes were not exactly `OWNER_BYTES_LEN` long.
     error InvalidOwnerBytesLength(bytes owner);
-
-    /// @notice Attempt to remove the bootstrap key at index 0.
-    error CannotRemoveBootstrap();
 
     /// @notice Owner bytes do not follow the N-mask layout. SPHINCS+C10 is
     ///         a 128-bit-security scheme; both `pkSeed` and `pkRoot` carry
@@ -101,7 +99,6 @@ abstract contract PQMultiOwnable {
     // ── Events ────────────────────────────────────────────────────────
 
     event AddOwner(uint256 indexed index, bytes owner);
-    event RemoveOwner(uint256 indexed index, bytes owner);
     event BootstrapUsed(uint256 indexed newCount);
     event SlotUsed(uint256 indexed ownerIndex, uint256 indexed newCount);
     event OffchainSigCountUpdated(uint256 indexed ownerIndex, uint256 prev, uint256 newCount);
@@ -125,14 +122,10 @@ abstract contract PQMultiOwnable {
         return _getStorage().nextOwnerIndex;
     }
 
-    /// @notice Active owner count (`nextOwnerIndex - removedOwnersCount`).
+    /// @notice Number of installed owners. Owners are never removed, so
+    ///         this always equals `nextOwnerIndex`.
     function ownerCount() public view virtual returns (uint256) {
-        PQMultiOwnableStorage storage $ = _getStorage();
-        return $.nextOwnerIndex - $.removedOwnersCount;
-    }
-
-    function removedOwnersCount() public view virtual returns (uint256) {
-        return _getStorage().removedOwnersCount;
+        return _getStorage().nextOwnerIndex;
     }
 
     function isOwnerBytes(bytes memory owner) public view virtual returns (bool) {
@@ -157,8 +150,10 @@ abstract contract PQMultiOwnable {
 
     // ── Internal helpers ──────────────────────────────────────────────
 
-    /// @dev Bulk-initialise owners. Used once by the factory-invoked
-    ///      `PQSmartWallet.initialize`. Reverts on malformed bytes or dup.
+    /// @dev Bulk-initialise owners. Called once per wallet, by the
+    ///      factory-invoked `PQSmartWallet.initialize`, and by the
+    ///      implementation's constructor to lock `initialize` on the
+    ///      implementation itself. Reverts on malformed bytes or a duplicate.
     function _initializeOwners(bytes[] memory owners) internal virtual {
         PQMultiOwnableStorage storage $ = _getStorage();
         uint256 idx = $.nextOwnerIndex;
@@ -178,21 +173,6 @@ abstract contract PQMultiOwnable {
         index = $.nextOwnerIndex;
         _addOwnerAtIndex(owner, index);
         $.nextOwnerIndex = index + 1;
-    }
-
-    /// @dev Remove the owner at `index`. Refuses to touch index 0.
-    function _removeOwnerAtIndex(uint256 index, bytes calldata owner) internal virtual {
-        if (index == 0) revert CannotRemoveBootstrap();
-        bytes memory current = ownerAtIndex(index);
-        if (current.length == 0) revert NoOwnerAtIndex(index);
-        if (keccak256(current) != keccak256(owner)) {
-            revert WrongOwnerAtIndex({index: index, expectedOwner: owner, actualOwner: current});
-        }
-        PQMultiOwnableStorage storage $ = _getStorage();
-        delete $.isOwner[owner];
-        delete $.ownerAtIndex[index];
-        $.removedOwnersCount++;
-        emit RemoveOwner(index, owner);
     }
 
     /// @dev Increment `bootstrapUses`, revert if it would exceed `cap`.

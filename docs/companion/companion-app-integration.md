@@ -647,22 +647,45 @@ interface IPQSmartWallet {
     function sphincsDigest(UserOperation06 calldata userOp)
         external view returns (bytes32);
 
-    // ── Execution (self-call only, via EntryPoint) ──────────────────
-    function execute(address target, uint256 value, bytes calldata data)
-        external returns (bytes memory);
-    function executeBatch(Call[] calldata calls) external;
+    // ── Execution (EntryPoint only; consumes the credit a slot-key
+    //    validation stamped for the same ownerIndex) ─────────────────
+    function executeWithOffchainCount(
+        uint256 ownerIndex, uint256 newOffchainCount,
+        address target, uint256 value, bytes calldata data
+    ) external returns (bytes memory);
+    function executeBatchWithOffchainCount(
+        uint256 ownerIndex, uint256 newOffchainCount,
+        address[] calldata targets, uint256[] calldata values,
+        bytes[] calldata datas
+    ) external;
 
-    // ── Multi-owner management ──────────────────────────────────────
-    function addOwnerBytes(bytes calldata newOwner) external;
-    function removeOwnerAtIndex(uint256 index, bytes calldata owner) external;
+    // ── Owners (append-only; there is no removal) ───────────────────
+    function addOwnerBytes(bytes calldata newOwner) external; // EntryPoint only, bootstrap-signed op
     function ownerAtIndex(uint256 index) external view returns (bytes memory);
     function nextOwnerIndex() external view returns (uint256);
-    function ownerCount() external view returns (uint256);
+    function ownerCount() external view returns (uint256);    // == nextOwnerIndex
     function isOwnerBytes(bytes memory owner) external view returns (bool);
 
     // ── Usage counters ──────────────────────────────────────────────
     function bootstrapUses() external view returns (uint256);
     function slotUses(uint256 ownerIndex) external view returns (uint256);
+    function offchainSigCount(uint256 ownerIndex) external view returns (uint256);
+
+    // ── EIP-1271 ────────────────────────────────────────────────────
+    function isValidSignature(bytes32 hash, bytes calldata signature)
+        external view returns (bytes4);            // 0x1626ba7e
+    function isValidSignature(bytes calldata data, bytes calldata signature)
+        external view returns (bytes4);            // 0x20c13b0b (Safe v1.3.0 / v1.4.1)
+
+    // ── Token receivers (always accept) ─────────────────────────────
+    function onERC721Received(address, address, uint256, bytes calldata)
+        external pure returns (bytes4);
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata)
+        external pure returns (bytes4);
+    function onERC1155BatchReceived(
+        address, address, uint256[] calldata, uint256[] calldata, bytes calldata
+    ) external pure returns (bytes4);
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool);
 
     // ── Convenience views ───────────────────────────────────────────
     function masterPkSeed() external view returns (bytes32);
@@ -672,23 +695,32 @@ interface IPQSmartWallet {
 
 **Key selectors:**
 
-| Selector     | Function                                     |
-|--------------|----------------------------------------------|
-| `0xb61d27f6` | `execute(address,uint256,bytes)`             |
-| `0x101490cb` | `addOwnerBytes(bytes)`                       |
+| Selector     | Function                                                                  |
+|--------------|---------------------------------------------------------------------------|
+| `0x14443c57` | `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`         |
+| `0x7a389933` | `executeBatchWithOffchainCount(uint256,uint256,address[],uint256[],bytes[])` |
+| `0x101490cb` | `addOwnerBytes(bytes)`                                                    |
+| `0x1626ba7e` | `isValidSignature(bytes32,bytes)`                                         |
+| `0x20c13b0b` | `isValidSignature(bytes,bytes)`                                           |
 
-The companion builds inner-tx `callData` for `execute(...)` by ABI-encoding
-directly — see `encodeExecuteCalldata` in the WebHID tool.
+The UserOp `callData` is built and signed by the device (it is part of the
+signed `sphincsDigest`); the companion reproduces it byte for byte from the
+request and the device's response. There is no plain `execute(...)` entry
+point (UPDATE 2026-10-20: this table used to list Coinbase's
+`execute(address,uint256,bytes)`, `0xb61d27f6`, which the wallet does not
+have).
 
 ### Dispatch rules (enforced inside `_validateSignature`)
 
 | `ownerIndex` | Required inner call        | Counter bumped                  |
 |--------------|----------------------------|---------------------------------|
 | `0`          | `addOwnerBytes(bytes)`     | `bootstrapUses` (cap 65_536)    |
-| `≥ 1`        | `execute` / `executeBatch` / `removeOwnerAtIndex` | `slotUses[ownerIndex]` (cap 65_536) |
+| `≥ 1`        | `executeWithOffchainCount` / `executeBatchWithOffchainCount`, first argument `== ownerIndex` | `slotUses[ownerIndex]` (cap 65_536, combined with `offchainSigCount[ownerIndex]`) |
 
 Any other selector from a slot owner is rejected. The bootstrap owner
-(index 0) can **only** add new owners — never move funds directly.
+(index 0) can **only** add new owners — never move funds directly. There is
+no owner removal (deleted 2026-10-20): the owner set is append-only, and a key
+that was ever installed can never be installed again.
 
 ### EntryPoint v0.6
 
@@ -882,6 +914,12 @@ Requires a device reporting protocol **0x0203+** (GET_DEVICE_INFO bytes 0–1),
 and a deployed wallet on this chain. Each slot has its own 65,536-signature
 budget (`slotUses + offchainSigCount`); rotating moves the wallet to a fresh
 slot whose budget starts at zero. Each rotation spends one bootstrap use.
+
+Always derive `newSlot` from `nextOwnerIndex` as in step 1. `addOwnerBytes`
+installs at `nextOwnerIndex` whatever slot the device signed for, and the
+owner set is append-only, so a key installed at the wrong index can never
+sign on that chain and its bootstrap use is spent. Re-read `nextOwnerIndex`
+right before submitting the Type-1 UserOp and abort if it changed.
 
 ```
 1. nextOwner ← wallet.nextOwnerIndex()
@@ -1273,18 +1311,27 @@ issue.
 | `0x14443c57` | `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`         |
 | `0x101490cb` | `addOwnerBytes(bytes)`                                                    |
 
-### Addresses (deterministic CREATE2 — same on every chain; live on Base Mainnet 2026-06-12, Base Sepolia redeploy pending)
+### Addresses (deterministic CREATE2; audit-freeze set, NOT YET DEPLOYED)
+
+UPDATE 2026-10-20: the contracts were changed for the audit freeze, which
+moved every address. Firmware built from that date predicts wallet addresses
+from this set only. It is not deployed on any chain yet, so on-chain flows
+(deploy, sign, EIP-1271 against a live wallet) fail until the owner deploys
+it. Do not use the superseded 2026-06-12 Base Mainnet set
+(`0xe8ce78cd…d452` factory): the firmware no longer predicts its addresses.
 
 | Contract                 | Address                                      |
 |--------------------------|----------------------------------------------|
 | EntryPoint v0.6          | `0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789` |
-| SPHINCsC10Asm verifier   | `0xdde4d290d646097eceea1e33bf8c9fa6dd589cbb` |
-| PQSmartWallet impl       | `0x31e49d24370bfa487df1d6687a1aca5a34183590` |
-| PQSmartWalletFactory     | `0xe8ce78cd976497447ff8b76c71b59ae42af0d452` |
+| SPHINCsC10Asm verifier   | `0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4` |
+| PQSmartWallet impl       | `0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011` |
+| PQSmartWalletFactory     | `0xE3dbA404dCeC30093DE26764965a51689C1607BD` |
+| proxy init-code hash     | `0x17ca674095afe9dc82aa6f396ee01bd837449a127b6be59a0d947329f29b2570` |
 
-Run-the-tool defaults (RPC: `https://sepolia.base.org`, beneficiary:
-`0x00137482d6b37eBb235A463D748191D925D92eB3`). Mainnet / other L2
-deployments are tracked in the project README.
+The addresses are the same on every chain where this exact set is deployed
+(Arachnid CREATE2 deployer, salt 0); on any other chain the predicted wallet
+address has no code and cannot be deployed. `contracts/smart-wallet/deployments/`
+records what is actually on which chain.
 
 ### Hash constants
 
@@ -1298,6 +1345,11 @@ attached. `KECCAK_EMPTY` is only needed when interacting with on-chain
 artefacts that the EVM hashes with keccak (CREATE2, userOpHash).
 
 ### Chain IDs
+
+Reference values only. A chain is usable when the audit-freeze set above is
+deployed on it; as of 2026-10-20 it is deployed on none (see
+`contracts/smart-wallet/deployments/`). The chain also needs Cancun or later,
+EntryPoint v0.6 at its canonical address and the Arachnid deployer.
 
 | Chain          | chain_id |
 |----------------|----------|

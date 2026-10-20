@@ -1,70 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {Script, console2} from "forge-std/Script.sol";
-import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
+import {ProductionDeploy} from "./ProductionDeploy.sol";
 
-import {PQSmartWallet} from "../src/PQSmartWallet.sol";
-import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
-import {ISPHINCSVerifier} from "../src/verifiers/ISPHINCSVerifier.sol";
-import {SPHINCsC10Asm} from "../src/verifiers/SPHINCsC10Asm.sol";
-
-/// @notice Deploy the PQ wallet stack: verifier → impl → factory, with
-///         CREATE2 salts so all three land at byte-identical addresses
-///         on every chain (the Coinbase-Smart-Wallet cross-chain recipe).
-///         EntryPoint v0.6 is assumed to already exist at the canonical
-///         singleton address on every target chain; its address feeds
-///         into the impl's constructor, so it must match everywhere.
-///
-///         Foundry routes `new X{salt: S}(args)` through Arachnid's
-///         deterministic CREATE2 factory at
-///         `0x4e59b44847b379578588920cA78FbF26c0B4956C` (already
-///         pre-deployed via Nick's method on every major EVM chain),
-///         so the predicted address depends only on
-///         `(0x4e59…, salt, keccak256(initCode))`. As long as the
-///         bytecode is byte-identical (same solc/via_ir/optimizer/evm
-///         version — locked in `foundry.toml`'s `deploy` profile), the
-///         addresses are the same on Base, Base Sepolia, mainnet, etc.
+/// @notice Deploy the PQ wallet stack (verifier → impl → factory) on any
+///         chain that has EntryPoint v0.6 and the Arachnid CREATE2 deployer.
+///         The set lands at the same addresses on every such chain because
+///         the addresses depend only on `(0x4e59…, salt 0, keccak256(initCode))`
+///         and the init code is byte-identical under `FOUNDRY_PROFILE=deploy`.
+///         `ProductionDeploy` refuses to broadcast unless those addresses are
+///         the ones compiled into the firmware. Chain-specific scripts
+///         (`DeployImplAndFactory*.s.sol`) add a chain-id guard.
 ///
 ///         Invoke: `FOUNDRY_PROFILE=deploy forge script \
 ///                    script/DeployFactory.s.sol \
 ///                    --rpc-url <rpc> --account <name> --broadcast`
-///
-///         Do NOT pass `--verify` — deployments are intentionally
-///         unpublished.
-contract DeployFactory is Script {
-    /// @notice Canonical ERC-4337 EntryPoint v0.6 (same address on every
-    ///         chain via Nick's-method singleton).
-    address constant ENTRY_POINT_V06 = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
-
-    /// @notice CREATE2 salts. Zero is fine and keeps things simple; if
-    ///         we ever need to redeploy a fixed contract (e.g. patched
-    ///         verifier) we bump the relevant salt.
-    bytes32 constant SALT_VERIFIER = bytes32(0);
-    bytes32 constant SALT_IMPL     = bytes32(0);
-    bytes32 constant SALT_FACTORY  = bytes32(0);
-
+///         Add `--verify` (with an explorer API key) to publish the source;
+///         the 2026-06 Base Mainnet set was verified on Basescan.
+contract DeployFactory is ProductionDeploy {
     function run() external {
-        require(ENTRY_POINT_V06.code.length > 0, "EntryPoint v0.6 not deployed on this chain");
-
-        vm.startBroadcast();
-
-        SPHINCsC10Asm verifier = new SPHINCsC10Asm{salt: SALT_VERIFIER}();
-        PQSmartWallet impl = new PQSmartWallet{salt: SALT_IMPL}(
-            IEntryPoint(ENTRY_POINT_V06),
-            ISPHINCSVerifier(address(verifier))
-        );
-        PQSmartWalletFactory factory = new PQSmartWalletFactory{salt: SALT_FACTORY}(
-            address(impl),
-            ISPHINCSVerifier(address(verifier))
-        );
-
-        vm.stopBroadcast();
-
-        console2.log("chain id         ", block.chainid);
-        console2.log("EntryPoint v0.6  ", ENTRY_POINT_V06);
-        console2.log("SPHINCsC10Asm    ", address(verifier));
-        console2.log("PQSmartWallet    ", address(impl));
-        console2.log("Factory          ", address(factory));
+        _deploySet();
     }
 }

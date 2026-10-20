@@ -23,22 +23,27 @@ import {Test} from "forge-std/Test.sol";
 ///
 ///         A zero constant means "not yet pinned": the freeze test prints
 ///         the live value for capture instead of asserting.
+///
+///         Since 2026-10-20 the build sets `bytecode_hash = "none"`
+///         (foundry.toml), so these hashes depend only on the code and the
+///         compiler settings, not on comments, source paths or which lib
+///         directories are present.
 abstract contract PinnedCodehashSelector is Test {
-    // ── default profile (runs=200) — re-pinned 2026-06-10 ─────────────
+    // ── default profile (runs=200) — re-pinned 2026-10-20 ─────────────
     bytes32 internal constant WALLET_CODEHASH_DEFAULT =
-        0x43c65420691792d7f0f63dab95f47ab7adb649df4c83f432bd3cf2c95db3a06a;
+        0xcebbd91dc5a2cd5869eacc84e2bd82dbd8702c504788017df78a2e1960119a0b;
     bytes32 internal constant FACTORY_CODEHASH_DEFAULT =
-        0xfa2922b4fadb81b4475307504890d68f2e3d9be97c7e5e9aeeba6e84110d7c3c;
+        0x318afcbf264cd2f0fa0cc25efa1c26d9ad1799f916a2182ec9a320d4a94e8b46;
     bytes32 internal constant VERIFIER_CODEHASH_DEFAULT =
-        0xf1ef4ccee22e6b39446723232fe39761f089c7195941b2c12576956b38fcfef5;
+        0x8fa670d53df0fd63bc64505463f268256ffbb51e57f62d8a5a41f5bcec5cf2eb;
 
-    // ── deploy profile (runs=999999) — pinned 2026-06-10 ──────────────
+    // ── deploy profile (runs=999999) — re-pinned 2026-10-20 ───────────
     bytes32 internal constant WALLET_CODEHASH_DEPLOY =
-        0x551c4e03bbd433a5929828ab19caac13a94ca9e2be6074cf3e18c7d926034c22;
+        0x1bbd83ba0479a352197328f581b3ee473643996b04e07355ae8e3ebc49d91bea;
     bytes32 internal constant FACTORY_CODEHASH_DEPLOY =
-        0x5feb7955252e54bcbbf44062295bdeb45f3dea13c4ef7fb1ba579196d84da4b9;
+        0x44c3b4f70f5dc5406275cce87be814eda909ab0acab4aacdb9dc3ef24f0f7b21;
     bytes32 internal constant VERIFIER_CODEHASH_DEPLOY =
-        0xeb1e3fcd38c7cd5f7b08352c298b34bd114d83f7dbd755b122c41eda2aab2cc5;
+        0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989;
 
     function _isDeployProfile() internal view returns (bool) {
         return keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("default"))))

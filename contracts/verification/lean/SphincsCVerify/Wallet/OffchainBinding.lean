@@ -9,7 +9,12 @@ over a value the FIRMWARE (never the companion) nests through Solady's
 operation is `keccak256` (see `aa/src/eip1271.rs` and the on-chain `ERC1271`
 base, which applies the nesting in the public `isValidSignature` before the
 internal `_erc1271IsValidSignatureNowCalldata` hook this project models in
-`Wallet/IsValidSignature.lean`).
+`Wallet/IsValidSignature.lean`). Since the 2026-10-20 audit freeze the wallet
+keeps ONLY Solady's nested workflow (`_erc1271IsValidSignature` override):
+Solady's two raw-hash workflows — the MulticallerWithSigner "safe caller" and
+the `tx.gasprice == 0` RPC path, which checked the bare hash — are gone
+(GitHub #691), so every accepted off-chain signature, on both the bytes32 and
+the legacy `isValidSignature(bytes,bytes)` entry, is over the nested value.
 
 The security invariant — the RAW32 UserOp-forgery-oracle defense, fixed
 2026-06-11 — is that an off-chain-signed value can never coincide with any
@@ -107,6 +112,38 @@ noncomputable def erc1271IsValidSignatureNested
   IsValidSignature.erc1271IsValidSignature s
     (replaySafeHash rawHash personalSignTypeHash domainSep eip712Prefix)
     signature verify_fn
+
+/-- The legacy EIP-1271 entry `isValidSignature(bytes,bytes)` (selector
+    `0x20c13b0b`; Safe v1.3.0 / v1.4.1 call it on a contract owner, GitHub
+    #995). The deployed wallet hashes `data` with keccak-256 and runs the same
+    nested check as the bytes32 entry on that hash. The hash is a parameter
+    (`dataHash = keccak256(data)`), so the legacy entry is, by definition, the
+    nested entry at `dataHash`; `test/halmos/HalmosIsValidSignature.t.sol`
+    proves the bytecode agrees. -/
+noncomputable def erc1271IsValidSignatureLegacy
+    (s : Storage)
+    (dataHash personalSignTypeHash domainSep : ByteVec 32)
+    (eip712Prefix : ByteSeg)
+    (signature : Array UInt8)
+    (verify_fn : ByteVec 32 → ByteVec 32 → ByteVec 32 → ByteVec SignatureLen → Bool) :
+    Bool :=
+  erc1271IsValidSignatureNested s dataHash personalSignTypeHash domainSep eip712Prefix
+    signature verify_fn
+
+/-- The legacy entry, like every off-chain path, never accepts the
+    bootstrap key (I-6 / G8). -/
+theorem erc1271IsValidSignatureLegacy_rejects_bootstrap
+    (s : Storage)
+    (dataHash personalSignTypeHash domainSep : ByteVec 32)
+    (eip712Prefix : ByteSeg)
+    (signature : Array UInt8)
+    (verify_fn : ByteVec 32 → ByteVec 32 → ByteVec 32 → ByteVec SignatureLen → Bool)
+    (d : DecodedSig)
+    (hdec : decodeWrappedSig signature = some d)
+    (h0 : d.ownerIndex = 0) :
+    erc1271IsValidSignatureLegacy s dataHash personalSignTypeHash domainSep eip712Prefix
+      signature verify_fn = false :=
+  IsValidSignature.erc1271IsValidSignature_rejects_bootstrap s _ signature verify_fn d hdec h0
 
 /-- **Gap-3 / RAW32-oracle defense — message-image disjointness.** What this
     theorem proves: the value the off-chain path signs (`replaySafeHash …`, a

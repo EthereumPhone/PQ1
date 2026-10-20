@@ -127,17 +127,25 @@ REQUIRED_SUMMARY_KEYS = frozenset(
 # `evidence` field — artifact schema drift). Also absorbs the two earlier
 # unpinned ledger edits that left C16 red on master (the 66cf2eba U+200B
 # removal in A5-ITSR noted in 7cf06a0e's commit message + one more).
+# RE-PINNED 2026-10-20 for the Trail of Bits audit-freeze ledger edit: A3.1–A3.4
+# pinned_codehash values moved to the freeze bytecode, dated UPDATE notes on
+# their status_detail, refreshed Kontrol evidence/dates/tool versions and Halmos
+# rule counts (43 with the new A3.2-exec credit rule), A3.4 description and
+# evidence without owner removal, an `evidence` field marking the A3.3 Certora
+# artifact historical (artifact schema drift), and the headline_status /
+# last_updated rewrite ("expected, deploy pending"). The axiom schema is
+# unchanged.
 EXPECTED_AXIOM_SCHEMA_SHA256 = (
     "e236341847edfe07334cd99239eac7596d70b4f25f377c81f663b16415615a50"
 )
 EXPECTED_ARTIFACT_SCHEMA_SHA256 = (
-    "fa023a607167fa08afb7b6e7dc79bb8c11bb50c05c55afd4d6fb80f20cc07c05"
+    "726bec6b030e999e666d02343752cde72adb6d662d3068c81575959250bcc367"
 )
 EXPECTED_AXIOM_VALUE_SHA256 = (
-    "6891215b18a003668d191227c02299f1f89553c7f289f57f28b25bd556d9142d"
+    "2837126ad68a8b87f16e7a58dc5761c865924e590791b436e18674475b243c3a"
 )
 EXPECTED_ARTIFACT_VALUE_SHA256 = (
-    "3e102b39f55a62f843a408e415109f7fb01af9d1b98d769478cfb0bb5335db47"
+    "2c3048aa95eed1ddc3516e93e8649ae0d693bf65abeb43b0f46a25067b149176"
 )
 EXPECTED_LEDGER_TOP_LEVEL_FIELDS = frozenset({
     "axioms",
@@ -159,7 +167,7 @@ EXPECTED_LEDGER_TOP_LEVEL_FIELDS = frozenset({
     "witness_coverage_doc",
 })
 EXPECTED_LEDGER_VALUE_SHA256 = (
-    "52a465c150893ea9579888d21b6046ff81c258465eb41e94566066040cd22eca"
+    "ba24e8a0b3c3945c63cfbba366cfbe2ee2b430a703cdb2557e7be07301772f6f"
 )
 EXPECTED_ARTIFACT_METHOD_STATUS_COUNTS = {
     ("cited-tcb", "citation"): 2,

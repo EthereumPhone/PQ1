@@ -503,7 +503,19 @@ commit marker, are tracked as a hardening follow-up. The **on-chain** caps
 (invariant #7) are unaffected — they live in contract storage, not flash.
 
 **SOL6 design note — cross-slot `removeOwnerAtIndex` authorization (owner
-management).** In `PQSmartWallet._validateSignature`, the H-3 ownerIndex-parity
+management).** *UPDATE 2026-10-20: resolved by deletion.* For the Trail of
+Bits audit freeze the owner decided to delete `removeOwnerAtIndex` (#131,
+#213). The device could never build that UserOp; the function let any slot
+key remove any other slot, and remove + re-add reset a key's per-chain budget
+(#131). The owner set is now append-only, a key can be installed only once,
+and a slot-signed op carrying the old selector (`0x89625b57`) fails validation
+(`test_removedRemoveOwnerSelectorFailsValidation`, Halmos
+`check_removed_selector_does_not_dispatch`). The accepted residual is that
+there is no on-chain revocation: a leaked slot key stays usable until its
+per-chain cap is spent, and recovery means moving funds to a new account
+index (`contracts/smart-wallet/AUDIT_REVIEW_GOALS.md` §4). The rest of this
+note describes the removed design and is kept for history.
+In `PQSmartWallet._validateSignature`, the H-3 ownerIndex-parity
 check (calldata's first arg must equal the signed wrapper `ownerIndex`) is
 **deliberately skipped for the `removeOwnerAtIndex` selector** — its first arg is
 a *removal* index, not the signer's index. The consequence is that any active

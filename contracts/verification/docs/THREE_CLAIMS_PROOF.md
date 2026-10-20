@@ -49,8 +49,19 @@ What this kills:
 > admin/deployer role can replace the implementation or owner set
 > unilaterally.
 
+> *UPDATE 2026-10-20 (audit freeze):* owner removal no longer exists, so the
+> owner set is **append-only**. Its only mutator after `initialize` is
+> `addOwnerBytes`, which is EntryPoint-gated and reachable only from a
+> bootstrap-validated UserOp (the self-call path was closed by H-2). It
+> appends at `nextOwnerIndex` and refuses any key ever installed, so a key
+> keeps one index and one set of counters for the wallet's life (#131). The
+> statement above predates that; "mutated only by self-call" should be read
+> as "only appended, only through the bootstrap-validated `addOwnerBytes`".
+
 What this kills:
-- Bricking via removing the last owner
+- Bricking via removing the last owner (since 2026-10-20 by construction:
+  nothing removes an owner)
+- Re-installing a spent key at a fresh index to reset its budget (#131)
 - Phantom-owner injection
 - Init-front-running of counterfactual deployments
 - "Trust the wallet vendor" criticism — the wallet maker cannot
@@ -174,12 +185,21 @@ Closure: `propext, Quot.sound, SphincsCVerify.Crypto.sha256_collision_resistance
 
 ### Claim 2
 
-**Lean** — `Wallet/Invariants.lean`:
-- `cannot_remove_bootstrap` (I-4) — `Storage.removeOwner s 0 _ = none`
+**Lean** — `Wallet/Invariants.lean` (UPDATE 2026-10-20: `Storage.removeOwner`
+and `removeOwner_preserves_index0` were deleted with the Solidity function;
+`cannot_remove_bootstrap` keeps its name with a new statement, and the I-9
+theorems below were added):
+- `cannot_remove_bootstrap` (I-4) — since 2026-10-20: on an initialised
+  state, `addOwner` leaves `ownerAtIndex 0` unchanged (the only owner-table
+  mutator left). Before: `Storage.removeOwner s 0 _ = none`
+- `reachable_ownerTableWF`, `reachable_key_installed_at_most_once`,
+  `reachable_addOwner_refuses_installed_key` (I-9, 2026-10-20) — on every
+  reachable state the owner table is injective, every installed key is
+  flagged and below `nextOwnerIndex`, and `addOwner` refuses an installed key
 - `initialize_called_exactly_once` — `nextOwnerIndex ≠ 0 ⇒ tryInitialize = none`
 - `initialize_post_state` — successful init produces `Storage.initialised`
 - `owner_set_nonempty_after_init` — bootstrap present, `nextOwnerIndex = 2`
-- `addOwner_preserves_index0`, `removeOwner_preserves_index0`,
+- `addOwner_preserves_index0`,
   `bumpBootstrap_preserves_ownerAtIndex`, `bumpSlot_preserves_ownerAtIndex`,
   `setOffchain_preserves_ownerAtIndex` — composite invariance
 - `create2_address_chain_independent` (I-7) — kernel-proves only that the
@@ -591,7 +611,9 @@ These are exactly accurate descriptions of what is true today:
 - "The wallet vendor cannot move user funds or change accounts — this
   is a theorem (`Wallet.Invariants.cannot_remove_bootstrap` +
   `addOwner_preserves_index0` + the Certora `onlySelfCanChange*`
-  rules), not a promise."
+  rules), not a promise." (UPDATE 2026-10-20: the Certora rules were never
+  run against current code; cite the Halmos `HalmosMultiOwnable` and Kontrol
+  owner-table proofs instead.)
 - "The local/manual verification gate records 118 successful Foundry
   results, the exact two pinned RPC-dependent skips, two fuzz tests at
   256 runs each, and six stateful invariants at 128,000 calls each."

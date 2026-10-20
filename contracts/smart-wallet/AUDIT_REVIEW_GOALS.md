@@ -1,316 +1,289 @@
 # PQSmartWallet — Audit Review Goals
 
 **Project:** PQ1 hardware wallet, on-chain account-abstraction contracts.
-**Scope:** `contracts/smart-wallet/src/` + the Yul SPHINCS+C10 verifier.
-**Prior review:** `AUDIT_2026-05-18.md` (3H/2M/3L/3I, all fixed; see
-`AUDIT_2026-05-18_CROSS_CHECK.md` for verification).
+**Scope:** `contracts/smart-wallet/src/`, including the Yul SPHINCS+C10
+verifier. Freeze and build: `AUDIT_SCOPE.md`.
+**Prior review:** `AUDIT_2026-05-18.md`, an internal review (3H/2M/3L/3I),
+with `AUDIT_2026-05-18_CROSS_CHECK.md`. Several of its fixes have since been
+replaced; see `AUDIT_SCOPE.md` §3.
 
-This document tells the next reviewer what we want them to look at, what
-we're afraid of, and what we've already convinced ourselves of.
-
----
-
-## 1. Scope (in / out)
-
-In-scope production Solidity + Yul (1,280 LoC):
-
-| File | LoC | Purpose |
-|------|----:|---------|
-| `src/PQSmartWallet.sol` | 569 | ERC-4337 v0.6 account behind ERC-1967 proxy. `validateUserOp`, `execute*WithOffchainCount`, EIP-1271, addOwner/removeOwner. |
-| `src/PQMultiOwnable.sol` | 267 | ERC-7201 storage: `ownerAtIndex`, `bootstrapUses`, `slotUses[i]`, `offchainSigCount[i]` + bumps. |
-| `src/PQSmartWalletFactory.sol` | 148 | CREATE2 ERC-1967 proxy factory; bootstrap-sig squat defence. |
-| `src/verifiers/SPHINCsC10Asm.sol` | 228 | Stateless Yul C10 verifier (hypertree + FORS + WOTS+C). Single immutable, reused for Type 1 / Type 2 / EIP-1271. |
-| `src/verifiers/ISPHINCSVerifier.sol` | 20 | Verifier interface (test/prod swap). |
-| `src/generated/PqsignerProto.sol` | 48 | Auto-generated from `pqsigner-proto` Rust IDL; CI-checked for drift. |
-
-Out of scope (but relevant context):
-
-- `lib/solady`, `lib/account-abstraction` (pinned versions).
-- `reference/` — upstream Coinbase Smart Wallet fork-base, kept for diff.
-- `test/`, `certora/`, `script/`, `broadcast/`.
-- Firmware (`secure/`, `nonsecure/`) — separate review.
-- EntryPoint v0.6 itself (battle-tested, unchanged).
-
-The verifier is a coupled unit with the wallet: same chain, same
-deployment, called via `try c10Verifier.verify(...) returns (bool)`.
+This document tells the reviewer what we want them to look at, what we are
+afraid of, and which residual risks we already accept.
 
 ---
 
-## 2. Security objectives (what must hold)
+## 1. Security objectives (what must hold)
 
-These are the CLAUDE.md invariants that this contract enforces:
-
-1. **One signature primitive.** SPHINCS+C10 only — no ECDSA / P-256 /
-   Ed25519 fallback anywhere in the wallet code path. Verify by reading
-   the source: there is one `c10Verifier`.
-2. **Bootstrap key immutable per wallet.** `_removeOwnerAtIndex` rejects
-   index 0; no `rotateMasterKeys`; CREATE2 salt depends only on
-   `(masterPkSeed, masterPkRoot)` so any rotation would change the
+1. **One signature primitive.** SPHINCS+C10 only. There is one
+   `c10Verifier` per chain, used by validation, EIP-1271 and the factory.
+2. **The bootstrap key is permanent.** Index 0 is installed at deployment
+   and never changes. There is no owner removal, `addOwnerBytes` appends at
+   `nextOwnerIndex ≥ 2`, and `initialize` is one-shot. The CREATE2 salt
+   depends only on the bootstrap key, so replacing it would change the
    address.
-3. **Per-chain caps monotonic, unresettable.** `bootstrapUses <
-   MAX_BOOTSTRAP_USES = 65,536`; `slotUses[i] + offchainSigCount[i] <
-   MAX_SLOT_USES = 65,536`. No reset/increase path exists.
-4. **Role split between bootstrap and slot keys.**
-   - Bootstrap (`ownerIndex == 0`) can sign **only**
-     `addOwnerBytes(...)` UserOps. Forbidden from EIP-1271.
-   - Slot (`ownerIndex >= 1`) can sign **only**
-     `executeWithOffchainCount` / `executeBatchWithOffchainCount` /
-     `removeOwnerAtIndex`. Cannot self-call (would re-enter
-     `addOwnerBytes`). Cannot add owners.
-5. **Cross-chain / cross-wallet replay resistance.** `sphincsDigest`
-   binds `chainId + entryPoint`; EIP-1271 path nests via Solady EIP-712
-   binding `chainId + verifyingContract`.
-6. **No new per-signature persistent state.** Off-chain sig count is the
-   only per-slot counter beyond `slotUses`; bumped only on signed
-   `executeWithOffchainCount(...)`.
-7. **CREATE2 squat defence.** Factory requires a bootstrap C10 sig over
-   `sha256(DOMAIN || chainId || slot0PkSeed || slot0PkRoot)` on first
-   deploy. Same 24 words → same address on every chain, but only the
-   bootstrap-key holder can populate slot 0.
-8. **Counterfactual signing works.** EIP-6492 wraps `(factory,
-   factoryCalldata, sigWrapper) || 0x6492…6492`; `factoryCalldata` must
-   match the calldata whose hash is baked into the CREATE2 address.
+3. **Per-chain caps are monotonic and cannot be reset, per index and per
+   key.** `bootstrapUses ≤ 65,536`; `slotUses[i] + offchainSigCount[i] ≤ 65,536`.
+   There is no reset or increase path. Because the owner set is append-only
+   and `addOwner` refuses installed keys, a key keeps one index and one set
+   of counters for the life of the wallet.
+4. **Role split.**
+   - The bootstrap key (`ownerIndex == 0`) may sign only `addOwnerBytes`,
+     and never off-chain.
+   - Slot keys (`ownerIndex ≥ 1`) may sign only
+     `executeWithOffchainCount` / `executeBatchWithOffchainCount` for their
+     own index (H-3 parity), and may not call the wallet itself (H-2).
+5. **One validated op, at most one execution.** Validation stamps a
+   transient per-index credit; each execute consumes one. With no
+   preceding validation in the same transaction, execution reverts.
+6. **Replay separation.**
+   - UserOps: `sphincsDigest` binds `chainId` and the EntryPoint; the
+     EntryPoint binds `sender` and nonce.
+   - Off-chain signatures: verified over Solady's nested EIP-712 hash,
+     bound to `chainId` and the wallet address, on both 1271 entry points.
+   - No raw-hash path remains.
+7. **CREATE2 squat defence.** The first deployment requires a bootstrap
+   signature over `sha256("pqwallet-factory-add-slot" ‖ chainId ‖ slot0PkSeed ‖ slot0PkRoot)`.
+8. **Counterfactual signing.** ERC-6492 blobs carry `factoryCalldata` =
+   the exact `createAccount` call whose result is the predicted address.
+9. **Address determinism.** The production build reproduces the firmware's
+   CREATE2 constants exactly. CI enforces this
+   (`DeployedBytecodeReproCheck`, deploy profile).
 
 ---
 
-## 3. Areas of concern (where we want eyes)
+## 2. Areas of concern (where we want eyes)
 
-Listed in roughly decreasing order of "this is the part that scares
-us." Items already audited in 2026-05-18 are marked **[re-check]** —
-fixes landed in `aa537ad`.
+Roughly in decreasing order of how much they worry us.
 
-### 3.1 Yul C10 verifier (`SPHINCsC10Asm.sol`)
+### 2.1 Yul C10 verifier (`SPHINCsC10Asm.sol`)
 
-228 lines of Yul implementing SPHINCS+C10 verification. Byte-level
-parity with Rust `sphincs-c10/` reference. Previously cross-checked at
-the byte level (ADRS encoding, force-zero, htIdx extraction, branchless
-Merkle swap, WOTS+C digit extraction, N-mask truncation, length check).
+146 SLOC of hand-written Yul. A bug here is a universal forgery. It has
+byte-level parity with the Rust reference `sphincs-c10/`: ADRS encoding,
+force-zero, htIdx extraction (now also bound into the FORS addresses),
+branchless Merkle swap, WOTS+C digit extraction, N-mask truncation and the
+length check. KATs (`test/c10_test_vectors.json`,
+`test/c10_primitive_kat_vectors.json`) and a mutant corpus
+(`test/SPHINCsC10AsmMutantCorpus.t.sol`) back it.
 
-Concerns: (a) memory-safe annotations write the FMP and zero slot —
-**[re-check M-2]** — confirmed safe in audit but want second eyes; (b)
-absence of bounds checks on the in-memory work area; (c) any
-divergence in SHA-256 precompile error handling.
+Concerns:
+- (a) the `memory-safe` annotation while writing the free-memory pointer
+  and zero slot (old M-2);
+- (b) bounds of the in-memory work area;
+- (c) SHA-256 precompile failure handling;
+- (d) anything that makes `verify` return `true` for a signature the Rust
+  verifier rejects.
 
-### 3.2 Transient-storage one-shot tokens (EIP-1153)
+### 2.2 Role split and owner table
 
-`PQSmartWallet.sol:97-98` defines two transient slots:
+- `_validateSignature` checks by selector: index 0 allows only
+  `addOwnerBytes`; index ≥ 1 allows only the two execute selectors, with the
+  calldata's first word equal to the signing index.
+- `addOwnerBytes` requires `msg.sender == entryPoint`; execute paths reject
+  `target == address(this)`.
+- Owner removal was deleted. A slot-signed op carrying its old selector
+  (`0x89625b57`) fails validation and has nothing to dispatch to.
 
-- `_TS_VALIDATED_OWNER_INDEX_PLUS_ONE` (slot 0) — written by
-  `_validateSignature` for slot-key UserOps (offset +1; 0 sentinel
-  means "no validation in this tx"); read+cleared by
-  `executeWithOffchainCount` / `executeBatchWithOffchainCount`. This is
-  the **fix for H-3** (cross-slot offchainSigCount poisoning).
-- `_TS_PENDING_BOOTSTRAP_BUMP` (slot 1) — set by `_validateSignature`
-  for bootstrap UserOps; read+cleared by `addOwnerBytes` to defer the
-  bootstrap counter bump until after `_addOwner` succeeds. This is the
-  **fix for M-1** (counter consumed on reverted execution).
+**Question:** is there any other path that lets a slot key reach
+`addOwnerBytes`, write the owner table, or act as index 0? Examples:
+delegatecall from a target, the receiver hooks, `supportsInterface`, the
+legacy 1271 entry, `initialize` on a proxy or on the implementation.
 
-**Things to verify:**
+### 2.3 Transient credits (EIP-1153)
 
-- Token clearing is unconditional after read (not skipped on early
-  revert paths).
-- No path in this tx can re-enter `_validateSignature` and stack a
-  second token before the execute consumes the first.
-- The +1 offset is preserved everywhere (no place writes a raw
-  `ownerIndex` to the slot).
-- Bundlers that batch multiple UserOps within one bundle each get their
-  own validate → execute pair separated by EntryPoint's
-  `_innerHandleOp`, so tokens cannot leak across UserOps in a bundle.
-  **(Halmos contracts in `test/halmos/` discharge this; please confirm
-  the contract bounds match the spec.)**
+`PQSmartWallet.sol`, "Transient validated-op credits".
+- Validation stamps `credit[ownerIndex] += 1` at
+  `keccak256(ownerIndex, _TS_CREDIT_NAMESPACE)`.
+- `execute*WithOffchainCount` consumes one, or reverts `OwnerIndexMismatch`.
+- A per-index counter, not a single token, because v0.6 validates every op
+  in a bundle before executing any.
 
-### 3.3 Role split between bootstrap and slot keys **[re-check H-2]**
+Things to verify:
+- No path stacks credits without a successful validation.
+- A credit stamped for index *i* is never consumable for index *j*.
+- A reverting execution rolls back its own decrement, so the credit stays
+  live until the end of the transaction. We believe that is harmless,
+  because only the EntryPoint can consume it and only with calldata that
+  passed validation. The precise claim is "at most one consumed per
+  validated op".
+- Reentrancy: an execute target calling back into the wallet during
+  execution.
 
-- `_validateSignature` enforces by selector: `ownerIndex == 0` ⇒
-  selector must be `addOwnerBytes.selector`; `ownerIndex >= 1` ⇒
-  selector must be in `_isSlotAllowedSelector` (execute / executeBatch
-  / removeOwnerAtIndex).
-- `addOwnerBytes` is `onlySelf` (`msg.sender == address(this)`).
-- `executeWithOffchainCount` / `executeBatchWithOffchainCount` reject
-  `target == address(this)` (closes the self-call escape — H-2 fix).
+### 2.4 Combined per-slot cap arithmetic
 
-Question: are there any other ways a slot key can cause `address(this)`
-to be the caller of `addOwnerBytes`?
+- Validation requires `slotUses[i] + offchainSigCount[i] < 65,536` before it
+  bumps `slotUses[i]`.
+- `_setOffchainSigCount` in the execute path requires
+  `slotUses[i] (post-bump) + newOffchainCount ≤ 65,536` and monotonic
+  `newOffchainCount`.
 
-- Solady multicall? Not exposed.
-- Static delegatecall through a target that delegatecalls back? Slot
-  execute is `target.call`, not `delegatecall`; targets cannot fake
-  `msg.sender`.
-- ERC-721/1155 receiver hooks? `receive() external payable {}` is bare;
-  no token receiver overrides.
+**Question:** is there a sequence that lands past the cap, or one that
+lets `offchainSigCount` decrease?
 
-### 3.4 Combined per-slot cap arithmetic **[re-check H-3]**
+### 2.5 EIP-1271: two entry points, nested only
 
-`slotUses[i] + offchainSigCount[i] < MAX_SLOT_USES` (pre-bump) at
-validate; `slotUses[i] + offchainSigCount[i] <= MAX_SLOT_USES`
-(post-bump, after validate's `_bumpSlotUses(+1)`) at execute. Note the
-off-by-one shift — the test in `_validateSignature` is strict-`>=`,
-in `executeWithOffchainCount` the cap check is inside
-`_setOffchainSigCount` and is `>`.
-
-Question: any way to land at exactly `MAX_SLOT_USES` via a sequence
-that side-steps the post-bump check?
-
-### 3.5 Wrapper ABI parse (`SignatureWrapper`)
-
-`_validateSignature` and `_erc1271IsValidSignatureNowCalldata` both
-manually parse `abi.encode(uint256 ownerIndex, bytes sig)` rather than
-using `abi.decode`. Parse asserts: exact length `96 + paddedInner`,
-offset field == 0x40, inner length == 4008, **tail-pad == 0**
-**[re-check L-1]**. Why manual: a `4128`-byte memory expansion per
-validate is ~3k gas, and the parse is verbatim across `validateUserOp`
-and `isValidSignature`.
-
-Question: are there ABI-encoded wrappers our manual parse accepts that
-`abi.decode` would reject (or vice versa)?
-
-### 3.6 Factory squat defence + ETH forwarding **[re-check H-1]**
-
-`createAccount`:
-
-- First-deploy path: verify factorySig over
-  `sha256(DOMAIN || chainId || slot0PkSeed || slot0PkRoot)`.
-- Subsequent-deploy path: skip squat re-check, forward `msg.value` via
-  `LibClone.createDeterministicERC1967`'s built-in already-deployed
-  branch (which uses `call`, not stranding ETH — **H-1 fix**).
+- `isValidSignature(bytes32,bytes)` is Solady's: an ERC-7739 probe, then
+  ERC-6492 unwrap, then `_erc1271IsValidSignature`.
+- `_erc1271IsValidSignature` is overridden to run only
+  `_erc1271IsValidSignatureViaNestedEIP712`, dropping Solady's safe-caller
+  and RPC raw-hash workflows (#691).
+- `isValidSignature(bytes,bytes)` (new, #995) returns `0x20c13b0b` iff
+  `_erc1271IsValidSignature(keccak256(data), sig)`, with no ERC-6492 unwrap.
+- `_erc1271IsValidSignatureNowCalldata`: exact 4128-byte wrapper, index 0
+  rejected, C10 verify against the slot key.
+- `_erc1271Signer()` reverts. It is unreachable, and Slither reports it as
+  dead code; it is kept as a tripwire (L-2).
 
 Questions:
+- Is there any input that makes either entry point verify a hash other
+  than the nested one? Include the TypedDataSign branch of Solady's nested
+  workflow, which the device never produces.
+- Is the legacy entry safe for callers other than Safe? Such callers pass
+  data the device can only sign through its loud "blind RAW32" tier.
 
-- Is the `LibClone.createDeterministicERC1967` already-deployed branch
-  guaranteed to forward `msg.value`? Confirm against Solady's source.
-- Does the second-call path actually update the wallet's owners if a
-  legitimate user re-runs with new slot0 bytes? (Answer: no — by design;
-  factory ignores `slot0*` args once the wallet exists. Document and
-  confirm UX.)
-- `WrongChainId` carries `(uint64(block.chainid), chainId)` — fine on
-  chains where `block.chainid` fits in `uint64`. Any deployment target
-  where it would not?
+### 2.6 Factory squat defence, ETH forwarding, address prediction
 
-### 3.7 EIP-1271 + ERC-6492 (off-chain sig)
+- First deployment: the bootstrap signature over the slot-0 digest is
+  verified, then `initialize` runs atomically.
+- Already deployed: `msg.value` is forwarded by Solady's
+  `createDeterministicERC1967`, and the slot-0 arguments are ignored by
+  design.
+- `getAddress` must equal what the device computes from the firmware
+  constants. `test/DeployedBytecodeReproCheck.t.sol` checks this.
 
-- Inherits Solady `ERC1271`.
-- Override: `_erc1271Signer()` reverts as a tripwire if some future
-  refactor drops the `_erc1271IsValidSignatureNowCalldata` override
-  **[re-check L-2]**.
-- Bootstrap (`ownerIndex == 0`) forbidden from off-chain validate.
-- ERC-6492 path: dapp-side validator must check `signer == predicted
-  CREATE2 address` **[re-check I-3]**.
+### 2.7 ERC-4337 / ERC-7562 validation rules
 
-Question: Solady's `ERC1271` has had several revisions for nested
-EIP-712 handling. Is the version we pinned (`lib/solady`) compatible
-with the assumptions in `_erc1271IsValidSignatureNowCalldata`? See
-`docs/companion/companion-app-integration.md` for the firmware-side wrapping that
-must remain in lockstep.
+Validation writes the account's own storage: `bootstrapUses`, `slotUses`,
+and transient credits.
 
-### 3.8 ERC-7201 storage **[re-check]**
+- It calls only the immutable verifier, through `staticcall`.
+- `test/ERC7562ValidationRules.t.sol` covers the storage and call-graph
+  subset.
+- **Not covered:** banned opcodes, gas and stack limits, and real bundler
+  tracers. Of particular interest: whether v0.6-era tracers accept
+  `TSTORE`/`TLOAD` in validation.
+- A real C10 validation costs about 230k gas.
 
-Slot derived from `"pqsigner.storage.PQMultiOwnable"` — pinned in
-`test/StorageSlotParity.t.sol`. No collision with Coinbase upstream
-slot. Confirm pinning catches accidental tag rename.
+### 2.8 Token receiver hooks and ERC-165
 
-### 3.9 Impl lockout
+Three `pure` hooks always accept, and `supportsInterface` reports three
+IDs. There is no fallback.
 
-Constructor seeds a dummy `(bytes32(0), bytes32(0))` owner at index 0
-so `nextOwnerIndex() != 0` on the impl, making `initialize` revert if
-called directly. Proxies have empty storage so they still initialise.
+**Question:** does accepting arbitrary NFTs create any risk beyond spam?
+Note that moving an NFT out is blind-signed on the device (§4).
 
-Question: does any path on the impl let `initialize` slip through —
-e.g. via a transient-storage trick or a `delegatecall` from somewhere
-unexpected?
+### 2.9 Implementation lock-out
 
----
-
-## 4. Worst-case scenarios
-
-The PR description for the audit doc should be in terms of "money
-moves." Listed worst-first:
-
-1. **Forge a C10 signature.** Drains every wallet on every chain that
-   shares the bootstrap pubkey (= 256 wallets per seed, every chain).
-   Mitigated by SPHINCS+ EUF-CMA + 16-byte N-mask security; mostly out
-   of scope for the contract audit, but the verifier must implement the
-   spec faithfully.
-2. **Squat the victim's wallet address on an unused chain.** Pre-fix
-   for squat defence: attacker installs their own slot 0 and exfiltrates
-   funds sent to the predicted address. Mitigated by `factorySig`.
-3. **Slot-key escape to bootstrap-only operations** (audit H-2 closed).
-   Promote a compromised slot key to add owners → full wallet takeover.
-4. **Cross-slot off-chain count poisoning** (audit H-3 closed). One
-   compromised slot key flips another slot's counter to its cap,
-   freezing the victim slot.
-5. **Bootstrap-budget exhaustion via failed UserOps** (audit M-1
-   closed). Burn the 16-bit bootstrap budget by sending UserOps that
-   revert in execution.
-6. **ETH stranded on factory** (audit H-1 closed). Lost funds on
-   re-deploy with attached value.
-7. **EntryPoint impersonation.** All `onlyEntryPoint` checks pin
-   `msg.sender == address(_entryPoint)` (immutable). Verify there is no
-   alternate path that confuses `msg.sender` (e.g. trusted forwarder).
-8. **Cross-chain replay of an EIP-1271 sig** — Solady's nested EIP-712
-   binds `chainId + verifyingContract`. Verify our override does not
-   bypass this.
+The implementation's constructor installs a dummy owner so `initialize`
+reverts on the implementation. Proxies start empty. Never delegate an EOA
+to the implementation with EIP-7702: anyone could then `initialize` it.
 
 ---
 
-## 5. Specific questions for auditors
+## 3. Worst cases (in terms of money moving)
 
-1. Does the Yul verifier's `memory-safe` block annotation actually hold
-   given that we write to the Solidity FMP (`0x40`) and zero slot
-   (`0x60`)? Audit M-2 concluded "yes by Solidity's docs"; is the
-   reasoning robust under future solc?
-2. Are the two transient-storage tokens **provably** one-shot under
-   every reentrancy shape we can construct? In particular: a slot-key
-   UserOp whose target is a contract that calls back into the wallet's
-   public functions during execution.
-3. The `tailPad` check at `_validateSignature:375-378` uses a masked
-   read of the last word. Is the mask correct given Solidity's
-   right-aligned `bytes` ABI encoding for the 4128-byte wrapper?
-4. The combined-cap pre-bump strict-`>=` vs post-bump strict-`>` shift
-   — is there a sequencing where these are not equivalent?
-5. Does the absence of a `multicall` or `executeBatch` that ALSO
-   accepts `target == this` open any social-engineering / dapp
-   ergonomics gap relative to upstream Coinbase Smart Wallet that users
-   will hit?
-6. The factory unconditionally forwards `msg.value` via Solady. What is
-   the gas profile of that forward when the wallet is already deployed
-   and has a single bare `receive()`? Could a hostile target chain
-   intentionally bork it?
-7. Counterfactual EIP-6492 mode: the firmware mints `signatureWrapper =
-   abi.encode(1, c10Sig)` (ownerIndex 1 = slot 0 in our scheme).
-   `factoryCalldata` must match exactly the calldata the factory will
-   be invoked with at deploy. Any byte that differs causes the
-   `address(this)` recovery inside Solady's ERC-6492 unwrap to point at
-   a different CREATE2 address. We rely on a single canonical encoding
-   — please cross-check against the Solady deployer side.
+1. **Forge a C10 signature.** That drains every wallet of that seed, on
+   every chain. Defended by the verifier's correctness plus SPHINCS+C
+   EUF-CMA.
+2. **Squat a victim's address on an unused chain.** Defended by the
+   factory signature.
+3. **Slot-key escalation to bootstrap powers (H-2):** a full takeover.
+4. **Cross-slot counter poisoning or credit theft (H-3):** freezes a
+   victim slot.
+5. **Bootstrap-budget under-count:** reopens few-time forgery on the
+   master key. Fixed by counting in validation.
+6. **Per-key budget reset by re-installing a key (#131):** reopens
+   few-time forgery on a slot key. Closed by deleting removal.
+7. **A public UserOp signature presented as an EIP-1271 signature (#691).**
+   Closed with the raw-hash workflows.
+8. **EntryPoint impersonation:** reaching execution without validation.
 
 ---
 
-## 6. What we believe is already settled (from 2026-05-18 + tests)
+## 4. Accepted residual risks (please confirm the reasoning, not re-litigate the decision)
 
-Items the prior audit explicitly checked and passed. The auditor is
-welcome to re-derive, but we are not asking for re-attestation:
+These are owner decisions recorded before the freeze.
 
-- Verifier byte parity with Rust reference (ADRS, force-zero, hash
-  inputs, N-mask).
-- ERC-7201 slot non-collision.
-- `_removeOwnerAtIndex` blocking index 0.
-- `c10Verifier` and `_entryPoint` immutables; no UUPS upgrade path.
-- Real-sig `validateUserOp` gas: 229,830 (verifier alone: 180,306) —
-  within mainstream bundler caps.
-- Bytecode-freeze defense-in-depth via codehash pinning
-  (`test/PinnedCodehashes.t.sol`).
+- **No on-chain key revocation.**
+  - What a leaked slot key can do:
+    - sign UserOps until its per-chain cap (65,536 combined) is spent;
+    - sign EIP-1271 signatures indefinitely: those are `view` and uncapped
+      on-chain, even after the slot is exhausted (#89).
+  - Recovery means moving funds to a new account index. The device could
+    never produce a removal anyway.
+  - The removed function also let any slot key delete the others.
+- **No in-wallet spending policy (#867).** There is no guard hook, delay or
+  cap on value. Funds at the wallet's own address are not protected against
+  a leaked seed. A separate vault contract can be added later without
+  touching the wallet.
+- **Out-of-order slot registration.**
+  - The device signs a slot key for `ownerIndex = slot_index + 1`, but
+    `addOwnerBytes` installs at whatever `nextOwnerIndex` is. A misordered
+    registration puts a key at an index the device will never sign for.
+  - With the owner set append-only, that key is dead on that chain; the
+    bootstrap use is spent.
+  - Companions must check `nextOwnerIndex == slot_index + 1` before a
+    rotation.
+- **Off-chain budget is device-local.**
+  - `offchainSigCount` is what the firmware reports.
+  - Two devices on one seed, or a restore that loses the device's counter
+    page, can exceed the per-key budget off-chain (#89, #179).
+- **The bootstrap key's budget is per chain, but the key is not.** The same
+  master key signs on every chain, and its factory signatures (one per
+  chain) are not counted in `bootstrapUses`. The per-key bound across *C*
+  chains is *C* × 65,536 (documented P14 caveat).
+- **NFT outflows are blind-signed.** The firmware has no ERC-721/1155
+  transfer decoder, so moving a received NFT goes through the loud blind
+  path.
+- **Chain requirements.**
+  - Cancun or later (`TSTORE`/`TLOAD`, `evm_version = prague`), EntryPoint
+    v0.6 at its canonical address, and the Arachnid deployer.
+  - On any other chain the address may exist but cannot validate.
+  - EntryPoint v0.6 is frozen by design.
+- **Safe-side caveat for the legacy entry.** Safe v1.3.0's public
+  `checkNSignatures(dataHash, data, …)` does not check that `data` hashes to
+  `dataHash`. A third-party module passing mismatched values obtains the
+  wallet's approval of `keccak256(data)`, the hash the user signed.
 
 ---
 
-## 7. Out-of-scope but related
+## 5. Specific questions
 
-- `secure/` firmware (Rust no-std) — separate audit track.
-- `pqsigner-proto`, `pqsigner-tx`, `pqsigner-domain` workspace crates —
-  produce the auto-generated `PqsignerProto.sol`; CI drift check.
-- EntryPoint v0.6 itself (vetted upstream).
-- The verifier's SHA-256 precompile (Ethereum-native).
+1. Does `SPHINCsC10Asm`'s `memory-safe` annotation hold given its writes to
+   `0x40` and `0x60`, under current and future solc?
+2. Can a credit be consumed for a different index than the one validated,
+   or twice for one validation, under any reentrancy shape?
+3. Is the masked tail-pad check (`calldataload(sig + 4096)` & low 24 bytes)
+   exactly the ABI padding of the 4128-byte wrapper?
+4. Are the pre-bump strict `<` (validation) and post-bump `≤` (execution)
+   cap checks equivalent in every interleaving, including several ops for
+   one slot in one bundle?
+5. Does the manual wrapper parse accept anything `abi.decode` would reject,
+   or reject anything it would accept, in a way that matters?
+6. Can either EIP-1271 entry be made to accept a signature over a value
+   other than the nested hash? Consider ERC-6492 wrappers, the ERC-7739
+   probe, and the TypedDataSign branch.
+7. ERC-6492: does `factoryCalldata` = `initCode[20:]` always reproduce the
+   predicted address, and does the counterfactual signature stop verifying
+   on every other chain?
+8. Is anything in validation incompatible with ERC-7562 as enforced by
+   production v0.6 bundlers (transient storage, storage writes, gas)?
+9. Is `uint64(block.chainid)` in the factory a problem on any realistic
+   target chain?
 
-We will **not** be migrating to EntryPoint v0.7 / v0.8: the v0.6
-address and ABI are baked into `initCode`, the userOpHash preimage, and
-the factory, so a version bump would break invariant #6 (same 24 words
-→ same address on every chain). See `CLAUDE.md` "What NOT to do".
+---
+
+## 6. Already settled (re-derive if you like; we are not asking for re-attestation)
+
+- ERC-7201 slot derivation and no collision with upstream
+  (`test/StorageSlotParity.t.sol`).
+- `c10Verifier`, `_entryPoint` and the factory's `implementation` are
+  immutable. There is no upgrade path: the wallet inherits no upgrade
+  mechanism, and nothing writes the ERC-1967 implementation slot
+  (`invariant_impl_slot_unchanged`).
+- Real-signature validation gas is about 230k (verifier about 180k).
+- Codehash pinning of the production build, and the CREATE2 constants
+  matching the firmware (CI).
+- The formal verification is described in
+  `../verification/docs/THE_CLAIM.md`. It covers control flow on the
+  compiled bytecode (Halmos and Kontrol) and the Lean models. Theft-freedom
+  rests on the cited EUF-CMA assumption, not on a composed proof.

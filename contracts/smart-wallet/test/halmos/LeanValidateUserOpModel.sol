@@ -33,14 +33,15 @@ import {PqsignerProto} from "../../src/generated/PqsignerProto.sol";
 ///         compares only (result, post-state), which is the equality A3.2
 ///         states.
 contract LeanValidateUserOpModel {
-    // ── Lean `Selector.*` literals (ValidateUserOp.lean:41-66) ─────────
+    // ── Lean `Selector.*` literals (ValidateUserOp.lean) ───────────────
     //
     // The harness setUp parity-asserts each against the live
     // `PQSmartWallet` function selectors, mirroring LeanSelectorParity.t.sol.
+    // (Owner removal was deleted before launch; its selector is in neither
+    // the Lean model nor the wallet.)
     bytes4 public constant SEL_ADD_OWNER_BYTES = 0x101490cb;
     bytes4 public constant SEL_EXECUTE_WITH_OFFCHAIN_COUNT = 0x14443c57;
     bytes4 public constant SEL_EXECUTE_BATCH_WITH_OFFCHAIN_COUNT = 0x7a389933;
-    bytes4 public constant SEL_REMOVE_OWNER_AT_INDEX = 0x89625b57;
 
     // ── Lean `Spec.SignatureLen` / wrapper layout (ValidateUserOp.lean:117-128)
     uint256 public constant SIGNATURE_LEN = PqsignerProto.C10_SIG_LEN; // 4008
@@ -185,11 +186,10 @@ contract LeanValidateUserOpModel {
         return bytes4(callData[0:4]);
     }
 
-    /// Lean `Selector.isSlotAllowed` (ValidateUserOp.lean:70-73).
+    /// Lean `Selector.isSlotAllowed` (ValidateUserOp.lean).
     function _isSlotAllowed(bytes4 s) private pure returns (bool) {
         return s == SEL_EXECUTE_WITH_OFFCHAIN_COUNT
-            || s == SEL_EXECUTE_BATCH_WITH_OFFCHAIN_COUNT
-            || s == SEL_REMOVE_OWNER_AT_INDEX;
+            || s == SEL_EXECUTE_BATCH_WITH_OFFCHAIN_COUNT;
     }
 
     /// Lean `calldataOwnerIndex` (ValidateUserOp.lean): the first ABI word
@@ -212,8 +212,7 @@ contract LeanValidateUserOpModel {
             return sel == SEL_ADD_OWNER_BYTES && wallet.bootstrapUses() < MAX_BOOTSTRAP_USES;
         }
         //   Selector.isSlotAllowed op.selectorOf &&
-        //   (decide (op.selectorOf = Selector.removeOwnerAtIndex) ||
-        //      decide (calldataOwnerIndex op = ownerIndex)) &&
+        //   decide (calldataOwnerIndex op = ownerIndex) &&
         //   decide (s.slotUses i + s.offchainSigCount i < MaxSlotUses)
         //
         // NOTE (reachable-state hypothesis): the Lean conjunct is over Nat
@@ -226,7 +225,7 @@ contract LeanValidateUserOpModel {
         // failure — a documented divergence on unreachable states; see
         // AXIOM_STATUS.json A3.2.
         return _isSlotAllowed(sel)
-            && (sel == SEL_REMOVE_OWNER_AT_INDEX || _calldataOwnerIndex(op.callData) == ownerIndex)
+            && _calldataOwnerIndex(op.callData) == ownerIndex
             && wallet.slotUses(ownerIndex) + wallet.offchainSigCount(ownerIndex) < MAX_SLOT_USES;
     }
 

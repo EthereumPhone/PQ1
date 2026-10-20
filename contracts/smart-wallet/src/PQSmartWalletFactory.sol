@@ -10,7 +10,7 @@ import {PqsignerProto} from "./generated/PqsignerProto.sol";
 /// @title PQSmartWalletFactory
 ///
 /// @notice Deterministic ERC-1967 proxy factory for `PQSmartWallet`. The
-///         factory CREATE2s a ~55-byte proxy that delegate-calls to the
+///         factory CREATE2s a 61-byte proxy that delegate-calls to the
 ///         shared `implementation` (deployed once per chain). Per-user
 ///         deploy cost drops from ~1.1 M gas (direct contract deploy) to
 ///         ~50 k gas (cheap proxy stub).

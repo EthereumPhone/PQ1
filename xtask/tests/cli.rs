@@ -156,6 +156,41 @@ fn positive_check_mode_stdout_matches_checked_in_file_byte_for_byte() {
 }
 
 #[test]
+fn positive_check_deployment_mode_stdout_matches_checked_in_file_byte_for_byte() {
+    // Same CI invariant for the firmware CREATE2 constants the deploy
+    // scripts assert against (`script/generated/PqsignerDeployment.sol`).
+    let path = workspace_root().join("contracts/smart-wallet/script/generated/PqsignerDeployment.sol");
+    let before = std::fs::read(&path).expect("read before");
+    let out = Command::new(bin())
+        .args(["gen-solidity-constants", "--check-deployment"])
+        .output()
+        .expect("spawn");
+    assert!(
+        out.status.success(),
+        "--check-deployment must exit success, got {:?}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(out.stderr.is_empty(), "--check-deployment must be quiet on stderr");
+    let stdout = String::from_utf8(out.stdout).expect("stdout utf8");
+    assert_eq!(
+        stdout,
+        String::from_utf8(before.clone()).expect("checked-in file utf8"),
+        "--check-deployment output drifted from checked-in PqsignerDeployment.sol — \
+         regenerate with `cargo run -p pqsigner-xtask -- gen-solidity-constants`",
+    );
+    assert_eq!(
+        std::fs::read(&path).expect("read after"),
+        before,
+        "--check-deployment must not modify the checked-in file",
+    );
+    assert!(
+        !stdout.contains("library PqsignerProto {"),
+        "--check-deployment must print only the deployment library",
+    );
+}
+
+#[test]
 fn positive_custom_erc7730_probe_with_all_explicit_outputs_is_isolated() {
     let temp = tempfile::tempdir().expect("create custom generation probe directory");
     let input = copy_probe_registry(temp.path());

@@ -22,5 +22,5 @@ docs/
 .certora_internal/
 
 # Coinbase smart-wallet reference clone (read-only, for derivation)
-reference/lib/kontrol-cheatcodes/
+reference/
 test/kontrol/

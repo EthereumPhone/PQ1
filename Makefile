@@ -2367,6 +2367,10 @@ check-solidity-constants:
 	@cargo run --locked -q -p pqsigner-xtask -- gen-solidity-constants --check \
 	    | diff - contracts/smart-wallet/src/generated/PqsignerProto.sol \
 	    || { echo "PqsignerProto.sol is stale — run: cargo run -p pqsigner-xtask -- gen-solidity-constants"; exit 1; }
+	@echo "==> Checking proto -> Solidity firmware CREATE2 constants (PqsignerDeployment.sol drift)"
+	@cargo run --locked -q -p pqsigner-xtask -- gen-solidity-constants --check-deployment \
+	    | diff - contracts/smart-wallet/script/generated/PqsignerDeployment.sol \
+	    || { echo "PqsignerDeployment.sol is stale — run: cargo run -p pqsigner-xtask -- gen-solidity-constants"; exit 1; }
 
 erc8176-coverage: ## Report ERC-8176 (EAS) attestation coverage of the ERC-7730 corpus
 	@echo "==> Querying EAS for ERC-8176 attestation coverage (needs network)"

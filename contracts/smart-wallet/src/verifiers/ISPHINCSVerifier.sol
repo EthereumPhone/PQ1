@@ -4,7 +4,8 @@ pragma solidity 0.8.28;
 /// @title ISPHINCSVerifier
 /// @notice Interface for SPHINCS+C SHA-256-based signature verification.
 ///         The public key is split into (pkSeed, pkRoot) — two bytes32 values.
-///         Signature format and size depend on the variant (C6, C7, etc.).
+///         The deployed implementation is `SPHINCsC10Asm` (parameter set C10,
+///         4008-byte signatures).
 interface ISPHINCSVerifier {
     /// @param pkSeed The public key seed (top 128 bits used, n=128).
     /// @param pkRoot The hypertree root commitment.

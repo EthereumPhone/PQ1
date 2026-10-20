@@ -1,13 +1,16 @@
 {
   "chainId": 8453,
   "chainName": "base-mainnet",
+  "status": "superseded",
+  "supersededOn": "2026-10-20",
+  "supersededReason": "Superseded 2026-10-20 by the audit-freeze contract set (verifier 0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4, implementation 0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011, factory 0xE3dbA404dCeC30093DE26764965a51689C1607BD; see ../AUDIT_SCOPE.md section 1), which is not deployed yet. Firmware built from 2026-10-20 on predicts wallet addresses from the freeze set only. Do not create new wallets with this set.",
   "rpcUrl": "https://mainnet.base.org",
   "deployer": "0x3a4e6eD8B0F02BFBfaA3C6506Af2DB939eA5798c",
   "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
   "salts": {
     "verifier": "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "impl":     "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "factory":  "0x0000000000000000000000000000000000000000000000000000000000000000"
+    "impl": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "factory": "0x0000000000000000000000000000000000000000000000000000000000000000"
   },
   "contracts": {
     "EntryPointV06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",

@@ -33,6 +33,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WALLET_DIR="$(cd "${HERE}/../../smart-wallet" && pwd)"
 SOLVER="${HALMOS_SOLVER:-z3}"
 export PATH="${HOME}/.local/bin:${PATH}"
+# Foundry >= 1.8 (the CI pin) enables dynamic test linking by default, which
+# compiles `new X(...)` in test contracts to `vm.deployCode(...)` — a cheat
+# code Halmos does not implement, so every harness setUp() fails before any
+# rule runs. Bytecode under test is unaffected; older forge ignores the key.
+export FOUNDRY_DYNAMIC_TEST_LINKING=false
 
 # --- Rule-identity floor (fv-deep-review-2026-07-19 F9) ----------------------
 # The wired rule set: every `check_*` test function under
@@ -40,8 +45,15 @@ export PATH="${HOME}/.local/bin:${PATH}"
 # harnesses (prior receipts recorded 38 and predate HalmosIsValidSignature.t.sol,
 # the 3 EIP-1271/G8 rules). Bump EXPECTED_RULES + EXPECTED_HALMOS_CONTRACTS when
 # adding/removing a harness or rule; fv-deep-review-2026-07-19 F9.
-EXPECTED_RULES=42
-EXPECTED_RULE_IDENTITIES_SHA256=f771610f051e90bbce42326f6fe432cd2df5cab21fa2740ef6734de837528fff
+# 2026-10-20 (audit freeze): still 42. HalmosMultiOwnable 7 -> 5 (three removal
+# rules -> one selector-absent rule; the gate rule covers addOwnerBytes only),
+# HalmosIsValidSignature 3 -> 5 (legacy isValidSignature(bytes,bytes) rules),
+# HalmosExecuteEquiv's remove-selector rule restated as a rejection rule.
+# Then 43: HalmosExecuteEquiv gains check_validate_bootstrap_success_stamps_no_credit
+# (a successful bootstrap validation opens no execute path for any index; the
+# removal-selector rule used to cover the successful-but-no-credit case).
+EXPECTED_RULES=43
+EXPECTED_RULE_IDENTITIES_SHA256=382a3564c0794f88ba4aa7a42a48f6cde1beb69f16a82328a88102fd3348b753
 EXPECTED_HALMOS_CONTRACTS=(
   HalmosValidateUserOpEquiv
   HalmosValidateUserOp
@@ -138,6 +150,10 @@ assert_pass_floor() {
     expected["${identity}"]=1
   done
 
+  # Halmos colours its status markers (`ESC[32m[PASS]ESC[0m`) whenever its
+  # console decides the stream is a terminal, which it can do even through
+  # `tee`. Strip SGR sequences so a coloured receipt parses exactly like a
+  # plain one (2026-10-20: a fully green run failed this floor on colour).
   while IFS= read -r line || [ -n "${line}" ]; do
     line="${line//$'\r'/}"
     if [[ "${line}" =~ ${running_re} ]]; then
@@ -182,7 +198,7 @@ assert_pass_floor() {
       echo "==> FAIL [${profile}]: Halmos output contains ${BASH_REMATCH[0]}" >&2
       return 1
     fi
-  done < "${outfile}"
+  done < <(sed 's/\x1b\[[0-9;]*m//g' "${outfile}")
 
   for contract in "${EXPECTED_HALMOS_CONTRACTS[@]}"; do
     if [ "${running_seen["${contract}"]:-0}" -ne 1 ]; then
@@ -208,10 +224,11 @@ self_test() {
   local d; d="$(mktemp -d /tmp/pq1-halmos-floor-selftest.XXXXXX)"
   local complete="${d}/complete.txt" zero="${d}/zero.txt"
   local missing="${d}/missing.txt" substituted="${d}/substituted.txt"
+  local coloured="${d}/coloured.txt"
   local original_src_dir="${HALMOS_SRC_DIR}" fixture_src="${d}/src"
   : > "${complete}"; : > "${zero}"; : > "${missing}"; : > "${substituted}"
   local contract want name rc=0
-  echo "-- self-test 1/5: exact harness-file inventory — extra file must be REJECTED"
+  echo "-- self-test 1/6: exact harness-file inventory — extra file must be REJECTED"
   if ! check_rule_inventory >/dev/null 2>&1; then
     echo "   CONTROL FAILURE: rejected the current exact harness inventory" >&2
     rc=1
@@ -252,14 +269,19 @@ self_test() {
       echo "[PASS] check_totally_unrelated() (paths: 1, time: 0.01s, bounds: [])" >> "${substituted}"
     done
   done
-  echo "-- self-test 2/5: complete exact-identity fixture — must be ACCEPTED"
+  echo "-- self-test 2/6: complete exact-identity fixture — must be ACCEPTED"
   if assert_pass_floor "${complete}" selftest >/dev/null 2>&1; then echo "   OK: accepted"; else echo "   CONTROL FAILURE: rejected a complete run" >&2; rc=1; fi
-  echo "-- self-test 3/5: zero-PASS fixture — must be REJECTED"
+  echo "-- self-test 3/6: zero-PASS fixture — must be REJECTED"
   if assert_pass_floor "${zero}" selftest >/dev/null 2>&1; then echo "   CONTROL FAILURE: green-at-zero accepted!" >&2; rc=1; else echo "   OK: rejected"; fi
-  echo "-- self-test 4/5: missing-one-harness fixture — must be REJECTED"
+  echo "-- self-test 4/6: missing-one-harness fixture — must be REJECTED"
   if assert_pass_floor "${missing}" selftest >/dev/null 2>&1; then echo "   CONTROL FAILURE: missing-harness accepted!" >&2; rc=1; else echo "   OK: rejected"; fi
-  echo "-- self-test 5/5: same-count arbitrary PASS identities — must be REJECTED"
+  echo "-- self-test 5/6: same-count arbitrary PASS identities — must be REJECTED"
   if assert_pass_floor "${substituted}" selftest >/dev/null 2>&1; then echo "   CONTROL FAILURE: arbitrary PASS identities accepted!" >&2; rc=1; else echo "   OK: rejected"; fi
+  echo "-- self-test 6/6: the same run with ANSI-coloured markers — must be ACCEPTED"
+  sed 's/\[PASS\]/\x1b[32m[PASS]\x1b[0m/' "${complete}" > "${coloured}"
+  if ! grep -q $'\x1b' "${coloured}"; then
+    echo "   CONTROL FAILURE: coloured fixture carries no escape sequence" >&2; rc=1
+  elif assert_pass_floor "${coloured}" selftest >/dev/null 2>&1; then echo "   OK: accepted"; else echo "   CONTROL FAILURE: rejected a coloured complete run" >&2; rc=1; fi
   rm -rf "${d}"
   if [ "${rc}" -eq 0 ]; then
     echo "run_halmos.sh --self-test: all controls behave"
@@ -302,7 +324,7 @@ certify_profile default
 certify_profile deploy
 echo "    OK: wallet / factory / verifier codehashes match PINNED_CODEHASHES.md"
 echo "    OK: runtime differs from the pinned instance only at the certified immutables"
-echo "    OK: CREATE2 replay reproduces the deployed Base Mainnet impl/factory/verifier (addr+codehash)"
+echo "    OK: deploy-profile CREATE2 replay lands at the predicted production addresses/codehashes and matches the firmware CREATE2 constants"
 
 run_symbolic() {
   local profile="$1"
@@ -312,7 +334,7 @@ run_symbolic() {
   # identity floor above and the executed set can never drift apart (F9).
   local match_contract
   match_contract="Halmos($(IFS='|'; echo "${EXPECTED_HALMOS_CONTRACTS[*]#Halmos}"))"
-  FOUNDRY_PROFILE="${profile}" halmos \
+  NO_COLOR=1 FOUNDRY_PROFILE="${profile}" halmos \
     --match-contract "${match_contract}" \
     --solver "${SOLVER}" --loop 4 \
     | tee "/tmp/pq1-halmos-run-${profile}.txt" | grep -E "Running|\[PASS\]|\[FAIL\]|\[ERROR\]|Symbolic test result"

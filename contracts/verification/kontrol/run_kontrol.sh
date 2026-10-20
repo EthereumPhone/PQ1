@@ -18,6 +18,10 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SW="$HERE/../../smart-wallet"            # the Foundry project (has lib/ + remappings)
 SRC_DIR="$HERE/test"                     # all Kontrol harnesses live here
 DEST_DIR="$SW/test/kontrol"
+# Foundry >= 1.8 (the CI pin) enables dynamic test linking by default, which
+# compiles `new X(...)` in test contracts to `vm.deployCode(...)`; the symbolic
+# engines here expect plain creation code. Bytecode under test is unaffected.
+export FOUNDRY_DYNAMIC_TEST_LINKING=false
 
 # --- Proof-identity baseline (fv-deep-review-2026-07-19 F9 / sweep-F52) ------
 # Every `prove_*` function wired under kontrol/test/, as the compiler-canonical
@@ -27,11 +31,14 @@ DEST_DIR="$SW/test/kontrol"
 # KontrolOwnerTable 9, KontrolFactory 6, KontrolBootstrapUnremovable 3 —
 # matching the 33/33 discharge recorded in ../docs/KONTROL_SCOPING.md
 # (2026-06-15; the 2026-07-18 sweep's "38 prove_ functions" was a miscount).
+# 2026-10-20 (audit freeze, owner removal deleted): 31 proofs — KontrolOwnerTable
+# 7 (three removal proofs replaced by one selector-absent proof), and the three
+# KontrolBootstrapUnremovable proofs restated for the append-only owner set.
 # Bump this list when adding/removing a proof; fv-deep-review-2026-07-19 F9.
 EXPECTED_PROOFS=(
-  "KontrolBootstrapUnremovable.prove_bootstrap_unremovable_from_entrypoint(bytes)"
-  "KontrolBootstrapUnremovable.prove_bootstrap_unremovable_exact_bytes()"
-  "KontrolBootstrapUnremovable.prove_bootstrap_remove_rejected_non_entrypoint(address,bytes)"
+  "KontrolBootstrapUnremovable.prove_bootstrap_unchanged_by_addOwner(bytes)"
+  "KontrolBootstrapUnremovable.prove_bootstrap_removal_selector_does_not_dispatch(address,bytes)"
+  "KontrolBootstrapUnremovable.prove_bootstrap_reinitialize_rejected(bytes,bytes)"
   "KontrolExecute.prove_execute_requires_entrypoint(address,uint256,uint256,uint256,bytes)"
   "KontrolExecute.prove_execute_no_credit_reverts(uint256,uint256,uint256,bytes)"
   "KontrolExecute.prove_execute_rejects_self_target(uint256,uint256,bytes)"
@@ -49,12 +56,10 @@ EXPECTED_PROOFS=(
   "KontrolOwnerTable.prove_addOwner_len64_pointwise(bytes)"
   "KontrolOwnerTable.prove_addOwner_rejects_len63(bytes)"
   "KontrolOwnerTable.prove_addOwner_rejects_len65(bytes)"
-  "KontrolOwnerTable.prove_removeOwner_installed_pointwise(bytes)"
-  "KontrolOwnerTable.prove_removeOwner_unset_rejects(uint256,bytes)"
+  "KontrolOwnerTable.prove_removed_selector_does_not_dispatch(address,uint256,bytes)"
   "KontrolOwnerTable.prove_initialize_one_shot(bytes,bytes)"
   "KontrolOwnerTable.prove_initialize_fresh_pointwise(bytes,bytes)"
   "KontrolOwnerTable.prove_addOwner_rejects_non_entrypoint(address,bytes)"
-  "KontrolOwnerTable.prove_removeOwner_rejects_non_entrypoint(address,bytes)"
   "KontrolValidateUserOp.prove_validate_slot_nonbypass(uint256,uint256,bool)"
   "KontrolValidateUserOp.prove_validate_bootstrap_nonbypass(uint256,bool)"
   "KontrolValidateUserOp.prove_validate_rejects_unset_owner(bool)"
@@ -401,6 +406,8 @@ command -v kontrol >/dev/null 2>&1 || {
 # until after staging; current harnesses use only forge-std cheatcodes), and
 # (b) remove it on exit so a later `forge test` / CI sees the canonical
 # foundry.lock lib set. See work-todo §34 + docs/KONTROL_SCOPING.md.
+# UPDATE 2026-10-20: since the build sets `bytecode_hash = "none"` the lib set
+# no longer reaches the codehashes; the cleanup stays so lib/ matches CI.
 KCC_DIR="$SW/lib/kontrol-cheatcodes"
 cleanup() {
   if [ -d "$DEST_DIR" ]; then
