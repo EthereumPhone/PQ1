@@ -1564,6 +1564,9 @@ unexpected, stale or mismatched evidence fails the gate.
 
 Artifact transport stays within the current workflow run and attempt; the
 reviewed producer workflow and GitHub runner/artifact service remain trusted.
+Sharding and receipt aggregation require that CI context; local runs use the
+full gate. Retry the whole workflow, since receipts from an earlier attempt
+cannot satisfy the current aggregate.
 This batch does not reuse PR evidence after landing or skip the push replay.
 That is a separate evidence-policy boundary coordinated with #789.
 Worker and shard measurements are pending; the experimental matrix is not

@@ -47,7 +47,9 @@ def read_json(path: Path):
             require(key not in result, f"duplicate JSON key: {key}")
             result[key] = value
         return result
-    return json.loads(path.read_text(), object_pairs_hook=pairs)
+    def constant(value):
+        raise RuntimeError(f"non-finite JSON constant: {value}")
+    return json.loads(path.read_text(), object_pairs_hook=pairs, parse_constant=constant)
 
 
 def resource_limits() -> dict:
@@ -129,27 +131,26 @@ def judge_control(row: dict, text: str, source: str, source_path: str, expected:
     return errors
 
 
-def producer_context(root: Path, batch: str | None = None) -> dict:
+def producer_context(root: Path) -> dict:
+    # Local callers use the cold full gate with configurable workers. Accepting
+    # caller-chosen local group IDs would create an unauthenticated reuse path.
+    require(os.environ.get("GITHUB_ACTIONS") == "true",
+            "shard production/aggregation requires the current GitHub workflow run")
     git = lambda *args: subprocess.check_output(["git", *args], cwd=root, text=True).strip()
     context = {"commit": git("rev-parse", "HEAD"), "tree": git("rev-parse", "HEAD^{tree}")}
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        require(batch is None, "local batch ID forbidden in CI")
-        keys = ("GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA",
-                "GITHUB_EVENT_NAME", "GITHUB_WORKFLOW_REF", "GITHUB_WORKFLOW_SHA")
-        require(all(os.environ.get(key) for key in keys), "incomplete CI producer context")
-        require(context["commit"] == os.environ["GITHUB_SHA"], "checkout differs from CI SHA")
-        require(not git("status", "--porcelain", "--untracked-files=normal"),
-                "CI checkout is not clean")
-        context.update(kind="github", **{key: os.environ[key] for key in keys})
-    else:
-        require(batch is not None and re.fullmatch(r"[a-zA-Z0-9_-]{16,80}", batch) is not None,
-                "local shard runs need a fresh 16..80 character batch ID")
-        context.update(kind="local", batch=batch)
+    keys = ("GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "GITHUB_SHA",
+            "GITHUB_EVENT_NAME", "GITHUB_WORKFLOW_REF", "GITHUB_WORKFLOW_SHA")
+    require(all(os.environ.get(key) for key in keys), "incomplete CI producer context")
+    require(context["commit"] == os.environ["GITHUB_SHA"], "checkout differs from CI SHA")
+    require(not git("status", "--porcelain", "--untracked-files=normal"),
+            "CI checkout is not clean")
+    context.update(kind="github", **{key: os.environ[key] for key in keys})
     return context
 
 
 def tree_hash(root: Path, accept) -> str:
     """Hash file contents under canonical relative names, rejecting symlink inputs."""
+    require(root.is_dir() and not root.is_symlink(), f"invalid identity tree: {root}")
     entries = {}
     for directory, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d != ".git")
@@ -190,8 +191,13 @@ def input_identity(root: Path, project: Path, manifest: dict, lean: str,
         pins[name] = digest(path.read_bytes())
     library = lambda p: (p.suffix in {".lean", ".ir", ".a", ".dll", ".dylib"}
                          or ".olean" in p.name or ".so" in p.name)
+    packages = project / ".lake/packages"
+    # Include dependency configuration/support sources as well as actual
+    # compiler-loadable artifacts. Exclude only generated non-library state.
+    dependency = lambda p: library(p) or ".lake" not in p.relative_to(packages).parts
     return {"schema": SCHEMA, "inputs_sha256": digest(canonical(pins)),
             "manifest_sha256": digest(canonical(manifest)),
+            "manifest_file_sha256": digest((project / "claims.json").read_bytes()),
             "cases_sha256": digest(canonical(selected)),
             "lean_sha256": digest(Path(lean).read_bytes()),
             "lake_sha256": digest((Path(lean).parent / "lake").read_bytes()),
@@ -201,7 +207,7 @@ def input_identity(root: Path, project: Path, manifest: dict, lean: str,
             "python_flags": {"ignore_environment": sys.flags.ignore_environment,
                              "no_site": sys.flags.no_site},
             "toolchain_sha256": tree_hash(Path(lean).parent.parent / "lib", library),
-            "dependencies_sha256": tree_hash(project / ".lake/packages", library),
+            "dependencies_sha256": tree_hash(packages, dependency),
             "project_libraries_sha256": tree_hash(project / ".lake/build/lib/lean", library),
             "policy": {"control_flags": CONTROL_FLAGS, "timeout": CONTROL_TIMEOUT,
                        "stages": list(STAGES), "excluded": EXCLUDED}}
@@ -235,6 +241,8 @@ def authenticate_shards(directory: Path, count: int, identity: dict, context: di
                 "wrong shard assignment")
         require(all(type(value) is int for value in result["shard"]), "non-integer shard identity")
         require(result.get("identity") == identity, "shard input/toolchain/policy mismatch")
+        require(result.get("manifest_sha256") == identity["manifest_file_sha256"],
+                "shard manifest receipt differs")
         require(result.get("context") == context, "stale or foreign producer context")
         require(result.get("lean", {}).get("sha256") == identity["lean_sha256"],
                 "selected compiler differs")

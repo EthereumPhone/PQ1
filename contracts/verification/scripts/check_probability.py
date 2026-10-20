@@ -153,7 +153,6 @@ def arguments(argv=None):
     parser.add_argument("--shard-index", type=int, default=os.environ.get("PROBABILITY_SHARD_INDEX"))
     parser.add_argument("--aggregate", type=Path, default=os.environ.get("PROBABILITY_AGGREGATE"))
     parser.add_argument("--output", type=Path, default=os.environ.get("PROBABILITY_OUTPUT"))
-    parser.add_argument("--batch-id", help="Fresh local shard group ID; forbidden in CI")
     args = parser.parse_args(argv)
     require(1 <= args.shard_count <= 8, "shard count outside 1..8")
     require(not (args.aggregate and args.shard_index is not None), "aggregate cannot be a shard")
@@ -170,7 +169,7 @@ def main(args=None) -> None:
     limits = resource_limits()
     workers = worker_count(args.workers, limits)
     mode = "aggregate" if args.aggregate else "shard" if args.shard_index is not None else "full"
-    context = producer_context(ROOT, args.batch_id) if mode != "full" else None
+    context = producer_context(ROOT) if mode != "full" else None
     manifest = static_checks()
     lake = _pinned_lake()
     env = _pinned_tool_env()
@@ -249,7 +248,7 @@ def main(args=None) -> None:
         require(result["identity"] == input_identity(ROOT, PROJECT, manifest, lean, cases(PROJECT), lake),
                 "toolchain/dependencies/policy changed during proof gate")
         if context is not None:
-            require(context == producer_context(ROOT, args.batch_id), "producer context changed")
+            require(context == producer_context(ROOT), "producer context changed")
         result["passed"] = True
     finally:
         result["seconds"] = time.monotonic() - started

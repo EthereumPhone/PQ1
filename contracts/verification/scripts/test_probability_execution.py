@@ -77,13 +77,13 @@ class ExecutionTests(unittest.TestCase):
             judge_control({"exit": 0}, json.dumps(error), source, "/fixture.lean", True)
         self.assertEqual(judge_control({"exit": 0}, "", source, "/fixture.lean", True), [])
 
-    def test_local_context_must_be_explicit(self):
+    def test_local_caller_cannot_select_receipt_reuse(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}):
-            for batch in (None, "", "too-short"):
-                with self.assertRaises(RuntimeError):
-                    execution.producer_context(gate.ROOT, batch)
-            context = execution.producer_context(gate.ROOT, "test-batch-0123456789")
-            self.assertEqual(context["kind"], "local")
+            with self.assertRaises(RuntimeError):
+                execution.producer_context(gate.ROOT)
+        with patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "incomplete CI producer context"):
+                execution.producer_context(gate.ROOT)
 
 
 class AggregateTests(unittest.TestCase):
@@ -93,7 +93,8 @@ class AggregateTests(unittest.TestCase):
         self.directory = Path(self.tmp.name) / "receipts"
         self.directory.mkdir()
         self.manifest = {"theorems": {"C10Probability.fixture": {}}}
-        self.identity = {"lean_sha256": "selected-compiler", "policy": "original"}
+        self.identity = {"lean_sha256": "selected-compiler", "policy": "original",
+                         "manifest_file_sha256": "manifest-file"}
         self.context = {"kind": "github", "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1",
                         "commit": "a" * 40, "tree": "b" * 40}
         self.cases = [{"name": name, "expected": expected,
@@ -105,6 +106,7 @@ class AggregateTests(unittest.TestCase):
             (bundle / "controls").mkdir(parents=True)
             result = {"passed": True, "mode": "shard", "shard": [index, 2], "workers": 1,
                       "identity": self.identity, "context": self.context,
+                      "manifest_sha256": "manifest-file",
                       "lean": {"path": "/tools/lean", "sha256": "selected-compiler"},
                       "missing_closure_control": True, "controls": [],
                       "closures": {"C10Probability.fixture": ["propext"]}}
@@ -175,6 +177,7 @@ class AggregateTests(unittest.TestCase):
             "foreign-checkout": lambda r: r["context"].update(commit="c"*40),
             "policy": lambda r: r["identity"].update(policy="changed"),
             "compiler": lambda r: r["lean"].update(sha256="other"),
+            "manifest": lambda r: r.update(manifest_sha256="other"),
             "failed-build": lambda r: r["build"].update(exit=1),
             "false-build": lambda r: r["build"].update(exit=False),
             "incomplete-closures": lambda r: r.update(closures={}),
@@ -217,6 +220,9 @@ class AggregateTests(unittest.TestCase):
         path = self.directory / "shard-0/result.json"
         original = path.read_bytes()
         path.write_bytes(b'{"passed":false,"passed":true}')
+        with self.assertRaises(RuntimeError):
+            self.aggregate()
+        path.write_bytes(original[:-1] + b',"invalid":NaN}')
         with self.assertRaises(RuntimeError):
             self.aggregate()
         path.write_bytes(original)
