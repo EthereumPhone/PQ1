@@ -1,5 +1,25 @@
 # AUDIT_2026-05-18 — Cross-Check Report
 
+> **Status note, 2026-10-20 (audit freeze).** This is an internal review, not
+> a third-party audit, and parts of it describe code that has since changed.
+> `AUDIT_SCOPE.md` §3 lists the changes; the current flows are in
+> `AUDIT_DIAGRAMS.md`. In particular:
+> - **M-1 is reversed.** `bootstrapUses` is counted in the validation phase
+>   again, not in `addOwnerBytes`: v0.6 keeps validation state when an
+>   execution reverts, so a count done in execution could be driven to zero.
+> - **The H-3 fix changed shape.** The single transient owner-index token is
+>   now a per-`ownerIndex` credit counter, and the index parity check runs in
+>   validation.
+> - **Owner removal is deleted.** `removeOwnerAtIndex`, `_removeOwnerAtIndex`
+>   and `CannotRemoveBootstrap` no longer exist; the owner set is append-only.
+> - **Owner management is gated on the EntryPoint** (`msg.sender ==
+>   entryPoint`), not on `address(this)`. The H-2 self-call ban is unchanged.
+> - **EIP-1271:** Solady's raw-hash workflows are disabled (#691), and a
+>   legacy `isValidSignature(bytes,bytes)` entry was added (#995).
+> - **New surface:** ERC-721 / ERC-1155 receiver hooks and `supportsInterface`.
+>
+> Line numbers below refer to the 2026-05-18 tree.
+
 **Date:** 2026-05-18
 **Reviewer:** independent cross-check on top of the colleague's fix
 commit `aa537ad`.

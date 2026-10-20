@@ -1,13 +1,16 @@
 {
   "chainId": 84532,
   "chainName": "base-sepolia",
+  "status": "superseded",
+  "supersededOn": "2026-10-20",
+  "supersededReason": "Superseded 2026-10-20 by the audit-freeze contract set (verifier 0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4, implementation 0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011, factory 0xE3dbA404dCeC30093DE26764965a51689C1607BD; see ../AUDIT_SCOPE.md section 1), which is not deployed yet. Firmware built from 2026-10-20 on predicts wallet addresses from the freeze set only. Do not create new wallets with this set.",
   "rpcUrl": "https://sepolia.base.org",
   "deployer": "0x00137482d6b37eBb235A463D748191D925D92eB3",
   "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
   "salts": {
     "verifier": "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "impl":     "0x0000000000000000000000000000000000000000000000000000000000000000",
-    "factory":  "0x0000000000000000000000000000000000000000000000000000000000000000"
+    "impl": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "factory": "0x0000000000000000000000000000000000000000000000000000000000000000"
   },
   "contracts": {
     "EntryPointV06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
@@ -17,5 +20,24 @@
   },
   "proxyInitCodeHash": "0x81bf5ce06e60f71c41de86991b75639e32d967b8e9d412b706a1c24e25aadc4c",
   "verified": false,
-  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Verifier+impl+factory regenerated after the EIP-1271 / off-chain-counter on-chain rework. Source intentionally NOT published."
+  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Verifier+impl+factory regenerated after the EIP-1271 / off-chain-counter on-chain rework. Source intentionally NOT published.",
+  "laterDeployments": [
+    {
+      "deployedOn": "2026-05-27",
+      "block": 42057089,
+      "deployer": "0x3a4e6eD8B0F02BFBfaA3C6506Af2DB939eA5798c",
+      "broadcast": "broadcast/DeployImplAndFactoryBaseSepolia.s.sol/84532/run-1779882464.json",
+      "contracts": {
+        "SPHINCsC10Asm": "0x472294ddaba57c98a47f5f0a5483f7ef7e8a78fe",
+        "PQSmartWalletImpl": "0x4c3d793c1aa7296fef68da5730515fca6458e219",
+        "PQSmartWalletFactory": "0xb903d72c61be8c67c3311ce53e0a2db6626ef133"
+      },
+      "runtimeCodehashes": {
+        "SPHINCsC10Asm": "0x919cf8ef4b028b50f51de2e71aba7d08900d0e59833d003eed68102c7e9289c0",
+        "PQSmartWalletImpl": "0x6c0eefc25d7e7232a85273204950176e01b6ccdebe1b8bac3ef5d4bbd7158ea5",
+        "PQSmartWalletFactory": "0x40d42d73d87c7b8db6868ccd3cca8a5128bc45d8e3acab9bb89a6494d7558a75"
+      },
+      "note": "A second bench set, deployed from an intermediate tree and never recorded here until 2026-10-20 (codehashes read on chain that day). Not pinned by any test or proof, and superseded like the set above."
+    }
+  ]
 }

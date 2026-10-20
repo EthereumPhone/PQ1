@@ -401,9 +401,11 @@ the full Safe transaction — the approveHash screens under a
 `SIGN SAFE TX?` banner — and signs `replay_safe_hash(safeTxHash)`, the same
 value RAW32 would sign. Do not send a SafeTx hash as RAW32 to a device that
 advertises the bit, and never fall back to RAW32 after a kind-4 refusal.
-Only Safe ≥ v1.5.0 can verify the signature (v1.3.0 / v1.4.1 call the legacy
-`isValidSignature(bytes,bytes)`); the on-chain approveHash route works on all
-three. Safe *messages* (`SafeMessage`) are not covered.
+Safe v1.3.0, v1.4.1 and v1.5.0+ can verify the signature (UPDATE 2026-10-20,
+#995: v1.3.0 / v1.4.1 call the legacy `isValidSignature(bytes,bytes)`, which
+the audit-freeze `PQSmartWallet` implements; before that only v1.5.0+ could).
+The on-chain approveHash route works on all three. Safe *messages*
+(`SafeMessage`) are not covered.
 
 When in doubt about whether a Safe surface is in scope, check the
 selector table above and the companion test fixtures in

@@ -163,6 +163,10 @@ thousands–millions of oracle signatures in step 2 never touched the chain.
   `removeOwnerAtIndex` → `addOwnerBytes` re-add of the same slot pubkey at a fresh index
   (`PQMultiOwnable.sol:184/242`). Backstopped by the per-`slot_index` page-123 counter; see the
   memory note. Same class of bug: **on-chain caps key by storage index, not by key identity.**
+  **UPDATE 2026-10-20: the sibling is fixed** (#131, Trail of Bits audit freeze).
+  `removeOwnerAtIndex` was deleted; the owner set is append-only and `AlreadyOwner` refuses any
+  key ever installed, so a key keeps one index and one set of counters for the wallet's life.
+  This VULN (the GET_INIT_CODE bootstrap oracle) is unaffected by that fix.
 - The per-*slot* keys are NOT affected by the GET_INIT_CODE oracle (it only signs with the
   bootstrap key). The slot keys are firmware-capped per `(account,chain,slot_index)`.
 

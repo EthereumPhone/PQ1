@@ -1,261 +1,189 @@
 # PQSmartWallet — Static Analysis, Coverage, Dead Code
 
-**Date:** 2026-05-22.
-**Tool versions used:** forge 1.2.3-stable (a813a2c).
-**Tool versions NOT used:** slither-analyzer — not installed locally;
-recommended for the auditor to run in their environment.
+Updated 2026-10-20 for the audit freeze (`AUDIT_SCOPE.md` §1). Tools:
+Foundry v1.8.3 (the CI pin), slither-analyzer 0.11.6, solc 0.8.28. The
+2026-05-22 version of this file is in git history.
 
 ---
 
 ## 1. Slither
 
-Not installed on the prep workstation. Recommended invocation for the
-auditor (or as a follow-up CI gate):
+Slither is a hard CI gate at Medium severity: the `Slither (contracts static
+analysis)` job of the repository-root `.github/workflows/ci.yml`. The
+configuration is `slither.config.json` (filter paths `lib/|reference/|test/|script/`,
+`exclude_dependencies`, `fail_on: medium`), so `slither .` in this directory
+reproduces CI. Workflow files under `contracts/smart-wallet/.github/` never
+run: GitHub executes workflows only from the repository root.
 
-```bash
-pip install slither-analyzer
-cd contracts/smart-wallet
-slither . --filter-paths "lib/|reference/|test/|script/" \
-          --exclude-dependencies \
-          --solc-remaps "$(cat remappings.txt | tr '\n' ' ')"
-```
+Freeze run: **15 contracts, 102 detectors, 28 results, none of them an
+untriaged Medium or High.**
 
-~~We do not currently gate CI on a clean slither run. Pre-launch action:
-add slither + 4naly3er to `.github/workflows/test.yml`.~~
+### Triaged Medium findings
 
-**LANDED 2026-07-31.** Slither is now a hard CI gate at **medium+ severity**,
-in the `Slither (contracts static analysis)` job of the repository-root
-`.github/workflows/ci.yml`.
-
-> Note the correction to the original TODO: it said to add the gate to
-> `.github/workflows/test.yml`. That file **never runs** — GitHub executes
-> workflows only from the repository-root `.github/workflows/`, so everything
-> under `contracts/smart-wallet/.github/` is inert (see the README there).
-> Landing the gate where the TODO pointed would have produced a check that
-> silently never executed.
-
-Configuration is `slither.config.json` (filter paths, `exclude_dependencies`,
-`fail_on: medium`), so `slither .` from this directory reproduces CI exactly.
-
-### Baseline, and the three triaged findings
-
-First clean run: **15 contracts, 102 detectors, 31 findings — zero High, three
-Medium, the rest Informational/Low.** The three Mediums are suppressed
-*individually* in `slither.db.json` (Slither's triage database, which keys on
-the finding, not the detector) rather than by disabling detectors — so a NEW
-instance of any of these detectors anywhere else still fails the build.
-Verified: removing one entry from the triage DB turns the gate red.
+Three Medium findings are suppressed individually in `slither.db.json`, which
+keys on the finding rather than the detector, so a new instance of the same
+detector anywhere else still fails the build. Slither's finding IDs include
+line ranges, so the two entries in `PQSmartWallet.sol` were re-keyed when the
+freeze moved their lines; the reasoning is unchanged.
 
 | Finding | Where | Why it is not a defect |
 |---|---|---|
-| `uninitialized-local` — `ok` | `PQSmartWalletFactory.createAccount` L106 | `bool ok;` is assigned in **both** arms of the `try/catch` that follows (`ok = v` / `ok = false`) before its only read. Slither's dataflow does not model try/catch assignment completeness. Note the direction of the residual risk even if it were right: Solidity zero-initialises `bool`, and the read is `if (!ok) revert InvalidFactorySignature()` — so the failure mode is **refusing a valid deploy, never accepting an invalid one.** Fail-closed by construction. |
-| `divide-before-multiply` ×2 | `PQSmartWallet._validateSignature` L406, `_erc1271IsValidSignatureNowCalldata` L606 | `((C10_SIG_LEN + 31) / 32) * 32` is the standard round-up-to-a-32-byte-word idiom, over the **compile-time constant** `C10_SIG_LEN = 4008` (→ 4032). There is no runtime input and the truncation is the *intent*, not a precision bug. |
+| `uninitialized-local` — `ok` | `PQSmartWalletFactory.createAccount` (line 106) | `bool ok;` is assigned in both arms of the `try`/`catch` that follows (`ok = v` / `ok = false`) before its only read. Slither does not model try/catch assignment. Even if it were right, the read is `if (!ok) revert InvalidFactorySignature()`, so the failure mode is refusing a valid deployment, never accepting an invalid one. |
+| `divide-before-multiply` | `PQSmartWallet._validateSignature` and `_erc1271IsValidSignatureNowCalldata` | `((C10_SIG_LEN + 31) / 32) * 32` rounds a compile-time constant (`C10_SIG_LEN = 4008`) up to a 32-byte word (4032). The truncation is the intent and there is no runtime input. |
 
-Suppressions live in `slither.db.json`, deliberately **not** as
-`// slither-disable-next-line` annotations in the contracts: a comment added to
-a `src/` file changes solc's metadata hash, therefore the deployed codehash, and
-would break the codehash-freeze tests (`PinnedCodehashes.t.sol`,
-`DeployedBytecodeReproCheck.t.sol`). An external triage file has no such effect.
+The suppressions live in `slither.db.json` rather than as
+`// slither-disable` comments in the sources. Since the build sets
+`bytecode_hash = "none"`, a comment would no longer move the codehash, but the
+external file keeps the sources free of tool annotations.
 
-### Still open from the original TODO
+### The remaining 28 results (Informational / Low / Optimization)
 
-`4naly3er` and `aderyn` are not yet wired — they are a second and third
-viewpoint with low overlap, and each needs its own baseline triage before it can
-gate. Tracked on the issue this work came from.
+| Detector | Impact | Count | Where | Assessment |
+|---|---|---:|---|---|
+| `calls-loop` | Low | 1 | `executeBatchWithOffchainCount` | Calling each signed target in turn is the purpose of the batch. Any failing call reverts the whole batch, and nothing runs after the loop. |
+| `reentrancy-events` | Low | 1 | `PQSmartWalletFactory.createAccount` | `AccountCreated` is emitted after `account.initialize(...)` on the proxy the factory just created, whose code is the wallet implementation. Only the event order is affected. |
+| `assembly` | Informational | 14 | wallet, owner table, verifier | Deliberate: parsing the fixed-layout signature wrapper and calldata words, the transient credit slots, the ERC-7201 storage pointer, owner-key words, revert-data bubbling, and the Yul verifier. |
+| `low-level-calls` | Informational | 3 | both execute paths, `validateUserOp` | The execute paths call the signed target and bubble its revert data. `validateUserOp` pays `missingAccountFunds` to the EntryPoint and ignores the result, as the v0.6 reference account does; the EntryPoint checks the deposit. |
+| `too-many-digits` | Informational | 6 | verifier, wrapper parsing | 256-bit mask literals: the wrapper's 24-byte tail-pad mask (twice), the verifier's N-mask and two address-field masks, and the `Error(string)` selector word. |
+| `cyclomatic-complexity` | Informational | 1 | `SPHINCsC10Asm.verify` | The whole verifier is one Yul function. |
+| `dead-code` | Informational | 1 | `PQSmartWallet._erc1271Signer` | The intentional tripwire (L-2); see §6. |
+| `missing-inheritance` | Informational | 1 | `SPHINCsC10Asm` | The verifier does not declare `ISPHINCSVerifier`. Its `verify(bytes32,bytes32,bytes32,bytes)` signature matches the interface, through which the wallet and factory call it. |
 
----
-
-## 2. Forge coverage
-
-`forge coverage --ir-minimum --no-match-path 'test/halmos/*'` (the
-Halmos tests are not exercised by the Foundry runner; symbolic
-discharge happens in CI via `halmos --contract Halmos...`).
-
-In-scope contract coverage (lines / branches / functions):
-
-| Contract | Lines | Branches | Functions |
-|---|---|---|---|
-| `src/PQSmartWallet.sol` | 74.83% (110/147) | 65.38% (17/26) | 83.33% (15/18) |
-| `src/PQMultiOwnable.sol` | 74.68% (59/79) | 35.71% (5/14) | 81.25% (13/16) |
-| `src/PQSmartWalletFactory.sol` | 90.00% (27/30) | 66.67% (4/6) | 100.00% (5/5) |
-| `src/verifiers/SPHINCsC10Asm.sol` | 0.85% (1/118) | 0.00% (0/5) | 100.00% (1/1) |
-
-Caveats:
-
-- **`SPHINCsC10Asm.sol` is 99% Yul assembly inside one external
-  `verify(...)` function.** `forge coverage` cannot instrument
-  individual lines inside `assembly { ... }` blocks, so the 0.85% line
-  number is meaningless. The verifier IS exercised by:
-  - `test/SPHINCsC10Asm.t.sol` — 316 lines of unit tests including
-    real C10 test vectors from `test/c10_test_vectors.json`.
-  - `test/PQSmartWalletRealSig.t.sol` — 150 lines of end-to-end real
-    signatures produced by the host signer.
-  - Byte-level cross-check against `sphincs-c10/` Rust reference,
-    documented in `AUDIT_2026-05-18.md` §1 "Verifier byte layout".
-- **Uncovered branches in `PQMultiOwnable.sol`** are largely error
-  paths that need fuzz / invariant runs to hit; the invariant suite
-  (`PQSmartWalletInvariants.t.sol`, 256 runs × 128k calls) does
-  exercise them but they don't show in `forge coverage`'s branch
-  counter.
-- The Halmos contracts and the deploy scripts pull the total down
-  (they're 0% by construction — scripts are not unit-tested, Halmos
-  contracts are not run by `forge test`). Filter them out to read the
-  in-scope numbers.
-
-Action items before audit handoff:
-
-1. Add a branch-coverage push for `PQMultiOwnable` error paths
-   (`AlreadyOwner`, `WrongOwnerAtIndex`, `NoOwnerAtIndex`,
-   `InvalidNMaskLayout` already covered; `OffchainSigCountNotMonotonic`
-   and `CombinedSlotCapExceeded` are covered via dedicated tests).
-2. Document explicitly in the audit cover letter that
-   `SPHINCsC10Asm.sol` line-coverage is misleading and direct the
-   reviewer to the test vectors + Rust-reference diff.
+`4naly3er`, `aderyn` and Mythril were not run.
 
 ---
 
-## 3. Pinned-bytecode test failures during coverage run
+## 2. Coverage
 
-`test/PinnedCodehashes.t.sol::test_codehash_pinned_or_print` and
-`test/SPHINCsC10Asm.t.sol::test_verifierBytecodeFrozen` both fail
-under `forge coverage --ir-minimum` because coverage disables the
-production optimizer (`optimizer_runs=200`, `via_ir=true`,
-`evm_version=prague`) so the deployed runtime bytecode hash differs
-from the pinned production hash.
+`forge coverage --ir-minimum --report summary --no-match-path 'test/halmos/*'`,
+with the default fuzz and invariant settings (256 runs; invariants at depth 500):
 
-- Pinned codehashes (from `test/PinnedCodehashSelector.sol`; `default` runs=200 / `deploy` runs=999999):
-  - PQSmartWallet: `0x43c65420…a06a` (default) / `0x551c4e03…34c22` (deploy)
-  - SPHINCsC10Asm: `0xf1ef4cce…fef5` (default) / `0xeb1e3fcd…2cc5` (deploy — byte-identical to on-chain Base Mainnet verifier `0xdDE4D290…`)
-- `forge coverage --ir-minimum` codehashes (today):
-  - PQSmartWallet: `0x9e88d1e2cb6339506e9fca0ebb6fc57a612e12906f7c74aeff2acc3f655b4d34`
-  - SPHINCsC10Asm: `0x41f8482f017e7d34748c36dc3370a328834bcd364975996ab3230dad6bb2bdd4`
+| Contract | Lines | Statements | Branches | Functions |
+|---|---|---|---|---|
+| `src/PQSmartWallet.sol` | 79.04% (132/167) | 76.92% (150/195) | 59.09% (26/44) | 92.59% (25/27) |
+| `src/PQMultiOwnable.sol` | 93.85% (61/65) | 92.19% (59/64) | 45.45% (5/11) | 100.00% (14/14) |
+| `src/PQSmartWalletFactory.sol` | 90.00% (27/30) | 91.18% (31/34) | 66.67% (4/6) | 100.00% (5/5) |
+| `src/verifiers/SPHINCsC10Asm.sol` | not meaningful (Yul) | | | 100.00% (1/1) |
 
-These tests pass under `forge test` (production profile). Documenting
-here so the auditor knows the divergence is expected.
+Two of the 27 functions in `PQSmartWallet.sol` are not reached; one is
+`_erc1271Signer`, which is unreachable by design (§6). Among the uncovered
+branches are the failure arms of the `require`s in `_bumpBootstrapUses` and
+`_bumpSlotUses`, which validation makes unreachable by checking the caps
+first (V-5 in `AUDIT_DIAGRAMS.md`).
 
----
+Reading the numbers:
 
-## 4. Foundry test suite (production profile)
-
-```
-forge test
-```
-
-92 tests; 92 pass under production profile. Subset:
-
-- `PQSmartWallet.t.sol` — 56 unit + integration tests (1,320 lines).
-- `PQSmartWalletInvariants.t.sol` — 7 stateful invariants (256 runs ×
-  128k calls each, 0 reverts).
-- `PQSmartWalletRealSig.t.sol` — end-to-end signing tests using real
-  C10 signatures from the host signer.
-- `SPHINCsC10Asm.t.sol` — verifier unit tests against
-  `c10_test_vectors.json`.
-- `StorageSlotParity.t.sol` — ERC-7201 slot derivation pinning.
-- `PinnedCodehashes.t.sol` — deployed-bytecode codehash pinning.
-- `LeanSelectorParity.t.sol` — selector consistency.
+- **`SPHINCsC10Asm.sol` is a single function of Yul.** `forge coverage` does
+  not instrument lines inside `assembly` blocks, so its line figure says
+  nothing. The verifier is exercised by `test/SPHINCsC10Asm.t.sol` (KAT
+  vectors from `test/c10_test_vectors.json` and primitive KATs),
+  `test/SPHINCsC10AsmAdversarial.t.sol` (about 250 mutated signatures that must
+  be rejected), `test/SPHINCsC10AsmMutantCorpus.t.sol`, the real-signature
+  tests, and a byte-level comparison with the Rust reference `sphincs-c10/`.
+- **The Halmos harnesses are excluded**: they are symbolic rules, run by
+  `make -C ../verification verify-bytecode`, not Foundry tests.
+- **Under `--ir-minimum` the codehash pin tests fail**, because coverage
+  compiles without the production optimizer settings. That is expected: they
+  pass under `forge test` and under the deploy profile.
 
 ---
 
-## 5. Symbolic execution (Halmos)
+## 3. Contract sizes (deploy profile, EIP-170 limit 24,576 bytes)
 
-`halmos.toml` pins:
-- halmos ≥ 0.2.0
-- Z3 ≥ 4.13.0
-- Bound `default_array_lengths = "0,1,2,4"`,
-  `default_bytes_lengths = "0,32,4128"`.
-- Loop unrolling `k <= 4`; larger k discharged by the Lean
-  `executeBatch_runs_in_signed_order` theorem.
-- `verify_bytecode = true` — fails if deployed codehash drifts from
-  the production pin.
+`FOUNDRY_PROFILE=deploy forge build --sizes`:
 
-Contracts:
-- `test/halmos/HalmosValidateUserOp.t.sol` — discharges
-  `solidityWallet_compiles_correctly` (A3.2) for the validate path.
-- `test/halmos/HalmosExecute.t.sol` — same for the execute path.
-
-Not run in this prep pass; the auditor should run both with
-`halmos --contract HalmosValidateUserOp` and
-`halmos --contract HalmosExecute` against the audit-freeze commit.
+| Contract | Runtime (B) | Initcode (B) | Runtime margin (B) |
+|---|---:|---:|---:|
+| `PQSmartWallet` | 10,930 | 12,393 | 13,646 |
+| `PQSmartWalletFactory` | 2,321 | 2,529 | 22,255 |
+| `SPHINCsC10Asm` | 1,889 | 1,915 | 22,687 |
 
 ---
 
-## 6. Formal verification (Certora)
+## 4. Tests
 
-Four spec files in `certora/`:
-- `PQMultiOwnable.spec`
-- `PQSmartWalletExecute.spec`
-- `PQSmartWalletFactory.spec`
-- `PQSmartWallet.spec`
+`forge test` (default profile): **149 passed, 0 failed, 2 skipped** in 20
+suites. The skips are expected: `DeployedBytecodeReproCheck` runs only under
+the deploy profile, and `EntryPointCodehashReceipt` needs `ENTRYPOINT_RPC_URL`.
+Of note:
 
-Configurations in `certora/confs/`. Not run in this prep pass — they
-require an API key. Status of each rule (timeout / verified / known
-issue) should be confirmed before audit handoff.
+| Suite | What it covers |
+|---|---|
+| `PQSmartWallet.t.sol` | Unit and integration tests: role split, caps, credits, H-2/H-3, removed-selector rejection, key re-install refusal |
+| `PQSmartWalletInvariants.t.sol` | Stateful invariants (256 runs × depth 500), including the append-only owner set with a re-install handler |
+| `PQSmartWalletRealSig.t.sol` | Real C10 signatures from the host signer |
+| `ERC7562ValidationRules.t.sol` | Storage and call-graph subset of the ERC-7562 validation rules |
+| `ERC6492Replay.t.sol` | Counterfactual signatures and cross-chain/cross-wallet replay |
+| `LegacyERC1271.t.sol` | The legacy `isValidSignature(bytes,bytes)` entry, a mock of Safe v1.4.1's contract-signature check, and the closed raw-hash workflows (#691) |
+| `TokenReceiver.t.sol` | ERC-721 and ERC-1155 transfers into a wallet proxy, `supportsInterface`, no fallback |
+| `SPHINCsC10Asm*.t.sol` | Verifier KATs, adversarial mutants, mutant corpus |
+| `PinnedCodehashes.t.sol`, `PinnedBytecodeImmutableLemma.t.sol`, `DeployedBytecodeReproCheck.t.sol` | Codehash pins for both profiles; the production addresses and the firmware CREATE2 constants (deploy profile, CI) |
+| `StorageSlotParity.t.sol`, `LeanSelectorParity.t.sol` | ERC-7201 slot and selector parity with the Lean model |
+
+Deploy profile: `FOUNDRY_PROFILE=deploy forge test --match-contract 'PinnedCodehashesTest|PinnedBytecodeImmutableLemmaTest|DeployedBytecodeReproCheckTest'`
+— **7 passed**.
 
 ---
 
-## 7. Dead-code scan
+## 5. Symbolic execution and proofs
 
-Manual review of internal helpers in `src/`:
-
-| Symbol | File | Used? |
+| Tool | Result at the freeze | Receipt |
 |---|---|---|
-| `_salt` | Factory:145 | Yes — `createAccount`, `getAddress` |
-| `_consumeValidatedOwnerIndex` | Wallet:275 | Yes — both execute paths |
-| `_validateSignature` | Wallet:345 | Yes — `validateUserOp` |
-| `_selectorOf` | Wallet:455 | Yes — `_validateSignature` |
-| `_isSlotAllowedSelector` | Wallet:462 | Yes — `_validateSignature` |
-| `_domainNameAndVersion` | Wallet:496 | Yes — Solady ERC1271 hook |
-| `_erc1271Signer` | Wallet:513 | Tripwire revert (audit L-2 fix); intentionally unreachable; documented |
-| `_erc1271IsValidSignatureNowCalldata` | Wallet:517 | Yes — Solady ERC1271 hook |
-| `_initializeOwners` | MultiOwnable:162 | Yes — constructor + `initialize` |
-| `_addOwner` | MultiOwnable:175 | Yes — `addOwnerBytes` |
-| `_removeOwnerAtIndex` | MultiOwnable:184 | Yes — `removeOwnerAtIndex` |
-| `_bumpBootstrapUses` | MultiOwnable:199 | Yes — `addOwnerBytes` |
-| `_bumpSlotUses` | MultiOwnable:208 | Yes — `_validateSignature` |
-| `_setOffchainSigCount` | MultiOwnable:220 | Yes — both execute paths |
-| `_addOwnerAtIndex` | MultiOwnable:242 | Yes — `_addOwner`, `_initializeOwners` |
-| `_getStorage` | MultiOwnable:261 | Yes — every state-touching method |
+| Halmos (`make -C ../verification verify-bytecode`) | 43/43 rules on both profiles | `../verification/halmos/sessions/halmos-session-2026-10-20.txt` |
+| Kontrol / KEVM (`make -C ../verification verify-kontrol`) | 31/31 proofs | `../verification/kontrol/sessions/kontrol-session-2026-10-20.txt` |
+| Lean 4 models and proofs | builds; FV gates pass | `../verification/docs/THE_CLAIM.md` |
 
-No dead internal symbols. Public/external surface is intentionally
-minimal:
-- Wallet: `initialize`, `entryPoint`, `masterPkSeed`, `masterPkRoot`,
-  `validateUserOp`, `executeWithOffchainCount`,
-  `executeBatchWithOffchainCount`, `addOwnerBytes`,
-  `removeOwnerAtIndex`, `sphincsDigest`, `c10Verifier`,
-  `_PQ_MULTI_OWNABLE_*` constants via inherited getters, `receive()`.
-- Factory: `implementation`, `c10Verifier`, `createAccount`,
-  `getAddress`, `addSlot0Digest`.
-
-The bare `receive() external payable {}` is intentional (`fund the
-wallet` UX); no other extension hooks.
+Certora specs in `certora/` are historical: they were never run against the
+current code and are not part of the evidence.
 
 ---
 
-## 8. Contract sizes (EIP-170 budget = 24,576 bytes)
+## 6. Dead code
 
-| Contract | Runtime | Initcode | Runtime margin | Initcode margin |
-|---|---:|---:|---:|---:|
-| `PQSmartWallet` | 8,281 | 9,737 | 16,295 | 39,415 |
-| `PQSmartWalletFactory` | 1,804 | 2,012 | 22,772 | 47,140 |
-| `SPHINCsC10Asm` | 1,259 | 1,285 | 23,317 | 47,867 |
-| `MockSPHINCSVerifier` (test only) | 274 | 357 | 24,302 | 48,795 |
+Internal helpers in `src/` and where they are used:
 
-All well within the EIP-170 24KB cap. The verifier in particular is
-tiny because the heavy lifting is in calldata + memory + SHA-256
-precompile calls, not in code.
+| Symbol | Used by |
+|---|---|
+| `PQSmartWalletFactory._salt` | `createAccount`, `getAddress` |
+| `PQSmartWallet._validateSignature` | `validateUserOp` |
+| `PQSmartWallet._selectorOf` | `_validateSignature` |
+| `PQSmartWallet._calldataOwnerIndex` | `_validateSignature` (H-3 parity) |
+| `PQSmartWallet._isSlotAllowedSelector` | `_validateSignature` |
+| `PQSmartWallet._creditSlot` | `_stampValidatedCredit`, `_consumeValidatedCredit` |
+| `PQSmartWallet._stampValidatedCredit` | `_validateSignature` |
+| `PQSmartWallet._consumeValidatedCredit` | both execute paths |
+| `PQSmartWallet._domainNameAndVersion` | Solady `EIP712` |
+| `PQSmartWallet._erc1271IsValidSignature` | both `isValidSignature` entries |
+| `PQSmartWallet._erc1271IsValidSignatureNowCalldata` | Solady's nested EIP-712 workflow |
+| `PQSmartWallet._erc1271Signer` | **unreachable by design**: reverts, as a tripwire against a refactor that drops the override above (L-2). Slither reports it as dead code. |
+| `PQMultiOwnable._initializeOwners` | constructor, `initialize` |
+| `PQMultiOwnable._addOwner` | `addOwnerBytes` |
+| `PQMultiOwnable._addOwnerAtIndex` | `_addOwner`, `_initializeOwners` |
+| `PQMultiOwnable._bumpBootstrapUses`, `_bumpSlotUses` | `_validateSignature` |
+| `PQMultiOwnable._setOffchainSigCount` | both execute paths |
+| `PQMultiOwnable._getStorage` | every storage access |
+
+Solady's `_erc1271IsValidSignatureViaSafeCaller` and
+`_erc1271IsValidSignatureViaRPC` remain in the inherited library but are no
+longer reachable: their only caller was the `_erc1271IsValidSignature`
+override point (#691).
+
+`removeOwnerAtIndex` and its helpers were deleted at the freeze. The struct
+field `removedOwnersCount` is kept, always zero, so the counter fields stay at
+their storage offsets.
 
 ---
 
-## 9. Status summary
+## 7. Summary
 
 | Item | Status |
 |---|---|
-| Slither clean / triaged | ⚠ Not run locally; auditor to run |
-| 4naly3er / mythril | ⚠ Not run |
-| Forge tests pass (prod profile) | ✅ 92/92 |
-| Forge coverage (in-scope contracts) | ⚠ 75-90% lines; verifier 99% Yul not measurable |
-| Invariant suite | ✅ 7/7 over 256 × 128k calls |
-| Halmos symbolic | ⚠ Not run this pass; configured |
-| Certora formal | ⚠ Specs written, runs pending API key |
-| Dead-code | ✅ None |
-| Contract size budget | ✅ Comfortable |
+| Slither | 28 results; no untriaged Medium or High; CI gate |
+| `forge test` | 149 passed, 0 failed, 2 skipped (expected) |
+| Deploy-profile pins and firmware constants | 7 passed; CI |
+| Coverage | §2 |
+| Halmos | 43/43, both profiles |
+| Kontrol | 31/31 |
+| Dead code | none, apart from the intentional tripwire |
+| Contract sizes | wallet 10,930 B of 24,576 |
+| 4naly3er / aderyn / Mythril | not run |
