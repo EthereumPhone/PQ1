@@ -40,20 +40,33 @@ jobs:
         run: test ! -e contracts/verification/probability/.lake/packages
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
-        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+        run: lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
       - name: measure fresh proof and complete identity (not a full control gate)
         env:
           EXPERIMENT_OUTPUT: ${{ runner.temp }}/cold-identity
         run: |
           /usr/bin/python3 -E -S - <<'PYCODE'
           import sys, os, json, time, subprocess
+          from unittest.mock import patch
           from pathlib import Path
           sys.path.insert(0, str(Path('contracts/verification/scripts').resolve()))
           import check_probability as gate
+          import probability_execution as execution
           start = time.monotonic()
           out = Path(os.environ['EXPERIMENT_OUTPUT']); out.mkdir()
           manifest = gate.static_checks(); lake = gate._pinned_lake(); env = gate._pinned_tool_env()
           assert not (gate.PROJECT / '.lake/build').exists()
+          lean = subprocess.check_output([str(Path(lake).with_name('elan')), 'which', 'lean'], cwd=gate.PROJECT, env=env, text=True).strip()
+          original_hash = execution.tree_hash
+          def before_project(path, accept):
+              if path == gate.PROJECT/'.lake/build/lib/lean':
+                  return 'not-built-not-proof-evidence'
+              return original_hash(path, accept)
+          # The baseline helper predates the include_project=False interface.
+          # Omit only the unavailable project field; hash every real dependency.
+          with patch.object(execution, 'tree_hash', side_effect=before_project):
+              prepared = gate.input_identity(gate.ROOT, gate.PROJECT, manifest, lean, gate.cases(gate.PROJECT), lake)
+          del prepared['project_libraries_sha256']
           build = gate.command([lake, 'build'], out, 'build', env)
           assert build['exit'] == 0 and 'warning:' not in (out/'build.log').read_text()
           audit = gate.command([lake, 'env', 'lean', 'Audit.lean'], out, 'axioms', env)
@@ -61,7 +74,8 @@ jobs:
           closures = gate.check_closures((out/'axioms.log').read_text(), set(manifest['theorems']))
           lean = subprocess.check_output([str(Path(lake).with_name('elan')), 'which', 'lean'], cwd=gate.PROJECT, env=env, text=True).strip()
           identity = gate.input_identity(gate.ROOT, gate.PROJECT, manifest, lean, gate.cases(gate.PROJECT), lake)
-          receipt = dict(identity=identity, context=gate.producer_context(gate.ROOT), build=build, audit=audit, closures=len(closures), seconds=time.monotonic()-start, scope='Feasibility only: no semantic controls or canaries; not a full gate pass')
+          assert prepared == {k:v for k,v in identity.items() if k != 'project_libraries_sha256'}
+          receipt = dict(prepared_identity=prepared, identity=identity, context=gate.producer_context(gate.ROOT), build=build, audit=audit, closures=len(closures), seconds=time.monotonic()-start, scope='Feasibility only: no semantic controls or canaries; not a full gate pass')
           (out/'identity.json').write_text(json.dumps(receipt, indent=2)+'\n')
           print(json.dumps(identity, indent=2))
           PYCODE
