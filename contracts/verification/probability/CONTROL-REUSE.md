@@ -27,7 +27,10 @@ other workflows cannot supply a branch-scoped executable cache to an eligible
 producer. Same workflow-byte equality and admission of the exact required step
 set enforce this policy; no cache step is permitted in an eligible producer. A compromised trusted
 runner/API is outside this mechanism's claim. No new privileged event, write
-permission, self-reported digest trust or attestation service is introduced.
+permission, trust in a digest supplied inside a receipt, or attestation service
+is introduced. Artifact digests obtained from the authenticated API are
+submitted by the pinned upload action, not independently computed by GitHub;
+the trusted runner/uploader boundary is necessary.
 
 ## Producer admission
 
@@ -58,7 +61,7 @@ archive sizes and expanded members. Treat a partial listing as ineligible.
 5. Require exactly the eight shard artifacts and original aggregate for that
    attempt. Pin IDs, GitHub SHA-256 digests, source repository/head/run and
    non-expiry. Download by ID and explicitly check archive bytes against the
-   server digest before strict extraction. Reject symlinks, traversal,
+   API-recorded uploader digest before strict extraction. Reject symlinks, traversal,
    duplicate members and resource-limit excess. Re-read metadata after
    download; changed run/artifact identity or conclusion refuses reuse.
 
@@ -88,6 +91,10 @@ select the existing eight fresh shards immediately. Probe error, skip or
 failure also selects those shards, using explicit `always()` dependency logic.
 
 The required final `PMF proofs and semantic controls (8)` job always runs.
+Add one explicit reuse mode to `check_probability.py`: its single process owns
+fresh build, identity, origin fetch/authentication, reuse or
+`run_controls(..., shard_index=0, shard_count=1)`, then exit drift checks. It
+does not invoke full mode recursively or start another build.
 It requires either a successful complete cold matrix or a successful probe
 with a candidate and an intentionally skipped matrix. All other dependency
 states fail. With a candidate, it freshly builds/audits the target then fetches
@@ -106,7 +113,9 @@ the eight-shard path. No probe output or skipped/failed job can green the final
 check. Repository variable `PROBABILITY_FORCE_COLD=true` and a manual dispatch
 with force-cold default true retain explicit cold routes; local full replay is
 unchanged. Only the probe and final jobs receive actions:read and
-pull-requests:read alongside contents:read. Tokens are scoped to API steps.
+pull-requests:read alongside contents:read. Tokens are supplied only to the probe/gate parent processes that call the API;
+remove GH_TOKEN and GITHUB_TOKEN from every proof/tool/control subprocess
+environment. Downloaded evidence remains data only.
 
 ## Bounded delivery and acceptance
 
@@ -116,6 +125,10 @@ fixtures, compiler limits and negative-control classification. Removing branch-s
 Actions caches narrows dependency trust; upstream mathlib artifacts remain the
 existing tool TCB. No changes to
 EasyCrypt, Rust sources or theorem assumptions.
+
+Before enabling reuse, compare all 15 fields from two independent cache-free
+hosted builds; mismatches keep reuse disabled and require diagnosis without
+narrowing identities. Draft experiment #1003 supplies this feasibility evidence.
 
 - R1: pure producer/receipt admission plus bounded GitHub transport and target
   linking. Negative tests cover repository/run/attempt/PR source/workflow/tree,
