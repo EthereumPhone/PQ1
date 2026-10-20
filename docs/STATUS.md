@@ -196,8 +196,13 @@ are proved. The [context-aware R-grinding session](../contracts/verification/pro
 now derives freshness or cached success from actual histories and bounds first
 exhaustion, including caps, refusal, persistent failure and the shared-prefix
 charge. A kernel example gives `2^-40` at ten-million trials, `2^32` raw queries
-and `2^20` searches. Full C10 keygen/sign availability still requires composition
-with its other private callers; unbounded-adversary representation and concrete
+and `2^20` searches. The [complete-C10 R observer](../contracts/verification/probability/README.md#r-exhaustion-in-the-complete-c10-game)
+now proves that composition through actual keygen, WOTS/FORS private callers,
+complete signing and final verification. It erases to the original full game
+and bounds the returned R-exhaustion event by `2^-39` at ten-million trials for
+both grinders and the same raw/sign quotas. This closes R-context provenance
+in that game; WOTS-count exhaustion remains a separate signing-availability
+obligation. Unbounded-adversary representation and concrete
 correspondence remain open. This adds no concrete hash/Rust, EasyCrypt execution, cross-kernel,
 QROM or hardware claim. The dated development history below is not the current
 proof inventory; use the linked owner for counts, gates and remaining limits.

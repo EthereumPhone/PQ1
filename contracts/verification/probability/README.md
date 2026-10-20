@@ -25,8 +25,10 @@ Concrete signer-session correspondence remains open.** The existing
 The [finite adaptive R-grinding session](#context-aware-adaptive-r-grinding)
 now derives freshness or successful replay from actual execution history and
 bounds first exhaustion, including the shared secret-prefix transfer. Its
-initialized endpoint has no caller-supplied freshness premise. Full C10
-keygen/sign availability still needs composition with its other private callers.
+initialized endpoint has no caller-supplied freshness premise. The
+[complete C10 R-exhaustion observer](#r-exhaustion-in-the-complete-c10-game)
+now composes the other private callers and actual keygen. WOTS-count exhaustion
+remains a separate obligation before claiming full C10 signing availability.
 
 ## What is checked
 
@@ -457,10 +459,64 @@ searches at caps `qr = 2^32` and `qs = 2^20`, using a block bound on the
 geometric tail instead of expanding the large exponent.
 
 This closes the repeated-context freshness premise for this bounded R/H_msg
-session. It does not yet prove availability of the complete C10 keygen/sign
-session: other private callers need explicit provenance composition. No
+session. Its provenance is composed with the complete signer below. No
 concrete SHA/Rust/EasyCrypt execution, cross-kernel, unbounded-adversary, QROM
 or physical claim follows. The existing forgery bounds are unchanged.
+
+## R exhaustion in the complete C10 game
+
+`RForeignBudget.lean` selects private tails of the valid R widths, 71 or 87
+bytes. Actual WOTS and FORS private tails have lengths 48 and 16; shuffle and
+recovery queries use the public interface. A zero selected-call budget preserves
+every selected cache entry exactly, including absence. `RForeignComposition`,
+`RForeignWots`, `RForeignTree`, `RForeignFors` and `RForeignSign` compose this
+property through the existing chain, stack-tree, forest, layer and complete
+post-R signer programs. No original query program or budget is changed.
+
+`C10RInvariant.lean` derives the empty R-context history from actual keygen.
+An admitted search adds its real context; a successful search supplies a replay
+witness that survives all later private and public calls. Public-history
+coverage follows from the executed query budgets. These premises are discharged
+at the initialized endpoint, including repeated contexts.
+
+`C10RSign`, `C10RSession` and `C10RGame` define independent direct interpreters
+and query-program compilers for an auxiliary R-failure observation. Their
+refinements retain the original client replies, signed-message ledger,
+remaining caps, final verification decision and complete cache. Erasing the
+observation yields the original C10 session/game exactly. R exhaustion sets
+the flag; later WOTS-count exhaustion does not. Either failure retains the
+original persistent signing refusal, while raw queries remain available.
+The flag is exposed only in the returned observer result.
+
+For R/WOTS trial limits `m,n`, admitted raw/sign caps `qr,qs`, define
+
+```text
+S = m + 2*n + 364290
+H = 155135 + qr + qs*S
+Q = H + 361
+Pr[an admitted R search exhausts] <=
+  min(1, qs*((1-1/2048)^m + collisionPairs(H,m)/2^128) + Q/2^256)
+```
+
+`C10RExhaustion.lean` bounds first R exhaustion in the complete adaptive session.
+`C10RGame.lean` composes actual keygen and final verification.
+`C10RTransfer.lean` transfers this returned event through the uniform
+secret-prefix interface, including randomized finite adversaries that receive
+the actual generated public key. Configuration, public seed and adversary
+randomness are independent of the sampled hidden prefix. No cache-visible
+event is transferred.
+
+`C10RReal.lean` proves finiteness before real conversion. `C10RNumeric.lean`
+checks a conservative `2^-39` bound at `m=n=10,000,000`, `qr=2^32`, `qs=2^20`;
+the larger history includes all full-signing public calls. Direct witnesses
+distinguish zero-R exhaustion from later WOTS failure, repeated cached
+signatures, malformed/capped refusal and public queries after failure.
+An initialized zero-R-trial experiment has failure flag true with probability
+one, without a prefilled-cache premise.
+
+The other-private-caller provenance obligation is closed for this R event.
+Full signing availability still needs a separate WOTS-count exhaustion bound.
+These remain ideal-model results with the correspondence boundaries below.
 
 ## Independence and correspondence boundary
 
@@ -1403,16 +1459,22 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2650 theorem closures against
+The gate rebuilds every project module, checks all 2752 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
 compiler-produced added-assumption canary must be rejected by the closure
 checker; missing closure records must also fail.
 
-1535 typed cases run 4605 compiler jobs: each baseline and changed
-definition must compile, 1348 changed behaviors must reject at the
-consuming `checked` theorem, and 187 value-preserving changes must pass.
+1599 typed cases run 4797 compiler jobs: each baseline and changed
+definition must compile, 1405 changed behaviors must reject at the
+consuming `checked` theorem, and 194 value-preserving changes must pass.
+The complete-C10 R observer adds 102 closures in sixteen modules and 64 controls
+(57 negative, seven equivalent), preserving all 2650 preceding statements,
+1535 fixture objects, non-umbrella proof-module bytes and 52 manual bindings.
+Consumers cover private-input separation, history/replay premises, independent
+sign/session/game refinement, R-versus-WOTS failure, caps, caches, keygen,
+final verification, initialized experiments and exact charged events.
 The repeated-R session adds 100 closures in seventeen modules and 64 controls
 (57 negative, seven equivalent). Consumers cover context encoding, private and
 public history, successful replay, cap/refusal/failure behavior, full-cache

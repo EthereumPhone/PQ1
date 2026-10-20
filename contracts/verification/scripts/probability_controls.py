@@ -4328,4 +4328,153 @@ def cases(project: Path) -> list[dict]:
   exact ⟨rfl, rfl⟩
 """)
 
+    # Actual initialized C10 R exhaustion: each changed definition is consumed
+    # by an unchanged proof, with the original definition baseline also checked.
+    ce_prefix = ("import C10Probability.C10RExamples\nnamespace C10Probability\n"
+                 "open scoped ENNReal\nnoncomputable section\n"
+                 "variable {K L R : Type*}\n")
+    ce_suffix = "\nend\nend C10Probability\n"
+
+    def ce_variants(pairs, module, consumer, variants, check_override=None):
+        names = {name: name + "CECandidate" for _, name in pairs}
+        declarations = []
+        for owner, name in pairs:
+            match = re.search(r"^(?:def|abbrev) " + re.escape(name) +
+                r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|inductive|attribute|end|set_option|local instance)\b)",
+                src[owner], flags=re.M | re.S)
+            if not match:
+                raise ValueError("missing C10 R-observer definition " + name)
+            declaration = match.group(0).split("\n/--", 1)[0]
+            for old, new in names.items():
+                declaration = re.sub(r"\b" + old + r"\b", new, declaration)
+            declarations.append(declaration)
+        key = pairs[0][1] + "CESlice"
+        src[key] = ce_prefix + "\n".join(declarations) + ce_suffix
+        check = check_override if check_override is not None else theorem(src[module], consumer)
+        for before, after in names.items():
+            check = re.sub(r"\b" + before + r"\b", after, check)
+        for label, old, new, expected in variants:
+            for before, after in names.items():
+                old = re.sub(r"\b" + before + r"\b", after, old)
+                new = re.sub(r"\b" + before + r"\b", after, new)
+            add("c10-r-" + label, key, old, new, check, expected)
+
+    ce_variants([("RForeignBudget", "rPrivateQuery")], "RForeignBudget", "r_private_query_public", [
+        ("selector-public-selected", "| .inl _ => false", "| .inl _ => true", False),
+    ])
+    ce_variants([("RForeignBudget", "rPrivateQuery")], "RForeignBudget", "r_private_query_context", [
+        ("selector-short-context-lost", "tail.length = 71", "tail.length = 70", False),
+        ("selector-long-context-lost", "tail.length = 87", "tail.length = 86", False),
+        ("selector-width-id", "tail.length = 71", "(id tail).length = 71", True),
+    ])
+    ce_variants([("RForeignBudget", "rPrivateQuery")], "RForeignBudget", "r_private_query_wots", [
+        ("selector-wots-overlap", "tail.length = 71", "tail.length = 48", False),
+    ])
+    ce_variants([("RForeignBudget", "rPrivateQuery")], "RForeignBudget", "r_private_query_fors", [
+        ("selector-fors-overlap", "tail.length = 71", "tail.length = 16", False),
+    ])
+    ce_variants([("C10RInvariant", "C10RInvariant")], "C10RExhaustion", "c10_r_session_exhaustion", [
+        ("invariant-history-lost", "BoundedRPublicHistory history table", "True", False),
+        ("invariant-origin-lost", "RContextHistory contexts table", "True", False),
+        ("invariant-replay-lost", "AcceptedRContexts contexts table cfg.seed cfg.root cfg.rTrials\n        (by simpa using cfg.rBound)", "True", False),
+    ])
+    ce_variants([("C10RSign", "c10RSign")], "C10RSign", "c10_r_sign_eval", [
+        ("sign-randomness-lost", "randomizerUnder encode table random message", "randomizerUnder encode table [] message", False),
+        ("sign-message-lost", "randomizerUnder encode table random message", "randomizerUnder encode table random []", False),
+        ("sign-root-lost", "random message seed root m hm", "random message seed [] m hm", False),
+        ("sign-shuffle-lost", "c10SignAfter encode found.2 seed shuffle", "c10SignAfter encode found.2 seed []", False),
+        ("sign-output-lost", "((reply.1, found.1.isNone), reply.2)", "((none, found.1.isNone), reply.2)", False),
+        ("sign-cache-lost", "((reply.1, found.1.isNone), reply.2)", "((reply.1, found.1.isNone), table)", False),
+        ("sign-randomness-id", "randomizerUnder encode table random message", "randomizerUnder encode table ((fun x => x) random) message", True),
+    ])
+    ce_variants([("C10RSign", "c10RSign")], "C10RSign", "c10_r_sign_zero", [
+        ("sign-r-failure-hidden", "found.1.isNone", "false", False),
+    ])
+    ce_variants([("C10RSign", "c10RSign")], "C10RExamples", "c10_r_sign_wots_failure", [
+        ("sign-wots-failure-misclassified", "found.1.isNone", "reply.1.isNone", False),
+        ("sign-failure-forced", "found.1.isNone", "true", False),
+    ])
+    ce_variants([("C10RSign", "c10RSignProgram")], "C10RSign", "c10_r_sign_eval", [
+        ("compiler-r-failure-hidden", "(reply, found.isNone)", "(reply, false)", False),
+        ("compiler-reply-lost", "(reply, found.isNone)", "(none, found.isNone)", False),
+    ])
+    ce_variants([("C10RSession", "addC10RFlag")], "C10RSession", "", [
+        ("flag-prior-lost", "failed || out.2", "out.2", False),
+        ("flag-later-lost", "failed || out.2", "failed", False),
+        ("flag-and", "failed || out.2", "failed && out.2", False),
+        ("flag-id", "failed || out.2", "(id failed) || out.2", True),
+    ], check_override="""theorem checked (result : C10SessionResult Unit) :
+    addC10RFlag true (result, false) = (result, true) ∧
+    addC10RFlag false (result, true) = (result, true) ∧
+    addC10RFlag false (result, false) = (result, false) := by
+  exact ⟨rfl, rfl, rfl⟩
+""")
+    ce_variants([("C10RSession", "c10RSession")], "C10RSession", "c10_r_session_eval", [
+        ("raw-default-changed", "(next 0) 0 qs ledger table", "(next 1) 0 qs ledger table", False),
+        ("raw-query-lost", "encode (.inl key)", "encode (.inl [])", False),
+        ("raw-reply-lost", "(next reply.1) qr qs ledger reply.2", "(next 0) qr qs ledger reply.2", False),
+        ("raw-cap-not-spent", "(next reply.1) qr qs ledger reply.2", "(next reply.1) (qr + 1) qs ledger reply.2", False),
+        ("raw-cache-lost", "(next reply.1) qr qs ledger reply.2", "(next reply.1) qr qs ledger table", False),
+        ("refusal-spends-cap", "(next none) qr (qs + 1) ledger table", "(next none) qr qs ledger table", False),
+        ("admission-bypassed", "if sessionAdmits ledger req then", "if true then", False),
+        ("client-signature-lost", "(next reply.1.1) qr qs", "(next none) qr qs", False),
+        ("sign-cap-not-spent", "(next reply.1.1) qr qs", "(next reply.1.1) qr (qs + 1)", False),
+        ("sign-ledger-lost", "(sessionAfterSign ledger req.message reply.1.1) reply.2", "ledger reply.2", False),
+        ("session-sign-cache-lost", "(sessionAfterSign ledger req.message reply.1.1) reply.2", "(sessionAfterSign ledger req.message reply.1.1) table", False),
+        ("session-r-flag-lost", "addC10RFlag reply.1.2 out.1", "addC10RFlag false out.1", False),
+        ("raw-key-id", "encode (.inl key)", "encode (.inl ((fun x => x) key))", True),
+    ])
+    ce_variants([("C10RGame", "c10RDriver")], "C10RGame", "c10_r_driver_eval", [
+        ("driver-final-verification-lost", "c10Final encode cfg observed.1.1 observed.2", "PMF.pure (false, observed.2)", False),
+        ("driver-final-cache-lost", "((final.1, observed.1), final.2)", "((final.1, observed.1), observed.2)", False),
+    ])
+    ce_variants([("C10RGame", "c10RGame")], "C10RGame", "c10_r_game_eval", [
+        ("game-public-seed-fixed", "c10Keygen encode table publicSeed", "c10Keygen encode table 0", False),
+        ("game-keygen-key-lost", "sessionConfigAt cfg key.1", "cfg", False),
+        ("game-adversary-key-swapped", "adversary key.1.1 key.1.2", "adversary key.1.2 key.1.1", False),
+        ("game-keygen-cache-lost", "qr qs key.2", "qr qs table", False),
+    ])
+    ce_variants([("C10RTransfer", "c10RIndependent")], "C10RTransfer", "c10_r_independent_refinement", [
+        ("independent-cache-prefilled", "fun _ => none", "fun _ => some 0", False),
+        ("independent-raw-cap-lost", "adversary qr qs", "adversary 0 qs", False),
+        ("independent-sign-cap-lost", "adversary qr qs", "adversary qr 0", False),
+    ])
+    ce_variants([("C10RTransfer", "c10RSharedAt")], "C10RTransfer", "c10_r_shared_at_refinement", [
+        ("shared-secret-fixed", "prefixedPrivateInput secret", "prefixedPrivateInput 0", False),
+        ("shared-cache-prefilled", "fun _ => none", "fun _ => some 0", False),
+        ("shared-sign-cap-lost", "adversary qr qs", "adversary qr 0", False),
+    ])
+    ce_variants([("C10RTransfer", "c10RShared")], "C10RTransfer", "c10_r_shared_refinement", [
+        ("shared-prefix-unsampled", "digestDraw.bind", "(PMF.pure 0).bind", False),
+    ])
+    ce_variants([("C10RTransfer", "c10RCharge")], "C10RReal", "c10_r_charge_real", [
+        ("charge-call-union-lost", "(qs : ℝ≥0∞) *", "(1 : ℝ≥0∞) *", False),
+        ("charge-history-lost", "rExhaustionCharge (c10RHistoryCap cfg qr qs)", "rExhaustionCharge qr", False),
+        ("charge-prefix-lost", "(c10RPublicCalls cfg qr qs : ℝ≥0∞) / 2 ^ 256", "0", False),
+        ("charge-prefix-budget-lost", "(c10RPublicCalls cfg qr qs : ℝ≥0∞) / 2 ^ 256", "(qr : ℝ≥0∞) / 2 ^ 256", False),
+        ("charge-cap-id", "(qs : ℝ≥0∞) *", "(((fun x => x) qs : ℕ) : ℝ≥0∞) *", True),
+    ])
+    ce_variants([("C10RGame", "c10RHistoryCap")], "C10RGame", "c10_r_game_initialized_exhaustion", [
+        ("history-keygen-lost", "155135 + qr", "0 + qr", False),
+        ("history-signing-lost", "qs * sessionSignPublic cfg", "qs * cfg.rTrials", False),
+        ("history-raw-id", "155135 + qr", "155135 + id qr", True),
+    ])
+    ce_variants([("C10RGame", "c10RPublicCalls")], "C10RGame", "", [
+        ("public-keygen-lost", "155135 +", "0 +", False),
+        ("public-final-verification-lost", "+ 361)", "+ 0)", False),
+    ], check_override="""theorem checked (cfg : C10SessionConfig) (qr qs : ℕ) :
+    c10RPublicCalls cfg qr qs = sessionGamePublic cfg qr qs := by
+  unfold c10RPublicCalls sessionGamePublic
+  omega
+""")
+    ce_variants([("C10RGame", "c10RFailure")], "C10RGame", "", [
+        ("event-hidden", "out.2.2", "false", False),
+        ("event-forced", "out.2.2", "true", False),
+        ("event-id", "out.2.2", "id out.2.2", True),
+    ], check_override="""theorem checked (session : C10SessionResult C10Forgery) :
+    c10RFailure (false, session, true) = true ∧
+    c10RFailure (true, session, false) = false := by
+  exact ⟨rfl, rfl⟩
+""")
+
     return out

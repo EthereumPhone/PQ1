@@ -96,6 +96,7 @@ import C10Probability
 #print axioms C10Probability.boolean_acceptance_charge_tight
 #print axioms C10Probability.bounded_mass_partition
 #print axioms C10Probability.bounded_mass_partition_real
+#print axioms C10Probability.bounded_r_history_execution
 #print axioms C10Probability.bounded_r_public_history_hmsg_card
 #print axioms C10Probability.budget_zero
 #print axioms C10Probability.byte_after_sign_eq
@@ -182,6 +183,7 @@ import C10Probability
 #print axioms C10Probability.c10_finish_physical_eval
 #print axioms C10Probability.c10_finish_prefix_error
 #print axioms C10Probability.c10_finish_public
+#print axioms C10Probability.c10_finish_r_zero
 #print axioms C10Probability.c10_finish_selected
 #print axioms C10Probability.c10_finish_signature_shape
 #print axioms C10Probability.c10_finish_zero_wots_budget
@@ -226,6 +228,8 @@ import C10Probability
 #print axioms C10Probability.c10_keygen_physical_eval
 #print axioms C10Probability.c10_keygen_prefix_error
 #print axioms C10Probability.c10_keygen_public
+#print axioms C10Probability.c10_keygen_r_history
+#print axioms C10Probability.c10_keygen_r_zero
 #print axioms C10Probability.c10_keygen_seed_high_half
 #print axioms C10Probability.c10_keygen_widths
 #print axioms C10Probability.c10_observed_accepted_collision_bound
@@ -316,6 +320,64 @@ import C10Probability
 #print axioms C10Probability.c10_probed_game_public
 #print axioms C10Probability.c10_probed_game_query_bound
 #print axioms C10Probability.c10_probed_game_seed
+#print axioms C10Probability.c10_r_bad_request_keeps_cap
+#print axioms C10Probability.c10_r_charge_ne_top
+#print axioms C10Probability.c10_r_charge_of_tail_bound
+#print axioms C10Probability.c10_r_charge_quota_bound
+#print axioms C10Probability.c10_r_charge_real
+#print axioms C10Probability.c10_r_driver_erases
+#print axioms C10Probability.c10_r_driver_eval
+#print axioms C10Probability.c10_r_driver_failure
+#print axioms C10Probability.c10_r_driver_map
+#print axioms C10Probability.c10_r_driver_public
+#print axioms C10Probability.c10_r_failure_event
+#print axioms C10Probability.c10_r_game_erases
+#print axioms C10Probability.c10_r_game_eval
+#print axioms C10Probability.c10_r_game_initialized_exhaustion
+#print axioms C10Probability.c10_r_game_map
+#print axioms C10Probability.c10_r_game_public
+#print axioms C10Probability.c10_r_hash_after_failure
+#print axioms C10Probability.c10_r_hash_cap_default
+#print axioms C10Probability.c10_r_independent_exhaustion
+#print axioms C10Probability.c10_r_independent_refinement
+#print axioms C10Probability.c10_r_initialized_zero_trials
+#print axioms C10Probability.c10_r_invariant_after_found
+#print axioms C10Probability.c10_r_invariant_keygen
+#print axioms C10Probability.c10_r_invariant_mono
+#print axioms C10Probability.c10_r_invariant_query
+#print axioms C10Probability.c10_r_invariant_sign
+#print axioms C10Probability.c10_r_programs_public
+#print axioms C10Probability.c10_r_returned_event_bounds
+#print axioms C10Probability.c10_r_session_erases
+#print axioms C10Probability.c10_r_session_eval
+#print axioms C10Probability.c10_r_session_exhaustion
+#print axioms C10Probability.c10_r_session_hash_capped
+#print axioms C10Probability.c10_r_session_map
+#print axioms C10Probability.c10_r_session_public
+#print axioms C10Probability.c10_r_session_sign_capped
+#print axioms C10Probability.c10_r_session_sign_observed
+#print axioms C10Probability.c10_r_session_sign_refused
+#print axioms C10Probability.c10_r_shared_at_refinement
+#print axioms C10Probability.c10_r_shared_exhaustion
+#print axioms C10Probability.c10_r_shared_exhaustion_capped
+#print axioms C10Probability.c10_r_shared_exhaustion_real
+#print axioms C10Probability.c10_r_shared_exhaustion_real_capped
+#print axioms C10Probability.c10_r_shared_refinement
+#print axioms C10Probability.c10_r_sign_cached_success
+#print axioms C10Probability.c10_r_sign_cap_default
+#print axioms C10Probability.c10_r_sign_erases
+#print axioms C10Probability.c10_r_sign_eval
+#print axioms C10Probability.c10_r_sign_map
+#print axioms C10Probability.c10_r_sign_public
+#print axioms C10Probability.c10_r_sign_wots_failure
+#print axioms C10Probability.c10_r_sign_zero
+#print axioms C10Probability.c10_r_signing_concrete_exhaustion
+#print axioms C10Probability.c10_r_two_cached_signatures
+#print axioms C10Probability.c10_r_wots_failure_absorbs
+#print axioms C10Probability.c10_r_zero_sign_cap_exhaustion
+#print axioms C10Probability.c10_r_zero_trial_sign_event
+#print axioms C10Probability.c10_r_zero_trials_absorb
+#print axioms C10Probability.c10_randomizer_independent
 #print axioms C10Probability.c10_record_lower_message_eq
 #print axioms C10Probability.c10_record_lower_wots_eq
 #print axioms C10Probability.c10_record_upper_message_eq
@@ -345,6 +407,8 @@ import C10Probability
 #print axioms C10Probability.c10_shared_forge_example_small
 #print axioms C10Probability.c10_sign_after_eval
 #print axioms C10Probability.c10_sign_after_map
+#print axioms C10Probability.c10_sign_after_r_history
+#print axioms C10Probability.c10_sign_after_r_zero
 #print axioms C10Probability.c10_sign_bytes_width
 #print axioms C10Probability.c10_sign_domain_bad_bound
 #print axioms C10Probability.c10_sign_eval
@@ -696,6 +760,7 @@ import C10Probability
 #print axioms C10Probability.forest_fill_opening_sealed
 #print axioms C10Probability.forest_fill_public
 #print axioms C10Probability.forest_fill_public_calls
+#print axioms C10Probability.forest_fill_r_zero
 #print axioms C10Probability.forest_fill_raw_calls
 #print axioms C10Probability.forest_fill_shape
 #print axioms C10Probability.forest_fill_step_opening_refines
@@ -710,6 +775,7 @@ import C10Probability
 #print axioms C10Probability.forest_finish_opening_refines
 #print axioms C10Probability.forest_finish_opening_sealed
 #print axioms C10Probability.forest_finish_public
+#print axioms C10Probability.forest_finish_r_zero
 #print axioms C10Probability.forest_finish_wots_cut_excluded
 #print axioms C10Probability.forest_history_private_comparison
 #print axioms C10Probability.forest_index_bound
@@ -733,6 +799,7 @@ import C10Probability
 #print axioms C10Probability.forest_one_opening_refines
 #print axioms C10Probability.forest_one_opening_sealed
 #print axioms C10Probability.forest_one_public
+#print axioms C10Probability.forest_one_r_zero
 #print axioms C10Probability.forest_one_wots_cut_excluded
 #print axioms C10Probability.forest_opening_history_comparison
 #print axioms C10Probability.forest_opening_of_equal_pk
@@ -746,6 +813,7 @@ import C10Probability
 #print axioms C10Probability.forest_ordered_opening_refines
 #print axioms C10Probability.forest_ordered_opening_sealed
 #print axioms C10Probability.forest_ordered_public
+#print axioms C10Probability.forest_ordered_r_zero
 #print axioms C10Probability.forest_permutation_eval
 #print axioms C10Probability.forest_permutation_map
 #print axioms C10Probability.forest_permutation_query_order
@@ -799,6 +867,7 @@ import C10Probability
 #print axioms C10Probability.forest_sign_physical_eval
 #print axioms C10Probability.forest_sign_prefix_error
 #print axioms C10Probability.forest_sign_public
+#print axioms C10Probability.forest_sign_r_zero
 #print axioms C10Probability.forest_sign_raw_trace
 #print axioms C10Probability.forest_sign_record_private_values
 #print axioms C10Probability.forest_sign_recovery_support
@@ -876,6 +945,7 @@ import C10Probability
 #print axioms C10Probability.fors_leaf_opening_sealed
 #print axioms C10Probability.fors_leaf_public
 #print axioms C10Probability.fors_leaf_query_order
+#print axioms C10Probability.fors_leaf_r_zero
 #print axioms C10Probability.fors_list_coverage_extension
 #print axioms C10Probability.fors_list_coverage_ofFn
 #print axioms C10Probability.fors_mass_exact
@@ -950,6 +1020,7 @@ import C10Probability
 #print axioms C10Probability.fors_root_opening_refines
 #print axioms C10Probability.fors_root_opening_sealed
 #print axioms C10Probability.fors_root_public
+#print axioms C10Probability.fors_root_r_zero
 #print axioms C10Probability.fors_secret_opening_budget
 #print axioms C10Probability.fors_secret_opening_marked
 #print axioms C10Probability.fors_secret_opening_refines
@@ -968,6 +1039,7 @@ import C10Probability
 #print axioms C10Probability.fors_sign_physical_eval
 #print axioms C10Probability.fors_sign_prefix_error
 #print axioms C10Probability.fors_sign_public
+#print axioms C10Probability.fors_sign_r_zero
 #print axioms C10Probability.fors_sign_returned_recovery
 #print axioms C10Probability.fors_single_witness_mass
 #print axioms C10Probability.fors_singleton_pool_charge
@@ -1001,6 +1073,7 @@ import C10Probability
 #print axioms C10Probability.fors_tree_prefix_error
 #print axioms C10Probability.fors_tree_public
 #print axioms C10Probability.fors_tree_public_calls
+#print axioms C10Probability.fors_tree_r_zero
 #print axioms C10Probability.fors_tree_raw_calls
 #print axioms C10Probability.fors_tree_returned_recovery
 #print axioms C10Probability.fors_tree_shape
@@ -1010,6 +1083,7 @@ import C10Probability
 #print axioms C10Probability.fors_tree_state_opening_refines
 #print axioms C10Probability.fors_tree_state_opening_sealed
 #print axioms C10Probability.fors_tree_state_public
+#print axioms C10Probability.fors_tree_state_r_zero
 #print axioms C10Probability.fors_tree_wots_cut_excluded
 #print axioms C10Probability.fors_two_equal_samples_covered
 #print axioms C10Probability.fors_two_pool_charge
@@ -1131,6 +1205,7 @@ import C10Probability
 #print axioms C10Probability.hypertree_sign_hmsg_excluded
 #print axioms C10Probability.hypertree_sign_map
 #print axioms C10Probability.hypertree_sign_public
+#print axioms C10Probability.hypertree_sign_r_zero
 #print axioms C10Probability.hypertree_sign_selected
 #print axioms C10Probability.hypertree_sign_shape
 #print axioms C10Probability.hypertree_sign_variable_budget
@@ -1187,6 +1262,7 @@ import C10Probability
 #print axioms C10Probability.layer_sign_after_eval
 #print axioms C10Probability.layer_sign_after_exhausted
 #print axioms C10Probability.layer_sign_after_map
+#print axioms C10Probability.layer_sign_after_r_zero
 #print axioms C10Probability.layer_sign_after_selected
 #print axioms C10Probability.layer_sign_cached_eval
 #print axioms C10Probability.layer_sign_correct_support
@@ -1200,6 +1276,7 @@ import C10Probability
 #print axioms C10Probability.layer_sign_physical_eval
 #print axioms C10Probability.layer_sign_prefix_error
 #print axioms C10Probability.layer_sign_public
+#print axioms C10Probability.layer_sign_r_zero
 #print axioms C10Probability.layer_sign_selected
 #print axioms C10Probability.layer_sign_signature_bound
 #print axioms C10Probability.layer_sign_variable_budget
@@ -1254,6 +1331,7 @@ import C10Probability
 #print axioms C10Probability.memo_prefilled_reject
 #print axioms C10Probability.memo_query_covered
 #print axioms C10Probability.memo_query_extends
+#print axioms C10Probability.memo_query_other_exact
 #print axioms C10Probability.memo_query_update_other
 #print axioms C10Probability.memo_repeat_two_failure
 #print axioms C10Probability.merge_access_bound
@@ -1280,6 +1358,7 @@ import C10Probability
 #print axioms C10Probability.merkle_build_physical_eval
 #print axioms C10Probability.merkle_build_prefix_error
 #print axioms C10Probability.merkle_build_public
+#print axioms C10Probability.merkle_build_r_zero
 #print axioms C10Probability.merkle_build_raw_trace
 #print axioms C10Probability.merkle_build_returned_recovery
 #print axioms C10Probability.merkle_certificate_reference
@@ -1603,6 +1682,7 @@ import C10Probability
 #print axioms C10Probability.r_context_exhaustion_bound
 #print axioms C10Probability.r_context_history_derived
 #print axioms C10Probability.r_context_history_empty
+#print axioms C10Probability.r_context_history_foreign
 #print axioms C10Probability.r_context_history_mono
 #print axioms C10Probability.r_context_history_private_query
 #print axioms C10Probability.r_context_history_public_query
@@ -1639,6 +1719,10 @@ import C10Probability
 #print axioms C10Probability.r_private_fresh_exhaustion
 #print axioms C10Probability.r_private_fresh_none
 #print axioms C10Probability.r_private_fresh_result
+#print axioms C10Probability.r_private_query_context
+#print axioms C10Probability.r_private_query_fors
+#print axioms C10Probability.r_private_query_public
+#print axioms C10Probability.r_private_query_wots
 #print axioms C10Probability.r_public_history_empty
 #print axioms C10Probability.r_public_history_execution
 #print axioms C10Probability.r_public_history_hmsg_card
@@ -1998,6 +2082,7 @@ import C10Probability
 #print axioms C10Probability.selectedBudget_cast
 #print axioms C10Probability.selectedBudget_map
 #print axioms C10Probability.selectedBudget_mapReturn
+#print axioms C10Probability.selectedBudget_map_none
 #print axioms C10Probability.selectedBudget_mono
 #print axioms C10Probability.selectedBudget_query
 #print axioms C10Probability.selectedBudget_reserve
@@ -2013,6 +2098,7 @@ import C10Probability
 #print axioms C10Probability.selected_budget_counts_repeats
 #print axioms C10Probability.selected_budget_of_public
 #print axioms C10Probability.selected_cache_membership
+#print axioms C10Probability.selected_castTreeProgram
 #print axioms C10Probability.selected_fors_assignment_mass
 #print axioms C10Probability.selected_history_collision_mass
 #print axioms C10Probability.selected_opening_comparison
@@ -2022,6 +2108,13 @@ import C10Probability
 #print axioms C10Probability.selected_probe_reveals_example
 #print axioms C10Probability.selected_reply_collision
 #print axioms C10Probability.selected_reply_seen
+#print axioms C10Probability.selected_zero_bind
+#print axioms C10Probability.selected_zero_cache_exact
+#print axioms C10Probability.selected_zero_chain
+#print axioms C10Probability.selected_zero_merge
+#print axioms C10Probability.selected_zero_query
+#print axioms C10Probability.selected_zero_stateFold
+#print axioms C10Probability.selected_zero_tree
 #print axioms C10Probability.session_admission_vectors
 #print axioms C10Probability.session_admits_iff
 #print axioms C10Probability.session_after_sign_failed
@@ -2126,6 +2219,7 @@ import C10Probability
 #print axioms C10Probability.subtree_program_map
 #print axioms C10Probability.subtree_program_public
 #print axioms C10Probability.subtree_public_calls
+#print axioms C10Probability.subtree_r_zero
 #print axioms C10Probability.subtree_raw_calls
 #print axioms C10Probability.subtree_root_cached
 #print axioms C10Probability.subtree_root_domain_bad_bound
@@ -2134,6 +2228,7 @@ import C10Probability
 #print axioms C10Probability.subtree_root_physical_eval
 #print axioms C10Probability.subtree_root_prefix_error
 #print axioms C10Probability.subtree_root_public
+#print axioms C10Probability.subtree_root_r_zero
 #print axioms C10Probability.subtree_root_raw_trace
 #print axioms C10Probability.subtree_shape
 #print axioms C10Probability.supported_event_le_flag
@@ -2282,6 +2377,7 @@ import C10Probability
 #print axioms C10Probability.wots_accepted_fill_opening_refines
 #print axioms C10Probability.wots_accepted_fill_opening_sealed
 #print axioms C10Probability.wots_accepted_fill_public
+#print axioms C10Probability.wots_accepted_fill_r_zero
 #print axioms C10Probability.wots_accepted_prefix_comparison
 #print axioms C10Probability.wots_accepted_remaining
 #print axioms C10Probability.wots_accepted_word_eq_or_lower
@@ -2415,6 +2511,7 @@ import C10Probability
 #print axioms C10Probability.wots_fill_opening_refines
 #print axioms C10Probability.wots_fill_opening_sealed
 #print axioms C10Probability.wots_fill_public
+#print axioms C10Probability.wots_fill_r_zero
 #print axioms C10Probability.wots_fill_single_position
 #print axioms C10Probability.wots_fill_step_opening_refines
 #print axioms C10Probability.wots_first_cut_private_example
@@ -2459,6 +2556,7 @@ import C10Probability
 #print axioms C10Probability.wots_leaf_fill_opening_refines
 #print axioms C10Probability.wots_leaf_fill_opening_sealed
 #print axioms C10Probability.wots_leaf_fill_public
+#print axioms C10Probability.wots_leaf_fill_r_zero
 #print axioms C10Probability.wots_leaf_fors_excluded
 #print axioms C10Probability.wots_leaf_hmsg_excluded
 #print axioms C10Probability.wots_leaf_map
@@ -2469,6 +2567,7 @@ import C10Probability
 #print axioms C10Probability.wots_leaf_prefix_error
 #print axioms C10Probability.wots_leaf_public
 #print axioms C10Probability.wots_leaf_public_cost
+#print axioms C10Probability.wots_leaf_r_zero
 #print axioms C10Probability.wots_leaf_raw_trace
 #print axioms C10Probability.wots_lift_variable_budget
 #print axioms C10Probability.wots_mass_count
@@ -2575,6 +2674,7 @@ import C10Probability
 #print axioms C10Probability.wots_seed_chain_opening_sealed
 #print axioms C10Probability.wots_seed_chain_precompute
 #print axioms C10Probability.wots_seed_chain_public
+#print axioms C10Probability.wots_seed_chain_r_zero
 #print axioms C10Probability.wots_seed_chain_snoc
 #print axioms C10Probability.wots_seed_opening_budget
 #print axioms C10Probability.wots_seed_opening_refines
@@ -2592,6 +2692,7 @@ import C10Probability
 #print axioms C10Probability.wots_sign_after_opening_refines
 #print axioms C10Probability.wots_sign_after_opening_sealed
 #print axioms C10Probability.wots_sign_after_public
+#print axioms C10Probability.wots_sign_after_r_zero
 #print axioms C10Probability.wots_sign_digit_budget
 #print axioms C10Probability.wots_sign_domain_bad_bound
 #print axioms C10Probability.wots_sign_domain_bad_bound_real
@@ -2612,6 +2713,7 @@ import C10Probability
 #print axioms C10Probability.wots_sign_physical_eval
 #print axioms C10Probability.wots_sign_prefix_error
 #print axioms C10Probability.wots_sign_public
+#print axioms C10Probability.wots_sign_r_zero
 #print axioms C10Probability.wots_sign_raw_trace
 #print axioms C10Probability.wots_sign_recover_chain
 #print axioms C10Probability.wots_sign_returned_count

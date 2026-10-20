@@ -37,8 +37,20 @@ failure. The shared returned-failure bound is
 capped at one. At ten-million trials, `2^32` raw queries and `2^20` searches,
 the kernel proves it at most `2^-40`. This is a separate ideal-model
 availability bound, not a full C10 signing result or a stronger forgery bound.
-Composing the other keygen/sign private callers with this provenance invariant
-remains open. No EasyCrypt theorem is imported into Lean.
+The [complete-C10 R observer](../../probability/README.md#r-exhaustion-in-the-complete-c10-game)
+now composes the other keygen/sign private callers with this provenance
+invariant. Concrete WOTS/FORS tail separation and zero selected-call budgets
+derive the keygen history and preserve successful R replay through complete
+signing. Independent observer/compiler refinement erases to the original
+session and final verified game, retaining result, ledger, caps and cache.
+Its initialized shared returned-event bound is
+`qs*((1-1/2048)^m + collisionPairs(H,m)/2^128) + (H+361)/2^256`,
+where `H=155135+qr+qs*(m+2*n+364290)`, capped at one. Finiteness precedes real
+conversion; a kernel example gives `2^-39` at `m=n=10,000,000`,
+`qr=2^32`, `qs=2^20`. The observer distinguishes R exhaustion from subsequent
+WOTS-count failure. **The R private-caller provenance obligation is closed;
+WOTS-count exhaustion remains open for complete signing availability.**
+No EasyCrypt theorem is imported into Lean.
 
 The [separate mathlib PMF project](../../probability/README.md) proves bounded
 independent sampling, including exact first-hit, returned-event and exhaustion
@@ -437,7 +449,10 @@ extension adds 101 closures in thirteen modules and 64 controls, preserving all
 preceding statements, fixtures, proof-module bytes and 52 bindings. The
 repeated-R session adds 100 closures in seventeen modules and 64 controls,
 retaining that preceding inventory of 2550 closures and 1471 typed cases.
-The current inventory is 2650 closures and 1535 typed cases. The combined forgery bound
+The complete-C10 R observer adds 102 closures in sixteen modules and 64 controls,
+preserving all 2650 preceding statements, 1535 fixtures, prior non-umbrella
+proof-module bytes and 52 bindings.
+The current inventory is 2752 closures and 1599 typed cases. The combined forgery bound
 retains all six events, uses exact tagged-cache erasure for collision/zero
 charges, and transfers only the final Boolean with the public-prefix charge. These separate Lean
 results import no EasyCrypt theorem and establish no concrete hash, Rust
