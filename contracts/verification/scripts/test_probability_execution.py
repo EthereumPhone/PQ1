@@ -76,6 +76,9 @@ class ExecutionTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             judge_control({"exit": 0}, json.dumps(error), source, "/fixture.lean", True)
         self.assertEqual(judge_control({"exit": 0}, "", source, "/fixture.lean", True), [])
+        for severity in ("information", "warning"):
+            message = json.dumps({"severity": severity, "data": ""})
+            self.assertEqual(judge_control({"exit": 0}, message, source, "/fixture.lean", True), [])
 
     def test_local_caller_cannot_select_receipt_reuse(self):
         with patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}):
@@ -240,6 +243,38 @@ class AggregateTests(unittest.TestCase):
                     self.aggregate()
         log.write_text(original)
         row["log_sha256"] = digest(original.encode())
+        path.write_bytes(canonical(result))
+        self.assertTrue(self.aggregate()["passed"])
+
+    def test_missing_or_invalid_diagnostic_fields(self):
+        bundle = self.directory / "shard-1"
+        path, log = bundle / "result.json", bundle / "controls/negative-checked.log"
+        result = json.loads(path.read_text())
+        row = next(row for row in result["controls"] if not row["expected_pass"])
+        original = log.read_text()
+        error = copy.deepcopy(row["errors"][0])
+        missing = dict(error)
+        del missing["data"]
+        messages = [[missing]]
+        messages += [[error | {"data": data}] for data in ("", " \n\t", None, False, 1, {}, [])]
+        messages += [[error | {"pos": {"line": 1000000}}]]
+        messages += [[error, extra] for extra in (
+            {"data": "maximum heartbeats exceeded"},
+            {"severity": "compiler-error", "data": "maximum heartbeats exceeded"},
+            {"severity": "warning"},
+            {"severity": "information", "data": False},
+        )]
+        for malformed in messages:
+            with self.subTest(diagnostics=malformed):
+                text = "".join(json.dumps(message) + "\n" for message in malformed)
+                log.write_text(text)
+                row["log_sha256"] = digest(text.encode())
+                row["errors"] = [message for message in malformed if message.get("severity") == "error"]
+                path.write_bytes(canonical(result))
+                with self.assertRaises(RuntimeError):
+                    self.aggregate()
+        log.write_text(original)
+        row["log_sha256"], row["errors"] = digest(original.encode()), [error]
         path.write_bytes(canonical(result))
         self.assertTrue(self.aggregate()["passed"])
 

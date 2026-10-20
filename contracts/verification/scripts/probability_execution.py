@@ -117,21 +117,26 @@ def shard_cases(selected: list[dict], index: int, count: int) -> list[dict]:
 
 
 def judge_control(row: dict, text: str, source: str, source_path: str, expected: bool) -> list:
-    """The original consuming-theorem acceptance rule, shared by run and aggregate."""
+    """Validate fields used to classify a consuming-theorem rejection."""
     require(type(row["exit"]) is int, "non-integer compiler exit")
     messages = [decode_json(line) for line in text.splitlines() if line.strip()]
     require(all(isinstance(message, dict) for message in messages), "malformed compiler message")
+    require(all(message.get("severity") in ("information", "warning", "error")
+                and isinstance(message.get("data"), str) for message in messages),
+            "missing or invalid compiler diagnostic severity/text")
     errors = [message for message in messages if message.get("severity") == "error"]
+    require(all(message["data"].strip() for message in errors), "empty compiler failure reason")
     if expected:
         require(row["exit"] == 0 and not errors, f"positive control failed: {source_path}")
     else:
         first = next(i for i, line in enumerate(source.splitlines(), 1)
                      if line.startswith("theorem checked"))
         require(row["exit"] == 1 and bool(errors), f"mutant did not reject: {source_path}")
-        require(all(type(m.get("pos", {}).get("line")) is int and m["pos"]["line"] >= first
+        require(all(type(m.get("pos", {}).get("line")) is int
+                    and first <= m["pos"]["line"] <= source.count("\n") + 1
                     and m.get("fileName") == source_path for m in errors),
-                f"mutant failed before consuming theorem: {source_path}")
-        require(all(not re.search(EXCLUDED, m.get("data", ""), re.I) for m in errors),
+                f"mutant failure outside consuming theorem: {source_path}")
+        require(all(not re.search(EXCLUDED, m["data"], re.I) for m in errors),
                 f"non-semantic mutant failure: {source_path}")
     return errors
 
