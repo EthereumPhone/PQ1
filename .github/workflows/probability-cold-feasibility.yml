@@ -1,0 +1,73 @@
+name: Probability cold dependency feasibility
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/probability-cold-feasibility.yml'
+permissions:
+  contents: read
+jobs:
+  identity:
+    if: github.head_ref == 'experiment/probability-cold-1002-20261020'
+    name: Cold identity (${{ matrix.index }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        index: [0, 1]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: install elan (toolchain pinned by lean-toolchain)
+        run: |
+          # Pinned + verified, not `curl | sh` from a moving branch. `master`
+          # is mutable: whoever controls that ref controls the toolchain
+          # installer on every FV runner, which is the trust root the
+          # verification Makefile builds on. Pin the commit, check the bytes,
+          # and only then execute. (#562)
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o elan-init.sh
+          echo "${ELAN_SHA256}  elan-init.sh" | sha256sum -c -
+          sh elan-init.sh -y --default-toolchain none
+          rm -f elan-init.sh
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: require no dependency cache
+        run: test ! -e contracts/verification/probability/.lake/packages
+      - name: fetch pinned mathlib probability cache
+        working-directory: contracts/verification/probability
+        run: lake exe cache get Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Probability.Distributions.Uniform Mathlib.Tactic Mathlib.Algebra.BigOperators.Fin Mathlib.Logic.Equiv.Fin.Basic Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic
+      - name: measure fresh proof and complete identity (not a full control gate)
+        env:
+          EXPERIMENT_OUTPUT: ${{ runner.temp }}/cold-identity
+        run: |
+          /usr/bin/python3 -E -S - <<'PYCODE'
+          import sys, os, json, time, subprocess
+          from pathlib import Path
+          sys.path.insert(0, str(Path('contracts/verification/scripts').resolve()))
+          import check_probability as gate
+          start = time.monotonic()
+          out = Path(os.environ['EXPERIMENT_OUTPUT']); out.mkdir()
+          manifest = gate.static_checks(); lake = gate._pinned_lake(); env = gate._pinned_tool_env()
+          assert not (gate.PROJECT / '.lake/build').exists()
+          build = gate.command([lake, 'build'], out, 'build', env)
+          assert build['exit'] == 0 and 'warning:' not in (out/'build.log').read_text()
+          audit = gate.command([lake, 'env', 'lean', 'Audit.lean'], out, 'axioms', env)
+          assert audit['exit'] == 0
+          closures = gate.check_closures((out/'axioms.log').read_text(), set(manifest['theorems']))
+          lean = subprocess.check_output([str(Path(lake).with_name('elan')), 'which', 'lean'], cwd=gate.PROJECT, env=env, text=True).strip()
+          identity = gate.input_identity(gate.ROOT, gate.PROJECT, manifest, lean, gate.cases(gate.PROJECT), lake)
+          receipt = dict(identity=identity, context=gate.producer_context(gate.ROOT), build=build, audit=audit, closures=len(closures), seconds=time.monotonic()-start, scope='Feasibility only: no semantic controls or canaries; not a full gate pass')
+          (out/'identity.json').write_text(json.dumps(receipt, indent=2)+'\n')
+          print(json.dumps(identity, indent=2))
+          PYCODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cold-identity-${{ matrix.index }}
+          path: ${{ runner.temp }}/cold-identity
+          if-no-files-found: error
+          retention-days: 7
