@@ -23,6 +23,16 @@ that owns it.
 > exact evidence and acceptance tests are in the
 > [2026-07-15 coordinator report](../../../docs/security/adversarial-review/findings/fv-full-stack-2026-07-15-coordinator.md).
 
+> **2026-10-20 status update (audit freeze).** The wallet bytecode changed:
+> owner removal deleted, a legacy EIP-1271 entry and token receiver hooks
+> added, Solady's raw-hash 1271 workflows dropped, `bytecode_hash = "none"`.
+> Halmos (43 rules, both profiles) and Kontrol (31 proofs) were re-run on the
+> new pinned codehashes (`PINNED_CODEHASHES.md`). That bytecode is **not
+> deployed yet**, so read "deployed bytecode" below as "the pinned production
+> build, deployment pending" until the freeze set is on chain and its
+> codehashes are compared (`THE_CLAIM.md` #6). G6 gained the I-9 theorems
+> (owner table injective on reachable states, a key installed at most once).
+
 > **One-sentence honest summary.** The on-chain authorization logic of the wallet
 > is proven to the Lean kernel and discharged on the deployed bytecode by two
 > independent symbolic engines; the cryptographic unforgeability and the
@@ -153,7 +163,8 @@ G0  theft-free + integrity (theft_free / theft_free_bytecode)
   `every_call_gated_by_verifier`, `no_call_without_prior_verifier_acceptance`.
 - **Artifact (B).** Halmos pointwise-equivalence `HalmosValidateUserOpEquiv` +
   `HalmosExecuteEquiv` and Kontrol `KontrolValidateUserOp`/`KontrolExecute` on
-  pinned codehash `0x43c654…/0x551c4e…` (A3.2). Two independent engines.
+  pinned codehash `0x43c654…/0x551c4e…` (A3.2; since 2026-10-20 the freeze
+  pins `0xcebbd9…/0x1bbd83…`). Two independent engines.
 - **Defeater.** The Lean `validateSignature` model not mirroring the bytecode →
   closed by A3.2 (`B`). SHA-256 left uninterpreted throughout (bottoms out at A1).
 
@@ -199,6 +210,10 @@ G0  theft-free + integrity (theft_free / theft_free_bytecode)
 - **Artifact.** `cannot_remove_bootstrap`, `initialize_called_exactly_once`,
   `owner_set_nonempty_after_init`, `upgrade_path_unreachable` (K, over the Lean
   Storage model); Halmos `HalmosMultiOwnable` (7 rules) + Kontrol (12 rules) (B).
+  UPDATE 2026-10-20: removal deleted, so 5 Halmos rules + 10 Kontrol proofs;
+  new K theorems `reachable_ownerTableWF`, `reachable_key_installed_at_most_once`,
+  `reachable_addOwner_refuses_installed_key` (I-9, the #131 per-key budget
+  reset is closed).
 - **Defeater / asymmetry.** Unlike G1/G5/G7, the K theorems here have **no
   `*_bytecode` corollary** — they bind only the Lean Storage model. The deployed
   owner-table property is carried **independently** by the Halmos/Kontrol harness
@@ -218,6 +233,13 @@ G0  theft-free + integrity (theft_free / theft_free_bytecode)
   (RAW32 forgery-oracle defense).
 - **Artifact (K).** `eip1271_forbids_bootstrap`; `Wallet/OffchainBinding.lean`
   (closure += `keccak_sha256_cross_separation`, an `∨ BreaksHash` cross-hash axiom).
+- **UPDATE 2026-10-20.** Two entry points now: `isValidSignature(bytes32,bytes)`
+  and the legacy `isValidSignature(bytes,bytes)` (#995). Both run only Solady's
+  nested EIP-712 workflow; the raw-hash workflows are overridden away (#691).
+  `HalmosIsValidSignature` has 5 rules, adding
+  `check_legacy_isValidSignature_agrees_with_bytes32_entry` and
+  `check_legacy_isValidSignature_forbids_bootstrap`; Lean adds
+  `erc1271IsValidSignatureLegacy_rejects_bootstrap`.
 - **Artifact (B) — NEW 2026-06-29.** `test/halmos/HalmosIsValidSignature.t.sol`
   (3 rules, PASS on BOTH profiles): `check_isValidSignature_forbids_bootstrap` is a
   clean bytecode **∀** over `hash` + the symbolic verifier answer — `ownerIndex 0`
@@ -307,7 +329,7 @@ Detail in `TRUST_ASSUMPTIONS.md`; summarized in §4 with evidence types.
 | **A1** | precompile `0x02` = FIPS-180-4 SHA-256 | **T** | named **non-consumed** marker | geth/reth/… consensus conformance; KAT parity test. Eliminate = verify a client's SHA-256 (Appel/VST). |
 | **A2** | deployed EntryPoint v0.6 ≡ `handleOp` | **T** | **external assumption, not a closure axiom**: the in-Lean `entrypoint_honest` is a proved theorem over the model | OZ/ChainSecurity/Spearbit audits + ≥18-mo immutable mainnet. Eliminate = Kontrol vs deployed EntryPoint (8–12 mo). |
 | **A3.1** | verifier bytecode = Lean Yul model | **C** | consumed | corpus + mutant (G2). Eliminate = interpreter-refinement (active). |
-| **A3.2/3.3/3.4** | wallet/factory/owner-table bytecode = Lean model | **B** | A3.2 in `theft_free_bytecode` | Halmos + Kontrol on pinned codehashes; deploy-profile reproduces live Base Mainnet exactly. |
+| **A3.2/3.3/3.4** | wallet/factory/owner-table bytecode = Lean model | **B** | A3.2 in `theft_free_bytecode` | Halmos + Kontrol on pinned codehashes; deploy-profile reproduced the live Base Mainnet set exactly until the 2026-10-20 freeze; the freeze set is expected, deploy pending. |
 | **A4** | EVM delivers emitted call bytes | **T** | named **non-consumed** marker | KEVM / consensus conformance. |
 | **A5** | SPHINCS+C10 EUF-CMA | **T** | consumed: ×4 EUF-CMA shapes in `theft_free` (the `sha256_collision_resistance` reduction is Claim-1-only — in `theft_free_with_calldata_binding`, **not** `theft_free`) | Barbosa'24 + PQC2022; `+C` cited. Eliminate = extend the EasyCrypt dev (multi-person-year). |
 | **A6** | Lean kernel checks proofs | **X** | always | `propext`, `Classical.choice`, `Quot.sound`. |

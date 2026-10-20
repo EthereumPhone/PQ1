@@ -1,0 +1,534 @@
+# Kontrol session — PQSmartWallet / Factory / owner table, KEVM symbolic proofs
+# Date: 2026-10-20 (Trail of Bits audit freeze: owner removal deleted, legacy
+#   EIP-1271 entry and token receivers added, bytecode_hash = "none")
+# kontrol: Kontrol version: 1.0.249
+# Foundry: forge Version: 1.8.3 (the CI pin), FOUNDRY_DYNAMIC_TEST_LINKING=false
+# Source: git HEAD 4bca0e86 plus the uncommitted audit-freeze change set,
+#   committed together with this receipt
+# Result: 31/31 expected proofs PASSED, each with exactly one version-0 record,
+#   admitted=False (run_kontrol.sh identity baseline, EXPECTED_PROOFS):
+#   KontrolValidateUserOp 7, KontrolExecute 8, KontrolFactory 6,
+#   KontrolOwnerTable 7, KontrolBootstrapUnremovable 3.
+#   Changes vs the 33-proof set: the three KontrolOwnerTable removal proofs became
+#   prove_removed_selector_does_not_dispatch; the three bootstrap proofs were
+#   restated (prove_bootstrap_unchanged_by_addOwner,
+#   prove_bootstrap_removal_selector_does_not_dispatch,
+#   prove_bootstrap_reinitialize_rejected). Two of those overlap owner-table
+#   proofs (see docs/KONTROL_SCOPING.md).
+# Note: the Halmos harness gained a 43rd rule after this run; that change is
+#   in test/halmos/ only and does not touch the bytecode or these harnesses.
+# Reproduce: make -C contracts/verification verify-kontrol  (exit 0, 30m22s here)
+#
+# ===================== kontrol list (proof status) and verdict =====================
+=== kontrol list (proof status) ===
+APRProof: test%kontrol%KontrolBootstrapUnremovable.prove_bootstrap_reinitialize_rejected(bytes,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 17
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 9s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolBootstrapUnremovable.prove_bootstrap_removal_selector_does_not_dispatch(address,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 81
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 8
+    refuted: 0
+    bounded: 0
+    execution time: 4m 54s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolBootstrapUnremovable.prove_bootstrap_unchanged_by_addOwner(bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 35
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 5
+    refuted: 0
+    bounded: 0
+    execution time: 2m 16s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolBootstrapUnremovable.setUp():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 17
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 2
+    refuted: 0
+    bounded: 0
+    execution time: 57s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_executeBatch_pointwise():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 44
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 2m 36s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_executeBatch_rejects_self_target(uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 48
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 6
+    refuted: 0
+    bounded: 0
+    execution time: 8m 6s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_execute_atomic_on_reverting_target(uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 91
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 10
+    refuted: 0
+    bounded: 0
+    execution time: 6m 41s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_execute_credit_one_shot(uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 40
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 4
+    refuted: 0
+    bounded: 0
+    execution time: 3m 36s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_execute_no_credit_reverts(uint256,uint256,uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 13
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 2s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_execute_pointwise(uint256,uint256,uint256,uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 132
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 8
+    refuted: 0
+    bounded: 0
+    execution time: 11m 33s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_execute_rejects_self_target(uint256,uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 22
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 2m 7s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.prove_execute_requires_entrypoint(address,uint256,uint256,uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 36
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 8
+    refuted: 0
+    bounded: 0
+    execution time: 2m 37s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolExecute.setUp():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 20
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 2
+    refuted: 0
+    bounded: 0
+    execution time: 1m 7s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolFactory.prove_createAccount_already_deployed_returns_existing(uint64,bytes32,bytes32,bool):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 47
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 4
+    refuted: 0
+    bounded: 0
+    execution time: 3m 1s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolFactory.prove_createAccount_iff(uint64,bool):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 47
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 5
+    refuted: 0
+    bounded: 0
+    execution time: 2m 51s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolFactory.prove_createAccount_rejects_duplicate_slot0():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 19
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 10s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolFactory.prove_createAccount_rejects_non_nmasked_master():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 18
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 1s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolFactory.prove_createAccount_rejects_non_nmasked_slot0():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 19
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 14s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolFactory.prove_createAccount_rejects_wrong_chain(uint64):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 9
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 37s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolFactory.setUp():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 9
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 2
+    refuted: 0
+    bounded: 0
+    execution time: 36s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.prove_addOwner_len64_pointwise(bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 106
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 5
+    refuted: 0
+    bounded: 0
+    execution time: 6m 18s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.prove_addOwner_rejects_len63(bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 15
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 54s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.prove_addOwner_rejects_len65(bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 15
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 51s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.prove_addOwner_rejects_non_entrypoint(address,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 57
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 8
+    refuted: 0
+    bounded: 0
+    execution time: 2m 52s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.prove_initialize_fresh_pointwise(bytes,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 109
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 10
+    refuted: 0
+    bounded: 0
+    execution time: 7m 49s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.prove_initialize_one_shot(bytes,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 20
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 17s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.prove_removed_selector_does_not_dispatch(address,uint256,bytes):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 112
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 8
+    refuted: 0
+    bounded: 0
+    execution time: 6m 11s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolOwnerTable.setUp():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 17
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 2
+    refuted: 0
+    bounded: 0
+    execution time: 1m 0s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.prove_validate_bootstrap_nonbypass(uint256,bool):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 44
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 5
+    refuted: 0
+    bounded: 0
+    execution time: 3m 25s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.prove_validate_rejects_bad_innerlen(uint256):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 13
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 1s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.prove_validate_rejects_bad_offset(uint256):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 13
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 6s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.prove_validate_rejects_bad_tailpad(bytes32):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 13
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 6s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.prove_validate_rejects_non_entrypoint(address):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 44
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 8
+    refuted: 0
+    bounded: 0
+    execution time: 2m 58s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.prove_validate_rejects_unset_owner(bool):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 13
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 3
+    refuted: 0
+    bounded: 0
+    execution time: 1m 2s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.prove_validate_slot_nonbypass(uint256,uint256,bool):0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 47
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 5
+    refuted: 0
+    bounded: 0
+    execution time: 3m 31s
+Subproofs: 0
+
+APRProof: test%kontrol%KontrolValidateUserOp.setUp():0
+    status: ProofStatus.PASSED
+    admitted: False
+    nodes: 22
+    pending: 0
+    failing: 0
+    vacuous: 0
+    stuck: 0
+    terminal: 2
+    refuted: 0
+    bounded: 0
+    execution time: 1m 10s
+Subproofs: 0
+==> PASS: all 31 expected proofs have exactly one PASSED, admitted=False version-0 record (identity baseline, F9)
+Removed isolated staged Kontrol harness directory.
+make: Leaving directory '/home/markus/Documents/PQ1/sphincs_rust/contracts/verification'
+
+real	30m22.607s
+user	117m15.892s
+sys	7m41.186s
+rc=0

@@ -81,6 +81,18 @@ each an `opaque + axiom-equality` shape that asserts the deployed
 bytecode matches the Lean model. Removing any one would leave the
 per-claim corollaries unprovable.
 
+> **UPDATE 2026-10-20 (audit freeze).** Every codehash below moved: owner
+> removal was deleted, a legacy EIP-1271 entry and token receiver hooks were
+> added, and the build now sets `bytecode_hash = "none"`. The pins in the
+> A3.* entries below are the freeze values (2026-06-10 values in parentheses
+> for history). The full Halmos suite (43 rules, both profiles) and the 31
+> Kontrol proofs were re-run on this bytecode. **It is not deployed yet:**
+> the "reproduces the live Base Mainnet contracts" statement in the next
+> paragraph applied to the superseded 2026-06-12 set. For the freeze set,
+> `DeployedBytecodeReproCheck.t.sol` asserts the *predicted* production
+> addresses and codehashes and their match with the firmware's CREATE2
+> constants (expected, deploy pending).
+>
 > **CURRENT (2026-06-13).** `AXIOM_STATUS.json` + `PINNED_CODEHASHES.md` are
 > the AUTHORITATIVE source for codehashes and discharge artifacts; the
 > entries below are kept in sync with them. The A3.* axioms are
@@ -98,7 +110,7 @@ per-claim corollaries unprovable.
 ### A3.1. `solidityVerifier_compiles_correctly`
 
 * **Lean.** `DeployedBytecode.SPHINCsC10Asm_verify = execC10Asm` (synced 2026-07-02; the bare `= verifyYulModel` form is **FALSE as a ∀** off N-masked keys — the bytecode runs two `and(key, N_MASK)==key` guards `verifyYulModel` omits. `execC10Asm` unfolds via `execC10Asm_eq` to `verifyYulModel` on N-masked keys, and is the form `theft_free`'s verifier leg consumes — `Bridge/Refinement.lean`)
-* **Pinned codehash.** `0xf1ef4ccee22e6b39446723232fe39761f089c7195941b2c12576956b38fcfef5` (default) / `0xeb1e3fcd38c7cd5f7b08352c298b34bd114d83f7dbd755b122c41eda2aab2cc5` (deploy — **byte-identical to on-chain Base Mainnet verifier `0xdDE4D290…`**)
+* **Pinned codehash.** `0x8fa670d53df0fd63bc64505463f268256ffbb51e57f62d8a5a41f5bcec5cf2eb` (default) / `0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989` (deploy; predicted production address `0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4`, not deployed). Same instruction bytes as before the freeze; only the metadata tail changed. (2026-06-10: `0xf1ef4cce…fef5` / `0xeb1e3fcd…2cc5`, byte-identical to the superseded Base Mainnet verifier `0xdDE4D290…`.)
 * **Discharge.** Halmos input-gate rules (`test/halmos/HalmosVerifier.t.sol`,
   length / N-mask) + **full-functional** executable Lean↔FIPS↔bytecode KAT
   (`lake exe verify-test-vectors` full-verify 10/10) + bulk 384/384
@@ -110,7 +122,7 @@ per-claim corollaries unprovable.
 * **Lean.** `DeployedBytecode.PQSmartWallet_validateUserOp = validateSignature`
   (+ `executeWithOffchainCount` / `executeBatchWithOffchainCount`), on
   reachable states (combined-cap invariant).
-* **Pinned codehash.** `0x43c65420691792d7f0f63dab95f47ab7adb649df4c83f432bd3cf2c95db3a06a` (default) / `0x551c4e03bbd433a5929828ab19caac13a94ca9e2be6074cf3e18c7d926034c22` (deploy)
+* **Pinned codehash.** `0xcebbd91dc5a2cd5869eacc84e2bd82dbd8702c504788017df78a2e1960119a0b` (default) / `0x1bbd83ba0479a352197328f581b3ee473643996b04e07355ae8e3ebc49d91bea` (deploy). (2026-06-10: `0x43c65420…a06a` / `0x551c4e03…4c22`.)
 * **Discharge.** Halmos pointwise-equivalence — primary
   `test/halmos/HalmosValidateUserOpEquiv.t.sol` + `HalmosExecuteEquiv.t.sol`;
   per-property corollaries `HalmosValidateUserOp.t.sol` + `HalmosExecute.t.sol`.
@@ -118,7 +130,7 @@ per-claim corollaries unprovable.
 ### A3.3. `solidityFactory_compiles_correctly`
 
 * **Lean.** `DeployedBytecode.PQSmartWalletFactory_createAccount_passes ↔ Factory.createAccountPrecondition`
-* **Pinned codehash.** `0xfa2922b4fadb81b4475307504890d68f2e3d9be97c7e5e9aeeba6e84110d7c3c` (default) / `0x5feb7955252e54bcbbf44062295bdeb45f3dea13c4ef7fb1ba579196d84da4b9` (deploy)
+* **Pinned codehash.** `0x318afcbf264cd2f0fa0cc25efa1c26d9ad1799f916a2182ec9a320d4a94e8b46` (default) / `0x44c3b4f70f5dc5406275cce87be814eda909ab0acab4aacdb9dc3ef24f0f7b21` (deploy). (2026-06-10: `0xfa2922b4…7c3c` / `0x5feb7955…a4b9`.)
 * **Discharge.** Halmos `test/halmos/HalmosFactory.t.sol` (5 rules) — the
   prior Certora rule-set `certora/PQSmartWalletFactory.spec` is an
   alternative path.
@@ -126,8 +138,10 @@ per-claim corollaries unprovable.
 ### A3.4. `solidityMultiOwnable_compiles_correctly`
 
 * **Lean.** `DeployedBytecode.PQMultiOwnable_ownerAtIndex s i = s.ownerAtIndex i`
-* **Pinned codehash.** `0x43c654…a06a` / `0x551c4e…34c22` (embedded in `PQSmartWallet`; no independent deploy)
-* **Discharge.** Halmos `test/halmos/HalmosMultiOwnable.t.sol` (7 rules) —
+* **Pinned codehash.** `0xcebbd9…9a0b` / `0x1bbd83…1bea` (embedded in `PQSmartWallet`; no independent deploy). (2026-06-10: `0x43c654…a06a` / `0x551c4e…34c22`.)
+* **Discharge.** Halmos `test/halmos/HalmosMultiOwnable.t.sol` (5 rules since
+  the 2026-10-20 freeze deleted owner removal; 7 before) and Kontrol
+  `KontrolOwnerTable` + `KontrolBootstrapUnremovable` (10 proofs; 12 before) —
   REPLACED the prior Certora artifact `certora/PQMultiOwnable.spec`, which had
   been pinned to a stale codehash and never re-run.
 

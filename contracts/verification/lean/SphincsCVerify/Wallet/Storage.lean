@@ -40,7 +40,10 @@ def hasNMaskLayout (o : OwnerBytes) : Prop :=
 end OwnerBytes
 
 /-- The `PQMultiOwnableStorage` struct as a Lean record. Mirrors
-    `contracts/smart-wallet/src/PQMultiOwnable.sol`. -/
+    `contracts/smart-wallet/src/PQMultiOwnable.sol`. `removedOwnersCount` is
+    reserved and always zero: owner removal was deleted before launch (the
+    owner set is append-only) and nothing writes the field; it is kept so the
+    record keeps mirroring the Solidity struct field-for-field. -/
 structure Storage where
   nextOwnerIndex : Nat
   removedOwnersCount : Nat
@@ -112,32 +115,21 @@ def addOwner (s : Storage) (o : OwnerBytes) : Option Storage :=
       if i = s.nextOwnerIndex then some o else s.ownerAtIndex i,
     isOwner := fun o' => decide (o' = o) || s.isOwner o' }
 
-/-- Remove the owner at `index`. Refuses to touch index 0. -/
-def removeOwner
-    (s : Storage) (index : Nat) (expected : OwnerBytes) : Option Storage :=
-  if index = 0 then none
-  else match s.ownerAtIndex index with
-    | none => none
-    | some o =>
-      if decide (o = expected) = false then none
-      else some {
-        s with
-        ownerAtIndex := fun i =>
-          if i = index then none else s.ownerAtIndex i,
-        isOwner := fun o' => !decide (o' = o) && s.isOwner o',
-        removedOwnersCount := s.removedOwnersCount + 1 }
-
 /-- The wallet's `initialize` function. Returns `none` (i.e. revert)
-    if the one-shot guard `nextOwnerIndex == 0` fails; otherwise
-    installs `bootstrap` at index 0 and `slot0` at index 1.
+    if the one-shot guard `nextOwnerIndex == 0` fails, or if the two owners
+    are the same key (`PQMultiOwnable._addOwnerAtIndex` reverts
+    `AlreadyOwner` on the second install); otherwise installs `bootstrap` at
+    index 0 and `slot0` at index 1.
 
-    Mirrors `PQSmartWallet.initialize` (Solidity lines 150-156) +
-    `PQMultiOwnable._initializeOwners` (lines 162-172).
+    Mirrors `PQSmartWallet.initialize` + `PQMultiOwnable._initializeOwners`.
+    (The N-mask and length gates live in the factory precondition,
+    `Factory.createAccountPrecondition`.)
 
     Named `tryInitialize` (rather than `initialize`) because
     `initialize` is reserved in Lean 4. -/
 def tryInitialize (s : Storage) (bootstrap slot0 : OwnerBytes) : Option Storage :=
   if s.nextOwnerIndex ≠ 0 then none
+  else if bootstrap = slot0 then none
   else some (Storage.initialised bootstrap slot0)
 
 end Storage

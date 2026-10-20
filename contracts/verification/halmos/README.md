@@ -8,7 +8,7 @@ bytecode**, so each passing `check_*` rule is a proof for *all* inputs in its
 envelope (not the 10 concrete KAT vectors), modulo the SMT solver and the
 SHA-256-as-uninterpreted-function abstraction (= axiom A1).
 
-## What is proved (42 rules, all PASS — on BOTH compiler profiles)
+## What is proved (43 rules, all PASS — on BOTH compiler profiles)
 
 > **Scope note.** These rules discharge the wallet/factory/owner-table
 > **control flow** on bytecode, with the verifier modeled as an
@@ -20,12 +20,12 @@ SHA-256-as-uninterpreted-function abstraction (= axiom A1).
 |---|---|---|
 | `HalmosValidateUserOpEquiv.t.sol` | A3.2 — **pointwise equivalence** of `validateUserOp` to the Lean model (+ symbolic-index sweep over installed slots) | 4 |
 | `HalmosValidateUserOp.t.sol` | A3.2 — `validateUserOp` per-property rules | 8 |
-| `HalmosExecuteEquiv.t.sol` | A3.2-exec — **pointwise equivalence** of `execute{,Batch}WithOffchainCount` to the Lean `Execute` model, **symbolic ∀ `ownerIndex`** | 6 |
+| `HalmosExecuteEquiv.t.sol` | A3.2-exec — **pointwise equivalence** of `execute{,Batch}WithOffchainCount` to the Lean `Execute` model, **symbolic ∀ `ownerIndex`**; credit rules incl. a successful bootstrap validation opening no execute path | 7 |
 | `HalmosExecute.t.sol` | A3.2-exec — `execute*WithOffchainCount` per-property rules | 6 |
-| `HalmosMultiOwnable.t.sol` | A3.4 — `addOwnerBytes`/`removeOwnerAtIndex`/`initialize` pointwise + `ownerAtIndex` read parity (replaces stale Certora) | 7 |
+| `HalmosMultiOwnable.t.sol` | A3.4 — `addOwnerBytes`/`initialize` pointwise + `ownerAtIndex` read parity; the deleted `removeOwnerAtIndex` selector reaches no code (replaces stale Certora) | 5 |
 | `HalmosVerifier.t.sol` | A3.1 — `SPHINCsC10Asm.verify` **input gates** | 3 |
 | `HalmosFactory.t.sol` | A3.3 — `createAccount` ⟺ `createAccountPrecondition` | 5 |
-| `HalmosIsValidSignature.t.sol` | G8 / EIP-1271 — `isValidSignature` forbids-bootstrap (∀ hash + verifier answer), non-bypass installed slot, no counter bump | 3 |
+| `HalmosIsValidSignature.t.sol` | G8 / EIP-1271 — `isValidSignature` forbids-bootstrap (∀ hash + verifier answer), non-bypass installed slot, no counter bump; legacy `isValidSignature(bytes,bytes)` agrees with the bytes32 entry and forbids bootstrap | 5 |
 
 Count corrected 2026-07-19 (fv-deep-review-2026-07-19 F9): the wired set is
 **42 rules across 8 harnesses** — this table previously said 38, trailed the
@@ -34,6 +34,18 @@ the whole 3-rule `HalmosIsValidSignature` G8 harness were wired but not
 receipted here). `run_halmos.sh` now pins `EXPECTED_RULES=42` + the 8-harness
 identity set and fails unless every harness runs and the PASS count meets the
 floor. Latest receipt: [`sessions/halmos-session-2026-07-19.txt`](sessions/halmos-session-2026-07-19.txt).
+
+UPDATE 2026-10-20 (Trail of Bits audit freeze): owner removal was deleted from
+the wallet (GitHub #131, #213) and a legacy EIP-1271 entry added (#995). Still
+42 rules: `HalmosMultiOwnable` 7 → 5 (the three removal rules became one
+"removed selector does not dispatch" rule; the access-gate rule now covers
+`addOwnerBytes` only), `HalmosIsValidSignature` 3 → 5 (two legacy-entry
+rules), and `HalmosExecuteEquiv`'s remove-selector rule is now
+`check_validate_rejects_removed_selector`. The review of the freeze then added
+`check_validate_bootstrap_success_stamps_no_credit` (a successful bootstrap
+validation opens no execute path for any index), so the freeze set is **43
+rules** and `EXPECTED_RULES=43`. The receipt for the freeze bytecode is
+[`sessions/halmos-session-2026-10-20.txt`](sessions/halmos-session-2026-10-20.txt).
 
 The full suite is executed against **both** the `default` (runs=200) and
 `deploy` (runs=999999, production) profile bytecode — the production codehash
@@ -99,12 +111,12 @@ faithful byte-delivery is **A4**, not A3.2-exec.
 
 ### A3.4 — owner table on bytecode (replaces stale Certora)
 
-`HalmosMultiOwnable.t.sol` proves `addOwnerBytes` / `removeOwnerAtIndex` /
-`initialize` pointwise-equal to the Lean `Storage` model (length + N-mask +
-duplicate gates; install/remove/init verbatim), each asserting `ownerAtIndex`
-**read parity** (the A3.4 equality proper) after the mutation, plus
-bootstrap-unremovable (Claim 2) for every `expected`-bytes value and the
-unset-index reject for every index `>= 2`. This replaces the prior Certora
+`HalmosMultiOwnable.t.sol` proves `addOwnerBytes` / `initialize`
+pointwise-equal to the Lean `Storage` model (length + N-mask + duplicate gates;
+install/init verbatim), each asserting `ownerAtIndex` **read parity** (the A3.4
+equality proper) after the mutation, and that the deleted `removeOwnerAtIndex`
+selector reaches no code for any caller or argument (the bytecode side of
+Claim 2 now that the owner set is append-only). This replaces the prior Certora
 artifact, which had gone stale (pinned to a PQSmartWallet codehash that no
 longer matched the embedding bytecode, never re-run).
 
@@ -136,8 +148,13 @@ the bootstrap key (`ownerIndex == 0`) is NEVER accepted off-chain, for **any**
 message hash and any symbolic verifier answer (rejected before the
 `ownerAtIndex` read and before the keccak `replaySafeHash`, so a clean ∀);
 plus the installed-slot non-bypass rule (concrete rep, same engine ceiling as
-A3.2's unset partition) and the no-counter-bump rule. keccak stays
-uninterpreted; SHA-256 is never on this path.
+A3.2's unset partition) and the no-counter-bump rule. Since 2026-10-20 it also
+covers the legacy `isValidSignature(bytes,bytes)` entry (Safe v1.3.0 / v1.4.1):
+for 66-byte `data`, installed `ownerIndex` 1 and a symbolic verifier answer,
+it returns its magic exactly when the bytes32 entry accepts `keccak256(data)`
+(the general statement holds by construction, since both entries call the same
+internal check, not by this rule), and it never accepts the bootstrap key.
+keccak stays uninterpreted; SHA-256 is never on this path.
 
 ## Reachable-state hypothesis (A3.2)
 
@@ -201,7 +218,7 @@ stop a crash. (The true digest is one admissible interpretation.)
 ```bash
 cd contracts/verification
 make verify-bytecode-setup   # clone + patch + install the patched halmos (once)
-make verify-bytecode         # certify codehashes (both profiles) + immutable lemma, then run all 42 rules on BOTH profiles
+make verify-bytecode         # certify codehashes (both profiles) + immutable lemma, then run all 43 rules on BOTH profiles
 ```
 
 `run_halmos.sh` first runs `PinnedCodehashes.t.sol` **and**
@@ -213,12 +230,15 @@ i.e. the bytecode Halmos executes is the bytecode the Lean `theft_free`
 closure names, on both the dev and production builds — then runs the full
 symbolic suite against **each** profile's bytecode and fails if any rule does
 not pass. It also enforces a **rule-identity floor** (fv-deep-review-2026-07-19
-F9): the wired `check_*` inventory must equal the pinned `EXPECTED_RULES=42`
+F9): the wired `check_*` inventory must equal the pinned `EXPECTED_RULES` (43 since 2026-10-20)
 before the run, and afterwards each of the 8 harnesses must have executed
 (its `Running N tests` line present with N equal to its wired rule count) and
-the total `[PASS]` count must be ≥ 42 — a silently unmatched harness or a
+the total `[PASS]` count must equal it — a silently unmatched harness or a
 zero-rule green is a hard failure. `run_halmos.sh --self-test` exercises the
 floor's positive/negative controls without the solver; `--check-output <file>`
 re-checks an archived session against the floor. Session output is archived
 under `sessions/`. Both compiler profiles are mandatory for an authoritative
-green result.
+green result. (UPDATE 2026-10-20: the floor parser strips ANSI colour codes
+and the runner sets `NO_COLOR`, after a fully green run failed the floor
+because halmos coloured its `[PASS]` markers; self-test control 6/6 covers a
+coloured run.)

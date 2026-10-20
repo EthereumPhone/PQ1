@@ -59,18 +59,13 @@ def executeWithOffchainCount : Selector :=
 def executeBatchWithOffchainCount : Selector :=
   ⟨#[0x7a, 0x38, 0x99, 0x33], by decide⟩
 
-/-- Selector for `removeOwnerAtIndex(uint256,bytes)`.
-
-    `bytes4(keccak256("removeOwnerAtIndex(uint256,bytes)")) = 0x89625b57`. -/
-def removeOwnerAtIndex : Selector :=
-  ⟨#[0x89, 0x62, 0x5b, 0x57], by decide⟩
-
 /-- Determine whether a selector is in the slot-allowed set. Mirrors
-    `_isSlotAllowedSelector` in PQSmartWallet.sol. -/
+    `_isSlotAllowedSelector` in PQSmartWallet.sol. Owner removal
+    (`removeOwnerAtIndex`, `0x89625b57`) was deleted before launch, so a slot
+    key may only sign the two offchain-count execute paths. -/
 def isSlotAllowed (s : Selector) : Bool :=
   decide (s = executeWithOffchainCount) ||
-  decide (s = executeBatchWithOffchainCount) ||
-  decide (s = removeOwnerAtIndex)
+  decide (s = executeBatchWithOffchainCount)
 
 end Selector
 
@@ -286,14 +281,13 @@ def sphincsDigest
     requires a slot-allowed selector + the audit-H-3 ownerIndex parity
     + combined cap budget.
 
-    The H-3 conjunct mirrors `_validateSignature` (Solidity lines
-    469-474): for the offchain-count execute selectors, the calldata's
-    first argument (the target slot) must equal the signed wrapper's
-    `ownerIndex`, so the execution-phase credit is unambiguously owned
-    by the slot that signed it. `removeOwnerAtIndex` carries a removal
-    index, not the signer's index, and is excluded. Added 2026-06-10
-    for bytecode faithfulness (the model previously accepted
-    mismatched-index ops the bytecode rejects). -/
+    The H-3 conjunct mirrors `_validateSignature`: both slot-allowed
+    selectors carry the target slot as their first calldata argument,
+    which must equal the signed wrapper's `ownerIndex`, so the
+    execution-phase credit is unambiguously owned by the slot that signed
+    it. Added 2026-06-10 for bytecode faithfulness (the model previously
+    accepted mismatched-index ops the bytecode rejects); unconditional
+    since owner removal was deleted (2026-10-20). -/
 def capOk
     (s : Storage) (op : UserOperation) (ownerIndex : Nat) : Bool :=
   if ownerIndex = 0 then
@@ -301,8 +295,7 @@ def capOk
     decide (s.bootstrapUses < MaxBootstrapUses)
   else
     Selector.isSlotAllowed op.selectorOf &&
-    (decide (op.selectorOf = Selector.removeOwnerAtIndex) ||
-       decide (calldataOwnerIndex op = ownerIndex)) &&
+    decide (calldataOwnerIndex op = ownerIndex) &&
     decide (s.slotUses ownerIndex + s.offchainSigCount ownerIndex < MaxSlotUses)
 
 /-- The counter-bump step run on the success path. Returns the

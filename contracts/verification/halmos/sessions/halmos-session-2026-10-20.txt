@@ -1,0 +1,445 @@
+# Halmos session — PQSmartWallet/Factory/MultiOwnable/Verifier/EIP-1271 bytecode discharge
+# Date: 2026-10-20 (Trail of Bits audit freeze: owner removal deleted, legacy
+#   EIP-1271 isValidSignature(bytes,bytes) added, Solady raw-hash 1271 workflows
+#   dropped, ERC-721/1155 receiver hooks added, bytecode_hash = "none")
+# halmos version: halmos 0.3.4.dev0+gba94bdc23.d20260610  (+ PQ1 sha256 sort + empty-input patches)
+# z3 version: Z3 version 4.12.6 - 64 bit  (the halmos venv binary; ~/.halmos/solvers is empty and no z3 on PATH)
+# Foundry: forge Version: 1.8.3  (the CI pin), FOUNDRY_DYNAMIC_TEST_LINKING=false, NO_COLOR=1
+# Source: git HEAD 4bca0e86 plus the uncommitted audit-freeze change set, committed
+#   together with this receipt
+# Pinned codehashes (default / deploy):
+#   PQSmartWallet        0xcebbd91d…9a0b / 0x1bbd83ba…1bea
+#   PQSmartWalletFactory 0x318afcbf…8b46 / 0x44c3b4f7…7b21
+#   SPHINCsC10Asm        0x8fa670d5…f2eb / 0xfd55ec70…2989
+# Profiles run: default (runs=200) AND deploy (runs=999999, production)
+# Certification (run first, BOTH profiles): PinnedCodehashes +
+#   PinnedBytecodeImmutableLemma + DeployedBytecodeReproCheck PASS. For this
+#   bytecode DeployedBytecodeReproCheck asserts the PREDICTED production
+#   addresses/codehashes and the firmware CREATE2 constants; nothing of the
+#   freeze set is deployed yet.
+# Result: 43/43 rules PASS on EACH profile (86 rule-executions); identity floor
+#   'all 8 harnesses and 43 exact Contract::check_* PASS records' met on both.
+#   Rule-set changes vs 2026-07-19 (42 rules): HalmosMultiOwnable 7 -> 5 (removal
+#   rules replaced by check_removed_selector_does_not_dispatch),
+#   HalmosIsValidSignature 3 -> 5 (two legacy-entry rules), HalmosExecuteEquiv
+#   6 -> 7 (check_validate_remove_selector_stamps_no_credit ->
+#   check_validate_rejects_removed_selector, plus the new
+#   check_validate_bootstrap_success_stamps_no_credit from the implementation
+#   review).
+# Earlier runs this day on the same bytecode with the 42-rule set: one passed all
+#   42 rules on the default profile but failed the identity floor because halmos
+#   coloured its [PASS] markers (the runner now strips ANSI codes and sets
+#   NO_COLOR; self-test control 6/6); the next passed 42/42 on both profiles.
+#
+# Reproduce: make -C contracts/verification verify-bytecode   (exit 0, 22m36.982s here)
+# Re-check an archived output: run_halmos.sh --check-output <file>
+#
+# ============================ full run log ============================
+make: Entering directory '/home/markus/Documents/PQ1/sphincs_rust/contracts/verification'
+==> [1/2] Certifying compiled bytecode == pinned codehashes (Foundry, both profiles)
+    [default] codehash freeze + immutable-window lemma + deployed-bytecode repro
+    [deploy] codehash freeze + immutable-window lemma + deployed-bytecode repro
+    OK: wallet / factory / verifier codehashes match PINNED_CODEHASHES.md
+    OK: runtime differs from the pinned instance only at the certified immutables
+    OK: deploy-profile CREATE2 replay lands at the predicted production addresses/codehashes and matches the firmware CREATE2 constants
+==> [2/2] Halmos symbolic execution of the deployed bytecode [profile=default]
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/verifiers/SPHINCsC10Asm.sol:170:48
+    │
+170 │                 if iszero(eq(digitSum, 205)) { revert(0, 0) }
+    │                                                ━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[missing-zero-check]: address parameter is used in a state write or value transfer without a zero-address check
+   ╭▸ src/PQSmartWalletFactory.sol:58:17
+   │
+58 │     constructor(address impl, ISPHINCSVerifier c10) {
+   │                 ━━━━━━━━━━━━
+   │
+   ╰ help: https://getfoundry.sh/forge/linting/missing-zero-check
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQSmartWalletFactory.sol:120:9
+    │
+120 │         emit AccountCreated(deployed, masterPkSeed, masterPkRoot, chainId);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[unsafe-typecast]: typecast can truncate values
+   ╭▸ src/PQSmartWalletFactory.sol:83:59
+   │
+83 │         if (chainId != block.chainid) revert WrongChainId(uint64(block.chainid), chainId);
+   │                                                           ━━━━━━━━━━━━━━━━━━━━━
+   │
+   ├ note: consider disabling this lint if you're certain the cast is safe
+   │       
+   │       // casting to 'uint64' is safe because [explain why]
+   │       // forge-lint: disable-next-line(unsafe-typecast)
+   │       
+   │       
+   ╰ help: https://getfoundry.sh/forge/linting/unsafe-typecast
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:238:9
+    │
+238 │         emit AddOwner(index, owner);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQMultiOwnable.sol:162:17
+    │
+162 │                 revert InvalidOwnerBytesLength(owners[i]);
+    │                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQMultiOwnable.sol:223:34
+    │
+223 │         if (isOwnerBytes(owner)) revert AlreadyOwner(owner);
+    │                                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQMultiOwnable.sol:233:13
+    │
+233 │             revert InvalidNMaskLayout(owner);
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:184:9
+    │
+184 │         emit BootstrapUsed(next);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:193:9
+    │
+193 │         emit SlotUsed(ownerIndex, next);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:216:13
+    │
+216 │             emit OffchainSigCountUpdated(ownerIndex, prev, newCount);
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[missing-zero-check]: address parameter is used in a state write or value transfer without a zero-address check
+    ╭▸ src/PQSmartWallet.sol:241:9
+    │
+241 │         address target,
+    │         ━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/missing-zero-check
+warning[calls-loop]: external call inside a loop
+    ╭▸ src/PQSmartWallet.sol:282:43
+    │
+282 │             (bool ok, bytes memory ret) = targets[i].call{value: values[i]}(datas[i]);
+    │                                           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/calls-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQSmartWallet.sol:281:46
+    │
+281 │             if (targets[i] == address(this)) revert SelfCallForbidden();
+    │                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQSmartWallet.sol:285:21
+    │
+285 │                     revert(add(ret, 0x20), mload(ret))
+    │                     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[divide-before-multiply]: division before multiplication may lose precision
+    ╭▸ src/PQSmartWallet.sol:401:31
+    │
+401 │         uint256 paddedInner = ((C10_SIG_LEN + 31) / 32) * 32;
+    │                               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/divide-before-multiply
+warning[divide-before-multiply]: division before multiplication may lose precision
+    ╭▸ src/PQSmartWallet.sol:636:31
+    │
+636 │         uint256 paddedInner = ((C10_SIG_LEN + 31) / 32) * 32;
+    │                               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/divide-before-multiply
+warning[environment-read-across-mutation]: `block.chainid` may be reused across `vm.chainId`
+    ╭▸ test/SphincsDigestFieldBinding.t.sol:130:25
+    │
+130 │         uint256 saved = block.chainid;
+    │                         ━━━━━━━━━━━━━
+131 │         vm.chainId(saved == 8453 ? 1 : 8453);
+    │         ──────────────────────────────────── `vm.chainId` changes this environment here
+    │
+    ├ help: capture it with `vm.getChainId()` instead
+    ╰ help: https://getfoundry.sh/forge/linting/environment-read-across-mutation
+Running 6 tests for test/halmos/HalmosExecute.t.sol:HalmosExecute
+[PASS] check_executeBatch_rejects_any_self_target(uint256) (paths: 3, time: 0.09s, bounds: [])
+[PASS] check_execute_no_replay() (paths: 1, time: 0.03s, bounds: [])
+[PASS] check_execute_rejects_non_entrypoint_caller(address) (paths: 2, time: 0.01s, bounds: [])
+[PASS] check_execute_rejects_owner_index_mismatch(uint256) (paths: 1, time: 0.03s, bounds: [])
+[PASS] check_execute_rejects_self_target() (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_execute_without_validate_reverts() (paths: 1, time: 0.00s, bounds: [])
+Symbolic test result: 6 passed; 0 failed; time: 0.24s
+Running 7 tests for test/halmos/HalmosExecuteEquiv.t.sol:HalmosExecuteEquiv
+[PASS] check_executeBatch_pointwise_equals_lean_model(uint256,uint256,uint256) (paths: 72, time: 8.08s, bounds: [])
+[PASS] check_execute_inner_revert_is_atomic(uint256) (paths: 12, time: 0.50s, bounds: [])
+[PASS] check_execute_no_credit_reverts_for_all_indices(uint256) (paths: 1, time: 0.01s, bounds: [])
+[PASS] check_execute_pointwise_equals_lean_model(uint256,uint256,uint256) (paths: 55, time: 6.20s, bounds: [])
+[PASS] check_two_stamps_fund_exactly_two_executes() (paths: 5, time: 0.40s, bounds: [])
+[PASS] check_validate_bootstrap_success_stamps_no_credit(uint256) (paths: 1, time: 0.03s, bounds: [])
+[PASS] check_validate_rejects_removed_selector(uint256) (paths: 1, time: 0.02s, bounds: [])
+Symbolic test result: 7 passed; 0 failed; time: 15.29s
+Running 5 tests for test/halmos/HalmosFactory.t.sol:HalmosFactory
+[PASS] check_createAccount_already_deployed_returns_existing(uint64,bytes32,bytes32,bool) (paths: 4, time: 0.11s, bounds: [])
+[PASS] check_createAccount_iff_lean_precondition(uint64,bool) (paths: 10, time: 0.28s, bounds: [])
+[PASS] check_createAccount_rejects_duplicate_slot0() (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_createAccount_rejects_non_nmasked_master(bytes32,bytes32) (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_createAccount_rejects_non_nmasked_slot0() (paths: 1, time: 0.02s, bounds: [])
+Symbolic test result: 5 passed; 0 failed; time: 0.49s
+Running 5 tests for test/halmos/HalmosIsValidSignature.t.sol:HalmosIsValidSignature
+[PASS] check_isValidSignature_forbids_bootstrap(bytes32) (paths: 2, time: 0.02s, bounds: [])
+[PASS] check_isValidSignature_no_counter_bump(bytes32) (paths: 2, time: 0.04s, bounds: [])
+[PASS] check_isValidSignature_nonbypass_slot1(bytes32) (paths: 3, time: 0.03s, bounds: [])
+[PASS] check_legacy_isValidSignature_agrees_with_bytes32_entry() (paths: 3, time: 0.05s, bounds: [])
+[PASS] check_legacy_isValidSignature_forbids_bootstrap() (paths: 2, time: 0.02s, bounds: [])
+Symbolic test result: 5 passed; 0 failed; time: 0.20s
+Running 5 tests for test/halmos/HalmosMultiOwnable.t.sol:HalmosMultiOwnable
+[PASS] check_addOwnerBytes_pointwise_equals_lean_model(uint256) (paths: 7, time: 0.37s, bounds: [])
+[PASS] check_initialize_fresh_pointwise() (paths: 10, time: 0.61s, bounds: [])
+[PASS] check_initialize_one_shot(uint256,uint256) (paths: 25, time: 0.44s, bounds: [])
+[PASS] check_owner_mutators_reject_non_entrypoint(address) (paths: 2, time: 0.02s, bounds: [])
+[PASS] check_removed_selector_does_not_dispatch(address,uint256,uint256) (paths: 6, time: 0.20s, bounds: [])
+Symbolic test result: 5 passed; 0 failed; time: 1.69s
+Running 8 tests for test/halmos/HalmosValidateUserOp.t.sol:HalmosValidateUserOp
+[PASS] check_bootstrap_bumps_cap_at_validation() (paths: 3, time: 0.04s, bounds: [])
+[PASS] check_nonbypass_bootstrap() (paths: 3, time: 0.03s, bounds: [])
+[PASS] check_nonbypass_slot() (paths: 3, time: 0.03s, bounds: [])
+[PASS] check_rejects_non_entrypoint_caller(address) (paths: 2, time: 0.01s, bounds: [])
+[PASS] check_rejects_nonzero_tail_pad(uint256) (paths: 3, time: 0.14s, bounds: [])
+[PASS] check_rejects_wrong_selector_for_bootstrap() (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_rejects_wrong_selector_for_slot() (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_slot_bumps_cap_at_validation() (paths: 3, time: 0.04s, bounds: [])
+Symbolic test result: 8 passed; 0 failed; time: 0.38s
+Running 4 tests for test/halmos/HalmosValidateUserOpEquiv.t.sol:HalmosValidateUserOpEquiv
+[PASS] check_validateUserOp_equiv_wrong_sig_lengths(uint256,uint256) (paths: 14, time: 3.15s, bounds: [])
+[PASS] check_validateUserOp_pointwise_equals_lean_model(uint256,uint256,bool,bool,uint256) (paths: 1787, time: 397.58s, bounds: [])
+[PASS] check_validateUserOp_pointwise_installed_indices(uint256,uint256,bool,bool,uint256) (paths: 890, time: 191.30s, bounds: [])
+[PASS] check_validateUserOp_reverting_verifier_is_false_interp(uint256,uint256) (paths: 82, time: 6.21s, bounds: [])
+Symbolic test result: 4 passed; 0 failed; time: 598.72s
+Running 3 tests for test/halmos/HalmosVerifier.t.sol:HalmosVerifier
+[PASS] check_verify_rejects_non_nmasked_pkRoot(bytes32,bytes32,bytes32) (paths: 1, time: 0.01s, bounds: [])
+[PASS] check_verify_rejects_non_nmasked_pkSeed(bytes32,bytes32,bytes32) (paths: 1, time: 0.00s, bounds: [])
+[PASS] check_verify_reverts_on_wrong_length(uint256,bytes32,bytes32,bytes32) (paths: 6, time: 0.02s, bounds: [])
+Symbolic test result: 3 passed; 0 failed; time: 0.06s
+    identity OK [default]: all 8 harnesses and 43 exact Contract::check_* PASS records matched the pin
+==> PASS: 43 bytecode rules verified [profile=default]
+    (A3.1 verifier gates / A3.2 validate equiv / A3.2-exec execute equiv / A3.3 factory iff / A3.4 owner table / EIP-1271 isValidSignature G8)
+==> [2/2] Halmos symbolic execution of the deployed bytecode [profile=deploy]
+warning[missing-zero-check]: address parameter is used in a state write or value transfer without a zero-address check
+   ╭▸ src/PQSmartWalletFactory.sol:58:17
+   │
+58 │     constructor(address impl, ISPHINCSVerifier c10) {
+   │                 ━━━━━━━━━━━━
+   │
+   ╰ help: https://getfoundry.sh/forge/linting/missing-zero-check
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/verifiers/SPHINCsC10Asm.sol:170:48
+    │
+170 │                 if iszero(eq(digitSum, 205)) { revert(0, 0) }
+    │                                                ━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQSmartWalletFactory.sol:120:9
+    │
+120 │         emit AccountCreated(deployed, masterPkSeed, masterPkRoot, chainId);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[unsafe-typecast]: typecast can truncate values
+   ╭▸ src/PQSmartWalletFactory.sol:83:59
+   │
+83 │         if (chainId != block.chainid) revert WrongChainId(uint64(block.chainid), chainId);
+   │                                                           ━━━━━━━━━━━━━━━━━━━━━
+   │
+   ├ note: consider disabling this lint if you're certain the cast is safe
+   │       
+   │       // casting to 'uint64' is safe because [explain why]
+   │       // forge-lint: disable-next-line(unsafe-typecast)
+   │       
+   │       
+   ╰ help: https://getfoundry.sh/forge/linting/unsafe-typecast
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:238:9
+    │
+238 │         emit AddOwner(index, owner);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQMultiOwnable.sol:162:17
+    │
+162 │                 revert InvalidOwnerBytesLength(owners[i]);
+    │                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQMultiOwnable.sol:223:34
+    │
+223 │         if (isOwnerBytes(owner)) revert AlreadyOwner(owner);
+    │                                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQMultiOwnable.sol:233:13
+    │
+233 │             revert InvalidNMaskLayout(owner);
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:184:9
+    │
+184 │         emit BootstrapUsed(next);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:193:9
+    │
+193 │         emit SlotUsed(ownerIndex, next);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[reentrancy-events]: event emitted after an external call; reentrancy can reorder or fabricate logs that off-chain consumers rely on
+    ╭▸ src/PQMultiOwnable.sol:216:13
+    │
+216 │             emit OffchainSigCountUpdated(ownerIndex, prev, newCount);
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/reentrancy-events
+warning[missing-zero-check]: address parameter is used in a state write or value transfer without a zero-address check
+    ╭▸ src/PQSmartWallet.sol:241:9
+    │
+241 │         address target,
+    │         ━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/missing-zero-check
+warning[calls-loop]: external call inside a loop
+    ╭▸ src/PQSmartWallet.sol:282:43
+    │
+282 │             (bool ok, bytes memory ret) = targets[i].call{value: values[i]}(datas[i]);
+    │                                           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/calls-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQSmartWallet.sol:281:46
+    │
+281 │             if (targets[i] == address(this)) revert SelfCallForbidden();
+    │                                              ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[require-revert-in-loop]: `require` or `revert` inside a loop
+    ╭▸ src/PQSmartWallet.sol:285:21
+    │
+285 │                     revert(add(ret, 0x20), mload(ret))
+    │                     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/require-revert-in-loop
+warning[divide-before-multiply]: division before multiplication may lose precision
+    ╭▸ src/PQSmartWallet.sol:401:31
+    │
+401 │         uint256 paddedInner = ((C10_SIG_LEN + 31) / 32) * 32;
+    │                               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/divide-before-multiply
+warning[divide-before-multiply]: division before multiplication may lose precision
+    ╭▸ src/PQSmartWallet.sol:636:31
+    │
+636 │         uint256 paddedInner = ((C10_SIG_LEN + 31) / 32) * 32;
+    │                               ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://getfoundry.sh/forge/linting/divide-before-multiply
+warning[environment-read-across-mutation]: `block.chainid` may be reused across `vm.chainId`
+    ╭▸ test/SphincsDigestFieldBinding.t.sol:130:25
+    │
+130 │         uint256 saved = block.chainid;
+    │                         ━━━━━━━━━━━━━
+131 │         vm.chainId(saved == 8453 ? 1 : 8453);
+    │         ──────────────────────────────────── `vm.chainId` changes this environment here
+    │
+    ├ help: capture it with `vm.getChainId()` instead
+    ╰ help: https://getfoundry.sh/forge/linting/environment-read-across-mutation
+Running 6 tests for test/halmos/HalmosExecute.t.sol:HalmosExecute
+[PASS] check_executeBatch_rejects_any_self_target(uint256) (paths: 3, time: 0.12s, bounds: [])
+[PASS] check_execute_no_replay() (paths: 1, time: 0.04s, bounds: [])
+[PASS] check_execute_rejects_non_entrypoint_caller(address) (paths: 2, time: 0.02s, bounds: [])
+[PASS] check_execute_rejects_owner_index_mismatch(uint256) (paths: 1, time: 0.04s, bounds: [])
+[PASS] check_execute_rejects_self_target() (paths: 1, time: 0.03s, bounds: [])
+[PASS] check_execute_without_validate_reverts() (paths: 1, time: 0.01s, bounds: [])
+Symbolic test result: 6 passed; 0 failed; time: 0.33s
+Running 7 tests for test/halmos/HalmosExecuteEquiv.t.sol:HalmosExecuteEquiv
+[PASS] check_executeBatch_pointwise_equals_lean_model(uint256,uint256,uint256) (paths: 83, time: 9.68s, bounds: [])
+[PASS] check_execute_inner_revert_is_atomic(uint256) (paths: 12, time: 0.26s, bounds: [])
+[PASS] check_execute_no_credit_reverts_for_all_indices(uint256) (paths: 1, time: 0.01s, bounds: [])
+[PASS] check_execute_pointwise_equals_lean_model(uint256,uint256,uint256) (paths: 57, time: 6.28s, bounds: [])
+[PASS] check_two_stamps_fund_exactly_two_executes() (paths: 5, time: 0.18s, bounds: [])
+[PASS] check_validate_bootstrap_success_stamps_no_credit(uint256) (paths: 1, time: 0.03s, bounds: [])
+[PASS] check_validate_rejects_removed_selector(uint256) (paths: 1, time: 0.02s, bounds: [])
+Symbolic test result: 7 passed; 0 failed; time: 16.53s
+Running 5 tests for test/halmos/HalmosFactory.t.sol:HalmosFactory
+[PASS] check_createAccount_already_deployed_returns_existing(uint64,bytes32,bytes32,bool) (paths: 4, time: 0.10s, bounds: [])
+[PASS] check_createAccount_iff_lean_precondition(uint64,bool) (paths: 10, time: 0.26s, bounds: [])
+[PASS] check_createAccount_rejects_duplicate_slot0() (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_createAccount_rejects_non_nmasked_master(bytes32,bytes32) (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_createAccount_rejects_non_nmasked_slot0() (paths: 1, time: 0.02s, bounds: [])
+Symbolic test result: 5 passed; 0 failed; time: 0.45s
+Running 5 tests for test/halmos/HalmosIsValidSignature.t.sol:HalmosIsValidSignature
+[PASS] check_isValidSignature_forbids_bootstrap(bytes32) (paths: 2, time: 0.02s, bounds: [])
+[PASS] check_isValidSignature_no_counter_bump(bytes32) (paths: 2, time: 0.03s, bounds: [])
+[PASS] check_isValidSignature_nonbypass_slot1(bytes32) (paths: 3, time: 0.03s, bounds: [])
+[PASS] check_legacy_isValidSignature_agrees_with_bytes32_entry() (paths: 3, time: 0.05s, bounds: [])
+[PASS] check_legacy_isValidSignature_forbids_bootstrap() (paths: 2, time: 0.02s, bounds: [])
+Symbolic test result: 5 passed; 0 failed; time: 0.18s
+Running 5 tests for test/halmos/HalmosMultiOwnable.t.sol:HalmosMultiOwnable
+[PASS] check_addOwnerBytes_pointwise_equals_lean_model(uint256) (paths: 7, time: 0.54s, bounds: [])
+[PASS] check_initialize_fresh_pointwise() (paths: 10, time: 0.43s, bounds: [])
+[PASS] check_initialize_one_shot(uint256,uint256) (paths: 25, time: 0.42s, bounds: [])
+[PASS] check_owner_mutators_reject_non_entrypoint(address) (paths: 2, time: 0.02s, bounds: [])
+[PASS] check_removed_selector_does_not_dispatch(address,uint256,uint256) (paths: 6, time: 0.18s, bounds: [])
+Symbolic test result: 5 passed; 0 failed; time: 1.64s
+Running 8 tests for test/halmos/HalmosValidateUserOp.t.sol:HalmosValidateUserOp
+[PASS] check_bootstrap_bumps_cap_at_validation() (paths: 3, time: 0.04s, bounds: [])
+[PASS] check_nonbypass_bootstrap() (paths: 3, time: 0.03s, bounds: [])
+[PASS] check_nonbypass_slot() (paths: 3, time: 0.19s, bounds: [])
+[PASS] check_rejects_non_entrypoint_caller(address) (paths: 2, time: 0.01s, bounds: [])
+[PASS] check_rejects_nonzero_tail_pad(uint256) (paths: 3, time: 0.04s, bounds: [])
+[PASS] check_rejects_wrong_selector_for_bootstrap() (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_rejects_wrong_selector_for_slot() (paths: 1, time: 0.02s, bounds: [])
+[PASS] check_slot_bumps_cap_at_validation() (paths: 3, time: 0.04s, bounds: [])
+Symbolic test result: 8 passed; 0 failed; time: 0.42s
+Running 4 tests for test/halmos/HalmosValidateUserOpEquiv.t.sol:HalmosValidateUserOpEquiv
+[PASS] check_validateUserOp_equiv_wrong_sig_lengths(uint256,uint256) (paths: 14, time: 3.10s, bounds: [])
+[PASS] check_validateUserOp_pointwise_equals_lean_model(uint256,uint256,bool,bool,uint256) (paths: 1772, time: 385.73s, bounds: [])
+[PASS] check_validateUserOp_pointwise_installed_indices(uint256,uint256,bool,bool,uint256) (paths: 891, time: 189.87s, bounds: [])
+[PASS] check_validateUserOp_reverting_verifier_is_false_interp(uint256,uint256) (paths: 82, time: 6.13s, bounds: [])
+Symbolic test result: 4 passed; 0 failed; time: 585.10s
+Running 3 tests for test/halmos/HalmosVerifier.t.sol:HalmosVerifier
+[PASS] check_verify_rejects_non_nmasked_pkRoot(bytes32,bytes32,bytes32) (paths: 1, time: 0.01s, bounds: [])
+[PASS] check_verify_rejects_non_nmasked_pkSeed(bytes32,bytes32,bytes32) (paths: 1, time: 0.00s, bounds: [])
+[PASS] check_verify_reverts_on_wrong_length(uint256,bytes32,bytes32,bytes32) (paths: 6, time: 0.02s, bounds: [])
+Symbolic test result: 3 passed; 0 failed; time: 0.06s
+    identity OK [deploy]: all 8 harnesses and 43 exact Contract::check_* PASS records matched the pin
+==> PASS: 43 bytecode rules verified [profile=deploy]
+    (A3.1 verifier gates / A3.2 validate equiv / A3.2-exec execute equiv / A3.3 factory iff / A3.4 owner table / EIP-1271 isValidSignature G8)
+make: Leaving directory '/home/markus/Documents/PQ1/sphincs_rust/contracts/verification'
+real	22m36.982s
+user	23m12.949s
+sys	0m17.459s
+rc=0

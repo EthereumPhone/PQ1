@@ -1,6 +1,32 @@
 # Pinned bytecode codehashes
 
-> ## ✅ Build-reproducibility repaired — deployed bytecode byte-bound (2026-06-13)
+> ## UPDATE 2026-10-20 — audit-freeze re-pin; nothing below is deployed yet
+>
+> The contracts were changed for the Trail of Bits audit freeze: owner removal
+> deleted (#131, #213), legacy EIP-1271 `isValidSignature(bytes,bytes)` added
+> (#995), Solady's raw-hash 1271 workflows dropped (#691), ERC-721/1155
+> receiver hooks and ERC-165 added. The build also moved to
+> `bytecode_hash = "none"`, so the **verifier pin moved too** although its
+> source and instruction bytes are unchanged (only the CBOR metadata tail
+> changed). From now on, comments, source paths and stray lib directories no
+> longer move any pin.
+>
+> **What this does to the 2026-06-13 banner below:** the pins are now the
+> freeze-set values in § "Pinned values", and the Base Mainnet contracts
+> (`0xdDE4…` / `0x31e49D24…` / `0xe8CE78CD…`) are a **superseded** deployment
+> that no pin, proof or firmware constant refers to any more. The freeze set is
+> **not deployed on any chain yet**, so every byte-binding statement is
+> "expected, deploy pending": the CREATE2 replay in
+> `DeployedBytecodeReproCheck.t.sol` (deploy profile, chain 8453) now asserts
+> the *predicted* addresses and codehashes, and ties them to the firmware's
+> CREATE2 constants. It becomes a statement about live code only once the
+> owner deploys the set and the on-chain codehashes are compared.
+>
+> Discharge on the new bytecode: Halmos 43/43 rules on both profiles
+> (`halmos/sessions/halmos-session-2026-10-20.txt`) and Kontrol 31/31 proofs
+> (`kontrol/sessions/kontrol-session-2026-10-20.txt`).
+
+> ## ✅ Build-reproducibility repaired — deployed bytecode byte-bound (2026-06-13; historical since 2026-10-20, see above)
 >
 > `contracts/smart-wallet/foundry.lock` had pinned account-abstraction v0.7.0
 > (`7af70c8`), which **did not compile** — the code imports
@@ -48,7 +74,56 @@ by `contracts/smart-wallet/test/PinnedCodehashes.t.sol`, which
 asserts that the deployed `address(<contract>).codehash` equals the
 pinned value below. Any drift fails CI.
 
-## Pinned values (re-pinned 2026-06-10)
+## Pinned values (re-pinned 2026-10-20, audit freeze)
+
+**default profile (`runs=200`)** — the build the test suite and the symbolic
+suite run against by default:
+
+```
+PQSmartWallet         0xcebbd91dc5a2cd5869eacc84e2bd82dbd8702c504788017df78a2e1960119a0b
+PQSmartWalletFactory  0x318afcbf264cd2f0fa0cc25efa1c26d9ad1799f916a2182ec9a320d4a94e8b46
+SPHINCsC10Asm         0x8fa670d53df0fd63bc64505463f268256ffbb51e57f62d8a5a41f5bcec5cf2eb
+PQMultiOwnable        (embedded in PQSmartWallet; no independent deploy)
+```
+
+**deploy profile (`runs=999999`)** — the production build:
+
+```
+PQSmartWallet         0x1bbd83ba0479a352197328f581b3ee473643996b04e07355ae8e3ebc49d91bea
+PQSmartWalletFactory  0x44c3b4f70f5dc5406275cce87be814eda909ab0acab4aacdb9dc3ef24f0f7b21
+SPHINCsC10Asm         0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989
+PQMultiOwnable        (embedded in PQSmartWallet; no independent deploy)
+```
+
+These are the harness-instance codehashes (test EntryPoint / mock-verifier
+immutables). The production instances, deployed through the Arachnid CREATE2
+deployer with salt 0, are predicted and asserted by
+`DeployedBytecodeReproCheck.t.sol` (deploy profile, chain 8453):
+
+| Contract | Predicted address | Predicted runtime codehash |
+|---|---|---|
+| `SPHINCsC10Asm` | `0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4` | `0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989` (no immutables, so equal to the deploy pin) |
+| `PQSmartWallet` | `0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011` | `0x4be66f1681776863f405c0bf6d5f412ffe7248873db7aa3ad6b38664f258b2b6` (chain 8453; the EIP-712 cache embeds the chain id) |
+| `PQSmartWalletFactory` | `0xE3dbA404dCeC30093DE26764965a51689C1607BD` | `0x711dff4be17b368d25e5a24c35d12102f18209cd485392863f009e8a72712d5b` |
+
+The factory address and the proxy init-code hash
+(`0x17ca674095afe9dc82aa6f396ee01bd837449a127b6be59a0d947329f29b2570`) are the
+firmware constants `PQ_SMART_WALLET_FACTORY` / `PROXY_INIT_CODE_HASH`
+(`proto/src/lib.rs`, mirrored into
+`contracts/smart-wallet/script/generated/PqsignerDeployment.sol`). CI runs the
+deploy-profile pin tests, so a source or toolchain change that would move a
+user's wallet address fails CI.
+
+### History
+
+| Date | default wallet / factory / verifier | deploy wallet / factory / verifier | Why |
+|---|---|---|---|
+| 2026-10-20 | `0xcebbd9…9a0b` / `0x318afc…8b46` / `0x8fa670…f2eb` | `0x1bbd83…1bea` / `0x44c3b4…7b21` / `0xfd55ec…2989` | audit freeze (above) |
+| 2026-06-10 | `0x43c654…a06a` / `0xfa2922…7c3c` / `0xf1ef4c…fef5` | `0x551c4e…4c22` / `0x5feb79…a4b9` / `0xeb1e3f…2cc5` | bootstrap cap counted in validation; deployed to Base Mainnet 2026-06-12, now superseded |
+
+The 2026-06-10 notes below are kept for history.
+
+## Pinned values as of 2026-06-10 (historical)
 
 > **Re-pinned 2026-06-10** after the bootstrap few-time-cap fix:
 > `PQSmartWallet._validateSignature` now bumps `bootstrapUses` in the
@@ -191,36 +266,55 @@ optimizer = true
 optimizer_runs = 200
 via_ir = true
 evm_version = "prague"
+bytecode_hash = "none"      # since 2026-10-20
 ```
 
-The `[profile.deploy]` profile uses `optimizer_runs = 999999` which
-produces different bytecode; those production codehashes are pinned in
-the **deploy profile** block above (captured + certified 2026-06-10) and
-covered by the same symbolic discharge via the immutable-window lemma.
-`make verify-bytecode` certifies BOTH profiles; set
-`PQ1_HALMOS_BOTH_PROFILES=1` to additionally re-run the symbolic suite
-under the deploy profile (the control flow is profile-independent).
+The `[profile.deploy]` profile uses `optimizer_runs = 999999`, which
+produces different bytecode; those production codehashes are the
+**deploy profile** block above. `make verify-bytecode` certifies both
+profiles and runs the full symbolic suite on both (UPDATE 2026-10-20: the
+older `PQ1_HALMOS_BOTH_PROFILES=1` switch this paragraph used to describe no
+longer exists; both profiles always run). Build with Foundry v1.8.3, the CI
+pin, and the exact `foundry.lock` lib set.
 
 ## Re-pinning procedure
 
-When a legitimate source change requires the bytecode to drift:
+UPDATE 2026-10-20: rewritten. The old procedure named the wrong file and
+skipped the deploy profile and the firmware constants.
 
-1. Run `forge test --match-test test_codehash_pinned_or_print -vv` to
-   capture the new codehash(es) from the log output.
-2. Update the constants in `test/PinnedCodehashes.t.sol`.
+When a legitimate source change moves the bytecode:
+
+1. Capture both profiles:
+   `forge test --match-test test_codehash_pinned_or_print -vv` and the same
+   under `FOUNDRY_PROFILE=deploy`. Put the values in
+   `contracts/smart-wallet/test/PinnedCodehashSelector.sol` (both pin sets
+   live there) and update the history comment in `PinnedCodehashes.t.sol`.
+2. If the deploy profile moved, the production addresses moved:
+   - run `FOUNDRY_PROFILE=deploy forge script script/PrintProductionAddresses.s.sol`;
+   - put the new factory address and proxy init-code hash into
+     `proto/src/lib.rs` and its pins (`proto/tests/negative_frozen_constants.rs`,
+     `secure/src/nsc_small_cmds_pure_tests.rs`);
+   - regenerate `script/generated/PqsignerDeployment.sol` with
+     `cargo run -p pqsigner-xtask -- gen-solidity-constants`;
+   - update the expected addresses and codehashes in
+     `test/DeployedBytecodeReproCheck.t.sol`;
+   - follow the receipt cascades an edit to `proto/` triggers (ERC-7730
+     curation manifest, extraction freshness).
+   A deploy-profile move changes every user's wallet address. Before launch
+   that is a re-flash; after launch it is a migration.
 3. Update this file.
-4. For each changed codehash, re-run the corresponding discharge
-   artifact (all via `make -C contracts/verification verify-bytecode`,
-   which runs the whole suite on both profiles):
-   - PQSmartWallet     → `HalmosValidateUserOpEquiv` + `HalmosValidateUserOp`
-                         (validate) and `HalmosExecuteEquiv` + `HalmosExecute`
-                         (execute); `HalmosMultiOwnable` (the embedded
-                         owner-table, A3.4)
-   - PQSmartWalletFactory → `HalmosFactory`
-   - SPHINCsC10Asm     → `HalmosVerifier` (input gates) + `cross_validation/`
-                         Lean ↔ Rust ↔ Solidity differential +
-                         `SPHINCsC10AsmAdversarial`
-5. Record the new discharge artifact ID (session hash / rule-set hash)
-   in `AXIOM_STATUS.json`.
-6. Re-run `lint_axioms.sh` and `make verify-audit` to confirm no
-   regression.
+4. Re-run the discharges on the new bytecode:
+   - `make -C contracts/verification verify-bytecode` (Halmos, both
+     profiles; archive the log under `halmos/sessions/`);
+   - `make -C contracts/verification verify-kontrol` (archive under
+     `kontrol/sessions/`).
+   Per contract:
+   - PQSmartWallet → `HalmosValidateUserOpEquiv`, `HalmosValidateUserOp`,
+     `HalmosExecuteEquiv`, `HalmosExecute`, `HalmosMultiOwnable`,
+     `HalmosIsValidSignature`, and the wallet Kontrol proofs;
+   - PQSmartWalletFactory → `HalmosFactory`, `KontrolFactory`;
+   - SPHINCsC10Asm → `HalmosVerifier`, the `cross_validation/`
+     Lean ↔ Rust ↔ Solidity differential, `SPHINCsC10AsmAdversarial`.
+5. Record the new codehashes and receipts in `AXIOM_STATUS.json`, then
+   re-pin the ledger digests (`scripts/check_ledger_consistency.py`).
+6. Run `make -C contracts/verification verify-audit verify-ledger-consistency`.

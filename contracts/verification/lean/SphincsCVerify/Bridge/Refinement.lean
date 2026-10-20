@@ -266,7 +266,9 @@ axiom solidityWallet_compiles_correctly :
     Discharge: Halmos `test/halmos/HalmosFactory.t.sol` (5 rules —
     `createAccount ⟺ createAccountPrecondition` iff + postconditions,
     already-deployed early-return, 3 install-gate rejects) against the
-    pinned factory codehash `0xfa2922…7c3c`. The prior Certora rule-set
+    pinned factory codehash (`0x318afc…8b46` default profile /
+    `0x44c3b4…7b21` deploy profile since the 2026-10-20 audit freeze; see
+    `PINNED_CODEHASHES.md`). The prior Certora rule-set
     `certora/PQSmartWalletFactory.spec` remains an alternative path. -/
 axiom solidityFactory_compiles_correctly :
     ∀ (masterPkSeed masterPkRoot slot0PkSeed slot0PkRoot : ByteVec 32)
@@ -285,13 +287,15 @@ axiom solidityFactory_compiles_correctly :
     Halmos-verified mutation rules (Claim 2), this gives a complete
     bytecode-level account of owner-set integrity.
 
-    Discharge: Halmos `test/halmos/HalmosMultiOwnable.t.sol` (7 rules —
-    add/remove/initialize pointwise vs the Lean `Storage` model +
-    `ownerAtIndex` read parity + bootstrap-unremovable + EntryPoint-only
-    gate) against the pinned `PQMultiOwnable`-embedded codehash
-    `0x43c654…a06a`. This REPLACED the prior Certora artifact
-    `certora/PQMultiOwnable.spec`, which had been pinned to a stale
-    codehash and never re-run. -/
+    Discharge: Halmos `test/halmos/HalmosMultiOwnable.t.sol` (5 rules —
+    `addOwnerBytes` / `initialize` pointwise vs the Lean `Storage` model,
+    one-shot `initialize`, EntryPoint-only gate, and the deleted removal
+    selector dispatching nothing) against the pinned
+    `PQMultiOwnable`-embedded wallet codehash (`0xcebbd9…9a0b` default /
+    `0x1bbd83…1bea` deploy since the 2026-10-20 audit freeze, which deleted
+    owner removal; before it, 7 rules incl. removal on `0x43c654…a06a`).
+    This REPLACED the prior Certora artifact `certora/PQMultiOwnable.spec`,
+    which had been pinned to a stale codehash and never re-run. -/
 axiom solidityMultiOwnable_compiles_correctly :
     ∀ (s : Storage) (i : Nat),
       DeployedBytecode.PQMultiOwnable_ownerAtIndex s i = s.ownerAtIndex i

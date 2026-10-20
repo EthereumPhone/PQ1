@@ -64,17 +64,33 @@ EXPECTED_INVARIANT_TESTS = frozenset({
         "test/PQSmartWalletInvariants.t.sol:PQSmartWalletInvariantsTest::"
         "invariant_nextOwnerIndex_at_least_2()"
     ),
+    (
+        "test/PQSmartWalletInvariants.t.sol:PQSmartWalletInvariantsTest::"
+        "invariant_owner_set_append_only()"
+    ),
 })
+# RE-PINNED 2026-10-20 (Trail of Bits audit freeze). The previous pins (120
+# tests / 6 invariants, invariant mode 6 tests) were already stale on master:
+# before the freeze the suite emitted 130 rows and the invariant contract
+# carried a unit test. The freeze adds LegacyERC1271 (11) and TokenReceiver
+# (8), replaces the cross-slot-removal test with two tests, and adds
+# invariant_owner_set_append_only plus test_handler_reinstall_path_is_live.
+# Counts and manifests were taken from a Forge run that reports one row per
+# invariant (forge 1.2.3, `~/.foundry/bin`), with every row inspected:
+# Success apart from the two allowed skips, invariants at 256 x 500 with 0
+# reverts. Known gap, tracked separately: forge 1.2.3 omits
+# failed_corpus_replays, which this checker requires, and Foundry >= 1.8 (the
+# CI pin) runs a contract's invariants as one campaign and emits a single row.
 EXPECTED_MODE_COUNTS = {
-    "full": {"tests": 120, "fuzz": 2, "invariants": 6, "skips": 2},
-    "invariants": {"tests": 6, "fuzz": 0, "invariants": 6, "skips": 0},
+    "full": {"tests": 157, "fuzz": 2, "invariants": 7, "skips": 2},
+    "invariants": {"tests": 9, "fuzz": 0, "invariants": 7, "skips": 0},
 }
 # Checker-owned pin over every emitted [suite::test, status, kind] row:
 # compact JSON per row, bytewise sorted, each terminated by "\n", then SHA-256.
 # Update only after inspecting an intentional test identity/status/kind change.
 EXPECTED_RESULT_MANIFEST_SHA256 = {
-    "full": "d84c2cd6193b5b5f516443d15bb3b9ee413357c0549895da25aeb6b497d63777",
-    "invariants": "95b2bbf81ca8103337859b3ccf590672ea3d10bc7b41c5fedafd2024921baf14",
+    "full": "7d6416b7f90ea0b7838be4b232c8019dc50a48fc8072d40a98b9f43a416946b8",
+    "invariants": "2cd3436542c683d2505fc2fa29bd6cafcb007fdbb581cbfb82be6b76d5c96f59",
 }
 
 
@@ -254,7 +270,12 @@ def self_test() -> int:
             "reason": None,
             "kind": {"Unit": {"gas": 1}},
         }
-        for index in range(110)
+        for index in range(
+            EXPECTED_MODE_COUNTS["full"]["tests"]
+            - len(EXPECTED_FUZZ_TESTS)
+            - len(EXPECTED_INVARIANT_TESTS)
+            - len(ALLOWED_SKIPS)
+        )
     }
     clean: dict[str, Any] = {
         "test/Example.t.sol:ExampleTest": {"test_results": full_results}
@@ -456,6 +477,19 @@ def self_test() -> int:
         )["test_results"][test_name] = json.loads(json.dumps(
             clean[suite_name]["test_results"][test_name]
         ))
+    # The invariant contract also carries plain unit tests (handler liveness
+    # checks); the invariant-mode run counts them, so the fixture does too.
+    invariant_suite = sorted(EXPECTED_INVARIANT_TESTS)[0].split("::", 1)[0]
+    for index in range(
+        EXPECTED_MODE_COUNTS["invariants"]["tests"] - len(EXPECTED_INVARIANT_TESTS)
+    ):
+        invariant_clean[invariant_suite]["test_results"][
+            f"test_handler_unit_{index}()"
+        ] = {
+            "status": "Success",
+            "reason": None,
+            "kind": {"Unit": {"gas": 1}},
+        }
     invariant_failures, _ = validate_results(
         invariant_clean,
         mode="invariants",

@@ -63,9 +63,9 @@ non-bypass claim:
   * `execute` — `wallet.executeWithOffchainCount(...)`.
   * `executeBatch` — `wallet.executeBatchWithOffchainCount(...)`.
 
-`addOwnerBytes` and `removeOwnerAtIndex` only mutate storage (no
-external calls), so they are outside the call-graph scope; their
-non-bypass facts are covered by Claim 2 (`Wallet.Invariants`). -/
+`addOwnerBytes` only mutates storage (no external calls), so it is
+outside the call-graph scope; its non-bypass facts are covered by Claim 2
+(`Wallet.Invariants`). (Owner removal was deleted before launch.) -/
 inductive Step where
   | validate
       (op : UserOperation) (entryPoint : ByteVec 20) (chainId : Nat)
@@ -93,9 +93,9 @@ offchain-count execute selector, we stamp ONE per-index credit
 (`credits[ownerIndex] += 1`) to mirror `_stampValidatedCredit`'s
 `tstore(slot, add(tload(slot), 1))` in `_validateSignature`. The
 bootstrap path (`ownerIndex = 0`) stamps no credit (its few-time cap is
-bumped revert-proof in validation), and `removeOwnerAtIndex` is
-authorised by validation alone — both leave `credits` untouched, so
-neither enables the execute guard.
+bumped revert-proof in validation) and leaves `credits` untouched, so it
+does not enable the execute guard. A successful slot validate always
+carries one of the two execute selectors (`capOk`), so it always stamps.
 
 The if-then-else structure (rather than nested `match`) mirrors the
 proof-friendly form used by `Execute.executeWithOffchainCount`. -/
@@ -107,12 +107,12 @@ def stampCredit (credits : Nat → Nat) (ownerIndex : Nat) : Nat → Nat :=
 
 /-- Helper: post-validate state mutation, factored out so the proof can
     case on individual sub-conditions. Mirrors the deployed stamp rules:
-    bootstrap stamps nothing; `removeOwnerAtIndex` stamps nothing; the
-    offchain-count execute selectors stamp `credits[d.ownerIndex] += 1`. -/
+    bootstrap stamps nothing; a slot validate (necessarily an
+    offchain-count execute selector) stamps `credits[d.ownerIndex] += 1`.
+    `op` is kept as a parameter so the call sites are unchanged. -/
 def applyValidateSuccess
-    (σ : ExecState) (s' : Storage) (d : DecodedSig) (op : UserOperation) : ExecState :=
+    (σ : ExecState) (s' : Storage) (d : DecodedSig) (_op : UserOperation) : ExecState :=
   if d.ownerIndex = 0 then { σ with storage := s' }
-  else if op.selectorOf = Selector.removeOwnerAtIndex then { σ with storage := s' }
   else { σ with storage := s', credits := stampCredit σ.credits d.ownerIndex }
 
 def applyStep (σ : ExecState) : Step → Option ExecState
@@ -147,9 +147,6 @@ private theorem applyValidateSuccess_preserves_callstack
   by_cases h : d.ownerIndex = 0
   · rw [if_pos h]
   · rw [if_neg h]
-    by_cases hsel : op.selectorOf = Selector.removeOwnerAtIndex
-    · rw [if_pos hsel]
-    · rw [if_neg hsel]
 
 /-- A `validate` step never appends to the callStack. -/
 theorem validate_step_preserves_callstack
@@ -252,7 +249,7 @@ theorem applyStep_credit_lift_only_by_validate_success
             rw [hdec] at h
             injection h with h
             -- h : applyValidateSuccess σ (validateSignature ...).2 d op = σ'
-            -- Decompose applyValidateSuccess into the three sub-cases.
+            -- Decompose applyValidateSuccess into its two sub-cases.
             by_cases hd0 : d.ownerIndex = 0
             · -- Bootstrap branch: credits unchanged.
               have hv : σ'.credits = σ.credits := by
@@ -262,38 +259,28 @@ theorem applyStep_credit_lift_only_by_validate_success
               rw [hv] at hnow
               obtain ⟨i, hi⟩ := hnow
               exact absurd (hwas i) hi
-            · by_cases hsel : op.selectorOf = Selector.removeOwnerAtIndex
-              · -- removeOwnerAtIndex: authorised by validation alone,
-                -- no credit stamped — credits unchanged.
-                have hv : σ'.credits = σ.credits := by
-                  rw [← h]
-                  unfold applyValidateSuccess
-                  rw [if_neg hd0, if_pos hsel]
-                rw [hv] at hnow
-                obtain ⟨i, hi⟩ := hnow
-                exact absurd (hwas i) hi
-              · -- Stamping branch: storage becomes the bumped value.
-                have hst : σ'.storage = (validateSignature σ.storage op ep cid vfn).2 := by
-                  rw [← h]
-                  unfold applyValidateSuccess
-                  rw [if_neg hd0, if_neg hsel]
-                -- Use validateSignature_success_iff to extract
-                -- validateSignatureOk + bump-eq.
-                have hsucc_pair :
-                    validateSignature σ.storage op ep cid vfn
-                      = (Result.success,
-                         (validateSignature σ.storage op ep cid vfn).2) := hpair
-                rw [validateSignature_success_iff] at hsucc_pair
-                obtain ⟨d', owner, hOk, hBumpEq⟩ := hsucc_pair
-                -- d' = d (both come from decoding the same op.signature).
-                have hd_eq : d' = d := by
-                  have h1 : (some d' : Option DecodedSig) = some d := by
-                    rw [← hOk.1, hdec]
-                  exact Option.some.inj h1
-                -- Use d' as the witness, rewriting back to d where needed.
-                refine ⟨op, ep, cid, vfn, d', owner, rfl, hOk, ?_, ?_⟩
-                · rw [hst]; exact hBumpEq
-                · rw [hd_eq]; exact hd0
+            · -- Stamping branch: storage becomes the bumped value.
+              have hst : σ'.storage = (validateSignature σ.storage op ep cid vfn).2 := by
+                rw [← h]
+                unfold applyValidateSuccess
+                rw [if_neg hd0]
+              -- Use validateSignature_success_iff to extract
+              -- validateSignatureOk + bump-eq.
+              have hsucc_pair :
+                  validateSignature σ.storage op ep cid vfn
+                    = (Result.success,
+                       (validateSignature σ.storage op ep cid vfn).2) := hpair
+              rw [validateSignature_success_iff] at hsucc_pair
+              obtain ⟨d', owner, hOk, hBumpEq⟩ := hsucc_pair
+              -- d' = d (both come from decoding the same op.signature).
+              have hd_eq : d' = d := by
+                have h1 : (some d' : Option DecodedSig) = some d := by
+                  rw [← hOk.1, hdec]
+                exact Option.some.inj h1
+              -- Use d' as the witness, rewriting back to d where needed.
+              refine ⟨op, ep, cid, vfn, d', owner, rfl, hOk, ?_, ?_⟩
+              · rw [hst]; exact hBumpEq
+              · rw [hd_eq]; exact hd0
       · rw [if_neg hsucc] at h
         injection h with h
         rw [← h] at hnow

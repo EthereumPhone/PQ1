@@ -1,6 +1,37 @@
 # Deployed-bytecode ↔ pinned-codehash: RESOLVED
 
-**Status:** ✅ **RESOLVED 2026-06-13.** The deployed Base Mainnet **wallet,
+> **UPDATE 2026-10-20 — reopened as "deploy pending".** The audit freeze
+> changed the contracts and set `bytecode_hash = "none"`, so every pin and
+> every production address moved (`PINNED_CODEHASHES.md`). The freeze set is
+> **not deployed on any chain**. `DeployedBytecodeReproCheck.t.sol` (deploy
+> profile, CI) now asserts the *predicted* production result instead of chain
+> state:
+>
+> | Contract | Predicted address (Arachnid, salt 0) | Predicted runtime codehash |
+> |---|---|---|
+> | `SPHINCsC10Asm` | `0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4` | `0xfd55ec70…2989` |
+> | `PQSmartWallet` | `0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011` | `0x4be66f16…b2b6` (chain 8453) |
+> | `PQSmartWalletFactory` | `0xE3dbA404dCeC30093DE26764965a51689C1607BD` | `0x711dff4b…2d5b` |
+>
+> It also asserts that the factory address and the proxy init-code hash equal
+> the firmware constants (`proto/src/lib.rs`, via
+> `script/generated/PqsignerDeployment.sol`), and that `factory.getAddress`
+> equals the address the firmware computes. Status: **expected, deploy
+> pending.** After the owner deploys the set, compare each on-chain
+> `extcodehash` with this table; only then is the byte-binding a statement
+> about live code again. The verifier's instruction bytes are unchanged from
+> the superseded `0xdDE4D290…`; only its metadata tail moved.
+>
+> The rest of this file describes the 2026-06-13 resolution for the
+> superseded 2026-06-12 Base Mainnet set and is kept for history. The
+> `foundry.lock` lesson in §1 still applies. The Basescan note in
+> `deployments/base-mainnet.json` (build without `lib/kontrol-cheatcodes`)
+> does not apply to the freeze set: with `bytecode_hash = "none"`, which lib
+> directories are present no longer reaches the bytecode (checked
+> 2026-10-20 by building with the extra directory and a comment edit; the
+> predicted addresses did not move).
+
+**Status (historical, see the 2026-10-20 update above):** ✅ **RESOLVED 2026-06-13.** The deployed Base Mainnet **wallet,
 factory, and verifier are byte-for-byte reproducible** from this repo's
 pinned source + `foundry.lock`. The earlier "not reproducible / deploy-time
 libs lost" finding was an **artifact of comparing builds at the wrong chain

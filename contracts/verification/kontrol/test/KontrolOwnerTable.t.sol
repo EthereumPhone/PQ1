@@ -11,7 +11,8 @@ import {MockSPHINCSVerifier} from "../../../smart-wallet/test/mocks/MockSPHINCSV
 
 /// @notice **A3.4 (owner-table) — Kontrol/KEVM port.** Proves the PQMultiOwnable
 ///         owner-table mutators + reads pointwise against the Lean
-///         `Storage.{addOwner,removeOwner,tryInitialize,ownerAtIndex}` model,
+///         `Storage.{addOwner,tryInitialize,ownerAtIndex}` model (owner removal
+///         was deleted before launch; Rule 2 proves its selector reaches no code),
 ///         DIRECTLY on the deployed `PQSmartWallet` runtime bytecode (KEVM
 ///         symbolic execution) — an engine independent of Halmos, with no
 ///         hand-written `LeanModel.sol` mirror in the loop. This is the
@@ -28,6 +29,15 @@ import {MockSPHINCSVerifier} from "../../../smart-wallet/test/mocks/MockSPHINCSV
 ///         access-gate rules; counters asserted in the frames.
 contract KontrolOwnerTable is Test {
     address internal constant ENTRY_POINT_ADDR = address(0x4337);
+
+    /// ERC-7201 base of `PQMultiOwnableStorage`; field +1 is the reserved,
+    /// always-zero former `removedOwnersCount`.
+    bytes32 internal constant PQ_SLOT_BASE =
+        0x470749eea5ac4a541d6582e535445f94e7300bac9e0e4e5577fd3336b407d000;
+
+    /// `bytes4(keccak256("removeOwnerAtIndex(uint256,bytes)"))` — the
+    /// selector of the deleted removal function.
+    bytes4 internal constant REMOVED_REMOVE_OWNER_SELECTOR = 0x89625b57;
 
     bytes32 internal constant MASTER_PK_SEED = bytes32(uint256(0xaaaa) << 240);
     bytes32 internal constant MASTER_PK_ROOT = bytes32(uint256(0xbbbb) << 240);
@@ -50,6 +60,11 @@ contract KontrolOwnerTable is Test {
             abi.encodePacked(MASTER_PK_SEED, MASTER_PK_ROOT),
             abi.encodePacked(SLOT0_PK_SEED, SLOT0_PK_ROOT)
         );
+    }
+
+    /// The reserved storage word (former `removedOwnersCount`).
+    function _reservedWord() internal view returns (bytes32) {
+        return vm.load(address(wallet), bytes32(uint256(PQ_SLOT_BASE) + 1));
     }
 
     /// Lean `OwnerBytes.hasNMaskLayout` / `Factory.nMasked`: the bottom 128 bits
@@ -75,7 +90,7 @@ contract KontrolOwnerTable is Test {
         bool wantSuccess = _nMasked64(newOwner) && !wallet.isOwnerBytes(newOwner);
 
         uint256 preNext = wallet.nextOwnerIndex();
-        uint256 preRemoved = wallet.removedOwnersCount();
+        bytes32 preReserved = _reservedWord();
         bytes32 preOwner0 = keccak256(wallet.ownerAtIndex(0));
         bytes32 preOwner1 = keccak256(wallet.ownerAtIndex(1));
 
@@ -92,7 +107,7 @@ contract KontrolOwnerTable is Test {
         }
         assertEq(keccak256(wallet.ownerAtIndex(0)), preOwner0, "add frame: owner 0");
         assertEq(keccak256(wallet.ownerAtIndex(1)), preOwner1, "add frame: owner 1");
-        assertEq(wallet.removedOwnersCount(), preRemoved, "add frame: removedOwnersCount");
+        assertEq(_reservedWord(), preReserved, "add frame: reserved word written");
     }
 
     /// **Wrong length is rejected** — the deployed length gate (Lean
@@ -119,49 +134,30 @@ contract KontrolOwnerTable is Test {
         }
     }
 
-    // ── Rule 2: removeOwnerAtIndex ≡ Lean Storage.removeOwner ────────────────
+    // ── Rule 2: the deleted removal function does not dispatch ───────────────
 
-    /// **`removeOwnerAtIndex(1, expected)` pointwise (∀ symbolic 64-byte
-    /// `expected`).** Removes iff `expected` keccak-matches the installed SLOT0
-    /// bytes (Lean `decide (o = expected)` under keccak injectivity); on remove,
-    /// clears the slot + bumps `removedOwnersCount`; owner 0 + nextOwnerIndex
-    /// unmoved on both arms.
-    function prove_removeOwner_installed_pointwise(bytes calldata expected) public {
+    /// **The former `removeOwnerAtIndex(uint256,bytes)` selector reaches no
+    /// code — ∀ caller (EntryPoint included), ∀ index, ∀ 64-byte argument.**
+    /// The call reverts and the owner table, `nextOwnerIndex` and the
+    /// reserved word are unchanged. The Lean model has no removal operation.
+    function prove_removed_selector_does_not_dispatch(address caller, uint256 index, bytes calldata expected)
+        public
+    {
         vm.assume(expected.length == 64);
-        bool wantSuccess =
-            keccak256(expected) == keccak256(abi.encodePacked(SLOT0_PK_SEED, SLOT0_PK_ROOT));
-
-        uint256 preRemoved = wallet.removedOwnersCount();
-        uint256 preNext = wallet.nextOwnerIndex();
         bytes32 preOwner0 = keccak256(wallet.ownerAtIndex(0));
+        bytes32 preOwner1 = keccak256(wallet.ownerAtIndex(1));
+        uint256 preNext = wallet.nextOwnerIndex();
+        bytes32 preReserved = _reservedWord();
 
-        vm.prank(ENTRY_POINT_ADDR);
-        try wallet.removeOwnerAtIndex(1, expected) {
-            assertTrue(wantSuccess, "A3.4 rm: removed with mismatched expected bytes");
-            assertEq(wallet.ownerAtIndex(1).length, 0, "A3.4 rm: slot not cleared (read parity)");
-            assertTrue(!wallet.isOwnerBytes(expected), "A3.4 rm: isOwner not cleared");
-            assertEq(wallet.removedOwnersCount(), preRemoved + 1, "A3.4 rm: removedOwnersCount");
-        } catch {
-            assertTrue(!wantSuccess, "A3.4 rm: rejected the matching expected bytes");
-            assertEq(wallet.ownerAtIndex(1).length, 64, "rm fail-path: owner 1 mutated");
-            assertEq(wallet.removedOwnersCount(), preRemoved, "rm fail-path: removedOwnersCount moved");
-        }
-        assertEq(keccak256(wallet.ownerAtIndex(0)), preOwner0, "rm frame: owner 0");
-        assertEq(wallet.nextOwnerIndex(), preNext, "rm frame: nextOwnerIndex");
-    }
+        vm.prank(caller);
+        (bool ok,) =
+            address(wallet).call(abi.encodeWithSelector(REMOVED_REMOVE_OWNER_SELECTOR, index, expected));
+        assertTrue(!ok, "removal selector dispatched");
 
-    /// **Unset indices (∀ index ≥ 2) reject removal** — Lean
-    /// `match s.ownerAtIndex index with | none => none`.
-    function prove_removeOwner_unset_rejects(uint256 index, bytes calldata expected) public {
-        vm.assume(index >= 2);
-        vm.assume(expected.length == 64);
-        uint256 preRemoved = wallet.removedOwnersCount();
-        vm.prank(ENTRY_POINT_ADDR);
-        try wallet.removeOwnerAtIndex(index, expected) {
-            assertTrue(false, "A3.4 rm: removed from an unset index");
-        } catch {
-            assertEq(wallet.removedOwnersCount(), preRemoved, "rm unset: removedOwnersCount moved");
-        }
+        assertEq(keccak256(wallet.ownerAtIndex(0)), preOwner0, "rm: owner 0 changed");
+        assertEq(keccak256(wallet.ownerAtIndex(1)), preOwner1, "rm: owner 1 changed");
+        assertEq(wallet.nextOwnerIndex(), preNext, "rm: nextOwnerIndex changed");
+        assertEq(_reservedWord(), preReserved, "rm: reserved word written");
     }
 
     // ── Rule 3: initialize one-shot + fresh-install pointwise ────────────────
@@ -215,18 +211,6 @@ contract KontrolOwnerTable is Test {
             assertTrue(false, "gate: non-EntryPoint addOwnerBytes accepted");
         } catch {
             assertEq(wallet.nextOwnerIndex(), preNext, "gate add: nextOwnerIndex moved");
-        }
-    }
-
-    function prove_removeOwner_rejects_non_entrypoint(address caller, bytes calldata expected) public {
-        vm.assume(caller != ENTRY_POINT_ADDR);
-        vm.assume(expected.length == 64);
-        uint256 preRemoved = wallet.removedOwnersCount();
-        vm.prank(caller);
-        try wallet.removeOwnerAtIndex(1, expected) {
-            assertTrue(false, "gate: non-EntryPoint removeOwnerAtIndex accepted");
-        } catch {
-            assertEq(wallet.removedOwnersCount(), preRemoved, "gate rm: removedOwnersCount moved");
         }
     }
 }

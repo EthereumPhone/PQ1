@@ -5,7 +5,7 @@
       "axiom_mentions": 11
     },
     "SphincsCVerify/Bridge/Refinement.lean": {
-      "sha256": "0df9bedb0ab466884e8c9850ec1a2e33046fe9341cf0357a6f02e6d7d3360adc",
+      "sha256": "69269c506073b160685d19575750d1a32fc72e1782e07268fc7d5a40dc99670f",
       "axiom_mentions": 36
     },
     "SphincsCVerify/Bridge/SolidityVerifier.lean": {
@@ -81,15 +81,15 @@
       "axiom_mentions": 1
     },
     "SphincsCVerify/Wallet/CreditLedger.lean": {
-      "sha256": "4a9a6f71af55264eace1c89bba478e515fa477fcf23184c45b4a4345447788e4",
+      "sha256": "8168a51d0757451a501722872c7caa2cd6ae57018719c022b37091e3513b9a8d",
       "axiom_mentions": 2
     },
     "SphincsCVerify/Wallet/Invariants.lean": {
-      "sha256": "d97a8b3c7f0a2f8773ab9ccbdbcffd1595be879addaa44ff05585b80d2be847e",
+      "sha256": "2e4fa55473c4117930b6c1e5dcd97b4ca04b1976f25768eb1f709749a0df06df",
       "axiom_mentions": 6
     },
     "SphincsCVerify/Wallet/OffchainBinding.lean": {
-      "sha256": "12fe61a2f1cb5b2db0787673fac42e3a2aa25d49d321df71e0f5197f4442c495",
+      "sha256": "7ca1251fc83a698d92f9d628cea99d8a544806e635fc34aa2bd6cd7e206c941b",
       "axiom_mentions": 6
     },
     "SphincsCVerify/Wallet/SphincsDigestSpec.lean": {

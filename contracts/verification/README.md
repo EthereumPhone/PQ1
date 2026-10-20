@@ -1,5 +1,17 @@
 # PQSmartWallet — Formal Verification
 
+> **UPDATE 2026-10-20 (Trail of Bits audit freeze).** The wallet changed:
+> owner removal was deleted (the owner set is append-only), a legacy EIP-1271
+> entry and token receiver hooks were added, Solady's raw-hash 1271 workflows
+> were dropped, and the build sets `bytecode_hash = "none"`. The Lean models
+> follow (new I-9 theorems: a key is installed at most once). Halmos (43
+> rules, both profiles) and Kontrol (31 proofs) were re-run on the new pinned
+> bytecode; receipts are under `halmos/sessions/` and `kontrol/sessions/`.
+> That bytecode is **not deployed yet**: wherever the text below says
+> "deployed", read "the pinned production build, deployment pending"
+> ([`docs/PINNED_CODEHASHES.md`](docs/PINNED_CODEHASHES.md),
+> [`docs/THE_CLAIM.md`](docs/THE_CLAIM.md) #6).
+
 > **Status (2026-06-10).** The Lean 4 kernel checks the headline theorem
 > `SphincsCVerify.Spec.Theorems.theft_free` and every claim corollary
 > with **zero `sorry`** and **zero `True := trivial` theorem
@@ -50,10 +62,11 @@
 >   deploy postconditions, the already-deployed early-return, and three
 >   install-gate reject rules.
 > - **A3.4 (owner table)** — `discharged-bytecode`:
->   `addOwnerBytes`/`removeOwnerAtIndex`/`initialize` pointwise vs the Lean
->   `Storage` model + `ownerAtIndex` read parity + bootstrap-unremovable +
->   EntryPoint-only gate ([`HalmosMultiOwnable.t.sol`](../smart-wallet/test/halmos/HalmosMultiOwnable.t.sol),
->   7 rules). Replaces the prior stale Certora artifact.
+>   `addOwnerBytes`/`initialize` pointwise vs the Lean `Storage` model +
+>   one-shot `initialize` + EntryPoint-only gate + the deleted removal
+>   selector dispatching nothing ([`HalmosMultiOwnable.t.sol`](../smart-wallet/test/halmos/HalmosMultiOwnable.t.sol),
+>   5 rules since the 2026-10-20 audit freeze deleted `removeOwnerAtIndex`;
+>   7 rules before). Replaces the prior stale Certora artifact.
 > - **A3.1 (verifier)** — `discharged-bytecode` (**tier C — corpus**):
 >   Halmos input gates + an **executable Lean↔FIPS↔bytecode KAT on the
 >   digest/htIdx sub-layers AND the full functional verify** (10/10 each,
