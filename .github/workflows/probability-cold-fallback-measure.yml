@@ -1,0 +1,71 @@
+name: Probability full cold fallback measurement
+'on':
+  pull_request:
+    branches:
+    - perf/probability-reuse-1002-20261020
+    paths:
+    - .github/workflows/probability-cold-fallback-measure.yml
+permissions:
+  contents: read
+jobs:
+  cold:
+    if: github.head_ref == 'experiment/probability-late-cold-1002-20261020'
+    name: Complete hosted cold fallback
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: install elan (toolchain pinned by lean-toolchain)
+      run: "# Pinned + verified, not `curl | sh` from a moving branch. `master`\n# is mutable: whoever controls that ref controls the toolchain\n# installer on every FV runner, which is the trust root the\n# verification Makefile builds on. Pin the commit, check the bytes,\n# and only then execute. (#562)\nset -euo pipefail\nELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2\nELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53\ncurl --proto '=https' --tlsv1.2 -fsSL \\\n  \"https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh\" \\\n  -o elan-init.sh\necho \"${ELAN_SHA256}  elan-init.sh\" | sha256sum -c -\nsh elan-init.sh -y --default-toolchain none\nrm -f elan-init.sh\necho \"$HOME/.elan/bin\" >> \"$GITHUB_PATH\"\n"
+    - name: require no dependency cache
+      run: test ! -e contracts/verification/probability/.lake/packages
+    - name: fetch pinned mathlib probability cache
+      working-directory: contracts/verification/probability
+      run: 'lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
+
+        lake build proofwidgets/widgetJsAll
+
+        '
+    - name: runner regression controls
+      run: '/usr/bin/python3 -E -S contracts/verification/scripts/test_probability_execution.py
+
+        /usr/bin/python3 -E -S contracts/verification/scripts/test_probability_reuse.py
+
+        '
+    - name: fresh proof and complete reuse-refusal fallback
+      env:
+        PROBABILITY_REUSE_RUN: '1'
+        PROBABILITY_SHARD_COUNT: '8'
+        PROBABILITY_WORKERS: auto
+        PROBABILITY_OUTPUT: ${{ runner.temp }}/probability-cold-fallback
+      run: 'make -C contracts/verification verify-probability
+
+        /usr/bin/python3 -E -S - <<''PYCODE''
+
+        import json, os
+
+        from pathlib import Path
+
+        result = json.loads((Path(os.environ[''PROBABILITY_OUTPUT''])/''result.json'').read_text())
+
+        assert result[''passed''] is True and result[''mode''] == ''reuse''
+
+        assert result[''reuse''] == {''accepted'': False, ''reason'': ''RuntimeError: not an eligible master push''}
+
+        assert len(result[''controls'']) == 4965 and len(result[''closures'']) == 2824
+
+        print(''MEASURED COMPLETE HOSTED COLD FALLBACK'', result[''workers''], result[''seconds''])
+
+        PYCODE
+
+        '
+    - name: preserve complete fallback evidence
+      if: ${{ always() }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: probability-hosted-cold-fallback
+        path: ${{ runner.temp }}/probability-cold-fallback
+        if-no-files-found: error
+        retention-days: 7
