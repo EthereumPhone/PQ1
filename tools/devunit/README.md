@@ -140,6 +140,14 @@ pin 1 (3.3 V), which needs the case open (DVT1, 2026-10-17).
 
 ## First flash of a unit (once, before it ships)
 
+**One command for a tester unit:** `make devunit-tester` (or
+`tools/devunit/make-tester.sh [<release-dir>]`) takes the newest `investor`
+release, asks for `YES` (it erases all flash), listens for `0483:df11`, and
+runs `flash.sh <release> --dfu --erase-all --regress` the moment the unit
+appears: an already-locked unit is regressed first, and it ends at RDP 1.
+It refuses a release without `devunit-die-keys`. Then do the acceptance check
+below. The manual steps:
+
 Over USB-C with the ROM bootloader (`0483:df11`): use the SBU-bridged USB-C
 adapter (`docs/hardware/evt-dev-loop.md`), or hold both buttons while plugging
 in if the unit already runs a `dev-dfu` image (dev-unit images: keep holding

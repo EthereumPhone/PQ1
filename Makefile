@@ -2718,13 +2718,16 @@ bootproof-hw: ## Flash the non-monolithic image and watch the FSBL verify + bran
 #   make devunit-flash DEVUNIT_REL=target/devunit/releases/investor-<v> DEVUNIT_PORT=dfu|swd [DEVUNIT_ERASE_ALL=1]
 #   make devunit-update DEVUNIT_PKG=<file.pq1fw>
 DEVUNIT_PORT ?= dfu
-.PHONY: devunit-release devunit-flash devunit-update devunit-info
+.PHONY: devunit-release devunit-flash devunit-update devunit-info devunit-tester
 devunit-release: ## Dev units: build + sign a release (both slots) and its .pq1fw update package
 	@PROFILE=$(or $(DEVUNIT_PROFILE),investor) tools/devunit/release.sh $(DEVUNIT_VERSION)
 
 devunit-flash: ## Dev units: first-flash FSBL + slot A + option bytes (DEVUNIT_REL=..., DEVUNIT_PORT=dfu|swd)
 	@test -n "$(DEVUNIT_REL)" || { echo "set DEVUNIT_REL=target/devunit/releases/<profile>-<version>"; exit 1; }
 	@tools/devunit/flash.sh $(DEVUNIT_REL) --$(DEVUNIT_PORT) $(if $(DEVUNIT_ERASE_ALL),--erase-all)
+
+devunit-tester: ## Dev units: wait for a DVT in DFU, flash the investor release, RDP 1, all flash erased (DEVUNIT_REL=... optional)
+	@tools/devunit/make-tester.sh $(DEVUNIT_REL)
 
 devunit-update: ## Dev units: install a .pq1fw over USB (DEVUNIT_PKG=...)
 	@test -n "$(DEVUNIT_PKG)" || { echo "set DEVUNIT_PKG=<file.pq1fw>"; exit 1; }
