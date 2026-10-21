@@ -179,12 +179,20 @@ buttons emulated over SWD (PA0/PA1 driven low through the secure GPIOA alias):
   `nsc_fw_begin`). With no consent, the dialog's 120 s idle timeout ended the
   session: `FW_BEGIN` returned `0x6984`, the updater reported "running
   firmware unchanged", and the unit kept running 26.10.21.1 (then locked).
+* Full investor updates with the on-device consents accepted (owner approved
+  the emulated presses): 26.10.21.1 (A) → 26.10.21.2 (B) → 26.10.21.3 (A).
+  Each time: the updater's UNLOCK brought up the PIN row when locked, the
+  verify consent (2 taps + chord) and the install consent ("UPDATE TO
+  V26.10.21.x?", 6 taps + chord) were accepted, 503 KB secure + 98 KB
+  non-secure streamed in 25.0 s + 4.9 s, COMMIT reset into the FSBL, the new
+  slot booted and unlocked the real wallet, and `fwupdate.py` confirmed the
+  new release and slot. Boot log after each: `CONFIRM(old)`, `ATTEMPT(new)`,
+  `CONFIRM(new)`.
 * Gotcha: with OpenOCD attached, the non-secure world's DHCSR-gated semihosting
   prints park the core unless `arm semihosting enable` is set — USB then never
   enumerates. Not an issue without a debugger.
 
-Not yet run on silicon: accepting the install consent on the investor image
-and the reboot into its slot B (the mechanics after consent are the code the
-bench image exercised above; the consent itself is a human action by design —
-do it on the DVT during the acceptance check), the FSBL on a DVT panel, and a
-torn boot-log record (the ECC-NMI recovery path).
+Not yet run on silicon: the FSBL on a DVT panel (it refuses to boot if its
+display bring-up fails — the per-unit acceptance check covers it), real button
+hardware (the bench emulates the pins), and a torn boot-log record (the
+ECC-NMI recovery path).
