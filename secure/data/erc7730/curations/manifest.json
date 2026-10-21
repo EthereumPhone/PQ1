@@ -489,8 +489,8 @@
       "path": "shared",
       "domain": "pqsigner/erc7730-tool-input-tree-v1",
       "files": 12,
-      "bytes": 220670,
-      "sha256": "32b1714791a73ba5804ece58efe31f819a1469f11bf7bcb1efb01332d6474d6c"
+      "bytes": 222936,
+      "sha256": "b1eae2d626f777c6349d2cca5b5423ce508a05a5a4f0c1c6037a242b18bd323e"
     },
     {
       "path": "tx-core",

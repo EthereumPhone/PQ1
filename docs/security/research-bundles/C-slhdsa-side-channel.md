@@ -4389,6 +4389,20 @@ devunit-ab = ["stm32u585"]
 # the FSBL's three-boot probation can be shown to fall back to the previous
 # slot on silicon (tools/devunit/README.md, "rollback test"). Never ship.
 devunit-test-fault = ["devunit-ab"]
+# DEV UNITS ONLY (2026-10-21): die-bound keys instead of `dev-testkey`. The
+# OPTIGA pairing secret, the SE050 admin credential and the PIN-credential PRF
+# derive from the DHUK (`saes-dhuk`), and every wallet gets a fresh random PIN
+# salt, so a dumped chip or a bus capture gives nothing without this MCU. The
+# DHUK is only per die at RDP >= 1 (at RDP 0 it is one ST constant shared by
+# every STM32U585), so the boot halts before any secure-element traffic unless
+# the unit runs at RDP Level 1, and `tools/devunit/flash.sh` sets RDP 1 at the
+# end of a first flash. Not `bhk`: an RDP regression erases the wrapped BHK and
+# would strand an SE050 keyed to it; the DHUK comes back the same. Not a
+# shipping posture either: the SE050 channel keeps the published SCP03 keys
+# (what crosses it is DHUK-masked), and the OPTIGA hardware counter, tamper
+# wipe and consumption mask stay off, as in the `dev-testkey` investor image.
+# `tools/devunit/README.md` has the full list.
+devunit-die-keys = ["devunit-ab", "saes-dhuk"]
 
 # #846/#896 negative control: compiles the one-at-a-time gateway gate OUT
 # of the `gateway_enter!` macro body (the veneer path), so a second

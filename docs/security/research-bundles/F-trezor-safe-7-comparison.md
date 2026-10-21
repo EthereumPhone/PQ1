@@ -1100,7 +1100,7 @@ The **consumption mask** is ported too: pq1 runs it on **TIM3_CH1 / PA6 / AF2** 
 - **Hardening / accelerators (compose):** `saes-dhuk` (Tier-1 KDF) · `saes-self-test` · `tamp` (Trezor-port; log-only by itself) · `tamp-wipe` (production escalation — fires `tzic::trigger_intrusion_wipe` on a confirmed tamper; default-off for bench safety, **forced ON for shipping dual-SE images** by the `nsc/mod.rs` ship-blocker fence alongside `tzic-wipe`) · `consumption-mask` (TIM2 CH1 PWM on PA5; caller must call `randomize()` periodically) · `usb`.
 - **OPTIGA hardware counter:** `optiga-hw-counter` (E120 LUC bound to F1D0; immune to PBS extraction; **destructive on first provisioning** — rewrites F1D0 metadata).
 - **First-boot self-lock candidate (work-todo #36):** `rdp2-self-lock` (implies `bhk`; **production-only**, forced ON for `mode-production` by the `nsc/mod.rs` S-1-style fence, incompatible with every dev/test feature, requires `dual-se`). Owns the candidate on-device flow in `secure/src/first_boot/`: Phase A verifies the ship option-byte profile + blank per-device pages 123–127 then programs RDP=0xCC (irreversible), Phase B journals a resumable BHK first-write + transport→final rotation of SE050 SCP03/admin + OPTIGA PBS. Absent from every bench/QEMU build (behaviour OFF is byte-identical). Compile-check: `make build-rdp2-self-lock`. This is not production authority; the handoff/recovery/E140-order/silicon gates above remain open. Refs: `docs/provisioning/first-boot-provisioning.md` (candidate responsibility split + field error codes + silicon runbook).
-- **Dev units only (2026-10-21):** `devunit-ab` (FSBL + secure + NS) — signed USB firmware updates for pre-production DVTs given to testers: own A/B layout (secure slot B in bank 2, `SECWM2 0x30..0x7F`, 640 KiB slots), COMMIT that stages + resets, "newer than running" instead of OTP, three-boot probation via a boot log on page 6. Dedicated dev-unit key (private half off-repo). `mode-production` refuses it everywhere. Not the production design. Runbook + silicon evidence: `tools/devunit/README.md`; `make devunit-release|devunit-flash|devunit-update`.
+- **Dev units only (2026-10-21):** `devunit-ab` (FSBL + secure + NS) — signed USB firmware updates for pre-production DVTs given to testers: own A/B layout (secure slot B in bank 2, `SECWM2 0x30..0x7F`, 640 KiB slots), COMMIT that stages + resets, "newer than running" instead of OTP, three-boot probation via a boot log on page 6. Dedicated dev-unit key (private half off-repo). `mode-production` refuses it everywhere. Not the production design. Runbook + silicon evidence: `tools/devunit/README.md`; `make devunit-release|devunit-flash|devunit-update`. **`devunit-die-keys`** (the `investor` profile from 26.10.21.14; the old one is `investor-testkey`): DHUK-rooted OPTIGA PBS / SE050 admin / PIN PRF + random per-wallet salt instead of `dev-testkey`, at **RDP 1** (`flash.sh` sets `0xBB`; the secure world halts before SE traffic at any other level, the dev-unit FSBL accepts RDP 0 or exactly `0xBB`). Keeps published SE050 SCP03 keys and the bench UserID admin-delete entry; lifts the shipping-posture fences only because `mode-production` refuses `devunit-ab`. No migration from a testkey wallet.
 - **Dev / test (NEVER ship):** `debug-log` · `e2e-test` (fixed mnemonic + PIN, short-circuits secure-side `confirm()` **and**, since a8961636, `enter_pin()`, which returns the e2e PIN `00000000`. Before that fix a panel-less board wedged forever in the PendSV idle re-unlock ~120 s after unlock; the fix was validated free-running on pq1 silicon 2026-09-18 across three idle deadlines. Caveat, #692: on these images every PendSV retry goes through `gated_unlock`, so a persistent SE fault burns the whole 10-attempt page-124 budget before the 46a30658 retry guard can fire) · `otp-hardcoded-master-key` (fixed ASCII OTP-master so re-flashed bench boards keep stable admin/SCP03/PBS bytes) · `ui-capture` (SHA-256 of every displayed frame).
 
 CI must gate shipped firmware on `debug-log` / `e2e-test` / `mock-se` / `otp-hardcoded-master-key` / `ui-capture` OFF. The `compile_error!` fences in `nsc/mod.rs` and the `saes-self-test` runner enforce most of this.
@@ -4964,6 +4964,7 @@ compile_error!(
     not(debug_assertions),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     feature = "dual-se",
     any(not(feature = "saes-dhuk"), not(feature = "se050-derived-scp03")),
 ))]
@@ -5259,6 +5260,36 @@ compile_error!(
      circuits boot into a firmware anti-rollback test — never a shipping image."
 );
 
+// Dedicated guard: `devunit-die-keys` (dev units with DHUK-rooted keys) is the
+// opposite of every fixed-key shortcut, so combining them is a contradiction:
+// `dev-testkey` / `otp-hardcoded-master-key` / `e2e-test` would put the public
+// constant or the fixed bench salt back, and `mock-se` has no chips to key.
+// `bhk` is refused because an RDP regression (the only way to re-flash a dev
+// unit's FSBL) erases the wrapped BHK on page 126 and would leave the SE050
+// keyed to a secret nothing can derive again; the DHUK survives it. This
+// feature also lifts the shipping-posture fences above and below (SE050
+// derived SCP03, OPTIGA hardware counter, consumption mask, tamper wipe) —
+// acceptable only because `mode-production` refuses `devunit-ab`, which it
+// implies.
+#[cfg(all(
+    feature = "devunit-die-keys",
+    any(
+        feature = "dev-testkey",
+        feature = "otp-hardcoded-master-key",
+        feature = "bhk-hardcoded-master-key",
+        feature = "e2e-test",
+        feature = "mock-se",
+        feature = "bhk",
+        not(feature = "dual-se"),
+    ),
+))]
+compile_error!(
+    "devunit-die-keys needs `dual-se` and excludes dev-testkey / \
+     otp-hardcoded-master-key / bhk-hardcoded-master-key / e2e-test / mock-se \
+     (they restore public keys or the fixed bench salt) and `bhk` (an RDP \
+     regression would strand the SE050). See secure/Cargo.toml."
+);
+
 // Firmware-rollback backend quarantine. The legacy hardware implementation
 // treated one ECC-protected OTP quad-word as a reusable per-bit tally, but
 // STM32U585 user OTP permits only one program operation per 128-bit QW.
@@ -5390,6 +5421,7 @@ compile_error!(
     ),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(feature = "optiga-hw-counter"),
 ))]
 compile_error!(
@@ -5561,6 +5593,7 @@ compile_error!(
     not(debug_assertions),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(feature = "consumption-mask"),
 ))]
 compile_error!(
@@ -5603,6 +5636,7 @@ compile_error!(
     ),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(all(feature = "tamp", feature = "tamp-wipe", feature = "tzic-wipe")),
 ))]
 compile_error!(
@@ -5647,6 +5681,7 @@ compile_error!(
     ),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(feature = "se050-derived-scp03"),
 ))]
 compile_error!(
