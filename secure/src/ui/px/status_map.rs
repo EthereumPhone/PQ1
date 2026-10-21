@@ -506,9 +506,17 @@ pub fn firmware_update_screens(
 /// request`): no manifest field is shown — the bytes are unverified.
 pub fn firmware_verify_screens(out: &mut pqsigner_ui_px::Screens) -> Result<(), ()> {
     out.set_len(0);
-    let hero = ScreenBuilder::hero(b"FWVERIFY", Icon::Fingerprint, b"VERIFY FIRMWARE PACKAGE?").finish().map_err(|_| ())?;
+    // Plain words (owner, 2026-10-21): the user is updating firmware; the
+    // version and the words come on the next ask, once the signature is
+    // checked — they are not shown here because they are not verified yet.
+    let hero = ScreenBuilder::hero(b"FWVERIFY", Icon::Fingerprint, b"UPDATE FIRMWARE?").finish().map_err(|_| ())?;
     out.push(&hero)?;
-    out.push(&fw_detail(b"FWMODE", Side::Left, b"FW UPDATE", &[b"Verify the vendor-", b"signed package"])?)?;
+    out.push(&fw_detail(
+        b"FWMODE",
+        Side::Left,
+        b"UPDATE",
+        &[b"First checks the", b"signature, then shows", b"version and words"],
+    )?)?;
     out.push(&hero)?;
     Ok(())
 }

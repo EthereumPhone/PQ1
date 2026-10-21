@@ -228,7 +228,7 @@ def install(args: argparse.Namespace) -> None:
         print(f"==> installing {pkg.label} into slot {target}")
         print("    on the device, for each question: tap RIGHT through its screens, then press BOTH")
         print("    buttons on the last one (hold LEFT to cancel):")
-        print("      1) VERIFY FIRMWARE PACKAGE?   2) UPDATE TO V" + pkg.label + "?  — check the words:")
+        print("      1) UPDATE FIRMWARE? (26.10.21.6 and older firmware: VERIFY FIRMWARE PACKAGE?)   2) UPDATE TO V" + pkg.label + "?  — check the words:")
         print(f"    firmware words: {' '.join(pkg.fingerprint(target))}")
         print(f"    signer words:   {' '.join(SIGNER_WORDS)}")
         sw, _ = dev.chained(INS_FW_BEGIN, manifest, timeout_s=600)

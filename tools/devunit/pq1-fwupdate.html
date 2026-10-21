@@ -254,7 +254,7 @@ function guide(target) {
   box.className = "device-says";
   box.innerHTML = `<p><b>On the PQ1</b> (each question: tap the right button through all its screens;
     on the last one press <b>both buttons together</b> to say yes; hold the left button to cancel):</p>
-    <p>1. <i>VERIFY FIRMWARE PACKAGE?</i> — say yes.<br>
+    <p>1. <i>UPDATE FIRMWARE?</i> (older firmware: <i>VERIFY FIRMWARE PACKAGE?</i>) — say yes; it checks the signature first.<br>
     2. <i>UPDATE TO V${pkg.header.label}?</i> — check the version, then the firmware words, which must be:</p>`;
   box.appendChild(wordsHtml(pkg.header.slots[target].fingerprint));
   const p2 = document.createElement("p");
