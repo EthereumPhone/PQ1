@@ -2707,6 +2707,32 @@ bootproof-hw: ## Flash the non-monolithic image and watch the FSBL verify + bran
 	@echo "==> Running. Expect the FSBL to verify manifest A and branch into slot A."
 	@probe-rs run --chip $(CHIP) $(BOOTPROOF_DIR)/fsbl/$(TARGET)/release/pqsigner-fsbl
 
+# ---------------------------------------------------------------------------
+# DEV UNITS — signed USB firmware updates for pre-production DVTs (devunit-ab)
+# ---------------------------------------------------------------------------
+#
+# Not the production update path (see tools/devunit/README.md). Thin wrappers
+# over tools/devunit/*; the scripts carry the logic and their own docs.
+#
+#   make devunit-release [DEVUNIT_VERSION=26.10.22.1] [DEVUNIT_PROFILE=investor|bench]
+#   make devunit-flash DEVUNIT_REL=target/devunit/releases/investor-<v> DEVUNIT_PORT=dfu|swd [DEVUNIT_ERASE_ALL=1]
+#   make devunit-update DEVUNIT_PKG=<file.pq1fw>
+DEVUNIT_PORT ?= dfu
+.PHONY: devunit-release devunit-flash devunit-update devunit-info
+devunit-release: ## Dev units: build + sign a release (both slots) and its .pq1fw update package
+	@PROFILE=$(or $(DEVUNIT_PROFILE),investor) tools/devunit/release.sh $(DEVUNIT_VERSION)
+
+devunit-flash: ## Dev units: first-flash FSBL + slot A + option bytes (DEVUNIT_REL=..., DEVUNIT_PORT=dfu|swd)
+	@test -n "$(DEVUNIT_REL)" || { echo "set DEVUNIT_REL=target/devunit/releases/<profile>-<version>"; exit 1; }
+	@tools/devunit/flash.sh $(DEVUNIT_REL) --$(DEVUNIT_PORT) $(if $(DEVUNIT_ERASE_ALL),--erase-all)
+
+devunit-update: ## Dev units: install a .pq1fw over USB (DEVUNIT_PKG=...)
+	@test -n "$(DEVUNIT_PKG)" || { echo "set DEVUNIT_PKG=<file.pq1fw>"; exit 1; }
+	@tools/devunit/fwupdate.py $(DEVUNIT_PKG)
+
+devunit-info: ## Dev units: show the release and slot the connected unit runs
+	@tools/devunit/fwupdate.py --info
+
 .PHONY: verify-fsbl-identity
 verify-fsbl-identity: ## Read-only: check an FSBL ELF against a bundle's vendor fingerprint (#742)
 	@# The signed bundle does NOT contain or bind the FSBL — `signed_preimage`

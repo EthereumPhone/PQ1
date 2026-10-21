@@ -22,7 +22,7 @@ use super::ptr_validate::validate_ns_read_ptr;
 use super::state::{peek_state, FW_UPDATE};
 use super::GatewayArgs;
 use crate::fw_update::{self, FwUpdateCtx, IncrementalSha256, SlotTag};
-use crate::hw::{flash, otp};
+use crate::hw::flash;
 use crate::timeout;
 
 /// # Safety
@@ -107,9 +107,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // above is the authorization boundary.
     crate::fi::wait_random();
 
-    // Run the verify chain. Rollback floor comes from OTP.
+    // Run the verify chain. Rollback floor comes from OTP (dev units: the
+    // running release's version, see `fw_update::rollback_floor`).
     let m = ManifestRef::new(&snap);
-    let floor = otp::rollback_floor();
+    let floor = fw_update::rollback_floor();
     match fw_update::verify_manifest(&m, floor) {
         Ok(()) => {}
         Err(fw_manifest::VerifyError::BelowRollback) => {

@@ -70,6 +70,14 @@ lcd-test = []
 # chronologically (sort by CYCCNT); differencing consecutive table entries
 # yields negative nonsense.
 stage-marker = []
+# DEV UNITS ONLY (pre-production DVTs handed to testers, 2026-10-21): boot the
+# `fw_manifest::devunit` A/B layout — secure slot A in bank 1, secure slot B in
+# bank 2 behind SECWM2 48..=127, 640 KiB each so the pixel-UI image fits — and
+# choose between the slots with that module's boot-log probation (an
+# unconfirmed new release gets three boots, then the FSBL falls back). Reads
+# no OTP. NOT the production layout or rollback design; refused together with
+# `mode-production`. `make devunit-release` is the entry point.
+devunit-ab = []
 
 [dependencies]
 # Signature verification — same crate the main firmware uses, so the

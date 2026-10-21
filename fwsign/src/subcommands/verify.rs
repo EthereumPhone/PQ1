@@ -61,18 +61,26 @@ pub(crate) fn authenticate_bundle(
     bundle_path: &Path,
     pubkey_path: &Path,
 ) -> Result<AuthenticatedBundle> {
+    authenticate_bundle_with_capacity(
+        bundle_path,
+        pubkey_path,
+        fw_manifest::SLOT_SECURE_CAPACITY,
+        fw_manifest::SLOT_NS_CAPACITY,
+    )
+}
+
+/// [`authenticate_bundle`] against explicit slot capacities (the dev-unit
+/// A/B layout has larger slots, `fw_manifest::devunit`).
+pub(crate) fn authenticate_bundle_with_capacity(
+    bundle_path: &Path,
+    pubkey_path: &Path,
+    secure_capacity: u32,
+    ns_capacity: u32,
+) -> Result<AuthenticatedBundle> {
     let unpacked = bundle::unpack(bundle_path)?;
 
-    crate::elf::ensure_image_capacity(
-        "secure",
-        unpacked.secure_bytes.len(),
-        fw_manifest::SLOT_SECURE_CAPACITY,
-    )?;
-    crate::elf::ensure_image_capacity(
-        "nonsecure",
-        unpacked.nonsecure_bytes.len(),
-        fw_manifest::SLOT_NS_CAPACITY,
-    )?;
+    crate::elf::ensure_image_capacity("secure", unpacked.secure_bytes.len(), secure_capacity)?;
+    crate::elf::ensure_image_capacity("nonsecure", unpacked.nonsecure_bytes.len(), ns_capacity)?;
 
     // Optional cross-check: the pubkey.bin inside the bundle should
     // match the vendor pubkey the auditor supplied (otherwise the
@@ -185,8 +193,17 @@ pub(crate) fn authenticate_bundle(
     })
 }
 
-pub fn run(bundle_path: &Path, pubkey_path: &Path) -> Result<()> {
-    let authenticated = authenticate_bundle(bundle_path, pubkey_path)?;
+pub fn run(bundle_path: &Path, pubkey_path: &Path, devunit_ab: bool) -> Result<()> {
+    let authenticated = if devunit_ab {
+        authenticate_bundle_with_capacity(
+            bundle_path,
+            pubkey_path,
+            fw_manifest::devunit::SECURE_SLOT_CAPACITY,
+            fw_manifest::devunit::NS_SLOT_CAPACITY,
+        )?
+    } else {
+        authenticate_bundle(bundle_path, pubkey_path)?
+    };
 
     eprintln!();
     eprintln!("==> verify: PASS");

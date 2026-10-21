@@ -14,7 +14,31 @@ fn main() {
         (false, true) => panic!("ui-px-atlas is a hardware (stm32u585) feature; QEMU builds carry no atlas"),
         (false, false) => "memory.x",
     };
-    std::fs::copy(mem_x, out_dir.join("memory.x")).unwrap();
+    // `devunit-ab`: the same script, moved to dev-unit non-secure slot A or B
+    // (`fw_manifest::devunit`: bank 2 pages 0..=23 / 24..=47, 192 KiB each).
+    // The secure world boots whichever non-secure image pairs with the secure
+    // slot it is linked for, and each pair shares one veneer import library.
+    println!("cargo:rerun-if-env-changed=PQSIGNER_NS_SLOT");
+    println!("cargo:rustc-check-cfg=cfg(devunit_slot_b)");
+    if env::var_os("CARGO_FEATURE_DEVUNIT_AB").is_some() {
+        let slot = env::var("PQSIGNER_NS_SLOT").unwrap_or_default();
+        let origin = match slot.as_str() {
+            "a" => "0x08100000",
+            "b" => "0x08130000",
+            _ => panic!("`devunit-ab` requires PQSIGNER_NS_SLOT=a or b (got `{slot}`)"),
+        };
+        if slot == "b" {
+            println!("cargo:rustc-cfg=devunit_slot_b");
+        }
+        let script = std::fs::read_to_string(mem_x).unwrap();
+        let from = "FLASH : ORIGIN = 0x08100000, LENGTH = 1024K";
+        assert!(script.contains(from), "{mem_x}: expected `{from}`");
+        let patched = script.replace(from, &format!("FLASH : ORIGIN = {origin}, LENGTH = 192K"));
+        std::fs::write(out_dir.join("memory.x"), patched).unwrap();
+    } else {
+        std::fs::copy(mem_x, out_dir.join("memory.x")).unwrap();
+    }
+    println!("cargo:rerun-if-env-changed=PQSIGNER_DEVUNIT_FW_VERSION");
     println!("cargo:rustc-link-search={}", out_dir.display());
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=memory-stm32u585.x");

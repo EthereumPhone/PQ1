@@ -19,3 +19,10 @@ for the 32-byte bench/test update key. Production gates compare raw key bytes
 against it and reject an exact match. The test tooling also derives its fixture
 key and checks it against this file, so changing a duplicated seed cannot make a
 new development key slip past the production ban.
+
+`devunit-firmware-vendor-pubkey.bin` / `devunit-firmware-vendor-key.sha256`
+are the public half and fingerprint of the separate DEV-UNIT update key
+(`devunit-ab`, `tools/devunit/README.md`): pre-production DVTs handed to
+testers accept releases signed by it and nothing else. It is not a production
+key and grants no production authority — `mode-production` refuses
+`devunit-ab` — and its private half is kept off the repository.

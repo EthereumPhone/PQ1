@@ -466,6 +466,11 @@ compile_error!(
         // requirement. A shipping image must have no path that turns
         // SCP_REQUIRED off.
         feature = "se050-platform-scp-tool",
+        // Dev-unit A/B updates (2026-10-21): a COMMIT that writes the boot
+        // log and resets into a slot on a layout that is not the production
+        // geometry, with no OTP anti-rollback. Dev units only.
+        feature = "devunit-ab",
+        feature = "devunit-test-fault",
     )
 ))]
 compile_error!(

@@ -164,6 +164,9 @@ struct FlashRegs {
     nscr: Reg32,
     icache_cr: Reg32,
     icache_sr: RoReg32,
+    /// `FLASH_ECCR` (dev units: the boot-log ECC recovery below).
+    #[cfg(feature = "devunit-ab")]
+    eccr: Reg32,
 }
 
 // SAFETY: each address below is a real, 4-byte-aligned MMIO register
@@ -183,8 +186,37 @@ const REG: FlashRegs = unsafe {
         nscr: Reg32::new(FLASH_NS + 0x28),
         icache_cr: Reg32::new(ICACHE_BASE),
         icache_sr: RoReg32::new(ICACHE_BASE + 0x04),
+        #[cfg(feature = "devunit-ab")]
+        eccr: Reg32::new(FLASH + 0x30),
     }
 };
+
+/// Dev units: was the pending NMI a flash double-ECC error inside the boot-log
+/// page? If so, clear it and say so.
+///
+/// A boot-log quad-word whose program was cut by a power loss can fail ECC,
+/// and on this part a double-ECC read raises an NMI (`FLASH_ECCR.ECCD`). The
+/// log is read on every boot, so treating that NMI as fatal would reset-loop
+/// the unit forever. Only this one page is excused: the read returns garbage,
+/// the record CRC rejects it, and the next COMMIT erases the page. Every other
+/// NMI keeps the zeroize-and-reset policy.
+#[cfg(feature = "devunit-ab")]
+pub fn take_boot_log_ecc_error() -> bool {
+    const ECCD: u32 = 1 << 31;
+    const ECCIE: u32 = 1 << 24;
+    const BK_ECC: u32 = 1 << 21;
+    const SYSF_ECC: u32 = 1 << 22;
+    const ADDR_MASK: u32 = 0xF_FFFF;
+    let eccr = REG.eccr.read();
+    let page_off = fw_manifest::devunit::BOOT_LOG_ADDR - pqsigner_geometry::BANK1_BASE;
+    let in_log = eccr & (BK_ECC | SYSF_ECC) == 0
+        && (page_off..page_off + fw_manifest::devunit::PAGE_SIZE).contains(&(eccr & ADDR_MASK));
+    if eccr & ECCD != 0 && in_log {
+        REG.eccr.write(ECCD | (eccr & ECCIE));
+        return true;
+    }
+    false
+}
 
 /// Invalidate the entire ICACHE so subsequent flash reads see fresh
 /// post-erase / post-program bytes rather than stale cached lines.
@@ -324,6 +356,19 @@ mod bank1_programming {
     ) -> Result<(), ()> {
         // SAFETY: `GenericSecureQwAddr` proves the full raw-writer contract
         // except erased state, which remains the caller's responsibility.
+        unsafe { write_verified_raw(addr.get(), data) }
+    }
+
+    /// Program a quad-word of the dev-unit secure slot B (bank 2, secure
+    /// alias). `SECCR` programs secure pages in either bank; the address
+    /// selects the bank.
+    #[cfg(feature = "devunit-ab")]
+    pub(super) unsafe fn write_devunit_slot_b_verified(
+        addr: crate::flash_policy::DevunitSlotBQwAddr,
+        data: &[u8; 16],
+    ) -> Result<(), ()> {
+        // SAFETY: `DevunitSlotBQwAddr` proves an aligned quad-word inside
+        // dev-unit secure slot B; erased state is the caller's contract.
         unsafe { write_verified_raw(addr.get(), data) }
     }
 
@@ -1303,25 +1348,95 @@ pub const BOOT_STATE_ADDR: u32 = 0x0C00_C000;
 pub const BOOT_STATE_PAGE: u32 = 6;
 
 // --- Slot image addresses -----------------------------------------------------
+//
+// `devunit-ab` (dev units only) swaps in the `fw_manifest::devunit` map:
+// secure slot A in bank 1 pages 7..=86, secure slot B in BANK 2 pages
+// 48..=127 (SECWM2), non-secure slots A/B in bank 2 pages 0..=23 / 24..=47.
 
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_A_SECURE_ADDR: u32 = 0x0C00_E000;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_A_SECURE_FIRST_PAGE: u32 = 7;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_A_SECURE_LAST_PAGE: u32 = 64;
 
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_B_SECURE_ADDR: u32 = 0x0C08_2000;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_B_SECURE_FIRST_PAGE: u32 = 65;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_B_SECURE_LAST_PAGE: u32 = 122;
 
 /// Slot capacities are a shared host/device release-policy constant.
+#[cfg(not(feature = "devunit-ab"))]
 pub use fw_manifest::{SLOT_NS_CAPACITY, SLOT_SECURE_CAPACITY};
 
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_A_NS_ADDR: u32 = 0x0810_0000;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_A_NS_FIRST_PAGE: u32 = 0;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_A_NS_LAST_PAGE: u32 = 63;
 
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_B_NS_ADDR: u32 = 0x0818_0000;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_B_NS_FIRST_PAGE: u32 = 64;
+#[cfg(not(feature = "devunit-ab"))]
 pub const SLOT_B_NS_LAST_PAGE: u32 = 127;
+
+#[cfg(feature = "devunit-ab")]
+use fw_manifest::devunit as du;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_A_SECURE_ADDR: u32 = du::SLOT_A_SECURE_ADDR;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_A_SECURE_FIRST_PAGE: u32 = du::SLOT_A_SECURE_FIRST_PAGE;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_A_SECURE_LAST_PAGE: u32 = du::SLOT_A_SECURE_FIRST_PAGE + du::SECURE_SLOT_PAGES - 1;
+/// Dev-unit secure slot B lives in BANK 2 (page numbers are bank-2 pages).
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_B_SECURE_ADDR: u32 = du::SLOT_B_SECURE_ADDR;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_B_SECURE_FIRST_PAGE: u32 = du::SLOT_B_SECURE_FIRST_PAGE;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_B_SECURE_LAST_PAGE: u32 = du::SLOT_B_SECURE_FIRST_PAGE + du::SECURE_SLOT_PAGES - 1;
+#[cfg(feature = "devunit-ab")]
+pub use fw_manifest::devunit::{
+    NS_SLOT_CAPACITY as SLOT_NS_CAPACITY, SECURE_SLOT_CAPACITY as SLOT_SECURE_CAPACITY,
+};
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_A_NS_ADDR: u32 = du::SLOT_A_NS_ADDR;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_A_NS_FIRST_PAGE: u32 = du::SLOT_A_NS_FIRST_PAGE;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_A_NS_LAST_PAGE: u32 = du::SLOT_A_NS_FIRST_PAGE + du::NS_SLOT_PAGES - 1;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_B_NS_ADDR: u32 = du::SLOT_B_NS_ADDR;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_B_NS_FIRST_PAGE: u32 = du::SLOT_B_NS_FIRST_PAGE;
+#[cfg(feature = "devunit-ab")]
+pub const SLOT_B_NS_LAST_PAGE: u32 = du::SLOT_B_NS_FIRST_PAGE + du::NS_SLOT_PAGES - 1;
+
+// The dev-unit map keeps the manifest and boot-log pages where the legacy
+// layout has them, and slot A clear of the per-device pages (123..=127).
+#[cfg(feature = "devunit-ab")]
+const _: () = assert!(
+    du::MANIFEST_A_ADDR == MANIFEST_A_ADDR
+        && du::MANIFEST_B_ADDR == MANIFEST_B_ADDR
+        && du::BOOT_LOG_ADDR == BOOT_STATE_ADDR
+        && du::BOOT_LOG_PAGE == BOOT_STATE_PAGE
+        && SLOT_A_SECURE_LAST_PAGE < 123
+        && SLOT_B_NS_LAST_PAGE < SLOT_B_SECURE_FIRST_PAGE
+);
+
+/// Dev units: the flash bank that holds a slot's SECURE image.
+#[cfg(feature = "devunit-ab")]
+pub fn slot_secure_bank(slot: Slot) -> pqsigner_geometry::Bank {
+    match slot {
+        Slot::A => pqsigner_geometry::Bank::One,
+        Slot::B => pqsigner_geometry::Bank::Two,
+    }
+}
 
 pub fn slot_secure_addr(slot: Slot) -> u32 {
     match slot {
@@ -1611,6 +1726,61 @@ pub unsafe fn erase_secure_page(page: u32) -> Result<(), ()> {
     })
 }
 
+/// Dev units: erase one SECURE page in an explicit bank — bank 2 holds the
+/// dev-unit secure slot B. A copy of [`erase_secure_page`] (kept separate so
+/// the production erase stays byte-identical) whose page proof carries the
+/// requested bank into `BKER`.
+///
+/// # Safety
+/// Same contract as [`erase_secure_page`].
+#[cfg(feature = "devunit-ab")]
+pub unsafe fn erase_secure_page_in(bank: pqsigner_geometry::Bank, page: u32) -> Result<(), ()> {
+    // Same proof discipline as `erase_secure_page`; the bank travels with it.
+    let proof = GenericSecurePage::new_in(bank, page).ok_or(())?;
+    let page = proof.get();
+    // BKER selects the bank for a page erase. This used to be omitted
+    // entirely, i.e. hard-wired to bank 1 — correct only while every secure
+    // page lives in bank 1, and silently catastrophic under a geometry that
+    // puts a secure slot in bank 2: a bank-2 page number would erase the
+    // BANK-1 page of the same number (the manifests, slot A, or the
+    // per-device pages). The bank now comes from the proof, so the two cannot
+    // disagree.
+    let bker = match proof.bank() {
+        pqsigner_geometry::Bank::One => 0,
+        pqsigner_geometry::Bank::Two => BKER,
+    };
+    cortex_m::interrupt::free(|_| {
+        wait_bsy();
+        clear_errors();
+        unlock();
+
+        let cr = PER | bker | (page << PNB_SHIFT);
+        REG.seccr.write(cr);
+        REG.seccr.write(cr | STRT);
+
+        wait_bsy();
+
+        REG.seccr.write(0);
+        let sr = REG.secsr.read();
+        lock();
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+        // Invalidate ICACHE after the bank-1 slot-page erase, matching the
+        // other secure erase/program helpers (file header comment). A
+        // stale cached line here would make a subsequent verified re-flash
+        // read back the pre-erase bytes and spuriously fail (see the
+        // erase_ns_page / write_ns_quadword twins).
+        icache_invalidate();
+
+        if sr & ERR_MASK != 0 {
+            clear_errors();
+            Err(())
+        } else {
+            Ok(())
+        }
+    })
+}
+
 /// Erase the full set of pages owned by `slot` — both secure and
 /// non-secure halves. Used at `CMD_FW_BEGIN` after the host declares
 /// which inactive slot it's about to stream into. Order matters: we
@@ -1632,7 +1802,12 @@ pub unsafe fn erase_slot(slot: Slot) -> Result<(), ()> {
     }
     for p in first_s..=last_s {
         // SAFETY: forwarded contract.
+        #[cfg(not(feature = "devunit-ab"))]
         unsafe { erase_secure_page(p)? };
+        // Dev units: secure slot B is in bank 2; the bank comes from the
+        // slot map. SAFETY: forwarded contract.
+        #[cfg(feature = "devunit-ab")]
+        unsafe { erase_secure_page_in(slot_secure_bank(slot), p)? };
     }
     // Erase the target manifest last: this is what FSBL keys off to
     // decide whether the slot is active. While the manifest is erased
@@ -1660,6 +1835,16 @@ pub unsafe fn write_slot_quadword_verified(addr: u32, data: &[u8; 16]) -> Result
         // SAFETY: forwarded contract; bank-1 dispatch.
         unsafe { write_quadword_verified(addr, data) }
     } else {
+        // Dev units: the secure alias of bank 2, limited to secure slot B.
+        #[cfg(feature = "devunit-ab")]
+        {
+            let addr = crate::flash_policy::DevunitSlotBQwAddr::new(addr).ok_or(())?;
+            // SAFETY: the capability confines the write to an aligned
+            // quad-word of dev-unit secure slot B; the caller guarantees it
+            // is erased and inactive.
+            return unsafe { bank1_programming::write_devunit_slot_b_verified(addr, data) };
+        }
+        #[cfg(not(feature = "devunit-ab"))]
         Err(())
     }
 }

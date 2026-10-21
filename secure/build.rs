@@ -49,6 +49,9 @@ fn main() {
             "FW_ROLLBACK_UNSAFE_OPT_IN_REQUIRED: non-shipping STM32U585 builds must enable legacy-fw-rollback-unsafe"
         );
     }
+    if env::var_os("CARGO_FEATURE_DEVUNIT_AB").is_some() && mode_production {
+        panic!("DEVUNIT_AB_NOT_PRODUCTION: the dev-unit A/B layout must never build with mode-production");
+    }
     if is_thumbv && stm32u585 && legacy_rollback_unsafe {
         println!(
             "cargo:warning=LEGACY ROLLBACK BACKEND — NONSHIPPING secure firmware; Draft 1.1 is an unapproved research candidate"
@@ -106,9 +109,27 @@ fn main() {
     // can verify a manifest and branch into it. Bench boot proof only — see
     // memory-stm32u585-slot-a.x. Unset (the default) is byte-identical to
     // every previous build.
+    //
+    // `devunit-ab` (dev units only, see `fw_manifest::devunit`) links the
+    // secure world at dev-unit slot A (bank 1) or slot B (bank 2), and
+    // REQUIRES the slot: a dev-unit image linked monolithically would be
+    // refused by the FSBL's vector-table check, so fail at build time instead.
+    let devunit_ab = env::var_os("CARGO_FEATURE_DEVUNIT_AB").is_some();
     let slot = env::var("PQSIGNER_SECURE_SLOT").unwrap_or_default();
     let mem_x = if !stm32u585 {
+        if devunit_ab {
+            panic!("`devunit-ab` is a hardware (stm32u585) layout");
+        }
         "memory.x"
+    } else if devunit_ab {
+        match slot.as_str() {
+            "a" => "memory-stm32u585-devab-a.x",
+            "b" => "memory-stm32u585-devab-b.x",
+            _ => panic!(
+                "`devunit-ab` requires PQSIGNER_SECURE_SLOT=a or b (got `{slot}`); \
+                 each dev-unit release is linked once per slot"
+            ),
+        }
     } else if slot == "a" {
         "memory-stm32u585-slot-a.x"
     } else if slot.is_empty() {
@@ -117,10 +138,18 @@ fn main() {
         panic!("PQSIGNER_SECURE_SLOT must be unset or `a`, got `{slot}`");
     };
     fs::copy(mem_x, out_dir.join("memory.x")).unwrap();
+    // Tell the code which dev-unit slot it is linked for (its non-secure
+    // partner and the slot COMMIT must not erase follow from it).
+    println!("cargo:rustc-check-cfg=cfg(devunit_slot_b)");
+    if devunit_ab && slot == "b" {
+        println!("cargo:rustc-cfg=devunit_slot_b");
+    }
     println!("cargo:rerun-if-env-changed=PQSIGNER_SECURE_SLOT");
     println!("cargo:rerun-if-changed=memory.x");
     println!("cargo:rerun-if-changed=memory-stm32u585.x");
     println!("cargo:rerun-if-changed=memory-stm32u585-slot-a.x");
+    println!("cargo:rerun-if-changed=memory-stm32u585-devab-a.x");
+    println!("cargo:rerun-if-changed=memory-stm32u585-devab-b.x");
 
     // Find cortex-m-rt's link.x. On QEMU we redirect .gnu.sgstubs to a
     // separate NSC region (QEMU 8.2.2 SG workaround). On real STM32U585
