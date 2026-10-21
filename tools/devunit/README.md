@@ -108,7 +108,7 @@ TZEN=0 and TZEN=1 units, opens the watermarks for the non-secure ROM
 bootloader, and leaves `TZEN=1, SECWM1=0..0x7F, SECWM2=0x30..0x7F,
 SECBOOTADD0=0x180000, nSWBOOT0=1, nBOOT0=1`. RDP stays 0, no WRP, no OTP.
 
-**Acceptance check per unit** (the FSBL has never run on a DVT before
+**Acceptance check per unit** (the FSBL first ran on a DVT on
 2026-10-21; it refuses to boot if its display bring-up fails):
 
 1. After flashing, the panel shows the FSBL's 8 words — they must equal the
@@ -210,7 +210,28 @@ buttons emulated over SWD (PA0/PA1 driven low through the secure GPIOA alias):
   prints park the core unless `arm semihosting enable` is set — USB then never
   enumerates. Not an issue without a debugger.
 
-Not yet run on silicon: the FSBL on a DVT panel (it refuses to boot if its
-display bring-up fails — the per-unit acceptance check covers it), real button
-hardware (the bench emulates the pins), and a torn boot-log record (the
-ECC-NMI recovery path).
+### Silicon evidence (two pq1 DVTs with panel and buttons, 2026-10-21 evening)
+
+Owner at the device, real buttons, USB-C only:
+
+* DVT #1, first flash over ROM DFU (both-buttons entry of its previous
+  `dev-dfu` image), `--erase-all`, 26.10.21.1: the FSBL drove the DVT panel
+  (5x8 words) and booted slot A; its secure elements still held an earlier
+  wallet (PIN screen, not the wizard).
+* Signed USB updates on the real panel and buttons: 26.10.21.1 (A) → .8 (B);
+  after the DFU re-flash below (.8 on A) → .9 (B) → .10 (A) → .11 (B) → .12
+  (A) → .13 (B), each unlocked on the new release. Transfer 30-36 s, 79 s with the per-chunk
+  INSTALLING film (0d3a2c1c; smooth, confirmed by the owner).
+* 26.10.21.8's 2 s both-buttons hold entered ROM DFU; `flash.sh` WITHOUT
+  `--erase-all` put the `px-fingerprint` FSBL on (pixel "OS FINGERPRINT" +
+  whole-word grid, no second screen from the secure world) and the existing
+  wallet still unlocked.
+* The UI changes were each confirmed on the panel one install after they
+  landed (the running firmware draws the update dialogs): UPDATE FIRMWARE?
+  wording, INSTALLING instead of a frozen confirm, the one-consent flow
+  (UPDATE FIRMWARE? → NEW VERSION → 8 words → chord), the smooth film.
+* DVT #2 (investor unit): both-buttons DFU from its previous image,
+  `--erase-all`, 26.10.21.13.
+
+Not yet run on silicon: a torn boot-log record (the ECC-NMI recovery path),
+and the 3-boot rollback on a DVT (silicon-tested on the EVT bench board only).
