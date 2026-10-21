@@ -1204,6 +1204,165 @@ fn show_auto_unlock_failure() {
     }
 }
 
+/// Dev diagnostic (`setup-unlock-repro`, never ships): the auto-unlock right
+/// after setup failed on the EVT (2026-10-16) and the DVT (2026-10-21) while
+/// the same PIN unlocked at the prompt a moment later. This reproduces that on
+/// a board with no panel or buttons. Each round wipes both chips (the e2e
+/// pre-clean cascade), starts them as a cold boot does, provisions a fixed
+/// public test wallet through `provision_from_mnemonic` exactly as setup does,
+/// then unlocks at once and again. With `setup-unlock-repro-restart` every
+/// second round calls `restart_sessions` first, as setup does now. Only
+/// Ok/Err and the `unlock-diag` step code are logged, never a secret. Halts.
+///
+/// # Safety
+/// Single-threaded secure boot path, before NS starts; owns `SE`.
+/// `setup_unlock_repro`'s results, readable over SWD without semihosting
+/// (`nm` for the address): `[0]` = `REPRO_MAGIC` once started, `[1]` = the
+/// round in progress, `[2]` = `REPRO_DONE` at the end, `[3]` = failed
+/// strong-RNG draws; round `r` at
+/// `[4 + 4r ..]`: three unlock outcomes (0 = not run, 1 = OK, otherwise
+/// `kind << 8 | step` with kind 2 = PinIncorrect, 3 = PinLocked, 4 = other)
+/// and the provisioning time in ms.
+#[cfg(all(feature = "setup-unlock-repro", feature = "dual-se", not(test)))]
+#[no_mangle]
+static REPRO_RESULT: [core::sync::atomic::AtomicU32; 20] =
+    [const { core::sync::atomic::AtomicU32::new(0) }; 20];
+#[cfg(all(feature = "setup-unlock-repro", feature = "dual-se", not(test)))]
+const REPRO_MAGIC: u32 = 0x5245_5052;
+#[cfg(all(feature = "setup-unlock-repro", feature = "dual-se", not(test)))]
+const REPRO_DONE: u32 = 0xD0D0_D0D0;
+
+#[cfg(all(feature = "setup-unlock-repro", feature = "dual-se", not(test)))]
+unsafe fn setup_unlock_repro() -> ! {
+    use core::sync::atomic::Ordering::SeqCst;
+    let put = |i: usize, v: u32| REPRO_RESULT[i].store(v, SeqCst);
+    for slot in &REPRO_RESULT {
+        slot.store(0, SeqCst);
+    }
+    put(0, REPRO_MAGIC);
+    use crate::secure_element::WalletStore;
+    use zeroize::Zeroize;
+
+    const WORDS: [&str; 24] = [
+        "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+        "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+        "abandon", "abandon", "abandon", "abandon", "abandon", "abandon",
+        "abandon", "abandon", "abandon", "abandon", "abandon", "art",
+    ];
+    // Rounds 0-1 unlock at once; rounds 2-3 first wait until the 120 s
+    // inactivity timeout has passed (`timeout::is_idle`), as a real setup
+    // does (minutes of pages, no `reset_activity`), and then also unlock
+    // once more after `reset_activity`, as the PIN prompt does.
+    const ROUNDS: u32 = 4;
+    let mnemonic = sphincs_tz_bip39::Mnemonic::from_words(&WORDS)
+        .expect("repro: fixed test mnemonic must parse");
+    let pin: [u8; 8] = *b"13572468";
+    let mut failed = [0u32; 3];
+
+    for round in 0..ROUNDS {
+        let restart = cfg!(feature = "setup-unlock-repro-restart") && round % 2 == 1;
+        let idle = round >= 2;
+        put(1, round);
+        let base = 4 + 4 * round as usize;
+        // SAFETY: forwarded contract; nothing else holds `SE`.
+        let se = unsafe { &mut *core::ptr::addr_of_mut!(SE) };
+        secure_log!("[REPRO] ---- round {} restart_sessions={} idle={} ----", round, restart, idle);
+        timeout::reset_activity();
+
+        // Pre-clean: the e2e cascade (admin wipe, A3 reinit, sweep).
+        let _ = se.reset_optiga_for_admin();
+        let wiped = se.se050.factory_reset_admin();
+        let _ = se.se050.reinit();
+        let _ = se.se050.iterative_wipe(None, None);
+        if !se.se050.admin_exists() {
+            let _ = hw::flash::erase_admin_page();
+        }
+        // Page 124 is never charged here: the unlocks below call
+        // `unlock` directly, not `gated_unlock`.
+        let _ = hw::flash::erase_offchain_page_for_wipe();
+        secure_log!(
+            "[REPRO]   pre-clean: se050 admin wipe ok={} provisioned now={}",
+            wiped.is_ok(),
+            se.is_provisioned()
+        );
+
+        // Start the chips as a cold boot into the wizard does.
+        let _ = se.se050.reinit();
+        let paired = se.pair_optiga_for_first_boot();
+        secure_log!("[REPRO]   pre-wizard OPTIGA pairing ok={}", paired.is_ok());
+        // The wizard's strong-RNG traffic on both chips' sessions (PIN-pad
+        // starts, seed entropy, quiz positions); failures counted in `[3]`.
+        for _ in 0..300 {
+            let mut b = [0u8; 32];
+            if crate::rng_strong::fill(&mut b).is_err() {
+                REPRO_RESULT[3].fetch_add(1, SeqCst);
+            }
+            b.zeroize();
+        }
+
+        let t0 = timeout::now();
+        crypto::provision_from_mnemonic(se, &mnemonic, &pin, None, None);
+        put(base + 3, timeout::now().wrapping_sub(t0));
+        secure_log!("[REPRO]   provisioned in {} ms", timeout::now().wrapping_sub(t0));
+
+        if idle {
+            while !timeout::is_idle() {
+                cortex_m::asm::nop();
+            }
+            secure_log!("[REPRO]   idle reached at {} ms", timeout::now().wrapping_sub(t0));
+        }
+        #[cfg(feature = "setup-unlock-repro-restart")]
+        if restart {
+            let r = se.restart_sessions();
+            secure_log!("[REPRO]   restart_sessions ok={}", r.is_ok());
+        }
+        let _ = restart;
+
+        let labels = ["unlock right after setup", "unlock again", "unlock after reset_activity"];
+        for (i, label) in labels.iter().enumerate() {
+            if i == 2 {
+                if !idle {
+                    break;
+                }
+                timeout::reset_activity();
+            }
+            match se.unlock(&pin) {
+                Ok(mut master) => {
+                    master.zeroize();
+                    put(base + i, 1);
+                    secure_log!("[REPRO]   {}: OK", label);
+                }
+                Err(_e) => {
+                    failed[i] += 1;
+                    let kind: u32 = match _e {
+                        crate::secure_element::UnlockError::PinIncorrect => 2,
+                        crate::secure_element::UnlockError::PinLocked => 3,
+                        _ => 4,
+                    };
+                    put(base + i, kind << 8 | u32::from(dual_se::last_unlock_failure()));
+                    secure_log!(
+                        "[REPRO]   {}: FAILED {:?} at step code {}",
+                        label,
+                        _e,
+                        dual_se::last_unlock_failure()
+                    );
+                }
+            }
+        }
+        se.zeroize_caches();
+    }
+
+    secure_log!(
+        "[REPRO] DONE: {} rounds; first unlock failed {}x, second {}x, after reset_activity {}x",
+        ROUNDS, failed[0], failed[1], failed[2]
+    );
+    let _ = failed;
+    put(2, REPRO_DONE);
+    loop {
+        cortex_m::asm::wfi();
+    }
+}
+
 /// Busy-wait on the S-only tick (SysTick runs from early boot on hardware).
 #[cfg(all(not(test), not(feature = "e2e-test")))]
 fn hold_ms(ms: u32) {
@@ -4396,6 +4555,14 @@ fn main() -> ! {
         secure_log!("[S] [WIPE] complete — halting. Flash the standalone firmware to continue.");
         ui::show_status("WIPED", "flash standalone");
         loop { cortex_m::asm::wfi(); }
+    }
+
+    // Dev diagnostic: the failed auto-unlock after setup, on a board with no
+    // panel or buttons. Never returns. See `setup_unlock_repro`.
+    #[cfg(feature = "setup-unlock-repro")]
+    // SAFETY: single-threaded secure boot path, before NS starts.
+    unsafe {
+        setup_unlock_repro();
     }
 
     #[cfg(feature = "optiga-admin-wipe-e2e")]
