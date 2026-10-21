@@ -646,6 +646,40 @@ pub const fn verify_confirmed_fields(
     Ok(())
 }
 
+/// Dev-unit A/B layout variant of [`verify_confirmed_fields`] — NOT a shipping
+/// profile (see `fw_manifest::devunit`).
+///
+/// Identical field by field, except that bank 2 must carry EXACTLY the secure
+/// watermark `[pstrt, pend]` (the dev-unit secure slot B) instead of being all
+/// non-secure. Exact, not "at least": a wider watermark would swallow a
+/// non-secure slot and a narrower one would expose part of secure slot B to
+/// the non-secure world.
+#[must_use]
+pub const fn verify_confirmed_fields_devunit(
+    optr: u32,
+    secwm1r1: u32,
+    secwm2r1: u32,
+    secbootadd0r: u32,
+    p: &ShipProfile,
+    secwm2_pstrt: u32,
+    secwm2_pend: u32,
+) -> Result<(), ObField> {
+    if let Err(f) = optr_matches_ship(optr, p) {
+        return Err(f);
+    }
+    if !secwm_bank1_all_secure(secwm1r1) {
+        return Err(ObField::Secwm1);
+    }
+    let (pstrt, pend) = secwm_fields(secwm2r1);
+    if pstrt != secwm2_pstrt || pend != secwm2_pend {
+        return Err(ObField::Secwm2);
+    }
+    if !secboot_selects(secbootadd0r, p.boot_addr) {
+        return Err(ObField::SecBootAdd0);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -750,6 +784,45 @@ mod tests {
             chk(GOOD_OPTR, SECWM1_ALL_SECURE, SECWM2_ALL_NS, 0),
             Err(ObField::SecBootAdd0)
         );
+    }
+
+    /// The dev-unit variant differs from the confirmed subset in ONE field:
+    /// bank 2 must carry exactly the secure-slot-B watermark (pages 48..=127;
+    /// raw `0xFFFF_FFB0`, the reserved bits reading as 1 as on silicon).
+    #[test]
+    fn devunit_subset_requires_the_exact_bank2_watermark() {
+        const DEVUNIT_SECWM2: u32 = 0xFFFF_FFB0;
+        assert_eq!(secwm_fields(DEVUNIT_SECWM2), (48, 127));
+        let chk = |optr, w1, w2, sb| {
+            verify_confirmed_fields_devunit(optr, w1, w2, sb, &SHIP_PROFILE_U585, 48, 127)
+        };
+        assert_eq!(chk(GOOD_OPTR, ST_SECWM1_PRODUCTION, DEVUNIT_SECWM2, GOOD_SECBOOT), Ok(()));
+        // The ordinary all-NS bank 2 is a mismatch here, and the dev-unit
+        // watermark is a mismatch for the ordinary profile.
+        assert_eq!(
+            chk(GOOD_OPTR, ST_SECWM1_PRODUCTION, PQ1_SECWM2_CONFIGURED, GOOD_SECBOOT),
+            Err(ObField::Secwm2)
+        );
+        assert_eq!(
+            verify_confirmed_fields(
+                GOOD_OPTR,
+                ST_SECWM1_PRODUCTION,
+                DEVUNIT_SECWM2,
+                GOOD_SECBOOT,
+                &SHIP_PROFILE_U585
+            ),
+            Err(ObField::Secwm2)
+        );
+        // Wider or narrower watermarks are both refused.
+        assert_eq!(secwm_fields(0xFFFF_FFAF), (47, 127));
+        assert_eq!(secwm_fields(0xFFFE_FFB0), (48, 126));
+        assert_eq!(chk(GOOD_OPTR, ST_SECWM1_PRODUCTION, 0xFFFF_FFAF, GOOD_SECBOOT), Err(ObField::Secwm2));
+        assert_eq!(chk(GOOD_OPTR, ST_SECWM1_PRODUCTION, 0xFFFE_FFB0, GOOD_SECBOOT), Err(ObField::Secwm2));
+        // Every other field is still checked.
+        assert_eq!(chk(GOOD_OPTR & !OPTR_TZEN, ST_SECWM1_PRODUCTION, DEVUNIT_SECWM2, GOOD_SECBOOT), Err(ObField::Tzen));
+        assert_eq!(chk(GOOD_OPTR, 0, DEVUNIT_SECWM2, GOOD_SECBOOT), Err(ObField::Secwm1));
+        assert_eq!(chk(GOOD_OPTR, ST_SECWM1_PRODUCTION, DEVUNIT_SECWM2, 0), Err(ObField::SecBootAdd0));
+        assert_eq!(chk(GOOD_OPTR | OPTR_SWAP_BANK, ST_SECWM1_PRODUCTION, DEVUNIT_SECWM2, GOOD_SECBOOT), Err(ObField::SwapBank));
     }
 
     /// The load-bearing DIFFERENCE between the two comparators, pinned in both

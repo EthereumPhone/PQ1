@@ -160,6 +160,10 @@ pub use sphincs_c10::params::{SIGNATURE_LEN, VERIFYING_KEY_LEN};
 /// Manifest-v6 pure format core (Draft 1.1 §6.1/§6.2, flag day).
 pub mod v6;
 
+/// Dev-unit A/B update layout, boot log and slot choice (`devunit-ab`
+/// consumers only; not production geometry).
+pub mod devunit;
+
 // ---------------------------------------------------------------------------
 // Layout constants
 // ---------------------------------------------------------------------------

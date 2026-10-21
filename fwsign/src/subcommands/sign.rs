@@ -31,6 +31,8 @@ use crate::keystore::{self, VendorKey};
 
 pub struct Args {
     pub legacy_bench_unsafe: bool,
+    /// Check against the dev-unit A/B slot capacities (`fw_manifest::devunit`).
+    pub devunit_ab: bool,
     pub key_path: PathBuf,
     pub fsbl_elf: PathBuf,
     pub trusted_fingerprint: PathBuf,
@@ -83,12 +85,16 @@ pub fn run(args: Args) -> Result<()> {
             &secure_elf,
         )?;
 
+    let (secure_capacity, ns_capacity) = if args.devunit_ab {
+        (
+            fw_manifest::devunit::SECURE_SLOT_CAPACITY,
+            fw_manifest::devunit::NS_SLOT_CAPACITY,
+        )
+    } else {
+        (fw_manifest::SLOT_SECURE_CAPACITY, fw_manifest::SLOT_NS_CAPACITY)
+    };
     let secure = flatten_logged_bytes("secure", &args.secure_elf, &secure_elf)?;
-    elf::ensure_image_capacity(
-        "secure",
-        secure.bytes.len(),
-        fw_manifest::SLOT_SECURE_CAPACITY,
-    )?;
+    elf::ensure_image_capacity("secure", secure.bytes.len(), secure_capacity)?;
     verified_keys.verify_secure_flat_image(&secure)?;
     erc7730_status.verify_flat_image(&secure, "ERC-7730 catalogue status")?;
     crate::artifact_key::verify_unique_erc7730_status_in_flat_image(
@@ -114,11 +120,7 @@ pub fn run(args: Args) -> Result<()> {
         crate::artifact_key::verify_erc7730_forced_eligible_absent_from_flat_image(&secure.bytes)?;
     }
     let nonsecure = flatten_logged("nonsecure", &args.nonsecure_elf)?;
-    elf::ensure_image_capacity(
-        "nonsecure",
-        nonsecure.bytes.len(),
-        fw_manifest::SLOT_NS_CAPACITY,
-    )?;
+    elf::ensure_image_capacity("nonsecure", nonsecure.bytes.len(), ns_capacity)?;
 
     let (manifest_bytes, digest) = build_signed_manifest(
         &key,
@@ -506,6 +508,7 @@ mod tests {
     fn positive_release_json_embeds_all_input_fields() {
         let args = Args {
             legacy_bench_unsafe: true,
+            devunit_ab: false,
             key_path: PathBuf::from("/dev/null"),
             fsbl_elf: PathBuf::from("fsbl.elf"),
             trusted_fingerprint: PathBuf::from("vendor-key.sha256"),
@@ -545,6 +548,7 @@ mod tests {
     fn negative_sign_refuses_legacy_format_before_reading_any_input() {
         let args = Args {
             legacy_bench_unsafe: false,
+            devunit_ab: false,
             key_path: PathBuf::from("must-not-be-read.key"),
             fsbl_elf: PathBuf::from("must-not-be-read-fsbl.elf"),
             trusted_fingerprint: PathBuf::from("must-not-be-read.sha256"),

@@ -440,6 +440,21 @@ Status word mapping:
 | WRP1A in `ob-configurator`   | ⚠ out of scope — Phase 7 |
 | `make flash-hw-production`   | ⚠ out of scope — Phase 7 |
 
+**UPDATE 2026-10-21 — a working update path exists for DEV UNITS only
+(`devunit-ab`, `tools/devunit/README.md`).** Pre-production DVTs handed to
+outside testers get their own A/B layout (secure slot B in bank 2 behind
+`SECWM2 = 0x30..0x7F`, 640 KiB slots so the pixel UI fits), a COMMIT that
+stages the slot and resets, "strictly newer than running" instead of the OTP
+floor (dev units never touch OTP), and a three-boot probation the FSBL reads
+from a boot log on page 6 (attempt early in boot, confirm at unlock; FSBL
+read-only). Signed with a dedicated dev-unit key. On EVT-3D21 (bench profile):
+A→B and B→A updates, refusals (downgrade, bad signature, wrong-slot build,
+tampered image, abort), a hard reset mid-stream, and an automatic rollback from
+a deliberately faulting release all behaved as designed. **None of this changes
+the production status in the table below** — `mode-production` refuses
+`devunit-ab` in every build script and crate, and the rows below still describe
+the production-shaped legacy path.
+
 **UPDATE 2026-09-16 — the FSBL half of the boot chain now has a silicon
 receipt; the update path above still does not.** Read the "Hardware bring-up"
 row narrowly: it means BEGIN / CHUNK / COMMIT and the slot flip have never been

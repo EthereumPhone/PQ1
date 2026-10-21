@@ -65,14 +65,27 @@ fn reg(off: u32) -> u32 {
 /// profile the live `RDP` byte selects.
 fn confirmed_fields_match() -> bool {
     let optr = reg(OPTR_OFF);
-    lockdown::verify_confirmed_fields(
+    #[cfg(not(feature = "devunit-ab"))]
+    let verdict = lockdown::verify_confirmed_fields(
         optr,
         reg(SECWM1R1_OFF),
         reg(SECWM2R1_OFF),
         reg(SECBOOTADD0R_OFF),
         lockdown::phase_profile(optr),
-    )
-    .is_ok()
+    );
+    // Dev units: same profile, except bank 2 must carry exactly the secure
+    // watermark that covers secure slot B (`fw_manifest::devunit`).
+    #[cfg(feature = "devunit-ab")]
+    let verdict = lockdown::verify_confirmed_fields_devunit(
+        optr,
+        reg(SECWM1R1_OFF),
+        reg(SECWM2R1_OFF),
+        reg(SECBOOTADD0R_OFF),
+        lockdown::phase_profile(optr),
+        fw_manifest::devunit::SECWM2_PSTRT,
+        fw_manifest::devunit::SECWM2_PEND,
+    );
+    verdict.is_ok()
 }
 
 /// `true` if the option bytes match the phase profile on EITHER of two

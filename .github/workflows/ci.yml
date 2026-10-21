@@ -498,6 +498,12 @@ jobs:
       # which emits --cmse-implib and links NS against the veneers object.
       - name: thumbv8m secure+nonsecure pair link (CMSE implib)
         run: make build-hw
+      # Dev-unit A/B images (devunit-ab, tools/devunit/README.md): the FSBL
+      # and both slot-linked secure+NS pairs of the investor image, each
+      # linked against its own slot's veneers and inside its 640 KiB / 192 KiB
+      # slot. Build-only — signing needs the off-repo dev-unit key.
+      - name: dev-unit A/B images (both slots, build only)
+        run: BUILD_ONLY=1 PROFILE=investor tools/devunit/release.sh 0.0.0.1
       # TZP-11 (#482): secure-slot capacity gate — fwmeasure's strict
       # --require-secure-slot check enforces the 464 KiB A/B slot bound on the
       # linked image (was diagnostic-only, enrolled in no workflow; the FSBL

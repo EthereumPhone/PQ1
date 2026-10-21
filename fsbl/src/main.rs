@@ -72,20 +72,28 @@ compile_error!(
 compile_error!(
     "FW_ROLLBACK_FSBL_UNSAFE_OPT_IN_REQUIRED: bench FSBL builds must enable legacy-fw-rollback-unsafe"
 );
+// The dev-unit layout is not the production geometry or rollback design.
+#[cfg(all(feature = "devunit-ab", feature = "mode-production"))]
+compile_error!("DEVUNIT_AB_NOT_PRODUCTION: the dev-unit A/B layout must never build with mode-production");
 
 use panic_halt as _;
 
 use cortex_m_rt::entry;
-use fw_manifest::{ManifestRef, TRY_ONCE_COMMITTED, TRY_ONCE_TRIED};
+use fw_manifest::ManifestRef;
+#[cfg(not(feature = "devunit-ab"))]
+use fw_manifest::{TRY_ONCE_COMMITTED, TRY_ONCE_TRIED};
 
 /// AW99703 backlight driver (#705). pq1 only — iota2's backlight is
 /// hard-wired, so the module compiles to nothing there.
 #[cfg(feature = "board-pq1")]
 mod aw99703;
 mod board;
+#[cfg(not(feature = "devunit-ab"))]
 mod boot_state;
 mod branch;
 mod clock;
+#[cfg(feature = "devunit-ab")]
+mod devunit;
 mod fi;
 mod glyphs;
 #[cfg(feature = "hw-sha256")]
@@ -96,6 +104,7 @@ mod manifest;
 mod marker;
 mod nv3007;
 mod optbytes;
+#[cfg(not(feature = "devunit-ab"))]
 mod otp;
 mod render;
 mod sau;
@@ -187,7 +196,12 @@ fn main() -> ! {
     let m_a = manifest::at(Slot::A);
     let m_b = manifest::at(Slot::B);
 
+    // Dev units read no OTP: their only anti-downgrade rule is "the higher
+    // valid version wins", plus the updater's "strictly newer than running".
+    #[cfg(not(feature = "devunit-ab"))]
     let floor = otp::rollback_floor();
+    #[cfg(feature = "devunit-ab")]
+    let floor = 0;
 
     #[cfg(feature = "stage-marker")]
     marker::record(marker::Stage::FloorRead, floor);
@@ -217,7 +231,12 @@ fn main() -> ! {
         u32::from(img_ok_a.is_some()),
     );
 
+    #[cfg(not(feature = "devunit-ab"))]
     let Some((slot, secure_digest)) = pick_slot(img_ok_a, img_ok_b) else {
+        halt();
+    };
+    #[cfg(feature = "devunit-ab")]
+    let Some((slot, secure_digest)) = devunit::pick(img_ok_a, img_ok_b) else {
         halt();
     };
 
@@ -363,7 +382,9 @@ fn filter_valid<'a>(m: &'a ManifestRef<'a>, floor: u32) -> Option<&'a ManifestRe
 /// `a` / `b` carry `(manifest, secure_digest)` pairs (None if that
 /// slot didn't pass `verify_images`). The pick logic operates on the
 /// manifest; the digest tags along untouched until we return.
+#[cfg(not(feature = "devunit-ab"))]
 type Candidate<'a> = (&'a ManifestRef<'a>, [u8; 32]);
+#[cfg(not(feature = "devunit-ab"))]
 fn pick_slot(a: Option<Candidate>, b: Option<Candidate>) -> Option<(Slot, [u8; 32])> {
     // Quick single-candidate cases.
     let (Some(a), Some(b)) = (a, b) else {

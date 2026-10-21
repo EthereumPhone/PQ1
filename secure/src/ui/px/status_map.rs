@@ -778,6 +778,17 @@ mod tests {
         }
         firmware_update_screens(5, 9, &fw, &key, &mut t).unwrap();
         assert_eq!(t.as_slice()[1].line(0, 1).unwrap().1, b"DOWNGRADE!");
+        // Dev-unit releases (`devunit-ab`) are numbered YY.MM.DD.N, and the
+        // floor is the running release: the longest realistic captions must
+        // still pass the flow rules, as must the widest possible version.
+        firmware_update_screens(0x1A0A_1502, 0x1A0A_1501, &fw, &key, &mut t).unwrap();
+        assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
+        assert_eq!(t.as_slice()[0].caption(), b"UPDATE TO V26.10.21.2?");
+        assert_eq!(t.as_slice()[1].line(0, 0).unwrap().1, b"to v26.10.21.2");
+        assert_eq!(t.as_slice()[1].line(0, 1).unwrap().1, b"UPGRADE");
+        firmware_update_screens(u32::MAX, u32::MAX - 1, &fw, &key, &mut t).unwrap();
+        assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
+        assert_eq!(t.as_slice()[0].caption(), b"UPDATE TO V255.255.255.255?");
         firmware_verify_screens(&mut t).unwrap();
         assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
     }

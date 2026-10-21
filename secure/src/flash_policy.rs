@@ -54,6 +54,39 @@ impl GenericSecureQwAddr {
     }
 }
 
+/// A quad-word address proven to be aligned and wholly inside the dev-unit
+/// secure slot B — the secure alias of bank-2 pages 48..=127
+/// (`fw_manifest::devunit`). The only bank-2 secure range any writer may
+/// program; compiled into the driver only under `devunit-ab`, kept pure here
+/// so the bounds are host-tested.
+#[cfg_attr(not(feature = "devunit-ab"), allow(dead_code))]
+pub(crate) struct DevunitSlotBQwAddr(u32);
+
+#[cfg_attr(not(feature = "devunit-ab"), allow(dead_code))]
+impl DevunitSlotBQwAddr {
+    const START: u32 = fw_manifest::devunit::SLOT_B_SECURE_ADDR;
+    const END: u32 = fw_manifest::devunit::SLOT_B_SECURE_ADDR
+        + fw_manifest::devunit::SECURE_SLOT_CAPACITY;
+
+    pub(crate) const fn new(addr: u32) -> Option<Self> {
+        if addr % QUADWORD_BYTES != 0 {
+            return None;
+        }
+        let end = match addr.checked_add(QUADWORD_BYTES) {
+            Some(end) => end,
+            None => return None,
+        };
+        if addr < Self::START || end > Self::END {
+            return None;
+        }
+        Some(Self(addr))
+    }
+
+    pub(crate) const fn get(&self) -> u32 {
+        self.0
+    }
+}
+
 /// A page proven erasable through the NON-SECURE erase API, carrying the
 /// PHYSICAL BANK it belongs to.
 ///
@@ -187,6 +220,23 @@ mod tests {
 
         // There is no generic bank-1 address above page 127.
         assert!(GenericSecureQwAddr::new(FIRST_BOOT_JOURNAL_END).is_none());
+    }
+
+    #[test]
+    fn devunit_slot_b_policy_is_exactly_bank2_pages_48_to_127() {
+        let start = fw_manifest::devunit::SLOT_B_SECURE_ADDR;
+        assert_eq!(start, 0x0C16_0000);
+        assert_eq!(DevunitSlotBQwAddr::new(start).map(|a| a.get()), Some(start));
+        assert_eq!(DevunitSlotBQwAddr::new(0x0C1F_FFF0).map(|a| a.get()), Some(0x0C1F_FFF0));
+        // The quad-word below the slot (bank-2 page 47 secure alias, the NS
+        // slot B pages), past the end of bank 2, misaligned, overflowing.
+        assert!(DevunitSlotBQwAddr::new(start - 16).is_none());
+        assert!(DevunitSlotBQwAddr::new(0x0C20_0000).is_none());
+        assert!(DevunitSlotBQwAddr::new(start + 8).is_none());
+        assert!(DevunitSlotBQwAddr::new(u32::MAX - 15).is_none());
+        // Never anything in bank 1 (manifests, slot A, per-device pages).
+        assert!(DevunitSlotBQwAddr::new(BANK1_BASE).is_none());
+        assert!(DevunitSlotBQwAddr::new(FIRST_BOOT_JOURNAL_ADDR).is_none());
     }
 
     #[test]

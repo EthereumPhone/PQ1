@@ -692,8 +692,14 @@ use secure_element::WalletStore;
 
 #[cfg(all(not(feature = "stm32u585"), not(test)))]
 const NS_FLASH_BASE: u32 = 0x0020_0000; // QEMU mps2-an505: NS alias of SSRAM-0
-#[cfg(all(feature = "stm32u585", not(test)))]
+#[cfg(all(feature = "stm32u585", not(feature = "devunit-ab"), not(test)))]
 const NS_FLASH_BASE: u32 = 0x0810_0000; // STM32U585: flash bank 2 NS alias
+// Dev units: the non-secure image that pairs with the secure slot this image
+// is linked for (`fw_manifest::devunit`; slot A is the same 0x0810_0000).
+#[cfg(all(feature = "devunit-ab", not(devunit_slot_b), not(test)))]
+const NS_FLASH_BASE: u32 = fw_manifest::devunit::SLOT_A_NS_ADDR;
+#[cfg(all(feature = "devunit-ab", devunit_slot_b, not(test)))]
+const NS_FLASH_BASE: u32 = fw_manifest::devunit::SLOT_B_NS_ADDR;
 
 // ARMv8-M architectural registers used directly from `main.rs`:
 //   SysTick (SYST_*), DWT cycle counter, DEMCR, ICSR, DHCSR.
@@ -1676,6 +1682,13 @@ fn main() -> ! {
         // Deliberately the first thing after the clocks — see hw/dev_dfu.rs.
         #[cfg(feature = "dev-dfu")]
         hw::dev_dfu::check_and_enter();
+        // Dev units: count this boot against a release still on probation,
+        // before anything that could hang or fault (see `fw_update::devunit`).
+        #[cfg(feature = "devunit-ab")]
+        fw_update::devunit::note_boot_attempt();
+        // Test-only broken release (see Cargo.toml): fault on every boot.
+        #[cfg(feature = "devunit-test-fault")]
+        cortex_m::asm::udf();
         // Bring the debug USART up immediately after the clock tree, so every
         // `secure_log!` from here on reaches the wire. It MUST be after
         // `rcc::init` — `hw::uart::init` programs `board::CONSOLE_BRR`, which
@@ -5075,6 +5088,13 @@ fn main() -> ! {
     ARCH.dwt_cyccnt.write(0);           // reset cycle counter
     ARCH.dwt_ctrl.set_bits(1);          // CYCCNTENA — start counter
 
+    // Dev units: the wallet unlocked on this release, so it is healthy enough
+    // to keep — confirm it before the FSBL's probation runs out.
+    #[cfg(feature = "devunit-ab")]
+    if nsc::is_unlocked() {
+        fw_update::devunit::confirm_running();
+    }
+
     secure_log!("[S] Booting non-secure world...");
     // SAFETY: `boot_ns::boot` performs the irreducibly-unsafe TrustZone
     // branch to the NS reset vector (BLXNS via the linker-provided NS
@@ -5228,6 +5248,16 @@ fn SysTick() {
     // those frames. Independent of the `iwdg` feature and of anything the
     // non-secure world can write. Same `&&` order as the wipe, so before the
     // deadline this costs one comparison per tick (#802).
+    // Dev units: a successful CMD_FW_COMMIT locked the wallet and asked for a
+    // reset once its status had left. Same zeroize-then-reset as below.
+    #[cfg(feature = "devunit-ab")]
+    if fw_update::devunit::reset_due() {
+        nsc::zeroize_sensitive_state();
+        stack_scrub::scrub_dead_stack();
+        crate::fi::zeroize_barrier();
+        cortex_m::peripheral::SCB::sys_reset();
+    }
+
     let wipe_deferred =
         timeout::is_idle() && nsc::handler_is_busy() && !nsc::is_definitely_locked();
     if timeout::wipe_defer_step(wipe_deferred, timeout::trusted_ui_is_waiting()) {
@@ -5559,9 +5589,24 @@ fn PendSV() {
 /// secret caches, then `sys_reset()` (startup re-zeroes `.bss`; the
 /// abnormal-reset path re-locks). NOT the destructive SE wipe — see the
 /// HardFault rationale below.
-#[cfg(all(not(test), feature = "stm32u585"))]
+#[cfg(all(not(test), feature = "stm32u585", not(feature = "devunit-ab")))]
 #[cortex_m_rt::exception]
 unsafe fn NonMaskableInt() -> ! {
+    nsc::zeroize_sensitive_state();
+    crate::fi::zeroize_barrier();
+    cortex_m::peripheral::SCB::sys_reset()
+}
+
+/// Dev units: the same policy, except a double-ECC read inside the boot-log
+/// page — a record torn by a power loss — is cleared and resumed instead of
+/// resetting, so one torn record cannot reset-loop the unit
+/// (`hw::flash::take_boot_log_ecc_error`).
+#[cfg(all(not(test), feature = "stm32u585", feature = "devunit-ab"))]
+#[cortex_m_rt::exception]
+unsafe fn NonMaskableInt() {
+    if hw::flash::take_boot_log_ecc_error() {
+        return;
+    }
     nsc::zeroize_sensitive_state();
     crate::fi::zeroize_barrier();
     cortex_m::peripheral::SCB::sys_reset()

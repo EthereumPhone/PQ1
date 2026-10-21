@@ -124,6 +124,13 @@ enum Cmd {
         #[arg(long)]
         legacy_bench_unsafe: bool,
 
+        /// Size-check the images against the DEV-UNIT A/B slot capacities
+        /// (`fw_manifest::devunit`, 640 KiB secure / 192 KiB non-secure)
+        /// instead of the legacy bench slots. Dev units only; the layout is
+        /// not production geometry.
+        #[arg(long)]
+        devunit_ab: bool,
+
         /// Encrypted vendor-key blob.
         #[arg(long)]
         key: std::path::PathBuf,
@@ -189,6 +196,9 @@ enum Cmd {
         /// Vendor public key (32 bytes, produced by `fwsign pubkey`).
         #[arg(long)]
         pubkey: std::path::PathBuf,
+        /// Size-check against the dev-unit A/B slot capacities.
+        #[arg(long)]
+        devunit_ab: bool,
     },
 
     /// Authenticate and extract the firmware-release half of ERC-7730
@@ -358,6 +368,7 @@ fn main() -> anyhow::Result<()> {
         } => subcommands::gen_test_fixture::run(version, secure_len, nonsecure_len, &out_dir),
         Cmd::Sign {
             legacy_bench_unsafe,
+            devunit_ab,
             key,
             fsbl,
             trusted_fingerprint,
@@ -370,6 +381,7 @@ fn main() -> anyhow::Result<()> {
             out,
         } => subcommands::sign::run(subcommands::sign::Args {
             legacy_bench_unsafe,
+            devunit_ab,
             key_path: key,
             fsbl_elf: fsbl,
             trusted_fingerprint,
@@ -381,7 +393,11 @@ fn main() -> anyhow::Result<()> {
             boot_counter_snap,
             out_path: out,
         }),
-        Cmd::Verify { bundle, pubkey } => subcommands::verify::run(&bundle, &pubkey),
+        Cmd::Verify {
+            bundle,
+            pubkey,
+            devunit_ab,
+        } => subcommands::verify::run(&bundle, &pubkey, devunit_ab),
         Cmd::Erc7730ReleaseMetadata {
             bundle,
             pubkey,

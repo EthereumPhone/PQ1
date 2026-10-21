@@ -1752,3 +1752,91 @@ fn negative_abort_returns_ok_or_notinitialized() {
         "cmd_fw_abort must mention NscStatus exactly twice (NotInitialized gate + Ok return)"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Dev-unit A/B updates (`devunit-ab`, 2026-10-21). The handler-level pins
+// above still hold for the shared code; these pin the dev-unit COMMIT tail,
+// which lives in `fw_update/devunit.rs` and is the only path that resets.
+// ─────────────────────────────────────────────────────────────────────
+
+const DEVUNIT_SRC: &str = include_str!("fw_update/devunit.rs");
+const MAIN_SRC_FOR_DEVUNIT: &str = include_str!("main.rs");
+
+fn devunit_commit_body() -> &'static str {
+    let start = DEVUNIT_SRC
+        .find("pub unsafe fn commit(")
+        .expect("fw_update/devunit.rs must define commit()");
+    let body = &DEVUNIT_SRC[start..];
+    &body[..body.find("\n}\n").expect("commit() must close")]
+}
+
+#[test]
+fn negative_devunit_commit_checks_slot_and_version_before_any_flash_write() {
+    // An image linked for the running slot, or a release that is not newer,
+    // must be refused before the boot log or a manifest is touched.
+    let body = devunit_commit_body();
+    let running_guard = body.find("if inactive == LINKED_SLOT").expect("running-slot guard");
+    let linked = body
+        .find("images_linked_for(inactive, &manifest)")
+        .expect("vector-table slot binding");
+    let newer = body.find("if new_version <= running").expect("strictly-newer check");
+    let first_write = body
+        .find("flash::erase_secure_page(layout::BOOT_LOG_PAGE)")
+        .expect("boot-log restart");
+    assert!(running_guard < first_write && linked < first_write && newer < first_write);
+    assert!(body.contains("NscStatus::FwUpdateBadImage") && body.contains("NscStatus::FwUpdateBadVersion"));
+}
+
+#[test]
+fn negative_devunit_commit_zeroizes_before_it_schedules_the_reset() {
+    // The secret-retention rule `negative_commit_has_no_reset_arm_so_no_secret_handoff`
+    // pins for the legacy handler: the dev-unit path does reset, so the
+    // unlocked session must be wiped first, and the reset itself (SysTick)
+    // wipes again before SYSRESETREQ.
+    let body = devunit_commit_body();
+    let gate = body.find("let gate = crate::fi::check_true_into_sentinel(").expect("staged re-verify");
+    let zeroize = body
+        .find("crate::nsc::zeroize_sensitive_state();")
+        .expect("commit must zeroize the session");
+    let reset = body.find("schedule_reset();").expect("commit must schedule the reset");
+    assert!(gate < zeroize && zeroize < reset);
+    assert!(!DEVUNIT_SRC.contains("trigger_intrusion_wipe"));
+
+    let systick = MAIN_SRC_FOR_DEVUNIT
+        .find("if fw_update::devunit::reset_due() {")
+        .expect("SysTick must poll the dev-unit reset");
+    let tail = &MAIN_SRC_FOR_DEVUNIT[systick..];
+    let z = tail.find("nsc::zeroize_sensitive_state();").expect("zeroize before reset");
+    let r = tail.find("SCB::sys_reset()").expect("reset");
+    assert!(z < r);
+}
+
+#[test]
+fn negative_devunit_staged_manifest_is_tried_and_reverified_from_flash() {
+    let body = devunit_commit_body();
+    assert!(body.contains("copy[fw_manifest::OFF_TRY_ONCE] = TRY_ONCE_TRIED;"));
+    assert!(body.contains("fw_manifest::crc32_ieee(&copy[..fw_manifest::OFF_CRC32])"));
+    assert!(body.contains("flash::write_quadword_verified("));
+    for check in [
+        "staged.as_bytes()[..] == copy[..]",
+        "staged.verify_digest().is_ok()",
+        "staged.try_once_flag() == TRY_ONCE_TRIED",
+        "staged.verify_rollback(running).is_ok()",
+    ] {
+        assert!(body.contains(check), "staged re-verify must include `{check}`");
+    }
+    assert!(body.contains("if gate != crate::fi::OK_SENTINEL"));
+}
+
+#[test]
+fn negative_devunit_ab_is_refused_with_mode_production() {
+    // The dev-unit layout, its resetting COMMIT and its test-only faulting
+    // release must sit in the PRODUCTION_DESTRUCTIVE_HARNESS_FORBIDDEN list.
+    let fence = NSC_MOD_SRC
+        .find("PRODUCTION_DESTRUCTIVE_HARNESS_FORBIDDEN")
+        .expect("production harness fence");
+    let list = &NSC_MOD_SRC[..fence];
+    let list = &list[list.rfind("feature = \"mode-production\",").expect("fence cfg")..];
+    assert!(list.contains("feature = \"devunit-ab\","));
+    assert!(list.contains("feature = \"devunit-test-fault\","));
+}

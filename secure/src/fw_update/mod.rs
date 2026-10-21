@@ -39,9 +39,25 @@ use sphincs_tz_shared::{FW_IMAGE_KIND_NONSECURE, FW_IMAGE_KIND_SECURE};
 
 use crate::ui::confirm::ConfirmResult;
 
+#[cfg(feature = "devunit-ab")]
+pub mod devunit;
 pub mod staging;
 pub mod vendor_pubkey;
 pub mod verify;
+
+/// The rollback floor BEGIN verifies against and the install dialog compares
+/// with: the legacy OTP tally, or on dev units the running release's version
+/// (a release must be strictly newer; dev units read no OTP).
+pub fn rollback_floor() -> u32 {
+    #[cfg(not(feature = "devunit-ab"))]
+    {
+        crate::hw::otp::rollback_floor()
+    }
+    #[cfg(feature = "devunit-ab")]
+    {
+        devunit::rollback_floor()
+    }
+}
 
 /// Require one trusted physical authorization to enter the manifest verifier.
 ///
@@ -129,7 +145,7 @@ pub fn confirm_install(manifest: &ManifestRef) -> (ConfirmResult, u32) {
         use sphincs_tz_bip39::hash_to_word_indices;
 
         let new_version = manifest.fw_version();
-        let floor = crate::hw::otp::rollback_floor();
+        let floor = rollback_floor();
         // Derive 8 BIP-39 words from the manifest's SIGNED secure-image
         // hash — what the user is being asked to install. The device's
         // COMMIT-time `verify_images` re-hashes the streamed bytes

@@ -160,6 +160,27 @@ pub(super) unsafe fn run(_args: &GatewayArgs) -> u32 {
         return NscStatus::Ok as u32;
     }
 
+    // Dev units (`devunit-ab`, never production): stage the slot through the
+    // dev-unit boot-log protocol and reset into the FSBL. The handler-level
+    // properties above all still hold — PIN gate, verify_images first, the
+    // context dropped on every exit — and `devunit::commit` zeroizes the
+    // unlocked session BEFORE it schedules the reset, so no secret crosses it
+    // (the boot-side scrub of a Software reset stays the second belt).
+    #[cfg(feature = "devunit-ab")]
+    {
+        let inactive: flash::Slot = ctx.inactive.into();
+        // SAFETY: `inactive` is the slot BEGIN erased and streamed, and the
+        // manifest bytes are the ones BEGIN verified and the user confirmed.
+        let status = unsafe { crate::fw_update::devunit::commit(inactive, &ctx.manifest_bytes) };
+        // SAFETY: category 5 — exclusive write to `static mut FW_UPDATE`
+        // under the non-reentrant dispatcher + `HandlerGuard`; `ctx` is not
+        // used after this point.
+        unsafe {
+            *core::ptr::addr_of_mut!(FW_UPDATE) = None;
+        }
+        return status as u32;
+    }
+
     // -- Commit -----------------------------------------------------
 
     let inactive: flash::Slot = ctx.inactive.into();

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PQ1 Firmware Update</title>
+<!--
+  PQ1 dev-unit firmware updater (WebHID). Self-contained: no network access,
+  no external scripts. Open in Chrome or Edge (desktop), choose the .pq1fw
+  file you were sent, connect the PQ1, and follow the screen on the device.
+
+  Dev units only (`devunit-ab` firmware). Protocol and package format:
+  tools/devunit/fwupdate.py and tools/devunit/pq1fw.py; device side:
+  fw-manifest/src/devunit.rs and secure/src/fw_update/devunit.rs.
+-->
+<style>
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66;
+  --line: #deded8; --accent: #2f5bd3; --ok: #1f7a43; --warn: #a15c00; --err: #b3261e;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1d1d1b; --ink: #ecece6; --muted: #a3a39b;
+    --line: #34342f; --accent: #8aa8ff; --ok: #5cc98a; --warn: #f0b04a; --err: #ff8a80;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --panel: #1d1d1b; --ink: #ecece6; --muted: #a3a39b;
+  --line: #34342f; --accent: #8aa8ff; --ok: #5cc98a; --warn: #f0b04a; --err: #ff8a80;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 680px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin: 0 0 24px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px 18px; margin: 0 0 14px; }
+section h2 { font-size: 15px; margin: 0 0 10px; display: flex; gap: 10px; align-items: baseline; }
+.step { color: var(--muted); font-weight: 500; }
+button { font: inherit; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent);
+  background: var(--accent); color: #fff; cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 10px 0 0; }
+dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+.words { font-family: var(--mono); font-size: 14px; display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 10px; margin: 8px 0 0; }
+.words span::before { content: attr(data-n) " "; color: var(--muted); }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 10px 0 4px; }
+.bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+.status { margin: 10px 0 0; min-height: 1.5em; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--err); }
+.device-says { border-left: 3px solid var(--accent); padding: 6px 12px; margin: 10px 0 0; }
+.small { font-size: 13px; color: var(--muted); }
+@media (max-width: 480px) { .words { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>PQ1 firmware update</h1>
+  <p class="sub">For PQ1 development units. Works in Chrome or Edge on a computer.</p>
+
+  <section>
+    <h2><span class="step">1</span> Choose the update file</h2>
+    <input type="file" id="file" accept=".pq1fw">
+    <div id="pkg" class="status"></div>
+  </section>
+
+  <section>
+    <h2><span class="step">2</span> Connect your PQ1</h2>
+    <p class="small">Plug it in and unlock it with your PIN first. Then click Connect and pick “PQSigner OS”.</p>
+    <button id="connect" disabled>Connect</button>
+    <div id="dev" class="status"></div>
+  </section>
+
+  <section>
+    <h2><span class="step">3</span> Install</h2>
+    <button id="install" disabled>Install update</button>
+    <button id="check" class="secondary">Check the PQ1</button>
+    <div id="guide"></div>
+    <div class="bar"><div id="bar"></div></div>
+    <div id="run" class="status"></div>
+  </section>
+
+  <p class="small">The update goes into the half of the PQ1’s memory that is not running. If anything
+  goes wrong — you cancel, the cable comes out, the computer sleeps — the firmware you had keeps
+  running, and you can simply try again. After installing, the PQ1 restarts and shows 8 words; check
+  them against the words listed above, then enter your PIN. If a new version cannot reach the PIN
+  screen, the PQ1 goes back to the previous version by itself after three restarts.</p>
+</main>
+<script>
+"use strict";
+const VID = 0x1209, PID = 0x7051, CLA = 0xF0, REPORT = 64, TAG_APDU = 0x05, CHANNEL = 0x0001;
+const INS = { INFO: 0x01, STATUS: 0x02, UNLOCK: 0x10, BEGIN: 0x70, CHUNK: 0x71, COMMIT: 0x72, ABORT: 0x74 };
+const SW_OK = 0x9000, CHUNK = 240;
+// The firmware-signing key of PQ1 development units; the device shows these
+// eight words on its "SIGNER" screen during an update.
+const SIGNER_WORDS = "popular shift evoke mass shoulder spoon mushroom cotton".split(" ");
+const SW_TEXT = {
+  0x6985: "the PQ1 is locked or the session ended — unlock it and try again",
+  0x6982: "cancelled on the PQ1",
+  0x6A80: "the PQ1 rejected this update (not newer, or not signed for this device)",
+  0x6984: "the PQ1 locked itself after inactivity — unlock it and try again",
+  0x6D00: "this PQ1 does not run development-unit firmware",
+};
+const $ = (id) => document.getElementById(id);
+let pkg = null, device = null, info = null;
+const frames = [];
+let wake = null;
+
+function verStr(v) { return [v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255].join("."); }
+function swText(sw) { return "0x" + sw.toString(16).toUpperCase() + " — " + (SW_TEXT[sw] || "unexpected status"); }
+function say(el, text, cls) { el.className = "status " + (cls || ""); el.textContent = text; }
+function wordsHtml(words) {
+  const d = document.createElement("div");
+  d.className = "words";
+  words.forEach((w, i) => { const s = document.createElement("span"); s.dataset.n = i + 1; s.textContent = w; d.appendChild(s); });
+  return d;
+}
+
+// ---- package -------------------------------------------------------------
+async function sha256hex(bytes) {
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  return Array.from(h, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function loadPackage(buf) {
+  const u8 = new Uint8Array(buf);
+  if (new TextDecoder().decode(u8.subarray(0, 8)) !== "PQ1DEVFW") throw new Error("not a PQ1 update file");
+  const hlen = new DataView(buf).getUint32(8, true);
+  const header = JSON.parse(new TextDecoder().decode(u8.subarray(12, 12 + hlen)));
+  if (header.format !== 1 || header.layout !== "devunit-ab-1") throw new Error("unsupported update file format");
+  const blobs = u8.subarray(12 + hlen);
+  const parts = {};
+  for (const slot of ["A", "B"]) {
+    parts[slot] = {};
+    for (const part of ["manifest", "secure", "nonsecure"]) {
+      const e = header.slots[slot][part];
+      const b = blobs.subarray(e.offset, e.offset + e.length);
+      if (b.length !== e.length || (await sha256hex(b)) !== e.sha256) throw new Error("the update file is damaged (download it again)");
+      parts[slot][part] = b;
+    }
+  }
+  return { header, parts, version: header.fw_version >>> 0 };
+}
+$("file").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  try {
+    pkg = await loadPackage(await f.arrayBuffer());
+    const el = $("pkg");
+    el.className = "status";
+    el.innerHTML = "";
+    const dl = document.createElement("dl");
+    dl.innerHTML = "<dt>Version</dt><dd></dd><dt>Build</dt><dd></dd>";
+    dl.children[1].textContent = pkg.header.label;
+    dl.children[3].textContent = (pkg.header.git || "").slice(0, 12) + " (" + pkg.header.profile + ")";
+    el.appendChild(dl);
+    $("connect").disabled = false;
+    refreshInstall();
+  } catch (e) { pkg = null; say($("pkg"), e.message, "err"); }
+});
+
+// ---- HID transport ---------------------------------------------------------
+function onReport(e) { frames.push(new Uint8Array(e.data.buffer)); if (wake) { const w = wake; wake = null; w(); } }
+async function nextFrame(timeoutMs) {
+  const end = Date.now() + timeoutMs;
+  while (!frames.length) {
+    const left = end - Date.now();
+    if (left <= 0) throw new Error("the PQ1 did not answer");
+    await new Promise((res) => { wake = res; setTimeout(res, Math.min(left, 1000)); });
+  }
+  return frames.shift();
+}
+async function apdu(ins, p1, data, timeoutMs) {
+  data = data || new Uint8Array(0);
+  const msg = new Uint8Array(5 + data.length);
+  msg.set([CLA, ins, p1, 0, data.length]); msg.set(data, 5);
+  let off = 0, seq = 0;
+  frames.length = 0;
+  while (off < msg.length || seq === 0) {
+    const f = new Uint8Array(REPORT);
+    f.set([CHANNEL >> 8, CHANNEL & 255, TAG_APDU, seq >> 8, seq & 255]);
+    let n;
+    if (seq === 0) { f[5] = msg.length >> 8; f[6] = msg.length & 255; n = Math.min(57, msg.length); f.set(msg.subarray(0, n), 7); }
+    else { n = Math.min(59, msg.length - off); f.set(msg.subarray(off, off + n), 5); }
+    await device.sendReport(0, f);
+    off += n; seq++;
+  }
+  const buf = []; let want = 0; seq = 0;
+  for (;;) {
+    const r = await nextFrame(timeoutMs || 30000);
+    if (r[2] !== TAG_APDU) continue;
+    if (((r[3] << 8) | r[4]) !== seq) throw new Error("USB framing error");
+    if (seq === 0) { want = (r[5] << 8) | r[6]; buf.push(...r.subarray(7, 7 + Math.min(57, want))); }
+    else buf.push(...r.subarray(5, 5 + Math.min(59, want - buf.length)));
+    seq++;
+    if (buf.length >= want) break;
+  }
+  return { sw: (buf[buf.length - 2] << 8) | buf[buf.length - 1], data: new Uint8Array(buf.slice(0, buf.length - 2)) };
+}
+async function chained(ins, payload, lastTimeoutMs) {
+  for (let off = 0; ;) {
+    const part = payload.subarray(off, off + 255);
+    off += part.length;
+    const last = off >= payload.length;
+    const r = await apdu(ins, last ? 0x00 : 0x80, part, last ? lastTimeoutMs : 30000);
+    if (last || r.sw !== SW_OK) return r;
+  }
+}
+async function readInfo() {
+  const r = await apdu(INS.INFO, 0);
+  if (r.sw !== SW_OK || r.data.length < 40) throw new Error("could not read the PQ1: " + swText(r.sw));
+  const t = r.data.subarray(40, 48);
+  if (t.length < 8 || t[0] !== 0x44 || t[1] !== 0x55 || t[2] !== 1)
+    return { devunit: false };
+  return { devunit: true, slot: t[3] === 1 ? "B" : "A", version: new DataView(t.buffer, t.byteOffset).getUint32(4, false) };
+}
+async function isUnlocked() { const r = await apdu(INS.STATUS, 0); return r.sw === SW_OK && r.data[0] === 0; }
+async function openDevice(d) {
+  device = d;
+  if (!device.opened) await device.open();
+  device.removeEventListener("inputreport", onReport);
+  device.addEventListener("inputreport", onReport);
+}
+
+$("connect").addEventListener("click", async () => {
+  try {
+    const ds = await navigator.hid.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
+    if (!ds.length) return;
+    await openDevice(ds[0]);
+    info = await readInfo();
+    if (!info.devunit) { say($("dev"), "This PQ1 does not run development-unit firmware, so it cannot be updated here.", "err"); return; }
+    const unlocked = await isUnlocked();
+    say($("dev"), `Connected: firmware ${verStr(info.version)}` + (unlocked ? ", unlocked." : " — locked: enter your PIN on the PQ1."), unlocked ? "ok" : "warn");
+    refreshInstall();
+  } catch (e) { say($("dev"), e.message, "err"); }
+});
+
+function refreshInstall() {
+  const ok = pkg && info && info.devunit;
+  $("install").disabled = !ok;
+  if (ok && pkg.version <= info.version)
+    say($("run"), `This PQ1 already has ${verStr(info.version)}; the file holds ${pkg.header.label}. Nothing to install.`, "warn");
+  else if (ok) say($("run"), `Ready to install ${pkg.header.label} (replaces ${verStr(info.version)}).`);
+}
+
+// ---- install -------------------------------------------------------------
+function guide(target) {
+  const g = $("guide");
+  g.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "device-says";
+  box.innerHTML = `<p><b>On the PQ1</b> (each question: tap the right button through all its screens;
+    on the last one press <b>both buttons together</b> to say yes; hold the left button to cancel):</p>
+    <p>1. <i>VERIFY FIRMWARE PACKAGE?</i> — say yes.<br>
+    2. <i>UPDATE TO V${pkg.header.label}?</i> — check the version, then the firmware words, which must be:</p>`;
+  box.appendChild(wordsHtml(pkg.header.slots[target].fingerprint));
+  const p2 = document.createElement("p");
+  p2.innerHTML = "and the signer words:";
+  box.appendChild(p2);
+  box.appendChild(wordsHtml(SIGNER_WORDS));
+  const p3 = document.createElement("p");
+  p3.textContent = "If both match, say yes on the last screen to install. If not, hold the left button to cancel.";
+  box.appendChild(p3);
+  g.appendChild(box);
+}
+async function stream(kind, image, done, total) {
+  for (let off = 0; off < image.length; ) {
+    const n = Math.min(CHUNK, image.length - off);
+    const p = new Uint8Array(8 + n);
+    const dv = new DataView(p.buffer);
+    dv.setUint32(0, off, false); p[4] = kind; p[5] = 0; dv.setUint16(6, n, false);
+    p.set(image.subarray(off, off + n), 8);
+    const r = await apdu(INS.CHUNK, 0, p);
+    if (r.sw !== SW_OK) throw new Error("transfer refused: " + swText(r.sw));
+    off += n;
+    $("bar").style.width = (100 * (done + off) / total).toFixed(1) + "%";
+  }
+}
+async function waitForReturn(target) {
+  say($("run"), "Installed. The PQ1 restarts and shows 8 words — compare them with the firmware words above — then enter your PIN.", "ok");
+  const deadline = Date.now() + 10 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 1500));
+    const ds = (await navigator.hid.getDevices()).filter((d) => d.vendorId === VID && d.productId === PID);
+    for (const d of ds) {
+      try {
+        await openDevice(d);
+        const now = await readInfo();
+        if (!now.devunit) continue;
+        if (now.version === pkg.version) {
+          info = now;
+          say($("run"), `Done: the PQ1 runs ${verStr(now.version)}.`, "ok");
+          return;
+        }
+        info = now;
+        say($("run"), `The PQ1 came back with ${verStr(now.version)}: the new version did not start, so it went back to the previous one. Please tell us.`, "err");
+        return;
+      } catch (e) { /* not ready yet */ }
+    }
+  }
+  say($("run"), "The PQ1 has not come back yet. Enter your PIN on it, then click “Check the PQ1”. If it stays dark, unplug and replug it.", "warn");
+}
+// Manual check after an install: the browser may need the device picked again.
+$("check").addEventListener("click", async () => {
+  try {
+    const ds = await navigator.hid.requestDevice({ filters: [{ vendorId: VID, productId: PID }] });
+    if (!ds.length) return;
+    await openDevice(ds[0]);
+    const now = await readInfo();
+    info = now;
+    if (!now.devunit) { say($("run"), "This PQ1 does not run development-unit firmware.", "err"); return; }
+    if (pkg && now.version === pkg.version) say($("run"), `Done: the PQ1 runs ${verStr(now.version)}.`, "ok");
+    else say($("run"), `The PQ1 runs ${verStr(now.version)}.`, pkg && now.version < pkg.version ? "warn" : "ok");
+  } catch (e) { say($("run"), e.message, "err"); }
+});
+$("install").addEventListener("click", async () => {
+  $("install").disabled = true;
+  try {
+    info = await readInfo();
+    if (!info.devunit) throw new Error("this PQ1 does not run development-unit firmware");
+    if (pkg.version <= info.version) throw new Error(`the PQ1 already has ${verStr(info.version)}`);
+    if (!(await isUnlocked())) {
+      say($("run"), "Enter your PIN on the PQ1…", "warn");
+      await apdu(INS.UNLOCK, 0, null, 300000);
+      if (!(await isUnlocked())) throw new Error("the PQ1 is still locked");
+    }
+    const target = info.slot === "A" ? "B" : "A";
+    const part = pkg.parts[target];
+    guide(target);
+    say($("run"), "Waiting for you to confirm on the PQ1…");
+    let r = await chained(INS.BEGIN, part.manifest, 10 * 60 * 1000);
+    if (r.sw !== SW_OK) throw new Error(swText(r.sw));
+    $("guide").innerHTML = "";
+    say($("run"), "Transferring — keep the PQ1 connected…");
+    const total = part.secure.length + part.nonsecure.length;
+    try {
+      await stream(0, part.secure, 0, total);
+      await stream(1, part.nonsecure, part.secure.length, total);
+    } catch (e) {
+      try { await apdu(INS.ABORT, 0); } catch (_) {}
+      throw e;
+    }
+    try {
+      r = await apdu(INS.COMMIT, 0, null, 60000);
+    } catch (e) {
+      // The PQ1 restarts right after a successful install; if its answer got
+      // lost, the version it comes back with tells.
+      r = { sw: SW_OK };
+    }
+    if (r.sw !== SW_OK) throw new Error("the PQ1 did not accept the transfer: " + swText(r.sw) + " — your firmware is unchanged");
+    $("bar").style.width = "100%";
+    try { await device.close(); } catch (_) {}
+    await waitForReturn(target);
+  } catch (e) {
+    say($("run"), e.message + ". Your current firmware is unchanged; you can try again.", "err");
+  } finally {
+    $("install").disabled = !(pkg && info && info.devunit);
+  }
+});
+
+if (!("hid" in navigator)) {
+  say($("pkg"), "This browser cannot talk to USB devices. Please use Chrome or Edge on a computer.", "err");
+  $("file").disabled = true;
+}
+</script>
+</body>
+</html>

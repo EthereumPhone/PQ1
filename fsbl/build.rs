@@ -66,6 +66,9 @@ fn main() {
     println!(
         "cargo:warning=LEGACY ROLLBACK BACKEND — NONSHIPPING FSBL; Draft 1.1 is an unapproved research candidate"
     );
+    if mode_production && env::var_os("CARGO_FEATURE_DEVUNIT_AB").is_some() {
+        panic!("FSBL `mode-production` and the dev-unit `devunit-ab` layout are mutually exclusive");
+    }
     if mode_production && lcd_test {
         panic!("FSBL `mode-production` and bench-only `lcd-test` are mutually exclusive");
     }

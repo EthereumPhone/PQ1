@@ -99,6 +99,12 @@ idle-hold-nobump = ["idle-hold-test"]
 toctou-test = ["nested-gate-test"]
 stm32u585 = ["sphincs-tz-shared/stm32u585"]  # Real STM32U585 hardware target (vs QEMU mps2-an505)
 usb = ["dep:usb-device", "dep:synopsys-usb-otg"]  # USB HID for host communication
+# DEV UNITS ONLY: link the non-secure world at dev-unit slot A or B
+# (`PQSIGNER_NS_SLOT=a|b`, `fw_manifest::devunit`) and append the dev-unit
+# trailer (running slot + build version) to GET_DEVICE_INFO so the updater can
+# pick the image variant for the inactive slot. Pairs with the secure and FSBL
+# `devunit-ab` features; `make devunit-release` builds all of them.
+devunit-ab = ["stm32u585"]
 # NS half of the IWDG USB-path hang watchdog. Mirrors the secure-side
 # `iwdg` feature: bumps a heartbeat counter each poll-loop iteration +
 # registers its address with the secure IWDG watcher at boot. Implies
