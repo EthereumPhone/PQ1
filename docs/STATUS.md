@@ -182,6 +182,17 @@ backend interpretation and the separate secure-wrapper experiment remain open.
 See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
 and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 
+**Native EasyCrypt R availability (2026-10-21):** the
+[complete initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)
+now bounds actual nonce exhaustion through key generation, complete WOTS/FORS
+signing and final verification. A private observer erases to the original game;
+recorded histories derive fresh-context or cached-success behavior without a
+caller-supplied freshness premise. The explicit bound retains complete public
+query costs and the returned-event prefix charge. Its 53 new lemmas include
+boundary and lossless exhaustion witnesses, with 62 generated controls.
+Native total R-plus-WOTS availability remains open; no Lean import, concrete
+backend or hardware claim follows.
+
 **Separate C10 probability frontier (2026-10-20):** the authoritative
 [PMF project](../contracts/verification/probability/README.md#six-case-initialized-forgery-bound)
 now composes all six actual winning-output alternatives into a finite

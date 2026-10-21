@@ -589,3 +589,16 @@ C10PairedSessionBound
 # Paired key preparation, initialized game and quantitative transfer, 2026-10-16.
 C10PairedKeygen
 C10PairedKeygenBound
+
+# Complete native C10 R availability, 2026-10-21.
+RClassifiedExhaustion
+RObservedSigner
+FullRSession
+RObservedExhaustion
+RObservedHistory
+FullRHistory
+FullRBound
+FullRGame
+FullRInitialization
+ByteRAvailability
+RAvailabilityExamples

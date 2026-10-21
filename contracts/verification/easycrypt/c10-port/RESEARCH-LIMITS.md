@@ -1,11 +1,42 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-20, following the initialized classical byte-game
+Research checkpoint: 2026-10-21, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Work remains tracked under PQ1 #100 and #295.
 
 ## Quantitative loss
+
+**Native EasyCrypt R availability (2026-10-21):**
+[`ByteRAvailability.byte_r_initialized_exhaustion`](cdrafts-split/ByteRAvailability.ec)
+now bounds actual nonce exhaustion through the complete initialized C10 game.
+The private observer calls the original R grinder and WOTS/FORS finisher;
+exact erasure preserves the original byte game's forgery result, session state
+and oracle state. Recorded, classified histories derive either a fresh R context
+or a retained successful trace, including histories after complete signing.
+Actual key generation establishes this invariant; admission, caps, failed calls,
+the successful-message ledger and final verification remain in the experiment.
+
+For nonnegative raw/sign caps `qr, qs`, let `m=10,000,000`,
+`H=155135+qr+qs*(3*m+364892)` and `p=1-1/2048`. The native endpoint is
+`qs*(p^m + (m*H+m*(m-1)/2)/2^128) + (H+771)/2^256`.
+Only the returned R-exhaustion Boolean crosses the existing physical-prefix
+comparison. The theorem quantifies over native lossless byte adversaries under
+the existing oracle-state exclusions; it assumes no caller-supplied freshness
+and imports no Lean theorem. This is an explicit formula, not a new certified
+numerical specialization or a concrete hash/firmware security rating.
+
+The eleven modules add 53 lemmas. Boundary witnesses cover empty history,
+initialization, malformed/capped/failed-session refusal and admitted exhaustion.
+A lossless constant test oracle witnesses actual exhaustion; it is not claimed
+to be a reachable initialized random-oracle history. The 62 generated controls
+include 17 typed procedural changes, seven changed contracts and seven
+equivalent variants, with unchanged consuming proofs. Contract rejection shows
+proof sensitivity rather than falsity of every altered statement.
+This closes native complete-signer R-context availability composition.
+**Native total R-plus-WOTS signing availability remains open.** The separate
+finite PMF result below already covers that larger event; no cross-kernel or
+backend correspondence follows from either result.
 
 **Current separate Lean frontier (2026-10-20):** the
 [six-case composition](../../probability/README.md#six-case-initialized-forgery-bound)

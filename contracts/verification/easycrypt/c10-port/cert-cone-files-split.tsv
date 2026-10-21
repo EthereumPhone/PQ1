@@ -772,3 +772,14 @@ cdrafts-split/C10PairedSession.ec
 cdrafts-split/C10PairedSessionBound.ec
 cdrafts-split/C10PairedKeygen.ec
 cdrafts-split/C10PairedKeygenBound.ec
+cdrafts-split/RClassifiedExhaustion.ec
+cdrafts-split/RObservedSigner.ec
+cdrafts-split/FullRSession.ec
+cdrafts-split/RObservedExhaustion.ec
+cdrafts-split/RObservedHistory.ec
+cdrafts-split/FullRHistory.ec
+cdrafts-split/FullRBound.ec
+cdrafts-split/FullRGame.ec
+cdrafts-split/FullRInitialization.ec
+cdrafts-split/ByteRAvailability.ec
+cdrafts-split/RAvailabilityExamples.ec

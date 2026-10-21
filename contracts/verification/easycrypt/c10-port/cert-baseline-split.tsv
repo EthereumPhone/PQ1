@@ -2625,3 +2625,17 @@ cdrafts-split/C10PairedSession.ec	module:3a25546b8d8e	PairedByteDriver
 cdrafts-split/C10PairedSession.ec	module:96ceffbd5ca0	PairedByteContext
 cdrafts-split/C10PairedKeygen.ec	module:632b5a2df69b	PairedKeygenPreparation
 cdrafts-split/C10PairedKeygen.ec	module:cfd6afcc4a76	PairedKeygenByteContext
+cdrafts-split/ByteRAvailability.ec	defined-op:324d4aee7a27	byte_r_availability_charge
+cdrafts-split/FullRBound.ec	defined-op:5e9296255ae3	full_r_invariant
+cdrafts-split/FullRBound.ec	defined-op:7af066193ac5	full_r_sign_cost
+cdrafts-split/FullRBound.ec	defined-op:bafbc982ae6c	full_r_valid
+cdrafts-split/FullRBound.ec	module:702f90a6f740	FullRRun
+cdrafts-split/FullRGame.ec	module:4448edc14325	FullRContext
+cdrafts-split/FullRGame.ec	module:54cee4d90515	FullRFailureContext
+cdrafts-split/FullRGame.ec	module:c540287d3040	FullRDriver
+cdrafts-split/FullRHistory.ec	defined-op:d8ed9ef35494	full_r_history
+cdrafts-split/FullRSession.ec	module:7f2da7909880	FullRSession
+cdrafts-split/RAvailabilityExamples.ec	module:9ba3fab8f08a	RRejectTestOracle
+cdrafts-split/RObservedExhaustion.ec	module:e318cb2a11e3	ROnlyFailure
+cdrafts-split/RObservedSigner.ec	module:e00de9779e89	RFailure
+cdrafts-split/RObservedSigner.ec	module:efc561ad8bbf	RObservedSigner
