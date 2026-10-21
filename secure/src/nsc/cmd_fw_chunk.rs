@@ -120,11 +120,31 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // `check_chunk` call above, and the destination addresses live in
     // the inactive slot established by BEGIN (the currently-running
     // image is therefore untouched).
-    unsafe {
+    let status = unsafe {
         match fw_update::staging::write_chunk(ctx, image_kind, chunk_offset, &data[..data_len]) {
             Ok(()) => NscStatus::Ok as u32,
             Err(ChunkError::FlashError) => NscStatus::FwUpdateFlashError as u32,
             Err(_) => NscStatus::FwUpdateBadChunk as u32,
         }
+    };
+    if status == NscStatus::Ok as u32 {
+        show_install_progress(ctx);
+    }
+    status
+}
+
+/// Last percentage drawn by [`show_install_progress`]; BEGIN resets it to 0.
+pub(super) static LAST_PCT: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(u8::MAX);
+
+/// Advance the INSTALLING screen BEGIN put up, at most once per percent of
+/// the streamed total, so the user sees the transfer move instead of a
+/// frozen confirm screen (owner, DVT 2026-10-21). Display only.
+fn show_install_progress(ctx: &fw_update::FwUpdateCtx) {
+    use core::sync::atomic::Ordering;
+    let total = u64::from(ctx.expected_secure_len) + u64::from(ctx.expected_nonsecure_len);
+    let done = u64::from(ctx.received_secure) + u64::from(ctx.received_nonsecure);
+    let pct = if total == 0 { 100 } else { (done.min(total) * 100 / total) as u8 };
+    if LAST_PCT.swap(pct, Ordering::Relaxed) != pct {
+        crate::ui::show_progress("INSTALLING", pct);
     }
 }

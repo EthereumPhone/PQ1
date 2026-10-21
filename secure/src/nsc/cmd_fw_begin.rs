@@ -156,6 +156,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         super::zeroize_sensitive_state();
         return NscStatus::UserRejected as u32;
     }
+    // Replace the confirm screen at once: the erase below and the ~30 s
+    // stream that follows would otherwise leave the user looking at a
+    // screen that no longer responds (CHUNK advances this one).
+    crate::ui::show_progress("INSTALLING", 0);
+    super::cmd_fw_chunk::LAST_PCT.store(0, core::sync::atomic::Ordering::Relaxed);
 
     // Determine the inactive slot (the one we're NOT currently running) from
     // the hardware VTOR, NOT the boot-state page. `read_active_slot()` trusts
