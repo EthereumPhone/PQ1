@@ -1824,12 +1824,17 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
                         && (attr.contains("feature = \"ui-px-film-gaps\"")
                             || attr.contains("feature = \"ui-px-film-bench\""))
                 };
-                let encl = (0..i)
-                    .rev()
-                    .find(|&k| lines[k].starts_with("fn ") || lines[k].starts_with("pub fn "))
-                    .expect("enclosing fn");
+                if gated(i - 1) {
+                    continue;
+                }
+                // Any top-level fn form (`pub(crate) fn`, `unsafe fn`, ...).
+                let top_fn = |k: usize| {
+                    let t = lines[k];
+                    !t.starts_with(' ') && (t.starts_with("fn ") || t.contains(" fn ")) && !t.starts_with("//")
+                };
+                let encl = (0..i).rev().find(|&k| top_fn(k)).expect("enclosing fn");
                 assert!(
-                    gated(i - 1) || (encl > 0 && gated(encl - 1)),
+                    encl > 0 && gated(encl - 1),
                     "{path}:{}: recorder call without its cfg: {l}",
                     i + 1
                 );

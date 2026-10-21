@@ -32,8 +32,12 @@ struct Rec {
     /// that ended a pause: `P` progress report, `H` hash driver, `C` chip
     /// wait, `S` the film's opening frame, `X` the recording's end.
     gaps: [(u32, u8, u8, u16); KEPT],
+    /// Per kept pause, its ms inside each [`Phase`] (`PHASES` order).
+    where_: [[u16; PHASES.len()]; KEPT],
     /// Cycles spent in I2C transactions since the previous frame.
     i2c_cyc: u32,
+    /// Cycles spent in each [`Phase`] since the previous frame.
+    phase_cyc: [u32; PHASES.len()],
     /// Pauses of 500 ms or more, all of them (only `KEPT` are listed).
     long: u32,
     /// Per I2C bus (0 = OPTIGA, 1 = SE050): transactions that took 100 ms or
@@ -112,7 +116,9 @@ impl Rec {
         frames: 0,
         total: 0,
         gaps: [(0, 0, 0, 0); KEPT],
+        where_: [[0; PHASES.len()]; KEPT],
         i2c_cyc: 0,
+        phase_cyc: [0; PHASES.len()],
         long: 0,
         buses: [Bus::ZERO; 2],
         steps: [0; STEPS],
@@ -126,17 +132,80 @@ impl Rec {
     fn gap(&mut self, now: u32, src: u8) {
         let i2c_ms = u16::try_from(self.i2c_cyc / 160_000).unwrap_or(u16::MAX);
         self.i2c_cyc = 0;
+        let mut ph = [0u16; PHASES.len()];
+        for (m, c) in ph.iter_mut().zip(self.phase_cyc.iter_mut()) {
+            *m = u16::try_from(*c / 160_000).unwrap_or(u16::MAX);
+            *c = 0;
+        }
         let mut item = (now.wrapping_sub(self.last), self.last_pct, src, i2c_ms);
         if item.0 >= 500 {
             self.long = self.long.wrapping_add(1);
         }
-        for slot in &mut self.gaps {
+        for (slot, w) in self.gaps.iter_mut().zip(self.where_.iter_mut()) {
             if item.0 > slot.0 {
                 core::mem::swap(slot, &mut item);
+                core::mem::swap(w, &mut ph);
             }
         }
         self.last = now;
         self.last_pct = self.pct;
+    }
+}
+
+/// The phases [`Phase`] times inside each pause: `T` the platform TRNG,
+/// `O` an OPTIGA random draw, `E` an SE050 random draw, `F` a flash
+/// controller busy-wait (program or erase).
+const PHASES: [u8; 4] = [b'T', b'O', b'E', b'F'];
+
+/// Times a stretch of work as phase `tag` (one of [`PHASES`]) from creation
+/// to drop, into the pause running at the time: the hunt for the ~45 ms at
+/// a sign's start with no I2C, no hash and no chip wait inside (2026-10-21).
+pub struct Phase {
+    k: usize,
+    c0: u32,
+}
+
+impl Phase {
+    #[must_use]
+    pub fn new(tag: u8) -> Self {
+        Self {
+            k: PHASES.iter().position(|&p| p == tag).unwrap_or(PHASES.len()),
+            c0: crate::hw::lcd_te::cycles(),
+        }
+    }
+}
+
+impl Drop for Phase {
+    fn drop(&mut self) {
+        let r = rec();
+        if r.on && self.k < PHASES.len() {
+            let d = crate::hw::lcd_te::cycles().wrapping_sub(self.c0);
+            r.phase_cyc[self.k] = r.phase_cyc[self.k].wrapping_add(d);
+        }
+    }
+}
+
+/// The fourth page: `WHERE T O E F`, then the three longest pauses as
+/// `<ms>:<T> <O> <E> <F>`, each the pause's ms inside that phase.
+pub fn rows4(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"WHERE T O E F" {
+        push(&mut out[0], &mut n, b);
+    }
+    for (row, (gap, w)) in out[1..].iter_mut().zip(r.gaps.iter().zip(r.where_.iter())) {
+        let mut n = 0;
+        push_u32(row, &mut n, gap.0);
+        push(row, &mut n, b':');
+        for (k, &ms) in w.iter().enumerate() {
+            if k > 0 {
+                push(row, &mut n, b' ');
+            }
+            push_u32(row, &mut n, u32::from(ms));
+        }
     }
 }
 

@@ -1807,6 +1807,8 @@ fn film_gaps_page() {
     dev_page(&rows);
     super::film_gaps::rows3(&mut rows);
     dev_page(&rows);
+    super::film_gaps::rows4(&mut rows);
+    dev_page(&rows);
 }
 
 /// Whether a chip wait's tick ([`film_tick_chip`]) draws back to back. On
