@@ -386,6 +386,18 @@ mod pq_wrap;
 #[cfg(not(test))]
 mod ui;
 
+/// The hash driver's tick (`pqsigner-hw` feature `tick-hook`, raised by
+/// `ui-px`): `pqsigner_sha256_final` calls it after every finished digest,
+/// so a running busy film draws from hash-bound work at its own pace rather
+/// than only at the signer's progress reports, which land ~6,000 hashes
+/// (~29 ms) apart (EVT, 2026-10-21). A no-op with no film running.
+#[cfg(feature = "ui-px")]
+#[no_mangle]
+pub extern "C" fn pqsigner_hash_tick() {
+    #[cfg(all(not(test), feature = "ui-lcd"))]
+    ui::px::lcd::film_tick_hash();
+}
+
 /// Factory provisioning state machine (`factory-provisioning`
 /// feature). One-shot ceremony the factory operator flashes and
 /// runs once per device — sets up dual-SE infrastructure and halts

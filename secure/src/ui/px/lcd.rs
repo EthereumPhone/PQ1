@@ -1773,18 +1773,82 @@ pub fn film_tick_chip() {
     film_tick_paced(film_chip_back_to_back());
 }
 
+/// Finished digests counted by [`film_tick_hash`].
+static FILM_HASHES: AtomicU32 = AtomicU32::new(0);
+
+/// Digests between two looks at the film from the hash driver: ~0.3 ms of
+/// signing at ~4.6 us a digest, fine enough for [`film_phase_ok`] to catch
+/// the start range, and a counter bump per digest otherwise.
+const HASH_TICK_EVERY: u32 = 64;
+
+/// One frame of the running film, if one is due, from the hash driver
+/// (`pqsigner_hash_tick`, after every finished SHA-256). Signing and keygen
+/// report progress only every ~6,000 digests (~29 ms on the EVT), and each
+/// frame then cost ~8 ms more, so the film ran at ~26 fps with uneven gaps
+/// (EVT, owner 2026-10-21: "still a bit choppy"). From here it draws at the
+/// CPU-bound pace instead ([`film_cpu_period_ms`]).
+pub fn film_tick_hash() {
+    if !FILM_LIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let n = FILM_HASHES.load(Ordering::Relaxed).wrapping_add(1);
+    FILM_HASHES.store(n, Ordering::Relaxed);
+    if n % HASH_TICK_EVERY == 0 {
+        film_tick_paced(false);
+    }
+}
+
+/// Start-to-start floor of a frame drawn from CPU-bound work (progress
+/// reports, the hash driver), where each frame's ~8 ms comes out of the work
+/// it plays over: one frame every two TE refreshes, 31 fps evenly spaced,
+/// for ~0.3 s on a sign. 4 ms under the refresh multiple, so that refresh's
+/// start range ([`film_phase_ok`]) is still reachable.
+///
+/// Dev (`ui-px-film-gaps`, owner 2026-10-21): successive signs alternate it
+/// with one frame every 1.5 refreshes (~42 fps, ~+1.4 s on a sign) for a
+/// side-by-side on glass; the STACK HWM page names the one that ran.
+fn film_cpu_period_ms() -> u32 {
+    #[cfg(feature = "ui-px-film-gaps")]
+    if FILM_PACE_FAST.load(Ordering::Relaxed) {
+        return if FILM_CPU_ODD.load(Ordering::Relaxed) { 12 } else { 28 };
+    }
+    28
+}
+
+/// Dev: this sign's film runs the ~42 fps pace ([`film_cpu_period_ms`]).
+#[cfg(feature = "ui-px-film-gaps")]
+static FILM_PACE_FAST: AtomicBool = AtomicBool::new(false);
+
+/// Dev: parity of the CPU-bound frames, for the 1.5-refresh pace.
+#[cfg(feature = "ui-px-film-gaps")]
+static FILM_CPU_ODD: AtomicBool = AtomicBool::new(false);
+
+/// A tick is drawing: a nested one (a digest inside the frame's own work
+/// reaching [`film_tick_hash`]) returns at once.
+static FILM_IN_TICK: AtomicBool = AtomicBool::new(false);
+
 fn film_tick_paced(back_to_back: bool) {
     if !FILM_LIVE.load(Ordering::Relaxed) {
         return;
     }
+    if FILM_IN_TICK.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    film_tick_due(back_to_back);
+    FILM_IN_TICK.store(false, Ordering::Relaxed);
+}
+
+fn film_tick_due(back_to_back: bool) {
     let now = timeout::now();
     if !FILM_SET.load(Ordering::Relaxed) {
         return;
     }
     // SAFETY: single-threaded driver state; `FILM_SET` says `film_start`
-    // wrote it, and no other reference is live during this call.
+    // wrote it, and no other reference is live during this call
+    // (`FILM_IN_TICK` keeps a nested tick out).
     let (anim, last) = unsafe { (*core::ptr::addr_of_mut!(FILM)).assume_init_mut() };
-    if now.wrapping_sub(*last) < FRAME_PERIOD_MS {
+    let floor = if back_to_back { FRAME_PERIOD_MS } else { film_cpu_period_ms() };
+    if now.wrapping_sub(*last) < floor {
         return;
     }
     // The previous frame is still streaming in the background: next tick.
@@ -1806,13 +1870,12 @@ fn film_tick_paced(back_to_back: bool) {
     let after = timeout::now();
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::frame(after);
-    *last = if back_to_back {
-        now
-    } else if after.wrapping_sub(now) > 50 {
-        after.wrapping_add(FRAME_PERIOD_MS)
-    } else {
-        after
-    };
+    #[cfg(feature = "ui-px-film-gaps")]
+    if !back_to_back {
+        FILM_CPU_ODD.store(!FILM_CPU_ODD.load(Ordering::Relaxed), Ordering::Relaxed);
+    }
+    // Paced start to start; a frame that overran 50 ms skips the next slot.
+    *last = if after.wrapping_sub(now) > 50 { after } else { now };
 }
 
 /// The work answered: land the running film on `e` (the current turn
@@ -1945,6 +2008,13 @@ fn show_stack_hwm(ms: u32, frames: u32) {
     let fps = if ms > 0 { frames * 10_000 / ms } else { 0 };
     let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
     bench_row(&mut rows[0], &[b"STACK HWM"], &[]);
+    // Dev: which CPU-bound pace this film ran; the next sign runs the other.
+    #[cfg(feature = "ui-px-film-gaps")]
+    {
+        let fast = FILM_PACE_FAST.load(Ordering::Relaxed);
+        bench_row(&mut rows[0], &[if fast { b"STACK HWM 42fps" } else { b"STACK HWM 31fps" }], &[]);
+        FILM_PACE_FAST.store(!fast, Ordering::Relaxed);
+    }
     bench_row(&mut rows[1], &[b"free ", b" B"], &[free]);
     bench_row(&mut rows[2], &[b"used ", b"/"], &[size.saturating_sub(free), size]);
     bench_row(&mut rows[3], &[b"film ", b".", b"s ", b"."], &[ms / 1000, ms % 1000 / 100, fps / 10, fps % 10]);

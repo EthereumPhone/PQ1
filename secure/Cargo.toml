@@ -201,7 +201,9 @@ ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)
 # Additive over the backend axis: with `ui-lcd` the strip rasteriser paints
 # the panel; with `ui-semihosting` the screens print as text for QEMU e2e.
 # Mutually exclusive with `ui-oled-bench` (16x4-only bench backend).
-ui-px = []
+# `pqsigner-hw/tick-hook`: the busy film also draws from the hash driver
+# (`pqsigner_hash_tick` in main.rs), not only at the signer's progress reports.
+ui-px = ["pqsigner-hw/tick-hook"]
 # `ui-px` at SPI ÷4 = 40 MHz (production board without the dev kit's LED on SCK).
 ui-px-spi40 = ["ui-px", "ui-lcd"]
 # Bench-only: overlay the previous frame's render / blit / period (ms) in the

@@ -62,6 +62,9 @@ const SECURE_CARGO_TOML_SRC: &str = include_str!("../../Cargo.toml");
 const AW99703_SRC: &str = include_str!("../hw/aw99703.rs");
 const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
+const HW_HASH_SRC: &str = include_str!("../../../hw/src/hash.rs");
+const HW_CARGO_SRC: &str = include_str!("../../../hw/Cargo.toml");
+const FSBL_CARGO_SRC: &str = include_str!("../../../fsbl/Cargo.toml");
 
 /// Returns true if `needle` appears in any non-comment line of `src`.
 /// A line is treated as comment-only after the first `//` token; the
@@ -2560,18 +2563,24 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
     let start = UI_PX_LCD_SRC.split("pub fn film_start_with(").nth(1).expect("film_start_with");
     let start = &start[..start.find("\n}\n").unwrap_or(start.len())];
     assert!(start.contains("present_film(&anim, &atlas.marks(), &atlas.font(), true)"), "a film opens on a full frame");
-    let tick = UI_PX_LCD_SRC.split("fn film_tick_paced(").nth(1).expect("film_tick_paced");
+    let tick = UI_PX_LCD_SRC.split("fn film_tick_due(").nth(1).expect("film_tick_due");
     let tick = &tick[..tick.find("\n}\n").unwrap_or(tick.len())];
     assert!(tick.contains("present_film(anim, &atlas.marks(), &atlas.font(), false)"));
-    // The signer's hook keeps its pause after each frame; only a chip wait
-    // may draw back to back, and only where the switch says so.
+    // The signer's hook (and the hash driver) draw at the CPU-bound pace,
+    // one frame per two refreshes outside the dev comparison; only a chip
+    // wait may draw back to back, and only where the switch says so.
+    assert!(tick.contains("let floor = if back_to_back { FRAME_PERIOD_MS } else { film_cpu_period_ms() };"));
+    let pace = UI_PX_LCD_SRC.split("fn film_cpu_period_ms() -> u32 {\n").nth(1).expect("film_cpu_period_ms");
+    let pace = &pace[..pace.find("\n}\n").unwrap_or(pace.len())];
+    assert!(pace.ends_with("\n    }\n    28"), "the shipping pace: {pace}");
+    assert!(pace.starts_with("    #[cfg(feature = \"ui-px-film-gaps\")]\n    if FILM_PACE_FAST.load(Ordering::Relaxed) {"));
     let hook = UI_PX_LCD_SRC.split("pub fn film_tick(_percent: u8) {").nth(1).expect("film_tick");
     assert!(hook.starts_with(
         "\n    #[cfg(feature = \"ui-px-film-gaps\")]\n    super::film_gaps::note_pct(_percent);\n    film_tick_paced(false);\n}"
     ));
     let chip = UI_PX_LCD_SRC.split("pub fn film_tick_chip() {").nth(1).expect("film_tick_chip");
     assert!(chip.starts_with("\n    film_tick_paced(film_chip_back_to_back());\n}"));
-    assert!(tick.contains("*last = if back_to_back {\n        now\n    } else if after.wrapping_sub(now) > 50 {"));
+    assert!(tick.contains("*last = if after.wrapping_sub(now) > 50 { after } else { now };"));
 }
 
 #[test]
@@ -2806,6 +2815,54 @@ fn negative_te_stamps_are_the_busy_films_alone() {
     assert!(UI_PX_LCD_SRC.contains("let Some(wait) = pqsigner_ui_px::stream::phase::wait(since, lo, hi) else {"));
     assert!(!UI_PX_LCD_SRC.contains("fn start_window("), "no second copy of the range");
     assert!(!UI_PX_LCD_SRC.contains("REFRESH_CYC - since"), "the 2026-10-19 underflow");
+}
+
+#[test]
+fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
+    // 2026-10-21. ASSUMPTION ATTACKED: the hash driver's UI hook reaches the
+    // FSBL (the measured trust root, which shares `pqsigner-hw`); it runs
+    // before the digest is out or with a hash in flight; it draws with no
+    // film running, or nests inside a frame's own work.
+    //
+    // Off by default, raised by the secure `ui-px` feature alone; the FSBL
+    // never names it (and builds alone, in its own target dir).
+    assert!(HW_CARGO_SRC.contains("\ndefault = []\n"));
+    assert!(HW_CARGO_SRC.contains("\ntick-hook = []\n"));
+    assert!(!FSBL_CARGO_SRC.contains("tick-hook"));
+    let raisers: std::vec::Vec<&str> = SECURE_CARGO_TOML_SRC
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("tick-hook"))
+        .collect();
+    assert_eq!(raisers, ["ui-px = [\"pqsigner-hw/tick-hook\"]"]);
+    // One call, the finalizer's last statement: the digest is written out,
+    // DCIS cleared and the merge state reset before it.
+    assert_eq!(HW_HASH_SRC.matches("\n        pqsigner_hash_tick();\n").count(), 1);
+    let fin = HW_HASH_SRC
+        .split("pub unsafe extern \"C\" fn pqsigner_sha256_final(out: *mut u8) {")
+        .nth(1)
+        .expect("pqsigner_sha256_final");
+    let fin = &fin[..fin.find("\n}\n").expect("end of final")];
+    let call = fin.find("pqsigner_hash_tick();").expect("the call is in final");
+    assert!(fin.find("core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i * 4), 4);").expect("digest out") < call);
+    assert!(fin.find("REG.sr.modify(|sr| sr & !SR_DCIS);").expect("DCIS cleared") < call);
+    assert!(fin.find("state.pending = 0;").expect("state reset") < call);
+    assert_eq!(fin[call..].trim_end(), "pqsigner_hash_tick();\n    }", "nothing after the tick");
+    assert!(fin[..call].contains("    #[cfg(feature = \"tick-hook\")]\n    // SAFETY:"));
+    assert!(HW_HASH_SRC.contains("#[cfg(feature = \"tick-hook\")]\nextern \"C\" {"));
+    // The secure end is a film tick and nothing else.
+    assert!(MAIN_SRC.contains(
+        "#[cfg(feature = \"ui-px\")]\n#[no_mangle]\npub extern \"C\" fn pqsigner_hash_tick() {\n    #[cfg(all(not(test), feature = \"ui-lcd\"))]\n    ui::px::lcd::film_tick_hash();\n}"
+    ));
+    // It returns first thing with no film running, and a tick never nests.
+    let tick = UI_PX_LCD_SRC.split("pub fn film_tick_hash() {\n").nth(1).expect("film_tick_hash");
+    assert!(tick.starts_with("    if !FILM_LIVE.load(Ordering::Relaxed) {\n        return;\n    }\n"));
+    let paced = UI_PX_LCD_SRC.split("fn film_tick_paced(back_to_back: bool) {\n").nth(1).expect("film_tick_paced");
+    let paced = &paced[..paced.find("\n}\n").expect("end")];
+    assert_eq!(
+        paced,
+        "    if !FILM_LIVE.load(Ordering::Relaxed) {\n        return;\n    }\n    if FILM_IN_TICK.swap(true, Ordering::Relaxed) {\n        return;\n    }\n    film_tick_due(back_to_back);\n    FILM_IN_TICK.store(false, Ordering::Relaxed);"
+    );
+    assert_eq!(UI_PX_LCD_SRC.matches("film_tick_due(").count(), 2, "one definition, one call");
 }
 
 #[test]

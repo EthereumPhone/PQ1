@@ -24,6 +24,10 @@ default = []
 # debugger issues a BKPT that HardFaults on real silicon, so even when enabled
 # the calls go through a DHCSR.C_DEBUGEN probe.
 debug-log = ["dep:cortex-m-semihosting"]
+# Call the secure world's `pqsigner_hash_tick` after every finished digest
+# (its busy film draws from hash-bound work). Secure image only: the FSBL
+# builds alone (`make fsbl`, its own target dir) and never enables it.
+tick-hook = []
 
 [dependencies.cortex-m-semihosting]
 workspace = true
