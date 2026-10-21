@@ -1598,6 +1598,7 @@ SOURCES = (
     'contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_clear_r_typed.ec',
     'contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_positive.ec',
     'contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_preserving.ec',
+    'contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_preserving.ec',
     'contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_failure_reject.ec',
     'contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_failure_typed.ec',
     'contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_seed_reject.ec',

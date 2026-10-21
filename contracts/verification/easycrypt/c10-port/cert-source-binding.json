@@ -9,7 +9,7 @@
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
     "sphincs-c10/tests/easycrypt_transcript.rs": "31801bff356ddf95b949db30e4f6adc3f9b2751ebbf753b1d2f240b5c8a6baa9",
-    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "0386af5476950c5de5215f7f0fcfa37967997421c2d383e2807602f90a84d1c4",
+    "contracts/verification/easycrypt/c10-port/tools/check_source_binding.py": "f4b7284f1e270318f970259370abca8d8ece4a539c26f2da0c95f118dc303660",
     "contracts/verification/scripts/run_easycrypt_split.py": "840c65e496ff977450c3c4d575bd2865f5eee0fa58a826ffb0cb7fb53f540cf8",
     "contracts/verification/easycrypt/c10-port/base-c10-split/WOTS_TW_ES.ec": "caf9c38ca988707bbbab232bb35483f04358352d6ff3bcc75602bf66ac1bb695",
     "contracts/verification/easycrypt/c10-port/base-c10-split/RadixEncoding.ec": "233c94da1e0a40c405f91be6a392c4894553280c62f680d6c0a582df501b6816",
@@ -1786,14 +1786,15 @@
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_clear_r_typed.ec": "e40587bee877a3cfd75072a4c7ffd48f390500d848a51a6245ca2e6cc7887bc1",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_positive.ec": "372f8a7695483fa295717fa0952bd984327379dac74a9900c2ccdc6469cb5750",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_preserving.ec": "7793f52274db39de8532292031fec31f3e0d422ba4d06a51d4999510c262209d",
-    "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_failure_reject.ec": "aa7264d70ac6569df826c47320309b7d70a0433013ef49e9f3d361f33e67e4e0",
-    "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_failure_typed.ec": "130c013be61caee55ce44e33a3304fbc14e1fdb83f4f299c15bddfc37342efe3",
+    "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_preserving.ec": "58a2810e3ec44970d6756b3fddf5af1d66a20f0e5e5b6874a5bcfa35ff6c4a48",
+    "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_failure_reject.ec": "a26425df627f36429fb93646e7b3e686d362b85cae884b953bfbd9b759342e5a",
+    "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_refusal_failure_typed.ec": "2f3de9a060191036f6f8e01ace1287a0849271b68731121bb7caf931cd518fb7",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_seed_reject.ec": "080967b4f61c2c195d3fa8b7d6a5a0077152bc8beab9b003b12d8c1e10244202",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_session_seed_typed.ec": "90ef75e47ab5df1731a22512e2ffecb270ea7a88e5d4e78525c7f68b27ec5fc1",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_wots_invent_failure_reject.ec": "40540d95cc4f974075a6380381a5d05e3bb976e72a3486e6110a8a26c626cad4",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_wots_invent_failure_typed.ec": "7c80069121d33cdd4bb4f9c5eea3efffcbf923959f7eff68b2f057999d157965",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_wots_positive.ec": "d769f2e7ef690d563fa79d01be22523984863817caf7b641b7f81ac667615a2e",
     "contracts/verification/easycrypt/c10-port/scratch/c10_total_availability_wots_preserving.ec": "e833f471a10a22602592f74aef8f96cca6538fd0a75534a3ef9c2fd1d404b901",
-    "contracts/verification/easycrypt/c10-port/tools/c10_total_availability_controls.py": "dbdeef2415a961682f5ee2550094332ec3c8b335cd3f7feaf59f078fcab72d7d"
+    "contracts/verification/easycrypt/c10-port/tools/c10_total_availability_controls.py": "c9c758089e68726660f6bc882efae5e1da16b74467817bda56b6b8a8c62ec907"
   }
 }

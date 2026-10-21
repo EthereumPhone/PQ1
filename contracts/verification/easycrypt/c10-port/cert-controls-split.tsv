@@ -1664,6 +1664,7 @@ scratch/c10_total_availability_driver_positive.ec	MUST-PASS	-
 scratch/c10_total_availability_driver_preserving.ec	MUST-PASS	-
 scratch/c10_total_availability_context_positive.ec	MUST-PASS	-
 scratch/c10_total_availability_context_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_session_refusal_preserving.ec	MUST-PASS	-
 scratch/c10_total_availability_cache_overwrite_typed.ec	MUST-PASS	-
 scratch/c10_total_availability_cache_overwrite_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/c10_total_availability_cache_key_typed.ec	MUST-PASS	-
@@ -1691,7 +1692,7 @@ scratch/c10_total_availability_finish_invent_failure_reject.ec	MUST-FAIL	cannot 
 scratch/c10_total_availability_finish_node_width_typed.ec	MUST-PASS	-
 scratch/c10_total_availability_finish_node_width_reject.ec	MUST-FAIL	cannot save an incomplete proof
 scratch/c10_total_availability_session_refusal_failure_typed.ec	MUST-PASS	-
-scratch/c10_total_availability_session_refusal_failure_reject.ec	MUST-FAIL	invalid first instruction
+scratch/c10_total_availability_session_refusal_failure_reject.ec	MUST-FAIL	cannot save an incomplete proof
 scratch/c10_total_availability_session_seed_typed.ec	MUST-PASS	-
 scratch/c10_total_availability_session_seed_reject.ec	MUST-FAIL	cannot save an incomplete proof
 scratch/c10_total_availability_session_clear_r_typed.ec	MUST-PASS	-

@@ -259,8 +259,12 @@ Nineteen typed procedure changes exercise the memoized cache, bounded count
 schedule, acceptance test, invented failure, node width, refusal behavior,
 seed binding and persistent failure state through WOTS/layer/finisher/session,
 driver and keygen context. Each changed definition must type-check alone.
-Eight unchanged and eight equivalent procedures must pass the original
-consuming proof. Count, finisher and session fixtures first prove relational
+Eight unchanged and nine equivalent procedures must pass the original
+consuming proof. The refusal control sets the failure flag only in the outer
+refusal branch; its matching self-assignment branch must pass both relational
+correspondence and the consuming proof. The faulty branch must reject at an
+incomplete `checked` proof, not a tactic-shape error. Count, finisher and
+session fixtures first prove relational
 correspondence to their canonical procedure using deterministic tactics; the
 original consuming proof follows. This makes their rejection independent of
 inconclusive SMT attempts on changed invariants.
@@ -272,8 +276,8 @@ reject at the `checked` proof application with `the given proof-term proves:`.
 These and the procedure controls establish proof sensitivity, not that every
 changed contract is false, every term is necessary, or the bound is tight.
 
-The generator `tools/c10_total_availability_controls.py` enrolls 80 controls:
-48 expected passes and 32 intended rejections. Diagnostics are pinned to the
+The generator `tools/c10_total_availability_controls.py` enrolls 81 controls:
+49 expected passes and 32 intended rejections. Diagnostics are pinned to the
 intended `checked` lemma and authenticated against raw output and current
 transitive inputs; parsing, typing and resource failures receive no credit.
 Nine additional forbidden-symbol scope probes guard the new modules.

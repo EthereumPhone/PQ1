@@ -52,7 +52,8 @@ TOTAL_AVAILABILITY_CHANGES = [
     ('layer-invent-failure', 'layer', 'result <- Some (sig,root);', 'result <- None;'),
     ('finish-invent-failure', 'finish', 'if (ok)', 'if (false)'),
     ('finish-node-width', 'finish', 'current <- forest.`3;', 'current <- nseq 17 0;'),
-    ('session-refusal-failure', 'session', 'result <- None;', 'result <- None; FullSession.failed <- true;'),
+    ('session-refusal-failure', 'session', '    }\n    return result;',
+     '    } else { FullSession.failed <- true; }\n    return result;'),
     ('session-seed', 'session', '.sign(FullSession.seed,FullSession.root,', '.sign([],FullSession.root,'),
     ('session-clear-r', 'session', 'FullSession.failed <- true;', 'FullSession.failed <- true; RFailure.bad <- false;'),
     ('driver-force-failure', 'driver', 'return result;', 'FullSession.failed <- true; return result;'),
@@ -68,7 +69,6 @@ TOTAL_AVAILABILITY_REASONS.update({
     'cache-overwrite': '[by]: cannot close goals',
     'cache-key': 'nothing to rewrite',
     'cache-distribution': 'nothing to rewrite',
-    'session-refusal-failure': 'invalid first instruction',
     'driver-force-failure': '[by]: cannot close goals',
     'driver-seed': 'expecting a goal of the form: hoare[S], phoare[S]',
 })
@@ -183,6 +183,13 @@ def total_availability_outputs(port):
         outputs[port / 'scratch' / (stem + '_positive.ec')] = header + block + proof
         preserving = mutate(block, 'ControlledTotalAvailability', proc, before, after)
         outputs[port / 'scratch' / (stem + '_preserving.ec')] = header + preserving + proof
+    # Match the refusal mutation's branch shape without changing its behavior.
+    # This must pass both correspondence and the original consuming proof.
+    header, block, proof = _fixture(port, 'session')
+    preserving = mutate(block, 'ControlledTotalAvailability', 'sign',
+                        '    }\n    return result;',
+                        '    } else { FullSession.failed <- FullSession.failed; }\n    return result;')
+    outputs[port / 'scratch' / 'c10_total_availability_session_refusal_preserving.ec'] = header + preserving + proof
     for name, group, before, after in TOTAL_AVAILABILITY_CHANGES:
         header, block, proof = _fixture(port, group)
         changed = mutate(block, 'ControlledTotalAvailability', GROUPS[group][4], before, after)
@@ -207,6 +214,7 @@ def total_availability_rows():
     for group in GROUPS:
         for suffix in ['positive', 'preserving']:
             rows.append('scratch/c10_total_availability_' + group + '_' + suffix + '.ec\tMUST-PASS\t-')
+    rows.append('scratch/c10_total_availability_session_refusal_preserving.ec\tMUST-PASS\t-')
     for name, *_ in TOTAL_AVAILABILITY_CHANGES:
         stem = 'scratch/c10_total_availability_' + name.replace('-', '_')
         rows.extend([stem + '_typed.ec\tMUST-PASS\t-',

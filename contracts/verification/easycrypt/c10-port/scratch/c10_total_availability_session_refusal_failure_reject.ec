@@ -15,7 +15,7 @@ module ControlledTotalAvailability (O : PrefixOracle) = {
   }
   proc hash = FullSession(O).hash
   proc sign(random message shuffle : raw_input) : raw_signature option = {
-    var result; result <- None; FullSession.failed <- true;
+    var result; result <- None;
     if (!FullSession.failed /\ size message = 32 /\
         (size random = 0 \/ size random = 16) /\ size shuffle = 32 /\
         FullSession.sign_calls < FullSession.sign_limit) {
@@ -24,7 +24,7 @@ module ControlledTotalAvailability (O : PrefixOracle) = {
       if (result <> None) {
         FullSession.signed_messages <- rcons FullSession.signed_messages message;
       } else { FullSession.failed <- true; }
-    }
+    } else { FullSession.failed <- true; }
     return result;
   }
 }.
