@@ -166,6 +166,25 @@ Bench profile, ST-LINK + USB-C:
 * The browser updater's script (via `webhid-harness.mjs`) installed a release
   end to end (22.5 s).
 
-Not yet run on silicon: the investor image (pixel-UI dialogs, real PIN and
-secure elements) — needs a unit with a panel and buttons; and a torn boot-log
-record (the ECC-NMI recovery path).
+Investor image (26.10.21.1, real dual-SE + pixel UI) on the same headless board,
+buttons emulated over SWD (PA0/PA1 driven low through the secure GPIOA alias):
+
+* SWD first flash with the partial erase kept the board's test wallet; the
+  dev-unit FSBL booted the investor slot A with no panel attached (the render
+  path does not depend on one).
+* PIN entry on the real pixel PIN row (random start digits read from SRAM)
+  unlocked the real OPTIGA + SE050 wallet; non-secure world and USB came up;
+  `fwupdate.py --info` read the dev-unit trailer (26.10.21.1, slot A).
+* `FW_BEGIN` reached the pixel consent flow (`confirm_screens_checked` under
+  `nsc_fw_begin`). With no consent, the dialog's 120 s idle timeout ended the
+  session: `FW_BEGIN` returned `0x6984`, the updater reported "running
+  firmware unchanged", and the unit kept running 26.10.21.1 (then locked).
+* Gotcha: with OpenOCD attached, the non-secure world's DHCSR-gated semihosting
+  prints park the core unless `arm semihosting enable` is set — USB then never
+  enumerates. Not an issue without a debugger.
+
+Not yet run on silicon: accepting the install consent on the investor image
+and the reboot into its slot B (the mechanics after consent are the code the
+bench image exercised above; the consent itself is a human action by design —
+do it on the DVT during the acceptance check), the FSBL on a DVT panel, and a
+torn boot-log record (the ECC-NMI recovery path).
