@@ -1698,9 +1698,10 @@ fn negative_pq1_optiga_provisioning_resets_only_on_demand() {
 }
 
 #[test]
-fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
-    // Signing and the timing-uniform unlock path must never draw from a chip
-    // wait: only `provision_from_mnemonic` holds the guard.
+fn negative_chip_wait_ticks_are_raised_only_by_provisioning_and_the_signers_draws() {
+    // The timing-uniform unlock path must never draw from a chip wait: only
+    // `provision_from_mnemonic` (its chip writes) and the signer (its strong
+    // draws, owner 2026-10-21) hold the guard.
     let mut holders = std::vec::Vec::new();
     for (path, src) in production_sources() {
         let n = src.matches("ChipWaitTicks::enter()").count();
@@ -1710,9 +1711,29 @@ fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
     }
     assert_eq!(
         holders,
-        std::vec![("src/crypto.rs".into(), 2)],
+        std::vec![("src/crypto.rs".into(), 3)],
         "holders: {holders:?}"
     );
+    // The signer's guard spans its three strong draws and is dropped before
+    // either sign runs.
+    let sign = fn_body(CRYPTO_SRC_PROV, "fn c10_sign_verified_with_progress_inner(");
+    assert_eq!(sign.matches("ChipWaitTicks::enter()").count(), 1);
+    let enter = sign
+        .find("let ticks = crate::ui::ChipWaitTicks::enter();")
+        .expect("signer guard");
+    let opt = sign
+        .find("crate::rng_strong::fill(&mut opt_rand_buf)")
+        .expect("OptRand draw");
+    let seed_b = sign
+        .find("crate::rng_strong::fill(&mut shuffle_seed_b)")
+        .expect("second shuffle-seed draw");
+    let lower = sign.find("drop(ticks);").expect("signer guard dropped");
+    let first_sign = sign.find(".sign_with_shuffle(").expect("first sign");
+    assert!(
+        enter < opt && seed_b < lower && lower < first_sign,
+        "the signer's guard must bracket its strong draws and end before signing"
+    );
+    assert_eq!(sign.matches("rng_strong::fill(").count(), 3);
     let prov = fn_body(CRYPTO_SRC_PROV, "pub fn provision_from_mnemonic(");
     assert_eq!(prov.matches("ChipWaitTicks::enter()").count(), 2);
     let enter = prov

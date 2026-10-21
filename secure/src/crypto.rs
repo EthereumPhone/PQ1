@@ -233,6 +233,12 @@ fn c10_sign_verified_with_progress_inner(
     // Hardware production is compile-fenced to both source-specific SE calls;
     // either missing/failing/non-contributing chip aborts the signature.
     let mut opt_rand_buf = [0u8; sphincs_c10::params::N];
+    // This draw and the two shuffle-seed draws below wait on both secure
+    // elements with no progress report: ~0.3 s frozen at 0% on the EVT
+    // (owner 2026-10-21). Under `ChipWaitTicks` those chip waits draw the
+    // busy film instead. The guard spans the draws only, never the signs,
+    // and every early return drops it.
+    let ticks = crate::ui::ChipWaitTicks::enter();
     #[cfg(not(test))]
     if crate::rng_strong::fill(&mut opt_rand_buf).is_err() {
         // `rng_strong::fill` may have written partial platform-TRNG bytes
@@ -314,6 +320,7 @@ fn c10_sign_verified_with_progress_inner(
         crate::fi::zeroize_barrier();
         return Err(());
     }
+    drop(ticks);
     // X17-FI2 (playbook FI11): same verified-success binding as the
     // OptRand draw above — a glitch that skips one `bl rng_strong::fill`
     // (stale-Ok register) leaves that seed all-zero, i.e. a known,
