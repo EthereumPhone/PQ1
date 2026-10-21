@@ -704,6 +704,9 @@ fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Op
         cost.beam_wait = frametime::cycles().wrapping_sub(t_edge);
         cost.cols = (xend - xa) as u32;
     }
+    // Dev (tearing hunt): where the beam is as this stream starts.
+    #[cfg(feature = "ui-px-film-gaps")]
+    let tear_at = tear_begin();
     lcd::set_window(0, xa as u16, (H - 1) as u16, (xend - 1) as u16);
     lcd::stream_open();
 
@@ -717,6 +720,11 @@ fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Op
     if bg {
         if present_bg(frame, font, bands, xa, xend, (pre, pre_x), &mut cost) {
             core::mem::forget(_guard);
+            // SAFETY: thread-only dev state; read back by `film_reap`.
+            #[cfg(feature = "ui-px-film-gaps")]
+            unsafe {
+                *core::ptr::addr_of_mut!(TEAR_BG) = tear_at.map(|(since, t0)| (xa, xend, since, t0));
+            }
             FILM_BG.store(true, Ordering::Release);
             // Provisional: `film_reap` forgets the glass if the stream then
             // fails. A partial frame is never `complete`.
@@ -827,6 +835,10 @@ fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Op
     lcd::stream_close();
     cost.complete = ok && cols.is_none() && x0 >= W;
     cost.streamed = ok && x0 >= xend;
+    #[cfg(feature = "ui-px-film-gaps")]
+    if cost.streamed {
+        tear_end_fg(xa, xend, tear_at);
+    }
     #[cfg(feature = "ui-px-frametime")]
     {
         cost.stream = frametime::cycles().wrapping_sub(t_edge);
@@ -935,10 +947,55 @@ fn film_reap(wait: bool) -> bool {
             *core::ptr::addr_of_mut!(FILM_SIGS) = (pqsigner_ui_px::damage::FrameSigs::UNKNOWN, 0);
         }
     }
+    // Dev (tearing hunt): the frame has left the wire; check it.
+    #[cfg(feature = "ui-px-film-gaps")]
+    tear_end_bg();
     wipe_scratch();
     FILM_BG.store(false, Ordering::Release);
     FRAME_IN_FLIGHT.store(false, Ordering::Release);
     true
+}
+
+/// Dev (tearing hunt): the background frame in flight, as (window start,
+/// window end, cycles from the last TE edge to its start, start cycle).
+#[cfg(all(feature = "ui-px-film-gaps", feature = "ui-px-dma"))]
+static mut TEAR_BG: Option<(i32, i32, Option<u32>, u32)> = None;
+
+/// Dev (tearing hunt): while the film recorder runs, the cycles since the
+/// last TE edge (`None` with no fresh stamp) and the cycle count now.
+#[cfg(feature = "ui-px-film-gaps")]
+fn tear_begin() -> Option<(Option<u32>, u32)> {
+    if !super::film_gaps::recording() {
+        return None;
+    }
+    let now = crate::hw::lcd_te::cycles();
+    let since = crate::hw::lcd_te::last_edge()
+        .map(|e| now.wrapping_sub(e))
+        .filter(|&d| d <= STAMP_STALE_CYC);
+    Some((since, now))
+}
+
+/// Dev (tearing hunt): a foreground film frame that started at `at`
+/// ([`tear_begin`]) has just left the wire.
+#[cfg(feature = "ui-px-film-gaps")]
+fn tear_end_fg(xa: i32, xend: i32, at: Option<(Option<u32>, u32)>) {
+    if let Some((since, t0)) = at {
+        let dur = crate::hw::lcd_te::cycles().wrapping_sub(t0);
+        super::film_gaps::stream(xa, xend, since, dur, 0);
+    }
+}
+
+/// Dev (tearing hunt): the background frame [`film_reap`] collects, timed by
+/// the panel driver's end stamp and longest mid-stream wait.
+#[cfg(all(feature = "ui-px-film-gaps", feature = "ui-px-dma"))]
+fn tear_end_bg() {
+    // SAFETY: thread-only dev state, written by `present_frame_cols`.
+    if let Some((xa, xend, since, t0)) = unsafe { (*core::ptr::addr_of_mut!(TEAR_BG)).take() } {
+        if lcd::async_ok() {
+            let (end, stall) = lcd::dev_bg_times();
+            super::film_gaps::stream(xa, xend, since, end.wrapping_sub(t0), stall);
+        }
+    }
 }
 
 #[cfg(not(feature = "ui-px-dma"))]
@@ -1742,6 +1799,8 @@ fn film_gaps_end() {
 fn film_gaps_page() {
     let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
     super::film_gaps::rows(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows3(&mut rows);
     dev_page(&rows);
 }
 

@@ -1123,6 +1123,26 @@ static BG_BUSY: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool:
 #[cfg(feature = "ui-px-dma")]
 static BG_OK: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
 
+/// Dev (`ui-px-film-gaps`, tearing hunt 2026-10-21): when the last
+/// background stream left the wire, the longest the wire sat idle inside it
+/// waiting for the thread's next band, and when the current wait began.
+#[cfg(all(feature = "ui-px-dma", feature = "ui-px-film-gaps"))]
+mod bg_dev {
+    use core::sync::atomic::{AtomicBool, AtomicU32};
+    pub static END: AtomicU32 = AtomicU32::new(0);
+    pub static STALL: AtomicU32 = AtomicU32::new(0);
+    pub static IDLE_AT: AtomicU32 = AtomicU32::new(0);
+    pub static IDLE: AtomicBool = AtomicBool::new(false);
+}
+
+/// Dev: the last background stream's end (cycle count) and longest
+/// mid-stream wait for a band (cycles).
+#[cfg(all(feature = "ui-px-dma", feature = "ui-px-film-gaps"))]
+pub fn dev_bg_times() -> (u32, u32) {
+    use core::sync::atomic::Ordering;
+    (bg_dev::END.load(Ordering::Acquire), bg_dev::STALL.load(Ordering::Acquire))
+}
+
 /// Polls `async_drain` waits before it aborts the stream: well over the
 /// longest stream (a full window is 24.3 ms of wire), on the same
 /// ~5 cycles-per-poll scale as `gpdma::wait`'s cap.
@@ -1145,6 +1165,11 @@ pub fn async_begin(total: u8) -> bool {
         st.q = pqsigner_ui_px::stream::BandQueue::new(total);
     }
     BG_OK.store(true, Ordering::Relaxed);
+    #[cfg(feature = "ui-px-film-gaps")]
+    {
+        bg_dev::STALL.store(0, Ordering::Relaxed);
+        bg_dev::IDLE.store(false, Ordering::Relaxed);
+    }
     BG_BUSY.store(true, Ordering::Release);
     true
 }
@@ -1172,6 +1197,12 @@ pub fn async_queue(px: &[u16]) -> bool {
         st.bands[k] = (px.as_ptr() as u32, px.len() as u16);
         match st.q.queue() {
             Some(pqsigner_ui_px::stream::Step::Start(n)) => {
+                // Dev: the wire was idle since the last band left it.
+                #[cfg(feature = "ui-px-film-gaps")]
+                if bg_dev::IDLE.swap(false, Ordering::Relaxed) {
+                    let idle = crate::hw::lcd_te::cycles().wrapping_sub(bg_dev::IDLE_AT.load(Ordering::Relaxed));
+                    bg_dev::STALL.fetch_max(idle, Ordering::Relaxed);
+                }
                 bg_start(st.bands[usize::from(n)]);
                 true
             }
@@ -1246,6 +1277,8 @@ fn bg_start((addr, n): (u32, u16)) {
 #[cfg(feature = "ui-px-dma")]
 fn bg_finish(ok: bool) {
     use core::sync::atomic::Ordering;
+    #[cfg(feature = "ui-px-film-gaps")]
+    bg_dev::END.store(crate::hw::lcd_te::cycles(), Ordering::Release);
     cs_deassert();
     BG_OK.store(ok, Ordering::Relaxed);
     BG_BUSY.store(false, Ordering::Release);
@@ -1281,7 +1314,15 @@ pub unsafe fn on_dma_irq() {
             match st.q.sent() {
                 Some(pqsigner_ui_px::stream::Step::Start(n)) => bg_start(st.bands[usize::from(n)]),
                 Some(pqsigner_ui_px::stream::Step::Finished) => bg_finish(true),
-                Some(pqsigner_ui_px::stream::Step::Idle) => {}
+                Some(pqsigner_ui_px::stream::Step::Idle) => {
+                    // Dev: the next band is not queued yet; the wire waits.
+                    #[cfg(feature = "ui-px-film-gaps")]
+                    {
+                        use core::sync::atomic::Ordering;
+                        bg_dev::IDLE_AT.store(crate::hw::lcd_te::cycles(), Ordering::Relaxed);
+                        bg_dev::IDLE.store(true, Ordering::Relaxed);
+                    }
+                }
                 None => bg_finish(false),
             }
         }

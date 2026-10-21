@@ -40,6 +40,41 @@ struct Rec {
     steps: [u32; STEPS],
     step: usize,
     step_at: u32,
+    tear: Tear,
+}
+
+/// Every film frame's stream checked against the panel's scan model
+/// (`pqsigner_ui_px::stream::phase::tear_check`): the tearing hunt of
+/// 2026-10-21 (owner: vertical tear lines while the opening's two discs
+/// close in, on a first sign's slot keygen).
+#[derive(Clone, Copy)]
+struct Tear {
+    /// Streams checked, and those with no fresh TE stamp to check against.
+    frames: u32,
+    unsynced: u32,
+    /// Started before the beam passed the window; overtaken by the next
+    /// refresh's beam.
+    early: u32,
+    lapped: u32,
+    /// The smallest lap margin seen (cycles; negative is a tear).
+    min_margin: i64,
+    /// The longest time the wire sat idle mid-stream, waiting for a band.
+    max_stall: u32,
+    /// When the first torn frame streamed (ms after the recording began;
+    /// `u32::MAX` while none).
+    first_bad: u32,
+}
+
+impl Tear {
+    const ZERO: Self = Self {
+        frames: 0,
+        unsynced: 0,
+        early: 0,
+        lapped: 0,
+        min_margin: i64::MAX,
+        max_stall: 0,
+        first_bad: u32::MAX,
+    };
 }
 
 /// The `dual_se::provision` steps timed on the second page.
@@ -78,6 +113,7 @@ impl Rec {
         steps: [0; STEPS],
         step: STEPS,
         step_at: 0,
+        tear: Tear::ZERO,
     };
 
     /// Close the pause that ends at `now`; keep it if it is among the longest.
@@ -135,6 +171,98 @@ pub fn frame(now: u32) {
         r.frames = r.frames.wrapping_add(1);
         r.gap(now);
     }
+}
+
+/// A film frame's stream into window [xa, xend) left the wire: `since` is
+/// the cycles from the last TE edge to its start (`None`: no fresh stamp),
+/// `dur` its length and `stall` the longest wait for a band inside it.
+pub fn stream(xa: i32, xend: i32, since: Option<u32>, dur: u32, stall: u32) {
+    let r = rec();
+    if !r.on {
+        return;
+    }
+    let t = &mut r.tear;
+    t.frames = t.frames.wrapping_add(1);
+    t.max_stall = t.max_stall.max(stall);
+    let Some(since) = since else {
+        t.unsynced = t.unsynced.wrapping_add(1);
+        return;
+    };
+    let (early, margin) = pqsigner_ui_px::stream::phase::tear_check(xa, xend, since, dur);
+    t.min_margin = t.min_margin.min(margin);
+    if early {
+        t.early = t.early.wrapping_add(1);
+    }
+    if margin < 0 {
+        t.lapped = t.lapped.wrapping_add(1);
+    }
+    if (early || margin < 0) && t.first_bad == u32::MAX {
+        t.first_bad = timeout::now().wrapping_sub(r.t0);
+    }
+}
+
+/// The third page: `TEAR F<frames> U<no stamp>`, then
+/// `E<early> L<lapped> @<first torn, ms>`, the smallest lap margin and the
+/// longest stall, in ms.
+pub fn rows3(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let t = rec().tear;
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"TEAR F" {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, t.frames);
+    for &b in b" U" {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, t.unsynced);
+    let mut n = 0;
+    push(&mut out[1], &mut n, b'E');
+    push_u32(&mut out[1], &mut n, t.early);
+    for &b in b" L" {
+        push(&mut out[1], &mut n, b);
+    }
+    push_u32(&mut out[1], &mut n, t.lapped);
+    if t.first_bad != u32::MAX {
+        for &b in b" @" {
+            push(&mut out[1], &mut n, b);
+        }
+        push_u32(&mut out[1], &mut n, t.first_bad);
+    }
+    let mut n = 0;
+    for &b in b"lap " {
+        push(&mut out[2], &mut n, b);
+    }
+    if t.min_margin == i64::MAX {
+        push(&mut out[2], &mut n, b'-');
+    } else {
+        // Tenths of a ms, signed.
+        let tenths = t.min_margin / 16_000;
+        if t.min_margin < 0 {
+            push(&mut out[2], &mut n, b'-');
+        }
+        push_tenths(&mut out[2], &mut n, tenths.unsigned_abs());
+        for &b in b"ms" {
+            push(&mut out[2], &mut n, b);
+        }
+    }
+    let mut n = 0;
+    for &b in b"stall " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_tenths(&mut out[3], &mut n, u64::from(t.max_stall / 16_000));
+    for &b in b"ms" {
+        push(&mut out[3], &mut n, b);
+    }
+}
+
+/// Append `tenths` as `<whole>.<tenth>`.
+fn push_tenths(row: &mut [u8; DISPLAY_COLS], n: &mut usize, tenths: u64) {
+    push_u32(row, n, u32::try_from(tenths / 10).unwrap_or(u32::MAX));
+    push(row, n, b'.');
+    push(row, n, b'0' + (tenths % 10) as u8);
 }
 
 /// Provisioning ended (the chips hold the wallet).

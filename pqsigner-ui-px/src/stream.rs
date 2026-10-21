@@ -178,6 +178,21 @@ pub mod phase {
     pub fn start_ok(at: u32, lo: u32, hi: u32, spin_ok: u32) -> bool {
         (at <= hi && at.saturating_add(spin_ok) >= lo) || at.saturating_add(spin_ok) >= REFRESH_CYC.saturating_add(lo)
     }
+
+    /// A finished stream into window [xa, xend) checked against the scan
+    /// model, for the dev tearing readout: it started `since` cycles after a
+    /// TE edge and left the wire `dur` cycles later. Returns whether it
+    /// started before the beam had passed `xa` (the faster beam then
+    /// overtakes the write inside this refresh), and its margin in cycles
+    /// against the next refresh's beam reaching `xend`; negative means that
+    /// beam overtook the write pointer. Both are tears by the model.
+    #[must_use]
+    pub fn tear_check(xa: i32, xend: i32, since: u32, dur: u32) -> (bool, i64) {
+        let beam_at = |row: i32| i64::from(row - TE_SCANLINE) * i64::from(BEAM_ROWS_DEN) / i64::from(BEAM_ROWS_NUM);
+        let early = i64::from(since) < beam_at(xa);
+        let margin = i64::from(REFRESH_CYC) + beam_at(xend) - (i64::from(since) + i64::from(dur));
+        (early, margin)
+    }
 }
 
 #[cfg(test)]
@@ -329,6 +344,42 @@ mod tests {
         assert_eq!(start_window(10, 10), None);
         assert_eq!(start_window(-48, 48), None);
         assert_eq!(start_window(0, W + 1), None);
+    }
+
+    /// The tearing readout's model agrees with the measured full sweep and
+    /// with the start range: #790 measured a full frame, started at the TE
+    /// edge, at 27.9 ms of wire against a 31.40 ms bound, i.e. 3.5 ms inside.
+    #[test]
+    fn tear_check_matches_the_measured_sweep_and_the_start_range() {
+        use super::phase::*;
+        use crate::raster::W;
+        const MS: u32 = 160_000;
+        let (early, margin) = tear_check(0, W, 0, 27_900 * (MS / 1000));
+        assert!(!early);
+        assert!((margin - i64::from(3_500 * (MS / 1000))).abs() < i64::from(MS / 20), "{margin}");
+        // A stall of 4 ms more on the same frame is a tear.
+        assert!(tear_check(0, W, 0, 31_900 * (MS / 1000)).1 < 0);
+        // Every start range, entered anywhere in it with the wire at the
+        // speed the range assumes (15.3 rows/ms), is tear-free with most of
+        // the 27-row (~1 ms) margin left at its late end.
+        let mut windows = 0;
+        for xa in (0..W).step_by(48) {
+            for xend in (xa + 1)..=W {
+                let Some((lo, hi)) = start_window(xa, xend) else { continue };
+                windows += 1;
+                let dur = ((xend - xa) as u32 * MS * 10).div_ceil(153);
+                for since in [lo, (lo + hi) / 2, hi] {
+                    let (early, margin) = tear_check(xa, xend, since, dur);
+                    assert!(!early, "{xa}..{xend} at {since}");
+                    assert!(margin > i64::from(MS * 3 / 4), "{xa}..{xend} at {since}: {margin}");
+                }
+                // Starting before the beam has passed `xa` is early.
+                if xa > TE_SCANLINE + 1 {
+                    assert!(tear_check(xa, xend, 0, dur).0, "{xa}..{xend}");
+                }
+            }
+        }
+        assert!(windows > 1000);
     }
 
     /// The device panic of 2026-10-19: a TE edge arriving a little after
