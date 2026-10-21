@@ -126,8 +126,12 @@ regression does not strand the chip.
 again. Do not send it `investor` updates before that; they halt at RDP 0 and
 roll back.
 
+**After a first flash, unplug and replug**: the boot straight out of the
+last option-byte write can leave the panel black (DVT #2, 2026-10-21).
+
 **Re-flashing an RDP-1 unit** (the FSBL only changes this way): enter ROM DFU
-(both buttons, as below) and run `flash.sh ... --dfu --regress`. RDP 1 -> 0
+(both buttons, as below) and run `flash.sh ... --dfu --regress` (it uses
+the ROM's readout-unprotect, `STM32_Programmer_CLI -c port=USB1 -rdu`). RDP 1 -> 0
 mass-erases the flash, so the wallet on the device is gone (restore from the
 24 words); the secure elements stay paired, because their keys come from the
 DHUK, which survives the regression. If the unit cannot reach DFU (broken
@@ -282,5 +286,39 @@ Owner at the device, real buttons, USB-C only:
 * DVT #2 (investor unit): both-buttons DFU from its previous image,
   `--erase-all`, 26.10.21.13.
 
-Not yet run on silicon: a torn boot-log record (the ECC-NMI recovery path),
+### Silicon evidence (die-bound keys at RDP 1, DVT #2, 2026-10-21 night)
+
+Owner at the device, real panel and buttons, USB-C only:
+
+* First flash of 26.10.21.14 (`investor`, `devunit-die-keys`) over ROM DFU
+  (both-buttons entry of its previous 26.10.21.13 testkey image),
+  `--erase-all`. All four images verified; the last option-byte write
+  (`nSWBOOT0=1 nBOOT0=1 RDP=0xBB`) printed "Downloading Option Bytes Data
+  failed", as the boot-bit write always does, and the unit left DFU.
+* **Gotcha:** the boot straight out of that write left the panel black. A
+  plain unplug/replug then showed the FSBL words (slot A, "spot foil twin
+  arena wait furnace slab better") and the setup wizard. Reaching the wizard
+  proves RDP 1 took: the secure world halts at NOT LOCKED below it, and the
+  FSBL booted at RDP 1 with the new `0xBB` read-back profile.
+* Setup wizard: new wallet on the real OPTIGA + SE050 with DHUK-rooted
+  pairing/admin keys and a fresh random salt; unlocked; `fwupdate.py --info`
+  read 26.10.21.14, slot A.
+* Signed USB update at RDP 1: 26.10.21.14 (A) → 26.10.21.15 (B), one consent
+  on the device, 495 KB secure in 64.8 s + 99 KB non-secure in 12.8 s; the
+  unit restarted into slot B (words "embrace early south cheese beauty drive
+  magnet adult"), the wallet unlocked, `--info` read 26.10.21.15, slot B.
+
+* Recovery path, same unit, test wallet: the both-buttons hold entered ROM
+  DFU at RDP 1 (`0483:df11`; the bootloader then refuses even the
+  option-byte read, "Fail to read NVM Size"). `-ob RDP=0xAA` is never sent
+  over DFU at RDP 1 (CubeProgrammer gives up on the read first); `-rdu`
+  (readout unprotect) regressed it: "Memory Read Protection disabled
+  successfully", re-enumerated, option bytes then RDP 0xAA with TZEN, SECWM
+  and SECBOOTADD0 unchanged. `flash.sh` now uses `-rdu`, and tolerates the
+  empty read. Re-flash of 26.10.21.15 to slot A with RDP 1 again; after a
+  replug: FSBL words, WIPING, WALLET WIPED (the SE wallet had no salt any
+  more and was wiped with the DHUK-derived admin credential), the wizard, a
+  new wallet, unlocked; `--info` read 26.10.21.15, slot A.
+
+Not yet run on silicon: a torn boot-log record (the ECC-NMI recovery path)
 and the 3-boot rollback on a DVT (silicon-tested on the EVT bench board only).

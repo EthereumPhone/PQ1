@@ -79,7 +79,7 @@ else
   wait_link() { sleep 2; }
 fi
 
-ob() { $P -ob displ 2>&1 | strip | grep -E '^\s*(RDP|TZEN|nSWBOOT0|nBOOT0|SWAP_BANK|SECWM1_PSTRT|SECWM1_PEND|SECWM2_PSTRT|SECWM2_PEND|SECBOOTADD0|BOOT_LOCK|SRAM_RST)\s'; }
+ob() { $P -ob displ 2>&1 | strip | grep -E '^\s*(RDP|TZEN|nSWBOOT0|nBOOT0|SWAP_BANK|SECWM1_PSTRT|SECWM1_PEND|SECWM2_PSTRT|SECWM2_PEND|SECBOOTADD0|BOOT_LOCK|SRAM_RST)\s' || true; }
 field() { grep -E "^\s*$1\s*:" "$2" | head -1 | sed -E 's/^[^:]*:\s*(0x[0-9A-Fa-f]+).*/\1/'; }
 obwrite() {  # program option bytes; the chip resets and (DFU) re-enumerates
   say "option bytes: $*"
@@ -88,9 +88,14 @@ obwrite() {  # program option bytes; the chip resets and (DFU) re-enumerates
 }
 
 say "option bytes before:"; ob | tee "$REL/ob-before-$MODE.txt" | tee -a "$LOG"
-if [ "$(field RDP "$REL/ob-before-$MODE.txt")" = "0xBB" ] && [ $REGRESS = 1 ]; then
+# At RDP 1 the ROM bootloader refuses even the option-byte read ("Fail to read
+# NVM Size", DVT #2 2026-10-21), so the RDP field is empty there: --regress
+# acts on anything that is not a confirmed Level 0.
+if [ "$(field RDP "$REL/ob-before-$MODE.txt")" != "0xAA" ] && [ $REGRESS = 1 ]; then
   say "RDP 1 -> 0: MASS ERASE of all flash (the wallet on this unit is gone)"
-  $P -ob RDP=0xAA 2>&1 | strip | tee -a "$LOG" | grep -E -i 'rror|success|unchanged' | tail -2 || true
+  # `-rdu` (ROM readout-unprotect), not `-ob RDP=0xAA`: at RDP 1 CubeProgrammer
+  # cannot read the option bytes first and never sends the write over DFU.
+  $P -rdu 2>&1 | strip | tee -a "$LOG" | grep -E -i 'rror|success|disabled' | tail -2 || true
   sleep 5; wait_link
   say "option bytes after the regression:"; ob | tee "$REL/ob-before-$MODE.txt" | tee -a "$LOG"
   ERASE_ALL=1
