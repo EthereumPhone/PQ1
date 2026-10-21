@@ -1573,13 +1573,24 @@ fn positive_busy_poll_draws_only_under_the_provisioning_flag() {
 }
 
 #[test]
-fn positive_each_driver_ticks_once_from_its_busy_wait() {
-    assert_eq!(IFX_I2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
+fn positive_each_driver_ticks_from_its_busy_waits() {
+    // OPTIGA: the response poll, and the NACK retries of a register write
+    // or read (the chip busy or waking; EVT 2026-10-21), each after its
+    // delay and nowhere else.
+    assert_eq!(IFX_I2C_SRC.matches("crate::ui::busy_poll();").count(), 3);
     let poll = fn_body(IFX_I2C_SRC, "unsafe fn poll_response_ready(");
     assert!(
         poll.contains("crate::ui::busy_poll();"),
         "OPTIGA: tick while the chip is busy"
     );
+    for f in ["unsafe fn write_register(", "unsafe fn read_register("] {
+        // A method: it ends at the impl's indentation.
+        let rest = &IFX_I2C_SRC[IFX_I2C_SRC.find(f).expect(f)..];
+        let body = &rest[..rest.find("\n    }\n").expect("method end")];
+        assert_eq!(body.matches("crate::ui::busy_poll();").count(), 1, "{f}");
+        let delay = body.find("cortex_m::asm::delay(80_000);").expect("retry delay");
+        assert!(delay < body.find("crate::ui::busy_poll();").unwrap(), "{f}: after the delay");
+    }
     assert_eq!(T1OI2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
     let read = fn_body(T1OI2C_SRC, "unsafe fn read_frame(");
     let sof_loop = &read[..read.find("if !found_sof {").expect("SOF loop")];
