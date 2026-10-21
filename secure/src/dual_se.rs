@@ -102,6 +102,30 @@ impl DualSecureElement {
         self.optiga.load_pbs();
     }
 
+    /// Put both chips on fresh sessions before the auto-unlock straight
+    /// after provisioning, so that unlock starts from the state a cold boot
+    /// gives every later one: OPTIGA reset + new shield, SE050 T=1' reset +
+    /// new SCP03 session. Provisioning leaves state behind that a boot never
+    /// sees (the SE050 selftest provokes a refused delete on purpose, the
+    /// SE050 A3 session-pending state; the OPTIGA has run its whole write
+    /// sequence); the auto-unlock failed on the EVT (2026-10-16) and the DVT
+    /// (2026-10-21) while the same PIN unlocked at the prompt right after.
+    /// No PIN or credential is involved. Both chips are always restarted;
+    /// the first error is returned, and the unlock that follows reports its
+    /// own failure either way.
+    pub fn restart_sessions(&mut self) -> Result<(), SeError> {
+        let o = self.optiga.restart_session();
+        let e = self.se050.reinit();
+        if let Err(_e) = &o {
+            secure_log!("[DUAL] OPTIGA session restart FAILED: {:?}", _e);
+        }
+        if let Err(_e) = &e {
+            secure_log!("[DUAL] SE050 session restart FAILED: {:?}", _e);
+        }
+        o.map_err(|_| SeError::InternalError)?;
+        e.map_err(|_| SeError::InternalError)
+    }
+
     /// Bring-up transport OPTIGA E140 pairing, run before the legacy seed
     /// wizard draws entropy — see `OptigaTrustM::pair_for_first_boot` for why
     /// (mandatory `ensure_shield` in `random()` needs a paired chip). This is
