@@ -502,7 +502,26 @@ pub fn firmware_update_screens(
     Ok(())
 }
 
-/// The consent to run the manifest verifier (`fw_update::confirm_verify_
+/// The dev-unit firmware update (`devunit-ab`), one consent (owner,
+/// 2026-10-21): the plain ask, the new version, its eight start-up words
+/// whole, and the returning ask, where the chord installs. The signature has
+/// already been checked when this is shown (dev units have no separate
+/// verify ask), so every fact on it is authenticated. `fw` is the zero-padded
+/// BIP-39 words of the signed secure-image hash — what the FSBL shows at
+/// every boot of the new release.
+pub fn firmware_install_screens(version: u32, fw: &[[u8; 8]; 8], out: &mut pqsigner_ui_px::Screens) -> Result<(), ()> {
+    out.set_len(0);
+    let mut ver = [0u8; 16];
+    let vn = version_text(version, &mut ver);
+    let hero = ScreenBuilder::hero(b"UPDATE", Icon::Fingerprint, b"UPDATE FIRMWARE?").finish().map_err(|_| ())?;
+    let fw_words: [&[u8]; 8] = core::array::from_fn(|i| trim_zero(&fw[i]));
+    out.push(&hero)?;
+    out.push(&fw_detail(b"VERSION", Side::Left, b"NEW VERSION", &[&ver[..vn], b"Next: its 8 words"])?)?;
+    out.push(&ScreenBuilder::words(b"FWWORDS", b"", &fw_words).finish().map_err(|_| ())?)?;
+    out.push(&hero)?;
+    Ok(())
+}
+
 /// request`): no manifest field is shown — the bytes are unverified.
 pub fn firmware_verify_screens(out: &mut pqsigner_ui_px::Screens) -> Result<(), ()> {
     out.set_len(0);
@@ -807,6 +826,23 @@ mod tests {
         // Verify consent: opening ask, one detail, returning ask (two taps).
         assert_eq!(t.as_slice().len(), 3);
         assert!(t.as_slice().iter().all(|s| s.npages() == 1));
+        // Dev units: one consent — ask, version, the eight words, returning
+        // ask (three RIGHT taps to the chord).
+        for v in [0x1A0A_150Au32, u32::MAX] {
+            firmware_install_screens(v, &fw, &mut t).unwrap();
+            assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
+            let s = t.as_slice();
+            assert_eq!(s.len(), 4);
+            assert!(s.iter().all(|x| x.npages() == 1));
+            assert_eq!(s[0].caption(), b"UPDATE FIRMWARE?");
+            assert_eq!(s[3].caption(), b"UPDATE FIRMWARE?");
+            for k in 0..8 {
+                assert_eq!(s[2].grid_word(k), Some(trim_zero(&fw[k])));
+            }
+        }
+        firmware_install_screens(0x1A0A_150A, &fw, &mut t).unwrap();
+        assert_eq!(t.as_slice()[1].line(0, 0).unwrap().1, b"26.10.21.10");
+        assert_eq!(t.as_slice()[1].line(0, 1).unwrap().1, b"Next: its 8 words");
     }
 
     /// The lifecycle scenarios (port step 4) as record fixtures for the frame

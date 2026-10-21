@@ -87,19 +87,28 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // This is the attempt boundary. Invalid transport input must never arm a
     // seed wipe, reset the device, write a persistent failure counter, or wear
     // flash. A retry requires another affirmative physical action.
+    //
+    // Dev units (`devunit-ab`, owner decision 2026-10-21) skip this ask: an
+    // update there is ONE consent, after the verifier (`confirm_install`).
+    // What that gives up: on an unlocked dev unit the host can run the
+    // verifier without a button press, i.e. repeat it for a glitch rig.
+    // Accepted for pre-production units; the production design keeps it.
     use crate::ui::confirm::ConfirmResult;
-    let (verify_confirm, verify_confirm_sentinel) = fw_update::confirm_verify_request();
-    match verify_confirm {
-        ConfirmResult::Confirmed => {}
-        ConfirmResult::Cancelled => return NscStatus::UserRejected as u32,
-        ConfirmResult::IdleWipe => {
-            super::zeroize_sensitive_state();
-            return NscStatus::IdleWipe as u32;
+    #[cfg(not(feature = "devunit-ab"))]
+    {
+        let (verify_confirm, verify_confirm_sentinel) = fw_update::confirm_verify_request();
+        match verify_confirm {
+            ConfirmResult::Confirmed => {}
+            ConfirmResult::Cancelled => return NscStatus::UserRejected as u32,
+            ConfirmResult::IdleWipe => {
+                super::zeroize_sensitive_state();
+                return NscStatus::IdleWipe as u32;
+            }
         }
-    }
-    if verify_confirm_sentinel != crate::fi::OK_SENTINEL {
-        super::zeroize_sensitive_state();
-        return NscStatus::UserRejected as u32;
+        if verify_confirm_sentinel != crate::fi::OK_SENTINEL {
+            super::zeroize_sensitive_state();
+            return NscStatus::UserRejected as u32;
+        }
     }
 
     // Jitter the entry into the verifier after consent. This is defense in

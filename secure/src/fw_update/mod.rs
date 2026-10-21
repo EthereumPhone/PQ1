@@ -165,7 +165,20 @@ pub fn confirm_install(manifest: &ManifestRef) -> (ConfirmResult, u32) {
         // Port step 4: the same facts on the design's screens — the version
         // and its direction, both fingerprints whole on the words grid —
         // through the pixel consent; the pages below only when it cannot run.
-        #[cfg(feature = "ui-px")]
+        // Dev units: one consent — version and the eight start-up words only
+        // (`status_map::firmware_install_screens`; owner, 2026-10-21). The
+        // signer words are left out: the verifier already refused anything
+        // not signed by the one dev-unit key.
+        #[cfg(all(feature = "ui-px", feature = "devunit-ab"))]
+        {
+            let fw_cells: [[u8; 8]; 8] = core::array::from_fn(|i| sphincs_tz_bip39::word_bytes_at(fw_words[i]).0);
+            if let Ok(out) = crate::nsc::px_confirm_plain(|t| {
+                crate::ui::px::status_map::firmware_install_screens(new_version, &fw_cells, t)
+            }) {
+                return out;
+            }
+        }
+        #[cfg(all(feature = "ui-px", not(feature = "devunit-ab")))]
         {
             let fw_cells: [[u8; 8]; 8] = core::array::from_fn(|i| sphincs_tz_bip39::word_bytes_at(fw_words[i]).0);
             let key_cells: [[u8; 8]; 8] = core::array::from_fn(|i| sphincs_tz_bip39::word_bytes_at(key_words[i]).0);

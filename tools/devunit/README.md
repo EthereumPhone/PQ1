@@ -127,9 +127,14 @@ The unit must be unlocked. Either tool:
 * **Linux CLI:** `tools/devunit/fwupdate.py <file.pq1fw>`; `--info` shows what
   runs.
 
-On the device, for each question: tap RIGHT through its screens, press BOTH
-buttons on the last one to accept, hold LEFT to cancel. ~25 s transfer for the
-investor image, then the unit restarts, shows the new words, asks for the PIN.
+On the device (firmware 26.10.21.10 and later): one question, "UPDATE
+FIRMWARE?" — tap RIGHT through the new version and its 8 words (3 taps), press
+BOTH buttons on the last screen to install, hold LEFT to cancel. The signature
+is checked before the question appears, so everything on it is authentic; the
+signer words are no longer shown (the device only accepts the dev-unit key).
+Then INSTALLING with progress, ~30 s, and the unit restarts, shows the new
+words, asks for the PIN. Firmware up to 26.10.21.9 asks twice (a verify
+question, then "UPDATE TO V…?" with 6 taps and the signer words).
 Cancel, unplug, or an error at any point leaves the running release in place.
 
 **What to send a tester:** the `.pq1fw` file, `pq1-fwupdate.html`, and the
