@@ -1333,13 +1333,19 @@ fn negative_measured_boot_module_is_test_gated_out_at_crate_root() {
     // conditions are asserted TOGETHER and in one attribute — two stacked
     // `#[cfg]`s would satisfy a laxer check while making the cfg-out silently
     // conditional on attribute order.
+    //
+    // `not(feature = "devunit-ab")` joined it 2026-10-21 for the same reason:
+    // dev units always boot through the FSBL, which shows the fingerprint (in
+    // the pixel UI's design under its `px-fingerprint`), so a second screen
+    // only repeated it.
     assert!(
         MAIN_SRC.contains(
-            "#[cfg(all(not(test), not(feature = \"mode-production\")))]\nmod measured_boot;"
+            "#[cfg(all(not(test), not(feature = \"mode-production\"), not(feature = \"devunit-ab\")))]\nmod measured_boot;"
         ),
         "main.rs must gate `mod measured_boot;` on cfg(all(not(test), \
-         not(feature = \"mode-production\"))) — hw-only peers, and release \
-         images do not carry the advisory fingerprint screen"
+         not(feature = \"mode-production\"), not(feature = \"devunit-ab\"))) — \
+         hw-only peers, and release and dev-unit images do not carry the \
+         advisory fingerprint screen"
     );
 }
 

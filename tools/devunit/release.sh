@@ -89,10 +89,10 @@ export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
 REPRO="--remap-path-prefix=$HOME/.cargo=/cargo --remap-path-prefix=$HOME/.rustup=/rustup --remap-path-prefix=/nix/store=/nix-store --remap-path-prefix=$ROOT=/pqsigner -C link-arg=--build-id=none"
 mkdir -p "$W"
 
-echo "==> FSBL"
+echo "==> FSBL (pixel-UI fingerprint: px-fingerprint)"
 FSBL_VENDOR_PUBKEY=$PUBKEY CARGO_TARGET_THUMBV8M_MAIN_NONE_EABI_RUSTFLAGS="-C linker=arm-none-eabi-ld -C link-arg=-Tlink.x $REPRO" \
   cargo build --locked --release --target $T --target-dir "$W/fsbl" \
-    -p pqsigner-fsbl --features legacy-fw-rollback-unsafe,board-pq1,devunit-ab 2>&1 \
+    -p pqsigner-fsbl --features legacy-fw-rollback-unsafe,board-pq1,devunit-ab,px-fingerprint 2>&1 \
   | grep -E '^(error|warning: unused)|^ *--> fsbl' || true
 FSBL_ELF=$W/fsbl/$T/release/pqsigner-fsbl
 [ -f "$FSBL_ELF" ] || { echo "FSBL build failed" >&2; exit 1; }

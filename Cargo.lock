@@ -1210,6 +1210,8 @@ name = "pqsigner-fsbl-tests"
 version = "0.1.0"
 dependencies = [
  "pqsigner-geometry",
+ "pqsigner-ui-px",
+ "sphincs-tz-bip39",
  "tempfile",
 ]
 

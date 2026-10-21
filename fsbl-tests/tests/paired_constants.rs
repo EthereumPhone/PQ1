@@ -104,6 +104,21 @@ fn fingerprint_dwell_agrees_between_the_fsbl_and_the_secure_world() {
     );
 }
 
+/// `px-fingerprint` paints the secure world's two screens (title, then words)
+/// in the FSBL, so the title gets the same time it had there.
+#[test]
+fn fingerprint_title_time_agrees_between_the_fsbl_and_the_secure_world() {
+    let fsbl_src = read_workspace_file("fsbl/src/render.rs");
+    let secure_src = read_workspace_file("secure/src/measured_boot.rs");
+    let fsbl_ms = const_u32(&fsbl_src, "fsbl/src/render.rs", "TITLE_HOLD_MS");
+    let secure_ms = const_u32(&secure_src, "secure/src/measured_boot.rs", "TITLE_MS");
+    assert_eq!(
+        fsbl_ms, secure_ms,
+        "fsbl/src/render.rs TITLE_HOLD_MS = {fsbl_ms} ms vs secure/src/measured_boot.rs \
+         TITLE_MS = {secure_ms} ms: change both, or say in the commit why they differ"
+    );
+}
+
 /// Every renderer targets the same logical trusted-display grid. The FSBL's
 /// own module doc says so: "Renders the SAME `DISPLAY_COLS=16 x
 /// DISPLAY_ROWS=4` char grid". Nothing enforced it until now — the FSBL

@@ -354,6 +354,20 @@ failed.
 - `sphincs_tz_bip39::firmware_fingerprint_lines` — pure layout
   function shared between FSBL and `secure/src/measured_boot.rs`.
 
+**UPDATE 2026-10-21 — dev units show the fingerprint once, in the FSBL, in
+the pixel UI's design.** The dev-unit FSBL (`devunit-ab` + `px-fingerprint`)
+paints the secure world's two pixel-UI screens itself — the "OS FINGERPRINT"
+title for `TITLE_HOLD_MS` = 1.5 s, then the eight whole words on the numbered
+grid for `FINGERPRINT_HOLD_MS` = 4 s — and the secure world's
+`measured_boot::run` is compiled out of dev-unit images, as it already was of
+`mode-production` ones. The composer (`fsbl/src/px_fprint.rs`) is pure and is
+compared pixel for pixel with the `pqsigner-ui-px` engine for every word of
+the list (`fsbl-tests/tests/px_fingerprint.rs`, which also regenerates its
+~7 KB of font/title data). Whole words need the letters past the fifth, which
+the FSBL's prefix-5 table lacks: a 1.4 KB suffix stream supplies them. The
+devunit FSBL span is 29,816 B of the legacy 32 KiB region. The default FSBL
+build is unchanged.
+
 ## Test coverage
 
 - `bip39/tests/prefix5_roundtrip.rs` — prefix table integrity, layout

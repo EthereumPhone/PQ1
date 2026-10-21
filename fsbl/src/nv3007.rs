@@ -947,6 +947,44 @@ impl Lcd {
         }
     }
 
+    /// Paint the whole panel from landscape columns (`px-fingerprint`).
+    ///
+    /// `column(x, col)` fills landscape column `x` in the pixel UI's wire order
+    /// (`col[H - 1 - y]`, `pqsigner_ui_px::raster::Strip`): native scan row
+    /// `x`, native X `0..142` — the transpose `blit_glyph` documents, with the
+    /// validated `FLIP_X` (native X = 141 − landscape y) and no `FLIP_Y`.
+    /// One window, one CS-low stream, one 284-byte column buffer on the stack.
+    ///
+    /// `false` means a transfer timed out; the frame is incomplete.
+    #[cfg(feature = "px-fingerprint")]
+    #[must_use]
+    pub fn paint(&mut self, mut column: impl FnMut(usize, &mut [u16; PANEL_W])) -> bool {
+        const _: () = assert!(FLIP_X && !FLIP_Y, "paint() assumes the validated FLIP_X-only orientation");
+        if !set_window(0, 0, FRAME_WIDTH - 1, FRAME_HEIGHT - 1) {
+            return false;
+        }
+        let mut col = [BG; PANEL_W];
+        cs_assert();
+        dc_high();
+        let mut ok = true;
+        for x in 0..PANEL_H {
+            column(x, &mut col);
+            spi_begin((PANEL_W * 2) as u16);
+            for &px in &col {
+                ok = spi_send_byte((px >> 8) as u8) && spi_send_byte(px as u8);
+                if !ok {
+                    break;
+                }
+            }
+            ok = spi_end() && ok;
+            if !ok {
+                break;
+            }
+        }
+        cs_deassert();
+        ok
+    }
+
     /// Reset the char grid to spaces.
     pub fn clear(&mut self) {
         for row in &mut self.rows {

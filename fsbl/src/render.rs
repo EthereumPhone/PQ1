@@ -11,7 +11,13 @@
 //! advisory screen must show the same words for the same digest; any
 //! divergence is a strong tamper signal).
 
+#[cfg(not(feature = "px-fingerprint"))]
 use sphincs_tz_bip39::firmware_fingerprint_lines;
+#[cfg(feature = "px-fingerprint")]
+use sphincs_tz_bip39::{hash_to_word_indices, word_prefix_at};
+
+#[cfg(feature = "px-fingerprint")]
+use crate::px_fprint;
 
 use crate::fi;
 use crate::nv3007::{delay_ms, Lcd};
@@ -47,6 +53,13 @@ use crate::nv3007::{delay_ms, Lcd};
 /// +0.02..0.03% across a 3.3x range. 4,000 is therefore EXPECTED to deliver
 /// ~4.001 s — but that has NOT been measured on silicon yet.
 pub const FINGERPRINT_HOLD_MS: u32 = 4_000;
+
+/// `px-fingerprint`: how long the "OS FINGERPRINT" title stays up before the
+/// words grid replaces it — the secure world's `measured_boot::TITLE_MS`,
+/// whose two screens this FSBL now paints instead (dev units show the
+/// fingerprint once, here). The words then hold for [`FINGERPRINT_HOLD_MS`].
+#[cfg(feature = "px-fingerprint")]
+pub const TITLE_HOLD_MS: u32 = 1_500;
 
 /// Drive the LCD end-to-end: init, render, flush, hold, return a VERDICT.
 ///
@@ -92,13 +105,22 @@ pub fn render_fingerprint(digest: &[u8; 32]) -> u32 {
     #[cfg(feature = "stage-marker")]
     crate::marker::record(crate::marker::Stage::LcdInited, 0);
 
-    lcd.clear();
+    #[cfg(not(feature = "px-fingerprint"))]
+    {
+        lcd.clear();
 
-    let rows = firmware_fingerprint_lines(digest);
-    for (i, row) in rows.iter().enumerate() {
-        lcd.draw_text(i, row);
+        let rows = firmware_fingerprint_lines(digest);
+        for (i, row) in rows.iter().enumerate() {
+            lcd.draw_text(i, row);
+        }
+        ok &= lcd.flush();
     }
-    ok &= lcd.flush();
+    // Pixel UI: the title first (the words follow once the panel is lit).
+    #[cfg(feature = "px-fingerprint")]
+    {
+        let mut title = px_fprint::Title::new();
+        ok = ok && lcd.paint(|_, col| title.next_column(col));
+    }
 
     // Payload = how many `spi_wait` polls timed out. On a correctly-mapped
     // panel this is 0. It stays a marker payload rather than the control
@@ -191,6 +213,24 @@ pub fn render_fingerprint(digest: &[u8; 32]) -> u32 {
     // re-measured on silicon. No button-wait — FSBL doesn't init GPIO buttons,
     // so unlike the secure world's dismissible screen this is a fixed floor;
     // a power-cycle is the abort path.
+    // Pixel UI: hold the title, then repaint with the words grid. A failed
+    // repaint refuses like the first paint did, and drops the backlight so
+    // the half-painted grid is not shown as a fingerprint.
+    #[cfg(feature = "px-fingerprint")]
+    {
+        delay_ms(TITLE_HOLD_MS);
+        let indices = hash_to_word_indices(digest);
+        let words: [[u8; px_fprint::WORD_LEN]; 8] =
+            core::array::from_fn(|i| px_fprint::full_word(indices[i], word_prefix_at(indices[i])));
+        let grid = px_fprint::Grid::new(&words);
+        ok &= lcd.paint(|x, col| grid.column(x, col));
+        if !ok {
+            #[cfg(feature = "board-pq1")]
+            crate::aw99703::off();
+            return 0;
+        }
+    }
+
     delay_ms(FINGERPRINT_HOLD_MS);
 
     // Recomputed through the FI gate rather than returning a plain bool: this

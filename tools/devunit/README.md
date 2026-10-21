@@ -39,6 +39,15 @@ time in the FSBL, the secure world and both build scripts.
   never writes flash.
 * **Versions** are `YY.MM.DD.N` packed into the signed `u32` (`26.10.21.2` =
   `0x1A0A1502`); the device shows them in that form.
+* **Boot fingerprint, shown once, in the pixel UI's design.** The dev-unit
+  FSBL is built with `px-fingerprint`: it paints the "OS FINGERPRINT" title
+  (1.5 s) and then the eight words, whole, on the numbered words grid (4 s),
+  pixel for pixel the secure world's screens (`fsbl/src/px_fprint.rs`, pinned
+  by `fsbl-tests/tests/px_fingerprint.rs`). The secure world no longer shows
+  its own copy on dev units. The FSBL is never written over USB: a unit
+  flashed before 2026-10-21 evening keeps the 5x8 text screen until it is
+  re-flashed over DFU or SWD (`flash.sh` without `--erase-all` keeps the
+  wallet).
 
 ## Signing key
 
