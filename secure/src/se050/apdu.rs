@@ -361,7 +361,11 @@ pub unsafe fn send_apdu(
         let mut wrapped = [0u8; MAX_APDU];
         // #991: `wrap_apdu` refuses (no session, malformed framing, too long)
         // rather than ever handing back the APDU unwrapped.
+        #[cfg(feature = "ui-px-film-gaps")]
+        let phase = crate::ui::px::film_gaps::Phase::new(b'W');
         let mut wlen = super::scp03::wrap_apdu(scp03, apdu_no_le, &mut wrapped)?;
+        #[cfg(feature = "ui-px-film-gaps")]
+        drop(phase);
 
         // S-7c fix — extended-Lc commands take a 2-byte Le per ISO 7816-4
         // (and per NXP plug-and-trust `se05x_tlv.c:1055-1059`). wrap_apdu
@@ -402,9 +406,13 @@ pub unsafe fn send_apdu(
     }
 
     let mut raw_resp = [0u8; MAX_APDU];
+    #[cfg(feature = "ui-px-film-gaps")]
+    let phase = crate::ui::px::film_gaps::Phase::new(b'K');
     let n = t1
         .transceive(&tx_buf[..tx_len], &mut raw_resp)
         .map_err(|_| Se050Error::Transport)?;
+    #[cfg(feature = "ui-px-film-gaps")]
+    drop(phase);
 
     if n < 2 {
         return Err(Se050Error::Transport);
@@ -420,7 +428,11 @@ pub unsafe fn send_apdu(
     // (pre-S-5) the body was cleartext but unauthenticated.  Either
     // way, unwrap_response is now the only correct path.
     let mut unwrapped = [0u8; MAX_APDU];
+    #[cfg(feature = "ui-px-film-gaps")]
+    let phase = crate::ui::px::film_gaps::Phase::new(b'U');
     let m = super::scp03::unwrap_response(scp03, &raw_resp[..n], &mut unwrapped)?;
+    #[cfg(feature = "ui-px-film-gaps")]
+    drop(phase);
     let (resp_slice, resp_len) = (&unwrapped[..m], m);
 
     let sw = ((resp_slice[resp_len - 2] as u16) << 8) | (resp_slice[resp_len - 1] as u16);

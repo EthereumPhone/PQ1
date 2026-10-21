@@ -297,6 +297,8 @@ impl T1State {
         // 0x00 if it hasn't prepared a response yet.
         let mut found_sof = false;
         for _ in 0..MAX_READ_RETRIES {
+            #[cfg(feature = "ui-px-film-gaps")]
+            crate::ui::px::film_gaps::count(b'Q');
             match i2c::read(&mut buf[..1]) {
                 Ok(()) => {
                     if buf[0] == SOF {

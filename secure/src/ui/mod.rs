@@ -332,6 +332,8 @@ pub fn chip_wait_ticks_active() -> bool {
 pub fn busy_poll() {
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {
+        #[cfg(feature = "ui-px-film-gaps")]
+        px::film_gaps::count(b'B');
         px::lcd::film_tick_chip();
     }
 }

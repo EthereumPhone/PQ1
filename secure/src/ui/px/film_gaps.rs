@@ -38,6 +38,12 @@ struct Rec {
     i2c_cyc: u32,
     /// Cycles spent in each [`Phase`] since the previous frame.
     phase_cyc: [u32; PHASES.len()],
+    /// The cycle count at the previous frame: a [`Phase`] counts only its
+    /// time inside the pause it ends in.
+    pause_c0: u32,
+    /// Per kept pause, and since the previous frame, the [`count`]s.
+    cnts: [[u16; COUNTS.len()]; KEPT],
+    cnt: [u16; COUNTS.len()],
     /// Pauses of 500 ms or more, all of them (only `KEPT` are listed).
     long: u32,
     /// Per I2C bus (0 = OPTIGA, 1 = SE050): transactions that took 100 ms or
@@ -119,6 +125,9 @@ impl Rec {
         where_: [[0; PHASES.len()]; KEPT],
         i2c_cyc: 0,
         phase_cyc: [0; PHASES.len()],
+        pause_c0: 0,
+        cnts: [[0; COUNTS.len()]; KEPT],
+        cnt: [0; COUNTS.len()],
         long: 0,
         buses: [Bus::ZERO; 2],
         steps: [0; STEPS],
@@ -137,14 +146,18 @@ impl Rec {
             *m = u16::try_from(*c / 160_000).unwrap_or(u16::MAX);
             *c = 0;
         }
+        let mut cn = self.cnt;
+        self.cnt = [0; COUNTS.len()];
+        self.pause_c0 = crate::hw::lcd_te::cycles();
         let mut item = (now.wrapping_sub(self.last), self.last_pct, src, i2c_ms);
         if item.0 >= 500 {
             self.long = self.long.wrapping_add(1);
         }
-        for (slot, w) in self.gaps.iter_mut().zip(self.where_.iter_mut()) {
+        for ((slot, w), c) in self.gaps.iter_mut().zip(self.where_.iter_mut()).zip(self.cnts.iter_mut()) {
             if item.0 > slot.0 {
                 core::mem::swap(slot, &mut item);
                 core::mem::swap(w, &mut ph);
+                core::mem::swap(c, &mut cn);
             }
         }
         self.last = now;
@@ -154,12 +167,34 @@ impl Rec {
 
 /// The phases [`Phase`] times inside each pause: `T` the platform TRNG,
 /// `O` an OPTIGA random draw, `E` an SE050 random draw, `F` a flash
-/// controller busy-wait (program or erase).
-const PHASES: [u8; 4] = [b'T', b'O', b'E', b'F'];
+/// controller busy-wait (program or erase); then inside an SE050 command,
+/// `I` the session check (or the T=1' reset + SCP03 handshake), `W` the
+/// SCP03 wrap, `K` the T=1' round trip, `U` the SCP03 unwrap. The second
+/// sign on the WHERE page (2026-10-21) put 52-53 ms of each start pause in
+/// `E` with only 6 ms of I2C; the second four split it.
+const PHASES: [u8; 8] = [b'T', b'O', b'E', b'F', b'I', b'W', b'K', b'U'];
+
+/// Events counted per pause: `Q` SE050 polls for a frame's start byte, `B`
+/// chip-wait ticks (`ui::busy_poll` with ticks on), and the reasons such a
+/// tick drew nothing: `D` not due yet, `R` the previous frame still
+/// streaming, `P` the beam out of the start range, `N` no film set up or no
+/// atlas (a nested tick is not counted). `Y`: an SE050 draw retried on a
+/// fresh session.
+const COUNTS: [u8; 7] = [b'Q', b'B', b'D', b'R', b'P', b'N', b'Y'];
+
+/// Count one `tag` (one of [`COUNTS`]) into the pause running now.
+pub fn count(tag: u8) {
+    let r = rec();
+    if let (true, Some(k)) = (r.on, COUNTS.iter().position(|&c| c == tag)) {
+        r.cnt[k] = r.cnt[k].saturating_add(1);
+    }
+}
 
 /// Times a stretch of work as phase `tag` (one of [`PHASES`]) from creation
-/// to drop, into the pause running at the time: the hunt for the ~45 ms at
-/// a sign's start with no I2C, no hash and no chip wait inside (2026-10-21).
+/// to drop, into the pause it ends in, counting only its time inside that
+/// pause (a frame drawn mid-phase starts the count again): the hunt for the
+/// ~45 ms at a sign's start with no I2C, no hash and no chip wait inside
+/// (2026-10-21).
 pub struct Phase {
     k: usize,
     c0: u32,
@@ -179,7 +214,8 @@ impl Drop for Phase {
     fn drop(&mut self) {
         let r = rec();
         if r.on && self.k < PHASES.len() {
-            let d = crate::hw::lcd_te::cycles().wrapping_sub(self.c0);
+            let now = crate::hw::lcd_te::cycles();
+            let d = now.wrapping_sub(self.c0).min(now.wrapping_sub(r.pause_c0));
             r.phase_cyc[self.k] = r.phase_cyc[self.k].wrapping_add(d);
         }
     }
@@ -188,23 +224,55 @@ impl Drop for Phase {
 /// The fourth page: `WHERE T O E F`, then the three longest pauses as
 /// `<ms>:<T> <O> <E> <F>`, each the pause's ms inside that phase.
 pub fn rows4(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    rows_where(out, b"WHERE T O E F", 0);
+}
+
+/// The fifth page: `SE050 I W K U`, the same pauses inside an SE050
+/// command's steps.
+pub fn rows5(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    rows_where(out, b"SE050 I W K U", 4);
+}
+
+fn rows_where(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS], title: &[u8], from: usize) {
     let r = *rec();
     for row in out.iter_mut() {
         *row = [b' '; DISPLAY_COLS];
     }
     let mut n = 0;
-    for &b in b"WHERE T O E F" {
+    for &b in title {
         push(&mut out[0], &mut n, b);
     }
     for (row, (gap, w)) in out[1..].iter_mut().zip(r.gaps.iter().zip(r.where_.iter())) {
         let mut n = 0;
         push_u32(row, &mut n, gap.0);
         push(row, &mut n, b':');
-        for (k, &ms) in w.iter().enumerate() {
+        for (k, &ms) in w[from..from + 4].iter().enumerate() {
             if k > 0 {
                 push(row, &mut n, b' ');
             }
             push_u32(row, &mut n, u32::from(ms));
+        }
+    }
+}
+
+/// The sixth page: `Q B D R P N Y`, then the same three pauses' [`COUNTS`]
+/// (no ms: the rows follow the WHERE page's order).
+pub fn rows6(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"Q B D R P N Y" {
+        push(&mut out[0], &mut n, b);
+    }
+    for (row, c) in out[1..].iter_mut().zip(r.cnts.iter()) {
+        let mut n = 0;
+        for (k, &v) in c.iter().enumerate() {
+            if k > 0 {
+                push(row, &mut n, b' ');
+            }
+            push_u32(row, &mut n, u32::from(v));
         }
     }
 }
@@ -224,6 +292,7 @@ pub fn start() {
         on: true,
         t0: now,
         last: now,
+        pause_c0: crate::hw::lcd_te::cycles(),
         ..Rec::OFF
     };
 }

@@ -1809,6 +1809,10 @@ fn film_gaps_page() {
     dev_page(&rows);
     super::film_gaps::rows4(&mut rows);
     dev_page(&rows);
+    super::film_gaps::rows5(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows6(&mut rows);
+    dev_page(&rows);
 }
 
 /// Whether a chip wait's tick ([`film_tick_chip`]) draws back to back. On
@@ -1914,9 +1918,20 @@ fn film_tick_paced(back_to_back: bool, src: u8) {
     FILM_IN_TICK.store(false, Ordering::Relaxed);
 }
 
+/// Dev: a chip-wait tick that drew nothing, and `why` (one of the recorder's
+/// `COUNTS`).
+#[cfg(feature = "ui-px-film-gaps")]
+fn film_gaps_refused(src: u8, why: u8) {
+    if src == b'C' {
+        super::film_gaps::count(why);
+    }
+}
+
 fn film_tick_due(back_to_back: bool, _src: u8) {
     let now = timeout::now();
     if !FILM_SET.load(Ordering::Relaxed) {
+        #[cfg(feature = "ui-px-film-gaps")]
+        film_gaps_refused(_src, b'N');
         return;
     }
     // SAFETY: single-threaded driver state; `FILM_SET` says `film_start`
@@ -1929,18 +1944,26 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
         film_cpu_due(now.wrapping_sub(*last))
     };
     if !due {
+        #[cfg(feature = "ui-px-film-gaps")]
+        film_gaps_refused(_src, b'D');
         return;
     }
     // The previous frame is still streaming in the background: next tick.
     if !film_reap(false) {
+        #[cfg(feature = "ui-px-film-gaps")]
+        film_gaps_refused(_src, b'R');
         return;
     }
     if !film_phase_ok() {
+        #[cfg(feature = "ui-px-film-gaps")]
+        film_gaps_refused(_src, b'P');
         return;
     }
     #[cfg(all(feature = "ui-px-film-bench", feature = "ui-px-frametime"))]
     let t_frame = frametime::cycles();
     let Some(atlas) = assets::atlas_film_frame() else {
+        #[cfg(feature = "ui-px-film-gaps")]
+        film_gaps_refused(_src, b'N');
         return;
     };
     anim.step(now);

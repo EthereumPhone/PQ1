@@ -2571,7 +2571,7 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
     // when no fresh stamp counts refreshes; only a chip wait may draw back
     // to back, and only where the switch says so.
     assert!(tick.contains(
-        "let due = if back_to_back {\n        now.wrapping_sub(*last) >= FRAME_PERIOD_MS\n    } else {\n        film_cpu_due(now.wrapping_sub(*last))\n    };\n    if !due {\n        return;\n    }"
+        "let due = if back_to_back {\n        now.wrapping_sub(*last) >= FRAME_PERIOD_MS\n    } else {\n        film_cpu_due(now.wrapping_sub(*last))\n    };\n    if !due {\n        #[cfg(feature = \"ui-px-film-gaps\")]\n        film_gaps_refused(_src, b'D');\n        return;\n    }"
     ));
     assert!(UI_PX_LCD_SRC.contains("\nconst FILM_CPU_PERIOD_MS: u32 = 28;\n"));
     let due = UI_PX_LCD_SRC.split("fn film_cpu_due(elapsed_ms: u32) -> bool {\n").nth(1).expect("film_cpu_due");
@@ -2906,7 +2906,7 @@ fn negative_background_stream_is_the_busy_films_alone() {
         let body = &body[..body.find("\n}\n").unwrap_or(body.len())];
         assert!(body.contains("film_reap(true);"), "{f} must collect a background frame");
     }
-    assert!(UI_PX_LCD_SRC.contains("    if !film_reap(false) {\n        return;\n    }"));
+    assert!(UI_PX_LCD_SRC.contains("    if !film_reap(false) {\n        #[cfg(feature = \"ui-px-film-gaps\")]\n        film_gaps_refused(_src, b'R');\n        return;\n    }"));
     let reap_fn = UI_PX_LCD_SRC.split("fn film_reap(wait: bool) -> bool {").nth(1).expect("film_reap");
     let reap_fn = &reap_fn[..reap_fn.find("\n}\n").unwrap_or(reap_fn.len())];
     assert!(reap_fn.contains("wipe_scratch();") && reap_fn.contains("FRAME_IN_FLIGHT.store(false, Ordering::Release);"));
