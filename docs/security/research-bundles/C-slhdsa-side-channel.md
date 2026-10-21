@@ -4374,6 +4374,22 @@ se-lcd-diag = []
 # NEVER SHIP — listed in the Makefile's PROD_FORBIDDEN.
 dev-dfu = []
 
+# DEV UNITS ONLY (pre-production DVTs handed to testers, 2026-10-21): working
+# signed USB firmware updates on the `fw_manifest::devunit` A/B layout. Links
+# the secure world at dev-unit slot A or B (`PQSIGNER_SECURE_SLOT=a|b`, both
+# are built and signed per release), makes CMD_FW_COMMIT stage the new slot and
+# reset into it, uses "strictly newer than the running release" instead of the
+# OTP floor, and keeps the boot log the FSBL's three-boot probation reads
+# (attempt early in boot, confirm once the wallet unlocks). Pairs with the
+# FSBL and non-secure `devunit-ab` features. NOT the production rollback
+# design; fenced out of `mode-production`. Entry point: `make devunit-release`.
+devunit-ab = ["stm32u585"]
+# TEST ONLY: a deliberately broken dev-unit release. Faults (UDF -> HardFault
+# -> zeroize + reset) right after the boot attempt is logged, every boot, so
+# the FSBL's three-boot probation can be shown to fall back to the previous
+# slot on silicon (tools/devunit/README.md, "rollback test"). Never ship.
+devunit-test-fault = ["devunit-ab"]
+
 # #846/#896 negative control: compiles the one-at-a-time gateway gate OUT
 # of the `gateway_enter!` macro body (the veneer path), so a second
 # gateway call made from a non-secure exception handler while one is in

@@ -1154,10 +1154,10 @@
         "fw-manifest/src/lib.rs"
       ],
       "rust_files_sha256": [
-        "c6f3b5262c47a576caaa4392315573b8039d6f8130ecb02e3a44f4569242ee44"
+        "6e5f7d65ee8b57763fff8012d1a52204f847f429707f639b5405ab86becb29b4"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "f8aba83c62fbb5e784b6ec763d9708c8252be89e50990689a47f925db2f13aa0",
+        "Funs.lean": "14e9cae64176004bf37623e054f906bfa122f14baabc22822b31ee6fbac8b223",
         "Types.lean": "5be8d8fe02446befa79f1396d035dadf755d7e53f1260dec496c55a9e44ee565"
       },
       "generated_lean": [
@@ -1165,7 +1165,7 @@
         "contracts/verification/extracted/Extracted/FwManifest/Types.lean"
       ],
       "generated_lean_sha256": [
-        "437f388793a1a3e41020c0e74284fc47bb056425e400b6e38c7f02fff60caadb",
+        "4836bff8d1b1be56f7cade7c8b3eee3ca12dac3a4e651cf9beb102039bf786c8",
         "5be8d8fe02446befa79f1396d035dadf755d7e53f1260dec496c55a9e44ee565"
       ],
       "theorem_file": "contracts/verification/extracted/Extracted/FwManifestSpec.lean",

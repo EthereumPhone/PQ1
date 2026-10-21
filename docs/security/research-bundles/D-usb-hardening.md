@@ -1538,6 +1538,19 @@ static mut CHAIN_LAST_FRAME: u16 = 0;
 // protocol decisions (e.g. wire-format selection) on it.
 const FW_VERSION: [u8; 3] = [0x03, 0x00, 0x00];
 
+/// Dev units: the slot this non-secure image is linked for.
+#[cfg(all(feature = "devunit-ab", not(devunit_slot_b)))]
+const DEVUNIT_SLOT: u8 = fw_manifest::SLOT_A;
+#[cfg(all(feature = "devunit-ab", devunit_slot_b))]
+const DEVUNIT_SLOT: u8 = fw_manifest::SLOT_B;
+/// Dev units: the release version this image was built for (the build passes
+/// the same number to the signer); 0 when unstamped.
+#[cfg(feature = "devunit-ab")]
+const DEVUNIT_FW_VERSION: u32 = match option_env!("PQSIGNER_DEVUNIT_FW_VERSION") {
+    Some(v) => fw_manifest::devunit::parse_u32_decimal(v),
+    None => 0,
+};
+
 // ---------------------------------------------------------------------------
 // Capability bits (reported by GET_DEVICE_INFO).
 // ---------------------------------------------------------------------------
@@ -1797,6 +1810,17 @@ impl CommandRouter {
         // Wrapper-overhead: header bytes prepended to each signed tx.
         RESP_BUF[p..p + 2].copy_from_slice(&(SIG_TYPE2_HEADER_LEN as u16).to_be_bytes());
         p += 2;
+
+        // Dev units: which slot this image runs from and its build stamp, so
+        // the host updater can pick the image variant for the OTHER slot.
+        // A hint only: the secure world re-checks the slot binding and the
+        // version at COMMIT. Readers of the documented 40 bytes ignore it.
+        #[cfg(feature = "devunit-ab")]
+        {
+            let trailer = fw_manifest::devunit::device_info_trailer(DEVUNIT_SLOT, DEVUNIT_FW_VERSION);
+            RESP_BUF[p..p + trailer.len()].copy_from_slice(&trailer);
+            p += trailer.len();
+        }
 
         RESP_BUF[p] = (SW_OK >> 8) as u8;
         RESP_BUF[p + 1] = (SW_OK & 0xFF) as u8;
