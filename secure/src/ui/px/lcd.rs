@@ -1786,7 +1786,7 @@ const HASH_TICK_EVERY: u32 = 64;
 /// report progress only every ~6,000 digests (~29 ms on the EVT), and each
 /// frame then cost ~8 ms more, so the film ran at ~26 fps with uneven gaps
 /// (EVT, owner 2026-10-21: "still a bit choppy"). From here it draws at the
-/// CPU-bound pace instead ([`film_cpu_period_ms`]).
+/// CPU-bound pace instead ([`FILM_CPU_PERIOD_MS`]).
 pub fn film_tick_hash() {
     if !FILM_LIVE.load(Ordering::Relaxed) {
         return;
@@ -1800,28 +1800,14 @@ pub fn film_tick_hash() {
 
 /// Start-to-start floor of a frame drawn from CPU-bound work (progress
 /// reports, the hash driver), where each frame's ~8 ms comes out of the work
-/// it plays over: one frame every two TE refreshes, 31 fps evenly spaced,
-/// for ~0.3 s on a sign. 4 ms under the refresh multiple, so that refresh's
-/// start range ([`film_phase_ok`]) is still reachable.
+/// it plays over: about one frame every two TE refreshes. 4 ms under the
+/// refresh multiple, so that refresh's start range ([`film_phase_ok`]) is
+/// still reachable.
 ///
-/// Dev (`ui-px-film-gaps`, owner 2026-10-21): successive signs alternate it
-/// with one frame every 1.5 refreshes (~42 fps, ~+1.4 s on a sign) for a
-/// side-by-side on glass; the STACK HWM page names the one that ran.
-fn film_cpu_period_ms() -> u32 {
-    #[cfg(feature = "ui-px-film-gaps")]
-    if FILM_PACE_FAST.load(Ordering::Relaxed) {
-        return if FILM_CPU_ODD.load(Ordering::Relaxed) { 12 } else { 28 };
-    }
-    28
-}
-
-/// Dev: this sign's film runs the ~42 fps pace ([`film_cpu_period_ms`]).
-#[cfg(feature = "ui-px-film-gaps")]
-static FILM_PACE_FAST: AtomicBool = AtomicBool::new(false);
-
-/// Dev: parity of the CPU-bound frames, for the 1.5-refresh pace.
-#[cfg(feature = "ui-px-film-gaps")]
-static FILM_CPU_ODD: AtomicBool = AtomicBool::new(false);
+/// Owner 2026-10-21, after both on glass: this pace drew 35 fps on a real
+/// sign ("a LOT smoother", 9.6 s with the slot keygen); one frame per 1.5
+/// refreshes drew 41.7 fps ("very smooth") for ~3 s more per sign.
+const FILM_CPU_PERIOD_MS: u32 = 28;
 
 /// A tick is drawing: a nested one (a digest inside the frame's own work
 /// reaching [`film_tick_hash`]) returns at once.
@@ -1847,7 +1833,7 @@ fn film_tick_due(back_to_back: bool) {
     // wrote it, and no other reference is live during this call
     // (`FILM_IN_TICK` keeps a nested tick out).
     let (anim, last) = unsafe { (*core::ptr::addr_of_mut!(FILM)).assume_init_mut() };
-    let floor = if back_to_back { FRAME_PERIOD_MS } else { film_cpu_period_ms() };
+    let floor = if back_to_back { FRAME_PERIOD_MS } else { FILM_CPU_PERIOD_MS };
     if now.wrapping_sub(*last) < floor {
         return;
     }
@@ -1870,10 +1856,6 @@ fn film_tick_due(back_to_back: bool) {
     let after = timeout::now();
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::frame(after);
-    #[cfg(feature = "ui-px-film-gaps")]
-    if !back_to_back {
-        FILM_CPU_ODD.store(!FILM_CPU_ODD.load(Ordering::Relaxed), Ordering::Relaxed);
-    }
     // Paced start to start; a frame that overran 50 ms skips the next slot.
     *last = if after.wrapping_sub(now) > 50 { after } else { now };
 }
@@ -2008,13 +1990,6 @@ fn show_stack_hwm(ms: u32, frames: u32) {
     let fps = if ms > 0 { frames * 10_000 / ms } else { 0 };
     let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
     bench_row(&mut rows[0], &[b"STACK HWM"], &[]);
-    // Dev: which CPU-bound pace this film ran; the next sign runs the other.
-    #[cfg(feature = "ui-px-film-gaps")]
-    {
-        let fast = FILM_PACE_FAST.load(Ordering::Relaxed);
-        bench_row(&mut rows[0], &[if fast { b"STACK HWM 42fps" } else { b"STACK HWM 31fps" }], &[]);
-        FILM_PACE_FAST.store(!fast, Ordering::Relaxed);
-    }
     bench_row(&mut rows[1], &[b"free ", b" B"], &[free]);
     bench_row(&mut rows[2], &[b"used ", b"/"], &[size.saturating_sub(free), size]);
     bench_row(&mut rows[3], &[b"film ", b".", b"s ", b"."], &[ms / 1000, ms % 1000 / 100, fps / 10, fps % 10]);

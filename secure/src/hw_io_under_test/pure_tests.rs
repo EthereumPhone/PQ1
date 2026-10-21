@@ -2567,13 +2567,10 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
     let tick = &tick[..tick.find("\n}\n").unwrap_or(tick.len())];
     assert!(tick.contains("present_film(anim, &atlas.marks(), &atlas.font(), false)"));
     // The signer's hook (and the hash driver) draw at the CPU-bound pace,
-    // one frame per two refreshes outside the dev comparison; only a chip
-    // wait may draw back to back, and only where the switch says so.
-    assert!(tick.contains("let floor = if back_to_back { FRAME_PERIOD_MS } else { film_cpu_period_ms() };"));
-    let pace = UI_PX_LCD_SRC.split("fn film_cpu_period_ms() -> u32 {\n").nth(1).expect("film_cpu_period_ms");
-    let pace = &pace[..pace.find("\n}\n").unwrap_or(pace.len())];
-    assert!(pace.ends_with("\n    }\n    28"), "the shipping pace: {pace}");
-    assert!(pace.starts_with("    #[cfg(feature = \"ui-px-film-gaps\")]\n    if FILM_PACE_FAST.load(Ordering::Relaxed) {"));
+    // about one frame per two refreshes (owner 2026-10-21); only a chip wait
+    // may draw back to back, and only where the switch says so.
+    assert!(tick.contains("let floor = if back_to_back { FRAME_PERIOD_MS } else { FILM_CPU_PERIOD_MS };"));
+    assert!(UI_PX_LCD_SRC.contains("\nconst FILM_CPU_PERIOD_MS: u32 = 28;\n"));
     let hook = UI_PX_LCD_SRC.split("pub fn film_tick(_percent: u8) {").nth(1).expect("film_tick");
     assert!(hook.starts_with(
         "\n    #[cfg(feature = \"ui-px-film-gaps\")]\n    super::film_gaps::note_pct(_percent);\n    film_tick_paced(false);\n}"
