@@ -130,7 +130,8 @@ roll back.
 last option-byte write can leave the panel black (DVT #2, 2026-10-21).
 
 **Re-flashing an RDP-1 unit** (the FSBL only changes this way): enter ROM DFU
-(both buttons, as below) and run `flash.sh ... --dfu --regress`. RDP 1 -> 0
+(both buttons, as below) and run `flash.sh ... --dfu --regress` (it uses
+the ROM's readout-unprotect, `STM32_Programmer_CLI -c port=USB1 -rdu`). RDP 1 -> 0
 mass-erases the flash, so the wallet on the device is gone (restore from the
 24 words); the secure elements stay paired, because their keys come from the
 DHUK, which survives the regression. If the unit cannot reach DFU (broken
@@ -307,7 +308,17 @@ Owner at the device, real panel and buttons, USB-C only:
   unit restarted into slot B (words "embrace early south cheese beauty drive
   magnet adult"), the wallet unlocked, `--info` read 26.10.21.15, slot B.
 
-Not yet run on silicon: a torn boot-log record (the ECC-NMI recovery path),
-the 3-boot rollback on a DVT (silicon-tested on the EVT bench board only),
-and for RDP-1 units: both-buttons ROM DFU entry at RDP 1, `flash.sh
---regress`, and a wipe + re-setup on die-bound keys.
+* Recovery path, same unit, test wallet: the both-buttons hold entered ROM
+  DFU at RDP 1 (`0483:df11`; the bootloader then refuses even the
+  option-byte read, "Fail to read NVM Size"). `-ob RDP=0xAA` is never sent
+  over DFU at RDP 1 (CubeProgrammer gives up on the read first); `-rdu`
+  (readout unprotect) regressed it: "Memory Read Protection disabled
+  successfully", re-enumerated, option bytes then RDP 0xAA with TZEN, SECWM
+  and SECBOOTADD0 unchanged. `flash.sh` now uses `-rdu`, and tolerates the
+  empty read. Re-flash of 26.10.21.15 to slot A with RDP 1 again; after a
+  replug: FSBL words, WIPING, WALLET WIPED (the SE wallet had no salt any
+  more and was wiped with the DHUK-derived admin credential), the wizard, a
+  new wallet, unlocked; `--info` read 26.10.21.15, slot A.
+
+Not yet run on silicon: a torn boot-log record (the ECC-NMI recovery path)
+and the 3-boot rollback on a DVT (silicon-tested on the EVT bench board only).
