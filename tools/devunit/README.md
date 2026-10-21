@@ -80,10 +80,12 @@ Output: `target/devunit/releases/<profile>-<version>/` with
 Profiles:
 
 * `investor` (default): `dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,unlock-diag,
-  stm32u585,usb,board-pq1` + `devunit-ab`. **No `dev-dfu`**: behind the FSBL
-  its both-buttons check runs just before the PIN pad appears, and an early
-  "enter" chord would latch the unit into ROM DFU on every boot. Override
-  with `FEAT_S=...` for bench units.
+  dev-dfu,stm32u585,usb,board-pq1` + `devunit-ab`. **`dev-dfu` with a 2 s
+  hold** (since 2026-10-21 evening; releases up to 26.10.21.5 had none): the
+  FSBL can only be re-flashed over DFU or SWD. To enter DFU, hold BOTH
+  buttons while plugging in USB-C and keep holding through the fingerprint
+  (~8 s) until the unit enumerates as `0483:df11`. The bench's 50 ms trigger
+  would latch a unit into DFU on a stray chord just before the PIN pad.
 * `bench`: `mock-se,e2e-test,ui-noop,...` — never touches the secure elements,
   auto-unlocks and auto-confirms; for the headless EVT bench board.
 
@@ -91,7 +93,9 @@ Profiles:
 
 Over USB-C with the ROM bootloader (`0483:df11`): use the SBU-bridged USB-C
 adapter (`docs/hardware/evt-dev-loop.md`), or hold both buttons while plugging
-in if the unit already runs a `dev-dfu` image. Then:
+in if the unit already runs a `dev-dfu` image (dev-unit images: keep holding
+~8 s, through the fingerprint). A unit on 26.10.21.1–.5 has no `dev-dfu`:
+install a newer release over USB first, then use the buttons. Then:
 
 ```bash
 tools/devunit/flash.sh target/devunit/releases/investor-<v> --dfu --erase-all

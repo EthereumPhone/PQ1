@@ -34,12 +34,13 @@ PROFILE=${PROFILE:-investor}
 case $PROFILE in
   investor)
     # The EVT/DVT dev image (real secure elements, pixel UI) plus the dev-unit
-    # update layout — WITHOUT `dev-dfu`: behind the FSBL its both-buttons check
-    # runs just as the PIN pad is about to appear, where a user pressing the
-    # "enter" chord early would latch the unit into ROM DFU on every boot
-    # (only CubeProgrammer gets it out). Signed USB updates replace it; add it
-    # back with FEAT_S=... for bench units.
-    FEAT_S=${FEAT_S:-dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,unlock-diag,stm32u585,usb,board-pq1}
+    # update layout, WITH `dev-dfu` (owner decision 2026-10-21): the FSBL can
+    # only be re-flashed over DFU or SWD, and a sealed DVT has no other way
+    # into DFU. Under `devunit-ab` the trigger is both buttons held for 2 s at
+    # power-up (hw/dev_dfu.rs), not the bench's 50 ms: behind the FSBL the
+    # check runs as the PIN pad is about to appear, and a short chord there
+    # would latch the unit into ROM DFU on every boot.
+    FEAT_S=${FEAT_S:-dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,unlock-diag,dev-dfu,stm32u585,usb,board-pq1}
     FEAT_N=${FEAT_N:-stm32u585,usb,board-pq1,ui-px-atlas} ;;
   bench)
     # Headless bench image: mock secure elements (the real chips are never

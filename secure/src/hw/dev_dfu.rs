@@ -60,8 +60,21 @@ fn pressed(pin: (u32, u32)) -> bool {
     idr.read() & (1 << pin.1) == 0 // active-low: pressed pulls to GND
 }
 
-/// Sample both buttons; if both are held for ~50 ms, enter the bootloader.
-/// Returns (doing nothing else) otherwise. Call right after `rcc::init`.
+/// 10 ms samples that must ALL read both buttons pressed: ~50 ms on the
+/// bench, ~2 s on dev units (`devunit-ab`), which go to outside testers. There
+/// this check runs right after the FSBL's fingerprint window, as the PIN pad
+/// is about to appear, and a stray chord would latch the unit into ROM DFU on
+/// every boot until a host clears it — a 2 s hold of both buttons is not a
+/// gesture the UI ever asks for. To enter: hold both while plugging in USB-C
+/// and keep holding until the unit enumerates as `0483:df11`.
+#[cfg(not(feature = "devunit-ab"))]
+const HOLD_SAMPLES: u32 = 5;
+#[cfg(feature = "devunit-ab")]
+const HOLD_SAMPLES: u32 = 200;
+
+/// Sample both buttons; if both are held for [`HOLD_SAMPLES`] × 10 ms, enter
+/// the bootloader. Returns (doing nothing else) otherwise. Call right after
+/// `rcc::init`.
 pub fn check_and_enter() {
     // SAFETY: the secure-alias RCC AHB2ENR1; `gpio_rcc_bit` maps each port
     // to its own enable bit, so this RMW touches no other driver's bit.
@@ -71,8 +84,9 @@ pub fn check_and_enter() {
     cortex_m::asm::dsb();
     input_pullup(LEFT);
     input_pullup(RIGHT);
-    // Settle + debounce: 5 samples 10 ms apart, all must read pressed.
-    for _ in 0..5 {
+    // Settle + debounce: HOLD_SAMPLES samples 10 ms apart, all must read
+    // pressed.
+    for _ in 0..HOLD_SAMPLES {
         cortex_m::asm::delay(1_600_000); // 10 ms at 160 MHz
         if !(pressed(LEFT) && pressed(RIGHT)) {
             return;
