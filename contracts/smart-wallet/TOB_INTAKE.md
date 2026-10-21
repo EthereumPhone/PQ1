@@ -18,7 +18,8 @@ SHA-256, 4008-byte signatures).
   Arachnid deterministic deployer).
 - End users are retail self-custody customers.
 - Nothing is deployed for users yet; the freeze set is not deployed on any
-  chain.
+  chain. (UPDATE 2026-10-21: the freeze set is now deployed, unchanged, on
+  Ethereum Mainnet, Base Mainnet and Base Sepolia; see `deployments/*.json`.)
 
 ## 2. SLOC (excluding blank lines and comments)
 

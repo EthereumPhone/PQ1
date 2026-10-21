@@ -92,7 +92,8 @@ run this code against its own empty storage, so anyone could call
 
 ## Addresses
 
-The audit-freeze set (computed, not yet deployed on any chain):
+The audit-freeze set, deployed 2026-10-21 at these addresses on Ethereum
+Mainnet, Base Mainnet and Base Sepolia (transactions in `deployments/*.json`):
 
 | Contract | Address |
 |---|---|
