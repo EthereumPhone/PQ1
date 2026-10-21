@@ -786,11 +786,19 @@ mod tests {
         assert_eq!(t.as_slice()[0].caption(), b"UPDATE TO V26.10.21.2?");
         assert_eq!(t.as_slice()[1].line(0, 0).unwrap().1, b"to v26.10.21.2");
         assert_eq!(t.as_slice()[1].line(0, 1).unwrap().1, b"UPGRADE");
+        // The walk to the returning ask (where the chord signs) is exactly six
+        // RIGHT taps through single-page screens; RIGHT on the returning ask
+        // re-enters the details, so a tool that over-taps lands on a detail.
+        assert_eq!(t.as_slice().len(), 7);
+        assert!(t.as_slice().iter().all(|s| s.npages() == 1));
         firmware_update_screens(u32::MAX, u32::MAX - 1, &fw, &key, &mut t).unwrap();
         assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
         assert_eq!(t.as_slice()[0].caption(), b"UPDATE TO V255.255.255.255?");
         firmware_verify_screens(&mut t).unwrap();
         assert_eq!(pqsigner_ui_px::check::check_flow(&t), Ok(()));
+        // Verify consent: opening ask, one detail, returning ask (two taps).
+        assert_eq!(t.as_slice().len(), 3);
+        assert!(t.as_slice().iter().all(|s| s.npages() == 1));
     }
 
     /// The lifecycle scenarios (port step 4) as record fixtures for the frame

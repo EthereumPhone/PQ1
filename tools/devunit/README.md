@@ -166,6 +166,33 @@ Bench profile, ST-LINK + USB-C:
 * The browser updater's script (via `webhid-harness.mjs`) installed a release
   end to end (22.5 s).
 
-Not yet run on silicon: the investor image (pixel-UI dialogs, real PIN and
-secure elements) — needs a unit with a panel and buttons; and a torn boot-log
-record (the ECC-NMI recovery path).
+Investor image (26.10.21.1, real dual-SE + pixel UI) on the same headless board,
+buttons emulated over SWD (PA0/PA1 driven low through the secure GPIOA alias):
+
+* SWD first flash with the partial erase kept the board's test wallet; the
+  dev-unit FSBL booted the investor slot A with no panel attached (the render
+  path does not depend on one).
+* PIN entry on the real pixel PIN row (random start digits read from SRAM)
+  unlocked the real OPTIGA + SE050 wallet; non-secure world and USB came up;
+  `fwupdate.py --info` read the dev-unit trailer (26.10.21.1, slot A).
+* `FW_BEGIN` reached the pixel consent flow (`confirm_screens_checked` under
+  `nsc_fw_begin`). With no consent, the dialog's 120 s idle timeout ended the
+  session: `FW_BEGIN` returned `0x6984`, the updater reported "running
+  firmware unchanged", and the unit kept running 26.10.21.1 (then locked).
+* Full investor updates with the on-device consents accepted (owner approved
+  the emulated presses): 26.10.21.1 (A) → 26.10.21.2 (B) → 26.10.21.3 (A).
+  Each time: the updater's UNLOCK brought up the PIN row when locked, the
+  verify consent (2 taps + chord) and the install consent ("UPDATE TO
+  V26.10.21.x?", 6 taps + chord) were accepted, 503 KB secure + 98 KB
+  non-secure streamed in 25.0 s + 4.9 s, COMMIT reset into the FSBL, the new
+  slot booted and unlocked the real wallet, and `fwupdate.py` confirmed the
+  new release and slot. Boot log after each: `CONFIRM(old)`, `ATTEMPT(new)`,
+  `CONFIRM(new)`.
+* Gotcha: with OpenOCD attached, the non-secure world's DHCSR-gated semihosting
+  prints park the core unless `arm semihosting enable` is set — USB then never
+  enumerates. Not an issue without a debugger.
+
+Not yet run on silicon: the FSBL on a DVT panel (it refuses to boot if its
+display bring-up fails — the per-unit acceptance check covers it), real button
+hardware (the bench emulates the pins), and a torn boot-log record (the
+ECC-NMI recovery path).
