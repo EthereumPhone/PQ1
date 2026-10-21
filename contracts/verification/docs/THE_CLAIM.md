@@ -126,7 +126,8 @@ Specifically and defensibly:
    `halmos/sessions/halmos-session-2026-10-20.txt`; Kontrol 31/31 (A3.4 = 10:
    the three removal proofs became one selector-absent proof), receipt
    `kontrol/sessions/kontrol-session-2026-10-20.txt`. That bytecode is the
-   freeze build, not yet deployed (#6). Earlier text: 42 Halmos rules (38 at the 2026-06-11
+   freeze build, not yet deployed (#6) (UPDATE 2026-10-21: deployed on Ethereum, Base and
+   Base Sepolia; on-chain codehashes equal the pins, `DEPLOYED_BYTECODE_PIN_CAVEAT.md`). Earlier text: 42 Halmos rules (38 at the 2026-06-11
    snapshot; +3 `HalmosIsValidSignature` for the EIP-1271 surface + Equiv rules
    since, 2026-06-29 — count re-tallied from the tree 2026-07-02) pass on **both**
    the `default` (runs=200) and `deploy` (runs=999999) profiles' deployed

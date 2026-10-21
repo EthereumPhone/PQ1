@@ -30,7 +30,9 @@ that owns it.
 > new pinned codehashes (`PINNED_CODEHASHES.md`). That bytecode is **not
 > deployed yet**, so read "deployed bytecode" below as "the pinned production
 > build, deployment pending" until the freeze set is on chain and its
-> codehashes are compared (`THE_CLAIM.md` #6). G6 gained the I-9 theorems
+> codehashes are compared (`THE_CLAIM.md` #6). **UPDATE 2026-10-21:** deployed
+> on Ethereum Mainnet, Base Mainnet and Base Sepolia and compared; the
+> codehashes equal the pins (`DEPLOYED_BYTECODE_PIN_CAVEAT.md`). G6 gained the I-9 theorems
 > (owner table injective on reachable states, a key installed at most once).
 
 > **One-sentence honest summary.** The on-chain authorization logic of the wallet

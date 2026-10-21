@@ -1,5 +1,17 @@
 # Deployed-bytecode ↔ pinned-codehash: RESOLVED
 
+> **UPDATE 2026-10-21 — deployed and compared; resolved again.** The freeze
+> set is live at the predicted addresses on Ethereum Mainnet (blocks
+> 26242705–07), Base Mainnet (52908513–15) and Base Sepolia (48422830/42/53),
+> deployed from `685a3498` with `contracts/smart-wallet/deploy.sh`. On-chain
+> `extcodehash`, read 2026-10-21: verifier `0xfd55ec70…2989` and factory
+> `0x711dff4b…2d5b` on all three chains, equal to the table below; the
+> implementation is `0x4be66f16…b2b6` on Base Mainnet (equal to the pin) and
+> differs on the other chains only in Solady's cached EIP-712 domain
+> separator and chain id, as expected. Wiring (`implementation`,
+> `c10Verifier`, `entryPoint` v0.6) checked on all three. Transactions:
+> `contracts/smart-wallet/deployments/*.json`.
+
 > **UPDATE 2026-10-20 — reopened as "deploy pending".** The audit freeze
 > changed the contracts and set `bytecode_hash = "none"`, so every pin and
 > every production address moved (`PINNED_CODEHASHES.md`). The freeze set is

@@ -1,11 +1,10 @@
 {
   "chainId": 84532,
   "chainName": "base-sepolia",
-  "status": "superseded",
-  "supersededOn": "2026-10-20",
-  "supersededReason": "Superseded 2026-10-20 by the audit-freeze contract set (verifier 0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4, implementation 0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011, factory 0xE3dbA404dCeC30093DE26764965a51689C1607BD; see ../AUDIT_SCOPE.md section 1), which is not deployed yet. Firmware built from 2026-10-20 on predicts wallet addresses from the freeze set only. Do not create new wallets with this set.",
+  "status": "active",
+  "contractSet": "audit-freeze 2026-10-20 (tag tob-audit-freeze-2026-10; ../AUDIT_SCOPE.md section 1)",
   "rpcUrl": "https://sepolia.base.org",
-  "deployer": "0x00137482d6b37eBb235A463D748191D925D92eB3",
+  "deployer": "0x3a4e6eD8B0F02BFBfaA3C6506Af2DB939eA5798c",
   "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
   "salts": {
     "verifier": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -14,14 +13,60 @@
   },
   "contracts": {
     "EntryPointV06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
-    "SPHINCsC10Asm": "0xb32e32a532d03a160ceb35af39b4a95ba4881fc7",
-    "PQSmartWalletImpl": "0x155d7da5feef1811214a1271335a19fb3fce8f1e",
-    "PQSmartWalletFactory": "0x67943487e9e41a9ee5f5f7a10f18aa82fe19e03b"
+    "SPHINCsC10Asm": "0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4",
+    "PQSmartWalletImpl": "0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011",
+    "PQSmartWalletFactory": "0xE3dbA404dCeC30093DE26764965a51689C1607BD"
   },
-  "proxyInitCodeHash": "0x81bf5ce06e60f71c41de86991b75639e32d967b8e9d412b706a1c24e25aadc4c",
+  "runtimeCodehashes": {
+    "SPHINCsC10Asm": "0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989",
+    "PQSmartWalletImpl": "0x33fc80c7bf511fa1af19b240f6c2df0aec098919a34d9a356597b18e2fa27ca7",
+    "PQSmartWalletFactory": "0x711dff4be17b368d25e5a24c35d12102f18209cd485392863f009e8a72712d5b"
+  },
+  "proxyInitCodeHash": "0x17ca674095afe9dc82aa6f396ee01bd837449a127b6be59a0d947329f29b2570",
+  "deployedOn": "2026-10-21",
+  "deployedFromCommit": "685a3498",
+  "transactions": [
+    {
+      "contract": "SPHINCsC10Asm",
+      "tx": "0xf4333572deeff4d8b1508b6c686e5e67d10ccb69432fd66a4ac9e26402791217",
+      "block": 48422830
+    },
+    {
+      "contract": "PQSmartWalletImpl",
+      "tx": "0xc3d1788723237955a075b4d6855c1356570ccd3cd997aa0c2d3ad66facd8be26",
+      "block": 48422842
+    },
+    {
+      "contract": "PQSmartWalletFactory",
+      "tx": "0xf88a6f98a17f838c0f43f91539b23820fa21902ea4e1a179c725007f25f81804",
+      "block": 48422853
+    }
+  ],
+  "broadcast": "broadcast/DeployImplAndFactoryBaseSepolia.s.sol/84532/run-1792606439.json",
   "verified": false,
-  "note": "CREATE2-deterministic via Arachnid's 0x4e59… deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Verifier+impl+factory regenerated after the EIP-1271 / off-chain-counter on-chain rework. Source intentionally NOT published.",
-  "laterDeployments": [
+  "note": "Deployed with ./deploy.sh (script/ProductionDeploy.sol): addresses checked against the firmware constants before broadcasting, wiring checked after. Checked on chain 2026-10-21: verifier and factory codehashes equal the pins in test/DeployedBytecodeReproCheck.t.sol on every chain; the impl codehash differs per chain only in Solady's cached EIP-712 domain separator and chain id (on Base it equals EXPECTED_IMPL_CODEHASH_ON_BASE); factory.implementation, factory.c10Verifier, impl.c10Verifier and impl.entryPoint (v0.6) all as expected. Source not yet verified on https://sepolia.basescan.org (./deploy.sh verify <chain>).",
+  "previousDeployments": [
+    {
+      "status": "superseded",
+      "supersededOn": "2026-10-20",
+      "supersededReason": "Superseded 2026-10-20 by the audit-freeze contract set (verifier 0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4, implementation 0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011, factory 0xE3dbA404dCeC30093DE26764965a51689C1607BD; see ../AUDIT_SCOPE.md section 1), which is not deployed yet. Firmware built from 2026-10-20 on predicts wallet addresses from the freeze set only. Do not create new wallets with this set.",
+      "deployer": "0x00137482d6b37eBb235A463D748191D925D92eB3",
+      "create2Deployer": "0x4e59b44847b379578588920cA78FbF26c0B4956C",
+      "salts": {
+        "verifier": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "impl": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "factory": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "contracts": {
+        "EntryPointV06": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+        "SPHINCsC10Asm": "0xb32e32a532d03a160ceb35af39b4a95ba4881fc7",
+        "PQSmartWalletImpl": "0x155d7da5feef1811214a1271335a19fb3fce8f1e",
+        "PQSmartWalletFactory": "0x67943487e9e41a9ee5f5f7a10f18aa82fe19e03b"
+      },
+      "proxyInitCodeHash": "0x81bf5ce06e60f71c41de86991b75639e32d967b8e9d412b706a1c24e25aadc4c",
+      "verified": false,
+      "note": "CREATE2-deterministic via Arachnid's 0x4e59\u2026 deployer; same addresses on any chain with byte-identical bytecode (FOUNDRY_PROFILE=deploy). Verifier+impl+factory regenerated after the EIP-1271 / off-chain-counter on-chain rework. Source intentionally NOT published."
+    },
     {
       "deployedOn": "2026-05-27",
       "block": 42057089,

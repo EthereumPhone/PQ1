@@ -1311,7 +1311,12 @@ issue.
 | `0x14443c57` | `executeWithOffchainCount(uint256,uint256,address,uint256,bytes)`         |
 | `0x101490cb` | `addOwnerBytes(bytes)`                                                    |
 
-### Addresses (deterministic CREATE2; audit-freeze set, NOT YET DEPLOYED)
+### Addresses (deterministic CREATE2; audit-freeze set)
+
+UPDATE 2026-10-21: deployed on Ethereum Mainnet (1), Base Mainnet (8453)
+and Base Sepolia (84532), on-chain codehashes compared with the pins
+(`contracts/smart-wallet/deployments/`). The 2026-10-20 note below is kept
+for history.
 
 UPDATE 2026-10-20: the contracts were changed for the audit freeze, which
 moved every address. Firmware built from that date predicts wallet addresses
@@ -1347,8 +1352,8 @@ artefacts that the EVM hashes with keccak (CREATE2, userOpHash).
 ### Chain IDs
 
 Reference values only. A chain is usable when the audit-freeze set above is
-deployed on it; as of 2026-10-20 it is deployed on none (see
-`contracts/smart-wallet/deployments/`). The chain also needs Cancun or later,
+deployed on it; as of 2026-10-21 that is Ethereum, Base and Base Sepolia
+(see `contracts/smart-wallet/deployments/`). The chain also needs Cancun or later,
 EntryPoint v0.6 at its canonical address and the Arachnid deployer.
 
 | Chain          | chain_id |
