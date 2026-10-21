@@ -182,16 +182,18 @@ backend interpretation and the separate secure-wrapper experiment remain open.
 See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
 and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 
-**Native EasyCrypt R availability (2026-10-21):** the
-[complete initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)
-now bounds actual nonce exhaustion through key generation, complete WOTS/FORS
-signing and final verification. A private observer erases to the original game;
-recorded histories derive fresh-context or cached-success behavior without a
-caller-supplied freshness premise. The explicit bound retains complete public
-query costs and the returned-event prefix charge. Its 53 new lemmas include
-boundary and lossless exhaustion witnesses, with 62 generated controls.
-Native total R-plus-WOTS availability remains open; no Lean import, concrete
-backend or hardware claim follows.
+**Native EasyCrypt total signing availability (2026-10-21):** the
+[initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)
+now bounds the original failed-session event for both R and WOTS-count
+exhaustion through key generation, complete signing and final verification.
+A cache-aware completion potential bounds WOTS exhaustion directly in the
+shared oracle; only the returned R-observer event crosses the prefix comparison.
+No caller-supplied freshness premise is needed. Native arithmetic gives
+`2^-38` at ten-million-trial grinders, `2^32` raw queries and `2^20` signing
+requests. The nine new modules contain 86 lemmas, with boundary/nonvacuity
+witnesses and 80 generated controls. This closes native ideal-model signing
+availability; concrete backend/Rust, cross-kernel, QROM and hardware boundaries
+remain open, and the forgery bound is unchanged.
 
 **Separate C10 probability frontier (2026-10-20):** the authoritative
 [PMF project](../contracts/verification/probability/README.md#six-case-initialized-forgery-bound)

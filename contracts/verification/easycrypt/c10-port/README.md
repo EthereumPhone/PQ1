@@ -126,6 +126,13 @@ scope checks and expected proof-driver rejections. An exact theorem-statement
 mismatch does not establish that the altered statement is false or that every
 term in a bound is necessary.
 
+The [native total signing-availability result](RESEARCH-LIMITS.md#quantitative-loss)
+bounds R-or-WOTS exhaustion in the original initialized byte game by `2^-38`
+at ten-million-trial grinders, `2^32` raw queries and `2^20` signing requests.
+It retains adaptive cache prefill and actual keygen/sign/final-verification
+composition. This ideal-oracle availability result changes no forgery bound
+and adds no concrete backend, cross-kernel or hardware claim.
+
 The older conditional-family headline theorem is **`EUFCMA_SPHINCS_PLUS_C10_CHARGED_QWIRED`**
 (`cdrafts-split/GprocChargedQWired.ec:77`) — a gated closure member whose statement
 is pinned by digest. It is a real, machine-checked theorem, and it is **not a

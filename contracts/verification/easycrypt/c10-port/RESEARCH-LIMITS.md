@@ -7,6 +7,39 @@ status label. Work remains tracked under PQ1 #100 and #295.
 
 ## Quantitative loss
 
+**Native total signing availability (2026-10-21):**
+[`ByteTotalAvailability.byte_total_initialized_availability`](cdrafts-split/ByteTotalAvailability.ec)
+bounds the original initialized byte game's `FullSession.failed` event, including
+both R and WOTS-count exhaustion. For the nonnegative raw/sign caps `qr, qs`,
+the bound is `byte_r_availability_charge qr qs + 2^256 * (1-pW)^10,000,000`,
+where `pW` is the exact deployed acceptance mass in
+[`WotsAcceptanceMass`](cdrafts-split/WotsAcceptanceMass.ec).
+[`TotalAvailabilityExamples.byte_total_deployed_availability`](cdrafts-split/TotalAvailabilityExamples.ec)
+specializes this to at most `2^-38` for `qr=2^32`, `qs=2^20` and both
+ten-million-trial grinders. Native real arithmetic bounds the R term by
+`2^-39` and the WOTS term by `2^-64`; no Lean theorem is imported.
+
+The WOTS proof uses a completion potential over distinct actual count inputs.
+Previously cached accepts or rejects keep their observed contribution, so no
+adversary-supplied freshness premise is needed. The finite union covers the
+actual serialized layer/tree/keypair/message fields at a fixed public seed;
+the count inputs use the original 32-byte big-endian counter. Actual
+count, WOTS, layer, finisher and persistent-session procedures establish the
+failure witness through key generation and final verification. The WOTS cache
+event is bounded directly under the physical shared oracle. Only the returned
+R-observer event uses the existing prefix comparison.
+
+The nine modules add 86 lemmas, including duplicate-input, zero-trial,
+prefilled-table, lossless forced-exhaustion, refusal and no-request witnesses.
+The 80 generated controls cover 19 typed procedure changes, thirteen contract
+changes and eight equivalent variants; nine scope probes are additional.
+Their precise proof-sensitivity boundary is recorded in
+[CONTROL-EVIDENCE.md](CONTROL-EVIDENCE.md#native-total-signing-availability-controls).
+This closes native ideal-oracle total signing availability for lossless native
+byte clients under the stated state exclusions and initial cap identities.
+It does not strengthen the forgery bound or establish concrete SHA-256/Rust,
+cross-kernel, QROM, physical-fault or deployed availability claims.
+
 **Native EasyCrypt R availability (2026-10-21):**
 [`ByteRAvailability.byte_r_initialized_exhaustion`](cdrafts-split/ByteRAvailability.ec)
 now bounds actual nonce exhaustion through the complete initialized C10 game.
@@ -33,10 +66,10 @@ to be a reachable initialized random-oracle history. The 62 generated controls
 include 17 typed procedural changes, seven changed contracts and seven
 equivalent variants, with unchanged consuming proofs. Contract rejection shows
 proof sensitivity rather than falsity of every altered statement.
-This closes native complete-signer R-context availability composition.
-**Native total R-plus-WOTS signing availability remains open.** The separate
-finite PMF result below already covers that larger event; no cross-kernel or
-backend correspondence follows from either result.
+This establishes the native complete-signer R-context component used in the
+total availability result above. The separate finite PMF result below covers
+the corresponding larger event independently; no cross-kernel or backend
+correspondence follows from either result.
 
 **Current separate Lean frontier (2026-10-20):** the
 [six-case composition](../../probability/README.md#six-case-initialized-forgery-bound)

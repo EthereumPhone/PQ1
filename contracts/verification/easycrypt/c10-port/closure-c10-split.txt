@@ -602,3 +602,14 @@ FullRGame
 FullRInitialization
 ByteRAvailability
 RAvailabilityExamples
+
+# Complete native C10 total signing availability, 2026-10-21.
+MemoRejectCompletion
+WotsRejectDomain
+WotsPhysicalFailure
+WotsSignerFailure
+FullAvailabilityTrace
+PhysicalRejectBound
+ByteTotalAvailability
+AvailabilityNumerics
+TotalAvailabilityExamples

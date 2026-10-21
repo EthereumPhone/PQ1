@@ -783,3 +783,12 @@ cdrafts-split/FullRGame.ec
 cdrafts-split/FullRInitialization.ec
 cdrafts-split/ByteRAvailability.ec
 cdrafts-split/RAvailabilityExamples.ec
+cdrafts-split/MemoRejectCompletion.ec
+cdrafts-split/WotsRejectDomain.ec
+cdrafts-split/WotsPhysicalFailure.ec
+cdrafts-split/WotsSignerFailure.ec
+cdrafts-split/FullAvailabilityTrace.ec
+cdrafts-split/PhysicalRejectBound.ec
+cdrafts-split/ByteTotalAvailability.ec
+cdrafts-split/AvailabilityNumerics.ec
+cdrafts-split/TotalAvailabilityExamples.ec

@@ -252,3 +252,32 @@ theorem/line and raw output. Both new modules have direct/CLI checks,
 statement/source/module pins and forbidden-symbol scope probes. Full cold
 replay and bounded review remain separate landing requirements. The controls
 do not establish a concrete hash or cross-kernel/session interpretation.
+
+## Native total signing-availability controls
+
+Nineteen typed procedure changes exercise the memoized cache, bounded count
+schedule, acceptance test, invented failure, node width, refusal behavior,
+seed binding and persistent failure state through WOTS/layer/finisher/session,
+driver and keygen context. Each changed definition must type-check alone.
+Eight unchanged and eight equivalent procedures must pass the original
+consuming proof. Count, finisher and session fixtures first prove relational
+correspondence to their canonical procedure using deterministic tactics; the
+original consuming proof follows. This makes their rejection independent of
+inconclusive SMT attempts on changed invariants.
+
+Thirteen contract pairs exercise distinct inputs, the actual prefilled table,
+message width/byte range, context cardinality, counter wrap, the physical
+charge, initial caps, the failure event and numerical budget/target. They must
+reject at the `checked` proof application with `the given proof-term proves:`.
+These and the procedure controls establish proof sensitivity, not that every
+changed contract is false, every term is necessary, or the bound is tight.
+
+The generator `tools/c10_total_availability_controls.py` enrolls 80 controls:
+48 expected passes and 32 intended rejections. Diagnostics are pinned to the
+intended `checked` lemma and authenticated against raw output and current
+transitive inputs; parsing, typing and resource failures receive no credit.
+Nine additional forbidden-symbol scope probes guard the new modules.
+Direct/CLI checks, source/statement/operation inventories, full cold replay and
+bounded review remain separate requirements. The constant rejecting test
+oracle is a nonvacuity witness, not a concrete backend or a claim about a
+reachable initialized random-oracle history.

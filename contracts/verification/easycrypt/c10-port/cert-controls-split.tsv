@@ -1646,3 +1646,94 @@ scratch/_scope_neg_op_FullRGame.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_FullRInitialization.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_ByteRAvailability.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_RAvailabilityExamples.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Native total signing availability: typed procedure, contract and scope controls.
+scratch/c10_total_availability_cache_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_cache_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_count_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_count_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_wots_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_wots_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_layer_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_layer_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_finish_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_finish_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_session_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_session_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_driver_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_driver_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_context_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_context_preserving.ec	MUST-PASS	-
+scratch/c10_total_availability_cache_overwrite_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_cache_overwrite_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_total_availability_cache_key_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_cache_key_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_total_availability_cache_distribution_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_cache_distribution_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_total_availability_count_short_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_count_short_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_count_start_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_count_start_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_count_skip_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_count_skip_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_count_input_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_count_input_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_count_acceptance_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_count_acceptance_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_count_invent_failure_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_count_invent_failure_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_wots_invent_failure_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_wots_invent_failure_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_layer_invent_failure_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_layer_invent_failure_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_finish_invent_failure_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_finish_invent_failure_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_finish_node_width_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_finish_node_width_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_session_refusal_failure_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_session_refusal_failure_reject.ec	MUST-FAIL	invalid first instruction
+scratch/c10_total_availability_session_seed_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_session_seed_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_session_clear_r_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_session_clear_r_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_driver_force_failure_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_driver_force_failure_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_total_availability_driver_seed_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_driver_seed_reject.ec	MUST-FAIL	expecting a goal of the form: hoare[S], phoare[S]
+scratch/c10_total_availability_context_seed_typed.ec	MUST-PASS	-
+scratch/c10_total_availability_context_seed_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_total_availability_distinct_inputs_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_distinct_inputs_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_prefilled_cache_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_prefilled_cache_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_context_bytes_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_context_bytes_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_context_width_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_context_width_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_context_cardinality_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_context_cardinality_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_counter_wrap_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_counter_wrap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_physical_charge_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_physical_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_byte_raw_cap_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_byte_raw_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_byte_sign_cap_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_byte_sign_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_byte_failed_event_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_byte_failed_event_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_byte_total_charge_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_byte_total_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_numerical_budget_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_numerical_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_total_availability_numerical_target_positive.ec	MUST-PASS	-
+scratch/c10_total_availability_numerical_target_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_MemoRejectCompletion.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsRejectDomain.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsPhysicalFailure.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsSignerFailure.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_FullAvailabilityTrace.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_PhysicalRejectBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_ByteTotalAvailability.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AvailabilityNumerics.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_TotalAvailabilityExamples.ec	MUST-FAIL	FORS_C_TreePort.
