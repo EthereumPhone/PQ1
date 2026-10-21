@@ -28,8 +28,12 @@ struct Rec {
     pct: u8,
     frames: u32,
     total: u32,
-    /// `(ms, percent)`, longest first.
-    gaps: [(u32, u8); KEPT],
+    /// `(ms, percent, ended by, ms of I2C inside)`, longest first. The tick
+    /// that ended a pause: `P` progress report, `H` hash driver, `C` chip
+    /// wait, `S` the film's opening frame, `X` the recording's end.
+    gaps: [(u32, u8, u8, u16); KEPT],
+    /// Cycles spent in I2C transactions since the previous frame.
+    i2c_cyc: u32,
     /// Pauses of 500 ms or more, all of them (only `KEPT` are listed).
     long: u32,
     /// Per I2C bus (0 = OPTIGA, 1 = SE050): transactions that took 100 ms or
@@ -107,7 +111,8 @@ impl Rec {
         pct: 0,
         frames: 0,
         total: 0,
-        gaps: [(0, 0); KEPT],
+        gaps: [(0, 0, 0, 0); KEPT],
+        i2c_cyc: 0,
         long: 0,
         buses: [Bus::ZERO; 2],
         steps: [0; STEPS],
@@ -116,9 +121,12 @@ impl Rec {
         tear: Tear::ZERO,
     };
 
-    /// Close the pause that ends at `now`; keep it if it is among the longest.
-    fn gap(&mut self, now: u32) {
-        let mut item = (now.wrapping_sub(self.last), self.last_pct);
+    /// Close the pause that `src` ends at `now`; keep it if it is among the
+    /// longest.
+    fn gap(&mut self, now: u32, src: u8) {
+        let i2c_ms = u16::try_from(self.i2c_cyc / 160_000).unwrap_or(u16::MAX);
+        self.i2c_cyc = 0;
+        let mut item = (now.wrapping_sub(self.last), self.last_pct, src, i2c_ms);
         if item.0 >= 500 {
             self.long = self.long.wrapping_add(1);
         }
@@ -164,12 +172,12 @@ pub fn note_pct(percent: u8) {
     }
 }
 
-/// A film frame reached the glass at `now`.
-pub fn frame(now: u32) {
+/// A film frame reached the glass at `now`, drawn from tick `src`.
+pub fn frame(now: u32, src: u8) {
     let r = rec();
     if r.on {
         r.frames = r.frames.wrapping_add(1);
-        r.gap(now);
+        r.gap(now, src);
     }
 }
 
@@ -270,7 +278,7 @@ pub fn stop() {
     let r = rec();
     if r.on {
         let now = timeout::now();
-        r.gap(now);
+        r.gap(now, b'X');
         r.total = now.wrapping_sub(r.t0);
         r.on = false;
     }
@@ -296,6 +304,7 @@ pub fn step(k: usize) {
 pub struct I2cWatch {
     bus: usize,
     t0: u32,
+    c0: u32,
 }
 
 impl I2cWatch {
@@ -304,6 +313,7 @@ impl I2cWatch {
         Self {
             bus,
             t0: timeout::now(),
+            c0: crate::hw::lcd_te::cycles(),
         }
     }
 }
@@ -314,6 +324,7 @@ impl Drop for I2cWatch {
         if !r.on || self.bus > 1 {
             return;
         }
+        r.i2c_cyc = r.i2c_cyc.wrapping_add(crate::hw::lcd_te::cycles().wrapping_sub(self.c0));
         let ms = timeout::now().wrapping_sub(self.t0);
         let b = &mut r.buses[self.bus];
         if ms >= 100 {
@@ -427,8 +438,8 @@ fn push(row: &mut [u8; DISPLAY_COLS], n: &mut usize, b: u8) {
     }
 }
 
-/// The 16x4 page: `F<frames> T<total>ms`, then the pauses as `<ms>@<pct>`,
-/// longest first, two per row.
+/// The 16x4 page: `F<frames> T<total>ms`, then the pauses as
+/// `<ms>@<pct><ended by><ms of I2C>`, longest first, two per row.
 pub fn rows(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let r = *rec();
     for row in out.iter_mut() {
@@ -444,13 +455,18 @@ pub fn rows(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     push(&mut out[0], &mut n, b's');
     for (row, pair) in out[1..].iter_mut().zip(r.gaps.chunks(2)) {
         let mut n = 0;
-        for (k, &(ms, pct)) in pair.iter().enumerate() {
+        for (k, &(ms, pct, src, i2c)) in pair.iter().enumerate() {
             if k > 0 {
                 push(row, &mut n, b' ');
             }
             push_u32(row, &mut n, ms);
             push(row, &mut n, b'@');
             push_u32(row, &mut n, u32::from(pct));
+            // What ended it, and its ms of I2C (`52@0C31`).
+            if src != 0 {
+                push(row, &mut n, src);
+                push_u32(row, &mut n, u32::from(i2c));
+            }
         }
     }
 }

@@ -704,6 +704,11 @@ fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Op
         cost.beam_wait = frametime::cycles().wrapping_sub(t_edge);
         cost.cols = (xend - xa) as u32;
     }
+    // The refresh this stream starts in: CPU-bound film frames go every
+    // second one after it (`film_cpu_due`).
+    if let Some((n, _)) = crate::hw::lcd_te::edge_snapshot() {
+        STREAM_EDGES.store(n, Ordering::Relaxed);
+    }
     // Dev (tearing hunt): where the beam is as this stream starts.
     #[cfg(feature = "ui-px-film-gaps")]
     let tear_at = tear_begin();
@@ -1347,7 +1352,7 @@ pub fn film_start_with(s: &Screen) {
     anim.film_start(now);
     let _ = present_film(&anim, &atlas.marks(), &atlas.font(), true);
     #[cfg(feature = "ui-px-film-gaps")]
-    super::film_gaps::frame(timeout::now());
+    super::film_gaps::frame(timeout::now(), b'S');
     // SAFETY: `FILM` is single-threaded driver state (no ISR touches it) and
     // this is the only writer while `FILM_LIVE` is false.
     unsafe {
@@ -1769,7 +1774,7 @@ fn bench_page(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS], m
 pub fn film_tick(_percent: u8) {
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::note_pct(_percent);
-    film_tick_paced(false);
+    film_tick_paced(false, b'P');
 }
 
 /// Dev: the running film started the pause recorder itself.
@@ -1829,7 +1834,7 @@ fn film_chip_back_to_back() -> bool {
 /// start) instead of leaving the signer's pause; the cost is that the wait
 /// returns up to one frame late.
 pub fn film_tick_chip() {
-    film_tick_paced(film_chip_back_to_back());
+    film_tick_paced(film_chip_back_to_back(), b'C');
 }
 
 /// Finished digests counted by [`film_tick_hash`].
@@ -1853,37 +1858,61 @@ pub fn film_tick_hash() {
     let n = FILM_HASHES.load(Ordering::Relaxed).wrapping_add(1);
     FILM_HASHES.store(n, Ordering::Relaxed);
     if n % HASH_TICK_EVERY == 0 {
-        film_tick_paced(false);
+        film_tick_paced(false, b'H');
     }
 }
 
-/// Start-to-start floor of a frame drawn from CPU-bound work (progress
-/// reports, the hash driver), where each frame's ~8 ms comes out of the work
-/// it plays over: about one frame every two TE refreshes. 4 ms under the
-/// refresh multiple, so that refresh's start range ([`film_phase_ok`]) is
-/// still reachable.
-///
-/// Owner 2026-10-21, after both on glass: this pace drew 35 fps on a real
-/// sign ("a LOT smoother", 9.6 s with the slot keygen); one frame per 1.5
-/// refreshes drew 41.7 fps ("very smooth") for ~3 s more per sign.
+/// A frame drawn from CPU-bound work (progress reports, the hash driver),
+/// where each frame's ~8 ms comes out of the work it plays over, starts
+/// every second TE refresh, evenly 32 ms apart (owner 2026-10-21: about one
+/// frame per two refreshes, "a LOT smoother"; one per 1.5 drew 41.7 fps for
+/// ~3 s more per sign). A 28 ms time floor alone drew 35 fps with 28, 32
+/// and ~48 ms gaps, seen as stutter during the spin; the rule is
+/// `pqsigner_ui_px::stream::phase::second_refresh_due`, host-tested. With no
+/// fresh TE stamp this floor stands in.
 const FILM_CPU_PERIOD_MS: u32 = 28;
+
+/// The TE edge count when the latest stream started.
+static STREAM_EDGES: AtomicU32 = AtomicU32::new(0);
+
+/// Whether a CPU-bound frame may start: every second refresh after the
+/// previous stream's, or `FILM_CPU_PERIOD_MS` after the previous tick's
+/// frame (`elapsed_ms`) with no fresh stamp to count refreshes by.
+fn film_cpu_due(elapsed_ms: u32) -> bool {
+    let Some((n, at)) = crate::hw::lcd_te::edge_snapshot() else {
+        return elapsed_ms >= FILM_CPU_PERIOD_MS;
+    };
+    let since = crate::hw::lcd_te::cycles().wrapping_sub(at);
+    if since > STAMP_STALE_CYC {
+        return elapsed_ms >= FILM_CPU_PERIOD_MS;
+    }
+    let win = FILM_WIN.load(Ordering::Relaxed);
+    let hi = if win == 0 {
+        None
+    } else {
+        start_window((win >> 16) as i32, (win & 0xFFFF) as i32).map(|(_, hi)| hi)
+    };
+    pqsigner_ui_px::stream::phase::second_refresh_due(n.wrapping_sub(STREAM_EDGES.load(Ordering::Relaxed)), since, hi)
+}
 
 /// A tick is drawing: a nested one (a digest inside the frame's own work
 /// reaching [`film_tick_hash`]) returns at once.
 static FILM_IN_TICK: AtomicBool = AtomicBool::new(false);
 
-fn film_tick_paced(back_to_back: bool) {
+/// `src` names the tick for the dev pause recorder: `P` progress report,
+/// `H` hash driver, `C` chip wait.
+fn film_tick_paced(back_to_back: bool, src: u8) {
     if !FILM_LIVE.load(Ordering::Relaxed) {
         return;
     }
     if FILM_IN_TICK.swap(true, Ordering::Relaxed) {
         return;
     }
-    film_tick_due(back_to_back);
+    film_tick_due(back_to_back, src);
     FILM_IN_TICK.store(false, Ordering::Relaxed);
 }
 
-fn film_tick_due(back_to_back: bool) {
+fn film_tick_due(back_to_back: bool, _src: u8) {
     let now = timeout::now();
     if !FILM_SET.load(Ordering::Relaxed) {
         return;
@@ -1892,8 +1921,12 @@ fn film_tick_due(back_to_back: bool) {
     // wrote it, and no other reference is live during this call
     // (`FILM_IN_TICK` keeps a nested tick out).
     let (anim, last) = unsafe { (*core::ptr::addr_of_mut!(FILM)).assume_init_mut() };
-    let floor = if back_to_back { FRAME_PERIOD_MS } else { FILM_CPU_PERIOD_MS };
-    if now.wrapping_sub(*last) < floor {
+    let due = if back_to_back {
+        now.wrapping_sub(*last) >= FRAME_PERIOD_MS
+    } else {
+        film_cpu_due(now.wrapping_sub(*last))
+    };
+    if !due {
         return;
     }
     // The previous frame is still streaming in the background: next tick.
@@ -1914,7 +1947,7 @@ fn film_tick_due(back_to_back: bool) {
     bench_split_add(&_cost, frametime::cycles().wrapping_sub(t_frame));
     let after = timeout::now();
     #[cfg(feature = "ui-px-film-gaps")]
-    super::film_gaps::frame(after);
+    super::film_gaps::frame(after, _src);
     // Paced start to start; a frame that overran 50 ms skips the next slot.
     *last = if after.wrapping_sub(now) > 50 { after } else { now };
 }

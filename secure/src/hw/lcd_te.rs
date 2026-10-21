@@ -375,6 +375,26 @@ pub fn last_edge() -> Option<u32> {
     Some(EDGE_AT.load(Ordering::Acquire))
 }
 
+/// The edge count and the latest edge's cycle count, read as one pair (an
+/// edge between the reads retries), while the stamps are on and at least
+/// one edge has been taken.
+#[must_use]
+pub fn edge_snapshot() -> Option<(u32, u32)> {
+    if !stamps_on() {
+        return None;
+    }
+    let mut n = EDGES.load(Ordering::Acquire);
+    for _ in 0..3 {
+        let at = EDGE_AT.load(Ordering::Acquire);
+        let again = EDGES.load(Ordering::Acquire);
+        if again == n {
+            return (n != 0).then_some((n, at));
+        }
+        n = again;
+    }
+    None
+}
+
 fn take_edge(rpr: &Reg32, line: u32) {
     rpr.write(line);
     EDGE_AT.store(cycles(), Ordering::Release);

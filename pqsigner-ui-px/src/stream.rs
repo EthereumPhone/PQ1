@@ -179,6 +179,22 @@ pub mod phase {
         (at <= hi && at.saturating_add(spin_ok) >= lo) || at.saturating_add(spin_ok) >= REFRESH_CYC.saturating_add(lo)
     }
 
+    /// Whether a CPU-bound film frame may start now, paced to every second
+    /// TE refresh: `edges` refresh edges have passed since the previous
+    /// frame's stream started, the latest `since` cycles ago, and `hi` ends
+    /// the start range of the frame's window (`None`: not known). Never in
+    /// the refresh right after the previous frame's, unless that refresh's
+    /// start range has already passed: the stream then starts in the next
+    /// one, two refreshes on, like every other frame.
+    #[must_use]
+    pub fn second_refresh_due(edges: u32, since: u32, hi: Option<u32>) -> bool {
+        match edges {
+            0 => false,
+            1 => hi.is_some_and(|hi| since > hi),
+            _ => true,
+        }
+    }
+
     /// A finished stream into window [xa, xend) checked against the scan
     /// model, for the dev tearing readout: it started `since` cycles after a
     /// TE edge and left the wire `dur` cycles later. Returns whether it
@@ -380,6 +396,31 @@ mod tests {
             }
         }
         assert!(windows > 1000);
+    }
+
+    /// CPU-bound frames go every second refresh: the one after the previous
+    /// frame's is skipped until its start range has passed (EVT 2026-10-21: a
+    /// 28 ms time floor drew 35 fps with 28/32/48 ms gaps, seen as stutter).
+    #[test]
+    fn cpu_frames_skip_exactly_one_refresh() {
+        use super::phase::*;
+        let (lo, hi) = start_window(96, 366).expect("a spin-sized window");
+        // Still in the previous frame's refresh: never.
+        for since in [0, lo, hi, REFRESH_CYC - 1] {
+            assert!(!second_refresh_due(0, since, Some(hi)));
+        }
+        // The next refresh: not while its start range is open or ahead...
+        for since in [0, lo, hi] {
+            assert!(!second_refresh_due(1, since, Some(hi)), "{since}");
+        }
+        // ...only once it has passed (the stream then lands two on).
+        assert!(second_refresh_due(1, hi + 1, Some(hi)));
+        assert!(!second_refresh_due(1, REFRESH_CYC, None), "no window known: wait for the edge");
+        // Two or more refreshes on: always.
+        for since in [0, lo, hi, REFRESH_CYC] {
+            assert!(second_refresh_due(2, since, Some(hi)));
+            assert!(second_refresh_due(7, since, None));
+        }
     }
 
     /// The device panic of 2026-10-19: a TE edge arriving a little after

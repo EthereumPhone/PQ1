@@ -2566,17 +2566,31 @@ fn negative_partial_redraw_is_the_busy_films_alone() {
     let tick = UI_PX_LCD_SRC.split("fn film_tick_due(").nth(1).expect("film_tick_due");
     let tick = &tick[..tick.find("\n}\n").unwrap_or(tick.len())];
     assert!(tick.contains("present_film(anim, &atlas.marks(), &atlas.font(), false)"));
-    // The signer's hook (and the hash driver) draw at the CPU-bound pace,
-    // about one frame per two refreshes (owner 2026-10-21); only a chip wait
-    // may draw back to back, and only where the switch says so.
-    assert!(tick.contains("let floor = if back_to_back { FRAME_PERIOD_MS } else { FILM_CPU_PERIOD_MS };"));
+    // The signer's hook (and the hash driver) draw every second TE refresh
+    // (owner 2026-10-21), by the host-tested rule, with a 28 ms floor only
+    // when no fresh stamp counts refreshes; only a chip wait may draw back
+    // to back, and only where the switch says so.
+    assert!(tick.contains(
+        "let due = if back_to_back {\n        now.wrapping_sub(*last) >= FRAME_PERIOD_MS\n    } else {\n        film_cpu_due(now.wrapping_sub(*last))\n    };\n    if !due {\n        return;\n    }"
+    ));
     assert!(UI_PX_LCD_SRC.contains("\nconst FILM_CPU_PERIOD_MS: u32 = 28;\n"));
+    let due = UI_PX_LCD_SRC.split("fn film_cpu_due(elapsed_ms: u32) -> bool {\n").nth(1).expect("film_cpu_due");
+    let due = &due[..due.find("\n}\n").expect("end")];
+    assert!(due.ends_with(
+        "pqsigner_ui_px::stream::phase::second_refresh_due(n.wrapping_sub(STREAM_EDGES.load(Ordering::Relaxed)), since, hi)"
+    ));
+    assert_eq!(due.matches("return elapsed_ms >= FILM_CPU_PERIOD_MS;").count(), 2, "both no-stamp fallbacks");
+    // Every stream records the refresh it starts in, before it opens.
+    let pfc = UI_PX_LCD_SRC.split("fn present_frame_cols(").nth(1).expect("present_frame_cols");
+    let rec = pfc.find("STREAM_EDGES.store(n, Ordering::Relaxed);").expect("records its refresh");
+    assert!(rec < pfc.find("lcd::stream_open();").expect("stream_open"));
+    assert_eq!(UI_PX_LCD_SRC.matches("STREAM_EDGES.store(").count(), 1);
     let hook = UI_PX_LCD_SRC.split("pub fn film_tick(_percent: u8) {").nth(1).expect("film_tick");
     assert!(hook.starts_with(
-        "\n    #[cfg(feature = \"ui-px-film-gaps\")]\n    super::film_gaps::note_pct(_percent);\n    film_tick_paced(false);\n}"
+        "\n    #[cfg(feature = \"ui-px-film-gaps\")]\n    super::film_gaps::note_pct(_percent);\n    film_tick_paced(false, b'P');\n}"
     ));
     let chip = UI_PX_LCD_SRC.split("pub fn film_tick_chip() {").nth(1).expect("film_tick_chip");
-    assert!(chip.starts_with("\n    film_tick_paced(film_chip_back_to_back());\n}"));
+    assert!(chip.starts_with("\n    film_tick_paced(film_chip_back_to_back(), b'C');\n}"));
     assert!(tick.contains("*last = if after.wrapping_sub(now) > 50 { after } else { now };"));
 }
 
@@ -2853,11 +2867,11 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     // It returns first thing with no film running, and a tick never nests.
     let tick = UI_PX_LCD_SRC.split("pub fn film_tick_hash() {\n").nth(1).expect("film_tick_hash");
     assert!(tick.starts_with("    if !FILM_LIVE.load(Ordering::Relaxed) {\n        return;\n    }\n"));
-    let paced = UI_PX_LCD_SRC.split("fn film_tick_paced(back_to_back: bool) {\n").nth(1).expect("film_tick_paced");
+    let paced = UI_PX_LCD_SRC.split("fn film_tick_paced(back_to_back: bool, src: u8) {\n").nth(1).expect("film_tick_paced");
     let paced = &paced[..paced.find("\n}\n").expect("end")];
     assert_eq!(
         paced,
-        "    if !FILM_LIVE.load(Ordering::Relaxed) {\n        return;\n    }\n    if FILM_IN_TICK.swap(true, Ordering::Relaxed) {\n        return;\n    }\n    film_tick_due(back_to_back);\n    FILM_IN_TICK.store(false, Ordering::Relaxed);"
+        "    if !FILM_LIVE.load(Ordering::Relaxed) {\n        return;\n    }\n    if FILM_IN_TICK.swap(true, Ordering::Relaxed) {\n        return;\n    }\n    film_tick_due(back_to_back, src);\n    FILM_IN_TICK.store(false, Ordering::Relaxed);"
     );
     assert_eq!(UI_PX_LCD_SRC.matches("film_tick_due(").count(), 2, "one definition, one call");
 }
