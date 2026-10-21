@@ -210,6 +210,7 @@ compile_error!(
     not(debug_assertions),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     feature = "dual-se",
     any(not(feature = "saes-dhuk"), not(feature = "se050-derived-scp03")),
 ))]
@@ -505,6 +506,36 @@ compile_error!(
      circuits boot into a firmware anti-rollback test — never a shipping image."
 );
 
+// Dedicated guard: `devunit-die-keys` (dev units with DHUK-rooted keys) is the
+// opposite of every fixed-key shortcut, so combining them is a contradiction:
+// `dev-testkey` / `otp-hardcoded-master-key` / `e2e-test` would put the public
+// constant or the fixed bench salt back, and `mock-se` has no chips to key.
+// `bhk` is refused because an RDP regression (the only way to re-flash a dev
+// unit's FSBL) erases the wrapped BHK on page 126 and would leave the SE050
+// keyed to a secret nothing can derive again; the DHUK survives it. This
+// feature also lifts the shipping-posture fences above and below (SE050
+// derived SCP03, OPTIGA hardware counter, consumption mask, tamper wipe) —
+// acceptable only because `mode-production` refuses `devunit-ab`, which it
+// implies.
+#[cfg(all(
+    feature = "devunit-die-keys",
+    any(
+        feature = "dev-testkey",
+        feature = "otp-hardcoded-master-key",
+        feature = "bhk-hardcoded-master-key",
+        feature = "e2e-test",
+        feature = "mock-se",
+        feature = "bhk",
+        not(feature = "dual-se"),
+    ),
+))]
+compile_error!(
+    "devunit-die-keys needs `dual-se` and excludes dev-testkey / \
+     otp-hardcoded-master-key / bhk-hardcoded-master-key / e2e-test / mock-se \
+     (they restore public keys or the fixed bench salt) and `bhk` (an RDP \
+     regression would strand the SE050). See secure/Cargo.toml."
+);
+
 // Firmware-rollback backend quarantine. The legacy hardware implementation
 // treated one ECC-protected OTP quad-word as a reusable per-bit tally, but
 // STM32U585 user OTP permits only one program operation per 128-bit QW.
@@ -636,6 +667,7 @@ compile_error!(
     ),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(feature = "optiga-hw-counter"),
 ))]
 compile_error!(
@@ -807,6 +839,7 @@ compile_error!(
     not(debug_assertions),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(feature = "consumption-mask"),
 ))]
 compile_error!(
@@ -849,6 +882,7 @@ compile_error!(
     ),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(all(feature = "tamp", feature = "tamp-wipe", feature = "tzic-wipe")),
 ))]
 compile_error!(
@@ -893,6 +927,7 @@ compile_error!(
     ),
     not(feature = "e2e-test"),
     not(feature = "dev-testkey"),
+    not(feature = "devunit-die-keys"),
     not(feature = "se050-derived-scp03"),
 ))]
 compile_error!(

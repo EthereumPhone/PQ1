@@ -79,8 +79,13 @@ Output: `target/devunit/releases/<profile>-<version>/` with
 
 Profiles:
 
-* `investor` (default): `dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,unlock-diag,
-  dev-dfu,stm32u585,usb,board-pq1` + `devunit-ab`. **`dev-dfu` with a 2 s
+* `investor` (default): `dual-se,devunit-die-keys,legacy-fw-rollback-unsafe,
+  erc7730-dev-unattested,ui-lcd,ui-px,ui-px-dma,unlock-diag,dev-dfu,stm32u585,
+  usb,board-pq1` + `devunit-ab`. **Die-bound keys and RDP 1** since
+  2026-10-21 (release 26.10.21.14 on): see "Keys" below.
+* `investor-testkey`: the investor image up to 26.10.21.13 (`dev-testkey`,
+  RDP 0). Only for a unit that still carries a wallet made by it.
+* Both investor profiles: **`dev-dfu` with a 2 s
   hold** (since 2026-10-21 evening; releases up to 26.10.21.5 had none): the
   FSBL can only be re-flashed over DFU or SWD. To enter DFU, hold BOTH
   buttons while plugging in USB-C and keep holding through the fingerprint
@@ -88,6 +93,46 @@ Profiles:
   would latch a unit into DFU on a stray chord just before the PIN pad.
 * `bench`: `mock-se,e2e-test,ui-noop,...` — never touches the secure elements,
   auto-unlocks and auto-confirms; for the headless EVT bench board.
+
+## Keys (`devunit-die-keys`, the `investor` profile)
+
+| | `investor-testkey` (≤ 26.10.21.13) | `investor` (26.10.21.14 on) |
+|---|---|---|
+| OPTIGA pairing secret, SE050 admin credential, PIN PRF key | public constant (`dev-testkey`) | SAES-CMAC(DHUK), per die |
+| PIN salt | fixed, public | 32 random bytes per wallet (page 125) |
+| one dumped chip | PIN found offline, then the other chip opens | a masked half and a credential, useless without this MCU |
+| bus capture of one unlock | seed (keys public, PIN guessable offline) | DHUK-masked values only |
+| RDP | 0 (SWD reads everything) | 1 (no outside read or write of flash, no debug) |
+| SE050 SCP03 | published NXP keys | unchanged: published NXP keys |
+
+Why RDP 1: at RDP 0 the DHUK is one ST constant shared by every STM32U585
+(measured 2026-05-05), so dropping `dev-testkey` alone would change nothing.
+The firmware refuses to touch the secure elements below RDP 1 (it shows NOT
+LOCKED / NEEDS RDP 1 and halts; the boot is never confirmed, so a USB update
+that lands on an RDP-0 unit rolls back after three boots). The FSBL accepts
+RDP 0 and exactly `0xBB`.
+
+Still NOT production: the SE050 channel keeps the published SCP03 keys (no
+PUT KEY rotation on these units — it is irreversible per chip; what crosses
+the channel is DHUK-masked), no SE050 `SCP_REQUIRED`, no OPTIGA hardware
+counter or lifecycle lock, no tamper wipe or consumption mask, the update key
+is a laptop key, and code running in the secure world can still drive the
+DHUK (an offline PIN search with one chip's contents). The SE050 UserID keeps
+the bench admin-delete entry (not S-6), so a forgotten PIN or an RDP
+regression does not strand the chip.
+
+**No migration.** A unit with a `investor-testkey` wallet cannot move to
+`investor` with its wallet: wipe it (check the 24 words first) and set it up
+again. Do not send it `investor` updates before that; they halt at RDP 0 and
+roll back.
+
+**Re-flashing an RDP-1 unit** (the FSBL only changes this way): enter ROM DFU
+(both buttons, as below) and run `flash.sh ... --dfu --regress`. RDP 1 -> 0
+mass-erases the flash, so the wallet on the device is gone (restore from the
+24 words); the secure elements stay paired, because their keys come from the
+DHUK, which survives the regression. If the unit cannot reach DFU (broken
+FSBL or firmware), the only way in is BOOT0 high at power-up: TP103 to J210
+pin 1 (3.3 V), which needs the case open (DVT1, 2026-10-17).
 
 ## First flash of a unit (once, before it ships)
 
@@ -106,10 +151,14 @@ Without it, only bank-1 pages 0–86 and bank 2 are erased and the wallet pages
 survive. With a probe on J210: `--swd` instead of `--dfu`. The script handles
 TZEN=0 and TZEN=1 units, opens the watermarks for the non-secure ROM
 bootloader, and leaves `TZEN=1, SECWM1=0..0x7F, SECWM2=0x30..0x7F,
-SECBOOTADD0=0x180000, nSWBOOT0=1, nBOOT0=1`. RDP stays 0, no WRP, no OTP.
+SECBOOTADD0=0x180000, nSWBOOT0=1, nBOOT0=1`, and for an `investor` release
+`RDP=0xBB` (Level 1) in the last write, so the release first boots at RDP 1.
+No WRP, no OTP, never RDP 2.
 
-**Acceptance check per unit** (the FSBL has never run on a DVT before
-2026-10-21; it refuses to boot if its display bring-up fails):
+**Acceptance check per unit** (the FSBL first ran on a DVT on
+2026-10-21; it refuses to boot if its display bring-up fails). For an
+`investor` release the unit must not show NOT LOCKED / NEEDS RDP 1; if it does,
+the RDP write did not take (re-enter DFU, run `flash.sh` again):
 
 1. After flashing, the panel shows the FSBL's 8 words — they must equal the
    slot-A words in `RELEASE.txt`.
@@ -210,7 +259,28 @@ buttons emulated over SWD (PA0/PA1 driven low through the secure GPIOA alias):
   prints park the core unless `arm semihosting enable` is set — USB then never
   enumerates. Not an issue without a debugger.
 
-Not yet run on silicon: the FSBL on a DVT panel (it refuses to boot if its
-display bring-up fails — the per-unit acceptance check covers it), real button
-hardware (the bench emulates the pins), and a torn boot-log record (the
-ECC-NMI recovery path).
+### Silicon evidence (two pq1 DVTs with panel and buttons, 2026-10-21 evening)
+
+Owner at the device, real buttons, USB-C only:
+
+* DVT #1, first flash over ROM DFU (both-buttons entry of its previous
+  `dev-dfu` image), `--erase-all`, 26.10.21.1: the FSBL drove the DVT panel
+  (5x8 words) and booted slot A; its secure elements still held an earlier
+  wallet (PIN screen, not the wizard).
+* Signed USB updates on the real panel and buttons: 26.10.21.1 (A) → .8 (B);
+  after the DFU re-flash below (.8 on A) → .9 (B) → .10 (A) → .11 (B) → .12
+  (A) → .13 (B), each unlocked on the new release. Transfer 30-36 s, 79 s with the per-chunk
+  INSTALLING film (0d3a2c1c; smooth, confirmed by the owner).
+* 26.10.21.8's 2 s both-buttons hold entered ROM DFU; `flash.sh` WITHOUT
+  `--erase-all` put the `px-fingerprint` FSBL on (pixel "OS FINGERPRINT" +
+  whole-word grid, no second screen from the secure world) and the existing
+  wallet still unlocked.
+* The UI changes were each confirmed on the panel one install after they
+  landed (the running firmware draws the update dialogs): UPDATE FIRMWARE?
+  wording, INSTALLING instead of a frozen confirm, the one-consent flow
+  (UPDATE FIRMWARE? → NEW VERSION → 8 words → chord), the smooth film.
+* DVT #2 (investor unit): both-buttons DFU from its previous image,
+  `--erase-all`, 26.10.21.13.
+
+Not yet run on silicon: a torn boot-log record (the ECC-NMI recovery path),
+and the 3-boot rollback on a DVT (silicon-tested on the EVT bench board only).

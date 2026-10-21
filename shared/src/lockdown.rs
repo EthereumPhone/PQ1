@@ -231,6 +231,12 @@ pub const SHIP_RDP_BYTE: u8 = 0xAA;
 /// (see [`phase_profile`]).
 pub const LOCKED_RDP_BYTE: u8 = 0xCC;
 
+/// RDP Level 1 as dev units with die-bound keys run it (`devunit-die-keys`,
+/// set by `tools/devunit/flash.sh`). Any byte other than `0xAA`/`0x55`/`0xCC`
+/// is Level 1 in silicon; the dev-unit FSBL accepts exactly this one, so a
+/// stray byte still trips the read-back. NOT a shipping state.
+pub const DEVUNIT_RDP1_BYTE: u8 = 0xBB;
+
 /// `SECWM1R1` FIELD values that mark all of bank 1 secure (`PSTRT=0, PEND=0x7F`).
 /// This is what a programmer WRITES, NOT what the register reads back: `SECWM1R1`/`SECWM2R1` are option-byte shadow registers
 /// whose unprogrammed bits read as 1s (SVD reset value `0xFF00FF00`). A correctly
@@ -384,6 +390,27 @@ pub const fn phase_profile(optr: u32) -> &'static ShipProfile {
     match rdp_level_from_byte((optr & 0xFF) as u8) {
         RdpLevel::L2 => &LOCKED_PROFILE_U585,
         _ => &SHIP_PROFILE_U585,
+    }
+}
+
+/// Dev units at RDP Level 1 (`devunit-die-keys`): the ship profile with
+/// [`DEVUNIT_RDP1_BYTE`]. Not a shipping profile.
+pub const DEVUNIT_RDP1_PROFILE_U585: ShipProfile = ShipProfile {
+    rdp_byte: DEVUNIT_RDP1_BYTE,
+    ..SHIP_PROFILE_U585
+};
+
+/// [`phase_profile`] for the dev-unit FSBL: a dev unit runs at RDP 0
+/// (`dev-testkey` images) or at RDP 1 ([`DEVUNIT_RDP1_BYTE`], die-bound keys),
+/// and never at RDP 2. `0xBB` selects the RDP-1 profile; every other byte,
+/// `0xCC` included, selects the RDP-0 ship profile, so the compare stays fail
+/// closed in the same direction as [`phase_profile`].
+#[must_use]
+pub const fn devunit_phase_profile(optr: u32) -> &'static ShipProfile {
+    if (optr & 0xFF) as u8 == DEVUNIT_RDP1_BYTE {
+        &DEVUNIT_RDP1_PROFILE_U585
+    } else {
+        &SHIP_PROFILE_U585
     }
 }
 
@@ -823,6 +850,35 @@ mod tests {
         assert_eq!(chk(GOOD_OPTR, 0, DEVUNIT_SECWM2, GOOD_SECBOOT), Err(ObField::Secwm1));
         assert_eq!(chk(GOOD_OPTR, ST_SECWM1_PRODUCTION, DEVUNIT_SECWM2, 0), Err(ObField::SecBootAdd0));
         assert_eq!(chk(GOOD_OPTR | OPTR_SWAP_BANK, ST_SECWM1_PRODUCTION, DEVUNIT_SECWM2, GOOD_SECBOOT), Err(ObField::SwapBank));
+    }
+
+    /// The dev-unit FSBL accepts RDP 0 and exactly `0xBB` (RDP 1), never
+    /// RDP 2 or another Level-1 byte; the production `phase_profile` still
+    /// refuses `0xBB`.
+    #[test]
+    fn devunit_phase_profile_accepts_rdp0_and_exactly_0xbb() {
+        const W2: u32 = 0xFFFF_FFB0;
+        let chk = |optr: u32| {
+            verify_confirmed_fields_devunit(
+                optr, ST_SECWM1_PRODUCTION, W2, GOOD_SECBOOT, devunit_phase_profile(optr), 48, 127,
+            )
+        };
+        assert_eq!(chk(OPTR_TZEN | 0xAA), Ok(()));
+        assert_eq!(chk(OPTR_TZEN | 0xBB), Ok(()));
+        for rdp in [0xCCu32, 0x55, 0x00, 0xBA, 0xFF] {
+            assert_eq!(chk(OPTR_TZEN | rdp), Err(ObField::Rdp), "rdp byte {rdp:#x}");
+        }
+        assert_eq!(chk(0xBB), Err(ObField::Tzen));
+        assert_eq!(
+            verify_confirmed_fields(
+                OPTR_TZEN | 0xBB,
+                ST_SECWM1_PRODUCTION,
+                PQ1_SECWM2_CONFIGURED,
+                GOOD_SECBOOT,
+                phase_profile(OPTR_TZEN | 0xBB)
+            ),
+            Err(ObField::Rdp)
+        );
     }
 
     /// The load-bearing DIFFERENCE between the two comparators, pinned in both

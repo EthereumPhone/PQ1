@@ -194,7 +194,14 @@ pub const ADMIN_WIPE_OBJ: u32 = 0x7B10_00A0;
 /// guess a PIN.
 ///
 /// The predicate is the bench predicate of `pin_gate::salt_policy` (pinned
-/// together in `se050_under_test`). `mode-production` forbids both
+/// together in `se050_under_test`), plus dev units with die-bound keys
+/// (`devunit-die-keys`), which keep the bench entry on purpose: a forgotten
+/// PIN or the RDP regression that re-flashing their FSBL needs would
+/// otherwise strand the UserID, and those units go to testers. What S-6
+/// would add there is narrow: every half on the chip is masked with a
+/// DHUK-keyed PIN mask (#855), so a substituted UserID reads a masked half;
+/// only an attacker who can also run the DHUK (secure-world code execution)
+/// gains an offline PIN search from it. `mode-production` forbids all three
 /// features; the assertion below fails the build if that ever stops being
 /// true.
 ///
@@ -205,7 +212,7 @@ pub const ADMIN_WIPE_OBJ: u32 = 0x7B10_00A0;
 /// image does NOT work: the OPTIGA half is rewritten and the SE050 half is
 /// kept, so the unlock check fails.
 pub(crate) const USERID_ADMIN_DELETE: Option<u32> =
-    if cfg!(any(feature = "e2e-test", feature = "otp-hardcoded-master-key")) {
+    if cfg!(any(feature = "e2e-test", feature = "otp-hardcoded-master-key", feature = "devunit-die-keys")) {
         Some(ADMIN_WIPE_OBJ)
     } else {
         None
