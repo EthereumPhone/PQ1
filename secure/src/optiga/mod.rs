@@ -310,6 +310,22 @@ impl OptigaTrustM {
         self.init()
     }
 
+    /// A fresh chip session, as at a cold boot: RST + OpenApplication, then
+    /// a new Shielded Connection. Used before the auto-unlock that follows
+    /// provisioning, so the first unlock of a new wallet meets the chip in
+    /// the same state every later unlock does (DVT 2026-10-21).
+    pub(crate) fn restart_session(&mut self) -> Result<(), OptigaError> {
+        #[cfg(feature = "stm32u585")]
+        self.hard_reset_and_reinit()?;
+        #[cfg(not(feature = "stm32u585"))]
+        {
+            self.ready = false;
+            self.shield.active = false;
+            self.init()?;
+        }
+        self.ensure_shield()
+    }
+
     /// Draw `buf.len()` bytes from the OPTIGA Trust M hardware TRNG
     /// over the Shielded Connection. The bytes are NOT intended to be
     /// used in isolation — `hw::rng_strong` XOR-mixes this stream with

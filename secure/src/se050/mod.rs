@@ -3155,6 +3155,13 @@ impl Se050 {
                 }
             }
             let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &sid);
+            // A3 recovery: the refused CANARY_USERID delete above (the
+            // expected post-S-6 outcome) leaves the chip session-pending,
+            // so the next `create_session` and `check_exists` answer
+            // SW=0x6982. Without this the self-delete below cannot run, the
+            // post-check reads every survivor as gone, and the first unlock
+            // after setup fails (EVT 2026-10-16, DVT 2026-10-21).
+            self.reinit()?;
 
             // Self-delete the canary UserID via its own PIN-verified
             // session (the production "graceful user delete" path —
@@ -3174,6 +3181,11 @@ impl Se050 {
                 }
                 let _ = apdu::close_session(&mut self.t1, &mut self.scp03, &self_sid);
             }
+            // A3 recovery again: a self-delete that did not go through
+            // cleanly leaves the same session-pending state, which would
+            // turn the post-check below into a false "gone" and reach the
+            // wallet's own objects in `store_objects`.
+            self.reinit()?;
 
             // Post-check: data objects MUST be gone (admin had delete).
             // CANARY_USERID survival is acceptable here even after the

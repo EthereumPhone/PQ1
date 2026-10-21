@@ -4812,6 +4812,14 @@ fn main() -> ! {
             // provision for no security gain (can't be an attack path:
             // we control both the PIN and the PIN target in the same
             // call).
+            //
+            // Both chips first get fresh sessions (`restart_sessions`):
+            // provisioning leaves them in states a boot never does, and the
+            // auto-unlock failed on that while the same PIN unlocked at the
+            // prompt right after (EVT 2026-10-16, DVT 2026-10-21). A failed
+            // restart is not fatal here; the unlock reports its own error.
+            #[cfg(feature = "dual-se")]
+            let _ = (&mut *core::ptr::addr_of_mut!(SE)).restart_sessions();
             let auto = (&mut *core::ptr::addr_of_mut!(SE)).unlock(&pin);
             // mnemonic drops at the end of this block → indices zeroed.
             use zeroize::Zeroize;
