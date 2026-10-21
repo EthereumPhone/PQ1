@@ -4600,6 +4600,16 @@ duress-ui-test = []
 # show which step of `DualSecureElement::unlock` failed ("code N") for 8 s
 # before the PIN prompt. NEVER ships (fenced in nsc/mod.rs).
 unlock-diag = []
+# Dev diagnostic (2026-10-21): reproduce the failed auto-unlock after setup
+# on a board with no panel or buttons. Each round wipes BOTH chips,
+# provisions a fixed public test wallet the way setup does, unlocks at once
+# and again, and reports over semihosting (with the unlock-diag step code);
+# then halts. NEVER ships (fenced in nsc/mod.rs).
+setup-unlock-repro = ["unlock-diag"]
+# The same, with every second round calling
+# `DualSecureElement::restart_sessions` before its first unlock (as setup does
+# since 148078f0).
+setup-unlock-repro-restart = ["setup-unlock-repro"]
 # Combined MCU page-124 + OPTIGA E120 + SE050 per-attempt and in-run
 # desynchronization/recovery E2E. It exercises ordinary three-way attempt
 # consumption plus MCU-, OPTIGA-, and SE050-ahead recovery and simulated

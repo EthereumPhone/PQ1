@@ -5213,6 +5213,8 @@ compile_error!(
         feature = "duress-ui-test",
         // Dev diagnostic: names the failing unlock step on the display.
         feature = "unlock-diag",
+        // Dev diagnostic: wipes and re-provisions both chips in a loop.
+        feature = "setup-unlock-repro",
         // #989 bench tool: sets AND clears the SE050 platform-SCP
         // requirement. A shipping image must have no path that turns
         // SCP_REQUIRED off.
