@@ -39,6 +39,15 @@ time in the FSBL, the secure world and both build scripts.
   never writes flash.
 * **Versions** are `YY.MM.DD.N` packed into the signed `u32` (`26.10.21.2` =
   `0x1A0A1502`); the device shows them in that form.
+* **Boot fingerprint, shown once, in the pixel UI's design.** The dev-unit
+  FSBL is built with `px-fingerprint`: it paints the "OS FINGERPRINT" title
+  (1.5 s) and then the eight words, whole, on the numbered words grid (4 s),
+  pixel for pixel the secure world's screens (`fsbl/src/px_fprint.rs`, pinned
+  by `fsbl-tests/tests/px_fingerprint.rs`). The secure world no longer shows
+  its own copy on dev units. The FSBL is never written over USB: a unit
+  flashed before 2026-10-21 evening keeps the 5x8 text screen until it is
+  re-flashed over DFU or SWD (`flash.sh` without `--erase-all` keeps the
+  wallet).
 
 ## Signing key
 
@@ -71,10 +80,12 @@ Output: `target/devunit/releases/<profile>-<version>/` with
 Profiles:
 
 * `investor` (default): `dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,unlock-diag,
-  stm32u585,usb,board-pq1` + `devunit-ab`. **No `dev-dfu`**: behind the FSBL
-  its both-buttons check runs just before the PIN pad appears, and an early
-  "enter" chord would latch the unit into ROM DFU on every boot. Override
-  with `FEAT_S=...` for bench units.
+  dev-dfu,stm32u585,usb,board-pq1` + `devunit-ab`. **`dev-dfu` with a 2 s
+  hold** (since 2026-10-21 evening; releases up to 26.10.21.5 had none): the
+  FSBL can only be re-flashed over DFU or SWD. To enter DFU, hold BOTH
+  buttons while plugging in USB-C and keep holding through the fingerprint
+  (~8 s) until the unit enumerates as `0483:df11`. The bench's 50 ms trigger
+  would latch a unit into DFU on a stray chord just before the PIN pad.
 * `bench`: `mock-se,e2e-test,ui-noop,...` — never touches the secure elements,
   auto-unlocks and auto-confirms; for the headless EVT bench board.
 
@@ -82,7 +93,9 @@ Profiles:
 
 Over USB-C with the ROM bootloader (`0483:df11`): use the SBU-bridged USB-C
 adapter (`docs/hardware/evt-dev-loop.md`), or hold both buttons while plugging
-in if the unit already runs a `dev-dfu` image. Then:
+in if the unit already runs a `dev-dfu` image (dev-unit images: keep holding
+~8 s, through the fingerprint). A unit on 26.10.21.1–.5 has no `dev-dfu`:
+install a newer release over USB first, then use the buttons. Then:
 
 ```bash
 tools/devunit/flash.sh target/devunit/releases/investor-<v> --dfu --erase-all
@@ -114,9 +127,14 @@ The unit must be unlocked. Either tool:
 * **Linux CLI:** `tools/devunit/fwupdate.py <file.pq1fw>`; `--info` shows what
   runs.
 
-On the device, for each question: tap RIGHT through its screens, press BOTH
-buttons on the last one to accept, hold LEFT to cancel. ~25 s transfer for the
-investor image, then the unit restarts, shows the new words, asks for the PIN.
+On the device (firmware 26.10.21.10 and later): one question, "UPDATE
+FIRMWARE?" — tap RIGHT through the new version and its 8 words (3 taps), press
+BOTH buttons on the last screen to install, hold LEFT to cancel. The signature
+is checked before the question appears, so everything on it is authentic; the
+signer words are no longer shown (the device only accepts the dev-unit key).
+Then INSTALLING with progress, ~30 s, and the unit restarts, shows the new
+words, asks for the PIN. Firmware up to 26.10.21.9 asks twice (a verify
+question, then "UPDATE TO V…?" with 6 taps and the signer words).
 Cancel, unplug, or an error at any point leaves the running release in place.
 
 **What to send a tester:** the `.pq1fw` file, `pq1-fwupdate.html`, and the

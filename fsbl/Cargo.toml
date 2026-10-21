@@ -78,6 +78,12 @@ stage-marker = []
 # no OTP. NOT the production layout or rollback design; refused together with
 # `mode-production`. `make devunit-release` is the entry point.
 devunit-ab = []
+# Paint the boot fingerprint with the pixel UI's design (the "OS FINGERPRINT"
+# title, then the numbered words grid, whole words) instead of the 5x8 text
+# grid. Pixel-for-pixel the secure world's screens: `src/px_fprint.rs`, pinned
+# by `fsbl-tests/tests/px_fingerprint.rs`. ~9 KB of the 32 KiB region.
+# Enabled by the dev-unit release (`tools/devunit/release.sh`).
+px-fingerprint = []
 
 [dependencies]
 # Signature verification — same crate the main firmware uses, so the

@@ -304,7 +304,8 @@ jobs:
             --test draft09_resource_envelope \
             --test draft11_deletion_experiments \
             --test source_invariants \
-            --test paired_constants
+            --test paired_constants \
+            --test px_fingerprint
       # ERC-7730 descriptor catalog gate: (1) the firmware-pinned
       # `ERC7730_DESCRIPTORS_ROOT` in secure/src/db_roots.rs must match a
       # fresh dbgen build — catches a forgotten `cargo run -p dbgen` after a

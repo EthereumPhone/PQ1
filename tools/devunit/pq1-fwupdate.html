@@ -252,17 +252,17 @@ function guide(target) {
   g.innerHTML = "";
   const box = document.createElement("div");
   box.className = "device-says";
-  box.innerHTML = `<p><b>On the PQ1</b> (each question: tap the right button through all its screens;
-    on the last one press <b>both buttons together</b> to say yes; hold the left button to cancel):</p>
-    <p>1. <i>VERIFY FIRMWARE PACKAGE?</i> — say yes.<br>
-    2. <i>UPDATE TO V${pkg.header.label}?</i> — check the version, then the firmware words, which must be:</p>`;
+  box.innerHTML = `<p><b>On the PQ1:</b> <i>UPDATE FIRMWARE?</i> Tap the right button to see the new
+    version (<b>${pkg.header.label}</b>) and its 8 words. The words must be:</p>`;
   box.appendChild(wordsHtml(pkg.header.slots[target].fingerprint));
   const p2 = document.createElement("p");
-  p2.innerHTML = "and the signer words:";
+  p2.innerHTML = "If they match, tap right once more and press <b>both buttons together</b> to install. " +
+    "If not, hold the left button to cancel. (Firmware 26.10.21.9 and older asks twice and also shows " +
+    "the signer words:)";
   box.appendChild(p2);
   box.appendChild(wordsHtml(SIGNER_WORDS));
   const p3 = document.createElement("p");
-  p3.textContent = "If both match, say yes on the last screen to install. If not, hold the left button to cancel.";
+  p3.textContent = "The PQ1 then shows INSTALLING, restarts, shows the same 8 words, and asks for your PIN.";
   box.appendChild(p3);
   g.appendChild(box);
 }

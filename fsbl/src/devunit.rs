@@ -99,13 +99,28 @@ const FLASH_ECCR: *mut u32 = 0x5002_2030 as *mut u32;
 const ECCD: u32 = 1 << 31;
 const ECCIE: u32 = 1 << 24;
 
-/// Flash double-ECC NMI: clear it and resume (see the module docs). Any other
-/// NMI source keeps cortex-m-rt's behaviour and parks the core.
+/// `FLASH_ECCR.BK_ECC` (bit 21, error in bank 2) and `SYSF_ECC` (bit 22,
+/// error in system flash); `ADDR_ECC` (bits 19:0) is the byte offset in the
+/// bank.
+const BK_ECC: u32 = 1 << 21;
+const SYSF_ECC: u32 = 1 << 22;
+const ADDR_MASK: u32 = 0xF_FFFF;
+/// The FSBL's own pages (bank 1, 0..=3): an ECC error there is in the code
+/// this core is executing, which no checksum downstream re-verifies.
+const FSBL_END_OFF: u32 = 4 * devunit::PAGE_SIZE;
+
+/// Flash double-ECC NMI on DATA the FSBL reads (see the module docs): clear
+/// it and resume. Excused anywhere the read is re-checked downstream — the
+/// boot log (record CRC), a manifest torn by a power cut during COMMIT
+/// (manifest CRC + signature), a slot image (image hash). NOT excused in the
+/// FSBL's own pages or in system flash, and any other NMI source: those keep
+/// cortex-m-rt's behaviour and park the core.
 #[cortex_m_rt::exception]
 unsafe fn NonMaskableInt() {
     // SAFETY: fixed, always-present FLASH register; single-threaded boot code.
     let eccr = unsafe { read_volatile(FLASH_ECCR) };
-    if eccr & ECCD != 0 {
+    let in_fsbl = eccr & (BK_ECC | SYSF_ECC) == 0 && eccr & ADDR_MASK < FSBL_END_OFF;
+    if eccr & ECCD != 0 && eccr & SYSF_ECC == 0 && !in_fsbl {
         // SAFETY: as above; writing ECCD clears it, ECCIE keeps its value.
         unsafe { write_volatile(FLASH_ECCR, ECCD | (eccr & ECCIE)) };
         return;

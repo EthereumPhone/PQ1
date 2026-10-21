@@ -56,7 +56,7 @@ if [ $MODE = dfu ]; then
       if [ -n "$d" ] && [ "$d" != "${OLD:-}" ]; then OLD=$d; sleep 2; return 0; fi
       sleep 1
     done
-    echo "!! no DFU device (0483:df11) — hold BOTH buttons while plugging USB-C in, or use the SBU adapter" >&2; exit 1
+    echo "!! no DFU device (0483:df11) — hold BOTH buttons while plugging USB-C in (dev-unit images: keep holding ~8 s), or use the SBU adapter" >&2; exit 1
   }
   OLD=""; say "waiting for the ROM DFU bootloader (0483:df11)"; wait_link
 else

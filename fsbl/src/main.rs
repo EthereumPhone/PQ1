@@ -95,6 +95,9 @@ mod clock;
 #[cfg(feature = "devunit-ab")]
 mod devunit;
 mod fi;
+// `px-fingerprint` paints with `px_fprint`; the 5x8 text grid stays for
+// the default build and `lcd-test`.
+#[cfg_attr(feature = "px-fingerprint", allow(dead_code))]
 mod glyphs;
 #[cfg(feature = "hw-sha256")]
 mod hash;
@@ -102,10 +105,13 @@ mod sha;
 mod manifest;
 #[cfg(feature = "stage-marker")]
 mod marker;
+#[cfg_attr(feature = "px-fingerprint", allow(dead_code))]
 mod nv3007;
 mod optbytes;
 #[cfg(not(feature = "devunit-ab"))]
 mod otp;
+#[cfg(feature = "px-fingerprint")]
+mod px_fprint;
 mod render;
 mod sau;
 mod slot;

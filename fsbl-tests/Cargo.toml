@@ -25,3 +25,8 @@ tempfile = "3"
 # agree with it (BANK1_BASE, FSBL_SPAN, FSBL_MAX_LOAD_SPAN) are consumed
 # from here (Foundation A slice FA-1.1, issue #540).
 pqsigner-geometry = { path = "../geometry" }
+# `px_fingerprint`: the pixel-UI engine renders the reference frames the FSBL's
+# `px-fingerprint` composer must match, and the full wordlist checks the
+# FSBL's suffix stream.
+pqsigner-ui-px = { path = "../pqsigner-ui-px", features = ["std"] }
+sphincs-tz-bip39 = { path = "../bip39", features = ["full-wordlist"] }

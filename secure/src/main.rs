@@ -373,7 +373,10 @@ mod dual_se;
 // retained in every debug build, which is where the FSBL-vs-secure comparison
 // is actually performed during bring-up. The `fsbl-tests/tests/paired_constants.rs`
 // pin that keeps the two dwell times equal stays meaningful for those builds.
-#[cfg(all(not(test), not(feature = "mode-production")))]
+// Dev units (`devunit-ab`) always boot through the FSBL, which shows the
+// fingerprint itself (in the pixel UI's design under its `px-fingerprint`), so
+// the secure world does not show it a second time.
+#[cfg(all(not(test), not(feature = "mode-production"), not(feature = "devunit-ab")))]
 mod measured_boot;
 // ML-KEM-1024 hybrid inner-wrap firmware adapter (binds pqsigner-pq-seal to the
 // device key hierarchy + the TRNG). Compiled under the self-test feature OR
@@ -2292,7 +2295,8 @@ fn main() -> ! {
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
     // Skipped in automated e2e tests which need non-interactive boot.
-    #[cfg(all(not(feature = "e2e-test"), not(feature = "mode-production")))]
+    // Not on dev units: their FSBL already showed it (see `mod measured_boot`).
+    #[cfg(all(not(feature = "e2e-test"), not(feature = "mode-production"), not(feature = "devunit-ab")))]
     measured_boot::run();
 
     // work-todo #36 — Phase B (post-lock provisioning). After the RDP-2

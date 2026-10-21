@@ -226,11 +226,11 @@ def install(args: argparse.Namespace) -> None:
             if not unlocked(dev):
                 sys.exit("still locked; unlock the device and run this again")
         print(f"==> installing {pkg.label} into slot {target}")
-        print("    on the device, for each question: tap RIGHT through its screens, then press BOTH")
-        print("    buttons on the last one (hold LEFT to cancel):")
-        print("      1) VERIFY FIRMWARE PACKAGE?   2) UPDATE TO V" + pkg.label + "?  — check the words:")
-        print(f"    firmware words: {' '.join(pkg.fingerprint(target))}")
-        print(f"    signer words:   {' '.join(SIGNER_WORDS)}")
+        print("    on the device: UPDATE FIRMWARE? — tap RIGHT through the new version and its 8 words,")
+        print("    then press BOTH buttons on the last screen (hold LEFT to cancel). The words must be:")
+        print(f"      {' '.join(pkg.fingerprint(target))}")
+        print("    (firmware 26.10.21.9 and older asks twice and also shows the signer words:")
+        print(f"      {' '.join(SIGNER_WORDS)})")
         sw, _ = dev.chained(INS_FW_BEGIN, manifest, timeout_s=600)
         if sw != SW_OK:
             sys.exit(f"FW_BEGIN: {sw_text(sw)}")
