@@ -1477,9 +1477,11 @@ fn negative_user_userid_has_no_admin_ref_post_s6() {
     // #912: bench images are the one exception, and only through one
     // constant. This test pins that constant whole: its value in a
     // non-bench build is `None`, its bench predicate is the two bench
-    // features and nothing else, and a production build asserts it.
+    // features plus `devunit-die-keys` (dev units keep the entry so a
+    // forgotten PIN does not strand the chip; the `se050/mod.rs` doc gives
+    // the argument) and nothing else, and a production build asserts it.
     let konst = "pub(crate) const USERID_ADMIN_DELETE: Option<u32> =\n    \
-if cfg!(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\")) {\n        \
+if cfg!(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\", feature = \"devunit-die-keys\")) {\n        \
 Some(ADMIN_WIPE_OBJ)\n    } else {\n        None\n    };\n";
     assert_eq!(MOD_SRC.matches(konst).count(), 1, "USERID_ADMIN_DELETE changed");
     assert_eq!(MOD_SRC.matches("const USERID_ADMIN_DELETE").count(), 1);
@@ -1488,7 +1490,9 @@ Some(ADMIN_WIPE_OBJ)\n    } else {\n        None\n    };\n";
     ));
     // The bench predicate is the one that selects the fixed public salt and
     // PRF key (`pin_gate::salt_policy`): a build that is "bench" for one is
-    // "bench" for the other.
+    // "bench" for the other. `devunit-die-keys` is the one deliberate split
+    // (admin entry, but the random salt and the DHUK PRF), and it cannot
+    // combine with either bench feature (`nsc/mod.rs` fence).
     const PIN_GATE_SRC: &str = include_str!("../pin_gate.rs");
     assert!(PIN_GATE_SRC.contains(
         "    #[cfg(any(feature = \"e2e-test\", feature = \"otp-hardcoded-master-key\"))]\n    {\n        SaltPolicy::FixedBench(&BENCH_FIXED_SALT)"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # flash.sh — first-flash a pq1 DEV UNIT with a dev-unit release (devunit-ab).
 #
-#   tools/devunit/flash.sh <release-dir> --dfu [--erase-all]   # USB-C, ROM DFU
-#   tools/devunit/flash.sh <release-dir> --swd [--erase-all]   # ST-LINK on J210
+#   tools/devunit/flash.sh <release-dir> --dfu [--erase-all] [--regress]   # USB-C, ROM DFU
+#   tools/devunit/flash.sh <release-dir> --swd [--erase-all] [--regress]   # ST-LINK on J210
 #
 # <release-dir> is target/devunit/releases/<profile>-<version> from
 # tools/devunit/release.sh. Writes the FSBL, manifest A and the slot-A images,
@@ -12,9 +12,19 @@
 #   SECWM2 = 0x30..0x7F (bank-2 pages 48..127 = secure slot B),
 #   SECBOOTADD0 = 0x180000 (the FSBL at 0x0C000000), nSWBOOT0=1, nBOOT0=1.
 #
-# Nothing irreversible: RDP stays 0xAA, no WRP, no OTP. After this, updates
+# Nothing irreversible: no WRP, no OTP, never RDP 2. After this, updates
 # go over USB with tools/devunit/fwupdate.py — this script is only for the
 # first flash (or a recovery).
+#
+# RDP: a release built with `devunit-die-keys` (the `investor` profile since
+# 2026-10-21; RELEASE.txt lists the features) is left at RDP Level 1 (0xBB),
+# set by the LAST option-byte write so the firmware never boots at RDP 0 with
+# its keys (it would halt before touching the secure elements anyway). Other
+# releases stay at RDP 0. At RDP 1 nothing can read or write the flash from
+# outside, so re-flashing such a unit needs --regress: RDP 1 -> 0, which
+# MASS-ERASES all flash (the wallet on the device is gone; restore it from the
+# 24 words). The secure elements stay paired: their keys come from the DHUK,
+# which the regression does not change.
 #
 # Erase: by default only what the layout owns is erased — bank 1 pages 0..86
 # and all of bank 2 — so bank-1 pages 123..127 (the wallet's PIN counter, PIN
@@ -31,13 +41,15 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 REL=${1:?usage: $0 <release-dir> --dfu|--swd [--erase-all]}; shift
-MODE=""; ERASE_ALL=0
-for a in "$@"; do case $a in --dfu) MODE=dfu;; --swd) MODE=swd;; --erase-all) ERASE_ALL=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
+MODE=""; ERASE_ALL=0; REGRESS=0
+for a in "$@"; do case $a in --dfu) MODE=dfu;; --swd) MODE=swd;; --erase-all) ERASE_ALL=1;; --regress) REGRESS=1;; *) echo "unknown arg $a" >&2; exit 2;; esac; done
 [ -n "$MODE" ] || { echo "choose --dfu or --swd" >&2; exit 2; }
 F=$REL/factory
 for f in fsbl.bin manifest-a.bin secure-a.bin nonsecure-a.bin; do
   [ -f "$F/$f" ] || { echo "missing $F/$f" >&2; exit 2; }
 done
+RDP1=0
+grep -q '^secure:.*devunit-die-keys' "$REL/RELEASE.txt" && RDP1=1
 
 PROG=${STM32_PROG:-STM32_Programmer_CLI}
 LOG=$REL/flash-$MODE-$(date +%Y%m%d-%H%M%S).log
@@ -76,7 +88,14 @@ obwrite() {  # program option bytes; the chip resets and (DFU) re-enumerates
 }
 
 say "option bytes before:"; ob | tee "$REL/ob-before-$MODE.txt" | tee -a "$LOG"
-[ "$(field RDP "$REL/ob-before-$MODE.txt")" = "0xAA" ] || { echo "!! RDP is not level 0 — stop (see tools/flash-evt-dfu.sh for regression)" >&2; exit 1; }
+if [ "$(field RDP "$REL/ob-before-$MODE.txt")" = "0xBB" ] && [ $REGRESS = 1 ]; then
+  say "RDP 1 -> 0: MASS ERASE of all flash (the wallet on this unit is gone)"
+  $P -ob RDP=0xAA 2>&1 | strip | tee -a "$LOG" | grep -E -i 'rror|success|unchanged' | tail -2 || true
+  sleep 5; wait_link
+  say "option bytes after the regression:"; ob | tee "$REL/ob-before-$MODE.txt" | tee -a "$LOG"
+  ERASE_ALL=1
+fi
+[ "$(field RDP "$REL/ob-before-$MODE.txt")" = "0xAA" ] || { echo "!! RDP is not level 0 — stop. An RDP-1 dev unit (0xBB): add --regress (mass-erases the flash; restore the wallet from the 24 words)" >&2; exit 1; }
 [ "$(field SWAP_BANK "$REL/ob-before-$MODE.txt")" = "0x0" ] || { echo "!! SWAP_BANK set — stop" >&2; exit 1; }
 TZEN=$(field TZEN "$REL/ob-before-$MODE.txt")
 
@@ -130,15 +149,22 @@ ok=1
 [ "$(field SECBOOTADD0 "$A")" = "0x180000" ] || ok=0
 [ $ok = 1 ] || { echo "!! option bytes are not the dev-unit profile — re-run before booting" >&2; exit 1; }
 
+RDP_OB=""
+[ $RDP1 = 1 ] && RDP_OB="RDP=0xBB"
 if [ $MODE = dfu ]; then
   # Leaving software-DFU: this reload boots flash at once, so the programmer
-  # usually reports a failed read-back even though the write took.
-  say "boot from flash: nSWBOOT0=1 nBOOT0=1"
-  $P -ob nSWBOOT0=1 nBOOT0=1 2>&1 | strip | tee -a "$LOG" | grep -E -i 'rror|success|unchanged' | tail -2 || true
+  # usually reports a failed read-back even though the write took. RDP 1 goes
+  # in the same write, so the first boot of the release is already at RDP 1.
+  say "boot from flash: nSWBOOT0=1 nBOOT0=1 $RDP_OB"
+  $P -ob nSWBOOT0=1 nBOOT0=1 $RDP_OB 2>&1 | strip | tee -a "$LOG" | grep -E -i 'rror|success|unchanged' | tail -2 || true
   sleep 3
   if lsusb -d 0483:df11 >/dev/null 2>&1; then
     say "still in DFU (SBU adapter attached?) — unplug it and plug the unit in normally"
   fi
+elif [ $RDP1 = 1 ]; then
+  # The chip resets into RDP 1; the debugger loses access from here on.
+  say "RDP 1 (0xBB) — SWD access ends here"
+  $P -ob RDP=0xBB 2>&1 | strip | tee -a "$LOG" | grep -E -i 'rror|success|unchanged' | tail -2 || true
 else
   $PROG -c port=SWD mode=HOTPLUG -rst 2>&1 | strip | tail -1 | tee -a "$LOG" || true
 fi

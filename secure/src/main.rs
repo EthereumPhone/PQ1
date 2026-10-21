@@ -2216,6 +2216,21 @@ fn main() -> ! {
     #[cfg(feature = "rdp2-self-lock")]
     first_boot::run_pre_lock_and_maybe_lock();
 
+    // Dev units with die-bound keys: the DHUK is per die only at RDP 1 (at
+    // RDP 0 it is ST's shared constant, and dev units never go to RDP 2), so
+    // a boot at any other level would pair the chips with keys every
+    // STM32U585 can compute, or fail against the ones they hold. Stop before
+    // the first secure-element command. The boot is never confirmed, so a USB
+    // update that lands here on an RDP-0 unit falls back to the previous
+    // release after three boots (`fw_update::devunit`).
+    #[cfg(feature = "devunit-die-keys")]
+    if hw::flash::rdp_level() != hw::flash::RdpLevel::L1 {
+        ui::show_status("NOT LOCKED", "NEEDS RDP 1");
+        loop {
+            cortex_m::asm::wfe();
+        }
+    }
+
     ui::splash();
 
     // Probe-less SE diagnostic on the LCD (feature `se-lcd-diag`). Terminal.

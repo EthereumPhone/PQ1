@@ -40,6 +40,17 @@ case $PROFILE in
     # power-up (hw/dev_dfu.rs), not the bench's 50 ms: behind the FSBL the
     # check runs as the PIN pad is about to appear, and a short chord there
     # would latch the unit into ROM DFU on every boot.
+    #
+    # Die-bound keys (`devunit-die-keys`, 2026-10-21): DHUK-rooted pairing
+    # secrets and PIN PRF plus a random salt per wallet, at RDP 1 (flash.sh
+    # sets it). `legacy-fw-rollback-unsafe` and `erc7730-dev-unattested` came
+    # in through `dev-testkey` before and stay, so nothing else changes.
+    FEAT_S=${FEAT_S:-dual-se,devunit-die-keys,legacy-fw-rollback-unsafe,erc7730-dev-unattested,ui-lcd,ui-px,ui-px-dma,unlock-diag,dev-dfu,stm32u585,usb,board-pq1}
+    FEAT_N=${FEAT_N:-stm32u585,usb,board-pq1,ui-px-atlas} ;;
+  investor-testkey)
+    # The investor image up to 26.10.21.13: public `dev-testkey` keys, RDP 0.
+    # Only for units that still carry a wallet made by it (no migration to
+    # die-bound keys: those units must be wiped and set up again).
     FEAT_S=${FEAT_S:-dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,unlock-diag,dev-dfu,stm32u585,usb,board-pq1}
     FEAT_N=${FEAT_N:-stm32u585,usb,board-pq1,ui-px-atlas} ;;
   bench)
@@ -47,7 +58,7 @@ case $PROFILE in
     # touched), auto-unlock and auto-confirm (`e2e-test`), no display.
     FEAT_S=${FEAT_S:-mock-se,e2e-test,ui-noop,stm32u585,usb,board-pq1}
     FEAT_N=${FEAT_N:-stm32u585,usb,board-pq1} ;;
-  *) echo "PROFILE must be investor or bench" >&2; exit 2 ;;
+  *) echo "PROFILE must be investor, investor-testkey or bench" >&2; exit 2 ;;
 esac
 FEAT_S="$FEAT_S,devunit-ab"
 FEAT_N="$FEAT_N,devunit-ab"

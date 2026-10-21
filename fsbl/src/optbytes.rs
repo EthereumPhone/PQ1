@@ -74,14 +74,15 @@ fn confirmed_fields_match() -> bool {
         lockdown::phase_profile(optr),
     );
     // Dev units: same profile, except bank 2 must carry exactly the secure
-    // watermark that covers secure slot B (`fw_manifest::devunit`).
+    // watermark that covers secure slot B (`fw_manifest::devunit`), and RDP
+    // may be Level 1 as well as 0 (`devunit-die-keys` images run there).
     #[cfg(feature = "devunit-ab")]
     let verdict = lockdown::verify_confirmed_fields_devunit(
         optr,
         reg(SECWM1R1_OFF),
         reg(SECWM2R1_OFF),
         reg(SECBOOTADD0R_OFF),
-        lockdown::phase_profile(optr),
+        lockdown::devunit_phase_profile(optr),
         fw_manifest::devunit::SECWM2_PSTRT,
         fw_manifest::devunit::SECWM2_PEND,
     );
