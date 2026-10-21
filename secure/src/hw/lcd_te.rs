@@ -559,8 +559,10 @@ pub fn measure(want_edges: u32, budget_cyc: u32) -> TeMeasure {
 
 }
 
+// `cycles` is the module's own (the busy film's stamps read it too); the
+// probe's identical reader stays private to `probe_clock`.
 #[cfg(feature = "ui-px-te-probe")]
-pub use probe_clock::{cycles, cyccnt_enable, measure, TeMeasure};
+pub use probe_clock::{cyccnt_enable, measure, TeMeasure};
 
 /// Consecutive missed edges. At `DEAD_AFTER` the line is declared dead.
 ///
