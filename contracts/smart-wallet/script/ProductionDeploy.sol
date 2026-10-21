@@ -27,7 +27,8 @@ import {PqsignerDeployment} from "./generated/PqsignerDeployment.sol";
 ///         requires every address to hold code and the immutables to point
 ///         at each other and at the canonical EntryPoint v0.6.
 ///
-///         Run under the production profile, which the address check
+///         Run it with `./deploy.sh <base-sepolia|base|eth-mainnet>`, or
+///         directly under the production profile, which the address check
 ///         enforces (any other profile predicts different addresses):
 ///           FOUNDRY_PROFILE=deploy forge script script/<Script>.s.sol \
 ///             --rpc-url <rpc> --account <name> [--broadcast] [--verify]
