@@ -1499,8 +1499,14 @@ static FILM_TICK_DT: AtomicU32 = AtomicU32::new(160_000);
 /// never `complete`.
 fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) -> FrameCost {
     use pqsigner_ui_px::damage::{Damage, FrameSigs};
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t0 = crate::hw::lcd_te::cycles();
     let mut frame = Frame::new();
     anim.build(marks, font, &mut frame);
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t1 = crate::hw::lcd_te::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_BUILD, t1.wrapping_sub(t0));
     let sigs = FrameSigs::of(&frame, font);
     // SAFETY: single-threaded driver state (no ISR touches it); copied out.
     let (prev, glass) = unsafe { *core::ptr::addr_of!(FILM_SIGS) };
@@ -1509,6 +1515,10 @@ fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) ->
     } else {
         sigs.damage(&prev)
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t2 = crate::hw::lcd_te::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_SIGS, t2.wrapping_sub(t1));
     let cost = match damage {
         Damage::Nothing => FrameCost { streamed: true, ..FrameCost::default() },
         Damage::Cols(x0, x1) => {
@@ -1517,6 +1527,8 @@ fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) ->
         }
         Damage::All => present_frame_cols(&frame, font, false, None, false),
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_PRESENT, crate::hw::lcd_te::cycles().wrapping_sub(t2));
     let kept = if cost.streamed { sigs } else { FrameSigs::UNKNOWN };
     // SAFETY: as above; the only writer.
     unsafe {
@@ -1855,6 +1867,8 @@ fn film_gaps_page() {
     dev_page(&rows);
     super::film_gaps::rows9(&mut rows);
     dev_page(&rows);
+    super::film_gaps::rows10(&mut rows);
+    dev_page(&rows);
     #[cfg(feature = "ui-px-dma2d-bench")]
     dma2d_bench_pages();
 }
@@ -2033,7 +2047,13 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
         film_gaps_refused(_src, b'N');
         return;
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_atlas = crate::hw::lcd_te::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_ATLAS, t_atlas.wrapping_sub(t_tick));
     anim.step(now);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_STEP, crate::hw::lcd_te::cycles().wrapping_sub(t_atlas));
     let _cost = present_film(anim, &atlas.marks(), &atlas.font(), false);
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::wait(super::film_gaps::WAIT_FRAME, crate::hw::lcd_te::cycles().wrapping_sub(t_tick));

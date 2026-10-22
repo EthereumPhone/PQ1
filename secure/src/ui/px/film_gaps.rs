@@ -71,14 +71,23 @@ struct Rec {
     drawn: u64,
     /// Film frames' CPU outside the signer: [`WAIT_BEAM`] spinning for the
     /// panel's start range, [`WAIT_BUF`] for a free band buffer, and
-    /// [`WAIT_FRAME`] the whole film tick that drew a frame.
-    waits: [u64; 3],
+    /// [`WAIT_FRAME`] the whole film tick that drew a frame; then the tick's
+    /// parts: the atlas header, the animation step, the display list, its
+    /// column signatures and damage, the presenter. What is left of the tick
+    /// (`arg` on the page) is mostly the marks and font views, parsed as
+    /// `present_film`'s arguments.
+    waits: [u64; 8],
 }
 
 /// [`wait`] kinds.
 pub const WAIT_BEAM: usize = 0;
 pub const WAIT_BUF: usize = 1;
 pub const WAIT_FRAME: usize = 2;
+pub const WAIT_ATLAS: usize = 3;
+pub const WAIT_STEP: usize = 4;
+pub const WAIT_BUILD: usize = 5;
+pub const WAIT_SIGS: usize = 6;
+pub const WAIT_PRESENT: usize = 7;
 
 /// Every film frame's stream checked against the panel's scan model
 /// (`pqsigner_ui_px::stream::phase::tear_check`): the tearing hunt of
@@ -163,7 +172,7 @@ impl Rec {
         bands: 0,
         items: 0,
         drawn: 0,
-        waits: [0; 3],
+        waits: [0; 8],
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -733,6 +742,44 @@ pub fn rows8(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let mut n = 13;
     push(&mut out[3], &mut n, b'b');
     push_u32(&mut out[3], &mut n, u32::try_from(u64::from(r.bands) * 10 / frames).unwrap_or(u32::MAX));
+}
+
+/// The tenth page: `TICK .1ms/fr`, then per film frame in tenths of a ms
+/// the atlas header and the animation step, the display list and its
+/// signatures/damage, the presenter (render and waits included) and what is
+/// left of the tick (`arg`: the marks and font views).
+pub fn rows10(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let frames = u64::from(r.frames.max(1));
+    let per = |c: u64| u32::try_from(c / frames / 16_000).unwrap_or(u32::MAX);
+    let mut n = 0;
+    for &b in b"TICK .1ms/fr" {
+        push(&mut out[0], &mut n, b);
+    }
+    let rows: [(&[u8], u32, &[u8], u32); 3] = [
+        (b"atl ", per(r.waits[WAIT_ATLAS]), b" step ", per(r.waits[WAIT_STEP])),
+        (b"bld ", per(r.waits[WAIT_BUILD]), b" sig ", per(r.waits[WAIT_SIGS])),
+        (
+            b"pres ",
+            per(r.waits[WAIT_PRESENT]),
+            b" arg ",
+            per(r.waits[WAIT_FRAME].saturating_sub(r.waits[WAIT_ATLAS..].iter().sum())),
+        ),
+    ];
+    for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {
+        let mut n = 0;
+        for &c in a {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, x);
+        for &c in b {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, y);
+    }
 }
 
 /// The last run's frame count, length (ms) and longest pause (ms).
