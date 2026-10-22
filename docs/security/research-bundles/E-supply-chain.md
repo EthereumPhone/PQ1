@@ -241,9 +241,11 @@ offset  size  field
 244    32    paymaster_and_data_hash (sha256, SHA256_EMPTY when none)
 276    20    to_address (inner tx recipient)
 296    32    value (u256 BE)
-328     2    data_len (u16 BE, 0..=4096)
+328     2    data_len (u16 BE, 0..=8192 — MAX_TX_LEN; GET_DEVICE_INFO bit 5)
 330     N    data
 ```
+
+**Calldata caps (2026-10-22).** `MAX_TX_LEN` = 8192 per call (single sign and each batch member; was 4096), advertised by `CAP_SIGN_USEROP_DATA_8K` (bit 5). A batch's members sum to at most `MAX_BATCH_CALL_DATA_TOTAL_LEN` = 16,384 (unchanged implied bound, so batch buffers did not grow; refused at parse time). Safe inner data stays 4096 (`SAFE_V1_RAW_DATA_MAX`, and `EXEC_TRANSACTION_MAX_CALLDATA_LEN` for a whole `execTransaction` call — refused above it, never blind-signed). The single-sign `executeWithOffchainCount` re-encode lives in `checked_single_digest` (`#[inline(never)]`, like the batch `checked_digest`), so the 8.4 KB buffer is gone before keygen/signing. `SIGN_USEROP_MAX_PAYLOAD_LEN` (32,300) sizes both the secure snapshot and the NS chain bound. On `ui-px` builds `SIGN_SNAP_BUF` is 44,592 B (single snapshot + screen overlay), else 41,583.
 
 ### Unified sign output
 
@@ -392,6 +394,7 @@ CI must gate shipped firmware on `debug-log` / `e2e-test` / `mock-se` / `otp-har
 ## Code Conventions
 
 - `#![no_std]`, no heap, no allocator. Stack-only. No `Vec` / `Box` / `String`.
+- **Secure stack is limit-guarded (2026-10-22).** `main` arms MSPLIM_S = `_stack_guard` (`stack_guard.rs`; 2 KiB band above `_stack_end`, set in every `secure/memory*.x`) and `CCR.STKOFHFNMIGN`, so an overflow is a STKOF UsageFault → HardFault (wipe + reset; on QEMU, semihosting exit 1) instead of silently overwriting `.bss`. QEMU negative control: the test-only `stack-overflow-probe` image traps with `v8M STKOF UsageFault` → secure exception 3 → exit 1. Keep big buffers in `#[inline(never)]` frames that end before keygen/signing (`checked_single_digest`, `batch_call_digest::checked_digest`). Not yet measured on silicon with the guard; see DVT row 5.9.
 - `zeroize::ZeroizeOnDrop` on every secret type with compiler fences.
 - `subtle` for constant-time compares. No secret-dependent branches.
 - Every `unsafe` block has a `// SAFETY:` comment. `#![deny(unsafe_op_in_unsafe_fn)]`, `#![warn(clippy::pedantic)]`.
