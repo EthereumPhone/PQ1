@@ -492,6 +492,17 @@ compile_error!(
      and never on a unit intended to ship."
 );
 
+// Dedicated guard: the hash driver's dev instruments (`hash-probe`,
+// `hw-sha256-crosscheck`) can be raised on `pqsigner-hw` directly
+// (`--features pqsigner-hw/…`), which the list above cannot see: it names
+// this crate's features only. The driver reports them as a constant.
+#[cfg(feature = "mode-production")]
+const _: () = assert!(
+    !pqsigner_hw::hash::DEV_INSTRUMENTED,
+    "PRODUCTION_HASH_INSTRUMENTATION_FORBIDDEN: mode-production with a dev \
+     instrument (hash-probe / hw-sha256-crosscheck) in the HASH driver"
+);
+
 // Dedicated guard: `gateway-gate-off` (#896 negative control) removes the
 // one-at-a-time gateway gate. It is only meaningful paired with a
 // non-secure test image that makes a nested gateway call, and that image

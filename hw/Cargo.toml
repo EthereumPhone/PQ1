@@ -31,20 +31,17 @@ tick-hook = []
 # Dev only: time each digest's stages on DWT_CYCCNT (`hash::probe`). The FSBL
 # never names it and the secure `nsc/mod.rs` fence keeps it out of shipping.
 hash-probe = []
-# Dev only: mirror every digest into software SHA-256 and fault on any
-# difference (`hash::xcheck`). Soak evidence for driver changes; the FSBL
-# never names it and the secure fence keeps it out of shipping. Mutually
-# exclusive with `hash-probe` (the software hash would land in its stages).
-hw-sha256-crosscheck = ["dep:sha2"]
+# Dev only: compare every digest with software SHA-256 and fault on any
+# difference. The software half is the linking binary's (`pqsigner_xcheck_*`,
+# the secure world), so this crate takes no `sha2` edge and `Cargo.lock` does
+# not move. The FSBL never names it; the secure fence keeps it out of
+# shipping. Mutually exclusive with `hash-probe` (the software hash would
+# land in its stages).
+hw-sha256-crosscheck = []
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []
 
 [dependencies.cortex-m-semihosting]
 workspace = true
-optional = true
-
-[dependencies.sha2]
-version = "0.10"
-default-features = false
 optional = true

@@ -48,3 +48,49 @@ pub extern "C" fn pqsigner_hash_fault() -> ! {
     crate::fi::zeroize_barrier();
     cortex_m::peripheral::SCB::sys_reset()
 }
+
+/// Software half of the dev crosscheck (`hw-sha256-crosscheck`): the driver
+/// mirrors every digest here and faults on a difference. It lives in this
+/// world because `sha2` is already a dependency here, so the shared driver
+/// crate takes no new edge and `Cargo.lock` does not move. SOAK EVIDENCE
+/// ONLY — a second, unzeroized copy of every preimage, compared in variable
+/// time; fenced out of production in `nsc/mod.rs`.
+#[cfg(feature = "hw-sha256-crosscheck")]
+mod xcheck {
+    use sha2::{Digest, Sha256};
+
+    static mut SW: Option<Sha256> = None;
+
+    fn sw() -> &'static mut Option<Sha256> {
+        // SAFETY: category 5 — called only from the hash hooks, which are
+        // serialised by their FFI contract on a single-threaded world; each
+        // caller drops this borrow before returning.
+        unsafe { &mut *core::ptr::addr_of_mut!(SW) }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn pqsigner_xcheck_begin() {
+        *sw() = Some(Sha256::new());
+    }
+
+    /// # Safety
+    /// `ptr..ptr + len` is a live byte slice for the call (the driver passes
+    /// its own `update` arguments through).
+    #[no_mangle]
+    pub unsafe extern "C" fn pqsigner_xcheck_feed(ptr: *const u8, len: usize) {
+        // SAFETY: category 3 — the caller's contract above.
+        let data = unsafe { core::slice::from_raw_parts(ptr, len) };
+        if let Some(h) = sw().as_mut() {
+            h.update(data);
+        }
+    }
+
+    /// # Safety
+    /// `digest` names 32 readable bytes (the driver's `final` output).
+    #[no_mangle]
+    pub unsafe extern "C" fn pqsigner_xcheck_same(digest: *const u8) -> bool {
+        // SAFETY: category 3 — the caller's contract above.
+        let hw = unsafe { &*digest.cast::<[u8; 32]>() };
+        sw().take().is_some_and(|h| h.finalize()[..] == hw[..])
+    }
+}

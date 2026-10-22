@@ -320,72 +320,50 @@ pub mod probe {
 #[cfg(all(feature = "hash-probe", feature = "hw-sha256-crosscheck"))]
 compile_error!("`hash-probe` and `hw-sha256-crosscheck` are exclusive: the software hash would land in the probe's stages");
 
-/// Runs software SHA-256 over the same bytes as the peripheral and compares
-/// the digests. SOAK EVIDENCE ONLY: it costs several hardware digests' worth
-/// of cycles, compares in variable time and keeps a second, unzeroized copy
-/// of every preimage (the `sk_seed` PRFs included). The FSBL never enables it
-/// and the secure `nsc/mod.rs` fence keeps it out of a shipping image.
+/// True when a dev instrument rides in this driver. The secure world refuses
+/// to build `mode-production` with it set: a dependency feature
+/// (`--features pqsigner-hw/…`) is invisible to that crate's own `cfg` fence,
+/// but not to a constant.
+pub const DEV_INSTRUMENTED: bool = cfg!(any(feature = "hash-probe", feature = "hw-sha256-crosscheck"));
+
 #[cfg(feature = "hw-sha256-crosscheck")]
-mod xcheck {
-    use sha2::{Digest, Sha256};
-
-    struct Live {
-        sw: Option<Sha256>,
-        n: u32,
-    }
-
-    static mut LIVE: Live = Live { sw: None, n: 0 };
-
-    fn live() -> &'static mut Live {
-        // SAFETY: category 5 — the hash hooks are serialised by their FFI
-        // contract and the secure world is single-threaded; each caller drops
-        // this borrow before the next hook runs.
-        unsafe { &mut *core::ptr::addr_of_mut!(LIVE) }
-    }
-
-    pub(super) fn begin() {
-        live().sw = Some(Sha256::new());
-    }
-
-    pub(super) fn feed(data: &[u8]) {
-        if let Some(h) = live().sw.as_mut() {
-            h.update(data);
-        }
-    }
-
-    /// `Ok(digests checked so far)`, or `Err` with the count before the
-    /// mismatch. A digest with no `begin` is a mismatch too.
-    pub(super) fn check(hw: &[u8; 32]) -> Result<u32, u32> {
-        let l = live();
-        let same = l.sw.take().is_some_and(|h| h.finalize()[..] == hw[..]);
-        if !same {
-            return Err(l.n);
-        }
-        l.n = l.n.wrapping_add(1);
-        Ok(l.n)
-    }
+extern "C" {
+    /// Software half of the crosscheck, supplied by the linking binary (the
+    /// secure world, `secure/src/hw/hash.rs`). SOAK EVIDENCE ONLY: it costs
+    /// several hardware digests' worth of cycles, compares in variable time
+    /// and keeps a second, unzeroized copy of every preimage (the `sk_seed`
+    /// PRFs included). Start a software digest.
+    fn pqsigner_xcheck_begin();
+    /// Mirror an `update`.
+    fn pqsigner_xcheck_feed(ptr: *const u8, len: usize);
+    /// Finish the software digest and compare it with the 32 bytes at
+    /// `digest`; false on a difference or with no digest started.
+    fn pqsigner_xcheck_same(digest: *const u8) -> bool;
 }
+
+/// Digests the crosscheck has passed since boot.
+#[cfg(feature = "hw-sha256-crosscheck")]
+static mut XCHECKED: u32 = 0;
 
 /// Compare the digest just written to `out` with the software one: report
 /// every 2^20 digests, take the H-1 fault posture on a difference.
 #[cfg(feature = "hw-sha256-crosscheck")]
 #[inline(never)]
 fn xcheck_digest(out: *const u8) {
-    // SAFETY: `pqsigner_sha256_final` wrote all 32 bytes of `out` (its FFI
-    // contract makes `[out, out + 32)` valid) before calling this.
-    let hw = unsafe { &*out.cast::<[u8; 32]>() };
-    match xcheck::check(hw) {
-        Ok(n) => {
-            if n % (1 << 20) == 0 {
-                hash_log!("[S] hash-xcheck n={} ok", n);
-            }
-            let _ = n;
-        }
-        Err(n) => {
-            hash_log!("[S] hash-xcheck MISMATCH after n={} ok — FAULT", n);
-            let _ = n;
-            hash_engine_fault();
-        }
+    // SAFETY: category 3 — FFI to the binary's software half;
+    // `pqsigner_sha256_final` wrote all 32 bytes at `out` (valid by its own
+    // FFI contract) before calling this.
+    let same = unsafe { pqsigner_xcheck_same(out) };
+    // SAFETY: category 5 — the hash hooks are serialised by their FFI
+    // contract and the secure world is single-threaded.
+    let n = unsafe { &mut *core::ptr::addr_of_mut!(XCHECKED) };
+    if !same {
+        hash_log!("[S] hash-xcheck MISMATCH after n={} ok — FAULT", *n);
+        hash_engine_fault();
+    }
+    *n = n.wrapping_add(1);
+    if *n % (1 << 20) == 0 {
+        hash_log!("[S] hash-xcheck n={} ok", *n);
     }
 }
 
@@ -454,6 +432,13 @@ unsafe fn self_test() {
     let mut out = [0u8; 32];
     // SAFETY: as above; `out` is valid for 32 bytes of writes.
     unsafe { pqsigner_sha256_final(out.as_mut_ptr()) };
+    // The secure image's unrolled feed gets a vector that reaches all of it;
+    // "abc" never leaves the merge buffer. Halts on its own failure.
+    #[cfg(feature = "unrolled-io")]
+    // SAFETY: forwarded contract, as above.
+    unsafe {
+        split_self_test();
+    }
     let expected: [u8; 32] = [
         0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
         0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
@@ -464,6 +449,49 @@ unsafe fn self_test() {
         hash_log!("[S] hash: HW SHA-256 self-test PASS");
     } else {
         hash_log!("[S] hash: HW SHA-256 self-test FAIL — HALT");
+        loop { cortex_m::asm::wfe(); }
+    }
+}
+
+/// SHA-256 of bytes `0, 1, …, 130`, fed as 3 + 62 + 66 from odd offsets:
+/// the merge buffer fills across a call, then the sixteen-byte loop, the word
+/// loop and the tail all run, and the message ends on a three-byte last word
+/// (NBLW = 24) after three blocks. A wrong index or count in `unrolled-io`'s
+/// feed changes this digest; "abc" never reaches it.
+///
+/// # Safety
+/// As `self_test`: boot only, single-threaded, no hash stream in flight.
+#[cfg(feature = "unrolled-io")]
+unsafe fn split_self_test() {
+    #[allow(clippy::cast_possible_truncation)] // i < 131
+    const MSG: [u8; 131] = {
+        let mut m = [0u8; 131];
+        let mut i = 0;
+        while i < m.len() {
+            m[i] = i as u8;
+            i += 1;
+        }
+        m
+    };
+    let mut out = [0u8; 32];
+    // SAFETY: forwarded contract; each `(ptr, len)` names a live sub-slice of
+    // the static `MSG`, and `out` is 32 bytes on this frame.
+    unsafe {
+        pqsigner_sha256_init();
+        for part in [&MSG[..3], &MSG[3..65], &MSG[65..]] {
+            pqsigner_sha256_update(part.as_ptr(), part.len());
+        }
+        pqsigner_sha256_final(out.as_mut_ptr());
+    }
+    // python3 -c "import hashlib; print(hashlib.sha256(bytes(range(131))).hexdigest())"
+    let expected: [u8; 32] = [
+        0x3a, 0xcc, 0x12, 0x8f, 0xaf, 0x01, 0x07, 0x77,
+        0x89, 0x74, 0x6e, 0xdc, 0xfd, 0x10, 0x51, 0xd9,
+        0x0b, 0xc1, 0x59, 0x13, 0x42, 0x40, 0x2d, 0x9b,
+        0x3c, 0xdd, 0x06, 0xd7, 0x31, 0x57, 0x02, 0xa4,
+    ];
+    if out != expected {
+        hash_log!("[S] hash: HW SHA-256 split self-test FAIL — HALT");
         loop { cortex_m::asm::wfe(); }
     }
 }
@@ -581,7 +609,8 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::START);
     #[cfg(feature = "hw-sha256-crosscheck")]
-    xcheck::begin();
+    // SAFETY: category 3 — FFI to the binary's software half; no arguments.
+    unsafe { pqsigner_xcheck_begin() };
 }
 
 /// Feed `len` bytes from `ptr` into the current SHA-256 computation.
@@ -602,7 +631,9 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
     // this call.
     let data = unsafe { core::slice::from_raw_parts(ptr, len) };
     #[cfg(feature = "hw-sha256-crosscheck")]
-    xcheck::feed(data);
+    // SAFETY: category 3 — the same `(ptr, len)` this call's own FFI contract
+    // makes a valid, live byte slice for its duration.
+    unsafe { pqsigner_xcheck_feed(ptr, len) };
     let mut i = 0;
 
     // SAFETY: category 5 — exclusive mutable borrow of `static mut
