@@ -516,12 +516,10 @@ use pqsigner_ui_px::stream::phase::{start_window, REFRESH_CYC, STAMP_STALE_CYC};
 /// returns whether it did anything.
 fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
     let Some((lo, hi)) = start_window(xa, xend) else { return false };
+    // Dev (`ui-px-film-gaps`): the whole wait less the bands it rendered.
     #[cfg(feature = "ui-px-film-gaps")]
-    let mut spun_at: Option<u32> = None;
+    let mut probe = super::film_gaps::SpinProbe::new();
     loop {
-        // Dev (`ui-px-film-gaps`): the spin just ended, into the recorder.
-        #[cfg(feature = "ui-px-film-gaps")]
-        if let Some(t) = spun_at.take() { super::film_gaps::wait(super::film_gaps::WAIT_BEAM, crate::hw::lcd_te::cycles().wrapping_sub(t)); }
         let Some(edge) = crate::hw::lcd_te::last_edge() else { return false };
         let since = crate::hw::lcd_te::cycles().wrapping_sub(edge);
         if since > STAMP_STALE_CYC {
@@ -529,14 +527,14 @@ fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
         }
         // Until the range opens, in this refresh or the next.
         let Some(wait) = pqsigner_ui_px::stream::phase::wait(since, lo, hi) else {
+            #[cfg(feature = "ui-px-film-gaps")]
+            probe.first_wait(0);
             return true;
         };
+        #[cfg(feature = "ui-px-film-gaps")]
+        probe.first_wait(wait);
         if wait > BAND_RENDER_CYC && work() {
             continue;
-        }
-        #[cfg(feature = "ui-px-film-gaps")]
-        {
-            spun_at = Some(crate::hw::lcd_te::cycles());
         }
         core::hint::spin_loop();
     }

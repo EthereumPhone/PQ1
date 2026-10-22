@@ -81,6 +81,9 @@ struct Rec {
     te_falls: u32,
     /// The ICACHE ways this recording ran with (see [`icache_ways`]).
     ways: u8,
+    /// `phase_start` calls by how far the start range was when they began:
+    /// open, < 0.25, < 0.5, < 1, < 2, >= 2 ms.
+    wt: [u32; 6],
 }
 
 /// [`wait`] kinds.
@@ -183,6 +186,7 @@ impl Rec {
         waits: [0; 10],
         te_falls: 0,
         ways: 0,
+        wt: [0; 6],
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -684,6 +688,53 @@ pub fn wait(k: usize, cyc: u32) {
     }
 }
 
+/// Times one `phase_start` (thread mode): its whole span less the bands it
+/// rendered while waiting goes to [`WAIT_BEAM`], and the first wait it
+/// computed is bucketed. The first meter timed only the spin instruction's
+/// own iteration and read 0.3 ms per frame against ~1.8 ms unaccounted.
+pub struct SpinProbe {
+    c0: u32,
+    rend0: u64,
+    bucketed: bool,
+}
+
+impl SpinProbe {
+    #[must_use]
+    pub fn new() -> Self {
+        Self { c0: crate::hw::lcd_te::cycles(), rend0: rec().rend[0], bucketed: false }
+    }
+
+    /// The wait (cycles) to the start range when the call began; 0 = open.
+    pub fn first_wait(&mut self, wait: u32) {
+        let r = rec();
+        if self.bucketed || !r.on {
+            return;
+        }
+        self.bucketed = true;
+        let k = match wait / 40_000 {
+            _ if wait == 0 => 0,
+            0 => 1,
+            1 => 2,
+            2..=3 => 3,
+            4..=7 => 4,
+            _ => 5,
+        };
+        r.wt[k] = r.wt[k].wrapping_add(1);
+    }
+}
+
+impl Drop for SpinProbe {
+    fn drop(&mut self) {
+        let r = rec();
+        if !r.on {
+            return;
+        }
+        let total = u64::from(crate::hw::lcd_te::cycles().wrapping_sub(self.c0));
+        let rendered = r.rend[0].wrapping_sub(self.rend0);
+        r.waits[WAIT_BEAM] = r.waits[WAIT_BEAM].wrapping_add(total.saturating_sub(rendered));
+    }
+}
+
 /// Dev (2026-10-22): the ICACHE ways in use (`ICACHE_CR.WAYSEL`: 2-way or
 /// direct-mapped), shown on the FRAME page.
 fn icache_ways() -> u8 {
@@ -770,9 +821,9 @@ pub fn rows8(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
 }
 
 /// The tenth page: `TICK .1ms/fr`, then per film frame in tenths of a ms
-/// the TE-edge fallback wait (and how many fallbacks in all), the band
-/// wipe after each frame streamed and the presenter (render and waits
-/// included), and what is left of the tick outside the presenter.
+/// the beam spin (whole `phase_start` less its renders) and the band wipe,
+/// then the `phase_start` calls by distance to the start range in percent:
+/// open, < 0.25, < 0.5 ms on one row, < 1, < 2, >= 2 ms on the next.
 pub fn rows10(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let r = *rec();
     for row in out.iter_mut() {
@@ -784,16 +835,20 @@ pub fn rows10(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     for &b in b"TICK .1ms/fr" {
         push(&mut out[0], &mut n, b);
     }
-    let rows: [(&[u8], u32, &[u8], u32); 3] = [
-        (b"te ", per(r.waits[WAIT_TE]), b" n ", r.te_falls),
-        (b"wipe ", per(r.waits[WAIT_REAP]), b" pres ", per(r.waits[WAIT_PRESENT])),
-        (
-            b"rest ",
-            per(r.waits[WAIT_FRAME].saturating_sub(r.waits[WAIT_ATLAS..=WAIT_PRESENT].iter().sum())),
-            b" bld ",
-            per(r.waits[WAIT_BUILD] + r.waits[WAIT_SIGS]),
-        ),
+    let rows: [(&[u8], u32, &[u8], u32); 1] = [
+        (b"spin ", per(r.waits[WAIT_BEAM]), b" wipe ", per(r.waits[WAIT_REAP])),
     ];
+    let calls = r.wt.iter().sum::<u32>().max(1);
+    for (row, part) in out[2..].iter_mut().zip(r.wt.chunks(3)) {
+        let mut n = 0;
+        for &c in b"wt" {
+            push(row, &mut n, c);
+        }
+        for &v in part {
+            push(row, &mut n, b' ');
+            push_u32(row, &mut n, v * 100 / calls);
+        }
+    }
     for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {
         let mut n = 0;
         for &c in a {
