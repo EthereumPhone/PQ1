@@ -286,7 +286,7 @@ the Part.
 - [ ] **B13. Trusted UI on glass** (mock SE, panel and buttons fitted).
   - Sign gesture: on every screen of every family, check that it fires only at
     `sign_point`.
-  - Walk all 42 `demo_px_flows.py` flows.
+  - Walk all 49 `demo_px_flows.py` flows (`--step all`; 42 until 2026-10-22).
   - Measure the atlas-swap race.
   - Check button debounce and the chord skew, and that NS writes to PA0/PA1 have no
     effect.
