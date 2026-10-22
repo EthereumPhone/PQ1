@@ -625,13 +625,18 @@ fn negative_slot_index_max_is_22_bits() {
 }
 
 #[test]
-fn negative_max_tx_len_unchanged_4096() {
-    // CLAUDE.md §"Unified sign input": `data_len (u16 BE, 0..=4096)`.
+fn negative_max_tx_len_pinned_8192() {
+    // CLAUDE.md §"Unified sign input": `data_len (u16 BE, 0..=8192)`.
     // The 16-bit field can hold 65535, but the firmware caps at
-    // MAX_TX_LEN. A larger cap would consume more SNAP_LEN; a
-    // smaller one would silently reject companion payloads that used
-    // to work.
-    assert_eq!(MAX_TX_LEN, 4096);
+    // MAX_TX_LEN (raised from 4096 on 2026-10-22 and advertised by
+    // GET_DEVICE_INFO bit 5). A larger cap would consume more SNAP_LEN
+    // and the `ui-px` overlay headroom; a smaller one would silently
+    // reject companion payloads that used to work.
+    assert_eq!(MAX_TX_LEN, 8192);
+    assert_eq!(
+        sphincs_tz_shared::DEVICE_CAPABILITIES & sphincs_tz_shared::CAP_SIGN_USEROP_DATA_8K,
+        sphincs_tz_shared::CAP_SIGN_USEROP_DATA_8K
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────

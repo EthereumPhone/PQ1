@@ -151,7 +151,35 @@ pub fn reconstruct_execute_calldata(
     tx: &Eip1559Tx,
     data: &[u8],
 ) -> Result<ExecuteCallData, AaError> {
+    let mut out = ExecuteCallData {
+        buf: [0u8; MAX_EXECUTE_CALLDATA_LEN],
+        len: 0,
+    };
+    reconstruct_execute_calldata_into(&mut out, owner_index, new_offchain_count, tx, data)?;
+    Ok(out)
+}
+
+/// [`reconstruct_execute_calldata`] into a caller-owned buffer, so the secure
+/// sign path never moves the `MAX_EXECUTE_CALLDATA_LEN`-byte result by value
+/// (a by-value return can leave two copies in the caller's frame). `out` may
+/// be dirty from a previous call: it is cleared first, and on any error it is
+/// left cleared with `len == 0`.
+pub fn reconstruct_execute_calldata_into(
+    out: &mut ExecuteCallData,
+    owner_index: u64,
+    new_offchain_count: u64,
+    tx: &Eip1559Tx,
+    data: &[u8],
+) -> Result<(), AaError> {
+    out.buf.fill(0);
+    out.len = 0;
     let target = tx.to.ok_or(AaError::ContractCreation)?;
+    // The protocol cap itself, not just "fits the buffer": the buffer has up
+    // to 31 B of padding slack, and the batch encoder already refuses a member
+    // over MAX_TX_LEN, so the two encoders must agree on the same bound.
+    if data.len() > pqsigner_proto::MAX_TX_LEN {
+        return Err(AaError::CallDataTooLong);
+    }
 
     let padded_data_len = data.len().checked_add(31).ok_or(AaError::CallDataTooLong)? & !31usize;
     // 4 head selector + 5 head words + len word + tail.
@@ -159,11 +187,7 @@ pub fn reconstruct_execute_calldata(
     if total > MAX_EXECUTE_CALLDATA_LEN {
         return Err(AaError::CallDataTooLong);
     }
-
-    let mut out = ExecuteCallData {
-        buf: [0u8; MAX_EXECUTE_CALLDATA_LEN],
-        len: total,
-    };
+    out.len = total;
 
     // Selector + 5 head words then `bytes` length + data (tail).
     let mut p = 0;
@@ -185,12 +209,12 @@ pub fn reconstruct_execute_calldata(
     out.buf[p + WORD - 1] = 0xa0;
     p += WORD;
     // Tail — bytes length word, then the data padded with zeros (the
-    // buffer is already zero-initialised, so no explicit pad write).
+    // buffer was cleared on entry, so no explicit pad write).
     write_u64_in_word_be(&mut out.buf[p..p + WORD], data.len() as u64);
     p += WORD;
     out.buf[p..p + data.len()].copy_from_slice(data);
 
-    Ok(out)
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -376,6 +400,9 @@ pub fn execute_batch_tuple_commitment_from_calldata(
     let datas_offsets = datas_start.checked_add(WORD)?;
     let mut cursor = expected_member_count.checked_mul(WORD)?;
     let mut members = [[0u8; 32]; pqsigner_proto::MAX_BATCH_TXS];
+    // Same per-member and summed-data bounds as the encoder, so the two can
+    // never disagree about which batch is well-formed.
+    let mut data_total: usize = 0;
     let mut i = 0usize;
     while i < expected_member_count {
         let target_word =
@@ -395,6 +422,10 @@ pub fn execute_batch_tuple_commitment_from_calldata(
         let data_len_u64 = read_batch_u64_word(calldata, payload_pos)?;
         let data_len = usize::try_from(data_len_u64).ok()?;
         if data_len > pqsigner_proto::MAX_TX_LEN {
+            return None;
+        }
+        data_total = data_total.checked_add(data_len)?;
+        if data_total > pqsigner_proto::MAX_BATCH_CALL_DATA_TOTAL_LEN {
             return None;
         }
         let data_start = payload_pos.checked_add(WORD)?;
@@ -506,12 +537,19 @@ pub fn reconstruct_execute_batch_calldata_into(
         [0; pqsigner_proto::MAX_BATCH_TXS];
     let mut datas_tail_size: usize = WORD + n * WORD; // length + N inner offsets
     let mut too_long = false;
+    // Summed member data, bounded by `MAX_BATCH_CALL_DATA_TOTAL_LEN` (each
+    // member is ≤ MAX_TX_LEN and n ≤ MAX_BATCH_TXS, so this cannot overflow).
+    let mut data_total: usize = 0;
     let mut i = 0;
     while i < n {
         let dlen = txs[i].data.len();
         if dlen > pqsigner_proto::MAX_TX_LEN {
             too_long = true;
         } else {
+            data_total += dlen;
+            if data_total > pqsigner_proto::MAX_BATCH_CALL_DATA_TOTAL_LEN {
+                too_long = true;
+            }
             // `dlen <= MAX_TX_LEN` here, so `+ 31` cannot overflow and
             // the old `checked_add(31)` arm is unreachable; the running
             // tail-size add keeps its checked form via saturating
@@ -1804,6 +1842,160 @@ mod tests {
         }
         let r = reconstruct_execute_batch_calldata(1, 0, &v);
         assert_eq!(r.unwrap_err(), BatchAaError::CallDataTooLong);
+    }
+
+    // ── Per-call cap 8192 + batch summed-data cap 16,384 (2026-10-22) ──
+
+    #[test]
+    fn single_execute_accepts_max_tx_len_and_refuses_one_more() {
+        let tx = test_value_transfer_tx();
+        let at_cap = vec![0xC3u8; pqsigner_proto::MAX_TX_LEN];
+        let out = reconstruct_execute_calldata(1, 0, &tx, &at_cap).unwrap();
+        assert_eq!(out.len, 4 + 6 * WORD + pqsigner_proto::MAX_TX_LEN);
+        assert_eq!(&out.as_slice()[4 + 6 * WORD..], &at_cap[..]);
+        let over = vec![0xC3u8; pqsigner_proto::MAX_TX_LEN + 1];
+        assert_eq!(
+            reconstruct_execute_calldata(1, 0, &tx, &over).unwrap_err(),
+            AaError::CallDataTooLong
+        );
+    }
+
+    #[test]
+    fn execute_into_matches_by_value_and_clears_a_dirty_buffer() {
+        let tx = test_value_transfer_tx();
+        let data = [0x5Au8; 77];
+        let expected = reconstruct_execute_calldata(9, 4, &tx, &data).unwrap();
+        let mut out = ExecuteCallData {
+            buf: [0xFFu8; MAX_EXECUTE_CALLDATA_LEN],
+            len: 1234,
+        };
+        reconstruct_execute_calldata_into(&mut out, 9, 4, &tx, &data).unwrap();
+        assert_eq!(out.as_slice(), expected.as_slice());
+        // ABI padding and everything past `len` read back as zero.
+        assert!(out.buf[out.len..].iter().all(|&b| b == 0));
+        // On error the buffer is left cleared and empty.
+        let over = vec![0u8; pqsigner_proto::MAX_TX_LEN + 1];
+        out.buf.fill(0xFF);
+        assert_eq!(
+            reconstruct_execute_calldata_into(&mut out, 9, 4, &tx, &over).unwrap_err(),
+            AaError::CallDataTooLong
+        );
+        assert_eq!(out.len, 0);
+        assert!(out.buf.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn batch_member_may_reach_max_tx_len_within_the_total() {
+        let full = vec![0x11u8; pqsigner_proto::MAX_TX_LEN];
+        let small = [0x22u8; 68];
+        // approve + 8 KB swap, two full members, and the even 4 × 4096 split.
+        let quarter = vec![0x33u8; 4096];
+        let cases: [&[&[u8]]; 3] = [
+            &[&small, &full],
+            &[&full, &full],
+            &[&quarter, &quarter, &quarter, &quarter],
+        ];
+        for members in cases {
+            let txs: Vec<_> = members.iter().map(|d| batch_tx(0x10, 0, d)).collect();
+            let encoded = reconstruct_execute_batch_calldata(2, 5, &txs)
+                .unwrap_or_else(|e| panic!("{:?} refused: {e:?}", members.iter().map(|d| d.len()).collect::<Vec<_>>()));
+            assert!(encoded.len <= MAX_EXECUTE_BATCH_CALLDATA_LEN);
+            assert_eq!(
+                execute_batch_tuple_commitment_from_calldata(encoded.as_slice(), 2, 5, txs.len()),
+                Some(batch_tuple_commitment(&txs).unwrap()),
+                "decoder must accept every batch the encoder builds"
+            );
+        }
+    }
+
+    #[test]
+    fn batch_summed_data_cap_is_exact() {
+        // Σ exactly 16,384 with all four members unaligned: the worst-case
+        // padding (proto asserts the buffer bound for it).
+        let total = pqsigner_proto::MAX_BATCH_CALL_DATA_TOTAL_LEN;
+        let (a, b, c) = (vec![1u8; 5000], vec![2u8; 5000], vec![3u8; 5000]);
+        let d = vec![4u8; total - 15_000];
+        let txs = [batch_tx(1, 0, &a), batch_tx(2, 0, &b), batch_tx(3, 0, &c), batch_tx(4, 0, &d)];
+        let encoded = reconstruct_execute_batch_calldata(1, 0, &txs).unwrap();
+        assert!(encoded.len <= MAX_EXECUTE_BATCH_CALLDATA_LEN);
+        assert!(execute_batch_tuple_commitment_from_calldata(encoded.as_slice(), 1, 0, 4).is_some());
+
+        // One byte more anywhere is refused, though every member is ≤ MAX_TX_LEN.
+        let d_over = vec![4u8; total - 15_000 + 1];
+        let over = [batch_tx(1, 0, &a), batch_tx(2, 0, &b), batch_tx(3, 0, &c), batch_tx(4, 0, &d_over)];
+        assert_eq!(
+            reconstruct_execute_batch_calldata(1, 0, &over).unwrap_err(),
+            BatchAaError::CallDataTooLong
+        );
+        let full = vec![0u8; pqsigner_proto::MAX_TX_LEN];
+        let one = [0u8; 1];
+        let over2 = [batch_tx(1, 0, &full), batch_tx(2, 0, &full), batch_tx(3, 0, &one)];
+        assert_eq!(
+            reconstruct_execute_batch_calldata(1, 0, &over2).unwrap_err(),
+            BatchAaError::CallDataTooLong
+        );
+    }
+
+    /// Independent ABI encoder for `executeBatchWithOffchainCount`, used to
+    /// build batches the production encoder refuses, so the decoder's own
+    /// summed-data bound is exercised directly.
+    fn abi_batch(owner: u64, count: u64, members: &[(u8, &[u8])]) -> Vec<u8> {
+        let word_u = |v: usize| {
+            let mut w = [0u8; 32];
+            w[24..].copy_from_slice(&(v as u64).to_be_bytes());
+            w
+        };
+        let n = members.len();
+        let mut out = EXECUTE_BATCH_SELECTOR.to_vec();
+        out.extend_from_slice(&word_u(owner as usize));
+        out.extend_from_slice(&word_u(count as usize));
+        let targets_off = 5 * 32;
+        let values_off = targets_off + 32 + n * 32;
+        let datas_off = values_off + 32 + n * 32;
+        for off in [targets_off, values_off, datas_off] {
+            out.extend_from_slice(&word_u(off));
+        }
+        out.extend_from_slice(&word_u(n));
+        for (tag, _) in members {
+            let mut w = [0u8; 32];
+            w[12..].copy_from_slice(&[*tag; 20]);
+            out.extend_from_slice(&w);
+        }
+        out.extend_from_slice(&word_u(n));
+        for _ in members {
+            out.extend_from_slice(&[0u8; 32]);
+        }
+        out.extend_from_slice(&word_u(n));
+        let mut cursor = n * 32;
+        for (_, d) in members {
+            out.extend_from_slice(&word_u(cursor));
+            cursor += 32 + ((d.len() + 31) & !31);
+        }
+        for (_, d) in members {
+            out.extend_from_slice(&word_u(d.len()));
+            out.extend_from_slice(d);
+            out.resize(out.len() + (((d.len() + 31) & !31) - d.len()), 0);
+        }
+        out
+    }
+
+    #[test]
+    fn batch_decoder_refuses_summed_data_over_the_cap() {
+        let small = [7u8; 40];
+        // The independent encoder agrees with production for an in-range batch.
+        let prod = reconstruct_execute_batch_calldata(3, 1, &[batch_tx(0xAA, 0, &small)]).unwrap();
+        assert_eq!(abi_batch(3, 1, &[(0xAA, &small)]), prod.as_slice());
+
+        let full = vec![9u8; pqsigner_proto::MAX_TX_LEN];
+        let at_cap = abi_batch(3, 1, &[(0xAA, &full), (0xBB, &full)]);
+        assert!(execute_batch_tuple_commitment_from_calldata(&at_cap, 3, 1, 2).is_some());
+        // Three full members: each ≤ MAX_TX_LEN, Σ = 24,576 > 16,384.
+        let over = abi_batch(3, 1, &[(0xAA, &full), (0xBB, &full), (0xCC, &full)]);
+        assert_eq!(execute_batch_tuple_commitment_from_calldata(&over, 3, 1, 3), None);
+        // A single member over MAX_TX_LEN is refused too.
+        let huge = vec![9u8; pqsigner_proto::MAX_TX_LEN + 1];
+        let one_over = abi_batch(3, 1, &[(0xAA, &huge)]);
+        assert_eq!(execute_batch_tuple_commitment_from_calldata(&one_over, 3, 1, 1), None);
     }
 
     #[test]

@@ -66,7 +66,7 @@ it for the wire detail and don't duplicate it here. In brief, that doc defines:
 
 - the **281-byte canonical SafeTx** layout (`chain_id / safe_address / to /
   value / data_hash / operation / gas fields / nonce`), framed as
-  `[u16 total_len][281 B canonical][u16 raw_data_len][raw_data ≤ MAX_TX_LEN]`,
+  `[u16 total_len][281 B canonical][u16 raw_data_len][raw_data ≤ SAFE_V1_RAW_DATA_MAX = 4096]`,
   with `SAFE_OFF_*` field offsets in `shared/src/lib.rs`;
 - the **outer UserOp shape** — `to = safe_address`, `value = 0`,
   `inner_data = APPROVE_HASH_SELECTOR (0xd4d9bdcd) || safeTxHash` (36 B), trailer

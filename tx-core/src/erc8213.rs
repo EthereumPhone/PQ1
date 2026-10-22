@@ -122,6 +122,18 @@ mod tests {
     }
 
     #[test]
+    fn calldata_digest_handles_the_8kib_per_call_cap() {
+        // MAX_TX_LEN since 2026-10-22. Streaming Keccak, no allocation, and
+        // the length prefix makes every length a distinct preimage.
+        let data = [0x5au8; 8192];
+        let h = calldata_digest(&data);
+        let mut data2 = data;
+        data2[8191] ^= 1;
+        assert_ne!(h, calldata_digest(&data2));
+        assert_ne!(h, calldata_digest(&data[..8191]));
+    }
+
+    #[test]
     fn calldata_digest_handles_4kib_buffer() {
         // Largest payload Phase 3 admits (MAX_TX_LEN). No allocation,
         // no panic — streaming Keccak handles this in O(1) stack.

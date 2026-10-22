@@ -457,6 +457,9 @@ compile_error!(
         feature = "fi-live-delays",
         // DVT 5.9 stack high-water mark: paints the dead stack. Test-only.
         feature = "stack-hwm",
+        // MSPLIM negative control: deliberately overflows the secure stack
+        // at boot. Terminal bench image.
+        feature = "stack-overflow-probe",
         // DVT 4.9 strong-RNG probe: records every RNG source contribution
         // and reads the OPTIGA PBS in place. Terminal bench image.
         feature = "rng-xor-probe",
@@ -1177,8 +1180,41 @@ pub fn is_definitely_locked() -> bool {
 /// protocol-max constant before copying; a `const` assert in each pins
 /// that constant ≤ [`SIGN_SNAP_BUF_LEN`] so an oversized handler can never
 /// silently overrun the shared buffer.
-pub(super) const SIGN_SNAP_BUF_LEN: usize =
-    sphincs_tz_shared::SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN;
+///
+/// Sizing: the largest snapshot any handler takes, and under `ui-px` also
+/// room for the pixel screen transcript behind the single-sign and off-chain
+/// snapshots (each handler splits at its own protocol maximum and hands the
+/// tail to `px_screens_view`). Since the 2026-10-22 raise of `MAX_TX_LEN` to
+/// 8192 the single-sign term (32,300 + 12,292 = 44,592) is the largest on
+/// `ui-px` builds (+3,009 B over the batch maximum); without `ui-px` the
+/// buffer stays at the batch maximum, 41,583 B.
+pub(super) const SIGN_SNAP_BUF_LEN: usize = {
+    const fn max(a: usize, b: usize) -> usize {
+        if a > b {
+            a
+        } else {
+            b
+        }
+    }
+    let snapshots = max(
+        sphincs_tz_shared::SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN,
+        max(
+            sphincs_tz_shared::SIGN_USEROP_MAX_PAYLOAD_LEN,
+            sphincs_tz_shared::SIGN_OFFCHAIN_INPUT_MAX_LEN,
+        ),
+    );
+    #[cfg(feature = "ui-px")]
+    let len = max(
+        snapshots,
+        max(
+            sphincs_tz_shared::SIGN_USEROP_MAX_PAYLOAD_LEN + pqsigner_ui_px::SCREENS_BYTES,
+            sphincs_tz_shared::SIGN_OFFCHAIN_INPUT_MAX_LEN + pqsigner_ui_px::SCREENS_BYTES,
+        ),
+    );
+    #[cfg(not(feature = "ui-px"))]
+    let len = snapshots;
+    len
+};
 
 /// The shared snapshot storage itself. Only ever borrowed (filled, parsed,
 /// then wiped) inside a single handler invocation, under [`GATEWAY_GATE`]
@@ -1187,8 +1223,8 @@ pub(super) static mut SIGN_SNAP_BUF: [u8; SIGN_SNAP_BUF_LEN] = [0u8; SIGN_SNAP_B
 
 /// The pixel-UI screen transcript (`ui-px`) is NOT a static of its own: it
 /// overlays the tail of [`SIGN_SNAP_BUF`] that the single-sign handler never
-/// fills (its snapshot maximum is well below the batch maximum the buffer is
-/// sized for). Costing ~10 KB of BSS instead collided with the batch
+/// fills ([`SIGN_SNAP_BUF_LEN`] reserves `SCREENS_BYTES` behind its snapshot
+/// maximum). Costing ~10 KB of BSS instead collided with the batch
 /// handler's stack on QEMU's 128 KB SRAM — the exact BSS-vs-stack class the
 /// shared buffer exists to prevent. The single handler splits its snapshot
 /// off the front of the buffer and hands the remainder here.

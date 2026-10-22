@@ -99,12 +99,59 @@ fn calldata_bind_sentinel(
     crate::fi::check_true_into_sentinel(|| core::hint::black_box(bound))
 }
 
+/// #846 backstop, encode + verdict + digest in one short frame — the
+/// single-call twin of `batch_call_digest::checked_digest`.
+///
+/// Encodes `executeWithOffchainCount(owner, count, to, value, data)` into a
+/// frame-local buffer (`MAX_EXECUTE_CALLDATA_LEN`, up to 8.4 KB since the
+/// 2026-10-22 `MAX_TX_LEN` raise), binds it with [`calldata_bind_sentinel`]
+/// against the pre-display `reference`, and hashes the same bytes. Returns
+/// only the digest, so the buffer never stays live under key generation or
+/// signing (it used to be a `run` local held across the bootstrap Type-1 sign).
+///
+/// `completion` is FAIL on entry and receives the bind verdict only after
+/// hashing; returning a digest alone never authorizes signing — the caller
+/// must read `completion` (it does, twice).
+#[inline(never)]
+fn checked_single_digest(
+    owner_index: u64,
+    offchain_count: u64,
+    tx: &Eip1559Tx,
+    data: &[u8],
+    reference: &[u8; 32],
+    completion: &mut u32,
+) -> Result<[u8; 32], ()> {
+    // SAFETY: exclusive caller-owned receipt. Also clears a reused receipt on
+    // encoder failure; the caller's initialisation protects a skipped call.
+    unsafe { core::ptr::write_volatile(completion, crate::fi::FAIL_SENTINEL) };
+    let mut calldata = ExecuteCallData {
+        buf: [0u8; MAX_EXECUTE_CALLDATA_LEN],
+        len: 0,
+    };
+    reconstruct_execute_calldata_into(&mut calldata, owner_index, offchain_count, tx, data)
+        .map_err(|_| ())?;
+    let verdict = calldata_bind_sentinel(
+        calldata.as_slice(),
+        owner_index,
+        offchain_count,
+        &tx.to.unwrap_or([0u8; 20]),
+        &tx.value.0,
+        reference,
+    );
+    let digest = sha256_bytes(calldata.as_slice());
+    // SAFETY: exclusive live receipt; published only after the bind check and
+    // the hash of the same bytes. The caller reads it through volatile.
+    unsafe { core::ptr::write_volatile(completion, verdict) };
+    Ok(digest)
+}
+
 use super::ptr_validate::{validate_ns_read_ptr, validate_ns_write_ptr};
 use super::state::CachedSlot;
 use super::GatewayArgs;
 use crate::aa::userop::{
-    compute_sphincs_digest_v06, reconstruct_execute_calldata, sha256_bytes,
-    AaUserOpParamsV06Sha256, ENTRY_POINT_V06, SHA256_EMPTY,
+    compute_sphincs_digest_v06, reconstruct_execute_calldata_into, sha256_bytes,
+    AaUserOpParamsV06Sha256, ExecuteCallData, ENTRY_POINT_V06, MAX_EXECUTE_CALLDATA_LEN,
+    SHA256_EMPTY,
 };
 use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
 use crate::names::{verify_name_bundle, NameResolver, MAX_NAME_BUNDLES, MAX_NAME_BUNDLE_LEN};
@@ -132,6 +179,11 @@ const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + 2 + MAX_SELF_ATTEST_BUNDLE_LEN
     + 2 + ERC7730_MAX_TRAILER_LEN
     + 1 + MAX_NAME_BUNDLES * (2 + MAX_NAME_BUNDLE_LEN);
+
+// The non-secure APDU chain bound uses the protocol literal; recomputing it
+// here from the per-trailer maxima keeps the two worlds from ever disagreeing
+// on the largest accepted request.
+const _: () = assert!(SNAP_LEN == sphincs_tz_shared::SIGN_USEROP_MAX_PAYLOAD_LEN);
 
 /// # Safety
 /// CMSE non-secure-entry handler — dispatcher-invoked. NS pointer
@@ -2245,50 +2297,41 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             ui::show_status("Sign", "offchain repair");
         }
     }
-    let t2_exec = match reconstruct_execute_calldata(
+    // #846 backstop, step 3 of 3, in its own frame (`checked_single_digest`):
+    // encode the `executeWithOffchainCount` calldata into a PRIVATE copy (the
+    // encoder reads the shared snapshot once), decode that copy and require
+    // it to be exactly the confirmed owner index, count, target and value
+    // with `data` hashing to the pre-display reference commitment, then hash
+    // the SAME copy into `t2_call_digest`. Every byte signed below derives
+    // from that digest, so no later write to the shared buffer can pass, and
+    // there is no window between the bind check and the hash. Only the
+    // 32-byte digest outlives the frame: the up-to-8.4 KB copy is gone before
+    // key generation and both signing passes. Fail-initialised receipt, read
+    // twice (here and immediately before the Type-2 digest).
+    let mut calldata_bind_verdict = crate::fi::FAIL_SENTINEL;
+    // SAFETY: unique live local; the volatile store keeps the fail
+    // initialisation from being folded into the call below.
+    unsafe {
+        core::ptr::write_volatile(&mut calldata_bind_verdict, crate::fi::FAIL_SENTINEL);
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    let t2_call_digest = match checked_single_digest(
         t2_owner_index,
         new_offchain_count,
         &tx_for_display,
         inner_data,
+        &calldata_ref_digest,
+        &mut calldata_bind_verdict,
     ) {
-        Ok(c) => c,
-        Err(_) => {
+        Ok(digest) => digest,
+        Err(()) => {
             entropy.zeroize();
             crate::fi::zeroize_barrier();
             return NscStatus::CryptoError as u32;
         }
     };
-
-    // #846 backstop, step 3 of 3. `t2_exec` is a PRIVATE copy: the encoder
-    // above read the shared snapshot once, and every byte signed below is
-    // derived from this copy (`t2_call_digest`). Decode the copy and require
-    // it to be exactly the confirmed owner index, count, target and value,
-    // with `data` hashing to the pre-display reference commitment. Because
-    // the check reads the copy and not the shared buffer, no later write to
-    // that buffer can pass it. Fail-initialised receipt, as in the batch
-    // handler's `checked_digest`: a skipped call leaves FAIL in place.
-    let mut calldata_bind_verdict = crate::fi::FAIL_SENTINEL;
-    // SAFETY: unique live local; the volatile store keeps the fail
-    // initialisation from being folded into the assignment below.
-    unsafe {
-        core::ptr::write_volatile(&mut calldata_bind_verdict, crate::fi::FAIL_SENTINEL);
-    }
     core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-    {
-        let verdict = calldata_bind_sentinel(
-            t2_exec.as_slice(),
-            t2_owner_index,
-            new_offchain_count,
-            &tx_for_display.to.unwrap_or([0u8; 20]),
-            &tx_for_display.value.0,
-            &calldata_ref_digest,
-        );
-        // SAFETY: unique live local, published only after the comparison.
-        unsafe {
-            core::ptr::write_volatile(&mut calldata_bind_verdict, verdict);
-        }
-    }
-    // SAFETY: reads the receipt written just above.
+    // SAFETY: reads the receipt `checked_single_digest` published.
     if unsafe { core::ptr::read_volatile(&calldata_bind_verdict) } != crate::fi::OK_SENTINEL {
         entropy.zeroize();
         crate::fi::zeroize_barrier();
@@ -2682,7 +2725,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         ui::show_status("Sign refused", "calldata changed");
         return NscStatus::InternalError as u32;
     }
-    let t2_call_digest = sha256_bytes(t2_exec.as_slice());
     let t2_init_code_digest = if include_init_code {
         t1_init_code_digest
     } else {

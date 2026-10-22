@@ -80,6 +80,11 @@ pub fn decode_execute_calldata(calldata: &[u8]) -> Option<ExecuteCallFields<'_>>
     }
 
     let data_len = usize::try_from(u64_word(word(5))?).ok()?;
+    // The encoder refuses `data` over the protocol cap, so the canonical
+    // encoding never carries more (the buffer bound alone leaves 31 B slack).
+    if data_len > pqsigner_proto::MAX_TX_LEN {
+        return None;
+    }
     let padded_len = data_len.checked_add(WORD - 1)? & !(WORD - 1);
     if calldata.len() != FIXED_LEN.checked_add(padded_len)? {
         return None;
@@ -138,8 +143,8 @@ mod tests {
         (c.buf, c.len)
     }
 
-    fn pattern(len: usize) -> [u8; 4096] {
-        let mut d = [0u8; 4096];
+    fn pattern(len: usize) -> [u8; pqsigner_proto::MAX_TX_LEN] {
+        let mut d = [0u8; pqsigner_proto::MAX_TX_LEN];
         for (i, b) in d.iter_mut().enumerate().take(len) {
             *b = (i as u8).wrapping_mul(31).wrapping_add(7);
         }
@@ -148,7 +153,7 @@ mod tests {
 
     #[test]
     fn decodes_exactly_what_the_encoder_wrote() {
-        for len in [0usize, 1, 4, 31, 32, 33, 68, 100, 4095, 4096] {
+        for len in [0usize, 1, 4, 31, 32, 33, 68, 100, 4095, 4096, 4097, 5050, 8191, 8192] {
             let d = pattern(len);
             let (buf, n) = encode(3, 9, 5, &d[..len]);
             let f = decode_execute_calldata(&buf[..n]).expect("canonical encoding decodes");
@@ -158,6 +163,27 @@ mod tests {
             assert_eq!(f.value, tx(5).value.0);
             assert_eq!(f.data, &d[..len], "data length {len}");
         }
+    }
+
+    /// A canonically shaped encoding whose `data` is one byte over the
+    /// protocol cap (it still fits the buffer's padding slack) is refused.
+    #[test]
+    fn data_over_max_tx_len_is_not_canonical() {
+        let len = pqsigner_proto::MAX_TX_LEN + 1;
+        let padded = (len + 31) & !31;
+        let n = FIXED_LEN + padded;
+        assert!(n <= MAX_EXECUTE_CALLDATA_LEN, "the case must fit the buffer to be meaningful");
+        let (head, _) = encode(3, 9, 5, &[]);
+        let mut buf = [0u8; MAX_EXECUTE_CALLDATA_LEN];
+        buf[..FIXED_LEN].copy_from_slice(&head[..FIXED_LEN]);
+        buf[FIXED_LEN - 8..FIXED_LEN].copy_from_slice(&(len as u64).to_be_bytes());
+        buf[FIXED_LEN..FIXED_LEN + len].fill(0x42);
+        assert!(decode_execute_calldata(&buf[..n]).is_none());
+        // Control: the same construction at the cap decodes.
+        let len = pqsigner_proto::MAX_TX_LEN;
+        buf[FIXED_LEN - 8..FIXED_LEN].copy_from_slice(&(len as u64).to_be_bytes());
+        buf[FIXED_LEN + len..].fill(0);
+        assert!(decode_execute_calldata(&buf[..FIXED_LEN + len]).is_some());
     }
 
     #[test]

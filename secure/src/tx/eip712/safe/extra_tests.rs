@@ -140,8 +140,11 @@ fn positive_canonical_layout_offsets_pin_to_documented_layout() {
 }
 
 #[test]
-fn positive_safe_v1_raw_data_max_is_max_tx_len() {
-    assert_eq!(SAFE_V1_RAW_DATA_MAX, MAX_TX_LEN);
+fn positive_safe_v1_raw_data_max_stays_4096() {
+    // Decoupled from MAX_TX_LEN on 2026-10-22 (MAX_TX_LEN → 8192): Safe inner
+    // data keeps the 4096-B domain the Safe decoders were reviewed against.
+    assert_eq!(SAFE_V1_RAW_DATA_MAX, 4096);
+    assert!(SAFE_V1_RAW_DATA_MAX < MAX_TX_LEN);
 }
 
 #[test]

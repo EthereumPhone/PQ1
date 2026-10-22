@@ -40,7 +40,7 @@ def userop.write_u64_in_word_be
   ok (index_mut_back s2)
 
 /-- [pqsigner_aa::userop::write_word_right_aligned]:
-    Source: 'aa/src/userop.rs', lines 695:0-699:1 -/
+    Source: 'aa/src/userop.rs', lines 733:0-737:1 -/
 def userop.write_word_right_aligned
   (buf : Array Std.U8 320#usize) (i : Std.Usize) (row : Slice Std.U8) :
   Result (Array Std.U8 320#usize)
@@ -59,7 +59,7 @@ def userop.write_word_right_aligned
   ok (index_mut_back s1)
 
 /-- [pqsigner_aa::userop::compute_user_op_hash]:
-    Source: 'aa/src/userop.rs', lines 702:0-733:1
+    Source: 'aa/src/userop.rs', lines 740:0-771:1
     Visibility: public -/
 def userop.compute_user_op_hash
   (params : userop.AaUserOpParams) (call_data_hash : Array Std.U8 32#usize) :
