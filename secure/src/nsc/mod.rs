@@ -435,6 +435,8 @@ compile_error!(
         feature = "ui-px-film-bench",
         // Dev bench: DMA2D against the CPU rasteriser after the film pages.
         feature = "ui-px-dma2d-bench",
+        // Dev probe: DWT stamps in every SHA-256 digest (hash driver).
+        feature = "hash-probe",
         // #846 negative control: removes the one-at-a-time gateway gate
         // from the veneer path. Never ship — a shipping image with this on
         // reinstates the re-entrancy #846 fixed.

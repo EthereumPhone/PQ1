@@ -222,6 +222,11 @@ ui-px-film-bench = ["ui-px-film-gaps"]
 # the CPU rasteriser on a band clear, an A4 blend and real glyph runs, and
 # count where the blends differ (`ui/px/dma2d_bench.rs`). NEVER ships.
 ui-px-dma2d-bench = ["ui-px-film-gaps", "ui-px-dma"]
+# Dev-only (2026-10-22): time each SHA-256 digest's stages in the HASH driver
+# on DWT_CYCCNT (`pqsigner_hw::hash::probe`); with `debug-log` it prints the
+# means every 2^20 digests. NEVER ships: fenced in `nsc/mod.rs` and listed in
+# the Makefile's PROD_FORBIDDEN.
+hash-probe = ["pqsigner-hw/hash-probe"]
 
 # Stream the pixel-UI strip blit over GPDMA1 instead of the polled per-byte
 # loop, so strip k goes out on the wire while strip k+1 renders. Opt-in: this

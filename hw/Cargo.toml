@@ -28,6 +28,9 @@ debug-log = ["dep:cortex-m-semihosting"]
 # (its busy film draws from hash-bound work). Secure image only: the FSBL
 # builds alone (`make fsbl`, its own target dir) and never enables it.
 tick-hook = []
+# Dev only: time each digest's stages on DWT_CYCCNT (`hash::probe`). The FSBL
+# never names it and the secure `nsc/mod.rs` fence keeps it out of shipping.
+hash-probe = []
 
 [dependencies.cortex-m-semihosting]
 workspace = true

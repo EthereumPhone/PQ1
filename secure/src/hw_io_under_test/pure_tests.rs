@@ -65,6 +65,8 @@ const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
 const HW_HASH_SRC: &str = include_str!("../../../hw/src/hash.rs");
 const HW_CARGO_SRC: &str = include_str!("../../../hw/Cargo.toml");
 const FSBL_CARGO_SRC: &str = include_str!("../../../fsbl/Cargo.toml");
+const NSC_MOD_SRC_HW: &str = include_str!("../nsc/mod.rs");
+const MAKEFILE_SRC_HW: &str = include_str!("../../../Makefile");
 
 /// Returns true if `needle` appears in any non-comment line of `src`.
 /// A line is treated as comment-only after the first `//` token; the
@@ -2826,6 +2828,41 @@ fn negative_te_stamps_are_the_busy_films_alone() {
     assert!(UI_PX_LCD_SRC.contains("let Some(wait) = pqsigner_ui_px::stream::phase::wait(since, lo, hi) else {"));
     assert!(!UI_PX_LCD_SRC.contains("fn start_window("), "no second copy of the range");
     assert!(!UI_PX_LCD_SRC.contains("REFRESH_CYC - since"), "the 2026-10-19 underflow");
+}
+
+#[test]
+fn negative_hash_probe_is_dev_only_and_never_in_the_fsbl() {
+    // 2026-10-22. ASSUMPTION ATTACKED: the hash driver's DWT stamps reach the
+    // FSBL (the measured trust root, which shares `pqsigner-hw`) or a
+    // shipping secure image, or another feature turns them on by implication.
+    assert!(HW_CARGO_SRC.contains("\nhash-probe = []\n"));
+    assert!(!HW_CARGO_SRC.contains("\ndefault = [\"hash-probe"));
+    assert!(!FSBL_CARGO_SRC.contains("hash-probe"));
+    let raisers: std::vec::Vec<&str> = SECURE_CARGO_TOML_SRC
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("hash-probe"))
+        .collect();
+    assert_eq!(raisers, ["hash-probe = [\"pqsigner-hw/hash-probe\"]"]);
+    assert!(NSC_MOD_SRC_HW.contains("        feature = \"hash-probe\",\n"));
+    let forbidden = MAKEFILE_SRC_HW
+        .split_once("override PROD_FORBIDDEN :=")
+        .expect("PROD_FORBIDDEN")
+        .1
+        .split_once("\n\n")
+        .expect("one block")
+        .0;
+    assert!(forbidden.split_whitespace().any(|w| w == "hash-probe"));
+    // Every stamp in the driver is behind the feature (ten: four in init,
+    // two in update, four in final).
+    let mut stamps = 0;
+    for (i, l) in HW_HASH_SRC.lines().enumerate() {
+        if l.trim_start().starts_with("probe::") || l.contains("= probe::") {
+            let prev = HW_HASH_SRC.lines().nth(i - 1).unwrap_or("");
+            assert_eq!(prev.trim(), "#[cfg(feature = \"hash-probe\")]", "ungated stamp: {l}");
+            stamps += 1;
+        }
+    }
+    assert_eq!(stamps, 10);
 }
 
 #[test]
