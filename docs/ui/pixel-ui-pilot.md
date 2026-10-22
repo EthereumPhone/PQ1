@@ -133,6 +133,7 @@ page per press:
 | FRAME | per film frame: the tick, its render, beam spin and band-buffer wait, display items dispatched/drawn, ICACHE ways |
 | TICK | per film frame: beam spin (whole `phase_start` less its renders), band wipe, and how early frames reached their start range (percent: open, < 0.25, < 0.5, < 1, < 2, >= 2 ms) |
 | GATE | the film gate's decisions by path (E no stamp, W no window, X empty range, S stale, K in range, F draw-now fallback, R refused ticks), and its mean tick spacing, `at - lo` and range width |
+| CFG | flash prefetch and ICACHE ways (read back), the digests the hash driver finished during the film, and the film's length per digest (ns; includes the sign's fixed costs) |
 
 `ui-px-dma2d-bench` (implies the recorder) adds three pages: DMA2D against
 the CPU on a band clear, a band A4 blend and glyph runs (us), where their
@@ -146,9 +147,12 @@ runs, seeded roots); the band wipe 1.0 -> 0.3 ms (u32 stores); the gate's
 beam spin 2.6 -> 0.3 ms (it drew every frame early: its tick-spacing estimate
 was the frame interval). Film CPU per frame went from ~8 ms to ~5 ms. Left:
 render 3.7 ms (shapes 3.3), ~1 ms band-buffer wait (a fourth 13.6 KB band
-would remove it, at the stack budget's expense), and a device render ~3-4x
-slower than the host and clock ratio predict, not explained by the ICACHE
-mode (#1028).
+would remove it, at the stack budget's expense). The device's render is
+~57x the host's for the same frame, which clock (~28x) times instruction
+throughput (~2-3x) predicts: nothing anomalous (an earlier version of this
+note said "3-4x slower than predicted", from the clock ratio alone). A 2x2 of
+flash prefetch x ICACHE ways measured no difference (#1028), and the FRAME and
+CFG pages read both back.
 
 ## Budgets (measured 2026-09-22)
 

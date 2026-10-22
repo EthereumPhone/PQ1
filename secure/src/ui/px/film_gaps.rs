@@ -101,6 +101,11 @@ struct Rec {
     g_at_lo: i64,
     g_width: u64,
     g_n: u32,
+    /// Flash prefetch (`FLASH_ACR.PRFTEN`) during this recording, and the
+    /// hash driver's digests counted by the film (start, then the count).
+    prefetch: bool,
+    hashes0: u32,
+    hashes: u32,
 }
 
 /// [`gate`] paths: no TE stamp, no window yet, empty start range, stale
@@ -217,6 +222,9 @@ impl Rec {
         g_at_lo: 0,
         g_width: 0,
         g_n: 0,
+        prefetch: false,
+        hashes0: 0,
+        hashes: 0,
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -441,6 +449,8 @@ pub fn start() {
         last: now,
         pause_c0: crate::hw::lcd_te::cycles(),
         ways,
+        prefetch: flash_acr().read() & PRFTEN != 0,
+        hashes0: super::lcd::film_hash_count(),
         ..Rec::OFF
     };
 }
@@ -566,8 +576,52 @@ pub fn stop() {
         let now = timeout::now();
         r.gap(now, b'X');
         r.total = now.wrapping_sub(r.t0);
+        r.hashes = super::lcd::film_hash_count().wrapping_sub(r.hashes0);
         r.on = false;
     }
+}
+
+/// `FLASH_ACR.PRFTEN` (RM0456 FLASH_ACR bit 8).
+const PRFTEN: u32 = 1 << 8;
+
+fn flash_acr() -> crate::hw::mmio::RoReg32 {
+    // SAFETY: FLASH_ACR on the secure alias (0x5002_2000, RM0456 FLASH
+    // register map), the register `hw::rcc` sets the 4 wait states in; read
+    // only.
+    unsafe { crate::hw::mmio::RoReg32::new(0x5002_2000) }
+}
+
+/// The twelfth page: `CFG pf<0|1> w<1|2>` (the flash prefetch and ICACHE
+/// ways read back at the film's start), the digests the hash driver
+/// finished during the film, and the film's length per digest in ns. The
+/// per-digest figure still carries the sign's fixed costs (random draws,
+/// verify, landing), so compare it between signs of similar digest counts.
+/// A 2x2 of prefetch x ways on 2026-10-22 measured no difference (#1028).
+pub fn rows12(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"CFG pf" {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, u32::from(r.prefetch));
+    for &b in b" w" {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, u32::from(r.ways));
+    let mut n = 0;
+    for &b in b"dig " {
+        push(&mut out[1], &mut n, b);
+    }
+    push_u32(&mut out[1], &mut n, r.hashes);
+    let ns = u64::from(r.total) * 1_000_000 / u64::from(r.hashes.max(1));
+    let mut n = 0;
+    for &b in b"ns/dig " {
+        push(&mut out[2], &mut n, b);
+    }
+    push_u32(&mut out[2], &mut n, u32::try_from(ns).unwrap_or(u32::MAX));
 }
 
 /// `dual_se::provision` entered step `k` (0 salt + credentials, 1 split-half

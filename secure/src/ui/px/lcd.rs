@@ -1929,6 +1929,8 @@ fn film_gaps_page() {
     dev_page(&rows);
     super::film_gaps::rows11(&mut rows);
     dev_page(&rows);
+    super::film_gaps::rows12(&mut rows);
+    dev_page(&rows);
     #[cfg(feature = "ui-px-dma2d-bench")]
     dma2d_bench_pages();
 }
@@ -1984,6 +1986,13 @@ pub fn film_tick_chip() {
 
 /// Finished digests counted by [`film_tick_hash`].
 static FILM_HASHES: AtomicU32 = AtomicU32::new(0);
+
+/// Dev (`ui-px-film-gaps`): the digests counted so far, for the recorder's
+/// throughput page.
+#[cfg(feature = "ui-px-film-gaps")]
+pub fn film_hash_count() -> u32 {
+    FILM_HASHES.load(Ordering::Relaxed)
+}
 
 /// Digests between two looks at the film from the hash driver: ~0.3 ms of
 /// signing at ~4.6 us a digest, fine enough for [`film_phase_ok`] to catch
