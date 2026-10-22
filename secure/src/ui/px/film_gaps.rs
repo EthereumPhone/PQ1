@@ -95,6 +95,12 @@ struct Rec {
     lead_sum: u64,
     shift_sum: i64,
     pairs: u32,
+    /// At gate calls that reached the range check: summed tick spacing
+    /// estimate, `at - lo` (signed) and `hi - lo`, and how many.
+    g_dt: u64,
+    g_at_lo: i64,
+    g_width: u64,
+    g_n: u32,
 }
 
 /// [`gate`] paths: no TE stamp, no window yet, empty start range, stale
@@ -207,6 +213,10 @@ impl Rec {
         lead_sum: 0,
         shift_sum: 0,
         pairs: 0,
+        g_dt: 0,
+        g_at_lo: 0,
+        g_width: 0,
+        g_n: 0,
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -724,6 +734,19 @@ pub fn gate(path: u8, adm: Option<(u32, u32)>) {
     }
 }
 
+/// The values the film gate decides on (cycles): the tick spacing estimate,
+/// where a stream started now would begin, and the start range.
+pub fn gate_vals(dt: u32, at: u32, lo: u32, hi: u32) {
+    let r = rec();
+    if !r.on {
+        return;
+    }
+    r.g_dt = r.g_dt.wrapping_add(u64::from(dt));
+    r.g_at_lo = r.g_at_lo.wrapping_add(i64::from(at) - i64::from(lo));
+    r.g_width = r.g_width.wrapping_add(u64::from(hi.saturating_sub(lo)));
+    r.g_n = r.g_n.wrapping_add(1);
+}
+
 /// `phase_start` began `since` cycles after the TE edge, waiting for the
 /// range starting at `lo`: pairs with the gate's last admission.
 pub fn phase_begin(since: u32, lo: u32) {
@@ -741,8 +764,9 @@ pub fn phase_begin(since: u32, lo: u32) {
 
 /// The eleventh page: `GATE n`, the gate's decisions by path (E no stamp,
 /// W no window, X empty range, S stale, K in range, F fallback, R refused),
-/// then the mean actual lead and the mean shift of the range's low end
-/// between the gate and the presenter, in tenths of a ms.
+/// then at the range check, in tenths of a ms: the mean tick spacing
+/// estimate `dt`, the mean `at - lo` (`a`, signed) and the mean range
+/// width `w`.
 pub fn rows11(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let r = *rec();
     for row in out.iter_mut() {
@@ -763,21 +787,26 @@ pub fn rows11(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
             push_u32(row, &mut n, r.gate[k]);
         }
     }
-    let pairs = i64::from(r.pairs.max(1));
-    let lead = r.lead_sum / u64::from(r.pairs.max(1)) / 16_000;
-    let shift = r.shift_sum / pairs / 16_000;
+    let g = u64::from(r.g_n.max(1));
+    let dt = r.g_dt / g / 16_000;
+    let a = r.g_at_lo / i64::from(r.g_n.max(1)) / 16_000;
+    let w = r.g_width / g / 16_000;
     let mut n = 0;
-    for &b in b"ld " {
+    for &b in b"dt " {
         push(&mut out[3], &mut n, b);
     }
-    push_u32(&mut out[3], &mut n, u32::try_from(lead).unwrap_or(u32::MAX));
-    for &b in b" sh " {
+    push_u32(&mut out[3], &mut n, u32::try_from(dt).unwrap_or(u32::MAX));
+    for &b in b" a " {
         push(&mut out[3], &mut n, b);
     }
-    if shift < 0 {
+    if a < 0 {
         push(&mut out[3], &mut n, b'-');
     }
-    push_u32(&mut out[3], &mut n, u32::try_from(shift.unsigned_abs()).unwrap_or(u32::MAX));
+    push_u32(&mut out[3], &mut n, u32::try_from(a.unsigned_abs()).unwrap_or(u32::MAX));
+    for &b in b" w " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(w).unwrap_or(u32::MAX));
 }
 
 /// Times one `phase_start` (thread mode): its whole span less the bands it

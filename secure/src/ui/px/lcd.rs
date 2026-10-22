@@ -1384,6 +1384,10 @@ pub fn film_start_with(s: &Screen) {
     // `film_abort`), and forget the previous film's window.
     crate::hw::lcd_te::stamps(true);
     FILM_WIN.store(0, Ordering::Relaxed);
+    // A new film's tick spacing starts over (not an earlier film's).
+    FILM_TICK_AT.store(0, Ordering::Relaxed);
+    FILM_TICK_DT.store(FILM_TICK_DT_START, Ordering::Relaxed);
+    FILM_TICK_DREW.store(false, Ordering::Relaxed);
     #[cfg(feature = "ui-px-film-gaps")]
     film_gaps_begin();
     let now = timeout::now();
@@ -1468,22 +1472,24 @@ const FILM_SPIN_OK_CYC: u32 = 32_000;
 /// Without stamps (or before the first partial frame) every due tick draws,
 /// as before.
 fn film_phase_ok() -> bool {
-    // The time between ticks, for guessing where the next one lands. Only
-    // an interval that followed a refusal is one: the gate is consulted
-    // once a frame is due, so the gap since the previous frame's admission
-    // is the frame interval, and folding it in (as before 2026-10-22) held
-    // the estimate at a whole refresh, i.e. "the next tick lands where this
-    // one does".
+    film_phase_go(crate::hw::lcd_te::cycles(), FILM_TICK_DT.load(Ordering::Relaxed))
+}
+
+/// Smooth the film's tick spacing, at every tick ([`film_tick_due`]): the
+/// interval since the previous tick, except right after a tick that drew a
+/// frame (that interval is the frame). It used to be the interval between
+/// GATE calls, i.e. one per frame: the frame interval, clamped to a refresh,
+/// which predicted the next tick where this one was and drew every early
+/// frame at once to spin (EVT 2026-10-22, 2.6 ms per frame); and a version
+/// updated only after a refusal locked in whatever an earlier film left.
+fn film_tick_spacing() {
     let now = crate::hw::lcd_te::cycles();
-    let gap = now.wrapping_sub(FILM_TICK_AT.swap(now, Ordering::Relaxed)).min(REFRESH_CYC);
-    let mut dt = FILM_TICK_DT.load(Ordering::Relaxed);
-    if FILM_TICK_WAITING.load(Ordering::Relaxed) {
-        dt = (dt * 3 + gap) / 4;
-        FILM_TICK_DT.store(dt, Ordering::Relaxed);
+    let last = FILM_TICK_AT.swap(now, Ordering::Relaxed);
+    if last != 0 && !FILM_TICK_DREW.swap(false, Ordering::Relaxed) {
+        let gap = now.wrapping_sub(last).min(REFRESH_CYC);
+        let dt = FILM_TICK_DT.load(Ordering::Relaxed);
+        FILM_TICK_DT.store((dt * 3 + gap) / 4, Ordering::Relaxed);
     }
-    let go = film_phase_go(now, dt);
-    FILM_TICK_WAITING.store(!go, Ordering::Relaxed);
-    go
 }
 
 /// [`film_phase_ok`]'s decision at `now` with ticks `dt` cycles apart.
@@ -1515,6 +1521,8 @@ fn film_phase_go(now: u32, dt: u32) -> bool {
     let ok = |at: u32| pqsigner_ui_px::stream::phase::start_ok(at, lo, hi, FILM_SPIN_OK_CYC);
     // Where the beam will be when the stream could start.
     let at = (since + FILM_LEAD_CYC) % REFRESH_CYC;
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::gate_vals(dt, at, lo, hi);
     if ok(at) {
         #[cfg(feature = "ui-px-film-gaps")]
         super::film_gaps::gate(b'K', Some((since, lo)));
@@ -1530,14 +1538,15 @@ fn film_phase_go(now: u32, dt: u32) -> bool {
     go
 }
 
-/// Cycle count at the film's previous gate call, and the smoothed interval
-/// between the ticks of a frame waiting at the gate (~0.3 ms while the
-/// signer hashes, `HASH_TICK_EVERY`; ~1 ms in chip waits; longer in coarse
-/// CPU-bound work).
+/// Cycle count at the film's previous tick (0: none yet in this film), the
+/// smoothed interval between ticks (~0.3 ms while the signer hashes,
+/// `HASH_TICK_EVERY`; ~1 ms in chip waits; longer in coarse CPU-bound
+/// work), and whether the previous tick drew a frame. Reset by each film's
+/// start ([`film_start_with`]).
 static FILM_TICK_AT: AtomicU32 = AtomicU32::new(0);
-static FILM_TICK_DT: AtomicU32 = AtomicU32::new(160_000);
-/// The previous gate call refused: the next one is a tick interval apart.
-static FILM_TICK_WAITING: AtomicBool = AtomicBool::new(false);
+static FILM_TICK_DT: AtomicU32 = AtomicU32::new(FILM_TICK_DT_START);
+static FILM_TICK_DREW: AtomicBool = AtomicBool::new(false);
+const FILM_TICK_DT_START: u32 = 160_000;
 
 /// Present one busy-film frame, streaming only the bands whose columns
 /// changed since the film's previous frame (#934, scoped to the film, owner
@@ -2058,6 +2067,7 @@ fn film_gaps_refused(src: u8, why: u8) {
 }
 
 fn film_tick_due(back_to_back: bool, _src: u8) {
+    film_tick_spacing();
     let now = timeout::now();
     if !FILM_SET.load(Ordering::Relaxed) {
         #[cfg(feature = "ui-px-film-gaps")]
@@ -2106,6 +2116,7 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::wait(super::film_gaps::WAIT_STEP, crate::hw::lcd_te::cycles().wrapping_sub(t_atlas));
     let _cost = present_film(anim, &atlas.marks(), &atlas.font(), false);
+    FILM_TICK_DREW.store(true, Ordering::Relaxed);
     #[cfg(feature = "ui-px-film-gaps")]
     super::film_gaps::wait(super::film_gaps::WAIT_FRAME, crate::hw::lcd_te::cycles().wrapping_sub(t_tick));
     #[cfg(all(feature = "ui-px-film-bench", feature = "ui-px-frametime"))]
