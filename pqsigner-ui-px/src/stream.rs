@@ -179,6 +179,23 @@ pub mod phase {
         (at <= hi && at.saturating_add(spin_ok) >= lo) || at.saturating_add(spin_ok) >= REFRESH_CYC.saturating_add(lo)
     }
 
+    /// For a frame that may not start now (`at`, as in [`start_ok`], is
+    /// outside the start range [lo, hi] and its allowance): whether to wait
+    /// for the next tick, expected `dt` cycles later. It should, unless that
+    /// tick would land past the end of the range it is waiting for (this
+    /// refresh's, or the next one's once `at` is past `hi`): then waiting
+    /// skips the range and the frame should start now and spin instead.
+    ///
+    /// The busy film used `!start_ok(at + dt)` here, which also chose to
+    /// draw now when the next tick merely would not be in range YET, so a
+    /// frame whose first due tick was early always spun to its range (EVT
+    /// 2026-10-22: 2.6 ms per frame, 95% of frames at least 2 ms early).
+    #[must_use]
+    pub fn wait_for_next_tick(at: u32, dt: u32, hi: u32) -> bool {
+        let end = if at <= hi { hi } else { REFRESH_CYC.saturating_add(hi) };
+        at.saturating_add(dt) <= end
+    }
+
     /// Whether a CPU-bound film frame may start now, paced to every second
     /// TE refresh: `edges` refresh edges have passed since the previous
     /// frame's stream started, the latest `since` cycles ago, and `hi` ends
@@ -360,6 +377,33 @@ mod tests {
         assert_eq!(start_window(10, 10), None);
         assert_eq!(start_window(-48, 48), None);
         assert_eq!(start_window(0, W + 1), None);
+    }
+
+    /// Waiting for the next tick is chosen exactly when that tick does not
+    /// skip the range being waited for: early frames wait (however far the
+    /// range), a frame whose next tick would overshoot starts now.
+    #[test]
+    fn wait_for_next_tick_waits_unless_the_tick_would_skip_the_range() {
+        use super::phase::*;
+        let (lo, hi) = start_window(96, 240).expect("a film window");
+        // Far before the range, ticks 0.3 ms apart: wait.
+        assert!(wait_for_next_tick(lo / 4, 48_000, hi));
+        // Just before it, the next tick inside it: wait.
+        assert!(wait_for_next_tick(lo - 10_000, 48_000, hi));
+        // Sparse ticks that would jump past the whole range: start now.
+        assert!(!wait_for_next_tick(lo - 10_000, hi - lo + 20_000, hi));
+        // Past this refresh's range: wait for the next refresh's, unless the
+        // next tick would overshoot that one too.
+        assert!(wait_for_next_tick(hi + 1, 48_000, hi));
+        assert!(!wait_for_next_tick(hi + 1, REFRESH_CYC, hi));
+        // Sweep: the answer is exactly "the next tick lands no later than the
+        // end of the range ahead".
+        for at in (0..REFRESH_CYC).step_by(7_919) {
+            for dt in [1, 48_000, 160_000, 960_000, REFRESH_CYC] {
+                let end = if at <= hi { hi } else { REFRESH_CYC + hi };
+                assert_eq!(wait_for_next_tick(at, dt, hi), at + dt <= end, "at={at} dt={dt}");
+            }
+        }
     }
 
     /// The tearing readout's model agrees with the measured full sweep and

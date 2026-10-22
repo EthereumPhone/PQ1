@@ -1466,13 +1466,26 @@ const FILM_SPIN_OK_CYC: u32 = 32_000;
 /// Without stamps (or before the first partial frame) every due tick draws,
 /// as before.
 fn film_phase_ok() -> bool {
-    // The time between ticks, for guessing where the next one lands.
+    // The time between ticks, for guessing where the next one lands. Only
+    // an interval that followed a refusal is one: the gate is consulted
+    // once a frame is due, so the gap since the previous frame's admission
+    // is the frame interval, and folding it in (as before 2026-10-22) held
+    // the estimate at a whole refresh, i.e. "the next tick lands where this
+    // one does".
     let now = crate::hw::lcd_te::cycles();
-    let dt = now.wrapping_sub(FILM_TICK_AT.swap(now, Ordering::Relaxed)).min(REFRESH_CYC);
-    let ema = FILM_TICK_DT.load(Ordering::Relaxed);
-    let dt = (ema * 3 + dt) / 4;
-    FILM_TICK_DT.store(dt, Ordering::Relaxed);
+    let gap = now.wrapping_sub(FILM_TICK_AT.swap(now, Ordering::Relaxed)).min(REFRESH_CYC);
+    let mut dt = FILM_TICK_DT.load(Ordering::Relaxed);
+    if FILM_TICK_WAITING.load(Ordering::Relaxed) {
+        dt = (dt * 3 + gap) / 4;
+        FILM_TICK_DT.store(dt, Ordering::Relaxed);
+    }
+    let go = film_phase_go(now, dt);
+    FILM_TICK_WAITING.store(!go, Ordering::Relaxed);
+    go
+}
 
+/// [`film_phase_ok`]'s decision at `now` with ticks `dt` cycles apart.
+fn film_phase_go(now: u32, dt: u32) -> bool {
     let Some(edge) = crate::hw::lcd_te::last_edge() else { return true };
     let win = FILM_WIN.load(Ordering::Relaxed);
     if win == 0 {
@@ -1493,17 +1506,21 @@ fn film_phase_ok() -> bool {
     if ok(at) {
         return true;
     }
-    // Not now. Wait for the next tick only if it should land in range;
-    // when ticks are sparse (CPU-bound work) and it would miss too, draw now
-    // and let the presenter spin, rather than drop a tick and stutter.
-    !ok((at + dt) % REFRESH_CYC)
+    // Not now. Wait for the next tick unless it would land past the range
+    // being waited for; when ticks are that sparse (coarse CPU-bound work),
+    // draw now and let the presenter spin, rather than skip the range and
+    // stutter.
+    !pqsigner_ui_px::stream::phase::wait_for_next_tick(at, dt, hi)
 }
 
-/// Cycle count at the film's previous tick, and the smoothed interval
-/// between ticks (~1 ms in chip waits, ~6 ms in the signer, longer in
-/// coarse CPU-bound work).
+/// Cycle count at the film's previous gate call, and the smoothed interval
+/// between the ticks of a frame waiting at the gate (~0.3 ms while the
+/// signer hashes, `HASH_TICK_EVERY`; ~1 ms in chip waits; longer in coarse
+/// CPU-bound work).
 static FILM_TICK_AT: AtomicU32 = AtomicU32::new(0);
 static FILM_TICK_DT: AtomicU32 = AtomicU32::new(160_000);
+/// The previous gate call refused: the next one is a tick interval apart.
+static FILM_TICK_WAITING: AtomicBool = AtomicBool::new(false);
 
 /// Present one busy-film frame, streaming only the bands whose columns
 /// changed since the film's previous frame (#934, scoped to the film, owner
