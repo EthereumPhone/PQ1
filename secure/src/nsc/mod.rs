@@ -437,6 +437,8 @@ compile_error!(
         feature = "ui-px-dma2d-bench",
         // Dev probe: DWT stamps in every SHA-256 digest (hash driver).
         feature = "hash-probe",
+        // Dev soak: software SHA-256 beside every hardware digest.
+        feature = "hw-sha256-crosscheck",
         // #846 negative control: removes the one-at-a-time gateway gate
         // from the veneer path. Never ship — a shipping image with this on
         // reinstates the re-entrancy #846 fixed.

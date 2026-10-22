@@ -2866,6 +2866,94 @@ fn negative_hash_probe_is_dev_only_and_never_in_the_fsbl() {
 }
 
 #[test]
+fn negative_hash_crosscheck_is_dev_only_and_checks_before_release() {
+    // 2026-10-23. ASSUMPTION ATTACKED: the software-SHA-256 soak (a second,
+    // unzeroized copy of every preimage, the `sk_seed` PRFs included) reaches
+    // the FSBL or a shipping image; a call site runs ungated; the comparison
+    // happens after the digest has been handed on, or a mismatch returns
+    // instead of taking the H-1 fault posture.
+    assert!(HW_CARGO_SRC.contains("\nhw-sha256-crosscheck = [\"dep:sha2\"]\n"));
+    assert!(!FSBL_CARGO_SRC.contains("crosscheck"));
+    let raisers: std::vec::Vec<&str> = SECURE_CARGO_TOML_SRC
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("crosscheck"))
+        .collect();
+    assert_eq!(raisers, ["hw-sha256-crosscheck = [\"pqsigner-hw/hw-sha256-crosscheck\"]"]);
+    assert!(NSC_MOD_SRC_HW.contains("        feature = \"hw-sha256-crosscheck\",\n"));
+    let forbidden = MAKEFILE_SRC_HW
+        .split_once("override PROD_FORBIDDEN :=")
+        .expect("PROD_FORBIDDEN")
+        .1
+        .split_once("\n\n")
+        .expect("one block")
+        .0;
+    assert!(forbidden.split_whitespace().any(|w| w == "hw-sha256-crosscheck"));
+    assert!(HW_HASH_SRC.contains(
+        "#[cfg(all(feature = \"hash-probe\", feature = \"hw-sha256-crosscheck\"))]\ncompile_error!("
+    ));
+    // Three hooks (begin, feed, check), each behind the feature.
+    let mut hooks = 0;
+    for (i, l) in HW_HASH_SRC.lines().enumerate() {
+        let t = l.trim_start();
+        if t.starts_with("xcheck::begin();") || t.starts_with("xcheck::feed(data);") || t.starts_with("xcheck_digest(out);") {
+            let prev = HW_HASH_SRC.lines().nth(i - 1).unwrap_or("");
+            assert_eq!(prev.trim(), "#[cfg(feature = \"hw-sha256-crosscheck\")]", "ungated hook: {l}");
+            hooks += 1;
+        }
+    }
+    assert_eq!(hooks, 3);
+    // The check reads the digest the final just wrote — both read-outs come
+    // first — and runs before DCIS is cleared and before the UI tick.
+    let fin = HW_HASH_SRC
+        .split("pub unsafe extern \"C\" fn pqsigner_sha256_final(out: *mut u8) {")
+        .nth(1)
+        .expect("pqsigner_sha256_final");
+    let fin = &fin[..fin.find("\n}\n").expect("end of final")];
+    let check = fin.find("xcheck_digest(out);").expect("check in final");
+    assert!(fin.find("hr_out!(0 1 2 3 4 5 6 7);").expect("unrolled read-out") < check);
+    assert!(fin.find("out.add(i * 4), 4);").expect("rolled read-out") < check);
+    assert!(check < fin.find("REG.sr.modify(|sr| sr & !SR_DCIS);").expect("DCIS cleared"));
+    assert!(check < fin.find("pqsigner_hash_tick();").expect("tick"));
+    // A mismatch is the wedged-engine posture, never a return.
+    let dig = HW_HASH_SRC.split("fn xcheck_digest(out: *const u8) {").nth(1).expect("xcheck_digest");
+    let dig = &dig[..dig.find("\n}\n").expect("end")];
+    let err = dig.split("Err(n) => {").nth(1).expect("mismatch arm");
+    assert!(err[..err.find("\n        }").expect("arm end")].trim_end().ends_with("hash_engine_fault();"));
+}
+
+#[test]
+fn negative_hash_unrolled_io_is_secure_only_and_paired() {
+    // 2026-10-23. ASSUMPTION ATTACKED: the unrolled DIN feed / HR read-out
+    // reaches the FSBL, whose bytes carry the silicon boot proof; an image
+    // that hashes in hardware runs the rolled loops instead; or one of the
+    // two paths loses its rolled twin, so a feature flip compiles a driver
+    // with no feed or no read-out.
+    assert!(HW_CARGO_SRC.contains("\nunrolled-io = []\n"));
+    assert!(!FSBL_CARGO_SRC.contains("unrolled-io"));
+    let raisers: std::vec::Vec<&str> = SECURE_CARGO_TOML_SRC
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("unrolled-io"))
+        .collect();
+    assert_eq!(raisers, ["hw-sha256 = [\"sphincs-c10/hw-sha256\", \"pqsigner-hw/unrolled-io\"]"]);
+    assert_eq!(HW_HASH_SRC.matches("    #[cfg(feature = \"unrolled-io\")]\n    {\n").count(), 2);
+    assert_eq!(HW_HASH_SRC.matches("    #[cfg(not(feature = \"unrolled-io\"))]\n").count(), 2);
+    assert_eq!(HW_HASH_SRC.matches("unrolled-io").count(), 4);
+    let upd = HW_HASH_SRC
+        .split("pub unsafe extern \"C\" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {")
+        .nth(1)
+        .expect("update");
+    let upd = &upd[..upd.find("\n}\n").expect("end of update")];
+    assert!(upd.contains("    #[cfg(not(feature = \"unrolled-io\"))]\n    while data.len() - i >= 4 {"));
+    assert!(upd.contains("        i = data.len() - words.remainder().len();\n    }\n"));
+    let fin = HW_HASH_SRC
+        .split("pub unsafe extern \"C\" fn pqsigner_sha256_final(out: *mut u8) {")
+        .nth(1)
+        .expect("final");
+    assert!(fin.contains("    #[cfg(not(feature = \"unrolled-io\"))]\n    for i in 0..8 {"));
+    assert!(fin.contains("        hr_out!(0 1 2 3 4 5 6 7);\n    }\n"));
+}
+
+#[test]
 fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     // 2026-10-21. ASSUMPTION ATTACKED: the hash driver's UI hook reaches the
     // FSBL (the measured trust root, which shares `pqsigner-hw`); it runs

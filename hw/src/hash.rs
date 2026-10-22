@@ -312,6 +312,83 @@ pub mod probe {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Dev crosscheck (feature `hw-sha256-crosscheck`): software SHA-256 beside
+// every hardware digest.
+// ---------------------------------------------------------------------------
+
+#[cfg(all(feature = "hash-probe", feature = "hw-sha256-crosscheck"))]
+compile_error!("`hash-probe` and `hw-sha256-crosscheck` are exclusive: the software hash would land in the probe's stages");
+
+/// Runs software SHA-256 over the same bytes as the peripheral and compares
+/// the digests. SOAK EVIDENCE ONLY: it costs several hardware digests' worth
+/// of cycles, compares in variable time and keeps a second, unzeroized copy
+/// of every preimage (the `sk_seed` PRFs included). The FSBL never enables it
+/// and the secure `nsc/mod.rs` fence keeps it out of a shipping image.
+#[cfg(feature = "hw-sha256-crosscheck")]
+mod xcheck {
+    use sha2::{Digest, Sha256};
+
+    struct Live {
+        sw: Option<Sha256>,
+        n: u32,
+    }
+
+    static mut LIVE: Live = Live { sw: None, n: 0 };
+
+    fn live() -> &'static mut Live {
+        // SAFETY: category 5 — the hash hooks are serialised by their FFI
+        // contract and the secure world is single-threaded; each caller drops
+        // this borrow before the next hook runs.
+        unsafe { &mut *core::ptr::addr_of_mut!(LIVE) }
+    }
+
+    pub(super) fn begin() {
+        live().sw = Some(Sha256::new());
+    }
+
+    pub(super) fn feed(data: &[u8]) {
+        if let Some(h) = live().sw.as_mut() {
+            h.update(data);
+        }
+    }
+
+    /// `Ok(digests checked so far)`, or `Err` with the count before the
+    /// mismatch. A digest with no `begin` is a mismatch too.
+    pub(super) fn check(hw: &[u8; 32]) -> Result<u32, u32> {
+        let l = live();
+        let same = l.sw.take().is_some_and(|h| h.finalize()[..] == hw[..]);
+        if !same {
+            return Err(l.n);
+        }
+        l.n = l.n.wrapping_add(1);
+        Ok(l.n)
+    }
+}
+
+/// Compare the digest just written to `out` with the software one: report
+/// every 2^20 digests, take the H-1 fault posture on a difference.
+#[cfg(feature = "hw-sha256-crosscheck")]
+#[inline(never)]
+fn xcheck_digest(out: *const u8) {
+    // SAFETY: `pqsigner_sha256_final` wrote all 32 bytes of `out` (its FFI
+    // contract makes `[out, out + 32)` valid) before calling this.
+    let hw = unsafe { &*out.cast::<[u8; 32]>() };
+    match xcheck::check(hw) {
+        Ok(n) => {
+            if n % (1 << 20) == 0 {
+                hash_log!("[S] hash-xcheck n={} ok", n);
+            }
+            let _ = n;
+        }
+        Err(n) => {
+            hash_log!("[S] hash-xcheck MISMATCH after n={} ok — FAULT", n);
+            let _ = n;
+            hash_engine_fault();
+        }
+    }
+}
+
 /// Semihosting print of the probe's means, cycles per digest since boot.
 #[cfg(all(feature = "hash-probe", feature = "debug-log"))]
 #[inline(never)]
@@ -503,6 +580,8 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
     cortex_m::asm::dsb();
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::START);
+    #[cfg(feature = "hw-sha256-crosscheck")]
+    xcheck::begin();
 }
 
 /// Feed `len` bytes from `ptr` into the current SHA-256 computation.
@@ -522,6 +601,8 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
     // is a valid, live, properly-aligned `[u8]` for the duration of
     // this call.
     let data = unsafe { core::slice::from_raw_parts(ptr, len) };
+    #[cfg(feature = "hw-sha256-crosscheck")]
+    xcheck::feed(data);
     let mut i = 0;
 
     // SAFETY: category 5 — exclusive mutable borrow of `static mut
@@ -542,10 +623,31 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
     }
 
     // Feed full 32-bit words directly. Data may be unaligned; read byte-wise.
+    #[cfg(not(feature = "unrolled-io"))]
     while data.len() - i >= 4 {
         let w = u32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
         write_word(w);
         i += 4;
+    }
+    // The same words in the same order, sixteen bytes a turn. `chunks_exact`
+    // fixes every index at compile time, so a turn is four load/store pairs
+    // and one branch instead of ~nine instructions a word (bounds and
+    // overflow checks included). Lengths are public preimage shapes, so how
+    // the bytes split between the loops leaks nothing.
+    #[cfg(feature = "unrolled-io")]
+    {
+        let mut quads = data[i..].chunks_exact(16);
+        for q in &mut quads {
+            write_word(u32::from_le_bytes([q[0], q[1], q[2], q[3]]));
+            write_word(u32::from_le_bytes([q[4], q[5], q[6], q[7]]));
+            write_word(u32::from_le_bytes([q[8], q[9], q[10], q[11]]));
+            write_word(u32::from_le_bytes([q[12], q[13], q[14], q[15]]));
+        }
+        let mut words = quads.remainder().chunks_exact(4);
+        for w in &mut words {
+            write_word(u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
+        }
+        i = data.len() - words.remainder().len();
     }
 
     // Buffer the trailing 0..=3 bytes.
@@ -619,6 +721,7 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     // Read 8 words from HR[0..8]. Per DATATYPE=10 convention the HR
     // registers hold each 4-byte digest chunk in natural byte order when
     // interpreted via to_be_bytes on the little-endian CPU.
+    #[cfg(not(feature = "unrolled-io"))]
     for i in 0..8 {
         // SAFETY: `RoReg32::read_at(i)` is `unsafe fn` because it
         // computes `addr + i * 4` and reads at that offset without
@@ -638,6 +741,25 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i * 4), 4);
         }
     }
+    // The same eight words with constant offsets: no counter or address
+    // arithmetic between the peripheral reads. `to_be` stored little-endian
+    // is `to_be_bytes` in memory, and an unaligned word store is legal on
+    // ARMv8-M Mainline (nothing sets `CCR.UNALIGN_TRP`; `update`'s word
+    // loads already rely on it).
+    #[cfg(feature = "unrolled-io")]
+    {
+        macro_rules! hr_out {
+            ($($i:literal)*) => {$(
+                // SAFETY: as in the rolled loop — HR0..HR7 is the 8-word
+                // digest bank at 0x310..0x32C and `$i < 8`; `[out, out + 32)`
+                // is valid and writable by this function's FFI contract.
+                unsafe { out.add($i * 4).cast::<u32>().write_unaligned(REG.hr0.read_at($i).to_be()) };
+            )*};
+        }
+        hr_out!(0 1 2 3 4 5 6 7);
+    }
+    #[cfg(feature = "hw-sha256-crosscheck")]
+    xcheck_digest(out);
 
     // Clear DCIS (write 0 to bit 1 per STM32U5 RM — SR.DCIS is rc_w0).
     REG.sr.modify(|sr| sr & !SR_DCIS);

@@ -1232,6 +1232,7 @@ version = "0.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-semihosting",
+ "sha2",
 ]
 
 [[package]]
