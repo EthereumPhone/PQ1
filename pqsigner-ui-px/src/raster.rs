@@ -694,7 +694,12 @@ fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8,
         // Non-zero coverage ⇔ dist < r + ZERO_D ⇔ dx² < r_zero² − dy².
         let Some(hz) = half_width(r_zero * r_zero - dy2) else { continue };
         let (xa, xb) = centres_within(c, hz);
-        let (xa, xb) = (xa.max(0), xb.min(W - 1));
+        // To THIS band, as `clump` and `ellipse_ring` do: clamped to the frame,
+        // a disc straddling a band edge ran its rim's exact distance for every
+        // column of the row and `Strip::idx` threw the other band's away — the
+        // rim computed twice (EVT 2026-10-22: the signing film is 12 discs,
+        // 4.3 of its 4.7 ms per frame in shapes). Output is unchanged.
+        let (xa, xb) = (xa.max(s.x0), xb.min(s.x0 + s.w - 1));
         if xb < xa {
             continue;
         }
@@ -714,7 +719,8 @@ fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8,
                 let d = dist_q8(px - cx, dy) - r;
                 let cov = edge_cov(d);
                 if cov != 0 {
-                    let aa = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
+                    // Opaque (every disc but a chord's): (cov·255 + 127) / 255 = cov.
+                    let aa = if a == 255 { cov } else { ((u16::from(cov) * u16::from(a) + 127) / 255) as u8 };
                     s.blend(x, y, color, aa);
                 }
             }
@@ -756,7 +762,8 @@ fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
         let dy2 = i64::from(dy) * i64::from(dy);
         let Some(hz) = half_width(r_zero * r_zero - dy2) else { continue };
         let (xa, xb) = centres_within(c, hz);
-        let (xa, xb) = (xa.max(0), xb.min(W - 1));
+        // To this band, like `disc` above. Output is unchanged.
+        let (xa, xb) = (xa.max(s.x0), xb.min(s.x0 + s.w - 1));
         if xb < xa {
             continue;
         }
