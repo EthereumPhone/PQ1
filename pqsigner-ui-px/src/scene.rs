@@ -48,6 +48,9 @@ pub const CHEV_LEFT_X_Q8: Q8 = (23 << 8) + 128;
 pub const CHEV_RIGHT_X_Q8: Q8 = (403 << 8) + 128;
 pub const CONFIRM_CIRCLE_X: i32 = 291;
 pub const CONFIRM_TEXT_X: i32 = 175;
+/// Clear space between a chain line's ink and the chain disc (owner
+/// 2026-10-22, EVT: "on Mainnet" ran into the disc).
+pub const CHAIN_TEXT_GAP: i32 = 16;
 pub const VALUE_PARK_X: i32 = -60;
 pub const PAGER_BASELINE_Y: i32 = 24;
 /// Token ring: stroke 2.4 px inward, art inset 1.2 px (Q8).
@@ -198,6 +201,25 @@ pub fn plays_forever(screen: &Screen, page: u8) -> bool {
 /// The band label at `label_x` and page `page`'s lines stacked at `text_x`
 /// — what a detail, a value screen and the docked notice share. One copy
 /// rather than three inlined loops (2026-10-14).
+/// The chain screen's disc and text centres. The design's pair (disc 291,
+/// text 175) fits only short names: "on Mainnet" at 36 px is 183 px wide,
+/// so centred on 175 its ink ends 5 px inside the disc. The text keeps its
+/// centre and the disc moves right until `CHAIN_TEXT_GAP` separates them,
+/// up to the docked column (352); a line still too wide there moves left.
+fn chain_columns(s: &Screen, page: u8) -> (i32, i32) {
+    let px = s.tier().map_or(22, Tier::px);
+    let mut half = 0;
+    for i in 0..s.nlines(page) {
+        if let Some((w, t)) = s.line(page, i) {
+            let w_q6 = crate::fit::measure_q6(t, px, matches!(w, Weight::SemiBold) && px == 22, 0).unwrap_or(0);
+            half = half.max(((w_q6 + 63) / 64).div_ceil(2) as i32);
+        }
+    }
+    let cx = (CONFIRM_TEXT_X + half + CHAIN_TEXT_GAP + CIRCLE_R).clamp(CONFIRM_CIRCLE_X, COL_RIGHT_CX);
+    let tx = CONFIRM_TEXT_X.min(cx - CIRCLE_R - CHAIN_TEXT_GAP - half);
+    (cx, tx)
+}
+
 fn label_and_lines(s: &Screen, page: u8, label_x: i32, text_x: i32, push: &mut impl FnMut(Option<TextSpec>)) {
     push(spec(s, Src::Label, TierId::semibold(16), label_x, BASELINE_Y, Align::Center, true, LS_LABEL_Q6));
     let tier = s.tier().unwrap_or(Tier::T22);
@@ -256,7 +278,7 @@ pub fn layout_of(s: &Screen, page: u8) -> Layout {
                 _ => (COL_LEFT_CX, TEXT_CX_CIRCLE_LEFT),
             };
             // The chain screen nudges (DESIGN.md: circle x 291 / text x 175).
-            let (cx, tx) = if s.icon() == Some(Icon::Chain) { (CONFIRM_CIRCLE_X, CONFIRM_TEXT_X) } else { (cx, tx) };
+            let (cx, tx) = if s.icon() == Some(Icon::Chain) { chain_columns(s, page) } else { (cx, tx) };
             l.circle = Some((cx, CIRCLE_CY));
             label_and_lines(s, page, cx, tx, &mut push);
         }
