@@ -50,14 +50,16 @@ use pqsigner_tx::names::NameResolver;
 use pqsigner_tx_core::eip1559::{Eip1559Tx, U256};
 
 /// Scratch capacity reaches the first aligned body above the production
-/// multi-tail cap (`4092` bytes). Besides canonical legacy and multi-tail
-/// candidates, this lets every topology-marked seed exercise the cap refusal
-/// without allocating in the fuzz loop.
-const BODY_WORD_CAP: usize = 128;
+/// multi-tail cap (`MAX_TX_LEN - 4` = 8188 bytes since 2026-10-22). Besides
+/// canonical legacy and multi-tail candidates, this lets every topology-marked
+/// seed exercise the cap refusal without allocating in the fuzz loop.
+const BODY_WORD_CAP: usize = 256;
 const BODY_CAP: usize = BODY_WORD_CAP * 32;
 const CALLDATA_CAP: usize = 4 + BODY_CAP;
 
 const _: () = assert!(BODY_CAP > MAX_MULTI_TAIL_BODY_LEN);
+// Still the FIRST aligned body above the cap, so the refusal stays reachable.
+const _: () = assert!(BODY_CAP - 32 <= MAX_MULTI_TAIL_BODY_LEN);
 
 #[derive(Clone, Copy)]
 struct TailGeometry {

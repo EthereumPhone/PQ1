@@ -108,6 +108,52 @@ presenter; `ui-semihosting` → text presenter). Fences: `ui-px` ×
 `build.rs` validates the assets against `manifest.json` and refuses the Safe
 brand mark in a production image without `safe_logo_approved`.
 
+### Busy-film measurement (dev, added 2026-10-22)
+
+Two dev features, both fenced out of production (`nsc/mod.rs`, the Makefile's
+`PROD_FORBIDDEN`), measure the busy film on the EVT without SWD. Build and
+flash an EVT dev image with them, e.g.
+
+```bash
+FEAT_S=dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,dev-dfu,stm32u585,usb,board-pq1,stack-hwm,ui-px-film-gaps \
+  tools/evt-dev-flash.sh --build-only   # then --no-build with the unit in DFU
+```
+
+and sign (`tools/hid_sign.py`). After the film lands, `stack-hwm` shows STACK
+HWM, then `ui-px-film-gaps` (`secure/src/ui/px/film_gaps.rs`) shows one 16x4
+page per press:
+
+| page | shows |
+|---|---|
+| pauses | frames, film length, the six longest pauses with the percent when they began, the tick that ended them (P progress, H hash, C chip wait, X end) and their ms of I2C |
+| TEAR | streams checked against the scan model, early/lapped starts, smallest lap margin, longest wire stall |
+| WHERE / SE050 / Q B D R P N Y | per longest pause: ms in the platform TRNG, OPTIGA and SE050 draws and flash waits; inside an SE050 command its session check, wrap, round trip and unwrap; SE050 polls, chip-wait ticks and why they drew nothing |
+| FI ms n slow | per longest pause: FI delays that drew their own length, and how many fell back to the hardened 1-byte fill |
+| RENDER | per film frame (0.1 ms): render by class (shapes, glyphs, fills, secret, rest) and bands per frame |
+| FRAME | per film frame: the tick, its render, beam spin and band-buffer wait, display items dispatched/drawn, ICACHE ways |
+| TICK | per film frame: beam spin (whole `phase_start` less its renders), band wipe, and how early frames reached their start range (percent: open, < 0.25, < 0.5, < 1, < 2, >= 2 ms) |
+| GATE | the film gate's decisions by path (E no stamp, W no window, X empty range, S stale, K in range, F draw-now fallback, R refused ticks), and its mean tick spacing, `at - lo` and range width |
+| CFG | flash prefetch and ICACHE ways (read back), the digests the hash driver finished during the film, and the film's length per digest (ns; includes the sign's fixed costs) |
+
+`ui-px-dma2d-bench` (implies the recorder) adds three pages: DMA2D against
+the CPU on a band clear, a band A4 blend and glyph runs (us), where their
+outputs differ, and a register-to-memory fill probe. Results:
+`gpdma-blit-design.md` § DMA2D.
+
+**What it found (2026-10-22, signing film, per frame):** the start-of-film
+stutters were FI delays drawing their own length (0.37 ms each, 86 per draw)
+and the SE050's fixed 259-B reads; shapes 4.3 -> 3.3 ms (band clamp, disc
+runs, seeded roots); the band wipe 1.0 -> 0.3 ms (u32 stores); the gate's
+beam spin 2.6 -> 0.3 ms (it drew every frame early: its tick-spacing estimate
+was the frame interval). Film CPU per frame went from ~8 ms to ~5 ms. Left:
+render 3.7 ms (shapes 3.3), ~1 ms band-buffer wait (a fourth 13.6 KB band
+would remove it, at the stack budget's expense). The device's render is
+~57x the host's for the same frame, which clock (~28x) times instruction
+throughput (~2-3x) predicts: nothing anomalous (an earlier version of this
+note said "3-4x slower than predicted", from the clock ratio alone). A 2x2 of
+flash prefetch x ICACHE ways measured no difference (#1028), and the FRAME and
+CFG pages read both back.
+
 ## Budgets (measured 2026-09-22)
 
 | image | text | data | bss |

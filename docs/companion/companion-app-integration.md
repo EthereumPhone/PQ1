@@ -417,7 +417,7 @@ Drain the next chunk of a large response.
 |    244 |   32 | `paymaster_and_data_hash` | **SHA-256** (not keccak). Use `SHA256_EMPTY` when no paymaster. |
 |    276 |   20 | `to_address`              | inner tx recipient                               |
 |    296 |   32 | `value`                   | u256 BE                                          |
-|    328 |    2 | `data_len`                | u16 BE, `0..=4096`                               |
+|    328 |    2 | `data_len`                | u16 BE, `0..=8192` (4096 without cap bit 5)      |
 |    330 |    N | `data`                    | inner tx calldata                                |
 
 > ⚠️ `paymaster_and_data_hash` is SHA-256 of `paymasterAndData`. This
@@ -1279,7 +1279,7 @@ issue.
 | Max SIGN_USEROP response         | 12,620 |
 | initCode (first deploy)          | 4,280  |
 | SIGN_USEROP request header       | 330    |
-| Max inner tx `data`              | 4,096  |
+| Max inner tx `data`              | 8,192 (4,096 without GET_DEVICE_INFO bit 5) |
 | SHA-256 digest                   | 32     |
 | Owner bytes (pkSeed ‖ pkRoot)    | 64     |
 | pk_seed (raw)                    | 16     |

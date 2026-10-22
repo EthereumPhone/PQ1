@@ -64,8 +64,10 @@ is 32-byte aligned. The final cursor must equal `body.len()`. Therefore every
 accepted interval is ordered, disjoint, gap-free, non-aliased, in bounds, and
 the set consumes all signed bytes after the head.
 
-The partition is capped at four tails and a 4,092-byte body, matching the
-current `MAX_TX_LEN - selector` input envelope. Per-field render limits remain
+The partition is capped at four tails and a `MAX_TX_LEN - 4`-byte body, the
+`MAX_TX_LEN - selector` input envelope (UPDATE 2026-10-22: 8,188 B since
+`MAX_TX_LEN` went to 8192; it was a 4,092 literal, which would have
+hard-refused every verified multi-tail descriptor on a 4–8 KB call). Per-field render limits remain
 stricter: strings remain exact printable values of at most 32 bytes and
 `ArrayAll` remains at most eight elements. The whole format refuses if either
 the topology proof or a field-local semantic check fails.

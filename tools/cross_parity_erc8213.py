@@ -65,6 +65,8 @@ def expected_calldata() -> dict[str, bytes]:
         "three-bytes": bytes.fromhex("abcdef"),
         "erc20-transfer": transfer,
         "max-4kib-pattern": bytes((index * 29 + 7) & 0xFF for index in range(4096)),
+        # MAX_TX_LEN since 2026-10-22.
+        "max-8kib-pattern": bytes((index * 29 + 7) & 0xFF for index in range(8192)),
     }
 
 

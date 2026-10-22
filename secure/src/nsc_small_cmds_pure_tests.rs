@@ -2096,53 +2096,78 @@ fn single_sign_binds_signed_calldata_to_the_pre_display_commitment() {
     let fingerprint = at("let calldata_fingerprint = pqsigner_tx_core::erc8213::calldata_digest(inner_data);");
     let unchanged = at("calldata_fingerprint.ct_eq(&calldata_ref_digest)");
     let confirm = at("None => confirm_checked(pages.as_slice()),");
-    let encode = at("let t2_exec = match reconstruct_execute_calldata(");
-    let bind = at("let verdict = calldata_bind_sentinel(");
-    let digest = at("let t2_call_digest = sha256_bytes(t2_exec.as_slice());");
+    let receipt_init = at("let mut calldata_bind_verdict = crate::fi::FAIL_SENTINEL;");
+    let call = at("let t2_call_digest = match checked_single_digest(");
+    let first_read = at("// SAFETY: reads the receipt `checked_single_digest` published.");
+    let second_read = at("// SAFETY: `calldata_bind_verdict` is a live local written once above.");
+    let signed = at("let t2_digest = compute_sphincs_digest_v06(&t2_params, &t2_call_digest);");
 
     // The reference is taken straight after the snapshot slice exists and
     // before anything is built for display.
     assert!(snapshot < reference && reference < first_page_use);
     // The displayed fingerprint is checked against it before the dialog.
     assert!(fingerprint < unchanged && unchanged < confirm);
-    // After confirm: encode once into a private copy, bind that copy, and
-    // only then hash it for signing.
-    assert!(confirm < encode && encode < bind && bind < digest);
+    // After confirm: fail-initialise the receipt, run the encode/bind/hash
+    // helper, read the receipt straight after it, and again right before the
+    // Type-2 digest consumes `t2_call_digest`.
+    assert!(confirm < receipt_init && receipt_init < call && call < first_read);
+    assert!(first_read < second_read && second_read < signed);
+    let after_call = &SRC[call..signed];
+    assert_eq!(
+        after_call.matches("core::ptr::read_volatile(&calldata_bind_verdict) } != crate::fi::OK_SENTINEL").count(),
+        2,
+        "the bind receipt must be read exactly twice between the helper and the signed digest"
+    );
+    // The call hands the helper the pre-display reference and the receipt.
+    let call_args = &SRC[call..call + 260];
+    assert!(call_args.contains("&calldata_ref_digest,"));
+    assert!(call_args.contains("&mut calldata_bind_verdict,"));
 
-    // The bind reads the private copy and the reference, never the shared
-    // snapshot.
-    let bind_call = &SRC[bind..bind + 320];
-    assert!(bind_call.contains("t2_exec.as_slice(),"));
-    assert!(bind_call.contains("&calldata_ref_digest,"));
-    assert!(!bind_call.contains("inner_data"));
+    // The helper: its own frame (never inlined into `run`, whose frame stays
+    // live under key generation and both signing passes), FAIL on entry,
+    // encode into a frame-local buffer, bind THAT copy, hash THAT copy, and
+    // publish the verdict only after hashing.
+    let helper = at("#[inline(never)]\nfn checked_single_digest(");
+    let helper_end = helper + SRC[helper..].find("\n}\n").expect("helper closes");
+    let body = &SRC[helper..helper_end];
+    let b = |needle: &str| body.find(needle).unwrap_or_else(|| panic!("helper missing: {needle}"));
+    let fail_init = b("unsafe { core::ptr::write_volatile(completion, crate::fi::FAIL_SENTINEL) };");
+    let local_buf = b("buf: [0u8; MAX_EXECUTE_CALLDATA_LEN],");
+    let encode = b("reconstruct_execute_calldata_into(&mut calldata, owner_index, offchain_count, tx, data)");
+    let bind = b("let verdict = calldata_bind_sentinel(");
+    let hash = b("let digest = sha256_bytes(calldata.as_slice());");
+    let publish = b("unsafe { core::ptr::write_volatile(completion, verdict) };");
+    assert!(fail_init < local_buf && local_buf < encode && encode < bind && bind < hash && hash < publish);
+    // The bind reads the private copy and the reference, never the data the
+    // encoder was given (which points into the shared snapshot).
+    let bind_call = &body[bind..hash];
+    assert!(bind_call.contains("calldata.as_slice(),"));
+    assert!(bind_call.contains("reference,"));
+    assert!(!bind_call.contains("data,") && !bind_call.contains("snap"));
 
-    // Both helpers keep their Keccak state and decoder locals out of the
-    // handler's own frame, which stays live under key generation and both
-    // signing passes; the verdict helper is the only caller of the decoder.
+    // Every helper keeps its Keccak state, decoder locals or calldata buffer
+    // out of the handler's frame; the verdict helper is the only caller of the
+    // decoder, and the buffer-sized encode happens in exactly one place.
     for helper in [
         "#[inline(never)]\nfn calldata_commitment(data: &[u8]) -> [u8; 32] {",
         "#[inline(never)]\nfn calldata_bind_sentinel(",
+        "#[inline(never)]\nfn checked_single_digest(",
     ] {
         assert!(SRC.contains(helper), "missing or inlinable helper: {helper}");
     }
     assert_eq!(SRC.matches("crate::aa::execute_bind::execute_calldata_binds(").count(), 1);
-
-    // The receipt is fail-initialised and read twice: once after the
-    // comparison and once immediately before the digest that is signed.
-    let between = &SRC[encode..digest];
-    assert!(between.contains("let mut calldata_bind_verdict = crate::fi::FAIL_SENTINEL;"));
-    assert_eq!(
-        between.matches("core::ptr::read_volatile(&calldata_bind_verdict) } != crate::fi::OK_SENTINEL").count(),
-        2
-    );
+    assert_eq!(SRC.matches("calldata_bind_sentinel(").count(), 2, "definition + the helper's one call");
+    assert_eq!(SRC.matches("reconstruct_execute_calldata_into(").count(), 1, "the helper's one call");
+    assert!(!SRC.contains("reconstruct_execute_calldata("), "no by-value encode on the sign path");
+    assert!(!SRC.contains("t2_exec"), "the calldata copy must not be a `run` local");
 
     // No read of the shared snapshot after the one that fills the private
-    // copy: from the end of the encoder call to the exit wipe, the handler
+    // copy: from the end of the helper call to the exit wipe, the handler
     // must not mention the snapshot slice again.
-    let encode_end = encode + SRC[encode..].find("    ) {").expect("encoder call closes");
+    let call_end = call + SRC[call..].find("    ) {").expect("helper call closes");
     let exit_wipe = at("// L-2: wipe the TOCTOU snapshot on exit too.");
-    assert!(encode_end < exit_wipe);
-    let tail = &SRC[encode_end..exit_wipe];
+    assert!(call_end < exit_wipe);
+    let tail = &SRC[call_end..exit_wipe];
     assert!(!tail.contains("inner_data"), "a post-confirm read of the shared snapshot was added");
     assert!(!tail.contains("snap["), "a post-confirm read of the shared snapshot was added");
 }

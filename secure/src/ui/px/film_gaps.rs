@@ -59,7 +59,78 @@ struct Rec {
     step: usize,
     step_at: u32,
     tear: Tear,
+    /// Band renders while recording: cycles in the whole `render_band`, then
+    /// per class of `RenderSplit` (shapes, glyphs, fills, secret), and the
+    /// bands rendered. The DMA2D sizing question (2026-10-22): how much of a
+    /// film frame's render could Chrom-ART take at most?
+    rend: [u64; 5],
+    bands: u32,
+    /// Display-list items dispatched and drawn (past their band cull), summed
+    /// over those bands: a disc straddling a band edge is drawn twice.
+    items: u64,
+    drawn: u64,
+    /// Film frames' CPU outside the signer: [`WAIT_BEAM`] spinning for the
+    /// panel's start range, [`WAIT_BUF`] for a free band buffer, and
+    /// [`WAIT_FRAME`] the whole film tick that drew a frame; then the tick's
+    /// parts: the atlas header, the animation step, the display list, its
+    /// column signatures and damage, the presenter. What is left of the tick
+    /// (`arg` on the page) is mostly the marks and font views, parsed as
+    /// `present_film`'s arguments.
+    waits: [u64; 10],
+    /// TE-edge fallbacks (`present_frame_cols` with no fresh stamp).
+    te_falls: u32,
+    /// The ICACHE ways this recording ran with (see [`icache_ways`]).
+    ways: u8,
+    /// `phase_start` calls by how far the start range was when they began:
+    /// open, < 0.25, < 0.5, < 1, < 2, >= 2 ms.
+    wt: [u32; 6],
+    /// The film gate's decisions by path ([`GATE_PATHS`]).
+    gate: [u32; 7],
+    /// At the gate's admission: cycles since the TE edge and the start range
+    /// low end it used; then, per `phase_start`, the summed actual lead
+    /// (cycles from admission to `phase_start`) and the summed signed shift
+    /// of the range's low end (the presenter's minus the gate's), and how
+    /// many pairs.
+    adm: Option<(u32, u32)>,
+    lead_sum: u64,
+    shift_sum: i64,
+    pairs: u32,
+    /// At gate calls that reached the range check: summed tick spacing
+    /// estimate, `at - lo` (signed) and `hi - lo`, and how many.
+    g_dt: u64,
+    g_at_lo: i64,
+    g_width: u64,
+    g_n: u32,
+    /// Flash prefetch (`FLASH_ACR.PRFTEN`) during this recording, and the
+    /// hash driver's digests counted by the film (start, then the count).
+    prefetch: bool,
+    hashes0: u32,
+    hashes: u32,
+    /// Bands rendered on a later tick (`lcd::film_continue`) instead of
+    /// spinning for a free buffer: their cycles and count, and the pending
+    /// frames abandoned.
+    cont_cyc: u64,
+    cont_n: u32,
+    cont_ab: u32,
 }
+
+/// [`gate`] paths: no TE stamp, no window yet, empty start range, stale
+/// stamp, in range (`ok`), fallback draw-now, refused (wait).
+pub const GATE_PATHS: [u8; 7] = [b'E', b'W', b'X', b'S', b'K', b'F', b'R'];
+
+/// [`wait`] kinds.
+pub const WAIT_BEAM: usize = 0;
+pub const WAIT_BUF: usize = 1;
+pub const WAIT_FRAME: usize = 2;
+pub const WAIT_ATLAS: usize = 3;
+pub const WAIT_STEP: usize = 4;
+pub const WAIT_BUILD: usize = 5;
+pub const WAIT_SIGS: usize = 6;
+pub const WAIT_PRESENT: usize = 7;
+/// `sync_to_scanout` when the beam phase had no fresh stamp.
+pub const WAIT_TE: usize = 8;
+/// `film_reap`'s band-buffer wipe.
+pub const WAIT_REAP: usize = 9;
 
 /// Every film frame's stream checked against the panel's scan model
 /// (`pqsigner_ui_px::stream::phase::tear_check`): the tearing hunt of
@@ -140,6 +211,29 @@ impl Rec {
         step: STEPS,
         step_at: 0,
         tear: Tear::ZERO,
+        rend: [0; 5],
+        bands: 0,
+        items: 0,
+        drawn: 0,
+        waits: [0; 10],
+        te_falls: 0,
+        ways: 0,
+        wt: [0; 6],
+        gate: [0; 7],
+        adm: None,
+        lead_sum: 0,
+        shift_sum: 0,
+        pairs: 0,
+        g_dt: 0,
+        g_at_lo: 0,
+        g_width: 0,
+        g_n: 0,
+        prefetch: false,
+        hashes0: 0,
+        hashes: 0,
+        cont_cyc: 0,
+        cont_n: 0,
+        cont_ab: 0,
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -357,11 +451,15 @@ fn rec() -> &'static mut Rec {
 /// Provisioning began.
 pub fn start() {
     let now = timeout::now();
+    let ways = icache_ways();
     *rec() = Rec {
         on: true,
         t0: now,
         last: now,
         pause_c0: crate::hw::lcd_te::cycles(),
+        ways,
+        prefetch: flash_acr().read() & PRFTEN != 0,
+        hashes0: super::lcd::film_hash_count(),
         ..Rec::OFF
     };
 }
@@ -487,8 +585,85 @@ pub fn stop() {
         let now = timeout::now();
         r.gap(now, b'X');
         r.total = now.wrapping_sub(r.t0);
+        r.hashes = super::lcd::film_hash_count().wrapping_sub(r.hashes0);
         r.on = false;
     }
+}
+
+/// A band rendered on a later tick took `cyc` cycles (build, check, render).
+pub fn cont(cyc: u32) {
+    let r = rec();
+    if r.on {
+        r.cont_cyc = r.cont_cyc.wrapping_add(u64::from(cyc));
+        r.cont_n = r.cont_n.wrapping_add(1);
+    }
+}
+
+/// A pending film frame was abandoned.
+pub fn cont_abort() {
+    let r = rec();
+    if r.on {
+        r.cont_ab = r.cont_ab.wrapping_add(1);
+    }
+}
+
+/// `FLASH_ACR.PRFTEN` (RM0456 FLASH_ACR bit 8).
+const PRFTEN: u32 = 1 << 8;
+
+fn flash_acr() -> crate::hw::mmio::RoReg32 {
+    // SAFETY: FLASH_ACR on the secure alias (0x5002_2000, RM0456 FLASH
+    // register map), the register `hw::rcc` sets the 4 wait states in; read
+    // only.
+    unsafe { crate::hw::mmio::RoReg32::new(0x5002_2000) }
+}
+
+/// The twelfth page: `CFG pf<0|1> w<1|2>` (the flash prefetch and ICACHE
+/// ways read back at the film's start), the digests the hash driver
+/// finished during the film, and the film's length per digest in ns. The
+/// per-digest figure still carries the sign's fixed costs (random draws,
+/// verify, landing), so compare it between signs of similar digest counts.
+/// A 2x2 of prefetch x ways on 2026-10-22 measured no difference (#1028).
+/// Last row: bands rendered on a later tick, per frame (`c`, tenths of a
+/// ms; `n`, tenths of a band) and pending frames abandoned (`ab`).
+pub fn rows12(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"CFG pf" {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, u32::from(r.prefetch));
+    for &b in b" w" {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, u32::from(r.ways));
+    let mut n = 0;
+    for &b in b"dig " {
+        push(&mut out[1], &mut n, b);
+    }
+    push_u32(&mut out[1], &mut n, r.hashes);
+    let ns = u64::from(r.total) * 1_000_000 / u64::from(r.hashes.max(1));
+    let mut n = 0;
+    for &b in b"ns/dig " {
+        push(&mut out[2], &mut n, b);
+    }
+    push_u32(&mut out[2], &mut n, u32::try_from(ns).unwrap_or(u32::MAX));
+    let frames = u64::from(r.frames.max(1));
+    let mut n = 0;
+    for &b in b"c " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(r.cont_cyc / frames / 16_000).unwrap_or(u32::MAX));
+    for &b in b" n " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(u64::from(r.cont_n) * 10 / frames).unwrap_or(u32::MAX));
+    for &b in b" ab " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, r.cont_ab);
 }
 
 /// `dual_se::provision` entered step `k` (0 salt + credentials, 1 split-half
@@ -609,6 +784,298 @@ pub fn rows2(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
         push(row, &mut n, b' ');
         push(row, &mut n, b'd');
         push_u32(row, &mut n, b.drains);
+    }
+}
+
+/// One band rendered while recording: `total` cycles in `render_band`, and
+/// the per-class split inside it.
+pub fn render(total: u32, split: &pqsigner_ui_px::raster::RenderSplit) {
+    let r = rec();
+    if !r.on {
+        return;
+    }
+    for (acc, c) in r.rend.iter_mut().zip([total, split.shapes, split.glyphs, split.fills, split.secret]) {
+        *acc = acc.wrapping_add(u64::from(c));
+    }
+    r.bands = r.bands.wrapping_add(1);
+    r.items = r.items.wrapping_add(u64::from(split.items));
+    r.drawn = r.drawn.wrapping_add(u64::from(split.drawn));
+}
+
+/// `cyc` cycles of film-frame time of kind `k` ([`WAIT_BEAM`], [`WAIT_BUF`],
+/// [`WAIT_FRAME`]) while recording.
+pub fn wait(k: usize, cyc: u32) {
+    let r = rec();
+    if r.on && k < r.waits.len() {
+        r.waits[k] = r.waits[k].wrapping_add(u64::from(cyc));
+        if k == WAIT_TE {
+            r.te_falls = r.te_falls.wrapping_add(1);
+        }
+    }
+}
+
+/// The film gate decided by `path` (one of [`GATE_PATHS`]); on an
+/// admission through the range check, `adm` is (cycles since the TE edge,
+/// the range's low end in cycles) it used.
+pub fn gate(path: u8, adm: Option<(u32, u32)>) {
+    let r = rec();
+    if !r.on || !in_thread() {
+        return;
+    }
+    if let Some(k) = GATE_PATHS.iter().position(|&p| p == path) {
+        r.gate[k] = r.gate[k].wrapping_add(1);
+    }
+    if path != b'R' {
+        r.adm = adm;
+    }
+}
+
+/// The values the film gate decides on (cycles): the tick spacing estimate,
+/// where a stream started now would begin, and the start range.
+pub fn gate_vals(dt: u32, at: u32, lo: u32, hi: u32) {
+    let r = rec();
+    if !r.on {
+        return;
+    }
+    r.g_dt = r.g_dt.wrapping_add(u64::from(dt));
+    r.g_at_lo = r.g_at_lo.wrapping_add(i64::from(at) - i64::from(lo));
+    r.g_width = r.g_width.wrapping_add(u64::from(hi.saturating_sub(lo)));
+    r.g_n = r.g_n.wrapping_add(1);
+}
+
+/// `phase_start` began `since` cycles after the TE edge, waiting for the
+/// range starting at `lo`: pairs with the gate's last admission.
+pub fn phase_begin(since: u32, lo: u32) {
+    let r = rec();
+    if !r.on {
+        return;
+    }
+    if let Some((s0, lo0)) = r.adm.take() {
+        let refresh = pqsigner_ui_px::stream::phase::REFRESH_CYC;
+        r.lead_sum = r.lead_sum.wrapping_add(u64::from((since + refresh - s0 % refresh) % refresh));
+        r.shift_sum = r.shift_sum.wrapping_add(i64::from(lo) - i64::from(lo0));
+        r.pairs = r.pairs.wrapping_add(1);
+    }
+}
+
+/// The eleventh page: `GATE n`, the gate's decisions by path (E no stamp,
+/// W no window, X empty range, S stale, K in range, F fallback, R refused),
+/// then at the range check, in tenths of a ms: the mean tick spacing
+/// estimate `dt`, the mean `at - lo` (`a`, signed) and the mean range
+/// width `w`.
+pub fn rows11(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"GATE n" {
+        push(&mut out[0], &mut n, b);
+    }
+    let groups: [&[usize]; 2] = [&[0, 1, 2, 3], &[4, 5, 6]];
+    for (row, idx) in out[1..3].iter_mut().zip(groups) {
+        let mut n = 0;
+        for (j, &k) in idx.iter().enumerate() {
+            if j > 0 {
+                push(row, &mut n, b' ');
+            }
+            push(row, &mut n, GATE_PATHS[k]);
+            push_u32(row, &mut n, r.gate[k]);
+        }
+    }
+    let g = u64::from(r.g_n.max(1));
+    let dt = r.g_dt / g / 16_000;
+    let a = r.g_at_lo / i64::from(r.g_n.max(1)) / 16_000;
+    let w = r.g_width / g / 16_000;
+    let mut n = 0;
+    for &b in b"dt " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(dt).unwrap_or(u32::MAX));
+    for &b in b" a " {
+        push(&mut out[3], &mut n, b);
+    }
+    if a < 0 {
+        push(&mut out[3], &mut n, b'-');
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(a.unsigned_abs()).unwrap_or(u32::MAX));
+    for &b in b" w " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(w).unwrap_or(u32::MAX));
+}
+
+/// Times one `phase_start` (thread mode): its whole span less the bands it
+/// rendered while waiting goes to [`WAIT_BEAM`], and the first wait it
+/// computed is bucketed. The first meter timed only the spin instruction's
+/// own iteration and read 0.3 ms per frame against ~1.8 ms unaccounted.
+pub struct SpinProbe {
+    c0: u32,
+    rend0: u64,
+    bucketed: bool,
+}
+
+impl SpinProbe {
+    #[must_use]
+    pub fn new() -> Self {
+        Self { c0: crate::hw::lcd_te::cycles(), rend0: rec().rend[0], bucketed: false }
+    }
+
+    /// The wait (cycles) to the start range when the call began; 0 = open.
+    pub fn first_wait(&mut self, wait: u32) {
+        let r = rec();
+        if self.bucketed || !r.on {
+            return;
+        }
+        self.bucketed = true;
+        let k = match wait / 40_000 {
+            _ if wait == 0 => 0,
+            0 => 1,
+            1 => 2,
+            2..=3 => 3,
+            4..=7 => 4,
+            _ => 5,
+        };
+        r.wt[k] = r.wt[k].wrapping_add(1);
+    }
+}
+
+impl Drop for SpinProbe {
+    fn drop(&mut self) {
+        let r = rec();
+        if !r.on {
+            return;
+        }
+        let total = u64::from(crate::hw::lcd_te::cycles().wrapping_sub(self.c0));
+        let rendered = r.rend[0].wrapping_sub(self.rend0);
+        r.waits[WAIT_BEAM] = r.waits[WAIT_BEAM].wrapping_add(total.saturating_sub(rendered));
+    }
+}
+
+/// Dev (2026-10-22): the ICACHE ways in use (`ICACHE_CR.WAYSEL`: 2-way or
+/// direct-mapped), shown on the FRAME page.
+fn icache_ways() -> u8 {
+    // SAFETY: ICACHE_CR on the secure alias (RM0456 ICACHE register map,
+    // 0x5003_0400), the address `hw::rcc` and `hw::flash` use; a plain read.
+    let cr = unsafe { crate::hw::mmio::RoReg32::new(0x5003_0400) };
+    if cr.read() & (1 << 2) != 0 { 2 } else { 1 }
+}
+
+/// The ninth page: `FRAME .1ms/fr`, then per film frame in tenths of a ms
+/// the whole tick and its render, the beam spin and the buffer wait, and the
+/// items dispatched and drawn per frame (whole numbers).
+pub fn rows9(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let frames = u64::from(r.frames.max(1));
+    let per = |c: u64| u32::try_from(c / frames / 16_000).unwrap_or(u32::MAX);
+    let n_per = |c: u64| u32::try_from(c / frames).unwrap_or(u32::MAX);
+    let mut n = 0;
+    for &b in b"FRAME .1ms/fr w" {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, u32::from(r.ways));
+    let rows: [(&[u8], u32, &[u8], u32); 3] = [
+        (b"tick ", per(r.waits[WAIT_FRAME]), b" rend ", per(r.rend[0])),
+        (b"beam ", per(r.waits[WAIT_BEAM]), b" buf ", per(r.waits[WAIT_BUF])),
+        (b"item ", n_per(r.items), b" drw ", n_per(r.drawn)),
+    ];
+    for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {
+        let mut n = 0;
+        for &c in a {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, x);
+        for &c in b {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, y);
+    }
+}
+
+/// The eighth page: `RENDER .1ms <share>%`, then the film's render time per
+/// frame in tenths of a ms: all of it and the rest outside the four classes
+/// (the band clear, culls, dispatch), shapes and glyphs, fills and secret
+/// with the bands per frame (in tenths). The share is of the run's length.
+pub fn rows8(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let frames = u64::from(r.frames.max(1));
+    // Cycles per frame in tenths of a ms (16,000 cycles at 160 MHz).
+    let per = |c: u64| u32::try_from(c / frames / 16_000).unwrap_or(u32::MAX);
+    let [all, shp, gly, fil, sec] = r.rend;
+    let rest = all.saturating_sub(shp + gly + fil + sec);
+    let share = if r.total > 0 { all / 1_600 / u64::from(r.total) } else { 0 };
+    let mut n = 0;
+    for &b in b"RENDER .1ms " {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, u32::try_from(share).unwrap_or(u32::MAX));
+    push(&mut out[0], &mut n, b'%');
+    let rows: [(&[u8], u32, &[u8], u32); 3] = [
+        (b"all ", per(all), b" rest ", per(rest)),
+        (b"shp ", per(shp), b" gly ", per(gly)),
+        (b"fil ", per(fil), b" sec ", per(sec)),
+    ];
+    for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {
+        let mut n = 0;
+        for &c in a {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, x);
+        for &c in b {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, y);
+    }
+    let mut n = 13;
+    push(&mut out[3], &mut n, b'b');
+    push_u32(&mut out[3], &mut n, u32::try_from(u64::from(r.bands) * 10 / frames).unwrap_or(u32::MAX));
+}
+
+/// The tenth page: `TICK .1ms/fr`, then per film frame in tenths of a ms
+/// the beam spin (whole `phase_start` less its renders) and the band wipe,
+/// then the `phase_start` calls by distance to the start range in percent:
+/// open, < 0.25, < 0.5 ms on one row, < 1, < 2, >= 2 ms on the next.
+pub fn rows10(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let frames = u64::from(r.frames.max(1));
+    let per = |c: u64| u32::try_from(c / frames / 16_000).unwrap_or(u32::MAX);
+    let mut n = 0;
+    for &b in b"TICK .1ms/fr" {
+        push(&mut out[0], &mut n, b);
+    }
+    let rows: [(&[u8], u32, &[u8], u32); 1] = [
+        (b"spin ", per(r.waits[WAIT_BEAM]), b" wipe ", per(r.waits[WAIT_REAP])),
+    ];
+    let calls = r.wt.iter().sum::<u32>().max(1);
+    for (row, part) in out[2..].iter_mut().zip(r.wt.chunks(3)) {
+        let mut n = 0;
+        for &c in b"wt" {
+            push(row, &mut n, c);
+        }
+        for &v in part {
+            push(row, &mut n, b' ');
+            push_u32(row, &mut n, v * 100 / calls);
+        }
+    }
+    for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {
+        let mut n = 0;
+        for &c in a {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, x);
+        for &c in b {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, y);
     }
 }
 

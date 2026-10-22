@@ -25,8 +25,11 @@ pub const TOPOLOGY_VERSION: u8 = 1;
 pub const MIN_DYNAMIC_TAILS: usize = 2;
 /// Maximum authenticated top-level tails in one format.
 pub const MAX_DYNAMIC_TAILS: usize = 4;
-/// Maximum calldata body after the four-byte selector (`MAX_TX_LEN - 4`).
-pub const MAX_MULTI_TAIL_BODY_LEN: usize = 4092;
+/// Maximum calldata body after the four-byte selector. Follows the per-call
+/// cap (8188 since `MAX_TX_LEN` went to 8192 on 2026-10-22): a verified,
+/// request-bound descriptor hard-refuses on any `RenderErr`, so a stale
+/// literal here would refuse every 4-8 KB call such a descriptor covers.
+pub const MAX_MULTI_TAIL_BODY_LEN: usize = pqsigner_proto::MAX_TX_LEN - 4;
 
 const TOPOLOGY_HEADER_LEN: usize = 2;
 const TOPOLOGY_RECORD_LEN: usize = 3;
@@ -528,7 +531,12 @@ mod tests {
         assert!(validate_exact_partition(&topology, &trailing, 2).is_err());
 
         assert!(validate_exact_partition(&topology, &canonical[..canonical.len() - 1], 2).is_err());
-        assert!(validate_exact_partition(&topology, &[0u8; 4096], 2).is_err());
+        // The body cap itself: one word past the per-call cap is refused by the
+        // cap, before any alignment or tail work.
+        assert!(matches!(
+            validate_exact_partition(&topology, &[0u8; pqsigner_proto::MAX_TX_LEN], 2),
+            Err(RenderErr::Reject("7730 partition body cap"))
+        ));
     }
 }
 
@@ -593,7 +601,7 @@ mod verification {
     #[kani::proof]
     fn body_cap_is_enforced_before_tail_work() {
         let topology = TailTopology::parse(&TWO_BLOBS).unwrap();
-        let body = [0u8; 4096];
+        let body = [0u8; pqsigner_proto::MAX_TX_LEN];
         assert!(validate_exact_partition(&topology, &body, 2).is_err());
     }
 }

@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	4cfde35dc9488ea78de9f938214addc3
+split	46b33cc65cb8b961bc5493e5d74fb5c4
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1636,3 +1636,8 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Original definitions/proofs retained; exact shuffle arithmetic source repinned.
 # No new project axiom/admit; fresh full replay and bounded review required.
 # Split identity 0b9f48c4ae6f3bb05a593ffe98f2569a -> b9f13385a00b24fa9747a05f23fe9411.
+
+# 2026-10-22 master integration: two UserOp generated source-location
+# comments changed upstream; refresh their native source bindings.
+# Native proof files, statements, axioms and controls are unchanged.
+# Split identity 4cfde35dc9488ea78de9f938214addc3 -> 46b33cc65cb8b961bc5493e5d74fb5c4.

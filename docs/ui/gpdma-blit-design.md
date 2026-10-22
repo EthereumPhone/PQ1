@@ -28,7 +28,7 @@ repaint below that however well it overlaps. Only the render half can hide.
 > from the manual rather than recalled.
 | GPDMA is TrustZone-aware: secure/non-secure **per channel**, plus a TrustZone-aware slave port protecting secure channels from NS access | RM0456 GPDMA §, "TrustZone support" |
 | GPDMA is **not** TZSC-attributable — it is "self-governed" via its own per-channel `SECCFGR` | already documented in `secure/src/sau.rs:615-619` |
-| DMA2D also exists on this part (AHB2 @160 MHz) — separate question, see below | DS13086 "Graphic features" |
+| DMA2D also exists on this part (AHB1 @160 MHz; corrected 2026-10-22, it is not on AHB2) — separate question, see below | DS13086 "Graphic features" |
 
 Channel register map (`x` = channel, each `+ 0x80 * x`):
 
@@ -124,3 +124,31 @@ through DMA2D. Its source address would be the glyph of a secret seed letter —
 a secret-dependent access performed by a bus master, which is precisely what the
 constant-time cell path exists to prevent, and which `make checkct` does not
 cover (its drivers are kdf/fors/th/saes/ct_eq only).
+
+**UPDATE 2026-10-22 — measured; not worth a driver for the busy film.** On the
+EVT screen unit, one real sign with the dev recorder (`ui-px-film-gaps`) and the
+DMA2D bench (`ui-px-dma2d-bench`, `secure/src/ui/px/dma2d_bench.rs`; see
+`pixel-ui-pilot.md` § Busy-film measurement):
+
+- A signing-film frame rendered 4.7 ms, of which **shapes 4.3 ms** (the orbit
+  is 12 anti-aliased discs of r = 13 px) and glyphs 0.1 ms. DMA2D could take
+  the glyphs and the band clear, ~0.2 ms of the frame.
+- One 48-column band: A4 blend 812 us on the CPU against 69 us on DMA2D
+  (~12x). DMA2D's blend differs from `blend_over` by up to 2/255 per channel
+  on most blended pixels, so any golden-covered screen drawn through it needs
+  a re-bless. A4 sources must have an even line length and offset and are low
+  nibble first (RM0456 Table 159 and the CEIF rules): our atlas is high nibble
+  first and not pre-rotated, so glyphs would need a re-bake.
+- Register-to-memory fill reports completion (TCIF, no error flag) yet leaves
+  the buffer untouched, as the first transfer after the clock enable and
+  after blends alike; the disassembly shows real loads and stores, and
+  neither RM0456 nor ES0499 explains it. Unresolved.
+- The CPU work went to pixel-identical rasteriser fixes instead (band clamp
+  for disc/ring rows, row-by-row disc runs skipping what a later disc covers,
+  seeded rim roots: shapes 4.3 -> 3.3 ms per frame).
+- The one route where DMA2D would pay: pre-rendered disc sprites (the orbit's
+  radius is constant) blitted by DMA2D, a redesign of the film's drawing with
+  a golden re-bless.
+- Besides `Item::Secret`, the dialed PIN digit and the typed seed letters
+  (`status_map::pin_row` / `letter_row`, drawn as ordinary text) must stay
+  off DMA2D too: its source address would be their glyph (#784).

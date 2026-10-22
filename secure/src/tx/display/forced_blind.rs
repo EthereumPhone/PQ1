@@ -1063,11 +1063,14 @@ mod tests {
             render(&input).err(),
             Some(ForcedRenderError::CalldataLength)
         );
-        input.calldata_len = 4097;
+        input.calldata_len = sphincs_tz_shared::MAX_TX_LEN as u32 + 1;
         assert_eq!(
             render(&input).err(),
             Some(ForcedRenderError::CalldataLength)
         );
+        // The per-call cap (8192 since 2026-10-22) itself renders.
+        input.calldata_len = sphincs_tz_shared::MAX_TX_LEN as u32;
+        assert!(render(&input).is_ok());
         input = fixture();
         input.call_gas_limit = [0xff; 32];
         assert_eq!(render(&input).err(), Some(ForcedRenderError::GasLane));

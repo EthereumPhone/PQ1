@@ -516,6 +516,11 @@ use pqsigner_ui_px::stream::phase::{start_window, REFRESH_CYC, STAMP_STALE_CYC};
 /// returns whether it did anything.
 fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
     let Some((lo, hi)) = start_window(xa, xend) else { return false };
+    // Dev (`ui-px-film-gaps`): the whole wait less the bands it rendered.
+    #[cfg(feature = "ui-px-film-gaps")]
+    let mut probe = super::film_gaps::SpinProbe::new();
+    #[cfg(feature = "ui-px-film-gaps")]
+    if let Some(edge) = crate::hw::lcd_te::last_edge() { super::film_gaps::phase_begin(crate::hw::lcd_te::cycles().wrapping_sub(edge), lo); }
     loop {
         let Some(edge) = crate::hw::lcd_te::last_edge() else { return false };
         let since = crate::hw::lcd_te::cycles().wrapping_sub(edge);
@@ -524,8 +529,12 @@ fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
         }
         // Until the range opens, in this refresh or the next.
         let Some(wait) = pqsigner_ui_px::stream::phase::wait(since, lo, hi) else {
+            #[cfg(feature = "ui-px-film-gaps")]
+            probe.first_wait(0);
             return true;
         };
+        #[cfg(feature = "ui-px-film-gaps")]
+        probe.first_wait(wait);
         if wait > BAND_RENDER_CYC && work() {
             continue;
         }
@@ -670,9 +679,13 @@ fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Op
         };
         phase_start(xa, xend, &mut work)
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_te_fb = crate::hw::lcd_te::cycles();
     if !phased {
         let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);
         let _ = synced;
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::wait(super::film_gaps::WAIT_TE, crate::hw::lcd_te::cycles().wrapping_sub(t_te_fb));
     }
     #[cfg(feature = "ui-px-frametime")]
     let t_edge = frametime::cycles();
@@ -892,20 +905,21 @@ fn present_bg(
         let w = BAND_W.min(xend - x0);
         let buf = k % N_BANDBUF;
         // The buffer's previous band (k - N_BANDBUF) must have left the wire.
-        // Bounded like the drain; a stream that died stops it at once.
-        #[cfg(feature = "ui-px-frametime")]
-        let t_w = frametime::cycles();
-        let mut spins = 0u32;
-        while k >= usize::from(lcd::async_sent()) + N_BANDBUF {
-            if !lcd::async_busy() || spins >= 4_000_000 {
+        // Not yet: leave the rest of the frame to later film ticks
+        // (`film_continue`) instead of spinning for it. The wire holds
+        // N_BANDBUF bands, ~2.7 ms each, against ~1.1 ms to render one: the
+        // spin was ~1 ms per film frame taken from the signer (EVT
+        // 2026-10-22). A stream that died stops the frame at once.
+        if k >= usize::from(lcd::async_sent()) + N_BANDBUF {
+            if !lcd::async_busy() {
                 return false;
             }
-            spins += 1;
-            core::hint::spin_loop();
-        }
-        #[cfg(feature = "ui-px-frametime")]
-        {
-            cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
+            // SAFETY: single-threaded film state, never touched from an ISR.
+            unsafe {
+                *core::ptr::addr_of_mut!(FILM_PENDING) =
+                    Some(Pending { x0, xend, k, at: crate::hw::lcd_te::cycles() });
+            }
+            return true;
         }
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
@@ -928,6 +942,152 @@ fn present_bg(
     true
 }
 
+/// The rest of a background film frame still to render: the next band's
+/// first column and the frame's end, its band index, and when the frame
+/// last made progress (cycles). Thread-only.
+#[cfg(feature = "ui-px-dma")]
+#[derive(Clone, Copy)]
+struct Pending {
+    x0: i32,
+    xend: i32,
+    k: usize,
+    at: u32,
+}
+
+/// See [`Pending`]. Set by `present_bg`, advanced by [`film_continue`],
+/// finished by `film_reap(true)`.
+#[cfg(feature = "ui-px-dma")]
+static mut FILM_PENDING: Option<Pending> = None;
+
+/// A pending frame that has not advanced for this long (a refresh and a
+/// half) is abandoned: the wire would otherwise sit idle mid-window.
+#[cfg(feature = "ui-px-dma")]
+const PENDING_STALL_CYC: u32 = REFRESH_CYC + REFRESH_CYC / 2;
+
+#[cfg(feature = "ui-px-dma")]
+fn film_pending() -> Option<Pending> {
+    // SAFETY: single-threaded film state, never touched from an ISR.
+    unsafe { *core::ptr::addr_of!(FILM_PENDING) }
+}
+
+/// Abandon the pending frame: stop its stream as failed, so `film_reap`
+/// forgets the glass and the next frame repaints in full.
+#[cfg(feature = "ui-px-dma")]
+fn film_pending_abort() {
+    lcd::async_abort();
+    // SAFETY: as `film_pending`.
+    unsafe { *core::ptr::addr_of_mut!(FILM_PENDING) = None };
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::cont_abort();
+}
+
+/// Render and queue the pending frame's next band from `anim`, which must
+/// be the state the frame was built from: the rebuilt display list's
+/// fingerprints are checked against those stored for the frame on the wire
+/// (`FILM_SIGS`), so a stepped animation cannot put half of one frame and
+/// half of another on the glass. `false` on any refusal (the caller aborts).
+/// Out of line: its `Frame` sits on the stack only while it runs.
+#[cfg(feature = "ui-px-dma")]
+#[inline(never)]
+fn film_render_pending(anim: &Anim, p: Pending) -> bool {
+    use pqsigner_ui_px::damage::{Damage, FrameSigs};
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t0 = crate::hw::lcd_te::cycles();
+    let Some(atlas) = assets::atlas_film_frame() else { return false };
+    let (marks, font) = (atlas.marks(), atlas.font());
+    let mut frame = Frame::new();
+    anim.build(&marks, &font, &mut frame);
+    // SAFETY: as `film_pending`.
+    let (stored, _) = unsafe { *core::ptr::addr_of!(FILM_SIGS) };
+    if FrameSigs::of(&frame, &font).damage(&stored) != Damage::Nothing {
+        return false;
+    }
+    // SAFETY: single-threaded film state; buffer `k % N_BANDBUF` held band
+    // `k - N_BANDBUF`, which the caller saw leave the wire.
+    let bands = unsafe { &mut *core::ptr::addr_of_mut!(BANDS) };
+    let w = BAND_W.min(p.xend - p.x0);
+    let buf = p.k % N_BANDBUF;
+    {
+        let Some(mut strip) = Strip::new(p.x0, w, &mut bands[buf].0[..]) else {
+            return false;
+        };
+        render_band(&frame, &font, &mut strip, &mut FrameCost::default());
+    }
+    if !lcd::async_queue(&bands[buf].0[..(w * H) as usize]) {
+        return false;
+    }
+    let next = p.x0 + w;
+    // SAFETY: as `film_pending`.
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM_PENDING) =
+            (next < p.xend).then(|| Pending { x0: next, xend: p.xend, k: p.k + 1, at: crate::hw::lcd_te::cycles() });
+    }
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::cont(crate::hw::lcd_te::cycles().wrapping_sub(t0));
+    true
+}
+
+/// A film tick while a background frame still has bands to render: render
+/// the next one once its buffer has left the wire. `true` while a frame is
+/// pending (the tick is spent on it, no new frame starts).
+#[cfg(feature = "ui-px-dma")]
+fn film_continue(anim: &Anim) -> bool {
+    let Some(p) = film_pending() else { return false };
+    if !lcd::async_busy() {
+        // The stream died; `film_reap` collects it.
+        // SAFETY: as `film_pending`.
+        unsafe { *core::ptr::addr_of_mut!(FILM_PENDING) = None };
+        return false;
+    }
+    if p.k >= usize::from(lcd::async_sent()) + N_BANDBUF {
+        if crate::hw::lcd_te::cycles().wrapping_sub(p.at) > PENDING_STALL_CYC {
+            film_pending_abort();
+        }
+        return true;
+    }
+    if !film_render_pending(anim, p) {
+        film_pending_abort();
+    }
+    // A tick that rendered: not a tick interval for the gate (`film_tick_spacing`).
+    FILM_TICK_DREW.store(true, Ordering::Relaxed);
+    true
+}
+
+#[cfg(not(feature = "ui-px-dma"))]
+fn film_continue(_anim: &Anim) -> bool {
+    false
+}
+
+/// Finish the pending frame's bands before it is collected (`film_reap`
+/// with `wait`): at a film's end, before another frame, before anything
+/// else draws. Never inside a film tick, whose caller holds the film's
+/// state borrowed: a frame still pending there is abandoned instead.
+#[cfg(feature = "ui-px-dma")]
+fn film_finish_pending() {
+    while let Some(p) = film_pending() {
+        if FILM_IN_TICK.load(Ordering::Relaxed) || !FILM_SET.load(Ordering::Relaxed) {
+            film_pending_abort();
+            return;
+        }
+        let mut spins = 0u32;
+        while p.k >= usize::from(lcd::async_sent()) + N_BANDBUF {
+            if !lcd::async_busy() || spins >= 4_000_000 {
+                film_pending_abort();
+                return;
+            }
+            spins += 1;
+            core::hint::spin_loop();
+        }
+        // SAFETY: `FILM_SET` holds a written film and no tick is running,
+        // so nothing else borrows it; a shared borrow for the build.
+        let anim = unsafe { &(*core::ptr::addr_of!(FILM)).assume_init_ref().0 };
+        if !film_render_pending(anim, p) {
+            film_pending_abort();
+            return;
+        }
+    }
+}
+
 /// A busy-film frame is streaming in the background, or has finished but not
 /// been collected: it holds `FRAME_IN_FLIGHT` and the band buffers.
 #[cfg(feature = "ui-px-dma")]
@@ -942,6 +1102,12 @@ static FILM_BG: AtomicBool = AtomicBool::new(false);
 fn film_reap(wait: bool) -> bool {
     if !FILM_BG.load(Ordering::Acquire) {
         return true;
+    }
+    if film_pending().is_some() {
+        if !wait {
+            return false;
+        }
+        film_finish_pending();
     }
     if lcd::async_busy() {
         if !wait {
@@ -958,7 +1124,11 @@ fn film_reap(wait: bool) -> bool {
     // Dev (tearing hunt): the frame has left the wire; check it.
     #[cfg(feature = "ui-px-film-gaps")]
     tear_end_bg();
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_wipe = crate::hw::lcd_te::cycles();
     wipe_scratch();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_REAP, crate::hw::lcd_te::cycles().wrapping_sub(t_wipe));
     FILM_BG.store(false, Ordering::Release);
     FRAME_IN_FLIGHT.store(false, Ordering::Release);
     true
@@ -1080,10 +1250,26 @@ fn wipe_scratch() {
 /// Rasterise one band, with or without the per-class cost split.
 fn render_band(frame: &Frame<'_>, font: &Font<'_>, strip: &mut Strip<'_>, cost: &mut FrameCost) {
     let _ = cost;
-    #[cfg(not(feature = "ui-px-frametime"))]
+    #[cfg(not(any(feature = "ui-px-frametime", feature = "ui-px-film-gaps")))]
     render_strip(frame, font, strip);
     #[cfg(feature = "ui-px-frametime")]
     pqsigner_ui_px::raster::render_strip_split(frame, font, strip, frametime::cycles, &mut cost.split);
+    #[cfg(all(feature = "ui-px-film-gaps", not(feature = "ui-px-frametime")))]
+    film_gaps_render(frame, font, strip);
+}
+
+/// Dev (`ui-px-film-gaps`): a band rendered while the film recorder runs is
+/// timed whole and per class into its eighth page (DMA2D sizing, 2026-10-22).
+#[cfg(all(feature = "ui-px-film-gaps", not(feature = "ui-px-frametime")))]
+fn film_gaps_render(frame: &Frame<'_>, font: &Font<'_>, strip: &mut Strip<'_>) {
+    if !super::film_gaps::recording() {
+        render_strip(frame, font, strip);
+        return;
+    }
+    let mut split = pqsigner_ui_px::raster::RenderSplit::default();
+    let t0 = crate::hw::lcd_te::cycles();
+    pqsigner_ui_px::raster::render_strip_split(frame, font, strip, crate::hw::lcd_te::cycles, &mut split);
+    super::film_gaps::render(crate::hw::lcd_te::cycles().wrapping_sub(t0), &split);
 }
 
 /// Build the display list for `anim` and present it. `overlay` is the bench
@@ -1347,6 +1533,17 @@ pub fn film_start_with(s: &Screen) {
     // `film_abort`), and forget the previous film's window.
     crate::hw::lcd_te::stamps(true);
     FILM_WIN.store(0, Ordering::Relaxed);
+    // A new film's tick spacing starts over (not an earlier film's), and no
+    // frame of an earlier film is pending (`film_reap(true)` above
+    // finished it).
+    #[cfg(feature = "ui-px-dma")]
+    // SAFETY: as `film_pending`.
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM_PENDING) = None;
+    }
+    FILM_TICK_AT.store(0, Ordering::Relaxed);
+    FILM_TICK_DT.store(FILM_TICK_DT_START, Ordering::Relaxed);
+    FILM_TICK_DREW.store(false, Ordering::Relaxed);
     #[cfg(feature = "ui-px-film-gaps")]
     film_gaps_begin();
     let now = timeout::now();
@@ -1407,13 +1604,22 @@ fn band_window(c0: i32, c1: i32) -> u32 {
 static FILM_WIN: AtomicU32 = AtomicU32::new(0);
 
 /// Build plus the first band's render, before a partial frame can start
-/// streaming: ~2 ms on the EVT (1.0 ms other + ~1.1 ms per band, measured
-/// 2026-10-19).
-const FILM_LEAD_CYC: u32 = 320_000;
+/// streaming: 1.3 ms. It was 2 ms (1.0 ms other + ~1.1 ms per band,
+/// measured 2026-10-19); by 2026-10-22 the build, damage and atlas views
+/// measured ~0.1 ms together and a band ~1.1 ms, so 2 ms admitted frames
+/// ~0.8 ms early, to spin.
+const FILM_LEAD_CYC: u32 = 208_000;
 
 /// How long a frame may spin for its start range rather than wait for a
-/// later tick: 2 ms.
-const FILM_SPIN_OK_CYC: u32 = 320_000;
+/// later tick: 0.2 ms. While a signature hashes, a tick comes every few
+/// microseconds, so the FIRST tick in this allowance always admits the
+/// frame at its earliest: at 2 ms, 95% of frames reached `phase_start` 2 ms
+/// or more before their range opened and spun 2.6 ms per frame on average
+/// (EVT 2026-10-22), CPU the signer never got back. A start range is ~9-10
+/// ms wide for the film's 3-4-band windows (`phase::start_window`), so a
+/// frame admitted at its opening has room for a late lead. Sparse ticks
+/// still fall back to drawing now and spinning (`film_phase_ok`).
+const FILM_SPIN_OK_CYC: u32 = 32_000;
 
 /// Whether a film frame may start at this tick (#934 stage 1). With the TE
 /// stamps on, a partial frame should start when the beam is in its window's
@@ -1422,23 +1628,48 @@ const FILM_SPIN_OK_CYC: u32 = 320_000;
 /// Without stamps (or before the first partial frame) every due tick draws,
 /// as before.
 fn film_phase_ok() -> bool {
-    // The time between ticks, for guessing where the next one lands.
-    let now = crate::hw::lcd_te::cycles();
-    let dt = now.wrapping_sub(FILM_TICK_AT.swap(now, Ordering::Relaxed)).min(REFRESH_CYC);
-    let ema = FILM_TICK_DT.load(Ordering::Relaxed);
-    let dt = (ema * 3 + dt) / 4;
-    FILM_TICK_DT.store(dt, Ordering::Relaxed);
+    film_phase_go(crate::hw::lcd_te::cycles(), FILM_TICK_DT.load(Ordering::Relaxed))
+}
 
-    let Some(edge) = crate::hw::lcd_te::last_edge() else { return true };
+/// Smooth the film's tick spacing, at every tick ([`film_tick_due`]): the
+/// interval since the previous tick, except right after a tick that drew a
+/// frame (that interval is the frame). It used to be the interval between
+/// GATE calls, i.e. one per frame: the frame interval, clamped to a refresh,
+/// which predicted the next tick where this one was and drew every early
+/// frame at once to spin (EVT 2026-10-22, 2.6 ms per frame); and a version
+/// updated only after a refusal locked in whatever an earlier film left.
+fn film_tick_spacing() {
+    let now = crate::hw::lcd_te::cycles();
+    let last = FILM_TICK_AT.swap(now, Ordering::Relaxed);
+    if last != 0 && !FILM_TICK_DREW.swap(false, Ordering::Relaxed) {
+        let gap = now.wrapping_sub(last).min(REFRESH_CYC);
+        let dt = FILM_TICK_DT.load(Ordering::Relaxed);
+        FILM_TICK_DT.store((dt * 3 + gap) / 4, Ordering::Relaxed);
+    }
+}
+
+/// [`film_phase_ok`]'s decision at `now` with ticks `dt` cycles apart.
+fn film_phase_go(now: u32, dt: u32) -> bool {
+    let Some(edge) = crate::hw::lcd_te::last_edge() else {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'E', None);
+        return true;
+    };
     let win = FILM_WIN.load(Ordering::Relaxed);
     if win == 0 {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'W', None);
         return true;
     }
     let Some((lo, hi)) = start_window((win >> 16) as i32, (win & 0xFFFF) as i32) else {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'X', None);
         return true;
     };
     let since = now.wrapping_sub(edge);
     if since > STAMP_STALE_CYC {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'S', None);
         return true;
     }
     // Starting at `at` cycles after an edge is fine if it is inside the start
@@ -1446,20 +1677,32 @@ fn film_phase_ok() -> bool {
     let ok = |at: u32| pqsigner_ui_px::stream::phase::start_ok(at, lo, hi, FILM_SPIN_OK_CYC);
     // Where the beam will be when the stream could start.
     let at = (since + FILM_LEAD_CYC) % REFRESH_CYC;
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::gate_vals(dt, at, lo, hi);
     if ok(at) {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'K', Some((since, lo)));
         return true;
     }
-    // Not now. Wait for the next tick only if it should land in range;
-    // when ticks are sparse (CPU-bound work) and it would miss too, draw now
-    // and let the presenter spin, rather than drop a tick and stutter.
-    !ok((at + dt) % REFRESH_CYC)
+    // Not now. Wait for the next tick unless it would land past the range
+    // being waited for; when ticks are that sparse (coarse CPU-bound work),
+    // draw now and let the presenter spin, rather than skip the range and
+    // stutter.
+    let go = !pqsigner_ui_px::stream::phase::wait_for_next_tick(at, dt, hi);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::gate(if go { b'F' } else { b'R' }, Some((since, lo)));
+    go
 }
 
-/// Cycle count at the film's previous tick, and the smoothed interval
-/// between ticks (~1 ms in chip waits, ~6 ms in the signer, longer in
-/// coarse CPU-bound work).
+/// Cycle count at the film's previous tick (0: none yet in this film), the
+/// smoothed interval between ticks (~0.3 ms while the signer hashes,
+/// `HASH_TICK_EVERY`; ~1 ms in chip waits; longer in coarse CPU-bound
+/// work), and whether the previous tick drew a frame. Reset by each film's
+/// start ([`film_start_with`]).
 static FILM_TICK_AT: AtomicU32 = AtomicU32::new(0);
-static FILM_TICK_DT: AtomicU32 = AtomicU32::new(160_000);
+static FILM_TICK_DT: AtomicU32 = AtomicU32::new(FILM_TICK_DT_START);
+static FILM_TICK_DREW: AtomicBool = AtomicBool::new(false);
+const FILM_TICK_DT_START: u32 = 160_000;
 
 /// Present one busy-film frame, streaming only the bands whose columns
 /// changed since the film's previous frame (#934, scoped to the film, owner
@@ -1470,8 +1713,14 @@ static FILM_TICK_DT: AtomicU32 = AtomicU32::new(160_000);
 /// never `complete`.
 fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) -> FrameCost {
     use pqsigner_ui_px::damage::{Damage, FrameSigs};
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t0 = crate::hw::lcd_te::cycles();
     let mut frame = Frame::new();
     anim.build(marks, font, &mut frame);
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t1 = crate::hw::lcd_te::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_BUILD, t1.wrapping_sub(t0));
     let sigs = FrameSigs::of(&frame, font);
     // SAFETY: single-threaded driver state (no ISR touches it); copied out.
     let (prev, glass) = unsafe { *core::ptr::addr_of!(FILM_SIGS) };
@@ -1480,6 +1729,10 @@ fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) ->
     } else {
         sigs.damage(&prev)
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t2 = crate::hw::lcd_te::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_SIGS, t2.wrapping_sub(t1));
     let cost = match damage {
         Damage::Nothing => FrameCost { streamed: true, ..FrameCost::default() },
         Damage::Cols(x0, x1) => {
@@ -1488,6 +1741,8 @@ fn present_film(anim: &Anim, marks: &Marks<'_>, font: &Font<'_>, first: bool) ->
         }
         Damage::All => present_frame_cols(&frame, font, false, None, false),
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_PRESENT, crate::hw::lcd_te::cycles().wrapping_sub(t2));
     let kept = if cost.streamed { sigs } else { FrameSigs::UNKNOWN };
     // SAFETY: as above; the only writer.
     unsafe {
@@ -1822,6 +2077,39 @@ fn film_gaps_page() {
     dev_page(&rows);
     super::film_gaps::rows7(&mut rows);
     dev_page(&rows);
+    super::film_gaps::rows8(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows9(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows10(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows11(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows12(&mut rows);
+    dev_page(&rows);
+    #[cfg(feature = "ui-px-dma2d-bench")]
+    dma2d_bench_pages();
+}
+
+/// Dev (`ui-px-dma2d-bench`): the DMA2D against CPU micro-bench, on the band
+/// buffers (the film has landed, nothing streams), then its two pages.
+#[cfg(feature = "ui-px-dma2d-bench")]
+fn dma2d_bench_pages() {
+    let Ok(atlas) = super::assets::verify_atlas() else { return };
+    let font = atlas.font();
+    // SAFETY: single-threaded secure UI; the film has landed and
+    // `film_reap` drained every transfer, so nothing else holds a band.
+    let bands = unsafe { &mut *core::ptr::addr_of_mut!(BANDS) };
+    let [a, b, c] = bands;
+    let res = super::dma2d_bench::run(&font, &mut a.0, &mut b.0, &mut c.0);
+    wipe_scratch();
+    let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
+    res.rows_speed(&mut rows);
+    dev_page(&rows);
+    res.rows_exact(&mut rows);
+    dev_page(&rows);
+    res.rows_r2m(&mut rows);
+    dev_page(&rows);
 }
 
 /// Whether a chip wait's tick ([`film_tick_chip`]) draws back to back. On
@@ -1854,6 +2142,13 @@ pub fn film_tick_chip() {
 
 /// Finished digests counted by [`film_tick_hash`].
 static FILM_HASHES: AtomicU32 = AtomicU32::new(0);
+
+/// Dev (`ui-px-film-gaps`): the digests counted so far, for the recorder's
+/// throughput page.
+#[cfg(feature = "ui-px-film-gaps")]
+pub fn film_hash_count() -> u32 {
+    FILM_HASHES.load(Ordering::Relaxed)
+}
 
 /// Digests between two looks at the film from the hash driver: ~0.3 ms of
 /// signing at ~4.6 us a digest, fine enough for [`film_phase_ok`] to catch
@@ -1937,6 +2232,7 @@ fn film_gaps_refused(src: u8, why: u8) {
 }
 
 fn film_tick_due(back_to_back: bool, _src: u8) {
+    film_tick_spacing();
     let now = timeout::now();
     if !FILM_SET.load(Ordering::Relaxed) {
         #[cfg(feature = "ui-px-film-gaps")]
@@ -1947,6 +2243,9 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
     // wrote it, and no other reference is live during this call
     // (`FILM_IN_TICK` keeps a nested tick out).
     let (anim, last) = unsafe { (*core::ptr::addr_of_mut!(FILM)).assume_init_mut() };
+    if film_continue(anim) {
+        return;
+    }
     let due = if back_to_back {
         now.wrapping_sub(*last) >= FRAME_PERIOD_MS
     } else {
@@ -1970,13 +2269,24 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
     }
     #[cfg(all(feature = "ui-px-film-bench", feature = "ui-px-frametime"))]
     let t_frame = frametime::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_tick = crate::hw::lcd_te::cycles();
     let Some(atlas) = assets::atlas_film_frame() else {
         #[cfg(feature = "ui-px-film-gaps")]
         film_gaps_refused(_src, b'N');
         return;
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_atlas = crate::hw::lcd_te::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_ATLAS, t_atlas.wrapping_sub(t_tick));
     anim.step(now);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_STEP, crate::hw::lcd_te::cycles().wrapping_sub(t_atlas));
     let _cost = present_film(anim, &atlas.marks(), &atlas.font(), false);
+    FILM_TICK_DREW.store(true, Ordering::Relaxed);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_FRAME, crate::hw::lcd_te::cycles().wrapping_sub(t_tick));
     #[cfg(all(feature = "ui-px-film-bench", feature = "ui-px-frametime"))]
     bench_split_add(&_cost, frametime::cycles().wrapping_sub(t_frame));
     let after = timeout::now();

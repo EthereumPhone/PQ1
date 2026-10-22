@@ -34,7 +34,9 @@
 
 // Re-exported for the tests below + `super::*` consumers. `pub use`
 // keeps them used in the firmware (non-test) build too.
-pub use sphincs_tz_shared::{EXEC_TRANSACTION_MIN_CALLDATA_LEN, EXEC_TRANSACTION_SELECTOR};
+pub use sphincs_tz_shared::{
+    EXEC_TRANSACTION_MAX_CALLDATA_LEN, EXEC_TRANSACTION_MIN_CALLDATA_LEN, EXEC_TRANSACTION_SELECTOR,
+};
 
 use super::Eip712Error;
 
@@ -115,6 +117,11 @@ pub fn verify_and_bind_exec<'a>(
     chain_id: u64,
     userop_to: &[u8; 20],
 ) -> Option<VerifiedSafeExec<'a>> {
+    // Routing policy, not ABI shape: the Safe route keeps its pre-2026-10-22
+    // 4096-B input domain (see `EXEC_TRANSACTION_MAX_CALLDATA_LEN`).
+    if inner_data.len() > EXEC_TRANSACTION_MAX_CALLDATA_LEN {
+        return None;
+    }
     let decoded = decode_exec_transaction(inner_data).ok()?;
     if decoded.operation != 0
         && !super::multi_send::is_multisend_claim(decoded.operation, &decoded.to, decoded.data)
@@ -185,6 +192,12 @@ pub(crate) fn verify_and_bind_exec_into<'a>(
     // intentionally mirror the Kani-backed pure decoder used by
     // `decode_exec_transaction`, but no aggregate crosses a call boundary.
     if inner_data.len() < EXEC_TRANSACTION_MIN_CALLDATA_LEN {
+        complete_reject!();
+    }
+    // Routing policy (same as `verify_and_bind_exec`): the Safe route keeps
+    // its pre-2026-10-22 4096-B input domain now that MAX_TX_LEN is 8192.
+    // The selector already claimed the Safe route, so this is a refusal.
+    if inner_data.len() > EXEC_TRANSACTION_MAX_CALLDATA_LEN {
         complete_reject!();
     }
     if inner_data[..4] != EXEC_TRANSACTION_SELECTOR {
@@ -721,6 +734,52 @@ mod tests {
         assert_eq!(verified.safe_address, fixture_addr(0xBB));
         assert_eq!(verified.decoded.data, &[0xCA, 0xFE]);
         assert_eq!(verified.decoded.signatures, &[0x01, 0x02]);
+    }
+
+    /// The Safe route keeps its pre-2026-10-22 4096-B domain although a
+    /// UserOp call may now carry 8192 B. Canonical encodings are 388 + 32k
+    /// bytes long, so the edge is 4068 (largest accepted) vs 4100.
+    #[test]
+    fn safe_exec_route_keeps_the_4096_byte_domain() {
+        let exec_with_data = |len: usize| {
+            encode_exec(
+                fixture_addr(0xAA),
+                fixture_u256(0),
+                &vec![0x5Au8; len],
+                0,
+                fixture_u256(0),
+                fixture_u256(0),
+                fixture_u256(0),
+                [0u8; 20],
+                [0u8; 20],
+                &[],
+            )
+        };
+        let strict = |cd: &[u8]| {
+            let mut out = None;
+            let mut cfi = crate::fi::CfiCounter::new();
+            unsafe { core::ptr::write_volatile(&mut out, None) };
+            verify_and_bind_exec_into(cd, 1, &fixture_addr(0xBB), &mut out, &mut cfi);
+            // A refusal still completes (one CFI step), it just publishes None.
+            assert_eq!(cfi.check_into_sentinel(EXEC_VERIFY_CFI_EXPECTED), crate::fi::OK_SENTINEL);
+            out.is_some()
+        };
+
+        let at_edge = exec_with_data(115 * 32);
+        assert_eq!(at_edge.len(), 4068);
+        assert!(verify_and_bind_exec(&at_edge, 1, &fixture_addr(0xBB)).is_some());
+        assert!(strict(&at_edge));
+
+        for len in [115 * 32 + 1, 4096, 7700] {
+            let over = exec_with_data(len);
+            assert!(over.len() > EXEC_TRANSACTION_MAX_CALLDATA_LEN);
+            assert!(over.len() <= sphincs_tz_shared::MAX_TX_LEN);
+            // Well-formed (the pure decoder accepts it), so the refusal below
+            // is the routing cap and not a decode failure.
+            assert!(decode_exec_transaction(&over).is_ok());
+            assert!(verify_and_bind_exec(&over, 1, &fixture_addr(0xBB)).is_none(), "len {len}");
+            assert!(!strict(&over), "len {len}");
+        }
     }
 
     #[test]

@@ -26,6 +26,8 @@ use sphincs_tz_shared::{
     SIG_TYPE1_LEN, SIG_TYPE2_LEN, TRAILER_KIND_ERC20, TRAILER_KIND_ERC7730, TRAILER_KIND_SAFE_V1,
     OWNER_BYTES_LEN, TYPE1_ROTATION_SECTION_LEN,
 };
+#[cfg(not(feature = "stm32u585"))]
+use sphincs_tz_shared::{MAX_TX_LEN, SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN};
 
 // === Scratch buffers =======================================================
 
@@ -34,9 +36,19 @@ static mut SIG_BUF: [u8; MAX_SIGN_RESPONSE_LEN] = [0u8; MAX_SIGN_RESPONSE_LEN];
 // carries a native 204-byte order trailer plus a safe_v1 trailer
 // whose raw_data is the ~484-byte multiSend calldata (2 + 281 + 2 + 484)
 // on top of the 36 B `approveHash` inner_data — ~1.1 KB of trailers. We
-// don't need the firmware's 16 KB SNAP_LEN budget because every e2e
-// scenario uses small inner_data.
-static mut PAYLOAD_BUF: [u8; SIGN_USEROP_HEADER_LEN + 4096] = [0u8; SIGN_USEROP_HEADER_LEN + 4096];
+// don't need the firmware's full SNAP_LEN budget because every e2e scenario
+// except the QEMU-only Scenario 7* uses small inner_data.
+//
+// QEMU (no `stm32u585`): sized for the largest batch request, so the
+// 2026-10-22 per-call-cap scenarios (Scenario 7*) can send an 8 KB single
+// call and a batch at the summed-data cap; QEMU's NS map has 128 KB. On
+// hardware NS SRAM2 is 64 KB and tight, so the buffer stays at the old size
+// and Scenario 7* is QEMU-only.
+#[cfg(not(feature = "stm32u585"))]
+const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN;
+#[cfg(feature = "stm32u585")]
+const PAYLOAD_BUF_LEN: usize = SIGN_USEROP_HEADER_LEN + 4096;
+static mut PAYLOAD_BUF: [u8; PAYLOAD_BUF_LEN] = [0u8; PAYLOAD_BUF_LEN];
 
 // === Helpers ===============================================================
 
@@ -133,6 +145,136 @@ fn build_minimal_safe_exec(to: &[u8; 20]) -> [u8; EXEC_TRANSACTION_MIN_CALLDATA_
     out[4 + 2 * 32 + 28..4 + 3 * 32].copy_from_slice(&(HEAD_LEN as u32).to_be_bytes());
     out[4 + 9 * 32 + 28..4 + 10 * 32].copy_from_slice(&((HEAD_LEN + 32) as u32).to_be_bytes());
     out
+}
+
+/// Canonical `Safe.execTransaction(...)` calldata whose `data` argument is
+/// `data_len` pattern bytes (empty signatures). Total length is
+/// `EXEC_TRANSACTION_MIN_CALLDATA_LEN + data_len` rounded up to a word.
+#[cfg(not(feature = "stm32u585"))]
+fn build_safe_exec_with_data(out: &mut [u8], to: &[u8; 20], data_len: usize) -> usize {
+    const HEAD_LEN: usize = 10 * 32;
+    let padded = (data_len + 31) & !31;
+    let total = 4 + HEAD_LEN + 32 + padded + 32;
+    out[..total].fill(0);
+    out[..4].copy_from_slice(&EXEC_TRANSACTION_SELECTOR);
+    out[4 + 12..4 + 32].copy_from_slice(to);
+    out[4 + 2 * 32 + 28..4 + 3 * 32].copy_from_slice(&(HEAD_LEN as u32).to_be_bytes());
+    let sig_off = HEAD_LEN + 32 + padded;
+    out[4 + 9 * 32 + 28..4 + 10 * 32].copy_from_slice(&(sig_off as u32).to_be_bytes());
+    let len_word = 4 + HEAD_LEN;
+    out[len_word + 28..len_word + 32].copy_from_slice(&(data_len as u32).to_be_bytes());
+    for (i, b) in out[len_word + 32..len_word + 32 + data_len].iter_mut().enumerate() {
+        *b = (i as u8).wrapping_mul(13).wrapping_add(1);
+    }
+    total
+}
+
+/// Inner calldata for the per-call-cap scenarios: Universal Router
+/// `execute(bytes,bytes[],uint256)` selector followed by a byte pattern. The
+/// router is not in the clear-sign catalogue, so the device takes the loud
+/// blind-sign route (`Data: N B` + calldata hash), the same as the real
+/// 5,050-byte swap that motivated the raise.
+#[cfg(not(feature = "stm32u585"))]
+fn fill_universal_router_call(out: &mut [u8]) {
+    out[..4].copy_from_slice(&[0x35, 0x93, 0x56, 0x4c]);
+    for (i, b) in out[4..].iter_mut().enumerate() {
+        *b = (i as u8).wrapping_mul(29).wrapping_add(7);
+    }
+}
+
+/// Scenario 7*: the 2026-10-22 per-call calldata cap (8192 B) and the
+/// unchanged batch summed-data cap (16,384 B), on a fresh chain so no
+/// earlier scenario's slot or nonce state moves.
+#[cfg(not(feature = "stm32u585"))]
+fn scenarios_calldata_8k(wallet_sender: &[u8; 20]) {
+    const CHAIN_C: u64 = 8453; // Base
+    const UNIVERSAL_ROUTER: [u8; 20] = [0x66; 20];
+    static mut BIG: [u8; MAX_TX_LEN + 1] = [0u8; MAX_TX_LEN + 1];
+    static mut SAFE_EXEC: [u8; MAX_TX_LEN] = [0u8; MAX_TX_LEN];
+
+    unsafe {
+        let big = &mut *core::ptr::addr_of_mut!(BIG);
+        fill_universal_router_call(&mut big[..]);
+        let payload = &mut *core::ptr::addr_of_mut!(PAYLOAD_BUF);
+        let sig = &mut *core::ptr::addr_of_mut!(SIG_BUF);
+
+        // 7a: the deepest stack path — slot keygen + bootstrap Type-1 +
+        // Type-2 — signing a call at the full per-call cap.
+        hprintln!("[NS][e2e] Scenario 7a: 8 KB call on a slot rotation (Type 1 + Type 2)");
+        let len = build_sign_payload(
+            payload, wallet_sender, CHAIN_C, 1, true, 1, &UNIVERSAL_ROUTER, 0,
+            &big[..MAX_TX_LEN],
+        );
+        let status = nsc_api::sign_userop(&payload[..len], sig);
+        assert_eq!(status, NscStatus::Ok as u32, "7a: 8192-byte call must sign (got {})", status);
+        let (t1_present, t2_len) = parse_response(sig);
+        assert!(t1_present, "7a must emit a Type 1");
+        hprintln!("[NS][e2e]   → data_len={}, t1_present={}, t2_len={}", MAX_TX_LEN, t1_present, t2_len);
+
+        // 7b: the motivating size on the registered slot (Type 2 only).
+        hprintln!("[NS][e2e] Scenario 7b: 5050-byte call signs (Type 2 only)");
+        let len = build_sign_payload(
+            payload, wallet_sender, CHAIN_C, 1, false, 2, &UNIVERSAL_ROUTER, 0, &big[..5050],
+        );
+        let status = nsc_api::sign_userop(&payload[..len], sig);
+        assert_eq!(status, NscStatus::Ok as u32, "7b: 5050-byte call must sign (got {})", status);
+        let (t1_present, _) = parse_response(sig);
+        assert!(!t1_present, "7b must NOT emit a Type 1");
+
+        // 7c: one byte over the per-call cap never reaches a screen.
+        hprintln!("[NS][e2e] Scenario 7c: 8193-byte call is refused");
+        let len = build_sign_payload(
+            payload, wallet_sender, CHAIN_C, 1, false, 3, &UNIVERSAL_ROUTER, 0,
+            &big[..MAX_TX_LEN + 1],
+        );
+        let status = nsc_api::sign_userop(&payload[..len], sig);
+        assert_eq!(status, NscStatus::InvalidPointer as u32, "7c: 8193 bytes must be refused (got {})", status);
+
+        // 7d: approve + 8 KB swap as one batch.
+        hprintln!("[NS][e2e] Scenario 7d: batch [approve, 8 KB call] signs");
+        let approve = build_erc20_approve_calldata(&UNIVERSAL_ROUTER, 1_000_000);
+        let inner = [
+            E2eBatchTx { to: [0x77; 20], value_wei: 0, data: &approve },
+            E2eBatchTx { to: UNIVERSAL_ROUTER, value_wei: 0, data: &big[..MAX_TX_LEN] },
+        ];
+        let len = build_batch_payload(payload, wallet_sender, CHAIN_C, 1, false, 3, &inner);
+        let status = nsc_api::sign_userop_batch(&payload[..len], sig);
+        assert_eq!(status, NscStatus::Ok as u32, "7d: [68, 8192] batch must sign (got {})", status);
+
+        // 7e: each member within the per-call cap but the sum one byte over
+        // the batch cap — refused at parse time, before any screen.
+        hprintln!("[NS][e2e] Scenario 7e: batch over the summed-data cap is refused");
+        let one = [0x01u8; 1];
+        let inner = [
+            E2eBatchTx { to: UNIVERSAL_ROUTER, value_wei: 0, data: &big[..MAX_TX_LEN] },
+            E2eBatchTx { to: UNIVERSAL_ROUTER, value_wei: 0, data: &big[..MAX_TX_LEN] },
+            E2eBatchTx { to: [0x77; 20], value_wei: 0, data: &one },
+        ];
+        let len = build_batch_payload(payload, wallet_sender, CHAIN_C, 1, false, 4, &inner);
+        let status = nsc_api::sign_userop_batch(&payload[..len], sig);
+        assert_eq!(status, NscStatus::InvalidPointer as u32, "7e: Σ 16,385 must be refused (got {})", status);
+
+        // 7f: the Safe route keeps its 4096-byte domain. Liveness control at
+        // the largest canonical size under the cap, then just over it.
+        hprintln!("[NS][e2e] Scenario 7f: Safe exec keeps the 4096-byte domain");
+        let safe_address = [0x5Au8; 20];
+        let safe_exec = &mut *core::ptr::addr_of_mut!(SAFE_EXEC);
+        let n = build_safe_exec_with_data(&mut safe_exec[..], &[0xA5u8; 20], 115 * 32);
+        assert_eq!(n, 4068);
+        let len = build_sign_payload(
+            payload, wallet_sender, CHAIN_C, 1, false, 4, &safe_address, 0, &safe_exec[..n],
+        );
+        let status = nsc_api::sign_userop(&payload[..len], sig);
+        assert_eq!(status, NscStatus::Ok as u32, "7f: 4068-byte Safe exec must sign (got {})", status);
+        let n = build_safe_exec_with_data(&mut safe_exec[..], &[0xA5u8; 20], 115 * 32 + 1);
+        assert_eq!(n, 4100);
+        let len = build_sign_payload(
+            payload, wallet_sender, CHAIN_C, 1, false, 5, &safe_address, 0, &safe_exec[..n],
+        );
+        let status = nsc_api::sign_userop(&payload[..len], sig);
+        assert_eq!(status, NscStatus::InvalidPointer as u32, "7f: 4100-byte Safe exec must be refused (got {})", status);
+        hprintln!("[NS][e2e]   → per-call cap scenarios passed");
+    }
 }
 
 /// Canonical ABI for the synthetic E2E
@@ -3234,6 +3376,10 @@ Issued At: 2026-10-19T12:00:00Z";
         );
         hprintln!("[NS][e2e]   → refused as expected (v3 required)");
     }
+
+    // Scenario 7*: per-call cap 8192 + batch summed-data cap (QEMU only).
+    #[cfg(not(feature = "stm32u585"))]
+    scenarios_calldata_8k(&wallet_sender);
 
         // counter at MAX and SE050 user UserID silicon-locked; next boot
     // recovers via `trigger_lockout_wipe` + fresh admin-wipe

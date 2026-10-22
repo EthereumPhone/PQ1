@@ -45,8 +45,8 @@
 //! way it submits any other; only the inner `callData` differs.
 
 use sphincs_tz_shared::{
-    NscStatus, C10_SIG_LEN, GPV2_SETTLEMENT_ADDRESS, MAX_BATCH_TXS, MAX_SIGN_RESPONSE_LEN,
-    MAX_TX_LEN, OWNER_BYTES_LEN, PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR,
+    NscStatus, C10_SIG_LEN, GPV2_SETTLEMENT_ADDRESS, MAX_BATCH_CALL_DATA_TOTAL_LEN, MAX_BATCH_TXS,
+    MAX_SIGN_RESPONSE_LEN, MAX_TX_LEN, OWNER_BYTES_LEN, PQ_ADD_OWNER_BYTES_SELECTOR, PQ_CREATE_ACCOUNT_SELECTOR,
     PQ_INIT_CODE_LEN, TYPE1_ROTATION_SECTION_LEN,
     PQ_SMART_WALLET_FACTORY, SET_PRE_SIGNATURE_SELECTOR, SIGN_USEROP_BATCH_HEADER_LEN,
     SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, SIGN_USEROP_BATCH_TX_PREFIX_LEN,
@@ -82,7 +82,8 @@ use crate::ui;
 use super::batch_trailers::parse_all as parse_batch_trailers;
 
 /// Snapshot buffer sized for the worst-case batch payload (header +
-/// MAX_BATCH_TXS × (per-tx prefix + MAX_TX_LEN data)).
+/// MAX_BATCH_TXS × per-tx prefix + MAX_BATCH_CALL_DATA_TOTAL_LEN data +
+/// trailers).
 const SNAP_LEN: usize = SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN;
 
 /// One parsed inner tx, pointing into the TOCTOU snapshot.
@@ -195,9 +196,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
     // The pixel UI (`ui-px`) overlays its screen transcript on the shared
-    // buffer's tail past THIS request's snapshot (the batch maximum fills the
-    // whole buffer, so a request too large to leave room for the transcript
-    // is refused on the pixel route — `px_screens_view` → "px scratch").
+    // buffer's tail past THIS request's snapshot (`total_len`, not the batch
+    // maximum). A request too large to leave `SCREENS_BYTES` behind it is
+    // refused on the pixel route — `px_screens_view` → "px scratch". On
+    // `ui-px` builds the buffer is sized for the single-sign maximum plus the
+    // transcript (44,592 B), so batches up to 32,300 B get the pixel route.
     let (snap_full, px_scratch) =
         (&mut *core::ptr::addr_of_mut!(super::SIGN_SNAP_BUF)).split_at_mut(total_len);
     #[cfg(not(feature = "ui-px"))]
@@ -348,6 +351,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // ── 5. Parse N inner-tx blocks ──────────────────────────────────
     let mut parsed: [Option<ParsedTx>; MAX_BATCH_TXS] = [const { None }; MAX_BATCH_TXS];
     let mut cursor = SIGN_USEROP_BATCH_HEADER_LEN;
+    // Summed member data. Each member may carry up to `MAX_TX_LEN` (8192) but
+    // the batch as a whole stays within `MAX_BATCH_CALL_DATA_TOTAL_LEN`
+    // (16,384) — refused here, before trailers, sender binding or any screen,
+    // so the encoder below can never refuse a batch the user already confirmed.
+    let mut data_total: usize = 0;
     for i in 0..batch_count {
         if cursor + SIGN_USEROP_BATCH_TX_PREFIX_LEN > total_len {
             ui::show_status("Batch sign", "truncated tx");
@@ -363,6 +371,11 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         cursor += 2;
         if data_len > MAX_TX_LEN || cursor + data_len > total_len {
             ui::show_status("Batch sign", "bad data_len");
+            return NscStatus::InvalidPointer as u32;
+        }
+        data_total += data_len;
+        if data_total > MAX_BATCH_CALL_DATA_TOTAL_LEN {
+            ui::show_status("Batch sign", "batch data too big");
             return NscStatus::InvalidPointer as u32;
         }
         let data_off = cursor;

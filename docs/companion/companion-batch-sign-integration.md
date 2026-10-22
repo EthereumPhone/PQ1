@@ -21,7 +21,9 @@ the atomic multi-call **batch sign** flow. Do not use the legacy broad
   full secure-world-derived signer address, and then a final "Sign N txs?"
   gate that repeats that signer identity.
 * Hard caps: `MAX_BATCH_TXS = 4` inner calls per UserOp, each call's
-  `data` ≤ `MAX_TX_LEN = 4096` bytes.
+  `data` ≤ `MAX_TX_LEN = 8192` bytes (4096 on firmware without
+  `CAP_SIGN_USEROP_DATA_8K`, GET_DEVICE_INFO bit 5), and the members' data
+  summed ≤ `MAX_BATCH_CALL_DATA_TOTAL_LEN = 16384` (UPDATE 2026-10-22).
 * Same flag layout as single-tx. First deployment uses
   `FLAG_INCLUDE_INIT_CODE` with slot 0. `FLAG_REGISTER_SLOT` (slot rotation)
   is usable against a device reporting protocol 0x0203+, whose response
@@ -71,7 +73,7 @@ is smaller than `executeBatchWithOffchainCount` for `N=1`).
 [278..  )  inner-tx blocks, repeated `batch_count` times:
              [20]  to_address
              [32]  value (u256 BE)
-             [ 2]  data_len (u16 BE, 0..=MAX_TX_LEN)
+             [ 2]  data_len (u16 BE, 0..=MAX_TX_LEN; Σ ≤ 16384)
              [N]   data
 [...   )   TLV-tagged trailer list (see next section)
 ```
@@ -338,7 +340,8 @@ constants header (preferred):
 | `SIGN_USEROP_BATCH_HEADER_LEN` | `278` | `shared::SIGN_USEROP_BATCH_HEADER_LEN` |
 | `SIGN_USEROP_BATCH_TX_PREFIX_LEN` | `54` | `shared::SIGN_USEROP_BATCH_TX_PREFIX_LEN` |
 | `EXECUTE_BATCH_SELECTOR` | `0x7a389933` | `shared::EXECUTE_BATCH_SELECTOR` |
-| `MAX_TX_LEN` (per-tx data cap) | `4096` | `shared::MAX_TX_LEN` |
+| `MAX_TX_LEN` (per-tx data cap) | `8192` (4096 without capability bit 5) | `shared::MAX_TX_LEN` |
+| `MAX_BATCH_CALL_DATA_TOTAL_LEN` (summed data cap) | `16384` | `shared::MAX_BATCH_CALL_DATA_TOTAL_LEN` |
 | `MAX_SLOT_USES` (combined cap) | `65,536` | `shared::MAX_SLOT_USES` |
 
 ## Reference implementation

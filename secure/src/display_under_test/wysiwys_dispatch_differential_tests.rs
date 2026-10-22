@@ -77,8 +77,9 @@ use super::value_page::{
 };
 use super::Pages;
 use crate::aa::userop::{
-    compute_sphincs_digest_v06, reconstruct_execute_calldata, sha256_bytes,
-    AaUserOpParamsV06Sha256, ENTRY_POINT_V06, SHA256_EMPTY,
+    compute_sphincs_digest_v06, reconstruct_execute_calldata, reconstruct_execute_calldata_into,
+    sha256_bytes, AaUserOpParamsV06Sha256, ExecuteCallData, ENTRY_POINT_V06,
+    MAX_EXECUTE_CALLDATA_LEN, SHA256_EMPTY,
 };
 use crate::erc20::bundle::Erc20Metadata;
 use crate::names::NameResolver;
@@ -482,7 +483,12 @@ fn drive_glue(p: &MirrorParsed, ctx: &Contexts<'_>) -> GlueOutcome {
 
     // §10 + §14 — the signed bytes and the SPHINCS digest.
     let t2_owner_index = u64::from(p.slot_index) + 1;
-    let t2_exec = reconstruct_execute_calldata(t2_owner_index, NEW_OFFCHAIN_COUNT, &tx, &p.inner)
+    // Same in-place encoder the handler's `checked_single_digest` uses.
+    let mut t2_exec = ExecuteCallData {
+        buf: [0u8; MAX_EXECUTE_CALLDATA_LEN],
+        len: 0,
+    };
+    reconstruct_execute_calldata_into(&mut t2_exec, t2_owner_index, NEW_OFFCHAIN_COUNT, &tx, &p.inner)
         .expect("corpus exec calldata must reconstruct");
     let t2_call_digest = sha256_bytes(t2_exec.as_slice());
     let t2_params = AaUserOpParamsV06Sha256 {
@@ -1973,12 +1979,17 @@ fn pin_handler_render_and_digest_glue_matches_replication() {
             "handler final display proof needs refusal gate B",
         ),
         (
-            "let t2_exec = match reconstruct_execute_calldata( t2_owner_index,
-             new_offchain_count, &tx_for_display, inner_data, )",
+            "let t2_call_digest = match checked_single_digest( t2_owner_index,
+             new_offchain_count, &tx_for_display, inner_data, &calldata_ref_digest,
+             &mut calldata_bind_verdict, )",
             "handler §10 signed-calldata inputs drifted",
         ),
         (
-            "let t2_call_digest = sha256_bytes(t2_exec.as_slice());",
+            "reconstruct_execute_calldata_into(&mut calldata, owner_index, offchain_count, tx, data)",
+            "handler §10 calldata encoder drifted",
+        ),
+        (
+            "let digest = sha256_bytes(calldata.as_slice());",
             "handler §14 calldata digest drifted",
         ),
         (

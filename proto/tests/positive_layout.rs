@@ -107,7 +107,11 @@ fn positive_device_capabilities_advertise_proof_set_without_reusing_retired_bit(
     assert_eq!(CAP_ERC7730_PROOF_SET, 1 << 2);
     assert_eq!(CAP_OFFCHAIN_SAFE_TX, 1 << 3);
     assert_eq!(CAP_OFFCHAIN_COW_ORDER, 1 << 4);
-    assert_eq!(DEVICE_CAPABILITIES, (1 << 0) | (1 << 2) | (1 << 3) | (1 << 4));
+    assert_eq!(CAP_SIGN_USEROP_DATA_8K, 1 << 5);
+    assert_eq!(
+        DEVICE_CAPABILITIES,
+        (1 << 0) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5)
+    );
     assert_eq!(DEVICE_CAPABILITIES & (1 << 1), 0, "bit 1 stays retired");
 }
 
@@ -149,15 +153,20 @@ fn positive_max_trailers_per_batch_covers_worst_case() {
 
 #[test]
 fn positive_batch_max_payload_includes_trailers_budget() {
-    // v2 wire: header + N × (tx_prefix + data) + trailer_count(1)
+    // v2 wire: header + N × tx_prefix + summed member data + trailer_count(1)
     //         + MAX_TRAILERS_PER_BATCH × per-record-header
     //         + TRAILERS_TOTAL_MAX_LEN.
     let expected = SIGN_USEROP_BATCH_HEADER_LEN
-        + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
+        + MAX_BATCH_TXS * SIGN_USEROP_BATCH_TX_PREFIX_LEN
+        + MAX_BATCH_CALL_DATA_TOTAL_LEN
         + 1
         + MAX_TRAILERS_PER_BATCH * SIGN_USEROP_BATCH_TRAILER_HEADER_LEN
         + TRAILERS_TOTAL_MAX_LEN;
     assert_eq!(SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, expected);
+    // Raising the per-call cap to 8192 (2026-10-22) left the batch payload,
+    // and with it both worlds' batch buffers, byte-identical.
+    assert_eq!(SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN, 41_583);
+    assert_eq!(MAX_BATCH_CALL_DATA_TOTAL_LEN, MAX_BATCH_TXS * 4096);
 }
 
 #[test]
@@ -171,11 +180,23 @@ fn positive_trailers_total_max_len_bounded() {
 
 #[test]
 fn positive_max_execute_batch_calldata_bounds_reconstructed_calldata() {
-    // Worst-case 4 inner txs each at 4096 B data:
+    // Worst case: 4 inner txs whose data sums to MAX_BATCH_CALL_DATA_TOTAL_LEN,
+    // all four unaligned so each pads up by as much as possible:
     //   selector(4) + head(160)
     // + targets[](32 + 4×32) + values[](32 + 4×32) + datas[](32 + 4×32)
-    // + 4 × (length(32) + padded_data(4096))
-    let computed = 4 + 5 * 32 + (32 + 4 * 32) * 3 + 4 * (32 + 4096);
+    // + 4 × length(32) + Σ padded data.
+    // d_i = 32·a_i + r_i with r_i ≥ 1 and Σd ≤ 16,384 ⇒ Σa ≤ 511, so the
+    // padded data is at most 32 · (511 + 4) = 16,480 → 772 + 16,480 = 17,252.
+    let mut worst_padded = 0usize;
+    for a_sum in 0..=MAX_BATCH_CALL_DATA_TOTAL_LEN / 32 {
+        let unaligned = MAX_BATCH_TXS; // members carrying a partial word
+        if 32 * a_sum + unaligned <= MAX_BATCH_CALL_DATA_TOTAL_LEN {
+            worst_padded = worst_padded.max(32 * (a_sum + unaligned));
+        }
+    }
+    assert_eq!(worst_padded, 16_480);
+    let computed = 4 + 5 * 32 + (32 + 4 * 32) * 3 + 4 * 32 + worst_padded;
+    assert_eq!(computed, 17_252);
     assert!(
         MAX_EXECUTE_BATCH_CALLDATA_LEN >= computed,
         "MAX_EXECUTE_BATCH_CALLDATA_LEN ({}) must bound the computed worst-case ({})",
@@ -416,7 +437,8 @@ fn positive_fw_states_pairwise_distinct() {
 #[test]
 fn positive_max_execute_calldata_covers_worst_case() {
     // selector(4) + head(5×32=160) + bytes_offset(32) + bytes_length(32)
-    // + padded_data(4096) = 4356
+    // + padded_data(MAX_TX_LEN = 8192) — an over-count by one word (the
+    // offset is one of the five head words), so a safe upper bound.
     let worst = 4 + 5 * 32 + 32 + 32 + MAX_TX_LEN;
     assert!(
         MAX_EXECUTE_CALLDATA_LEN >= worst,
@@ -472,7 +494,10 @@ fn positive_safe_v1_payload_max_includes_canonical_plus_raw_data() {
         SAFE_V1_PAYLOAD_MAX,
         SAFE_V1_CANONICAL_LEN + 2 + SAFE_V1_RAW_DATA_MAX
     );
-    assert_eq!(SAFE_V1_RAW_DATA_MAX, MAX_TX_LEN);
+    // Decoupled from MAX_TX_LEN on 2026-10-22: Safe inner data keeps the
+    // 4096-B domain its decoders were reviewed and fuzzed against.
+    assert_eq!(SAFE_V1_RAW_DATA_MAX, 4096);
+    assert!(SAFE_V1_RAW_DATA_MAX < MAX_TX_LEN);
     assert_eq!(APPROVE_HASH_CALLDATA_LEN, 4 + 32);
 }
 

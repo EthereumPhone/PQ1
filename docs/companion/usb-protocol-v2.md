@@ -178,9 +178,20 @@ offset  size  field
 244    32    paymaster_and_data_hash (sha256, SHA256_EMPTY when empty)
 276    20    to_address (inner tx recipient)
 296    32    value (u256 BE)
-328     2    data_len (u16 BE, 0..=4096)
+328     2    data_len (u16 BE, 0..=8192; 0..=4096 on firmware without capability bit 5)
 330     N    data
 ```
+
+UPDATE 2026-10-22: the per-call cap `MAX_TX_LEN` went from 4096 to 8192 (a real
+Uniswap Universal Router swap carried 5,050 B). Firmware that accepts it sets
+`CAP_SIGN_USEROP_DATA_8K` (bit 5); older firmware refuses a longer `data_len`
+with a generic `0x6F00`, so companions cap at 4096 unless the bit is set. Batch
+members take the same per-call cap, with the members' data summed to at most
+`MAX_BATCH_CALL_DATA_TOTAL_LEN` = 16,384 B (refused at parse time, before any
+screen). Safe inner data keeps 4096: the `safe_v1` raw data
+(`SAFE_V1_RAW_DATA_MAX`) and a whole `execTransaction` call routed as a Safe
+transaction (`EXEC_TRANSACTION_MAX_CALLDATA_LEN`; longer is refused, never
+blind-signed).
 
 Before any signature is released, every confirmation set includes a mandatory
 `Signer acct #N` page followed by the full EIP-55 address independently derived
@@ -289,7 +300,10 @@ currently **0x0203** (see §Protocol version history below). Reports
 `CAP_ERC7730_PROOF_SET`. A companion may emit the versioned two-bundle
 ERC-7730 envelope only when bit 2 is set. Bit 3 is `CAP_OFFCHAIN_SAFE_TX` and
 bit 4 is `CAP_OFFCHAIN_COW_ORDER` (UPDATE 2026-10-19): `0x62 SIGN_OFFCHAIN`
-accepts kinds 4 / 5 only when the matching bit is set. The capability word is
+accepts kinds 4 / 5 only when the matching bit is set. Bit 5 is
+`CAP_SIGN_USEROP_DATA_8K` (UPDATE 2026-10-22): `SIGN_USEROP` and every
+`SIGN_USEROP_BATCH` member accept up to 8192 B of `data` (see the unified sign
+input below); without it the cap is 4096. The capability word is
 bytes 21–24 (u32 BE) of the response, after `protocol_version` (2),
 `fw_version` (3) and the 16-byte `device_uid` placeholder. Do not infer that support from the
 three `fw_version` bytes: they are currently a fixed placeholder rather than

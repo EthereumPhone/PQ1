@@ -22,7 +22,7 @@ namespace pqsigner_aa
 def pqsigner_tx_core.eip1559.U256 := Array Std.U8 32#usize
 
 /-- [pqsigner_aa::userop::AaUserOpParams]
-    Source: 'aa/src/userop.rs', lines 667:0-679:1
+    Source: 'aa/src/userop.rs', lines 705:0-717:1
     Visibility: public -/
 structure userop.AaUserOpParams where
   sender : Array Std.U8 20#usize

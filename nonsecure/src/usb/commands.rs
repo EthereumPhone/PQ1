@@ -37,40 +37,22 @@ use crate::nsc_api;
 // Static buffers
 // ---------------------------------------------------------------------------
 
-/// Maximum accumulated command data across chained APDUs. Size reflects
-/// the worst-case unified sign payload: `SIGN_USEROP_HEADER_LEN`-byte
-/// header + max inner-tx calldata (`MAX_TX_LEN`) + optional 2-byte prefix
-/// + max ERC-20 bundle + the 2-byte reserved compatibility slot.
+/// Maximum accumulated `INS_V2_SIGN_USEROP` data across chained APDUs: the
+/// protocol's largest single-sign request (header + `MAX_TX_LEN` of inner
+/// calldata + every trailer slot at its maximum). The secure handler's
+/// TOCTOU snapshot is sized by the same constant and asserts it equals its
+/// own per-trailer sum, so the two worlds accept exactly the same requests.
+/// (This bound used to be hand-written here and left out the `safe_v1`,
+/// curated-selector and self-attest slots, so NS refused some requests the
+/// secure world would have accepted.)
 ///
-/// Also accommodates `INS_V2_FW_BEGIN`'s 8 KB manifest — the max
-/// function below resolves to whichever of the two use cases is
-/// larger. `const fn max` isn't available in no_std stable, so we
-/// hand-expand via a pair of `const` branches and compile-asserts.
-const CHAIN_BUF_LEN_SIGN: usize = SIGN_USEROP_HEADER_LEN
-    + MAX_TX_LEN
-    + 2
-    + 1120
-    + 2 // reserved compatibility slot (length field only, must be 0)
-    // CoW order trailer: 2-byte length + canonical + two ERC-20 bundles.
-    + 2
-    + COW_ORDER_TRAILER_MAX_LEN
-    // ERC-7730 clear-signing descriptor trailer: 2-byte length plus
-    // either one legacy bundle or a two-bundle proof set (up to
-    // ERC7730_MAX_TRAILER_LEN = 10268 B). Sits
-    // between self-attest and names per the wire-format ordering in
-    // `docs/archive/handoff-erc7730-phase3.md` §"Canonical wire formats".
-    + 2
-    + sphincs_tz_shared::ERC7730_MAX_TRAILER_LEN
-    // Names trailer: 1-byte count + up to 4 × (2-byte length + bundle).
-    // The 1200-byte-per-bundle figure is the MAX_NAME_BUNDLE_LEN upper
-    // bound plus the 2-byte length prefix, rounded to the 32-bit
-    // proof-depth cap.
-    + 1
-    + 4 * (2 + 1200)
-    + 64;
+/// The shared chain buffer below is the max over all chained commands; the
+/// batch maximum still dominates, so the 2026-10-22 raise of `MAX_TX_LEN` to
+/// 8192 added nothing to NS `.bss` (asserted below — NS SRAM2 is tight).
+const CHAIN_BUF_LEN_SIGN: usize = SIGN_USEROP_MAX_PAYLOAD_LEN;
 const CHAIN_BUF_LEN_FW: usize = fw_manifest::MANIFEST_SIZE + 64;
-/// Worst-case batch sign payload: header + N × (per-tx prefix +
-/// MAX_TX_LEN data). Defined in the shared crate as
+/// Worst-case batch sign payload: header + N × per-tx prefix + the summed
+/// member data cap + trailers. Defined in the shared crate as
 /// [`sphincs_tz_shared::SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN`].
 const CHAIN_BUF_LEN_BATCH: usize = SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN;
 const CHAIN_BUF_LEN_SIGN_OR_BATCH: usize = if CHAIN_BUF_LEN_SIGN > CHAIN_BUF_LEN_BATCH {
@@ -87,6 +69,11 @@ const CHAIN_BUF_LEN: usize = if CHAIN_BUF_LEN_SIGN_OR_BATCH > CHAIN_BUF_LEN_FW {
 // The largest `CMD_SIGN_OFFCHAIN` request (the structured SafeTx kind, 2026-10-19)
 // must fit the shared chain buffer its bound below indexes.
 const _: () = assert!(SIGN_OFFCHAIN_INPUT_MAX_LEN <= CHAIN_BUF_LEN);
+// The single-sign bound must not size the buffer: the batch maximum does
+// (41,583 B). If a future protocol change flips that, NS SRAM2 grows and
+// this fires so the budget gets re-checked (`make size-report`).
+const _: () = assert!(CHAIN_BUF_LEN_SIGN < CHAIN_BUF_LEN_BATCH);
+const _: () = assert!(CHAIN_BUF_LEN == CHAIN_BUF_LEN_BATCH);
 
 /// Per-CMD upper bound on accumulated chain payload. The global
 /// `CHAIN_BUF_LEN` is the max of all chained CMDs; passing it to

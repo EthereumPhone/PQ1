@@ -55,6 +55,14 @@ fn main() {
     }
     emit_calldata("max-4kib-pattern", &max_pattern);
 
+    // The per-call cap since 2026-10-22 (MAX_TX_LEN = 8192): the largest
+    // calldata whose fingerprint the device now shows and binds.
+    let mut max_8k_pattern = [0u8; 8192];
+    for (index, byte) in max_8k_pattern.iter_mut().enumerate() {
+        *byte = (index as u8).wrapping_mul(29).wrapping_add(7);
+    }
+    emit_calldata("max-8kib-pattern", &max_8k_pattern);
+
     emit_eip712("all-zero", &[0; 32], &[0; 32]);
     emit_eip712("uniform", &[0x11; 32], &[0x22; 32]);
     let mut domain_separator = [0u8; 32];

@@ -23,3 +23,16 @@ MEMORY
 }
 
 _stack_start = ORIGIN(RAM) + LENGTH(RAM);
+
+/* Secure stack-overflow guard (`secure/src/stack_guard.rs`, 2026-10-22).
+ * `main` programs MSPLIM_S = `_stack_guard`, so a stack pointer that would go
+ * below it faults (UsageFault STKOF, escalated to HardFault) instead of
+ * silently overwriting `.bss` (it once clobbered `SLOT_CACHE`). The band
+ * [`_stack_end`, `_stack_guard`) is left for the HardFault handler itself,
+ * which runs with the limit ignored (CCR.STKOFHFNMIGN) to wipe secrets and
+ * reset; size it from that handler's measured stack use. `_stack_end` is
+ * cortex-m-rt's `__euninit` (end of `.bss`/`.uninit`). */
+_stack_guard_size = 2K;
+_stack_guard = ALIGN(_stack_end + _stack_guard_size, 8);
+ASSERT(_stack_guard % 8 == 0, "secure stack guard must be 8-byte aligned");
+ASSERT(_stack_guard < _stack_start, "secure stack guard band leaves no stack");
