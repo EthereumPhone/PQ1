@@ -199,8 +199,10 @@ const PHASES: [u8; 9] = [b'T', b'O', b'E', b'F', b'I', b'W', b'K', b'U', b'Z'];
 /// tick drew nothing: `D` not due yet, `R` the previous frame still
 /// streaming, `P` the beam out of the start range, `N` no film set up or no
 /// atlas (a nested tick is not counted). `Y`: an SE050 draw retried on a
-/// fresh session. `Z`: FI delays that drew their own length (the `Z` phase).
-const COUNTS: [u8; 8] = [b'Q', b'B', b'D', b'R', b'P', b'N', b'Y', b'Z'];
+/// fresh session. `Z`: FI delays that drew their own length (the `Z` phase),
+/// `V` those of them that fell back from the raw TRNG word to the hardened
+/// 1-byte fill.
+const COUNTS: [u8; 9] = [b'Q', b'B', b'D', b'R', b'P', b'N', b'Y', b'Z', b'V'];
 
 /// Thread mode only: SysTick's idle gate runs FI delays too, and an ISR must
 /// not touch [`REC`] under the thread.
@@ -308,8 +310,8 @@ pub fn rows6(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     }
     for (row, c) in out[1..].iter_mut().zip(r.cnts.iter()) {
         let mut n = 0;
-        // `Z` has its own page.
-        for (k, &v) in c[..COUNTS.len() - 1].iter().enumerate() {
+        // `Q` to `Y`; `Z` and `V` have their own page.
+        for (k, &v) in c[..7].iter().enumerate() {
             if k > 0 {
                 push(row, &mut n, b' ');
             }
@@ -318,25 +320,29 @@ pub fn rows6(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     }
 }
 
-/// The seventh page: `FI WAIT ms n`, then the same three pauses as
-/// `<ms>:<Z ms> <Z count>`, the FI delays that drew their own length.
+/// The seventh page: `FI ms n slow`, then the same three pauses as
+/// `<ms>:<Z ms> <Z count> <V count>`, the FI delays that drew their own
+/// length and how many of them fell back to the hardened fill.
 pub fn rows7(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let r = *rec();
     for row in out.iter_mut() {
         *row = [b' '; DISPLAY_COLS];
     }
     let mut n = 0;
-    for &b in b"FI WAIT ms n" {
+    for &b in b"FI ms n slow" {
         push(&mut out[0], &mut n, b);
     }
+    let at = |tags: &[u8], t: u8| tags.iter().position(|&x| x == t).unwrap_or(0);
     let rows = r.gaps.iter().zip(r.where_.iter()).zip(r.cnts.iter());
     for (row, ((gap, w), c)) in out[1..].iter_mut().zip(rows) {
         let mut n = 0;
         push_u32(row, &mut n, gap.0);
         push(row, &mut n, b':');
-        push_u32(row, &mut n, u32::from(w[PHASES.len() - 1]));
-        push(row, &mut n, b' ');
-        push_u32(row, &mut n, u32::from(c[COUNTS.len() - 1]));
+        push_u32(row, &mut n, u32::from(w[at(&PHASES, b'Z')]));
+        for v in [c[at(&COUNTS, b'Z')], c[at(&COUNTS, b'V')]] {
+            push(row, &mut n, b' ');
+            push_u32(row, &mut n, u32::from(v));
+        }
     }
 }
 
