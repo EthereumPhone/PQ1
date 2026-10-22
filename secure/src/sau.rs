@@ -409,8 +409,9 @@ mod stm32 {
     // p.129; bit positions from the STM32U585 SVD — the RM text swaps the two
     // SDMMC labels on p.210/p.218). A master made secure-only in TZSC "issues
     // secure transactions" (RM0456 p.158), so only secure code can program it,
-    // and its RCC enable/reset bits become secure with it (§11.5.1). Nothing on
-    // either board uses them (no DMA2D/SDMMC code anywhere in the tree), but
+    // and its RCC enable/reset bits become secure with it (§11.5.1). Nothing
+    // that ships uses them (no SDMMC code; the only DMA2D code is the dev-only
+    // `ui-px-dma2d-bench`, fenced out of production), but
     // left NS each one is a DMA engine the non-secure world could point at the
     // OTP and UID, which no flash or MPC option protects (RM0456 Table 71,
     // p.327: OTP is NS-readable by design). #982.
