@@ -79,7 +79,7 @@ struct Rec {
     waits: [u64; 10],
     /// TE-edge fallbacks (`present_frame_cols` with no fresh stamp).
     te_falls: u32,
-    /// The ICACHE ways this recording ran with (see [`icache_toggle_ways`]).
+    /// The ICACHE ways this recording ran with (see [`icache_ways`]).
     ways: u8,
 }
 
@@ -400,7 +400,7 @@ fn rec() -> &'static mut Rec {
 /// Provisioning began.
 pub fn start() {
     let now = timeout::now();
-    let ways = icache_toggle_ways();
+    let ways = icache_ways();
     *rec() = Rec {
         on: true,
         t0: now,
@@ -684,34 +684,13 @@ pub fn wait(k: usize, cyc: u32) {
     }
 }
 
-/// Dev A/B (2026-10-22): flip the ICACHE between direct-mapped and 2-way,
-/// returning the ways now in use. `hw::rcc` enables the cache with
-/// `ICACHE_CR = 1`, which clears the reset default `WAYSEL = 1` (2-way,
-/// RM0456 ICACHE_CR) and leaves it direct-mapped; each film recording runs
-/// the other mode, so two signs compare them. WAYSEL is writable only with
-/// the cache off; the cache is invalidated before it comes back.
-fn icache_toggle_ways() -> u8 {
-    use crate::hw::mmio::{Reg32, RoReg32};
-    const EN: u32 = 1 << 0;
-    const CACHEINV: u32 = 1 << 1;
-    const WAYSEL: u32 = 1 << 2;
-    const BUSYF: u32 = 1 << 0;
-    // SAFETY: ICACHE_CR / ICACHE_SR on the secure alias (RM0456 ICACHE
-    // register map, 0x5003_0400); the same addresses `hw::rcc` and
-    // `hw::flash` use.
-    let (cr, sr) = unsafe { (Reg32::new(0x5003_0400), RoReg32::new(0x5003_0404)) };
-    let ways = if cr.read() & WAYSEL == 0 { WAYSEL } else { 0 };
-    cortex_m::interrupt::free(|_| {
-        cr.write(0);
-        while sr.read() & BUSYF != 0 {}
-        cr.write(ways);
-        cr.write(ways | CACHEINV);
-        while sr.read() & BUSYF != 0 {}
-        cr.write(ways | EN);
-        cortex_m::asm::dsb();
-        cortex_m::asm::isb();
-    });
-    if ways == WAYSEL { 2 } else { 1 }
+/// Dev (2026-10-22): the ICACHE ways in use (`ICACHE_CR.WAYSEL`: 2-way or
+/// direct-mapped), shown on the FRAME page.
+fn icache_ways() -> u8 {
+    // SAFETY: ICACHE_CR on the secure alias (RM0456 ICACHE register map,
+    // 0x5003_0400), the address `hw::rcc` and `hw::flash` use; a plain read.
+    let cr = unsafe { crate::hw::mmio::RoReg32::new(0x5003_0400) };
+    if cr.read() & (1 << 2) != 0 { 2 } else { 1 }
 }
 
 /// The ninth page: `FRAME .1ms/fr`, then per film frame in tenths of a ms
