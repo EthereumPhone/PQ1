@@ -1672,6 +1672,20 @@ the certificate. The verifier composition intentionally preserves Rust's
 zero-node continuation and does not assert raw-acceptance implies strict byte
 verification. No production source or signature format changes in this batch.
 
+Wrapper source refresh (2026-10-22): the current firmware adds a UI guard around
+the three strong draws and polls between them. The counted adapter interprets
+the guard and polls as Unit under the same explicit callback non-interference
+boundary as progress callbacks. Fresh extraction changes only generated source
+locations; the Lean declaration bodies and types remain byte-identical. The
+literal-source host corpus retains these calls and independently observes guard
+entry/exit and poll positions, checks that each strong draw is guarded and each
+signing call is outside the guard, and covers cleanup on early returns. Three
+compiled source mutations disable entry, suppress polls, or postpone explicit
+guard exit; each fails its named lifecycle oracle. This brings the Rust source
+controls to nine. These finite scripted observations do not verify the real UI
+guard, display/interrupt state, timing, or callback non-interference; those remain
+dependency-interpretation limits, not newly proved firmware properties.
+
 Paired representation endpoints (2026-10-11):
 `cdrafts-split/C10RepresentationBridge.ec` and
 `extracted/Extracted/C10RepresentationBridge.lean` prove their actual digest

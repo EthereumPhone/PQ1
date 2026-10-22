@@ -92,7 +92,7 @@ def production.CFI_STEP_CT_EQ : Std.U32 := 4133447852#u32
 def production.CFI_STEP_VERIFY_GATE : Std.U32 := 392198589#u32
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner::{impl core::ops::function::FnMut<(), bool> for secure_wrapper_model::production::c10_sign_verified_with_progress_inner::closure#1<'_0>}::call_mut]:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 343:52-343:79 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 355:52-355:79 -/
 def
   production.c10_sign_verified_with_progress_inner.closure_1.Insts.CoreOpsFunctionFnMutTupleBool.call_mut
   (c : production.c10_sign_verified_with_progress_inner.closure_1) (_ : Unit) :
@@ -102,7 +102,7 @@ def
   ok (b, c)
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner::{impl core::ops::function::FnOnce<(), bool> for secure_wrapper_model::production::c10_sign_verified_with_progress_inner::closure#1<'_0>}::call_once]:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 343:52-343:79 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 355:52-355:79 -/
 def
   production.c10_sign_verified_with_progress_inner.closure_1.Insts.CoreOpsFunctionFnOnceTupleBool.call_once
   (c : production.c10_sign_verified_with_progress_inner.closure_1) (_ : Unit) :
@@ -114,7 +114,7 @@ def
   ok b
 
 /-- Trait implementation: [secure_wrapper_model::production::c10_sign_verified_with_progress_inner::{impl core::ops::function::FnOnce<(), bool> for secure_wrapper_model::production::c10_sign_verified_with_progress_inner::closure#1<'_0>}]
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 343:52-343:79 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 355:52-355:79 -/
 @[reducible]
 def
   production.c10_sign_verified_with_progress_inner.closure_1.Insts.CoreOpsFunctionFnOnceTupleBool
@@ -125,7 +125,7 @@ def
 }
 
 /-- Trait implementation: [secure_wrapper_model::production::c10_sign_verified_with_progress_inner::{impl core::ops::function::FnMut<(), bool> for secure_wrapper_model::production::c10_sign_verified_with_progress_inner::closure#1<'_0>}]
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 343:52-343:79 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 355:52-355:79 -/
 @[reducible]
 def
   production.c10_sign_verified_with_progress_inner.closure_1.Insts.CoreOpsFunctionFnMutTupleBool
@@ -198,7 +198,7 @@ def production.c10_sign_verified_with_progress_inner.CFI_EXPECTED
   ok (core.num.U32.wrapping_add i6 production.CFI_STEP_VERIFY_GATE)
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner]: loop body 0:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 194:8-196:9 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 200:8-202:9 -/
 @[rust_loop_body]
 def production.c10_sign_verified_with_progress_inner_loop0.body
   (iter : core.slice.iter.Iter Std.U8) (acc : Std.U8) :
@@ -211,7 +211,7 @@ def production.c10_sign_verified_with_progress_inner_loop0.body
               ok (cont (iter1, acc1))
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner]: loop 0:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 194:8-196:9 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 200:8-202:9 -/
 @[rust_loop]
 def production.c10_sign_verified_with_progress_inner_loop0
   (iter : core.slice.iter.Iter Std.U8) (acc : Std.U8) : Result Std.U8 := do
@@ -221,7 +221,7 @@ def production.c10_sign_verified_with_progress_inner_loop0
     (iter, acc)
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner]: loop body 1:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 262:8-265:9 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 274:8-277:9 -/
 @[rust_loop_body]
 def production.c10_sign_verified_with_progress_inner_loop1.body
   (shuffle_seed_a : Array Std.U8 32#usize)
@@ -242,7 +242,7 @@ def production.c10_sign_verified_with_progress_inner_loop1.body
     ok (cont (iter1, acc_a1, acc_b1))
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner]: loop 1:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 262:8-265:9 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 274:8-277:9 -/
 @[rust_loop]
 def production.c10_sign_verified_with_progress_inner_loop1
   (iter : core.ops.range.Range Std.Usize)
@@ -257,7 +257,7 @@ def production.c10_sign_verified_with_progress_inner_loop1
     (iter, acc_a, acc_b)
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner]:
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 73:0-400:1 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 73:0-412:1 -/
 def production.c10_sign_verified_with_progress_inner
   (sk : sphincs_c10.SigningKey) (msg_hash : Array Std.U8 32#usize)
   (progress : (Unit × Unit)) (effects : Effects)

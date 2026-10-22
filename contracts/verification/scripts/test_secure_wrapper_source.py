@@ -22,7 +22,15 @@ MUTATIONS = [
     ("cfi", "secure/src/crypto.rs", "check_into_sentinel(CFI_EXPECTED) !=", "check_into_sentinel(CFI_EXPECTED) ==", 1),
     ("delay-source", "secure/src/crypto.rs", "if crate::fi::delay_source_failed() {", "if !crate::fi::delay_source_failed() {", 1),
     ("relock", str(REL / "src/lib.rs"), "super::event(e,14);", "let _ = e;", 1),
+    ("ui-enter", "secure/src/crypto.rs", "let ticks = crate::ui::ChipWaitTicks::enter();", "let ticks = if false { Some(crate::ui::ChipWaitTicks::enter()) } else { None };", 1),
+    ("ui-polls", "secure/src/crypto.rs", "crate::ui::busy_poll();", "if false { crate::ui::busy_poll(); }", 2),
+    ("ui-exit", "secure/src/crypto.rs", "drop(ticks);", "if false { drop(ticks); }", 1),
 ]
+UI_REASONS = {
+    "ui-enter": "UI guard must cover strong draws",
+    "ui-polls": "wrong independent UI callback trace",
+    "ui-exit": "UI guard must end before signing",
+}
 
 
 def compile_and_run(root, target, features=(), release=True):
@@ -62,14 +70,20 @@ def main():
             shutil.copytree(ROOT / REL, tree / REL, ignore=shutil.ignore_patterns("target"))
             source = tree / relative
             text = source.read_text()
-            assert text.count(before) == count, (label, "mutation anchor drift")
-            source.write_text(text.replace(before, after))
+            start, end = 0, len(text)
+            if label in UI_REASONS:
+                start = text.index("pub fn c10_sign_verified_with_progress(")
+                end = text.index("\n/// Provision a `WalletStore` backend")
+            selected = text[start:end]
+            assert selected.count(before) == count, (label, "mutation anchor drift")
+            source.write_text(text[:start] + selected.replace(before, after) + text[end:])
             result = compile_and_run(tree, tree / "target")
             assert result.returncode == 101, (label, "missing ordinary Rust assertion failure", result.returncode, result.stderr)
             assert "assertion `left == right` failed" in result.stderr
-            assert any(reason in result.stderr for reason in ["wrong independent release outcome", "wrong relock classification"]), (label, result.stderr)
+            reasons = [UI_REASONS[label]] if label in UI_REASONS else ["wrong independent release outcome", "wrong relock classification"]
+            assert any(reason in result.stderr for reason in reasons), (label, result.stderr)
             print(f"PASS source control: {label} compiled and failed the independent outcome oracle", flush=True)
-    print("OK: 3 production-cfg corpus builds and 6 compiled semantic source controls")
+    print("OK: 3 production-cfg corpus builds and 9 compiled semantic source controls")
 
 
 if __name__ == "__main__":

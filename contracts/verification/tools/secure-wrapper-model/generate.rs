@@ -18,7 +18,14 @@ fn main() {
     let imports="use crate::sphincs_c10;\nuse crate::zeroize::Zeroize;\n";
     fs::write(output.join("native.rs"),format!("{imports}{body}")).unwrap();
     let mut lifted=body;
+    // UI callbacks are outside Effects, just like the progress callbacks.
+    // This Unit interpretation assumes callback non-interference; it does not
+    // verify the real guard, display driver, timing or UI state. The native
+    // corpus keeps the literal calls and independently checks their lifecycle.
     let edits:&[(&str,&str,usize)]=&[
+        ("crate::ui::ChipWaitTicks::enter()","()",1),
+        ("crate::ui::busy_poll();","();",2),
+        ("drop(ticks);","let _ = ticks;",1),
         ("progress: (fn(u8), fn(u8)),","progress: ((), ()),\n    effects: &mut crate::Effects,",3),
         ("        progress,\n","        progress,\n        effects,\n",2),
         ("use subtle::ConstantTimeEq;","use crate::subtle::ConstantTimeEq;",1),

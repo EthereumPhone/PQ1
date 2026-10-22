@@ -48,7 +48,7 @@ structure sphincs_c10.SigningKey where
 def production.VerifiedRateCharge := Std.U32
 
 /-- [secure_wrapper_model::production::c10_sign_verified_with_progress_inner::closure#1]
-    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 343:52-343:79 -/
+    Source: 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', lines 355:52-355:79 -/
 @[reducible]
 def production.c10_sign_verified_with_progress_inner.closure_1 := Bool
 

@@ -9,6 +9,37 @@ thread_local! { static WORLD: RefCell<Option<model::Effects>> = const { RefCell:
 fn effect<T>(f: impl FnOnce(&mut model::Effects) -> T) -> T {
     WORLD.with(|world| f(world.borrow_mut().as_mut().expect("installed fixture")))
 }
+// Independent observations of the literal source's UI calls. These scripted
+// callbacks do not implement or certify the firmware's display/interrupt state.
+pub mod ui {
+    use std::cell::{Cell, RefCell};
+    thread_local! {
+        static ACTIVE: Cell<bool> = const { Cell::new(false) };
+        static TRACE: RefCell<Vec<(u8,usize)>> = const { RefCell::new(Vec::new()) };
+    }
+    fn observe(tag:u8) {
+        let fills=super::effect(|e|e.fills);
+        TRACE.with(|trace|trace.borrow_mut().push((tag,fills)));
+    }
+    pub fn active()->bool {ACTIVE.with(Cell::get)}
+    pub struct ChipWaitTicks(());
+    impl ChipWaitTicks {
+        pub fn enter()->Self {
+            assert!(!active(),"nested modeled UI guard");
+            ACTIVE.with(|active|active.set(true)); observe(0); Self(())
+        }
+    }
+    impl Drop for ChipWaitTicks {
+        fn drop(&mut self) {observe(2); ACTIVE.with(|active|active.set(false));}
+    }
+    pub fn busy_poll() {
+        assert!(active(),"UI poll outside modeled guard"); observe(1);
+    }
+    pub fn take_trace()->Vec<(u8,usize)> {
+        assert!(!active(),"modeled UI guard leaked across a normal return");
+        TRACE.with(|trace|std::mem::take(&mut *trace.borrow_mut()))
+    }
+}
 pub mod fi {
     pub use super::model::fi::OK_SENTINEL;
     pub struct CfiCounter(super::model::fi::CfiCounter);
@@ -41,6 +72,7 @@ pub mod sign_rate {
 }
 pub mod rng_strong {
     pub fn fill<const N:usize>(buf:&mut [u8;N])->Result<(),()> {
+        assert_eq!(super::ui::active(),true,"UI guard must cover strong draws");
         super::effect(|e|super::model::rng_strong::fill(e,buf))
     }
 }
@@ -72,6 +104,7 @@ pub mod sphincs_c10 {
         pub fn pk_seed(&self)->&[u8;16] {self.0.pk_seed()}
         pub fn pk_root(&self)->&[u8;16] {self.0.pk_root()}
         pub fn sign_with_shuffle(&self,msg:&[u8;32],opt:Option<&[u8;16]>,shuffle:&shuffle::ShuffleSeed,_progress:fn(u8))->[u8;4008] {
+            assert_eq!(super::ui::active(),false,"UI guard must end before signing");
             super::effect(|e| self.0.sign_with_shuffle(e,msg,opt,shuffle,()))
         }
     }
@@ -105,6 +138,14 @@ fn check(initial:model::Effects,expected_ok:bool,expected_relock:bool) {
     WORLD.with(|cell|*cell.borrow_mut()=Some(initial));
     let native_result=original::c10_sign_verified_with_progress(&sphincs_c10::SigningKey(key),&[4;32],(|_|{},|_|{}));
     let native=WORLD.with(|cell|cell.borrow_mut().take().unwrap());
+    let mut expected_ui=Vec::new();
+    if native.fills>0 {
+        expected_ui.push((0,0));
+        if native.fills>=2 {expected_ui.push((1,1));}
+        if native.fills==3 {expected_ui.push((1,2));}
+        expected_ui.push((2,native.fills));
+    }
+    assert_eq!(ui::take_trace(),expected_ui,"wrong independent UI callback trace");
     assert_eq!(native_result,lifted_result,"source transformation changed returned bytes or refusal");
     assert_eq!(native,lifted,"source transformation changed effect order or data");
     assert_eq!(native_result.is_ok(),expected_ok,"wrong independent release outcome");
