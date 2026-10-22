@@ -519,6 +519,8 @@ fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
     // Dev (`ui-px-film-gaps`): the whole wait less the bands it rendered.
     #[cfg(feature = "ui-px-film-gaps")]
     let mut probe = super::film_gaps::SpinProbe::new();
+    #[cfg(feature = "ui-px-film-gaps")]
+    if let Some(edge) = crate::hw::lcd_te::last_edge() { super::film_gaps::phase_begin(crate::hw::lcd_te::cycles().wrapping_sub(edge), lo); }
     loop {
         let Some(edge) = crate::hw::lcd_te::last_edge() else { return false };
         let since = crate::hw::lcd_te::cycles().wrapping_sub(edge);
@@ -1486,16 +1488,26 @@ fn film_phase_ok() -> bool {
 
 /// [`film_phase_ok`]'s decision at `now` with ticks `dt` cycles apart.
 fn film_phase_go(now: u32, dt: u32) -> bool {
-    let Some(edge) = crate::hw::lcd_te::last_edge() else { return true };
+    let Some(edge) = crate::hw::lcd_te::last_edge() else {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'E', None);
+        return true;
+    };
     let win = FILM_WIN.load(Ordering::Relaxed);
     if win == 0 {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'W', None);
         return true;
     }
     let Some((lo, hi)) = start_window((win >> 16) as i32, (win & 0xFFFF) as i32) else {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'X', None);
         return true;
     };
     let since = now.wrapping_sub(edge);
     if since > STAMP_STALE_CYC {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'S', None);
         return true;
     }
     // Starting at `at` cycles after an edge is fine if it is inside the start
@@ -1504,13 +1516,18 @@ fn film_phase_go(now: u32, dt: u32) -> bool {
     // Where the beam will be when the stream could start.
     let at = (since + FILM_LEAD_CYC) % REFRESH_CYC;
     if ok(at) {
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::gate(b'K', Some((since, lo)));
         return true;
     }
     // Not now. Wait for the next tick unless it would land past the range
     // being waited for; when ticks are that sparse (coarse CPU-bound work),
     // draw now and let the presenter spin, rather than skip the range and
     // stutter.
-    !pqsigner_ui_px::stream::phase::wait_for_next_tick(at, dt, hi)
+    let go = !pqsigner_ui_px::stream::phase::wait_for_next_tick(at, dt, hi);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::gate(if go { b'F' } else { b'R' }, Some((since, lo)));
+    go
 }
 
 /// Cycle count at the film's previous gate call, and the smoothed interval
@@ -1900,6 +1917,8 @@ fn film_gaps_page() {
     super::film_gaps::rows9(&mut rows);
     dev_page(&rows);
     super::film_gaps::rows10(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows11(&mut rows);
     dev_page(&rows);
     #[cfg(feature = "ui-px-dma2d-bench")]
     dma2d_bench_pages();

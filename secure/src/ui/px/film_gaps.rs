@@ -84,7 +84,22 @@ struct Rec {
     /// `phase_start` calls by how far the start range was when they began:
     /// open, < 0.25, < 0.5, < 1, < 2, >= 2 ms.
     wt: [u32; 6],
+    /// The film gate's decisions by path ([`GATE_PATHS`]).
+    gate: [u32; 7],
+    /// At the gate's admission: cycles since the TE edge and the start range
+    /// low end it used; then, per `phase_start`, the summed actual lead
+    /// (cycles from admission to `phase_start`) and the summed signed shift
+    /// of the range's low end (the presenter's minus the gate's), and how
+    /// many pairs.
+    adm: Option<(u32, u32)>,
+    lead_sum: u64,
+    shift_sum: i64,
+    pairs: u32,
 }
+
+/// [`gate`] paths: no TE stamp, no window yet, empty start range, stale
+/// stamp, in range (`ok`), fallback draw-now, refused (wait).
+pub const GATE_PATHS: [u8; 7] = [b'E', b'W', b'X', b'S', b'K', b'F', b'R'];
 
 /// [`wait`] kinds.
 pub const WAIT_BEAM: usize = 0;
@@ -187,6 +202,11 @@ impl Rec {
         te_falls: 0,
         ways: 0,
         wt: [0; 6],
+        gate: [0; 7],
+        adm: None,
+        lead_sum: 0,
+        shift_sum: 0,
+        pairs: 0,
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -686,6 +706,78 @@ pub fn wait(k: usize, cyc: u32) {
             r.te_falls = r.te_falls.wrapping_add(1);
         }
     }
+}
+
+/// The film gate decided by `path` (one of [`GATE_PATHS`]); on an
+/// admission through the range check, `adm` is (cycles since the TE edge,
+/// the range's low end in cycles) it used.
+pub fn gate(path: u8, adm: Option<(u32, u32)>) {
+    let r = rec();
+    if !r.on || !in_thread() {
+        return;
+    }
+    if let Some(k) = GATE_PATHS.iter().position(|&p| p == path) {
+        r.gate[k] = r.gate[k].wrapping_add(1);
+    }
+    if path != b'R' {
+        r.adm = adm;
+    }
+}
+
+/// `phase_start` began `since` cycles after the TE edge, waiting for the
+/// range starting at `lo`: pairs with the gate's last admission.
+pub fn phase_begin(since: u32, lo: u32) {
+    let r = rec();
+    if !r.on {
+        return;
+    }
+    if let Some((s0, lo0)) = r.adm.take() {
+        let refresh = pqsigner_ui_px::stream::phase::REFRESH_CYC;
+        r.lead_sum = r.lead_sum.wrapping_add(u64::from((since + refresh - s0 % refresh) % refresh));
+        r.shift_sum = r.shift_sum.wrapping_add(i64::from(lo) - i64::from(lo0));
+        r.pairs = r.pairs.wrapping_add(1);
+    }
+}
+
+/// The eleventh page: `GATE n`, the gate's decisions by path (E no stamp,
+/// W no window, X empty range, S stale, K in range, F fallback, R refused),
+/// then the mean actual lead and the mean shift of the range's low end
+/// between the gate and the presenter, in tenths of a ms.
+pub fn rows11(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"GATE n" {
+        push(&mut out[0], &mut n, b);
+    }
+    let groups: [&[usize]; 2] = [&[0, 1, 2, 3], &[4, 5, 6]];
+    for (row, idx) in out[1..3].iter_mut().zip(groups) {
+        let mut n = 0;
+        for (j, &k) in idx.iter().enumerate() {
+            if j > 0 {
+                push(row, &mut n, b' ');
+            }
+            push(row, &mut n, GATE_PATHS[k]);
+            push_u32(row, &mut n, r.gate[k]);
+        }
+    }
+    let pairs = i64::from(r.pairs.max(1));
+    let lead = r.lead_sum / u64::from(r.pairs.max(1)) / 16_000;
+    let shift = r.shift_sum / pairs / 16_000;
+    let mut n = 0;
+    for &b in b"ld " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(lead).unwrap_or(u32::MAX));
+    for &b in b" sh " {
+        push(&mut out[3], &mut n, b);
+    }
+    if shift < 0 {
+        push(&mut out[3], &mut n, b'-');
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(shift.unsigned_abs()).unwrap_or(u32::MAX));
 }
 
 /// Times one `phase_start` (thread mode): its whole span less the bands it
