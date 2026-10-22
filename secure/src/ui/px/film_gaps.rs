@@ -106,6 +106,12 @@ struct Rec {
     prefetch: bool,
     hashes0: u32,
     hashes: u32,
+    /// Bands rendered on a later tick (`lcd::film_continue`) instead of
+    /// spinning for a free buffer: their cycles and count, and the pending
+    /// frames abandoned.
+    cont_cyc: u64,
+    cont_n: u32,
+    cont_ab: u32,
 }
 
 /// [`gate`] paths: no TE stamp, no window yet, empty start range, stale
@@ -225,6 +231,9 @@ impl Rec {
         prefetch: false,
         hashes0: 0,
         hashes: 0,
+        cont_cyc: 0,
+        cont_n: 0,
+        cont_ab: 0,
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -581,6 +590,23 @@ pub fn stop() {
     }
 }
 
+/// A band rendered on a later tick took `cyc` cycles (build, check, render).
+pub fn cont(cyc: u32) {
+    let r = rec();
+    if r.on {
+        r.cont_cyc = r.cont_cyc.wrapping_add(u64::from(cyc));
+        r.cont_n = r.cont_n.wrapping_add(1);
+    }
+}
+
+/// A pending film frame was abandoned.
+pub fn cont_abort() {
+    let r = rec();
+    if r.on {
+        r.cont_ab = r.cont_ab.wrapping_add(1);
+    }
+}
+
 /// `FLASH_ACR.PRFTEN` (RM0456 FLASH_ACR bit 8).
 const PRFTEN: u32 = 1 << 8;
 
@@ -597,6 +623,8 @@ fn flash_acr() -> crate::hw::mmio::RoReg32 {
 /// per-digest figure still carries the sign's fixed costs (random draws,
 /// verify, landing), so compare it between signs of similar digest counts.
 /// A 2x2 of prefetch x ways on 2026-10-22 measured no difference (#1028).
+/// Last row: bands rendered on a later tick, per frame (`c`, tenths of a
+/// ms; `n`, tenths of a band) and pending frames abandoned (`ab`).
 pub fn rows12(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let r = *rec();
     for row in out.iter_mut() {
@@ -622,6 +650,20 @@ pub fn rows12(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
         push(&mut out[2], &mut n, b);
     }
     push_u32(&mut out[2], &mut n, u32::try_from(ns).unwrap_or(u32::MAX));
+    let frames = u64::from(r.frames.max(1));
+    let mut n = 0;
+    for &b in b"c " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(r.cont_cyc / frames / 16_000).unwrap_or(u32::MAX));
+    for &b in b" n " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, u32::try_from(u64::from(r.cont_n) * 10 / frames).unwrap_or(u32::MAX));
+    for &b in b" ab " {
+        push(&mut out[3], &mut n, b);
+    }
+    push_u32(&mut out[3], &mut n, r.cont_ab);
 }
 
 /// `dual_se::provision` entered step `k` (0 salt + credentials, 1 split-half

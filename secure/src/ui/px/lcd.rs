@@ -905,24 +905,21 @@ fn present_bg(
         let w = BAND_W.min(xend - x0);
         let buf = k % N_BANDBUF;
         // The buffer's previous band (k - N_BANDBUF) must have left the wire.
-        // Bounded like the drain; a stream that died stops it at once.
-        #[cfg(feature = "ui-px-frametime")]
-        let t_w = frametime::cycles();
-        #[cfg(feature = "ui-px-film-gaps")]
-        let t_buf = crate::hw::lcd_te::cycles();
-        let mut spins = 0u32;
-        while k >= usize::from(lcd::async_sent()) + N_BANDBUF {
-            if !lcd::async_busy() || spins >= 4_000_000 {
+        // Not yet: leave the rest of the frame to later film ticks
+        // (`film_continue`) instead of spinning for it. The wire holds
+        // N_BANDBUF bands, ~2.7 ms each, against ~1.1 ms to render one: the
+        // spin was ~1 ms per film frame taken from the signer (EVT
+        // 2026-10-22). A stream that died stops the frame at once.
+        if k >= usize::from(lcd::async_sent()) + N_BANDBUF {
+            if !lcd::async_busy() {
                 return false;
             }
-            spins += 1;
-            core::hint::spin_loop();
-        }
-        #[cfg(feature = "ui-px-film-gaps")]
-        super::film_gaps::wait(super::film_gaps::WAIT_BUF, crate::hw::lcd_te::cycles().wrapping_sub(t_buf));
-        #[cfg(feature = "ui-px-frametime")]
-        {
-            cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
+            // SAFETY: single-threaded film state, never touched from an ISR.
+            unsafe {
+                *core::ptr::addr_of_mut!(FILM_PENDING) =
+                    Some(Pending { x0, xend, k, at: crate::hw::lcd_te::cycles() });
+            }
+            return true;
         }
         #[cfg(feature = "ui-px-frametime")]
         let t0 = frametime::cycles();
@@ -945,6 +942,152 @@ fn present_bg(
     true
 }
 
+/// The rest of a background film frame still to render: the next band's
+/// first column and the frame's end, its band index, and when the frame
+/// last made progress (cycles). Thread-only.
+#[cfg(feature = "ui-px-dma")]
+#[derive(Clone, Copy)]
+struct Pending {
+    x0: i32,
+    xend: i32,
+    k: usize,
+    at: u32,
+}
+
+/// See [`Pending`]. Set by `present_bg`, advanced by [`film_continue`],
+/// finished by `film_reap(true)`.
+#[cfg(feature = "ui-px-dma")]
+static mut FILM_PENDING: Option<Pending> = None;
+
+/// A pending frame that has not advanced for this long (a refresh and a
+/// half) is abandoned: the wire would otherwise sit idle mid-window.
+#[cfg(feature = "ui-px-dma")]
+const PENDING_STALL_CYC: u32 = REFRESH_CYC + REFRESH_CYC / 2;
+
+#[cfg(feature = "ui-px-dma")]
+fn film_pending() -> Option<Pending> {
+    // SAFETY: single-threaded film state, never touched from an ISR.
+    unsafe { *core::ptr::addr_of!(FILM_PENDING) }
+}
+
+/// Abandon the pending frame: stop its stream as failed, so `film_reap`
+/// forgets the glass and the next frame repaints in full.
+#[cfg(feature = "ui-px-dma")]
+fn film_pending_abort() {
+    lcd::async_abort();
+    // SAFETY: as `film_pending`.
+    unsafe { *core::ptr::addr_of_mut!(FILM_PENDING) = None };
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::cont_abort();
+}
+
+/// Render and queue the pending frame's next band from `anim`, which must
+/// be the state the frame was built from: the rebuilt display list's
+/// fingerprints are checked against those stored for the frame on the wire
+/// (`FILM_SIGS`), so a stepped animation cannot put half of one frame and
+/// half of another on the glass. `false` on any refusal (the caller aborts).
+/// Out of line: its `Frame` sits on the stack only while it runs.
+#[cfg(feature = "ui-px-dma")]
+#[inline(never)]
+fn film_render_pending(anim: &Anim, p: Pending) -> bool {
+    use pqsigner_ui_px::damage::{Damage, FrameSigs};
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t0 = crate::hw::lcd_te::cycles();
+    let Some(atlas) = assets::atlas_film_frame() else { return false };
+    let (marks, font) = (atlas.marks(), atlas.font());
+    let mut frame = Frame::new();
+    anim.build(&marks, &font, &mut frame);
+    // SAFETY: as `film_pending`.
+    let (stored, _) = unsafe { *core::ptr::addr_of!(FILM_SIGS) };
+    if FrameSigs::of(&frame, &font).damage(&stored) != Damage::Nothing {
+        return false;
+    }
+    // SAFETY: single-threaded film state; buffer `k % N_BANDBUF` held band
+    // `k - N_BANDBUF`, which the caller saw leave the wire.
+    let bands = unsafe { &mut *core::ptr::addr_of_mut!(BANDS) };
+    let w = BAND_W.min(p.xend - p.x0);
+    let buf = p.k % N_BANDBUF;
+    {
+        let Some(mut strip) = Strip::new(p.x0, w, &mut bands[buf].0[..]) else {
+            return false;
+        };
+        render_band(&frame, &font, &mut strip, &mut FrameCost::default());
+    }
+    if !lcd::async_queue(&bands[buf].0[..(w * H) as usize]) {
+        return false;
+    }
+    let next = p.x0 + w;
+    // SAFETY: as `film_pending`.
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM_PENDING) =
+            (next < p.xend).then(|| Pending { x0: next, xend: p.xend, k: p.k + 1, at: crate::hw::lcd_te::cycles() });
+    }
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::cont(crate::hw::lcd_te::cycles().wrapping_sub(t0));
+    true
+}
+
+/// A film tick while a background frame still has bands to render: render
+/// the next one once its buffer has left the wire. `true` while a frame is
+/// pending (the tick is spent on it, no new frame starts).
+#[cfg(feature = "ui-px-dma")]
+fn film_continue(anim: &Anim) -> bool {
+    let Some(p) = film_pending() else { return false };
+    if !lcd::async_busy() {
+        // The stream died; `film_reap` collects it.
+        // SAFETY: as `film_pending`.
+        unsafe { *core::ptr::addr_of_mut!(FILM_PENDING) = None };
+        return false;
+    }
+    if p.k >= usize::from(lcd::async_sent()) + N_BANDBUF {
+        if crate::hw::lcd_te::cycles().wrapping_sub(p.at) > PENDING_STALL_CYC {
+            film_pending_abort();
+        }
+        return true;
+    }
+    if !film_render_pending(anim, p) {
+        film_pending_abort();
+    }
+    // A tick that rendered: not a tick interval for the gate (`film_tick_spacing`).
+    FILM_TICK_DREW.store(true, Ordering::Relaxed);
+    true
+}
+
+#[cfg(not(feature = "ui-px-dma"))]
+fn film_continue(_anim: &Anim) -> bool {
+    false
+}
+
+/// Finish the pending frame's bands before it is collected (`film_reap`
+/// with `wait`): at a film's end, before another frame, before anything
+/// else draws. Never inside a film tick, whose caller holds the film's
+/// state borrowed: a frame still pending there is abandoned instead.
+#[cfg(feature = "ui-px-dma")]
+fn film_finish_pending() {
+    while let Some(p) = film_pending() {
+        if FILM_IN_TICK.load(Ordering::Relaxed) || !FILM_SET.load(Ordering::Relaxed) {
+            film_pending_abort();
+            return;
+        }
+        let mut spins = 0u32;
+        while p.k >= usize::from(lcd::async_sent()) + N_BANDBUF {
+            if !lcd::async_busy() || spins >= 4_000_000 {
+                film_pending_abort();
+                return;
+            }
+            spins += 1;
+            core::hint::spin_loop();
+        }
+        // SAFETY: `FILM_SET` holds a written film and no tick is running,
+        // so nothing else borrows it; a shared borrow for the build.
+        let anim = unsafe { &(*core::ptr::addr_of!(FILM)).assume_init_ref().0 };
+        if !film_render_pending(anim, p) {
+            film_pending_abort();
+            return;
+        }
+    }
+}
+
 /// A busy-film frame is streaming in the background, or has finished but not
 /// been collected: it holds `FRAME_IN_FLIGHT` and the band buffers.
 #[cfg(feature = "ui-px-dma")]
@@ -959,6 +1102,12 @@ static FILM_BG: AtomicBool = AtomicBool::new(false);
 fn film_reap(wait: bool) -> bool {
     if !FILM_BG.load(Ordering::Acquire) {
         return true;
+    }
+    if film_pending().is_some() {
+        if !wait {
+            return false;
+        }
+        film_finish_pending();
     }
     if lcd::async_busy() {
         if !wait {
@@ -1384,7 +1533,14 @@ pub fn film_start_with(s: &Screen) {
     // `film_abort`), and forget the previous film's window.
     crate::hw::lcd_te::stamps(true);
     FILM_WIN.store(0, Ordering::Relaxed);
-    // A new film's tick spacing starts over (not an earlier film's).
+    // A new film's tick spacing starts over (not an earlier film's), and no
+    // frame of an earlier film is pending (`film_reap(true)` above
+    // finished it).
+    #[cfg(feature = "ui-px-dma")]
+    // SAFETY: as `film_pending`.
+    unsafe {
+        *core::ptr::addr_of_mut!(FILM_PENDING) = None;
+    }
     FILM_TICK_AT.store(0, Ordering::Relaxed);
     FILM_TICK_DT.store(FILM_TICK_DT_START, Ordering::Relaxed);
     FILM_TICK_DREW.store(false, Ordering::Relaxed);
@@ -2087,6 +2243,9 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
     // wrote it, and no other reference is live during this call
     // (`FILM_IN_TICK` keeps a nested tick out).
     let (anim, last) = unsafe { (*core::ptr::addr_of_mut!(FILM)).assume_init_mut() };
+    if film_continue(anim) {
+        return;
+    }
     let due = if back_to_back {
         now.wrapping_sub(*last) >= FRAME_PERIOD_MS
     } else {
