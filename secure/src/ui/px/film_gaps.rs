@@ -65,7 +65,20 @@ struct Rec {
     /// film frame's render could Chrom-ART take at most?
     rend: [u64; 5],
     bands: u32,
+    /// Display-list items dispatched and drawn (past their band cull), summed
+    /// over those bands: a disc straddling a band edge is drawn twice.
+    items: u64,
+    drawn: u64,
+    /// Film frames' CPU outside the signer: [`WAIT_BEAM`] spinning for the
+    /// panel's start range, [`WAIT_BUF`] for a free band buffer, and
+    /// [`WAIT_FRAME`] the whole film tick that drew a frame.
+    waits: [u64; 3],
 }
+
+/// [`wait`] kinds.
+pub const WAIT_BEAM: usize = 0;
+pub const WAIT_BUF: usize = 1;
+pub const WAIT_FRAME: usize = 2;
 
 /// Every film frame's stream checked against the panel's scan model
 /// (`pqsigner_ui_px::stream::phase::tear_check`): the tearing hunt of
@@ -148,6 +161,9 @@ impl Rec {
         tear: Tear::ZERO,
         rend: [0; 5],
         bands: 0,
+        items: 0,
+        drawn: 0,
+        waits: [0; 3],
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -631,6 +647,50 @@ pub fn render(total: u32, split: &pqsigner_ui_px::raster::RenderSplit) {
         *acc = acc.wrapping_add(u64::from(c));
     }
     r.bands = r.bands.wrapping_add(1);
+    r.items = r.items.wrapping_add(u64::from(split.items));
+    r.drawn = r.drawn.wrapping_add(u64::from(split.drawn));
+}
+
+/// `cyc` cycles of film-frame time of kind `k` ([`WAIT_BEAM`], [`WAIT_BUF`],
+/// [`WAIT_FRAME`]) while recording.
+pub fn wait(k: usize, cyc: u32) {
+    let r = rec();
+    if r.on && k < r.waits.len() {
+        r.waits[k] = r.waits[k].wrapping_add(u64::from(cyc));
+    }
+}
+
+/// The ninth page: `FRAME .1ms/fr`, then per film frame in tenths of a ms
+/// the whole tick and its render, the beam spin and the buffer wait, and the
+/// items dispatched and drawn per frame (whole numbers).
+pub fn rows9(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let frames = u64::from(r.frames.max(1));
+    let per = |c: u64| u32::try_from(c / frames / 16_000).unwrap_or(u32::MAX);
+    let n_per = |c: u64| u32::try_from(c / frames).unwrap_or(u32::MAX);
+    let mut n = 0;
+    for &b in b"FRAME .1ms/fr" {
+        push(&mut out[0], &mut n, b);
+    }
+    let rows: [(&[u8], u32, &[u8], u32); 3] = [
+        (b"tick ", per(r.waits[WAIT_FRAME]), b" rend ", per(r.rend[0])),
+        (b"beam ", per(r.waits[WAIT_BEAM]), b" buf ", per(r.waits[WAIT_BUF])),
+        (b"item ", n_per(r.items), b" drw ", n_per(r.drawn)),
+    ];
+    for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {
+        let mut n = 0;
+        for &c in a {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, x);
+        for &c in b {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, y);
+    }
 }
 
 /// The eighth page: `RENDER .1ms <share>%`, then the film's render time per

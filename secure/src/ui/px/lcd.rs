@@ -516,7 +516,12 @@ use pqsigner_ui_px::stream::phase::{start_window, REFRESH_CYC, STAMP_STALE_CYC};
 /// returns whether it did anything.
 fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
     let Some((lo, hi)) = start_window(xa, xend) else { return false };
+    #[cfg(feature = "ui-px-film-gaps")]
+    let mut spun_at: Option<u32> = None;
     loop {
+        // Dev (`ui-px-film-gaps`): the spin just ended, into the recorder.
+        #[cfg(feature = "ui-px-film-gaps")]
+        if let Some(t) = spun_at.take() { super::film_gaps::wait(super::film_gaps::WAIT_BEAM, crate::hw::lcd_te::cycles().wrapping_sub(t)); }
         let Some(edge) = crate::hw::lcd_te::last_edge() else { return false };
         let since = crate::hw::lcd_te::cycles().wrapping_sub(edge);
         if since > STAMP_STALE_CYC {
@@ -528,6 +533,10 @@ fn phase_start(xa: i32, xend: i32, work: &mut dyn FnMut() -> bool) -> bool {
         };
         if wait > BAND_RENDER_CYC && work() {
             continue;
+        }
+        #[cfg(feature = "ui-px-film-gaps")]
+        {
+            spun_at = Some(crate::hw::lcd_te::cycles());
         }
         core::hint::spin_loop();
     }
@@ -895,6 +904,8 @@ fn present_bg(
         // Bounded like the drain; a stream that died stops it at once.
         #[cfg(feature = "ui-px-frametime")]
         let t_w = frametime::cycles();
+        #[cfg(feature = "ui-px-film-gaps")]
+        let t_buf = crate::hw::lcd_te::cycles();
         let mut spins = 0u32;
         while k >= usize::from(lcd::async_sent()) + N_BANDBUF {
             if !lcd::async_busy() || spins >= 4_000_000 {
@@ -903,6 +914,8 @@ fn present_bg(
             spins += 1;
             core::hint::spin_loop();
         }
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::wait(super::film_gaps::WAIT_BUF, crate::hw::lcd_te::cycles().wrapping_sub(t_buf));
         #[cfg(feature = "ui-px-frametime")]
         {
             cost.dma_wait = cost.dma_wait.wrapping_add(frametime::cycles().wrapping_sub(t_w));
@@ -1840,6 +1853,8 @@ fn film_gaps_page() {
     dev_page(&rows);
     super::film_gaps::rows8(&mut rows);
     dev_page(&rows);
+    super::film_gaps::rows9(&mut rows);
+    dev_page(&rows);
     #[cfg(feature = "ui-px-dma2d-bench")]
     dma2d_bench_pages();
 }
@@ -1860,6 +1875,8 @@ fn dma2d_bench_pages() {
     res.rows_speed(&mut rows);
     dev_page(&rows);
     res.rows_exact(&mut rows);
+    dev_page(&rows);
+    res.rows_r2m(&mut rows);
     dev_page(&rows);
 }
 
@@ -2009,6 +2026,8 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
     }
     #[cfg(all(feature = "ui-px-film-bench", feature = "ui-px-frametime"))]
     let t_frame = frametime::cycles();
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_tick = crate::hw::lcd_te::cycles();
     let Some(atlas) = assets::atlas_film_frame() else {
         #[cfg(feature = "ui-px-film-gaps")]
         film_gaps_refused(_src, b'N');
@@ -2016,6 +2035,8 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
     };
     anim.step(now);
     let _cost = present_film(anim, &atlas.marks(), &atlas.font(), false);
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_FRAME, crate::hw::lcd_te::cycles().wrapping_sub(t_tick));
     #[cfg(all(feature = "ui-px-film-bench", feature = "ui-px-frametime"))]
     bench_split_add(&_cost, frametime::cycles().wrapping_sub(t_frame));
     let after = timeout::now();

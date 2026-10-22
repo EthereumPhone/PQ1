@@ -104,8 +104,32 @@ pub struct Results {
     /// whole-band pattern.
     exact: [(u32, u32, u8); 3],
     /// Every DMA2D error flag seen (`TEIF`/`CAEIF`/`CEIF`), OR-ed, plus bit 31
-    /// for a transfer that never ended.
+    /// for a transfer that never ended and bit 30 for a fill that read back
+    /// wrong.
     err: u32,
+    /// Glyphs in the runs (DMA2D drew `glyphs` of them).
+    glyphs_all: u32,
+    /// The two register-to-memory fills (the first transfer after the clock
+    /// enable, and one after the blends): `CR` read back after completion,
+    /// the first pixel that is not 0 (`u32::MAX`: none) and its value.
+    r2m: [(u32, u32, u16); 2],
+}
+
+/// Fill the band with `0x1234`, clear it with register-to-memory, and report
+/// `(CR after, first non-zero pixel, its value)`.
+fn r2m_probe(hw: &mut [u16], err: &mut u32) -> (u32, u32, u16, u32) {
+    hw.fill(0x1234);
+    let t = cycles();
+    *err |= hw_fill(hw.as_mut_ptr(), H as u32, BAND_COLS as u32, 0, 0);
+    let dt = cycles().wrapping_sub(t);
+    let cr = REG.cr.read();
+    match hw.iter().position(|&p| p != 0) {
+        Some(i) => {
+            *err |= 1 << 30;
+            (cr, i as u32, hw[i], dt)
+        }
+        None => (cr, u32::MAX, 0, dt),
+    }
 }
 
 fn cycles() -> u32 {
@@ -121,6 +145,8 @@ fn go(mode: u32) -> u32 {
         let isr = REG.isr.read();
         if isr & (ISR_TCIF | ISR_ERR) != 0 {
             REG.ifcr.write(IFCR_ALL);
+            // Order the caller's reads of the output after the completion.
+            cortex_m::asm::dsb();
             return isr & ISR_ERR;
         }
     }
@@ -193,8 +219,9 @@ fn compare(a: &[u16], b: &[u16]) -> (u32, u32, u8) {
     (diff, a.len().min(b.len()) as u32, max)
 }
 
-/// The glyph runs: six lines of four, in the band's 48 columns.
-const LINES: [&[u8]; 6] = [b"Sign", b"0.25", b"ETH ", b"abcd", b"XYZ9", b"send"];
+/// The glyph runs: six lines of three, inside the band's 48 columns so the
+/// CPU and DMA2D draw the same glyphs (four overran it on 2026-10-22).
+const LINES: [&[u8]; 6] = [b"Sig", b"0.2", b"ETH", b"abc", b"XYZ", b"snd"];
 const TEXT_COLOR: Rgb = Rgb::new(0xE8, 0xE4, 0xDC);
 
 fn run_at(text: &[u8], line: usize) -> TextRun<'_> {
@@ -298,13 +325,7 @@ pub fn run(font: &Font<'_>, cpu: &mut [u16], hw: &mut [u16], scratch: &mut [u16]
         s.clear();
     }
     let fill_cpu = cycles().wrapping_sub(t);
-    hw.fill(0x1234);
-    let t = cycles();
-    err |= hw_fill(hw.as_mut_ptr(), H as u32, BAND_COLS as u32, 0, 0);
-    let fill_hw = cycles().wrapping_sub(t);
-    if hw.iter().any(|&p| p != 0) {
-        err |= 1 << 30;
-    }
+    let (cr0, i0, v0, fill_hw) = r2m_probe(hw, &mut err);
 
     // 2. A whole-band A4 blend over black: a glyph-like pattern, about half
     //    the pixels transparent, one DMA2D line per landscape column.
@@ -348,6 +369,9 @@ pub fn run(font: &Font<'_>, cpu: &mut [u16], hw: &mut [u16], scratch: &mut [u16]
         exact[pass] = compare(cpu, hw);
     }
     exact[2] = pattern;
+    // The clear again, now that DMA2D has run blends.
+    let (cr1, i1, v1, _) = r2m_probe(hw, &mut err);
+    let glyphs_all = LINES.iter().flat_map(|l| l.iter()).filter(|&&c| c != b' ').count() as u32;
     REG.rcc_ahb1enr.clear_bits(RCC_AHB1ENR_DMA2DEN);
     Results {
         fill: (fill_cpu, fill_hw),
@@ -356,6 +380,8 @@ pub fn run(font: &Font<'_>, cpu: &mut [u16], hw: &mut [u16], scratch: &mut [u16]
         glyphs: n as u32,
         exact,
         err,
+        glyphs_all,
+        r2m: [(cr0, i0, v0), (cr1, i1, v1)],
     }
 }
 
@@ -365,6 +391,13 @@ fn push(row: &mut [u8; DISPLAY_COLS], n: &mut usize, s: &[u8]) {
             row[*n] = b;
             *n += 1;
         }
+    }
+}
+
+fn push_hex(row: &mut [u8; DISPLAY_COLS], n: &mut usize, v: u32, digits: u32) {
+    for k in (0..digits).rev() {
+        let d = ((v >> (4 * k)) & 0xF) as u8;
+        push(row, n, &[if d < 10 { b'0' + d } else { b'A' + d - 10 }]);
     }
 }
 
@@ -404,20 +437,47 @@ impl Results {
             push(row, &mut n, b" ");
             push_u32(row, &mut n, us(h));
         }
-        let mut n = 13;
+        let mut n = 12;
         push(&mut out[3], &mut n, b"g");
         push_u32(&mut out[3], &mut n, self.glyphs);
+        push(&mut out[3], &mut n, b"/");
+        push_u32(&mut out[3], &mut n, self.glyphs_all);
     }
 
-    /// `D2D exact e<err>`, then per comparison `<diff>/<px> d<max>`: glyphs
+    /// `R2M m i v`, then per fill (first after the clock enable, then after
+    /// the blends) `CR[23:16]` (the mode, hex), the first non-zero pixel
+    /// (`-`: none) and its value (hex): 1234 means untouched.
+    pub fn rows_r2m(&self, out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+        for row in out.iter_mut() {
+            *row = [b' '; DISPLAY_COLS];
+        }
+        let mut n = 0;
+        push(&mut out[0], &mut n, b"R2M m i v");
+        for (k, (row, &(cr, i, v))) in out[1..].iter_mut().zip(self.r2m.iter()).enumerate() {
+            let mut n = 0;
+            push_u32(row, &mut n, k as u32 + 1);
+            push(row, &mut n, b" ");
+            push_hex(row, &mut n, cr >> 16, 2);
+            push(row, &mut n, b" ");
+            if i == u32::MAX {
+                push(row, &mut n, b"-");
+            } else {
+                push_u32(row, &mut n, i);
+                push(row, &mut n, b" ");
+                push_hex(row, &mut n, u32::from(v), 4);
+            }
+        }
+    }
+
+    /// `D2D ex e<err, hex>`, then per comparison `<diff>/<px> d<max>`: glyphs
     /// over black, over a colour, the band pattern.
     pub fn rows_exact(&self, out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
         for row in out.iter_mut() {
             *row = [b' '; DISPLAY_COLS];
         }
         let mut n = 0;
-        push(&mut out[0], &mut n, b"D2D exact e");
-        push_u32(&mut out[0], &mut n, self.err);
+        push(&mut out[0], &mut n, b"D2D ex e");
+        push_hex(&mut out[0], &mut n, self.err, 8);
         let names: [&[u8]; 3] = [b"blk ", b"col ", b"pat "];
         for (row, (name, (diff, px, max))) in out[1..].iter_mut().zip(names.iter().zip(self.exact)) {
             let mut n = 0;
