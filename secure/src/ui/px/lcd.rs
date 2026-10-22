@@ -1442,13 +1442,22 @@ fn band_window(c0: i32, c1: i32) -> u32 {
 static FILM_WIN: AtomicU32 = AtomicU32::new(0);
 
 /// Build plus the first band's render, before a partial frame can start
-/// streaming: ~2 ms on the EVT (1.0 ms other + ~1.1 ms per band, measured
-/// 2026-10-19).
-const FILM_LEAD_CYC: u32 = 320_000;
+/// streaming: 1.3 ms. It was 2 ms (1.0 ms other + ~1.1 ms per band,
+/// measured 2026-10-19); by 2026-10-22 the build, damage and atlas views
+/// measured ~0.1 ms together and a band ~1.1 ms, so 2 ms admitted frames
+/// ~0.8 ms early, to spin.
+const FILM_LEAD_CYC: u32 = 208_000;
 
 /// How long a frame may spin for its start range rather than wait for a
-/// later tick: 2 ms.
-const FILM_SPIN_OK_CYC: u32 = 320_000;
+/// later tick: 0.2 ms. While a signature hashes, a tick comes every few
+/// microseconds, so the FIRST tick in this allowance always admits the
+/// frame at its earliest: at 2 ms, 95% of frames reached `phase_start` 2 ms
+/// or more before their range opened and spun 2.6 ms per frame on average
+/// (EVT 2026-10-22), CPU the signer never got back. A start range is ~9-10
+/// ms wide for the film's 3-4-band windows (`phase::start_window`), so a
+/// frame admitted at its opening has room for a late lead. Sparse ticks
+/// still fall back to drawing now and spinning (`film_phase_ok`).
+const FILM_SPIN_OK_CYC: u32 = 32_000;
 
 /// Whether a film frame may start at this tick (#934 stage 1). With the TE
 /// stamps on, a partial frame should start when the beam is in its window's
