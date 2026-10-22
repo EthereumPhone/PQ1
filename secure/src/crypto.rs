@@ -310,10 +310,15 @@ fn c10_sign_verified_with_progress_inner(
     // therefore DELIBERATELY shared across both passes.)
     let mut shuffle_seed_a = [0u8; 32];
     let mut shuffle_seed_b = [0u8; 32];
+    // Each strong draw ends in tens of ms of FI-checked CPU work with no chip
+    // wait inside it, so the film gets one tick between draws as well (EVT
+    // 2026-10-22: ~54 ms pauses spanning each draw boundary).
+    crate::ui::busy_poll();
     #[cfg(not(test))]
-    if crate::rng_strong::fill(&mut shuffle_seed_a).is_err()
-        || crate::rng_strong::fill(&mut shuffle_seed_b).is_err()
-    {
+    if crate::rng_strong::fill(&mut shuffle_seed_a).is_err() || {
+        crate::ui::busy_poll();
+        crate::rng_strong::fill(&mut shuffle_seed_b).is_err()
+    } {
         shuffle_seed_a.zeroize();
         shuffle_seed_b.zeroize();
         opt_rand_buf.zeroize();

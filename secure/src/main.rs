@@ -457,6 +457,8 @@ mod ui {
     impl Drop for ChipWaitTicks {
         fn drop(&mut self) {}
     }
+    /// The signer ticks the film between its strong draws.
+    pub fn busy_poll() {}
 
     // Mirrors the production constants in `crate::ui` so the
     // `display_under_test` scaffold can re-mount the per-renderer
