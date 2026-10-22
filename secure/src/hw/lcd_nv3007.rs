@@ -68,7 +68,16 @@
 
 use crate::board;
 use crate::hw::mmio::{Reg32, RoReg32};
-use crate::hw::spi_hw::{cs_assert, cs_deassert, SPI_BASE};
+use crate::hw::spi_hw::{cs_deassert, SPI_BASE};
+
+/// Chip select for every new transaction this driver starts. Waits first for
+/// the busy film's background stream (#934 stage 2) to leave the wire, or
+/// aborts it: no command, window or pixel may interleave with that stream.
+fn cs_assert() {
+    #[cfg(feature = "ui-px-dma")]
+    let _ = async_drain();
+    crate::hw::spi_hw::cs_assert();
+}
 
 // ---------------------------------------------------------------------------
 // Display geometry
@@ -1067,6 +1076,255 @@ pub fn stream_dma_finish() -> Result<(), crate::hw::gpdma::DmaErr> {
         Err(_) => {
             spi_force_down();
             r
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Background streams (#934 stage 2, the busy film only)
+// ---------------------------------------------------------------------------
+//
+// The film renders its bands into the band buffers and queues them here;
+// GPDMA's completion interrupt (`on_dma_irq`, IRQ 29) drains each band's SPI
+// transaction and starts the next queued one, so the CPU does not wait for
+// the wire. The stream is framed exactly like the polled one (one window,
+// CS low throughout, one SPI transaction per band) and the order rules are
+// `pqsigner_ui_px::stream::BandQueue`'s, host-tested there.
+//
+// What the interrupt touches: GPDMA channel 0's registers, SPI1's registers
+// (the panel's alone) and the DC/CS pins through their BSRR (atomic set /
+// reset: no read-modify-write that could lose a thread-side update on the
+// same port). Every new transaction this driver starts goes through
+// `cs_assert`, which waits for a stream in flight to finish (or aborts it), so
+// nothing interleaves with it.
+
+#[cfg(feature = "ui-px-dma")]
+mod bg {
+    use pqsigner_ui_px::stream::BandQueue;
+
+    /// Bands in one frame, at most (W / 48, rounded up).
+    pub const MAX_BANDS: usize = 9;
+
+    pub struct Stream {
+        pub q: BandQueue,
+        /// Each queued band's buffer: address and pixel count.
+        pub bands: [(u32, u16); MAX_BANDS],
+    }
+
+    /// Written by the thread only while no stream is in flight (`begin`),
+    /// and by the thread under a critical section or by the interrupt
+    /// otherwise; never both at once.
+    pub static mut STREAM: Stream = Stream { q: BandQueue::new(0), bands: [(0, 0); MAX_BANDS] };
+}
+
+#[cfg(feature = "ui-px-dma")]
+static BG_BUSY: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+/// Whether the last background stream reached the panel in full.
+#[cfg(feature = "ui-px-dma")]
+static BG_OK: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
+
+/// Dev (`ui-px-film-gaps`, tearing hunt 2026-10-21): when the last
+/// background stream left the wire, the longest the wire sat idle inside it
+/// waiting for the thread's next band, and when the current wait began.
+#[cfg(all(feature = "ui-px-dma", feature = "ui-px-film-gaps"))]
+mod bg_dev {
+    use core::sync::atomic::{AtomicBool, AtomicU32};
+    pub static END: AtomicU32 = AtomicU32::new(0);
+    pub static STALL: AtomicU32 = AtomicU32::new(0);
+    pub static IDLE_AT: AtomicU32 = AtomicU32::new(0);
+    pub static IDLE: AtomicBool = AtomicBool::new(false);
+}
+
+/// Dev: the last background stream's end (cycle count) and longest
+/// mid-stream wait for a band (cycles).
+#[cfg(all(feature = "ui-px-dma", feature = "ui-px-film-gaps"))]
+pub fn dev_bg_times() -> (u32, u32) {
+    use core::sync::atomic::Ordering;
+    (bg_dev::END.load(Ordering::Acquire), bg_dev::STALL.load(Ordering::Acquire))
+}
+
+/// Polls `async_drain` waits before it aborts the stream: well over the
+/// longest stream (a full window is 24.3 ms of wire), on the same
+/// ~5 cycles-per-poll scale as `gpdma::wait`'s cap.
+#[cfg(feature = "ui-px-dma")]
+const BG_DRAIN_CAP: u32 = 4_000_000;
+
+/// Start a background stream of `total` bands into the window just opened
+/// (`set_window` + `stream_open`). Queue them with [`async_queue`].
+#[cfg(feature = "ui-px-dma")]
+pub fn async_begin(total: u8) -> bool {
+    use core::sync::atomic::Ordering;
+    if total == 0 || usize::from(total) > bg::MAX_BANDS || BG_BUSY.load(Ordering::Acquire) {
+        return false;
+    }
+    crate::hw::gpdma::irq_enable();
+    // SAFETY: no stream is in flight (checked above), so the interrupt does
+    // not run for this state until the first band starts.
+    unsafe {
+        let st = &mut *core::ptr::addr_of_mut!(bg::STREAM);
+        st.q = pqsigner_ui_px::stream::BandQueue::new(total);
+    }
+    BG_OK.store(true, Ordering::Relaxed);
+    #[cfg(feature = "ui-px-film-gaps")]
+    {
+        bg_dev::STALL.store(0, Ordering::Relaxed);
+        bg_dev::IDLE.store(false, Ordering::Relaxed);
+    }
+    BG_BUSY.store(true, Ordering::Release);
+    true
+}
+
+/// Hand over the next band. `px` must stay alive and unmodified until
+/// [`async_sent`] counts it. `false` if it was refused (odd or too long, all
+/// bands already queued, or the stream died); the caller then stops.
+#[cfg(feature = "ui-px-dma")]
+pub fn async_queue(px: &[u16]) -> bool {
+    use core::sync::atomic::Ordering;
+    if px.is_empty() || px.len() > MAX_DMA_PX_CHUNK || px.len() % 2 != 0 {
+        return false;
+    }
+    cortex_m::interrupt::free(|_| {
+        if !BG_BUSY.load(Ordering::Acquire) {
+            return false;
+        }
+        // SAFETY: interrupts are off, so the DMA interrupt cannot touch the
+        // state while it is read and written here.
+        let st = unsafe { &mut *core::ptr::addr_of_mut!(bg::STREAM) };
+        let k = usize::from(st.q.queued_count());
+        if k >= bg::MAX_BANDS {
+            return false;
+        }
+        st.bands[k] = (px.as_ptr() as u32, px.len() as u16);
+        match st.q.queue() {
+            Some(pqsigner_ui_px::stream::Step::Start(n)) => {
+                // Dev: the wire was idle since the last band left it.
+                #[cfg(feature = "ui-px-film-gaps")]
+                if bg_dev::IDLE.swap(false, Ordering::Relaxed) {
+                    let idle = crate::hw::lcd_te::cycles().wrapping_sub(bg_dev::IDLE_AT.load(Ordering::Relaxed));
+                    bg_dev::STALL.fetch_max(idle, Ordering::Relaxed);
+                }
+                bg_start(st.bands[usize::from(n)]);
+                true
+            }
+            Some(_) => true,
+            None => false,
+        }
+    })
+}
+
+/// Bands of the current (or last) background stream that have left the wire.
+#[cfg(feature = "ui-px-dma")]
+pub fn async_sent() -> u8 {
+    cortex_m::interrupt::free(|_| {
+        // SAFETY: as in `async_queue`.
+        unsafe { (*core::ptr::addr_of!(bg::STREAM)).q.sent_count() }
+    })
+}
+
+/// Whether a background stream is on the wire.
+#[cfg(feature = "ui-px-dma")]
+pub fn async_busy() -> bool {
+    BG_BUSY.load(core::sync::atomic::Ordering::Acquire)
+}
+
+/// Whether the last background stream reached the panel in full.
+#[cfg(feature = "ui-px-dma")]
+pub fn async_ok() -> bool {
+    BG_OK.load(core::sync::atomic::Ordering::Acquire)
+}
+
+/// Wait for a background stream to finish; abort it if it does not within
+/// `BG_DRAIN_CAP` polls (its interrupt cannot run from here, or it stalled
+/// short of its last band). Returns `async_ok()`.
+#[cfg(feature = "ui-px-dma")]
+pub fn async_drain() -> bool {
+    let mut spins = 0u32;
+    while async_busy() {
+        spins += 1;
+        if spins >= BG_DRAIN_CAP {
+            async_abort();
+            break;
+        }
+        core::hint::spin_loop();
+    }
+    async_ok()
+}
+
+/// Bring a background stream down where it stands: the channel aborted, the
+/// SPI forced down, CS released. The glass then holds a partial frame,
+/// which `async_ok() == false` reports.
+#[cfg(feature = "ui-px-dma")]
+pub fn async_abort() {
+    cortex_m::interrupt::free(|_| {
+        if async_busy() {
+            crate::hw::gpdma::abort();
+            spi_force_down();
+            bg_finish(false);
+        }
+    });
+}
+
+#[cfg(feature = "ui-px-dma")]
+fn bg_start((addr, n): (u32, u16)) {
+    // SAFETY: `addr`/`n` came from a live `&[u16]` handed to `async_queue`,
+    // whose caller keeps it unmodified until the band is counted sent.
+    let px = unsafe { core::slice::from_raw_parts(addr as *const u16, usize::from(n)) };
+    dc_high();
+    spi_begin_px(n); // TSIZE = frames
+    crate::hw::gpdma::start_px_irq(px); // BNDT = 2 * frames, in bytes
+}
+
+#[cfg(feature = "ui-px-dma")]
+fn bg_finish(ok: bool) {
+    use core::sync::atomic::Ordering;
+    #[cfg(feature = "ui-px-film-gaps")]
+    bg_dev::END.store(crate::hw::lcd_te::cycles(), Ordering::Release);
+    cs_deassert();
+    BG_OK.store(ok, Ordering::Relaxed);
+    BG_BUSY.store(false, Ordering::Release);
+}
+
+/// GPDMA1 channel 0's interrupt: the band on the wire is done (or failed).
+/// Drain its SPI transaction and start the next queued band, or close the
+/// stream after the last one.
+///
+/// # Safety
+/// Called only from `DefaultHandler` for `gpdma::IRQN`.
+#[cfg(feature = "ui-px-dma")]
+pub unsafe fn on_dma_irq() {
+    use crate::hw::gpdma::Irq;
+    match crate::hw::gpdma::take_irq() {
+        Irq::Nothing => {}
+        Irq::Failed => {
+            if async_busy() {
+                spi_force_down();
+                bg_finish(false);
+            }
+        }
+        Irq::Done => {
+            if !async_busy() {
+                return;
+            }
+            if !spi_end() {
+                bg_finish(false);
+                return;
+            }
+            // SAFETY: the thread touches this state only with interrupts off.
+            let st = unsafe { &mut *core::ptr::addr_of_mut!(bg::STREAM) };
+            match st.q.sent() {
+                Some(pqsigner_ui_px::stream::Step::Start(n)) => bg_start(st.bands[usize::from(n)]),
+                Some(pqsigner_ui_px::stream::Step::Finished) => bg_finish(true),
+                Some(pqsigner_ui_px::stream::Step::Idle) => {
+                    // Dev: the next band is not queued yet; the wire waits.
+                    #[cfg(feature = "ui-px-film-gaps")]
+                    {
+                        use core::sync::atomic::Ordering;
+                        bg_dev::IDLE_AT.store(crate::hw::lcd_te::cycles(), Ordering::Relaxed);
+                        bg_dev::IDLE.store(true, Ordering::Relaxed);
+                    }
+                }
+                None => bg_finish(false),
+            }
         }
     }
 }

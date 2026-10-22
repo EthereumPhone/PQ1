@@ -439,4 +439,25 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     REG.sr.modify(|sr| sr & !SR_DCIS);
 
     state.pending = 0;
+
+    // The digest is out and the engine idle: give the secure world's busy
+    // UI its turn (feature `tick-hook`; the FSBL never enables it).
+    #[cfg(feature = "tick-hook")]
+    // SAFETY: category 3 — FFI call to the secure world's
+    // `pqsigner_hash_tick`, which takes no arguments and may run a whole
+    // SHA-256 of its own: this hash is finished and `state` is not used
+    // after this point.
+    unsafe {
+        pqsigner_hash_tick();
+    }
+}
+
+#[cfg(feature = "tick-hook")]
+extern "C" {
+    /// Defined by the secure world (`tick-hook`): called after every
+    /// finished digest, so hash-bound work (signing, keygen) gives a busy
+    /// animation a chance to draw far more often than its own progress
+    /// reports (~6,000 hashes apart). Must return promptly when it has
+    /// nothing to do.
+    fn pqsigner_hash_tick();
 }

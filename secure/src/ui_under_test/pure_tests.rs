@@ -1557,7 +1557,7 @@ fn positive_busy_poll_draws_only_under_the_provisioning_flag() {
         .find("if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {")
         .expect("busy_poll must test the provisioning flag");
     let tick = body
-        .find("px::lcd::film_tick(0);")
+        .find("px::lcd::film_tick_chip();")
         .expect("busy_poll must advance the film");
     assert!(guard < tick, "the film tick must sit inside the flag test");
     assert_eq!(body.matches("film_tick").count(), 1, "one tick per poll");
@@ -1573,13 +1573,24 @@ fn positive_busy_poll_draws_only_under_the_provisioning_flag() {
 }
 
 #[test]
-fn positive_each_driver_ticks_once_from_its_busy_wait() {
-    assert_eq!(IFX_I2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
+fn positive_each_driver_ticks_from_its_busy_waits() {
+    // OPTIGA: the response poll, and the NACK retries of a register write
+    // or read (the chip busy or waking; EVT 2026-10-21), each after its
+    // delay and nowhere else.
+    assert_eq!(IFX_I2C_SRC.matches("crate::ui::busy_poll();").count(), 3);
     let poll = fn_body(IFX_I2C_SRC, "unsafe fn poll_response_ready(");
     assert!(
         poll.contains("crate::ui::busy_poll();"),
         "OPTIGA: tick while the chip is busy"
     );
+    for f in ["unsafe fn write_register(", "unsafe fn read_register("] {
+        // A method: it ends at the impl's indentation.
+        let rest = &IFX_I2C_SRC[IFX_I2C_SRC.find(f).expect(f)..];
+        let body = &rest[..rest.find("\n    }\n").expect("method end")];
+        assert_eq!(body.matches("crate::ui::busy_poll();").count(), 1, "{f}");
+        let delay = body.find("cortex_m::asm::delay(80_000);").expect("retry delay");
+        assert!(delay < body.find("crate::ui::busy_poll();").unwrap(), "{f}: after the delay");
+    }
     assert_eq!(T1OI2C_SRC.matches("crate::ui::busy_poll();").count(), 1);
     let read = fn_body(T1OI2C_SRC, "unsafe fn read_frame(");
     let sof_loop = &read[..read.find("if !found_sof {").expect("SOF loop")];
@@ -1660,9 +1671,48 @@ fn negative_pq1_resets_the_optiga_once_per_reinit_cycle() {
 }
 
 #[test]
-fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
-    // Signing and the timing-uniform unlock path must never draw from a chip
-    // wait: only `provision_from_mnemonic` holds the guard.
+fn negative_pq1_optiga_provisioning_resets_only_on_demand() {
+    // EVT 2026-10-16: pq1's OPTIGA ran the whole write sequence with no
+    // throttle reset and zero retries (OPTIGA phase 4.1 s -> 1.4 s), and the
+    // wallet unlocked before and after a power cycle. ASSUMPTION ATTACKED:
+    // (a) pq1 loses the retry, so a chip that does throttle fails setup;
+    // (b) a reset site comes back unconditional on pq1; (c) iota2, where the
+    // throttle was seen, loses its resets.
+    let start = OPTIGA_MOD_SRC.find("fn on_demand<T>(").expect("on_demand");
+    let end = start + OPTIGA_MOD_SRC[start..].find("\n    }\n").expect("end");
+    let od = &OPTIGA_MOD_SRC[start..end];
+    let pq1 = od
+        .find("#[cfg(all(feature = \"stm32u585\", feature = \"board-pq1\"))]")
+        .expect("(a) the pq1 retry path");
+    let retry = &od[pq1..];
+    let reset = retry.find("self.hard_reset_and_reinit()?;").expect("(a) resets on failure");
+    let shield = retry.find("self.ensure_shield()?;").expect("(a) re-handshakes");
+    let again = retry.find("f(self)\n").expect("(a) retries");
+    assert!(reset < shield && shield < again);
+    assert_eq!(retry.matches("f(self)").count(), 3, "(a) one try, one retry, and the plain path");
+    assert!(od.contains("#[cfg(not(all(feature = \"stm32u585\", feature = \"board-pq1\")))]\n        f(self)"));
+    // (b)/(c): in store_objects every throttle reset is iota2-only.
+    let so = OPTIGA_MOD_SRC.find("    fn store_objects(").expect("store_objects");
+    let so_end = so + OPTIGA_MOD_SRC[so..].find("\n    }\n").expect("end");
+    let body = &OPTIGA_MOD_SRC[so..so_end];
+    let gated = "#[cfg(all(feature = \"stm32u585\", not(feature = \"board-pq1\")))]";
+    assert_eq!(body.matches(gated).count(), 3, "(b)/(c) PBS, auth_ref and per-OID resets");
+    assert!(!body.contains("#[cfg(feature = \"stm32u585\")]\n            self.hard_reset_and_reinit()?;"));
+    // The steps go through on_demand.
+    for step in [
+        "self.on_demand(|s| s.ensure_shield())?;",
+        "self.on_demand(|s| unsafe { s.provision_auth_ref(cred.expose_for_optiga()) });",
+        "self.on_demand($call)",
+    ] {
+        assert!(body.contains(step), "missing: {step}");
+    }
+}
+
+#[test]
+fn negative_chip_wait_ticks_are_raised_only_by_provisioning_and_the_signers_draws() {
+    // The timing-uniform unlock path must never draw from a chip wait: only
+    // `provision_from_mnemonic` (its chip writes) and the signer (its strong
+    // draws, owner 2026-10-21) hold the guard.
     let mut holders = std::vec::Vec::new();
     for (path, src) in production_sources() {
         let n = src.matches("ChipWaitTicks::enter()").count();
@@ -1672,9 +1722,29 @@ fn negative_chip_wait_ticks_are_raised_only_by_provisioning() {
     }
     assert_eq!(
         holders,
-        std::vec![("src/crypto.rs".into(), 2)],
+        std::vec![("src/crypto.rs".into(), 3)],
         "holders: {holders:?}"
     );
+    // The signer's guard spans its three strong draws and is dropped before
+    // either sign runs.
+    let sign = fn_body(CRYPTO_SRC_PROV, "fn c10_sign_verified_with_progress_inner(");
+    assert_eq!(sign.matches("ChipWaitTicks::enter()").count(), 1);
+    let enter = sign
+        .find("let ticks = crate::ui::ChipWaitTicks::enter();")
+        .expect("signer guard");
+    let opt = sign
+        .find("crate::rng_strong::fill(&mut opt_rand_buf)")
+        .expect("OptRand draw");
+    let seed_b = sign
+        .find("crate::rng_strong::fill(&mut shuffle_seed_b)")
+        .expect("second shuffle-seed draw");
+    let lower = sign.find("drop(ticks);").expect("signer guard dropped");
+    let first_sign = sign.find(".sign_with_shuffle(").expect("first sign");
+    assert!(
+        enter < opt && seed_b < lower && lower < first_sign,
+        "the signer's guard must bracket its strong draws and end before signing"
+    );
+    assert_eq!(sign.matches("rng_strong::fill(").count(), 3);
     let prov = fn_body(CRYPTO_SRC_PROV, "pub fn provision_from_mnemonic(");
     assert_eq!(prov.matches("ChipWaitTicks::enter()").count(), 2);
     let enter = prov
@@ -1719,11 +1789,16 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
         .lines()
         .filter(|l| !l.trim_start().starts_with('#') && l.contains("ui-px-film-gaps"))
         .collect();
+    // Only the film bench (itself fenced, below) implies it.
     assert_eq!(
         mentions,
-        std::vec!["ui-px-film-gaps = [\"ui-px\", \"ui-lcd\"]"]
+        std::vec![
+            "ui-px-film-gaps = [\"ui-px\", \"ui-lcd\"]",
+            "ui-px-film-bench = [\"ui-px-film-gaps\"]"
+        ]
     );
     assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-gaps\","));
+    assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-bench\","));
     let forbidden = MAKEFILE_SRC_PROV
         .split_once("override PROD_FORBIDDEN :=")
         .expect("PROD_FORBIDDEN")
@@ -1732,6 +1807,7 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
         .expect("one block")
         .0;
     assert!(forbidden.contains("ui-px-film-gaps"));
+    assert!(forbidden.contains("ui-px-film-bench"));
     // Every call into the recorder sits under its feature.
     for (path, src) in production_sources() {
         if path.ends_with("film_gaps.rs") {
@@ -1743,14 +1819,22 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
                 // Gated on the line itself, or by the function it sits in.
                 let gated = |k: usize| {
                     let attr = lines[k].trim();
-                    attr.starts_with("#[cfg(") && attr.contains("feature = \"ui-px-film-gaps\"")
+                    // The film bench implies the recorder (and is fenced too).
+                    attr.starts_with("#[cfg(")
+                        && (attr.contains("feature = \"ui-px-film-gaps\"")
+                            || attr.contains("feature = \"ui-px-film-bench\""))
                 };
-                let encl = (0..i)
-                    .rev()
-                    .find(|&k| lines[k].starts_with("fn ") || lines[k].starts_with("pub fn "))
-                    .expect("enclosing fn");
+                if gated(i - 1) {
+                    continue;
+                }
+                // Any top-level fn form (`pub(crate) fn`, `unsafe fn`, ...).
+                let top_fn = |k: usize| {
+                    let t = lines[k];
+                    !t.starts_with(' ') && (t.starts_with("fn ") || t.contains(" fn ")) && !t.starts_with("//")
+                };
+                let encl = (0..i).rev().find(|&k| top_fn(k)).expect("enclosing fn");
                 assert!(
-                    gated(i - 1) || (encl > 0 && gated(encl - 1)),
+                    encl > 0 && gated(encl - 1),
                     "{path}:{}: recorder call without its cfg: {l}",
                     i + 1
                 );

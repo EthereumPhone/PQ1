@@ -400,6 +400,10 @@ fn show_film_gaps() {
     hold(&Screen::legacy(&rows));
     super::px::film_gaps::rows2(&mut rows);
     hold(&Screen::legacy(&rows));
+    super::px::film_gaps::rows3(&mut rows);
+    hold(&Screen::legacy(&rows));
+    super::px::film_gaps::rows4(&mut rows);
+    hold(&Screen::legacy(&rows));
 }
 
 /// Import: the intro, then the 24 words typed in. `None` = the user went

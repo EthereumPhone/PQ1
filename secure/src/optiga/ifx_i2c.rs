@@ -213,6 +213,10 @@ impl IfxState {
             // recent toolchains — use `delay` which has a volatile
             // counter and always runs the full cycle count.
             cortex_m::asm::delay(80_000);
+            // The chip is busy or waking (it NACKs): the busy film may draw
+            // (EVT 2026-10-21: ~50 ms freezes at a sign's start, mostly
+            // outside I2C transfers).
+            crate::ui::busy_poll();
         }
         Err(IfxError::I2c)
     }
@@ -245,6 +249,8 @@ impl IfxState {
             // recent toolchains — use `delay` which has a volatile
             // counter and always runs the full cycle count.
             cortex_m::asm::delay(80_000);
+            // The chip is busy or waking (it NACKs): the busy film may draw.
+            crate::ui::busy_poll();
         }
         Err(IfxError::I2c)
     }

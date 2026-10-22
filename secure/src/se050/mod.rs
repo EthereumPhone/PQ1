@@ -1059,7 +1059,14 @@ impl Se050 {
         for attempt in 0..2u8 {
             buf.fill(0);
             crate::fi::zeroize_barrier();
-            let result = if attempt == 0 { self.init() } else { self.reinit() }.and_then(|()| {
+            #[cfg(feature = "ui-px-film-gaps")]
+            if attempt > 0 { crate::ui::px::film_gaps::count(b'Y'); }
+            #[cfg(feature = "ui-px-film-gaps")]
+            let phase = crate::ui::px::film_gaps::Phase::new(b'I');
+            let ready = if attempt == 0 { self.init() } else { self.reinit() };
+            #[cfg(feature = "ui-px-film-gaps")]
+            drop(phase);
+            let result = ready.and_then(|()| {
                 unsafe { apdu::get_random(&mut self.t1, &mut self.scp03, buf).map(|_| ()) }
             });
             match result {

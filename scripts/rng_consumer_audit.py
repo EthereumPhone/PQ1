@@ -19,7 +19,11 @@ EXCLUDED_FILES = {"rng.rs", "rng_strong.rs", "host_rng.rs"}
 # old `byte_nonsecret` call was removed. A new accessor must not be able to
 # walk around the allowlist; matching the `byte` prefix family keeps any
 # future `byte_*` helper in scope by default.
-CALL = re.compile(r"\b(?:crate::)?rng::(?:fill|byte|byte_nonsecret|try_byte_nonsecret)\s*\(")
+# `try_delay_byte_raw` (2026-10-22) is the FI delay path's raw-word arm, the
+# same consumer as `try_byte_nonsecret` one step earlier.
+CALL = re.compile(
+    r"\b(?:crate::)?rng::(?:fill|byte|byte_nonsecret|try_byte_nonsecret|try_delay_byte_raw)\s*\("
+)
 SOFTWARE_RNG = re.compile(
     r"\b(?:StdRng|SmallRng|ChaCha(?:8|12|20)?Rng|thread_rng|fastrand|"
     r"yasmarang|xorshift(?:32|64)?|Lcg|seed_from_u64)\b|\brand::(?:rngs|thread_rng)"
@@ -42,7 +46,10 @@ EXPECTED = {
     # poisons the operation, which then refuses at its own boundary. What
     # remains is the NON-substituting accessor, which can say no.
     "secure/src/fi.rs": Counter(
-        {"if let Some(b) = crate::rng::try_byte_nonsecret() {": 1}
+        {
+            "if let Some(b) = crate::rng::try_byte_nonsecret() {": 1,
+            "if let Some(b) = crate::rng::try_delay_byte_raw() {": 1,
+        }
     ),
     # Bench-only measurement probes (`ui-px-bench`, and the fault probe also
     # needs `rng-fault-probe`, which is in PROD_FORBIDDEN and fenced in

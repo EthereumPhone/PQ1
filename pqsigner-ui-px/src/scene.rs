@@ -713,6 +713,9 @@ pub struct Anim {
     idle_since: u32,
     /// When the current screen arrived (a verdict's clock).
     arrived_at: u32,
+    /// A sign fading out under the arriving verdict ([`Anim::verdict_to`]):
+    /// the outgoing screen, its clock when handed over, and when.
+    handoff: Option<(Screen, u32, u32)>,
 }
 
 /// Screens that own the canvas: no token disc rests on them, and none
@@ -749,9 +752,28 @@ impl Anim {
             film: None,
             idle_since: now,
             arrived_at: now,
+            handoff: None,
         };
         a.alpha_out.snap(0);
         a
+    }
+
+    /// Present the PIN check's result over a resting CHECKING PIN without
+    /// the black gap (owner 2026-10-16): WRONG PIN continues on the same pill
+    /// into its turn and shake; any other verdict (UNLOCKED) arrives while
+    /// the pill fades out. From any other screen this is plain
+    /// [`Anim::go_to`]. The outgoing caption fades as on any transition.
+    pub fn verdict_to(&mut self, screen: &Screen, now: u32) {
+        let from = self.cur;
+        let from_t = now.wrapping_sub(self.arrived_at);
+        let continues = crate::verdict::is_pin_check(&from) && screen.kind() == Some(Kind::Verdict);
+        self.go_to(screen, 0, now);
+        if continues {
+            self.arrived_at = now.wrapping_sub(crate::verdict::handoff_start(screen));
+            if screen.icon() != Some(Icon::Pill) {
+                self.handoff = Some((from, from_t, now));
+            }
+        }
     }
 
     #[must_use]
@@ -781,6 +803,7 @@ impl Anim {
         self.flip_at = None;
         self.idle_since = now;
         self.arrived_at = now;
+        self.handoff = None;
         self.sweep = 0;
         if token_less(screen) {
             // No token rides into a token-less screen: park it now so a
@@ -1086,6 +1109,13 @@ impl Anim {
             let t = now.wrapping_sub(self.arrived_at);
             match self.cur.kind() {
                 Some(Kind::Verdict) => {
+                    if let Some((from, from_t, at)) = self.handoff {
+                        let u = motion::phase(now.wrapping_sub(at), 0, crate::verdict::HANDOFF_FADE_MS);
+                        let fade = ONE_Q16 - motion::ease_out(u);
+                        if fade > 0 {
+                            crate::verdict::build_sign_faded(&from, from_t, frame, fade);
+                        }
+                    }
                     crate::verdict::build_sign(&self.cur, t, frame);
                     let ta = crate::verdict::caption_alpha(&self.cur, t);
                     let a = (i64::from(ta) * 255 >> 16) as u8;
@@ -1641,6 +1671,59 @@ mod tests {
         let discs = f.items().iter().filter(|i| matches!(i, Item::Disc { .. })).count();
         assert_eq!(discs, 1, "the trail has caught up");
         assert!(a.next_wake(t).is_none(), "a settled detail sleeps until input");
+    }
+
+    /// Owner 2026-10-16: no black gap between CHECKING PIN and its result.
+    /// WRONG PIN continues on the same pill; UNLOCKED arrives while the pill
+    /// fades. Every frame from the hand-off on carries a sign.
+    #[test]
+    fn the_pin_check_hands_over_without_a_black_gap() {
+        use crate::screen::{ResultMark, State};
+        let checking = ScreenBuilder::verdict(b"CHECKPIN", Icon::Pill, b"CHECKING PIN", State::Awaiting, ResultMark::None)
+            .finish()
+            .unwrap();
+        let wrong = ScreenBuilder::verdict(b"WRONGPIN", Icon::Pill, b"WRONG PIN", State::Failed, ResultMark::None)
+            .finish()
+            .unwrap();
+        let unlocked = ScreenBuilder::verdict(b"UNLOCKED", Icon::Unlock, b"UNLOCKED", State::Done, ResultMark::None)
+            .finish()
+            .unwrap();
+        let items = |a: &Anim| {
+            let mut f = Frame::new();
+            a.build(&Marks::default(), &Font::empty(), &mut f);
+            let shapes = f.items().iter().filter(|i| matches!(i, Item::Shape { .. })).count();
+            let discs = f.items().iter().filter(|i| matches!(i, Item::Disc { .. })).count();
+            (shapes, discs)
+        };
+        // Control: the same verdict started cold opens on its black hold.
+        let cold = Anim::new(&wrong, 0, 10_000);
+        assert_eq!(items(&cold), (0, 0), "a cold verdict opens black");
+        for (next, name) in [(wrong, "WRONG PIN"), (unlocked, "UNLOCKED")] {
+            let mut a = Anim::new(&checking, 0, 0);
+            let mut t = 16;
+            while a.step(t) && t < 5000 {
+                t += 16;
+            }
+            assert_eq!(items(&a), (1, 4), "CHECKING PIN rests as the pill and its four dots");
+            a.verdict_to(&next, t);
+            if name == "WRONG PIN" {
+                assert_eq!(items(&a), (1, 4), "WRONG PIN starts on the filled pill already on the glass");
+            }
+            let mut u = t;
+            while u < t + 1500 {
+                a.step(u);
+                assert!(items(&a).0 > 0, "{name}: no sign at +{} ms", u - t);
+                u += 16;
+            }
+        }
+        // A hand-off only ever starts from CHECKING PIN.
+        let mut a = Anim::new(&wrong, 0, 0);
+        let mut t = 16;
+        while a.step(t) && t < 5000 {
+            t += 16;
+        }
+        a.verdict_to(&unlocked, t);
+        assert_eq!(items(&a), (0, 0), "from any other verdict it is the plain cold start");
     }
 
     #[test]

@@ -143,6 +143,20 @@ pub fn try_byte_nonsecret() -> Option<u8> {
     }
 }
 
+/// One FI delay length read straight from the TRNG, or `None` to take
+/// [`try_byte_nonsecret`]'s hardened fill instead: see
+/// `hw::rng::delay_byte_raw`. The host backend has no raw path.
+pub fn try_delay_byte_raw() -> Option<u8> {
+    #[cfg(feature = "stm32u585")]
+    {
+        hw_rng::delay_byte_raw()
+    }
+    #[cfg(not(feature = "stm32u585"))]
+    {
+        None
+    }
+}
+
 /// Whether a FIXED FI delay length is currently permitted.
 ///
 /// True only inside the RNG's own conditioning sequence — see

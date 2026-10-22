@@ -288,9 +288,11 @@ pub fn show_progress(title: &str, percent: u8) {
     d.flush();
 }
 
-/// Set only while provisioning writes the wallet to the two chips (a
-/// [`ChipWaitTicks`] held by `crypto::provision_from_mnemonic`). Nothing else
-/// sets it, so signing and the PIN check never draw from inside a chip wait.
+/// Set only while provisioning writes the wallet to the two chips, or while
+/// the signer draws its strong randomness from them (a [`ChipWaitTicks`]
+/// held by `crypto::provision_from_mnemonic` or
+/// `crypto::c10_sign_verified_with_progress_inner`). Nothing else sets it,
+/// so the PIN check never draws from inside a chip wait.
 static CHIP_WAIT_TICKS: AtomicBool = AtomicBool::new(false);
 
 /// While alive, [`busy_poll`] advances the busy film: the chip writes of
@@ -312,8 +314,8 @@ impl Drop for ChipWaitTicks {
     }
 }
 
-/// Whether provisioning's chip writes are running (a [`ChipWaitTicks`] is
-/// alive). `optiga::settle` reads it to time its waits by the S-only clock
+/// Whether provisioning's chip writes or the signer's strong draws are
+/// running (a [`ChipWaitTicks`] is alive). `optiga::settle` reads it to time its waits by the S-only clock
 /// and draw the film inside them; everywhere else the waits stay the plain
 /// cycle delays they always were.
 #[inline]
@@ -324,12 +326,14 @@ pub fn chip_wait_ticks_active() -> bool {
 
 /// The OPTIGA and SE050 drivers call this each time they wait on a busy
 /// chip. Under [`ChipWaitTicks`] it draws at most one film frame
-/// (`film_tick` is rate-limited and a no-op with no film running); otherwise
+/// (`film_tick_chip` is rate-limited and a no-op with no film running); otherwise
 /// it does nothing.
 #[inline]
 pub fn busy_poll() {
     #[cfg(all(feature = "ui-px", feature = "ui-lcd"))]
     if CHIP_WAIT_TICKS.load(Ordering::Relaxed) {
-        px::lcd::film_tick(0);
+        #[cfg(feature = "ui-px-film-gaps")]
+        px::film_gaps::count(b'B');
+        px::lcd::film_tick_chip();
     }
 }

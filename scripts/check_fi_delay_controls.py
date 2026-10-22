@@ -49,6 +49,8 @@ EMPTY = P + "negative_an_armed_but_empty_pool_counts_a_miss_and_defers"
 SHORTFALL = P + "positive_a_shortfall_is_topped_up_in_place_rather_than_escalated"
 WIPE = P + "negative_disarm_wipes_the_pool_so_no_length_outlives_its_guard"
 TOPUP = P + "positive_replenish_tops_up_only_once_the_pool_has_run_low"
+RAWREP = P + "negative_a_raw_delay_word_that_is_zero_or_repeated_is_refused"
+RAWZERO = P + "negative_a_raw_delay_byte_is_never_a_zero_length"
 
 F = "secure_fi_pin_rng_pure_tests::fi_source_text::"
 NOREUSE = F + "negative_rng_byte_never_substitutes_a_reused_delay_length"
@@ -102,6 +104,14 @@ MUTATIONS = [
     ("pool", "replenish re-draws even when full",
      "if ARMED.load(Relaxed) && AVAIL.load(Relaxed) >= REFILL_BELOW {\n        return;\n    }", "",
      {TOPUP}),
+    # ---- the raw-word arm for top-level delays (2026-10-22) ----
+    ("pool", "the raw word's repetition test is dropped",
+     "if word == 0 || word == last {", "if word == 0 {",
+     {RAWREP}),
+    ("pool", "a raw word's zero low byte becomes a zero-length delay",
+     "word.to_le_bytes().into_iter().find(|&b| b != 0)",
+     "word.to_le_bytes().into_iter().next()",
+     {RAWZERO}),
     # ---- the no-reuse policy and its sink (#833, #835) ----
     ("fi", "the no-length arm halts again (the pre-#835 sink)",
      "None => poison_delay_source(),", "None => loop { core::hint::spin_loop() },",

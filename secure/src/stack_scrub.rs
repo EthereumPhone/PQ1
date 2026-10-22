@@ -106,6 +106,24 @@ pub mod hwm {
         STACK_HWM_SCANS.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// The headroom left: bytes from the bottom of the stack to the lowest
+    /// word any frame has written since boot, after scanning the running
+    /// command's dead stack too. `None` before any scan found one.
+    pub fn free_now() -> Option<u32> {
+        scan_below_sp();
+        let low = STACK_HWM_LOW.load(Ordering::Relaxed);
+        (low != u32::MAX).then(|| low - bottom())
+    }
+
+    /// The stack region's size in bytes.
+    pub fn size() -> u32 {
+        extern "C" {
+            static _stack_start: u32;
+        }
+        // SAFETY: address of a linker symbol, never dereferenced here.
+        unsafe { core::ptr::addr_of!(_stack_start) as u32 - bottom() }
+    }
+
     /// Fill `[_stack_end, SP)` with the pattern.
     #[inline(never)]
     pub fn paint_below_sp() {
@@ -128,6 +146,32 @@ impl Drop for ScrubOnDrop {
     fn drop(&mut self) {
         scrub_dead_stack();
     }
+}
+
+/// Dev bench (`ui-px-film-bench`): bytes at the bottom of the secure stack
+/// still zero since the last [`scrub_dead_stack`], i.e. the headroom the
+/// deepest frame since then (exceptions included) left. Exact up to the zero
+/// words a frame may itself have stored at its lowest addresses.
+#[cfg(all(target_arch = "arm", feature = "ui-px-film-bench"))]
+pub fn untouched_since_scrub() -> u32 {
+    let start = core::ptr::addr_of!(_stack_end) as usize;
+    let sp = cortex_m::register::msp::read() as usize;
+    let mut p = start;
+    // SAFETY: reads only `[_stack_end, SP)`, word-aligned RAM reserved for
+    // the stack (see `scrub_dead_stack`).
+    while p < sp && unsafe { core::ptr::read_volatile(p as *const u32) } == 0 {
+        p += 4;
+    }
+    (p - start) as u32
+}
+
+/// Dev bench: the secure stack region's size in bytes.
+#[cfg(all(target_arch = "arm", feature = "ui-px-film-bench"))]
+pub fn stack_size() -> u32 {
+    extern "C" {
+        static _stack_start: u32;
+    }
+    (core::ptr::addr_of!(_stack_start) as usize - core::ptr::addr_of!(_stack_end) as usize) as u32
 }
 
 /// Host and QEMU-model builds have no linker-provided secure stack to scrub.

@@ -90,6 +90,19 @@ const SR_ERR: u32 = SR_USEF | SR_ULEF | SR_DTEF;
 const CR_EN: u32 = 1 << 0;
 const CR_RESET: u32 = 1 << 1;
 const CR_SUSP: u32 = 1 << 2;
+/// `GPDMA_CxCR` interrupt enables (RM0456 Rev 7, GPDMA_CxCR): transfer
+/// complete (bit 8), data transfer error (10), update link error (11), user
+/// setting error (12). Set only by [`start_px_irq`], the busy film's
+/// background stream (#934 stage 2); [`start_px`] keeps them all 0.
+const CR_TCIE: u32 = 1 << 8;
+const CR_DTEIE: u32 = 1 << 10;
+const CR_ULEIE: u32 = 1 << 11;
+const CR_USEIE: u32 = 1 << 12;
+const CR_IRQ: u32 = CR_TCIE | CR_DTEIE | CR_ULEIE | CR_USEIE;
+
+/// RM0456 Rev 7, Table "STM32U5 series vector table": GPDMA1 channel 0 is
+/// IRQ 29.
+pub const IRQN: u32 = 29;
 
 /// `SPI_CFG1.TXDMAEN`.
 const CFG1_TXDMAEN: u32 = 1 << 15;
@@ -213,6 +226,19 @@ pub fn init() {
 /// reported and no transfer is issued"). An even pixel count gives the second;
 /// the band buffers are `#[repr(align(4))]` for the first.
 pub fn start_px(px: &[u16]) {
+    arm(px, CR_EN);
+}
+
+/// [`start_px`] with the channel's completion and error interrupts on: the
+/// busy film's background stream (#934 stage 2), whose interrupt
+/// (`lcd_nv3007::on_dma_irq`, [`IRQN`]) finishes this band and starts the
+/// next. The same preconditions; `px` must stay alive and unmodified until
+/// that interrupt has run for it.
+pub fn start_px_irq(px: &[u16]) {
+    arm(px, CR_EN | CR_IRQ);
+}
+
+fn arm(px: &[u16], ccr: u32) {
     debug_assert!(!px.is_empty(), "a null block raises USEF, not a no-op");
     let bytes = px.len() * 2;
     debug_assert!(bytes <= 0xFFFF, "BNDT is 16 bits");
@@ -242,9 +268,56 @@ pub fn start_px(px: &[u16]) {
     // guards every clock enable in this tree.
     cortex_m::asm::dsb();
 
-    // EN last, and nothing else in CxCR: all interrupt enables stay 0 (we
-    // poll), PRIO stays at its reset low/low, LAP/LSM stay 0.
-    REG.ccr.write(CR_EN);
+    // EN last, with the interrupt enables the caller chose (none for the
+    // polled path); PRIO stays at its reset low/low, LAP/LSM stay 0.
+    REG.ccr.write(ccr);
+}
+
+/// What the channel's interrupt found.
+pub enum Irq {
+    /// The block completed; the flags are cleared.
+    Done,
+    /// It failed; the channel has been aborted and its flags cleared.
+    Failed,
+    /// No flag set (a stale or spurious entry).
+    Nothing,
+}
+
+/// Read and clear the channel's status from its interrupt.
+pub fn take_irq() -> Irq {
+    let sr = REG.csr.read();
+    if sr & SR_ERR != 0 {
+        abort();
+        REG.cfcr.write(FCR_ALL);
+        return Irq::Failed;
+    }
+    if sr & SR_TCF != 0 {
+        REG.cfcr.write(FCR_ALL);
+        // As in `wait`: before the buffer the channel read may be reused.
+        cortex_m::asm::dsb();
+        return Irq::Done;
+    }
+    Irq::Nothing
+}
+
+/// Route [`IRQN`] to the secure world at a priority below SysTick, and
+/// enable it. Idempotent. Only CxCR enables set by [`start_px_irq`] make the
+/// channel raise it.
+pub fn irq_enable() {
+    let bit = 1u32 << (IRQN % 32);
+    // SAFETY: NVIC registers are real, aligned core registers on the secure
+    // side; `ITNS`/`IPR` are read-modify-written on this IRQ's own bit and
+    // byte only, from thread mode (the ISR touches none of them).
+    unsafe {
+        // Secure target: never retargetable to the non-secure vector table.
+        Reg32::new(0xE000_E380 + 4 * (IRQN / 32)).modify(|v| v & !bit);
+        // IPR7 byte 1: priority 0x40, below SysTick (0, `setup_systick`) so the
+        // millisecond clock and the watchdog kick are never held up by it.
+        let ipr = Reg32::new(0xE000_E400 + 4 * (IRQN / 4));
+        let shift = 8 * (IRQN % 4);
+        ipr.modify(|v| (v & !(0xFF << shift)) | (0x40 << shift));
+        Reg32::new(0xE000_E100 + 4 * (IRQN / 32)).write(bit);
+    }
 }
 
 /// Block until the armed transfer completes, or fails, or exceeds `spin_cap`

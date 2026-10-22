@@ -348,6 +348,62 @@ pub(crate) fn delay_pool_word() -> Option<u32> {
     Some(word)
 }
 
+/// The last word [`delay_byte_raw`] served: its own continuous-repetition
+/// test. Kept apart from `PREVIOUS_WORD`, which guards real output only (see
+/// [`delay_pool_word`]).
+static LAST_DELAY_WORD: AtomicU32 = AtomicU32::new(0);
+
+/// DRDY polls [`delay_byte_raw`] makes with interrupts masked before it hands
+/// the delay back to the hardened path. A word is normally ready within a few
+/// dozen; this bounds the masked window to tens of microseconds.
+const DELAY_RAW_POLL_LIMIT: u32 = 1_000;
+
+/// One FI delay length straight from the TRNG for a top-level
+/// `fi::wait_random` (outside a fill, so the delay pool is not armed), or
+/// `None` to let it take the hardened 1-byte fill instead.
+///
+/// That fill costs ~0.37 ms per delay — it runs ~31 delays of its own and
+/// refills the 128-byte pool to use a quarter of it — against ~0.01 ms here.
+/// On the EVT (2026-10-22) 86 such delays were ~32 ms of every 48 ms film
+/// stall at a sign's start. This is #832's candidate fix 2 and the pool's own
+/// word source: every length is still fresh hardware output at the moment it
+/// is used, so `CLAUDE.md`'s carve-out for software generators does not
+/// apply.
+///
+/// Refuses, and the caller falls back, on: a contended driver; a latched or
+/// concurrent seed/clock error (the fallback's `fill_bound` recovers first,
+/// #835 C1); no word within [`DELAY_RAW_POLL_LIMIT`] polls; an all-zero word;
+/// a word equal to the last one served here.
+pub(crate) fn delay_byte_raw() -> Option<u8> {
+    // #835 H5: take the driver, read and release it in ONE masked section. A
+    // preempting `wait_random` must never see the driver busy with the pool
+    // unarmed: it would find no length anywhere and poison healthy hardware.
+    cortex_m::interrupt::free(|_| {
+        let _guard = DriverGuard::try_acquire().ok()?;
+        let mut polls = 0u32;
+        loop {
+            let sr = REG.sr.read();
+            if !status_is_clean(sr) {
+                return None;
+            }
+            if sr & DRDY != 0 {
+                break;
+            }
+            polls += 1;
+            if polls >= DELAY_RAW_POLL_LIMIT {
+                return None;
+            }
+        }
+        let word = REG.dr.read();
+        // RM0456: a seed error can assert concurrently with the DR read.
+        if !status_is_clean(REG.sr.read()) {
+            return None;
+        }
+        let last = LAST_DELAY_WORD.swap(word, Ordering::Relaxed);
+        crate::fi_delay_pool::raw_delay_byte(word, last)
+    })
+}
+
 #[inline]
 fn status_is_clean(sr: u32) -> bool {
     sr & ERROR_FLAGS == 0

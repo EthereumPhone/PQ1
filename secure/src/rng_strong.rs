@@ -107,7 +107,12 @@ pub(crate) fn fill_with_source_draw(
     // mistaken for an STM32 contribution.
     buf.zeroize();
     crate::fi::zeroize_barrier();
+    // Dev (`ui-px-film-gaps`): time the platform draw into the film's pause.
+    #[cfg(feature = "ui-px-film-gaps")]
+    let phase = crate::ui::px::film_gaps::Phase::new(b'T');
     let platform_result = crate::rng::fill(buf);
+    #[cfg(feature = "ui-px-film-gaps")]
+    drop(phase);
     #[cfg(feature = "rng-xor-probe")]
     crate::rng_xor_probe::record_platform(buf);
     let mut platform_nonzero = 0u8;
@@ -209,8 +214,17 @@ pub fn fill(buf: &mut [u8]) -> Result<(), ()> {
     #[cfg(all(not(test), not(feature = "mock-se")))]
     {
         return fill_with_source_draw(buf, |source, block| match source {
-            SeSource::Optiga => unsafe { crate::se_random_optiga(block) }.is_ok(),
-            SeSource::Se050 => unsafe { crate::se_random_se050(block) }.is_ok(),
+            SeSource::Optiga => {
+                // Dev (`ui-px-film-gaps`): time the draw into the film's pause.
+                #[cfg(feature = "ui-px-film-gaps")]
+                let _phase = crate::ui::px::film_gaps::Phase::new(b'O');
+                unsafe { crate::se_random_optiga(block) }.is_ok()
+            }
+            SeSource::Se050 => {
+                #[cfg(feature = "ui-px-film-gaps")]
+                let _phase = crate::ui::px::film_gaps::Phase::new(b'E');
+                unsafe { crate::se_random_se050(block) }.is_ok()
+            }
         });
     }
 

@@ -176,6 +176,38 @@ const fn tenths(v: i32) -> Q8 {
 
 /// Draw the verdict's sign at `t` ms after arrival.
 pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
+    build_sign_faded(s, t, frame, ONE_Q16);
+}
+
+/// The PIN check's busy verdict: CHECKING PIN, the white pill with its dots.
+#[must_use]
+pub fn is_pin_check(s: &Screen) -> bool {
+    s.kind() == Some(Kind::Verdict) && s.icon() == Some(Icon::Pill) && s.state() == Some(State::Awaiting)
+}
+
+/// Where the next verdict's clock starts when it takes over from a resting
+/// CHECKING PIN (owner 2026-10-16: no black gap between the check and its
+/// result). Another pill (WRONG PIN) continues on the very pill already on
+/// the glass, from the moment it is filled, so it goes straight to the turn
+/// and the shake. Any other sign (UNLOCKED's padlock) skips only the black
+/// hold and arrives while the pill fades out (`HANDOFF_FADE_MS`).
+#[must_use]
+pub fn handoff_start(next: &Screen) -> u32 {
+    let tl = timeline(next);
+    if next.icon() == Some(Icon::Pill) {
+        tl.hold + ARRIVE_MS + PILL_FILL
+    } else {
+        tl.hold
+    }
+}
+
+/// How long the outgoing CHECKING PIN pill takes to fade under a different
+/// arriving sign (one arrival, so the two cross at the midpoint).
+pub const HANDOFF_FADE_MS: u32 = ARRIVE_MS;
+
+/// [`build_sign`] dimmed by `fade` (Q16; verdicts sit on black, so scaling
+/// every colour is a fade). Used for the outgoing sign of a hand-off.
+pub fn build_sign_faded(s: &Screen, t: u32, frame: &mut Frame<'_>, fade: Q16) {
     let Some(icon) = s.icon() else { return };
     let tl = timeline(s);
     if t < tl.hold {
@@ -183,6 +215,7 @@ pub fn build_sign(s: &Screen, t: u32, frame: &mut Frame<'_>) {
     }
     let tm = t - tl.hold; // the sign's clock
     let (a_q16, mut k) = motion::arrive(phase(tm, 0, ARRIVE_MS));
+    let a_q16 = mul_q16(a_q16, fade.clamp(0, ONE_Q16));
     let a = ((i64::from(a_q16) * 255) >> 16) as u8;
     if a == 0 {
         return;

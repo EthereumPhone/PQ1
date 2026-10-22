@@ -386,6 +386,18 @@ mod pq_wrap;
 #[cfg(not(test))]
 mod ui;
 
+/// The hash driver's tick (`pqsigner-hw` feature `tick-hook`, raised by
+/// `ui-px`): `pqsigner_sha256_final` calls it after every finished digest,
+/// so a running busy film draws from hash-bound work at its own pace rather
+/// than only at the signer's progress reports, which land ~6,000 hashes
+/// (~29 ms) apart (EVT, 2026-10-21). A no-op with no film running.
+#[cfg(feature = "ui-px")]
+#[no_mangle]
+pub extern "C" fn pqsigner_hash_tick() {
+    #[cfg(all(not(test), feature = "ui-lcd"))]
+    ui::px::lcd::film_tick_hash();
+}
+
 /// Factory provisioning state machine (`factory-provisioning`
 /// feature). One-shot ceremony the factory operator flashes and
 /// runs once per device — sets up dual-SE infrastructure and halts
@@ -445,6 +457,8 @@ mod ui {
     impl Drop for ChipWaitTicks {
         fn drop(&mut self) {}
     }
+    /// The signer ticks the film between its strong draws.
+    pub fn busy_poll() {}
 
     // Mirrors the production constants in `crate::ui` so the
     // `display_under_test` scaffold can re-mount the per-renderer
@@ -2306,6 +2320,9 @@ fn main() -> ! {
     // permanently; a bench image boots to the bench and nothing else.
     #[cfg(feature = "ui-px-bench")]
     ui::px::bench::run();
+    // Dev bench: the setup film's partial vs full redraw, no wallet (#934).
+    #[cfg(feature = "ui-px-film-bench")]
+    ui::px::lcd::film_bench();
 
     // Firmware measurement: hash flash, display 8 BIP-39 words for
     // visual comparison with the companion tool's reproducible build.
@@ -5333,6 +5350,18 @@ unsafe fn DefaultHandler(irqn: i16) {
         // counter to confirm enforcement is working.
         8 => unsafe { hw::tzic::on_violation() }, // GTZC_IRQn
 
+        // The panel's TE line (pq1: EXTI2 = IRQ 13), enabled only while a
+        // busy film runs (`lcd_te::stamps`): stamps the edge so the film can
+        // start a frame without waiting for one (#934 stage 1).
+        #[cfg(feature = "ui-lcd")]
+        n if hw::lcd_te::owns_irq(n) => unsafe { hw::lcd_te::on_irq() },
+
+        // GPDMA1 channel 0 (IRQ 29): the busy film's background stream
+        // (#934 stage 2). Only `gpdma::start_px_irq` sets the channel's
+        // interrupt enables, under the same cfg.
+        #[cfg(feature = "ui-px-dma")]
+        n if i32::from(n) == hw::gpdma::IRQN as i32 => unsafe { hw::lcd_nv3007::on_dma_irq() },
+
         // Unmatched — log, wipe secrets, reset (F33/RUN-5). NOT a
         // panic so the host semihosting backend gets a chance to
         // flush the log line before the chip resets. Reachability
@@ -5668,6 +5697,43 @@ unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {
     cortex_m::peripheral::SCB::sys_reset()
 }
 
+/// `"<file tail>:<line>"` for the fatal screen's last row (dev,
+/// `unlock-diag`). Panic-free: byte copies within bounds, no formatting
+/// machinery, and a non-ASCII byte becomes `?`.
+#[cfg(all(not(test), feature = "unlock-diag"))]
+fn panic_where<'a>(info: &core::panic::PanicInfo, buf: &'a mut [u8; ui::DISPLAY_COLS]) -> &'a str {
+    let Some(loc) = info.location() else { return "to retry" };
+    let mut digits = [0u8; 10];
+    let mut n = 0;
+    let mut line = loc.line();
+    loop {
+        digits[n] = b'0' + (line % 10) as u8;
+        n += 1;
+        line /= 10;
+        if line == 0 || n == digits.len() {
+            break;
+        }
+    }
+    let room = buf.len().saturating_sub(n + 1);
+    let file = loc.file().as_bytes();
+    let tail = &file[file.len().saturating_sub(room)..];
+    let mut i = 0;
+    for &b in tail {
+        buf[i] = if b.is_ascii_graphic() { b } else { b'?' };
+        i += 1;
+    }
+    if i < buf.len() {
+        buf[i] = b':';
+        i += 1;
+    }
+    while n > 0 && i < buf.len() {
+        n -= 1;
+        buf[i] = digits[n];
+        i += 1;
+    }
+    core::str::from_utf8(&buf[..i]).unwrap_or("to retry")
+}
+
 /// Custom panic handler: zeroizes all sensitive state before halting.
 /// This ensures secrets don't persist in RAM after a crash.
 ///
@@ -5706,12 +5772,20 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     // Issue #484 fatal screen. Secrets are already wiped, so row 1 is
     // truthful. Every call on this path is panic-free by construction
     // (see the handler doc + `ui::display_if_ready`).
+    // Dev (`unlock-diag`, never ships): the last row names where it panicked
+    // (the source file's tail and the line), since the EVT has no SWD.
+    #[cfg(feature = "unlock-diag")]
+    let mut where_buf = [b' '; ui::DISPLAY_COLS];
+    #[cfg(feature = "unlock-diag")]
+    let last_row = panic_where(_info, &mut where_buf);
+    #[cfg(not(feature = "unlock-diag"))]
+    let last_row = "to retry";
     if let Some(d) = ui::display_if_ready() {
         d.clear();
         d.draw_line(0, "! FATAL ERROR");
         d.draw_line(1, "Secrets wiped");
         d.draw_line(2, "Power-cycle");
-        d.draw_line(3, "to retry");
+        d.draw_line(3, last_row);
         d.flush();
     }
 

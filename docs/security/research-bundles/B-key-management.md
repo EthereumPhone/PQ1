@@ -2714,6 +2714,9 @@ pub const KEY_PAGE_ADDR: u32 = flash_policy::FIRST_BOOT_JOURNAL_ADDR;
 
 /// Wait until the secure flash controller is not busy.
 fn wait_bsy() {
+    // Dev (`ui-px-film-gaps`): time flash busy-waits into the film's pause.
+    #[cfg(feature = "ui-px-film-gaps")]
+    let _phase = crate::ui::px::film_gaps::Phase::new(b'F');
     while REG.secsr.read() & BSY != 0 {
         cortex_m::asm::nop();
     }
