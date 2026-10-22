@@ -53,14 +53,30 @@ fn rng_byte() -> Option<u8> {
             return Some(b);
         }
 
-        // 2. A direct draw, retried. `fill_bound` performs RM0456's
-        //    conditioning reset on a latched `SECS`/`CECS` BEFORE it delays
-        //    (#835 C1), so each attempt genuinely carries its own recovery.
-        // Dev (`ui-px-film-gaps`): time and count these into the film's pause.
+        // Dev (`ui-px-film-gaps`): time and count the delays that draw their
+        // own length into the film's pause.
         #[cfg(feature = "ui-px-film-gaps")]
         crate::ui::px::film_gaps::count(b'Z');
         #[cfg(feature = "ui-px-film-gaps")]
         let _phase = crate::ui::px::film_gaps::Phase::new(b'Z');
+
+        // 1b. One raw fresh TRNG word (#832 candidate fix 2). Arm 2 is a whole
+        //     hardened 1-byte fill with ~31 delays of its own, ~0.37 ms on the
+        //     EVT against ~0.01 ms here; 86 of them were ~32 ms of every 48 ms
+        //     film stall at a sign's start (2026-10-22). Anything unusual
+        //     (driver busy, error latched, slow DRDY, zero or repeated word)
+        //     falls through to arm 2, which recovers first.
+        if let Some(b) = crate::rng::try_delay_byte_raw() {
+            DELAY_RAW_DRAWS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            return Some(b);
+        }
+        DELAY_RAW_FALLBACKS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        #[cfg(feature = "ui-px-film-gaps")]
+        crate::ui::px::film_gaps::count(b'V');
+
+        // 2. A direct draw, retried. `fill_bound` performs RM0456's
+        //    conditioning reset on a latched `SECS`/`CECS` BEFORE it delays
+        //    (#835 C1), so each attempt genuinely carries its own recovery.
         let mut attempt = 0u32;
         while attempt < FRESH_DELAY_ATTEMPTS {
             // Do not spin against a source already known to be failing: the
@@ -185,6 +201,15 @@ pub fn clear_delay_poison() {
 /// to the companion is a separate decision; existing at all is the
 /// prerequisite.
 pub static DELAY_POISONINGS: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+
+/// Top-level delays served by a raw TRNG word (arm 1b of [`rng_byte`]), and
+/// those that fell back to the hardened 1-byte fill. Unconditional, like
+/// [`DELAY_POISONINGS`] (#832: whatever lands keeps a counter): a climbing
+/// fallback share means the TRNG or its driver lock is under pressure.
+pub static DELAY_RAW_DRAWS: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
+pub static DELAY_RAW_FALLBACKS: core::sync::atomic::AtomicU32 =
     core::sync::atomic::AtomicU32::new(0);
 
 /// Direct-draw attempts before refusing. Each one carries `fill_bound`'s

@@ -363,6 +363,23 @@ fn refill_in_place() -> bool {
 #[cfg(test)]
 static TEST_REFILL_WORDS: AtomicUsize = AtomicUsize::new(0);
 
+/// The delay length a raw TRNG `word` gives a top-level `fi::wait_random`
+/// (`hw::rng::delay_byte_raw`), where `last` is the word served that way
+/// before it. Here rather than in the driver so the host tests reach it.
+///
+/// `None` for an all-zero word, and for a repeat of `last`: its own
+/// continuous-repetition test, kept apart from the one that guards real
+/// output. Otherwise the first nonzero byte, uniform on 1..=255: a zero length
+/// is no delay at all (`wait_random_loop(0)` passes both its checks without
+/// waiting), the same reason [`take`] draws past a zero.
+#[must_use]
+pub fn raw_delay_byte(word: u32, last: u32) -> Option<u8> {
+    if word == 0 || word == last {
+        return None;
+    }
+    word.to_le_bytes().into_iter().find(|&b| b != 0)
+}
+
 /// Disarm and wipe. Called from `DriverGuard::drop`, before the busy flag is
 /// released, so the pool is never armed outside a guard's lifetime.
 pub fn disarm() {
@@ -562,6 +579,29 @@ mod tests {
              turned a 1/256 TRNG outcome into two poisoned operations"
         );
         assert_eq!(HITS.load(Relaxed), 2);
+    }
+
+    #[test]
+    fn negative_a_raw_delay_word_that_is_zero_or_repeated_is_refused() {
+        assert_eq!(raw_delay_byte(0, 0x1234_5678), None, "an all-zero word");
+        assert_eq!(
+            raw_delay_byte(0x1234_5678, 0x1234_5678),
+            None,
+            "a stuck DR repeating its last word must fall back to the hardened fill"
+        );
+        assert_eq!(raw_delay_byte(0x1234_5678, 0x1234_5679), Some(0x78));
+    }
+
+    #[test]
+    fn negative_a_raw_delay_byte_is_never_a_zero_length() {
+        // Every placement of zero bytes in a nonzero word: the length is the
+        // lowest nonzero byte, never zero.
+        for word in [0x0000_00A1u32, 0x0000_A100, 0x00A1_0000, 0xA100_0000, 0xA100_00B2] {
+            let b = raw_delay_byte(word, 0).expect("a nonzero word always gives a length");
+            assert_ne!(b, 0);
+            assert_eq!(b, word.to_le_bytes().into_iter().find(|&x| x != 0).unwrap());
+        }
+        assert_eq!(raw_delay_byte(0xA100_0000, 0), Some(0xA1));
     }
 
     #[test]
