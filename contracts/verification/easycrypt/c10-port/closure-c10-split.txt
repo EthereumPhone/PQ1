@@ -613,3 +613,11 @@ PhysicalRejectBound
 ByteTotalAvailability
 AvailabilityNumerics
 TotalAvailabilityExamples
+
+# Functional bounded-search backend interpretation, 2026-10-22.
+C10FirstHit
+C10FixedBackend
+C10FixedCallerBridge
+C10FunctionalWots
+C10FunctionalFors
+C10FunctionalSearch

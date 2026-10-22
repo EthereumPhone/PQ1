@@ -103,4 +103,10 @@ def shuffle_swap (order : (List Nat)) (i : Nat) (j : Nat) : (List Nat)  :=
 def shuffle_order (n : Nat) (stream : (List Nat)) : (List Nat)  :=
   (List.foldr (fun i order => (shuffle_swap order i (shuffle_choice (List.getD stream (2 * ((n - 1) - i)) 0) (List.getD stream ((2 * ((n - 1) - i)) + 1) 0) (i + 1)))) ((List.range n).map (fun i => i)) ((List.range (n - 1)).map (fun i => (i + 1))))
 
+def wots_first_slot (digests : (List (List Int))) : Nat  :=
+  (List.foldr (fun digest slot => (if ((wots_sum digest) - (wots_target )) = 0 then 1 else (if slot = 0 then 0 else (slot + 1)))) 0 digests)
+
+def fors_first_slot (digests : (List (List Int))) : Nat  :=
+  (List.foldr (fun digest slot => (if (fors_zero_field digest) = 0 then 1 else (if slot = 0 then 0 else (slot + 1)))) 0 digests)
+
 end C10Representation

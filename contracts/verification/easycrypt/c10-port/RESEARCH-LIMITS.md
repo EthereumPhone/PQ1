@@ -1,9 +1,47 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-21, following the initialized classical byte-game
+Research checkpoint: 2026-10-22, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Work remains tracked under PQ1 #100 and #295.
+
+## Functional bounded-search backend interpretation
+
+The paired representation now supplies `wots_first_slot` and `fors_first_slot`:
+zero means exhaustion, and a positive value is the first accepted index plus
+one. Both definitions come from the existing integer/list expression tree.
+The only new primitive is signed integer subtraction; count subtraction stays
+saturated, and every earlier generated definition is unchanged.
+
+[`C10FunctionalSearch.lean`](../../extracted/Extracted/C10FunctionalSearch.lean)
+connects the actual extracted `wots.find_count` and `fors.grind_r` results to
+these selectors at the ten-million-trial cap. It preserves the returned WOTS
+count, digest and digits, the FORS randomizer and digest in both OptRand modes,
+and the exact assertion-failure result on exhaustion. Generic first-hit laws
+establish the earliest hit and exhaustion without a success-existence premise
+or concrete evaluation of ten million SHA computations. The 21 new Lean
+headlines use only kernel axioms.
+
+[`C10FunctionalSearch.ec`](cdrafts-split/C10FunctionalSearch.ec) connects the
+original native `RawWots.count` and `RoleGrind.run` callers to the same selectors
+through their paired callers. `C10FixedBackend` is a separate deterministic,
+memoizing interpretation. Its complete prior history must agree with the fixed
+function; it is retained through every call. The proofs give the exact queried
+prefix and final history, one hash call per WOTS attempt, and two per FORS
+attempt, including full exhaustion. The native correspondence also requires
+256-bit backend outputs. Empty consistent history and a fixed-width function
+are proved witnesses, so these premises do not assume the desired outcome.
+The six new modules contain 46 lemmas and introduce no project axiom or admit.
+
+This closes a functional bounded-search component under the disclosed backend
+interpretation. It does **not** identify the executable Lean SHA model with
+RustCrypto, STM32 SHA, or EasyCrypt's sampled `Shared` oracle. The generated
+printers and cross-tool interpretation remain TCB, and the full Rust/EasyCrypt
+keygen/sign/verify/session relation remains open. In particular, the ideal-oracle
+availability and forgery bounds below do not transfer to this fixed backend.
+Full replay, source identities and review are separate landing evidence; the
+[control owner](CONTROL-EVIDENCE.md#functional-bounded-search-controls) states
+the exact mutation coverage and its limits.
 
 ## Quantitative loss
 
@@ -31,8 +69,8 @@ R-observer event uses the existing prefix comparison.
 
 The nine modules add 86 lemmas, including duplicate-input, zero-trial,
 prefilled-table, lossless forced-exhaustion, refusal and no-request witnesses.
-The 80 generated controls cover 19 typed procedure changes, thirteen contract
-changes and eight equivalent variants; nine scope probes are additional.
+The 81 generated controls cover 19 typed procedure changes, thirteen contract
+changes and nine equivalent variants; nine scope probes are additional.
 Their precise proof-sensitivity boundary is recorded in
 [CONTROL-EVIDENCE.md](CONTROL-EVIDENCE.md#native-total-signing-availability-controls).
 This closes native ideal-oracle total signing availability for lossless native

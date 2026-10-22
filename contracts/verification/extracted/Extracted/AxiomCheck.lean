@@ -1,4 +1,4 @@
-import Extracted.C10AcceptanceBridge
+import Extracted.C10FunctionalSearch
 import Extracted.C10ShuffleBridge
 import Extracted.C10AddressInputBridge
 import Extracted.C10HashInputBridge
@@ -459,3 +459,24 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10AcceptanceBridge.extracted_fors_trial
 #print axioms Extracted.C10AcceptanceBridge.extracted_wots_search
 #print axioms Extracted.C10AcceptanceBridge.extracted_fors_search
+#print axioms Extracted.C10FirstHit.firstSlot_nil
+#print axioms Extracted.C10FirstHit.firstSlot_cons
+#print axioms Extracted.C10FirstHit.all_rejected
+#print axioms Extracted.C10FirstHit.first_hit
+#print axioms Extracted.C10FirstHit.firstSlot_le_length
+#print axioms Extracted.C10FirstHit.firstSlot_zero_iff
+#print axioms Extracted.C10FirstHit.firstSlot_at
+#print axioms Extracted.C10FirstHit.firstSlot_range_hit
+#print axioms Extracted.C10FirstHit.firstSlot_range_exhausted
+#print axioms Extracted.C10FirstHit.wots_first_slot_common
+#print axioms Extracted.C10FirstHit.fors_first_slot_common
+#print axioms Extracted.C10FunctionalSearch.searchCounter_val
+#print axioms Extracted.C10FunctionalSearch.searchCounter_of_val
+#print axioms Extracted.C10FunctionalSearch.wots_schedule_hit
+#print axioms Extracted.C10FunctionalSearch.wots_schedule_exhausted
+#print axioms Extracted.C10FunctionalSearch.fors_schedule_hit
+#print axioms Extracted.C10FunctionalSearch.fors_schedule_exhausted
+#print axioms Extracted.C10FunctionalSearch.extracted_wots_first_slot
+#print axioms Extracted.C10FunctionalSearch.extracted_fors_first_slot
+#print axioms Extracted.C10FunctionalSearch.extracted_wots_exhaustion_iff
+#print axioms Extracted.C10FunctionalSearch.extracted_fors_exhaustion_iff

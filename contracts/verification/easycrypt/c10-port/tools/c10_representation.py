@@ -6,6 +6,7 @@ This generator and the cross-tool interpretation of arithmetic, lists and ordere
 tuples remain a disclosed TCB. The endpoint proofs are independently checked; this
 is not a cross-kernel proof exporter. Default operation checks existing outputs.
 Words use mathematical signed integers. Count subtraction is saturated at zero;
+word subtraction is signed.
 count division accepts only a positive constant divisor. Zero tests select between
 branches of the same type. No machine arithmetic,
 oracle, probability, arbitrary source injection, or cross-kernel export.
@@ -70,6 +71,9 @@ def repeat(n, x):
 def count_sub(a, b):
     assert a.ty == b.ty == COUNT
     return Expr("count_sub", (a,b), COUNT)
+def int_sub(a, b):
+    assert a.ty == b.ty == INT
+    return Expr("int_sub", (a,b), INT)
 def count_div(a, divisor):
     assert a.ty == COUNT and type(divisor) is int and divisor > 0
     return Expr("count_div", (a,literal(divisor)), COUNT)
@@ -201,6 +205,17 @@ shuffle_order = define("shuffle_order", (n,stream),
     fold(seq(count_sub(n,literal(1)),i,add(i,literal(1))),i,order,
          shuffle_swap(order,i,choice),seq(n,i,i)))
 
+# First accepted digest: zero denotes exhaustion; a positive slot is index + 1.
+# The finite digest schedule is a mathematical input, not extra oracle queries.
+digests, digest, slot = var("digests",NODES), var("digest",BYTES), var("slot",COUNT)
+next_slot = if_zero(slot,literal(0),add(slot,literal(1)))
+wots_first_slot = define("wots_first_slot", (digests,),
+    fold(digests,digest,slot,
+         if_zero(int_sub(wots_sum(digest),wots_target()),literal(1),next_slot),literal(0)))
+fors_first_slot = define("fors_first_slot", (digests,),
+    fold(digests,digest,slot,
+         if_zero(fors_zero_field(digest),literal(1),next_slot),literal(0)))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"
@@ -234,6 +249,8 @@ def render(e, lean):
         return f"({'List.replicate' if lean else 'nseq'} {r(a[0])} {r(a[1])})"
     if op == "count_sub":
         return f"({r(a[0])} - {r(a[1])})" if lean else f"(max 0 ({r(a[0])} - {r(a[1])}))"
+    if op == "int_sub":
+        return f"({r(a[0])} - {r(a[1])})"
     if op == "count_div":
         return f"({r(a[0])} {'/' if lean else '%/'} {r(a[1])})"
     if op == "index":
@@ -267,6 +284,14 @@ def check_outputs(expected):
             raise ValueError(f"generated representation missing or changed: {p}")
 
 def self_test():
+    for a, b in ((literal(1), literal(2)), (literal(1,INT), literal(2)),
+                 (literal(1), literal(2,INT))):
+        try: int_sub(a,b)
+        except AssertionError: pass
+        else: raise RuntimeError("signed subtraction accepted a count operand")
+    signed = int_sub(literal(1,INT),literal(205,INT))
+    if signed.ty != INT or any(render(signed,lean) != "(1 - 205)" for lean in (True,False)):
+        raise RuntimeError("signed subtraction changed interpretation")
     with tempfile.TemporaryDirectory(prefix="c10-representation-") as tmp:
         expected={Path(tmp)/"C10Representation.lean":source(True),
                   Path(tmp)/"C10Representation.ec":source(False)}

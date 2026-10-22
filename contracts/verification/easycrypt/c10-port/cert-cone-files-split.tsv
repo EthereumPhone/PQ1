@@ -792,3 +792,9 @@ cdrafts-split/PhysicalRejectBound.ec
 cdrafts-split/ByteTotalAvailability.ec
 cdrafts-split/AvailabilityNumerics.ec
 cdrafts-split/TotalAvailabilityExamples.ec
+cdrafts-split/C10FirstHit.ec
+cdrafts-split/C10FixedBackend.ec
+cdrafts-split/C10FixedCallerBridge.ec
+cdrafts-split/C10FunctionalWots.ec
+cdrafts-split/C10FunctionalFors.ec
+cdrafts-split/C10FunctionalSearch.ec

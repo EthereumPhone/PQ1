@@ -100,3 +100,9 @@ op shuffle_swap (order : (int list)) (i : int) (j : int) : (int list) =
 
 op shuffle_order (n : int) (stream : (int list)) : (int list) =
   (foldl (fun order i => (shuffle_swap order i (shuffle_choice (nth 0 stream (2 * (max 0 ((max 0 (n - 1)) - i)))) (nth 0 stream ((2 * (max 0 ((max 0 (n - 1)) - i))) + 1)) (i + 1)))) (mkseq (fun i => i) n) (mkseq (fun i => (i + 1)) (max 0 (n - 1)))).
+
+op wots_first_slot (digests : ((int list) list)) : int =
+  (foldr (fun digest slot => (if ((wots_sum digest) - (wots_target )) = 0 then 1 else (if slot = 0 then 0 else (slot + 1)))) 0 digests).
+
+op fors_first_slot (digests : ((int list) list)) : int =
+  (foldr (fun digest slot => (if (fors_zero_field digest) = 0 then 1 else (if slot = 0 then 0 else (slot + 1)))) 0 digests).

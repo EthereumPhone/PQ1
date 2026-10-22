@@ -285,3 +285,39 @@ Direct/CLI checks, source/statement/operation inventories, full cold replay and
 bounded review remain separate requirements. The constant rejecting test
 oracle is a nonvacuity witness, not a concrete backend or a claim about a
 reachable initialized random-oracle history.
+
+## Functional bounded-search controls
+
+Seven shared-expression mutations change the first accepted slot, exhaustion,
+the index increment, or signed subtraction. Each generated definition must
+type-check in Lean and EasyCrypt before the unchanged paired selector law
+rejects. The Lean fixture also contains the actual extracted WOTS/FORS result
+theorems. The original and an arithmetic-equivalent edit pass the whole fixture.
+The signed-subtraction mutation exposes the distinction between a negative
+difference and zero; count subtraction retains its original saturated meaning.
+
+Nine procedure mutations change the memoized backend's cost, returned value or
+retained history, or the actual paired searches' cap, initial counter and
+returned result. Each definition-only fixture must compile. A deterministic
+`checked` comparison to the canonical procedure comes before the unchanged
+functional consuming proofs. The unchanged and equivalent variants pass both
+parts; the changed variants reject at an incomplete comparison proof. This
+tests correspondence sensitivity. It does not independently establish that
+every later invariant proof would reject every mutation. The comparison uses
+no inconclusive SMT attempt as rejection evidence.
+
+A separate exact-contract pair removes the requirement that prior cached
+values agree with the fixed backend. The original contract passes; the altered
+one rejects at the exact application of `fixed_hash`. Contract rejection shows
+proof sensitivity, rather than proving every strengthened statement false.
+The empty-history and fixed-width-function witnesses keep the original model's
+premises nonvacuous.
+
+`tools/c10_functional_search_controls.py` enrolls 43 EasyCrypt controls:
+26 expected passes and 17 intended rejections. Six additional forbidden-symbol
+scope probes cover the new modules. Parsing, typing, resource failures and
+unmatched diagnostics receive no rejection credit. The Lean runner executes
+two positive fixtures and seven typed intended-theorem rejections. Full native
+direct/CLI replay, extraction gates, identities and bounded review remain
+separate requirements. These controls add no concrete SHA security,
+random-oracle transfer, or cross-kernel session claim.

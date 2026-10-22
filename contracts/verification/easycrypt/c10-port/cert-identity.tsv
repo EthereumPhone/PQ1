@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	85cc912fd97064cb55e283c9397a01f9
+split	0b9f48c4ae6f3bb05a593ffe98f2569a
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1624,3 +1624,8 @@ fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-10-14: reject EasyCrypt prover Failure/High failure and startup warnings
 # in either control polarity; regression corpus extended. Proof sources unchanged.
+
+# 2026-10-22: functional bounded-search backend interpretation.
+# Appended shared first-hit selectors, 6 native modules/46 lemmas, 21 Lean
+# theorems, typed/equivalent controls and exact census/source enrollment.
+# 85cc912fd97064cb55e283c9397a01f9 -> 0b9f48c4ae6f3bb05a593ffe98f2569a; no new project axiom or admit.

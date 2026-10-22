@@ -1738,3 +1738,54 @@ scratch/_scope_neg_op_PhysicalRejectBound.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_ByteTotalAvailability.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AvailabilityNumerics.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_TotalAvailabilityExamples.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Functional search: paired selectors, stateful callers and scope controls.
+scratch/c10_functional_selector_positive.ec	MUST-PASS	-
+scratch/c10_functional_selector_preserving.ec	MUST-PASS	-
+scratch/c10_functional_backend_positive.ec	MUST-PASS	-
+scratch/c10_functional_backend_preserving.ec	MUST-PASS	-
+scratch/c10_functional_wots_positive.ec	MUST-PASS	-
+scratch/c10_functional_wots_preserving.ec	MUST-PASS	-
+scratch/c10_functional_fors_positive.ec	MUST-PASS	-
+scratch/c10_functional_fors_preserving.ec	MUST-PASS	-
+scratch/c10_functional_wots_origin_typed.ec	MUST-PASS	-
+scratch/c10_functional_wots_origin_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_functional_wots_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_functional_wots_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_functional_wots_step_typed.ec	MUST-PASS	-
+scratch/c10_functional_wots_step_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_functional_wots_signed_zero_typed.ec	MUST-PASS	-
+scratch/c10_functional_wots_signed_zero_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_functional_fors_origin_typed.ec	MUST-PASS	-
+scratch/c10_functional_fors_origin_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_functional_fors_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_functional_fors_exhaustion_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_functional_fors_step_typed.ec	MUST-PASS	-
+scratch/c10_functional_fors_step_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_functional_backend_cost_typed.ec	MUST-PASS	-
+scratch/c10_functional_backend_cost_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_backend_output_typed.ec	MUST-PASS	-
+scratch/c10_functional_backend_output_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_backend_history_typed.ec	MUST-PASS	-
+scratch/c10_functional_backend_history_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_wots_cap_typed.ec	MUST-PASS	-
+scratch/c10_functional_wots_cap_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_wots_index_typed.ec	MUST-PASS	-
+scratch/c10_functional_wots_index_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_wots_start_typed.ec	MUST-PASS	-
+scratch/c10_functional_wots_start_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_fors_cap_typed.ec	MUST-PASS	-
+scratch/c10_functional_fors_cap_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_fors_result_typed.ec	MUST-PASS	-
+scratch/c10_functional_fors_result_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_fors_start_typed.ec	MUST-PASS	-
+scratch/c10_functional_fors_start_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_functional_backend_unchecked_history_positive.ec	MUST-PASS	-
+scratch/c10_functional_backend_unchecked_history_typed.ec	MUST-PASS	-
+scratch/c10_functional_backend_unchecked_history_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_C10FirstHit.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FixedBackend.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FixedCallerBridge.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalWots.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalFors.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSearch.ec	MUST-FAIL	FORS_C_TreePort.

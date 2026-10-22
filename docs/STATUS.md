@@ -182,6 +182,16 @@ backend interpretation and the separate secure-wrapper experiment remain open.
 See the [numerical owner](../contracts/verification/easycrypt/c10-port/RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
 and [remaining correspondence](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).
 
+**Functional bounded-search correspondence (2026-10-22):** the actual extracted
+WOTS/FORS grinders and original native EasyCrypt callers now consume paired
+first-hit/exhaustion selectors under an explicit deterministic backend
+interpretation. Native proofs preserve the complete prior cache and exact
+queried prefix/call count; extracted results retain their exact failure and
+output values, including both OptRand modes. This closes a functional component,
+with the full Rust/EasyCrypt session, concrete backend and ideal-oracle security
+transfer still open. See the
+[research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-bounded-search-backend-interpretation).
+
 **Native EasyCrypt total signing availability (2026-10-21):** the
 [initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)
 now bounds the original failed-session event for both R and WOTS-count
@@ -191,7 +201,7 @@ shared oracle; only the returned R-observer event crosses the prefix comparison.
 No caller-supplied freshness premise is needed. Native arithmetic gives
 `2^-38` at ten-million-trial grinders, `2^32` raw queries and `2^20` signing
 requests. The nine new modules contain 86 lemmas, with boundary/nonvacuity
-witnesses and 80 generated controls. This closes native ideal-model signing
+witnesses and 81 generated controls. This closes native ideal-model signing
 availability; concrete backend/Rust, cross-kernel, QROM and hardware boundaries
 remain open, and the forgery bound is unchanged.
 
