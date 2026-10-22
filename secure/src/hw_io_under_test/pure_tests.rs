@@ -64,6 +64,8 @@ const BUTTONS_SRC: &str = include_str!("../hw/buttons.rs");
 const HW_MOD_SRC: &str = include_str!("../hw/mod.rs");
 const HW_HASH_SRC: &str = include_str!("../../../hw/src/hash.rs");
 const SECURE_HW_HASH_SRC: &str = include_str!("../hw/hash.rs");
+const FSBL_HASH_SRC: &str = include_str!("../../../fsbl/src/hash.rs");
+const FSBL_MAIN_SRC_HW: &str = include_str!("../../../fsbl/src/main.rs");
 const HW_CARGO_SRC: &str = include_str!("../../../hw/Cargo.toml");
 const FSBL_CARGO_SRC: &str = include_str!("../../../fsbl/Cargo.toml");
 const NSC_MOD_SRC_HW: &str = include_str!("../nsc/mod.rs");
@@ -2988,6 +2990,39 @@ fn negative_hash_unrolled_io_is_secure_only_and_paired() {
     assert!(HW_HASH_SRC.contains("#[cfg(feature = \"unrolled-io\")]\nunsafe fn split_self_test() {"));
     assert!(HW_HASH_SRC.contains("for part in [&MSG[..3], &MSG[3..65], &MSG[65..]] {"));
     assert!(HW_HASH_SRC.contains("const MSG: [u8; 131] = {"));
+    // The FSBL refuses every secure-image driver feature at compile time,
+    // however it arrives (a workspace dependency line or a build script's
+    // `--features pqsigner-hw/…` reach it with no source pin reading them).
+    // Mutation-checked 2026-10-23: `features = ["unrolled-io"]` on the root
+    // `pqsigner-hw` line fails `make fsbl` here.
+    let gated = HW_HASH_SRC
+        .split("pub const SECURE_IMAGE_ONLY: bool = cfg!(any(\n")
+        .nth(1)
+        .expect("SECURE_IMAGE_ONLY")
+        .split("\n));")
+        .next()
+        .expect("end");
+    let mut gated: std::vec::Vec<&str> = gated.split(",\n").map(str::trim).collect();
+    gated.sort_unstable();
+    let mut declared: std::vec::Vec<std::string::String> = HW_CARGO_SRC
+        .split("\n[features]\n")
+        .nth(1)
+        .expect("[features]")
+        .split("\n[")
+        .next()
+        .expect("features table")
+        .lines()
+        .filter(|l| !l.starts_with('#') && l.contains(" = ["))
+        .map(|l| l.split(" = ").next().expect("name").to_owned())
+        .filter(|f| f != "default" && f != "debug-log")
+        .map(|f| format!("feature = \"{f}\""))
+        .collect();
+    declared.sort_unstable();
+    assert_eq!(gated, declared, "every pqsigner-hw feature but debug-log is secure-image-only");
+    assert!(FSBL_HASH_SRC.trim_end().ends_with(
+        "const _: () = assert!(\n    !pqsigner_hw::hash::SECURE_IMAGE_ONLY,\n    \"FSBL_SECURE_ONLY_DRIVER_FEATURE: a secure-image pqsigner-hw feature reached the FSBL\"\n);"
+    ));
+    assert!(FSBL_MAIN_SRC_HW.contains("#[cfg(feature = \"hw-sha256\")]\nmod hash;\n"));
 }
 
 #[test]

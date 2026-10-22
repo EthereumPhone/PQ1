@@ -326,6 +326,19 @@ compile_error!("`hash-probe` and `hw-sha256-crosscheck` are exclusive: the softw
 /// but not to a constant.
 pub const DEV_INSTRUMENTED: bool = cfg!(any(feature = "hash-probe", feature = "hw-sha256-crosscheck"));
 
+/// True when a feature this crate reserves for the secure image is on. The
+/// FSBL asserts it false at compile time (`fsbl/src/hash.rs`): its bytes carry
+/// the silicon boot proof, and a feature can reach it through a manifest or a
+/// recipe that no source pin reads (the workspace dependency line, a
+/// `--features pqsigner-hw/…` in a build script). `tick-hook` alone would also
+/// fail to link there; the others would link and ship.
+pub const SECURE_IMAGE_ONLY: bool = cfg!(any(
+    feature = "unrolled-io",
+    feature = "tick-hook",
+    feature = "hash-probe",
+    feature = "hw-sha256-crosscheck"
+));
+
 #[cfg(feature = "hw-sha256-crosscheck")]
 extern "C" {
     /// Software half of the crosscheck, supplied by the linking binary (the
