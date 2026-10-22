@@ -24,7 +24,23 @@ the table only takes a name when showing it cannot mislead:
     two chains share is dropped for both.
   * Not borrowing a hand-picked name: a candidate whose words contain one
     ("Crynux on Base", "SKALE Base", "Arbitrum Nova") could be read as that
-    chain, so it is dropped and keeps showing its number.
+    chain, so it is dropped and keeps showing its number. Nor a testnet word
+    ("Berachain Bepolia" is listed as a mainnet).
+
+Testnets (2026-10-22) follow their own rules, because a testnet's name is
+its parent's name plus a testnet word ("Linea Sepolia"):
+
+  * HAND-PICKED testnets (`CURATED_TESTNETS`) win for their ids; they cover
+    well-known testnets chainlist gives no TVL, and shorten a few names
+    ("Arbitrum Sepolia" is 16 bytes: "Arb Sepolia").
+  * Other testnets: chainlist copies the parent chain's TVL onto its
+    testnets, so the same MIN_TVL_USD picks testnets of chains people use.
+  * Retired networks (Goerli, Rinkeby, Kovan, Ropsten, Mumbai) are dropped.
+  * "Testnet" is removed when another testnet word names the network
+    ("Base Sepolia Testnet" -> "Base Sepolia"), and so is "Network".
+  * The result must still contain a testnet word (`TESTNET_WORDS`), so a
+    testnet can never read as a mainnet; length, glyphs and uniqueness as
+    above.
 
 The source is third-party data. The generated file records its sha256; the
 table itself is what the firmware signs over, so review its diff like code.
@@ -70,8 +86,24 @@ CURATED: dict[int, str] = {
     11155111: "Sepolia",
     84532: "Base Sepolia",
 }
-# Words a candidate may not contain: the hand-picked names, plus the names
-# people know those chains by.
+# Hand-picked testnets: well-known ones chainlist gives no TVL, and short
+# forms of names over MAX_NAME_LEN.
+CURATED_TESTNETS: dict[int, str] = {
+    97: "BSC Testnet",
+    17000: "Holesky",
+    80002: "Polygon Amoy",
+    10200: "Gnosis Chiado",
+    1328: "Sei Testnet",
+    421614: "Arb Sepolia",
+}
+# A testnet's name must contain one of these; a mainnet's must not.
+TESTNET_WORDS = {
+    "testnet", "sepolia", "hoodi", "holesky", "fuji", "amoy", "chiado", "minato",
+    "coston2", "bepolia", "aeneid", "blaze",
+}
+RETIRED_WORDS = {"goerli", "rinkeby", "kovan", "ropsten", "mumbai"}
+# Words a mainnet candidate may not contain: the hand-picked names, plus the
+# names people know those chains by.
 PROTECTED_WORDS = {w.lower() for n in CURATED.values() for w in n.split()} | {
     "ethereum", "eth", "op", "bnb", "binance", "arbitrum", "zksync", "avax", "matic",
 }
@@ -99,48 +131,78 @@ def baked_glyphs() -> set[str]:
     return ok
 
 
+def capitalise(n: str) -> str:
+    """Capital first letter for an all-lowercase first word ("katana"); a
+    brand's own casing ("zkSync", "opBNB") is kept."""
+    first = n.split(" ", 1)[0]
+    return n[:1].upper() + n[1:] if first.islower() else n
+
+
 def display_name(raw: str) -> str:
     """Chainlist name minus a trailing "Mainnet" (and the " - " some entries
-    put before it), first letter capitalised ("katana" -> "Katana")."""
+    put before it), see `capitalise`."""
     n = " ".join(raw.split())
     n = re.sub(r"[\s\-]*\bMainnet$", "", n).rstrip(" -")
-    return n[:1].upper() + n[1:]
+    return capitalise(n)
+
+
+def testnet_name(raw: str) -> str:
+    """Chainlist testnet name minus "Network", and minus "Testnet" when
+    another testnet word names the network."""
+    words = [w for w in raw.split() if w.lower() != "network"]
+    if any(w.lower() in TESTNET_WORDS - {"testnet"} for w in words):
+        words = [w for w in words if w.lower() != "testnet"]
+    return capitalise(" ".join(words))
 
 
 def build(entries: list[dict]) -> tuple[dict[int, str], list[str]]:
     glyphs = baked_glyphs()
-    for cid, name in CURATED.items():
+    hand = {**CURATED, **CURATED_TESTNETS}
+    assert len(hand) == len(CURATED) + len(CURATED_TESTNETS)
+    for cid, name in hand.items():
         assert len(name) <= MAX_NAME_LEN and set(name) <= glyphs, (cid, name)
+    for cid, name in CURATED_TESTNETS.items():
+        assert {w.lower() for w in name.split()} & TESTNET_WORDS, (cid, name)
     dropped: list[str] = []
     cand: dict[int, str] = {}
     for e in entries:
         cid = e.get("chainId")
-        if not isinstance(cid, int) or cid <= 0 or cid >= 1 << 64 or cid in CURATED:
+        if not isinstance(cid, int) or cid <= 0 or cid >= 1 << 64 or cid in hand:
             continue
-        if e.get("isTestnet") or (e.get("tvl") or 0) < MIN_TVL_USD:
+        if (e.get("tvl") or 0) < MIN_TVL_USD:
             continue
-        name = display_name(str(e.get("name", "")))
+        testnet = bool(e.get("isTestnet"))
+        raw = str(e.get("name", ""))
+        name = testnet_name(raw) if testnet else display_name(raw)
+        words = {w.lower() for w in name.split()}
         why = None
         if len(name) > MAX_NAME_LEN:
             why = "too long"
         elif not CHARSET.match(name) or not set(name) <= glyphs:
             why = "characters"
-        elif {w.lower() for w in name.split()} & PROTECTED_WORDS:
+        elif testnet and words & RETIRED_WORDS:
+            why = "retired testnet"
+        elif testnet and not words & TESTNET_WORDS:
+            why = "testnet without a testnet word"
+        elif not testnet and words & PROTECTED_WORDS:
             why = "borrows a hand-picked name"
+        elif not testnet and words & TESTNET_WORDS:
+            why = "mainnet named like a testnet"
         if why:
             dropped.append(f"{cid} {e.get('name')!r}: {why}")
             continue
         cand[cid] = name
     # Uniqueness across curated + candidates.
     seen: dict[str, list[int]] = {}
-    for cid, name in {**CURATED, **cand}.items():
+    for cid, name in {**hand, **cand}.items():
         seen.setdefault(fold(name), []).append(cid)
     for key, ids in seen.items():
         if len(ids) > 1:
+            assert sum(cid in hand for cid in ids) <= 1, f"hand-picked names collide: {ids}"
             for cid in ids:
                 if cid in cand:
                     dropped.append(f"{cid} {cand.pop(cid)!r}: name shared with {ids}")
-    return {**CURATED, **cand}, dropped
+    return {**hand, **cand}, dropped
 
 
 def render(table: dict[int, str], sha: str, n_in: int) -> str:
@@ -148,8 +210,8 @@ def render(table: dict[int, str], sha: str, n_in: int) -> str:
     return f"""// @generated by tools/gen_chain_names.py — do not edit by hand.
 // Source: https://chainlist.org/rpcs.json, sha256 {sha}, {n_in} entries.
 // Rules (see the generator): hand-picked names first; then mainnets with
-// TVL >= ${MIN_TVL_USD:,}, names <= {MAX_NAME_LEN} bytes in baked glyphs, unique, and not
-// borrowing a hand-picked name.
+// TVL >= ${MIN_TVL_USD:,} not borrowing a hand-picked name, and testnets of such chains
+// named with a testnet word; every name <= {MAX_NAME_LEN} bytes in baked glyphs, unique.
 
 /// `(chain id, "(display name)")`, sorted by id for binary search.
 pub(crate) const CHAIN_NAMES: [(u64, &str); {len(table)}] = [
@@ -170,7 +232,7 @@ def main() -> int:
     text = render(table, hashlib.sha256(raw).hexdigest(), len(entries))
     if args.verbose:
         print("\n".join(sorted(dropped)))
-    print(f"{len(table)} names ({len(CURATED)} hand-picked), {len(dropped)} candidates dropped")
+    print(f"{len(table)} names ({len(CURATED) + len(CURATED_TESTNETS)} hand-picked), {len(dropped)} candidates dropped")
     if args.check:
         if OUT.read_text() != text:
             print(f"{OUT} differs from the generator output", file=sys.stderr)

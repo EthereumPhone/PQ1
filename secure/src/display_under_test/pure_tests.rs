@@ -2257,7 +2257,14 @@ fn negative_chain_name_list_pinned() {
         "(534352, \"(Scroll)\")",
         "(11155111, \"(Sepolia)\")",
         "(84532, \"(Base Sepolia)\")",
-        "CHAIN_NAMES: [(u64, &str); 87]",
+        // Hand-picked testnets (2026-10-22).
+        "(97, \"(BSC Testnet)\")",
+        "(17000, \"(Holesky)\")",
+        "(80002, \"(Polygon Amoy)\")",
+        "(10200, \"(Gnosis Chiado)\")",
+        "(1328, \"(Sei Testnet)\")",
+        "(421614, \"(Arb Sepolia)\")",
+        "CHAIN_NAMES: [(u64, &str); 139]",
     ] {
         assert!(table.contains(needle), "chain_names_gen.rs must keep `{}`", needle);
     }
