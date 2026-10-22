@@ -15,7 +15,7 @@
 //! Coordinates are Q8 (1/256 px), coverage is 0..=255. Everything is
 //! integer; host and device renders are bit-identical.
 
-use crate::fixed::{dist_q8, isqrt_u64, Q16, Q8, ONE_Q8};
+use crate::fixed::{dist_q8, isqrt_u32_from, isqrt_u64, Q16, Q8, ONE_Q8};
 use crate::font::{Font, TextRun};
 
 pub const W: i32 = 428;
@@ -491,8 +491,30 @@ impl Default for Frame<'_> {
 /// Render every item of `frame` that intersects `strip` (cleared first).
 pub fn render_strip(frame: &Frame<'_>, font: &Font<'_>, strip: &mut Strip<'_>) {
     strip.clear();
-    for item in frame.items() {
-        draw_item(item, font, strip);
+    let items = frame.items();
+    let mut i = 0;
+    while i < items.len() {
+        i += draw_items(&items[i..], font, strip);
+    }
+}
+
+/// Draw the item at the head of `items`, or, when it starts a run of
+/// [`Item::Disc`]s, the whole run through [`disc_run`]. Returns how many
+/// items it drew.
+fn draw_items(items: &[Item<'_>], font: &Font<'_>, s: &mut Strip<'_>) -> usize {
+    let mut run = [(0, 0, 0, Rgb::BLACK); RUN_MAX];
+    let mut n = 0;
+    for item in items.iter().take(RUN_MAX) {
+        let Item::Disc { cx, cy, r, color } = *item else { break };
+        run[n] = (cx, cy, r, color);
+        n += 1;
+    }
+    if n < 2 {
+        draw_item(&items[0], font, s);
+        1
+    } else {
+        disc_run(s, &run[..n]);
+        n
     }
 }
 
@@ -544,13 +566,14 @@ pub fn render_strip_split(
 ) {
     strip.clear();
     let drawn_before = work_count();
-    for item in frame.items() {
-        if !matches!(*item, Item::None) {
-            acc.items = acc.items.wrapping_add(1);
-        }
+    let items = frame.items();
+    let mut i = 0;
+    while i < items.len() {
+        let item = &items[i];
         let t0 = now();
-        draw_item(item, font, strip);
+        let k = draw_items(&items[i..], font, strip);
         let dt = now().wrapping_sub(t0);
+        i += k;
         let slot = match *item {
             Item::Text { .. } | Item::Mask { .. } => &mut acc.glyphs,
             Item::Secret { .. } => &mut acc.secret,
@@ -558,6 +581,7 @@ pub fn render_strip_split(
             Item::None => continue,
             _ => &mut acc.shapes,
         };
+        acc.items = acc.items.wrapping_add(k as u32);
         *slot = slot.wrapping_add(dt);
     }
     acc.drawn = acc.drawn.wrapping_add(work_count().wrapping_sub(drawn_before));
@@ -664,6 +688,31 @@ fn half_width(limit: i64) -> Option<Q8> {
     Some(isqrt_u64((limit - 1) as u64) as Q8)
 }
 
+/// [`half_width`] for `limit ≤ bound²` (`bound ≥ 0`): the same root, its
+/// Newton started at `bound` (see [`isqrt_u32_from`]).
+#[inline]
+fn half_width_below(limit: i64, bound: Q8) -> Option<Q8> {
+    if limit <= 0 {
+        return None;
+    }
+    match u32::try_from(limit - 1) {
+        Ok(v) => Some(isqrt_u32_from(v, bound as u32) as Q8),
+        Err(_) => half_width(limit),
+    }
+}
+
+/// [`dist_q8`] for a point whose distance is below `bound` (`bound ≥ 0`): the
+/// same floor root, its Newton started at `bound`. A disc's rim lies within
+/// half a pixel of the radius, where a power-of-two start cost 3-4 divisions.
+#[inline]
+fn dist_q8_below(dx: Q8, dy: Q8, bound: Q8) -> Q8 {
+    let s = i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy);
+    match u32::try_from(s) {
+        Ok(v) => isqrt_u32_from(v, bound as u32) as Q8,
+        Err(_) => dist_q8(dx, dy),
+    }
+}
+
 /// Filled disc; `min_y` limits the fill to rows `≥ min_y` when given (chord).
 ///
 /// Per row the interior (`dist ≤ r − ½ px`, always coverage 255) is one span
@@ -692,7 +741,7 @@ fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8,
         let dy = py - cy;
         let dy2 = i64::from(dy) * i64::from(dy);
         // Non-zero coverage ⇔ dist < r + ZERO_D ⇔ dx² < r_zero² − dy².
-        let Some(hz) = half_width(r_zero * r_zero - dy2) else { continue };
+        let Some(hz) = half_width_below(r_zero * r_zero - dy2, r_zero as Q8) else { continue };
         let (xa, xb) = centres_within(c, hz);
         // To THIS band, as `clump` and `ellipse_ring` do: clamped to the frame,
         // a disc straddling a band edge ran its rim's exact distance for every
@@ -705,7 +754,7 @@ fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8,
         }
         // Full coverage ⇔ dist ≤ r − FULL_D ⇔ dx² < r_full² − dy² (r_full > 0).
         let (fa, fb) = if r_full > 0 {
-            match half_width(r_full * r_full - dy2) {
+            match half_width_below(r_full * r_full - dy2, r_full as Q8) {
                 Some(hf) => centres_within(c, hf),
                 None => (1, 0),
             }
@@ -716,7 +765,8 @@ fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8,
         let rim = |s: &mut Strip<'_>, x0: i32, x1: i32| {
             for x in x0..=x1 {
                 let px = (x << 8) + ONE_Q8 / 2;
-                let d = dist_q8(px - cx, dy) - r;
+                // Inside [xa, xb]: dist < r_zero.
+                let d = dist_q8_below(px - cx, dy, r_zero as Q8) - r;
                 let cov = edge_cov(d);
                 if cov != 0 {
                     // Opaque (every disc but a chord's): (cov·255 + 127) / 255 = cov.
@@ -731,6 +781,135 @@ fn disc(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, color: Rgb, min_y: Option<(Q8,
             rim(s, xa, fa - 1);
             s.fill_span(fa, fb, y, color, a);
             rim(s, fb + 1, xb);
+        }
+    }
+}
+
+/// Most discs [`disc_run`] takes at once; a longer run is drawn in chunks.
+const RUN_MAX: usize = 16;
+
+/// One disc's spans on one row, as [`disc`] computes them: nonzero coverage
+/// over `xa ..= xb` (clamped to the band), full coverage over `fa ..= fb`
+/// (inside it; empty when `fb < fa`).
+#[derive(Clone, Copy)]
+struct RowSpan {
+    xa: i32,
+    xb: i32,
+    fa: i32,
+    fb: i32,
+}
+
+fn disc_row_span(s: &Strip<'_>, cx: Q8, r: Q8, dy: Q8) -> Option<RowSpan> {
+    let c = ONE_Q8 / 2 - cx;
+    let r_zero = i64::from(r + ZERO_D);
+    let r_full = i64::from(r - FULL_D + 1);
+    let dy2 = i64::from(dy) * i64::from(dy);
+    let hz = half_width_below(r_zero * r_zero - dy2, r_zero as Q8)?;
+    let (xa, xb) = centres_within(c, hz);
+    let (xa, xb) = (xa.max(s.x0), xb.min(s.x0 + s.w - 1));
+    if xb < xa {
+        return None;
+    }
+    let (fa, fb) = if r_full > 0 {
+        match half_width_below(r_full * r_full - dy2, r_full as Q8) {
+            Some(hf) => centres_within(c, hf),
+            None => (1, 0),
+        }
+    } else {
+        (1, 0)
+    };
+    Some(RowSpan { xa, xb, fa: fa.max(xa), fb: fb.min(xb) })
+}
+
+/// Consecutive [`Item::Disc`]s, drawn row by row: every pixel still receives
+/// the same blends in the same order as drawing the discs one after another,
+/// except where a LATER disc of the run covers it fully. That disc's
+/// `fill_span` stores its colour outright (a = 255), so nothing drawn there
+/// before it can show, and it is skipped. The signing film's orbit is 12
+/// discs of r = 13 px whose trail steps ~5 px apart, so most of each trail
+/// disc lies under the next one (EVT 2026-10-22: shapes were 3.5 of 3.9 ms
+/// per frame). Output is identical to [`disc`] per item.
+fn disc_run(s: &mut Strip<'_>, discs: &[(Q8, Q8, Q8, Rgb)]) {
+    let n = discs.len().min(RUN_MAX);
+    let mut live = [false; RUN_MAX];
+    let (mut y_lo, mut y_hi) = (H, -1);
+    for (k, &(cx, cy, r, _)) in discs[..n].iter().enumerate() {
+        if s.x_hits(((cx - r) >> 8) - 1, ((cx + r) >> 8) + 1) {
+            note_work();
+            live[k] = true;
+            y_lo = y_lo.min(((cy - r) >> 8) - 1);
+            y_hi = y_hi.max(((cy + r) >> 8) + 1);
+        }
+    }
+    for y in y_lo.max(0)..=y_hi.min(H - 1) {
+        let py = (y << 8) + ONE_Q8 / 2;
+        // The discs on this row, in run order, with their spans.
+        let mut on = [0usize; RUN_MAX];
+        let mut spans = [RowSpan { xa: 0, xb: -1, fa: 0, fb: -1 }; RUN_MAX];
+        let mut m = 0;
+        for k in 0..n {
+            if !live[k] {
+                continue;
+            }
+            let (cx, cy, r, _) = discs[k];
+            if let Some(sp) = disc_row_span(s, cx, r, py - cy) {
+                on[m] = k;
+                spans[m] = sp;
+                m += 1;
+            }
+        }
+        for i in 0..m {
+            let sp = spans[i];
+            // The later discs' full spans that cut this one, by start.
+            let mut cuts = [(0i32, 0i32); RUN_MAX];
+            let mut nc = 0;
+            for o in &spans[i + 1..m] {
+                if o.fa <= o.fb && o.fb >= sp.xa && o.fa <= sp.xb {
+                    let mut at = nc;
+                    while at > 0 && cuts[at - 1].0 > o.fa {
+                        cuts[at] = cuts[at - 1];
+                        at -= 1;
+                    }
+                    cuts[at] = (o.fa, o.fb);
+                    nc += 1;
+                }
+            }
+            let (cx, cy, r, color) = discs[on[i]];
+            let dy = py - cy;
+            let r_zero = r + ZERO_D;
+            let piece = |s: &mut Strip<'_>, x0: i32, x1: i32| {
+                let rim = |s: &mut Strip<'_>, x0: i32, x1: i32| {
+                    for x in x0..=x1 {
+                        let px = (x << 8) + ONE_Q8 / 2;
+                        // Inside [xa, xb]: dist < r_zero.
+                        let cov = edge_cov(dist_q8_below(px - cx, dy, r_zero) - r);
+                        if cov != 0 {
+                            s.blend(x, y, color, cov);
+                        }
+                    }
+                };
+                let (fa, fb) = (sp.fa.max(x0), sp.fb.min(x1));
+                if fb < fa {
+                    rim(s, x0, x1);
+                } else {
+                    rim(s, x0, fa - 1);
+                    s.fill_span(fa, fb, y, color, 255);
+                    rim(s, fb + 1, x1);
+                }
+            };
+            let mut x = sp.xa;
+            for &(c0, c1) in &cuts[..nc] {
+                if c0 > x {
+                    piece(s, x, (c0 - 1).min(sp.xb));
+                }
+                x = x.max(c1 + 1);
+                if x > sp.xb {
+                    break;
+                }
+            }
+            if x <= sp.xb {
+                piece(s, x, sp.xb);
+            }
         }
     }
 }
@@ -760,7 +939,7 @@ fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
             continue;
         }
         let dy2 = i64::from(dy) * i64::from(dy);
-        let Some(hz) = half_width(r_zero * r_zero - dy2) else { continue };
+        let Some(hz) = half_width_below(r_zero * r_zero - dy2, r_zero as Q8) else { continue };
         let (xa, xb) = centres_within(c, hz);
         // To this band, like `disc` above. Output is unchanged.
         let (xa, xb) = (xa.max(s.x0), xb.min(s.x0 + s.w - 1));
@@ -768,7 +947,7 @@ fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
             continue;
         }
         let (ha, hb) = if r_hole > 0 {
-            match half_width(r_hole * r_hole - dy2) {
+            match half_width_below(r_hole * r_hole - dy2, r_hole as Q8) {
                 Some(hh) => centres_within(c, hh),
                 None => (1, 0),
             }
@@ -779,7 +958,8 @@ fn ring(s: &mut Strip<'_>, cx: Q8, cy: Q8, r: Q8, w: Q8, color: Rgb) {
         let band = |s: &mut Strip<'_>, x0: i32, x1: i32| {
             for x in x0..=x1 {
                 let px = (x << 8) + ONE_Q8 / 2;
-                let d = dist_q8(px - cx, dy);
+                // Inside [xa, xb]: dist < r_zero.
+                let d = dist_q8_below(px - cx, dy, r_zero as Q8);
                 // Inside the annulus when r_in ≤ d ≤ r: signed distance to the
                 // nearest edge, negative inside.
                 let sd = (d - r).max(r_in - d);
@@ -1731,6 +1911,46 @@ mod span_equivalence {
         let accepted = TEST_WORK.with(core::cell::Cell::get);
         assert!(accepted >= 7, "the x = [0, 48) band holds all 7 items, got {accepted}");
         assert!(buf.iter().any(|&p| p != 0), "the holding band must have drawn something");
+    }
+
+    /// A run of discs drawn row by row, skipping what a later disc covers
+    /// fully, must leave exactly the pixels the discs drawn one by one leave:
+    /// trails of overlapping discs (the signing film's orbit), any radius,
+    /// partly off the frame, in bands of any width, over a random background.
+    #[test]
+    fn disc_runs_match_discs_drawn_one_by_one() {
+        let mut seed = 0x5eed_1234u32;
+        for case in 0..300 {
+            let n = 2 + (lcg(&mut seed) % 14) as usize;
+            let mut run = [(0, 0, 0, Rgb::BLACK); RUN_MAX];
+            let mut cx = ((lcg(&mut seed) % 380) as i32 + 24) << 8;
+            let mut cy = ((lcg(&mut seed) % 100) as i32 + 20) << 8;
+            for d in run.iter_mut().take(n) {
+                let r = (((lcg(&mut seed) % 30) as i32) << 8) + (lcg(&mut seed) % 256) as i32;
+                cx += (lcg(&mut seed) % 2048) as i32 - 1024;
+                cy += (lcg(&mut seed) % 2048) as i32 - 1024;
+                let c = Rgb::new(lcg(&mut seed) as u8, lcg(&mut seed) as u8, lcg(&mut seed) as u8);
+                *d = (cx, cy, r, c);
+            }
+            let x0 = (lcg(&mut seed) % (W as u32 - 48)) as i32;
+            let w = 1 + (lcg(&mut seed) % 48) as i32;
+            let mut b1 = [0u16; (48 * H) as usize];
+            for (i, p) in b1.iter_mut().enumerate() {
+                *p = if case % 3 == 0 { 0 } else { (i as u32).wrapping_mul(2_654_435_761) as u16 };
+            }
+            let mut b2 = b1;
+            {
+                let mut s1 = Strip::new(x0, w, &mut b1).unwrap();
+                for &(cx, cy, r, c) in &run[..n] {
+                    disc(&mut s1, cx, cy, r, c, None);
+                }
+            }
+            {
+                let mut s2 = Strip::new(x0, w, &mut b2).unwrap();
+                disc_run(&mut s2, &run[..n]);
+            }
+            assert!(b1 == b2, "case {case}: n={n} x0={x0} w={w}");
+        }
     }
 
     /// Nine vertical bands must compose to exactly the same frame as one
