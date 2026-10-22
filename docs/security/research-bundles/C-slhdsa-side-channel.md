@@ -4264,11 +4264,15 @@ ui-px-frametime = ["ui-px", "ui-lcd", "pqsigner-ui-px/render-split"]
 # (each with the progress percent when it began) and show them on a 16x4 page
 # after HELP (`ui/px/film_gaps.rs`). NEVER ship: fenced in `nsc/mod.rs` and
 # listed in the Makefile's PROD_FORBIDDEN.
-ui-px-film-gaps = ["ui-px", "ui-lcd"]
+ui-px-film-gaps = ["ui-px", "ui-lcd", "pqsigner-ui-px/render-split"]
 # Dev bench (2026-10-16): boots straight into the setup busy film under a
 # simulated load, alternating partial and full redraw (#934), and shows the
 # frame rate. No wallet, no secure-element traffic. NEVER ships.
 ui-px-film-bench = ["ui-px-film-gaps"]
+# Dev bench (2026-10-22): after the film recorder's pages, time DMA2D against
+# the CPU rasteriser on a band clear, an A4 blend and real glyph runs, and
+# count where the blends differ (`ui/px/dma2d_bench.rs`). NEVER ships.
+ui-px-dma2d-bench = ["ui-px-film-gaps", "ui-px-dma"]
 
 # Stream the pixel-UI strip blit over GPDMA1 instead of the polled per-byte
 # loop, so strip k goes out on the wire while strip k+1 renders. Opt-in: this
