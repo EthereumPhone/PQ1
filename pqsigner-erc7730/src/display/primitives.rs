@@ -525,38 +525,20 @@ pub fn write_addr_full_or_name(
 // ---------------------------------------------------------------------------
 
 /// Human-readable chain label, shown on the row BELOW the numeric
-/// `Chain: <id>` (`write_chain`) — so the id is always the ground truth and
-/// this label is advisory. The list covers the chains the vendored ERC-7730
-/// registry actually ships descriptors for (a wrong label would misrepresent
-/// the network, so only high-confidence mainnet ids are added; the rest fall
-/// through to `(unknown chain)`). We say `(unknown chain)` rather than
-/// `(UNVERIFIED)` so the stronger `UNVERIFIED` marker keeps a single meaning
-/// (an unverified *token*); the numeric id shown above already lets the user
-/// confirm the network.
+/// `Chain: <id>` (`write_chain`) and, on the pixel NETWORK screen, as
+/// "on <name>". A wrong label would misrepresent the network, so the table
+/// (`chain_names_gen.rs`, from `tools/gen_chain_names.py`) holds the
+/// hand-picked names plus chainlist.org mainnets with real use (TVL) whose
+/// names are short, unique and do not borrow a hand-picked name; every
+/// other id falls through to `(unknown chain)` and the screen shows the
+/// number. We say `(unknown chain)` rather than `(UNVERIFIED)` so the
+/// stronger `UNVERIFIED` marker keeps a single meaning (an unverified
+/// *token*).
 pub fn chain_name(chain_id: u64) -> &'static str {
-    match chain_id {
-        1 => "(Mainnet)",
-        10 => "(Optimism)",
-        14 => "(Flare)",
-        30 => "(Rootstock)",
-        56 => "(BSC)",
-        100 => "(Gnosis)",
-        137 => "(Polygon)",
-        146 => "(Sonic)",
-        250 => "(Fantom)",
-        324 => "(zkSync Era)",
-        999 => "(HyperEVM)",
-        1329 => "(Sei)",
-        8217 => "(Kaia)",
-        8453 => "(Base)",
-        42161 => "(Arbitrum)",
-        42220 => "(Celo)",
-        43114 => "(Avalanche)",
-        59144 => "(Linea)",
-        534352 => "(Scroll)",
-        11155111 => "(Sepolia)",
-        84532 => "(BaseSepolia)",
-        _ => "(unknown chain)",
+    use super::chain_names_gen::CHAIN_NAMES;
+    match CHAIN_NAMES.binary_search_by_key(&chain_id, |&(id, _)| id) {
+        Ok(i) => CHAIN_NAMES[i].1,
+        Err(_) => "(unknown chain)",
     }
 }
 
@@ -2067,5 +2049,61 @@ mod kani_harness {
         assert!(r1 == *b"0x5aAeb6053F3E94");
         assert!(r2 == *b"C9b9A09f33669435");
         assert!(r3 == *b"E7Ef1BeAed      ");
+    }
+}
+
+#[cfg(test)]
+mod chain_name_tests {
+    use super::{chain_name, DISPLAY_COLS};
+    use crate::display::chain_names_gen::CHAIN_NAMES;
+
+    /// Strictly ascending ids (binary search), and every id found.
+    #[test]
+    fn table_is_sorted_and_every_id_resolves() {
+        for w in CHAIN_NAMES.windows(2) {
+            assert!(w[0].0 < w[1].0, "{} !< {}", w[0].0, w[1].0);
+        }
+        for &(id, name) in &CHAIN_NAMES {
+            assert_eq!(chain_name(id), name);
+        }
+        assert_eq!(chain_name(0), "(unknown chain)");
+        assert_eq!(chain_name(u64::MAX), "(unknown chain)");
+    }
+
+    /// Every label is "(name)", fits a 16-column row whole (`write_line`
+    /// would cut it), and uses only letters, digits, space, '.' and '-'.
+    #[test]
+    fn labels_fit_a_row_in_a_safe_charset() {
+        for &(id, label) in &CHAIN_NAMES {
+            let b = label.as_bytes();
+            assert!(b.len() <= DISPLAY_COLS, "{id}: {label} is longer than a row");
+            assert!(b[0] == b'(' && b[b.len() - 1] == b')', "{id}: {label}");
+            let inner = &b[1..b.len() - 1];
+            assert!(!inner.is_empty() && inner[0] != b' ' && inner[inner.len() - 1] != b' ', "{id}: {label}");
+            assert!(
+                inner.iter().all(|c| c.is_ascii_alphanumeric() || matches!(c, b' ' | b'.' | b'-')),
+                "{id}: {label} has a character outside the safe set"
+            );
+        }
+    }
+
+    /// No two chains share a label, even ignoring case and punctuation, so a
+    /// name always means one chain id.
+    #[test]
+    fn labels_are_unique_after_folding() {
+        let fold = |s: &str| -> [u8; DISPLAY_COLS] {
+            let mut out = [0u8; DISPLAY_COLS];
+            let mut n = 0;
+            for c in s.bytes().filter(u8::is_ascii_alphanumeric) {
+                out[n] = c.to_ascii_lowercase();
+                n += 1;
+            }
+            out
+        };
+        for (i, a) in CHAIN_NAMES.iter().enumerate() {
+            for b in &CHAIN_NAMES[i + 1..] {
+                assert_ne!(fold(a.1), fold(b.1), "{} and {} share a label", a.0, b.0);
+            }
+        }
     }
 }

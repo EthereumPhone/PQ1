@@ -314,6 +314,20 @@ Pre-computed 4280-byte `initCode` for `(account_index, chain_id)` so the
 companion can run gas estimation against the EntryPoint without
 round-tripping through `0x30 SIGN_USEROP`.
 
+No on-device confirmation. It takes ~16 s on pq1 (address keygen 2.6 s +
+init code 13.6 s, measured 2026-10-22), so allow at least 30 s. Each call
+releases a fresh randomized bootstrap-key signature: cache the result.
+
+**Idle lock (UPDATE 2026-10-22).** This is the only command that moves the
+120 s idle deadline of an unlocked session forward without a button press:
++20 s, once per unlock, never past 120 s from now, never for a session that
+has already expired. It exists so a first transaction started late in the
+window can still reach the sign screen. It does not cover a request sent
+more than ~105 s after the last press: the device can still lock right after
+answering, and the companion must handle `locked` on the following
+`0x30 SIGN_USEROP` by asking the user to unlock and retrying (reuse the
+cached init code).
+
 ### 0x62 SIGN_OFFCHAIN
 
 EIP-1271 signature response with two layouts selected by the input `flags`

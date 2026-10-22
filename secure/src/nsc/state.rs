@@ -387,6 +387,11 @@ impl SecureState {
         // (idle-wipe, panic handler).
         crate::sign_rate::reset_counters();
         self.pin_verified.set_false();
+        // The next unlocked session gets its own one-time GET_INIT_CODE
+        // grace (`timeout::grant_init_code_grace`). `timeout` is firmware-
+        // only; the host scaffold that re-includes this file has none.
+        #[cfg(not(test))]
+        crate::timeout::rearm_init_code_grace();
         self.last_chain_id = 0;
         self.last_key_index = 0;
         self.last_ots_index = 0;

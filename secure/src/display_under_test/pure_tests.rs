@@ -216,7 +216,7 @@ fn positive_chain_name_known_chains() {
     assert_eq!(chain_name(8453), "(Base)");
     assert_eq!(chain_name(42161), "(Arbitrum)");
     assert_eq!(chain_name(11155111), "(Sepolia)");
-    assert_eq!(chain_name(84532), "(BaseSepolia)");
+    assert_eq!(chain_name(84532), "(Base Sepolia)");
 }
 
 #[test]
@@ -1139,7 +1139,7 @@ fn negative_chain_name_mainnet_distinct_from_sidechains() {
         (8453, "(Base)"),
         (42161, "(Arbitrum)"),
         (11155111, "(Sepolia)"),
-        (84532, "(BaseSepolia)"),
+        (84532, "(Base Sepolia)"),
     ];
     for (id, name) in labels {
         assert_eq!(chain_name(*id), *name);
@@ -2228,43 +2228,48 @@ fn negative_personal_sign_sanitiser_range_pinned() {
 
 #[test]
 fn negative_chain_name_list_pinned() {
-    // The full curated chain list — bound here so an addition or
-    // removal of an entry forces the test to be re-acked. Mirrors the
-    // KDF-tag-stability discipline from CLAUDE.md "no casual KDF tag
-    // changes".
-    // `primitives.rs` was extracted to the host crate (host-fuzzable byte
-    // writers); pin against its new canonical location.
-    let src = include_str!("../../../pqsigner-erc7730/src/display/primitives.rs");
+    // The hand-picked chain names — bound here so a change to one forces the
+    // test to be re-acked. Mirrors the KDF-tag-stability discipline from
+    // CLAUDE.md "no casual KDF tag changes". Since 2026-10-22 the table is
+    // generated (`tools/gen_chain_names.py` adds chainlist.org mainnets under
+    // stated rules); the hand-picked names must survive every regeneration,
+    // and the table's size is pinned so a regeneration is re-acked too.
+    let table = include_str!("../../../pqsigner-erc7730/src/display/chain_names_gen.rs");
     for needle in [
-        "1 => \"(Mainnet)\"",
-        "10 => \"(Optimism)\"",
-        "14 => \"(Flare)\"",
-        "30 => \"(Rootstock)\"",
-        "56 => \"(BSC)\"",
-        "100 => \"(Gnosis)\"",
-        "137 => \"(Polygon)\"",
-        "146 => \"(Sonic)\"",
-        "250 => \"(Fantom)\"",
-        "324 => \"(zkSync Era)\"",
-        "999 => \"(HyperEVM)\"",
-        "1329 => \"(Sei)\"",
-        "8217 => \"(Kaia)\"",
-        "8453 => \"(Base)\"",
-        "42161 => \"(Arbitrum)\"",
-        "42220 => \"(Celo)\"",
-        "43114 => \"(Avalanche)\"",
-        "59144 => \"(Linea)\"",
-        "534352 => \"(Scroll)\"",
-        "11155111 => \"(Sepolia)\"",
-        "84532 => \"(BaseSepolia)\"",
-        "_ => \"(unknown chain)\"",
+        "(1, \"(Mainnet)\")",
+        "(10, \"(Optimism)\")",
+        "(14, \"(Flare)\")",
+        "(30, \"(Rootstock)\")",
+        "(56, \"(BSC)\")",
+        "(100, \"(Gnosis)\")",
+        "(137, \"(Polygon)\")",
+        "(146, \"(Sonic)\")",
+        "(250, \"(Fantom)\")",
+        "(324, \"(zkSync Era)\")",
+        "(999, \"(HyperEVM)\")",
+        "(1329, \"(Sei)\")",
+        "(8217, \"(Kaia)\")",
+        "(8453, \"(Base)\")",
+        "(42161, \"(Arbitrum)\")",
+        "(42220, \"(Celo)\")",
+        "(43114, \"(Avalanche)\")",
+        "(59144, \"(Linea)\")",
+        "(534352, \"(Scroll)\")",
+        "(11155111, \"(Sepolia)\")",
+        "(84532, \"(Base Sepolia)\")",
+        // Hand-picked testnets (2026-10-22).
+        "(97, \"(BSC Testnet)\")",
+        "(17000, \"(Holesky)\")",
+        "(80002, \"(Polygon Amoy)\")",
+        "(10200, \"(Gnosis Chiado)\")",
+        "(1328, \"(Sei Testnet)\")",
+        "(421614, \"(Arb Sepolia)\")",
+        "CHAIN_NAMES: [(u64, &str); 139]",
     ] {
-        assert!(
-            src.contains(needle),
-            "primitives.rs chain_name must keep `{}`",
-            needle
-        );
+        assert!(table.contains(needle), "chain_names_gen.rs must keep `{}`", needle);
     }
+    let src = include_str!("../../../pqsigner-erc7730/src/display/primitives.rs");
+    assert!(src.contains("Err(_) => \"(unknown chain)\","), "chain_name must keep its unknown label");
 }
 
 // --- Trusted display: no non-ASCII in any rendered output -----------------

@@ -1042,6 +1042,69 @@ fn positive_get_wallet_address_show_path_confirms_before_ns_write() {
 // 8. Source-text invariant pins — `cmd_get_init_code.rs`
 // ─────────────────────────────────────────────────────────────────────
 
+/// Every `.rs` file under `secure/src`, minus host-test sources (they quote
+/// the call they pin).
+fn secure_src_files() -> Vec<(String, String)> {
+    fn walk(dir: &std::path::Path, out: &mut Vec<(String, String)>) {
+        for entry in std::fs::read_dir(dir).expect("read secure/src") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                let name = path.to_string_lossy().into_owned();
+                if name.ends_with("_tests.rs") || name.contains("/tests/") || name.contains("_under_test") {
+                    continue;
+                }
+                out.push((name, std::fs::read_to_string(&path).expect("read source")));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut out);
+    out
+}
+
+#[test]
+fn negative_init_code_grace_has_exactly_one_call_site() {
+    // Owner decision 2026-10-22: GET_INIT_CODE is the ONLY command that moves
+    // an unlocked session's idle deadline forward without a button press
+    // (`timeout.rs`, "Who moves the deadline"). A second caller would make
+    // that statement false, so it fails here instead.
+    let sites: Vec<String> = secure_src_files()
+        .into_iter()
+        .filter(|(name, _)| !name.ends_with("/timeout.rs"))
+        .flat_map(|(name, src)| {
+            let n = src.matches("grant_init_code_grace(").count();
+            std::iter::repeat_n(name, n)
+        })
+        .collect();
+    assert_eq!(sites.len(), 1, "grant_init_code_grace must have exactly one caller, found {sites:?}");
+    assert!(sites[0].ends_with("/nsc/cmd_get_init_code.rs"), "the caller must be cmd_get_init_code.rs, found {sites:?}");
+}
+
+#[test]
+fn negative_init_code_grace_comes_after_validation_and_before_secrets() {
+    let grace = GET_INIT_CODE_SRC.find("crate::timeout::grant_init_code_grace()").expect("grace call present");
+    let unlocked = GET_INIT_CODE_SRC.find("pin_verified.check_sentinel()").expect("unlock check present");
+    let account = GET_INIT_CODE_SRC.find("account_index > MAX_ACCOUNT_INDEX").expect("account check present");
+    let ptrs = GET_INIT_CODE_SRC.find("validate_ns_write_ptr(args.arg1").expect("out-ptr check present");
+    let secret = GET_INIT_CODE_SRC.find("read_entropy_blob").expect("SE read present");
+    assert!(unlocked < grace, "a locked device must get no grace");
+    assert!(ptrs < grace && account < grace, "a malformed request must get no grace");
+    assert!(grace < secret, "the grace is granted before any secret is read");
+}
+
+#[test]
+fn negative_init_code_grace_is_rearmed_on_every_lock() {
+    // One grace per unlock: the single place a session ends
+    // (`pin_verified.set_false()`) re-arms it.
+    const STATE_SRC: &str = include_str!("nsc/state.rs");
+    let set_false = STATE_SRC.find("self.pin_verified.set_false();").expect("lock point present");
+    let rearm = STATE_SRC.find("crate::timeout::rearm_init_code_grace();").expect("re-arm present");
+    assert!(rearm > set_false && rearm - set_false < 400, "re-arm must sit at the lock point");
+    assert_eq!(STATE_SRC.matches("pin_verified.set_false()").count(), 1, "a second lock point must re-arm too");
+}
+
 #[test]
 fn negative_get_init_code_uses_handler_guard() {
     // HIGH-7: slot keygen takes several seconds — SysTick must NOT

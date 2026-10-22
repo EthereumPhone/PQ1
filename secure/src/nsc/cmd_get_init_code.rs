@@ -35,6 +35,16 @@
 //!     current on-chain `bootstrapUses` counter cannot reconstruct such
 //!     released/withheld signatures; this is a documented pre-production
 //!     design residual, not a reason to call this path free or deterministic.
+//!   * Idle lock: this is the ONLY command that moves the deadline of an
+//!     unlocked session forward without a button press
+//!     (`timeout::grant_init_code_grace`, owner decision 2026-10-22): +20 s,
+//!     once per unlock, never past 120 s from now, never for an expired
+//!     session. It is granted after the unlock check and the input
+//!     validation, before any secret is read, so a malformed request gets
+//!     nothing. Why: a companion's first transaction on a network starts
+//!     here with ~16 s of keygen and signing before any screen, and a click
+//!     late in the 120 s window locked the device at the end of that job.
+//!     The full list of what moves the deadline is in `timeout.rs`.
 //!   * Per-slot keygen hits the same cache (`SLOT_CACHE`) as
 //!     `CMD_SIGN_USEROP`, so a later sign on the same
 //!     `(account_index, chain_id)` skips the <1 s keygen.
@@ -121,6 +131,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         crate::ui::show_status("InitCode", "bad acct");
         return NscStatus::InvalidPointer as u32;
     }
+
+    // The one non-press extension of the idle lock (module doc; `timeout.rs`
+    // "Who moves the deadline"). After the unlock check and the input
+    // validation, before any secret is read.
+    // `_granted`: read only by `secure_log!`, which is a no-op without
+    // `debug-log`.
+    let _granted = crate::timeout::grant_init_code_grace();
+    secure_log!("[S] init-code: idle grace {}", if _granted { "+20 s" } else { "not granted" });
 
     // ── 4. Reconstruct entropy + derive slot master per-account ───
     //
