@@ -39,8 +39,12 @@ struct Rec {
     /// Cycles spent in each [`Phase`] since the previous frame.
     phase_cyc: [u32; PHASES.len()],
     /// The cycle count at the previous frame: a [`Phase`] counts only its
-    /// time inside the pause it ends in.
+    /// time inside each pause it spans.
     pause_c0: u32,
+    /// Per [`Phase`] tag, the open phases (nested ones of the same tag count
+    /// once) and when the outermost one began.
+    depth: [u8; PHASES.len()],
+    open_c0: [u32; PHASES.len()],
     /// Per kept pause, and since the previous frame, the [`count`]s.
     cnts: [[u16; COUNTS.len()]; KEPT],
     cnt: [u16; COUNTS.len()],
@@ -126,6 +130,8 @@ impl Rec {
         i2c_cyc: 0,
         phase_cyc: [0; PHASES.len()],
         pause_c0: 0,
+        depth: [0; PHASES.len()],
+        open_c0: [0; PHASES.len()],
         cnts: [[0; COUNTS.len()]; KEPT],
         cnt: [0; COUNTS.len()],
         long: 0,
@@ -141,6 +147,18 @@ impl Rec {
     fn gap(&mut self, now: u32, src: u8) {
         let i2c_ms = u16::try_from(self.i2c_cyc / 160_000).unwrap_or(u16::MAX);
         self.i2c_cyc = 0;
+        // A phase still open at this frame (the frame is usually drawn from a
+        // chip poll inside one) gives this pause its time so far; its drop
+        // credits the rest to the pause it ends in. Without this, a phase
+        // spanning a frame lost its whole pre-frame part (where2: `E` read 24
+        // of a ~53 ms draw, `O` read 0).
+        let c_now = crate::hw::lcd_te::cycles();
+        for (k, c) in self.phase_cyc.iter_mut().enumerate() {
+            if self.depth[k] > 0 {
+                let d = c_now.wrapping_sub(self.open_c0[k]).min(c_now.wrapping_sub(self.pause_c0));
+                *c = c.wrapping_add(d);
+            }
+        }
         let mut ph = [0u16; PHASES.len()];
         for (m, c) in ph.iter_mut().zip(self.phase_cyc.iter_mut()) {
             *m = u16::try_from(*c / 160_000).unwrap_or(u16::MAX);
@@ -148,7 +166,7 @@ impl Rec {
         }
         let mut cn = self.cnt;
         self.cnt = [0; COUNTS.len()];
-        self.pause_c0 = crate::hw::lcd_te::cycles();
+        self.pause_c0 = c_now;
         let mut item = (now.wrapping_sub(self.last), self.last_pct, src, i2c_ms);
         if item.0 >= 500 {
             self.long = self.long.wrapping_add(1);
@@ -171,51 +189,73 @@ impl Rec {
 /// `I` the session check (or the T=1' reset + SCP03 handshake), `W` the
 /// SCP03 wrap, `K` the T=1' round trip, `U` the SCP03 unwrap. The second
 /// sign on the WHERE page (2026-10-21) put 52-53 ms of each start pause in
-/// `E` with only 6 ms of I2C; the second four split it.
-const PHASES: [u8; 8] = [b'T', b'O', b'E', b'F', b'I', b'W', b'K', b'U'];
+/// `E` with only 6 ms of I2C; the second four split it. `Z`: an FI delay
+/// that had to draw its own length (`fi::wait_random` outside a TRNG fill,
+/// which runs a whole hardened 1-byte fill and its ~31 inner delays).
+const PHASES: [u8; 9] = [b'T', b'O', b'E', b'F', b'I', b'W', b'K', b'U', b'Z'];
 
 /// Events counted per pause: `Q` SE050 polls for a frame's start byte, `B`
 /// chip-wait ticks (`ui::busy_poll` with ticks on), and the reasons such a
 /// tick drew nothing: `D` not due yet, `R` the previous frame still
 /// streaming, `P` the beam out of the start range, `N` no film set up or no
 /// atlas (a nested tick is not counted). `Y`: an SE050 draw retried on a
-/// fresh session.
-const COUNTS: [u8; 7] = [b'Q', b'B', b'D', b'R', b'P', b'N', b'Y'];
+/// fresh session. `Z`: FI delays that drew their own length (the `Z` phase).
+const COUNTS: [u8; 8] = [b'Q', b'B', b'D', b'R', b'P', b'N', b'Y', b'Z'];
+
+/// Thread mode only: SysTick's idle gate runs FI delays too, and an ISR must
+/// not touch [`REC`] under the thread.
+fn in_thread() -> bool {
+    use cortex_m::peripheral::{scb::VectActive, SCB};
+    SCB::vect_active() == VectActive::ThreadMode
+}
 
 /// Count one `tag` (one of [`COUNTS`]) into the pause running now.
 pub fn count(tag: u8) {
     let r = rec();
+    if !in_thread() {
+        return;
+    }
     if let (true, Some(k)) = (r.on, COUNTS.iter().position(|&c| c == tag)) {
         r.cnt[k] = r.cnt[k].saturating_add(1);
     }
 }
 
 /// Times a stretch of work as phase `tag` (one of [`PHASES`]) from creation
-/// to drop, into the pause it ends in, counting only its time inside that
-/// pause (a frame drawn mid-phase starts the count again): the hunt for the
-/// ~45 ms at a sign's start with no I2C, no hash and no chip wait inside
-/// (2026-10-21).
+/// to drop, splitting it at every frame drawn inside it so each pause gets
+/// exactly its own part: the hunt for the ~45 ms at a sign's start with no
+/// I2C, no hash and no chip wait inside (2026-10-21). Inert outside a
+/// recording and in an ISR.
 pub struct Phase {
     k: usize,
-    c0: u32,
 }
 
 impl Phase {
     #[must_use]
     pub fn new(tag: u8) -> Self {
-        Self {
-            k: PHASES.iter().position(|&p| p == tag).unwrap_or(PHASES.len()),
-            c0: crate::hw::lcd_te::cycles(),
+        let r = rec();
+        let k = PHASES.iter().position(|&p| p == tag).unwrap_or(PHASES.len());
+        if k == PHASES.len() || !r.on || !in_thread() {
+            return Self { k: PHASES.len() };
         }
+        if r.depth[k] == 0 {
+            r.open_c0[k] = crate::hw::lcd_te::cycles();
+        }
+        r.depth[k] = r.depth[k].saturating_add(1);
+        Self { k }
     }
 }
 
 impl Drop for Phase {
     fn drop(&mut self) {
         let r = rec();
-        if r.on && self.k < PHASES.len() {
+        // `start` clears the depths: a phase opened before it is dropped here.
+        if self.k == PHASES.len() || r.depth[self.k] == 0 {
+            return;
+        }
+        r.depth[self.k] -= 1;
+        if r.on && r.depth[self.k] == 0 {
             let now = crate::hw::lcd_te::cycles();
-            let d = now.wrapping_sub(self.c0).min(now.wrapping_sub(r.pause_c0));
+            let d = now.wrapping_sub(r.open_c0[self.k]).min(now.wrapping_sub(r.pause_c0));
             r.phase_cyc[self.k] = r.phase_cyc[self.k].wrapping_add(d);
         }
     }
@@ -268,12 +308,35 @@ pub fn rows6(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     }
     for (row, c) in out[1..].iter_mut().zip(r.cnts.iter()) {
         let mut n = 0;
-        for (k, &v) in c.iter().enumerate() {
+        // `Z` has its own page.
+        for (k, &v) in c[..COUNTS.len() - 1].iter().enumerate() {
             if k > 0 {
                 push(row, &mut n, b' ');
             }
             push_u32(row, &mut n, u32::from(v));
         }
+    }
+}
+
+/// The seventh page: `FI WAIT ms n`, then the same three pauses as
+/// `<ms>:<Z ms> <Z count>`, the FI delays that drew their own length.
+pub fn rows7(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let mut n = 0;
+    for &b in b"FI WAIT ms n" {
+        push(&mut out[0], &mut n, b);
+    }
+    let rows = r.gaps.iter().zip(r.where_.iter()).zip(r.cnts.iter());
+    for (row, ((gap, w), c)) in out[1..].iter_mut().zip(rows) {
+        let mut n = 0;
+        push_u32(row, &mut n, gap.0);
+        push(row, &mut n, b':');
+        push_u32(row, &mut n, u32::from(w[PHASES.len() - 1]));
+        push(row, &mut n, b' ');
+        push_u32(row, &mut n, u32::from(c[COUNTS.len() - 1]));
     }
 }
 

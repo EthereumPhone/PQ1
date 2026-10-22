@@ -56,6 +56,11 @@ fn rng_byte() -> Option<u8> {
         // 2. A direct draw, retried. `fill_bound` performs RM0456's
         //    conditioning reset on a latched `SECS`/`CECS` BEFORE it delays
         //    (#835 C1), so each attempt genuinely carries its own recovery.
+        // Dev (`ui-px-film-gaps`): time and count these into the film's pause.
+        #[cfg(feature = "ui-px-film-gaps")]
+        crate::ui::px::film_gaps::count(b'Z');
+        #[cfg(feature = "ui-px-film-gaps")]
+        let _phase = crate::ui::px::film_gaps::Phase::new(b'Z');
         let mut attempt = 0u32;
         while attempt < FRESH_DELAY_ATTEMPTS {
             // Do not spin against a source already known to be failing: the
