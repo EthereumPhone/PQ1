@@ -292,6 +292,13 @@ paths = ['''^contracts/verification/probability/claims\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"C10Probability/ReturnedAuthRecovery\.lean": "3fbe568a5becd0d45bb6bbce87bf37c09edca56af7be77d91fa9908ecd5ed5b8",?\s*$''']
 
+[[rules.allowlists]]
+description = "Exact public digest of the functional WOTS keygen scope probe"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10\-port/cert\-source\-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_C10FunctionalWotsKeygen\.ec": "4a24e131c607b1885d89675faafda1b1b781c84384f3d9fae3fd6c953fa450dc",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
