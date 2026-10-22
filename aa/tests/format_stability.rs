@@ -165,6 +165,11 @@ fn stability_userop_header_is_305_bytes() {
 
 #[test]
 fn stability_max_tx_len_and_batch_caps() {
-    assert_eq!(MAX_TX_LEN, 4096);
+    // 8192 per call since 2026-10-22 (was 4096), advertised by
+    // GET_DEVICE_INFO bit 5; the batch's summed data keeps the old implied
+    // 4 × 4096 bound so batch buffers did not move.
+    assert_eq!(MAX_TX_LEN, 8192);
     assert_eq!(MAX_BATCH_TXS, 4);
+    assert_eq!(pqsigner_proto::MAX_BATCH_CALL_DATA_TOTAL_LEN, 16_384);
+    assert_eq!(pqsigner_proto::CAP_SIGN_USEROP_DATA_8K, 1 << 5);
 }

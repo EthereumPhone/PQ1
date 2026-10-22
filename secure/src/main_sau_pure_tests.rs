@@ -1261,26 +1261,49 @@ fn negative_hardfault_handler_zeroizes_then_resets_and_never_se_wipes() {
     // intrusion wipe — that would let a single induced fault brick the
     // wallet (DoS). Pin all three invariants against the source so a future
     // refactor can't silently weaken the fault backstop.
-    let hf_start = MAIN_SRC
-        .find("unsafe fn HardFault(")
-        .expect("HardFault handler must exist (rr-1)");
-    let body_start = hf_start + MAIN_SRC[hf_start..].find('{').expect("HardFault body must open");
-    let body_end = body_start + MAIN_SRC[body_start..].find("\n}\n").expect("HardFault must close");
-    let body = &MAIN_SRC[body_start..body_end];
-    assert!(
-        body.contains("nsc::zeroize_sensitive_state();"),
-        "HardFault handler must zeroize SRAM secrets before resetting"
-    );
-    assert!(
-        body.contains("SCB::sys_reset()"),
-        "HardFault handler must reset (re-enter the FSBL) after zeroizing"
-    );
-    assert!(
-        !body.contains("trigger_intrusion_wipe"),
-        "HardFault handler must NOT arm the destructive dual-SE wipe — a single \
-         induced fault must not be able to brick the wallet (reserve SE wipe for \
-         a confirmed TAMP/GTZC tamper)"
-    );
+    // Two handlers since 2026-10-22: silicon (`stm32u585`) and the QEMU model,
+    // which exits the emulator with a failure status so a fault (e.g. the
+    // MSPLIM stack guard firing) fails `make e2e` instead of hanging. Every
+    // one must wipe and must never SE-wipe; their exits differ.
+    let mut silicon = 0;
+    let mut qemu = 0;
+    let mut from = 0;
+    while let Some(rel) = MAIN_SRC[from..].find("unsafe fn HardFault(") {
+        let hf_start = from + rel;
+        let attrs = &MAIN_SRC[hf_start.saturating_sub(160)..hf_start];
+        let body_start =
+            hf_start + MAIN_SRC[hf_start..].find('{').expect("HardFault body must open");
+        let body_end =
+            body_start + MAIN_SRC[body_start..].find("\n}\n").expect("HardFault must close");
+        let body = &MAIN_SRC[body_start..body_end];
+        assert!(
+            body.contains("nsc::zeroize_sensitive_state();"),
+            "HardFault handler must zeroize SRAM secrets before resetting"
+        );
+        assert!(
+            !body.contains("trigger_intrusion_wipe"),
+            "HardFault handler must NOT arm the destructive dual-SE wipe — a single \
+             induced fault must not be able to brick the wallet (reserve SE wipe for \
+             a confirmed TAMP/GTZC tamper)"
+        );
+        if attrs.contains("#[cfg(all(not(test), feature = \"stm32u585\"))]") {
+            assert!(
+                body.contains("SCB::sys_reset()"),
+                "silicon HardFault handler must reset (re-enter the FSBL) after zeroizing"
+            );
+            silicon += 1;
+        } else if attrs.contains("not(feature = \"stm32u585\")") {
+            assert!(
+                body.contains("debug::exit(cortex_m_semihosting::debug::EXIT_FAILURE)"),
+                "QEMU HardFault handler must fail the run"
+            );
+            qemu += 1;
+        } else {
+            panic!("HardFault handler with an unrecognised cfg: {attrs}");
+        }
+        from = body_end;
+    }
+    assert_eq!((silicon, qemu), (1, 1), "exactly one silicon and one QEMU HardFault");
 }
 
 #[test]

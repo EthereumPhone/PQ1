@@ -468,7 +468,11 @@ E2E_PX_TRANSCRIPTS ?= 0
 # 50 = 47 + Scenario 5e-rot (batch rotation consent, its member, final ask).
 # 53 = 50 + Scenarios 5p-personal-siwe and 5p-personal-hex (two hex signs).
 # 55 = 53 + Scenarios 5p-safe and 5p-cow (structured off-chain SafeTx / CoW order).
-e2e-px: E2E_PX_TRANSCRIPTS = 55
+# 62 = 55 + Scenario 7* (2026-10-22 per-call cap): 7a rotation consent + 8 KB
+#      blind call, 7b 5,050-B call, 7d batch (two members + final ask), 7f the
+#      4,068-B Safe exec. 7c / 7e / the 4,100-B Safe exec are refused before any
+#      screen, so they add none.
+e2e-px: E2E_PX_TRANSCRIPTS = 62
 e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
 
 e2e: ## Automated unified-sign E2E (QEMU)
@@ -550,6 +554,12 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 5s: multiSend (approve+presign) safe-wrapped CoW clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5t: multiSend with a delegatecall record is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5u: multiSend presign without cow_order is refused" \
+		"\\[NS\\]\\[e2e\\] Scenario 7a: 8 KB call on a slot rotation" \
+		"\\[NS\\]\\[e2e\\] Scenario 7b: 5050-byte call signs" \
+		"\\[NS\\]\\[e2e\\] Scenario 7c: 8193-byte call is refused" \
+		"\\[NS\\]\\[e2e\\] Scenario 7d: batch \\[approve, 8 KB call\\] signs" \
+		"\\[NS\\]\\[e2e\\] Scenario 7e: batch over the summed-data cap is refused" \
+		"\\[NS\\]\\[e2e\\] Scenario 7f: Safe exec keeps the 4096-byte domain" \
 		"\\[NS\\]\\[e2e\\] Scenario 6: brute-force protection" \
 		"\\[NS\\]\\[e2e\\] === All scenarios passed! ==="; do \
 		if grep -q "$$line" $$log; then \
@@ -2990,7 +3000,8 @@ RELEASE_FEATURES ?= stm32u585,se050,optiga-trust-m,dual-se,ui-lcd,usb,iwdg,saes-
 override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-master-key se-lcd-diag dev-dfu \
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
-                 erc7730-forced-blind rng-fault-probe trng-dump sign-timing fi-live-delays stack-hwm rng-xor-probe \
+                 erc7730-forced-blind rng-fault-probe trng-dump sign-timing fi-live-delays stack-hwm \
+                 stack-overflow-probe rng-xor-probe \
                  fw-rollback-e2e fwup-transport-e2e se050-scp03-allow-factory-fallback \
                  legacy-fw-rollback-unsafe prodtest factory-provisioning \
                  factory-provisioning-rehearsal factory-production-irreversible-im-sure \

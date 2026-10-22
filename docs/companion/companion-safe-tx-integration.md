@@ -115,7 +115,9 @@ multi-byte integers are big-endian.
 Constants exposed by `pqsigner_proto` / `sphincs_tz_shared`:
 
 - `SAFE_V1_CANONICAL_LEN = 281`
-- `SAFE_V1_RAW_DATA_MAX = MAX_TX_LEN` (4096 bytes)
+- `SAFE_V1_RAW_DATA_MAX` = 4096 bytes (a literal since 2026-10-22, when `MAX_TX_LEN`
+  went to 8192; a whole `execTransaction` call is likewise capped at
+  `EXEC_TRANSACTION_MAX_CALLDATA_LEN` = 4096 and refused above it)
 - `SAFE_V1_PAYLOAD_MAX = 281 + 2 + 4096 = 4379`
 - `SAFE_OFF_CHAIN_ID = 0`, `SAFE_OFF_SAFE_ADDRESS = 8`, … (full list in
   `proto/src/lib.rs:1467`)

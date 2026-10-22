@@ -322,12 +322,14 @@ fn negative_sign_userop_batch_tx_prefix_len_is_54() {
 #[test]
 fn negative_sign_userop_batch_max_payload_len_covers_max_batch_at_max_tx_len() {
     // SNAP_BUF in cmd_sign_userop_batch.rs is sized to this constant.
-    // v2 wire: header + MAX_BATCH_TXS × (prefix + MAX_TX_LEN data) +
+    // v2 wire: header + MAX_BATCH_TXS × prefix + summed member data
+    // (MAX_BATCH_CALL_DATA_TOTAL_LEN, enforced at parse time) +
     // trailer_count(1) + MAX_TRAILERS_PER_BATCH × per-record-header(4)
     // + TRAILERS_TOTAL_MAX_LEN budget. A fully-loaded batch payload must
     // fit without overflowing the snapshot.
     let expected = SIGN_USEROP_BATCH_HEADER_LEN
-        + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
+        + MAX_BATCH_TXS * SIGN_USEROP_BATCH_TX_PREFIX_LEN
+        + sphincs_tz_shared::MAX_BATCH_CALL_DATA_TOTAL_LEN
         + 1
         + MAX_TRAILERS_PER_BATCH * SIGN_USEROP_BATCH_TRAILER_HEADER_LEN
         + TRAILERS_TOTAL_MAX_LEN;
@@ -389,9 +391,11 @@ fn negative_max_sign_response_len_fits_batch_worst_case() {
 
 #[test]
 fn negative_max_tx_len_per_inner_tx_unchanged() {
-    // CLAUDE.md "data_len (u16 BE, 0..=4096)". Per-tx cap also bounds
-    // the snapshot size for batch.
-    assert_eq!(MAX_TX_LEN, 4096);
+    // CLAUDE.md "data_len (u16 BE, 0..=8192)" (raised from 4096 on
+    // 2026-10-22). The per-member cap no longer bounds the batch snapshot:
+    // the SUMMED member data does, at the old implied 4 × 4096.
+    assert_eq!(MAX_TX_LEN, 8192);
+    assert_eq!(sphincs_tz_shared::MAX_BATCH_CALL_DATA_TOTAL_LEN, 16_384);
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -3261,7 +3265,10 @@ fn negative_proto_constants_used_by_handlers_resolve_to_pinned_values() {
     assert_eq!(MAX_SLOT_USES, 65_536);
     assert_eq!(MAX_ACCOUNT_INDEX, 0xFF);
     assert_eq!(MAX_BATCH_TXS, 4);
-    assert_eq!(MAX_TX_LEN, 4096);
+    assert_eq!(MAX_TX_LEN, 8192);
+    assert_eq!(sphincs_tz_shared::MAX_BATCH_CALL_DATA_TOTAL_LEN, 16_384);
+    assert_eq!(sphincs_tz_shared::SIGN_USEROP_MAX_PAYLOAD_LEN, 32_300);
+    assert_eq!(sphincs_tz_shared::SAFE_V1_RAW_DATA_MAX, 4096);
     assert_eq!(SIGN_OFFCHAIN_HEADER_LEN, 17);
     assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN, 4016);
     assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN_6492, 8616);

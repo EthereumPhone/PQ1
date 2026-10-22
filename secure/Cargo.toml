@@ -424,6 +424,12 @@ fi-live-delays = []
 # word in `STACK_HWM_LOW` for an SWD read. The scrub still zeroes first, so
 # no secret survives it; the pattern is written after. NEVER ship.
 stack-hwm = []
+# Test-only negative control for the MSPLIM stack guard (`stack_guard.rs`,
+# 2026-10-22): right after the guard is armed, `main` recurses with a large
+# frame until the limit fires. A correct image ends in the HardFault wipe and
+# reset (the boot log shows the probe start and never its end). Terminal bench
+# image. NEVER ship.
+stack-overflow-probe = []
 # Reversible firmware anti-rollback test: drives the real fw_update::
 # verify_manifest chain with dev-key-signed v1/v2/v3 manifests against
 # literal test floors (no OTP burn, no flash, no reboot). Runs early in

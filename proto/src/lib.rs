@@ -22,10 +22,27 @@ pub const PIN_LEN: usize = 8;
 pub const TX_HASH_LEN: usize = 32;
 pub const MAX_ATTEMPTS: u8 = 10;
 
-/// Maximum size of an unsigned EIP-1559 transaction envelope passed across
-/// the gateway. The secure world copies the bytes into its own stack buffer
-/// before parsing, so this also bounds that buffer.
-pub const MAX_TX_LEN: usize = 4096;
+/// Maximum calldata of ONE inner call: the single `CMD_SIGN_USEROP` call and
+/// each member of a `CMD_SIGN_USEROP_BATCH`. A batch is additionally bounded
+/// by [`MAX_BATCH_CALL_DATA_TOTAL_LEN`] summed over its members.
+///
+/// 8192 since 2026-10-22 (was 4096): a real Uniswap Universal Router swap
+/// carried 5,050 B. Firmware that accepts more than 4096 sets
+/// [`CAP_SIGN_USEROP_DATA_8K`]; companions gate on that bit. The bytes are
+/// read in place from the TOCTOU snapshot (`SIGN_SNAP_BUF`), never copied to
+/// a stack buffer of this size; the only per-call stack copy is the
+/// reconstructed `execute` calldata ([`MAX_EXECUTE_CALLDATA_LEN`]), which
+/// lives in a short `#[inline(never)]` frame that ends before signing.
+pub const MAX_TX_LEN: usize = 8192;
+
+/// Upper bound on the calldata summed over all members of one
+/// `CMD_SIGN_USEROP_BATCH`. Equals the pre-2026-10-22 implied bound
+/// (`MAX_BATCH_TXS × 4096`), so raising [`MAX_TX_LEN`] leaves every batch
+/// buffer byte-identical. Enforced at parse time, before any display.
+pub const MAX_BATCH_CALL_DATA_TOTAL_LEN: usize = 16 * 1024; // 16,384
+
+const _: () = assert!(MAX_TX_LEN <= u16::MAX as usize); // wire `data_len` is u16
+const _: () = assert!(MAX_TX_LEN <= MAX_BATCH_CALL_DATA_TOTAL_LEN);
 
 // ---------------------------------------------------------------------------
 // CoW Swap on-device decode — canonical inner-calldata length.
@@ -466,7 +483,8 @@ pub const CMD_SIGN_OFFCHAIN: u32 = 16;
 ///   [278..   )  repeat batch_count times:
 ///                 [20]              to_address
 ///                 [32]              value (u256 BE)
-///                 [ 2]              data_len (u16 BE, ≤ MAX_TX_LEN)
+///                 [ 2]              data_len (u16 BE, ≤ MAX_TX_LEN; Σ over
+///                                   members ≤ MAX_BATCH_CALL_DATA_TOTAL_LEN)
 ///                 [data_len]        data
 ///   [...     )  trailer_count u8 (0..=MAX_TRAILERS_PER_BATCH)
 ///   [...     )  repeat trailer_count times:
@@ -1045,9 +1063,19 @@ pub const CAP_OFFCHAIN_SAFE_TX: u32 = 1 << 3;
 /// `GET_DEVICE_INFO.capabilities` bit 4: `CMD_SIGN_OFFCHAIN` accepts
 /// [`OFFCHAIN_KIND_COW_ORDER`]. Same gating rule as [`CAP_OFFCHAIN_SAFE_TX`].
 pub const CAP_OFFCHAIN_COW_ORDER: u32 = 1 << 4;
+/// `GET_DEVICE_INFO.capabilities` bit 5: `CMD_SIGN_USEROP` and every
+/// `CMD_SIGN_USEROP_BATCH` member accept inner calldata up to
+/// [`MAX_TX_LEN`] = 8192 B (batch summed data still ≤
+/// [`MAX_BATCH_CALL_DATA_TOTAL_LEN`]). Firmware without the bit refuses
+/// anything over 4096 with a generic status, so companions MUST cap at 4096
+/// unless the bit is set — never probe by sending and reading the error.
+pub const CAP_SIGN_USEROP_DATA_8K: u32 = 1 << 5;
 /// Capability bitmap emitted by the current firmware.
-pub const DEVICE_CAPABILITIES: u32 =
-    CAP_SIGN_USEROP | CAP_ERC7730_PROOF_SET | CAP_OFFCHAIN_SAFE_TX | CAP_OFFCHAIN_COW_ORDER;
+pub const DEVICE_CAPABILITIES: u32 = CAP_SIGN_USEROP
+    | CAP_ERC7730_PROOF_SET
+    | CAP_OFFCHAIN_SAFE_TX
+    | CAP_OFFCHAIN_COW_ORDER
+    | CAP_SIGN_USEROP_DATA_8K;
 
 // -- Session management (0x10-0x1F) --
 pub const INS_V2_UNLOCK: u8 = 0x10;
@@ -1756,7 +1784,7 @@ pub const SLOT_INDEX_MASK: u32 =
 /// | 244 | 32  | paymaster_and_data_hash (sha256; `SHA256_EMPTY` when empty) |
 /// | 276 | 20  | to_address (inner tx recipient) |
 /// | 296 | 32  | value (u256 BE) |
-/// | 328 |  2  | data_len (u16 BE; 0..=MAX_TX_LEN) |
+/// | 328 |  2  | data_len (u16 BE; 0..=MAX_TX_LEN = 8192) |
 /// | 330 |  N  | data |
 /// | 330+N | 2 | erc20_bundle_len (u16 BE; 0 = no bundle) |
 /// | 332+N | B | erc20_bundle (Merkle-verified ERC-20 metadata, see `erc20::bundle`) |
@@ -1773,6 +1801,19 @@ pub const SIGN_USEROP_HEADER_LEN: usize =
 
 /// Compile-time sanity check: header ends exactly at `data_len`.
 const _: () = assert!(SIGN_USEROP_HEADER_LEN == 330);
+
+/// Largest `CMD_SIGN_USEROP` request the firmware accepts: the header,
+/// `MAX_TX_LEN` of inner data, then every trailer slot at its maximum
+/// (ERC-20 bundle, reserved slot, CoW order, `safe_v1`, curated selector,
+/// self-attest selector, ERC-7730, names). Both worlds size by it: the secure
+/// TOCTOU snapshot (`cmd_sign_userop.rs::SNAP_LEN`, which recomputes the sum
+/// from the per-trailer constants and asserts equality with this literal) and
+/// the non-secure APDU chain bound (`nonsecure/src/usb/commands.rs`).
+///
+/// A literal because `proto` has no dependencies and three of the trailer
+/// maxima live in `pqsigner-tx`.
+pub const SIGN_USEROP_MAX_PAYLOAD_LEN: usize = 32_300;
+const _: () = assert!(SIGN_USEROP_MAX_PAYLOAD_LEN > SIGN_USEROP_HEADER_LEN + MAX_TX_LEN);
 
 // Wire slot 1 is reserved for compatibility and its length MUST remain zero.
 
@@ -1891,6 +1932,20 @@ pub const EXEC_TRANSACTION_SELECTOR: [u8; 4] = [0x6a, 0x76, 0x12, 0x02];
 /// words(320) + two dynamic-length words(64) for `data` and `signatures`.
 /// Real calls are at least this long; anything shorter is malformed.
 pub const EXEC_TRANSACTION_MIN_CALLDATA_LEN: usize = 4 + 10 * 32 + 2 * 32;
+
+/// Maximum calldata length the firmware routes as a Safe `execTransaction`
+/// UserOp (the whole call, selector included). Above it the Safe route
+/// REFUSES; it never falls through to another renderer, because the selector
+/// alone claims the Safe route (`is_exec_transaction_claim`).
+///
+/// 4096 = `MAX_TX_LEN` before the 2026-10-22 raise to 8192, so the Safe
+/// decoder, multiSend walker, CoW binding and Safe screens keep exactly the
+/// input domain they were reviewed and fuzzed against. The `data` argument
+/// inside is further bounded by this length; trailers carrying Safe inner
+/// data use [`SAFE_V1_RAW_DATA_MAX`] (also 4096).
+pub const EXEC_TRANSACTION_MAX_CALLDATA_LEN: usize = 4096;
+const _: () = assert!(EXEC_TRANSACTION_MIN_CALLDATA_LEN < EXEC_TRANSACTION_MAX_CALLDATA_LEN);
+const _: () = assert!(EXEC_TRANSACTION_MAX_CALLDATA_LEN <= MAX_TX_LEN);
 
 // ---------------------------------------------------------------------------
 // Safe `MultiSendCallOnly` — batched SafeTx via DELEGATECALL
@@ -2044,10 +2099,15 @@ pub const SAFE_TX_TYPEHASH: [u8; 32] = [
 /// ```
 pub const SAFE_V1_CANONICAL_LEN: usize = 281;
 
-/// Maximum size of the `raw_data` carried alongside the canonical in
-/// the `safe_v1` trailer. Set to `MAX_TX_LEN` so any inner Safe call
-/// the wallet would otherwise accept as a UserOp's inner data fits.
-pub const SAFE_V1_RAW_DATA_MAX: usize = MAX_TX_LEN;
+/// Maximum size of a Safe transaction's inner `data`: the `raw_data` of the
+/// `safe_v1` trailer, the off-chain `SAFE_TX` kind, and (enforced in
+/// `secure/src/tx/eip712/safe/exec_decode.rs`) the `data` argument of an
+/// `execTransaction` sent as a UserOp's inner call.
+///
+/// Deliberately a literal, NOT `MAX_TX_LEN`: when `MAX_TX_LEN` went to 8192
+/// (2026-10-22) the Safe decoder, multiSend walker and Safe screens kept
+/// exactly the 4096-B input domain they were reviewed and fuzzed against.
+pub const SAFE_V1_RAW_DATA_MAX: usize = 4096;
 
 /// Maximum size of the full `safe_v1` trailer payload:
 /// `canonical (281) + u16 raw_data_len (2) + raw_data (≤4096)`.
@@ -2075,8 +2135,10 @@ const _: () = assert!(SAFE_OFF_NONCE + 32 == SAFE_V1_CANONICAL_LEN);
 /// uint256 newOffchainCount, address target, uint256 value, bytes data)`
 /// callData size: selector(4) + 5 fixed head slots(160) + bytes-offset(32)
 /// + bytes-length(32) + data padded to 32-byte boundary. Bounded by
-/// `MAX_TX_LEN` (4096) for the inner data.
-pub const MAX_EXECUTE_CALLDATA_LEN: usize = 4 * 1024 + 256; // 4352
+/// `MAX_TX_LEN` (8192) for the inner data: 196 + 8192 = 8388 ≤ 8448.
+pub const MAX_EXECUTE_CALLDATA_LEN: usize = 8 * 1024 + 256; // 8448
+
+const _: () = assert!(4 + 6 * 32 + MAX_TX_LEN <= MAX_EXECUTE_CALLDATA_LEN);
 
 // ---------------------------------------------------------------------------
 // Batch-sign constants (CMD_SIGN_USEROP_BATCH)
@@ -2171,7 +2233,8 @@ pub const SIGN_USEROP_BATCH_TRAILER_HEADER_LEN: usize = 1 + 1 + 2;
 
 /// Worst-case `CMD_SIGN_USEROP_BATCH` v2 payload length:
 ///   header(278)
-/// + N × (tx_prefix(54) + MAX_TX_LEN(4096))
+/// + N × tx_prefix(54)
+/// + MAX_BATCH_CALL_DATA_TOTAL_LEN (16,384 summed member data)
 /// + trailer_count u8 (1)
 /// + MAX_TRAILERS_PER_BATCH × per-record header (4)
 /// + TRAILERS_TOTAL_MAX_LEN
@@ -2182,7 +2245,8 @@ pub const SIGN_USEROP_BATCH_TRAILER_HEADER_LEN: usize = 1 + 1 + 2;
 /// apply. Lands ~41 KB which fits the 192 KB secure SRAM budget with
 /// headroom.
 pub const SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN: usize = SIGN_USEROP_BATCH_HEADER_LEN
-    + MAX_BATCH_TXS * (SIGN_USEROP_BATCH_TX_PREFIX_LEN + MAX_TX_LEN)
+    + MAX_BATCH_TXS * SIGN_USEROP_BATCH_TX_PREFIX_LEN
+    + MAX_BATCH_CALL_DATA_TOTAL_LEN
     + 1
     + MAX_TRAILERS_PER_BATCH * SIGN_USEROP_BATCH_TRAILER_HEADER_LEN
     + TRAILERS_TOTAL_MAX_LEN;
@@ -2195,8 +2259,8 @@ pub const SIGN_USEROP_BATCH_MAX_PAYLOAD_LEN: usize = SIGN_USEROP_BATCH_HEADER_LE
 pub const EXECUTE_BATCH_SELECTOR: [u8; 4] = [0x7a, 0x38, 0x99, 0x33];
 
 /// Maximum reconstructed `executeBatchWithOffchainCount(...)` calldata
-/// size for `MAX_BATCH_TXS` inner txs each at `MAX_TX_LEN` bytes of
-/// data. Layout:
+/// size for up to `MAX_BATCH_TXS` inner txs whose data sums to at most
+/// `MAX_BATCH_CALL_DATA_TOTAL_LEN` bytes. Layout:
 ///
 ///   selector(4)
 /// + head(5 × 32 = 160)         — ownerIndex, newOffchainCount, three offsets
@@ -2204,10 +2268,21 @@ pub const EXECUTE_BATCH_SELECTOR: [u8; 4] = [0x7a, 0x38, 0x99, 0x33];
 /// + values[](32 + N×32)
 /// + datas[](32 + N×32 inner-offsets + N × (32 length + padded data))
 ///
-/// For N = MAX_BATCH_TXS = 4 and per-tx data = MAX_TX_LEN = 4096 (already
-/// 32-aligned): 4 + 160 + (32 + 128) + (32 + 128) + (32 + 128) + 4 ×
-/// (32 + 4096) = 644 + 16,512 = 17,156. Round up to 18 KiB for safety.
+/// Worst case, N = MAX_BATCH_TXS = 4: fixed part 4 + 160 + 3 × (32 + 128)
+/// + 4 × 32 length words = 772, plus the member data rounded up to 32-byte
+/// words. Rounding adds at most 31 B per member, so the data part is at
+/// most `MAX_BATCH_CALL_DATA_TOTAL_LEN + 4 × 31` (exact worst case: 16,480,
+/// four unaligned members), i.e. ≤ 17,280 < 18 KiB. Asserted below.
 pub const MAX_EXECUTE_BATCH_CALLDATA_LEN: usize = 18 * 1024; // 18,432
+
+const _: () = assert!(
+    4 + 5 * 32
+        + 3 * (32 + MAX_BATCH_TXS * 32)
+        + MAX_BATCH_TXS * 32
+        + MAX_BATCH_CALL_DATA_TOTAL_LEN
+        + MAX_BATCH_TXS * 31
+        <= MAX_EXECUTE_BATCH_CALLDATA_LEN
+);
 
 /// v2 protocol version reported in GET_DEVICE_INFO.
 ///

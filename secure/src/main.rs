@@ -154,6 +154,7 @@ mod board;
 mod crypto;
 mod fi;
 /// Zero the dead part of the secure stack (DVT1 row 5.5).
+mod stack_guard;
 mod stack_scrub;
 /// Pre-drawn fresh-TRNG pool for FI delay lengths (#832).
 mod fi_delay_pool;
@@ -1670,6 +1671,18 @@ fn main() -> ! {
     // supplies or overrides this identity.
     let _ = core::hint::black_box(&db_roots::PQSIGNER_ERC7730_CATALOGUE_STATUS);
 
+    // Stack-overflow guard: from here on, a secure stack pointer below
+    // `_stack_guard` faults into the wipe-and-reset HardFault instead of
+    // overwriting `.bss` (see `stack_guard.rs`). First, so every later frame
+    // — provisioning, unlock, every sign — is covered.
+    stack_guard::arm();
+
+    // Test-only negative control for the guard (`stack-overflow-probe`). On
+    // QEMU semihosting output works from here; on silicon it runs once the
+    // UART console is up (below).
+    #[cfg(all(feature = "stack-overflow-probe", not(feature = "stm32u585")))]
+    stack_guard::run_overflow_probe();
+
     // DVT 5.9 (test-only): paint the dead stack for the high-water mark.
     #[cfg(feature = "stack-hwm")]
     stack_scrub::hwm::paint_below_sp();
@@ -1716,6 +1729,8 @@ fn main() -> ! {
         #[cfg(feature = "uart-console")]
         uart_log::init();
         secure_log!("[S] uart console up @ {} MHz", mhz);
+        #[cfg(feature = "stack-overflow-probe")]
+        stack_guard::run_overflow_probe();
         // Report the die identity (work-todo A4a / HW-ASSUME-REV-U). Report
         // only, never a fault: a rev X/W part is good silicon that the STM32U5
         // SESIP certificate (SESIP-2400133-01 / TN1545 Rev 3, which pins
@@ -5658,6 +5673,23 @@ unsafe fn NonMaskableInt() {
     nsc::zeroize_sensitive_state();
     crate::fi::zeroize_barrier();
     cortex_m::peripheral::SCB::sys_reset()
+}
+
+/// QEMU model (no `stm32u585`): the same wipe as the silicon handler, then
+/// exit the emulator with a failure status. Without it a fault — in
+/// particular the MSPLIM stack guard firing (`stack_guard.rs`) — parks in
+/// cortex-m-rt's default handler and `make e2e` hangs until the CI timeout
+/// instead of failing at once.
+#[cfg(all(not(test), target_arch = "arm", not(feature = "stm32u585")))]
+#[cortex_m_rt::exception]
+unsafe fn HardFault(_ef: &cortex_m_rt::ExceptionFrame) -> ! {
+    nsc::zeroize_sensitive_state();
+    stack_scrub::scrub_dead_stack();
+    crate::fi::zeroize_barrier();
+    cortex_m_semihosting::debug::exit(cortex_m_semihosting::debug::EXIT_FAILURE);
+    loop {
+        cortex_m::asm::wfe();
+    }
 }
 
 /// **rr-1 (Trezor-port) — route synchronous CPU faults to zeroize + reset.**
