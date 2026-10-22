@@ -59,6 +59,12 @@ struct Rec {
     step: usize,
     step_at: u32,
     tear: Tear,
+    /// Band renders while recording: cycles in the whole `render_band`, then
+    /// per class of `RenderSplit` (shapes, glyphs, fills, secret), and the
+    /// bands rendered. The DMA2D sizing question (2026-10-22): how much of a
+    /// film frame's render could Chrom-ART take at most?
+    rend: [u64; 5],
+    bands: u32,
 }
 
 /// Every film frame's stream checked against the panel's scan model
@@ -140,6 +146,8 @@ impl Rec {
         step: STEPS,
         step_at: 0,
         tear: Tear::ZERO,
+        rend: [0; 5],
+        bands: 0,
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -610,6 +618,61 @@ pub fn rows2(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
         push(row, &mut n, b'd');
         push_u32(row, &mut n, b.drains);
     }
+}
+
+/// One band rendered while recording: `total` cycles in `render_band`, and
+/// the per-class split inside it.
+pub fn render(total: u32, split: &pqsigner_ui_px::raster::RenderSplit) {
+    let r = rec();
+    if !r.on {
+        return;
+    }
+    for (acc, c) in r.rend.iter_mut().zip([total, split.shapes, split.glyphs, split.fills, split.secret]) {
+        *acc = acc.wrapping_add(u64::from(c));
+    }
+    r.bands = r.bands.wrapping_add(1);
+}
+
+/// The eighth page: `RENDER .1ms <share>%`, then the film's render time per
+/// frame in tenths of a ms: all of it and the rest outside the four classes
+/// (the band clear, culls, dispatch), shapes and glyphs, fills and secret
+/// with the bands per frame (in tenths). The share is of the run's length.
+pub fn rows8(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
+    let r = *rec();
+    for row in out.iter_mut() {
+        *row = [b' '; DISPLAY_COLS];
+    }
+    let frames = u64::from(r.frames.max(1));
+    // Cycles per frame in tenths of a ms (16,000 cycles at 160 MHz).
+    let per = |c: u64| u32::try_from(c / frames / 16_000).unwrap_or(u32::MAX);
+    let [all, shp, gly, fil, sec] = r.rend;
+    let rest = all.saturating_sub(shp + gly + fil + sec);
+    let share = if r.total > 0 { all / 1_600 / u64::from(r.total) } else { 0 };
+    let mut n = 0;
+    for &b in b"RENDER .1ms " {
+        push(&mut out[0], &mut n, b);
+    }
+    push_u32(&mut out[0], &mut n, u32::try_from(share).unwrap_or(u32::MAX));
+    push(&mut out[0], &mut n, b'%');
+    let rows: [(&[u8], u32, &[u8], u32); 3] = [
+        (b"all ", per(all), b" rest ", per(rest)),
+        (b"shp ", per(shp), b" gly ", per(gly)),
+        (b"fil ", per(fil), b" sec ", per(sec)),
+    ];
+    for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {
+        let mut n = 0;
+        for &c in a {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, x);
+        for &c in b {
+            push(row, &mut n, c);
+        }
+        push_u32(row, &mut n, y);
+    }
+    let mut n = 13;
+    push(&mut out[3], &mut n, b'b');
+    push_u32(&mut out[3], &mut n, u32::try_from(u64::from(r.bands) * 10 / frames).unwrap_or(u32::MAX));
 }
 
 /// The last run's frame count, length (ms) and longest pause (ms).

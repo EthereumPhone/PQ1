@@ -1080,10 +1080,26 @@ fn wipe_scratch() {
 /// Rasterise one band, with or without the per-class cost split.
 fn render_band(frame: &Frame<'_>, font: &Font<'_>, strip: &mut Strip<'_>, cost: &mut FrameCost) {
     let _ = cost;
-    #[cfg(not(feature = "ui-px-frametime"))]
+    #[cfg(not(any(feature = "ui-px-frametime", feature = "ui-px-film-gaps")))]
     render_strip(frame, font, strip);
     #[cfg(feature = "ui-px-frametime")]
     pqsigner_ui_px::raster::render_strip_split(frame, font, strip, frametime::cycles, &mut cost.split);
+    #[cfg(all(feature = "ui-px-film-gaps", not(feature = "ui-px-frametime")))]
+    film_gaps_render(frame, font, strip);
+}
+
+/// Dev (`ui-px-film-gaps`): a band rendered while the film recorder runs is
+/// timed whole and per class into its eighth page (DMA2D sizing, 2026-10-22).
+#[cfg(all(feature = "ui-px-film-gaps", not(feature = "ui-px-frametime")))]
+fn film_gaps_render(frame: &Frame<'_>, font: &Font<'_>, strip: &mut Strip<'_>) {
+    if !super::film_gaps::recording() {
+        render_strip(frame, font, strip);
+        return;
+    }
+    let mut split = pqsigner_ui_px::raster::RenderSplit::default();
+    let t0 = crate::hw::lcd_te::cycles();
+    pqsigner_ui_px::raster::render_strip_split(frame, font, strip, crate::hw::lcd_te::cycles, &mut split);
+    super::film_gaps::render(crate::hw::lcd_te::cycles().wrapping_sub(t0), &split);
 }
 
 /// Build the display list for `anim` and present it. `overlay` is the bench
@@ -1821,6 +1837,29 @@ fn film_gaps_page() {
     super::film_gaps::rows6(&mut rows);
     dev_page(&rows);
     super::film_gaps::rows7(&mut rows);
+    dev_page(&rows);
+    super::film_gaps::rows8(&mut rows);
+    dev_page(&rows);
+    #[cfg(feature = "ui-px-dma2d-bench")]
+    dma2d_bench_pages();
+}
+
+/// Dev (`ui-px-dma2d-bench`): the DMA2D against CPU micro-bench, on the band
+/// buffers (the film has landed, nothing streams), then its two pages.
+#[cfg(feature = "ui-px-dma2d-bench")]
+fn dma2d_bench_pages() {
+    let Ok(atlas) = super::assets::verify_atlas() else { return };
+    let font = atlas.font();
+    // SAFETY: single-threaded secure UI; the film has landed and
+    // `film_reap` drained every transfer, so nothing else holds a band.
+    let bands = unsafe { &mut *core::ptr::addr_of_mut!(BANDS) };
+    let [a, b, c] = bands;
+    let res = super::dma2d_bench::run(&font, &mut a.0, &mut b.0, &mut c.0);
+    wipe_scratch();
+    let mut rows = [[b' '; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_ROWS];
+    res.rows_speed(&mut rows);
+    dev_page(&rows);
+    res.rows_exact(&mut rows);
     dev_page(&rows);
 }
 

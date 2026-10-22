@@ -1789,16 +1789,18 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
         .lines()
         .filter(|l| !l.trim_start().starts_with('#') && l.contains("ui-px-film-gaps"))
         .collect();
-    // Only the film bench (itself fenced, below) implies it.
+    // Only the film bench and the DMA2D bench (both fenced, below) imply it.
     assert_eq!(
         mentions,
         std::vec![
-            "ui-px-film-gaps = [\"ui-px\", \"ui-lcd\"]",
-            "ui-px-film-bench = [\"ui-px-film-gaps\"]"
+            "ui-px-film-gaps = [\"ui-px\", \"ui-lcd\", \"pqsigner-ui-px/render-split\"]",
+            "ui-px-film-bench = [\"ui-px-film-gaps\"]",
+            "ui-px-dma2d-bench = [\"ui-px-film-gaps\", \"ui-px-dma\"]"
         ]
     );
     assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-gaps\","));
     assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-film-bench\","));
+    assert!(NSC_MOD_SRC_PROV.contains("feature = \"ui-px-dma2d-bench\","));
     let forbidden = MAKEFILE_SRC_PROV
         .split_once("override PROD_FORBIDDEN :=")
         .expect("PROD_FORBIDDEN")
@@ -1808,6 +1810,7 @@ fn negative_film_gap_recorder_is_off_by_default_and_never_ships() {
         .0;
     assert!(forbidden.contains("ui-px-film-gaps"));
     assert!(forbidden.contains("ui-px-film-bench"));
+    assert!(forbidden.contains("ui-px-dma2d-bench"));
     // Every call into the recorder sits under its feature.
     for (path, src) in production_sources() {
         if path.ends_with("film_gaps.rs") {
