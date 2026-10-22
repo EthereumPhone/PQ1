@@ -28,6 +28,7 @@
 //! buffers callers pass need no re-export — only the named `Pages`/`MAX_PAGES`
 //! struct does.
 
+mod chain_names_gen;
 pub mod primitives;
 pub mod render;
 
