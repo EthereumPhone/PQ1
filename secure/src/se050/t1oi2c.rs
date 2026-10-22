@@ -325,16 +325,20 @@ impl T1State {
             return Err(T1Error::Timeout);
         }
 
-        // Step 2: SOF received. Read the remainder of the frame in one
-        // I2C transaction: PCB(1) + LEN(1) + INF(up to 254) + CRC(2).
-        // We read a generous fixed size; trailing bytes beyond the frame
-        // will be 0x00 or garbage — we parse only up to LEN+CRC.
-        // Read remaining frame: PCB(1) + LEN(2) + INF(up to 254) + CRC(2).
-        // Max = 259 bytes. Read the full possible frame.
-        let read_len = MAX_FRAME - 1; // everything after NAD
-        i2c::read(&mut buf[1..1 + read_len])?;
+        // Step 2: SOF received. Read the rest of the header, PCB(1) +
+        // LEN(2, GP 1.0), then exactly INF(LEN) + CRC(2) — NXP's reader
+        // (`phNxpEse_readPacket`) splits a frame the same way. This used to
+        // read a fixed MAX_FRAME - 1 = 259 bytes, ~6 ms at 400 kHz for every
+        // frame however short (EVT 2026-10-22: a busy-film stall at each
+        // SE050 GetRandom).
+        i2c::read(&mut buf[1..4])?;
+        let inf_len = (usize::from(buf[2]) << 8) | usize::from(buf[3]);
+        if inf_len > IFSC {
+            return Err(T1Error::Protocol);
+        }
+        i2c::read(&mut buf[4..4 + inf_len + 2])?;
 
-        // buf[0]=NAD(0xA5), buf[1]=PCB, buf[2]=LEN, buf[3..]=INF+CRC
+        // buf[0]=NAD(0xA5), buf[1]=PCB, buf[2..4]=LEN, buf[4..]=INF+CRC
         Ok(())
     }
 }
