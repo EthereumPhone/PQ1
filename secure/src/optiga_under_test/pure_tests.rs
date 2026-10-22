@@ -2755,6 +2755,9 @@ fn negative_typed_helpers_refuse_without_session_and_emit_no_plaintext() {
         assert!(matches!(e, apdu::OptigaError::Shield), "helper {i}: {e:?}");
         assert!(!e.is_inconclusive(), "helper {i}: Shield is a verdict, not a bus fault");
     }
+    // `read_last_error` exists only under `debug-log` (CI's host feature set);
+    // the FI-delay controls build without it.
+    #[cfg(feature = "debug-log")]
     assert_eq!(unsafe { apdu::read_last_error(&mut ifx, &mut sc) }, None);
     assert_eq!(plain_tx_count(), before, "no plaintext frame may reach the bus");
 }
