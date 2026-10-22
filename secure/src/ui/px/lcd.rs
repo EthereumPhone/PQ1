@@ -74,6 +74,9 @@ const N_STRIPS: usize = ((W + BAND_W - 1) / BAND_W) as usize;
 #[repr(align(4))]
 struct Band([u16; STRIP_PX]);
 
+// `wipe_scratch` zeroizes each band as `STRIP_PX / 2` u32 words.
+const _: () = assert!(STRIP_PX % 2 == 0 && core::mem::align_of::<Band>() >= 4);
+
 // The OTHER half of the word-beat precondition, and the one that is a property
 // of the panel rather than of a type: `GPDMA_CxBR1.BNDT` must be a multiple of
 // the 4-byte source data width (RM0456 §17.8.14), and `BNDT` for a band is
@@ -1055,9 +1058,10 @@ fn film_bg_allowed() -> bool {
 ///
 /// Unconditional rather than gated on a "this frame was secret" flag: that is
 /// the same kind of remembered relationship the review objected to. The cost
-/// is one clear of a buffer `render_strip` already clears nine times a frame
-/// (~0.085 ms per buffer against a 24.31 ms wire), so there is nothing to
-/// buy by being clever. Iterating `BANDS` rather than naming each buffer is
+/// is one clear of each buffer per frame. That was estimated at ~0.085 ms per
+/// buffer; the EVT measured 1.0 ms for the three as 16-bit volatile stores
+/// (2026-10-22, busy film, after every partial frame), hence the 32-bit
+/// view below. Iterating `BANDS` rather than naming each buffer is
 /// deliberate: adding one would otherwise leave it un-wiped, silently.
 fn wipe_scratch() {
     // SAFETY: single-threaded frame loop, and every transfer that could read
@@ -1065,7 +1069,10 @@ fn wipe_scratch() {
     // stream was closed.
     unsafe {
         for b in (*core::ptr::addr_of_mut!(BANDS)).iter_mut() {
-            b.0.zeroize();
+            // As 32-bit words: the same volatile zeroing in half the stores.
+            // The view is the band's own storage, exactly: `Band` is
+            // `align(4)` and `STRIP_PX` is even (asserted below).
+            core::slice::from_raw_parts_mut(b.0.as_mut_ptr().cast::<u32>(), STRIP_PX / 2).zeroize();
         }
     }
 }
