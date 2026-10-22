@@ -83,6 +83,28 @@ pub fn isqrt_u32(v: u32) -> u32 {
     }
 }
 
+/// [`isqrt_u32`] from a caller-known `seed ≥ ⌊√v⌋` instead of a power of
+/// two. Integer Newton descends monotonically to the floor root from any
+/// seed at or above it, so the result is the same; a seed close to the root
+/// (a disc's rim, whose distances lie within half a pixel of the radius)
+/// needs about half the divisions. A seed below the root returns the seed:
+/// callers must bound it.
+#[must_use]
+pub fn isqrt_u32_from(v: u32, seed: u32) -> u32 {
+    if v == 0 {
+        return 0;
+    }
+    let mut x = seed.max(1);
+    loop {
+        // u64: `x + v / x` overflows u32 for a seed far above the root.
+        let y = ((u64::from(x) + u64::from(v / x)) >> 1) as u32;
+        if y >= x {
+            return x;
+        }
+        x = y;
+    }
+}
+
 /// Distance in Q8 between two Q8 points.
 #[must_use]
 pub fn dist_q8(dx: Q8, dy: Q8) -> Q8 {
@@ -248,6 +270,25 @@ mod isqrt_tests {
             assert_eq!(u64::from(isqrt_u32(sq as u32)), r);
             if sq > 0 {
                 assert_eq!(u64::from(isqrt_u32((sq - 1) as u32)), r - 1);
+            }
+        }
+    }
+
+    #[test]
+    fn isqrt_u32_from_any_seed_at_or_above_the_root_is_isqrt_u32() {
+        // Every v up to 70,000 from its exact root, one above, a little and
+        // far above; then a disc rim's range (Q8 distances near a radius).
+        for v in 0u32..70_000 {
+            let root = isqrt_u32(v);
+            for seed in [root, root + 1, root + 7, root + 300, root * 2 + 1, 65_535] {
+                assert_eq!(isqrt_u32_from(v, seed), root, "v={v} seed={seed}");
+            }
+        }
+        for r in [3u32 << 8, 13 << 8, 30 << 8, 120 << 8] {
+            for d in (r - 200)..(r + 128) {
+                for v in [d * d, d * d + d, (d + 1) * (d + 1) - 1] {
+                    assert_eq!(isqrt_u32_from(v, r + 128), isqrt_u32(v), "r={r} v={v}");
+                }
             }
         }
     }
