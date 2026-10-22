@@ -76,7 +76,11 @@ struct Rec {
     /// column signatures and damage, the presenter. What is left of the tick
     /// (`arg` on the page) is mostly the marks and font views, parsed as
     /// `present_film`'s arguments.
-    waits: [u64; 8],
+    waits: [u64; 10],
+    /// TE-edge fallbacks (`present_frame_cols` with no fresh stamp).
+    te_falls: u32,
+    /// The ICACHE ways this recording ran with (see [`icache_toggle_ways`]).
+    ways: u8,
 }
 
 /// [`wait`] kinds.
@@ -88,6 +92,10 @@ pub const WAIT_STEP: usize = 4;
 pub const WAIT_BUILD: usize = 5;
 pub const WAIT_SIGS: usize = 6;
 pub const WAIT_PRESENT: usize = 7;
+/// `sync_to_scanout` when the beam phase had no fresh stamp.
+pub const WAIT_TE: usize = 8;
+/// `film_reap`'s band-buffer wipe.
+pub const WAIT_REAP: usize = 9;
 
 /// Every film frame's stream checked against the panel's scan model
 /// (`pqsigner_ui_px::stream::phase::tear_check`): the tearing hunt of
@@ -172,7 +180,9 @@ impl Rec {
         bands: 0,
         items: 0,
         drawn: 0,
-        waits: [0; 8],
+        waits: [0; 10],
+        te_falls: 0,
+        ways: 0,
     };
 
     /// Close the pause that `src` ends at `now`; keep it if it is among the
@@ -390,11 +400,13 @@ fn rec() -> &'static mut Rec {
 /// Provisioning began.
 pub fn start() {
     let now = timeout::now();
+    let ways = icache_toggle_ways();
     *rec() = Rec {
         on: true,
         t0: now,
         last: now,
         pause_c0: crate::hw::lcd_te::cycles(),
+        ways,
         ..Rec::OFF
     };
 }
@@ -666,7 +678,40 @@ pub fn wait(k: usize, cyc: u32) {
     let r = rec();
     if r.on && k < r.waits.len() {
         r.waits[k] = r.waits[k].wrapping_add(u64::from(cyc));
+        if k == WAIT_TE {
+            r.te_falls = r.te_falls.wrapping_add(1);
+        }
     }
+}
+
+/// Dev A/B (2026-10-22): flip the ICACHE between direct-mapped and 2-way,
+/// returning the ways now in use. `hw::rcc` enables the cache with
+/// `ICACHE_CR = 1`, which clears the reset default `WAYSEL = 1` (2-way,
+/// RM0456 ICACHE_CR) and leaves it direct-mapped; each film recording runs
+/// the other mode, so two signs compare them. WAYSEL is writable only with
+/// the cache off; the cache is invalidated before it comes back.
+fn icache_toggle_ways() -> u8 {
+    use crate::hw::mmio::{Reg32, RoReg32};
+    const EN: u32 = 1 << 0;
+    const CACHEINV: u32 = 1 << 1;
+    const WAYSEL: u32 = 1 << 2;
+    const BUSYF: u32 = 1 << 0;
+    // SAFETY: ICACHE_CR / ICACHE_SR on the secure alias (RM0456 ICACHE
+    // register map, 0x5003_0400); the same addresses `hw::rcc` and
+    // `hw::flash` use.
+    let (cr, sr) = unsafe { (Reg32::new(0x5003_0400), RoReg32::new(0x5003_0404)) };
+    let ways = if cr.read() & WAYSEL == 0 { WAYSEL } else { 0 };
+    cortex_m::interrupt::free(|_| {
+        cr.write(0);
+        while sr.read() & BUSYF != 0 {}
+        cr.write(ways);
+        cr.write(ways | CACHEINV);
+        while sr.read() & BUSYF != 0 {}
+        cr.write(ways | EN);
+        cortex_m::asm::dsb();
+        cortex_m::asm::isb();
+    });
+    if ways == WAYSEL { 2 } else { 1 }
 }
 
 /// The ninth page: `FRAME .1ms/fr`, then per film frame in tenths of a ms
@@ -681,9 +726,10 @@ pub fn rows9(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let per = |c: u64| u32::try_from(c / frames / 16_000).unwrap_or(u32::MAX);
     let n_per = |c: u64| u32::try_from(c / frames).unwrap_or(u32::MAX);
     let mut n = 0;
-    for &b in b"FRAME .1ms/fr" {
+    for &b in b"FRAME .1ms/fr w" {
         push(&mut out[0], &mut n, b);
     }
+    push_u32(&mut out[0], &mut n, u32::from(r.ways));
     let rows: [(&[u8], u32, &[u8], u32); 3] = [
         (b"tick ", per(r.waits[WAIT_FRAME]), b" rend ", per(r.rend[0])),
         (b"beam ", per(r.waits[WAIT_BEAM]), b" buf ", per(r.waits[WAIT_BUF])),
@@ -745,9 +791,9 @@ pub fn rows8(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
 }
 
 /// The tenth page: `TICK .1ms/fr`, then per film frame in tenths of a ms
-/// the atlas header and the animation step, the display list and its
-/// signatures/damage, the presenter (render and waits included) and what is
-/// left of the tick (`arg`: the marks and font views).
+/// the TE-edge fallback wait (and how many fallbacks in all), the band
+/// wipe after each frame streamed and the presenter (render and waits
+/// included), and what is left of the tick outside the presenter.
 pub fn rows10(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
     let r = *rec();
     for row in out.iter_mut() {
@@ -760,13 +806,13 @@ pub fn rows10(out: &mut [[u8; DISPLAY_COLS]; DISPLAY_ROWS]) {
         push(&mut out[0], &mut n, b);
     }
     let rows: [(&[u8], u32, &[u8], u32); 3] = [
-        (b"atl ", per(r.waits[WAIT_ATLAS]), b" step ", per(r.waits[WAIT_STEP])),
-        (b"bld ", per(r.waits[WAIT_BUILD]), b" sig ", per(r.waits[WAIT_SIGS])),
+        (b"te ", per(r.waits[WAIT_TE]), b" n ", r.te_falls),
+        (b"wipe ", per(r.waits[WAIT_REAP]), b" pres ", per(r.waits[WAIT_PRESENT])),
         (
-            b"pres ",
-            per(r.waits[WAIT_PRESENT]),
-            b" arg ",
-            per(r.waits[WAIT_FRAME].saturating_sub(r.waits[WAIT_ATLAS..].iter().sum())),
+            b"rest ",
+            per(r.waits[WAIT_FRAME].saturating_sub(r.waits[WAIT_ATLAS..=WAIT_PRESENT].iter().sum())),
+            b" bld ",
+            per(r.waits[WAIT_BUILD] + r.waits[WAIT_SIGS]),
         ),
     ];
     for (row, (a, x, b, y)) in out[1..].iter_mut().zip(rows) {

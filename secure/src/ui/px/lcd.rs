@@ -679,9 +679,13 @@ fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Op
         };
         phase_start(xa, xend, &mut work)
     };
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_te_fb = crate::hw::lcd_te::cycles();
     if !phased {
         let synced = crate::hw::lcd_te::sync_to_scanout(2_000_000);
         let _ = synced;
+        #[cfg(feature = "ui-px-film-gaps")]
+        super::film_gaps::wait(super::film_gaps::WAIT_TE, crate::hw::lcd_te::cycles().wrapping_sub(t_te_fb));
     }
     #[cfg(feature = "ui-px-frametime")]
     let t_edge = frametime::cycles();
@@ -971,7 +975,11 @@ fn film_reap(wait: bool) -> bool {
     // Dev (tearing hunt): the frame has left the wire; check it.
     #[cfg(feature = "ui-px-film-gaps")]
     tear_end_bg();
+    #[cfg(feature = "ui-px-film-gaps")]
+    let t_wipe = crate::hw::lcd_te::cycles();
     wipe_scratch();
+    #[cfg(feature = "ui-px-film-gaps")]
+    super::film_gaps::wait(super::film_gaps::WAIT_REAP, crate::hw::lcd_te::cycles().wrapping_sub(t_wipe));
     FILM_BG.store(false, Ordering::Release);
     FRAME_IN_FLIGHT.store(false, Ordering::Release);
     true
