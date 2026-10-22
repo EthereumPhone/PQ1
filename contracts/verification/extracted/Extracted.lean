@@ -1,3 +1,4 @@
+import Extracted.C10FunctionalWotsRecover
 import Extracted.C10FunctionalSearch
 import Extracted.C10ShuffleBridge
 import Extracted.C10AddressInputBridge

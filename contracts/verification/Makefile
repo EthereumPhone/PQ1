@@ -1961,6 +1961,9 @@ endif
 	@$(_FV_PYTHON3) scripts/test_c10_representation_controls.py
 	@$(_FV_PYTHON3) scripts/test_c10_acceptance_controls.py
 	@$(_FV_PYTHON3) scripts/test_c10_functional_search_controls.py
+	@$(_FV_PYTHON3) scripts/test_c10_functional_wots_controls.py
+	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_functional_wots_fixtures.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/C10FunctionalWotsFixtures.lean
 	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_shuffle_fixtures.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.C10ShuffleBridge 2>&1 | tail -1
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/C10ShuffleFixtures.lean

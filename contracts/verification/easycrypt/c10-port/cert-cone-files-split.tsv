@@ -798,3 +798,10 @@ cdrafts-split/C10FixedCallerBridge.ec
 cdrafts-split/C10FunctionalWots.ec
 cdrafts-split/C10FunctionalFors.ec
 cdrafts-split/C10FunctionalSearch.ec
+cdrafts-split/C10FunctionalWotsValue.ec
+cdrafts-split/C10FunctionalWotsChain.ec
+cdrafts-split/C10FunctionalWotsKeygen.ec
+cdrafts-split/C10FunctionalWotsRecover.ec
+cdrafts-split/C10FunctionalWotsShuffle.ec
+cdrafts-split/C10FunctionalWotsFill.ec
+cdrafts-split/C10FunctionalWotsSign.ec

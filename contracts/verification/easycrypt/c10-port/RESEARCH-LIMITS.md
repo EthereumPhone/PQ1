@@ -43,6 +43,47 @@ Full replay, source identities and review are separate landing evidence; the
 [control owner](CONTROL-EVIDENCE.md#functional-bounded-search-controls) states
 the exact mutation coverage and its limits.
 
+## Functional WOTS values under the fixed backend
+
+The shared representation now also defines secret derivation, ordered chain
+evaluation, all 43 key-generation endpoints and their compression, signature
+values, and recovery including its sixteen-zero-byte rejection result. Its
+typed extension permits only a pure bytes-to-bytes function parameter and
+application, plus explicit count/integer conversions. Integer-to-count clamps
+negative values to zero in both printers; earlier definitions retain their
+bytes. Pure function applications do not themselves model oracle calls.
+
+[`C10FunctionalWots.lean`](../../extracted/Extracted/C10FunctionalWots.lean),
+[`C10FunctionalWotsSign.lean`](../../extracted/Extracted/C10FunctionalWotsSign.lean)
+and [`C10FunctionalWotsRecover.lean`](../../extracted/Extracted/C10FunctionalWotsRecover.lean)
+connect the actual extracted secret, chain, compression, keygen, shuffled-sign
+and recovery procedures to those expressions. The 21 new audited headlines
+have kernel-only axiom closures. Signing retains both the first accepted
+counter and exact assertion failure at exhaustion. Recovery retains the full
+u32 counter domain and the target-205 rejection branch; chain correspondence
+covers every non-overflowing u32 window, including zero steps.
+
+Seven native modules, from [`C10FunctionalWotsValue`](cdrafts-split/C10FunctionalWotsValue.ec)
+through [`C10FunctionalWotsSign`](cdrafts-split/C10FunctionalWotsSign.ec),
+prove the corresponding actual `RawKeygen.leaf`, `RawWots.sign`,
+`RawWotsFill.sign` and `RawWots.recover` results under `FixedPrefix`.
+Their 59 lemmas introduce no project axiom or admit. They retain arbitrary
+backend-consistent prior history, frame the key and function, and specify the
+ordered final history and exact query cost. Key generation takes 345 calls;
+signing includes the bounded search, optional four-call shuffle and visited
+secret/chain computations. Permuted writes give the same positional signature.
+Recovery includes its digest, accepted suffix chains and compression, or just
+the rejected digest call. Termination is proved without eventual acceptance.
+
+This closes the selected functional WOTS component under the disclosed
+backend interpretation. The remaining compositional bridge covers FORS,
+trees, the full signer/verifier and sessions. The paired printers, function
+interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
+transfer and QROM/physical assumptions remain explicit limits. The ideal-model
+probability bounds do not transfer through a deterministic interpretation.
+[Control coverage](CONTROL-EVIDENCE.md#functional-wots-value-controls), full
+replay, source identities and review are separate evidence requirements.
+
 ## Quantitative loss
 
 **Native total signing availability (2026-10-21):**

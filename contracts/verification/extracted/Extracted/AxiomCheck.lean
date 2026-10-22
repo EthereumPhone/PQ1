@@ -1,3 +1,4 @@
+import Extracted.C10FunctionalWotsRecover
 import Extracted.C10FunctionalSearch
 import Extracted.C10ShuffleBridge
 import Extracted.C10AddressInputBridge
@@ -480,3 +481,26 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalSearch.extracted_fors_first_slot
 #print axioms Extracted.C10FunctionalSearch.extracted_wots_exhaustion_iff
 #print axioms Extracted.C10FunctionalSearch.extracted_fors_exhaustion_iff
+
+-- Functional WOTS endpoints under the supplied pure backend.
+#print axioms Extracted.C10FunctionalWots.supplied_backend_width
+#print axioms Extracted.C10FunctionalWots.chain_zero
+#print axioms Extracted.C10FunctionalWots.chain_succ
+#print axioms Extracted.C10FunctionalWots.hash_step_value
+#print axioms Extracted.C10FunctionalWots.chain_pure_value
+#print axioms Extracted.C10FunctionalWots.extracted_chain_value
+#print axioms Extracted.C10FunctionalWots.secret_pure_value
+#print axioms Extracted.C10FunctionalWots.extracted_secret_value
+#print axioms Extracted.C10FunctionalWots.multi_pure_value
+#print axioms Extracted.C10FunctionalWots.extracted_multi_value
+#print axioms Extracted.C10FunctionalWots.pure_address_value
+#print axioms Extracted.C10FunctionalWots.keygen_nodes_value
+#print axioms Extracted.C10FunctionalWots.keygen_pure_value
+#print axioms Extracted.C10FunctionalWots.extracted_keygen_value
+#print axioms Extracted.C10FunctionalWotsSign.digest_pure_value
+#print axioms Extracted.C10FunctionalWotsSign.functional_schedule_value
+#print axioms Extracted.C10FunctionalWotsSign.digit_value
+#print axioms Extracted.C10FunctionalWotsSign.sign_nodes_value
+#print axioms Extracted.C10FunctionalWotsSign.extracted_sign_value
+#print axioms Extracted.C10FunctionalWotsRecover.recover_nodes_value
+#print axioms Extracted.C10FunctionalWotsRecover.extracted_recover_value

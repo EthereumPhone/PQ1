@@ -321,3 +321,32 @@ two positive fixtures and seven typed intended-theorem rejections. Full native
 direct/CLI replay, extraction gates, identities and bounded review remain
 separate requirements. These controls add no concrete SHA security,
 random-oracle transfer, or cross-kernel session claim.
+
+## Functional WOTS value controls
+
+Twelve shared-expression mutations change node width, backend input, secret
+index, chain order or position, keygen chain count or length, compression
+domain, signing digit, or recovery length, target or zero sentinel.
+`tools/c10_functional_wots_controls.py` emits 27 native fixtures in the distinct
+`scratch/c10_wots_value_*` family: original and equivalent positives, twelve
+definition-only passes, twelve intended unchanged-consumer rejections, and
+independent boundary examples. Seven forbidden-symbol scope probes cover the
+new modules. Prior search and procedural caller/shuffle controls remain enrolled.
+
+The positive fixtures contain all seven native modules; the Lean fixtures
+contain all three new endpoint modules. Each changed definition must type-check
+before its first consuming theorem rejects. The recorded consumer is a chain,
+secret, node-list, compression or recovery law; later endpoint proofs are not
+claimed to have run after an earlier rejection. Rejection demonstrates proof
+sensitivity, not a proof of the mutated proposition's negation. Syntax, typing,
+resource failure and inconclusive SMT output earn no rejection credit. Replacing
+the node width 16 with `8+8` passes the entire fixture in each language.
+
+`tools/c10_functional_wots_fixtures.py` checks both printers' pure application
+and count/integer boundaries, including negative-to-zero conversion. Five
+ordered-chain examples cover zero steps, multiple steps, a position-byte carry
+and a high u32 position. Expected bytes come from a separate Python byte-array
+loop, not evaluation of the shared expression tree. Lean checks these examples
+with kernel `decide`; EasyCrypt proves the explicit finite folds. These finite
+examples supplement the generic proofs and do not establish printer correctness
+for all expressions or identify the supplied function with a sampled oracle.

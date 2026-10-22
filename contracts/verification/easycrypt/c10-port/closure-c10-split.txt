@@ -621,3 +621,12 @@ C10FixedCallerBridge
 C10FunctionalWots
 C10FunctionalFors
 C10FunctionalSearch
+
+# Functional WOTS backend interpretation, 2026-10-22.
+C10FunctionalWotsValue
+C10FunctionalWotsChain
+C10FunctionalWotsKeygen
+C10FunctionalWotsRecover
+C10FunctionalWotsShuffle
+C10FunctionalWotsFill
+C10FunctionalWotsSign

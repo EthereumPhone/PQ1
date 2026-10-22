@@ -109,4 +109,28 @@ def wots_first_slot (digests : (List (List Int))) : Nat  :=
 def fors_first_slot (digests : (List (List Int))) : Nat  :=
   (List.foldr (fun digest slot => (if (fors_zero_field digest) = 0 then 1 else (if slot = 0 then 0 else (slot + 1)))) 0 digests)
 
+def hash_bytes_node (hash_fn : (List Int → List Int)) (bs : (List Int)) : (List Int)  :=
+  (List.take 16 (hash_fn bs))
+
+def wots_secret_value (hash_fn : (List Int → List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (kp : Int) (ci : Int) : (List Int)  :=
+  (hash_bytes_node hash_fn (wots_private_preimage secret layer tree kp ci))
+
+def wots_chain_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (address : (List Int)) (value : (List Int)) (start : Int) (steps : Nat) : (List Int)  :=
+  (List.foldr (fun i current => (hash_bytes_node hash_fn (th_preimage seed (chain_position_words address (start + (Int.ofNat i))) (pad_node current)))) value (List.reverse ((List.range steps).map (fun i => i))))
+
+def wots_keygen_nodes (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (kp : Int) : (List (List Int))  :=
+  ((List.range 43).map (fun i => (wots_chain_value hash_fn seed (address_words layer tree 0 kp (Int.ofNat i) 0 0) (wots_secret_value hash_fn secret layer tree kp (Int.ofNat i)) 0 7)))
+
+def wots_keygen_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (kp : Int) : (List Int)  :=
+  (hash_bytes_node hash_fn (multi_preimage seed (address_words layer tree 1 kp 0 0 0) (wots_keygen_nodes hash_fn seed secret layer tree kp)))
+
+def wots_sign_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (kp : Int) (bs : (List Int)) : (List (List Int))  :=
+  ((List.range 43).map (fun i => (wots_chain_value hash_fn seed (address_words layer tree 0 kp (Int.ofNat i) 0 0) (wots_secret_value hash_fn secret layer tree kp (Int.ofNat i)) 0 (Int.toNat (wots_field bs i)))))
+
+def wots_recover_nodes (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kp : Int) (bs : (List Int)) (values : (List (List Int))) : (List (List Int))  :=
+  ((List.range 43).map (fun i => (wots_chain_value hash_fn seed (address_words layer tree 0 kp (Int.ofNat i) 0 0) (List.getD values i (List.replicate 16 0)) (wots_field bs i) (Int.toNat (7 - (wots_field bs i))))))
+
+def wots_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kp : Int) (message : (List Int)) (values : (List (List Int))) (nonce : Int) : (List Int)  :=
+  (if ((wots_sum (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) nonce))) - (wots_target )) = 0 then (hash_bytes_node hash_fn (multi_preimage seed (address_words layer tree 1 kp 0 0 0) (wots_recover_nodes hash_fn seed layer tree kp (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) nonce)) values))) else (List.replicate 16 0))
+
 end C10Representation

@@ -7,9 +7,11 @@ tuples remain a disclosed TCB. The endpoint proofs are independently checked; th
 is not a cross-kernel proof exporter. Default operation checks existing outputs.
 Words use mathematical signed integers. Count subtraction is saturated at zero;
 word subtraction is signed.
-count division accepts only a positive constant divisor. Zero tests select between
-branches of the same type. No machine arithmetic,
-oracle, probability, arbitrary source injection, or cross-kernel export.
+Count division accepts only a positive constant divisor. Zero tests select between
+branches of the same type. A pure bytes-to-bytes function parameter interprets
+hash computations; it has no oracle state or probability semantics. Count/word
+conversions embed counts and clamp negative words at zero explicitly. No machine
+arithmetic, arbitrary source injection, or cross-kernel export.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +20,7 @@ import tempfile
 
 COUNT = "count"
 INT = "int"
+HASH = "hash"
 def LIST(t): return ("list", t)
 def PRODUCT(*ts): return ("product", *ts)
 BYTES = LIST(INT)
@@ -74,6 +77,15 @@ def count_sub(a, b):
 def int_sub(a, b):
     assert a.ty == b.ty == INT
     return Expr("int_sub", (a,b), INT)
+def count_as_int(a):
+    assert a.ty == COUNT
+    return Expr("count_as_int", (a,), INT)
+def int_as_count(a):
+    assert a.ty == INT
+    return Expr("int_as_count", (a,), COUNT)
+def hash_apply(fn, data):
+    assert fn.ty == HASH and data.ty == BYTES
+    return Expr("hash_apply", (fn,data), BYTES)
 def count_div(a, divisor):
     assert a.ty == COUNT and type(divisor) is int and divisor > 0
     return Expr("count_div", (a,literal(divisor)), COUNT)
@@ -216,9 +228,50 @@ fors_first_slot = define("fors_first_slot", (digests,),
     fold(digests,digest,slot,
          if_zero(fors_zero_field(digest),literal(1),next_slot),literal(0)))
 
+# Pure functional WOTS computations. Repeated appearances of a function call in
+# these mathematical expressions are not an operational query-cost model.
+hash_fn = var("hash_fn", HASH)
+start, steps = var("start",INT), var("steps",COUNT)
+current = var("current",BYTES)
+hash_bytes_node = define("hash_bytes_node", (hash_fn,bs),
+    take(16,hash_apply(hash_fn,bs)))
+wots_secret_value = define("wots_secret_value", (hash_fn,secret,layer,tree,kp,ci),
+    hash_bytes_node(hash_fn,wots_private_preimage(secret,layer,tree,kp,ci)))
+wots_chain_value = define("wots_chain_value", (hash_fn,seed,address,value,start,steps),
+    fold(reverse(seq(steps,i,i)),i,current,
+         hash_bytes_node(hash_fn,th_preimage(seed,
+             chain_position_words(address,add(start,count_as_int(i))),pad_node(current))),value))
+chain_address = address_words(layer,tree,literal(0,INT),kp,count_as_int(i),
+                              literal(0,INT),literal(0,INT))
+chain_secret = wots_secret_value(hash_fn,secret,layer,tree,kp,count_as_int(i))
+wots_keygen_nodes = define("wots_keygen_nodes", (hash_fn,seed,secret,layer,tree,kp),
+    seq(literal(43),i,wots_chain_value(hash_fn,seed,chain_address,chain_secret,
+        literal(0,INT),literal(7))))
+pk_address = address_words(layer,tree,literal(1,INT),kp,literal(0,INT),
+                           literal(0,INT),literal(0,INT))
+wots_keygen_value = define("wots_keygen_value", (hash_fn,seed,secret,layer,tree,kp),
+    hash_bytes_node(hash_fn,multi_preimage(seed,pk_address,
+        wots_keygen_nodes(hash_fn,seed,secret,layer,tree,kp))))
+wots_sign_values = define("wots_sign_values", (hash_fn,seed,secret,layer,tree,kp,bs),
+    seq(literal(43),i,wots_chain_value(hash_fn,seed,chain_address,chain_secret,
+        literal(0,INT),int_as_count(wots_field(bs,i)))))
+wots_recover_nodes = define("wots_recover_nodes", (hash_fn,seed,layer,tree,kp,bs,values),
+    seq(literal(43),i,wots_chain_value(hash_fn,seed,chain_address,
+        index(values,i,repeat(literal(16),literal(0,INT))),wots_field(bs,i),
+        int_as_count(int_sub(literal(7,INT),wots_field(bs,i))))))
+recovery_digest = hash_apply(hash_fn,wots_preimage(seed,
+    address_words(layer,tree,literal(0,INT),kp,literal(0,INT),literal(0,INT),literal(0,INT)),
+    pad_node(message),nonce))
+wots_recover_value = define("wots_recover_value", (hash_fn,seed,layer,tree,kp,message,values,nonce),
+    if_zero(int_sub(wots_sum(recovery_digest),wots_target()),
+        hash_bytes_node(hash_fn,multi_preimage(seed,pk_address,
+            wots_recover_nodes(hash_fn,seed,layer,tree,kp,recovery_digest,values))),
+        repeat(literal(16),literal(0,INT))))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"
+    if ty == HASH: return "(List Int → List Int)" if lean else "(int list -> int list)"
     if ty[0] == "list":
         return f"(List {type_text(ty[1],lean)})" if lean else f"({type_text(ty[1],lean)} list)"
     assert ty[0] == "product"
@@ -251,6 +304,12 @@ def render(e, lean):
         return f"({r(a[0])} - {r(a[1])})" if lean else f"(max 0 ({r(a[0])} - {r(a[1])}))"
     if op == "int_sub":
         return f"({r(a[0])} - {r(a[1])})"
+    if op == "count_as_int":
+        return f"(Int.ofNat {r(a[0])})" if lean else f"({r(a[0])})"
+    if op == "int_as_count":
+        return f"(Int.toNat {r(a[0])})" if lean else f"(max 0 {r(a[0])})"
+    if op == "hash_apply":
+        return f"({r(a[0])} {r(a[1])})"
     if op == "count_div":
         return f"({r(a[0])} {'/' if lean else '%/'} {r(a[1])})"
     if op == "index":
@@ -284,6 +343,23 @@ def check_outputs(expected):
             raise ValueError(f"generated representation missing or changed: {p}")
 
 def self_test():
+    rejected = [lambda: count_as_int(literal(0,INT)),
+                lambda: int_as_count(literal(0)),
+                lambda: hash_apply(literal(0,INT),items(INT)),
+                lambda: hash_apply(hash_fn,items(COUNT)),
+                lambda: hash_apply(hash_fn,hash_fn)]
+    for operation in rejected:
+        try: operation()
+        except AssertionError: pass
+        else: raise RuntimeError("functional backend/count constructor accepted a wrong type")
+    if count_as_int(literal(3)).ty != INT or int_as_count(literal(3,INT)).ty != COUNT:
+        raise RuntimeError("functional count conversion changed type")
+    application = hash_apply(hash_fn,items(INT))
+    if application.ty != BYTES or any(render(application,lean) != "(hash_fn [])" for lean in (True,False)):
+        raise RuntimeError("pure backend application changed interpretation")
+    negative = int_as_count(int_sub(literal(0,INT),literal(1,INT)))
+    if render(negative,True) != "(Int.toNat (0 - 1))" or render(negative,False) != "(max 0 (0 - 1))":
+        raise RuntimeError("negative-to-count conversion changed interpretation")
     for a, b in ((literal(1), literal(2)), (literal(1,INT), literal(2)),
                  (literal(1), literal(2,INT))):
         try: int_sub(a,b)
