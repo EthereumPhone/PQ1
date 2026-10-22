@@ -1642,6 +1642,80 @@ mod timeout_tests {
         assert_eq!(t::TIMEOUT_TICKS, 2 * 60 * 1000);
     }
 
+    // ── GET_INIT_CODE idle grace (owner decision 2026-10-22) ─────────
+
+    fn ticks(n: u32) {
+        for _ in 0..n {
+            tick_once();
+        }
+    }
+
+    #[test]
+    fn positive_init_code_grace_is_twenty_seconds() {
+        assert_eq!(t::INIT_CODE_GRACE_TICKS, 20_000);
+    }
+
+    #[test]
+    fn positive_grace_last_activity_moves_twenty_seconds_capped_at_now() {
+        // 50 s since the last press: the deadline moves exactly 20 s.
+        assert_eq!(t::grace_last_activity(1_000, 51_000), 21_000);
+        // 5 s since the last press: capped at now, never in the future.
+        assert_eq!(t::grace_last_activity(1_000, 6_000), 6_000);
+        // Exactly 20 s: lands on now.
+        assert_eq!(t::grace_last_activity(1_000, 21_000), 21_000);
+        // Across the u32 wrap.
+        assert_eq!(t::grace_last_activity(u32::MAX - 9, 49_990), (u32::MAX - 9).wrapping_add(20_000));
+        assert_eq!(t::grace_last_activity(u32::MAX - 9, 5), 5);
+    }
+
+    #[test]
+    fn positive_grant_init_code_grace_once_per_unlock() {
+        let _guard = t::test_lock();
+        t::rearm_init_code_grace();
+        t::reset_activity();
+        ticks(50_000);
+        let before = t::idle_for();
+        assert!(t::grant_init_code_grace(), "first call in a session is granted");
+        let after = t::idle_for();
+        assert!(before - after >= 19_995 && before - after <= 20_000, "moved {} ticks", before - after);
+        // Second call in the same session: nothing changes.
+        assert!(!t::grant_init_code_grace(), "a second grace in one unlock is refused");
+        assert!(t::idle_for() <= after + 5);
+        // A lock re-arms it.
+        t::rearm_init_code_grace();
+        assert!(t::grant_init_code_grace());
+        t::rearm_init_code_grace();
+    }
+
+    #[test]
+    fn positive_grant_init_code_grace_never_puts_the_deadline_past_two_minutes() {
+        let _guard = t::test_lock();
+        t::rearm_init_code_grace();
+        t::reset_activity();
+        ticks(5_000);
+        assert!(t::grant_init_code_grace());
+        assert!(t::idle_for() <= 5, "capped at now: idle_for {} must be ~0, not wrapped", t::idle_for());
+        assert!(!t::is_idle());
+        t::rearm_init_code_grace();
+    }
+
+    #[test]
+    fn negative_grant_init_code_grace_never_revives_an_expired_session() {
+        let _guard = t::test_lock();
+        t::rearm_init_code_grace();
+        t::reset_activity();
+        ticks(t::TIMEOUT_TICKS + 10);
+        assert!(t::is_idle());
+        let before = t::idle_for();
+        assert!(!t::grant_init_code_grace(), "an expired session gets no grace");
+        assert!(t::is_idle());
+        assert!(t::idle_for() >= before);
+        // And it did not spend the session's grace.
+        t::reset_activity();
+        assert!(t::grant_init_code_grace());
+        t::rearm_init_code_grace();
+    }
+
     #[test]
     fn positive_tick_increments_monotonically() {
         let _guard = t::test_lock();
@@ -1829,14 +1903,29 @@ mod timeout_source_text {
     /// input paths. This source-text check pins the mutator surface.
     #[test]
     fn negative_only_reset_activity_writes_last_activity() {
+        // Exactly two mutators: `reset_activity` (button presses, PIN) and
+        // the one documented non-press exception, `grant_init_code_grace`
+        // (owner decision 2026-10-22, CLAUDE.md "NS does not control the
+        // inactivity timer"; its single call site is pinned in
+        // `nsc_small_cmds_pure_tests`). A third mutator could be an
+        // NS-reachable path that keeps an unlocked session alive.
         let writes = TIMEOUT_SRC.matches("LAST_ACTIVITY.store(").count();
         assert_eq!(
-            writes, 1,
-            "LAST_ACTIVITY must have exactly one mutator (reset_activity) — \
-             multiple mutators risk an NS-reachable code path slipping in \
-             and resetting the inactivity timer, violating the CLAUDE.md \
+            writes, 2,
+            "LAST_ACTIVITY must have exactly two mutators (reset_activity and \
+             grant_init_code_grace) — another one risks an NS-reachable code \
+             path keeping the session unlocked, violating the CLAUDE.md \
              contract 'NS pings do NOT reset it'."
         );
+        for f in ["pub fn reset_activity()", "pub fn grant_init_code_grace()"] {
+            let start = TIMEOUT_SRC.find(f).unwrap_or_else(|| panic!("{f} missing"));
+            let body_end = start + TIMEOUT_SRC[start..].find("\n}\n").expect("fn end");
+            assert_eq!(
+                TIMEOUT_SRC[start..body_end].matches("LAST_ACTIVITY.store(").count(),
+                1,
+                "{f} must hold one of the two writes"
+            );
+        }
     }
 
     /// The watchdog exception is valid only while the trusted confirm loop is

@@ -23,6 +23,15 @@ reachable. Read that section as the mechanism, not as the risk.
 > The fixes below are recorded for completeness only; they are NOT scheduled. Documented so future
 > vuln sweeps skip it (same disposition class as the paymaster-unshown WON'T-FIX).
 
+> **UPDATE 2026-10-22 — the silent window grows by 20 s per unlock.** `GET_INIT_CODE` now moves
+> the idle deadline +20 s, once per unlock (owner decision; `timeout::grant_init_code_grace`,
+> CLAUDE.md "NS does not control the inactivity timer"). It is still unconfirmed. Effect on this
+> finding: per unlock, the host gains at most 20 s of extra unlocked time in which it can call
+> `GET_INIT_CODE` silently — about one more bootstrap signature per unlock at the measured 13.6 s
+> per call on pq1. The disposition above is unchanged (LOW, accepted); the per-unlock count it
+> relies on rises by about one. A button-press consent on this command was considered the same
+> day and not taken.
+
 **Status:** ACCEPTED KNOWN TRADEOFF (found 2026-06-30; owner-classified WON'T-FIX same day;
 severity corrected HIGH → **LOW** and the uncapped design confirmed **intentional** 2026-07-24).
 Novel — not in the prior finding ledger.

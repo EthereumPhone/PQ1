@@ -19,8 +19,34 @@
 //! Background NS gateway commands (GET_REMAINING, GET_PUBKEY) intentionally
 //! do NOT count as activity — only physical user input does, matching the
 //! Ledger model.
+//!
+//! # Who moves the deadline (stated exactly, 2026-10-22)
+//!
+//! The rule is "only a button press extends an unlocked session". These are
+//! every place that moves the deadline, so the rule's exceptions are visible
+//! in one list:
+//!
+//! - Button presses on the trusted UI (`ui/confirm.rs`, `ui/px/lcd.rs`
+//!   `run_flow`, `ui/px/confirm_px.rs`) and a successful PIN entry.
+//! - Batch and forced sign reset it after the user's confirmation, so they
+//!   are press-derived (`cmd_sign_userop_batch.rs`, `cmd_sign_userop_forced.rs`).
+//! - `REQUEST_UNLOCK` resets it while the device is LOCKED, with no secret
+//!   loaded, so the PIN prompt can run (`cmd_request_unlock.rs`).
+//! - Firmware update: `FW_BEGIN` and `FW_COMMIT` reset it. On production
+//!   images BEGIN follows the verify press. On `devunit-ab` images BEGIN asks
+//!   no press, so a host holding a newer, genuinely signed release can reset
+//!   the timer without one (accepted for pre-production dev units).
+//! - **`GET_INIT_CODE` ([`grant_init_code_grace`]) is the only command that
+//!   moves the deadline of an unlocked session forward with no button press
+//!   anywhere in the flow:** +20 s, once per unlock, never past 120 s from
+//!   now, never for a session that has already expired. Owner decision
+//!   2026-10-22: Ambire's first transaction on a network starts with ~16 s
+//!   of keygen and bootstrap-key signing (GET_INIT_CODE) before any screen,
+//!   and a click late in the window locked the device at the end of that
+//!   job. It does not cover a click after ~105 s: the job can still end with
+//!   only seconds left, and the user unlocks and retries.
 
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 /// 2 minutes at ~1 ms tick. The actual SysTick reload is configured in
 /// `main::setup_systick()`.
@@ -314,6 +340,54 @@ pub fn tick_verified(health_out: &mut u32, cfi_out: &mut u32) {
 #[inline]
 pub fn reset_activity() {
     LAST_ACTIVITY.store(now(), Ordering::Relaxed);
+}
+
+/// How far [`grant_init_code_grace`] moves the idle deadline.
+pub const INIT_CODE_GRACE_TICKS: u32 = 20_000;
+
+/// The grace was spent in this unlocked session. Cleared by
+/// [`rearm_init_code_grace`] on every lock (`SecureState::zeroize_sensitive`).
+static INIT_CODE_GRACE_USED: AtomicBool = AtomicBool::new(false);
+
+/// The one non-press extension of an unlocked session (see the module doc,
+/// "Who moves the deadline"). Called once from `cmd_get_init_code` after its
+/// unlock check and input validation.
+///
+/// Moves the deadline [`INIT_CODE_GRACE_TICKS`] later, once per unlock:
+/// - an expired session is never revived (`is_idle()` returns `false` here
+///   and nothing changes);
+/// - a second call in the same session changes nothing;
+/// - the deadline never ends up more than [`TIMEOUT_TICKS`] ahead:
+///   `LAST_ACTIVITY` is capped at `now()`, because a value in the future
+///   would wrap `idle_for` and lock at once.
+///
+/// Returns whether the grace was granted.
+pub fn grant_init_code_grace() -> bool {
+    if is_idle() || INIT_CODE_GRACE_USED.swap(true, Ordering::SeqCst) {
+        return false;
+    }
+    let now = now();
+    let last = LAST_ACTIVITY.load(Ordering::Relaxed);
+    LAST_ACTIVITY.store(grace_last_activity(last, now), Ordering::Relaxed);
+    true
+}
+
+/// `LAST_ACTIVITY` after the grace: [`INIT_CODE_GRACE_TICKS`] later, capped
+/// at `now` (wrap-safe: compares elapsed ticks, not absolute values).
+#[inline]
+#[must_use]
+pub fn grace_last_activity(last: u32, now: u32) -> u32 {
+    if now.wrapping_sub(last) < INIT_CODE_GRACE_TICKS {
+        now
+    } else {
+        last.wrapping_add(INIT_CODE_GRACE_TICKS)
+    }
+}
+
+/// Re-arm the grace for the next unlocked session. Called on every lock.
+#[inline]
+pub fn rearm_init_code_grace() {
+    INIT_CODE_GRACE_USED.store(false, Ordering::SeqCst);
 }
 
 #[inline]
