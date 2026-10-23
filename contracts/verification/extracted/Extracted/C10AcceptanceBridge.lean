@@ -54,7 +54,7 @@ theorem fors_accept_common (sk seed root message : Std.Array Std.U8 32#usize)
 theorem extracted_wots_trial (seed adrs message : Std.Array Std.U8 32#usize)
     (progress : hypertree.ProgressSink) (pct : Std.U8) (count : Std.U32)
     (hcount : count.val < 10000000) :
-    wots.find_count_loop0.body seed message progress pct adrs count ⦃ r =>
+    wots.find_count_loop.body seed message progress pct adrs count ⦃ r =>
       (∃ digits, r = done (count, wots_digest_pure seed adrs message count, digits) ∧
         wots_sum ((wots_digest_pure seed adrs message count).val.map
           (fun b => Int.ofNat b.val)) = wots_target ∧
