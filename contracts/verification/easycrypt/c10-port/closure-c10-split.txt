@@ -635,3 +635,16 @@ C10FunctionalWotsSign
 C10FunctionalTreeValue
 C10FunctionalMerkle
 C10FunctionalForsRecovery
+
+# Functional FORS/XMSS construction backend interpretation, 2026-10-23.
+C10FunctionalBuildValue
+C10FunctionalBuildStack
+C10FunctionalBuildBackend
+C10FunctionalBuildOutside
+C10FunctionalBuildCost
+C10FunctionalForsBuild
+C10FunctionalMerkleBuild
+C10FunctionalBuildHistory
+C10FunctionalForsBuildHistory
+C10FunctionalMerkleBuildHistory
+C10FunctionalBuildContracts

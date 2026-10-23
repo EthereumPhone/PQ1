@@ -1,3 +1,4 @@
+import Extracted.C10FunctionalBuilders
 import Extracted.C10FunctionalTrees
 import Extracted.C10FunctionalWotsRecover
 import Extracted.C10FunctionalSearch
@@ -522,3 +523,44 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalTrees.merkle_fold_eq
 #print axioms Extracted.C10FunctionalTrees.extracted_fors_recover_value
 #print axioms Extracted.C10FunctionalTrees.extracted_merkle_recover_value
+#print axioms Extracted.C10FunctionalBuildValues.nodes_zero
+#print axioms Extracted.C10FunctionalBuildValues.nodes_succ
+#print axioms Extracted.C10FunctionalBuildValues.level_length
+#print axioms Extracted.C10FunctionalBuildValues.nodes_length
+#print axioms Extracted.C10FunctionalBuildValues.auth_length
+#print axioms Extracted.C10FunctionalBuildValues.root_value
+#print axioms Extracted.C10FunctionalBuildValues.level_get
+#print axioms Extracted.C10FunctionalBuildValues.nodes_get_eq
+#print axioms Extracted.C10FunctionalBuildValues.root_eq_node
+#print axioms Extracted.C10FunctionalBuildValues.auth_get
+#print axioms Extracted.C10FunctionalBuildValues.sibling_outside
+#print axioms Extracted.C10FunctionalBuildValues.sibling_inside
+#print axioms Extracted.C10FunctionalBuildValues.pow_two_even
+#print axioms Extracted.C10FunctionalBuildValues.auth_outside_get
+#print axioms Extracted.C10FunctionalBuildValues.auth_outside
+#print axioms Extracted.C10FunctionalBuildValues.sibling_xor
+#print axioms Extracted.C10FunctionalBuildValues.sibling_int_nat_index
+#print axioms Extracted.C10FunctionalBuildValues.sibling_int_nat
+#print axioms Extracted.C10FunctionalBuildValues.sibling_nat_inside
+#print axioms Extracted.C10FunctionalBuildValues.sibling_nat_outside
+#print axioms Extracted.C10FunctionalBuildValues.sibling_nat_range
+#print axioms Extracted.C10FunctionalBuildValues.auth_nat_node
+#print axioms Extracted.C10FunctionalBuildValues.sibling_shift_outside
+#print axioms Extracted.Equiv.fors_auth_capture_outside
+#print axioms Extracted.Equiv.fors_auth_carry_outside_spec
+#print axioms Extracted.Equiv.fors_auth_loop_outside_spec
+#print axioms Extracted.Equiv.xmss_auth_capture_outside
+#print axioms Extracted.Equiv.xmss_auth_carry_outside_spec
+#print axioms Extracted.Equiv.xmss_auth_loop_outside_spec
+#print axioms Extracted.C10FunctionalBuilders.fors_node_value
+#print axioms Extracted.C10FunctionalBuilders.merkle_node_value
+#print axioms Extracted.C10FunctionalBuilders.extracted_fors_root_value
+#print axioms Extracted.C10FunctionalBuilders.extracted_merkle_root_value
+#print axioms Extracted.C10FunctionalBuilders.fors_path_value
+#print axioms Extracted.C10FunctionalBuilders.merkle_path_value
+#print axioms Extracted.C10FunctionalBuilders.extracted_fors_sign_valid_values
+#print axioms Extracted.C10FunctionalBuilders.extracted_merkle_build_valid_value
+#print axioms Extracted.C10FunctionalBuilders.extracted_fors_sign_values
+#print axioms Extracted.C10FunctionalBuilders.extracted_merkle_build_value
+#print axioms Extracted.Equiv.fors_sign_tree_outside_spec
+#print axioms Extracted.Equiv.xmss_build_auth_outside_spec

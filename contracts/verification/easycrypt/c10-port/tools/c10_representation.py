@@ -303,6 +303,58 @@ merkle_recover_value = define("merkle_recover_value",
     tree_path_value(hash_fn,seed,layer,tree,literal(2,INT),literal(0,INT),
                     value,index0,auth,literal(9)))
 
+# Pure construction values. Levelwise evaluation is a mathematical
+# specification; it does not specify the stack callers' oracle query order.
+total_height, rounds = var("total_height",COUNT), var("rounds",COUNT)
+nodes = var("nodes",NODES)
+zero_node = repeat(literal(16),literal(0,INT))
+size_at_height = binary("pow",literal(2),count_sub(total_height,height))
+tree_level_value = define("tree_level_value",
+    (hash_fn,seed,layer,tree,kind,kp,total_height,height,nodes),
+    seq(size_at_height,i,tree_pair_value(hash_fn,seed,
+        address_words(layer,tree,kind,kp,literal(0,INT),count_as_int(height),count_as_int(i)),
+        index(nodes,mul(literal(2),i),zero_node),
+        index(nodes,add(mul(literal(2),i),literal(1)),zero_node))))
+tree_nodes_value = define("tree_nodes_value",
+    (hash_fn,seed,layer,tree,kind,kp,total_height,rounds,values),
+    fold(reverse(seq(rounds,i,i)),i,nodes,
+        tree_level_value(hash_fn,seed,layer,tree,kind,kp,total_height,
+                         add(i,literal(1)),nodes),values))
+tree_root_value = define("tree_root_value",
+    (hash_fn,seed,layer,tree,kind,kp,total_height,values),
+    index(tree_nodes_value(hash_fn,seed,layer,tree,kind,kp,total_height,
+                           total_height,values),literal(0),zero_node))
+target_at_height = binary("div",index0,binary("pow",literal(2,INT),height))
+sibling_at_height = if_zero(binary("mod",target_at_height,literal(2,INT)),
+    add(target_at_height,literal(1,INT)),int_sub(target_at_height,literal(1,INT)))
+tree_auth_values = define("tree_auth_values",
+    (hash_fn,seed,layer,tree,kind,kp,total_height,values,index0),
+    seq(total_height,height,index(tree_nodes_value(hash_fn,seed,layer,tree,kind,kp,
+        total_height,height,values),int_as_count(sibling_at_height),zero_node)))
+fors_tree_leaves = define("fors_tree_leaves",(hash_fn,seed,secret,ht,tree),
+    seq(literal(2048),i,fors_leaf_value(hash_fn,seed,ht,tree,count_as_int(i),
+        fors_secret_value(hash_fn,secret,ht,tree,count_as_int(i)))))
+fors_root_value = define("fors_root_value",(hash_fn,seed,secret,ht,tree),
+    tree_root_value(hash_fn,seed,literal(0,INT),ht,literal(3,INT),tree,literal(11),
+        fors_tree_leaves(hash_fn,seed,secret,ht,tree)))
+fors_auth_values = define("fors_auth_values",(hash_fn,seed,secret,ht,tree,leaf),
+    tree_auth_values(hash_fn,seed,literal(0,INT),ht,literal(3,INT),tree,literal(11),
+        fors_tree_leaves(hash_fn,seed,secret,ht,tree),leaf))
+fors_sign_values = define("fors_sign_values",(hash_fn,seed,secret,ht,tree,leaf),
+    product(fors_secret_value(hash_fn,secret,ht,tree,leaf),
+        fors_auth_values(hash_fn,seed,secret,ht,tree,leaf)))
+merkle_tree_leaves = define("merkle_tree_leaves",(hash_fn,seed,secret,layer,tree),
+    seq(literal(512),i,wots_keygen_value(hash_fn,seed,secret,layer,tree,count_as_int(i))))
+merkle_root_value = define("merkle_root_value",(hash_fn,seed,secret,layer,tree),
+    tree_root_value(hash_fn,seed,layer,tree,literal(2,INT),literal(0,INT),literal(9),
+        merkle_tree_leaves(hash_fn,seed,secret,layer,tree)))
+merkle_auth_values = define("merkle_auth_values",(hash_fn,seed,secret,layer,tree,index0),
+    tree_auth_values(hash_fn,seed,layer,tree,literal(2,INT),literal(0,INT),literal(9),
+        merkle_tree_leaves(hash_fn,seed,secret,layer,tree),index0))
+merkle_build_value = define("merkle_build_value",(hash_fn,seed,secret,layer,tree,index0),
+    product(merkle_auth_values(hash_fn,seed,secret,layer,tree,index0),
+        merkle_root_value(hash_fn,seed,secret,layer,tree)))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"

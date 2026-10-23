@@ -113,14 +113,58 @@ hash; XMSS begins with the supplied leaf. Losslessness is separate from result
 equality. The private-derivation lemma also connects `FixedPrefix.derive` to
 the shared FORS secret value.
 
-This closes recovery computations under the disclosed interpretation, not
-FORS/XMSS root and authentication-path construction, complete forest
-composition, or the full signer/verifier/session relation. Paired-printer and
+This closes recovery computations under the disclosed interpretation. Root and
+authentication-path construction is covered by the component below; complete
+forest composition and the full signer/verifier/session relation remain open. Paired-printer and
 backend interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
 security transfer and QROM/physical boundaries remain open. No ideal-model
 probability bound transfers from these deterministic functional equalities.
 [Controls](CONTROL-EVIDENCE.md#functional-tree-value-controls), full replay,
 source identity and review remain separate requirements.
+
+## Functional FORS and XMSS construction values
+
+Twelve appended shared operators specify finite tree levels, roots and sibling
+paths, then instantiate the FORS leaves and 512 WOTS public-key leaves. The
+existing expression constructors are unchanged, and all fifty earlier generated
+definitions are preserved. These expressions specify values; they do not impose
+a new oracle execution order.
+
+[`C10FunctionalBuilders.lean`](../../extracted/Extracted/C10FunctionalBuilders.lean)
+connects the actual extracted FORS root/sign and XMSS root/authentication builders
+to those shared values. Four new proof modules contribute 41 kernel-only
+headlines, including the generic recurrences and the actual out-of-tree branches.
+The top-level results cover every u32 target, not only valid leaves: FORS keeps
+eleven zero authentication nodes outside 2,048 leaves, while XMSS keeps nine
+outside 512 leaves. FORS still derives the requested target's secret, and XMSS
+still returns the independently constructed root. Full u32 FORS fields and
+u32/u64 XMSS layer/tree fields are retained. This is the existing callback-free,
+release extraction boundary.
+
+Eleven native modules culminate in
+[`C10FunctionalBuildContracts`](cdrafts-split/C10FunctionalBuildContracts.ec),
+with 128 new lemmas and no new project axiom or admit. The actual Raw and
+CommonInput callers agree on return values and their complete backend state.
+FORS root/tree construction makes exactly 6,143 calls, FORS signing 6,144,
+and XMSS root/build construction 177,151. Losslessness is proved separately
+for both caller forms.
+
+The history contract is exact for every input key: construction queries map to
+the supplied function's digest, and every other entry equals the initial map.
+It retains arbitrary consistent prehistory, handles repeated queries, and frames
+the key and function. FORS signing also retains its initial target-secret query,
+including an out-of-tree target. This is an exact final-map contract, not an
+ordered transcript; actual Raw/CommonInput execution equivalence and call
+counts are separate statements. It assumes neither an empty initial history
+nor a desired return value.
+
+[Controls](CONTROL-EVIDENCE.md#functional-construction-controls) exercise both
+printers and unchanged consumers. Complete forest/layer/signer/session
+composition, paired-printer and backend interpretation, concrete RustCrypto or
+STM32 behavior, progress callbacks, sampled-oracle transfer, and QROM/physical
+assumptions remain outside this result. The component does not transfer the
+ideal-model probability bound. Full replay, source identity and review remain
+separate requirements.
 
 ## Quantitative loss
 

@@ -79,7 +79,7 @@ NONPOLICY_MAGNITUDES = {
     # Paired expression: the same 16-bit shuffle divisor, never wallet policy.
     # Search, WOTS and tree values append definitions without changing that divisor.
     ('cdrafts-split/C10Representation.ec', r'\b65536\b'):
-        'c5b497398f9b2638f93c8b300253bbbecc901d464a145005fcde44ba2ee5f4ee',
+        'ca701ac8c1f909da85e03a928d443b6cfa5aeeeb1faa44031fcfffe54f669be0',
     ('cdrafts-split/RawShuffle.ec', r'\b65536\b'):
         '2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639',
     ('cdrafts-split/RawShufflePermutation.ec', r'\b65536\b'):

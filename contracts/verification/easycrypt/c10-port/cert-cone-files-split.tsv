@@ -808,3 +808,14 @@ cdrafts-split/C10FunctionalWotsSign.ec
 cdrafts-split/C10FunctionalTreeValue.ec
 cdrafts-split/C10FunctionalMerkle.ec
 cdrafts-split/C10FunctionalForsRecovery.ec
+cdrafts-split/C10FunctionalBuildValue.ec
+cdrafts-split/C10FunctionalBuildStack.ec
+cdrafts-split/C10FunctionalBuildBackend.ec
+cdrafts-split/C10FunctionalBuildOutside.ec
+cdrafts-split/C10FunctionalBuildCost.ec
+cdrafts-split/C10FunctionalForsBuild.ec
+cdrafts-split/C10FunctionalMerkleBuild.ec
+cdrafts-split/C10FunctionalBuildHistory.ec
+cdrafts-split/C10FunctionalForsBuildHistory.ec
+cdrafts-split/C10FunctionalMerkleBuildHistory.ec
+cdrafts-split/C10FunctionalBuildContracts.ec

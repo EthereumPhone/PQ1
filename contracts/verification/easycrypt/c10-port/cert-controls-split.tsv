@@ -1861,3 +1861,51 @@ scratch/c10_tree_value_merkle_steps_reject.ec	MUST-FAIL	[by]: cannot close goals
 scratch/_scope_neg_op_C10FunctionalTreeValue.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalMerkle.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalForsRecovery.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Functional FORS/XMSS construction: values, exact history/calls, complete callers and scope controls.
+scratch/c10_build_value_positive.ec	MUST-PASS	-
+scratch/c10_build_value_preserving.ec	MUST-PASS	-
+scratch/c10_build_value_fixtures.ec	MUST-PASS	-
+scratch/c10_build_value_left_child_typed.ec	MUST-PASS	-
+scratch/c10_build_value_left_child_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_right_child_typed.ec	MUST-PASS	-
+scratch/c10_build_value_right_child_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_node_height_typed.ec	MUST-PASS	-
+scratch/c10_build_value_node_height_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_node_index_typed.ec	MUST-PASS	-
+scratch/c10_build_value_node_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_round_order_typed.ec	MUST-PASS	-
+scratch/c10_build_value_round_order_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_build_value_root_rounds_typed.ec	MUST-PASS	-
+scratch/c10_build_value_root_rounds_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_auth_parity_typed.ec	MUST-PASS	-
+scratch/c10_build_value_auth_parity_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_auth_default_typed.ec	MUST-PASS	-
+scratch/c10_build_value_auth_default_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_fors_leaf_index_typed.ec	MUST-PASS	-
+scratch/c10_build_value_fors_leaf_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_fors_root_kind_typed.ec	MUST-PASS	-
+scratch/c10_build_value_fors_root_kind_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_build_value_fors_auth_keypair_typed.ec	MUST-PASS	-
+scratch/c10_build_value_fors_auth_keypair_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_build_value_fors_sign_secret_typed.ec	MUST-PASS	-
+scratch/c10_build_value_fors_sign_secret_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_build_value_merkle_leaf_index_typed.ec	MUST-PASS	-
+scratch/c10_build_value_merkle_leaf_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_build_value_merkle_root_kind_typed.ec	MUST-PASS	-
+scratch/c10_build_value_merkle_root_kind_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_build_value_merkle_auth_keypair_typed.ec	MUST-PASS	-
+scratch/c10_build_value_merkle_auth_keypair_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_build_value_merkle_build_target_typed.ec	MUST-PASS	-
+scratch/c10_build_value_merkle_build_target_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/_scope_neg_op_C10FunctionalBuildValue.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalBuildStack.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalBuildBackend.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalBuildOutside.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalBuildCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForsBuild.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalMerkleBuild.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalBuildHistory.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForsBuildHistory.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalMerkleBuildHistory.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalBuildContracts.ec	MUST-FAIL	FORS_C_TreePort.

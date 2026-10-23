@@ -21,7 +21,6 @@ op fors_recover_value (hash_fn : (int list -> int list)) (seed : (int list)) (ht
 op merkle_recover_value (hash_fn : (int list -> int list)) (seed : (int list)) (layer : int) (tree : int) (value : (int list)) (index0 : int) (auth : ((int list) list)) : (int list) =
   (tree_path_value hash_fn seed layer tree 2 0 value index0 auth 8).
 
-
 (* Common functional FORS/Merkle values; no sampled-oracle interpretation. *)
 
 import IntOrder.

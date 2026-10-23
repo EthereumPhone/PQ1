@@ -192,6 +192,17 @@ with the full Rust/EasyCrypt session, concrete backend and ideal-oracle security
 transfer still open. See the
 [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-bounded-search-backend-interpretation).
 
+**Functional tree-construction correspondence (2026-10-23):** actual extracted
+FORS and XMSS root/authentication builders now consume the paired values for
+all u32 targets, including the actual zero-path behavior outside each tree.
+Native Raw/CommonInput contracts preserve arbitrary consistent prior history,
+key/function state, exact final maps and exact call counts, with separate
+termination proofs. This closes the selected construction component under the
+existing backend and callback-free extraction interpretation. Full
+forest/layer/signer/session composition and concrete-backend/ideal-oracle
+transfer remain open; see the
+[research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-fors-and-xmss-construction-values).
+
 **Native EasyCrypt total signing availability (2026-10-21):** the
 [initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)
 now bounds the original failed-session event for both R and WOTS-count

@@ -376,3 +376,28 @@ checks the corresponding finite computations, sharing proved byte-projection
 lemmas to avoid repeatedly expanding the same lists. The toy function is
 public arithmetic, not SHA. These examples supplement the generic endpoint
 proofs and do not remove the paired-printer or backend interpretation boundary.
+
+## Functional construction controls
+
+`tools/c10_functional_build_controls.py` supplies sixteen typed changes covering
+left/right child selection, node height/index, fold order, root depth, path
+parity/defaults, FORS and XMSS leaf indices, root domains, authentication
+keypairs, the returned FORS secret and the XMSS target. Every changed definition
+must compile, then fail at its recorded first consuming proof. The unchanged
+and arithmetic-equivalent `i + (2-1)` fixtures pass. The combined fixtures retain
+the actual-caller consumers; later statements following a rejection earn no
+execution credit. Ordinary proof rejection demonstrates sensitivity, not the
+logical negation of each changed theorem. Syntax/type errors and resource
+failures do not count. Eleven scope probes cover the new native modules.
+
+`tools/c10_functional_build_fixtures.py` independently constructs every node of
+four complete trees using Python byte encodings: 2,048 and 512 leaves with zero
+and maximum-width FORS/XMSS address fields. It pins four roots and twenty paths,
+covering first, odd, last, first-outside and maximum-u32 targets. The leaves are
+explicit arithmetic vectors; these fixtures do not execute the actual FORS
+secret or WOTS leaf backends. Their instantiations are covered by the separate
+actual-caller proofs and typed controls. The public arithmetic hash observes
+address bytes and ordered children. Lean and EasyCrypt prove whole-level
+identities before checking the roots and paths, keeping the fixtures small
+without replacing either proof checker with Python evaluation. The paired
+printers and supplied-backend interpretation remain disclosed boundaries.

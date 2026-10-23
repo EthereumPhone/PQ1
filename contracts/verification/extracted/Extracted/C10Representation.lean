@@ -154,4 +154,40 @@ def fors_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (
 def merkle_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (value : (List Int)) (index0 : Int) (auth : (List (List Int))) : (List Int)  :=
   (tree_path_value hash_fn seed layer tree 2 0 value index0 auth 9)
 
+def tree_level_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kind : Int) (kp : Int) (total_height : Nat) (height : Nat) (nodes : (List (List Int))) : (List (List Int))  :=
+  ((List.range (2 ^ (total_height - height))).map (fun i => (tree_pair_value hash_fn seed (address_words layer tree kind kp 0 (Int.ofNat height) (Int.ofNat i)) (List.getD nodes (2 * i) (List.replicate 16 0)) (List.getD nodes ((2 * i) + 1) (List.replicate 16 0)))))
+
+def tree_nodes_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kind : Int) (kp : Int) (total_height : Nat) (rounds : Nat) (values : (List (List Int))) : (List (List Int))  :=
+  (List.foldr (fun i nodes => (tree_level_value hash_fn seed layer tree kind kp total_height (i + 1) nodes)) values (List.reverse ((List.range rounds).map (fun i => i))))
+
+def tree_root_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kind : Int) (kp : Int) (total_height : Nat) (values : (List (List Int))) : (List Int)  :=
+  (List.getD (tree_nodes_value hash_fn seed layer tree kind kp total_height total_height values) 0 (List.replicate 16 0))
+
+def tree_auth_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kind : Int) (kp : Int) (total_height : Nat) (values : (List (List Int))) (index0 : Int) : (List (List Int))  :=
+  ((List.range total_height).map (fun height => (List.getD (tree_nodes_value hash_fn seed layer tree kind kp total_height height values) (Int.toNat (if ((index0 / (2 ^ height)) % 2) = 0 then ((index0 / (2 ^ height)) + 1) else ((index0 / (2 ^ height)) - 1))) (List.replicate 16 0))))
+
+def fors_tree_leaves (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (ht : Int) (tree : Int) : (List (List Int))  :=
+  ((List.range 2048).map (fun i => (fors_leaf_value hash_fn seed ht tree (Int.ofNat i) (fors_secret_value hash_fn secret ht tree (Int.ofNat i)))))
+
+def fors_root_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (ht : Int) (tree : Int) : (List Int)  :=
+  (tree_root_value hash_fn seed 0 ht 3 tree 11 (fors_tree_leaves hash_fn seed secret ht tree))
+
+def fors_auth_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (ht : Int) (tree : Int) (leaf : Int) : (List (List Int))  :=
+  (tree_auth_values hash_fn seed 0 ht 3 tree 11 (fors_tree_leaves hash_fn seed secret ht tree) leaf)
+
+def fors_sign_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (ht : Int) (tree : Int) (leaf : Int) : ((List Int) × (List (List Int)))  :=
+  ((fors_secret_value hash_fn secret ht tree leaf), (fors_auth_values hash_fn seed secret ht tree leaf))
+
+def merkle_tree_leaves (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) : (List (List Int))  :=
+  ((List.range 512).map (fun i => (wots_keygen_value hash_fn seed secret layer tree (Int.ofNat i))))
+
+def merkle_root_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) : (List Int)  :=
+  (tree_root_value hash_fn seed layer tree 2 0 9 (merkle_tree_leaves hash_fn seed secret layer tree))
+
+def merkle_auth_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (index0 : Int) : (List (List Int))  :=
+  (tree_auth_values hash_fn seed layer tree 2 0 9 (merkle_tree_leaves hash_fn seed secret layer tree) index0)
+
+def merkle_build_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (index0 : Int) : ((List (List Int)) × (List Int))  :=
+  ((merkle_auth_values hash_fn seed secret layer tree index0), (merkle_root_value hash_fn seed secret layer tree))
+
 end C10Representation

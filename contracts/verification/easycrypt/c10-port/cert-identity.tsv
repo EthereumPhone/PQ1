@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	9b8a8b073e13da755a5ba7558b04068b
+split	d5fb7fe267c5d93f463655fd6c6b36d1
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1641,3 +1641,12 @@ fork	9c2d21280c84d52c30b22111151f1135
 # comments changed upstream; refresh their native source bindings.
 # Native proof files, statements, axioms and controls are unchanged.
 # Split identity 4cfde35dc9488ea78de9f938214addc3 -> 46b33cc65cb8b961bc5493e5d74fb5c4.
+
+# 2026-10-23: functional FORS/XMSS construction under the fixed backend.
+# Twelve appended expressions preserve all fifty earlier definitions.
+# 11 native modules / 128 lemmas, 41 kernel-only Lean headlines; full u32 targets.
+# Exact final maps/calls/frames, losslessness, typed controls and whole-tree fixtures.
+# 820 targets / 5240 pins / 4513 statements / 1711 controls / 2008 source bindings.
+# No new project axiom/admit. Exact shuffle arithmetic exception repinned.
+# Split identity 9b8a8b073e13da755a5ba7558b04068b -> d5fb7fe267c5d93f463655fd6c6b36d1.
+# Full replay and bounded owner review remain required.
