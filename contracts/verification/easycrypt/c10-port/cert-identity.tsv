@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	a3521da827732cd906ac9b01f3c4b948
+split	f2c96a9909cc82bb8d8d39eb8eeacbc5
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1654,3 +1654,16 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Proofs, statements, assumptions and controls unchanged. Reviewed by Fable 5.1
 # and GPT-6 Astra.
 # Split identity 9b8a8b073e13da755a5ba7558b04068b -> a3521da827732cd906ac9b01f3c4b948.
+
+# 2026-10-23 S2 (chain_hash preimage hoist): re-bind hash.rs, Hash/Funs.lean
+# and HashSpecs/ChainHash.lean. chain_hash builds th's 96-byte preimage once
+# (`chain_buf`) and per step rewrites only chain_pos and the 16 value bytes;
+# the per-step th input is unchanged. The edit is line-neutral: hash.rs lines
+# 1-330 and 341-419 are byte-identical, so every hash.rs line the .ec files
+# cite (322-328, 344-365) is unchanged, and the new helpers sit at the end of
+# the file. Evidence: Lean `hash.chain_hash_spec` statement unchanged
+# (r = chain_hash_pure ...), re-proved over the hoisted buffer
+# (chain_hash_loop_value, chain_buf_spec, chain_value_spec), closures
+# [propext, Classical.choice, Quot.sound]; WotsSecret/ForsSecret extractions
+# unchanged. Proofs, statements, assumptions and controls unchanged.
+# Split identity a3521da827732cd906ac9b01f3c4b948 -> f2c96a9909cc82bb8d8d39eb8eeacbc5.
