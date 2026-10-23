@@ -811,6 +811,93 @@ def f_batch1(c: Ctx) -> Request:
                    ["degenerate 1-tx batch: 0.05 ETH -> alice", "TX 1 OF 1, then the final ask for one tx"])
 
 
+# ── per-call calldata cap (8192 B, 2026-10-22): mirrors e2e Scenario 7a-7f ──
+
+BIG_TARGET = addr("0x" + "66" * 20)    # synthetic router: not catalogued, so the loud blind route
+BIG_SAFE = addr("0x" + "5a" * 20)
+MAX_TX_LEN = 8192
+
+
+def big_call(n: int) -> bytes:
+    """Universal Router `execute` selector + the e2e byte pattern, `n` B total."""
+    return bytes.fromhex("3593564c") + bytes((i * 29 + 7) & 0xFF for i in range(n - 4))
+
+
+def big_userop(c: Ctx, n: int, lines: list[str], kind: str = "userop", slot: int | None = None,
+               extra: int = 0, **kw: bool) -> Request:
+    data = big_call(n)
+    return Request(INS_SIGN_USEROP,
+                   userop_head(c.sender, BASE, c.flags(slot, extra), c.nonce, BIG_TARGET, 0, data)
+                   + trailers(), kind,
+                   [f"{n} B blind call -> 0x{BIG_TARGET.hex()} on Base, data sha256 "
+                    f"{hashlib.sha256(data).hexdigest()[:16]}..."] + lines, **kw)
+
+
+def f_big_5050(c: Ctx) -> Request:
+    return big_userop(c, 5050, ["the Universal Router size that motivated the raise; expect Data: 5050 B"])
+
+
+def f_big_8k(c: Ctx) -> Request:
+    return big_userop(c, MAX_TX_LEN, ["exactly the per-call cap; expect Data: 8192 B"])
+
+
+def f_big_8k_rotate(c: Ctx) -> Request:
+    slot = c.args.rotate_slot
+    return big_userop(c, MAX_TX_LEN, [f"on a slot-{slot} rotation (Type 1 + Type 2): the deepest stack path",
+                                      "(re-running on a registered slot may refuse; use --rotate-slot N)"],
+                      slot=slot, extra=FLAG_REGISTER_SLOT, want_t1=True)
+
+
+def f_big_over(c: Ctx) -> Request:
+    return big_userop(c, MAX_TX_LEN + 1, ["one byte over the cap: refused before any screen"], kind="refuse")
+
+
+def big_batch(c: Ctx, txs: list[tuple[bytes, bytes]]) -> bytes:
+    body = batch_head(c, len(txs))
+    for to, d in txs:
+        body += to + u256(0) + u16(len(d)) + d
+    return body + bytes([0])
+
+
+def f_big_batch(c: Ctx) -> Request:
+    approve = erc20_call(APPROVE, BIG_TARGET, 1_000_000)
+    return Request(INS_SIGN_USEROP_BATCH,
+                   big_batch(c, [(addr("0x" + "77" * 20), approve), (BIG_TARGET, big_call(MAX_TX_LEN))]),
+                   "batch", ["batch on Base: [approve 68 B, 8192 B blind call]",
+                             "2 member asks, then SIGN 2 TXS?"])
+
+
+def f_big_batch_over(c: Ctx) -> Request:
+    big = big_call(MAX_TX_LEN)
+    return Request(INS_SIGN_USEROP_BATCH,
+                   big_batch(c, [(BIG_TARGET, big), (BIG_TARGET, big), (addr("0x" + "77" * 20), b"\x01")]),
+                   "refuse", ["batch [8192, 8192, 1] = 16,385 B: one over the summed cap",
+                              "refused at parse time, before any screen"])
+
+
+def safe_exec_sized(data_len: int) -> bytes:
+    """e2e `build_safe_exec_with_data`: execTransaction(0xa5.., 0, data, ..., sigs="")."""
+    data = bytes((i * 13 + 1) & 0xFF for i in range(data_len))
+    return safe_exec_calldata(addr("0x" + "a5" * 20), 0, data, b"")
+
+
+def f_big_safe(c: Ctx) -> Request:
+    data = safe_exec_sized(115 * 32)
+    assert len(data) == 4068
+    return Request(INS_SIGN_USEROP,
+                   userop_head(c.sender, BASE, c.flags(), c.nonce, BIG_SAFE, 0, data) + trailers(),
+                   "userop", [f"Safe execTransaction, {len(data)} B total (largest under the 4096 Safe cap)",
+                              "inner 3680 B unknown call: Safe BLIND SIGN"])
+
+
+def f_big_safe_over(c: Ctx) -> Request:
+    data = safe_exec_sized(115 * 32 + 1)
+    assert len(data) == 4100
+    return Request(INS_SIGN_USEROP,
+                   userop_head(c.sender, BASE, c.flags(), c.nonce, BIG_SAFE, 0, data) + trailers(),
+                   "refuse", [f"Safe execTransaction, {len(data)} B: over the Safe cap, refused (never blind-signed)"])
+
+
 def sync_key(c: Ctx, slot: int) -> bytes:
     return bytes([c.args.account]) + u64(BASE) + u32(slot)
 
@@ -915,14 +1002,23 @@ FLOWS: dict[str, Flow] = {
     "sync-refuse": Flow(f_sync_refuse, "sync", "no dialog: refused, would use up --rotate-slot (run rotate first)"),
     "batch": Flow(f_batch, "batch", "3 member asks (TX i OF 3 CONFIRMED) + SIGN 3 TXS?"),
     "batch1": Flow(f_batch1, "batch", "1-tx batch: one member ask + the final ask"),
+    "big-5050": Flow(f_big_5050, "big", "5050 B blind call (Universal Router size): Data: 5050 B, full hash"),
+    "big-8k": Flow(f_big_8k, "big", "8192 B blind call (the cap): Data: 8192 B, full hash"),
+    "big-8k-rotate": Flow(f_big_8k_rotate, "big", "8192 B call on a --rotate-slot rotation (Type 1 + Type 2)"),
+    "big-over": Flow(f_big_over, "big", "8193 B call: refused, no ask"),
+    "big-batch": Flow(f_big_batch, "big", "batch [approve, 8192 B call]: 2 member asks + SIGN 2 TXS?"),
+    "big-batch-over": Flow(f_big_batch_over, "big", "batch summing 16,385 B: refused, no ask"),
+    "big-safe": Flow(f_big_safe, "big", "4068 B Safe execTransaction: Safe blind inner"),
+    "big-safe-over": Flow(f_big_safe_over, "big", "4100 B Safe execTransaction: refused, no ask"),
     "address": Flow(f_address, "device", "wallet-address consent, the address whole"),
     "fw-verify": Flow(f_fw_verify, "device", "firmware-update verify consent, then the rejection (devunit-ab: no ask)"),
     "lock": Flow(f_lock, "device", "LOCKED padlock -> PIN row"),
     "idle": Flow(f_idle, "device", "hands off 120 s: LOCKED padlock -> PIN row"),
 }
 # Not in the default walk: lock/idle lock the device; sync-warn spends 1,500 of
-# --sync-slot's budget per run; sync-refuse needs a rotated slot.
-SPECIAL = ("sync-warn", "sync-refuse", "lock", "idle")
+# --sync-slot's budget per run; sync-refuse needs a rotated slot; big-8k-rotate
+# registers --rotate-slot (like rotate).
+SPECIAL = ("sync-warn", "sync-refuse", "lock", "idle", "big-8k-rotate")
 DEFAULT = [n for n in FLOWS if n not in SPECIAL]
 # Flows not yet walked on glass at the first EVT walk (2026-09-23, e6a8dd97), plus later additions.
 NEW = ["named", "extras", "usdt", "dai-wrap", "pull", "typed-rich", "typed-curated", "blind-named",
