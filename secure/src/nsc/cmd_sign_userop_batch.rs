@@ -2428,8 +2428,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     }
 
     // #1037: the cached key must be the one this request named before
-    // anything uses it. Two verdicts, each with its own refusal, around a
-    // random delay (`state::slot_cache_identity_verdict`).
+    // anything uses it. Two verdicts, each with its own refusal, separated
+    // by a random delay and a scrub of the stale-OK register r0 (F-15.r1).
     if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
         != crate::fi::OK_SENTINEL
     {
@@ -2437,7 +2437,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         crate::fi::zeroize_barrier();
         return NscStatus::InternalError as u32;
     }
-    crate::fi::wait_random();
+    crate::fi::scrub_sentinel_register();
     if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
         != crate::fi::OK_SENTINEL
     {

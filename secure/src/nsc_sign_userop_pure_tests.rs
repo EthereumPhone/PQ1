@@ -2336,43 +2336,44 @@ fn negative_cached_slot_key_identity_is_checked_twice_before_use() {
     const GET_INIT_CODE_SRC: &str = include_str!("nsc/cmd_get_init_code.rs");
     const STATE_SRC: &str = include_str!("nsc/state.rs");
     const FIH_SRC: &str = include_str!("fih.rs");
-    let check = |args: &str| {
-        format!(
-            "    if super::state::slot_cache_identity_verdict({args})\n        != crate::fi::OK_SENTINEL\n    {{\n"
-        )
+    // The whole gate, exactly and contiguously, directly after the keygen
+    // branch: nothing (a `#[cfg(any())]` line, a reordered statement) can sit
+    // between the branch and the checks or inside them (Fable 5.1 review).
+    let gate = |args: &str, refusal: &str| {
+        let check = format!(
+            "    if super::state::slot_cache_identity_verdict({args})\n        != crate::fi::OK_SENTINEL\n    {{\n{refusal}    }}\n"
+        );
+        format!("{check}    crate::fi::scrub_sentinel_register();\n{check}")
     };
-    for (name, src, args, lookup, refusal) in [
-        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC, "account_index, chain_id, slot_index",
-         "Some(c) => !c.names(account_index, chain_id, slot_index),", "return NscStatus::InternalError as u32;"),
-        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC, "account_index, chain_id, slot_index",
-         "Some(c) => !c.names(account_index, chain_id, slot_index),", "return NscStatus::InternalError as u32;"),
-        ("cmd_sign_offchain.rs", CMD_SIGN_OFFCHAIN_SRC, "account_index, chain_id, slot_index",
-         "Some(c) => !c.names(account_index, chain_id, slot_index),", "return NscStatus::InternalError as u32;"),
-        ("cmd_get_init_code.rs", GET_INIT_CODE_SRC, "account_index, chain_id, SLOT_INDEX",
-         "Some(c) => !c.names(account_index, chain_id, SLOT_INDEX),", "return NscStatus::InternalError as u32;"),
-        ("cmd_sign_userop_forced.rs", CMD_SIGN_USEROP_FORCED_SRC, "account_index, chain_id, slot_index",
+    let note = "\n    // #1037: the cached key must be the one this request named before\n    // anything uses it. Two verdicts, each with its own refusal, separated\n    // by a random delay and a scrub of the stale-OK register r0 (F-15.r1).\n";
+    let wipe = "        entropy.zeroize();\n        crate::fi::zeroize_barrier();\n        return NscStatus::InternalError as u32;\n";
+    let plain = "        return NscStatus::InternalError as u32;\n";
+    let forced_head = "\n    // #1037: the same identity gate as the other handlers — two verdicts\n    // over the complement-protected tag, each with its own refusal,\n    // separated by a random delay and a scrub of the stale-OK register r0.\n    let (account_index, chain_id, slot_index) =\n        (request.account_index, request.chain_id, request.slot_index);\n";
+    let args = "account_index, chain_id, slot_index";
+    for (name, src, lookup, expected) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC,
+         "Some(c) => !c.names(account_index, chain_id, slot_index),", format!("{note}{}", gate(args, wipe))),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC,
+         "Some(c) => !c.names(account_index, chain_id, slot_index),", format!("{note}{}", gate(args, wipe))),
+        ("cmd_sign_offchain.rs", CMD_SIGN_OFFCHAIN_SRC,
+         "Some(c) => !c.names(account_index, chain_id, slot_index),", format!("{note}{}", gate(args, plain))),
+        ("cmd_get_init_code.rs", GET_INIT_CODE_SRC,
+         "Some(c) => !c.names(account_index, chain_id, SLOT_INDEX),",
+         format!("{note}{}", gate("account_index, chain_id, SLOT_INDEX",
+             "        crate::ui::show_status(\"InitCode\", \"slot cache MIA\");\n        return NscStatus::InternalError as u32;\n"))),
+        ("cmd_sign_userop_forced.rs", CMD_SIGN_USEROP_FORCED_SRC,
          "Some(cached) => !cached.names(request.account_index, request.chain_id, request.slot_index),",
-         "return Err(NscStatus::InternalError);"),
+         format!("{forced_head}{}", gate(args, "        return Err(NscStatus::InternalError);\n"))),
     ] {
         // The miss/hit decision itself reads the protected tag.
         assert_eq!(src.matches(lookup).count(), 1, "{name}: need_keygen through the tag");
+        assert_eq!(src.matches("slot_cache_identity_verdict(").count(), 2, "{name}: two identity checks");
         let open = src.find("    if need_keygen {\n").unwrap_or_else(|| panic!("{name}: keygen branch"));
         let close = open + src[open..].find("\n    }\n").unwrap_or_else(|| panic!("{name}: branch end")) + 7;
         let after = &src[close..];
-        let c = check(args);
-        assert_eq!(src.matches(c.as_str()).count(), 2, "{name}: two identity checks");
-        let first = after.find(c.as_str()).unwrap_or_else(|| panic!("{name}: check after the keygen branch"));
-        let second = first + c.len() + after[first + c.len()..].find(c.as_str()).expect("second check");
-        // Each check has its own refusal, and a delay separates them.
-        for at in [first, second] {
-            let body = &after[at + c.len()..];
-            let body = &body[..body.find("\n    }\n").expect("refusal end")];
-            assert!(body.trim_end().ends_with(refusal), "{name}: refusal");
-        }
-        assert!(after[first..second].contains("    crate::fi::wait_random();\n"), "{name}: delay between");
-        // Both run before anything reads the cache again.
-        let next_read = after.find("SLOT_CACHE").unwrap_or(after.len());
-        assert!(second < next_read, "{name}: the cached key is used before the second check");
+        assert!(after.starts_with(expected.as_str()), "{name}: the gate is not exactly the block after the keygen branch");
+        // Nothing read the cache between the branch and the gate.
+        assert!(!after[..expected.len()].contains("SLOT_CACHE"), "{name}: cache read inside the gate");
     }
     // The cache holds no bare identity: only the protected tag, and every
     // lookup is `names`. The verdict is two evaluations into a sentinel.

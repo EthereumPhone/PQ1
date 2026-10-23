@@ -825,8 +825,8 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
     }
 
     // #1037: the same identity gate as the other handlers — two verdicts
-    // over the complement-protected tag, each with its own refusal, around a
-    // random delay (`state::slot_cache_identity_verdict`).
+    // over the complement-protected tag, each with its own refusal,
+    // separated by a random delay and a scrub of the stale-OK register r0.
     let (account_index, chain_id, slot_index) =
         (request.account_index, request.chain_id, request.slot_index);
     if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
@@ -834,7 +834,7 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
     {
         return Err(NscStatus::InternalError);
     }
-    crate::fi::wait_random();
+    crate::fi::scrub_sentinel_register();
     if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
         != crate::fi::OK_SENTINEL
     {
