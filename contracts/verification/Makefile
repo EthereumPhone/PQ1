@@ -2504,6 +2504,7 @@ _extract-hash-fns-impl:
 	  --start-from 'sphincs_c10::hash::chain_hash' \
 	  --start-from 'sphincs_c10::hash::wots_digest' \
 	  --start-from 'sphincs_c10::hash::h_msg' \
+	  --start-from 'sphincs_c10::hash::pad16' \
 	  --dest-file $${EXTRACTION_TMP_ROOT}/hashfns.llbc 2>&1 | tail -1 )
 	@rm -rf $${EXTRACTION_TMP_ROOT}/hout && mkdir -p $${EXTRACTION_TMP_ROOT}/hout
 	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/hout -split-files $${EXTRACTION_TMP_ROOT}/hashfns.llbc

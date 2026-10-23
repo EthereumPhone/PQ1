@@ -239,49 +239,102 @@ def hash.h_msg
   let s5 ← lift (Array.to_slice (Array.make 5#usize [ s, s1, s2, s3, s4 ]))
   hash.sha256_parts s5
 
+/-- [sphincs_c10::hash::chain_value]:
+    Source: 'sphincs-c10/src/hash.rs', lines 434:0-438:1 -/
+def hash.chain_value
+  (buf : Array Std.U8 96#usize) : Result (Array Std.U8 16#usize) := do
+  let out := Array.repeat 16#usize 0#u8
+  let (s, to_slice_mut_back) ← lift (Array.to_slice_mut out)
+  let i ← 64#usize + params.N
+  let s1 ←
+    core.array.Array.index (core.ops.index.IndexSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf
+      { start := 64#usize, «end» := i }
+  let s2 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s s1
+  ok (to_slice_mut_back s2)
+
+/-- [sphincs_c10::hash::chain_buf]:
+    Source: 'sphincs-c10/src/hash.rs', lines 425:0-431:1 -/
+def hash.chain_buf
+  (seed : Array Std.U8 32#usize) (adrs : Array Std.U8 32#usize)
+  (val : Array Std.U8 16#usize) :
+  Result (Array Std.U8 96#usize)
+  := do
+  let buf := Array.repeat 96#usize 0#u8
+  let (s, index_mut_back) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf
+      { start := 0#usize, «end» := 32#usize }
+  let s1 ← lift (Array.to_slice seed)
+  let s2 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s s1
+  let buf1 := index_mut_back s2
+  let (s3, index_mut_back1) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf1
+      { start := 32#usize, «end» := 64#usize }
+  let s4 ← lift (Array.to_slice adrs)
+  let s5 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s3 s4
+  let buf2 := index_mut_back1 s5
+  let i ← 64#usize + params.N
+  let (s6, index_mut_back2) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf2
+      { start := 64#usize, «end» := i }
+  let s7 ← lift (Array.to_slice val)
+  let s8 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s6 s7
+  ok (index_mut_back2 s8)
+
 /-- [sphincs_c10::hash::chain_hash]: loop body 0:
     Source: 'sphincs-c10/src/hash.rs', lines 334:4-339:5
     Visibility: public -/
 @[rust_loop_body]
 def hash.chain_hash_loop.body
-  (seed : Array Std.U8 32#usize) (start_pos : Std.U32)
-  (iter : core.ops.range.Range Std.U32) (current : Array Std.U8 32#usize)
-  (a : Array Std.U8 32#usize) :
+  (start_pos : Std.U32) (iter : core.ops.range.Range Std.U32)
+  (buf : Array Std.U8 96#usize) :
   Result (ControlFlow ((core.ops.range.Range Std.U32) × (Array Std.U8
-    32#usize) × (Array Std.U8 32#usize)) (Array Std.U8 32#usize))
+    96#usize)) (Array Std.U8 96#usize))
   := do
   let (o, iter1) ←
     core.iter.range.IteratorRange.next U32.Insts.CoreIterRangeStep iter
   match o with
-  | none => ok (done current)
+  | none => ok (done buf)
   | some step =>
-    let pos ← start_pos + step
     let (s, index_mut_back) ←
       core.array.Array.index_mut (core.ops.index.IndexMutSlice
-        (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) a
-        { start := 24#usize, «end» := 28#usize }
-    let a1 ← lift (core.num.U32.to_be_bytes pos)
-    let s1 ← lift (Array.to_slice a1)
+        (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf
+        { start := 56#usize, «end» := 60#usize }
+    let i ← start_pos + step
+    let a ← lift (core.num.U32.to_be_bytes i)
+    let s1 ← lift (Array.to_slice a)
     let s2 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s s1
-    let a2 := index_mut_back s2
-    let a3 ← hash.th seed a2 current
-    let current1 ← hash.pad16 a3
-    ok (cont (iter1, current1, a2))
+    let buf1 := index_mut_back s2
+    let s3 ← lift (Array.to_slice buf1)
+    let d ← hash.sha256_bytes s3
+    let i1 ← 64#usize + params.N
+    let (s4, index_mut_back1) ←
+      core.array.Array.index_mut (core.ops.index.IndexMutSlice
+        (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf1
+        { start := 64#usize, «end» := i1 }
+    let s5 ←
+      core.array.Array.index (core.ops.index.IndexSlice
+        (core.slice.index.SliceIndexRangeToUsizeSlice Std.U8)) d
+        { «end» := params.N }
+    let s6 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s4 s5
+    let buf2 := index_mut_back1 s6
+    ok (cont (iter1, buf2))
 
 /-- [sphincs_c10::hash::chain_hash]: loop 0:
     Source: 'sphincs-c10/src/hash.rs', lines 334:4-339:5
     Visibility: public -/
 @[rust_loop]
 def hash.chain_hash_loop
-  (iter : core.ops.range.Range Std.U32) (seed : Array Std.U8 32#usize)
-  (start_pos : Std.U32) (current : Array Std.U8 32#usize)
-  (a : Array Std.U8 32#usize) :
-  Result (Array Std.U8 32#usize)
+  (iter : core.ops.range.Range Std.U32) (start_pos : Std.U32)
+  (buf : Array Std.U8 96#usize) :
+  Result (Array Std.U8 96#usize)
   := do
   loop
-    (fun (iter1, current1, a1) => hash.chain_hash_loop.body seed start_pos
-      iter1 current1 a1)
-    (iter, current, a)
+    (fun (iter1, buf1) => hash.chain_hash_loop.body start_pos iter1 buf1)
+    (iter, buf)
 
 /-- [sphincs_c10::hash::chain_hash]:
     Source: 'sphincs-c10/src/hash.rs', lines 324:0-341:1
@@ -291,11 +344,10 @@ def hash.chain_hash
   (val : Array Std.U8 16#usize) (start_pos : Std.U32) (steps : Std.U32) :
   Result (Array Std.U8 16#usize)
   := do
-  let current ← hash.pad16 val
-  let current1 ←
-    hash.chain_hash_loop { start := 0#u32, «end» := steps } seed start_pos
-      current adrs
-  hash.truncate current1
+  let buf ← hash.chain_buf seed adrs val
+  let buf1 ←
+    hash.chain_hash_loop { start := 0#u32, «end» := steps } start_pos buf
+  hash.chain_value buf1
 
 /-- [sphincs_c10::hash::wots_digest]:
     Source: 'sphincs-c10/src/hash.rs', lines 352:0-367:1
