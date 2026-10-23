@@ -73,14 +73,14 @@ pub(crate) fn find_count(
     let mut count = 0u32;
     while count < 10_000_000 {
         let d = wots_digest(seed, &wots_adrs, msg_hash, count);
-        let digits = extract_digits(&d);
-        // Indexed form keeps the extracted sum explicit, as in pk_from_sig.
-        let mut sum: usize = 0;
-        for i in 0..L {
-            sum += digits[i] as usize;
-        }
-        if sum == TARGET_SUM {
-            return (count, d, digits);
+        // Rejected trials (all but the last) need only the digit sum, not
+        // the digits: `digit_sum(d)` is `Σ extract_digits(d)` (pinned by
+        // `digit_sum_matches_extracted_digits`), and the digits are
+        // extracted once, for the accepted count, so the returned count,
+        // digest and digits are unchanged. (Line count kept: the extraction
+        // annotates every function below with its source lines.)
+        if digit_sum(&d) == TARGET_SUM {
+            return (count, d, extract_digits(&d));
         }
         if count % GRIND_REPORT_EVERY == GRIND_REPORT_EVERY - 1 {
             crate::hypertree::report(progress, pct);
@@ -229,4 +229,58 @@ mod extract_digits_tests {
             }
         }
     }
+
+    /// `find_count` accepts on `digit_sum`; it must equal the sum of the
+    /// extracted digits for every digest. Each digit is a weighted sum of its
+    /// bits with no carry, and so is `digit_sum` (field values stay below
+    /// 64), so agreement on every single-bit digest, all-zero and all-ones
+    /// covers the bit weights; the random digests cover the combination.
+    #[test]
+    fn digit_sum_matches_extracted_digits() {
+        fn check(d: &[u8; 32]) {
+            let want: usize = extract_digits(d).iter().map(|&x| x as usize).sum();
+            assert_eq!(digit_sum(d), want, "digest {d:02x?}");
+        }
+        check(&[0u8; 32]);
+        check(&[0xFFu8; 32]);
+        for bit in 0..256 {
+            let mut d = [0u8; 32];
+            d[31 - bit / 8] = 1 << (bit % 8);
+            check(&d);
+        }
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..20_000 {
+            let mut d = [0u8; 32];
+            for b in d.iter_mut() {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                *b = x as u8;
+            }
+            check(&d);
+        }
+    }
+}
+
+/// `Σ extract_digits(digest)`, without building the digit array. Eight 3-bit
+/// digits are exactly three bytes, so the 129 digit bits are five 24-bit
+/// groups plus the top three digits; a group's eight digits are summed
+/// field-parallel (pairs side by side in 6-bit fields, at most 14 then 28,
+/// so no carry crosses a field). Public data only: the grind digest of public
+/// inputs, whose accepted count is in the signature.
+pub(crate) fn digit_sum(digest: &[u8; 32]) -> usize {
+    let mut sum: usize = 0;
+    for g in 0..5 {
+        // Bits 24g..24g+23 of the big-endian integer: bytes 31-3g (low)
+        // down to 29-3g (high).
+        let lo = 31 - 3 * g;
+        let v = digest[lo] as u32 | (digest[lo - 1] as u32) << 8 | (digest[lo - 2] as u32) << 16;
+        let s1 = (v & 0o07070707) + ((v >> 3) & 0o07070707);
+        let s2 = s1 + (s1 >> 12);
+        sum += ((s2 & 0o77) + ((s2 >> 6) & 0o77)) as usize;
+    }
+    // Digits 40..=42: bits 120..=128, all of byte 16 and bit 0 of byte 15.
+    let v = digest[16] as u32 | ((digest[15] & 1) as u32) << 8;
+    sum += ((v & 7) + ((v >> 3) & 7) + ((v >> 6) & 7)) as usize;
+    sum
 }
