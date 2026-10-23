@@ -41,6 +41,14 @@ hw-sha256-crosscheck = []
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []
+# Inline `dsb`, and drop the barriers between two writes to the HASH
+# peripheral itself (CR before DIN, NBLW before DCAL), which Device-memory
+# ordering already covers. Secure image only, as `unrolled-io`.
+inline-barriers = []
+# `pqsigner_sha256_oneshot`: init, one update and final in a single call,
+# for `sphincs-c10`'s `sha256_bytes` (its `hw-sha256-oneshot`). Secure image
+# only, as `unrolled-io`.
+oneshot = []
 
 [dependencies.cortex-m-semihosting]
 workspace = true

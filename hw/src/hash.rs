@@ -21,6 +21,9 @@
 //!   pqsigner_sha256_update(ptr, len)
 //!   pqsigner_sha256_final(out_ptr)
 //!
+//! and, in the secure image (`oneshot`), `pqsigner_sha256_oneshot(ptr, len,
+//! out_ptr)`: the three in one call, for a contiguous buffer.
+//!
 //! The underlying implementation is single-threaded and uses static state
 //! (the peripheral itself, plus a 4-byte merge buffer for non-word-aligned
 //! streaming updates). Signing is called from one thread only; the secure
@@ -339,6 +342,8 @@ pub const DEV_INSTRUMENTED: bool = cfg!(any(feature = "hash-probe", feature = "h
 /// fail to link there; the others would link and ship.
 pub const SECURE_IMAGE_ONLY: bool = cfg!(any(
     feature = "unrolled-io",
+    feature = "inline-barriers",
+    feature = "oneshot",
     feature = "tick-hook",
     feature = "hash-probe",
     feature = "hw-sha256-crosscheck"
@@ -592,6 +597,25 @@ fn write_word(w: u32) {
     REG.din.write(w);
 }
 
+/// `dsb`, with cortex-m's fences. The secure image inlines it
+/// (`inline-barriers`): without cortex-m's `inline-asm` feature
+/// `cortex_m::asm::dsb()` is a call to an out-of-line stub, and turning that
+/// workspace feature on would change the FSBL.
+#[inline(always)]
+fn dsb() {
+    #[cfg(not(feature = "inline-barriers"))]
+    cortex_m::asm::dsb();
+    #[cfg(feature = "inline-barriers")]
+    {
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        // SAFETY: `dsb sy` only waits for earlier memory accesses to complete;
+        // it reads or writes no register or memory the compiler tracks, which
+        // is what cortex-m's own inline form declares.
+        unsafe { core::arch::asm!("dsb sy", options(nomem, nostack, preserves_flags)) };
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Extern symbols — called from `sphincs-c10`.
 // ---------------------------------------------------------------------------
@@ -607,6 +631,16 @@ fn write_word(w: u32) {
 /// because category-5 `static mut STATE` is shared across them.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_init() {
+    // SAFETY: this symbol's own FFI contract, forwarded unchanged.
+    unsafe { init_body() }
+}
+
+/// `pqsigner_sha256_init`'s body, inlined there and into the one-shot.
+///
+/// # Safety
+/// As `pqsigner_sha256_init`.
+#[inline(always)]
+unsafe fn init_body() {
     #[cfg(feature = "hash-probe")]
     probe::init_entered();
     wait_ready();
@@ -625,13 +659,17 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
     // FIFO counters stay in a state where the next block can't be pushed.
     // RSTR wipes the whole peripheral state back to cold-boot values.
     REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);
-    cortex_m::asm::dsb();
+    dsb();
     REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);
-    cortex_m::asm::dsb();
+    dsb();
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::RESET);
     // HASH mode (MODE=0), 8-bit datatype, SHA-256, INIT=1.
     REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+    // The DIN writes that follow go to the same peripheral, so Device-memory
+    // ordering already puts them after this one: the secure image drops the
+    // barrier (`inline-barriers`). The FSBL keeps it, and its bytes.
+    #[cfg(not(feature = "inline-barriers"))]
     cortex_m::asm::dsb();
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::START);
@@ -650,6 +688,16 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
 /// first; no other SHA-256 stream may be interleaved.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
+    // SAFETY: this symbol's own FFI contract, forwarded unchanged.
+    unsafe { update_body(ptr, len) }
+}
+
+/// `pqsigner_sha256_update`'s body, inlined there and into the one-shot.
+///
+/// # Safety
+/// As `pqsigner_sha256_update`.
+#[inline(always)]
+unsafe fn update_body(ptr: *const u8, len: usize) {
     #[cfg(feature = "hash-probe")]
     let t0 = probe::now();
     // SAFETY: category 3 — materialising the FFI `(ptr, len)` pair as
@@ -728,6 +776,16 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
 /// may be interleaved.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
+    // SAFETY: this symbol's own FFI contract, forwarded unchanged.
+    unsafe { final_body(out) }
+}
+
+/// `pqsigner_sha256_final`'s body, inlined there and into the one-shot.
+///
+/// # Safety
+/// As `pqsigner_sha256_final`.
+#[inline(always)]
+unsafe fn final_body(out: *mut u8) {
     #[cfg(feature = "hash-probe")]
     probe::final_entered();
     // SAFETY: category 5 — exclusive mutable borrow of `static mut
@@ -748,6 +806,12 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     // THEN set DCAL in a separate write. Some combinations of the U5 HASH
     // IP reportedly latch NBLW incorrectly if DCAL is set in the same cycle.
     REG.str_.write(remaining_bits);
+    // Both writes go to the same register, so they reach it in order without
+    // a barrier: the secure image drops it (`inline-barriers`), the FSBL
+    // keeps it. Nonzero NBLW without the barrier is exercised by both boot
+    // self-tests ("abc" and the 131-byte vector end on NBLW = 24) and, in
+    // every sign, by `grind_r`'s 119-byte PRF (NBLW = 24, ~2^11 a pass).
+    #[cfg(not(feature = "inline-barriers"))]
     cortex_m::asm::dsb();
     REG.str_.write(remaining_bits | STR_DCAL);
     #[cfg(feature = "hash-probe")]
@@ -835,6 +899,28 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     // after this point.
     unsafe {
         pqsigner_hash_tick();
+    }
+}
+
+/// SHA-256 of one contiguous buffer: `init`, a single `update` and `final`
+/// in one call, for `sphincs-c10`'s `sha256_bytes` (`oneshot`, secure image
+/// only; the FSBL keeps the three-call API). The three bodies are inlined
+/// here, so the engine sequence, the probe stages, the crosscheck and the UI
+/// tick are the streamed digest's; only the calls between them go.
+///
+/// # Safety
+/// Category 3 — FFI symbol. `(ptr, len)` names a single valid, live byte
+/// slice and `out` 32 bytes of valid, writable memory, as for `update` and
+/// `final`; no other SHA-256 stream may be in flight.
+#[cfg(feature = "oneshot")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8) {
+    // SAFETY: this symbol's contract is the three bodies' contracts joined,
+    // in their order, with nothing else in flight.
+    unsafe {
+        init_body();
+        update_body(ptr, len);
+        final_body(out);
     }
 }
 

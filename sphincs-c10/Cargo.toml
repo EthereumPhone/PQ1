@@ -15,6 +15,10 @@ zeroize = { workspace = true, features = ["zeroize_derive"] }
 # `secure/src/hw/hash.rs`. Without this feature the crate uses software
 # `sha2::Sha256`, which is what host tests need.
 hw-sha256 = []
+# `sha256_bytes` (a contiguous buffer) through one extern call,
+# `pqsigner_sha256_oneshot`, instead of the three. Only the secure image has
+# the symbol (`pqsigner-hw/oneshot`); the FSBL keeps the three-call path.
+hw-sha256-oneshot = ["hw-sha256"]
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs

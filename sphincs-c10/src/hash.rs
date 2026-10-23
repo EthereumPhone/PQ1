@@ -194,9 +194,9 @@ fn u64_to_b32(v: u64) -> [u8; 32] {
 /// of the software/hardware backend to that specification remains open.
 /// Streaming callers can use `sha256_parts` without a concatenation buffer.
 pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(data);
-    h.finalize().into()
+    // One backend call in the secure image (`hw-sha256-oneshot`); defined
+    // with the other late helpers so that no extracted `Source:` line moves.
+    sha256_oneshot(data)
 }
 
 /// Streaming SHA-256 over ordered byte slices, without a concatenation buffer.
@@ -435,4 +435,32 @@ fn chain_value(buf: &[u8; 96]) -> [u8; N] {
     let mut out = [0u8; N];
     out.copy_from_slice(&buf[64..64 + N]);
     out
+}
+
+/// `sha256_bytes`'s backend in the secure image (`hw-sha256-oneshot`): the
+/// buffer goes to the driver in one call, `pqsigner_sha256_oneshot`, instead
+/// of `init` / `update` / `final`. Kept at the end of the file, like
+/// `chain_buf`, so that no extracted function above moves.
+#[cfg(feature = "hw-sha256-oneshot")]
+#[inline(always)]
+fn sha256_oneshot(data: &[u8]) -> [u8; 32] {
+    extern "C" {
+        fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8);
+    }
+    let mut out = [0u8; 32];
+    // SAFETY: `data` is valid for `data.len()` bytes of reads and `out` for
+    // 32 bytes of writes for the whole call; the hook reads only the former
+    // and writes exactly the digest into the latter.
+    unsafe { pqsigner_sha256_oneshot(data.as_ptr(), data.len(), out.as_mut_ptr()) };
+    out
+}
+
+/// `sha256_bytes`'s backend everywhere else (software, and the FSBL's
+/// hardware path): `init`, one `update`, `final`.
+#[cfg(not(feature = "hw-sha256-oneshot"))]
+#[inline(always)]
+fn sha256_oneshot(data: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(data);
+    h.finalize().into()
 }

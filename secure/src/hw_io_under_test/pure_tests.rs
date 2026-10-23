@@ -68,6 +68,11 @@ const FSBL_HASH_SRC: &str = include_str!("../../../fsbl/src/hash.rs");
 const FSBL_MAIN_SRC_HW: &str = include_str!("../../../fsbl/src/main.rs");
 const HW_CARGO_SRC: &str = include_str!("../../../hw/Cargo.toml");
 const FSBL_CARGO_SRC: &str = include_str!("../../../fsbl/Cargo.toml");
+const C10_CARGO_SRC: &str = include_str!("../../../sphincs-c10/Cargo.toml");
+const C10_HASH_SRC: &str = include_str!("../../../sphincs-c10/src/hash.rs");
+/// The secure `hw-sha256` line: the one place the driver's secure-image
+/// features and `sphincs-c10`'s one-call digest are raised.
+const HW_SHA256_FEATURE_LINE: &str = "hw-sha256 = [\"sphincs-c10/hw-sha256\", \"sphincs-c10/hw-sha256-oneshot\", \"pqsigner-hw/unrolled-io\", \"pqsigner-hw/inline-barriers\", \"pqsigner-hw/oneshot\"]";
 const NSC_MOD_SRC_HW: &str = include_str!("../nsc/mod.rs");
 const MAKEFILE_SRC_HW: &str = include_str!("../../../Makefile");
 
@@ -2931,9 +2936,9 @@ fn negative_hash_crosscheck_is_dev_only_and_checks_before_release() {
     // The check reads the digest the final just wrote — both read-outs come
     // first — and runs before DCIS is cleared and before the UI tick.
     let fin = HW_HASH_SRC
-        .split("pub unsafe extern \"C\" fn pqsigner_sha256_final(out: *mut u8) {")
+        .split("unsafe fn final_body(out: *mut u8) {")
         .nth(1)
-        .expect("pqsigner_sha256_final");
+        .expect("final_body");
     let fin = &fin[..fin.find("\n}\n").expect("end of final")];
     let check = fin.find("xcheck_digest(out);").expect("check in final");
     assert!(fin.find("hr_out!(0 1 2 3 4 5 6 7);").expect("unrolled read-out") < check);
@@ -2964,20 +2969,20 @@ fn negative_hash_unrolled_io_is_secure_only_and_paired() {
         .lines()
         .filter(|l| !l.trim_start().starts_with('#') && l.contains("unrolled-io"))
         .collect();
-    assert_eq!(raisers, ["hw-sha256 = [\"sphincs-c10/hw-sha256\", \"pqsigner-hw/unrolled-io\"]"]);
+    assert_eq!(raisers, [HW_SHA256_FEATURE_LINE]);
     let on = HW_HASH_SRC.matches("#[cfg(feature = \"unrolled-io\")]\n").count();
     assert_eq!(HW_HASH_SRC.matches("    #[cfg(feature = \"unrolled-io\")]\n    {\n").count(), 2);
     assert_eq!(HW_HASH_SRC.matches("    #[cfg(not(feature = \"unrolled-io\"))]\n").count(), 2);
     assert_eq!(on, 4, "two unrolled blocks, the self-test call, the self-test fn");
     let upd = HW_HASH_SRC
-        .split("pub unsafe extern \"C\" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {")
+        .split("unsafe fn update_body(ptr: *const u8, len: usize) {")
         .nth(1)
         .expect("update");
     let upd = &upd[..upd.find("\n}\n").expect("end of update")];
     assert!(upd.contains("    #[cfg(not(feature = \"unrolled-io\"))]\n    while data.len() - i >= 4 {"));
     assert!(upd.contains("        i = data.len() - words.remainder().len();\n    }\n"));
     let fin = HW_HASH_SRC
-        .split("pub unsafe extern \"C\" fn pqsigner_sha256_final(out: *mut u8) {")
+        .split("unsafe fn final_body(out: *mut u8) {")
         .nth(1)
         .expect("final");
     assert!(fin.contains("    #[cfg(not(feature = \"unrolled-io\"))]\n    for i in 0..8 {"));
@@ -3026,6 +3031,85 @@ fn negative_hash_unrolled_io_is_secure_only_and_paired() {
 }
 
 #[test]
+fn negative_hash_barriers_and_oneshot_are_secure_only() {
+    // 2026-10-23. ASSUMPTION ATTACKED: the inlined barriers or the one-call
+    // digest reach the FSBL, whose bytes carry the silicon boot proof; a
+    // barrier around the RCC reset pulse goes with the same-peripheral ones;
+    // the one-shot is not the streamed digest's exact sequence (a probe
+    // stage, the crosscheck or the UI tick missing on the hot path); or
+    // `sphincs-c10` calls the one-shot hook in a build whose driver lacks it.
+    fn raised(needle: &str) -> std::vec::Vec<&'static str> {
+        SECURE_CARGO_TOML_SRC
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#') && l.contains(needle))
+            .collect()
+    }
+    for f in ["inline-barriers", "oneshot"] {
+        assert!(HW_CARGO_SRC.contains(&format!("\n{f} = []\n")), "{f} declared");
+        assert!(!FSBL_CARGO_SRC.contains(f), "{f} named by the FSBL");
+        assert_eq!(raised(&format!("\"pqsigner-hw/{f}\"")), [HW_SHA256_FEATURE_LINE]);
+    }
+    assert!(C10_CARGO_SRC.contains("\nhw-sha256-oneshot = [\"hw-sha256\"]\n"));
+    assert_eq!(raised("\"sphincs-c10/hw-sha256-oneshot\""), [HW_SHA256_FEATURE_LINE]);
+    fn body(start: &str) -> &'static str {
+        let b = HW_HASH_SRC.split(start).nth(1).expect(start);
+        &b[..b.find("\n}\n").expect("end of body")]
+    }
+    // The reset pulse keeps both barriers (inlined in the secure image);
+    // exactly the two same-peripheral ones are compiled out there, and the
+    // boot-time `init_clock` keeps cortex-m's.
+    let gated = "    #[cfg(not(feature = \"inline-barriers\"))]\n    cortex_m::asm::dsb();\n";
+    let init = body("unsafe fn init_body() {");
+    assert!(init.contains(
+        "    REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);\n    dsb();\n    REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);\n    dsb();\n"
+    ));
+    let cr = init.find("REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);").expect("CR write");
+    assert!(init[cr..].contains(gated), "CR before DIN");
+    let fin = body("unsafe fn final_body(out: *mut u8) {");
+    let nblw = fin.find("REG.str_.write(remaining_bits);\n").expect("NBLW write");
+    let dcal = fin.find("REG.str_.write(remaining_bits | STR_DCAL);").expect("DCAL write");
+    let g = fin.find(gated).expect("NBLW before DCAL");
+    assert!(nblw < g && g < dcal);
+    assert_eq!(HW_HASH_SRC.matches(gated).count(), 3, "CR, NBLW and the helper's own fallback");
+    assert_eq!(body("pub unsafe fn init_clock() {").matches("    cortex_m::asm::dsb();\n").count(), 3);
+    assert!(HW_HASH_SRC.contains(
+        "fn dsb() {\n    #[cfg(not(feature = \"inline-barriers\"))]\n    cortex_m::asm::dsb();\n    #[cfg(feature = \"inline-barriers\")]\n    {\n"
+    ));
+    assert_eq!(HW_HASH_SRC.matches("core::arch::asm!(").count(), 1);
+    assert!(HW_HASH_SRC.contains("core::arch::asm!(\"dsb sy\", options(nomem, nostack, preserves_flags))"));
+    // Each streaming symbol is its body and nothing else, and the one-shot is
+    // the three bodies in order and nothing else, so the paths cannot drift.
+    fn code(b: &str) -> std::vec::Vec<std::string::String> {
+        b.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("//")).map(str::to_owned).collect()
+    }
+    assert_eq!(code(body("pub unsafe extern \"C\" fn pqsigner_sha256_init() {")), ["unsafe { init_body() }"]);
+    assert_eq!(
+        code(body("pub unsafe extern \"C\" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {")),
+        ["unsafe { update_body(ptr, len) }"]
+    );
+    assert_eq!(code(body("pub unsafe extern \"C\" fn pqsigner_sha256_final(out: *mut u8) {")), ["unsafe { final_body(out) }"]);
+    assert_eq!(
+        code(body("pub unsafe extern \"C\" fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8) {")),
+        ["unsafe {", "init_body();", "update_body(ptr, len);", "final_body(out);", "}"]
+    );
+    assert!(HW_HASH_SRC.contains("#[cfg(feature = \"oneshot\")]\n#[no_mangle]\npub unsafe extern \"C\" fn pqsigner_sha256_oneshot("));
+    for b in ["init_body() {", "update_body(ptr: *const u8, len: usize) {", "final_body(out: *mut u8) {"] {
+        assert!(HW_HASH_SRC.contains(&format!("#[inline(always)]\nunsafe fn {b}")), "{b} inlined");
+    }
+    // `sphincs-c10`: `sha256_bytes` is the backend call; the hook is declared
+    // only under the feature, and every other build streams as before.
+    let sb = C10_HASH_SRC.split("pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {\n").nth(1).expect("sha256_bytes");
+    assert_eq!(code(&sb[..sb.find("\n}\n").expect("end")]), ["sha256_oneshot(data)"]);
+    assert_eq!(C10_HASH_SRC.matches("fn pqsigner_sha256_oneshot(").count(), 1);
+    assert!(C10_HASH_SRC.contains(
+        "#[cfg(feature = \"hw-sha256-oneshot\")]\n#[inline(always)]\nfn sha256_oneshot(data: &[u8]) -> [u8; 32] {\n    extern \"C\" {\n        fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8);\n    }\n"
+    ));
+    assert!(C10_HASH_SRC.contains(
+        "#[cfg(not(feature = \"hw-sha256-oneshot\"))]\n#[inline(always)]\nfn sha256_oneshot(data: &[u8]) -> [u8; 32] {\n    let mut h = Sha256::new();\n    h.update(data);\n    h.finalize().into()\n}\n"
+    ));
+}
+
+#[test]
 fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     // 2026-10-21. ASSUMPTION ATTACKED: the hash driver's UI hook reaches the
     // FSBL (the measured trust root, which shares `pqsigner-hw`); it runs
@@ -3046,9 +3130,9 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     // DCIS cleared and the merge state reset before it.
     assert_eq!(HW_HASH_SRC.matches("\n        pqsigner_hash_tick();\n").count(), 1);
     let fin = HW_HASH_SRC
-        .split("pub unsafe extern \"C\" fn pqsigner_sha256_final(out: *mut u8) {")
+        .split("unsafe fn final_body(out: *mut u8) {")
         .nth(1)
-        .expect("pqsigner_sha256_final");
+        .expect("final_body");
     let fin = &fin[..fin.find("\n}\n").expect("end of final")];
     let call = fin.find("pqsigner_hash_tick();").expect("the call is in final");
     assert!(fin.find("core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i * 4), 4);").expect("digest out") < call);
