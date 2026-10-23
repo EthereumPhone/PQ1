@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	d3f09e943f61b98014d1d54367a5776c
+split	5c8029a9542d3e69378794a983124990
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1699,3 +1699,15 @@ fork	9c2d21280c84d52c30b22111151f1135
 # checks and exact-input evidence audits are required for this integration.
 # Prior proof executions keep their original execution identities.
 # Combined split identity 73f8cfd8e5102e6904df9aa30a87fa5a -> d3f09e943f61b98014d1d54367a5776c.
+
+# 2026-10-23 HASH driver round 2 ("E", one-call digest): re-bind hash.rs only.
+# `sha256_bytes` (opaque in every extraction: `--opaque
+# sphincs_c10::hash::sha256_bytes`) now calls `sha256_oneshot`, defined after
+# chain_value at the end of the file: the secure image's
+# `hw-sha256-oneshot` passes the buffer to the driver in one extern call,
+# every other build keeps the init/update/final stream. The edit is
+# line-neutral: hash.rs lines 1-196 and 200-438 are byte-identical, so every
+# hash.rs line the .ec files cite (322-328, 344-365) is unchanged. No
+# extracted function, Lean file, proof, statement, assumption or control
+# changes; the extraction regen loop re-derives every target unchanged.
+# Combined split identity d3f09e943f61b98014d1d54367a5776c -> 5c8029a9542d3e69378794a983124990.
