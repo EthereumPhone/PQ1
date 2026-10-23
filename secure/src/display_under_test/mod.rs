@@ -155,6 +155,10 @@ pub mod erc7730 {
 #[path = "../tx/display/erc8213.rs"]
 pub mod erc8213;
 
+#[path = "../tx/display/permit2.rs"]
+#[allow(dead_code)]
+pub mod permit2;
+
 // `safe_display` IS re-mounted (2026-06-30). Its absolute `crate::tx::display::
 // {Pages,primitives}` + `crate::tx::eip712::cowswap_display::*` paths now
 // resolve via the `#[cfg(test)] pub(crate) use … as display` alias in
@@ -217,6 +221,10 @@ pub mod erc7730_screens;
 #[path = "../tx/display/offchain_screens.rs"]
 #[allow(dead_code)]
 pub mod offchain_screens;
+
+#[path = "../tx/display/permit2_screens.rs"]
+#[allow(dead_code)]
+pub mod permit2_screens;
 
 #[path = "../tx/display/batch_screens.rs"]
 #[allow(dead_code)]

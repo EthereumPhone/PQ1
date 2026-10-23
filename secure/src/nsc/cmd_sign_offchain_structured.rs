@@ -1,6 +1,6 @@
-//! `CMD_SIGN_OFFCHAIN` kinds 4 (`OFFCHAIN_KIND_SAFE_TX`) and 5
-//! (`OFFCHAIN_KIND_COW_ORDER`): clear-signed EIP-712 typed data whose
-//! meaning the firmware already decodes on the UserOp path.
+//! `CMD_SIGN_OFFCHAIN` kinds 4 (`OFFCHAIN_KIND_SAFE_TX`), 5
+//! (`OFFCHAIN_KIND_COW_ORDER`) and 6 (`OFFCHAIN_KIND_PERMIT2`): clear-signed
+//! EIP-712 typed data the firmware decodes natively.
 //!
 //!   * **SafeTx** — this wallet co-signs a Safe transaction off-chain as an
 //!     owner. The payload carries the on-chain `approveHash` trailer encoding
@@ -12,6 +12,11 @@
 //!     scheme (owner = this wallet). The payload is the on-chain CoW order
 //!     trailer encoding; the device recomputes the order digest under the
 //!     GPv2Settlement domain and renders the order.
+//!   * **Permit2 permit** — this wallet signs a Uniswap Permit2 permit as its
+//!     owner (Permit2 calls the wallet's ERC-1271). The payload is the packed
+//!     permit plus per-token ERC-20 bundles and the spender's name bundle; the
+//!     device recomputes the permit digest from pinned constants (domain,
+//!     `PERMIT2_ADDRESS`, type hashes) and renders it.
 //!
 //! **The signed value is unchanged from RAW32.** Both sign
 //! `replay_safe_hash(chain, wallet, H)` where `H` is the EIP-712 digest the
@@ -25,23 +30,25 @@
 //! of `cmd_sign_offchain::run` — the page-123 gap/cap gate before, the
 //! confirmation-authority gate, FI-hardened C10 sign, verify-before-release
 //! and the durable counter bump after — is shared with every other kind.
-//! Both kinds refuse an undeployed wallet before this runs (neither Safe's
-//! `checkSignatures` nor GPv2Settlement unwraps ERC-6492).
+//! All three kinds refuse an undeployed wallet before this runs (neither
+//! Safe's `checkSignatures`, GPv2Settlement nor Permit2 unwraps ERC-6492).
 
 use sphincs_tz_shared::{
-    NscStatus, MAX_SLOT_USES, OFFCHAIN_KIND_COW_ORDER, OFFCHAIN_KIND_SAFE_TX,
-    OFFCHAIN_MAX_NAME_BUNDLES, OFFCHAIN_NAME_BUNDLE_MAX_LEN,
+    NscStatus, MAX_SLOT_USES, OFFCHAIN_KIND_COW_ORDER, OFFCHAIN_KIND_PERMIT2, OFFCHAIN_KIND_SAFE_TX,
+    OFFCHAIN_MAX_NAME_BUNDLES, OFFCHAIN_NAME_BUNDLE_MAX_LEN, PERMIT2_MAX_NAME_BUNDLES,
 };
 use subtle::ConstantTimeEq;
 
 use crate::tx::display::erc8213::Kind as FpKind;
 use crate::tx::display::{OffchainConfirmContext, OffchainConfirmReceipt, Pages};
 use crate::tx::eip712::cowswap::VerifiedCowswapV3;
+use crate::tx::eip712::permit2::VerifiedPermit2;
 use crate::tx::eip712::safe::VerifiedSafeV1;
 
 // The proto mirrors of the name-bundle limits (proto has no dependencies).
 const _: () = assert!(OFFCHAIN_NAME_BUNDLE_MAX_LEN == crate::names::MAX_NAME_BUNDLE_LEN);
 const _: () = assert!(OFFCHAIN_MAX_NAME_BUNDLES == crate::names::MAX_NAME_BUNDLES);
+const _: () = assert!(PERMIT2_MAX_NAME_BUNDLES <= crate::names::MAX_NAME_BUNDLES);
 
 /// What a confirmed structured request hands back to the common half.
 pub(super) struct Confirmed {
@@ -100,6 +107,14 @@ fn cow_pair_equal(a: &(VerifiedCowswapV3, [u8; 32]), b: &(VerifiedCowswapV3, [u8
         && bool::from(a.1.ct_eq(&b.1))
 }
 
+fn permit2_pair_equal(a: &(VerifiedPermit2, [u8; 32]), b: &(VerifiedPermit2, [u8; 32])) -> bool {
+    a.0.packed_len == b.0.packed_len
+        && bool::from(a.0.packed().ct_eq(b.0.packed()))
+        && a.0.core == b.0.core
+        && a.0.legs.iter().zip(b.0.legs.iter()).all(|(x, y)| x.is_decoded() == y.is_decoded())
+        && bool::from(a.1.ct_eq(&b.1))
+}
+
 /// Append the handler-owned suffix (ERC-8213 fingerprint of `H`, then the
 /// off-chain context) and prove each insertion. Returns the two insertion
 /// indices for the final-set proofs.
@@ -155,7 +170,7 @@ fn suffix_final_proofs(
     Ok(())
 }
 
-/// The kind-specific half of a kind-4 / kind-5 request. On `Ok` the user
+/// The kind-specific half of a kind-4 / 5 / 6 request. On `Ok` the user
 /// confirmed and `receipt` holds the one confirmation for exactly the
 /// returned `(wallet_addr, hash_to_sign)` plus the caller's counters; on
 /// `Err` the `NscStatus` to return (nothing was signed or written).
@@ -363,8 +378,124 @@ pub(super) unsafe fn confirm(
             let px_owns_ending = run_confirm(px, &pages)?;
             finish(receipt, &ctx, kind, payload, chain_id, &digest, &hash_to_sign, wallet_addr, px_owns_ending)
         }
+        OFFCHAIN_KIND_PERMIT2 => confirm_permit2(
+            payload,
+            chain_id,
+            account_index,
+            slot_index,
+            account_deployed,
+            new_count,
+            last_userop,
+            entropy,
+            px_scratch,
+            receipt,
+        ),
         _ => Err(NscStatus::InternalError as u32),
     }
+}
+
+/// The kind-6 (Permit2) half, in its own frame so the two verified copies,
+/// the legs and the pages do not enlarge the other kinds' stack (the secure
+/// stack is limit-guarded, CLAUDE.md "Code Conventions").
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn confirm_permit2(
+    payload: &[u8],
+    chain_id: u64,
+    account_index: u32,
+    slot_index: u32,
+    account_deployed: bool,
+    new_count: u64,
+    last_userop: u64,
+    entropy: &[u8; 32],
+    px_scratch: &mut [u8],
+    receipt: &mut OffchainConfirmReceipt,
+) -> Result<Confirmed, u32> {
+    #[cfg(not(feature = "ui-px"))]
+    let _ = &px_scratch;
+    let kind = OFFCHAIN_KIND_PERMIT2;
+    let refuse = |reason: &'static str| -> u32 {
+        crate::ui::show_status("Sign refused", reason);
+        NscStatus::InternalError as u32
+    };
+    let frame = match pqsigner_aa::offchain_header::parse_permit2_frame(payload) {
+        Ok(f) => f,
+        Err(e) => {
+            crate::ui::show_status("Permit2 sign", e.status_str());
+            return Err(NscStatus::InvalidPointer as u32);
+        }
+    };
+    // ── Double verify: two independent runs, every fact equal ──
+    let a = crate::tx::eip712::permit2::verify_offchain_permit2(frame.core, &frame.erc20, chain_id);
+    crate::fi::wait_random();
+    let b = crate::tx::eip712::permit2::verify_offchain_permit2(
+        core::hint::black_box(frame.core),
+        core::hint::black_box(&frame.erc20),
+        core::hint::black_box(chain_id),
+    );
+    let (v, digest) = match (a, b) {
+        (Ok(a), Ok(b)) if gate(permit2_pair_equal(&a, &b)) => a,
+        (Err(reason), _) | (_, Err(reason)) => {
+            crate::ui::show_status("Permit2 sign", reason);
+            return Err(NscStatus::InvalidPointer as u32);
+        }
+        _ => {
+            crate::ui::show_status("Permit2 sign", "permit invalid");
+            return Err(NscStatus::InvalidPointer as u32);
+        }
+    };
+    // Every signed amount must render exactly; refuse rather than show a
+    // lossy one.
+    if !gate(crate::tx::display::permit2_amounts_are_exactly_renderable(&v)) {
+        return Err(refuse("permit2 amount"));
+    }
+    // The spender's name: Merkle-proven, and it must name THIS spender (the
+    // resolver matches by chain + address); anything else shows the bare
+    // address.
+    let mut resolver = crate::names::NameResolver::new();
+    if !frame.name.is_empty() {
+        if let Some(m) = crate::names::verify_name_bundle(frame.name) {
+            resolver.push(m);
+        }
+    }
+    let wallet_addr = wallet_address(account_index, entropy);
+    // ── The signed value: RAW32's nesting of the recomputed H ──
+    let hash_to_sign = crate::aa::eip1271::replay_safe_hash(chain_id, &wallet_addr, &digest);
+    let ctx = OffchainConfirmContext::new(
+        kind,
+        chain_id,
+        account_index,
+        slot_index,
+        wallet_addr,
+        account_deployed,
+        new_count,
+        last_userop,
+        MAX_SLOT_USES,
+        hash_to_sign,
+    );
+    // ── Render + suffix + confirm ──
+    let Ok(mut pages) = crate::tx::display::render_permit2_offchain_pages(&v, &wallet_addr, &resolver) else {
+        return Err(refuse("render refused"));
+    };
+    let fp = FpKind::Eip712Final(digest);
+    let (fp_before, ctx_before) = append_suffix(&mut pages, fp, &ctx).map_err(refuse)?;
+    suffix_final_proofs(&pages, fp, fp_before, &ctx, ctx_before).map_err(refuse)?;
+    #[cfg(feature = "ui-px")]
+    let px = px_route(
+        px_scratch,
+        &pages,
+        crate::tx::display::px_lift::Body::Permit2Offchain {
+            v: &v,
+            wallet: &wallet_addr,
+            resolver: &resolver,
+        },
+        fp,
+        &ctx,
+    );
+    #[cfg(not(feature = "ui-px"))]
+    let px: PxOutcome = None;
+    let px_owns_ending = run_confirm(px, &pages)?;
+    finish(receipt, &ctx, kind, payload, chain_id, &digest, &hash_to_sign, wallet_addr, px_owns_ending)
 }
 
 /// Post-confirm FI: an independent second parse + verify of the snapshot

@@ -168,13 +168,15 @@ pub fn parse_eip712_typed_frame(
 }
 
 // ---------------------------------------------------------------------------
-// Structured off-chain kinds: SafeTx (4) and CoW order (5)
+// Structured off-chain kinds: SafeTx (4), CoW order (5) and Permit2 (6)
 // ---------------------------------------------------------------------------
 
 use pqsigner_proto::{
     COW_ORDER_BUNDLE_MAX, COW_ORDER_TRAILER_MAX_LEN, EIP712_CANONICAL_LEN,
-    OFFCHAIN_MAX_NAME_BUNDLES, OFFCHAIN_NAME_BUNDLE_MAX_LEN, SAFE_V1_CANONICAL_LEN,
-    SAFE_V1_PAYLOAD_MAX,
+    OFFCHAIN_MAX_NAME_BUNDLES, OFFCHAIN_NAME_BUNDLE_MAX_LEN, PERMIT2_ALLOWANCE_HEAD_LEN,
+    PERMIT2_ENTRY_LEN, PERMIT2_MAX_NAME_BUNDLES, PERMIT2_MAX_TOKENS, PERMIT2_TRANSFER_HEAD_LEN,
+    PERMIT2_VARIANT_BATCH, PERMIT2_VARIANT_BATCH_TRANSFER, PERMIT2_VARIANT_SINGLE,
+    PERMIT2_VARIANT_TRANSFER, SAFE_V1_CANONICAL_LEN, SAFE_V1_PAYLOAD_MAX,
 };
 
 /// The sections of an `OFFCHAIN_KIND_SAFE_TX` payload. Every slice borrows
@@ -208,6 +210,22 @@ pub struct CowOrderFrame<'a> {
     pub buy: &'a [u8],
 }
 
+/// The sections of an `OFFCHAIN_KIND_PERMIT2` payload (layout in
+/// `pqsigner_proto::MAX_OFFCHAIN_PERMIT2_LEN`).
+#[derive(Debug)]
+pub struct Permit2Frame<'a> {
+    /// The packed permit (`head + count * 52` bytes); decoded by
+    /// `pqsigner_tx::permit2::decode_core`.
+    pub core: &'a [u8],
+    /// Token count announced by the core (the number of ERC-20 slots).
+    pub count: usize,
+    /// Per-token ERC-20 bundles; slot `i` belongs to token `i`, only the
+    /// first `count` are meaningful, empty = none.
+    pub erc20: [&'a [u8]; PERMIT2_MAX_TOKENS],
+    /// The spender's name bundle (empty = none).
+    pub name: &'a [u8],
+}
+
 /// Why a structured off-chain frame was refused. `status_str` is the
 /// ≤16-column banner the secure world shows.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -230,6 +248,10 @@ pub enum StructuredFrameError {
     BadLegLen,
     /// Bytes remain after the last section (hidden trailing data).
     TrailingBytes,
+    /// A Permit2 variant byte outside 0..=3.
+    BadPermit2Variant,
+    /// A Permit2 token count outside its variant's range.
+    BadPermit2Count,
 }
 
 impl StructuredFrameError {
@@ -246,6 +268,8 @@ impl StructuredFrameError {
             StructuredFrameError::BadNameLen => "bad name len",
             StructuredFrameError::BadLegLen => "bad leg len",
             StructuredFrameError::TrailingBytes => "struct trailing",
+            StructuredFrameError::BadPermit2Variant => "permit2 variant",
+            StructuredFrameError::BadPermit2Count => "permit2 count",
         }
     }
 }
@@ -365,6 +389,74 @@ pub fn parse_cow_order_frame(payload: &[u8]) -> Result<CowOrderFrame<'_>, Struct
     Ok(CowOrderFrame { canonical, sell, buy })
 }
 
+/// Strictly decode an `OFFCHAIN_KIND_PERMIT2` payload: the packed permit
+/// core, `count` length-prefixed ERC-20 slots and at most one non-empty
+/// name bundle, consumed EXACTLY. Panic/OOB-free for ANY input. The core's
+/// fields are decoded (and its policy refusals applied) by
+/// `pqsigner_tx::permit2::decode_core`; this checks only the framing.
+pub fn parse_permit2_frame(payload: &[u8]) -> Result<Permit2Frame<'_>, StructuredFrameError> {
+    let Some(&variant) = payload.first() else {
+        return Err(StructuredFrameError::Truncated);
+    };
+    let (head, batch) = match variant {
+        PERMIT2_VARIANT_SINGLE => (PERMIT2_ALLOWANCE_HEAD_LEN, false),
+        PERMIT2_VARIANT_BATCH => (PERMIT2_ALLOWANCE_HEAD_LEN, true),
+        PERMIT2_VARIANT_TRANSFER => (PERMIT2_TRANSFER_HEAD_LEN, false),
+        PERMIT2_VARIANT_BATCH_TRANSFER => (PERMIT2_TRANSFER_HEAD_LEN, true),
+        _ => return Err(StructuredFrameError::BadPermit2Variant),
+    };
+    if payload.len() < head {
+        return Err(StructuredFrameError::Truncated);
+    }
+    let count = payload[head - 1] as usize;
+    let count_ok = if batch { (1..=PERMIT2_MAX_TOKENS).contains(&count) } else { count == 1 };
+    if !count_ok {
+        return Err(StructuredFrameError::BadPermit2Count);
+    }
+    let core_len = head + count * PERMIT2_ENTRY_LEN;
+    if payload.len() < core_len {
+        return Err(StructuredFrameError::Truncated);
+    }
+    let mut p = core_len;
+    let mut erc20: [&[u8]; PERMIT2_MAX_TOKENS] = [&[]; PERMIT2_MAX_TOKENS];
+    // Index loops bounded by `count <= 6` and `names <= 1` so a bounded model
+    // checker unwinds them (see `parse_safe_tx_frame`).
+    let mut i = 0usize;
+    while i < count {
+        erc20[i] = take_u16_prefixed(payload, &mut p, COW_ORDER_BUNDLE_MAX, StructuredFrameError::BadLegLen)?;
+        i += 1;
+    }
+    if p >= payload.len() {
+        return Err(StructuredFrameError::Truncated);
+    }
+    let names_count = payload[p] as usize;
+    p += 1;
+    if names_count > PERMIT2_MAX_NAME_BUNDLES {
+        return Err(StructuredFrameError::BadNamesCount);
+    }
+    let mut name: &[u8] = &[];
+    if names_count == 1 {
+        name = take_u16_prefixed(
+            payload,
+            &mut p,
+            OFFCHAIN_NAME_BUNDLE_MAX_LEN,
+            StructuredFrameError::BadNameLen,
+        )?;
+        if name.is_empty() {
+            return Err(StructuredFrameError::BadNameLen);
+        }
+    }
+    if p != payload.len() {
+        return Err(StructuredFrameError::TrailingBytes);
+    }
+    Ok(Permit2Frame {
+        core: &payload[..core_len],
+        count,
+        erc20,
+        name,
+    })
+}
+
 #[cfg(test)]
 mod structured_tests {
     extern crate std;
@@ -458,6 +550,87 @@ mod structured_tests {
         }
         // The bare 204-byte canonical (no leg words) is NOT the kind-5 shape.
         assert!(parse_cow_order_frame(&p[..EIP712_CANONICAL_LEN]).is_err());
+    }
+
+    fn permit2_payload(variant: u8, count: u8, slots: &[&[u8]], name: Option<&[u8]>) -> Vec<u8> {
+        let head = if variant < 2 { PERMIT2_ALLOWANCE_HEAD_LEN } else { PERMIT2_TRANSFER_HEAD_LEN };
+        let mut v = std::vec![0x44u8; head + usize::from(count) * PERMIT2_ENTRY_LEN];
+        v[0] = variant;
+        v[head - 1] = count;
+        for s in slots {
+            v.extend_from_slice(&(s.len() as u16).to_be_bytes());
+            v.extend_from_slice(s);
+        }
+        match name {
+            Some(n) => {
+                v.push(1);
+                v.extend_from_slice(&(n.len() as u16).to_be_bytes());
+                v.extend_from_slice(n);
+            }
+            None => v.push(0),
+        }
+        v
+    }
+
+    #[test]
+    fn permit2_frame_minimal_and_full_accept() {
+        let p = permit2_payload(PERMIT2_VARIANT_SINGLE, 1, &[&[]], None);
+        assert_eq!(p.len(), pqsigner_proto::MIN_OFFCHAIN_PERMIT2_LEN);
+        let f = parse_permit2_frame(&p).unwrap();
+        assert_eq!((f.core.len(), f.count, f.name.len()), (114, 1, 0));
+
+        let p = permit2_payload(PERMIT2_VARIANT_BATCH_TRANSFER, 3, &[&[1, 2], &[], &[3]], Some(&[9; 4]));
+        let f = parse_permit2_frame(&p).unwrap();
+        assert_eq!(f.core.len(), PERMIT2_TRANSFER_HEAD_LEN + 3 * PERMIT2_ENTRY_LEN);
+        assert_eq!((f.erc20[0], f.erc20[1], f.erc20[2]), (&[1u8, 2][..], &[][..], &[3u8][..]));
+        assert_eq!(f.name, &[9; 4]);
+    }
+
+    #[test]
+    fn permit2_frame_refusals() {
+        use StructuredFrameError::*;
+        let good = permit2_payload(PERMIT2_VARIANT_BATCH, 2, &[&[1], &[2]], Some(&[7]));
+        for cut in 0..good.len() {
+            assert!(parse_permit2_frame(&good[..cut]).is_err(), "cut {cut}");
+        }
+        let mut t = good.clone();
+        t.push(0);
+        assert_eq!(parse_permit2_frame(&t).unwrap_err(), TrailingBytes);
+        let mut v = good.clone();
+        v[0] = 4;
+        assert_eq!(parse_permit2_frame(&v).unwrap_err(), BadPermit2Variant);
+        assert_eq!(
+            parse_permit2_frame(&permit2_payload(PERMIT2_VARIANT_SINGLE, 2, &[&[], &[]], None)).unwrap_err(),
+            BadPermit2Count
+        );
+        assert_eq!(
+            parse_permit2_frame(&permit2_payload(PERMIT2_VARIANT_BATCH, 0, &[], None)).unwrap_err(),
+            BadPermit2Count
+        );
+        let seven: [&[u8]; 7] = [&[]; 7];
+        assert_eq!(
+            parse_permit2_frame(&permit2_payload(PERMIT2_VARIANT_BATCH_TRANSFER, 7, &seven, None)).unwrap_err(),
+            BadPermit2Count
+        );
+        assert_eq!(
+            parse_permit2_frame(&permit2_payload(PERMIT2_VARIANT_TRANSFER, 1, &[&[]], Some(&[]))).unwrap_err(),
+            BadNameLen
+        );
+        let mut two_names = permit2_payload(PERMIT2_VARIANT_TRANSFER, 1, &[&[]], None);
+        *two_names.last_mut().unwrap() = 2;
+        assert_eq!(parse_permit2_frame(&two_names).unwrap_err(), BadNamesCount);
+        let big = std::vec![0u8; COW_ORDER_BUNDLE_MAX + 1];
+        assert_eq!(
+            parse_permit2_frame(&permit2_payload(PERMIT2_VARIANT_SINGLE, 1, &[&big], None)).unwrap_err(),
+            BadLegLen
+        );
+        // The largest legal frame is exactly the proto maximum.
+        let full = std::vec![0u8; COW_ORDER_BUNDLE_MAX];
+        let slots: [&[u8]; 6] = [&full; 6];
+        let name = std::vec![0u8; OFFCHAIN_NAME_BUNDLE_MAX_LEN];
+        let max = permit2_payload(PERMIT2_VARIANT_BATCH_TRANSFER, 6, &slots, Some(&name));
+        assert_eq!(max.len(), pqsigner_proto::MAX_OFFCHAIN_PERMIT2_LEN);
+        assert!(parse_permit2_frame(&max).is_ok());
     }
 }
 
@@ -566,6 +739,39 @@ mod verification {
         }
     }
 
+    /// `OFFCHAIN_KIND_PERMIT2` framing: panic/OOB-free over symbolic payloads
+    /// of length ≤ N, and on ACCEPT the core, the `count` ERC-20 slots and the
+    /// optional name consume the payload EXACTLY, the core is exactly
+    /// `head + count * 52` bytes and the count is in its variant's range.
+    /// N admits a two-token transfer core plus short sections.
+    #[kani::proof]
+    #[kani::unwind(8)]
+    fn parse_permit2_frame_panic_free_and_exact() {
+        const N: usize = PERMIT2_TRANSFER_HEAD_LEN + 2 * PERMIT2_ENTRY_LEN + 8;
+        let buf: [u8; N] = kani::any();
+        let len: usize = kani::any();
+        kani::assume(len <= N);
+        let payload = &buf[..len];
+        if let Ok(f) = parse_permit2_frame(payload) {
+            let head = if payload[0] < 2 { PERMIT2_ALLOWANCE_HEAD_LEN } else { PERMIT2_TRANSFER_HEAD_LEN };
+            assert!(payload[0] <= 3);
+            assert_eq!(f.count, payload[head - 1] as usize);
+            assert!(f.count >= 1 && f.count <= PERMIT2_MAX_TOKENS);
+            assert!(payload[0] == PERMIT2_VARIANT_BATCH || payload[0] == PERMIT2_VARIANT_BATCH_TRANSFER || f.count == 1);
+            assert_eq!(f.core.len(), head + f.count * PERMIT2_ENTRY_LEN);
+            let mut n = f.core.len() + 1;
+            let mut i = 0;
+            while i < f.count {
+                n += 2 + f.erc20[i].len();
+                i += 1;
+            }
+            if !f.name.is_empty() {
+                n += 2 + f.name.len();
+            }
+            assert_eq!(n, len);
+        }
+    }
+
     /// Non-vacuity: the minimal well-formed frames are ACCEPTED.
     #[kani::proof]
     #[kani::unwind(6)]
@@ -578,5 +784,9 @@ mod verification {
         let cow = [0u8; pqsigner_proto::MIN_OFFCHAIN_COW_ORDER_LEN];
         let f = parse_cow_order_frame(&cow).expect("minimal CoW frame accepts");
         assert!(f.sell.is_empty() && f.buy.is_empty());
+        let mut permit2 = [0u8; pqsigner_proto::MIN_OFFCHAIN_PERMIT2_LEN];
+        permit2[PERMIT2_ALLOWANCE_HEAD_LEN - 1] = 1;
+        let f = parse_permit2_frame(&permit2).expect("minimal Permit2 frame accepts");
+        assert!(f.count == 1 && f.erc20[0].is_empty() && f.name.is_empty());
     }
 }

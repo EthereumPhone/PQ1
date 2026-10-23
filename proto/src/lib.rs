@@ -370,6 +370,13 @@ pub const CMD_GET_INIT_CODE: u32 = 15;
 ///     `replay_safe_hash(H)`, exactly what RAW32 signs for `H`
 ///     (2026-10-19; see [`MAX_OFFCHAIN_SAFE_TX_LEN`]).
 ///
+///   * **`OFFCHAIN_KIND_PERMIT2` (6)** — a Uniswap Permit2 permit
+///     (PermitSingle / PermitBatch / PermitTransferFrom /
+///     PermitBatchTransferFrom) on the canonical deployment
+///     [`PERMIT2_ADDRESS`], rendered natively with Merkle-proven token
+///     metadata; same signed value as RAW32 over the recomputed digest
+///     (2026-10-23; see [`MAX_OFFCHAIN_PERMIT2_LEN`]).
+///
 /// In every mode, on-chain verification works because Solady's
 /// `_erc1271IsValidSignatureViaNestedEIP712` first attempts the
 /// TypedDataSign branch and falls back to PersonalSign when no
@@ -419,7 +426,8 @@ pub const CMD_GET_INIT_CODE: u32 = 15;
 ///       [ 1.. 9)  chain_id       (u64 BE)
 ///       [ 9..13)  slot_index     (u32 BE)
 ///       [13..14)  kind           (u8: 0=raw32, 1=personal_sign,
-///                                 2=eip712_typed)
+///                                 2=eip712_typed, 3=eip712_typed_v3,
+///                                 4=safe_tx, 5=cow_order, 6=permit2)
 ///       [14..16)  payload_len    (u16 BE)
 ///       [16..17)  flags          (u8 — bit 0 = `OFFCHAIN_FLAG_ACCOUNT_DEPLOYED`;
 ///                                 other bits MUST be zero)
@@ -1070,12 +1078,16 @@ pub const CAP_OFFCHAIN_COW_ORDER: u32 = 1 << 4;
 /// anything over 4096 with a generic status, so companions MUST cap at 4096
 /// unless the bit is set — never probe by sending and reading the error.
 pub const CAP_SIGN_USEROP_DATA_8K: u32 = 1 << 5;
+/// `GET_DEVICE_INFO.capabilities` bit 6: `CMD_SIGN_OFFCHAIN` accepts
+/// [`OFFCHAIN_KIND_PERMIT2`]. Same gating rule as [`CAP_OFFCHAIN_SAFE_TX`].
+pub const CAP_OFFCHAIN_PERMIT2: u32 = 1 << 6;
 /// Capability bitmap emitted by the current firmware.
 pub const DEVICE_CAPABILITIES: u32 = CAP_SIGN_USEROP
     | CAP_ERC7730_PROOF_SET
     | CAP_OFFCHAIN_SAFE_TX
     | CAP_OFFCHAIN_COW_ORDER
-    | CAP_SIGN_USEROP_DATA_8K;
+    | CAP_SIGN_USEROP_DATA_8K
+    | CAP_OFFCHAIN_PERMIT2;
 
 // -- Session management (0x10-0x1F) --
 pub const INS_V2_UNLOCK: u8 = 0x10;
@@ -1398,6 +1410,61 @@ pub const MIN_OFFCHAIN_COW_ORDER_LEN: usize = EIP712_CANONICAL_LEN + 2 + 2;
 /// to the on-chain CoW order trailer, consumed EXACTLY.
 pub const MAX_OFFCHAIN_COW_ORDER_LEN: usize = COW_ORDER_TRAILER_MAX_LEN;
 
+/// `OFFCHAIN_KIND_PERMIT2` variant byte: `PermitSingle` (AllowanceTransfer).
+pub const PERMIT2_VARIANT_SINGLE: u8 = 0;
+/// `OFFCHAIN_KIND_PERMIT2` variant byte: `PermitBatch` (AllowanceTransfer).
+pub const PERMIT2_VARIANT_BATCH: u8 = 1;
+/// `OFFCHAIN_KIND_PERMIT2` variant byte: `PermitTransferFrom` (SignatureTransfer).
+pub const PERMIT2_VARIANT_TRANSFER: u8 = 2;
+/// `OFFCHAIN_KIND_PERMIT2` variant byte: `PermitBatchTransferFrom` (SignatureTransfer).
+pub const PERMIT2_VARIANT_BATCH_TRANSFER: u8 = 3;
+/// Most tokens in one Permit2 batch. Bound by the legacy page budget
+/// (worst case 28 of `MAX_PAGES` = 31, display-side const-asserted).
+pub const PERMIT2_MAX_TOKENS: usize = 6;
+/// One packed token entry: allowance `token(20) amount_u160(20)
+/// expiration_u48(6) nonce_u48(6)` or transfer `token(20) amount_u256(32)`.
+pub const PERMIT2_ENTRY_LEN: usize = 52;
+/// Allowance head: `variant(1) chain_id(8) spender(20) sigDeadline(32) count(1)`.
+pub const PERMIT2_ALLOWANCE_HEAD_LEN: usize = 1 + 8 + 20 + 32 + 1;
+/// Transfer head: `variant(1) chain_id(8) spender(20) nonce(32) deadline(32) count(1)`.
+pub const PERMIT2_TRANSFER_HEAD_LEN: usize = 1 + 8 + 20 + 32 + 32 + 1;
+/// Largest packed Permit2 core (a six-token transfer batch).
+pub const PERMIT2_CORE_MAX_LEN: usize =
+    PERMIT2_TRANSFER_HEAD_LEN + PERMIT2_MAX_TOKENS * PERMIT2_ENTRY_LEN;
+/// Name bundles in an `OFFCHAIN_KIND_PERMIT2` payload: the spender only.
+pub const PERMIT2_MAX_NAME_BUNDLES: usize = 1;
+
+/// Minimum `OFFCHAIN_KIND_PERMIT2` payload: a one-token PermitSingle core,
+/// one empty ERC-20 slot and `names_count = 0`. (The smallest transfer
+/// frame is longer; the frame parser enforces each variant's exact size.)
+pub const MIN_OFFCHAIN_PERMIT2_LEN: usize =
+    PERMIT2_ALLOWANCE_HEAD_LEN + PERMIT2_ENTRY_LEN + 2 + 1;
+
+/// Maximum `OFFCHAIN_KIND_PERMIT2` payload. Layout (lengths `u16` BE),
+/// consumed EXACTLY:
+/// ```text
+///   allowance (variant 0 PermitSingle, 1 PermitBatch):
+///     variant(1) chain_id(8 BE) spender(20) sigDeadline(32 BE) count(1)
+///     count x { token(20) amount_u160(20 BE) expiration_u48(6 BE) nonce_u48(6 BE) }
+///   transfer (variant 2 PermitTransferFrom, 3 PermitBatchTransferFrom):
+///     variant(1) chain_id(8 BE) spender(20) nonce(32 BE) deadline(32 BE) count(1)
+///     count x { token(20) amount_u256(32 BE) }
+///   then count x { [len:2][ERC-20 bundle] }        slot i = token i, len 0 = none, <= 1120
+///        [names_count:1 <= 1]{[len:2][name bundle]} the spender's name, <= 1093
+/// ```
+/// `count` is exactly 1 for variants 0 and 2 and `1..=PERMIT2_MAX_TOKENS`
+/// for 1 and 3. Fields are packed at their Solidity width, so the device
+/// widens each into its EIP-712 word itself (no dirty high bits can exist).
+pub const MAX_OFFCHAIN_PERMIT2_LEN: usize = PERMIT2_CORE_MAX_LEN
+    + PERMIT2_MAX_TOKENS * (2 + COW_ORDER_BUNDLE_MAX)
+    + 1
+    + PERMIT2_MAX_NAME_BUNDLES * (2 + OFFCHAIN_NAME_BUNDLE_MAX_LEN);
+
+// Kind 6 must not raise the off-chain input ceiling (SafeTx sets it), so the
+// secure snapshot and the NS chain buffer stay the size they are.
+const _: () = assert!(MAX_OFFCHAIN_PERMIT2_LEN <= MAX_OFFCHAIN_SAFE_TX_LEN);
+const _: () = assert!(PERMIT2_MAX_NAME_BUNDLES <= OFFCHAIN_MAX_NAME_BUNDLES);
+
 /// Maximum input length the gateway will accept for `CMD_SIGN_OFFCHAIN`.
 /// Sized for the largest valid request across all kinds.
 pub const SIGN_OFFCHAIN_INPUT_MAX_LEN: usize = SIGN_OFFCHAIN_HEADER_LEN
@@ -1406,7 +1473,10 @@ pub const SIGN_OFFCHAIN_INPUT_MAX_LEN: usize = SIGN_OFFCHAIN_HEADER_LEN
             MAX_OFFCHAIN_PERSONAL_SIGN_LEN,
             max_usize(MAX_OFFCHAIN_EIP712_TYPED_LEN, MAX_OFFCHAIN_EIP712_TYPED_V3_LEN),
         ),
-        max_usize(MAX_OFFCHAIN_SAFE_TX_LEN, MAX_OFFCHAIN_COW_ORDER_LEN),
+        max_usize(
+            MAX_OFFCHAIN_SAFE_TX_LEN,
+            max_usize(MAX_OFFCHAIN_COW_ORDER_LEN, MAX_OFFCHAIN_PERMIT2_LEN),
+        ),
     );
 
 // Every kind's payload length must fit the header's `u16 payload_len`.
@@ -1465,6 +1535,22 @@ pub const OFFCHAIN_KIND_SAFE_TX: u8 = 4;
 /// `OFFCHAIN_KIND_RAW32` over the same digest. Requires a deployed wallet.
 /// Gated by [`CAP_OFFCHAIN_COW_ORDER`].
 pub const OFFCHAIN_KIND_COW_ORDER: u8 = 5;
+/// A Uniswap Permit2 permit signed off-chain by this wallet as the permit
+/// owner: `PermitSingle` / `PermitBatch` (reusable allowances,
+/// AllowanceTransfer) or `PermitTransferFrom` / `PermitBatchTransferFrom`
+/// (one-time pulls, SignatureTransfer) under the domain
+/// `EIP712Domain(string name,uint256 chainId,address verifyingContract)`
+/// with `name = "Permit2"` and `verifyingContract = PERMIT2_ADDRESS`. The
+/// companion sends the packed permit plus per-token ERC-20 bundles and the
+/// spender's name bundle (see [`MAX_OFFCHAIN_PERMIT2_LEN`]); the device
+/// recomputes the permit digest with pinned type hashes, renders the permit,
+/// and signs `replay_safe_hash(chain, wallet, permitDigest)` —
+/// byte-identical to `OFFCHAIN_KIND_RAW32` over the same digest. Requires a
+/// deployed wallet: Permit2 calls ERC-1271 only on an owner that already has
+/// code and has no ERC-6492 path. Witness permits
+/// (`PermitWitnessTransferFrom`, UniswapX) are not this kind. Gated by
+/// [`CAP_OFFCHAIN_PERMIT2`].
+pub const OFFCHAIN_KIND_PERMIT2: u8 = 6;
 
 // ─── ERC-7730 clear-signing descriptor trailer ───────────────────────
 //
@@ -1880,6 +1966,15 @@ pub const SET_PRE_SIGNATURE_SELECTOR: [u8; 4] = [0xec, 0x6c, 0xb1, 0x3f];
 pub const GPV2_SETTLEMENT_ADDRESS: [u8; 20] = [
     0x90, 0x08, 0xd1, 0x9f, 0x58, 0xaa, 0xbd, 0x9e, 0xd0, 0xd6, 0x09, 0x71, 0x56, 0x5a, 0xa8,
     0x51, 0x05, 0x60, 0xab, 0x41,
+];
+
+/// Uniswap `Permit2` (`0x000000000022D473030F116dDEE9F6B43aC78BA3`), the
+/// same CREATE2 address on every chain it is deployed on. The
+/// `verifyingContract` of every `OFFCHAIN_KIND_PERMIT2` digest — pinned
+/// here, never taken from the companion.
+pub const PERMIT2_ADDRESS: [u8; 20] = [
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x22, 0xd4, 0x73, 0x03, 0x0f, 0x11, 0x6d, 0xde, 0xe9, 0xf6,
+    0xb4, 0x3a, 0xc7, 0x8b, 0xa3,
 ];
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,8 @@
 use sha3::{Digest, Keccak256};
 
 pub mod cowswap;
+// Uniswap Permit2 permits signed off-chain (`SIGN_OFFCHAIN` kind 6).
+pub mod permit2;
 pub mod safe;
 // The signed value of the structured off-chain kinds (SafeTx, CoW order),
 // recomputed from the wire payload — pure, host-tested against RAW32.

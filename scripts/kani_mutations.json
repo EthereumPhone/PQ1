@@ -271,6 +271,54 @@
       "harness_path": "offchain_header::verification::parse_cow_order_frame_panic_free_and_exact"
     },
     {
+      "id": "offchain_permit2_exact_consumption",
+      "tier": "default",
+      "crate": "pqsigner-aa",
+      "harness": "parse_permit2_frame_panic_free_and_exact",
+      "file": "aa/src/offchain_header.rs",
+      "find": "    if p != payload.len() {\n        return Err(StructuredFrameError::TrailingBytes);\n    }\n    Ok(Permit2Frame {",
+      "replace": "    if p > payload.len() {\n        return Err(StructuredFrameError::TrailingBytes);\n    }\n    Ok(Permit2Frame {",
+      "expect": "kani_fails",
+      "note": "weaken the SIGN_OFFCHAIN kind-6 (Permit2) EXACT-consumption guard (`!=` -> `>`) -> parse_permit2_frame_panic_free_and_exact's `core + slots + name == payload length` assertion MUST break.",
+      "harness_path": "offchain_header::verification::parse_permit2_frame_panic_free_and_exact"
+    },
+    {
+      "id": "offchain_permit2_count_cap",
+      "tier": "default",
+      "crate": "pqsigner-aa",
+      "harness": "parse_permit2_frame_panic_free_and_exact",
+      "file": "aa/src/offchain_header.rs",
+      "find": "    let count_ok = if batch { (1..=PERMIT2_MAX_TOKENS).contains(&count) } else { count == 1 };",
+      "replace": "    let count_ok = if batch { count <= PERMIT2_MAX_TOKENS } else { count == 1 };",
+      "expect": "kani_fails",
+      "note": "admit an empty Permit2 batch (drop the `>= 1` bound) -> the harness's `count >= 1` assertion MUST break.",
+      "harness_path": "offchain_header::verification::parse_permit2_frame_panic_free_and_exact"
+    },
+    {
+      "id": "permit2_decode_duplicate_check",
+      "tier": "default",
+      "crate": "pqsigner-tx",
+      "harness": "decode_core_rejects_duplicates",
+      "file": "tx/src/permit2.rs",
+      "find": "            if entries[j].token == token {\n                return Err(Permit2DecodeError::DuplicateToken);\n            }",
+      "replace": "            if entries[j].token == token && false {\n                return Err(Permit2DecodeError::DuplicateToken);\n            }",
+      "expect": "kani_fails",
+      "note": "disable the duplicate-token refusal -> decode_core_rejects_duplicates (two accepted tokens are distinct) MUST break.",
+      "harness_path": "permit2::verification::decode_core_rejects_duplicates"
+    },
+    {
+      "id": "permit2_decode_zero_address",
+      "tier": "default",
+      "crate": "pqsigner-tx",
+      "harness": "decode_core_soundness",
+      "file": "tx/src/permit2.rs",
+      "find": "    if spender == [0u8; 20] {\n        return Err(Permit2DecodeError::ZeroSpender);\n    }",
+      "replace": "    if spender == [0u8; 20] && false {\n        return Err(Permit2DecodeError::ZeroSpender);\n    }",
+      "expect": "kani_fails",
+      "note": "disable the zero-spender refusal -> decode_core_soundness's `spender != 0` assertion MUST break.",
+      "harness_path": "permit2::verification::decode_core_soundness"
+    },
+    {
       "id": "usb_apdu_reassembly_bounds",
       "tier": "default",
       "crate": "sphincs-tz-shared",

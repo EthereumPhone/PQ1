@@ -1197,3 +1197,278 @@ fn an_undeclared_intent_page_falls_back_to_the_neutral_caption() {
         "and must never guess its way back to the merged caption:\n{text}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Structured off-chain sign: SIGN_OFFCHAIN kind 6 (Uniswap Permit2 permit)
+// ---------------------------------------------------------------------------
+
+use crate::tx::eip712::permit2::{verify_offchain_permit2, VerifiedPermit2};
+use sphincs_tz_shared::{
+    PERMIT2_MAX_TOKENS, PERMIT2_VARIANT_BATCH, PERMIT2_VARIANT_BATCH_TRANSFER, PERMIT2_VARIANT_SINGLE,
+    PERMIT2_VARIANT_TRANSFER,
+};
+
+const UR_BASE: [u8; 20] = [
+    0x6f, 0xf5, 0x69, 0x3b, 0x99, 0x21, 0x2d, 0xa7, 0x6a, 0xd3, 0x16, 0x17, 0x8a, 0x18, 0x4a, 0xb5,
+    0x6d, 0x29, 0x9b, 0x43,
+];
+const WETH_BASE: [u8; 20] = [
+    0x42, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x06,
+];
+const MAX160: u128 = u128::MAX; // marker: the exact uint160 maximum (see `amount20`)
+const JAN_2026: u64 = 1_767_225_600;
+const JAN_2027: u64 = 1_798_761_600;
+
+fn amount20(v: u128) -> [u8; 20] {
+    if v == MAX160 {
+        return [0xff; 20];
+    }
+    let mut a = [0u8; 20];
+    a[4..].copy_from_slice(&v.to_be_bytes());
+    a
+}
+
+fn word(v: u128) -> [u8; 32] {
+    let mut w = [0u8; 32];
+    w[16..].copy_from_slice(&v.to_be_bytes());
+    w
+}
+
+/// Allowance core: `(token, amount, expiration, nonce)` entries.
+fn allowance_core(variant: u8, entries: &[([u8; 20], u128, u64, u64)], sig_deadline: [u8; 32]) -> Vec<u8> {
+    let mut v = vec![variant];
+    v.extend_from_slice(&8453u64.to_be_bytes());
+    v.extend_from_slice(&UR_BASE);
+    v.extend_from_slice(&sig_deadline);
+    v.push(entries.len() as u8);
+    for (t, a, e, n) in entries {
+        v.extend_from_slice(t);
+        v.extend_from_slice(&amount20(*a));
+        v.extend_from_slice(&e.to_be_bytes()[2..]);
+        v.extend_from_slice(&n.to_be_bytes()[2..]);
+    }
+    v
+}
+
+/// Transfer core: `(token, amount word)` entries.
+fn transfer_core(variant: u8, entries: &[([u8; 20], [u8; 32])], nonce: [u8; 32], deadline: [u8; 32]) -> Vec<u8> {
+    let mut v = vec![variant];
+    v.extend_from_slice(&8453u64.to_be_bytes());
+    v.extend_from_slice(&UR_BASE);
+    v.extend_from_slice(&nonce);
+    v.extend_from_slice(&deadline);
+    v.push(entries.len() as u8);
+    for (t, a) in entries {
+        v.extend_from_slice(t);
+        v.extend_from_slice(a);
+    }
+    v
+}
+
+/// Verify the core (no bundles), then attach the given decoded legs.
+fn permit2(core: &[u8], legs: &[Option<CowLeg>]) -> (VerifiedPermit2, [u8; 32]) {
+    let empty: [&[u8]; PERMIT2_MAX_TOKENS] = [&[]; PERMIT2_MAX_TOKENS];
+    let (mut v, d) = verify_offchain_permit2(core, &empty, 8453).expect("permit verifies");
+    for (i, l) in legs.iter().enumerate() {
+        if let Some(l) = l {
+            v.legs[i] = *l;
+        }
+    }
+    (v, d)
+}
+
+fn usdc_leg() -> CowLeg {
+    cow_leg(b"USDC", b"USD Coin", 6)
+}
+
+fn router_names() -> NameResolver<'static> {
+    let mut r = NameResolver::new();
+    r.push(crate::names::NameMeta { chain_id: 8453, address: UR_BASE, name: b"Uniswap Universal Router" });
+    r
+}
+
+fn lift_permit2(v: &VerifiedPermit2, digest: [u8; 32], r: &NameResolver<'_>) -> Lifted {
+    let mut pages = super::permit2::render_permit2_offchain_pages(v, &WALLET, r).expect("renders");
+    let t = crate::tx::eip1559::Eip1559Tx::default();
+    let ctx = structured_context(6, 8453);
+    let facts = offchain_trailers(&mut pages, &t, &[0u8; 32], &WALLET, FpKind::Eip712Final(digest), None, Some(&ctx));
+    let inputs = ContentInputs {
+        body: Body::Permit2Offchain { v, wallet: &WALLET, resolver: r },
+        trailers: &facts,
+    };
+    finish(pages, &inputs, "permit2_offchain")
+}
+
+/// Every content id comes before the `Confirm?`, which is followed by the
+/// fingerprint banner.
+fn assert_confirm_after_body(l: &Lifted, body: &[&str]) {
+    let (at, next) = confirm_neighbourhood(l);
+    assert_eq!(next, "FP8213", "{:?}", ids(&l.screens));
+    for want in body {
+        assert!(ids(&l.screens)[..at].iter().any(|i| i == want), "{want} after the Confirm?: {:?}", ids(&l.screens));
+    }
+}
+
+#[test]
+fn offchain_permit2_single_screens() {
+    let core = allowance_core(PERMIT2_VARIANT_SINGLE, &[(USDC_BASE, 1_000_000_000, JAN_2027, 3)], word(JAN_2026.into()));
+    let (v, d) = permit2(&core, &[Some(usdc_leg())]);
+    let r = router_names();
+    let l = lift_permit2(&v, d, &r);
+    assert_eq!(hero_caption(&l), "PERMIT2 APPROVE USDC?");
+    assert_eq!(l.screens.as_slice()[0].icon(), Some(Icon::Usdc));
+    assert_eq!(
+        ids(&l.screens)[..8],
+        ["PERMIT2", "NETWORK", "KIND", "SPENDER", "AMT1", "TOK1", "EXP1", "DEADLINE"],
+        "{:?}",
+        ids(&l.screens)
+    );
+    assert_confirm_after_body(&l, &["SPENDER", "AMT1", "TOK1", "EXP1", "DEADLINE"]);
+    let text = screen_text(&l.screens);
+    for want in ["1000.000000", "USD Coin", "Uniswap Universal\nRouter", "2027-01-01", "nonce 3", "2026-01-01", "reusable"] {
+        assert!(text.contains(want), "{want}:\n{text}");
+    }
+    check("eip1271", "permit2_single", &l, 8453, "permit2_offchain", "de591923a03228a8e74f1fe0e31f9ad28548f7d29b7320d278522dc4f39981b2");
+}
+
+#[test]
+fn offchain_permit2_unlimited_and_expiry_zero_are_loud() {
+    let core = allowance_core(PERMIT2_VARIANT_SINGLE, &[(USDC_BASE, MAX160, 0, 0)], word(JAN_2026.into()));
+    let (v, d) = permit2(&core, &[Some(usdc_leg())]);
+    let l = lift_permit2(&v, d, &NameResolver::new());
+    let text = screen_text(&l.screens);
+    for want in ["Unlimited", "(uint160 max)", "this block only", "(expiration 0)"] {
+        assert!(text.contains(want), "{want}:\n{text}");
+    }
+    // One below the maximum is a number, never "Unlimited": as raw units of
+    // an unknown token it is the full word, and as USDC it is too long to
+    // show exactly, so the device refuses it before any page.
+    let mut almost = core.clone();
+    almost[62 + 20 + 19] = 0xfe;
+    let (v2, d2) = permit2(&almost, &[]);
+    let l2 = lift_permit2(&v2, d2, &NameResolver::new());
+    assert!(!screen_text(&l2.screens).contains("Unlimited"));
+    let (v3, _) = permit2(&almost, &[Some(usdc_leg())]);
+    assert!(!super::permit2::permit2_amounts_are_exactly_renderable(&v3));
+    assert!(super::permit2::render_permit2_offchain_pages(&v3, &WALLET, &NameResolver::new()).is_err());
+    check("eip1271", "permit2_single_max", &l, 8453, "permit2_offchain", "ddfd56e738faa78277022c8930b6654b5a9d178cd28a95ce2431a9d829c71330");
+}
+
+#[test]
+fn offchain_permit2_revoke_screens() {
+    let core = allowance_core(PERMIT2_VARIANT_SINGLE, &[(USDC_BASE, 0, JAN_2027, 4)], word(JAN_2026.into()));
+    let (v, d) = permit2(&core, &[Some(usdc_leg())]);
+    let l = lift_permit2(&v, d, &NameResolver::new());
+    assert_eq!(hero_caption(&l), "PERMIT2 REVOKE USDC?");
+    check("eip1271", "permit2_revoke", &l, 8453, "permit2_offchain", "e9f6b0a80c30fd0cc983bfaa652fd6cecbd96f4b7078d8b2d10a7b60e6c70575");
+}
+
+#[test]
+fn offchain_permit2_batch_with_an_unknown_token_screens() {
+    let core = allowance_core(
+        PERMIT2_VARIANT_BATCH,
+        &[(USDC_BASE, 25_000_000, JAN_2027, 1), (WETH_BASE, MAX160, 0, 0)],
+        word(JAN_2026.into()),
+    );
+    let (v, d) = permit2(&core, &[Some(usdc_leg()), None]);
+    let l = lift_permit2(&v, d, &router_names());
+    assert_eq!(hero_caption(&l), "PERMIT2 APPROVE 2 TOKENS?");
+    assert_confirm_after_body(&l, &["AMT1", "TOK1", "EXP1", "TOK2", "AMT2", "EXP2", "DEADLINE"]);
+    let text = screen_text(&l.screens);
+    for want in ["! Unknown token", "Unlimited", "APPROVE 2/2"] {
+        assert!(text.contains(want), "{want}:\n{text}");
+    }
+    check("eip1271", "permit2_batch", &l, 8453, "permit2_offchain", "fd64c699366c4eb5458966de7eb1df9b23390f889a4eb57453eb09366709f14f");
+}
+
+#[test]
+fn offchain_permit2_transfer_screens() {
+    let core = transfer_core(PERMIT2_VARIANT_TRANSFER, &[(USDC_BASE, word(500_000_000))], word(42), word(JAN_2026.into()));
+    let (v, d) = permit2(&core, &[Some(usdc_leg())]);
+    let l = lift_permit2(&v, d, &router_names());
+    assert!(hero_caption(&l).starts_with("PERMIT2 ONE-TIME PULL"), "{}", hero_caption(&l));
+    assert_confirm_after_body(&l, &["KIND", "SPENDER", "AMT1", "TOK1", "NONCE", "DEADLINE"]);
+    let text = screen_text(&l.screens);
+    for want in ["! Spender picks", "500.000000", "PULL MAX", "42"] {
+        assert!(text.contains(want), "{want}:\n{text}");
+    }
+    check("eip1271", "permit2_transfer", &l, 8453, "permit2_offchain", "54c0a7dd82bf8a18a67427fe9257342cbae0e65fc5f82ef47e68247fadafca31");
+}
+
+#[test]
+fn offchain_permit2_worst_case_batch_fits_both_painters() {
+    // Six tokens, unknown, any-amount pulls, a 256-bit nonce, no deadline.
+    let toks: Vec<([u8; 20], [u8; 32])> = (1..=6u8).map(|i| ([i; 20], [0xff; 32])).collect();
+    let mut nonce = [0u8; 32];
+    nonce[0] = 0x80;
+    let core = transfer_core(PERMIT2_VARIANT_BATCH_TRANSFER, &toks, nonce, [0xff; 32]);
+    let (v, d) = permit2(&core, &[]);
+    let l = lift_permit2(&v, d, &NameResolver::new());
+    let text = screen_text(&l.screens);
+    assert!(text.contains("Any amount") && text.contains("! no deadline"), "{text}");
+    assert!(l.pages.len <= super::MAX_PAGES);
+    // ... and the six-token allowance batch with far-future expiries and
+    // a deadline past the year 9999.
+    let toks: Vec<([u8; 20], u128, u64, u64)> = (1..=6u8).map(|i| ([i; 20], 7, (1u64 << 48) - 1, (1 << 48) - 1)).collect();
+    let mut far = [0u8; 32];
+    far[0] = 1;
+    let core = allowance_core(PERMIT2_VARIANT_BATCH, &toks, far);
+    let (v, d) = permit2(&core, &[]);
+    let l = lift_permit2(&v, d, &NameResolver::new());
+    assert!(screen_text(&l.screens).contains("! far future"));
+    assert_eq!(l.pages.len, super::MAX_PAGES - 3, "the documented worst case");
+}
+
+#[test]
+fn offchain_permit2_binding_rejects_a_different_permit() {
+    let core = allowance_core(PERMIT2_VARIANT_SINGLE, &[(USDC_BASE, 1_000_000_000, JAN_2027, 3)], word(JAN_2026.into()));
+    let (v, d) = permit2(&core, &[Some(usdc_leg())]);
+    let r = NameResolver::new();
+    let mut pages = super::permit2::render_permit2_offchain_pages(&v, &WALLET, &r).unwrap();
+    let t = crate::tx::eip1559::Eip1559Tx::default();
+    let ctx = structured_context(6, 8453);
+    let facts = offchain_trailers(&mut pages, &t, &[0u8; 32], &WALLET, FpKind::Eip712Final(d), None, Some(&ctx));
+    let mut other_core = core.clone();
+    other_core[62 + 39] ^= 1; // one base unit more
+    let (other, _) = permit2(&other_core, &[Some(usdc_leg())]);
+    let inputs = ContentInputs {
+        body: Body::Permit2Offchain { v: &other, wallet: &WALLET, resolver: &r },
+        trailers: &facts,
+    };
+    let mut screens = pqsigner_ui_px::Screens::blank();
+    let receipt = super::px_lift::emit_content(&mut screens, &inputs).unwrap();
+    super::px_lift::append_returning_hero(&mut screens).unwrap();
+    let confirm_at = super::px_lift::insert_confirm(&mut screens, &receipt.family).unwrap();
+    assert_ne!(
+        super::px_lift::transcript_proof(&screens, &pages, &inputs.body, receipt.body.legacy_pages, &receipt, &facts, confirm_at),
+        crate::fi::OK_SENTINEL
+    );
+}
+
+#[test]
+fn offchain_permit2_spender_equal_to_the_wallet_is_labelled() {
+    let mut core = allowance_core(PERMIT2_VARIANT_SINGLE, &[(USDC_BASE, 1, JAN_2027, 0)], word(JAN_2026.into()));
+    core[9..29].copy_from_slice(&WALLET);
+    let (v, d) = permit2(&core, &[Some(usdc_leg())]);
+    let l = lift_permit2(&v, d, &NameResolver::new());
+    assert!(screen_text(&l.screens).contains("! = this wallet"), "{}", screen_text(&l.screens));
+    assert!((0..l.pages.len).any(|i| l.pages.buf[i][0].starts_with(b"Spender=wallet!")));
+}
+
+#[test]
+fn offchain_permit2_inexact_amount_is_refused_before_any_page() {
+    // A decoded token whose decimals cannot show this amount exactly is
+    // refused by the pre-publication gate (the handler refuses on it).
+    let core = allowance_core(PERMIT2_VARIANT_SINGLE, &[(USDC_BASE, 1_000_000_000, JAN_2027, 3)], word(JAN_2026.into()));
+    let (v, _) = permit2(&core, &[Some(usdc_leg())]);
+    assert!(super::permit2::permit2_amounts_are_exactly_renderable(&v));
+    // 2^159 base units of a 0-decimal token: 48 digits, no two-row form.
+    let mut core = allowance_core(PERMIT2_VARIANT_SINGLE, &[(USDC_BASE, 1, JAN_2027, 3)], word(JAN_2026.into()));
+    core[62 + 20..62 + 40].copy_from_slice(&{
+        let mut a = [0u8; 20];
+        a[0] = 0x80;
+        a
+    });
+    let (v, _) = permit2(&core, &[Some(cow_leg(b"BIG", b"Big", 0))]);
+    assert!(!super::permit2::permit2_amounts_are_exactly_renderable(&v));
+}

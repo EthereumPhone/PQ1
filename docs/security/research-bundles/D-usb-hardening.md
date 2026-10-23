@@ -2968,7 +2968,9 @@ bit 4 is `CAP_OFFCHAIN_COW_ORDER` (UPDATE 2026-10-19): `0x62 SIGN_OFFCHAIN`
 accepts kinds 4 / 5 only when the matching bit is set. Bit 5 is
 `CAP_SIGN_USEROP_DATA_8K` (UPDATE 2026-10-22): `SIGN_USEROP` and every
 `SIGN_USEROP_BATCH` member accept up to 8192 B of `data` (see the unified sign
-input below); without it the cap is 4096. The capability word is
+input below); without it the cap is 4096. Bit 6 is `CAP_OFFCHAIN_PERMIT2`
+(UPDATE 2026-10-23): `0x62 SIGN_OFFCHAIN` accepts kind 6 (a Uniswap Permit2
+permit) only when it is set. The capability word is
 bytes 21–24 (u32 BE) of the response, after `protocol_version` (2),
 `fw_version` (3) and the 16-byte `device_uid` placeholder. Do not infer that support from the
 three `fw_version` bytes: they are currently a fixed placeholder rather than
@@ -3041,6 +3043,7 @@ format:
 | `OFFCHAIN_KIND_EIP712_TYPED_V3` | 3     | EIP-712 typed-data plus descriptor-selected nested/string display witnesses; see the canonical companion guide §6.5. |
 | `OFFCHAIN_KIND_SAFE_TX`         | 4     | EIP-712 `SafeTx` (Safe ≥ v1.3.0) this wallet co-signs as an owner; see below. Gated by `CAP_OFFCHAIN_SAFE_TX`. |
 | `OFFCHAIN_KIND_COW_ORDER`       | 5     | CoW `GPv2Order` under CoW's `eip1271` scheme (owner = this wallet); see below. Gated by `CAP_OFFCHAIN_COW_ORDER`. |
+| `OFFCHAIN_KIND_PERMIT2`         | 6     | Uniswap Permit2 permit (PermitSingle / PermitBatch / PermitTransferFrom / PermitBatchTransferFrom) this wallet signs as its owner; see below. Gated by `CAP_OFFCHAIN_PERMIT2`. |
 
 `RAW32` is a deliberately loud blind-sign tier, not evidence that the device
 understands a user's intent. A hostile companion can submit the final hash of
@@ -3151,6 +3154,59 @@ signature over the same hash). Older Safes
 kind 4. Companions MUST gate kinds 4 / 5 on the capability bits and MUST NOT
 fall back to RAW32 after a kind-4/5 refusal — that would turn every structured
 refusal into a blind signature.
+
+#### `kind = OFFCHAIN_KIND_PERMIT2` (6)
+
+UPDATE 2026-10-23. A Uniswap Permit2 permit on the canonical deployment
+`0x000000000022D473030F116dDEE9F6B43aC78BA3`, clear-signed: the device renders
+the spender (verified name over the full address), every token (verified
+name/symbol over the full contract address, or the address plus the raw amount
+word), the exact amount, the allowance expiry and nonce, the one-time nonce and
+the deadline. As for kinds 4/5, **the signed value is RAW32's**: the device
+recomputes the permit digest from pinned constants only — the domain
+`EIP712Domain(string name,uint256 chainId,address verifyingContract)` with
+`name = "Permit2"`, the request chain and `PERMIT2_ADDRESS`, and the type hash
+chosen by the variant byte (the six type strings are pinned and tested against
+the official source of the deployment tag, `PermitHash.sol`) — and signs
+`replay_safe_hash(chain, wallet, H)`. Golden vectors: the same
+`structured_offchain_goldens.json` (four Permit2 vectors, each checked against
+viem `hashTypedData`).
+
+Payload (all lengths `u16` BE), consumed exactly; values are packed at their
+Solidity width and widened on the device:
+
+```
+allowance (variant 0 PermitSingle, 1 PermitBatch):
+  variant(1) chain_id(8 BE) spender(20) sigDeadline(32 BE) count(1)
+  count x { token(20) amount uint160(20 BE) expiration uint48(6 BE) nonce uint48(6 BE) }
+transfer (variant 2 PermitTransferFrom, 3 PermitBatchTransferFrom):
+  variant(1) chain_id(8 BE) spender(20) nonce(32 BE) deadline(32 BE) count(1)
+  count x { token(20) amount uint256(32 BE) }
+then  count x { [len][ERC-20 bundle] }          slot i = token i, len 0 = none, len <= 1120
+      [names_count u8 <= 1]{[len][name bundle]}  the spender's name, 0 < len <= 1093
+```
+
+`count` is exactly 1 for variants 0/2 and `1..=6` for 1/3.
+`MIN_OFFCHAIN_PERMIT2_LEN = 117`, `MAX_OFFCHAIN_PERMIT2_LEN = 8,234`. The device
+refuses: a chain_id other than the request's, a zero spender or token, a token
+named twice (Permit2 would apply the last allowance, or pull both — neither
+reads safely as two rows), a count out of range, an unknown variant, an amount
+it cannot show exactly, any framing error, and an undeployed wallet (Permit2
+calls ERC-1271 only on an owner that already has code and has no ERC-6492
+path). An ERC-20 or name bundle that is absent, does not verify, or describes
+another (chain, address) degrades that token to address mode / the spender to
+the bare address. Display rules: "Unlimited" only for the exact `uint160`
+maximum (the one non-decrementing allowance), "Any amount" only for the exact
+`uint256` maximum, allowance 0 is a revoke, expiration 0 is "this block only"
+(Permit2 stores it as the block timestamp), a value no date can show is its
+full 32-byte word. A transfer permit says the spender picks the recipient and
+any amount up to the maximum shown, because neither is signed.
+
+Witness permits (`PermitWitnessTransferFrom`, UniswapX orders) are not kind 6;
+a companion without a route for them, or talking to firmware without the
+capability bit, keeps its existing policy for undecodable typed data (Ambire:
+RAW32, owner decision 2026-10-23) — but MUST NOT retry as RAW32 after a kind-6
+refusal.
 
 ### 0x63 OFFCHAIN_STATUS
 

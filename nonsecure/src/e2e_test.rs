@@ -2931,6 +2931,111 @@ Issued At: 2026-10-19T12:00:00Z";
         hprintln!("[NS][e2e]   → CoW order signed; trailing byte / chain mismatch refused");
     }
 
+    // Scenario 5p-permit2: Uniswap Permit2 permits this wallet signs
+    // off-chain as their owner (SIGN_OFFCHAIN kind 6). All four non-witness
+    // variants sign (the count advances once each); every refusal below
+    // happens before any page-123 write.
+    hprintln!("[NS][e2e] Scenario 5p-permit2: Permit2 off-chain clear-sign");
+    {
+        const OFFCHAIN_KIND_PERMIT2: u8 = 6;
+        const SEPOLIA: u64 = 11_155_111;
+        const SPENDER: [u8; 20] = [0x66; 20];
+        // Packed core: allowance (variant 0/1) or transfer (variant 2/3).
+        fn p2_core(out: &mut [u8; 512], variant: u8, chain: u64, tokens: &[[u8; 20]], count: u8) -> usize {
+            out.fill(0);
+            out[0] = variant;
+            out[1..9].copy_from_slice(&chain.to_be_bytes());
+            out[9..29].copy_from_slice(&SPENDER);
+            let allowance = variant < 2;
+            // sigDeadline / (nonce, deadline): 2026-01-01
+            let head = if allowance { 62 } else { 94 };
+            out[head - 9..head - 1].copy_from_slice(&1_767_225_600u64.to_be_bytes());
+            if !allowance {
+                out[29 + 31] = 42; // the one-time nonce
+            }
+            out[head - 1] = count;
+            for (i, t) in tokens.iter().enumerate() {
+                let e = head + i * 52;
+                out[e..e + 20].copy_from_slice(t);
+                out[e + 51] = 0x10 + i as u8; // amount (or nonce) low byte
+                if allowance {
+                    out[e + 40..e + 46].copy_from_slice(&1_798_761_600u64.to_be_bytes()[2..]);
+                }
+            }
+            head + tokens.len() * 52
+        }
+        fn permit2_input(out: &mut [u8; 17 + 512], slot: u32, deployed: bool, core: &[u8], slots: usize, extra: usize) -> usize {
+            out.fill(0);
+            out[1..9].copy_from_slice(&SEPOLIA.to_be_bytes());
+            out[9..13].copy_from_slice(&slot.to_be_bytes());
+            out[13] = OFFCHAIN_KIND_PERMIT2;
+            out[16] = u8::from(deployed);
+            out[17..17 + core.len()].copy_from_slice(core);
+            // `slots` empty ERC-20 slots, names_count 0, then `extra` junk bytes.
+            let n = 17 + core.len() + 2 * slots + 1 + extra;
+            out[14..16].copy_from_slice(&((n - 17) as u16).to_be_bytes());
+            n
+        }
+        let local_count = || -> u64 {
+            let mut q = [0u8; 13];
+            q[1..9].copy_from_slice(&SEPOLIA.to_be_bytes());
+            q[9..13].copy_from_slice(&1u32.to_be_bytes());
+            let mut r = [0u8; 24];
+            assert_eq!(nsc_api::offchain_status(&q, &mut r), NscStatus::Ok as u32);
+            u64::from_be_bytes(r[..8].try_into().unwrap())
+        };
+        let (a, b, c) = ([0x11u8; 20], [0x22u8; 20], [0x33u8; 20]);
+        let mut cb = [0u8; 512];
+        let mut input = [0u8; 17 + 512];
+        let mut out = [0u8; 4016];
+        let before = local_count();
+        for (variant, tokens) in [(0u8, &[a][..]), (1, &[a, b, c][..]), (2, &[a][..]), (3, &[a, b][..])] {
+            let n = p2_core(&mut cb, variant, SEPOLIA, tokens, tokens.len() as u8);
+            let m = permit2_input(&mut input, 1, true, &cb[..n], tokens.len(), 0);
+            let status = nsc_api::sign_offchain(&input[..m], &mut out);
+            assert_eq!(status, NscStatus::Ok as u32, "scenario 5p-permit2 variant {} must sign (got {})", variant, status);
+        }
+        assert_eq!(local_count(), before + 4, "four permits advance the off-chain count four times");
+
+        // Refusals: none of these may touch page 123.
+        let after = local_count();
+        let refused = |input: &[u8], what: &str| {
+            let mut out = [0u8; 4016];
+            assert_eq!(nsc_api::sign_offchain(input, &mut out), NscStatus::InvalidPointer as u32, "5p-permit2: {}", what);
+        };
+        // (a) a permit for another chain than the request.
+        let n = p2_core(&mut cb, 0, 1, &[a], 1);
+        let m = permit2_input(&mut input, 1, true, &cb[..n], 1, 0);
+        refused(&input[..m], "chain");
+        // (b) a trailing byte.
+        let n = p2_core(&mut cb, 0, SEPOLIA, &[a], 1);
+        let m = permit2_input(&mut input, 1, true, &cb[..n], 1, 1);
+        refused(&input[..m], "trailing");
+        // (c) a duplicate token in a batch.
+        let n = p2_core(&mut cb, 1, SEPOLIA, &[a, b, a], 3);
+        let m = permit2_input(&mut input, 1, true, &cb[..n], 3, 0);
+        refused(&input[..m], "duplicate token");
+        // (d) an empty batch and (e) seven tokens.
+        let n = p2_core(&mut cb, 3, SEPOLIA, &[], 0);
+        let m = permit2_input(&mut input, 1, true, &cb[..n], 0, 0);
+        refused(&input[..m], "empty batch");
+        let seven = [[1u8; 20], [2; 20], [3; 20], [4; 20], [5; 20], [6; 20], [7; 20]];
+        let n = p2_core(&mut cb, 3, SEPOLIA, &seven, 7);
+        let m = permit2_input(&mut input, 1, true, &cb[..n], 7, 0);
+        refused(&input[..m], "seven tokens");
+        // (f) an undeployed wallet (slot 0, so the kind gate refuses).
+        let n = p2_core(&mut cb, 0, SEPOLIA, &[a], 1);
+        let m = permit2_input(&mut input, 0, false, &cb[..n], 1, 0);
+        refused(&input[..m], "undeployed");
+        // (g) an unknown variant.
+        let n = p2_core(&mut cb, 0, SEPOLIA, &[a], 1);
+        cb[0] = 4;
+        let m = permit2_input(&mut input, 1, true, &cb[..n], 1, 0);
+        refused(&input[..m], "variant");
+        assert_eq!(local_count(), after, "5p-permit2: a refusal must not touch page 123");
+        hprintln!("[NS][e2e]   → 4 permits signed; chain / trailing / dup / empty / 7 tokens / undeployed / variant refused");
+    }
+
     // Scenario 5n: a cryptographically-valid trailer for the wrong deployment
     // must not restore blind signing for a firmware-known call. The UserOp is
     // WETH Sepolia deposit(), while the attached proof is WETH mainnet. Bundle

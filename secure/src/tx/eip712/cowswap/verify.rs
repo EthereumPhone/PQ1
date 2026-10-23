@@ -94,7 +94,7 @@ pub struct VerifiedCowswapV3 {
 /// Decode one leg from its optional bundle slice. Returns `AddrHex`
 /// whenever the bundle is absent, fails Merkle verification, or its
 /// `(contract, chain_id)` does not match the canonical leg token + chain.
-fn decode_leg(bundle: Option<&[u8]>, expected_token: &[u8; 20], chain_id: u64) -> CowLeg {
+pub(crate) fn decode_leg(bundle: Option<&[u8]>, expected_token: &[u8; 20], chain_id: u64) -> CowLeg {
     let Some(bundle) = bundle else {
         return CowLeg::AddrHex;
     };

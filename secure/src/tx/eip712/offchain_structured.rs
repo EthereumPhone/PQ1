@@ -1,8 +1,9 @@
 //! The value a structured off-chain sign (`SIGN_OFFCHAIN` kind 4 SafeTx,
-//! kind 5 CoW order) commits to, recomputed straight from the wire payload.
+//! kind 5 CoW order, kind 6 Permit2) commits to, recomputed straight from
+//! the wire payload.
 //!
 //! Pure and host-compiled so the equivalence with RAW32 is a host test
-//! (`offchain_structured_tests` below): for the same typed data, kind 4/5
+//! (`offchain_structured_tests` below): for the same typed data, kinds 4-6
 //! sign exactly `replay_safe_hash(chain, wallet, H)` — the value RAW32 signs
 //! when a companion passes the dapp's `H` — with `H` recomputed on-device.
 //! The handler (`nsc::cmd_sign_offchain_structured`) uses
@@ -10,9 +11,9 @@
 //! independent parse + verify of the snapshot that must reproduce the value
 //! it confirmed.
 
-use sphincs_tz_shared::{OFFCHAIN_KIND_COW_ORDER, OFFCHAIN_KIND_SAFE_TX};
+use sphincs_tz_shared::{OFFCHAIN_KIND_COW_ORDER, OFFCHAIN_KIND_PERMIT2, OFFCHAIN_KIND_SAFE_TX};
 
-/// The EIP-712 digest `H` a kind-4 / kind-5 payload describes, after the
+/// The EIP-712 digest `H` a kind-4 / 5 / 6 payload describes, after the
 /// same framing and verification the handler applies; `None` for anything
 /// the handler would refuse at that stage (other kinds included).
 #[must_use]
@@ -27,11 +28,17 @@ pub fn structured_digest(kind: u8, payload: &[u8], chain_id: u64) -> Option<[u8;
             super::cowswap::verify_offchain_cow_order(frame.canonical, frame.sell, frame.buy, chain_id)
                 .map(|(_, h)| h)
         }
+        OFFCHAIN_KIND_PERMIT2 => {
+            let frame = pqsigner_aa::offchain_header::parse_permit2_frame(payload).ok()?;
+            super::permit2::verify_offchain_permit2(frame.core, &frame.erc20, chain_id)
+                .ok()
+                .map(|(_, h)| h)
+        }
         _ => None,
     }
 }
 
-/// The value the slot key signs for a kind-4 / kind-5 payload:
+/// The value the slot key signs for a kind-4 / 5 / 6 payload:
 /// `replay_safe_hash(chain_id, wallet, H)`.
 #[must_use]
 pub fn structured_signed_value(kind: u8, payload: &[u8], chain_id: u64, wallet: &[u8; 20]) -> Option<[u8; 32]> {
@@ -128,6 +135,45 @@ mod offchain_structured_tests {
         );
     }
 
+    /// Kind-6 payload: the packed permit, one empty ERC-20 slot per token,
+    /// no name.
+    fn permit2_payload(core: &[u8]) -> Vec<u8> {
+        let n = usize::from(core[pqsigner_tx::permit2::head_len(core[0]).unwrap() - 1]);
+        let mut v = core.to_vec();
+        for _ in 0..n {
+            v.extend_from_slice(&0u16.to_be_bytes());
+        }
+        v.push(0);
+        v
+    }
+
+    #[test]
+    fn permit2_signs_exactly_what_raw32_signs_for_the_viem_digest() {
+        use super::super::permit2::test_vectors as tv;
+        for (core, chain, digest) in [
+            (tv::single(), 8453, tv::SINGLE_DIGEST),
+            (tv::batch(), 8453, tv::BATCH_DIGEST),
+            (tv::transfer(), 1, tv::TRANSFER_DIGEST),
+            (tv::batch_transfer(), 8453, tv::BATCH_TRANSFER_DIGEST),
+        ] {
+            let p = permit2_payload(&core);
+            let reference = h32(digest);
+            assert_eq!(structured_digest(OFFCHAIN_KIND_PERMIT2, &p, chain), Some(reference));
+            assert_eq!(
+                structured_signed_value(OFFCHAIN_KIND_PERMIT2, &p, chain, &WALLET),
+                Some(raw32_signed_value(chain, &reference))
+            );
+            // The wrong chain, a trailing byte, a missing ERC-20 slot.
+            assert_eq!(structured_digest(OFFCHAIN_KIND_PERMIT2, &p, 10), None);
+            let mut t = p.clone();
+            t.push(0);
+            assert_eq!(structured_digest(OFFCHAIN_KIND_PERMIT2, &t, chain), None);
+            let mut short = core.clone();
+            short.push(0);
+            assert_eq!(structured_digest(OFFCHAIN_KIND_PERMIT2, &short, chain), None);
+        }
+    }
+
     #[test]
     fn structured_refusals() {
         let raw = unhex(SAFE_PRESIGN_HEX);
@@ -189,14 +235,15 @@ mod offchain_structured_tests {
         let mut n = 0;
         for obj in GOLDENS.split("{\n   \"name\"").skip(1) {
             let kind: u8 = field(obj, "kind").parse().unwrap();
+            let chain: u64 = field(obj, "chainId").parse().unwrap();
             let payload = unhex(field(obj, "payload").trim_start_matches("0x"));
             let digest = h32(field(obj, "digest").trim_start_matches("0x"));
             let signed = h32(field(obj, "signedValue").trim_start_matches("0x"));
-            assert_eq!(structured_digest(kind, &payload, 1), Some(digest), "vector {n}");
-            assert_eq!(structured_signed_value(kind, &payload, 1, &WALLET), Some(signed), "vector {n}");
+            assert_eq!(structured_digest(kind, &payload, chain), Some(digest), "vector {n}");
+            assert_eq!(structured_signed_value(kind, &payload, chain, &WALLET), Some(signed), "vector {n}");
             n += 1;
         }
-        assert_eq!(n, 2, "both golden vectors were checked");
+        assert_eq!(n, 6, "every golden vector (SafeTx, CoW, four Permit2) was checked");
     }
 
     /// Verifier parity: the off-chain verifier accepts a SafeTx exactly when

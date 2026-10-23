@@ -240,6 +240,17 @@ would sign for the same typed data — so they move a SafeTx / CoW order off
 the blind tier for an honest companion; a hostile companion can still send
 the hash as RAW32 (#381).
 
+**UPDATE 2026-10-23 — Permit2 (kind 6) joins them.** Hero id `PERMIT2`
+(captions `PERMIT2 APPROVE USDC?`, `PERMIT2 REVOKE USDC?`, `PERMIT2 APPROVE
+3 TOKENS?`, `PERMIT2 ONE-TIME PULL USDC?`, …) is in
+`STRUCTURED_OFFCHAIN_HERO_IDS`, so `Confirm?` again follows the whole body:
+
+| Flow (fixture) | Shown before `Confirm?` | Skipped when signing from it |
+|---|---|---|
+| Off-chain Permit2 (`eip1271/permit2_single`, `_single_max`, `_revoke`, `_batch`, `_transfer`) | network, permit kind (allowance / one-time pull, with the "spender picks recipient and amount" warning), spender, every token's amount + token + allowance expiry/nonce, the one-time nonce, the deadline | ERC-8213 fingerprint + digest (the permit digest), signer account, signing wallet, response mode / key usage |
+
+Same residual: a hostile companion can still send the permit hash as RAW32.
+
 CORRECTION to the 2026-09-24 UPDATE: the pin was never in
 `fsbl-tests/tests/paired_constants.rs`, which recorded the pair as
 deliberately absent. It was `fsbl-tests/tests/source_invariants.rs`

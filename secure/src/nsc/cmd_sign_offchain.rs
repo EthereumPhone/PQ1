@@ -52,12 +52,12 @@
 
 use sphincs_tz_shared::{
     NscStatus, EIP6492_BLOB_LEN, EIP6492_FACTORY_CALLDATA_LEN, MAX_ACCOUNT_INDEX,
-    MAX_OFFCHAIN_COW_ORDER_LEN, MAX_OFFCHAIN_EIP712_TYPED_LEN, MAX_OFFCHAIN_EIP712_TYPED_V3_LEN,
+    MAX_OFFCHAIN_COW_ORDER_LEN, MAX_OFFCHAIN_PERMIT2_LEN, MIN_OFFCHAIN_PERMIT2_LEN, MAX_OFFCHAIN_EIP712_TYPED_LEN, MAX_OFFCHAIN_EIP712_TYPED_V3_LEN,
     MAX_OFFCHAIN_SAFE_TX_LEN, MIN_OFFCHAIN_COW_ORDER_LEN, MIN_OFFCHAIN_SAFE_TX_LEN,
     MAX_OFFCHAIN_PERSONAL_SIGN_LEN, MAX_SLOT_USES, OFFCHAIN_FLAGS_MASK,
     OFFCHAIN_FLAG_ACCOUNT_DEPLOYED, OFFCHAIN_KIND_EIP712_TYPED, OFFCHAIN_KIND_EIP712_TYPED_V3,
-    OFFCHAIN_KIND_COW_ORDER, OFFCHAIN_KIND_PERSONAL_SIGN, OFFCHAIN_KIND_RAW32,
-    OFFCHAIN_KIND_SAFE_TX, PQ_SMART_WALLET_FACTORY, SIGNATURE_LEN,
+    OFFCHAIN_KIND_COW_ORDER, OFFCHAIN_KIND_PERMIT2, OFFCHAIN_KIND_PERSONAL_SIGN,
+    OFFCHAIN_KIND_RAW32, OFFCHAIN_KIND_SAFE_TX, PQ_SMART_WALLET_FACTORY, SIGNATURE_LEN,
     SIGN_OFFCHAIN_HEADER_LEN, SIGN_OFFCHAIN_INPUT_FLAGS_OFF, SIGN_OFFCHAIN_INPUT_KIND_OFF,
     SIGN_OFFCHAIN_INPUT_MAX_LEN, SIGN_OFFCHAIN_INPUT_PAYLOAD_LEN_OFF,
     SIGN_OFFCHAIN_INPUT_PAYLOAD_OFF, SIGN_OFFCHAIN_OUTPUT_COUNT_OFF, SIGN_OFFCHAIN_OUTPUT_LEN,
@@ -251,16 +251,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InvalidPointer as u32;
             }
         }
-        // Structured kinds (2026-10-19): an EIP-712 SafeTx / CoW order the
-        // device decodes and renders (`cmd_sign_offchain_structured`). Both
-        // need a deployed wallet — neither Safe's `checkSignatures` nor
-        // GPv2Settlement unwraps an ERC-6492 blob — refused here, before
-        // the slot probe, so nothing touches flash.
-        OFFCHAIN_KIND_SAFE_TX | OFFCHAIN_KIND_COW_ORDER => {
-            let (min, max) = if kind == OFFCHAIN_KIND_SAFE_TX {
-                (MIN_OFFCHAIN_SAFE_TX_LEN, MAX_OFFCHAIN_SAFE_TX_LEN)
-            } else {
-                (MIN_OFFCHAIN_COW_ORDER_LEN, MAX_OFFCHAIN_COW_ORDER_LEN)
+        // Structured kinds (2026-10-19, Permit2 2026-10-23): an EIP-712
+        // SafeTx / CoW order / Permit2 permit the device decodes and renders
+        // (`cmd_sign_offchain_structured`). All need a deployed wallet —
+        // neither Safe's `checkSignatures`, GPv2Settlement nor Permit2
+        // unwraps an ERC-6492 blob — refused here, before the slot probe,
+        // so nothing touches flash.
+        OFFCHAIN_KIND_SAFE_TX | OFFCHAIN_KIND_COW_ORDER | OFFCHAIN_KIND_PERMIT2 => {
+            let (min, max) = match kind {
+                OFFCHAIN_KIND_SAFE_TX => (MIN_OFFCHAIN_SAFE_TX_LEN, MAX_OFFCHAIN_SAFE_TX_LEN),
+                OFFCHAIN_KIND_COW_ORDER => (MIN_OFFCHAIN_COW_ORDER_LEN, MAX_OFFCHAIN_COW_ORDER_LEN),
+                _ => (MIN_OFFCHAIN_PERMIT2_LEN, MAX_OFFCHAIN_PERMIT2_LEN),
             };
             if payload_len < min || payload_len > max {
                 crate::ui::show_status("EIP-1271", "struct bad len");
@@ -480,10 +481,10 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let mut offchain_confirm_receipt = crate::tx::display::OffchainConfirmReceipt::new();
     offchain_confirm_receipt.fail_initialize();
 
-    // ── 7a. Structured SafeTx / CoW order (kinds 4/5): parse, double
-    //        verify, render, confirm; the signed value is RAW32's
+    // ── 7a. Structured SafeTx / CoW order / Permit2 (kinds 4-6): parse,
+    //        double verify, render, confirm; the signed value is RAW32's
     //        `replay_safe_hash` of the device-recomputed digest ──
-    if kind == OFFCHAIN_KIND_SAFE_TX || kind == OFFCHAIN_KIND_COW_ORDER {
+    if kind == OFFCHAIN_KIND_SAFE_TX || kind == OFFCHAIN_KIND_COW_ORDER || kind == OFFCHAIN_KIND_PERMIT2 {
         match super::cmd_sign_offchain_structured::confirm(
             kind,
             payload,
@@ -965,7 +966,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         OFFCHAIN_KIND_EIP712_TYPED | OFFCHAIN_KIND_EIP712_TYPED_V3 => {
             // hash_to_sign already populated + confirmed in §7b.
         }
-        OFFCHAIN_KIND_SAFE_TX | OFFCHAIN_KIND_COW_ORDER => {
+        OFFCHAIN_KIND_SAFE_TX | OFFCHAIN_KIND_COW_ORDER | OFFCHAIN_KIND_PERMIT2 => {
             // hash_to_sign already populated + confirmed in §7a.
         }
         _ => return NscStatus::InternalError as u32, // unreachable past §4

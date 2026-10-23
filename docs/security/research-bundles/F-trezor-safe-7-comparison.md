@@ -986,7 +986,7 @@ In both modes the wallet recomputes `replaySafeHash(rawHash)` (Solady-nested EIP
 
 `RAW32` remains intentionally opaque: replay-safe nesting prevents the UserOp-forgery oracle, but it cannot prove how a dapp obtained `H`. A hostile companion can submit the final hash of otherwise-supported typed data as `RAW32` and suppress its semantic pages; the device therefore shows `! BLIND RAW32` plus the complete hash. Companions MUST preserve the dapp-requested method and MUST NOT downgrade typed data to `RAW32`. Disabling `RAW32` in production remains the preferred policy unless an explicit compatibility decision accepts this residual.
 
-**Structured off-chain kinds (2026-10-19).** `kind = SAFE_TX` (4) and `kind = COW_ORDER` (5) clear-sign an EIP-712 `SafeTx` (this wallet as a Safe owner) and a CoW `GPv2Order` (CoW's `eip1271` scheme, owner = this wallet) with the native Safe / CoW verifiers and painters of the UserOp path (`nsc/cmd_sign_offchain_structured.rs`). The payloads are the on-chain `safe_v1` and CoW-order trailer encodings (`docs/companion/usb-protocol-v2.md` §0x62); the device recomputes `H` (`safeTxHash` / order digest) and signs `replay_safe_hash(H)` — the same value RAW32 signs for `H` (host-proven, `tx::eip712::offchain_structured`). Gated by `GET_DEVICE_INFO` capability bits 3 / 4; deployed wallets only; under `ui-px` `Confirm?` follows the whole body. A kind-4 signature verifies on Safe v1.3.0, v1.4.1 and v1.5.0+ once the audit-freeze contract set is deployed: since the 2026-10-20 freeze `PQSmartWallet` also implements the legacy `isValidSignature(bytes,bytes)` that v1.3.0 / v1.4.1 call (#995; earlier deployments verified on v1.5.0+ only).
+**Structured off-chain kinds (2026-10-19).** `kind = SAFE_TX` (4) and `kind = COW_ORDER` (5) clear-sign an EIP-712 `SafeTx` (this wallet as a Safe owner) and a CoW `GPv2Order` (CoW's `eip1271` scheme, owner = this wallet) with the native Safe / CoW verifiers and painters of the UserOp path (`nsc/cmd_sign_offchain_structured.rs`). The payloads are the on-chain `safe_v1` and CoW-order trailer encodings (`docs/companion/usb-protocol-v2.md` §0x62); the device recomputes `H` (`safeTxHash` / order digest) and signs `replay_safe_hash(H)` — the same value RAW32 signs for `H` (host-proven, `tx::eip712::offchain_structured`). Gated by `GET_DEVICE_INFO` capability bits 3 / 4; deployed wallets only; under `ui-px` `Confirm?` follows the whole body. A kind-4 signature verifies on Safe v1.3.0, v1.4.1 and v1.5.0+ once the audit-freeze contract set is deployed: since the 2026-10-20 freeze `PQSmartWallet` also implements the legacy `isValidSignature(bytes,bytes)` that v1.3.0 / v1.4.1 call (#995; earlier deployments verified on v1.5.0+ only). **Permit2 (2026-10-23):** `kind = PERMIT2` (6, capability bit 6) clear-signs the four non-witness Uniswap Permit2 permits on the canonical deployment: packed permit + per-token ERC-20 bundles + the spender's name bundle (`docs/companion/usb-protocol-v2.md` §0x62); digest from pinned constants (domain, `PERMIT2_ADDRESS`, type hashes tested against `PermitHash.sol`), signs `replay_safe_hash(H)` like the others, deployed wallets only, duplicate tokens / zero addresses / inexact amounts refused (`tx/src/permit2.rs`, `secure/src/tx/eip712/permit2/`, `tx/display/permit2{,_screens}.rs`).
 
 ### On-chain validation
 
@@ -1546,6 +1546,17 @@ Only trailers are skippable there. Both kinds sign
 would sign for the same typed data — so they move a SafeTx / CoW order off
 the blind tier for an honest companion; a hostile companion can still send
 the hash as RAW32 (#381).
+
+**UPDATE 2026-10-23 — Permit2 (kind 6) joins them.** Hero id `PERMIT2`
+(captions `PERMIT2 APPROVE USDC?`, `PERMIT2 REVOKE USDC?`, `PERMIT2 APPROVE
+3 TOKENS?`, `PERMIT2 ONE-TIME PULL USDC?`, …) is in
+`STRUCTURED_OFFCHAIN_HERO_IDS`, so `Confirm?` again follows the whole body:
+
+| Flow (fixture) | Shown before `Confirm?` | Skipped when signing from it |
+|---|---|---|
+| Off-chain Permit2 (`eip1271/permit2_single`, `_single_max`, `_revoke`, `_batch`, `_transfer`) | network, permit kind (allowance / one-time pull, with the "spender picks recipient and amount" warning), spender, every token's amount + token + allowance expiry/nonce, the one-time nonce, the deadline | ERC-8213 fingerprint + digest (the permit digest), signer account, signing wallet, response mode / key usage |
+
+Same residual: a hostile companion can still send the permit hash as RAW32.
 
 CORRECTION to the 2026-09-24 UPDATE: the pin was never in
 `fsbl-tests/tests/paired_constants.rs`, which recorded the pair as

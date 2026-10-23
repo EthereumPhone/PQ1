@@ -13,6 +13,9 @@
 //!   page-budget per-record page bound + the no-hidden-value WYSIWYS
 //!   soundness + CoW-first precedence — `records_pages_total`'s own
 //!   panic-freedom is compositional from these parts).
+//! - [`permit2`] — pure field-decode of the packed Uniswap Permit2 permit
+//!   carried by the off-chain kind 6 (Kani decode-soundness + duplicate-token
+//!   refusal verified).
 //! - [`names`] — address-name DB + stack-resident [`names::NameResolver`].
 //! - [`safe_mgmt`] — strict selector + fixed-arg decoder for Safe
 //!   owner/module/guard/fallback management ops
@@ -51,6 +54,7 @@ pub mod cowswap_order;
 pub mod erc20;
 pub mod multisend;
 pub mod names;
+pub mod permit2;
 pub mod safe_mgmt;
 pub mod safe_tx;
 pub mod selectors;

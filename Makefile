@@ -472,7 +472,9 @@ E2E_PX_TRANSCRIPTS ?= 0
 #      blind call, 7b 5,050-B call, 7d batch (two members + final ask), 7f the
 #      4,068-B Safe exec. 7c / 7e / the 4,100-B Safe exec are refused before any
 #      screen, so they add none.
-e2e-px: E2E_PX_TRANSCRIPTS = 62
+# 66 = 62 + Scenario 5p-permit2 (the four signed Permit2 variants; its seven
+#      refusals are refused before any screen).
+e2e-px: E2E_PX_TRANSCRIPTS = 66
 e2e-px: e2e ## The e2e suite with the pixel trusted UI (`ui-px`) — pixel routes print [UI-PX]
 
 e2e: ## Automated unified-sign E2E (QEMU)
@@ -547,6 +549,7 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		"\\[NS\\]\\[e2e\\] Scenario 5p-raw32: RAW32 off-chain signature" \
 		"\\[NS\\]\\[e2e\\] Scenario 5p-safe: EIP-712 SafeTx off-chain clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5p-cow: CoW order off-chain clear-sign" \
+		"\\[NS\\]\\[e2e\\] Scenario 5p-permit2: Permit2 off-chain clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5n: known-call mis-bound descriptor is refused" \
 		"\\[NS\\]\\[e2e\\] Scenario 5q: Safe-wrapped CoW presign clear-sign" \
 		"\\[NS\\]\\[e2e\\] Scenario 5q-direct: direct CoW order clear-sign" \
@@ -611,13 +614,13 @@ e2e: ## Automated unified-sign E2E (QEMU)
 		px_flows=$$(grep -c '^\[UI-PX\] 0000/[0-9a-f]* p0' $$log || true); \
 		if [ "$$px_flows" -eq $(E2E_PX_TRANSCRIPTS) ]; then echo "  PASS  ui-px: $(E2E_PX_TRANSCRIPTS) pixel transcripts (every sign dialog)"; \
 		else echo "  FAIL  ui-px: expected $(E2E_PX_TRANSCRIPTS) pixel transcripts, saw $$px_flows"; fail=1; fi; \
-		for hero in APPROVE EXECUTE SEND CALL TRANSFER UNKNOWN BLIND ROTATE; do \
+		for hero in APPROVE EXECUTE SEND CALL TRANSFER UNKNOWN BLIND ROTATE PERMIT2; do \
 			if grep -Eq "^\[UI-PX\] 0000/[0-9a-f]{4} p0 H.* id=$$hero " $$log; then echo "  PASS  ui-px: family hero $$hero"; \
 			else echo "  FAIL  ui-px: no pixel transcript opens with $$hero"; fail=1; fi; \
 		done; \
 		if grep -q '^\[UI-PX\] .* id=DEPLOY ' $$log; then echo "  PASS  ui-px: deployment trailer twin (Scenario 4c)"; \
 		else echo "  FAIL  ui-px: no DEPLOY trailer screen"; fail=1; fi; \
-		for want in 'cap="SIGN COWSWAP[?]"' 'cap="SIGN EIP-1271[?]"' 'cap="SIGN BLIND HASH[?]"' 'cap="SIGN SAFE TX[?]"' 'cap="SIGN COW ORDER[?]"' 'id=INTENT ' 'id=BATCH ' 'cap="SIGN [0-9] TXS[?]"' 'id=OFFSIGNR '; do \
+		for want in 'cap="SIGN COWSWAP[?]"' 'cap="SIGN EIP-1271[?]"' 'cap="SIGN BLIND HASH[?]"' 'cap="SIGN SAFE TX[?]"' 'cap="SIGN COW ORDER[?]"' 'cap="PERMIT2 ' 'id=INTENT ' 'id=BATCH ' 'cap="SIGN [0-9] TXS[?]"' 'id=OFFSIGNR '; do \
 			if grep -Eq "^\[UI-PX\] .* $$want" $$log; then echo "  PASS  ui-px: structured route screen $$want"; \
 			else echo "  FAIL  ui-px: no $$want screen (port step 3)"; fail=1; fi; \
 		done; \
