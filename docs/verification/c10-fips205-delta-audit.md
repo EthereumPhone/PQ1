@@ -142,10 +142,10 @@ self-consistent custom bit order, not the FIPS one.
 
 | FIPS 205 | C10 counterpart | Where | Class |
 |----------|-----------------|-------|-------|
-| **Alg. 5 `chain`** | `chain_hash` | `hash.rs:322-339` | SAME (direction) |
-| **Alg. 6 `wots_pkGen`** | `wots::keygen_pk` | `wots.rs:82-98` | DEVIATES (SPHINCS+C) |
-| **Alg. 7 `wots_sign`** | `wots::sign_with_shuffle` + `find_count` | `wots.rs:54-133` | DEVIATES (SPHINCS+C) |
-| **Alg. 8 `wots_pkFromSig`** | `wots::pk_from_sig` | `wots.rs:139-173` | DEVIATES (SPHINCS+C) |
+| **Alg. 5 `chain`** | `chain_hash` (+ `chain_buf`/`chain_value`) | `hash.rs:324-341`, `425-438` | SAME (direction) |
+| **Alg. 6 `wots_pkGen`** | `wots::keygen_pk` | `wots.rs:101-117` | DEVIATES (SPHINCS+C) |
+| **Alg. 7 `wots_sign`** | `wots::sign_with_shuffle` + `find_count` | `wots.rs:63-156` | DEVIATES (SPHINCS+C) |
+| **Alg. 8 `wots_pkFromSig`** | `wots::pk_from_sig` | `wots.rs:162-196` | DEVIATES (SPHINCS+C) |
 
 **The WOTS+C deviation (the headline one).** FIPS 205 WOTS+ signs `len =
 len_1 + len_2` chains, where `len_2` chains carry a **checksum** of the message
@@ -155,7 +155,7 @@ chains → 46 chains.
 
 C10 has **no checksum chains** (`l = 43`, all message digits). Instead it
 **grinds a 32-bit `count`** until the base-8 digit sum of a count-tweaked
-digest equals exactly `TARGET_SUM = 205` (`find_count`, `wots.rs:54-75`;
+digest equals exactly `TARGET_SUM = 205` (`find_count`, `wots.rs:63-94`;
 `params.rs:52`). The constant-sum constraint is what a checksum would
 otherwise enforce (it pins the total digit weight so an attacker can't freely
 lower digits to forge). This is the "WOTS+C" construction; the `count` is
@@ -166,11 +166,11 @@ such construction — a full-text scan of the standard finds zero occurrences of
 signs the full `len_2`-digit checksum.
 
 - **Chain direction is SAME as WOTS+.** Sign advances each chain from
-  position `0` for `digit[i]` steps (`wots.rs:130`); verify advances from
-  `digit[i]` for `w−1−digit[i] = 7−digit[i]` steps (`wots.rs:168-169`; Yul
+  position `0` for `digit[i]` steps (`wots.rs:153`); verify advances from
+  `digit[i]` for `w−1−digit[i] = 7−digit[i]` steps (`wots.rs:191-192`; Yul
   `SPHINCsC10Asm.sol:176` `steps := sub(7,digit)`). Both reach chain end 7.
 - **Digit-sum gate is enforced on the verify side too** — `pk_from_sig`
-  returns the all-zero pubkey if `Σ digit ≠ 205` (`wots.rs:156-162`), and the
+  returns the all-zero pubkey if `Σ digit ≠ 205` (`wots.rs:179-185`), and the
   Yul reverts (`SPHINCsC10Asm.sol:170`). A signature with a non-conforming
   count cannot validate.
 - **Bound check:** `l·(w−1) = 43·7 = 301 ≥ 205` ✓, so a conforming count

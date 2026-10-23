@@ -72,6 +72,7 @@
       "extract-verifier",
       "extract-fors-grind-r",
       "extract-wots-find-count",
+      "extract-merkle-verify",
       "extract-fors-recovery",
       "extract-wots-pkfromsig",
       "extract-hash-fns"
@@ -89,7 +90,9 @@
       "extract-verifier",
       "extract-wots-find-count",
       "extract-sphincs-adrs",
-      "extract-fors-recovery"
+      "extract-merkle-verify",
+      "extract-fors-recovery",
+      "extract-wots-pkfromsig"
     ],
     "sphincs-c10/src/params.rs": [
       "extract-sign-release",
@@ -117,6 +120,10 @@
       "extract-aa-userop",
       "extract-u256-mul",
       "extract-format-decimal"
+    ],
+    "tx-core/src/hash.rs": [
+      "extract-aa-userop",
+      "extract-aa-eip1271"
     ],
     "tx-core/src/rlp.rs": [
       "extract-decode-item",
@@ -918,11 +925,15 @@
       "crate": "sphincs-c10",
       "rust_files": [
         "sphincs-c10/src/merkle.rs",
-        "sphincs-c10/src/params.rs"
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/address.rs"
       ],
       "rust_files_sha256": [
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
-        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "ee7143b5b909603d7cbbd87f4ca4a5b66cd8311915d2af41c56717614334c617",
@@ -985,12 +996,14 @@
       "rust_files": [
         "sphincs-c10/src/wots.rs",
         "sphincs-c10/src/params.rs",
-        "sphincs-c10/src/hash.rs"
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/address.rs"
       ],
       "rust_files_sha256": [
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
-        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "58cfbc8a7d630f2452b21e3753ea844caec2ce92d11d0adab31856bd8c8f3c5a",
@@ -1208,10 +1221,12 @@
       "make_dir": "contracts/verification",
       "crate": "aa",
       "rust_files": [
-        "aa/src/eip1271.rs"
+        "aa/src/eip1271.rs",
+        "tx-core/src/hash.rs"
       ],
       "rust_files_sha256": [
-        "fe9650ce44d882943a8e431390ce0a8a9e83c62165221a083e178d6a1593944f"
+        "fe9650ce44d882943a8e431390ce0a8a9e83c62165221a083e178d6a1593944f",
+        "0fae281bfb4cb3f29b22433a8a95f4c2acfee9994f1aa932f3388627a6638211"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "ba66c38560e1f120268e8ee59ebe9a120b4eb3a8373b80c8cf70f3d6e0a4a0ad",

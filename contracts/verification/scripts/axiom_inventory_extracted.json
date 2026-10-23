@@ -73,7 +73,7 @@
       "axiom_mentions": 2
     },
     "Extracted/HashSpecs/ChainHash.lean": {
-      "sha256": "1b18399a0df7ae5c5242d9c941ce54c10fafc09a2a9f675c2cd51a7a179e48ce",
+      "sha256": "429226908c7d9ced78118e866262ba2aa001d34db2631b702a626507427c86b4",
       "axiom_mentions": 1
     },
     "Extracted/HashSpecs/Th.lean": {

@@ -1,8 +1,11 @@
-/- §33 axiom-collapse — `hash.chain_hash` spec: the extracted loop (per-step
-   ADRS chain-position tweak at bytes [24..28) + `th` + `pad16`) computes
-   exactly `chain_hash_pure`'s fold, for `start + steps ≤ u32::MAX` (the
-   per-step `start_pos + step` would panic past that; the WOTS+C caller
-   passes start = digit ≤ 7, steps = 7 − digit). -/
+/- §33 axiom-collapse — `hash.chain_hash` spec: the extracted loop over `th`'s
+   96-byte preimage (`chain_buf` = seed ‖ adrs ‖ pad16 val, built once; each
+   step writes the chain position at bytes [56..60) — ADRS bytes [24..28) —
+   hashes the buffer with `sha256_bytes`, and writes the digest's first N bytes
+   back as the value at [64..80); `chain_value` reads it out) computes exactly
+   `chain_hash_pure`'s fold, for `start + steps ≤ u32::MAX` (the per-step
+   `start_pos + step` would panic past that; the WOTS+C caller passes
+   start = digit ≤ 7, steps = 7 − digit). -/
 import Extracted.HashSpecs.Th
 import Extracted.HashSpecs.WotsDigest
 

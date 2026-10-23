@@ -1935,6 +1935,7 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/ForsExtractDiffCheck.lean
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/HMsgDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_hmsg_proof_controls.py
+	@$(_FV_PYTHON3) scripts/test_chain_hash_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsBridgeDiffCheck.lean
 	@$(_FV_PYTHON3) scripts/test_wots_proof_controls.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/WotsRecoveryDiffCheck.lean
@@ -2487,8 +2488,12 @@ _extract-decode-item-impl:
 
 # §33 axiom-collapse — the five sphincs-c10 tweakable-hash primitives with
 # sha256_bytes as the SINGLE opaque boundary (FunsExternal wires it to the
-# vendored FIPS 180-4 sha256_pure). chain_hash extracts its real loop (calls
-# th); th/th_pair/th_multi/wots_digest expose their exact preimage assembly.
+# vendored FIPS 180-4 sha256_pure). chain_hash extracts its real loop over
+# th's 96-byte preimage (chain_buf/chain_value; it calls sha256_bytes directly);
+# th/th_pair/th_multi/wots_digest expose their exact preimage assembly. pad16
+# is its own root because chain_hash no longer reaches it, and pad16_pure_spec
+# (HashSpecs/ChainHash.lean, used by the FORS/sign specs) is stated about this
+# extraction's hash.pad16.
 # H_msg keeps streaming through the separate sha256_parts backend boundary.
 .PHONY: extract-hash-fns
 _extract-hash-fns-impl:

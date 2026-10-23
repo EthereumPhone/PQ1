@@ -29,7 +29,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from check_extraction_freshness import max_attempts_consistency_errors
+from check_extraction_freshness import (
+    ALLOWED_EXTERNAL_SOURCE_PREFIXES,
+    SOURCE_RE,
+    max_attempts_consistency_errors,
+)
+from normalize_secure_wrapper_extraction import normalize as normalize_secure_wrapper
 
 VERIF_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -303,6 +308,42 @@ def raw_output_errors(
     return errors
 
 
+# Targets whose recipe rewrites raw `Source:` paths before committing: the
+# secure-wrapper model is extracted from a materialized crate, so its raw
+# spans name `src/lib.rs` / `src/production.rs` relative to that crate.
+RAW_SOURCE_NORMALIZERS = {"extract-secure-wrapper": normalize_secure_wrapper}
+
+
+def source_coverage_errors(
+    output_dir: Path, rust_files: list[str], ignored: set[str],
+    normalize=lambda text: text,
+) -> list[str]:
+    """Every repo-local file a raw module cites must be a pinned input.
+
+    `check_extraction_freshness.entry_provenance_errors` checks the committed
+    modules; this is the regen-time half for raw outputs that are never
+    committed, notably the external templates. A template citing a file missing
+    from `rust_files` can go stale on an edit to that file without the
+    toolchain-free pins noticing — the extract-merkle-verify template cited
+    hash.rs while only merkle.rs and params.rs were pinned. Declarations a
+    recipe `--kill`s (re-imported from another extraction) still count: their
+    raw spans move the raw pins."""
+    pinned = set(rust_files)
+    cited: dict[str, set[str]] = collections.defaultdict(set)
+    for path in sorted(output_dir.glob("*.lean")):
+        if path.name in ignored:
+            continue
+        text = normalize(path.read_text(encoding="utf-8"))
+        for source in SOURCE_RE.findall(text):
+            if not source.startswith(ALLOWED_EXTERNAL_SOURCE_PREFIXES):
+                cited[source].add(path.name)
+    return [
+        f"raw module(s) {sorted(cited[source])} cite {source!r}, "
+        "which is not in the registry entry's rust_files"
+        for source in sorted(set(cited) - pinned)
+    ]
+
+
 def compare_external_interface(
     label: str,
     committed: Path,
@@ -470,6 +511,13 @@ def check_target(target: str, output_dir: Path, transformed_funs: Path | None) -
             output_dir, entry["raw_generated_sha256"], ignored
         )
     )
+    errors.extend(
+        f"{target}: {message}"
+        for message in source_coverage_errors(
+            output_dir, entry["rust_files"], ignored,
+            RAW_SOURCE_NORMALIZERS.get(target, lambda text: text),
+        )
+    )
     return errors
 
 
@@ -581,6 +629,65 @@ def self_test() -> int:
             print("  ok: raw generated Types/template signature drift is CAUGHT")
         else:
             print("FAIL: raw generated content/hash drift escaped")
+            ok = False
+
+        (raw / "FunsExternal_Template.lean").write_text(
+            "/- Source: 'crate/src/a.rs', lines 1:0-2:1 -/\n"
+            "/- Source: '/rustc/library/core/src/option.rs', lines 3:0-4:1 -/\n",
+            encoding="utf-8",
+        )
+        if source_coverage_errors(raw, ["crate/src/a.rs"], set()):
+            print("FAIL: fully pinned raw source citations were rejected")
+            ok = False
+        (raw / "FunsExternal_Template.lean").write_text(
+            "/- Source: 'crate/src/a.rs', lines 1:0-2:1 -/\n"
+            "/- Source: 'crate/src/b.rs', lines 3:0-4:1 -/\n",
+            encoding="utf-8",
+        )
+        if source_coverage_errors(raw, ["crate/src/a.rs"], set()):
+            print("  ok: raw output citing an unpinned workspace file is CAUGHT")
+        else:
+            print("FAIL: raw output citing an unpinned workspace file escaped")
+            ok = False
+
+        # The same check through check_target, so dropping its call there fails.
+        coverage = "which is not in the registry entry's rust_files"
+        wired = root / "wired"
+        wired.mkdir()
+        (wired / "Adrs.lean").write_text(
+            "/- Source: 'sphincs-c10/src/address.rs', lines 1:0-2:1 -/\n",
+            encoding="utf-8",
+        )
+        if any(coverage in e for e in check_target("extract-sphincs-adrs", wired, None)):
+            print("FAIL: check_target rejected a pinned raw source citation")
+            ok = False
+        (wired / "Adrs.lean").write_text(
+            "/- Source: 'sphincs-c10/src/hash.rs', lines 1:0-2:1 -/\n",
+            encoding="utf-8",
+        )
+        if any(coverage in e for e in check_target("extract-sphincs-adrs", wired, None)):
+            print("  ok: check_target reports a raw citation of an unpinned file")
+        else:
+            print("FAIL: check_target does not run the raw source-coverage check")
+            ok = False
+
+        # Materialized-crate paths are pinned only after the recipe's mapping.
+        registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
+        wrapper = next(e for e in registry["entries"]
+                       if e["target"] == "extract-secure-wrapper")
+        (raw / "FunsExternal_Template.lean").write_text(
+            "/- Source: 'src/lib.rs', lines 1:0-2:1 -/\n"
+            "/- Source: 'src/production.rs', lines 3:0-4:1 -/\n",
+            encoding="utf-8",
+        )
+        normalize = RAW_SOURCE_NORMALIZERS["extract-secure-wrapper"]
+        if source_coverage_errors(raw, wrapper["rust_files"], set(), normalize):
+            print("FAIL: mapped secure-wrapper source citations were rejected")
+            ok = False
+        if source_coverage_errors(raw, wrapper["rust_files"], set()):
+            print("  ok: unmapped materialized-crate source paths are CAUGHT")
+        else:
+            print("FAIL: unmapped materialized-crate source paths escaped")
             ok = False
     print("check_extraction_regen_output --self-test PASS" if ok else
           "check_extraction_regen_output --self-test FAILED")

@@ -104,6 +104,7 @@ on:
       - 'contracts/verification/lean/SphincsCVerify/Spec/Signature.lean'
       - 'contracts/verification/scripts/test_hmsg_vendored_spec.py'
       - 'contracts/verification/scripts/test_hmsg_proof_controls.py'
+      - 'contracts/verification/scripts/test_chain_hash_proof_controls.py'
       - 'contracts/verification/scripts/test_wots_vendored_spec.py'
       - 'contracts/verification/scripts/test_wots_proof_controls.py'
       - 'contracts/verification/scripts/test_fors_recovery_proof_controls.py'
