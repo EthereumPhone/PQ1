@@ -245,6 +245,11 @@ pub mod probe {
             } else {
                 l.p.long.0 = l.p.long.0.saturating_add(1);
                 l.p.long.1 += u64::from(gap);
+                // Every long gap is a boundary candidate (a sign's end is
+                // one): print the running sums so per-sign deltas can be
+                // taken against the bench's own lines.
+                #[cfg(feature = "debug-log")]
+                super::probe_mark(&l.p);
             }
         }
         l.mark = t;
@@ -378,6 +383,15 @@ fn xcheck_digest(out: *const u8) {
     if *n % (1 << 20) == 0 {
         hash_log!("[S] hash-xcheck n={} ok", *n);
     }
+}
+
+/// Semihosting print of the probe's running sums at a long gap: digests,
+/// short-gap cycles, driver cycles (every stage), long-gap cycles.
+#[cfg(all(feature = "hash-probe", feature = "debug-log"))]
+#[inline(never)]
+fn probe_mark(p: &probe::Probe) {
+    let drv: u64 = p.cyc[probe::READY..].iter().sum();
+    hash_log!("[S] hash-probe L n={} gap={} drv={} long={}", p.n, p.cyc[probe::GAP], drv, p.long.1);
 }
 
 /// Semihosting print of the probe's means, cycles per digest since boot.
