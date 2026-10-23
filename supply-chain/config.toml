@@ -241,8 +241,9 @@ version = "0.9.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.ctutils]]
-version = "0.4.2"
+version = "0.4.4"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0385 patch upgrade; retains the existing exemption, not a full crate audit."
 
 [[exemptions.dbl]]
 version = "0.3.2"
