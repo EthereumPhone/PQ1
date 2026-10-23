@@ -102,6 +102,7 @@ two host-runnable mechanisms:
 | `negative_saes_polls_keyvalid_before_encrypt` | KEYVALID polled before EN | text-pin spin loop | engine starves forever, CCF never sets |
 | `negative_saes_decrypt_runs_key_derivation_pass_first` | KD pass (MODE=0b01) precedes decrypt (0b10) | text-pin both MODE shifts | nonsense plaintext on every decrypt |
 | `negative_hash_module_pulses_hashrst_before_each_init` | HASHRST set+clear pulsed in both `init_clock` and `pqsigner_sha256_init` | substring-count ≥ 2 | STM32U5 errata: completed-hash FIFO state stays stuck |
+| ↳ **UPDATE 2026-10-23:** replaced by `negative_hash_reset_is_per_digest_in_fsbl_and_on_wipe_in_secure` (exact-shape pin; the count-≥2 form passed a cfg-gated removal). The secure image now restarts each digest with INIT alone (`pqsigner-hw/init-restart`) and resets the engine in `nsc::zeroize_sensitive_state`; the FSBL keeps the per-digest pulse. No erratum backs the old "FIFO stays stuck" claim: it landed with the DINIS-poll fix in 4fefc3bc9 and was never isolated. | | | |
 | `negative_bhk_provision_refuses_when_already_provisioned` | second-call refuses | text-pin guard | reprovision invalidates paired SE050 channels |
 | `negative_bhk_load_and_lock_sets_bhklock` | BHKLOCK raised before return | text-pin `seccfgr | TAMP_BHKLOCK` write | S-world RCE could dump unwrapped BHK from BKPR |
 | `negative_hkdf_expand_n_blocks_capped_at_255` | 255-block cap enforced | text-pin `debug_assert!(n <= 255` | counter byte wraps silently → repeated blocks |

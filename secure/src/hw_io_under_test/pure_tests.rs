@@ -72,7 +72,7 @@ const C10_CARGO_SRC: &str = include_str!("../../../sphincs-c10/Cargo.toml");
 const C10_HASH_SRC: &str = include_str!("../../../sphincs-c10/src/hash.rs");
 /// The secure `hw-sha256` line: the one place the driver's secure-image
 /// features and `sphincs-c10`'s one-call digest are raised.
-const HW_SHA256_FEATURE_LINE: &str = "hw-sha256 = [\"sphincs-c10/hw-sha256\", \"sphincs-c10/hw-sha256-oneshot\", \"pqsigner-hw/unrolled-io\", \"pqsigner-hw/inline-barriers\", \"pqsigner-hw/oneshot\"]";
+const HW_SHA256_FEATURE_LINE: &str = "hw-sha256 = [\"sphincs-c10/hw-sha256\", \"sphincs-c10/hw-sha256-oneshot\", \"pqsigner-hw/unrolled-io\", \"pqsigner-hw/inline-barriers\", \"pqsigner-hw/oneshot\", \"pqsigner-hw/init-restart\"]";
 const NSC_MOD_SRC_HW: &str = include_str!("../nsc/mod.rs");
 const MAKEFILE_SRC_HW: &str = include_str!("../../../Makefile");
 
@@ -3061,7 +3061,7 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
     let gated = "    #[cfg(not(feature = \"inline-barriers\"))]\n    cortex_m::asm::dsb();\n";
     let init = body("unsafe fn init_body() {");
     assert!(init.contains(
-        "    REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);\n    dsb();\n    REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);\n    dsb();\n"
+        "    {\n        REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);\n        dsb();\n        REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);\n        dsb();\n    }\n"
     ));
     let cr = init.find("REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);").expect("CR write");
     assert!(init[cr..].contains(gated), "CR before DIN");
@@ -3107,6 +3107,89 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
     assert!(C10_HASH_SRC.contains(
         "#[cfg(not(feature = \"hw-sha256-oneshot\"))]\n#[inline(always)]\nfn sha256_oneshot(data: &[u8]) -> [u8; 32] {\n    let mut h = Sha256::new();\n    h.update(data);\n    h.finalize().into()\n}\n"
     ));
+}
+
+#[test]
+fn negative_hash_init_restart_is_secure_only_kat_checked_and_wiped() {
+    // 2026-10-23. ASSUMPTION ATTACKED: the INIT-only restart reaches the FSBL
+    // or misses the shipping image (`stm32u585` must raise `hw-sha256`, which
+    // raises it); it ships without the back-to-back boot vector, or with a
+    // vector whose constant was computed differently from what the firmware
+    // runs (a wrong constant is a boot halt with no diagnostic); a length
+    // runs through only one entry point; or the engine is never reset once
+    // the per-digest reset is gone (the last block fed, `sk_seed` for the
+    // PRFs, would stay in its context registers through idle and lock).
+    assert!(HW_CARGO_SRC.contains("\ninit-restart = [\"oneshot\"]\n"));
+    assert!(!FSBL_CARGO_SRC.contains("init-restart"));
+    let raisers: std::vec::Vec<&str> = SECURE_CARGO_TOML_SRC
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#') && l.contains("\"pqsigner-hw/init-restart\""))
+        .collect();
+    assert_eq!(raisers, [HW_SHA256_FEATURE_LINE]);
+    assert!(SECURE_CARGO_TOML_SRC.contains("\nstm32u585 = [\"sphincs-tz-shared/stm32u585\", \"hw-sha256\"]\n"));
+    // The boot self-test runs the vector in this image.
+    let st = HW_HASH_SRC.split("unsafe fn self_test() {").nth(1).expect("self_test");
+    let st = &st[..st.find("\n}\n").expect("end of self_test")];
+    assert!(st.contains("    #[cfg(feature = \"init-restart\")]\n    // SAFETY: forwarded contract, as above.\n    unsafe {\n        restart_self_test();\n    }\n"));
+    let kat = HW_HASH_SRC.split("unsafe fn restart_self_test() {").nth(1).expect("restart_self_test");
+    let kat = &kat[..kat.find("\n}\n").expect("end")];
+    for shape in [
+        "*b = (i as u8).wrapping_mul(7) ^ 0x5A;",
+        "for (k, &len) in lens.clone().chain(lens.rev()).enumerate() {",
+        "let (head, tail) = msg[..len].split_at(len / 3 + 1);",
+        "if k % 2 == 0 {\n                pqsigner_sha256_oneshot(msg.as_ptr(), len, d.as_mut_ptr());",
+        "pqsigner_sha256_update(head.as_ptr(), head.len());\n                pqsigner_sha256_update(tail.as_ptr(), tail.len());",
+        "acc.rotate_left(1);\n        for (a, x) in acc.iter_mut().zip(d) {\n            *a ^= x;",
+        "if acc == RESTART_KAT {",
+        "loop { cortex_m::asm::wfe(); }",
+    ] {
+        assert!(kat.contains(shape), "restart_self_test shape: {shape}");
+    }
+    assert!(HW_HASH_SRC.contains("let mut msg = [0u8; 1440];"));
+    // The constant is the fold this test recomputes with software SHA-256.
+    let lens: std::vec::Vec<usize> = HW_HASH_SRC
+        .split("const RESTART_KAT_LENS: [usize; 23] =\n    [")
+        .nth(1)
+        .expect("RESTART_KAT_LENS")
+        .split("];")
+        .next()
+        .expect("end")
+        .split(',')
+        .map(|x| x.trim().parse().expect("length"))
+        .collect();
+    let want: std::vec::Vec<u8> = HW_HASH_SRC
+        .split("const RESTART_KAT: [u8; 32] = [")
+        .nth(1)
+        .expect("RESTART_KAT")
+        .split("];")
+        .next()
+        .expect("end")
+        .split(',')
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(|x| u8::from_str_radix(x.trim_start_matches("0x"), 16).expect("byte"))
+        .collect();
+    assert_eq!((lens.len(), want.len()), (23, 32));
+    assert!(lens.iter().all(|&n| (1..=1440).contains(&n)), "no empty message, all within the buffer");
+    #[allow(clippy::cast_possible_truncation)]
+    let msg: std::vec::Vec<u8> = (0..1440usize).map(|i| (i as u8).wrapping_mul(7) ^ 0x5A).collect();
+    let mut acc = [0u8; 32];
+    let mut apis = std::collections::BTreeMap::<usize, [bool; 2]>::new();
+    for (k, &len) in lens.iter().chain(lens.iter().rev()).enumerate() {
+        use sha2::{Digest, Sha256};
+        let d = Sha256::digest(&msg[..len]);
+        acc.rotate_left(1);
+        for (a, x) in acc.iter_mut().zip(d) {
+            *a ^= x;
+        }
+        apis.entry(len).or_default()[k % 2] = true;
+    }
+    assert_eq!(acc.to_vec(), want, "RESTART_KAT is not the fold of RESTART_KAT_LENS");
+    assert!(apis.values().all(|a| a[0] && a[1]), "every length through both entry points");
+    // Every secret wipe resets the engine instead.
+    let wipe = NSC_MOD_SRC_HW.split("pub fn zeroize_sensitive_state() {\n").nth(1).expect("zeroize_sensitive_state");
+    let wipe = &wipe[..wipe.find("\n}\n").expect("end")];
+    assert!(wipe.contains("    #[cfg(feature = \"hw-sha256\")]\n    pqsigner_hw::hash::scrub();\n"));
 }
 
 #[test]

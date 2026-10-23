@@ -1065,13 +1065,37 @@ fn negative_saes_decrypt_runs_key_derivation_pass_first() {
 }
 
 #[test]
-fn negative_hash_module_pulses_hashrst_before_each_init() {
-    // STM32U5 HASH errata: setting INIT alone is not enough to recover
-    // from a completed hash. RSTR pulse wipes FIFO state.
-    let rstr_set = HASH_SRC.matches("REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);").count();
-    let rstr_clr = HASH_SRC.matches("REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);").count();
-    assert!(rstr_set >= 2, "HASHRST must be pulsed in both init_clock and pqsigner_sha256_init");
-    assert!(rstr_clr >= 2);
+fn negative_hash_reset_is_per_digest_in_fsbl_and_on_wipe_in_secure() {
+    // 2026-10-23. Replaces `negative_hash_module_pulses_hashrst_before_each_init`,
+    // which counted occurrences (>= 2) of the pulse text, so a cfg-gated
+    // removal passed it, and cited an "errata" no document carries.
+    // ASSUMPTION ATTACKED: the per-digest HASHRST disappears from every build
+    // (the FSBL's bytes carry the silicon boot proof); `init_clock` loses its
+    // boot reset; the reset the secure image moved out of `init` stops
+    // resetting the engine (`scrub`); or a stale DCIS is not checked where the
+    // per-digest reset used to clear it.
+    let body = |start: &str| -> std::string::String {
+        let b = HASH_SRC.split(start).nth(1).expect(start);
+        b[..b.find("\n}\n").expect("end of body")].to_owned()
+    };
+    assert_eq!(HASH_SRC.matches("REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);").count(), 3, "init_clock, the gated per-digest pulse, scrub");
+    assert_eq!(HASH_SRC.matches("REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);").count(), 3);
+    // Every build without `init-restart` (the FSBL) still pulses per digest.
+    assert!(body("unsafe fn init_body() {").contains(
+        "    #[cfg(not(feature = \"init-restart\"))]\n    {\n        REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);\n        dsb();\n        REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);\n        dsb();\n    }\n"
+    ));
+    assert!(body("pub unsafe fn init_clock() {").contains(
+        "    REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);\n    cortex_m::asm::dsb();\n    REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);\n    cortex_m::asm::dsb();\n"
+    ));
+    assert_eq!(
+        body("pub fn scrub() {\n"),
+        "    REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);\n    dsb();\n    REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);\n    dsb();"
+    );
+    // The INIT-only start checks the idle status word for a stale DCIS.
+    assert!(body("unsafe fn init_body() {").contains(
+        "    #[cfg(feature = \"init-restart\")]\n    if wait_ready_sr() & SR_DCIS != 0 {\n        hash_log!(\"[S] hash: DCIS still set at init — FAULT\");\n        hash_engine_fault();\n    }\n"
+    ));
+    assert!(body("unsafe fn init_body() {").contains("    #[cfg(not(feature = \"init-restart\"))]\n    wait_ready();\n"));
 }
 
 #[test]
