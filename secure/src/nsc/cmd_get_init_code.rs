@@ -230,6 +230,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         });
     }
 
+    // #1037: the cached key must be the one this request named before
+    // anything uses it. Two verdicts, each with its own refusal, around a
+    // random delay (`state::slot_cache_identity_verdict`).
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, SLOT_INDEX)
+        != crate::fi::OK_SENTINEL
+    {
+        crate::ui::show_status("InitCode", "slot cache MIA");
+        return NscStatus::InternalError as u32;
+    }
+    crate::fi::wait_random();
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, SLOT_INDEX)
+        != crate::fi::OK_SENTINEL
+    {
+        crate::ui::show_status("InitCode", "slot cache MIA");
+        return NscStatus::InternalError as u32;
+    }
+
     // Extract 32-byte slot-0 pubkey halves from the cache. Mirrors the
     // extraction in `cmd_sign_userop.rs` (N-byte pkSeed/pkRoot copied
     // into the low 16 bytes of a 32-byte zero-init buffer).

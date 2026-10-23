@@ -578,6 +578,43 @@ static mut STATE: SecureState = SecureState::new();
 /// SAFETY: same single-threaded invariant as `STATE`.
 pub(super) static mut SLOT_CACHE: Option<CachedSlot> = None;
 
+/// #1037: whether the cached slot key is the one `(account_index, chain_id,
+/// slot_index)` names. `need_keygen` is one unhardened comparison, so a
+/// single glitch that turns a miss into a hit would otherwise go on to sign
+/// with — or, for a rotation or `get_init_code`, have the bootstrap key
+/// register — another chain's or slot's key. A slot key is chain-bound
+/// precisely so that `MAX_SLOT_USES` is a per-key cap. The identity is read
+/// with volatile loads so each evaluation is its own load.
+#[inline(never)]
+fn slot_cache_names(account_index: u32, chain_id: u64, slot_index: u32) -> bool {
+    // SAFETY: category 5 — read-only borrow of `static mut SLOT_CACHE` under
+    // the single-threaded, non-reentrant gateway, as every handler's read.
+    let Some(c) = (unsafe { &*core::ptr::addr_of!(SLOT_CACHE) }) else {
+        return false;
+    };
+    // SAFETY: category 4 — `c` borrows the populated cache, so the three
+    // fields are live, aligned and initialised; volatile so the compiler
+    // cannot share one load between evaluations.
+    let (a, ch, s) = unsafe {
+        (
+            core::ptr::read_volatile(&c.account_index),
+            core::ptr::read_volatile(&c.chain_id),
+            core::ptr::read_volatile(&c.slot_index),
+        )
+    };
+    a == account_index && ch == chain_id && s == slot_index
+}
+
+/// [`slot_cache_names`] evaluated twice around `fi::wait_random()` and
+/// committed to a sentinel (`fi::check_true_into_sentinel`). Every handler
+/// that uses the cached key after its keygen branch checks this verdict
+/// twice, each check with its own refusal, around another delay — so one
+/// fault neither flips the cache decision nor skips the refusal.
+#[inline(never)]
+pub(super) fn slot_cache_identity_verdict(account_index: u32, chain_id: u64, slot_index: u32) -> u32 {
+    crate::fi::check_true_into_sentinel(|| slot_cache_names(account_index, chain_id, slot_index))
+}
+
 /// Active firmware-update session state. Populated by `CMD_FW_BEGIN`
 /// and drained by `CMD_FW_COMMIT` / `CMD_FW_ABORT`. Lives in SRAM only
 /// — any reset or idle-wipe restarts the companion from BEGIN.

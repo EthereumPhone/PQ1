@@ -1331,6 +1331,21 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         });
     }
 
+    // #1037: the cached key must be the one this request named before
+    // anything uses it. Two verdicts, each with its own refusal, around a
+    // random delay (`state::slot_cache_identity_verdict`).
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        return NscStatus::InternalError as u32;
+    }
+    crate::fi::wait_random();
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        return NscStatus::InternalError as u32;
+    }
+
     // ── 11. Common confirmation-authority gate + C10 sign ───────────
     // Reconstruct from the live values used by key selection, response
     // dispatch, counter publication, and signing. This gate is unconditional

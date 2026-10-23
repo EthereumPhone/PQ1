@@ -2436,6 +2436,25 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         });
     }
 
+    // #1037: the cached key must be the one this request named before
+    // anything uses it. Two verdicts, each with its own refusal, around a
+    // random delay (`state::slot_cache_identity_verdict`).
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        return NscStatus::InternalError as u32;
+    }
+    crate::fi::wait_random();
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        return NscStatus::InternalError as u32;
+    }
+
     // SAFETY: category 5 — read-only borrow of `static mut
     // SLOT_CACHE`. Cache populated above; single-threaded dispatcher
     // means no concurrent mutator.

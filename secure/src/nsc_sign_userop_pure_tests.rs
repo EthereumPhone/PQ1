@@ -2319,3 +2319,53 @@ fn negative_slot_master_is_derived_on_a_cache_miss_only() {
         assert!(!body.contains("derive_c10_slot_keypair"), "{name}: keygen before the derivation");
     }
 }
+
+#[test]
+fn negative_cached_slot_key_identity_is_checked_twice_before_use() {
+    // #1037. ASSUMPTION ATTACKED: a handler uses the cached slot key (to
+    // sign, or to have the bootstrap key register its pubkey on a rotation
+    // or in `get_init_code`'s factory call) after only a `Some(c)` match, so
+    // one glitch that turns `need_keygen`'s miss into a hit signs / registers
+    // another chain's or slot's key — and a slot key is chain-bound precisely
+    // so that MAX_SLOT_USES is a per-key cap.
+    const GET_INIT_CODE_SRC: &str = include_str!("nsc/cmd_get_init_code.rs");
+    const STATE_SRC: &str = include_str!("nsc/state.rs");
+    let check = |slot: &str| {
+        format!(
+            "    if super::state::slot_cache_identity_verdict(account_index, chain_id, {slot})\n        != crate::fi::OK_SENTINEL\n    {{\n"
+        )
+    };
+    for (name, src, slot) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC, "slot_index"),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC, "slot_index"),
+        ("cmd_sign_offchain.rs", CMD_SIGN_OFFCHAIN_SRC, "slot_index"),
+        ("cmd_get_init_code.rs", GET_INIT_CODE_SRC, "SLOT_INDEX"),
+    ] {
+        let open = src.find("    if need_keygen {\n").unwrap_or_else(|| panic!("{name}: keygen branch"));
+        let close = open + src[open..].find("\n    }\n").unwrap_or_else(|| panic!("{name}: branch end")) + 7;
+        let after = &src[close..];
+        let c = check(slot);
+        assert_eq!(src.matches(c.as_str()).count(), 2, "{name}: two identity checks");
+        let first = after.find(c.as_str()).unwrap_or_else(|| panic!("{name}: check after the keygen branch"));
+        let second = first + c.len() + after[first + c.len()..].find(c.as_str()).expect("second check");
+        // Each check has its own refusal, and a delay separates them.
+        for at in [first, second] {
+            let body = &after[at + c.len()..];
+            let body = &body[..body.find("\n    }\n").expect("refusal end")];
+            assert!(body.trim_end().ends_with("return NscStatus::InternalError as u32;"), "{name}: refusal");
+        }
+        assert!(after[first..second].contains("    crate::fi::wait_random();\n"), "{name}: delay between");
+        // Both run before anything reads the cache again.
+        let next_read = after.find("SLOT_CACHE").unwrap_or(after.len());
+        assert!(second < next_read, "{name}: the cached key is used before the second check");
+    }
+    // The verdict: two volatile-loaded evaluations committed to a sentinel.
+    let names = STATE_SRC.split("fn slot_cache_names(").nth(1).expect("slot_cache_names");
+    let names = &names[..names.find("\n}\n").expect("end")];
+    assert_eq!(names.matches("core::ptr::read_volatile(&c.").count(), 3);
+    assert!(STATE_SRC.contains(
+        "#[inline(never)]\npub(super) fn slot_cache_identity_verdict(account_index: u32, chain_id: u64, slot_index: u32) -> u32 {\n    crate::fi::check_true_into_sentinel(|| slot_cache_names(account_index, chain_id, slot_index))\n}"
+    ));
+    // The forced path keeps its own double read.
+    assert!(CMD_SIGN_USEROP_FORCED_SRC.contains("if identity_a != expected || identity_b != expected {"));
+}
