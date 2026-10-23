@@ -2404,7 +2404,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     if need_keygen {
         // Derived here, on a cache miss only: a cached slot key never reads
         // the slot master, and deriving it costs a whole BIP-39 seed
-        // (2,048 HMAC-SHA512 rounds, ~0.5 s on the U585) per request.
+        // (2,048 HMAC-SHA512 rounds, 0.63 s measured on the U585) per request.
         let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
             crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
         );

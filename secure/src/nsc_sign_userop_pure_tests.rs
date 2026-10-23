@@ -2293,7 +2293,7 @@ fn forced_authority_is_volatile_invalidated_on_every_terminal_return() {
 fn negative_slot_master_is_derived_on_a_cache_miss_only() {
     // 2026-10-23. ASSUMPTION ATTACKED: a handler derives the slot master (a
     // whole BIP-39 seed: 24 constant-time dictionary scans and 2,048
-    // HMAC-SHA512 rounds, ~0.6 s on the U585) on a slot-cache HIT, where
+    // HMAC-SHA512 rounds, 0.63 s measured on the U585) on a slot-cache HIT, where
     // nothing reads it; or derives it anywhere but inside its own
     // `if need_keygen { … }` branch, so a keygen could run on a master the
     // request never derived. Measured on the pq1 bench board: moving it into
