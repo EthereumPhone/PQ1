@@ -179,7 +179,7 @@ REQUIRED_ENTRY_PATHS = {
          "contracts/verification/extracted/Extracted/TxMerkle/FunsExternal.lean"),
     ),
     "extract-merkle-verify": (
-        ("sphincs-c10/src/merkle.rs", "sphincs-c10/src/params.rs"),
+        ("sphincs-c10/src/merkle.rs", "sphincs-c10/src/params.rs", "sphincs-c10/src/hash.rs", "sphincs-c10/src/address.rs"),
         ("contracts/verification/extracted/Extracted/Merkle/Funs.lean",
          "contracts/verification/extracted/Extracted/Merkle/Types.lean",
          "contracts/verification/extracted/Extracted/Merkle/FunsExternal.lean"),
@@ -189,7 +189,7 @@ REQUIRED_ENTRY_PATHS = {
         ('contracts/verification/extracted/Extracted/ForsRecovery/Funs.lean', 'contracts/verification/extracted/Extracted/ForsRecovery/Types.lean', 'contracts/verification/extracted/Extracted/ForsRecovery/FunsExternal.lean'),
     ),
     "extract-wots-pkfromsig": (
-        ("sphincs-c10/src/wots.rs", "sphincs-c10/src/params.rs"),
+        ("sphincs-c10/src/wots.rs", "sphincs-c10/src/params.rs", "sphincs-c10/src/hash.rs", "sphincs-c10/src/address.rs"),
         ("contracts/verification/extracted/Extracted/PkFromSig/Funs.lean",
          "contracts/verification/extracted/Extracted/PkFromSig/Types.lean",
          "contracts/verification/extracted/Extracted/PkFromSig/FunsExternal.lean"),
@@ -231,7 +231,7 @@ REQUIRED_ENTRY_PATHS = {
          "contracts/verification/extracted/Extracted/Wots/Types.lean"),
     ),
     "extract-aa-eip1271": (
-        ("aa/src/eip1271.rs",),
+        ("aa/src/eip1271.rs", "tx-core/src/hash.rs"),
         ("contracts/verification/extracted/Extracted/Eip1271/Funs.lean",
          "contracts/verification/extracted/Extracted/Eip1271/Types.lean",
          "contracts/verification/extracted/Extracted/Eip1271/FunsExternal.lean"),
@@ -258,7 +258,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "8462295912a30a77774af7c76429a4750a74e563ac08397066ed2d7c3e6657a3"
+REGISTRY_BINDING_SHA256 = "9476c1aef14f286c00e1f43a8203c7c7f96457ef7e06c16c46ef614bea674aea"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")

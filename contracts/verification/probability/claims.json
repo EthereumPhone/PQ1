@@ -11861,7 +11861,7 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/PrefixState.ec": "7a2f84fe20ca4989f3a65772de4d12334d00d7e42699b6da2bdd6db77930ab51",
     "sphincs-c10/src/wots.rs": "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
     "sphincs-c10/src/fors.rs": "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
-    "sphincs-c10/src/hash.rs": "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+    "sphincs-c10/src/hash.rs": "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/RawKeygen.ec": "9f983fbb237129b0600ee1462429a722c53f86a5a74e25a0e508f16c1238174e",
     "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/KeygenPrefixes.ec": "19b7377f3c34ab07d8a2e0884efd4554e612667df34bc5c3d1db16f1045ea66e",

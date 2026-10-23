@@ -10,12 +10,25 @@
     "extract_command_pattern": "cd <crate> && RUSTFLAGS=--cfg lean_extract $PQLEAN/charon cargo --preset=aeneas --opaque <deps> --start-from <symbol> --dest-file <llbc>; $PQLEAN/aeneas -backend lean -dest <out> [-split-files] <llbc>; check_extraction_regen_output.py <target> <out> [normalized Funs]"
   },
   "shared_rust_files": {
-    "sphincs-c10/src/shuffle.rs": [
+    "sphincs-c10/src/hypertree.rs": [
       "extract-sign-release",
       "extract-sign-forest",
-      "extract-shuffle-derive",
-      "extract-shuffle",
-      "extract-wots-sign"
+      "extract-wots-sign",
+      "extract-xmss-auth",
+      "extract-xmss-root",
+      "extract-verifier",
+      "extract-wots-find-count",
+      "extract-fors-recovery"
+    ],
+    "sphincs-c10/src/fors.rs": [
+      "extract-sign-release",
+      "extract-sign-forest",
+      "extract-fors-auth",
+      "extract-fors-root",
+      "extract-fors-pk",
+      "extract-verifier",
+      "extract-fors-grind-r",
+      "extract-fors-index"
     ],
     "sphincs-c10/src/wots.rs": [
       "extract-sign-release",
@@ -28,6 +41,41 @@
       "extract-wots-find-count",
       "extract-wots-pkfromsig",
       "extract-wots-digits"
+    ],
+    "sphincs-c10/src/merkle.rs": [
+      "extract-sign-release",
+      "extract-sign-forest",
+      "extract-xmss-auth",
+      "extract-xmss-root",
+      "extract-verifier",
+      "extract-merkle-verify"
+    ],
+    "sphincs-c10/src/shuffle.rs": [
+      "extract-sign-release",
+      "extract-sign-forest",
+      "extract-shuffle-derive",
+      "extract-shuffle",
+      "extract-wots-sign"
+    ],
+    "sphincs-c10/src/hash.rs": [
+      "extract-sign-release",
+      "extract-sign-forest",
+      "extract-wots-sign",
+      "extract-xmss-auth",
+      "extract-xmss-root",
+      "extract-fors-auth",
+      "extract-fors-root",
+      "extract-fors-secret",
+      "extract-wots-keygen",
+      "extract-wots-secret",
+      "extract-fors-pk",
+      "extract-verifier",
+      "extract-fors-grind-r",
+      "extract-wots-find-count",
+      "extract-merkle-verify",
+      "extract-fors-recovery",
+      "extract-wots-pkfromsig",
+      "extract-hash-fns"
     ],
     "sphincs-c10/src/address.rs": [
       "extract-sign-release",
@@ -42,7 +90,9 @@
       "extract-verifier",
       "extract-wots-find-count",
       "extract-sphincs-adrs",
-      "extract-fors-recovery"
+      "extract-merkle-verify",
+      "extract-fors-recovery",
+      "extract-wots-pkfromsig"
     ],
     "sphincs-c10/src/params.rs": [
       "extract-sign-release",
@@ -66,56 +116,14 @@
       "extract-hash-fns",
       "extract-wots-digits"
     ],
-    "sphincs-c10/src/hash.rs": [
-      "extract-sign-release",
-      "extract-sign-forest",
-      "extract-wots-sign",
-      "extract-xmss-auth",
-      "extract-xmss-root",
-      "extract-fors-auth",
-      "extract-fors-root",
-      "extract-fors-secret",
-      "extract-wots-keygen",
-      "extract-wots-secret",
-      "extract-fors-pk",
-      "extract-verifier",
-      "extract-fors-grind-r",
-      "extract-wots-find-count",
-      "extract-fors-recovery",
-      "extract-hash-fns"
-    ],
-    "sphincs-c10/src/hypertree.rs": [
-      "extract-sign-release",
-      "extract-sign-forest",
-      "extract-wots-sign",
-      "extract-xmss-auth",
-      "extract-xmss-root",
-      "extract-verifier",
-      "extract-wots-find-count",
-      "extract-fors-recovery"
-    ],
-    "sphincs-c10/src/merkle.rs": [
-      "extract-sign-release",
-      "extract-sign-forest",
-      "extract-xmss-auth",
-      "extract-xmss-root",
-      "extract-verifier",
-      "extract-merkle-verify"
-    ],
-    "sphincs-c10/src/fors.rs": [
-      "extract-sign-release",
-      "extract-sign-forest",
-      "extract-fors-auth",
-      "extract-fors-root",
-      "extract-fors-pk",
-      "extract-verifier",
-      "extract-fors-grind-r",
-      "extract-fors-index"
-    ],
     "tx-core/src/eip1559.rs": [
       "extract-aa-userop",
       "extract-u256-mul",
       "extract-format-decimal"
+    ],
+    "tx-core/src/hash.rs": [
+      "extract-aa-userop",
+      "extract-aa-eip1271"
     ],
     "tx-core/src/rlp.rs": [
       "extract-decode-item",
@@ -235,7 +243,7 @@
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
         "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
@@ -279,7 +287,7 @@
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
         "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
@@ -378,7 +386,7 @@
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
         "02641534d8d87df0a5e6e3aa2581c4b6e3bad8fbee37939ab05d296b54fab3c7",
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a"
       ],
@@ -419,7 +427,7 @@
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "32cbdd1567dbd07ae37785e93337394e3c676f1964bee97edf92b726cc18cd56",
@@ -459,7 +467,7 @@
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "971d73a4f6e07bb410cd4656ac22e300b9db1e62cfda942c9ebde9547acd16c7",
@@ -495,7 +503,7 @@
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "f0a3b8977eca85195418b31e9c0d96e8628559afe80e9b355cd0b0caddac985b",
@@ -530,7 +538,7 @@
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "781b363e69989dd67c24d6f9269ed955dbc40c801ec32a7db826cef81ed1183d",
@@ -561,7 +569,7 @@
         "sphincs-c10/src/params.rs"
       ],
       "rust_files_sha256": [
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {
@@ -597,7 +605,7 @@
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "467deb815a3016fea8c8782a474d68a2bfea01dc373434456d458b5fd9ec83fc",
@@ -627,7 +635,7 @@
         "sphincs-c10/src/params.rs"
       ],
       "rust_files_sha256": [
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {
@@ -663,7 +671,7 @@
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "160318291e85c43e75cb80571f823806e0b083e353b366de7008b467e90a3b20",
@@ -701,7 +709,7 @@
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef"
@@ -738,7 +746,7 @@
       "rust_files_sha256": [
         "c15c5d5ecf46aeda6007d61e2e9e227a2eca2d40fcb9d4120263ab0011ffa804",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "42c9aaed875972bb4a232c388ed3a6c88d5acb854fd23af70125615d3a70a1e3",
@@ -775,7 +783,7 @@
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "0256d70ca612b23b7939e5cfa20eb03296336d351d5f505584b0ee70b120c1d9",
@@ -917,11 +925,15 @@
       "crate": "sphincs-c10",
       "rust_files": [
         "sphincs-c10/src/merkle.rs",
-        "sphincs-c10/src/params.rs"
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/address.rs"
       ],
       "rust_files_sha256": [
         "e5b95bd8abb5982e11637572260b69ef466039e9305430bf6f25091d183fcbef",
-        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "ee7143b5b909603d7cbbd87f4ca4a5b66cd8311915d2af41c56717614334c617",
@@ -956,7 +968,7 @@
         "2f5e307fd9fb164830dfca9030d8d57d3da2b72d3f64139297f41ea33b4cc23a",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
         "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00",
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a"
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "03fdaae78900f26b748b182ec39b7a876881f1217520abc4e13d0129c6a34be8",
@@ -983,11 +995,15 @@
       "crate": "sphincs-c10",
       "rust_files": [
         "sphincs-c10/src/wots.rs",
-        "sphincs-c10/src/params.rs"
+        "sphincs-c10/src/params.rs",
+        "sphincs-c10/src/hash.rs",
+        "sphincs-c10/src/address.rs"
       ],
       "rust_files_sha256": [
         "5e94b52579f488e0933f0ca634e3b84ba687838b41192a98f5a8afb5e8b16327",
-        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
+        "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
+        "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "58cfbc8a7d630f2452b21e3753ea844caec2ce92d11d0adab31856bd8c8f3c5a",
@@ -1017,11 +1033,11 @@
         "sphincs-c10/src/params.rs"
       ],
       "rust_files_sha256": [
-        "b71f18ac0131fac76ce5c264cdfddf40b11399daf85e6afed9cc9078b6d5891a",
+        "c00562f0b0ac71bc238e5be21ff8541821a0523155836f3c0872c34c1b1b87be",
         "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
       ],
       "raw_generated_sha256": {
-        "Funs.lean": "79b52e3ae29363da35c5985439d46457214d1000f81f0644e6eaa2aedc52d414",
+        "Funs.lean": "2d3d110478e469eb25df52d61b6a354b64a7ffc774320a7378dc35bd96744b97",
         "Types.lean": "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
         "FunsExternal_Template.lean": "b18ad5f135e067d0775a28ab26a203395868ec06a95188a6b659c48a426a933b"
       },
@@ -1031,7 +1047,7 @@
         "contracts/verification/extracted/Extracted/Hash/FunsExternal.lean"
       ],
       "generated_lean_sha256": [
-        "c962d0645f1dd5fb23e486123444310a33feeb7d56c8d9fa40acc9f86e7c5404",
+        "cfa6c16cb00671f4abd34998cb49040d0a032958d280156b696bc8a7080d8bc5",
         "1a8a61e6baf8695010c94fd0e65d21551f6fbf74a31bb5d3f7a48f150d84ab66",
         "3b2c51b255bd986e19843f4e4d968974ba68697864266c96b9459bd2ad1ada7b"
       ],
@@ -1205,10 +1221,12 @@
       "make_dir": "contracts/verification",
       "crate": "aa",
       "rust_files": [
-        "aa/src/eip1271.rs"
+        "aa/src/eip1271.rs",
+        "tx-core/src/hash.rs"
       ],
       "rust_files_sha256": [
-        "fe9650ce44d882943a8e431390ce0a8a9e83c62165221a083e178d6a1593944f"
+        "fe9650ce44d882943a8e431390ce0a8a9e83c62165221a083e178d6a1593944f",
+        "0fae281bfb4cb3f29b22433a8a95f4c2acfee9994f1aa932f3388627a6638211"
       ],
       "raw_generated_sha256": {
         "Funs.lean": "ba66c38560e1f120268e8ee59ebe9a120b4eb3a8373b80c8cf70f3d6e0a4a0ad",
