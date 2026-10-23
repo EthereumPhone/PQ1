@@ -2288,3 +2288,34 @@ fn forced_authority_is_volatile_invalidated_on_every_terminal_return() {
     assert!(FORCED_BLIND_DISPLAY_SRC.contains("write_volatile(&mut self.domain, 0)"));
     assert!(FORCED_BLIND_DISPLAY_SRC.contains("for byte in &mut self.request_digest"));
 }
+
+#[test]
+fn negative_slot_master_is_derived_on_a_cache_miss_only() {
+    // 2026-10-23. ASSUMPTION ATTACKED: a handler derives the slot master (a
+    // whole BIP-39 seed: 24 constant-time dictionary scans and 2,048
+    // HMAC-SHA512 rounds, ~0.6 s on the U585) on a slot-cache HIT, where
+    // nothing reads it; or derives it anywhere but inside its own
+    // `if need_keygen { … }` branch, so a keygen could run on a master the
+    // request never derived. Measured on the pq1 bench board: moving it into
+    // the branch took the fixed non-hash cost of a cached Type-2 sign from
+    // 126.45 M to 25.15 M cycles.
+    const GET_INIT_CODE_SRC: &str = include_str!("nsc/cmd_get_init_code.rs");
+    for (name, src) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC),
+        ("cmd_sign_offchain.rs", CMD_SIGN_OFFCHAIN_SRC),
+        ("cmd_get_init_code.rs", GET_INIT_CODE_SRC),
+        ("cmd_sign_userop_forced.rs", CMD_SIGN_USEROP_FORCED_SRC),
+    ] {
+        let calls: std::vec::Vec<usize> =
+            src.match_indices("slot_master_entropy_from_entropy(").map(|(i, _)| i).collect();
+        assert_eq!(calls.len(), 1, "{name}: one slot-master derivation");
+        let open = src.find("if need_keygen {\n").unwrap_or_else(|| panic!("{name}: need_keygen branch"));
+        let indent = &src[src[..open].rfind('\n').expect("line start") + 1..open];
+        let close = open + src[open..].find(&format!("\n{indent}}}\n")).unwrap_or_else(|| panic!("{name}: branch end"));
+        assert!(open < calls[0] && calls[0] < close, "{name}: derivation outside the cache-miss branch");
+        // It is the branch's first statement, before any keygen.
+        let body = &src[open..calls[0]];
+        assert!(!body.contains("derive_c10_slot_keypair"), "{name}: keygen before the derivation");
+    }
+}
