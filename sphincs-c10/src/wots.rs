@@ -284,3 +284,8 @@ pub(crate) fn digit_sum(digest: &[u8; 32]) -> usize {
     sum += ((v & 7) + ((v >> 3) & 7) + ((v >> 6) & 7)) as usize;
     sum
 }
+
+// `digit_sum` is written for C10's geometry: 43 digits of 3 bits, i.e. five
+// 3-byte groups of eight digits plus the top three (bits 120..=128). Any
+// other parameter set must not compile it unchanged.
+const _: () = assert!(L == 43 && LOG_W == 3 && W_MASK == 7 && L * LOG_W == 5 * 24 + 9);
