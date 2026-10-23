@@ -278,6 +278,7 @@
         "tx/src/cowswap_order.rs",
         "tx/src/erc20/calldata.rs",
         "tx/src/multisend.rs",
+        "tx/src/permit2.rs",
         "tx/src/safe_mgmt.rs",
         "tx/src/safe_tx.rs",
         "tx/src/typed_call/abi.rs",
