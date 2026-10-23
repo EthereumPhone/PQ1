@@ -1096,6 +1096,12 @@ fn negative_hash_reset_is_per_digest_in_fsbl_and_on_wipe_in_secure() {
         "    #[cfg(feature = \"init-restart\")]\n    if wait_ready_sr() & SR_DCIS != 0 {\n        hash_log!(\"[S] hash: DCIS still set at init — FAULT\");\n        hash_engine_fault();\n    }\n"
     ));
     assert!(body("unsafe fn init_body() {").contains("    #[cfg(not(feature = \"init-restart\"))]\n    wait_ready();\n"));
+    assert!(HASH_SRC.contains("#[cfg(not(feature = \"init-restart\"))]\n#[inline]\nfn wait_ready() {"));
+    // INIT leaves NBLW alone: the INIT-only start zeroes it first, as the
+    // reset did (RM0456 §51.4.5 writes NBLW before INIT).
+    assert!(body("unsafe fn init_body() {").contains(
+        "    #[cfg(feature = \"init-restart\")]\n    REG.str_.write(0);\n    // HASH mode (MODE=0), 8-bit datatype, SHA-256, INIT=1.\n    REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);\n"
+    ));
 }
 
 #[test]

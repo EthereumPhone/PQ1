@@ -3135,12 +3135,13 @@ fn negative_hash_init_restart_is_secure_only_kat_checked_and_wiped() {
     let kat = &kat[..kat.find("\n}\n").expect("end")];
     for shape in [
         "*b = (i as u8).wrapping_mul(7) ^ 0x5A;",
-        "for (k, &len) in lens.clone().chain(lens.rev()).enumerate() {",
+        "for k in 0..2 * n {\n        let i = if k < n { k } else { 2 * n - 1 - k };\n        let len = RESTART_KAT_LENS[i];",
         "let (head, tail) = msg[..len].split_at(len / 3 + 1);",
         "if k % 2 == 0 {\n                pqsigner_sha256_oneshot(msg.as_ptr(), len, d.as_mut_ptr());",
         "pqsigner_sha256_update(head.as_ptr(), head.len());\n                pqsigner_sha256_update(tail.as_ptr(), tail.len());",
         "acc.rotate_left(1);\n        for (a, x) in acc.iter_mut().zip(d) {\n            *a ^= x;",
-        "if acc == RESTART_KAT {",
+        "prefixes_ok &= u32::from_be_bytes([d[0], d[1], d[2], d[3]]) == RESTART_KAT_PREFIX[i];",
+        "if prefixes_ok && acc == RESTART_KAT {",
         "loop { cortex_m::asm::wfe(); }",
     ] {
         assert!(kat.contains(shape), "restart_self_test shape: {shape}");
@@ -3169,7 +3170,19 @@ fn negative_hash_init_restart_is_secure_only_kat_checked_and_wiped() {
         .filter(|x| !x.is_empty())
         .map(|x| u8::from_str_radix(x.trim_start_matches("0x"), 16).expect("byte"))
         .collect();
-    assert_eq!((lens.len(), want.len()), (23, 32));
+    let prefixes: std::vec::Vec<u32> = HW_HASH_SRC
+        .split("const RESTART_KAT_PREFIX: [u32; 23] = [")
+        .nth(1)
+        .expect("RESTART_KAT_PREFIX")
+        .split("];")
+        .next()
+        .expect("end")
+        .split(',')
+        .map(str::trim)
+        .filter(|x| !x.is_empty())
+        .map(|x| u32::from_str_radix(&x.trim_start_matches("0x").replace('_', ""), 16).expect("prefix"))
+        .collect();
+    assert_eq!((lens.len(), want.len(), prefixes.len()), (23, 32, 23));
     assert!(lens.iter().all(|&n| (1..=1440).contains(&n)), "no empty message, all within the buffer");
     #[allow(clippy::cast_possible_truncation)]
     let msg: std::vec::Vec<u8> = (0..1440usize).map(|i| (i as u8).wrapping_mul(7) ^ 0x5A).collect();
@@ -3178,6 +3191,9 @@ fn negative_hash_init_restart_is_secure_only_kat_checked_and_wiped() {
     for (k, &len) in lens.iter().chain(lens.iter().rev()).enumerate() {
         use sha2::{Digest, Sha256};
         let d = Sha256::digest(&msg[..len]);
+        let i = if k < lens.len() { k } else { 2 * lens.len() - 1 - k };
+        assert_eq!(lens[i], len);
+        assert_eq!(u32::from_be_bytes([d[0], d[1], d[2], d[3]]), prefixes[i], "RESTART_KAT_PREFIX[{i}] (length {len})");
         acc.rotate_left(1);
         for (a, x) in acc.iter_mut().zip(d) {
             *a ^= x;

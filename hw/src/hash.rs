@@ -176,7 +176,9 @@ pub mod probe {
     /// The caller's own work: the previous digest's end to this `init` (with
     /// the tick hook, when it runs). Only gaps below [`LONG`] count here.
     pub const GAP: usize = 0;
-    /// `init`: the busy wait, the HASHRST pulse, the CR write.
+    /// `init`: the busy wait, the HASHRST pulse (builds without
+    /// `init-restart`; with it the stage is the merge-buffer clear), the CR
+    /// write.
     pub const READY: usize = 1;
     pub const RESET: usize = 2;
     pub const START: usize = 3;
@@ -547,8 +549,21 @@ unsafe fn split_self_test() {
 const RESTART_KAT_LENS: [usize; 23] =
     [3, 1, 2, 4, 48, 55, 56, 63, 64, 65, 68, 80, 96, 103, 119, 120, 127, 128, 129, 131, 160, 480, 1440];
 
-/// The 46 digests folded (rotate left a byte, XOR the digest); a host test
-/// recomputes it from the list and message above with software SHA-256.
+/// The first four bytes of each length's digest, checked digest by digest;
+/// a host test recomputes them from the list and message above with
+/// software SHA-256.
+#[cfg(feature = "init-restart")]
+const RESTART_KAT_PREFIX: [u32; 23] = [
+    0xde73_c79b, 0xbbee_bd87, 0x9573_16fe, 0x0bc0_bfd8, 0x6d1b_47e9, 0xc5e3_c3e3,
+    0xa790_d48a, 0xbbeb_cae4, 0xdd19_841d, 0xc09e_be66, 0x83db_114f, 0x69c4_9e84,
+    0xd7be_0585, 0x73a6_5f4d, 0xbfd6_9afd, 0xed63_36a0, 0x3c9b_bdbb, 0x6c8c_35df,
+    0x61f2_d40e, 0xa1c0_279e, 0x2ad8_1c36, 0x5087_5667, 0x5c18_81a7,
+];
+
+/// The 46 full digests folded (rotate left a byte, XOR the digest), for the
+/// bytes the prefixes do not cover. The fold alone can cancel two equal,
+/// rotation-invariant errors; the per-digest prefixes cannot. A host test
+/// recomputes it too.
 #[cfg(feature = "init-restart")]
 const RESTART_KAT: [u8; 32] = [
     0x02, 0xd7, 0x6d, 0x3f, 0xc6, 0xbf, 0xd2, 0x19,
@@ -560,7 +575,7 @@ const RESTART_KAT: [u8; 32] = [
 /// Back-to-back digests with no reset between them (`init-restart`): each
 /// starts on INIT alone after the previous shape, through the one-shot and
 /// through a two-part streamed digest in turn. A digest that INIT failed to
-/// restart cleanly changes the folded value.
+/// restart cleanly fails its own prefix check.
 ///
 /// # Safety
 /// As `self_test`: boot only, single-threaded, no hash stream in flight.
@@ -572,8 +587,11 @@ unsafe fn restart_self_test() {
         *b = (i as u8).wrapping_mul(7) ^ 0x5A;
     }
     let mut acc = [0u8; 32];
-    let lens = RESTART_KAT_LENS.iter();
-    for (k, &len) in lens.clone().chain(lens.rev()).enumerate() {
+    let mut prefixes_ok = true;
+    let n = RESTART_KAT_LENS.len();
+    for k in 0..2 * n {
+        let i = if k < n { k } else { 2 * n - 1 - k };
+        let len = RESTART_KAT_LENS[i];
         let (head, tail) = msg[..len].split_at(len / 3 + 1);
         let mut d = [0u8; 32];
         // SAFETY: forwarded contract; each `(ptr, len)` names a live
@@ -588,12 +606,13 @@ unsafe fn restart_self_test() {
                 pqsigner_sha256_final(d.as_mut_ptr());
             }
         }
+        prefixes_ok &= u32::from_be_bytes([d[0], d[1], d[2], d[3]]) == RESTART_KAT_PREFIX[i];
         acc.rotate_left(1);
         for (a, x) in acc.iter_mut().zip(d) {
             *a ^= x;
         }
     }
-    if acc == RESTART_KAT {
+    if prefixes_ok && acc == RESTART_KAT {
         hash_log!("[S] hash: back-to-back self-test PASS ({} digests, no reset between)", 2 * RESTART_KAT_LENS.len());
     } else {
         hash_log!("[S] hash: back-to-back self-test FAIL — HALT");
@@ -645,6 +664,7 @@ fn hash_engine_fault() -> ! {
     unsafe { pqsigner_hash_fault() }
 }
 
+#[cfg(not(feature = "init-restart"))]
 #[inline]
 fn wait_ready() {
     let mut t = 0u32;
@@ -686,10 +706,11 @@ fn wait_ready_sr() -> u32 {
 /// hold the last block fed — `sk_seed` for the PRFs), which nothing else
 /// clears: the per-digest reset only ever ran at the *next* digest's start,
 /// and RM0456 does not say INIT clears CSRx. The secure world calls this from
-/// every secret wipe (`nsc::zeroize_sensitive_state`: lock, idle wipe, FI
-/// failure, tamper, faults), so nothing of the last digest stays in the
-/// engine through the idle window or past a lock. The clock stays on, and the
-/// next digest starts from the reset state, as after boot.
+/// `nsc::zeroize_sensitive_state` (lock, idle wipe, FI failure, tamper,
+/// faults), so the engine is reset whenever the secrets in SRAM are: on idle
+/// that is the same deferral-bounded moment, not the instant the deadline
+/// passes while a handler is busy. The clock stays on, and the next digest
+/// starts from the reset state, as after boot.
 ///
 /// Any digest in flight is lost, so call it only where no hash resumes. A
 /// misplaced call costs a wrong digest or a DCIS timeout, never a stale one:
@@ -762,8 +783,10 @@ unsafe fn init_body() {
     // must not still carry DCIS. The previous digest's `final` clears DCIS
     // after reading HR out, so DCIS set here means that clear was skipped.
     // This catches that one fault and nothing more: a skipped INIT write
-    // below leaves DCIS clear and gives a wrong digest, which the FI double
-    // compute and verify-before-release catch, as with the per-digest reset.
+    // below leaves DCIS clear and gives a wrong digest. In the signer the FI
+    // double compute and verify-before-release catch that; every other
+    // consumer fails closed (an image or bundle refused, a wrong address).
+    // A skipped CR write after the per-digest reset was the same class.
     #[cfg(feature = "init-restart")]
     if wait_ready_sr() & SR_DCIS != 0 {
         hash_log!("[S] hash: DCIS still set at init — FAULT");
@@ -799,6 +822,13 @@ unsafe fn init_body() {
     }
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::RESET);
+    // INIT leaves NBLW alone, and the reset used to zero it, so the last
+    // digest's value (24 after `grind_r`'s 119-byte PRF) would otherwise sit
+    // there until this digest's `final` writes its own: a single skipped
+    // STR write there would pad with the stale count. RM0456 §51.4.5 has
+    // NBLW written before INIT anyway (step 1c, and the caution under it).
+    #[cfg(feature = "init-restart")]
+    REG.str_.write(0);
     // HASH mode (MODE=0), 8-bit datatype, SHA-256, INIT=1.
     REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
     // The DIN writes that follow go to the same peripheral, so Device-memory
