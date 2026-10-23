@@ -2217,6 +2217,33 @@ static mut STATE: SecureState = SecureState::new();
 /// SAFETY: same single-threaded invariant as `STATE`.
 pub(super) static mut SLOT_CACHE: Option<CachedSlot> = None;
 
+/// #1037: whether the cached slot key is the one `(account_index, chain_id,
+/// slot_index)` names, through the complement-protected tag.
+/// `need_keygen` is one comparison, so a single glitch that turns a miss into
+/// a hit would otherwise go on to sign with — or, for a rotation or
+/// `get_init_code`, have the bootstrap key register — another chain's or
+/// slot's key. A slot key is chain-bound precisely so that `MAX_SLOT_USES` is
+/// a per-key cap.
+#[inline(never)]
+fn slot_cache_names(account_index: u32, chain_id: u64, slot_index: u32) -> bool {
+    // SAFETY: category 5 — read-only borrow of `static mut SLOT_CACHE` under
+    // the single-threaded, non-reentrant gateway, as every handler's read.
+    match unsafe { &*core::ptr::addr_of!(SLOT_CACHE) } {
+        Some(c) => c.names(account_index, chain_id, slot_index),
+        None => false,
+    }
+}
+
+/// [`slot_cache_names`] evaluated twice around `fi::wait_random()` and
+/// committed to a sentinel (`fi::check_true_into_sentinel`). Every handler
+/// that uses the cached key after its keygen branch checks this verdict
+/// twice, each check with its own refusal, around another delay — so one
+/// fault neither flips the cache decision nor skips the refusal.
+#[inline(never)]
+pub(super) fn slot_cache_identity_verdict(account_index: u32, chain_id: u64, slot_index: u32) -> u32 {
+    crate::fi::check_true_into_sentinel(|| slot_cache_names(account_index, chain_id, slot_index))
+}
+
 /// Active firmware-update session state. Populated by `CMD_FW_BEGIN`
 /// and drained by `CMD_FW_COMMIT` / `CMD_FW_ABORT`. Lives in SRAM only
 /// — any reset or idle-wipe restarts the companion from BEGIN.
@@ -2238,11 +2265,24 @@ pub(super) static mut FW_UPDATE: Option<crate::fw_update::FwUpdateCtx> = None;
 /// multi-account derivation, slot keys also vary per `account_index`
 /// (the `master_entropy` they descend from is account-scoped). A
 /// mismatch on any field triggers a fresh keygen (<1 s on hardware).
+///
+/// #1037: the identity is a complement-protected [`crate::fih::FihSlotTag`];
+/// every lookup goes through [`CachedSlot::names`], so a corrupted tag reads
+/// as a miss (fresh keygen), never as another chain's or slot's key.
 pub(super) struct CachedSlot {
-    pub(super) account_index: u32,
-    pub(super) chain_id: u64,
-    pub(super) slot_index: u32,
+    tag: crate::fih::FihSlotTag,
     pub(super) key: sphincs_c10::SigningKey,
+}
+
+impl CachedSlot {
+    pub(super) fn new(account_index: u32, chain_id: u64, slot_index: u32, key: sphincs_c10::SigningKey) -> Self {
+        Self { tag: crate::fih::FihSlotTag::new(account_index, chain_id, slot_index), key }
+    }
+
+    /// The tag is intact and names exactly this identity.
+    pub(super) fn names(&self, account_index: u32, chain_id: u64, slot_index: u32) -> bool {
+        self.tag.names(account_index, chain_id, slot_index)
+    }
 }
 
 /// Borrow the gateway state mutably for the duration of `f`.

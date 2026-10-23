@@ -3236,11 +3236,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // no other handler can race this read.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
-            Some(c) => {
-                c.account_index != account_index
-                    || c.chain_id != chain_id
-                    || c.slot_index != slot_index
-            }
+            Some(c) => !c.names(account_index, chain_id, slot_index),
             None => true,
         }
     });
@@ -3266,12 +3262,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // update. Any displaced prior `CachedSlot` drops here; its
         // `ZeroizeOnDrop` wipes the previous SK.
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
-                account_index,
-                chain_id,
-                slot_index,
-                key: slot_sk,
-            });
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot::new(account_index, chain_id, slot_index, slot_sk));
         }
         super::state::with_state(|s| {
             s.slot_master_entropy.zeroize();
@@ -3279,6 +3270,25 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             s.slot_master_entropy = *slot_master_entropy;
             s.slot_master_derived.set_true();
         });
+    }
+
+    // #1037: the cached key must be the one this request named before
+    // anything uses it. Two verdicts, each with its own refusal, separated
+    // by a random delay and a scrub of the stale-OK register r0 (F-15.r1).
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        return NscStatus::InternalError as u32;
+    }
+    crate::fi::scrub_sentinel_register();
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        return NscStatus::InternalError as u32;
     }
 
     // Extract the 32-byte slot pubkey halves. Post-port the on-chain
