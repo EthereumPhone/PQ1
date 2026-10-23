@@ -560,16 +560,17 @@ const RESTART_KAT_PREFIX: [u32; 23] = [
     0x61f2_d40e, 0xa1c0_279e, 0x2ad8_1c36, 0x5087_5667, 0x5c18_81a7,
 ];
 
-/// The 46 full digests folded (rotate left a byte, XOR the digest), for the
-/// bytes the prefixes do not cover. The fold alone can cancel two equal,
-/// rotation-invariant errors; the per-digest prefixes cannot. A host test
-/// recomputes it too.
+/// The 46 full digests folded (digest `k` XORed in at byte offset `k`), for
+/// the bytes the prefixes do not cover. The fold alone can cancel two equal,
+/// rotation-invariant errors; the per-digest prefixes cannot. Indexing
+/// rather than `rotate_left` keeps `memmove` (1.5 KB) out of the image. A
+/// host test recomputes it too.
 #[cfg(feature = "init-restart")]
 const RESTART_KAT: [u8; 32] = [
-    0x02, 0xd7, 0x6d, 0x3f, 0xc6, 0xbf, 0xd2, 0x19,
-    0x80, 0x6c, 0x9d, 0x74, 0x67, 0x45, 0xd9, 0x07,
-    0x84, 0x4d, 0xea, 0x40, 0x3b, 0x92, 0x4f, 0x63,
-    0x85, 0x2e, 0x6e, 0x70, 0xea, 0x75, 0xb0, 0xb0,
+    0x40, 0x3b, 0x92, 0x4f, 0x63, 0x85, 0x2e, 0x6e,
+    0x70, 0xea, 0x75, 0xb0, 0xb0, 0x02, 0xd7, 0x6d,
+    0x3f, 0xc6, 0xbf, 0xd2, 0x19, 0x80, 0x6c, 0x9d,
+    0x74, 0x67, 0x45, 0xd9, 0x07, 0x84, 0x4d, 0xea,
 ];
 
 /// Back-to-back digests with no reset between them (`init-restart`): each
@@ -607,9 +608,8 @@ unsafe fn restart_self_test() {
             }
         }
         prefixes_ok &= u32::from_be_bytes([d[0], d[1], d[2], d[3]]) == RESTART_KAT_PREFIX[i];
-        acc.rotate_left(1);
-        for (a, x) in acc.iter_mut().zip(d) {
-            *a ^= x;
+        for (j, x) in d.iter().enumerate() {
+            acc[(j + k) % 32] ^= x;
         }
     }
     if prefixes_ok && acc == RESTART_KAT {

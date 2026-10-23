@@ -3139,7 +3139,7 @@ fn negative_hash_init_restart_is_secure_only_kat_checked_and_wiped() {
         "let (head, tail) = msg[..len].split_at(len / 3 + 1);",
         "if k % 2 == 0 {\n                pqsigner_sha256_oneshot(msg.as_ptr(), len, d.as_mut_ptr());",
         "pqsigner_sha256_update(head.as_ptr(), head.len());\n                pqsigner_sha256_update(tail.as_ptr(), tail.len());",
-        "acc.rotate_left(1);\n        for (a, x) in acc.iter_mut().zip(d) {\n            *a ^= x;",
+        "for (j, x) in d.iter().enumerate() {\n            acc[(j + k) % 32] ^= x;",
         "prefixes_ok &= u32::from_be_bytes([d[0], d[1], d[2], d[3]]) == RESTART_KAT_PREFIX[i];",
         "if prefixes_ok && acc == RESTART_KAT {",
         "loop { cortex_m::asm::wfe(); }",
@@ -3194,9 +3194,8 @@ fn negative_hash_init_restart_is_secure_only_kat_checked_and_wiped() {
         let i = if k < lens.len() { k } else { 2 * lens.len() - 1 - k };
         assert_eq!(lens[i], len);
         assert_eq!(u32::from_be_bytes([d[0], d[1], d[2], d[3]]), prefixes[i], "RESTART_KAT_PREFIX[{i}] (length {len})");
-        acc.rotate_left(1);
-        for (a, x) in acc.iter_mut().zip(d) {
-            *a ^= x;
+        for (j, x) in d.iter().enumerate() {
+            acc[(j + k) % 32] ^= x;
         }
         apis.entry(len).or_default()[k % 2] = true;
     }
