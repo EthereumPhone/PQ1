@@ -329,15 +329,15 @@ pub fn chain_hash(
     steps: u32,
 ) -> [u8; N] {
     bump!(CHAIN_HASH);
-    let mut current = pad16(val);
-    let mut a = *adrs;
+    // `th`'s preimage, built once (`chain_buf`); a step rewrites only chain_pos and the value.
+    let mut buf = chain_buf(seed, adrs, val);
     for step in 0..steps {
-        let pos = start_pos + step;
-        // Set chain_pos field at adrs bytes [24..28)
-        a[24..28].copy_from_slice(&pos.to_be_bytes());
-        current = pad16(&th(seed, &a, &current));
+        buf[56..60].copy_from_slice(&(start_pos + step).to_be_bytes());
+        bump!(TH);
+        let d = sha256_bytes(&buf);
+        buf[64..64 + N].copy_from_slice(&d[..N]);
     }
-    truncate(&current)
+    chain_value(&buf)
 }
 
 // ---------------------------------------------------------------------------
@@ -416,4 +416,23 @@ pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32
         &tree_idx.to_be_bytes(), // to_b4
         &leaf_idx.to_be_bytes(), // to_b4
     ]))
+}
+
+/// `chain_hash`'s 96-byte `th` preimage `seed ‖ adrs ‖ pad16(val)`: the value's
+/// 16 bytes at [64..80), its pad half [80..96) zero. Kept out of `chain_hash`
+/// (and at the end of the file) so no extracted function above moves: the
+/// EasyCrypt drafts cite this file by line number.
+fn chain_buf(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; N]) -> [u8; 96] {
+    let mut buf = [0u8; 96];
+    buf[0..32].copy_from_slice(seed);
+    buf[32..64].copy_from_slice(adrs);
+    buf[64..64 + N].copy_from_slice(val);
+    buf
+}
+
+/// The chain value a `chain_buf` holds (bytes [64..80)).
+fn chain_value(buf: &[u8; 96]) -> [u8; N] {
+    let mut out = [0u8; N];
+    out.copy_from_slice(&buf[64..64 + N]);
+    out
 }
