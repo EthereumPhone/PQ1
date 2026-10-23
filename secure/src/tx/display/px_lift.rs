@@ -53,6 +53,7 @@ use super::Pages;
 use crate::erc20::bundle::Erc20Metadata;
 use crate::names::NameResolver;
 use crate::tx::eip712::cowswap::VerifiedCowswapV3;
+use crate::tx::eip712::permit2::VerifiedPermit2;
 use crate::tx::eip712::safe::{VerifiedSafeExec, VerifiedSafeV1};
 use pqsigner_ui_px::{exact_screen_occurrences, screen_exact, Kind, Screens};
 use subtle::ConstantTimeEq;
@@ -104,6 +105,13 @@ pub(crate) enum Body<'a> {
     /// An off-chain CoW order (`SIGN_OFFCHAIN` kind 5), bound by re-running
     /// its page painter.
     CowOffchain { v3: &'a VerifiedCowswapV3 },
+    /// An off-chain Permit2 permit (`SIGN_OFFCHAIN` kind 6), bound by
+    /// re-running its page painter. `wallet` is the signing wallet.
+    Permit2Offchain {
+        v: &'a VerifiedPermit2,
+        wallet: &'a [u8; 20],
+        resolver: &'a NameResolver<'a>,
+    },
     /// One member of an atomic batch: the `BATCH SIGN / Tx i of N` banner
     /// page, then the member's own route body (`batch_screens`).
     BatchMember {
@@ -179,6 +187,10 @@ fn emit_body(screens: &mut Screens, body: &Body<'_>) -> Result<(BodyReceipt, Fam
             Family::SAFE,
         ),
         Body::CowOffchain { v3 } => (super::cowswap_screens::emit_offchain(screens, v3)?, super::cowswap_screens::FAMILY),
+        Body::Permit2Offchain { v, wallet, resolver } => (
+            super::permit2_screens::emit_offchain(screens, v, wallet, resolver)?,
+            super::permit2_screens::family(v),
+        ),
         Body::BatchMember { index, total, inner } => {
             if matches!(inner, Body::BatchMember { .. } | Body::BatchSummary { .. }) {
                 return Err(());
@@ -290,6 +302,8 @@ fn body_bound(body: &Body<'_>, pages: &Pages, start: usize, len: usize) -> bool 
                 .is_ok_and(|rendered| prefix_matches(&rendered, pages, start, len))
         }
         Body::CowOffchain { v3 } => prefix_matches(&super::cowswap_screens::render_offchain_pages(v3), pages, start, len),
+        Body::Permit2Offchain { v, wallet, resolver } => super::permit2::render_permit2_offchain_pages(v, wallet, resolver)
+            .is_ok_and(|rendered| prefix_matches(&rendered, pages, start, len)),
         // The banner page, then the member's own body right after it.
         Body::BatchMember { index, total, inner } => {
             pages.buf[start] == super::batch::build_batch_banner_page(*index, *total)

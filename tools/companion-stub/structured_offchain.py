@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Build and check SIGN_OFFCHAIN kind-4 (SafeTx) / kind-5 (CoW order) payloads.
+"""Build and check SIGN_OFFCHAIN kind-4 (SafeTx) / 5 (CoW order) / 6 (Permit2) payloads.
 
 An INDEPENDENT host implementation of the structured off-chain wire format
-(proto `MAX_OFFCHAIN_SAFE_TX_LEN` / `MAX_OFFCHAIN_COW_ORDER_LEN`,
-`docs/companion/usb-protocol-v2.md` §0x62 kinds 4/5) and of the value the
-device signs for it:
+(proto `MAX_OFFCHAIN_SAFE_TX_LEN` / `MAX_OFFCHAIN_COW_ORDER_LEN` /
+`MAX_OFFCHAIN_PERMIT2_LEN`, `docs/companion/usb-protocol-v2.md` §0x62 kinds
+4-6) and of the value the device signs for it:
 
     H      = safeTxHash (Safe >= v1.3.0 domain {chainId, verifyingContract})
              | GPv2 order digest (domain "Gnosis Protocol" / "v2" / GPv2Settlement)
+             | Permit2 permit digest (domain "Permit2" / chainId / Permit2, no version)
     signed = replay_safe_hash(chain, wallet, H)
            = keccak(0x1901 || PQSmartWallet domain(chain, wallet)
                     || keccak(PersonalSign typehash || H))
@@ -23,7 +24,7 @@ device signs for it:
 
 Usage:
   structured_offchain.py --emit-goldens goldens.json
-  structured_offchain.py --check PAYLOAD_HEX --kind 4|5 --chain N [--wallet 0x..]
+  structured_offchain.py --check PAYLOAD_HEX --kind 4|5|6 --chain N [--wallet 0x..]
 """
 from __future__ import annotations
 
@@ -35,6 +36,12 @@ from Crypto.Hash import keccak as _keccak
 
 OFFCHAIN_KIND_SAFE_TX = 4
 OFFCHAIN_KIND_COW_ORDER = 5
+OFFCHAIN_KIND_PERMIT2 = 6
+PERMIT2 = bytes.fromhex("000000000022D473030F116dDEE9F6B43aC78BA3")
+PERMIT2_SINGLE, PERMIT2_BATCH, PERMIT2_TRANSFER, PERMIT2_BATCH_TRANSFER = 0, 1, 2, 3
+PERMIT2_MAX_TOKENS = 6
+PERMIT2_ENTRY_LEN = 52
+PERMIT2_MAX_NAME_BUNDLES = 1
 SAFE_V1_CANONICAL_LEN = 281
 EIP712_CANONICAL_LEN = 204
 SAFE_V1_RAW_DATA_MAX = 4096
@@ -73,6 +80,19 @@ ORDER_TYPEHASH = keccak256(
     b"bool partiallyFillable,string sellTokenBalance,string buyTokenBalance)"
 )
 PERSONAL_SIGN_TYPEHASH = keccak256(b"PersonalSign(bytes prefixed)")
+PERMIT2_DOMAIN_TYPEHASH = keccak256(b"EIP712Domain(string name,uint256 chainId,address verifyingContract)")
+_PERMIT_DETAILS = b"PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)"
+_TOKEN_PERMISSIONS = b"TokenPermissions(address token,uint256 amount)"
+PERMIT_DETAILS_TYPEHASH = keccak256(_PERMIT_DETAILS)
+TOKEN_PERMISSIONS_TYPEHASH = keccak256(_TOKEN_PERMISSIONS)
+PERMIT2_PRIMARY_TYPEHASH = {
+    PERMIT2_SINGLE: keccak256(b"PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)" + _PERMIT_DETAILS),
+    PERMIT2_BATCH: keccak256(b"PermitBatch(PermitDetails[] details,address spender,uint256 sigDeadline)" + _PERMIT_DETAILS),
+    PERMIT2_TRANSFER: keccak256(b"PermitTransferFrom(TokenPermissions permitted,address spender,uint256 nonce,"
+                                b"uint256 deadline)" + _TOKEN_PERMISSIONS),
+    PERMIT2_BATCH_TRANSFER: keccak256(b"PermitBatchTransferFrom(TokenPermissions[] permitted,address spender,"
+                                      b"uint256 nonce,uint256 deadline)" + _TOKEN_PERMISSIONS),
+}
 
 
 def u16(n: int) -> bytes:
@@ -120,6 +140,78 @@ def replay_safe_hash(chain_id: int, wallet: bytes, h: bytes) -> bytes:
     dom = keccak256(EIP712_DOMAIN_TYPEHASH + keccak256(b"PQSmartWallet") + keccak256(b"1")
                     + chain_id.to_bytes(32, "big") + word(wallet))
     return keccak256(b"\x19\x01" + dom + keccak256(PERSONAL_SIGN_TYPEHASH + h))
+
+
+def permit2_head_len(variant: int) -> int:
+    return {PERMIT2_SINGLE: 62, PERMIT2_BATCH: 62, PERMIT2_TRANSFER: 94, PERMIT2_BATCH_TRANSFER: 94}[variant]
+
+
+def build_permit2_core(variant: int, chain_id: int, spender: bytes, entries: list[tuple],
+                       deadline: int, nonce: int = 0) -> bytes:
+    """Packed permit. `entries`: (token, amount, expiration, nonce) for the
+    allowance variants 0/1, (token, amount) for the transfer variants 2/3.
+    `deadline` is sigDeadline (allowance) or deadline (transfer); `nonce` is
+    the SignatureTransfer nonce (transfer variants only)."""
+    allowance = variant in (PERMIT2_SINGLE, PERMIT2_BATCH)
+    out = bytes([variant]) + chain_id.to_bytes(8, "big") + spender
+    out += deadline.to_bytes(32, "big") if allowance else nonce.to_bytes(32, "big") + deadline.to_bytes(32, "big")
+    out += bytes([len(entries)])
+    for e in entries:
+        if allowance:
+            token, amount, expiration, a_nonce = e
+            out += token + amount.to_bytes(20, "big") + expiration.to_bytes(6, "big") + a_nonce.to_bytes(6, "big")
+        else:
+            token, amount = e
+            out += token + amount.to_bytes(32, "big")
+    return out
+
+
+def build_permit2_payload(core: bytes, erc20: list[bytes] | None = None, name: bytes = b"") -> bytes:
+    count = core[permit2_head_len(core[0]) - 1]
+    erc20 = erc20 if erc20 is not None else [b""] * count
+    assert len(erc20) == count and all(len(b) <= ERC20_BUNDLE_MAX for b in erc20)
+    assert len(name) <= NAME_BUNDLE_MAX
+    out = core + b"".join(u16(len(b)) + b for b in erc20)
+    return out + (bytes([1]) + u16(len(name)) + name if name else bytes([0]))
+
+
+def permit2_digest(core: bytes, chain_id: int) -> bytes:
+    """Permit2 digest of a packed permit, with the device's decode refusals."""
+    variant = core[0]
+    if variant not in PERMIT2_PRIMARY_TYPEHASH:
+        raise ValueError("permit2 variant")
+    head = permit2_head_len(variant)
+    if len(core) < head:
+        raise ValueError("permit2 length")
+    count = core[head - 1]
+    batch = variant in (PERMIT2_BATCH, PERMIT2_BATCH_TRANSFER)
+    if not (1 <= count <= PERMIT2_MAX_TOKENS if batch else count == 1):
+        raise ValueError("permit2 count")
+    if len(core) != head + count * PERMIT2_ENTRY_LEN:
+        raise ValueError("permit2 length")
+    if int.from_bytes(core[1:9], "big") != chain_id:
+        raise ValueError("permit2 chain")
+    spender = core[9:29]
+    if spender == bytes(20):
+        raise ValueError("permit2 zero adr")
+    allowance = variant in (PERMIT2_SINGLE, PERMIT2_BATCH)
+    hashes, tokens = [], []
+    for i in range(count):
+        e = core[head + i * PERMIT2_ENTRY_LEN:head + (i + 1) * PERMIT2_ENTRY_LEN]
+        token = e[:20]
+        if token == bytes(20) or token in tokens:
+            raise ValueError("permit2 zero tok" if token == bytes(20) else "permit2 dup tok")
+        tokens.append(token)
+        if allowance:
+            ed = word(token) + word(e[20:40]) + word(e[40:46]) + word(e[46:52])
+            hashes.append(keccak256(PERMIT_DETAILS_TYPEHASH + ed))
+        else:
+            hashes.append(keccak256(TOKEN_PERMISSIONS_TYPEHASH + word(token) + e[20:52]))
+    member = hashes[0] if not batch else keccak256(b"".join(hashes))
+    tail = core[29:61] if allowance else core[29:61] + core[61:93]
+    sh = keccak256(PERMIT2_PRIMARY_TYPEHASH[variant] + member + word(spender) + tail)
+    dom = keccak256(PERMIT2_DOMAIN_TYPEHASH + keccak256(b"Permit2") + chain_id.to_bytes(32, "big") + word(PERMIT2))
+    return keccak256(b"\x19\x01" + dom + sh)
 
 
 def build_safe_tx_payload(canonical: bytes, raw: bytes, erc20: bytes = b"", cow: bytes = b"",
@@ -192,6 +284,26 @@ def structured_digest(kind: int, payload: bytes, chain_id: int) -> bytes:
         if int.from_bytes(c[0:8], "big") != chain_id:
             raise ValueError("chain")
         return cow_order_digest(c)
+    if kind == OFFCHAIN_KIND_PERMIT2:
+        if not payload or payload[0] not in PERMIT2_PRIMARY_TYPEHASH:
+            raise ValueError("permit2 variant")
+        head = permit2_head_len(payload[0])
+        if len(payload) < head:
+            raise ValueError("truncated")
+        core_len = head + payload[head - 1] * PERMIT2_ENTRY_LEN
+        core, o = payload[:core_len], core_len
+        for _ in range(payload[head - 1]):
+            _, o = _take(payload, o, ERC20_BUNDLE_MAX)
+        if o >= len(payload) or payload[o] > PERMIT2_MAX_NAME_BUNDLES:
+            raise ValueError("names")
+        names, o = payload[o], o + 1
+        if names:
+            n, o = _take(payload, o, NAME_BUNDLE_MAX)
+            if not n:
+                raise ValueError("empty name")
+        if o != len(payload):
+            raise ValueError("trailing bytes")
+        return permit2_digest(core, chain_id)
     raise ValueError(f"kind {kind} is not structured")
 
 
@@ -218,6 +330,31 @@ REF_SAFE_PRESIGN = bytes.fromhex(
 REF_SAFE_TX_HASH = bytes.fromhex("0e436954453310227409c573f988f1b7ff49cfe3588e493320396da72791bfaa")
 GOLDEN_WALLET = bytes([0xfb] * 20)
 
+# Permit2 references: viem 2.56.3 `hashTypedData` over the equivalent typed
+# data (secure/src/tx/eip712/permit2/test_vectors.rs builds the same permits).
+USDC_BASE = bytes.fromhex("833589fcd6edb6e08f4c7c32d4f71b54bda02913")
+WETH_BASE = bytes.fromhex("4200000000000000000000000000000000000006")
+USDC_ETH = bytes.fromhex("a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+UR_BASE = bytes.fromhex("6ff5693b99212da76ad316178a184ab56d299b43")
+UR_ETH = bytes.fromhex("3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad")
+MAX160, MAX256 = (1 << 160) - 1, (1 << 256) - 1
+REF_PERMIT2 = (
+    ("permit2_single", 8453, build_permit2_core(
+        PERMIT2_SINGLE, 8453, UR_BASE, [(USDC_BASE, 1_000_000_000, 1_798_761_600, 3)], 1_767_225_600),
+     "497c41366bda0e8bb4d9744d263a0979a0eeb5df293ced92d4aba868ac946888"),
+    ("permit2_batch", 8453, build_permit2_core(
+        PERMIT2_BATCH, 8453, UR_BASE,
+        [(USDC_BASE, 1_000_000_000, 1_798_761_600, 3), (WETH_BASE, MAX160, 0, 0)], 1_767_225_600),
+     "83e5dfb254dc96d7dfda2ea103d5063b019939ec087e15862bee88d416c7a4ba"),
+    ("permit2_transfer", 1, build_permit2_core(
+        PERMIT2_TRANSFER, 1, UR_ETH, [(USDC_ETH, 500_000_000)], 1_767_225_600, nonce=42),
+     "17146f9e0b8c3404e9e667f3655b031304f4ef59e2052b36f674e27c1515e8fe"),
+    ("permit2_batch_transfer", 8453, build_permit2_core(
+        PERMIT2_BATCH_TRANSFER, 8453, UR_BASE,
+        [(USDC_BASE, MAX256), (WETH_BASE, 123_456_789_012_345_678)], MAX256, nonce=(1 << 200) + 7),
+     "a13082a184d56e9a727c02b337098b02c57c3fe4e8f78f01a554b2f7f11ebede"),
+)
+
 
 def goldens() -> dict:
     assert safe_tx_hash(REF_SAFE_CANONICAL) == REF_SAFE_TX_HASH, "Safe reference drifted"
@@ -226,15 +363,20 @@ def goldens() -> dict:
                                          cow=build_cow_order_payload(REF_COW_CANONICAL))
     cow_payload = build_cow_order_payload(REF_COW_CANONICAL)
     out = {"wallet": "0x" + GOLDEN_WALLET.hex(), "chainId": 1, "vectors": []}
-    for name, kind, payload in (("safe_tx_cow_presign", OFFCHAIN_KIND_SAFE_TX, safe_payload),
-                                ("cow_order", OFFCHAIN_KIND_COW_ORDER, cow_payload)):
-        h = structured_digest(kind, payload, 1)
+    cases = [("safe_tx_cow_presign", OFFCHAIN_KIND_SAFE_TX, 1, safe_payload),
+             ("cow_order", OFFCHAIN_KIND_COW_ORDER, 1, cow_payload)]
+    for name, chain, core, want in REF_PERMIT2:
+        assert permit2_digest(core, chain).hex() == want, f"{name} reference drifted"
+        cases.append((name, OFFCHAIN_KIND_PERMIT2, chain, build_permit2_payload(core)))
+    for name, kind, chain, payload in cases:
+        h = structured_digest(kind, payload, chain)
         out["vectors"].append({
             "name": name,
             "kind": kind,
+            "chainId": chain,
             "payload": "0x" + payload.hex(),
             "digest": "0x" + h.hex(),
-            "signedValue": "0x" + replay_safe_hash(1, GOLDEN_WALLET, h).hex(),
+            "signedValue": "0x" + replay_safe_hash(chain, GOLDEN_WALLET, h).hex(),
         })
     return out
 
@@ -243,7 +385,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--emit-goldens", metavar="FILE")
     ap.add_argument("--check", metavar="PAYLOAD_HEX")
-    ap.add_argument("--kind", type=int, choices=(4, 5))
+    ap.add_argument("--kind", type=int, choices=(4, 5, 6))
     ap.add_argument("--chain", type=int, default=1)
     ap.add_argument("--wallet", default="0x" + GOLDEN_WALLET.hex())
     a = ap.parse_args()

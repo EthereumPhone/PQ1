@@ -112,6 +112,7 @@ OFFCHAIN_KIND_PERSONAL = 1
 OFFCHAIN_KIND_EIP712 = 2
 OFFCHAIN_KIND_SAFE_TX = structured_offchain.OFFCHAIN_KIND_SAFE_TX      # 4
 OFFCHAIN_KIND_COW_ORDER = structured_offchain.OFFCHAIN_KIND_COW_ORDER  # 5
+OFFCHAIN_KIND_PERMIT2 = structured_offchain.OFFCHAIN_KIND_PERMIT2      # 6
 OFFCHAIN_FLAG_DEPLOYED = 0x01
 EIP6492_BLOB_LEN = 8608
 EIP6492_MAGIC = bytes.fromhex("64926492" * 8)
@@ -781,6 +782,96 @@ def f_off_cow_addr(c: Ctx) -> Request:
                        "legs shown as token contracts + raw amounts"])
 
 
+# Uniswap Permit2 permits signed off-chain (SIGN_OFFCHAIN kind 6, 2026-10-23).
+# Like kinds 4/5 they go out as deployed on --slot (Permit2 has no ERC-6492
+# path). The spender is the Uniswap v4 Universal Router on Base, which the
+# names DB names; every token is proven unless the flow says otherwise.
+
+UR_BASE = addr("0x6fF5693b99212Da76ad316178A184AB56D299b43")   # names DB: "Uniswap Universal Router"
+P2_EXPIRY = 1_798_761_600       # 2027-01-01T00:00:00Z
+P2_DEADLINE = 1_767_225_600     # 2026-01-01T00:00:00Z
+MAX160, MAX256 = (1 << 160) - 1, (1 << 256) - 1
+
+
+def permit2(c: Ctx, variant: int, entries: list[tuple], lines: list[str], *, deadline: int = P2_DEADLINE,
+            nonce: int = 0, proofs: bool = True, spender: bytes = UR_BASE) -> Request:
+    core = structured_offchain.build_permit2_core(variant, BASE, spender, entries, deadline, nonce)
+    erc20 = []
+    for e in entries:
+        try:
+            erc20.append(erc20_proof(BASE, e[0]) if proofs else b"")
+        except (Exception, SystemExit):
+            erc20.append(b"")   # not in the ERC-20 DB: shown by address + raw amount
+    try:
+        name = names_proof(BASE, spender) if proofs else b""
+    except (Exception, SystemExit):
+        name = b""
+    payload = structured_offchain.build_permit2_payload(core, erc20, name)
+    return structured(c, BASE, OFFCHAIN_KIND_PERMIT2, payload, ["EIP-1271 Permit2 permit on Base:"] + lines)
+
+
+def f_permit2(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_SINGLE, [(USDC_BASE, 1_000_000_000, P2_EXPIRY, 0)],
+                   ["PermitSingle: approve 1000 USDC to the Universal Router, expires 2027-01-01"])
+
+
+def f_permit2_max(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_SINGLE, [(USDC_BASE, MAX160, 0, 1)],
+                   ["PermitSingle: UNLIMITED USDC (uint160 max), expiration 0 = this block only"])
+
+
+def f_permit2_revoke(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_SINGLE, [(USDC_BASE, 0, P2_EXPIRY, 2)],
+                   ["PermitSingle: allowance 0 = revoke USDC"])
+
+
+def f_permit2_addr(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_SINGLE, [(USDC_BASE, 1_000_000_000, P2_EXPIRY, 0)],
+                   ["the same PermitSingle WITHOUT proofs: token by address + raw word, bare spender"],
+                   proofs=False)
+
+
+def f_permit2_batch(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_BATCH,
+                   [(USDC_BASE, 25_000_000, P2_EXPIRY, 0), (WETH_BASE, MAX160, P2_EXPIRY, 0),
+                    (UNKNOWN_TOKEN, 1234, P2_EXPIRY, 0)],
+                   ["PermitBatch: 25 USDC, unlimited WETH, an unknown token (address + raw word)"])
+
+
+def f_permit2_batch_max(c: Ctx) -> Request:
+    toks = [USDC_BASE, WETH_BASE, DAI_BASE, USDT_BASE, TOSHI_BASE, UNKNOWN_TOKEN]
+    return permit2(c, structured_offchain.PERMIT2_BATCH, [(t, 10**6 * (i + 1), P2_EXPIRY, i) for i, t in enumerate(toks)],
+                   ["PermitBatch: six tokens (the cap), deadline past the year 9999 (full word)"],
+                   deadline=1 << 255)
+
+
+def f_permit2_pull(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_TRANSFER, [(USDC_BASE, 500_000_000)],
+                   ["PermitTransferFrom: one pull of at most 500 USDC, 256-bit nonce (full word)"],
+                   nonce=(1 << 200) + 7)
+
+
+def f_permit2_pull_any(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_TRANSFER, [(USDC_BASE, MAX256)],
+                   ["PermitTransferFrom: ANY amount (uint256 max), nonce 42"], nonce=42)
+
+
+def f_permit2_pull_batch(c: Ctx) -> Request:
+    return permit2(c, structured_offchain.PERMIT2_BATCH_TRANSFER, [(USDC_BASE, 75_000_000), (WETH_BASE, 10**16)],
+                   ["PermitBatchTransferFrom: pull <= 75 USDC and <= 0.01 WETH, no deadline (uint256 max)"],
+                   nonce=7, deadline=MAX256)
+
+
+def f_permit2_dup(c: Ctx) -> Request:
+    core = structured_offchain.build_permit2_core(
+        structured_offchain.PERMIT2_BATCH, BASE, UR_BASE,
+        [(USDC_BASE, 1, P2_EXPIRY, 0), (USDC_BASE, MAX160, P2_EXPIRY, 0)], P2_DEADLINE)
+    payload = structured_offchain.build_permit2_payload(core)
+    return Request(INS_SIGN_OFFCHAIN, offchain(c, BASE, OFFCHAIN_KIND_PERMIT2, payload, [], deployed=True).payload,
+                   "refuse", ["PermitBatch naming USDC twice: refused before any screen ('permit2 dup tok')"],
+                   deployed=True)
+
+
 def batch_head(c: Ctx, count: int) -> bytes:
     return b"".join([
         u64(BASE), u32(c.flags()), c.sender, ENTRY_POINT_V06, u256(c.nonce),
@@ -997,6 +1088,16 @@ FLOWS: dict[str, Flow] = {
     "off-safe-msend": Flow(f_off_safe_msend, "offchain", "EIP-1271 SafeTx (kind 4) multiSend v1.5.0: RECORD 1/2, 2/2"),
     "off-cow": Flow(f_off_cow, "offchain", "EIP-1271 CoW order (kind 5): SIGN COWSWAP?, decoded legs"),
     "off-cow-addr": Flow(f_off_cow_addr, "offchain", "EIP-1271 CoW order (kind 5), no proofs: address mode"),
+    "off-permit2": Flow(f_permit2, "permit2", "PERMIT2 APPROVE USDC? 1000 USDC, Universal Router named, expiry date"),
+    "off-permit2-max": Flow(f_permit2_max, "permit2", "Permit2 Unlimited (uint160 max) + 'this block only' expiry"),
+    "off-permit2-revoke": Flow(f_permit2_revoke, "permit2", "PERMIT2 REVOKE USDC?"),
+    "off-permit2-addr": Flow(f_permit2_addr, "permit2", "Permit2 without proofs: ! Unknown token, raw word, bare spender"),
+    "off-permit2-batch": Flow(f_permit2_batch, "permit2", "PERMIT2 APPROVE 3 TOKENS? USDC / unlimited WETH / unknown"),
+    "off-permit2-batch-max": Flow(f_permit2_batch_max, "permit2", "Permit2 batch of six tokens, far-future deadline word"),
+    "off-permit2-pull": Flow(f_permit2_pull, "permit2", "PERMIT2 ONE-TIME PULL USDC? <= 500 USDC, nonce word"),
+    "off-permit2-pull-any": Flow(f_permit2_pull_any, "permit2", "Permit2 one-time pull of ANY amount (uint256 max)"),
+    "off-permit2-pull-batch": Flow(f_permit2_pull_batch, "permit2", "Permit2 batch pull, two tokens, no deadline"),
+    "off-permit2-dup": Flow(f_permit2_dup, "permit2", "Permit2 batch naming one token twice: refused, no ask"),
     "sync": Flow(f_sync, "sync", "UPDATE SIGNATURE COUNT? +1 on --sync-slot (plain)"),
     "sync-warn": Flow(f_sync_warn, "sync", "UPDATE SIGNATURE COUNT? +1,500, plus the ! CAREFUL screen"),
     "sync-refuse": Flow(f_sync_refuse, "sync", "no dialog: refused, would use up --rotate-slot (run rotate first)"),

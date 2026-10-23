@@ -39,6 +39,8 @@ mod nonce_lane;
 pub mod erc7730;
 pub mod erc8213;
 mod offchain_sync;
+// Uniswap Permit2 permits signed off-chain (`SIGN_OFFCHAIN` kind 6).
+mod permit2;
 pub(super) mod primitives;
 #[cfg(not(test))]
 mod safe_display;
@@ -73,6 +75,8 @@ mod cowswap_screens;
 pub(crate) mod erc7730_screens;
 #[cfg(feature = "ui-px")]
 pub(crate) mod offchain_screens;
+#[cfg(feature = "ui-px")]
+mod permit2_screens;
 #[cfg(feature = "ui-px")]
 pub(crate) mod batch_screens;
 // The native pixel-UI twins of the handler-owned trailer pages. Always
@@ -129,6 +133,7 @@ pub use erc20_unknown::render_erc20_unknown_pages;
 pub use safe_display::{
     multisend_sign_gate, render_safe_exec_pages, render_safe_offchain_pages, render_safe_v1_pages, MultisendGate,
 };
+pub use permit2::{permit2_amounts_are_exactly_renderable, render_permit2_offchain_pages};
 pub use offchain_sync::{build_offchain_sync_pages, OFFCHAIN_SYNC_PAGES, OFFCHAIN_SYNC_PAGES_WARN};
 pub use slot_rotation::build_slot_rotation_pages;
 pub(crate) use slot_rotation::{

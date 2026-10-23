@@ -1413,10 +1413,11 @@ fn first_fingerprint(visible: &[Screen]) -> Option<usize> {
     visible.iter().filter(|s| s.kind() != Some(Kind::Confirm)).position(|s| s.id() == FINGERPRINT_ID)
 }
 
-/// The hero ids of the structured off-chain signs (`SIGN_OFFCHAIN` kinds 4
-/// and 5: an EIP-712 `SafeTx`, a CoW `GPv2Order`). Their whole body is the
-/// substance being signed, so `Confirm?` follows it.
-const STRUCTURED_OFFCHAIN_HERO_IDS: [&[u8]; 2] = [b"SIGNSAFE", b"SIGNCOW"];
+/// The hero ids of the structured off-chain signs (`SIGN_OFFCHAIN` kinds 4,
+/// 5 and 6: an EIP-712 `SafeTx`, a CoW `GPv2Order`, a Uniswap Permit2
+/// permit). Their whole body is the substance being signed, so `Confirm?`
+/// follows it.
+const STRUCTURED_OFFCHAIN_HERO_IDS: [&[u8]; 3] = [b"SIGNSAFE", b"SIGNCOW", b"PERMIT2"];
 
 /// `Confirm?` for a structured off-chain sign: immediately before the first
 /// `FP8213` screen, i.e. after the complete SafeTx / order body, so only the
@@ -2088,7 +2089,7 @@ mod tests {
 
     #[test]
     fn structured_offchain_confirm_follows_the_whole_body() {
-        for (hero_id, icon) in [(b"SIGNSAFE".as_slice(), Icon::Safe), (b"SIGNCOW", Icon::Cowswap)] {
+        for (hero_id, icon) in [(b"SIGNSAFE".as_slice(), Icon::Safe), (b"SIGNCOW", Icon::Cowswap), (b"PERMIT2", Icon::Eth)] {
             // A long body: Confirm? lands right before the fingerprint banner.
             let mut ss = structured_offchain_flow(hero_id, icon, 12);
             assert_eq!(ss.insert_confirm(icon), Ok(Some(13)));

@@ -30,11 +30,11 @@ def hypertree.report
     Source: 'sphincs-c10/src/wots.rs', lines 51:0-51:48 -/
 @[global_simps, irreducible] def wots.GRIND_REPORT_EVERY : Std.U32 := 4096#u32
 
-/-- [sphincs_c10::wots::find_count]: loop body 1:
-    Source: 'sphincs-c10/src/wots.rs', lines 79:8-81:9 -/
+/-- [sphincs_c10::wots::digit_sum]: loop body 0:
+    Source: 'sphincs-c10/src/wots.rs', lines 273:4-281:5 -/
 @[rust_loop_body]
-def wots.find_count_loop0_loop0.body
-  (digits : Array Std.U8 43#usize) (iter : core.ops.range.Range Std.Usize)
+def wots.digit_sum_loop.body
+  (digest : Array Std.U8 32#usize) (iter : core.ops.range.Range Std.Usize)
   (sum : Std.Usize) :
   Result (ControlFlow ((core.ops.range.Range Std.Usize) × Std.Usize)
     Std.Usize)
@@ -43,28 +43,73 @@ def wots.find_count_loop0_loop0.body
     core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
   match o with
   | none => ok (done sum)
-  | some i =>
-    let i1 ← Array.index_usize digits i
-    let i2 ← lift (UScalar.cast .Usize i1)
-    let sum1 ← sum + i2
+  | some g =>
+    let i ← 3#usize * g
+    let lo ← 31#usize - i
+    let i1 ← Array.index_usize digest lo
+    let i2 ← lift (UScalar.cast .U32 i1)
+    let i3 ← lo - 1#usize
+    let i4 ← Array.index_usize digest i3
+    let i5 ← lift (UScalar.cast .U32 i4)
+    let i6 ← i5 <<< 8#i32
+    let i7 ← lift (i2 ||| i6)
+    let i8 ← lo - 2#usize
+    let i9 ← Array.index_usize digest i8
+    let i10 ← lift (UScalar.cast .U32 i9)
+    let i11 ← i10 <<< 16#i32
+    let v ← lift (i7 ||| i11)
+    let i12 ← lift (v &&& 1864135#u32)
+    let i13 ← v >>> 3#i32
+    let i14 ← lift (i13 &&& 1864135#u32)
+    let s1 ← i12 + i14
+    let i15 ← s1 >>> 12#i32
+    let s2 ← s1 + i15
+    let i16 ← lift (s2 &&& 63#u32)
+    let i17 ← s2 >>> 6#i32
+    let i18 ← lift (i17 &&& 63#u32)
+    let i19 ← i16 + i18
+    let i20 ← lift (UScalar.cast .Usize i19)
+    let sum1 ← sum + i20
     ok (cont (iter1, sum1))
 
-/-- [sphincs_c10::wots::find_count]: loop 1:
-    Source: 'sphincs-c10/src/wots.rs', lines 79:8-81:9 -/
+/-- [sphincs_c10::wots::digit_sum]: loop 0:
+    Source: 'sphincs-c10/src/wots.rs', lines 273:4-281:5 -/
 @[rust_loop]
-def wots.find_count_loop0_loop0
-  (iter : core.ops.range.Range Std.Usize) (digits : Array Std.U8 43#usize)
+def wots.digit_sum_loop
+  (iter : core.ops.range.Range Std.Usize) (digest : Array Std.U8 32#usize)
   (sum : Std.Usize) :
   Result Std.Usize
   := do
   loop
-    (fun (iter1, sum1) => wots.find_count_loop0_loop0.body digits iter1 sum1)
+    (fun (iter1, sum1) => wots.digit_sum_loop.body digest iter1 sum1)
     (iter, sum)
+
+/-- [sphincs_c10::wots::digit_sum]:
+    Source: 'sphincs-c10/src/wots.rs', lines 271:0-286:1 -/
+def wots.digit_sum (digest : Array Std.U8 32#usize) : Result Std.Usize := do
+  let sum ←
+    wots.digit_sum_loop { start := 0#usize, «end» := 5#usize } digest 0#usize
+  let i ← Array.index_usize digest 16#usize
+  let i1 ← lift (UScalar.cast .U32 i)
+  let i2 ← Array.index_usize digest 15#usize
+  let i3 ← lift (i2 &&& 1#u8)
+  let i4 ← lift (UScalar.cast .U32 i3)
+  let i5 ← i4 <<< 8#i32
+  let v ← lift (i1 ||| i5)
+  let i6 ← lift (v &&& 7#u32)
+  let i7 ← v >>> 3#i32
+  let i8 ← lift (i7 &&& 7#u32)
+  let i9 ← i6 + i8
+  let i10 ← v >>> 6#i32
+  let i11 ← lift (i10 &&& 7#u32)
+  let i12 ← i9 + i11
+  let i13 ← lift (UScalar.cast .Usize i12)
+  sum + i13
 
 /-- [sphincs_c10::wots::find_count]: loop body 0:
     Source: 'sphincs-c10/src/wots.rs', lines 74:4-94:1 -/
 @[rust_loop_body]
-def wots.find_count_loop0.body
+def wots.find_count_loop.body
   (seed : Array Std.U8 32#usize) (msg_hash : Array Std.U8 32#usize)
   (progress : hypertree.ProgressSink) (pct : Std.U8)
   (wots_adrs : Array Std.U8 32#usize) (count : Std.U32) :
@@ -73,16 +118,14 @@ def wots.find_count_loop0.body
   := do
   massert (count < 10000000#u32)
   let d ← hash.wots_digest seed wots_adrs msg_hash count
-  let digits ← wots.extract_digits d
-  let sum ←
-    wots.find_count_loop0_loop0 { start := 0#usize, «end» := params.L }
-      digits 0#usize
-  if sum = params.TARGET_SUM
-  then ok (done (count, d, digits))
+  let i ← wots.digit_sum d
+  if i = params.TARGET_SUM
+  then let a ← wots.extract_digits d
+       ok (done (count, d, a))
   else
-    let i ← count % wots.GRIND_REPORT_EVERY
-    let i1 ← wots.GRIND_REPORT_EVERY - 1#u32
-    if i = i1
+    let i1 ← count % wots.GRIND_REPORT_EVERY
+    let i2 ← wots.GRIND_REPORT_EVERY - 1#u32
+    if i1 = i2
     then hypertree.report progress pct
     else ok ()
     let count1 ← count + 1#u32
@@ -91,14 +134,14 @@ def wots.find_count_loop0.body
 /-- [sphincs_c10::wots::find_count]: loop 0:
     Source: 'sphincs-c10/src/wots.rs', lines 74:4-94:1 -/
 @[rust_loop]
-def wots.find_count_loop0
+def wots.find_count_loop
   (seed : Array Std.U8 32#usize) (msg_hash : Array Std.U8 32#usize)
   (progress : hypertree.ProgressSink) (pct : Std.U8)
   (wots_adrs : Array Std.U8 32#usize) (count : Std.U32) :
   Result (Std.U32 × (Array Std.U8 32#usize) × (Array Std.U8 43#usize))
   := do
   loop
-    (fun count1 => wots.find_count_loop0.body seed msg_hash progress pct
+    (fun count1 => wots.find_count_loop.body seed msg_hash progress pct
       wots_adrs count1)
     count
 
@@ -112,6 +155,6 @@ def wots.find_count
   := do
   let wots_adrs ←
     address.make_adrs layer tree params.ADRS_WOTS kp 0#u32 0#u32 0#u32
-  wots.find_count_loop0 seed msg_hash progress pct wots_adrs 0#u32
+  wots.find_count_loop seed msg_hash progress pct wots_adrs 0#u32
 
 end sphincs_c10

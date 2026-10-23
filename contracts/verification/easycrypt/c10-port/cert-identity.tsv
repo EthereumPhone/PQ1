@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	9929d0bb28a58fe90c4589b6efe884df
+split	73f8cfd8e5102e6904df9aa30a87fa5a
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1651,3 +1651,23 @@ fork	9c2d21280c84d52c30b22111151f1135
 # Split identity 9b8a8b073e13da755a5ba7558b04068b -> d5fb7fe267c5d93f463655fd6c6b36d1.
 # Full replay and bounded owner review remain required.
 # 2026-10-23: repin the bounded construction-control runner correction; native proof sources and statements unchanged.
+
+# Historical upstream S1 identity (its review covers the upstream snapshot):
+# 2026-10-23 S1 (find_count digit_sum): re-bind wots.rs, FindCount/Funs.lean,
+# FindCountSpec.lean and C10AcceptanceBridge.lean. find_count sums the grind
+# digits with `digit_sum` and extracts them only for the accepted count; the
+# trial observable (digest -> 43 digits -> sum = TARGET_SUM, u32 count) is
+# unchanged. Evidence: Lean `Extracted.Equiv.digit_sum_spec :
+# wots.digit_sum d {{ r => r.val = grindSum d }}`, grind_body_spec and
+# C10AcceptanceBridge.extracted_wots_trial unchanged modulo the generated loop
+# rename (find_count_loop0 -> find_count_loop), every wots.rs line the .ec files
+# cite (all <= 160) byte-identical, easycrypt_transcript 4/4 under sim-internals.
+# Proofs, statements, assumptions and controls unchanged. Reviewed by Fable 5.1
+# and GPT-6 Astra.
+# Split identity 9b8a8b073e13da755a5ba7558b04068b -> a3521da827732cd906ac9b01f3c4b948.
+
+# 2026-10-23 combined construction/S1 integration: regenerate the identity
+# from all 2008 combined source bindings; no native theorem/control edits.
+# Changed Rust/FindCount correspondence requires fresh Lean/Rust gates.
+# Prior execution identities are retained separately from this metadata identity.
+# Combined split identity 9929d0bb28a58fe90c4589b6efe884df -> 73f8cfd8e5102e6904df9aa30a87fa5a.

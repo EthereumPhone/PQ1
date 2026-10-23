@@ -653,6 +653,14 @@ CoW decoders of the UserOp path and sign exactly what RAW32 would sign for
 the same hash (`docs/companion/usb-protocol-v2.md` §0x62). Route those two
 shapes there before the descriptor lookup when the device advertises the bit.
 
+UPDATE 2026-10-23: Uniswap Permit2 has a native kind too — `kind=6`, gated by
+capability bit 6. The four non-witness permits on the canonical Permit2
+deployment (PermitSingle, PermitBatch, PermitTransferFrom,
+PermitBatchTransferFrom) go there with per-token ERC-20 bundles and the
+spender's name bundle; the device shows symbols, exact amounts and the named
+spender, which the generic descriptor route (§6.5, `erc20: None`) cannot.
+Prefer kind 6 over the kind-3 descriptor route whenever the bit is set.
+
 ### 6.4 CMD_SIGN_OFFCHAIN — kind=0 / kind=1 fingerprint pages
 
 For `kind=0` (raw32) and `kind=1` (personal_sign), no ERC-7730

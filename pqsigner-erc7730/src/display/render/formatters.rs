@@ -3458,7 +3458,7 @@ pub(super) fn write_decimal_into(out: &mut [u8; DISPLAY_COLS], pos: usize, mut n
 
 /// Render unix-seconds `secs` into rows `r1` + `r2` as `YYYY-MM-DD` /
 /// `HH:MM:SS UTC`. Always-fits since the format is < 16 chars per row.
-fn format_iso8601_utc(secs: u64, r1: &mut [u8; DISPLAY_COLS], r2: &mut [u8; DISPLAY_COLS]) -> bool {
+pub fn format_iso8601_utc(secs: u64, r1: &mut [u8; DISPLAY_COLS], r2: &mut [u8; DISPLAY_COLS]) -> bool {
     let (year, mon, day, hour, min, sec) = unix_to_ymdhms(secs);
 
     // WYSIWYS (audit 2026-06-26 — date year truncation). The 4-digit
