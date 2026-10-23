@@ -185,11 +185,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // no concurrent mutator.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
-            Some(c) => {
-                c.account_index != account_index
-                    || c.chain_id != chain_id
-                    || c.slot_index != SLOT_INDEX
-            }
+            Some(c) => !c.names(account_index, chain_id, SLOT_INDEX),
             None => true,
         }
     });
@@ -215,12 +211,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // Any prior `CachedSlot` drops here; its `ZeroizeOnDrop`
         // wipes the dropped secret key.
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
-                account_index,
-                chain_id,
-                slot_index: SLOT_INDEX,
-                key: slot_sk,
-            });
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot::new(account_index, chain_id, SLOT_INDEX, slot_sk));
         }
         super::state::with_state(|s| {
             s.slot_master_entropy.zeroize();

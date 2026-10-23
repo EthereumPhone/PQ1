@@ -2372,11 +2372,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // no other handler can race this read.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
-            Some(c) => {
-                c.account_index != account_index
-                    || c.chain_id != chain_id
-                    || c.slot_index != slot_index
-            }
+            Some(c) => !c.names(account_index, chain_id, slot_index),
             None => true,
         }
     });
@@ -2402,12 +2398,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // update. Any displaced prior `CachedSlot` drops here; its
         // `ZeroizeOnDrop` wipes the previous SK.
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
-                account_index,
-                chain_id,
-                slot_index,
-                key: slot_sk,
-            });
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot::new(account_index, chain_id, slot_index, slot_sk));
         }
         super::state::with_state(|s| {
             s.slot_master_entropy.zeroize();

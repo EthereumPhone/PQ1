@@ -579,30 +579,20 @@ static mut STATE: SecureState = SecureState::new();
 pub(super) static mut SLOT_CACHE: Option<CachedSlot> = None;
 
 /// #1037: whether the cached slot key is the one `(account_index, chain_id,
-/// slot_index)` names. `need_keygen` is one unhardened comparison, so a
-/// single glitch that turns a miss into a hit would otherwise go on to sign
-/// with — or, for a rotation or `get_init_code`, have the bootstrap key
-/// register — another chain's or slot's key. A slot key is chain-bound
-/// precisely so that `MAX_SLOT_USES` is a per-key cap. The identity is read
-/// with volatile loads so each evaluation is its own load.
+/// slot_index)` names, through the complement-protected tag.
+/// `need_keygen` is one comparison, so a single glitch that turns a miss into
+/// a hit would otherwise go on to sign with — or, for a rotation or
+/// `get_init_code`, have the bootstrap key register — another chain's or
+/// slot's key. A slot key is chain-bound precisely so that `MAX_SLOT_USES` is
+/// a per-key cap.
 #[inline(never)]
 fn slot_cache_names(account_index: u32, chain_id: u64, slot_index: u32) -> bool {
     // SAFETY: category 5 — read-only borrow of `static mut SLOT_CACHE` under
     // the single-threaded, non-reentrant gateway, as every handler's read.
-    let Some(c) = (unsafe { &*core::ptr::addr_of!(SLOT_CACHE) }) else {
-        return false;
-    };
-    // SAFETY: category 4 — `c` borrows the populated cache, so the three
-    // fields are live, aligned and initialised; volatile so the compiler
-    // cannot share one load between evaluations.
-    let (a, ch, s) = unsafe {
-        (
-            core::ptr::read_volatile(&c.account_index),
-            core::ptr::read_volatile(&c.chain_id),
-            core::ptr::read_volatile(&c.slot_index),
-        )
-    };
-    a == account_index && ch == chain_id && s == slot_index
+    match unsafe { &*core::ptr::addr_of!(SLOT_CACHE) } {
+        Some(c) => c.names(account_index, chain_id, slot_index),
+        None => false,
+    }
 }
 
 /// [`slot_cache_names`] evaluated twice around `fi::wait_random()` and
@@ -636,11 +626,24 @@ pub(super) static mut FW_UPDATE: Option<crate::fw_update::FwUpdateCtx> = None;
 /// multi-account derivation, slot keys also vary per `account_index`
 /// (the `master_entropy` they descend from is account-scoped). A
 /// mismatch on any field triggers a fresh keygen (<1 s on hardware).
+///
+/// #1037: the identity is a complement-protected [`crate::fih::FihSlotTag`];
+/// every lookup goes through [`CachedSlot::names`], so a corrupted tag reads
+/// as a miss (fresh keygen), never as another chain's or slot's key.
 pub(super) struct CachedSlot {
-    pub(super) account_index: u32,
-    pub(super) chain_id: u64,
-    pub(super) slot_index: u32,
+    tag: crate::fih::FihSlotTag,
     pub(super) key: sphincs_c10::SigningKey,
+}
+
+impl CachedSlot {
+    pub(super) fn new(account_index: u32, chain_id: u64, slot_index: u32, key: sphincs_c10::SigningKey) -> Self {
+        Self { tag: crate::fih::FihSlotTag::new(account_index, chain_id, slot_index), key }
+    }
+
+    /// The tag is intact and names exactly this identity.
+    pub(super) fn names(&self, account_index: u32, chain_id: u64, slot_index: u32) -> bool {
+        self.tag.names(account_index, chain_id, slot_index)
+    }
 }
 
 /// Borrow the gateway state mutably for the duration of `f`.
