@@ -2379,6 +2379,17 @@ fn negative_cached_slot_key_identity_is_checked_twice_before_use() {
     let cached = STATE_SRC.split("pub(super) struct CachedSlot {\n").nth(1).expect("CachedSlot");
     let cached = &cached[..cached.find("\n}\n").expect("end")];
     assert_eq!(cached, "    tag: crate::fih::FihSlotTag,\n    pub(super) key: sphincs_c10::SigningKey,");
+    // ... and the wrapper every lookup calls delegates to the tag and
+    // nothing else (`… || true` here would void every gate and survive the
+    // tag's own tests — GPT-6 Astra re-review).
+    let wrapper = STATE_SRC
+        .split("    pub(super) fn names(&self, account_index: u32, chain_id: u64, slot_index: u32) -> bool {\n")
+        .nth(1)
+        .expect("CachedSlot::names");
+    assert_eq!(
+        &wrapper[..wrapper.find("\n    }\n").expect("end")],
+        "        self.tag.names(account_index, chain_id, slot_index)"
+    );
     assert!(STATE_SRC.contains("        Some(c) => c.names(account_index, chain_id, slot_index),\n        None => false,\n"));
     assert!(STATE_SRC.contains(
         "#[inline(never)]\npub(super) fn slot_cache_identity_verdict(account_index: u32, chain_id: u64, slot_index: u32) -> u32 {\n    crate::fi::check_true_into_sentinel(|| slot_cache_names(account_index, chain_id, slot_index))\n}"
