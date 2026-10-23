@@ -819,3 +819,12 @@ cdrafts-split/C10FunctionalBuildHistory.ec
 cdrafts-split/C10FunctionalForsBuildHistory.ec
 cdrafts-split/C10FunctionalMerkleBuildHistory.ec
 cdrafts-split/C10FunctionalBuildContracts.ec
+cdrafts-split/C10FunctionalCallerState.ec
+cdrafts-split/C10FunctionalCallerShuffle.ec
+cdrafts-split/C10FunctionalForestRecover.ec
+cdrafts-split/C10FunctionalLayerRecover.ec
+cdrafts-split/C10FunctionalLayerSign.ec
+cdrafts-split/C10FunctionalForestOne.ec
+cdrafts-split/C10FunctionalForestFill.ec
+cdrafts-split/C10FunctionalForestValue.ec
+cdrafts-split/C10FunctionalForestSign.ec

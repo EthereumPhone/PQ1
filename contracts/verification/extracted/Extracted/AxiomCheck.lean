@@ -1,3 +1,6 @@
+import Extracted.C10FunctionalForest
+import Extracted.C10FunctionalForestRecover
+import Extracted.C10FunctionalLayer
 import Extracted.C10FunctionalBuilders
 import Extracted.C10FunctionalTrees
 import Extracted.C10FunctionalWotsRecover
@@ -564,3 +567,23 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalBuilders.extracted_merkle_build_value
 #print axioms Extracted.Equiv.fors_sign_tree_outside_spec
 #print axioms Extracted.Equiv.xmss_build_auth_outside_spec
+
+-- Complete functional forest and layer caller endpoints.
+#print axioms Extracted.C10FunctionalForest.index_words_get
+#print axioms Extracted.C10FunctionalForest.forest_root_value
+#print axioms Extracted.C10FunctionalForest.signing_path_value
+#print axioms Extracted.C10FunctionalForest.signer_secrets_value
+#print axioms Extracted.C10FunctionalForest.signer_paths_value
+#print axioms Extracted.C10FunctionalForest.signing_recovery_value
+#print axioms Extracted.C10FunctionalForest.signer_roots_value
+#print axioms Extracted.C10FunctionalForest.forest_compression_value
+#print axioms Extracted.C10FunctionalForest.extracted_forest_sign_value
+#print axioms Extracted.C10FunctionalForestRecover.node_words_get
+#print axioms Extracted.C10FunctionalForestRecover.path_words_get
+#print axioms Extracted.C10FunctionalForestRecover.normal_root_value
+#print axioms Extracted.C10FunctionalForestRecover.extracted_forest_recover_value
+#print axioms Extracted.C10FunctionalLayer.layer_path_value
+#print axioms Extracted.C10FunctionalLayer.layer_recovery_value
+#print axioms Extracted.C10FunctionalLayer.signed_layer_recovery_value
+#print axioms Extracted.C10FunctionalLayer.pure_layer_sign_values
+#print axioms Extracted.C10FunctionalLayer.extracted_layer_body_values

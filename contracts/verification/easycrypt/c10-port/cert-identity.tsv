@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	5c8029a9542d3e69378794a983124990
+split	81d5cfe50492fda9650f3f3143b4589e
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1711,3 +1711,10 @@ fork	9c2d21280c84d52c30b22111151f1135
 # extracted function, Lean file, proof, statement, assumption or control
 # changes; the extraction regen loop re-derives every target unchanged.
 # Combined split identity d3f09e943f61b98014d1d54367a5776c -> 5c8029a9542d3e69378794a983124990.
+
+# 2026-10-24 functional forest/layer caller batch: 829 full targets,
+# 4573 exact statements, 5342 statement/operator pins, 1747 controls and
+# 2060 source bindings. Ten shared operators preserve the prior62 definitions;
+# nine modules add60 lemmas without a project axiom/admit. The complete
+# cold direct/CLI replay, extracted evidence, controls and combined review
+# remain required; an identity update is not proof execution evidence.

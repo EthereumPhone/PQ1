@@ -36,7 +36,6 @@ op merkle_auth_values (hash_fn : (int list -> int list)) (seed : (int list)) (se
 op merkle_build_value (hash_fn : (int list -> int list)) (seed : (int list)) (secret : (int list)) (layer : int) (tree : int) (index0 : int) : (((int list) list) * (int list)) =
   ((merkle_auth_values hash_fn seed secret layer tree (index0+1)), (merkle_root_value hash_fn seed secret layer tree)).
 
-
 (* Shared construction recurrences; these do not specify oracle scheduling. *)
 
 

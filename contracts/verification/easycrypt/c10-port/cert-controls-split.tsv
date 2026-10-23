@@ -1909,3 +1909,41 @@ scratch/_scope_neg_op_C10FunctionalBuildHistory.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalForsBuildHistory.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalMerkleBuildHistory.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalBuildContracts.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Functional forest/layer callers: values, exact history/calls, complete callers and scope controls.
+scratch/c10_caller_value_positive.ec	MUST-PASS	-
+scratch/c10_caller_value_preserving.ec	MUST-PASS	-
+scratch/c10_caller_value_fixtures.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_last_tree_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_last_tree_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_caller_value_forest_secret_index_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_secret_index_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_caller_value_forest_path_index_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_path_index_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_caller_value_forest_last_leaf_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_last_leaf_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_value_forest_compress_domain_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_compress_domain_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_caller_value_forest_recover_order_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_recover_order_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_caller_value_forest_sign_address_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_forest_sign_address_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_value_layer_search_bound_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_layer_search_bound_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_value_layer_slot_sentinel_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_layer_slot_sentinel_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_value_layer_signed_counter_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_layer_signed_counter_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_caller_value_layer_signed_path_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_layer_signed_path_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_caller_value_layer_recover_position_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_layer_recover_position_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/_scope_neg_op_C10FunctionalCallerState.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalCallerShuffle.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForestRecover.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalLayerRecover.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalLayerSign.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForestOne.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForestFill.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForestValue.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForestSign.ec	MUST-FAIL	FORS_C_TreePort.

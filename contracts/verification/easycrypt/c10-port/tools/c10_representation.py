@@ -355,6 +355,53 @@ merkle_build_value = define("merkle_build_value",(hash_fn,seed,secret,layer,tree
     product(merkle_auth_values(hash_fn,seed,secret,layer,tree,index0),
         merkle_root_value(hash_fn,seed,secret,layer,tree)))
 
+# Forest and layer caller values. Slot 12 transmits the final FORS tree root;
+# recovery hashes that transmitted value once before compressing all 13 roots.
+# The search slot retains zero for exhaustion. Result/option failure remains in
+# the endpoint contracts; layer_sign_values is consumed only at an accepted count.
+forest_indices = var("forest_indices", LIST(INT))
+forest_secrets = var("forest_secrets", NODES)
+forest_paths = var("forest_paths", LIST(NODES))
+forest_target = index(forest_indices, i, literal(0,INT))
+forest_sign_secrets = define("forest_sign_secrets",(hash_fn,seed,secret,ht,forest_indices),
+    cat(seq(literal(12),i,fors_secret_value(hash_fn,secret,ht,count_as_int(i),forest_target)),
+        items(BYTES,fors_root_value(hash_fn,seed,secret,ht,literal(12,INT)))))
+forest_sign_paths = define("forest_sign_paths",(hash_fn,seed,secret,ht,forest_indices),
+    seq(literal(12),i,fors_auth_values(hash_fn,seed,secret,ht,count_as_int(i),forest_target)))
+forest_recover_roots = define("forest_recover_roots",
+    (hash_fn,seed,ht,forest_indices,forest_secrets,forest_paths),
+    cat(seq(literal(12),i,fors_recover_value(hash_fn,seed,ht,count_as_int(i),forest_target,
+            index(forest_secrets,i,zero_node),index(forest_paths,i,items(BYTES)))),
+        items(BYTES,fors_leaf_value(hash_fn,seed,ht,literal(12,INT),literal(0,INT),
+            index(forest_secrets,literal(12),zero_node)))))
+forest_compress_value = define("forest_compress_value",(hash_fn,seed,ht,values),
+    hash_bytes_node(hash_fn,multi_preimage(seed,
+        address_words(literal(0,INT),ht,literal(4,INT),literal(0,INT),literal(0,INT),
+            literal(0,INT),literal(0,INT)),values)))
+forest_recover_value = define("forest_recover_value",
+    (hash_fn,seed,ht,forest_indices,forest_secrets,forest_paths),
+    forest_compress_value(hash_fn,seed,ht,
+        forest_recover_roots(hash_fn,seed,ht,forest_indices,forest_secrets,forest_paths)))
+forest_sign_value = define("forest_sign_value",(hash_fn,seed,secret,ht,forest_indices),
+    product(forest_sign_secrets(hash_fn,seed,secret,ht,forest_indices),
+        forest_sign_paths(hash_fn,seed,secret,ht,forest_indices),
+        forest_recover_value(hash_fn,seed,ht,forest_indices,
+            forest_sign_secrets(hash_fn,seed,secret,ht,forest_indices),
+            forest_sign_paths(hash_fn,seed,secret,ht,forest_indices))))
+wots_search_digests = define("wots_search_digests",(hash_fn,seed,layer,tree,kp,message),
+    seq(literal(10000000),i,hash_apply(hash_fn,wots_preimage(seed,
+        address_words(layer,tree,literal(0,INT),kp,literal(0,INT),literal(0,INT),literal(0,INT)),
+        pad_node(message),count_as_int(i)))))
+layer_sign_slot = define("layer_sign_slot",(hash_fn,seed,layer,tree,kp,message),
+    wots_first_slot(wots_search_digests(hash_fn,seed,layer,tree,kp,message)))
+layer_sign_values = define("layer_sign_values",(hash_fn,seed,secret,layer,tree,kp,message,nonce),
+    product(wots_sign_values(hash_fn,seed,secret,layer,tree,kp,recovery_digest),nonce,
+        merkle_auth_values(hash_fn,seed,secret,layer,tree,kp)))
+layer_recover_value = define("layer_recover_value",
+    (hash_fn,seed,layer,tree,kp,message,values,nonce,auth),
+    merkle_recover_value(hash_fn,seed,layer,tree,
+        wots_recover_value(hash_fn,seed,layer,tree,kp,message,values,nonce),kp,auth))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"

@@ -34,6 +34,7 @@ from c10_functional_search_controls import functional_search_outputs, functional
 from c10_functional_wots_controls import functional_wots_outputs, functional_wots_rows
 from c10_functional_tree_controls import functional_tree_outputs, functional_tree_rows
 from c10_functional_build_controls import functional_build_outputs, functional_build_rows
+from c10_functional_caller_controls import functional_caller_outputs, functional_caller_rows
 
 CHANGES = [
     ("word-endian", "byte_word", "List.reverse bs", "bs", "rev bs", "bs"),
@@ -124,6 +125,7 @@ def control_outputs(port):
     result.update(functional_wots_outputs(port))
     result.update(functional_tree_outputs(port))
     result.update(functional_build_outputs(port))
+    result.update(functional_caller_outputs(port))
     return result
 
 def control_rows():
@@ -132,11 +134,11 @@ def control_rows():
         stem="scratch/c10_rep_"+name.replace("-","_")
         rows.extend([stem+"_typed.ec\tMUST-PASS\t-",
                      stem+"_reject.ec\tMUST-FAIL\t"+REASONS[name]])
-    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + paired_signer_rows() + digest_caller_rows() + stirling_rows() + accepted_encoding_rows() + node_domain_rows() + leaf_candidate_rows() + chain_candidate_rows() + paired_session_rows() + paired_keygen_rows() + r_availability_rows() + total_availability_rows() + search_acceptance_rows() + functional_search_rows() + functional_wots_rows() + functional_tree_rows() + functional_build_rows()
+    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + paired_signer_rows() + digest_caller_rows() + stirling_rows() + accepted_encoding_rows() + node_domain_rows() + leaf_candidate_rows() + chain_candidate_rows() + paired_session_rows() + paired_keygen_rows() + r_availability_rows() + total_availability_rows() + search_acceptance_rows() + functional_search_rows() + functional_wots_rows() + functional_tree_rows() + functional_build_rows() + functional_caller_rows()
 
 def check_manifest_rows(rows):
     expected=control_rows()
-    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_", "scratch/c10_paired_signer_", "scratch/c10_digest_caller_", "scratch/stirling_", "scratch/accepted_encoding_", "scratch/node_domain_", "scratch/leaf_candidate_", "scratch/chain_candidate_", "scratch/c10_paired_session_", "scratch/c10_paired_keygen_", "scratch/c10_r_availability_", "scratch/c10_total_availability_", "scratch/c10_functional_", "scratch/c10_wots_value_", "scratch/c10_tree_value_", "scratch/c10_build_value_"))]
+    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_", "scratch/c10_paired_signer_", "scratch/c10_digest_caller_", "scratch/stirling_", "scratch/accepted_encoding_", "scratch/node_domain_", "scratch/leaf_candidate_", "scratch/chain_candidate_", "scratch/c10_paired_session_", "scratch/c10_paired_keygen_", "scratch/c10_r_availability_", "scratch/c10_total_availability_", "scratch/c10_functional_", "scratch/c10_wots_value_", "scratch/c10_tree_value_", "scratch/c10_build_value_", "scratch/c10_caller_value_"))]
     if sorted(live)!=sorted(expected):
         raise ValueError("paired representation control enrollment changed")
 

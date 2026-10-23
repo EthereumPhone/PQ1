@@ -77,9 +77,9 @@ MAGNITUDES = [r'\b65536\b', r'\b0x10000\b', r'2\s*\^\s*16', r'\b4\s*\^\s*8\b']
 # changed shuffle source requires deliberately updating this digest as well.
 NONPOLICY_MAGNITUDES = {
     # Paired expression: the same 16-bit shuffle divisor, never wallet policy.
-    # Search, WOTS and tree values append definitions without changing that divisor.
+    # Search, WOTS, tree and caller values append definitions without changing that divisor.
     ('cdrafts-split/C10Representation.ec', r'\b65536\b'):
-        'ca701ac8c1f909da85e03a928d443b6cfa5aeeeb1faa44031fcfffe54f669be0',
+        '034111bf5fd419f1f6b3aba596aaa2b7825b1c10b59e0901f9bf33c8121a063d',
     ('cdrafts-split/RawShuffle.ec', r'\b65536\b'):
         '2d8c14b922f4e85c7c2a1a8a4852a7622dbff8a87a3e6faf43ff6b13d5e3e639',
     ('cdrafts-split/RawShufflePermutation.ec', r'\b65536\b'):

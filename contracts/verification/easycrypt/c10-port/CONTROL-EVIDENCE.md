@@ -401,3 +401,40 @@ address bytes and ordered children. Lean and EasyCrypt prove whole-level
 identities before checking the roots and paths, keeping the fixtures small
 without replacing either proof checker with Python evaluation. The paired
 printers and supplied-backend interpretation remain disclosed boundaries.
+
+## Functional forest and layer caller controls
+
+`tools/c10_functional_caller_controls.py` supplies twelve typed mutations:
+forest final-tree selection, secret/path index, separate final leaf, compression
+domain, recovery ordering, signing address, layer search bound, zero sentinel,
+returned counter, authentication-path target and recovery position. The 27
+`scratch/c10_caller_value_*` fixtures include original and arithmetic-equivalent
+positives, twelve definition-only passes, twelve intended-consumer rejections
+and independent value examples. Nine scope probes cover the new native modules.
+The native positive fixtures retain all nine modules; the Lean fixture retains
+the three endpoint modules and the transitive caller proofs needed to avoid
+importing a second copy of the shared definitions. Repeated backend reducibility
+attributes are retained once, with other declarations unchanged.
+
+Each changed definition must typecheck before its first unchanged consuming
+theorem rejects. The Lean checker enforces that first error's theorem location;
+the native full gate enforces its ordinary rejection diagnostic, with the
+coordinator's raw-log audit checking the intended location. Persistent native
+location enforcement remains the separate deferred #1034. Later proofs after a
+rejection earn no execution credit. Syntax/type errors, timeouts, resource
+failures and inconclusive outcomes do not count. Replacing compression domain
+`4` with `2+2` passes the complete fixture. These controls demonstrate proof
+sensitivity, not the logical negation of the changed theorem.
+
+`tools/c10_functional_caller_fixtures.py` independently constructs two full
+forest recoveries using Python byte encodings, pins all 26 positional roots and
+the two compressed values, and checks them in both provers. They include zero
+and maximum hypertree fields and first, odd, last, outside and maximum-u32 leaf
+indices. The thirteenth secret gets its separate tree-12 leaf hash at index zero.
+Four layer examples retain zero-node WOTS rejection and the nine-level XMSS
+continuation at counters 0, 9,999,999, 10,000,000 and maximum u32, with full-width
+coordinates and empty witness lists. These layer examples use a constant-zero
+backend; their scope is the rejection branch, not accepted WOTS construction.
+The earlier WOTS and complete-tree fixtures remain enrolled. All fixture
+backends are public arithmetic, not SHA. Lean uses kernel `decide` and native
+EasyCrypt checks the finite folds; Python is not a substitute proof checker.

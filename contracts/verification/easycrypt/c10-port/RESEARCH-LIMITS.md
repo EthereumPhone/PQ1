@@ -1,9 +1,9 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-22, following the initialized classical byte-game
+Research checkpoint: 2026-10-24, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
-status label. Work remains tracked under PQ1 #100 and #295.
+status label. Remaining research is tracked under PQ1 #100; #295 is closed.
 
 ## Functional bounded-search backend interpretation
 
@@ -77,7 +77,7 @@ the rejected digest call. Termination is proved without eventual acceptance.
 
 This closes the selected functional WOTS component under the disclosed
 backend interpretation. The next component is the FORS/Merkle recovery
-bridge below; construction, the full signer/verifier and sessions remain open.
+bridge below; construction and forest/layer composition are covered below; the full signer/verifier and sessions remain open.
 The paired printers, function
 interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
 transfer and QROM/physical assumptions remain explicit limits. The ideal-model
@@ -114,8 +114,7 @@ equality. The private-derivation lemma also connects `FixedPrefix.derive` to
 the shared FORS secret value.
 
 This closes recovery computations under the disclosed interpretation. Root and
-authentication-path construction is covered by the component below; complete
-forest composition and the full signer/verifier/session relation remain open. Paired-printer and
+authentication-path construction is covered by the component below; forest/layer composition is covered below; the full signer/verifier/session relation remains open. Paired-printer and
 backend interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
 security transfer and QROM/physical boundaries remain open. No ideal-model
 probability bound transfers from these deterministic functional equalities.
@@ -159,12 +158,67 @@ counts are separate statements. It assumes neither an empty initial history
 nor a desired return value.
 
 [Controls](CONTROL-EVIDENCE.md#functional-construction-controls) exercise both
-printers and unchanged consumers. Complete forest/layer/signer/session
-composition, paired-printer and backend interpretation, concrete RustCrypto or
+printers and unchanged consumers. Forest/layer composition is covered below.
+Complete signer/verifier/session composition, paired-printer and backend interpretation, concrete RustCrypto or
 STM32 behavior, progress callbacks, sampled-oracle transfer, and QROM/physical
 assumptions remain outside this result. The component does not transfer the
 ideal-model probability bound. Full replay, source identity and review remain
 separate requirements.
+
+## Functional forest and layer caller values
+
+Ten appended expressions reuse the existing typed constructors; all 62 earlier
+expression trees are preserved. They compose twelve ordinary FORS paths, the
+separate root-as-secret slot 12 and forest compression, plus the bounded WOTS
+selector and the layer signature/recovery values. The zero selector still
+means exhaustion, and a positive selector is the first accepted counter plus
+one. The signature expression is consumed only for the actual accepted counter;
+it does not assume that a successful search exists.
+
+[`C10FunctionalForest.lean`](../../extracted/Extracted/C10FunctionalForest.lean),
+[`C10FunctionalForestRecover.lean`](../../extracted/Extracted/C10FunctionalForestRecover.lean)
+and [`C10FunctionalLayer.lean`](../../extracted/Extracted/C10FunctionalLayer.lean)
+contribute 18 kernel-only headlines. The factored extracted forest-signing
+phase and its actual compression call consume the shared secrets, paths and
+result; the factored verifier forest block consumes the shared recovery value
+for arbitrary u32 indices. The actual hypertree signing-loop body retains its
+serialized continuation, recovered root, accepted count or exact assertion
+failure. Forest signing uses the existing first-twelve-index bound below 2048;
+the complete digest caller must discharge that premise when composed. Layer
+signing uses the actual two-layer/9-bit leaf domain, while recovery retains
+full u32 counters and coordinates.
+
+Nine native modules culminate in
+[`C10FunctionalForestSign`](cdrafts-split/C10FunctionalForestSign.ec),
+[`C10FunctionalForestRecover`](cdrafts-split/C10FunctionalForestRecover.ec),
+[`C10FunctionalLayerSign`](cdrafts-split/C10FunctionalLayerSign.ec) and
+[`C10FunctionalLayerRecover`](cdrafts-split/C10FunctionalLayerRecover.ec).
+Their 60 lemmas add no project axiom or admit. Raw/CommonInput callers agree on
+results and complete backend state. Forest signing takes 80,017 calls plus its
+explicit zero/nonzero-seed derivation and permutation costs; recovery takes
+146. Layer signing includes the 177,151-call builder, derivation, bounded search
+and, on success, recovery. Exhaustion retains construction and search effects:
+10,177,151 calls plus zero or one derivation call. Recovery preserves the
+WOTS zero-node rejection continuation through all nine XMSS levels. Separate
+losslessness results require no eventual-success premise.
+
+Every state contract allows arbitrary backend-consistent prior history and
+frames the key/function. Construction and shuffled forest phases specify final
+maps pointwise, retaining untouched keys; subsequent queries are explicit
+remember operations. Intermediate maps are existentially quantified outputs
+constrained by these exact pointwise relations, not assumed desired maps or
+ordered transcript claims. The separate Raw/CommonInput equivalences retain
+the actual execution state.
+
+[Controls](CONTROL-EVIDENCE.md#functional-forest-and-layer-caller-controls),
+full cold replay, exact source identities and the combined review remain
+separate requirements. The next feasible component is the complete
+signer/verifier and initialized session composition, including the digest-bound
+premises and the secure wrapper's two signing calls and verification cost.
+Paired-printer and backend interpretation, concrete RustCrypto/STM32 behavior,
+callback non-interference, sampled-oracle security transfer and QROM/physical
+assumptions remain explicit limits. These deterministic equalities do not
+transfer the ideal-model probability bound or grant production authority.
 
 ## Quantitative loss
 

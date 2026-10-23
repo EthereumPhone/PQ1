@@ -199,9 +199,19 @@ Native Raw/CommonInput contracts preserve arbitrary consistent prior history,
 key/function state, exact final maps and exact call counts, with separate
 termination proofs. This closes the selected construction component under the
 existing backend and callback-free extraction interpretation. Full
-forest/layer/signer/session composition and concrete-backend/ideal-oracle
+signer/verifier/session composition and concrete-backend/ideal-oracle
 transfer remain open; see the
 [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-fors-and-xmss-construction-values).
+
+**Functional forest/layer correspondence (2026-10-24):** the actual extracted
+forest phases/compression and hypertree-layer body now consume shared values,
+including the separate slot-12 hash, positional shuffled outputs and bounded
+signing failure. Native Raw/CommonInput endpoints preserve arbitrary consistent
+prehistory, key/function state, exact final maps and calls, with separate
+termination proofs. The complete signer/verifier/session composition and
+concrete-backend/ideal-oracle transfer remain open. The precise domains,
+construction effects retained on failure and interpretation limits are in the
+[research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-forest-and-layer-caller-values).
 
 **Native EasyCrypt total signing availability (2026-10-21):** the
 [initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)

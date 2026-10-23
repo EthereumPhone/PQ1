@@ -190,4 +190,34 @@ def merkle_auth_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (
 def merkle_build_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (index0 : Int) : ((List (List Int)) × (List Int))  :=
   ((merkle_auth_values hash_fn seed secret layer tree index0), (merkle_root_value hash_fn seed secret layer tree))
 
+def forest_sign_secrets (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (ht : Int) (forest_indices : (List Int)) : (List (List Int))  :=
+  (((List.range 12).map (fun i => (fors_secret_value hash_fn secret ht (Int.ofNat i) (List.getD forest_indices i 0)))) ++ [(fors_root_value hash_fn seed secret ht 12)])
+
+def forest_sign_paths (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (ht : Int) (forest_indices : (List Int)) : (List (List (List Int)))  :=
+  ((List.range 12).map (fun i => (fors_auth_values hash_fn seed secret ht (Int.ofNat i) (List.getD forest_indices i 0))))
+
+def forest_recover_roots (hash_fn : (List Int → List Int)) (seed : (List Int)) (ht : Int) (forest_indices : (List Int)) (forest_secrets : (List (List Int))) (forest_paths : (List (List (List Int)))) : (List (List Int))  :=
+  (((List.range 12).map (fun i => (fors_recover_value hash_fn seed ht (Int.ofNat i) (List.getD forest_indices i 0) (List.getD forest_secrets i (List.replicate 16 0)) (List.getD forest_paths i [])))) ++ [(fors_leaf_value hash_fn seed ht 12 0 (List.getD forest_secrets 12 (List.replicate 16 0)))])
+
+def forest_compress_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (ht : Int) (values : (List (List Int))) : (List Int)  :=
+  (hash_bytes_node hash_fn (multi_preimage seed (address_words 0 ht 4 0 0 0 0) values))
+
+def forest_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (ht : Int) (forest_indices : (List Int)) (forest_secrets : (List (List Int))) (forest_paths : (List (List (List Int)))) : (List Int)  :=
+  (forest_compress_value hash_fn seed ht (forest_recover_roots hash_fn seed ht forest_indices forest_secrets forest_paths))
+
+def forest_sign_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (ht : Int) (forest_indices : (List Int)) : ((List (List Int)) × (List (List (List Int))) × (List Int))  :=
+  ((forest_sign_secrets hash_fn seed secret ht forest_indices), (forest_sign_paths hash_fn seed secret ht forest_indices), (forest_recover_value hash_fn seed ht forest_indices (forest_sign_secrets hash_fn seed secret ht forest_indices) (forest_sign_paths hash_fn seed secret ht forest_indices)))
+
+def wots_search_digests (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kp : Int) (message : (List Int)) : (List (List Int))  :=
+  ((List.range 10000000).map (fun i => (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) (Int.ofNat i)))))
+
+def layer_sign_slot (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kp : Int) (message : (List Int)) : Nat  :=
+  (wots_first_slot (wots_search_digests hash_fn seed layer tree kp message))
+
+def layer_sign_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (secret : (List Int)) (layer : Int) (tree : Int) (kp : Int) (message : (List Int)) (nonce : Int) : ((List (List Int)) × Int × (List (List Int)))  :=
+  ((wots_sign_values hash_fn seed secret layer tree kp (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) nonce))), nonce, (merkle_auth_values hash_fn seed secret layer tree kp))
+
+def layer_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kp : Int) (message : (List Int)) (values : (List (List Int))) (nonce : Int) (auth : (List (List Int))) : (List Int)  :=
+  (merkle_recover_value hash_fn seed layer tree (wots_recover_value hash_fn seed layer tree kp message values nonce) kp auth)
+
 end C10Representation
