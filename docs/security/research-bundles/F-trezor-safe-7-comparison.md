@@ -6795,6 +6795,11 @@ pub fn zeroize_sensitive_state() {
     // input backend cannot keep the watchdog fed until the 120 s idle limit.
     crate::timeout::clear_trusted_ui_wait();
     state::with_state(|s| s.zeroize_sensitive());
+    // The HASH engine keeps the last digest (and, in its context registers,
+    // the last block fed — `sk_seed` for the PRFs) until reset; nothing else
+    // resets it between digests in this image (`init-restart`).
+    #[cfg(feature = "hw-sha256")]
+    pqsigner_hw::hash::scrub();
     // SAFETY: category 5 — exclusive mutable borrow of the
     // `static mut crate::SE` driver. Single-threaded secure world,
     // non-reentrant gateway: nothing else touches the SE while this
