@@ -2,7 +2,9 @@
 """Type-correct functional construction changes must fail the unchanged Lean consumers."""
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import os
 import re
+import signal
 import subprocess
 import tempfile
 from test_c10_functional_tree_controls import fixture as tree_fixture
@@ -10,6 +12,26 @@ from test_fors_auth_proof_controls import LAKE, ROOT, require_semantic_rejection
 from c10_representation import source
 from c10_representation_controls import changed
 from c10_functional_build_controls import BUILD_CHANGES
+
+
+def run_lean(path, timeout=300):
+    """Keep a finite bound and terminate lake's Lean children on failure."""
+    command = [str(LAKE), 'env', 'lean', str(path)]
+    process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True,
+                               start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except BaseException:
+        # Killing only lake leaves its Lean child running, holding the pipes
+        # and competing with the remaining controls after a timeout.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.communicate()
+        raise
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def fixture(definitions):
@@ -38,8 +60,7 @@ def main():
         def run(name, text):
             path = Path(tmp) / (name + '.lean')
             path.write_text(text)
-            return subprocess.run([str(LAKE), 'env', 'lean', str(path)], cwd=ROOT,
-                                  capture_output=True, text=True, timeout=90)
+            return run_lean(path)
         original = source(True)
         benign = changed(original, 'tree_nodes_value', '(i + 1)', '(i + (2-1))', True)
         for name, definitions in [('positive', original), ('preserving', benign)]:
@@ -66,7 +87,9 @@ def main():
             if not errors or not lo <= int(errors[0]) < hi:
                 raise RuntimeError(name + ': rejection missed ' + theorem + '\n' + result.stdout + result.stderr)
             print('PASS C10 functional construction typed rejection: ' + name + ' at ' + theorem, flush=True)
-        with ThreadPoolExecutor(max_workers=3) as pool:
+        # CI needs about a minute even for one positive fixture. Two workers
+        # keep these larger construction fixtures within the runner's budget.
+        with ThreadPoolExecutor(max_workers=2) as pool:
             list(pool.map(negative, BUILD_CHANGES))
     print(f'OK C10 functional construction: 2 positives and {len(BUILD_CHANGES)} typed intended-theorem rejections')
 
