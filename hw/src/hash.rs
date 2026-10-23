@@ -152,6 +152,274 @@ static mut STATE: State = State {
     pending: 0,
 };
 
+// ---------------------------------------------------------------------------
+// Dev probe (feature `hash-probe`): where a digest's cycles go.
+// ---------------------------------------------------------------------------
+
+/// Cycle sums per digest stage, on `DWT_CYCCNT`. MEASUREMENT ONLY: nothing
+/// here arms the counter (the secure world's benches and busy film do), the
+/// FSBL never enables the feature, and the secure `nsc/mod.rs` fence keeps it
+/// out of a shipping image. The stamps and sums cost cycles of their own,
+/// which land in the stages, so compare a probed build's wall time with an
+/// unprobed one before trusting the split.
+#[cfg(feature = "hash-probe")]
+pub mod probe {
+    use crate::mmio::RoReg32;
+
+    // SAFETY: DWT_CYCCNT (ARMv8-M core debug block, 0xE000_1004) is a real,
+    // aligned register; reading it has no side effect.
+    const CYCCNT: RoReg32 = unsafe { RoReg32::new(0xE000_1004) };
+
+    /// The caller's own work: the previous digest's end to this `init` (with
+    /// the tick hook, when it runs). Only gaps below [`LONG`] count here.
+    pub const GAP: usize = 0;
+    /// `init`: the busy wait, the HASHRST pulse, the CR write.
+    pub const READY: usize = 1;
+    pub const RESET: usize = 2;
+    pub const START: usize = 3;
+    /// Every `update` of the digest.
+    pub const FEED: usize = 4;
+    /// `final` to the DCAL write: the last word, NBLW.
+    pub const LAST: usize = 5;
+    /// DCAL to DCIS: the engine's tail.
+    pub const WAIT: usize = 6;
+    /// The digest read out and DCIS cleared.
+    pub const OUT: usize = 7;
+    pub const STAGES: usize = 8;
+
+    /// A gap this long (100 µs at 160 MHz) is other work between digest
+    /// streams (a sign's start, the bench's prints), not per-digest overhead.
+    pub const LONG: u32 = 16_000;
+
+    #[derive(Clone, Copy)]
+    pub struct Probe {
+        /// Digests finished.
+        pub n: u32,
+        /// Cycles per stage, summed.
+        pub cyc: [u64; STAGES],
+        /// Gaps counted in `cyc[GAP]`.
+        pub gaps: u32,
+        /// Gaps of [`LONG`] or more: how many, and their cycles.
+        pub long: (u32, u64),
+        /// By padded message blocks (1, 2, 3, 4 or more): digests, and their
+        /// FEED and WAIT cycles.
+        pub blocks: [(u32, u64, u64); 4],
+    }
+
+    struct Live {
+        p: Probe,
+        /// The previous digest's end; 0 before the first.
+        end: u32,
+        /// The latest stage boundary of the digest in flight.
+        mark: u32,
+        feed: u32,
+        bytes: u32,
+    }
+
+    static mut LIVE: Live = Live {
+        p: Probe { n: 0, cyc: [0; STAGES], gaps: 0, long: (0, 0), blocks: [(0, 0, 0); 4] },
+        end: 0,
+        mark: 0,
+        feed: 0,
+        bytes: 0,
+    };
+
+    #[inline(always)]
+    pub(crate) fn now() -> u32 {
+        CYCCNT.read()
+    }
+
+    /// `init` entered: file the gap since the previous digest.
+    #[inline(always)]
+    pub(crate) fn init_entered() {
+        let t = now();
+        // SAFETY: category 5 — the hash hooks are serialised by their FFI
+        // contract and the secure world is single-threaded; nothing else
+        // holds a reference to LIVE while this one lives.
+        let l = unsafe { &mut *core::ptr::addr_of_mut!(LIVE) };
+        if l.end != 0 {
+            let gap = t.wrapping_sub(l.end);
+            if gap < LONG {
+                l.p.cyc[GAP] += u64::from(gap);
+                l.p.gaps = l.p.gaps.saturating_add(1);
+            } else {
+                l.p.long.0 = l.p.long.0.saturating_add(1);
+                l.p.long.1 += u64::from(gap);
+                // Every long gap is a boundary candidate (a sign's end is
+                // one): print the running sums so per-sign deltas can be
+                // taken against the bench's own lines.
+                #[cfg(feature = "debug-log")]
+                super::probe_mark(&l.p);
+            }
+        }
+        l.mark = t;
+        l.feed = 0;
+        l.bytes = 0;
+    }
+
+    /// Close stage `k` of the digest in flight; returns its cycles.
+    #[inline(always)]
+    pub(crate) fn stage(k: usize) -> u32 {
+        let t = now();
+        // SAFETY: as in `init_entered`.
+        let l = unsafe { &mut *core::ptr::addr_of_mut!(LIVE) };
+        let d = t.wrapping_sub(l.mark);
+        l.p.cyc[k] += u64::from(d);
+        l.mark = t;
+        d
+    }
+
+    /// One `update` of `len` bytes ran from `t0` to now.
+    #[inline(always)]
+    pub(crate) fn fed(t0: u32, len: usize) {
+        let t = now();
+        // SAFETY: as in `init_entered`.
+        let l = unsafe { &mut *core::ptr::addr_of_mut!(LIVE) };
+        l.feed = l.feed.wrapping_add(t.wrapping_sub(t0));
+        l.bytes = l.bytes.wrapping_add(len as u32);
+    }
+
+    /// `final` entered.
+    #[inline(always)]
+    pub(crate) fn final_entered() {
+        let t = now();
+        // SAFETY: as in `init_entered`.
+        unsafe { (*core::ptr::addr_of_mut!(LIVE)).mark = t };
+    }
+
+    /// The digest is out (its WAIT took `wait`): file it, report every 2^20
+    /// digests, then stamp its end.
+    #[inline(never)]
+    pub(crate) fn done(wait: u32) {
+        stage(OUT);
+        // SAFETY: as in `init_entered`.
+        let l = unsafe { &mut *core::ptr::addr_of_mut!(LIVE) };
+        l.p.cyc[FEED] += u64::from(l.feed);
+        // SHA-256 pads with 0x80 and an 8-byte length: (len + 9) rounded up.
+        let blocks = (l.bytes as usize + 72) / 64;
+        let b = &mut l.p.blocks[blocks.clamp(1, 4) - 1];
+        b.0 = b.0.saturating_add(1);
+        b.1 += u64::from(l.feed);
+        b.2 += u64::from(wait);
+        l.p.n = l.p.n.saturating_add(1);
+        #[cfg(feature = "debug-log")]
+        if l.p.n % (1 << 20) == 0 {
+            super::probe_report(&l.p);
+        }
+        l.end = now();
+    }
+
+    /// The sums so far (since boot; the reader takes differences).
+    #[must_use]
+    pub fn snapshot() -> Probe {
+        // SAFETY: as in `init_entered`; a copy, taken outside any hash.
+        unsafe { (*core::ptr::addr_of!(LIVE)).p }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dev crosscheck (feature `hw-sha256-crosscheck`): software SHA-256 beside
+// every hardware digest.
+// ---------------------------------------------------------------------------
+
+#[cfg(all(feature = "hash-probe", feature = "hw-sha256-crosscheck"))]
+compile_error!("`hash-probe` and `hw-sha256-crosscheck` are exclusive: the software hash would land in the probe's stages");
+
+/// True when a dev instrument rides in this driver. The secure world refuses
+/// to build `mode-production` with it set: a dependency feature
+/// (`--features pqsigner-hw/…`) is invisible to that crate's own `cfg` fence,
+/// but not to a constant.
+pub const DEV_INSTRUMENTED: bool = cfg!(any(feature = "hash-probe", feature = "hw-sha256-crosscheck"));
+
+/// True when a feature this crate reserves for the secure image is on. The
+/// FSBL asserts it false at compile time (`fsbl/src/hash.rs`): its bytes carry
+/// the silicon boot proof, and a feature can reach it through a manifest or a
+/// recipe that no source pin reads (the workspace dependency line, a
+/// `--features pqsigner-hw/…` in a build script). `tick-hook` alone would also
+/// fail to link there; the others would link and ship.
+pub const SECURE_IMAGE_ONLY: bool = cfg!(any(
+    feature = "unrolled-io",
+    feature = "tick-hook",
+    feature = "hash-probe",
+    feature = "hw-sha256-crosscheck"
+));
+
+#[cfg(feature = "hw-sha256-crosscheck")]
+extern "C" {
+    /// Software half of the crosscheck, supplied by the linking binary (the
+    /// secure world, `secure/src/hw/hash.rs`). SOAK EVIDENCE ONLY: it costs
+    /// several hardware digests' worth of cycles, compares in variable time
+    /// and keeps a second, unzeroized copy of every preimage (the `sk_seed`
+    /// PRFs included). Start a software digest.
+    fn pqsigner_xcheck_begin();
+    /// Mirror an `update`.
+    fn pqsigner_xcheck_feed(ptr: *const u8, len: usize);
+    /// Finish the software digest and compare it with the 32 bytes at
+    /// `digest`; false on a difference or with no digest started.
+    fn pqsigner_xcheck_same(digest: *const u8) -> bool;
+}
+
+/// Digests the crosscheck has passed since boot.
+#[cfg(feature = "hw-sha256-crosscheck")]
+static mut XCHECKED: u32 = 0;
+
+/// Compare the digest just written to `out` with the software one: report
+/// every 2^20 digests, take the H-1 fault posture on a difference.
+#[cfg(feature = "hw-sha256-crosscheck")]
+#[inline(never)]
+fn xcheck_digest(out: *const u8) {
+    // SAFETY: category 3 — FFI to the binary's software half;
+    // `pqsigner_sha256_final` wrote all 32 bytes at `out` (valid by its own
+    // FFI contract) before calling this.
+    let same = unsafe { pqsigner_xcheck_same(out) };
+    // SAFETY: category 5 — the hash hooks are serialised by their FFI
+    // contract and the secure world is single-threaded.
+    let n = unsafe { &mut *core::ptr::addr_of_mut!(XCHECKED) };
+    if !same {
+        hash_log!("[S] hash-xcheck MISMATCH after n={} ok — FAULT", *n);
+        hash_engine_fault();
+    }
+    *n = n.wrapping_add(1);
+    if *n % (1 << 20) == 0 {
+        hash_log!("[S] hash-xcheck n={} ok", *n);
+    }
+}
+
+/// Semihosting print of the probe's running sums at a long gap: digests,
+/// short-gap cycles, driver cycles (every stage), long-gap cycles.
+#[cfg(all(feature = "hash-probe", feature = "debug-log"))]
+#[inline(never)]
+fn probe_mark(p: &probe::Probe) {
+    let drv: u64 = p.cyc[probe::READY..].iter().sum();
+    hash_log!("[S] hash-probe L n={} gap={} drv={} long={}", p.n, p.cyc[probe::GAP], drv, p.long.1);
+}
+
+/// Semihosting print of the probe's means, cycles per digest since boot.
+#[cfg(all(feature = "hash-probe", feature = "debug-log"))]
+#[inline(never)]
+fn probe_report(p: &probe::Probe) {
+    let per = |c: u64, n: u32| c / u64::from(n.max(1));
+    let c = &p.cyc;
+    hash_log!(
+        "[S] hash-probe n={} gap={} (n {}) ready={} reset={} start={} feed={} last={} wait={} out={}; long {} x {} cyc",
+        p.n,
+        per(c[probe::GAP], p.gaps),
+        p.gaps,
+        per(c[probe::READY], p.n),
+        per(c[probe::RESET], p.n),
+        per(c[probe::START], p.n),
+        per(c[probe::FEED], p.n),
+        per(c[probe::LAST], p.n),
+        per(c[probe::WAIT], p.n),
+        per(c[probe::OUT], p.n),
+        p.long.0,
+        per(p.long.1, p.long.0)
+    );
+    for (k, &(n, feed, wait)) in p.blocks.iter().enumerate() {
+        hash_log!("[S] hash-probe {}blk n={} feed={} wait={}", k + 1, n, per(feed, n), per(wait, n));
+    }
+}
+
 /// Enable HASH peripheral clock. Call once during boot. Safe to call twice.
 ///
 /// # Safety
@@ -191,6 +459,13 @@ unsafe fn self_test() {
     let mut out = [0u8; 32];
     // SAFETY: as above; `out` is valid for 32 bytes of writes.
     unsafe { pqsigner_sha256_final(out.as_mut_ptr()) };
+    // The secure image's unrolled feed gets a vector that reaches all of it;
+    // "abc" never leaves the merge buffer. Halts on its own failure.
+    #[cfg(feature = "unrolled-io")]
+    // SAFETY: forwarded contract, as above.
+    unsafe {
+        split_self_test();
+    }
     let expected: [u8; 32] = [
         0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
         0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
@@ -201,6 +476,49 @@ unsafe fn self_test() {
         hash_log!("[S] hash: HW SHA-256 self-test PASS");
     } else {
         hash_log!("[S] hash: HW SHA-256 self-test FAIL — HALT");
+        loop { cortex_m::asm::wfe(); }
+    }
+}
+
+/// SHA-256 of bytes `0, 1, …, 130`, fed as 3 + 62 + 66 from odd offsets:
+/// the merge buffer fills across a call, then the sixteen-byte loop, the word
+/// loop and the tail all run, and the message ends on a three-byte last word
+/// (NBLW = 24) after three blocks. A wrong index or count in `unrolled-io`'s
+/// feed changes this digest; "abc" never reaches it.
+///
+/// # Safety
+/// As `self_test`: boot only, single-threaded, no hash stream in flight.
+#[cfg(feature = "unrolled-io")]
+unsafe fn split_self_test() {
+    #[allow(clippy::cast_possible_truncation)] // i < 131
+    const MSG: [u8; 131] = {
+        let mut m = [0u8; 131];
+        let mut i = 0;
+        while i < m.len() {
+            m[i] = i as u8;
+            i += 1;
+        }
+        m
+    };
+    let mut out = [0u8; 32];
+    // SAFETY: forwarded contract; each `(ptr, len)` names a live sub-slice of
+    // the static `MSG`, and `out` is 32 bytes on this frame.
+    unsafe {
+        pqsigner_sha256_init();
+        for part in [&MSG[..3], &MSG[3..65], &MSG[65..]] {
+            pqsigner_sha256_update(part.as_ptr(), part.len());
+        }
+        pqsigner_sha256_final(out.as_mut_ptr());
+    }
+    // python3 -c "import hashlib; print(hashlib.sha256(bytes(range(131))).hexdigest())"
+    let expected: [u8; 32] = [
+        0x3a, 0xcc, 0x12, 0x8f, 0xaf, 0x01, 0x07, 0x77,
+        0x89, 0x74, 0x6e, 0xdc, 0xfd, 0x10, 0x51, 0xd9,
+        0x0b, 0xc1, 0x59, 0x13, 0x42, 0x40, 0x2d, 0x9b,
+        0x3c, 0xdd, 0x06, 0xd7, 0x31, 0x57, 0x02, 0xa4,
+    ];
+    if out != expected {
+        hash_log!("[S] hash: HW SHA-256 split self-test FAIL — HALT");
         loop { cortex_m::asm::wfe(); }
     }
 }
@@ -289,7 +607,11 @@ fn write_word(w: u32) {
 /// because category-5 `static mut STATE` is shared across them.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_init() {
+    #[cfg(feature = "hash-probe")]
+    probe::init_entered();
     wait_ready();
+    #[cfg(feature = "hash-probe")]
+    probe::stage(probe::READY);
     // SAFETY: category 5 — exclusive write to `static mut STATE` (the
     // 4-byte streaming merge buffer). The secure world is single-
     // threaded and non-preemptive, and the FFI contract above forbids
@@ -306,9 +628,16 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
     cortex_m::asm::dsb();
     REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);
     cortex_m::asm::dsb();
+    #[cfg(feature = "hash-probe")]
+    probe::stage(probe::RESET);
     // HASH mode (MODE=0), 8-bit datatype, SHA-256, INIT=1.
     REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
     cortex_m::asm::dsb();
+    #[cfg(feature = "hash-probe")]
+    probe::stage(probe::START);
+    #[cfg(feature = "hw-sha256-crosscheck")]
+    // SAFETY: category 3 — FFI to the binary's software half; no arguments.
+    unsafe { pqsigner_xcheck_begin() };
 }
 
 /// Feed `len` bytes from `ptr` into the current SHA-256 computation.
@@ -321,11 +650,17 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
 /// first; no other SHA-256 stream may be interleaved.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
+    #[cfg(feature = "hash-probe")]
+    let t0 = probe::now();
     // SAFETY: category 3 — materialising the FFI `(ptr, len)` pair as
     // a Rust slice. Caller's FFI contract guarantees `ptr..ptr+len`
     // is a valid, live, properly-aligned `[u8]` for the duration of
     // this call.
     let data = unsafe { core::slice::from_raw_parts(ptr, len) };
+    #[cfg(feature = "hw-sha256-crosscheck")]
+    // SAFETY: category 3 — the same `(ptr, len)` this call's own FFI contract
+    // makes a valid, live byte slice for its duration.
+    unsafe { pqsigner_xcheck_feed(ptr, len) };
     let mut i = 0;
 
     // SAFETY: category 5 — exclusive mutable borrow of `static mut
@@ -346,10 +681,31 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
     }
 
     // Feed full 32-bit words directly. Data may be unaligned; read byte-wise.
+    #[cfg(not(feature = "unrolled-io"))]
     while data.len() - i >= 4 {
         let w = u32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]);
         write_word(w);
         i += 4;
+    }
+    // The same words in the same order, sixteen bytes a turn. `chunks_exact`
+    // fixes every index at compile time, so a turn is four load/store pairs
+    // and one branch instead of ~nine instructions a word (bounds and
+    // overflow checks included). Lengths are public preimage shapes, so how
+    // the bytes split between the loops leaks nothing.
+    #[cfg(feature = "unrolled-io")]
+    {
+        let mut quads = data[i..].chunks_exact(16);
+        for q in &mut quads {
+            write_word(u32::from_le_bytes([q[0], q[1], q[2], q[3]]));
+            write_word(u32::from_le_bytes([q[4], q[5], q[6], q[7]]));
+            write_word(u32::from_le_bytes([q[8], q[9], q[10], q[11]]));
+            write_word(u32::from_le_bytes([q[12], q[13], q[14], q[15]]));
+        }
+        let mut words = quads.remainder().chunks_exact(4);
+        for w in &mut words {
+            write_word(u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
+        }
+        i = data.len() - words.remainder().len();
     }
 
     // Buffer the trailing 0..=3 bytes.
@@ -358,6 +714,8 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
         state.pending += 1;
         i += 1;
     }
+    #[cfg(feature = "hash-probe")]
+    probe::fed(t0, len);
 }
 
 /// Finalize the current SHA-256 computation and write 32 bytes to `out`.
@@ -370,6 +728,8 @@ pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
 /// may be interleaved.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
+    #[cfg(feature = "hash-probe")]
+    probe::final_entered();
     // SAFETY: category 5 — exclusive mutable borrow of `static mut
     // STATE`. Same single-threaded + no-concurrent-hash justification
     // as in `pqsigner_sha256_init`.
@@ -390,6 +750,8 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     REG.str_.write(remaining_bits);
     cortex_m::asm::dsb();
     REG.str_.write(remaining_bits | STR_DCAL);
+    #[cfg(feature = "hash-probe")]
+    probe::stage(probe::LAST);
 
     // Wait for digest.
     let mut t = 0u32;
@@ -411,10 +773,13 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
             hash_engine_fault();
         }
     }
+    #[cfg(feature = "hash-probe")]
+    let wait = probe::stage(probe::WAIT);
 
     // Read 8 words from HR[0..8]. Per DATATYPE=10 convention the HR
     // registers hold each 4-byte digest chunk in natural byte order when
     // interpreted via to_be_bytes on the little-endian CPU.
+    #[cfg(not(feature = "unrolled-io"))]
     for i in 0..8 {
         // SAFETY: `RoReg32::read_at(i)` is `unsafe fn` because it
         // computes `addr + i * 4` and reads at that offset without
@@ -434,11 +799,32 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
             core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i * 4), 4);
         }
     }
+    // The same eight words with constant offsets: no counter or address
+    // arithmetic between the peripheral reads. `to_be` stored little-endian
+    // is `to_be_bytes` in memory, and an unaligned word store is legal on
+    // ARMv8-M Mainline (nothing sets `CCR.UNALIGN_TRP`; `update`'s word
+    // loads already rely on it).
+    #[cfg(feature = "unrolled-io")]
+    {
+        macro_rules! hr_out {
+            ($($i:literal)*) => {$(
+                // SAFETY: as in the rolled loop — HR0..HR7 is the 8-word
+                // digest bank at 0x310..0x32C and `$i < 8`; `[out, out + 32)`
+                // is valid and writable by this function's FFI contract.
+                unsafe { out.add($i * 4).cast::<u32>().write_unaligned(REG.hr0.read_at($i).to_be()) };
+            )*};
+        }
+        hr_out!(0 1 2 3 4 5 6 7);
+    }
+    #[cfg(feature = "hw-sha256-crosscheck")]
+    xcheck_digest(out);
 
     // Clear DCIS (write 0 to bit 1 per STM32U5 RM — SR.DCIS is rc_w0).
     REG.sr.modify(|sr| sr & !SR_DCIS);
 
     state.pending = 0;
+    #[cfg(feature = "hash-probe")]
+    probe::done(wait);
 
     // The digest is out and the engine idle: give the secure world's busy
     // UI its turn (feature `tick-hook`; the FSBL never enables it).

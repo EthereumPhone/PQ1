@@ -83,3 +83,12 @@ pub extern "C" fn pqsigner_hash_fault() -> ! {
         cortex_m::asm::wfe();
     }
 }
+
+// The shared driver's secure-image features (unrolled I/O, the UI tick, the
+// dev instruments) must never reach this binary: its bytes carry the boot
+// proof. A compile-time check, so it emits no code; it sits at the end of the
+// file so no panic location above it moves.
+const _: () = assert!(
+    !pqsigner_hw::hash::SECURE_IMAGE_ONLY,
+    "FSBL_SECURE_ONLY_DRIVER_FEATURE: a secure-image pqsigner-hw feature reached the FSBL"
+);

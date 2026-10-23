@@ -4315,6 +4315,16 @@ ui-px-film-bench = ["ui-px-film-gaps"]
 # the CPU rasteriser on a band clear, an A4 blend and real glyph runs, and
 # count where the blends differ (`ui/px/dma2d_bench.rs`). NEVER ships.
 ui-px-dma2d-bench = ["ui-px-film-gaps", "ui-px-dma"]
+# Dev-only (2026-10-22): time each SHA-256 digest's stages in the HASH driver
+# on DWT_CYCCNT (`pqsigner_hw::hash::probe`); with `debug-log` it prints the
+# means every 2^20 digests. NEVER ships: fenced in `nsc/mod.rs` and listed in
+# the Makefile's PROD_FORBIDDEN.
+hash-probe = ["pqsigner-hw/hash-probe"]
+# Dev-only (2026-10-23): compare every hardware SHA-256 digest with software
+# SHA-256 and take the HASH fault posture on any difference
+# (`pqsigner_hw::hash::xcheck`). Soak evidence for driver changes. NEVER ships:
+# fenced in `nsc/mod.rs` and listed in the Makefile's PROD_FORBIDDEN.
+hw-sha256-crosscheck = ["pqsigner-hw/hw-sha256-crosscheck"]
 
 # Stream the pixel-UI strip blit over GPDMA1 instead of the polled per-byte
 # loop, so strip k goes out on the wire while strip k+1 renders. Opt-in: this
@@ -4490,8 +4500,10 @@ gateway-gate-off = []
 # Route every SHA-256 call in the signing crates through the STM32U585 HASH
 # peripheral (the `pqsigner_sha256_*` extern fns in `secure/src/hw/hash.rs`).
 # Without this feature the signing crates use software `sha2::Sha256` — what
-# host tests need. Every `stm32u585` build opts in automatically.
-hw-sha256 = ["sphincs-c10/hw-sha256"]
+# host tests need. Every `stm32u585` build opts in automatically. It also
+# takes the driver's unrolled DIN feed and HR read-out (`unrolled-io`), which
+# the FSBL does not.
+hw-sha256 = ["sphincs-c10/hw-sha256", "pqsigner-hw/unrolled-io"]
 # Non-interactive automated end-to-end test mode. Provisions a fixed
 # test mnemonic + PIN at boot, marks PIN as verified, and short-circuits
 # every confirm() / enter_pin() dialog so no stdin input is needed.

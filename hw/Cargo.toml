@@ -28,6 +28,19 @@ debug-log = ["dep:cortex-m-semihosting"]
 # (its busy film draws from hash-bound work). Secure image only: the FSBL
 # builds alone (`make fsbl`, its own target dir) and never enables it.
 tick-hook = []
+# Dev only: time each digest's stages on DWT_CYCCNT (`hash::probe`). The FSBL
+# never names it and the secure `nsc/mod.rs` fence keeps it out of shipping.
+hash-probe = []
+# Dev only: compare every digest with software SHA-256 and fault on any
+# difference. The software half is the linking binary's (`pqsigner_xcheck_*`,
+# the secure world), so this crate takes no `sha2` edge and `Cargo.lock` does
+# not move. The FSBL never names it; the secure fence keeps it out of
+# shipping. Mutually exclusive with `hash-probe` (the software hash would
+# land in its stages).
+hw-sha256-crosscheck = []
+# Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
+# rolled loops so its bytes, and the silicon boot proof taken on them, stand.
+unrolled-io = []
 
 [dependencies.cortex-m-semihosting]
 workspace = true

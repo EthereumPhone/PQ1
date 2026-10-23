@@ -435,6 +435,10 @@ compile_error!(
         feature = "ui-px-film-bench",
         // Dev bench: DMA2D against the CPU rasteriser after the film pages.
         feature = "ui-px-dma2d-bench",
+        // Dev probe: DWT stamps in every SHA-256 digest (hash driver).
+        feature = "hash-probe",
+        // Dev soak: software SHA-256 beside every hardware digest.
+        feature = "hw-sha256-crosscheck",
         // #846 negative control: removes the one-at-a-time gateway gate
         // from the veneer path. Never ship — a shipping image with this on
         // reinstates the re-entrancy #846 fixed.
@@ -486,6 +490,17 @@ compile_error!(
      any reset, wipe, persistent provisioning, stress, counter-mutation, or \
      stateful E2E harness. Use each feature only through its named bench target \
      and never on a unit intended to ship."
+);
+
+// Dedicated guard: the hash driver's dev instruments (`hash-probe`,
+// `hw-sha256-crosscheck`) can be raised on `pqsigner-hw` directly
+// (`--features pqsigner-hw/…`), which the list above cannot see: it names
+// this crate's features only. The driver reports them as a constant.
+#[cfg(feature = "mode-production")]
+const _: () = assert!(
+    !pqsigner_hw::hash::DEV_INSTRUMENTED,
+    "PRODUCTION_HASH_INSTRUMENTATION_FORBIDDEN: mode-production with a dev \
+     instrument (hash-probe / hw-sha256-crosscheck) in the HASH driver"
 );
 
 // Dedicated guard: `gateway-gate-off` (#896 negative control) removes the
