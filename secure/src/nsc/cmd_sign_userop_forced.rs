@@ -789,20 +789,18 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
         crate::crypto::decrypt_entropy_blob(&entropy_blob[..entropy_blob_len], &*master_secret)
             .map_err(|_| NscStatus::CryptoError)?,
     );
-    let slot_master = Zeroizing::new(crate::crypto::slot_master_entropy_from_entropy(
-        &*entropy,
-        request.account_index,
-    ));
-
     let need_keygen = match unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) } {
-        Some(cached) => {
-            cached.account_index != request.account_index
-                || cached.chain_id != request.chain_id
-                || cached.slot_index != request.slot_index
-        }
+        Some(cached) => !cached.names(request.account_index, request.chain_id, request.slot_index),
         None => true,
     };
     if need_keygen {
+        // Derived here, on a cache miss only: a cached slot key never reads
+        // the slot master, and deriving it costs a whole BIP-39 seed
+        // (2,048 HMAC-SHA512 rounds, 0.63 s measured on the U585) per request.
+        let slot_master = Zeroizing::new(crate::crypto::slot_master_entropy_from_entropy(
+            &*entropy,
+            request.account_index,
+        ));
         crate::ui::show_progress("Forced keygen", 0);
         let (key, _, _) = crate::crypto::derive_c10_slot_keypair_with_progress(
             &*slot_master,
@@ -811,12 +809,12 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
             forced_keygen_progress,
         );
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
-                account_index: request.account_index,
-                chain_id: request.chain_id,
-                slot_index: request.slot_index,
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot::new(
+                request.account_index,
+                request.chain_id,
+                request.slot_index,
                 key,
-            });
+            ));
         }
         super::state::with_state(|state| {
             state.slot_master_entropy.zeroize();
@@ -826,17 +824,20 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
         });
     }
 
-    let identity_a = match unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) } {
-        Some(cached) => (cached.account_index, cached.chain_id, cached.slot_index),
-        None => return Err(NscStatus::InternalError),
-    };
-    crate::fi::wait_random();
-    let identity_b = match unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) } {
-        Some(cached) => (cached.account_index, cached.chain_id, cached.slot_index),
-        None => return Err(NscStatus::InternalError),
-    };
-    let expected = (request.account_index, request.chain_id, request.slot_index);
-    if identity_a != expected || identity_b != expected {
+    // #1037: the same identity gate as the other handlers — two verdicts
+    // over the complement-protected tag, each with its own refusal,
+    // separated by a random delay and a scrub of the stale-OK register r0.
+    let (account_index, chain_id, slot_index) =
+        (request.account_index, request.chain_id, request.slot_index);
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        return Err(NscStatus::InternalError);
+    }
+    crate::fi::scrub_sentinel_register();
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
         return Err(NscStatus::InternalError);
     }
     Ok(())
@@ -1376,9 +1377,7 @@ pub(super) unsafe fn run(
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot = match cached {
             Some(cached)
-                if cached.account_index == request.account_index
-                    && cached.chain_id == request.chain_id
-                    && cached.slot_index == request.slot_index =>
+                if cached.names(request.account_index, request.chain_id, request.slot_index) =>
             {
                 &cached.key
             }
@@ -1405,9 +1404,7 @@ pub(super) unsafe fn run(
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         let slot = match cached {
             Some(cached)
-                if cached.account_index == request.account_index
-                    && cached.chain_id == request.chain_id
-                    && cached.slot_index == request.slot_index =>
+                if cached.names(request.account_index, request.chain_id, request.slot_index) =>
             {
                 &cached.key
             }

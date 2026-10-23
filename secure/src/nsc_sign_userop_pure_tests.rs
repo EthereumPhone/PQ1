@@ -2288,3 +2288,117 @@ fn forced_authority_is_volatile_invalidated_on_every_terminal_return() {
     assert!(FORCED_BLIND_DISPLAY_SRC.contains("write_volatile(&mut self.domain, 0)"));
     assert!(FORCED_BLIND_DISPLAY_SRC.contains("for byte in &mut self.request_digest"));
 }
+
+#[test]
+fn negative_slot_master_is_derived_on_a_cache_miss_only() {
+    // 2026-10-23. ASSUMPTION ATTACKED: a handler derives the slot master (a
+    // whole BIP-39 seed: 24 constant-time dictionary scans and 2,048
+    // HMAC-SHA512 rounds, 0.63 s measured on the U585) on a slot-cache HIT, where
+    // nothing reads it; or derives it anywhere but inside its own
+    // `if need_keygen { … }` branch, so a keygen could run on a master the
+    // request never derived. Measured on the pq1 bench board: moving it into
+    // the branch took the fixed non-hash cost of a cached Type-2 sign from
+    // 126.45 M to 25.15 M cycles.
+    const GET_INIT_CODE_SRC: &str = include_str!("nsc/cmd_get_init_code.rs");
+    for (name, src) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC),
+        ("cmd_sign_offchain.rs", CMD_SIGN_OFFCHAIN_SRC),
+        ("cmd_get_init_code.rs", GET_INIT_CODE_SRC),
+        ("cmd_sign_userop_forced.rs", CMD_SIGN_USEROP_FORCED_SRC),
+    ] {
+        let calls: std::vec::Vec<usize> =
+            src.match_indices("slot_master_entropy_from_entropy(").map(|(i, _)| i).collect();
+        assert_eq!(calls.len(), 1, "{name}: one slot-master derivation");
+        let open = src.find("if need_keygen {\n").unwrap_or_else(|| panic!("{name}: need_keygen branch"));
+        let indent = &src[src[..open].rfind('\n').expect("line start") + 1..open];
+        let close = open + src[open..].find(&format!("\n{indent}}}\n")).unwrap_or_else(|| panic!("{name}: branch end"));
+        assert!(open < calls[0] && calls[0] < close, "{name}: derivation outside the cache-miss branch");
+        // It is the branch's first statement, before any keygen.
+        let body = &src[open..calls[0]];
+        assert!(!body.contains("derive_c10_slot_keypair"), "{name}: keygen before the derivation");
+    }
+}
+
+#[test]
+fn negative_cached_slot_key_identity_is_checked_twice_before_use() {
+    // #1037. ASSUMPTION ATTACKED: a handler uses the cached slot key (to
+    // sign, or to have the bootstrap key register its pubkey on a rotation
+    // or in `get_init_code`'s factory call) after only a `Some(c)` match, so
+    // one glitch that turns `need_keygen`'s miss into a hit — or one fault
+    // that rewrites the stored tag to another request's identity — signs /
+    // registers another chain's or slot's key; a slot key is chain-bound
+    // precisely so that MAX_SLOT_USES is a per-key cap.
+    //
+    // The tag's semantics are executed in `fih::slot_tag_tests` (every
+    // field, every single-bit flip of value and complement); this pins that
+    // every handler goes through it, twice, before using the key.
+    const GET_INIT_CODE_SRC: &str = include_str!("nsc/cmd_get_init_code.rs");
+    const STATE_SRC: &str = include_str!("nsc/state.rs");
+    const FIH_SRC: &str = include_str!("fih.rs");
+    // The whole gate, exactly and contiguously, directly after the keygen
+    // branch: nothing (a `#[cfg(any())]` line, a reordered statement) can sit
+    // between the branch and the checks or inside them (Fable 5.1 review).
+    let gate = |args: &str, refusal: &str| {
+        let check = format!(
+            "    if super::state::slot_cache_identity_verdict({args})\n        != crate::fi::OK_SENTINEL\n    {{\n{refusal}    }}\n"
+        );
+        format!("{check}    crate::fi::scrub_sentinel_register();\n{check}")
+    };
+    let note = "\n    // #1037: the cached key must be the one this request named before\n    // anything uses it. Two verdicts, each with its own refusal, separated\n    // by a random delay and a scrub of the stale-OK register r0 (F-15.r1).\n";
+    let wipe = "        entropy.zeroize();\n        crate::fi::zeroize_barrier();\n        return NscStatus::InternalError as u32;\n";
+    let plain = "        return NscStatus::InternalError as u32;\n";
+    let forced_head = "\n    // #1037: the same identity gate as the other handlers — two verdicts\n    // over the complement-protected tag, each with its own refusal,\n    // separated by a random delay and a scrub of the stale-OK register r0.\n    let (account_index, chain_id, slot_index) =\n        (request.account_index, request.chain_id, request.slot_index);\n";
+    let args = "account_index, chain_id, slot_index";
+    for (name, src, lookup, expected) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC,
+         "Some(c) => !c.names(account_index, chain_id, slot_index),", format!("{note}{}", gate(args, wipe))),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC,
+         "Some(c) => !c.names(account_index, chain_id, slot_index),", format!("{note}{}", gate(args, wipe))),
+        ("cmd_sign_offchain.rs", CMD_SIGN_OFFCHAIN_SRC,
+         "Some(c) => !c.names(account_index, chain_id, slot_index),", format!("{note}{}", gate(args, plain))),
+        ("cmd_get_init_code.rs", GET_INIT_CODE_SRC,
+         "Some(c) => !c.names(account_index, chain_id, SLOT_INDEX),",
+         format!("{note}{}", gate("account_index, chain_id, SLOT_INDEX",
+             "        crate::ui::show_status(\"InitCode\", \"slot cache MIA\");\n        return NscStatus::InternalError as u32;\n"))),
+        ("cmd_sign_userop_forced.rs", CMD_SIGN_USEROP_FORCED_SRC,
+         "Some(cached) => !cached.names(request.account_index, request.chain_id, request.slot_index),",
+         format!("{forced_head}{}", gate(args, "        return Err(NscStatus::InternalError);\n"))),
+    ] {
+        // The miss/hit decision itself reads the protected tag.
+        assert_eq!(src.matches(lookup).count(), 1, "{name}: need_keygen through the tag");
+        assert_eq!(src.matches("slot_cache_identity_verdict(").count(), 2, "{name}: two identity checks");
+        let open = src.find("    if need_keygen {\n").unwrap_or_else(|| panic!("{name}: keygen branch"));
+        let close = open + src[open..].find("\n    }\n").unwrap_or_else(|| panic!("{name}: branch end")) + 7;
+        let after = &src[close..];
+        assert!(after.starts_with(expected.as_str()), "{name}: the gate is not exactly the block after the keygen branch");
+        // Nothing read the cache between the branch and the gate.
+        assert!(!after[..expected.len()].contains("SLOT_CACHE"), "{name}: cache read inside the gate");
+    }
+    // The cache holds no bare identity: only the protected tag, and every
+    // lookup is `names`. The verdict is two evaluations into a sentinel.
+    let cached = STATE_SRC.split("pub(super) struct CachedSlot {\n").nth(1).expect("CachedSlot");
+    let cached = &cached[..cached.find("\n}\n").expect("end")];
+    assert_eq!(cached, "    tag: crate::fih::FihSlotTag,\n    pub(super) key: sphincs_c10::SigningKey,");
+    // ... and the wrapper every lookup calls delegates to the tag and
+    // nothing else (`… || true` here would void every gate and survive the
+    // tag's own tests — GPT-6 Astra re-review).
+    let wrapper = STATE_SRC
+        .split("    pub(super) fn names(&self, account_index: u32, chain_id: u64, slot_index: u32) -> bool {\n")
+        .nth(1)
+        .expect("CachedSlot::names");
+    assert_eq!(
+        &wrapper[..wrapper.find("\n    }\n").expect("end")],
+        "        self.tag.names(account_index, chain_id, slot_index)"
+    );
+    assert!(STATE_SRC.contains("        Some(c) => c.names(account_index, chain_id, slot_index),\n        None => false,\n"));
+    assert!(STATE_SRC.contains(
+        "#[inline(never)]\npub(super) fn slot_cache_identity_verdict(account_index: u32, chain_id: u64, slot_index: u32) -> u32 {\n    crate::fi::check_true_into_sentinel(|| slot_cache_names(account_index, chain_id, slot_index))\n}"
+    ));
+    let names = FIH_SRC.split("pub fn names(&self, account_index: u32, chain_id: u64, slot_index: u32) -> bool {").nth(1).expect("FihSlotTag::names");
+    let names = &names[..names.find("\n    }\n").expect("end")];
+    assert_eq!(names.matches("read_volatile(&self.").count(), 6, "every stored word is a volatile load");
+    assert!(names.trim_end().ends_with(
+        "a == !na && c == !nc && s == !ns && a == account_index && c == chain_id && s == slot_index"
+    ));
+}

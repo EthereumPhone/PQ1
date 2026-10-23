@@ -140,7 +140,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let _granted = crate::timeout::grant_init_code_grace();
     secure_log!("[S] init-code: idle grace {}", if _granted { "+20 s" } else { "not granted" });
 
-    // ── 4. Reconstruct entropy + derive slot master per-account ───
+    // ── 4. Reconstruct entropy (slot master: on a cache miss, below) ─
     //
     // Mirrors `cmd_sign_userop.rs` §9: every call reads the entropy
     // blob out of the SE, decrypts with the session master_secret,
@@ -172,9 +172,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
         },
     );
-    let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
-        crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
-    );
 
     // ── 5. Slot-0 C10 keygen (cached by (account_index, chain_id, 0)) ──
     //
@@ -188,16 +185,18 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // no concurrent mutator.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
-            Some(c) => {
-                c.account_index != account_index
-                    || c.chain_id != chain_id
-                    || c.slot_index != SLOT_INDEX
-            }
+            Some(c) => !c.names(account_index, chain_id, SLOT_INDEX),
             None => true,
         }
     });
 
     if need_keygen {
+        // Derived here, on a cache miss only: a cached slot key never reads
+        // the slot master, and deriving it costs a whole BIP-39 seed
+        // (2,048 HMAC-SHA512 rounds, 0.63 s measured on the U585) per request.
+        let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
+            crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
+        );
         crate::ui::show_progress("Slot keygen", 0);
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(
@@ -212,12 +211,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // Any prior `CachedSlot` drops here; its `ZeroizeOnDrop`
         // wipes the dropped secret key.
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
-                account_index,
-                chain_id,
-                slot_index: SLOT_INDEX,
-                key: slot_sk,
-            });
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot::new(account_index, chain_id, SLOT_INDEX, slot_sk));
         }
         super::state::with_state(|s| {
             s.slot_master_entropy.zeroize();
@@ -225,6 +219,23 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             s.slot_master_entropy = *slot_master_entropy;
             s.slot_master_derived.set_true();
         });
+    }
+
+    // #1037: the cached key must be the one this request named before
+    // anything uses it. Two verdicts, each with its own refusal, separated
+    // by a random delay and a scrub of the stale-OK register r0 (F-15.r1).
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, SLOT_INDEX)
+        != crate::fi::OK_SENTINEL
+    {
+        crate::ui::show_status("InitCode", "slot cache MIA");
+        return NscStatus::InternalError as u32;
+    }
+    crate::fi::scrub_sentinel_register();
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, SLOT_INDEX)
+        != crate::fi::OK_SENTINEL
+    {
+        crate::ui::show_status("InitCode", "slot cache MIA");
+        return NscStatus::InternalError as u32;
     }
 
     // Extract 32-byte slot-0 pubkey halves from the cache. Mirrors the

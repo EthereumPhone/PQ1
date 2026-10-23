@@ -173,6 +173,114 @@ impl FihBool {
     }
 }
 
+/// #1037: the slot cache's `(account_index, chain_id, slot_index)` tag,
+/// stored with its bitwise complement — `FihBool`'s storage invariant applied
+/// to an identity. Reading it twice cannot detect a tag a fault has already
+/// rewritten; the complement can: a flipped stored bit breaks the pairing, so
+/// the tag then names NOTHING, even when the flipped value happens to equal
+/// another request's identity. A slot-cache lookup through
+/// [`FihSlotTag::names`] therefore turns tag corruption into a cache miss (a
+/// fresh keygen), never into another chain's or slot's key.
+/// Deliberately not `Clone`/`Copy`, like `FihBool`: no stale snapshot of a
+/// guard value.
+#[repr(C)]
+pub struct FihSlotTag {
+    account_index: u32,
+    chain_id: u64,
+    slot_index: u32,
+    not_account_index: u32,
+    not_chain_id: u64,
+    not_slot_index: u32,
+}
+
+impl FihSlotTag {
+    pub const fn new(account_index: u32, chain_id: u64, slot_index: u32) -> Self {
+        Self {
+            account_index,
+            chain_id,
+            slot_index,
+            not_account_index: !account_index,
+            not_chain_id: !chain_id,
+            not_slot_index: !slot_index,
+        }
+    }
+
+    /// True only when the stored pair is intact and names exactly this
+    /// identity. Each field is a volatile load, and the function is never
+    /// inlined, so two calls are two sets of loads.
+    #[inline(never)]
+    pub fn names(&self, account_index: u32, chain_id: u64, slot_index: u32) -> bool {
+        // SAFETY: `self` is a live shared borrow, so every field is valid,
+        // aligned and initialised for a read.
+        let (a, c, s, na, nc, ns) = unsafe {
+            (
+                read_volatile(&self.account_index),
+                read_volatile(&self.chain_id),
+                read_volatile(&self.slot_index),
+                read_volatile(&self.not_account_index),
+                read_volatile(&self.not_chain_id),
+                read_volatile(&self.not_slot_index),
+            )
+        };
+        a == !na && c == !nc && s == !ns && a == account_index && c == chain_id && s == slot_index
+    }
+}
+
+#[cfg(test)]
+mod slot_tag_tests {
+    use super::*;
+
+    const ID: (u32, u64, u32) = (3, 8453, 7);
+
+    fn names(t: &FihSlotTag, id: (u32, u64, u32)) -> bool {
+        t.names(id.0, id.1, id.2)
+    }
+
+    #[test]
+    fn names_exactly_its_own_identity() {
+        let t = FihSlotTag::new(ID.0, ID.1, ID.2);
+        assert!(names(&t, ID));
+        // Each field independently wrong — the `||` / `&&` mix-ups a
+        // shape-only pin cannot see.
+        assert!(!names(&t, (ID.0 ^ 1, ID.1, ID.2)));
+        assert!(!names(&t, (ID.0, ID.1 ^ 1, ID.2)));
+        assert!(!names(&t, (ID.0, ID.1, ID.2 ^ 1)));
+        assert!(!names(&t, (ID.0, ID.1 ^ 1, ID.2 ^ 1)));
+        assert!(!names(&t, (ID.0 ^ 1, ID.1, ID.2 ^ 1)));
+        assert!(!names(&t, (ID.0 ^ 1, ID.1 ^ 1, ID.2)));
+        // Extremes round-trip.
+        let z = FihSlotTag::new(0, 0, 0);
+        assert!(names(&z, (0, 0, 0)));
+        let m = FihSlotTag::new(u32::MAX, u64::MAX, u32::MAX);
+        assert!(names(&m, (u32::MAX, u64::MAX, u32::MAX)));
+    }
+
+    /// Astra's scenario: one stored bit flipped so the tag equals ANOTHER
+    /// request's identity. Every single-bit flip of every stored word, value
+    /// or complement, must make the tag name neither the old identity nor the
+    /// flipped one.
+    #[test]
+    fn every_single_bit_flip_names_nothing() {
+        for field in 0..6 {
+            let width = if field % 3 == 1 { 64 } else { 32 };
+            for bit in 0..width {
+                let mut f = FihSlotTag::new(ID.0, ID.1, ID.2);
+                let mut flipped = ID;
+                match field {
+                    0 => { f.account_index ^= 1 << bit; flipped.0 ^= 1 << bit; }
+                    1 => { f.chain_id ^= 1u64 << bit; flipped.1 ^= 1u64 << bit; }
+                    2 => { f.slot_index ^= 1 << bit; flipped.2 ^= 1 << bit; }
+                    3 => f.not_account_index ^= 1 << bit,
+                    4 => f.not_chain_id ^= 1u64 << bit,
+                    _ => f.not_slot_index ^= 1 << bit,
+                }
+                assert!(!names(&f, ID), "field {field} bit {bit}: still names the old identity");
+                assert!(!names(&f, flipped), "field {field} bit {bit}: names the flipped identity");
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod exactly_false_tests {
     use super::*;

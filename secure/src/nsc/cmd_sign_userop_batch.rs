@@ -2201,7 +2201,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     }
 
-    // ── 7. Reconstruct entropy + derive slot master ─────────────────
+    // ── 7. Reconstruct entropy (slot master: on a cache miss, below) ─
     let master_secret: Zeroizing<[u8; 32]> =
         Zeroizing::new(super::state::peek_state(|s| s.master_secret));
     let mut entropy_blob = Zeroizing::new([0u8; 64]);
@@ -2221,9 +2221,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Ok(e) => e,
             Err(_) => return NscStatus::CryptoError as u32,
         },
-    );
-    let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
-        crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
 
     // ── 8. Build Type 2 callData: executeBatchWithOffchainCount(...) ─
@@ -2396,15 +2393,17 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // `cmd_sign_userop`.
         let cached = unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) };
         match cached {
-            Some(c) => {
-                c.account_index != account_index
-                    || c.chain_id != chain_id
-                    || c.slot_index != slot_index
-            }
+            Some(c) => !c.names(account_index, chain_id, slot_index),
             None => true,
         }
     });
     if need_keygen {
+        // Derived here, on a cache miss only: a cached slot key never reads
+        // the slot master, and deriving it costs a whole BIP-39 seed
+        // (2,048 HMAC-SHA512 rounds, 0.63 s measured on the U585) per request.
+        let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
+            crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
+        );
         ui::show_progress("Slot keygen", 0);
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(
@@ -2418,12 +2417,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // `HandlerGuard`. Displaced prior `CachedSlot` drops here
         // (ZeroizeOnDrop wipes the previous SK).
         unsafe {
-            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot {
-                account_index,
-                chain_id,
-                slot_index,
-                key: slot_sk,
-            });
+            *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot::new(account_index, chain_id, slot_index, slot_sk));
         }
         super::state::with_state(|s| {
             s.slot_master_entropy.zeroize();
@@ -2431,6 +2425,25 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             s.slot_master_entropy = *slot_master_entropy;
             s.slot_master_derived.set_true();
         });
+    }
+
+    // #1037: the cached key must be the one this request named before
+    // anything uses it. Two verdicts, each with its own refusal, separated
+    // by a random delay and a scrub of the stale-OK register r0 (F-15.r1).
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        return NscStatus::InternalError as u32;
+    }
+    crate::fi::scrub_sentinel_register();
+    if super::state::slot_cache_identity_verdict(account_index, chain_id, slot_index)
+        != crate::fi::OK_SENTINEL
+    {
+        entropy.zeroize();
+        crate::fi::zeroize_barrier();
+        return NscStatus::InternalError as u32;
     }
 
     // SAFETY: category 5 — read-only borrow of `static mut
