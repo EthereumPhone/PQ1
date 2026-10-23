@@ -2713,3 +2713,13 @@ cdrafts-split/C10Representation.ec	defined-op:cbc6325fc007	hash_bytes_node
 cdrafts-split/C10Representation.ec	defined-op:d553712ceabe	wots_secret_value
 cdrafts-split/C10Representation.ec	defined-op:d55dbd51e7fa	wots_recover_value
 cdrafts-split/C10Representation.ec	defined-op:f8854673000f	wots_recover_nodes
+cdrafts-split/C10FunctionalForsRecovery.ec	defined-op:6c060a89bab2	functional_fors_leaf_query
+cdrafts-split/C10FunctionalForsRecovery.ec	defined-op:cdd80be6ffc4	functional_fors_recovery_history
+cdrafts-split/C10FunctionalTreeValue.ec	defined-op:14efb78408ab	functional_tree_query
+cdrafts-split/C10Representation.ec	defined-op:16f12642b2b8	merkle_recover_value
+cdrafts-split/C10Representation.ec	defined-op:2dee53cf8ff6	fors_secret_value
+cdrafts-split/C10Representation.ec	defined-op:5a01b5f9a277	tree_pair_value
+cdrafts-split/C10Representation.ec	defined-op:608f581916c3	fors_leaf_value
+cdrafts-split/C10Representation.ec	defined-op:772bb5d9f2c9	tree_path_step
+cdrafts-split/C10Representation.ec	defined-op:be9ad0800bbc	tree_path_value
+cdrafts-split/C10Representation.ec	defined-op:f4ddee44f0eb	fors_recover_value

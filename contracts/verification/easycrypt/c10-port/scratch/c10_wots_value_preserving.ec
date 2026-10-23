@@ -24,7 +24,6 @@ op wots_recover_nodes (hash_fn : (int list -> int list)) (seed : (int list)) (la
 op wots_recover_value (hash_fn : (int list -> int list)) (seed : (int list)) (layer : int) (tree : int) (kp : int) (message : (int list)) (values : ((int list) list)) (nonce : int) : (int list) =
   (if ((wots_sum (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) nonce))) - (wots_target )) = 0 then (hash_bytes_node hash_fn (multi_preimage seed (address_words layer tree 1 kp 0 0 0) (wots_recover_nodes hash_fn seed layer tree kp (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) nonce)) values))) else (nseq 16 0)).
 
-
 (* Pure WOTS values under the disclosed deterministic backend interpretation.
    These laws do not identify that function with the sampled Shared oracle. *)
 

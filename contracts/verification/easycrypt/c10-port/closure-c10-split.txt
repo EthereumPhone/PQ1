@@ -630,3 +630,8 @@ C10FunctionalWotsRecover
 C10FunctionalWotsShuffle
 C10FunctionalWotsFill
 C10FunctionalWotsSign
+
+# Functional FORS/Merkle recovery backend interpretation, 2026-10-23.
+C10FunctionalTreeValue
+C10FunctionalMerkle
+C10FunctionalForsRecovery

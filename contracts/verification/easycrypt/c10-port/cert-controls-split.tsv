@@ -1825,3 +1825,39 @@ scratch/_scope_neg_op_C10FunctionalWotsRecover.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalWotsShuffle.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalWotsFill.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalWotsSign.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Functional FORS/Merkle recovery: paired values, complete callers and scope controls.
+scratch/c10_tree_value_positive.ec	MUST-PASS	-
+scratch/c10_tree_value_preserving.ec	MUST-PASS	-
+scratch/c10_tree_value_fixtures.ec	MUST-PASS	-
+scratch/c10_tree_value_secret_index_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_secret_index_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_leaf_kind_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_leaf_kind_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_pair_order_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_pair_order_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_parent_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_parent_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_height_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_height_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_parity_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_parity_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_sibling_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_sibling_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_path_order_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_path_order_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_tree_value_fors_kind_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_fors_kind_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_fors_keypair_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_fors_keypair_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_fors_steps_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_fors_steps_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_merkle_kind_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_merkle_kind_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_merkle_keypair_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_merkle_keypair_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_tree_value_merkle_steps_typed.ec	MUST-PASS	-
+scratch/c10_tree_value_merkle_steps_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_C10FunctionalTreeValue.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalMerkle.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalForsRecovery.ec	MUST-FAIL	FORS_C_TreePort.

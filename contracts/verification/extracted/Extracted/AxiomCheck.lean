@@ -1,3 +1,4 @@
+import Extracted.C10FunctionalTrees
 import Extracted.C10FunctionalWotsRecover
 import Extracted.C10FunctionalSearch
 import Extracted.C10ShuffleBridge
@@ -504,3 +505,20 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalWotsSign.extracted_sign_value
 #print axioms Extracted.C10FunctionalWotsRecover.recover_nodes_value
 #print axioms Extracted.C10FunctionalWotsRecover.extracted_recover_value
+
+-- Functional FORS and Merkle recovery: supplied backend, kernel-only.
+#print axioms Extracted.C10FunctionalTrees.pad16p_eq
+#print axioms Extracted.C10FunctionalTrees.fors_secret_pure_value
+#print axioms Extracted.C10FunctionalTrees.extracted_fors_secret_value
+#print axioms Extracted.C10FunctionalTrees.pair_pure_value
+#print axioms Extracted.C10FunctionalTrees.path_address_value
+#print axioms Extracted.C10FunctionalTrees.fors_leaf_pure_value
+#print axioms Extracted.C10FunctionalTrees.path_zero
+#print axioms Extracted.C10FunctionalTrees.path_succ
+#print axioms Extracted.C10FunctionalTrees.path_step_value
+#print axioms Extracted.C10FunctionalTrees.path_fold_value
+#print axioms Extracted.C10FunctionalTrees.path_value
+#print axioms Extracted.C10FunctionalTrees.fors_fold_eq
+#print axioms Extracted.C10FunctionalTrees.merkle_fold_eq
+#print axioms Extracted.C10FunctionalTrees.extracted_fors_recover_value
+#print axioms Extracted.C10FunctionalTrees.extracted_merkle_recover_value

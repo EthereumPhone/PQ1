@@ -1,8 +1,8 @@
 {
   "source": {
     "Extracted/AxiomCheck.lean": {
-      "sha256": "2738bded7941536055d910abc426910ffb06b681197f0e5e3b1e06707a7654dd",
-      "axiom_mentions": 346
+      "sha256": "0df835142c7df8c19eb9820d01430e0ed4d03caf572edc59f71cb3a47caa3e80",
+      "axiom_mentions": 361
     },
     "Extracted/AxiomCheckFormatDecimal.lean": {
       "sha256": "e79c14b72dab3f2e77833edafabbd5b333ff671def875ee6beca4216c354aabc",
@@ -173,7 +173,7 @@
       "axiom_mentions": 1
     },
     "Extracted.lean": {
-      "sha256": "34bc56644db122fa4ce89076c7f9cf3ae77962c9c946fc5516ee9d8caefafb65",
+      "sha256": "a1bbb8279a0fe8ecd77351a1642a1623618ac4f352f088af6f81e957e320ebb5",
       "axiom_mentions": 1
     }
   },

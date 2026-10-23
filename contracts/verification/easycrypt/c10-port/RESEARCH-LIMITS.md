@@ -76,13 +76,51 @@ Recovery includes its digest, accepted suffix chains and compression, or just
 the rejected digest call. Termination is proved without eventual acceptance.
 
 This closes the selected functional WOTS component under the disclosed
-backend interpretation. The remaining compositional bridge covers FORS,
-trees, the full signer/verifier and sessions. The paired printers, function
+backend interpretation. The next component is the FORS/Merkle recovery
+bridge below; construction, the full signer/verifier and sessions remain open.
+The paired printers, function
 interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
 transfer and QROM/physical assumptions remain explicit limits. The ideal-model
 probability bounds do not transfer through a deterministic interpretation.
 [Control coverage](CONTROL-EVIDENCE.md#functional-wots-value-controls), full
 replay, source identities and review are separate evidence requirements.
+
+## Functional FORS and Merkle recovery values
+
+Seven appended shared operators define FORS private derivation and leaf
+hashing, pair hashing, an ordered authentication-path step/fold, and the
+eleven-level FORS and nine-level XMSS recovery values. They use the existing
+typed expression constructors and deterministic backend interpretation;
+earlier generated definitions are preserved.
+
+[`C10FunctionalTrees.lean`](../../extracted/Extracted/C10FunctionalTrees.lean)
+connects the actual extracted `fors_secret`, `reconstruct_fors_root` and
+`verify_auth_path` results to those values. Its 15 named theorems have
+kernel-only axiom closures. Every u32 target/index is included, even outside
+the corresponding tree's leaf range. FORS retains full u32 hypertree/tree
+fields, and XMSS retains full u32 layer and u64 tree fields. The proofs preserve
+parent division, sibling ordering, height, domain/keypair fields, padding and
+sixteen-byte truncation.
+
+[`C10FunctionalTreeValue`](cdrafts-split/C10FunctionalTreeValue.ec),
+[`C10FunctionalMerkle`](cdrafts-split/C10FunctionalMerkle.ec) and
+[`C10FunctionalForsRecovery`](cdrafts-split/C10FunctionalForsRecovery.ec)
+add 18 lemmas without new project axioms or admits. The actual `RawFors.recover`
+and `RawMerkle.recover` contracts preserve arbitrary backend-consistent
+prehistory, frame the key and function, and give the ordered resulting history
+and exactly 12 or 9 calls, respectively. FORS includes the initial secret-to-leaf
+hash; XMSS begins with the supplied leaf. Losslessness is separate from result
+equality. The private-derivation lemma also connects `FixedPrefix.derive` to
+the shared FORS secret value.
+
+This closes recovery computations under the disclosed interpretation, not
+FORS/XMSS root and authentication-path construction, complete forest
+composition, or the full signer/verifier/session relation. Paired-printer and
+backend interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
+security transfer and QROM/physical boundaries remain open. No ideal-model
+probability bound transfers from these deterministic functional equalities.
+[Controls](CONTROL-EVIDENCE.md#functional-tree-value-controls), full replay,
+source identity and review remain separate requirements.
 
 ## Quantitative loss
 

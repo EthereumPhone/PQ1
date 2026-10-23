@@ -350,3 +350,29 @@ loop, not evaluation of the shared expression tree. Lean checks these examples
 with kernel `decide`; EasyCrypt proves the explicit finite folds. These finite
 examples supplement the generic proofs and do not establish printer correctness
 for all expressions or identify the supplied function with a sampled oracle.
+
+## Functional tree value controls
+
+`tools/c10_functional_tree_controls.py` covers fourteen changes to FORS secret
+index, leaf domain, pair order, parent division, height, parity, sibling
+selection, fold order, and FORS/XMSS domain, keypair and path length.
+The `scratch/c10_tree_value_*` family contains original and equivalent
+positives, fourteen definition-only passes and fourteen intended-consumer
+rejections, plus independent examples. Three scope probes cover the new
+modules. The previous FORS search module and its controls remain unchanged.
+
+Each changed definition must typecheck before the first unchanged consuming
+theorem rejects it. Both checkers record that consumer; later proofs after a
+rejection earn no execution credit. Syntax/type errors, resource failures and
+inconclusive SMT outcomes do not count. Replacing the height increment `1`
+with `2-1` passes the whole fixture. This is sensitivity evidence, not a proof
+that each mutated theorem's negation holds.
+
+`tools/c10_functional_tree_fixtures.py` independently constructs concrete
+addresses and ordered hash inputs with Python byte encodings. Seven pinned
+complete-path checkpoint sequences cover even/odd traversal, full u32/u64
+fields and an out-of-tree FORS index. Lean uses kernel `decide`; EasyCrypt
+checks the corresponding finite computations, sharing proved byte-projection
+lemmas to avoid repeatedly expanding the same lists. The toy function is
+public arithmetic, not SHA. These examples supplement the generic endpoint
+proofs and do not remove the paired-printer or backend interpretation boundary.

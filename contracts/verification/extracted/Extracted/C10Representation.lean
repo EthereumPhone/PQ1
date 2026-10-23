@@ -133,4 +133,25 @@ def wots_recover_nodes (hash_fn : (List Int → List Int)) (seed : (List Int)) (
 def wots_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kp : Int) (message : (List Int)) (values : (List (List Int))) (nonce : Int) : (List Int)  :=
   (if ((wots_sum (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) nonce))) - (wots_target )) = 0 then (hash_bytes_node hash_fn (multi_preimage seed (address_words layer tree 1 kp 0 0 0) (wots_recover_nodes hash_fn seed layer tree kp (hash_fn (wots_preimage seed (address_words layer tree 0 kp 0 0 0) (pad_node message) nonce)) values))) else (List.replicate 16 0))
 
+def fors_secret_value (hash_fn : (List Int → List Int)) (secret : (List Int)) (ht : Int) (tree : Int) (leaf : Int) : (List Int)  :=
+  (hash_bytes_node hash_fn (fors_private_preimage secret ht tree leaf))
+
+def fors_leaf_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (ht : Int) (tree : Int) (leaf : Int) (value : (List Int)) : (List Int)  :=
+  (hash_bytes_node hash_fn (th_preimage seed (address_words 0 ht 3 tree 0 0 leaf) (pad_node value)))
+
+def tree_pair_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (address : (List Int)) (left : (List Int)) (right : (List Int)) : (List Int)  :=
+  (hash_bytes_node hash_fn (pair_preimage seed address (pad_node left) (pad_node right)))
+
+def tree_path_step (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kind : Int) (kp : Int) (auth : (List (List Int))) (index0 : Int) (current : (List Int)) (height : Nat) : (List Int)  :=
+  (tree_pair_value hash_fn seed (address_words layer tree kind kp 0 (Int.ofNat (height + 1)) ((index0 / (2 ^ height)) / 2)) (if ((index0 / (2 ^ height)) % 2) = 0 then current else (List.getD auth height (List.replicate 16 0))) (if ((index0 / (2 ^ height)) % 2) = 0 then (List.getD auth height (List.replicate 16 0)) else current))
+
+def tree_path_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kind : Int) (kp : Int) (value : (List Int)) (index0 : Int) (auth : (List (List Int))) (steps : Nat) : (List Int)  :=
+  (List.foldr (fun i current => (tree_path_step hash_fn seed layer tree kind kp auth index0 current i)) value (List.reverse ((List.range steps).map (fun i => i))))
+
+def fors_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (ht : Int) (tree : Int) (leaf : Int) (value : (List Int)) (auth : (List (List Int))) : (List Int)  :=
+  (tree_path_value hash_fn seed 0 ht 3 tree (fors_leaf_value hash_fn seed ht tree leaf value) leaf auth 11)
+
+def merkle_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (value : (List Int)) (index0 : Int) (auth : (List (List Int))) : (List Int)  :=
+  (tree_path_value hash_fn seed layer tree 2 0 value index0 auth 9)
+
 end C10Representation

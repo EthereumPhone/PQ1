@@ -268,6 +268,41 @@ wots_recover_value = define("wots_recover_value", (hash_fn,seed,layer,tree,kp,me
             wots_recover_nodes(hash_fn,seed,layer,tree,kp,recovery_digest,values))),
         repeat(literal(16),literal(0,INT))))
 
+# Functional tree recovery. The loop index is a nonnegative count; the original
+# leaf index is an integer, constrained at actual callers to the full u32 range.
+# These expressions use the existing typed constructors and backend boundary.
+fors_secret_value = define("fors_secret_value", (hash_fn,secret,ht,tree,leaf),
+    hash_bytes_node(hash_fn,fors_private_preimage(secret,ht,tree,leaf)))
+fors_leaf_value = define("fors_leaf_value", (hash_fn,seed,ht,tree,leaf,value),
+    hash_bytes_node(hash_fn,th_preimage(seed,
+        address_words(literal(0,INT),ht,literal(3,INT),tree,literal(0,INT),
+                      literal(0,INT),leaf),pad_node(value))))
+tree_pair_value = define("tree_pair_value", (hash_fn,seed,address,left,right),
+    hash_bytes_node(hash_fn,pair_preimage(seed,address,pad_node(left),pad_node(right))))
+auth, index0, height = var("auth",NODES), var("index0",INT), var("height",COUNT)
+path_index = binary("div",index0,binary("pow",literal(2,INT),height))
+path_parent = binary("div",path_index,literal(2,INT))
+path_parity = binary("mod",path_index,literal(2,INT))
+path_sibling = index(auth,height,repeat(literal(16),literal(0,INT)))
+tree_path_step = define("tree_path_step",
+    (hash_fn,seed,layer,tree,kind,kp,auth,index0,current,height),
+    tree_pair_value(hash_fn,seed,
+        address_words(layer,tree,kind,kp,literal(0,INT),
+                      count_as_int(add(height,literal(1))),path_parent),
+        if_zero(path_parity,current,path_sibling),
+        if_zero(path_parity,path_sibling,current)))
+tree_path_value = define("tree_path_value",
+    (hash_fn,seed,layer,tree,kind,kp,value,index0,auth,steps),
+    fold(reverse(seq(steps,i,i)),i,current,
+         tree_path_step(hash_fn,seed,layer,tree,kind,kp,auth,index0,current,i),value))
+fors_recover_value = define("fors_recover_value", (hash_fn,seed,ht,tree,leaf,value,auth),
+    tree_path_value(hash_fn,seed,literal(0,INT),ht,literal(3,INT),tree,
+        fors_leaf_value(hash_fn,seed,ht,tree,leaf,value),leaf,auth,literal(11)))
+merkle_recover_value = define("merkle_recover_value",
+    (hash_fn,seed,layer,tree,value,index0,auth),
+    tree_path_value(hash_fn,seed,layer,tree,literal(2,INT),literal(0,INT),
+                    value,index0,auth,literal(9)))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"

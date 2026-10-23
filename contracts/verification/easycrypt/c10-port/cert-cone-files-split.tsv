@@ -805,3 +805,6 @@ cdrafts-split/C10FunctionalWotsRecover.ec
 cdrafts-split/C10FunctionalWotsShuffle.ec
 cdrafts-split/C10FunctionalWotsFill.ec
 cdrafts-split/C10FunctionalWotsSign.ec
+cdrafts-split/C10FunctionalTreeValue.ec
+cdrafts-split/C10FunctionalMerkle.ec
+cdrafts-split/C10FunctionalForsRecovery.ec
