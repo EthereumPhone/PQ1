@@ -299,6 +299,16 @@ paths = ['''^contracts/verification/easycrypt/c10\-port/cert\-source\-binding\.j
 regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_C10FunctionalWotsKeygen\.ec": "4a24e131c607b1885d89675faafda1b1b781c84384f3d9fae3fd6c953fa450dc",?\s*$''']
 
+[[rules.allowlists]]
+description = "Exact public outside-target builder proof source digests"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
+regexTarget = "line"
+regexes = [
+  '''^\s*"contracts/verification/extracted/Extracted/ForsAuthOutside\.lean": "d21e77b0ebe9f52fa70d27a2efcec1e64313e02e152783b254d2cce593331ac8",?\s*$''',
+  '''^\s*"contracts/verification/extracted/Extracted/XmssAuthOutside\.lean": "f43183acf09d0e3fcc07478684839d42468af8bc96397e3675a38cdd5d47c0b8",?\s*$''',
+]
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 
