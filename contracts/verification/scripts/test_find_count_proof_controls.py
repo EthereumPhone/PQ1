@@ -20,22 +20,39 @@ LAKE = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".elan/bin/lake"
 
 def main():
     generated = (ROOT / "Extracted/FindCount/Funs.lean").read_text()
-    marker = "/-- [sphincs_c10::wots::find_count]: loop body 1:"
-    body = generated[generated.index(marker):].replace("wots.find_count", "wots.probe_find_count")
+    marker = "/-- [sphincs_c10::wots::digit_sum]: loop body 0:"
+
+    def probe(text):
+        # `digit_sum` and `find_count` (and their loops) are the executable
+        # definitions under test; everything else keeps its real name.
+        return (text.replace("wots.find_count", "wots.probe_find_count")
+                    .replace("wots.digit_sum", "wots.probe_digit_sum"))
+
+    body = probe(generated[generated.index(marker):])
     proof = (ROOT / "Extracted/FindCountSpec.lean").read_text()
     header, rest = proof.split("namespace Extracted.Equiv", 1)
-    rest = ("namespace Extracted.Equiv" + rest).replace("wots.find_count", "wots.probe_find_count")
+    rest = probe("namespace Extracted.Equiv" + rest)
     definitions = header + "\nnamespace sphincs_c10\n" + body
     mutations = [
         ("start", "adrs 0#u32", "adrs 1#u32"),
         ("short-bound", "count < 10000000#u32", "count < 9999999#u32"),
         ("long-bound", "count < 10000000#u32", "count < 10000001#u32"),
-        ("threshold", "sum = params.TARGET_SUM", "sum >= params.TARGET_SUM"),
+        ("threshold", "i = params.TARGET_SUM", "i >= params.TARGET_SUM"),
         ("skip", "count + 1#u32", "count + 2#u32"),
-        ("returned-count", "done (count, d, digits)", "done (0#u32, d, digits)"),
+        ("returned-count", "done (count, d, a)", "done (0#u32, d, a)"),
         ("wrong-message", "wots_digest seed wots_adrs msg_hash count",
          "wots_digest seed wots_adrs seed count"),
-        ("sum-omits-last", "«end» := params.L", "«end» := 42#usize"),
+        # `digit_sum` must equal the verifier's digit sum: every mask, shift,
+        # byte index and group count below is load-bearing for that lemma.
+        ("sum-omits-group", "«end» := 5#usize", "«end» := 4#usize"),
+        ("group-byte", "31#usize - i", "30#usize - i"),
+        ("even-mask", "v &&& 1864135#u32", "v &&& 1864134#u32"),
+        ("odd-shift", "let i13 ← v >>> 3#i32", "let i13 ← v >>> 4#i32"),
+        ("fold-shift", "s1 >>> 12#i32", "s1 >>> 13#i32"),
+        ("field-mask", "s2 &&& 63#u32", "s2 &&& 31#u32"),
+        ("top-byte", "digest 16#usize", "digest 17#usize"),
+        ("top-bit", "i2 &&& 1#u8", "i2 &&& 3#u8"),
+        ("top-digit-mask", "v &&& 7#u32", "v &&& 15#u32"),
     ]
     with tempfile.TemporaryDirectory(prefix="find-count-proof-controls-") as td:
         def run(name, source):
@@ -58,7 +75,7 @@ def main():
 
         with ThreadPoolExecutor(max_workers=3) as pool:
             list(pool.map(negative, mutations))
-    print("OK: bounded grinder proof controls: fresh positive; 8 typed semantic mutations rejected")
+    print(f"OK: bounded grinder proof controls: fresh positive; {len(mutations)} typed semantic mutations rejected")
 
 
 if __name__ == "__main__":
