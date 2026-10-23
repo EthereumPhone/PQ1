@@ -60,7 +60,7 @@ def main():
         ("position-offset", "{ start := 56#usize, «end» := 60#usize }",
          "{ start := 52#usize, «end» := 56#usize }"),
         ("value-offset", "{ start := 64#usize, «end» := i1 }",
-         "{ start := 60#usize, «end» := i1 }"),
+         "{ start := 48#usize, «end» := 64#usize }"),
         ("digest-wrong-half",
          "(core.slice.index.SliceIndexRangeToUsizeSlice Std.U8)) d\n        { «end» := params.N }",
          "(core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) d\n        { start := params.N, «end» := 32#usize }"),
