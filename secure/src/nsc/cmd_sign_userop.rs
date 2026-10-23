@@ -2145,7 +2145,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         return NscStatus::InternalError as u32;
     }
 
-    // ── 9. Reconstruct entropy + derive slot master ────────────────
+    // ── 9. Reconstruct entropy (slot master: step 12, cache miss) ──
     //
     // HIGH-6: wrap every stack-local secret in Zeroizing.
     let master_secret: Zeroizing<[u8; 32]> =
@@ -2167,9 +2167,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             Ok(e) => e,
             Err(_) => return NscStatus::CryptoError as u32,
         },
-    );
-    let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
-        crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
     );
 
     // ── 10. Build Type 2 callData: executeWithOffchainCount(...) ───
@@ -2385,6 +2382,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     });
 
     if need_keygen {
+        // Derived here, on a cache miss only: a cached slot key never reads
+        // the slot master, and deriving it costs a whole BIP-39 seed
+        // (2,048 HMAC-SHA512 rounds, ~0.5 s on the U585) per request.
+        let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
+            crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
+        );
         ui::show_progress("Slot keygen", 0);
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(

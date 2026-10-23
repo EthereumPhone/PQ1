@@ -789,11 +789,6 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
         crate::crypto::decrypt_entropy_blob(&entropy_blob[..entropy_blob_len], &*master_secret)
             .map_err(|_| NscStatus::CryptoError)?,
     );
-    let slot_master = Zeroizing::new(crate::crypto::slot_master_entropy_from_entropy(
-        &*entropy,
-        request.account_index,
-    ));
-
     let need_keygen = match unsafe { &*core::ptr::addr_of!(super::state::SLOT_CACHE) } {
         Some(cached) => {
             cached.account_index != request.account_index
@@ -803,6 +798,13 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
         None => true,
     };
     if need_keygen {
+        // Derived here, on a cache miss only: a cached slot key never reads
+        // the slot master, and deriving it costs a whole BIP-39 seed
+        // (2,048 HMAC-SHA512 rounds, ~0.5 s on the U585) per request.
+        let slot_master = Zeroizing::new(crate::crypto::slot_master_entropy_from_entropy(
+            &*entropy,
+            request.account_index,
+        ));
         crate::ui::show_progress("Forced keygen", 0);
         let (key, _, _) = crate::crypto::derive_c10_slot_keypair_with_progress(
             &*slot_master,

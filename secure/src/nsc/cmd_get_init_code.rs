@@ -140,7 +140,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     let _granted = crate::timeout::grant_init_code_grace();
     secure_log!("[S] init-code: idle grace {}", if _granted { "+20 s" } else { "not granted" });
 
-    // ── 4. Reconstruct entropy + derive slot master per-account ───
+    // ── 4. Reconstruct entropy (slot master: on a cache miss, below) ─
     //
     // Mirrors `cmd_sign_userop.rs` §9: every call reads the entropy
     // blob out of the SE, decrypts with the session master_secret,
@@ -172,9 +172,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
             }
         },
     );
-    let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
-        crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
-    );
 
     // ── 5. Slot-0 C10 keygen (cached by (account_index, chain_id, 0)) ──
     //
@@ -198,6 +195,12 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     });
 
     if need_keygen {
+        // Derived here, on a cache miss only: a cached slot key never reads
+        // the slot master, and deriving it costs a whole BIP-39 seed
+        // (2,048 HMAC-SHA512 rounds, ~0.5 s on the U585) per request.
+        let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
+            crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
+        );
         crate::ui::show_progress("Slot keygen", 0);
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(
