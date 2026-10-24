@@ -428,6 +428,29 @@ verifier_recover_value = define("verifier_recover_value",
         digest_forest_value(hash_fn,seed,bs,forest_secrets,forest_paths),
         values0,nonce0,auth0,values1,nonce1,auth1))
 
+# Complete signer header and serialization. The optional randomizer is encoded
+# by its actual bytes (empty or sixteen bytes) at each endpoint. Exhaustion is
+# still the zero first-hit slot; no successful-search premise is introduced.
+signer_randomizer = define("signer_randomizer",(hash_fn,secret,random,message,nonce),
+    hash_bytes_node(hash_fn,r_preimage(secret,random,message,nonce)))
+signer_digest = define("signer_digest",(hash_fn,seed,root,secret,random,message,nonce),
+    verifier_digest(hash_fn,seed,root,signer_randomizer(hash_fn,secret,random,message,nonce),message))
+signer_search_digests = define("signer_search_digests",(hash_fn,seed,root,secret,random,message),
+    seq(literal(10000000),i,
+        signer_digest(hash_fn,seed,root,secret,random,message,count_as_int(i))))
+signer_nonce_slot = define("signer_nonce_slot",(hash_fn,seed,root,secret,random,message),
+    fors_first_slot(signer_search_digests(hash_fn,seed,root,secret,random,message)))
+nodes_bytes = define("nodes_bytes",(values,),
+    fold(values,value,tail,cat(value,tail),items(INT)))
+layer_bytes = define("layer_bytes",(values,nonce,auth),
+    cat(nodes_bytes(values),u32_bytes(nonce),nodes_bytes(auth)))
+path_row = var("path_row",NODES)
+signature_bytes = define("signature_bytes",
+    (random,forest_secrets,forest_paths,values0,nonce0,auth0,values1,nonce1,auth1),
+    cat(random,nodes_bytes(forest_secrets),
+        fold(forest_paths,path_row,tail,cat(nodes_bytes(path_row),tail),items(INT)),
+        layer_bytes(values0,nonce0,auth0),layer_bytes(values1,nonce1,auth1)))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"

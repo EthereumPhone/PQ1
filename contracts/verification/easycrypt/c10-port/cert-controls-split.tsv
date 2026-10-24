@@ -1983,3 +1983,59 @@ scratch/c10_caller_value_examples_continuation_reject.ec	MUST-FAIL	[by]: cannot 
 scratch/_scope_neg_op_C10FunctionalVerifierValue.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalVerifierState.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalVerifier.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Complete functional release signer: header, sequential values, exact history/cost, bytes and scope controls.
+scratch/c10_signer_header_positive.ec	MUST-PASS	-
+scratch/c10_signer_header_preserving.ec	MUST-PASS	-
+scratch/c10_signer_bytes_positive.ec	MUST-PASS	-
+scratch/c10_signer_bytes_preserving.ec	MUST-PASS	-
+scratch/c10_signer_optional_random_typed.ec	MUST-PASS	-
+scratch/c10_signer_optional_random_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_signer_randomizer_order_typed.ec	MUST-PASS	-
+scratch/c10_signer_randomizer_order_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_signer_randomizer_nonce_typed.ec	MUST-PASS	-
+scratch/c10_signer_randomizer_nonce_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_signer_digest_root_typed.ec	MUST-PASS	-
+scratch/c10_signer_digest_root_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_signer_nonce_first_trial_typed.ec	MUST-PASS	-
+scratch/c10_signer_nonce_first_trial_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_signer_nonce_budget_typed.ec	MUST-PASS	-
+scratch/c10_signer_nonce_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_signer_nonce_sentinel_typed.ec	MUST-PASS	-
+scratch/c10_signer_nonce_sentinel_reject.ec	MUST-FAIL	not a congruence
+scratch/c10_signer_node_order_typed.ec	MUST-PASS	-
+scratch/c10_signer_node_order_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_signer_counter_high_bytes_typed.ec	MUST-PASS	-
+scratch/c10_signer_counter_high_bytes_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_signer_forest_path_order_typed.ec	MUST-PASS	-
+scratch/c10_signer_forest_path_order_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_signer_second_layer_fields_typed.ec	MUST-PASS	-
+scratch/c10_signer_second_layer_fields_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_signer_randomizer_prefix_typed.ec	MUST-PASS	-
+scratch/c10_signer_randomizer_prefix_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_signer_composition_positive.ec	MUST-PASS	-
+scratch/c10_signer_composition_preserving.ec	MUST-PASS	-
+scratch/c10_signer_composition_first_coordinate_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_first_coordinate_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_signer_composition_second_layer_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_second_layer_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_signer_composition_second_message_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_second_message_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_signer_composition_second_exhaustion_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_second_exhaustion_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_signer_composition_outer_root_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_outer_root_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_signer_composition_header_call_cost_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_header_call_cost_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_signer_composition_exhaustion_history_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_exhaustion_history_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_signer_composition_finish_history_typed.ec	MUST-PASS	-
+scratch/c10_signer_composition_finish_history_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/_scope_neg_op_C10FunctionalSignerHeader.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSignerValue.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSignerState.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSignerFinish.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSigner.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSignatureBytes.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSignerWidths.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSignerBytes.ec	MUST-FAIL	FORS_C_TreePort.

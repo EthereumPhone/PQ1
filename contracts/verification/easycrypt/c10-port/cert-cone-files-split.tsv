@@ -831,3 +831,11 @@ cdrafts-split/C10FunctionalForestSign.ec
 cdrafts-split/C10FunctionalVerifierValue.ec
 cdrafts-split/C10FunctionalVerifierState.ec
 cdrafts-split/C10FunctionalVerifier.ec
+cdrafts-split/C10FunctionalSignerHeader.ec
+cdrafts-split/C10FunctionalSignerValue.ec
+cdrafts-split/C10FunctionalSignerState.ec
+cdrafts-split/C10FunctionalSignerFinish.ec
+cdrafts-split/C10FunctionalSigner.ec
+cdrafts-split/C10FunctionalSignatureBytes.ec
+cdrafts-split/C10FunctionalSignerWidths.ec
+cdrafts-split/C10FunctionalSignerBytes.ec

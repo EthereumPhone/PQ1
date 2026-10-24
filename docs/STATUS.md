@@ -208,7 +208,7 @@ forest phases/compression and hypertree-layer body now consume shared values,
 including the separate slot-12 hash, positional shuffled outputs and bounded
 signing failure. Native Raw/CommonInput endpoints preserve arbitrary consistent
 prehistory, key/function state, exact final maps and calls, with separate
-termination proofs. Complete signing/session composition and
+termination proofs. Complete release signing is covered below; initialized session composition and
 concrete-backend/ideal-oracle transfer remain open. The precise domains,
 construction effects retained on failure and interpretation limits are in the
 [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-forest-and-layer-caller-values).
@@ -219,9 +219,20 @@ digest, forest and two-layer values through the final decision. The statements
 retain forced-zero refusal, WOTS zero-node continuation and arbitrary represented
 signatures. Native proofs preserve arbitrary consistent history and exact calls,
 with separate losslessness. Ten typed mutations and input-sensitive layer value
-examples supplement the required full gates. Complete signing, initialized
+examples supplement the required full gates. Complete release signing is covered below; initialized
 sessions and concrete-backend/ideal-oracle transfer remain open; see the
 [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-complete-verifier-values).
+
+**Functional complete release-signer correspondence (2026-10-24):** the actual
+extracted release caller and native Raw/CommonInput signer compose the shared
+nonce, forest, two-layer values and exact 4,008-byte encoding. All bounded
+failure branches remain explicit; native contracts retain arbitrary consistent
+prehistory and exact effects/cost, and derive successful output width from the
+actual calls. Seventeen paired typed mutations and three native state/cost
+mutations supplement the required gates. Initialized functional sessions,
+secure-wrapper accounting and concrete-backend/ideal-oracle transfer remain
+open; see the
+[research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-complete-release-signer-values).
 
 **Native EasyCrypt total signing availability (2026-10-21):** the
 [initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)

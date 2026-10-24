@@ -238,4 +238,25 @@ def hypertree_recover_value (hash_fn : (List Int → List Int)) (seed : (List In
 def verifier_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (bs : (List Int)) (forest_secrets : (List (List Int))) (forest_paths : (List (List (List Int)))) (values0 : (List (List Int))) (nonce0 : Int) (auth0 : (List (List Int))) (values1 : (List (List Int))) (nonce1 : Int) (auth1 : (List (List Int))) : (List Int)  :=
   (hypertree_recover_value hash_fn seed (ht_field bs) (digest_forest_value hash_fn seed bs forest_secrets forest_paths) values0 nonce0 auth0 values1 nonce1 auth1)
 
+def signer_randomizer (hash_fn : (List Int → List Int)) (secret : (List Int)) (random : (List Int)) (message : (List Int)) (nonce : Int) : (List Int)  :=
+  (hash_bytes_node hash_fn (r_preimage secret random message nonce))
+
+def signer_digest (hash_fn : (List Int → List Int)) (seed : (List Int)) (root : (List Int)) (secret : (List Int)) (random : (List Int)) (message : (List Int)) (nonce : Int) : (List Int)  :=
+  (verifier_digest hash_fn seed root (signer_randomizer hash_fn secret random message nonce) message)
+
+def signer_search_digests (hash_fn : (List Int → List Int)) (seed : (List Int)) (root : (List Int)) (secret : (List Int)) (random : (List Int)) (message : (List Int)) : (List (List Int))  :=
+  ((List.range 10000000).map (fun i => (signer_digest hash_fn seed root secret random message (Int.ofNat i))))
+
+def signer_nonce_slot (hash_fn : (List Int → List Int)) (seed : (List Int)) (root : (List Int)) (secret : (List Int)) (random : (List Int)) (message : (List Int)) : Nat  :=
+  (fors_first_slot (signer_search_digests hash_fn seed root secret random message))
+
+def nodes_bytes (values : (List (List Int))) : (List Int)  :=
+  (List.foldr (fun value tail => (value ++ tail)) [] values)
+
+def layer_bytes (values : (List (List Int))) (nonce : Int) (auth : (List (List Int))) : (List Int)  :=
+  ((nodes_bytes values) ++ (u32_bytes nonce) ++ (nodes_bytes auth))
+
+def signature_bytes (random : (List Int)) (forest_secrets : (List (List Int))) (forest_paths : (List (List (List Int)))) (values0 : (List (List Int))) (nonce0 : Int) (auth0 : (List (List Int))) (values1 : (List (List Int))) (nonce1 : Int) (auth1 : (List (List Int))) : (List Int)  :=
+  (random ++ (nodes_bytes forest_secrets) ++ (List.foldr (fun path_row tail => ((nodes_bytes path_row) ++ tail)) [] forest_paths) ++ (layer_bytes values0 nonce0 auth0) ++ (layer_bytes values1 nonce1 auth1))
+
 end C10Representation

@@ -478,3 +478,29 @@ passes. Native first-location checks are retained in the coordinator's raw audit
 persistent native enforcement remains #1034. These are proof-sensitivity tests,
 not proofs that every changed universal statement is false. Full cold replay and
 all inherited controls remain mandatory.
+
+## Functional complete signer controls
+
+`tools/c10_functional_signer_controls.py` changes the optional randomizer,
+secret/message order, nonce, public-root binding, first trial, search budget,
+exhaustion selector, node order, high counter bytes, forest-path order, second
+layer fields and randomizer prefix. Each typed change rechecks the unchanged
+header or byte-encoding consumer. `tools/c10_functional_signer_composition_controls.py`
+adds five paired changes to the first coordinates, second layer identifier,
+second input message, second-layer exhaustion and outer root input. Three
+native-only changes cover the header's call cost and history retained through
+nonce exhaustion and completion. These native state/cost obligations are not
+claimed as Lean runtime-effect proofs.
+
+The native family has six positive/preserving fixtures and twenty separately
+typed rejection pairs, plus eight scope probes. The Lean suite runs six
+positive/preserving fixtures and seventeen typed rejections at the intended
+first theorem in `scripts/test_c10_functional_signer_controls.py`, wired into
+the full extracted differential gate. Each compiler process has a 4 GiB memory
+cap; resource errors cannot earn rejection credit. The preserving variants use
+a constant budget expression, bound-variable renaming and beta-equivalent
+index selection. Native rejection locations are checked in the coordinator's
+raw audit; persistent enforcement remains #1034. These controls establish
+sensitivity of the selected consuming proofs, not falsity of every changed
+proposition or completeness against all specification errors. Full cold replay
+and inherited controls remain mandatory.

@@ -242,6 +242,27 @@ op hypertree_recover_value (hash_fn : (int list -> int list)) (seed : (int list)
 op verifier_recover_value (hash_fn : (int list -> int list)) (seed : (int list)) (bs : (int list)) (forest_secrets : ((int list) list)) (forest_paths : (((int list) list) list)) (values0 : ((int list) list)) (nonce0 : int) (auth0 : ((int list) list)) (values1 : ((int list) list)) (nonce1 : int) (auth1 : ((int list) list)) : (int list) =
   (hypertree_recover_value hash_fn seed (ht_field bs) (digest_forest_value hash_fn seed bs forest_secrets forest_paths) values0 nonce0 auth0 values1 nonce1 auth1).
 
+op signer_randomizer (hash_fn : (int list -> int list)) (secret : (int list)) (random : (int list)) (message : (int list)) (nonce : int) : (int list) =
+  (hash_bytes_node hash_fn (r_preimage secret random message nonce)).
+
+op signer_digest (hash_fn : (int list -> int list)) (seed : (int list)) (root : (int list)) (secret : (int list)) (random : (int list)) (message : (int list)) (nonce : int) : (int list) =
+  (verifier_digest hash_fn seed root (signer_randomizer hash_fn secret random message nonce) message).
+
+op signer_search_digests (hash_fn : (int list -> int list)) (seed : (int list)) (root : (int list)) (secret : (int list)) (random : (int list)) (message : (int list)) : ((int list) list) =
+  (mkseq (fun i => (signer_digest hash_fn seed root secret random message (i))) 10000000).
+
+op signer_nonce_slot (hash_fn : (int list -> int list)) (seed : (int list)) (root : (int list)) (secret : (int list)) (random : (int list)) (message : (int list)) : int =
+  (fors_first_slot (signer_search_digests hash_fn seed root secret random message)).
+
+op nodes_bytes (values : ((int list) list)) : (int list) =
+  (foldr (fun value tail => (value ++ tail)) [] values).
+
+op layer_bytes (values : ((int list) list)) (nonce : int) (auth : ((int list) list)) : (int list) =
+  ((nodes_bytes values) ++ (u32_bytes nonce) ++ (nodes_bytes auth)).
+
+op signature_bytes (random : (int list)) (forest_secrets : ((int list) list)) (forest_paths : (((int list) list) list)) (values0 : ((int list) list)) (nonce0 : int) (auth0 : ((int list) list)) (values1 : ((int list) list)) (nonce1 : int) (auth1 : ((int list) list)) : (int list) =
+  (random ++ (nodes_bytes forest_secrets) ++ (foldr (fun path_row tail => ((nodes_bytes path_row) ++ tail)) [] forest_paths) ++ (layer_bytes values0 nonce0 auth0) ++ (layer_bytes values1 nonce1 auth1)).
+
 require import C10AddressInputBridge C10CallerInputBridge.
 
 lemma shuffle_forest_label_common : [102;111;114;115] = shuffle_forest_label.

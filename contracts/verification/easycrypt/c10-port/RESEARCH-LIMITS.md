@@ -77,7 +77,8 @@ the rejected digest call. Termination is proved without eventual acceptance.
 
 This closes the selected functional WOTS component under the disclosed
 backend interpretation. The next component is the FORS/Merkle recovery
-bridge below; construction and forest/layer composition are covered below; the full signer/verifier and sessions remain open.
+bridge below; construction, forest/layer composition and complete functional
+signer/verifier values are covered below. Initialized sessions remain open.
 The paired printers, function
 interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
 transfer and QROM/physical assumptions remain explicit limits. The ideal-model
@@ -114,7 +115,9 @@ equality. The private-derivation lemma also connects `FixedPrefix.derive` to
 the shared FORS secret value.
 
 This closes recovery computations under the disclosed interpretation. Root and
-authentication-path construction is covered by the component below; forest/layer composition is covered below; the full signer/verifier/session relation remains open. Paired-printer and
+authentication-path construction, forest/layer composition and complete
+functional signer/verifier values are covered below. Initialized sessions remain
+open. Paired-printer and
 backend interpretation, concrete RustCrypto/STM32 correspondence, sampled-oracle
 security transfer and QROM/physical boundaries remain open. No ideal-model
 probability bound transfers from these deterministic functional equalities.
@@ -213,7 +216,7 @@ the actual execution state.
 [Controls](CONTROL-EVIDENCE.md#functional-forest-and-layer-caller-controls),
 full cold replay, exact source identities and the combined review remain
 separate requirements. The complete verifier component is described below.
-Complete signing and initialized session composition remain next, including
+Complete release signing is described below. Initialized session composition remains next, including
 the secure wrapper's two signing calls and verification cost.
 Paired-printer and backend interpretation, concrete RustCrypto/STM32 behavior,
 callback non-interference, sampled-oracle security transfer and QROM/physical
@@ -253,12 +256,54 @@ layer recovery costs. Separate losslessness proofs assume no acceptance.
 This closes the complete fixed-backend verifier component under the existing
 printer and primitive interpretations. It does not identify either backend with
 concrete RustCrypto/STM32 execution or a sampled oracle, nor transfer the
-ideal-model probability bound. Complete signing, initialized cross-language
+ideal-model probability bound. Complete release signing is covered below; initialized cross-language
 session composition, secure-wrapper accounting, callbacks and physical/QROM
 assumptions remain open. The [control owner](CONTROL-EVIDENCE.md#functional-complete-verifier-controls)
 records the ten typed mutations and the strengthened supplementary layer
 examples from #1043. Full replay, exact source identities, required review and
 actual CI remain separate landing evidence.
+
+## Functional complete release-signer values
+
+Seven appended definitions in the existing typed representation specify the
+randomizer, message digest, bounded nonce schedule and selector, node and layer
+encoding, and complete signature encoding. All 78 earlier definitions and the
+expression language are preserved. The explicit Result/option adapters retain
+exhaustion; they do not assume a successful search or a valid generated key.
+
+[`C10FunctionalSigner.lean`](../../extracted/Extracted/C10FunctionalSigner.lean)
+connects the actual extracted `release_sign_inner` caller to the shared nonce,
+forest and two-layer values. The header retains both OptRand encodings and the
+first accepted nonce at the ten-million-trial cap. Digest-derived coordinates,
+the special thirteenth FORS secret, both layer searches, sequential messages and
+positional serialization are composed from their existing component proofs.
+`extracted_signer_bytes` gives the exact returned 4,008-byte array, including
+every byte of both u32 counters. Failure remains the same Result, with no
+success or final-root-equality premise. This is the release caller: it does not
+invent the checked configuration's final debug root guard. Five new Lean
+modules enroll 38 kernel-only theorem closures.
+
+[`C10FunctionalSignerBytes`](cdrafts-split/C10FunctionalSignerBytes.ec) reaches
+the actual native `RawSigner(FixedPrefix).sign` and common-input caller. Eight
+new modules contain 36 lemmas. Their contracts retain the function and key,
+arbitrary backend-consistent prehistory, the exact resulting history relation
+and call count. Nonce exhaustion retains its executed query prefix; either
+layer's exhaustion retains all construction and search work already performed.
+The full caller obtains the digest width from the header. Successful signature
+width and complete byte encoding follow from actual calls, without adding
+successful signing as an entry premise. Losslessness remains separate from
+value equality.
+
+This closes the complete release-signer value/encoding component under the
+existing paired-printer and primitive interpretations. It does not identify
+the supplied Lean backend with RustCrypto, STM32 SHA or EasyCrypt's sampled
+oracle. Initialized functional sessions, the secure wrapper's two signing
+calls and verification accounting, callback non-interference and physical/QROM
+assumptions remain open. No sampled-oracle probability bound transfers through
+these deterministic equalities. The [control owner](CONTROL-EVIDENCE.md#functional-complete-signer-controls)
+records the typed value, composition and native-effect mutations. Full cold
+replay, exact identities, required review and actual CI remain separate landing
+evidence; these statements confer no production authority.
 
 ## Quantitative loss
 

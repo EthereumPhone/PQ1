@@ -18,7 +18,6 @@ op hypertree_recover_value (hash_fn : (int list -> int list)) (seed : (int list)
 op verifier_recover_value (hash_fn : (int list -> int list)) (seed : (int list)) (bs : (int list)) (forest_secrets : ((int list) list)) (forest_paths : (((int list) list) list)) (values0 : ((int list) list)) (nonce0 : int) (auth0 : ((int list) list)) (values1 : ((int list) list)) (nonce1 : int) (auth1 : ((int list) list)) : (int list) =
   (hypertree_recover_value hash_fn seed (ht_field bs) (digest_forest_value hash_fn seed bs (rev forest_secrets) forest_paths) values0 nonce0 auth0 values1 nonce1 auth1).
 
-
 (* Values and digest-bound discharge for complete verifier composition.
    The fixed backend and paired-printer interpretation are explicit. *)
 

@@ -1,3 +1,4 @@
+import Extracted.C10FunctionalSigner
 import Extracted.C10FunctionalVerifier
 import Extracted.C10FunctionalForest
 import Extracted.C10FunctionalForestRecover

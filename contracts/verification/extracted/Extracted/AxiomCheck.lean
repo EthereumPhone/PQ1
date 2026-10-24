@@ -1,3 +1,4 @@
+import Extracted.C10FunctionalSigner
 import Extracted.C10FunctionalVerifier
 import Extracted.C10FunctionalForest
 import Extracted.C10FunctionalForestRecover
@@ -599,3 +600,43 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalVerifier.extracted_hypertree_value
 #print axioms Extracted.C10FunctionalVerifier.verifier_head_values
 #print axioms Extracted.C10FunctionalVerifier.decoded_verifier_result
+
+-- Complete functional signer: exact release Result, bytes, and component bridges.
+#print axioms Extracted.C10FunctionalSignerHeader.randomizer_value
+#print axioms Extracted.C10FunctionalSignerHeader.digest_value
+#print axioms Extracted.C10FunctionalSignerHeader.schedule_value
+#print axioms Extracted.C10FunctionalSignerHeader.extracted_header_result
+#print axioms Extracted.C10FunctionalSignerHeader.pure_header_result
+#print axioms Extracted.C10FunctionalSignatureBytes.nodes_bytes_flatten
+#print axioms Extracted.C10FunctionalSignatureBytes.chunks_join
+#print axioms Extracted.C10FunctionalSignatureBytes.word_nodes_bytes
+#print axioms Extracted.C10FunctionalSignatureBytes.four_byte_encoding
+#print axioms Extracted.C10FunctionalSignatureBytes.parsed_counter_bytes
+#print axioms Extracted.C10FunctionalSignatureBytes.paths_bytes_flatten
+#print axioms Extracted.C10FunctionalSignatureBytes.chunk_cat
+#print axioms Extracted.C10FunctionalSignatureBytes.layer_encoding
+#print axioms Extracted.C10FunctionalSignatureBytes.decoded_bytes
+#print axioms Extracted.C10FunctionalSignatureBytes.parsed_bytes
+#print axioms Extracted.C10FunctionalSignerValues.pure_layer_result
+#print axioms Extracted.C10FunctionalSignerValues.layer_coordinates
+#print axioms Extracted.C10FunctionalSignerValues.indexed_layer_result
+#print axioms Extracted.C10FunctionalSignerValues.second_indexed_layer_result
+#print axioms Extracted.C10FunctionalSignerSerialization.prefix_node
+#print axioms Extracted.C10FunctionalSignerSerialization.prefix_forest
+#print axioms Extracted.C10FunctionalSignerSerialization.prefix_first_layer
+#print axioms Extracted.C10FunctionalSignerSerialization.serialized_layer_words
+#print axioms Extracted.C10FunctionalSignerSerialization.serialized_full_words
+#print axioms Extracted.C10FunctionalSignerSerialization.serialized_full_bytes
+#print axioms Extracted.C10FunctionalSigner.paired_actions
+#print axioms Extracted.C10FunctionalSigner.fields_factor
+#print axioms Extracted.C10FunctionalSigner.hypertree_result
+#print axioms Extracted.C10FunctionalSigner.forest_values
+#print axioms Extracted.C10FunctionalSigner.finish_result
+#print axioms Extracted.C10FunctionalSigner.pure_release_words
+#print axioms Extracted.C10FunctionalSigner.mapped_action
+#print axioms Extracted.C10FunctionalSigner.mapped_pair_action
+#print axioms Extracted.C10FunctionalSigner.actual_finish_result
+#print axioms Extracted.C10FunctionalSigner.pure_signer_result
+#print axioms Extracted.C10FunctionalSigner.actual_release_words
+#print axioms Extracted.C10FunctionalSigner.extracted_signer_result
+#print axioms Extracted.C10FunctionalSigner.extracted_signer_bytes

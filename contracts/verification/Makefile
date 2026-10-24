@@ -1973,6 +1973,7 @@ endif
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/C10FunctionalBuildFixtures.lean
 	@$(_FV_PYTHON3) scripts/test_c10_functional_caller_controls.py
 	@$(_FV_PYTHON3) scripts/test_c10_functional_verifier_controls.py
+	@$(_FV_PYTHON3) scripts/test_c10_functional_signer_controls.py
 	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_functional_caller_fixtures.py
 	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/C10FunctionalCallerFixtures.lean
 	@$(_FV_PYTHON3) easycrypt/c10-port/tools/c10_shuffle_fixtures.py

@@ -18,7 +18,6 @@ op hypertree_recover_value (hash_fn : (int list -> int list)) (seed : (int list)
 op verifier_recover_value (hash_fn : (int list -> int list)) (seed : (int list)) (bs : (int list)) (forest_secrets : ((int list) list)) (forest_paths : (((int list) list) list)) (values0 : ((int list) list)) (nonce0 : int) (auth0 : ((int list) list)) (values1 : ((int list) list)) (nonce1 : int) (auth1 : ((int list) list)) : (int list) =
   (hypertree_recover_value hash_fn seed (ht_field bs) (digest_forest_value hash_fn seed bs forest_secrets forest_paths) values0 nonce0 auth0 values1 nonce1 auth1).
 
-
 op paired_verifier_result fn seed root message (sig : raw_signature) =
   let d = verifier_digest fn seed root sig.`1 message in
   let first = nth ([],0,[]) sig.`4 0 in

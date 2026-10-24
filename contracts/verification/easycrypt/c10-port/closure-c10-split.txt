@@ -664,3 +664,13 @@ C10FunctionalForestSign
 C10FunctionalVerifierValue
 C10FunctionalVerifierState
 C10FunctionalVerifier
+
+# Functional complete signer backend interpretation, 2026-10-24.
+C10FunctionalSignerHeader
+C10FunctionalSignerValue
+C10FunctionalSignerState
+C10FunctionalSignerFinish
+C10FunctionalSigner
+C10FunctionalSignatureBytes
+C10FunctionalSignerWidths
+C10FunctionalSignerBytes
