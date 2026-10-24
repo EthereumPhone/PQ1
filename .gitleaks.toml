@@ -51,7 +51,7 @@ description = "Exact public digest and full key of the authentication-path proof
 condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
 regexTarget = "line"
-regexes = ['''^\s*"contracts/verification/scripts/test_fors_auth_proof_controls\.py": "2b2380a9baf8bd6bf5f863f0220d10ca5df28d269518c8d6c299d6f5c3c95ed5",?\s*$''']
+regexes = ['''^\s*"contracts/verification/scripts/test_fors_auth_proof_controls\.py": "(2b2380a9baf8bd6bf5f863f0220d10ca5df28d269518c8d6c299d6f5c3c95ed5|368fb691e422e2e57d558f16c8e18e463888e4d4bb2a9c775e840848668ce850)",?\s*$''']
 
 [[rules.allowlists]]
 description = "Exact public source digest of the node-domain keygen scope probe"
