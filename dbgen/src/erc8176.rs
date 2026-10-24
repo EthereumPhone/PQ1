@@ -953,14 +953,14 @@ fn recover_eoa(digest: [u8; 32], r: [u8; 32], s: [u8; 32], v: u8) -> Result<[u8;
         .ok_or_else(|| format!("v must be canonical 27 or 28, got {v}"))?;
     let signature = Signature::from_scalars(r, s)
         .map_err(|error| format!("invalid secp256k1 r/s scalars: {error}"))?;
-    if signature.normalize_s().is_some() {
+    if signature.normalize_s() != signature {
         return Err("high-s secp256k1 signature is non-canonical".to_string());
     }
     let recovery_id = RecoveryId::from_byte(recovery_byte)
         .ok_or_else(|| format!("invalid secp256k1 recovery id {recovery_byte}"))?;
     let key = VerifyingKey::recover_from_prehash(&digest, &signature, recovery_id)
         .map_err(|error| format!("secp256k1 recovery failed: {error}"))?;
-    let encoded = key.to_encoded_point(false);
+    let encoded = key.to_sec1_point(false);
     let bytes = encoded.as_bytes();
     if bytes.len() != 65 || bytes[0] != 4 {
         return Err("recovered secp256k1 key is not uncompressed SEC1".to_string());
@@ -1043,7 +1043,7 @@ pub(crate) fn synthetic_snapshot_fixture(descriptor_hash: [u8; 32]) -> Synthetic
     let mut attestations = Vec::new();
 
     for (index, key) in signing_keys.iter().enumerate() {
-        let public = key.verifying_key().to_encoded_point(false);
+        let public = key.verifying_key().to_sec1_point(false);
         let public_hash = keccak256(&public.as_bytes()[1..]);
         let mut attester = [0; 20];
         attester.copy_from_slice(&public_hash[12..]);
@@ -1068,9 +1068,7 @@ pub(crate) fn synthetic_snapshot_fixture(descriptor_hash: [u8; 32]) -> Synthetic
         };
         let uid = eas_v2_uid(&message);
         let digest = eas_v2_typed_data_digest(&message);
-        let (signature, recovery_id) = key
-            .sign_prehash_recoverable(&digest)
-            .expect("fixture signing succeeds");
+        let (signature, recovery_id) = key.sign_prehash_recoverable(&digest);
         let signature_bytes = signature.to_bytes();
         attestations.push(serde_json::json!({
             "uid": fixture_hex(&uid),
@@ -1502,9 +1500,7 @@ mod tests {
     }
 
     fn sign_json_record(record: &mut Value, key: &SigningKey, digest: [u8; 32]) {
-        let (signature, recovery_id) = key
-            .sign_prehash_recoverable(&digest)
-            .expect("fixture signing succeeds");
+        let (signature, recovery_id) = key.sign_prehash_recoverable(&digest);
         let bytes = signature.to_bytes();
         record["signature"] = serde_json::json!({
             "r": fixture_hex(&bytes[..32]),
@@ -1633,6 +1629,37 @@ mod tests {
         assert!(parse_rlp_item(&[0xb8, 0x01, 0x00]).is_err());
         assert!(parse_rlp_item(&[0xf8, 0x01, 0x80]).is_err());
         assert!(parse_rlp_item(&[0xb9, 0x00, 0x38]).is_err());
+    }
+
+    #[test]
+    fn legacy_public_recovery_vectors_remain_compatible() {
+        // k256 0.13.4 public recovery vectors (src/ecdsa.rs). Expected addresses
+        // were derived independently from their published compressed points.
+        // This pins old-format compatibility across the 0.14 dependency update.
+        let digest = sha256(b"example message");
+        let vectors = [
+            (
+                "ce53abb3721bafc561408ce8ff99c909f7f0b18a2f788649d6470162ab1aa032",
+                "3971edc523a6d6453f3fb6128d318d9db1a5ff3386feb1047d9816e780039d52",
+                27,
+                "691a8d05678fc962ff0f2174134379c0051cb686",
+            ),
+            (
+                "46c05b6368a44b8810d79859441d819b8e7cdc8bfd371e35c53196f4bcacdb51",
+                "35c7facce2a97b95eacba8a586d87b7958aaf8368ab29cee481f76e871dbd9cb",
+                28,
+                "ede35562d3555e61120a151b3c8e8e91d83a378a",
+            ),
+        ];
+        for (r_hex, s_hex, v, address_hex) in vectors {
+            let r: [u8; 32] = hex::decode(r_hex).unwrap().try_into().unwrap();
+            let s: [u8; 32] = hex::decode(s_hex).unwrap().try_into().unwrap();
+            let expected: [u8; 20] = hex::decode(address_hex).unwrap().try_into().unwrap();
+            assert_eq!(recover_eoa(digest, r, s, v).unwrap(), expected);
+            let mut changed = digest;
+            changed[0] ^= 1;
+            assert_ne!(recover_eoa(changed, r, s, v).ok(), Some(expected));
+        }
     }
 
     #[test]

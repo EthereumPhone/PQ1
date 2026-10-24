@@ -73,8 +73,9 @@ version = "0.2.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.base16ct]]
-version = "0.2.0"
+version = "1.0.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.base64ct]]
 version = "1.8.3"
@@ -157,8 +158,9 @@ version = "1.0.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.const-oid]]
-version = "0.9.6"
+version = "0.10.2"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required. Shared dependency; not restricted to the host verifier."
 
 [[exemptions.convert_case]]
 version = "0.10.0"
@@ -179,6 +181,11 @@ criteria = "safe-to-deploy"
 [[exemptions.cortex-m-semihosting]]
 version = "0.5.0"
 criteria = "safe-to-deploy"
+
+[[exemptions.cpubits]]
+version = "0.1.1"
+criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.cpufeatures]]
 version = "0.2.17"
@@ -217,8 +224,9 @@ version = "0.2.4"
 criteria = "safe-to-run"
 
 [[exemptions.crypto-bigint]]
-version = "0.5.5"
+version = "0.7.6"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.crypto-common]]
 version = "0.1.7"
@@ -241,17 +249,18 @@ version = "0.9.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.ctutils]]
-version = "0.4.4"
+version = "0.4.5"
 criteria = "safe-to-deploy"
-notes = "RUSTSEC-2026-0385 patch upgrade; retains the existing exemption, not a full crate audit."
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required. Shared dependency; not restricted to the host verifier."
 
 [[exemptions.dbl]]
 version = "0.3.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.der]]
-version = "0.7.10"
+version = "0.8.2"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.derive_more]]
 version = "2.1.1"
@@ -290,12 +299,14 @@ version = "1.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.ecdsa]]
-version = "0.16.9"
+version = "0.17.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.elliptic-curve]]
-version = "0.13.8"
+version = "0.14.1"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.embedded-graphics]]
 version = "0.8.2"
@@ -326,8 +337,9 @@ version = "2.4.1"
 criteria = "safe-to-run"
 
 [[exemptions.ff]]
-version = "0.13.1"
+version = "0.14.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.fiat-crypto]]
 version = "0.2.9"
@@ -370,8 +382,9 @@ version = "0.5.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.group]]
-version = "0.13.0"
+version = "0.14.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.half]]
 version = "2.7.1"
@@ -397,9 +410,15 @@ criteria = "safe-to-run"
 version = "0.12.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.hybrid-array]]
-version = "0.4.12"
+[[exemptions.hmac]]
+version = "0.13.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
+
+[[exemptions.hybrid-array]]
+version = "0.4.15"
+criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required. Shared dependency; not restricted to the host verifier."
 
 [[exemptions.id-arena]]
 version = "2.3.0"
@@ -434,8 +453,9 @@ version = "0.3.95"
 criteria = "safe-to-run"
 
 [[exemptions.k256]]
-version = "0.13.4"
+version = "0.14.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.keccak]]
 version = "0.1.6"
@@ -553,6 +573,16 @@ criteria = "safe-to-deploy"
 version = "0.2.37"
 criteria = "safe-to-run"
 
+[[exemptions.primefield]]
+version = "0.14.0"
+criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
+
+[[exemptions.primeorder]]
+version = "0.14.0"
+criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
+
 [[exemptions.proptest]]
 version = "1.11.0"
 criteria = "safe-to-run"
@@ -618,8 +648,9 @@ version = "0.8.10"
 criteria = "safe-to-run"
 
 [[exemptions.rfc6979]]
-version = "0.4.0"
+version = "0.6.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.rpassword]]
 version = "7.5.2"
@@ -658,8 +689,9 @@ version = "1.0.23"
 criteria = "safe-to-run"
 
 [[exemptions.sec1]]
-version = "0.7.3"
+version = "0.8.1"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.semver]]
 version = "0.9.0"
@@ -701,6 +733,11 @@ criteria = "safe-to-run"
 version = "0.10.9"
 criteria = "safe-to-deploy"
 
+[[exemptions.sha2]]
+version = "0.11.1"
+criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
+
 [[exemptions.sha3]]
 version = "0.9.1"
 criteria = "safe-to-run"
@@ -714,8 +751,9 @@ version = "0.11.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.signature]]
-version = "2.2.0"
+version = "3.0.0"
 criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.simd-adler32]]
 version = "0.3.9"
@@ -884,6 +922,11 @@ criteria = "safe-to-deploy"
 [[exemptions.winnow]]
 version = "0.7.15"
 criteria = "safe-to-deploy"
+
+[[exemptions.wnaf]]
+version = "0.14.1"
+criteria = "safe-to-deploy"
+notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.wyz]]
 version = "0.5.1"

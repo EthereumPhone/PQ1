@@ -34,7 +34,7 @@ pqsigner-tx = { workspace = true }
 toml = { version = "0.8", default-features = false, features = ["parse"] }
 # Host-only secp256k1 recovery for authenticated ERC-8176 EAS-v2 snapshots.
 # This never enters firmware or the signing stack.
-k256 = { version = "0.13.4", default-features = false, features = ["ecdsa"] }
+k256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
 
 [dev-dependencies]
 tempfile = "3"

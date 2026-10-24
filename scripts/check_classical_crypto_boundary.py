@@ -29,12 +29,12 @@ ROOT = Path(__file__).resolve().parent.parent
 ALLOWED_HOST_ROOTS = {"dbgen", "pqsigner-xtask"}
 EXPECTED_PACKAGES = {
     "k256": (
-        "0.13.4",
+        "0.14.0",
         {"arithmetic", "digest", "ecdsa", "ecdsa-core", "sha2", "sha256"},
     ),
     "ecdsa": (
-        "0.16.9",
-        {"arithmetic", "der", "digest", "hazmat", "rfc6979", "signing", "verifying"},
+        "0.17.0",
+        {"algorithm", "der", "digest"},
     ),
 }
 EXPECTED_EDGES = {
