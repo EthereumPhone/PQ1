@@ -224,6 +224,21 @@ impl FihSlotTag {
         };
         a == !na && c == !nc && s == !ns && a == account_index && c == chain_id && s == slot_index
     }
+
+    /// The account the tag holds, when its value and complement agree. A
+    /// caller that keeps a request's account in a tag from the start reads it
+    /// back here, so a register corrupted in between cannot relabel what the
+    /// request derived (`nsc::state::slot_master_for`).
+    #[inline(never)]
+    pub fn account_index(&self) -> Option<u32> {
+        // SAFETY: as in `names`.
+        let (a, na) = unsafe { (read_volatile(&self.account_index), read_volatile(&self.not_account_index)) };
+        if a == !na {
+            Some(a)
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -277,6 +292,19 @@ mod slot_tag_tests {
                 assert!(!names(&f, ID), "field {field} bit {bit}: still names the old identity");
                 assert!(!names(&f, flipped), "field {field} bit {bit}: names the flipped identity");
             }
+        }
+    }
+
+    #[test]
+    fn account_index_reads_back_only_an_intact_pair() {
+        assert_eq!(FihSlotTag::new(ID.0, ID.1, ID.2).account_index(), Some(ID.0));
+        for bit in 0..32 {
+            let mut f = FihSlotTag::new(ID.0, ID.1, ID.2);
+            f.account_index ^= 1 << bit;
+            assert_eq!(f.account_index(), None, "value bit {bit}");
+            let mut f = FihSlotTag::new(ID.0, ID.1, ID.2);
+            f.not_account_index ^= 1 << bit;
+            assert_eq!(f.account_index(), None, "complement bit {bit}");
         }
     }
 }

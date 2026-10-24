@@ -794,13 +794,14 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
         None => true,
     };
     if need_keygen {
-        // Derived here, on a cache miss only: a cached slot key never reads
-        // the slot master, and deriving it costs a whole BIP-39 seed
-        // (2,048 HMAC-SHA512 rounds, 0.63 s measured on the U585) per request.
-        let slot_master = Zeroizing::new(crate::crypto::slot_master_entropy_from_entropy(
-            &*entropy,
-            request.account_index,
-        ));
+        // Read here, on a cache miss only: a cached slot key never reads the
+        // slot master. It is the session's own when it names this account;
+        // otherwise one BIP-39 stretch (2,048 HMAC-SHA512 rounds, 0.63 s
+        // measured on the U585) derives it. A steady Type-2 never needs the
+        // bootstrap key.
+        let mut slot_master = Zeroizing::new([0u8; 32]);
+        let _ = super::state::slot_master_for(&entropy, request.account_index, false, &mut slot_master)
+            .map_err(|()| NscStatus::InternalError)?;
         crate::ui::show_progress("Forced keygen", 0);
         let (key, _, _) = crate::crypto::derive_c10_slot_keypair_with_progress(
             &*slot_master,
@@ -816,12 +817,6 @@ unsafe fn ensure_slot_key(request: &ForcedRequest<'_>) -> Result<(), NscStatus> 
                 key,
             ));
         }
-        super::state::with_state(|state| {
-            state.slot_master_entropy.zeroize();
-            crate::fi::zeroize_barrier();
-            state.slot_master_entropy = *slot_master;
-            state.slot_master_derived.set_true();
-        });
     }
 
     // #1037: the same identity gate as the other handlers — two verdicts

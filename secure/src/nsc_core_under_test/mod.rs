@@ -2,8 +2,8 @@
 //!
 //! The production `nsc` module is `#[cfg(not(test))]` because most of its
 //! files depend on hardware-only crates. This scaffold re-includes the
-//! three pure-logic files of the slice (`ptr_validate`, `ns_ptr`,
-//! `state`) under a parallel module tree so their `super::*` imports
+//! four pure-logic files of the slice (`ptr_validate`, `ns_ptr`,
+//! `seed_once`, `state`) under a parallel module tree so their `super::*` imports
 //! continue to resolve and their inline `#[cfg(test)] mod tests` blocks
 //! become live.
 //!
@@ -17,6 +17,9 @@ pub mod ptr_validate;
 
 #[path = "../nsc/ns_ptr.rs"]
 pub mod ns_ptr;
+
+#[path = "../nsc/seed_once.rs"]
+pub mod seed_once;
 
 #[path = "../nsc/state.rs"]
 pub mod state;

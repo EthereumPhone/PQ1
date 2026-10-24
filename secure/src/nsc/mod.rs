@@ -77,6 +77,7 @@ mod factory_calldata;
 mod ns_ptr;
 mod ptr_validate;
 mod sig_wrapper;
+mod seed_once;
 mod state;
 mod trailer;
 

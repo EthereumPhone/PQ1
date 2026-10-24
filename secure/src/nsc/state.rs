@@ -288,21 +288,36 @@ pub(super) struct SecureState {
     // Post-C10-cutover the firmware is stateless with respect to slot
     // selection: the companion sends `(chain_id, slot_index, flags)` on
     // every sign. We cache the derived slot master entropy across the
-    // unlock session (one BIP-39 → SHA-256 pass) and the derived slot
-    // SigningKey (one multi-second hypertree keygen) to amortise repeat
-    // signs. Both are dropped on lock / idle-wipe / panic.
+    // unlock session (one BIP-39 stretch, 0.63 s on the U585, which a later
+    // slot-key miss for the same account then skips: `slot_master_for`) and
+    // the derived slot SigningKey (one multi-second hypertree keygen) to
+    // amortise repeat signs. Both are dropped on lock / idle-wipe / panic.
 
-    /// Slot master entropy (derived once per unlock from BIP-39 seed).
+    /// Slot master entropy for the account `slot_master_tag` names, derived
+    /// on the session's first slot-key miss for it.
     pub(super) slot_master_entropy: [u8; 32],
 
     /// Whether `slot_master_entropy` has been derived this session.
     ///
-    /// F-14-style hardening: `FihBool` complement-storage. If this
-    /// flag is ever read as a "skip re-derive" optimization, a
-    /// single-fault flip from false→true would let a follow-up
-    /// command operate on stale / zero entropy. Defended now even
-    /// though current code doesn't gate on it.
+    /// F-14-style hardening: `FihBool` complement-storage. `slot_master_for`
+    /// reads it as the "skip re-derive" gate, together with
+    /// `slot_master_tag`, so a false→true flip alone after a wipe still
+    /// finds a tag that names no account.
     pub(super) slot_master_derived: FihBool,
+
+    /// The account `slot_master_entropy` was derived for: account indices
+    /// differ in their slot master, so a reuse must name the request's own.
+    /// Complement-protected like `SLOT_CACHE`'s tag (#1037), so a corrupted
+    /// tag names nothing. `chain_id` and `slot_index` stay 0; reset to
+    /// [`NO_SLOT_MASTER`] on every wipe.
+    pub(super) slot_master_tag: crate::fih::FihSlotTag,
+
+    /// `seed_once::slot_master_check(account, entropy, slot_master_entropy)`,
+    /// computed where the master was derived. A reuse needs the kept bytes, and
+    /// then the request's own copy of them, to hash to it with the request's
+    /// account and entropy: the tag and flag alone cannot tell a skipped copy
+    /// (zeros, a public master) or another wallet's master from the real one.
+    pub(super) slot_master_check: [u8; 32],
 
     // -- Bootstrap C10 pubkey LRU cache --------------------------------
     // Multi-account variant: one seed produces up to 256 independent
@@ -362,6 +377,8 @@ impl SecureState {
             has_signed: FihBool::new_false(),
             slot_master_entropy: [0u8; 32],
             slot_master_derived: FihBool::new_false(),
+            slot_master_tag: crate::fih::FihSlotTag::new(NO_SLOT_MASTER, 0, 0),
+            slot_master_check: [0u8; 32],
             bootstrap_cache: [NONE_ENTRY; BOOTSTRAP_CACHE_LEN],
             bootstrap_cache_tick: 0,
             #[cfg(feature = "erc7730-forced-blind")]
@@ -399,6 +416,8 @@ impl SecureState {
         self.slot_master_entropy.zeroize();
         crate::fi::zeroize_barrier();
         self.slot_master_derived.set_false();
+        self.slot_master_tag = crate::fih::FihSlotTag::new(NO_SLOT_MASTER, 0, 0);
+        self.slot_master_check.zeroize();
         // Bootstrap pubkey halves are technically non-secret, but wipe
         // them anyway so a stale entry can't influence post-lock UI
         // assumptions and so the cache reverts to a clean slate on
@@ -524,6 +543,15 @@ impl SecureState {
         self.forced_attempt.disarm();
         self.master_secret.zeroize();
         crate::fi::zeroize_barrier();
+        // A new master may open another wallet (duress decoy or real), whose
+        // account 0 has its own slot master: drop the kept one. The check binds
+        // it to its entropy anyway (`seed_once::slot_master_check`); this keeps
+        // it from outliving the unlock that derived it.
+        self.slot_master_entropy.zeroize();
+        self.slot_master_check.zeroize();
+        crate::fi::zeroize_barrier();
+        self.slot_master_derived.set_false();
+        self.slot_master_tag = crate::fih::FihSlotTag::new(NO_SLOT_MASTER, 0, 0);
         // Trezor-parity: random delay before installing the new
         // master_secret. The 32-byte copy below is a single fixed-
         // duration block that an EM-glitch attacker could otherwise
@@ -603,6 +631,142 @@ fn slot_cache_names(account_index: u32, chain_id: u64, slot_index: u32) -> bool 
 #[inline(never)]
 pub(super) fn slot_cache_identity_verdict(account_index: u32, chain_id: u64, slot_index: u32) -> u32 {
     crate::fi::check_true_into_sentinel(|| slot_cache_names(account_index, chain_id, slot_index))
+}
+
+/// `slot_master_tag`'s account when no slot master is held. A request's
+/// account index is 8 bits (`flags` bits 29..22), so no request names it.
+pub(super) const NO_SLOT_MASTER: u32 = u32::MAX;
+
+impl SecureState {
+    /// Keep `entropy` as this session's slot master under `tag` (the account
+    /// it was derived for), with the `check` its derivation computed. A
+    /// skipped bytes or check write leaves a state no reuse accepts; a skipped
+    /// tag or flag write leaves the old entry's, which fails the new check or,
+    /// for the same account, names the same bytes. The tag is moved in.
+    pub(super) fn store_slot_master(&mut self, tag: crate::fih::FihSlotTag, entropy: &[u8; 32], check: &[u8; 32]) {
+        self.slot_master_entropy.zeroize();
+        self.slot_master_check.zeroize();
+        crate::fi::zeroize_barrier();
+        self.slot_master_entropy = *entropy;
+        self.slot_master_check = *check;
+        self.slot_master_tag = tag;
+        self.slot_master_derived.set_true();
+    }
+}
+
+/// `master` hashes, with `account_index` and `entropy`, to `s`'s kept
+/// slot-master check.
+#[inline(never)]
+fn slot_master_matches_check(s: &SecureState, account_index: u32, entropy: &[u8; 32], master: &[u8; 32]) -> bool {
+    use subtle::ConstantTimeEq;
+    let check = super::seed_once::slot_master_check(account_index, entropy, master);
+    bool::from(check[..].ct_eq(&s.slot_master_check[..]))
+}
+
+/// The session holds a slot master, its tag is intact and names
+/// `account_index`, and its bytes still hash to their check with this
+/// request's `entropy`. The bytes are hashed in place; the hasher's own
+/// buffer (`sha2` does not wipe it) is dead stack, which the gateway's
+/// completion scrub clears.
+#[inline(never)]
+fn slot_master_names(account_index: u32, entropy: &[u8; 32]) -> bool {
+    peek_state(|s| {
+        s.slot_master_derived.is_true()
+            && s.slot_master_tag.names(account_index, 0, 0)
+            && slot_master_matches_check(s, account_index, entropy, &s.slot_master_entropy)
+    })
+}
+
+/// [`slot_master_names`] evaluated twice around `fi::wait_random()` and
+/// committed to a sentinel, as [`slot_cache_identity_verdict`].
+#[inline(never)]
+pub(super) fn slot_master_verdict(account_index: u32, entropy: &[u8; 32]) -> u32 {
+    crate::fi::check_true_into_sentinel(|| slot_master_names(account_index, entropy))
+}
+
+/// [`slot_master_verdict`] for the request's own `copy` of the kept master,
+/// against the request's protected `account`: the kept state still names that
+/// account, and the copy, not only the original, hashes to the check.
+#[inline(never)]
+fn slot_master_copy_verdict(account: &crate::fih::FihSlotTag, entropy: &[u8; 32], copy: &[u8; 32]) -> u32 {
+    crate::fi::check_true_into_sentinel(|| match account.account_index() {
+        Some(a) => slot_master_names(a, entropy) && peek_state(|s| slot_master_matches_check(s, a, entropy, copy)),
+        None => false,
+    })
+}
+
+/// A freshly derived `master` and the `check` its stretch computed agree with
+/// the request's protected `account`: the check is that account's, over these
+/// bytes. Fails when the account changed between the derivation and the
+/// check (account A's master under a valid check for B, GPT-6 Astra review),
+/// when the derivation itself ran on another account, and when `master` is
+/// not the derived value (a skipped copy).
+#[inline(never)]
+fn derived_slot_master_verdict(
+    account: &crate::fih::FihSlotTag,
+    entropy: &[u8; 32],
+    master: &[u8; 32],
+    check: &[u8; 32],
+) -> u32 {
+    use subtle::ConstantTimeEq;
+    crate::fi::check_true_into_sentinel(|| match account.account_index() {
+        Some(a) => bool::from(super::seed_once::slot_master_check(a, entropy, master)[..].ct_eq(&check[..])),
+        None => false,
+    })
+}
+
+/// Write the slot master for this request's `account_index` into `out`, for
+/// a slot-key cache miss, and return, when `with_bootstrap` and a stretch
+/// runs, the bootstrap seeds from that same stretch (`seed_once`).
+///
+/// The account is copied into a complement-protected tag first, and every
+/// later check reads it from there, so a register corrupted after that point
+/// cannot relabel what this request derives or reuses. The session's slot
+/// master serves when [`slot_master_verdict`] names this account and its
+/// bytes still match their check; after the copy into `out`,
+/// [`slot_master_copy_verdict`] checks `out` itself, the storage slot keygen
+/// reads. A fresh stretch's master is refused unless
+/// [`derived_slot_master_verdict`] finds its check to be the protected
+/// account's over the bytes in `out`; only then is it published. So one fault
+/// can neither take the reuse branch alone nor hand over another account's
+/// master or a skipped copy's zeros (whose slot key a rotation or
+/// `GET_INIT_CODE` would have the bootstrap key authorise). `Err` (with `out`
+/// zeroed) means a verdict failed: refuse.
+///
+/// An account corrupted before this call makes the whole call consistently
+/// another account's; that is the handler-level window the slot cache's own
+/// tag (#1037) already has.
+pub(super) fn slot_master_for(
+    entropy: &[u8; 32],
+    account_index: u32,
+    with_bootstrap: bool,
+    out: &mut [u8; 32],
+) -> Result<Option<super::seed_once::BootstrapSeeds>, ()> {
+    // The request's account is 8 bits, which keeps `NO_SLOT_MASTER` out of
+    // reach here, whatever a caller checked.
+    if account_index > sphincs_tz_shared::MAX_ACCOUNT_INDEX {
+        return Err(());
+    }
+    let account = crate::fih::FihSlotTag::new(account_index, 0, 0);
+    if slot_master_verdict(account_index, entropy) == crate::fi::OK_SENTINEL {
+        peek_state(|s| out.copy_from_slice(&s.slot_master_entropy));
+        crate::fi::scrub_sentinel_register();
+        if slot_master_copy_verdict(&account, entropy, out) != crate::fi::OK_SENTINEL {
+            out.zeroize();
+            return Err(());
+        }
+        return Ok(None);
+    }
+    let (master, check, bootstrap) =
+        super::seed_once::slot_master_and_bootstrap(entropy, account_index, with_bootstrap);
+    out.copy_from_slice(&*master);
+    drop(master);
+    if derived_slot_master_verdict(&account, entropy, out, &check) != crate::fi::OK_SENTINEL {
+        out.zeroize();
+        return Err(());
+    }
+    with_state(|s| s.store_slot_master(account, out, &check));
+    Ok(bootstrap)
 }
 
 /// Active firmware-update session state. Populated by `CMD_FW_BEGIN`
@@ -691,6 +855,16 @@ pub(super) mod tests {
     /// acquire it through this same entry point.
     pub(crate) fn state_test_lock() -> MutexGuard<'static, ()> {
         crate::sign_rate::tests::counter_test_lock()
+    }
+
+    /// `slot_master_for` with its output buffer returned as a value.
+    fn master_for(
+        entropy: &[u8; 32],
+        account: u32,
+        with_bootstrap: bool,
+    ) -> Result<(zeroize::Zeroizing<[u8; 32]>, Option<super::super::seed_once::BootstrapSeeds>), ()> {
+        let mut out = zeroize::Zeroizing::new([0u8; 32]);
+        slot_master_for(entropy, account, with_bootstrap, &mut out).map(|seeds| (out, seeds))
     }
 
     /// Reset STATE to a clean initial value between tests so ordering
@@ -982,11 +1156,172 @@ pub(super) mod tests {
         with_state(|s| {
             s.slot_master_entropy = [0xBBu8; 32];
             s.slot_master_derived.set_true();
+            s.slot_master_check = [0xCCu8; 32];
         });
         with_state(|s| s.zeroize_sensitive());
         let got = peek_state(|s| s.slot_master_entropy);
         assert_eq!(got, [0u8; 32]);
         assert!(!peek_state(|s| s.slot_master_derived.is_true_fi()));
+        assert!(peek_state(|s| s.slot_master_tag.names(NO_SLOT_MASTER, 0, 0)), "wipe resets the tag");
+        assert_eq!(peek_state(|s| s.slot_master_check), [0u8; 32], "wipe zeroes the check");
+    }
+
+    #[test]
+    fn negative_unlock_drops_the_kept_slot_master_and_bad_accounts_are_refused() {
+        // Fable review 2026-10-24. ASSUMPTION ATTACKED: a kept slot master
+        // outlives the unlock that derived it, so an unlock that installs
+        // another wallet's master without a wipe in between would hand the
+        // old wallet's master to the new wallet's account 0 (the check's
+        // entropy binding refuses that too); and `slot_master_for` trusts its
+        // callers to bound the account below `NO_SLOT_MASTER`.
+        let _g = state_test_lock();
+        reset_state();
+        let entropy = [0x42u8; 32];
+        let _ = master_for(&entropy, 0, false).expect("derive");
+        assert_eq!(slot_master_verdict(0, &entropy), crate::fi::OK_SENTINEL, "kept");
+        with_state(|s| s.mark_unlocked([0x77u8; 32]));
+        assert_ne!(slot_master_verdict(0, &entropy), crate::fi::OK_SENTINEL, "dropped by the unlock");
+        assert_eq!(peek_state(|s| s.slot_master_entropy), [0u8; 32]);
+        assert_eq!(peek_state(|s| s.slot_master_check), [0u8; 32]);
+        assert!(peek_state(|s| s.slot_master_tag.names(NO_SLOT_MASTER, 0, 0)));
+        assert!(master_for(&entropy, sphincs_tz_shared::MAX_ACCOUNT_INDEX + 1, false).is_err());
+        assert!(master_for(&entropy, NO_SLOT_MASTER, false).is_err());
+        reset_state();
+    }
+
+    #[test]
+    fn negative_a_slot_master_is_published_and_reused_only_under_its_own_account() {
+        // 2026-10-24, GPT-6 Astra re-review. ASSUMPTION ATTACKED: a check
+        // computed after the derivation proves which account the derivation
+        // used. One register corrupted between the two (3 -> 2) yields account
+        // 3's master under a valid check and tag for account 2, which a later
+        // account-2 request would reuse; at reuse, one corrupted at the first
+        // verdict hands account 2's master to account 3. `slot_master_for`
+        // keeps the request's account in a protected tag and checks both
+        // against it.
+        let e = [0x42u8; 32];
+        let ok = crate::fi::OK_SENTINEL;
+        let tag3 = crate::fih::FihSlotTag::new(3, 0, 0);
+        let m3 = pqsigner_domain::slot_master_entropy_from_entropy(&e, 3);
+        let m2 = pqsigner_domain::slot_master_entropy_from_entropy(&e, 2);
+        let check = |a: u32, m: &[u8; 32]| super::super::seed_once::slot_master_check(a, &e, m);
+        assert_eq!(derived_slot_master_verdict(&tag3, &e, &m3, &check(3, &m3)), ok, "honest derivation");
+        assert_ne!(derived_slot_master_verdict(&tag3, &e, &m3, &check(2, &m3)), ok, "account changed after the derivation");
+        assert_ne!(derived_slot_master_verdict(&tag3, &e, &m2, &check(2, &m2)), ok, "derivation ran on another account");
+        assert_ne!(derived_slot_master_verdict(&tag3, &e, &[0u8; 32], &check(3, &m3)), ok, "skipped copy into the output");
+        let _g = state_test_lock();
+        reset_state();
+        with_state(|s| s.store_slot_master(crate::fih::FihSlotTag::new(2, 0, 0), &m2, &check(2, &m2)));
+        assert_eq!(slot_master_verdict(2, &e), ok, "account 2's master is kept");
+        assert_ne!(slot_master_copy_verdict(&tag3, &e, &m2), ok, "handed to account 3 at reuse");
+        reset_state();
+    }
+
+    #[test]
+    fn negative_no_slot_master_reuse_after_a_skipped_write_or_a_mislabel() {
+        // 2026-10-24, GPT-6 Astra review. ASSUMPTION ATTACKED: the tag and the
+        // flag vouch for the 32 bytes behind them. One skipped copy in
+        // `store_slot_master` leaves zeros (a public master, so an
+        // attacker-computable slot key) under a valid tag and flag; one account
+        // corrupted between the derivation and the publication labels account
+        // 3's master as account 4's. Each state below is what one such fault
+        // leaves, built through the same store.
+        let _g = state_test_lock();
+        let entropy = [0x42u8; 32];
+        let want = pqsigner_domain::slot_master_entropy_from_entropy(&entropy, 3);
+        let check3 = super::super::seed_once::slot_master_check(3, &entropy, &want);
+        for (what, bytes, check, tag, ask) in [
+            ("skipped copy of the bytes", [0u8; 32], check3, 3, 3),
+            ("skipped copy of the check", want, [0u8; 32], 3, 3),
+            ("account 3's master published under account 4", want, check3, 4, 4),
+        ] {
+            reset_state();
+            with_state(|s| s.store_slot_master(crate::fih::FihSlotTag::new(tag, 0, 0), &bytes, &check));
+            assert_ne!(slot_master_verdict(ask, &entropy), crate::fi::OK_SENTINEL, "{what}: reused");
+            let (m, _) = master_for(&entropy, ask, false).expect("derive");
+            assert_eq!(
+                *m,
+                pqsigner_domain::slot_master_entropy_from_entropy(&entropy, ask),
+                "{what}: must be derived afresh"
+            );
+        }
+        // An intact store is reused, and the request's own copy is checked too.
+        reset_state();
+        with_state(|s| s.store_slot_master(crate::fih::FihSlotTag::new(3, 0, 0), &want, &check3));
+        assert_eq!(slot_master_verdict(3, &entropy), crate::fi::OK_SENTINEL, "intact store");
+        assert_eq!(slot_master_copy_verdict(&crate::fih::FihSlotTag::new(3, 0, 0), &entropy, &want), crate::fi::OK_SENTINEL, "intact copy");
+        assert_ne!(slot_master_copy_verdict(&crate::fih::FihSlotTag::new(3, 0, 0), &entropy, &[0u8; 32]), crate::fi::OK_SENTINEL, "skipped copy out");
+        let mut flipped = want;
+        flipped[7] ^= 0x10;
+        assert_ne!(slot_master_copy_verdict(&crate::fih::FihSlotTag::new(3, 0, 0), &entropy, &flipped), crate::fi::OK_SENTINEL, "corrupted copy out");
+        reset_state();
+    }
+
+    #[test]
+    fn positive_slot_master_is_reused_for_its_own_account_only() {
+        let _g = state_test_lock();
+        reset_state();
+        let entropy = [0x42u8; 32];
+        // The session's first miss derives and keeps it, and hands out the
+        // bootstrap seeds of that same stretch when asked.
+        let (first, seeds) = master_for(&entropy, 3, true).expect("derive");
+        assert!(seeds.is_some(), "a fresh stretch serves the bootstrap seeds too");
+        assert_eq!(*first, pqsigner_domain::slot_master_entropy_from_entropy(&entropy, 3));
+        // A later miss for the same account of the same wallet reuses it
+        // without a stretch, so it gives no seeds.
+        let (again, seeds) = master_for(&entropy, 3, true).expect("reuse");
+        assert!(seeds.is_none(), "a reuse runs no stretch");
+        assert_eq!(*again, *first);
+        // Another wallet's account 3 (another entropy) does not match the
+        // check: its own master is derived, with a stretch.
+        let other_wallet = [0x99u8; 32];
+        let (theirs, seeds) = master_for(&other_wallet, 3, true).expect("derive");
+        assert!(seeds.is_some(), "another wallet stretches afresh");
+        assert_eq!(*theirs, pqsigner_domain::slot_master_entropy_from_entropy(&other_wallet, 3));
+        assert_ne!(*theirs, *first);
+        let _ = master_for(&entropy, 3, false).expect("derive back");
+        // Another account derives its own, which replaces the kept one.
+        let (other, _) = master_for(&entropy, 4, false).expect("derive");
+        assert_eq!(*other, pqsigner_domain::slot_master_entropy_from_entropy(&entropy, 4));
+        assert_ne!(*other, *first);
+        assert!(peek_state(|s| s.slot_master_tag.names(4, 0, 0)));
+        assert_ne!(slot_master_verdict(3, &entropy), crate::fi::OK_SENTINEL, "account 3's master is gone");
+        reset_state();
+    }
+
+    #[test]
+    fn negative_no_slot_master_reuse_after_a_wipe_or_under_another_tag() {
+        // ASSUMPTION ATTACKED: the reuse gate trusts `slot_master_derived`
+        // alone, or a tag that does not name the request's account, so a
+        // request takes a wiped (zero) master or another account's and
+        // derives the wrong slot key, which a rotation would then register.
+        let _g = state_test_lock();
+        reset_state();
+        let entropy = [0x42u8; 32];
+        let _ = master_for(&entropy, 3, false).expect("derive");
+        assert_eq!(slot_master_verdict(3, &entropy), crate::fi::OK_SENTINEL, "kept for account 3");
+        with_state(|s| s.zeroize_sensitive());
+        assert_ne!(slot_master_verdict(3, &entropy), crate::fi::OK_SENTINEL, "wiped");
+        // The flag set again after the wipe still meets a tag naming no account.
+        with_state(|s| s.slot_master_derived.set_true());
+        assert_ne!(slot_master_verdict(3, &entropy), crate::fi::OK_SENTINEL, "flag alone");
+        let fresh = [0x17u8; 32];
+        let (m, _) = master_for(&fresh, 3, false).expect("derive");
+        assert_eq!(
+            *m,
+            pqsigner_domain::slot_master_entropy_from_entropy(&fresh, 3),
+            "derived afresh, not the zeroed copy"
+        );
+        assert_eq!(slot_master_verdict(3, &fresh), crate::fi::OK_SENTINEL, "kept for account 3");
+        // A tag naming another account names nothing for this one (a broken
+        // complement is `fih::slot_tag_tests`'); a cleared flag stops reuse.
+        with_state(|s| s.slot_master_tag = crate::fih::FihSlotTag::new(5, 0, 0));
+        assert_ne!(slot_master_verdict(3, &fresh), crate::fi::OK_SENTINEL, "another account's tag");
+        with_state(|s| s.slot_master_tag = crate::fih::FihSlotTag::new(3, 0, 0));
+        assert_eq!(slot_master_verdict(3, &fresh), crate::fi::OK_SENTINEL, "tag restored");
+        with_state(|s| s.slot_master_derived.set_false());
+        assert_ne!(slot_master_verdict(3, &fresh), crate::fi::OK_SENTINEL, "flag false");
+        reset_state();
     }
 
     #[test]

@@ -2307,9 +2307,12 @@ fn negative_slot_master_is_derived_on_a_cache_miss_only() {
         ("cmd_get_init_code.rs", GET_INIT_CODE_SRC),
         ("cmd_sign_userop_forced.rs", CMD_SIGN_USEROP_FORCED_SRC),
     ] {
+        // 2026-10-24: the read goes through `state::slot_master_for` (reuse
+        // or one stretch); no handler stretches the seed for it directly.
+        assert!(!src.contains("slot_master_entropy_from_entropy("), "{name}: a direct stretch");
         let calls: std::vec::Vec<usize> =
-            src.match_indices("slot_master_entropy_from_entropy(").map(|(i, _)| i).collect();
-        assert_eq!(calls.len(), 1, "{name}: one slot-master derivation");
+            src.match_indices("super::state::slot_master_for(").map(|(i, _)| i).collect();
+        assert_eq!(calls.len(), 1, "{name}: one slot-master read");
         let open = src.find("if need_keygen {\n").unwrap_or_else(|| panic!("{name}: need_keygen branch"));
         let indent = &src[src[..open].rfind('\n').expect("line start") + 1..open];
         let close = open + src[open..].find(&format!("\n{indent}}}\n")).unwrap_or_else(|| panic!("{name}: branch end"));
@@ -2318,6 +2321,95 @@ fn negative_slot_master_is_derived_on_a_cache_miss_only() {
         let body = &src[open..calls[0]];
         assert!(!body.contains("derive_c10_slot_keypair"), "{name}: keygen before the derivation");
     }
+}
+
+#[test]
+fn negative_slot_master_reuse_is_rechecked_and_bootstrap_seeds_are_used_once() {
+    // 2026-10-24. ASSUMPTION ATTACKED: (1) `state::slot_master_for` reuses the
+    // session's slot master on a single verdict, so one fault takes the reuse
+    // branch with another account's master (whose slot key a rotation would
+    // register here), or a wipe leaves the tag naming the old account; (2) a
+    // handler handed the bootstrap seeds of the shared stretch drops them and
+    // stretches again (the 0.57 s this removes), or uses them anywhere but its
+    // one bootstrap keygen. `nsc::state`'s runtime tests execute the reuse
+    // and publication rules; only this pin sees the second verdict and the
+    // shape of the gate, which they cannot fail.
+    const STATE_SRC: &str = include_str!("nsc/state.rs");
+    const GET_INIT_CODE_SRC: &str = include_str!("nsc/cmd_get_init_code.rs");
+    let f = STATE_SRC.find("pub(super) fn slot_master_for(").expect("slot_master_for");
+    let body = &STATE_SRC[f..f + STATE_SRC[f..].find("\n}\n").expect("slot_master_for end")];
+    // The account goes into a protected tag before anything reads it again.
+    let gate = "    let account = crate::fih::FihSlotTag::new(account_index, 0, 0);\n    \
+        if slot_master_verdict(account_index, entropy) == crate::fi::OK_SENTINEL {\n        \
+        peek_state(|s| out.copy_from_slice(&s.slot_master_entropy));\n        \
+        crate::fi::scrub_sentinel_register();\n        \
+        if slot_master_copy_verdict(&account, entropy, out) != crate::fi::OK_SENTINEL {\n            \
+        out.zeroize();\n            return Err(());\n        }\n        return Ok(None);\n    }\n    \
+        let (master, check, bootstrap) =\n        \
+        super::seed_once::slot_master_and_bootstrap(entropy, account_index, with_bootstrap);\n    \
+        out.copy_from_slice(&*master);\n    drop(master);\n    \
+        if derived_slot_master_verdict(&account, entropy, out, &check) != crate::fi::OK_SENTINEL {\n        \
+        out.zeroize();\n        return Err(());\n    }\n    \
+        with_state(|s| s.store_slot_master(account, out, &check));\n    Ok(bootstrap)";
+    assert!(body.contains(gate), "the gate: protected account; reuse verdict, copy into out, copy verdict; \
+        or stretch, copy into out, derived verdict, publish under the protected tag");
+    // GPT-6 Astra 2026-10-24: every verdict checks bytes against the account-
+    // and wallet-bound check: the kept bytes, the caller's copy, and a fresh
+    // derivation against the protected account. Fable 5.1 2026-10-24: the
+    // account is bounded inside, and an unlock drops the kept master.
+    for needle in [
+        "            && slot_master_matches_check(s, account_index, entropy, &s.slot_master_entropy)\n",
+        "        Some(a) => slot_master_names(a, entropy) && peek_state(|s| slot_master_matches_check(s, a, entropy, copy)),\n",
+        "        Some(a) => bool::from(super::seed_once::slot_master_check(a, entropy, master)[..].ct_eq(&check[..])),\n",
+        "        self.slot_master_tag = tag;\n",
+    ] {
+        assert!(STATE_SRC.contains(needle), "missing: {needle}");
+    }
+    assert!(body.contains("    if account_index > sphincs_tz_shared::MAX_ACCOUNT_INDEX {\n        return Err(());\n    }\n"));
+    const SEED_ONCE_SRC: &str = include_str!("nsc/seed_once.rs");
+    assert!(SEED_ONCE_SRC.contains("    let check = slot_master_check(account_index, entropy, &slot_master);\n"));
+    let unlock = STATE_SRC.find("pub(super) fn mark_unlocked(").expect("mark_unlocked");
+    let unlock_body = &STATE_SRC[unlock..unlock + STATE_SRC[unlock..].find("\n    }\n").expect("mark_unlocked end")];
+    for line in [
+        "self.slot_master_entropy.zeroize();",
+        "self.slot_master_check.zeroize();",
+        "self.slot_master_derived.set_false();",
+        "self.slot_master_tag = crate::fih::FihSlotTag::new(NO_SLOT_MASTER, 0, 0);",
+    ] {
+        assert!(unlock_body.contains(line), "mark_unlocked must drop the kept slot master: {line}");
+    }
+    let wipe = STATE_SRC.find("pub(super) fn zeroize_sensitive(&mut self)").expect("zeroize_sensitive");
+    let wipe_body = &STATE_SRC[wipe..wipe + STATE_SRC[wipe..].find("\n    }\n").expect("wipe end")];
+    assert!(
+        wipe_body.contains("self.slot_master_tag = crate::fih::FihSlotTag::new(NO_SLOT_MASTER, 0, 0);"),
+        "every wipe resets the tag"
+    );
+    for (name, src, with_bootstrap) in [
+        ("cmd_sign_userop.rs", CMD_SIGN_USEROP_SRC, "include_init_code || register_slot,\n            &mut slot_master_entropy,\n"),
+        ("cmd_sign_userop_batch.rs", CMD_SIGN_USEROP_BATCH_SRC, "include_init_code || register_slot,\n            &mut slot_master_entropy,\n"),
+        ("cmd_sign_offchain.rs", CMD_SIGN_OFFCHAIN_SRC, "account_index, !account_deployed, &mut slot_master_entropy)"),
+        ("cmd_get_init_code.rs", GET_INIT_CODE_SRC, "account_index, true, &mut slot_master_entropy)"),
+    ] {
+        let read = src.find("super::state::slot_master_for(").unwrap_or_else(|| panic!("{name}: read"));
+        assert!(src[read..read + 200].contains(with_bootstrap), "{name}: asks for seeds exactly when it signs with the bootstrap key");
+        assert_eq!(src.matches("Ok(seeds) => bootstrap_seeds = seeds,").count(), 1, "{name}: seeds kept once");
+        assert_eq!(src.matches("match bootstrap_seeds.take() {").count(), 1, "{name}: seeds taken once");
+        assert_eq!(src.matches("super::seed_once::bootstrap_keypair(seeds,").count(), 1, "{name}: one keygen from them");
+        let take = src.find("match bootstrap_seeds.take() {").expect("take");
+        assert!(read < take, "{name}: seeds taken before they exist");
+        // No user dialog while the bootstrap seeds are held (Fable F5).
+        for dialog in ["confirm_checked(", "px_route_confirm(", "px_confirm_", "enter_pin(", "::confirm("] {
+            assert!(!src[read..take].contains(dialog), "{name}: {dialog} while the bootstrap seeds are held");
+        }
+        assert!(
+            src[take..take + 600].contains("None => crate::crypto::derive_c10_master_keypair_from_entropy_with_progress("),
+            "{name}: without seeds the bootstrap key is derived as before"
+        );
+    }
+    assert!(
+        CMD_SIGN_USEROP_FORCED_SRC.contains("super::state::slot_master_for(&entropy, request.account_index, false, &mut slot_master)"),
+        "the forced steady Type-2 needs no bootstrap key"
+    );
 }
 
 #[test]
