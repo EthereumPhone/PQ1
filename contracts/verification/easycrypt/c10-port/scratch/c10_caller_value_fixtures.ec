@@ -1888,6 +1888,527 @@ lemma caller_indices9 : iota_ 0 9 = [0; 1; 2; 3; 4; 5; 6; 7; 8].
 proof. by rewrite (iotaS 0 8) 1:// (iotaS 1 7) 1:// (iotaS 2 6) 1:// (iotaS 3 5) 1:// (iotaS 4 4) 1:// (iotaS 5 3) 1:// (iotaS 6 2) 1:// (iotaS 7 1) 1:// (iotaS 8 0) 1:// iota0 1://. qed.
 lemma caller_indices43 : iota_ 0 43 = [0; 1; 2; 3; 4; 5; 6; 7; 8; 9; 10; 11; 12; 13; 14; 15; 16; 17; 18; 19; 20; 21; 22; 23; 24; 25; 26; 27; 28; 29; 30; 31; 32; 33; 34; 35; 36; 37; 38; 39; 40; 41; 42].
 proof. by rewrite (iotaS 0 42) 1:// (iotaS 1 41) 1:// (iotaS 2 40) 1:// (iotaS 3 39) 1:// (iotaS 4 38) 1:// (iotaS 5 37) 1:// (iotaS 6 36) 1:// (iotaS 7 35) 1:// (iotaS 8 34) 1:// (iotaS 9 33) 1:// (iotaS 10 32) 1:// (iotaS 11 31) 1:// (iotaS 12 30) 1:// (iotaS 13 29) 1:// (iotaS 14 28) 1:// (iotaS 15 27) 1:// (iotaS 16 26) 1:// (iotaS 17 25) 1:// (iotaS 18 24) 1:// (iotaS 19 23) 1:// (iotaS 20 22) 1:// (iotaS 21 21) 1:// (iotaS 22 20) 1:// (iotaS 23 19) 1:// (iotaS 24 18) 1:// (iotaS 25 17) 1:// (iotaS 26 16) 1:// (iotaS 27 15) 1:// (iotaS 28 14) 1:// (iotaS 29 13) 1:// (iotaS 30 12) 1:// (iotaS 31 11) 1:// (iotaS 32 10) 1:// (iotaS 33 9) 1:// (iotaS 34 8) 1:// (iotaS 35 7) 1:// (iotaS 36 6) 1:// (iotaS 37 5) 1:// (iotaS 38 4) 1:// (iotaS 39 3) 1:// (iotaS 40 2) 1:// (iotaS 41 1) 1:// (iotaS 42 0) 1:// iota0 1://. qed.
+lemma caller_repeat28 (x : int) : nseq 28 x = [x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x; x].
+proof. by rewrite (nseqS 27 x) 1:// (nseqS 26 x) 1:// (nseqS 25 x) 1:// (nseqS 24 x) 1:// (nseqS 23 x) 1:// (nseqS 22 x) 1:// (nseqS 21 x) 1:// (nseqS 20 x) 1:// (nseqS 19 x) 1:// (nseqS 18 x) 1:// (nseqS 17 x) 1:// (nseqS 16 x) 1:// (nseqS 15 x) 1:// (nseqS 14 x) 1:// (nseqS 13 x) 1:// (nseqS 12 x) 1:// (nseqS 11 x) 1:// (nseqS 10 x) 1:// (nseqS 9 x) 1:// (nseqS 8 x) 1:// (nseqS 7 x) 1:// (nseqS 6 x) 1:// (nseqS 5 x) 1:// (nseqS 4 x) 1:// (nseqS 3 x) 1:// (nseqS 2 x) 1:// (nseqS 1 x) 1:// (nseqS 0 x) 1:// nseq0. qed.
+lemma caller_digit_pow0 : 2^0 = 1.
+proof. by rewrite  IntID.expr0. qed.
+lemma caller_digit_pow3 : 2^3 = 8.
+proof. by rewrite (IntID.exprS 2 2) 1:// (IntID.exprS 2 1) 1:// (IntID.exprS 2 0) 1:// caller_digit_pow0. qed.
+lemma caller_digit_pow6 : 2^6 = 64.
+proof. by rewrite (IntID.exprS 2 5) 1:// (IntID.exprS 2 4) 1:// (IntID.exprS 2 3) 1:// caller_digit_pow3. qed.
+lemma caller_digit_pow9 : 2^9 = 512.
+proof. by rewrite (IntID.exprS 2 8) 1:// (IntID.exprS 2 7) 1:// (IntID.exprS 2 6) 1:// caller_digit_pow6. qed.
+lemma caller_digit_pow12 : 2^12 = 4096.
+proof. by rewrite (IntID.exprS 2 11) 1:// (IntID.exprS 2 10) 1:// (IntID.exprS 2 9) 1:// caller_digit_pow9. qed.
+lemma caller_digit_pow15 : 2^15 = 32768.
+proof. by rewrite (IntID.exprS 2 14) 1:// (IntID.exprS 2 13) 1:// (IntID.exprS 2 12) 1:// caller_digit_pow12. qed.
+lemma caller_digit_pow18 : 2^18 = 262144.
+proof. by rewrite (IntID.exprS 2 17) 1:// (IntID.exprS 2 16) 1:// (IntID.exprS 2 15) 1:// caller_digit_pow15. qed.
+lemma caller_digit_pow21 : 2^21 = 2097152.
+proof. by rewrite (IntID.exprS 2 20) 1:// (IntID.exprS 2 19) 1:// (IntID.exprS 2 18) 1:// caller_digit_pow18. qed.
+lemma caller_digit_pow24 : 2^24 = 16777216.
+proof. by rewrite (IntID.exprS 2 23) 1:// (IntID.exprS 2 22) 1:// (IntID.exprS 2 21) 1:// caller_digit_pow21. qed.
+lemma caller_digit_pow27 : 2^27 = 134217728.
+proof. by rewrite (IntID.exprS 2 26) 1:// (IntID.exprS 2 25) 1:// (IntID.exprS 2 24) 1:// caller_digit_pow24. qed.
+lemma caller_digit_pow30 : 2^30 = 1073741824.
+proof. by rewrite (IntID.exprS 2 29) 1:// (IntID.exprS 2 28) 1:// (IntID.exprS 2 27) 1:// caller_digit_pow27. qed.
+lemma caller_digit_pow33 : 2^33 = 8589934592.
+proof. by rewrite (IntID.exprS 2 32) 1:// (IntID.exprS 2 31) 1:// (IntID.exprS 2 30) 1:// caller_digit_pow30. qed.
+lemma caller_digit_pow36 : 2^36 = 68719476736.
+proof. by rewrite (IntID.exprS 2 35) 1:// (IntID.exprS 2 34) 1:// (IntID.exprS 2 33) 1:// caller_digit_pow33. qed.
+lemma caller_digit_pow39 : 2^39 = 549755813888.
+proof. by rewrite (IntID.exprS 2 38) 1:// (IntID.exprS 2 37) 1:// (IntID.exprS 2 36) 1:// caller_digit_pow36. qed.
+lemma caller_digit_pow42 : 2^42 = 4398046511104.
+proof. by rewrite (IntID.exprS 2 41) 1:// (IntID.exprS 2 40) 1:// (IntID.exprS 2 39) 1:// caller_digit_pow39. qed.
+lemma caller_digit_pow45 : 2^45 = 35184372088832.
+proof. by rewrite (IntID.exprS 2 44) 1:// (IntID.exprS 2 43) 1:// (IntID.exprS 2 42) 1:// caller_digit_pow42. qed.
+lemma caller_digit_pow48 : 2^48 = 281474976710656.
+proof. by rewrite (IntID.exprS 2 47) 1:// (IntID.exprS 2 46) 1:// (IntID.exprS 2 45) 1:// caller_digit_pow45. qed.
+lemma caller_digit_pow51 : 2^51 = 2251799813685248.
+proof. by rewrite (IntID.exprS 2 50) 1:// (IntID.exprS 2 49) 1:// (IntID.exprS 2 48) 1:// caller_digit_pow48. qed.
+lemma caller_digit_pow54 : 2^54 = 18014398509481984.
+proof. by rewrite (IntID.exprS 2 53) 1:// (IntID.exprS 2 52) 1:// (IntID.exprS 2 51) 1:// caller_digit_pow51. qed.
+lemma caller_digit_pow57 : 2^57 = 144115188075855872.
+proof. by rewrite (IntID.exprS 2 56) 1:// (IntID.exprS 2 55) 1:// (IntID.exprS 2 54) 1:// caller_digit_pow54. qed.
+lemma caller_digit_pow60 : 2^60 = 1152921504606846976.
+proof. by rewrite (IntID.exprS 2 59) 1:// (IntID.exprS 2 58) 1:// (IntID.exprS 2 57) 1:// caller_digit_pow57. qed.
+lemma caller_digit_pow63 : 2^63 = 9223372036854775808.
+proof. by rewrite (IntID.exprS 2 62) 1:// (IntID.exprS 2 61) 1:// (IntID.exprS 2 60) 1:// caller_digit_pow60. qed.
+lemma caller_digit_pow66 : 2^66 = 73786976294838206464.
+proof. by rewrite (IntID.exprS 2 65) 1:// (IntID.exprS 2 64) 1:// (IntID.exprS 2 63) 1:// caller_digit_pow63. qed.
+lemma caller_digit_pow69 : 2^69 = 590295810358705651712.
+proof. by rewrite (IntID.exprS 2 68) 1:// (IntID.exprS 2 67) 1:// (IntID.exprS 2 66) 1:// caller_digit_pow66. qed.
+lemma caller_digit_pow72 : 2^72 = 4722366482869645213696.
+proof. by rewrite (IntID.exprS 2 71) 1:// (IntID.exprS 2 70) 1:// (IntID.exprS 2 69) 1:// caller_digit_pow69. qed.
+lemma caller_digit_pow75 : 2^75 = 37778931862957161709568.
+proof. by rewrite (IntID.exprS 2 74) 1:// (IntID.exprS 2 73) 1:// (IntID.exprS 2 72) 1:// caller_digit_pow72. qed.
+lemma caller_digit_pow78 : 2^78 = 302231454903657293676544.
+proof. by rewrite (IntID.exprS 2 77) 1:// (IntID.exprS 2 76) 1:// (IntID.exprS 2 75) 1:// caller_digit_pow75. qed.
+lemma caller_digit_pow81 : 2^81 = 2417851639229258349412352.
+proof. by rewrite (IntID.exprS 2 80) 1:// (IntID.exprS 2 79) 1:// (IntID.exprS 2 78) 1:// caller_digit_pow78. qed.
+lemma caller_digit_pow84 : 2^84 = 19342813113834066795298816.
+proof. by rewrite (IntID.exprS 2 83) 1:// (IntID.exprS 2 82) 1:// (IntID.exprS 2 81) 1:// caller_digit_pow81. qed.
+lemma caller_digit_pow87 : 2^87 = 154742504910672534362390528.
+proof. by rewrite (IntID.exprS 2 86) 1:// (IntID.exprS 2 85) 1:// (IntID.exprS 2 84) 1:// caller_digit_pow84. qed.
+lemma caller_digit_pow90 : 2^90 = 1237940039285380274899124224.
+proof. by rewrite (IntID.exprS 2 89) 1:// (IntID.exprS 2 88) 1:// (IntID.exprS 2 87) 1:// caller_digit_pow87. qed.
+lemma caller_digit_pow93 : 2^93 = 9903520314283042199192993792.
+proof. by rewrite (IntID.exprS 2 92) 1:// (IntID.exprS 2 91) 1:// (IntID.exprS 2 90) 1:// caller_digit_pow90. qed.
+lemma caller_digit_pow96 : 2^96 = 79228162514264337593543950336.
+proof. by rewrite (IntID.exprS 2 95) 1:// (IntID.exprS 2 94) 1:// (IntID.exprS 2 93) 1:// caller_digit_pow93. qed.
+lemma caller_digit_pow99 : 2^99 = 633825300114114700748351602688.
+proof. by rewrite (IntID.exprS 2 98) 1:// (IntID.exprS 2 97) 1:// (IntID.exprS 2 96) 1:// caller_digit_pow96. qed.
+lemma caller_digit_pow102 : 2^102 = 5070602400912917605986812821504.
+proof. by rewrite (IntID.exprS 2 101) 1:// (IntID.exprS 2 100) 1:// (IntID.exprS 2 99) 1:// caller_digit_pow99. qed.
+lemma caller_digit_pow105 : 2^105 = 40564819207303340847894502572032.
+proof. by rewrite (IntID.exprS 2 104) 1:// (IntID.exprS 2 103) 1:// (IntID.exprS 2 102) 1:// caller_digit_pow102. qed.
+lemma caller_digit_pow108 : 2^108 = 324518553658426726783156020576256.
+proof. by rewrite (IntID.exprS 2 107) 1:// (IntID.exprS 2 106) 1:// (IntID.exprS 2 105) 1:// caller_digit_pow105. qed.
+lemma caller_digit_pow111 : 2^111 = 2596148429267413814265248164610048.
+proof. by rewrite (IntID.exprS 2 110) 1:// (IntID.exprS 2 109) 1:// (IntID.exprS 2 108) 1:// caller_digit_pow108. qed.
+lemma caller_digit_pow114 : 2^114 = 20769187434139310514121985316880384.
+proof. by rewrite (IntID.exprS 2 113) 1:// (IntID.exprS 2 112) 1:// (IntID.exprS 2 111) 1:// caller_digit_pow111. qed.
+lemma caller_digit_pow117 : 2^117 = 166153499473114484112975882535043072.
+proof. by rewrite (IntID.exprS 2 116) 1:// (IntID.exprS 2 115) 1:// (IntID.exprS 2 114) 1:// caller_digit_pow114. qed.
+lemma caller_digit_pow120 : 2^120 = 1329227995784915872903807060280344576.
+proof. by rewrite (IntID.exprS 2 119) 1:// (IntID.exprS 2 118) 1:// (IntID.exprS 2 117) 1:// caller_digit_pow117. qed.
+lemma caller_digit_pow123 : 2^123 = 10633823966279326983230456482242756608.
+proof. by rewrite (IntID.exprS 2 122) 1:// (IntID.exprS 2 121) 1:// (IntID.exprS 2 120) 1:// caller_digit_pow120. qed.
+lemma caller_digit_pow126 : 2^126 = 85070591730234615865843651857942052864.
+proof. by rewrite (IntID.exprS 2 125) 1:// (IntID.exprS 2 124) 1:// (IntID.exprS 2 123) 1:// caller_digit_pow123. qed.
+lemma layer_zero_query : wots_preimage (nseq 32 0) (address_words 0 0 0 0 0 0 0) (pad_node (nseq 16 3)) 0 = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0].
+proof. by rewrite /wots_preimage /pad_node /address_words /u32_bytes /u64_bytes
+  !tree_repeat16 !tree_repeat32 caller_repeat28 /mkseq tree_indices4 tree_indices8 /=
+  ?tree_pow8 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56
+  ?IntID.expr0 !rev_cons !rev_nil /=. qed.
+lemma layer_zero_digest : toy (wots_preimage (nseq 32 0) (address_words 0 0 0 0 0 0 0) (pad_node (nseq 16 3)) 0) = (nseq 32 69).
+proof. by rewrite layer_zero_query /toy /=. qed.
+lemma layer_zero_rejected : wots_sum (toy (wots_preimage (nseq 32 0) (address_words 0 0 0 0 0 0 0) (pad_node (nseq 16 3)) 0)) = 115.
+proof. rewrite layer_zero_digest /wots_sum /wots_field /word_window /byte_word /byte_word_le
+  tree_repeat32 /mkseq caller_indices43 /=.
+  by rewrite ?caller_digit_pow0 ?caller_digit_pow3 ?caller_digit_pow6 ?caller_digit_pow9 ?caller_digit_pow12 ?caller_digit_pow15 ?caller_digit_pow18 ?caller_digit_pow21 ?caller_digit_pow24 ?caller_digit_pow27 ?caller_digit_pow30 ?caller_digit_pow33 ?caller_digit_pow36 ?caller_digit_pow39 ?caller_digit_pow42 ?caller_digit_pow45 ?caller_digit_pow48 ?caller_digit_pow51 ?caller_digit_pow54 ?caller_digit_pow57 ?caller_digit_pow60 ?caller_digit_pow63 ?caller_digit_pow66 ?caller_digit_pow69 ?caller_digit_pow72 ?caller_digit_pow75 ?caller_digit_pow78 ?caller_digit_pow81 ?caller_digit_pow84 ?caller_digit_pow87 ?caller_digit_pow90 ?caller_digit_pow93 ?caller_digit_pow96 ?caller_digit_pow99 ?caller_digit_pow102 ?caller_digit_pow105 ?caller_digit_pow108 ?caller_digit_pow111 ?caller_digit_pow114 ?caller_digit_pow117 ?caller_digit_pow120 ?caller_digit_pow123 ?caller_digit_pow126 /=. qed.
+lemma layer_zero_step0 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 0 = (nseq 16 0).
+proof. by rewrite functional_path_zero. qed.
+lemma layer_zero_step1 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 1 = (nseq 16 90).
+proof.
+  rewrite (_: 1=0+1) 1:// functional_path_next 1:// layer_zero_step0.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step2 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 2 = (nseq 16 72).
+proof.
+  rewrite (_: 2=1+1) 1:// functional_path_next 1:// layer_zero_step1.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step3 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 3 = (nseq 16 130).
+proof.
+  rewrite (_: 3=2+1) 1:// functional_path_next 1:// layer_zero_step2.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step4 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 4 = (nseq 16 144).
+proof.
+  rewrite (_: 4=3+1) 1:// functional_path_next 1:// layer_zero_step3.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step5 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 5 = (nseq 16 170).
+proof.
+  rewrite (_: 5=4+1) 1:// functional_path_next 1:// layer_zero_step4.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step6 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 6 = (nseq 16 216).
+proof.
+  rewrite (_: 6=5+1) 1:// functional_path_next 1:// layer_zero_step5.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step7 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 7 = (nseq 16 210).
+proof.
+  rewrite (_: 7=6+1) 1:// functional_path_next 1:// layer_zero_step6.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step8 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 8 = (nseq 16 32).
+proof.
+  rewrite (_: 8=7+1) 1:// functional_path_next 1:// layer_zero_step7.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_step9 : tree_path_value toy (nseq 32 0) 0 0 2 0 (nseq 16 0) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 9 = (nseq 16 250).
+proof.
+  rewrite (_: 9=8+1) 1:// functional_path_next 1:// layer_zero_step8.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_zero_complete : layer_recover_value toy (nseq 32 0) 0 0 0 (nseq 16 3) (nseq 43 (nseq 16 5)) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] = (nseq 16 250).
+proof.
+  rewrite /layer_recover_value /wots_recover_value layer_zero_rejected /wots_target /=.
+  try rewrite /merkle_recover_value.
+  by rewrite ?layer_zero_step9. qed.
+lemma layer_odd_query : wots_preimage (nseq 32 0) (address_words 1 512 0 1 0 0 0) (pad_node (nseq 16 3)) 9999999 = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 1; 0; 0; 0; 0; 0; 0; 2; 0; 0; 0; 0; 0; 0; 0; 0; 1; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 152; 150; 127].
+proof. by rewrite /wots_preimage /pad_node /address_words /u32_bytes /u64_bytes
+  !tree_repeat16 !tree_repeat32 caller_repeat28 /mkseq tree_indices4 tree_indices8 /=
+  ?tree_pow8 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56
+  ?IntID.expr0 !rev_cons !rev_nil /=. qed.
+lemma layer_odd_digest : toy (wots_preimage (nseq 32 0) (address_words 1 512 0 1 0 0 0) (pad_node (nseq 16 3)) 9999999) = (nseq 32 80).
+proof. by rewrite layer_odd_query /toy /=. qed.
+lemma layer_odd_rejected : wots_sum (toy (wots_preimage (nseq 32 0) (address_words 1 512 0 1 0 0 0) (pad_node (nseq 16 3)) 9999999)) = 73.
+proof. rewrite layer_odd_digest /wots_sum /wots_field /word_window /byte_word /byte_word_le
+  tree_repeat32 /mkseq caller_indices43 /=.
+  by rewrite ?caller_digit_pow0 ?caller_digit_pow3 ?caller_digit_pow6 ?caller_digit_pow9 ?caller_digit_pow12 ?caller_digit_pow15 ?caller_digit_pow18 ?caller_digit_pow21 ?caller_digit_pow24 ?caller_digit_pow27 ?caller_digit_pow30 ?caller_digit_pow33 ?caller_digit_pow36 ?caller_digit_pow39 ?caller_digit_pow42 ?caller_digit_pow45 ?caller_digit_pow48 ?caller_digit_pow51 ?caller_digit_pow54 ?caller_digit_pow57 ?caller_digit_pow60 ?caller_digit_pow63 ?caller_digit_pow66 ?caller_digit_pow69 ?caller_digit_pow72 ?caller_digit_pow75 ?caller_digit_pow78 ?caller_digit_pow81 ?caller_digit_pow84 ?caller_digit_pow87 ?caller_digit_pow90 ?caller_digit_pow93 ?caller_digit_pow96 ?caller_digit_pow99 ?caller_digit_pow102 ?caller_digit_pow105 ?caller_digit_pow108 ?caller_digit_pow111 ?caller_digit_pow114 ?caller_digit_pow117 ?caller_digit_pow120 ?caller_digit_pow123 ?caller_digit_pow126 /=. qed.
+lemma layer_odd_step0 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 0 = (nseq 16 0).
+proof. by rewrite functional_path_zero. qed.
+lemma layer_odd_step1 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 1 = (nseq 16 24).
+proof.
+  rewrite (_: 1=0+1) 1:// functional_path_next 1:// layer_odd_step0.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step2 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 2 = (nseq 16 90).
+proof.
+  rewrite (_: 2=1+1) 1:// functional_path_next 1:// layer_odd_step1.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step3 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 3 = (nseq 16 32).
+proof.
+  rewrite (_: 3=2+1) 1:// functional_path_next 1:// layer_odd_step2.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step4 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 4 = (nseq 16 194).
+proof.
+  rewrite (_: 4=3+1) 1:// functional_path_next 1:// layer_odd_step3.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step5 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 5 = (nseq 16 40).
+proof.
+  rewrite (_: 5=4+1) 1:// functional_path_next 1:// layer_odd_step4.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step6 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 6 = (nseq 16 42).
+proof.
+  rewrite (_: 6=5+1) 1:// functional_path_next 1:// layer_odd_step5.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step7 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 7 = (nseq 16 48).
+proof.
+  rewrite (_: 7=6+1) 1:// functional_path_next 1:// layer_odd_step6.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step8 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 8 = (nseq 16 146).
+proof.
+  rewrite (_: 8=7+1) 1:// functional_path_next 1:// layer_odd_step7.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_step9 : tree_path_value toy (nseq 32 0) 1 512 2 0 (nseq 16 0) 1 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 9 = (nseq 16 56).
+proof.
+  rewrite (_: 9=8+1) 1:// functional_path_next 1:// layer_odd_step8.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_odd_complete : layer_recover_value toy (nseq 32 0) 1 512 1 (nseq 16 3) (nseq 43 (nseq 16 5)) 9999999 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] = (nseq 16 56).
+proof.
+  rewrite /layer_recover_value /wots_recover_value layer_odd_rejected /wots_target /=.
+  try rewrite /merkle_recover_value.
+  by rewrite ?layer_odd_step9. qed.
+lemma layer_full_0_query : wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 0 = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 0; 0; 0; 0; 255; 255; 255; 255; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0].
+proof. by rewrite /wots_preimage /pad_node /address_words /u32_bytes /u64_bytes
+  !tree_repeat16 !tree_repeat32 caller_repeat28 /mkseq tree_indices4 tree_indices8 /=
+  ?tree_pow8 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56
+  ?IntID.expr0 !rev_cons !rev_nil /=. qed.
+lemma layer_full_0_digest : toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 0) = (nseq 32 49).
+proof. by rewrite layer_full_0_query /toy /=. qed.
+lemma layer_full_0_rejected : wots_sum (toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 0)) = 116.
+proof. rewrite layer_full_0_digest /wots_sum /wots_field /word_window /byte_word /byte_word_le
+  tree_repeat32 /mkseq caller_indices43 /=.
+  by rewrite ?caller_digit_pow0 ?caller_digit_pow3 ?caller_digit_pow6 ?caller_digit_pow9 ?caller_digit_pow12 ?caller_digit_pow15 ?caller_digit_pow18 ?caller_digit_pow21 ?caller_digit_pow24 ?caller_digit_pow27 ?caller_digit_pow30 ?caller_digit_pow33 ?caller_digit_pow36 ?caller_digit_pow39 ?caller_digit_pow42 ?caller_digit_pow45 ?caller_digit_pow48 ?caller_digit_pow51 ?caller_digit_pow54 ?caller_digit_pow57 ?caller_digit_pow60 ?caller_digit_pow63 ?caller_digit_pow66 ?caller_digit_pow69 ?caller_digit_pow72 ?caller_digit_pow75 ?caller_digit_pow78 ?caller_digit_pow81 ?caller_digit_pow84 ?caller_digit_pow87 ?caller_digit_pow90 ?caller_digit_pow93 ?caller_digit_pow96 ?caller_digit_pow99 ?caller_digit_pow102 ?caller_digit_pow105 ?caller_digit_pow108 ?caller_digit_pow111 ?caller_digit_pow114 ?caller_digit_pow117 ?caller_digit_pow120 ?caller_digit_pow123 ?caller_digit_pow126 /=. qed.
+lemma layer_full_0_step0 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 0 = (nseq 16 0).
+proof. by rewrite functional_path_zero. qed.
+lemma layer_full_0_step1 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 1 = (nseq 16 107).
+proof.
+  rewrite (_: 1=0+1) 1:// functional_path_next 1:// layer_full_0_step0.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step2 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 2 = (nseq 16 248).
+proof.
+  rewrite (_: 2=1+1) 1:// functional_path_next 1:// layer_full_0_step1.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step3 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 3 = (nseq 16 127).
+proof.
+  rewrite (_: 3=2+1) 1:// functional_path_next 1:// layer_full_0_step2.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step4 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 4 = (nseq 16 104).
+proof.
+  rewrite (_: 4=3+1) 1:// functional_path_next 1:// layer_full_0_step3.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step5 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 5 = (nseq 16 243).
+proof.
+  rewrite (_: 5=4+1) 1:// functional_path_next 1:// layer_full_0_step4.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step6 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 6 = (nseq 16 28).
+proof.
+  rewrite (_: 6=5+1) 1:// functional_path_next 1:// layer_full_0_step5.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step7 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 7 = (nseq 16 77).
+proof.
+  rewrite (_: 7=6+1) 1:// functional_path_next 1:// layer_full_0_step6.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step8 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 8 = (nseq 16 119).
+proof.
+  rewrite (_: 8=7+1) 1:// functional_path_next 1:// layer_full_0_step7.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_step9 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 9 = (nseq 16 231).
+proof.
+  rewrite (_: 9=8+1) 1:// functional_path_next 1:// layer_full_0_step8.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_0_complete : layer_recover_value toy (nseq 32 0) 4294967295 18446744073709551615 4294967295 (nseq 16 3) (nseq 43 (nseq 16 5)) 0 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] = (nseq 16 231).
+proof.
+  rewrite /layer_recover_value /wots_recover_value layer_full_0_rejected /wots_target /=.
+  try rewrite /merkle_recover_value.
+  by rewrite ?layer_full_0_step9. qed.
+lemma layer_full_9999999_query : wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 9999999 = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 0; 0; 0; 0; 255; 255; 255; 255; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 152; 150; 127].
+proof. by rewrite /wots_preimage /pad_node /address_words /u32_bytes /u64_bytes
+  !tree_repeat16 !tree_repeat32 caller_repeat28 /mkseq tree_indices4 tree_indices8 /=
+  ?tree_pow8 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56
+  ?IntID.expr0 !rev_cons !rev_nil /=. qed.
+lemma layer_full_9999999_digest : toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 9999999) = (nseq 32 49).
+proof. by rewrite layer_full_9999999_query /toy /=. qed.
+lemma layer_full_9999999_rejected : wots_sum (toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 9999999)) = 116.
+proof. rewrite layer_full_9999999_digest /wots_sum /wots_field /word_window /byte_word /byte_word_le
+  tree_repeat32 /mkseq caller_indices43 /=.
+  by rewrite ?caller_digit_pow0 ?caller_digit_pow3 ?caller_digit_pow6 ?caller_digit_pow9 ?caller_digit_pow12 ?caller_digit_pow15 ?caller_digit_pow18 ?caller_digit_pow21 ?caller_digit_pow24 ?caller_digit_pow27 ?caller_digit_pow30 ?caller_digit_pow33 ?caller_digit_pow36 ?caller_digit_pow39 ?caller_digit_pow42 ?caller_digit_pow45 ?caller_digit_pow48 ?caller_digit_pow51 ?caller_digit_pow54 ?caller_digit_pow57 ?caller_digit_pow60 ?caller_digit_pow63 ?caller_digit_pow66 ?caller_digit_pow69 ?caller_digit_pow72 ?caller_digit_pow75 ?caller_digit_pow78 ?caller_digit_pow81 ?caller_digit_pow84 ?caller_digit_pow87 ?caller_digit_pow90 ?caller_digit_pow93 ?caller_digit_pow96 ?caller_digit_pow99 ?caller_digit_pow102 ?caller_digit_pow105 ?caller_digit_pow108 ?caller_digit_pow111 ?caller_digit_pow114 ?caller_digit_pow117 ?caller_digit_pow120 ?caller_digit_pow123 ?caller_digit_pow126 /=. qed.
+lemma layer_full_9999999_step0 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 0 = (nseq 16 0).
+proof. by rewrite functional_path_zero. qed.
+lemma layer_full_9999999_step1 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 1 = (nseq 16 107).
+proof.
+  rewrite (_: 1=0+1) 1:// functional_path_next 1:// layer_full_9999999_step0.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step2 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 2 = (nseq 16 248).
+proof.
+  rewrite (_: 2=1+1) 1:// functional_path_next 1:// layer_full_9999999_step1.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step3 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 3 = (nseq 16 127).
+proof.
+  rewrite (_: 3=2+1) 1:// functional_path_next 1:// layer_full_9999999_step2.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step4 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 4 = (nseq 16 104).
+proof.
+  rewrite (_: 4=3+1) 1:// functional_path_next 1:// layer_full_9999999_step3.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step5 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 5 = (nseq 16 243).
+proof.
+  rewrite (_: 5=4+1) 1:// functional_path_next 1:// layer_full_9999999_step4.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step6 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 6 = (nseq 16 28).
+proof.
+  rewrite (_: 6=5+1) 1:// functional_path_next 1:// layer_full_9999999_step5.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step7 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 7 = (nseq 16 77).
+proof.
+  rewrite (_: 7=6+1) 1:// functional_path_next 1:// layer_full_9999999_step6.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step8 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 8 = (nseq 16 119).
+proof.
+  rewrite (_: 8=7+1) 1:// functional_path_next 1:// layer_full_9999999_step7.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_step9 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 9 = (nseq 16 231).
+proof.
+  rewrite (_: 9=8+1) 1:// functional_path_next 1:// layer_full_9999999_step8.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_9999999_complete : layer_recover_value toy (nseq 32 0) 4294967295 18446744073709551615 4294967295 (nseq 16 3) (nseq 43 (nseq 16 5)) 9999999 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] = (nseq 16 231).
+proof.
+  rewrite /layer_recover_value /wots_recover_value layer_full_9999999_rejected /wots_target /=.
+  try rewrite /merkle_recover_value.
+  by rewrite ?layer_full_9999999_step9. qed.
+lemma layer_full_10000000_query : wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 10000000 = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 0; 0; 0; 0; 255; 255; 255; 255; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 152; 150; 128].
+proof. by rewrite /wots_preimage /pad_node /address_words /u32_bytes /u64_bytes
+  !tree_repeat16 !tree_repeat32 caller_repeat28 /mkseq tree_indices4 tree_indices8 /=
+  ?tree_pow8 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56
+  ?IntID.expr0 !rev_cons !rev_nil /=. qed.
+lemma layer_full_10000000_digest : toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 10000000) = (nseq 32 49).
+proof. by rewrite layer_full_10000000_query /toy /=. qed.
+lemma layer_full_10000000_rejected : wots_sum (toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 10000000)) = 116.
+proof. rewrite layer_full_10000000_digest /wots_sum /wots_field /word_window /byte_word /byte_word_le
+  tree_repeat32 /mkseq caller_indices43 /=.
+  by rewrite ?caller_digit_pow0 ?caller_digit_pow3 ?caller_digit_pow6 ?caller_digit_pow9 ?caller_digit_pow12 ?caller_digit_pow15 ?caller_digit_pow18 ?caller_digit_pow21 ?caller_digit_pow24 ?caller_digit_pow27 ?caller_digit_pow30 ?caller_digit_pow33 ?caller_digit_pow36 ?caller_digit_pow39 ?caller_digit_pow42 ?caller_digit_pow45 ?caller_digit_pow48 ?caller_digit_pow51 ?caller_digit_pow54 ?caller_digit_pow57 ?caller_digit_pow60 ?caller_digit_pow63 ?caller_digit_pow66 ?caller_digit_pow69 ?caller_digit_pow72 ?caller_digit_pow75 ?caller_digit_pow78 ?caller_digit_pow81 ?caller_digit_pow84 ?caller_digit_pow87 ?caller_digit_pow90 ?caller_digit_pow93 ?caller_digit_pow96 ?caller_digit_pow99 ?caller_digit_pow102 ?caller_digit_pow105 ?caller_digit_pow108 ?caller_digit_pow111 ?caller_digit_pow114 ?caller_digit_pow117 ?caller_digit_pow120 ?caller_digit_pow123 ?caller_digit_pow126 /=. qed.
+lemma layer_full_10000000_step0 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 0 = (nseq 16 0).
+proof. by rewrite functional_path_zero. qed.
+lemma layer_full_10000000_step1 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 1 = (nseq 16 107).
+proof.
+  rewrite (_: 1=0+1) 1:// functional_path_next 1:// layer_full_10000000_step0.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step2 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 2 = (nseq 16 248).
+proof.
+  rewrite (_: 2=1+1) 1:// functional_path_next 1:// layer_full_10000000_step1.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step3 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 3 = (nseq 16 127).
+proof.
+  rewrite (_: 3=2+1) 1:// functional_path_next 1:// layer_full_10000000_step2.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step4 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 4 = (nseq 16 104).
+proof.
+  rewrite (_: 4=3+1) 1:// functional_path_next 1:// layer_full_10000000_step3.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step5 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 5 = (nseq 16 243).
+proof.
+  rewrite (_: 5=4+1) 1:// functional_path_next 1:// layer_full_10000000_step4.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step6 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 6 = (nseq 16 28).
+proof.
+  rewrite (_: 6=5+1) 1:// functional_path_next 1:// layer_full_10000000_step5.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step7 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 7 = (nseq 16 77).
+proof.
+  rewrite (_: 7=6+1) 1:// functional_path_next 1:// layer_full_10000000_step6.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step8 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 8 = (nseq 16 119).
+proof.
+  rewrite (_: 8=7+1) 1:// functional_path_next 1:// layer_full_10000000_step7.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_step9 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 9 = (nseq 16 231).
+proof.
+  rewrite (_: 9=8+1) 1:// functional_path_next 1:// layer_full_10000000_step8.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_10000000_complete : layer_recover_value toy (nseq 32 0) 4294967295 18446744073709551615 4294967295 (nseq 16 3) (nseq 43 (nseq 16 5)) 10000000 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] = (nseq 16 231).
+proof.
+  rewrite /layer_recover_value /wots_recover_value layer_full_10000000_rejected /wots_target /=.
+  try rewrite /merkle_recover_value.
+  by rewrite ?layer_full_10000000_step9. qed.
+lemma layer_full_4294967295_query : wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 4294967295 = [0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 0; 0; 0; 0; 255; 255; 255; 255; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 3; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 0; 255; 255; 255; 255].
+proof. by rewrite /wots_preimage /pad_node /address_words /u32_bytes /u64_bytes
+  !tree_repeat16 !tree_repeat32 caller_repeat28 /mkseq tree_indices4 tree_indices8 /=
+  ?tree_pow8 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56
+  ?IntID.expr0 !rev_cons !rev_nil /=. qed.
+lemma layer_full_4294967295_digest : toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 4294967295) = (nseq 32 49).
+proof. by rewrite layer_full_4294967295_query /toy /=. qed.
+lemma layer_full_4294967295_rejected : wots_sum (toy (wots_preimage (nseq 32 0) (address_words 4294967295 18446744073709551615 0 4294967295 0 0 0) (pad_node (nseq 16 3)) 4294967295)) = 116.
+proof. rewrite layer_full_4294967295_digest /wots_sum /wots_field /word_window /byte_word /byte_word_le
+  tree_repeat32 /mkseq caller_indices43 /=.
+  by rewrite ?caller_digit_pow0 ?caller_digit_pow3 ?caller_digit_pow6 ?caller_digit_pow9 ?caller_digit_pow12 ?caller_digit_pow15 ?caller_digit_pow18 ?caller_digit_pow21 ?caller_digit_pow24 ?caller_digit_pow27 ?caller_digit_pow30 ?caller_digit_pow33 ?caller_digit_pow36 ?caller_digit_pow39 ?caller_digit_pow42 ?caller_digit_pow45 ?caller_digit_pow48 ?caller_digit_pow51 ?caller_digit_pow54 ?caller_digit_pow57 ?caller_digit_pow60 ?caller_digit_pow63 ?caller_digit_pow66 ?caller_digit_pow69 ?caller_digit_pow72 ?caller_digit_pow75 ?caller_digit_pow78 ?caller_digit_pow81 ?caller_digit_pow84 ?caller_digit_pow87 ?caller_digit_pow90 ?caller_digit_pow93 ?caller_digit_pow96 ?caller_digit_pow99 ?caller_digit_pow102 ?caller_digit_pow105 ?caller_digit_pow108 ?caller_digit_pow111 ?caller_digit_pow114 ?caller_digit_pow117 ?caller_digit_pow120 ?caller_digit_pow123 ?caller_digit_pow126 /=. qed.
+lemma layer_full_4294967295_step0 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 0 = (nseq 16 0).
+proof. by rewrite functional_path_zero. qed.
+lemma layer_full_4294967295_step1 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 1 = (nseq 16 107).
+proof.
+  rewrite (_: 1=0+1) 1:// functional_path_next 1:// layer_full_4294967295_step0.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step2 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 2 = (nseq 16 248).
+proof.
+  rewrite (_: 2=1+1) 1:// functional_path_next 1:// layer_full_4294967295_step1.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step3 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 3 = (nseq 16 127).
+proof.
+  rewrite (_: 3=2+1) 1:// functional_path_next 1:// layer_full_4294967295_step2.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step4 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 4 = (nseq 16 104).
+proof.
+  rewrite (_: 4=3+1) 1:// functional_path_next 1:// layer_full_4294967295_step3.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step5 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 5 = (nseq 16 243).
+proof.
+  rewrite (_: 5=4+1) 1:// functional_path_next 1:// layer_full_4294967295_step4.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step6 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 6 = (nseq 16 28).
+proof.
+  rewrite (_: 6=5+1) 1:// functional_path_next 1:// layer_full_4294967295_step5.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step7 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 7 = (nseq 16 77).
+proof.
+  rewrite (_: 7=6+1) 1:// functional_path_next 1:// layer_full_4294967295_step6.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step8 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 8 = (nseq 16 119).
+proof.
+  rewrite (_: 8=7+1) 1:// functional_path_next 1:// layer_full_4294967295_step7.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_step9 : tree_path_value toy (nseq 32 0) 4294967295 18446744073709551615 2 0 (nseq 16 0) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] 9 = (nseq 16 231).
+proof.
+  rewrite (_: 9=8+1) 1:// functional_path_next 1:// layer_full_4294967295_step8.
+  rewrite /tree_path_step ?tree_pow1 ?tree_pow2 ?tree_pow3 ?tree_pow4 ?tree_pow5 ?tree_pow6 ?tree_pow7 ?tree_pow8 ?tree_pow9 ?tree_pow10 ?tree_pow11 ?tree_pow16 ?tree_pow24 ?tree_pow32 ?tree_pow40 ?tree_pow48 ?tree_pow56 ?IntID.expr0 /=.
+  by rewrite (tree_toy_pair _ _ _ (tree_address_size _ _ _ _ _ _)) tree_address_score /=.
+qed.
+lemma layer_full_4294967295_complete : layer_recover_value toy (nseq 32 0) 4294967295 18446744073709551615 4294967295 (nseq 16 3) (nseq 43 (nseq 16 5)) 4294967295 [(nseq 16 11); (nseq 16 18); (nseq 16 25); (nseq 16 32); (nseq 16 39); (nseq 16 46); (nseq 16 53); (nseq 16 60); (nseq 16 67)] = (nseq 16 231).
+proof.
+  rewrite /layer_recover_value /wots_recover_value layer_full_4294967295_rejected /wots_target /=.
+  try rewrite /merkle_recover_value.
+  by rewrite ?layer_full_4294967295_step9. qed.
+
 op zero_backend (_ : int list) = nseq 32 0.
 lemma caller_zero_sum : wots_sum (nseq 32 0) = 0.
 proof. by rewrite /wots_sum /wots_field /word_window /byte_word /byte_word_le

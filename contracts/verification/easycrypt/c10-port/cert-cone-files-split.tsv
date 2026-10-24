@@ -828,3 +828,6 @@ cdrafts-split/C10FunctionalForestOne.ec
 cdrafts-split/C10FunctionalForestFill.ec
 cdrafts-split/C10FunctionalForestValue.ec
 cdrafts-split/C10FunctionalForestSign.ec
+cdrafts-split/C10FunctionalVerifierValue.ec
+cdrafts-split/C10FunctionalVerifierState.ec
+cdrafts-split/C10FunctionalVerifier.ec

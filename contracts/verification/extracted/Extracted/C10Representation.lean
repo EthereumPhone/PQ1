@@ -220,4 +220,22 @@ def layer_sign_values (hash_fn : (List Int → List Int)) (seed : (List Int)) (s
 def layer_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (layer : Int) (tree : Int) (kp : Int) (message : (List Int)) (values : (List (List Int))) (nonce : Int) (auth : (List (List Int))) : (List Int)  :=
   (merkle_recover_value hash_fn seed layer tree (wots_recover_value hash_fn seed layer tree kp message values nonce) kp auth)
 
+def digest_fors_indices (bs : (List Int)) : (List Int)  :=
+  ((List.range 13).map (fun i => (fors_field bs i)))
+
+def verifier_digest (hash_fn : (List Int → List Int)) (seed : (List Int)) (root : (List Int)) (random : (List Int)) (message : (List Int)) : (List Int)  :=
+  (hash_fn (hmsg_preimage seed root (pad_node random) message))
+
+def digest_forest_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (bs : (List Int)) (forest_secrets : (List (List Int))) (forest_paths : (List (List (List Int)))) : (List Int)  :=
+  (forest_recover_value hash_fn seed (ht_field bs) (digest_fors_indices bs) forest_secrets forest_paths)
+
+def hypertree_first_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (ht : Int) (message : (List Int)) (values : (List (List Int))) (nonce : Int) (auth : (List (List Int))) : (List Int)  :=
+  (layer_recover_value hash_fn seed 0 (ht / 512) (ht % 512) message values nonce auth)
+
+def hypertree_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (ht : Int) (message : (List Int)) (values0 : (List (List Int))) (nonce0 : Int) (auth0 : (List (List Int))) (values1 : (List (List Int))) (nonce1 : Int) (auth1 : (List (List Int))) : (List Int)  :=
+  (layer_recover_value hash_fn seed 1 ((ht / 512) / 512) ((ht / 512) % 512) (hypertree_first_value hash_fn seed ht message values0 nonce0 auth0) values1 nonce1 auth1)
+
+def verifier_recover_value (hash_fn : (List Int → List Int)) (seed : (List Int)) (bs : (List Int)) (forest_secrets : (List (List Int))) (forest_paths : (List (List (List Int)))) (values0 : (List (List Int))) (nonce0 : Int) (auth0 : (List (List Int))) (values1 : (List (List Int))) (nonce1 : Int) (auth1 : (List (List Int))) : (List Int)  :=
+  (hypertree_recover_value hash_fn seed (ht_field bs) (digest_forest_value hash_fn seed bs forest_secrets forest_paths) values0 nonce0 auth0 values1 nonce1 auth1)
+
 end C10Representation

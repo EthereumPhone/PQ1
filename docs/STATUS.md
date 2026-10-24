@@ -208,10 +208,20 @@ forest phases/compression and hypertree-layer body now consume shared values,
 including the separate slot-12 hash, positional shuffled outputs and bounded
 signing failure. Native Raw/CommonInput endpoints preserve arbitrary consistent
 prehistory, key/function state, exact final maps and calls, with separate
-termination proofs. The complete signer/verifier/session composition and
+termination proofs. Complete signing/session composition and
 concrete-backend/ideal-oracle transfer remain open. The precise domains,
 construction effects retained on failure and interpretation limits are in the
 [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-forest-and-layer-caller-values).
+
+**Functional complete verifier correspondence (2026-10-24):** the actual extracted
+4,008-byte verifier and native Raw/CommonInput callers now consume the shared
+digest, forest and two-layer values through the final decision. The statements
+retain forced-zero refusal, WOTS zero-node continuation and arbitrary represented
+signatures. Native proofs preserve arbitrary consistent history and exact calls,
+with separate losslessness. Ten typed mutations and input-sensitive layer value
+examples supplement the required full gates. Complete signing, initialized
+sessions and concrete-backend/ideal-oracle transfer remain open; see the
+[research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-complete-verifier-values).
 
 **Native EasyCrypt total signing availability (2026-10-21):** the
 [initialized byte-game theorem](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#quantitative-loss)

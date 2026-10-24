@@ -1947,3 +1947,39 @@ scratch/_scope_neg_op_C10FunctionalForestOne.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalForestFill.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalForestValue.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalForestSign.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Complete functional verifier and strengthened layer examples: values, exact history/calls, decoded endpoints and scope controls.
+scratch/c10_verifier_value_positive.ec	MUST-PASS	-
+scratch/c10_verifier_value_preserving.ec	MUST-PASS	-
+scratch/c10_verifier_value_digest_indices_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_digest_indices_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_verifier_value_digest_root_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_digest_root_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_verifier_value_forest_digest_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_forest_digest_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_verifier_value_first_position_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_first_position_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_verifier_value_top_layer_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_top_layer_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_verifier_value_second_message_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_second_message_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_verifier_value_forest_order_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_forest_order_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_verifier_value_forced_zero_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_forced_zero_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_verifier_value_final_root_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_final_root_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_verifier_value_second_fields_typed.ec	MUST-PASS	-
+scratch/c10_verifier_value_second_fields_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_caller_value_examples_preserving.ec	MUST-PASS	-
+scratch/c10_caller_value_examples_position_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_examples_position_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_value_examples_tree_address_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_examples_tree_address_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_value_examples_path_order_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_examples_path_order_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_caller_value_examples_continuation_typed.ec	MUST-PASS	-
+scratch/c10_caller_value_examples_continuation_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_C10FunctionalVerifierValue.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalVerifierState.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalVerifier.ec	MUST-FAIL	FORS_C_TreePort.

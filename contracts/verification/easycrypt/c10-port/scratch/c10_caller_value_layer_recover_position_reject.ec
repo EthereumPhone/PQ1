@@ -30,7 +30,6 @@ op layer_sign_values (hash_fn : (int list -> int list)) (seed : (int list)) (sec
 op layer_recover_value (hash_fn : (int list -> int list)) (seed : (int list)) (layer : int) (tree : int) (kp : int) (message : (int list)) (values : ((int list) list)) (nonce : int) (auth : ((int list) list)) : (int list) =
   (merkle_recover_value hash_fn seed layer tree (wots_recover_value hash_fn seed layer tree kp message values nonce) (kp+1) auth).
 
-
 (* Transfer existing actual construction contracts to their checked paired callers. *)
 
 

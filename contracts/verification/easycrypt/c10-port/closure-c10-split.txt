@@ -659,3 +659,8 @@ C10FunctionalForestOne
 C10FunctionalForestFill
 C10FunctionalForestValue
 C10FunctionalForestSign
+
+# Functional complete verifier backend interpretation, 2026-10-24.
+C10FunctionalVerifierValue
+C10FunctionalVerifierState
+C10FunctionalVerifier

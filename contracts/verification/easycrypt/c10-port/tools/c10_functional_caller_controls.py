@@ -9,6 +9,39 @@ MODULES = ('C10FunctionalCallerState', 'C10FunctionalCallerShuffle',
 OPERATORS = ('forest_sign_secrets', 'forest_sign_paths', 'forest_recover_roots',
              'forest_compress_value', 'forest_recover_value', 'forest_sign_value',
              'wots_search_digests', 'layer_sign_slot', 'layer_sign_values', 'layer_recover_value')
+# Supplementary value examples must themselves distinguish these changes;
+# universal endpoint controls below remain a separate assurance layer.
+LAYER_VALUE_CHANGES = [
+    ('position', 'nonce) kp auth', 'nonce) (kp+1) auth',
+     'nonce) kp auth', 'nonce) (kp+1) auth'),
+    ('tree-address', 'merkle_recover_value hash_fn seed layer tree',
+     'merkle_recover_value hash_fn seed layer (tree+1)',
+     'merkle_recover_value hash_fn seed layer tree',
+     'merkle_recover_value hash_fn seed layer (tree+1)'),
+    ('path-order', 'nonce) kp auth', 'nonce) kp (List.reverse auth)',
+     'nonce) kp auth', 'nonce) kp (rev auth)'),
+    ('continuation', '(merkle_recover_value hash_fn seed layer tree (wots_recover_value hash_fn seed layer tree kp message values nonce) kp auth)',
+     '(wots_recover_value hash_fn seed layer tree kp message values nonce)',
+     '(merkle_recover_value hash_fn seed layer tree (wots_recover_value hash_fn seed layer tree kp message values nonce) kp auth)',
+     '(wots_recover_value hash_fn seed layer tree kp message values nonce)'),
+]
+
+
+def layer_definition(lean):
+    prefix = 'def ' if lean else 'op '
+    return re.search(r'(?ms)^'+prefix+r'layer_recover_value\b.*?(?=\n\n|\Z)', source(lean)).group()
+
+
+def layer_value_fixture(definitions, lean):
+    from c10_functional_caller_fixtures import fixture_source
+    text = fixture_source(lean)
+    if lean:
+        text = '\n'.join(line for line in text.splitlines() if not line.startswith('import '))
+        return 'import Aeneas\n' + definitions + '\n' + text + '\n'
+    header, body = [], []
+    for line in text.splitlines():
+        (header if line.startswith('require import ') else body).append(line)
+    return '\n'.join(header) + '\n' + definitions + '\n' + '\n'.join(body) + '\n'
 # Name, operator, Lean before/after, EasyCrypt before/after, first Lean/EC consumer.
 CALLER_CHANGES = [
     ('forest-last-tree', 'forest_sign_secrets', 'seed secret ht 12)', 'seed secret ht 11)',
@@ -87,6 +120,14 @@ def functional_caller_outputs(port):
         stem = 'c10_caller_value_' + name.replace('-', '_')
         result[port / 'scratch' / (stem + '_typed.ec')] = 'require import AllCore List IntDiv C10Representation.\n' + altered
         result[port / 'scratch' / (stem + '_reject.ec')] = native_fixture(port, altered)
+    original_layer = layer_definition(False)
+    benign_layer = changed(original_layer, 'layer_recover_value', 'nonce) kp auth', 'nonce) (kp+0) auth', False)
+    result[port / 'scratch/c10_caller_value_examples_preserving.ec'] = layer_value_fixture(benign_layer, False)
+    for name, _, _, before, after in LAYER_VALUE_CHANGES:
+        altered = changed(original_layer, 'layer_recover_value', before, after, False)
+        stem = 'c10_caller_value_examples_' + name.replace('-', '_')
+        result[port / 'scratch' / (stem + '_typed.ec')] = 'require import AllCore List IntDiv C10Representation.\n' + altered
+        result[port / 'scratch' / (stem + '_reject.ec')] = layer_value_fixture(altered, False)
     return {path: text.rstrip() + '\n' for path, text in result.items()}
 
 
@@ -98,4 +139,9 @@ def functional_caller_rows():
         stem = 'scratch/c10_caller_value_' + name.replace('-', '_')
         rows += [stem + '_typed.ec\tMUST-PASS\t-',
                  stem + '_reject.ec\tMUST-FAIL\t' + CALLER_REASONS[name]]
+    rows.append('scratch/c10_caller_value_examples_preserving.ec\tMUST-PASS\t-')
+    for name, *_ in LAYER_VALUE_CHANGES:
+        stem = 'scratch/c10_caller_value_examples_' + name.replace('-', '_')
+        rows += [stem + '_typed.ec\tMUST-PASS\t-',
+                 stem + '_reject.ec\tMUST-FAIL\t[by]: cannot close goals']
     return rows

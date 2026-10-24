@@ -81,7 +81,8 @@ def require_semantic_rejection(result, name):
         ("unsolved goals", "Type mismatch", "Application type mismatch", "Tactic `rewrite` failed",
          "'show' tactic failed", "'change' tactic failed", "`simp` made no progress", "Tactic `rfl` failed",
          "Tactic `apply` failed", "Could not unify", "Tactic `assumption` failed",
-         "omega could not prove", "scalar_tac failed", "Insufficient number of fields")), (name, output)
+         "omega could not prove", "scalar_tac failed", "Insufficient number of fields",
+         "Tactic `decide` proved that the proposition")), (name, output)
     lowered = output.lower()
     assert not any(x in lowered for x in
         ("unknown module", "unknown constant", "unexpected token", "unknown identifier",
@@ -95,7 +96,8 @@ def require_semantic_rejection(result, name):
 def test_result_classifier():
     """Mixed proof/resource output and abnormal exits must fail closed."""
     for semantic in ("error: unsolved goals", "error: 'change' tactic failed",
-                     "error: Insufficient number of fields for constructor"):
+                     "error: Insufficient number of fields for constructor",
+                     "error: Tactic `decide` proved that the proposition 1 = 2 is false"):
         require_semantic_rejection(subprocess.CompletedProcess([], 1, semantic, ""), "positive proof error")
         rejected = [
             subprocess.CompletedProcess([], code, semantic, "")

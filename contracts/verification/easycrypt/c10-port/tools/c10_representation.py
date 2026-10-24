@@ -402,6 +402,32 @@ layer_recover_value = define("layer_recover_value",
     merkle_recover_value(hash_fn,seed,layer,tree,
         wots_recover_value(hash_fn,seed,layer,tree,kp,message,values,nonce),kp,auth))
 
+# Complete verifier values. Refusal and final equality stay in the actual
+# Boolean endpoint contracts. The two layers preserve the zero-node WOTS
+# continuation, with no accepted-signature premise or supplied target root.
+digest_fors_indices = define("digest_fors_indices",(bs,),
+    seq(literal(13),i,fors_field(bs,i)))
+verifier_digest = define("verifier_digest",(hash_fn,seed,root,random,message),
+    hash_apply(hash_fn,hmsg_preimage(seed,root,pad_node(random),message)))
+digest_forest_value = define("digest_forest_value",(hash_fn,seed,bs,forest_secrets,forest_paths),
+    forest_recover_value(hash_fn,seed,ht_field(bs),digest_fors_indices(bs),forest_secrets,forest_paths))
+hypertree_first_value = define("hypertree_first_value",(hash_fn,seed,ht,message,values,nonce,auth),
+    layer_recover_value(hash_fn,seed,literal(0,INT),binary("div",ht,literal(512,INT)),
+        binary("mod",ht,literal(512,INT)),message,values,nonce,auth))
+values0,values1,auth0,auth1 = (var(x,NODES) for x in ("values0","values1","auth0","auth1"))
+nonce0,nonce1 = var("nonce0",INT),var("nonce1",INT)
+next_tree = binary("div",ht,literal(512,INT))
+hypertree_recover_value = define("hypertree_recover_value",
+    (hash_fn,seed,ht,message,values0,nonce0,auth0,values1,nonce1,auth1),
+    layer_recover_value(hash_fn,seed,literal(1,INT),binary("div",next_tree,literal(512,INT)),
+        binary("mod",next_tree,literal(512,INT)),
+        hypertree_first_value(hash_fn,seed,ht,message,values0,nonce0,auth0),values1,nonce1,auth1))
+verifier_recover_value = define("verifier_recover_value",
+    (hash_fn,seed,bs,forest_secrets,forest_paths,values0,nonce0,auth0,values1,nonce1,auth1),
+    hypertree_recover_value(hash_fn,seed,ht_field(bs),
+        digest_forest_value(hash_fn,seed,bs,forest_secrets,forest_paths),
+        values0,nonce0,auth0,values1,nonce1,auth1))
+
 def type_text(ty, lean):
     if ty == COUNT: return "Nat" if lean else "int"
     if ty == INT: return "Int" if lean else "int"

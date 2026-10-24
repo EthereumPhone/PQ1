@@ -407,7 +407,7 @@ printers and supplied-backend interpretation remain disclosed boundaries.
 `tools/c10_functional_caller_controls.py` supplies twelve typed mutations:
 forest final-tree selection, secret/path index, separate final leaf, compression
 domain, recovery ordering, signing address, layer search bound, zero sentinel,
-returned counter, authentication-path target and recovery position. The 27
+returned counter, authentication-path target and recovery position. The original 27
 `scratch/c10_caller_value_*` fixtures include original and arithmetic-equivalent
 positives, twelve definition-only passes, twelve intended-consumer rejections
 and independent value examples. Nine scope probes cover the new native modules.
@@ -434,7 +434,47 @@ indices. The thirteenth secret gets its separate tree-12 leaf hash at index zero
 Four layer examples retain zero-node WOTS rejection and the nine-level XMSS
 continuation at counters 0, 9,999,999, 10,000,000 and maximum u32, with full-width
 coordinates and empty witness lists. These layer examples use a constant-zero
-backend; their scope is the rejection branch, not accepted WOTS construction.
+backend. They check reduction to zero and cannot themselves distinguish a wrong
+position, path or address. Universal consuming-proof controls remain separate.
+
+The #1043 correction adds six input-sensitive examples with non-empty chains
+and paths, zero/odd/full-width coordinates and the same four counter boundaries.
+An independent imperative byte encoder pins every complete WOTS query, its
+digest and rejected digit sum, the zero sentinel, and all nine XMSS node values.
+The arithmetic backend observes addresses and path nodes. It deliberately need
+not distinguish every counter: the encoded query checks pin the counter bytes,
+while rejected counters can legitimately produce the same final root.
+Four additional well-typed changes shift the recovery position, change the tree
+address, reverse the path or omit continuation. Both provers reject their first
+`layer_zero_complete` equation; Lean computes a false proposition. Baseline and
+an equivalent `kp+0` example pass. The nine new native fixtures comprise that
+equivalent positive and four definition-only/rejection pairs. Earlier examples
+remain enrolled. These finite checks supplement universal correspondence; they
+do not establish accepted-WOTS behavior or sensitivity to every possible change.
+
 The earlier WOTS and complete-tree fixtures remain enrolled. All fixture
 backends are public arithmetic, not SHA. Lean uses kernel `decide` and native
 EasyCrypt checks the finite folds; Python is not a substitute proof checker.
+
+## Functional complete verifier controls
+
+`tools/c10_functional_verifier_controls.py` supplies ten typed mutations covering
+digest indices and root binding, the forest digest/address, first-layer position,
+top-layer identifier, the second layer's input message, forest ordering, the
+forced-zero decision, final-root comparison and selection of the second decoded
+layer. The 22 native fixtures contain two positives and ten definition-only /
+intended-consumer rejection pairs; three scope probes cover the new modules.
+The unchanged complete-verifier proofs consume local copies of the six appended
+expressions, with earlier component proofs imported unchanged. Decision mutations
+change the final Boolean adapter before rechecking its unchanged consumer.
+
+`scripts/test_c10_functional_verifier_controls.py` runs in the full extracted
+differential gate. The Lean checker enforces normal semantic rejection at the
+intended first theorem. Local irreducibility keeps complete recovery and decoded
+layer arrays symbolic during unification; explicit proof rewrites still unfold
+the required definitions. Thus a mismatched layer does not earn rejection credit
+from eager expansion or a resource limit. The equivalent `2-1` layer identifier
+passes. Native first-location checks are retained in the coordinator's raw audit;
+persistent native enforcement remains #1034. These are proof-sensitivity tests,
+not proofs that every changed universal statement is false. Full cold replay and
+all inherited controls remain mandatory.

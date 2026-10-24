@@ -1,3 +1,4 @@
+import Extracted.C10FunctionalVerifier
 import Extracted.C10FunctionalForest
 import Extracted.C10FunctionalForestRecover
 import Extracted.C10FunctionalLayer
@@ -587,3 +588,14 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalLayer.signed_layer_recovery_value
 #print axioms Extracted.C10FunctionalLayer.pure_layer_sign_values
 #print axioms Extracted.C10FunctionalLayer.extracted_layer_body_values
+
+-- Complete functional verifier, with no acceptance premise.
+#print axioms Extracted.C10FunctionalVerifier.header_index_words
+#print axioms Extracted.C10FunctionalVerifier.header_ht_word
+#print axioms Extracted.C10FunctionalVerifier.header_forest_bounds
+#print axioms Extracted.C10FunctionalVerifier.digest_value
+#print axioms Extracted.C10FunctionalVerifier.byte_node_injective
+#print axioms Extracted.C10FunctionalVerifier.raw_layer_values
+#print axioms Extracted.C10FunctionalVerifier.extracted_hypertree_value
+#print axioms Extracted.C10FunctionalVerifier.verifier_head_values
+#print axioms Extracted.C10FunctionalVerifier.decoded_verifier_result

@@ -212,13 +212,53 @@ the actual execution state.
 
 [Controls](CONTROL-EVIDENCE.md#functional-forest-and-layer-caller-controls),
 full cold replay, exact source identities and the combined review remain
-separate requirements. The next feasible component is the complete
-signer/verifier and initialized session composition, including the digest-bound
-premises and the secure wrapper's two signing calls and verification cost.
+separate requirements. The complete verifier component is described below.
+Complete signing and initialized session composition remain next, including
+the secure wrapper's two signing calls and verification cost.
 Paired-printer and backend interpretation, concrete RustCrypto/STM32 behavior,
 callback non-interference, sampled-oracle security transfer and QROM/physical
 assumptions remain explicit limits. These deterministic equalities do not
 transfer the ideal-model probability bound or grant production authority.
+
+## Functional complete verifier values
+
+Six appended expressions in the existing typed representation compose the
+message digest, its FORS indices, forest recovery and both hypertree layers.
+All 72 earlier definitions and the expression language are preserved. The
+Boolean endpoint adapters check the shared forced-zero field and compare the
+padded recovered root with the supplied root. They retain the raw verifier's
+WOTS zero-node continuation through all nine XMSS levels.
+
+[`C10FunctionalVerifier.lean`](../../extracted/Extracted/C10FunctionalVerifier.lean)
+connects the actual `hypertree.verify` entry point to these values and the
+existing shared decoder for every represented 4,008-byte signature. Its
+`decoded_verifier_result` has no valid-signature, digest-acceptance, WOTS-success
+or desired-result premise. It includes actual seed/root/randomizer/message
+padding, the forced-zero refusal, all forest fields, both decoded layers and
+the final comparison. The digest-index bounds are derived from the actual
+digest. Nine headlines are enrolled in the exact kernel-only closure gate.
+
+[`C10FunctionalVerifierValue`](cdrafts-split/C10FunctionalVerifierValue.ec),
+[`C10FunctionalVerifierState`](cdrafts-split/C10FunctionalVerifierState.ec) and
+[`C10FunctionalVerifier`](cdrafts-split/C10FunctionalVerifier.ec) add fourteen
+lemmas. The actual native Raw/CommonInput verifier results and full backend
+state agree. Structured Raw verification retains its existing two-u32-counter
+condition; the 4,008-byte decoded endpoint discharges it. The common caller
+contract admits arbitrary backend-consistent prehistory, including repeated
+queries, and preserves the key and function. Its exact final history and call
+count include the message query and, on digest acceptance, all forest and layer
+effects. Refusal takes one call; the other branch takes 147 plus the two exact
+layer recovery costs. Separate losslessness proofs assume no acceptance.
+
+This closes the complete fixed-backend verifier component under the existing
+printer and primitive interpretations. It does not identify either backend with
+concrete RustCrypto/STM32 execution or a sampled oracle, nor transfer the
+ideal-model probability bound. Complete signing, initialized cross-language
+session composition, secure-wrapper accounting, callbacks and physical/QROM
+assumptions remain open. The [control owner](CONTROL-EVIDENCE.md#functional-complete-verifier-controls)
+records the ten typed mutations and the strengthened supplementary layer
+examples from #1043. Full replay, exact source identities, required review and
+actual CI remain separate landing evidence.
 
 ## Quantitative loss
 

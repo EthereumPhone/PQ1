@@ -500,3 +500,14 @@ Extracted.C10FunctionalLayer.layer_recovery_value
 Extracted.C10FunctionalLayer.signed_layer_recovery_value
 Extracted.C10FunctionalLayer.pure_layer_sign_values
 Extracted.C10FunctionalLayer.extracted_layer_body_values
+
+# Complete functional verifier (2026-10-24): nine kernel-only headlines.
+Extracted.C10FunctionalVerifier.header_index_words
+Extracted.C10FunctionalVerifier.header_ht_word
+Extracted.C10FunctionalVerifier.header_forest_bounds
+Extracted.C10FunctionalVerifier.digest_value
+Extracted.C10FunctionalVerifier.byte_node_injective
+Extracted.C10FunctionalVerifier.raw_layer_values
+Extracted.C10FunctionalVerifier.extracted_hypertree_value
+Extracted.C10FunctionalVerifier.verifier_head_values
+Extracted.C10FunctionalVerifier.decoded_verifier_result

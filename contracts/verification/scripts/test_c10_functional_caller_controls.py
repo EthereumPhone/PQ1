@@ -11,7 +11,7 @@ from test_c10_functional_build_controls import fixture as build_fixture
 from test_fors_auth_proof_controls import LAKE, ROOT, require_semantic_rejection
 from c10_representation import source
 from c10_representation_controls import changed
-from c10_functional_caller_controls import CALLER_CHANGES
+from c10_functional_caller_controls import CALLER_CHANGES, LAYER_VALUE_CHANGES, layer_value_fixture
 
 
 def run_lean(path, timeout=300):
@@ -92,12 +92,45 @@ def fixture(definitions):
     return '\n'.join(sorted(imports)) + '\n' + base + '\n' + '\n'.join(bodies)
 
 
+def check_value_fixtures(run):
+    """Finite expected values must reject the selected well-typed changes."""
+    original = source(True)
+    benign = changed(original, 'layer_recover_value', 'nonce) kp auth', 'nonce) (kp+0) auth', True)
+    for name, definitions in [('positive', original), ('preserving', benign)]:
+        result = run('examples_' + name, layer_value_fixture(definitions, True))
+        if result.returncode:
+            raise RuntimeError(name + ' layer value examples failed:\n' + result.stdout + result.stderr)
+        print('PASS C10 layer value examples: ' + name, flush=True)
+
+    def negative(row):
+        name, before, after, _, _ = row
+        definitions = changed(original, 'layer_recover_value', before, after, True)
+        typed = run('examples_' + name + '_typed', definitions)
+        if typed.returncode:
+            raise RuntimeError(name + ': layer value definition failed typing:\n' + typed.stdout + typed.stderr)
+        text = layer_value_fixture(definitions, True)
+        result = run('examples_' + name, text)
+        require_semantic_rejection(result, name)
+        start = text.index('theorem layer_zero_complete ')
+        stop = text.index('\ntheorem ', start + 1) + 1
+        lo, hi = text[:start].count('\n') + 1, text[:stop].count('\n') + 1
+        errors = re.findall(r'\.lean:(\d+):\d+: error:', result.stdout + result.stderr)
+        if not errors or not lo <= int(errors[0]) < hi:
+            raise RuntimeError(name + ': rejection missed layer_zero_complete\n' + result.stdout + result.stderr)
+        if 'Tactic `decide` proved that the proposition' not in result.stdout + result.stderr:
+            raise RuntimeError(name + ': value rejection was not a computed false proposition')
+        print('PASS C10 layer value typed rejection: ' + name + ' at layer_zero_complete', flush=True)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(negative, LAYER_VALUE_CHANGES))
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix='c10-functional-caller-controls-') as tmp:
         def run(name, text):
             path = Path(tmp) / (name + '.lean')
             path.write_text(text)
             return run_lean(path)
+        check_value_fixtures(run)
         original = source(True)
         benign = changed(original, 'forest_compress_value', '0 ht 4 0', '0 ht (2+2) 0', True)
         for name, definitions in [('positive', original), ('preserving', benign)]:

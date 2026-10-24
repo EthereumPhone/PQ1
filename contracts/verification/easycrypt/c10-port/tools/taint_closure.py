@@ -74,6 +74,20 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    'functional_verifier_digest',
+    'functional_digest_indices',
+    'functional_verifier_forest_value',
+    'functional_verifier_index_step',
+    'functional_verifier_layer_step',
+    'functional_verifier_coordinates',
+    'functional_verifier_history_step',
+    'functional_verifier_cost_step',
+    'functional_verifier_decision',
+    'fixed_functional_verifier',
+    'raw_functional_verifier',
+    'raw_functional_verifier_decoded',
+    'fixed_functional_verifier_lossless',
+    'raw_functional_verifier_lossless',
     'functional_common_merkle_build_projection',
     'common_functional_merkle_build',
     'functional_common_fors_sign_projection',
