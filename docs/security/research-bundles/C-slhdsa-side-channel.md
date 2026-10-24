@@ -4515,10 +4515,11 @@ gateway-gate-off = []
 # Without this feature the signing crates use software `sha2::Sha256` — what
 # host tests need. Every `stm32u585` build opts in automatically. It also
 # takes the driver's unrolled DIN feed and HR read-out (`unrolled-io`), its
-# inlined barriers (`inline-barriers`) and the one-call digest for
-# contiguous buffers (`oneshot`, with `sphincs-c10/hw-sha256-oneshot`), none
-# of which the FSBL takes.
-hw-sha256 = ["sphincs-c10/hw-sha256", "sphincs-c10/hw-sha256-oneshot", "pqsigner-hw/unrolled-io", "pqsigner-hw/inline-barriers", "pqsigner-hw/oneshot"]
+# inlined barriers (`inline-barriers`), the one-call digest for contiguous
+# buffers (`oneshot`, with `sphincs-c10/hw-sha256-oneshot`) and the INIT-only
+# restart between digests (`init-restart`; `nsc::zeroize_sensitive_state`
+# resets the engine instead), none of which the FSBL takes.
+hw-sha256 = ["sphincs-c10/hw-sha256", "sphincs-c10/hw-sha256-oneshot", "pqsigner-hw/unrolled-io", "pqsigner-hw/inline-barriers", "pqsigner-hw/oneshot", "pqsigner-hw/init-restart"]
 # Non-interactive automated end-to-end test mode. Provisions a fixed
 # test mnemonic + PIN at boot, marks PIN as verified, and short-circuits
 # every confirm() / enter_pin() dialog so no stdin input is needed.

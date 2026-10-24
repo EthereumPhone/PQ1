@@ -49,6 +49,11 @@ inline-barriers = []
 # for `sphincs-c10`'s `sha256_bytes` (its `hw-sha256-oneshot`). Secure image
 # only, as `unrolled-io`.
 oneshot = []
+# Start each digest with HASH_CR.INIT alone, no RCC HASHRST pulse (the
+# reset moves to `hash::scrub`, which every secure-world wipe calls), with
+# a back-to-back boot self-test through both entry points. Secure image
+# only, as `unrolled-io`; the FSBL keeps the per-digest reset.
+init-restart = ["oneshot"]
 
 [dependencies.cortex-m-semihosting]
 workspace = true

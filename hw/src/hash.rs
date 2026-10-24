@@ -176,7 +176,9 @@ pub mod probe {
     /// The caller's own work: the previous digest's end to this `init` (with
     /// the tick hook, when it runs). Only gaps below [`LONG`] count here.
     pub const GAP: usize = 0;
-    /// `init`: the busy wait, the HASHRST pulse, the CR write.
+    /// `init`: the busy wait, the HASHRST pulse (builds without
+    /// `init-restart`; with it the stage is the merge-buffer clear), the CR
+    /// write.
     pub const READY: usize = 1;
     pub const RESET: usize = 2;
     pub const START: usize = 3;
@@ -344,6 +346,7 @@ pub const SECURE_IMAGE_ONLY: bool = cfg!(any(
     feature = "unrolled-io",
     feature = "inline-barriers",
     feature = "oneshot",
+    feature = "init-restart",
     feature = "tick-hook",
     feature = "hash-probe",
     feature = "hw-sha256-crosscheck"
@@ -471,6 +474,13 @@ unsafe fn self_test() {
     unsafe {
         split_self_test();
     }
+    // The secure image restarts the engine with INIT alone between digests;
+    // its boot vector for that runs here. Halts on its own failure.
+    #[cfg(feature = "init-restart")]
+    // SAFETY: forwarded contract, as above.
+    unsafe {
+        restart_self_test();
+    }
     let expected: [u8; 32] = [
         0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
         0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
@@ -528,6 +538,88 @@ unsafe fn split_self_test() {
     }
 }
 
+/// Message lengths of the back-to-back self-test: every shape the signer
+/// hashes (48/80-byte PRFs, 96/128/160-byte tweak hashes, `grind_r`'s
+/// 119 bytes at NBLW = 24, the 480/1,440-byte compressions) and the padding
+/// edges around them. An odd count, so that running the list forward and
+/// then reversed with the entry point alternating puts each length through
+/// both. The empty message is left out: nothing hashes it, and the Linux
+/// driver carries a quirk for it.
+#[cfg(feature = "init-restart")]
+const RESTART_KAT_LENS: [usize; 23] =
+    [3, 1, 2, 4, 48, 55, 56, 63, 64, 65, 68, 80, 96, 103, 119, 120, 127, 128, 129, 131, 160, 480, 1440];
+
+/// The first four bytes of each length's digest, checked digest by digest;
+/// a host test recomputes them from the list and message above with
+/// software SHA-256.
+#[cfg(feature = "init-restart")]
+const RESTART_KAT_PREFIX: [u32; 23] = [
+    0xde73_c79b, 0xbbee_bd87, 0x9573_16fe, 0x0bc0_bfd8, 0x6d1b_47e9, 0xc5e3_c3e3,
+    0xa790_d48a, 0xbbeb_cae4, 0xdd19_841d, 0xc09e_be66, 0x83db_114f, 0x69c4_9e84,
+    0xd7be_0585, 0x73a6_5f4d, 0xbfd6_9afd, 0xed63_36a0, 0x3c9b_bdbb, 0x6c8c_35df,
+    0x61f2_d40e, 0xa1c0_279e, 0x2ad8_1c36, 0x5087_5667, 0x5c18_81a7,
+];
+
+/// The 46 full digests folded (digest `k` XORed in at byte offset `k`), for
+/// the bytes the prefixes do not cover. The fold alone can cancel two equal,
+/// rotation-invariant errors; the per-digest prefixes cannot. Indexing
+/// rather than `rotate_left` keeps `memmove` (1.5 KB) out of the image. A
+/// host test recomputes it too.
+#[cfg(feature = "init-restart")]
+const RESTART_KAT: [u8; 32] = [
+    0x40, 0x3b, 0x92, 0x4f, 0x63, 0x85, 0x2e, 0x6e,
+    0x70, 0xea, 0x75, 0xb0, 0xb0, 0x02, 0xd7, 0x6d,
+    0x3f, 0xc6, 0xbf, 0xd2, 0x19, 0x80, 0x6c, 0x9d,
+    0x74, 0x67, 0x45, 0xd9, 0x07, 0x84, 0x4d, 0xea,
+];
+
+/// Back-to-back digests with no reset between them (`init-restart`): each
+/// starts on INIT alone after the previous shape, through the one-shot and
+/// through a two-part streamed digest in turn. A digest that INIT failed to
+/// restart cleanly fails its own prefix check.
+///
+/// # Safety
+/// As `self_test`: boot only, single-threaded, no hash stream in flight.
+#[cfg(feature = "init-restart")]
+#[allow(clippy::cast_possible_truncation)] // the message pattern wraps by design
+unsafe fn restart_self_test() {
+    let mut msg = [0u8; 1440];
+    for (i, b) in msg.iter_mut().enumerate() {
+        *b = (i as u8).wrapping_mul(7) ^ 0x5A;
+    }
+    let mut acc = [0u8; 32];
+    let mut prefixes_ok = true;
+    let n = RESTART_KAT_LENS.len();
+    for k in 0..2 * n {
+        let i = if k < n { k } else { 2 * n - 1 - k };
+        let len = RESTART_KAT_LENS[i];
+        let (head, tail) = msg[..len].split_at(len / 3 + 1);
+        let mut d = [0u8; 32];
+        // SAFETY: forwarded contract; each `(ptr, len)` names a live
+        // sub-slice of `msg`, and `d` is 32 bytes on this frame.
+        unsafe {
+            if k % 2 == 0 {
+                pqsigner_sha256_oneshot(msg.as_ptr(), len, d.as_mut_ptr());
+            } else {
+                pqsigner_sha256_init();
+                pqsigner_sha256_update(head.as_ptr(), head.len());
+                pqsigner_sha256_update(tail.as_ptr(), tail.len());
+                pqsigner_sha256_final(d.as_mut_ptr());
+            }
+        }
+        prefixes_ok &= u32::from_be_bytes([d[0], d[1], d[2], d[3]]) == RESTART_KAT_PREFIX[i];
+        for (j, x) in d.iter().enumerate() {
+            acc[(j + k) % 32] ^= x;
+        }
+    }
+    if prefixes_ok && acc == RESTART_KAT {
+        hash_log!("[S] hash: back-to-back self-test PASS ({} digests, no reset between)", 2 * RESTART_KAT_LENS.len());
+    } else {
+        hash_log!("[S] hash: back-to-back self-test FAIL — HALT");
+        loop { cortex_m::asm::wfe(); }
+    }
+}
+
 
 // **H-1 (Trezor-port) — a wedged HASH engine must fail LOUD, not
 // silently return a stale digest.**
@@ -572,6 +664,7 @@ fn hash_engine_fault() -> ! {
     unsafe { pqsigner_hash_fault() }
 }
 
+#[cfg(not(feature = "init-restart"))]
 #[inline]
 fn wait_ready() {
     let mut t = 0u32;
@@ -586,6 +679,47 @@ fn wait_ready() {
             hash_engine_fault();
         }
     }
+}
+
+/// `wait_ready`, returning the status word that showed the engine idle, so
+/// `init-restart` checks it for a stale DCIS without another bus read.
+#[cfg(feature = "init-restart")]
+#[inline]
+fn wait_ready_sr() -> u32 {
+    let mut t = 0u32;
+    loop {
+        let sr = REG.sr.read();
+        if sr & SR_BUSY == 0 {
+            return sr;
+        }
+        t += 1;
+        if t > 10_000_000 {
+            hash_log!("[S] hash: wait_ready TIMEOUT, SR={:#x}", sr);
+            // H-1, as in `wait_ready`.
+            hash_engine_fault();
+        }
+    }
+}
+
+/// Reset the HASH engine: the HASHRST pulse `init_clock` gives it at boot.
+/// It clears the core, HR and the context registers (`HASH_CSRx`, which can
+/// hold the last block fed — `sk_seed` for the PRFs), which nothing else
+/// clears: the per-digest reset only ever ran at the *next* digest's start,
+/// and RM0456 does not say INIT clears CSRx. The secure world calls this from
+/// `nsc::zeroize_sensitive_state` (lock, idle wipe, FI failure, tamper,
+/// faults), so the engine is reset whenever the secrets in SRAM are: on idle
+/// that is the same deferral-bounded moment, not the instant the deadline
+/// passes while a handler is busy. The clock stays on, and the next digest
+/// starts from the reset state, as after boot.
+///
+/// Any digest in flight is lost, so call it only where no hash resumes. A
+/// misplaced call costs a wrong digest or a DCIS timeout, never a stale one:
+/// the FI double compute or the H-1 fault posture takes it from there.
+pub fn scrub() {
+    REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);
+    dsb();
+    REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);
+    dsb();
 }
 
 #[inline]
@@ -643,7 +777,21 @@ pub unsafe extern "C" fn pqsigner_sha256_init() {
 unsafe fn init_body() {
     #[cfg(feature = "hash-probe")]
     probe::init_entered();
+    #[cfg(not(feature = "init-restart"))]
     wait_ready();
+    // `init-restart`: the same idle wait, and the status word that ended it
+    // must not still carry DCIS. The previous digest's `final` clears DCIS
+    // after reading HR out, so DCIS set here means that clear was skipped.
+    // This catches that one fault and nothing more: a skipped INIT write
+    // below leaves DCIS clear and gives a wrong digest. In the signer the FI
+    // double compute and verify-before-release catch that; every other
+    // consumer fails closed (an image or bundle refused, a wrong address).
+    // A skipped CR write after the per-digest reset was the same class.
+    #[cfg(feature = "init-restart")]
+    if wait_ready_sr() & SR_DCIS != 0 {
+        hash_log!("[S] hash: DCIS still set at init — FAULT");
+        hash_engine_fault();
+    }
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::READY);
     // SAFETY: category 5 — exclusive write to `static mut STATE` (the
@@ -654,16 +802,33 @@ unsafe fn init_body() {
         STATE.buf = [0; 4];
         STATE.pending = 0;
     }
-    // Pulse HASHRST in RCC before every new hash. Setting INIT=1 in HASH_CR
-    // alone is NOT enough on STM32U5: after a completed hash the internal
-    // FIFO counters stay in a state where the next block can't be pushed.
-    // RSTR wipes the whole peripheral state back to cold-boot values.
-    REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);
-    dsb();
-    REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);
-    dsb();
+    // The FSBL pulses HASHRST before every digest (its bytes carry the boot
+    // proof). The secure image (`init-restart`) does not: the INIT write
+    // below is RM0456's per-message re-initialisation. It resets the hash
+    // core, sets NBWE back to 0x11, NBWP and DINNE to 0, clears DCIS and
+    // forces HR to its reset value, and it is what the ST HAL and Linux
+    // driver do per message. The old claim here, that INIT alone leaves the
+    // FIFO unable to take the next block, landed together with the real fix
+    // for that stall (pushing DIN without polling DINIS, 4fefc3bc9) and was
+    // never tested on its own; the boot self-test now runs 46 back-to-back
+    // digests without a reset. The reset moves to `scrub`, which every
+    // secret wipe calls.
+    #[cfg(not(feature = "init-restart"))]
+    {
+        REG.rcc_ahb2rstr1.set_bits(RCC_HASHRST);
+        dsb();
+        REG.rcc_ahb2rstr1.clear_bits(RCC_HASHRST);
+        dsb();
+    }
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::RESET);
+    // INIT leaves NBLW alone, and the reset used to zero it, so the last
+    // digest's value (24 after `grind_r`'s 119-byte PRF) would otherwise sit
+    // there until this digest's `final` writes its own: a single skipped
+    // STR write there would pad with the stale count. RM0456 §51.4.5 has
+    // NBLW written before INIT anyway (step 1c, and the caution under it).
+    #[cfg(feature = "init-restart")]
+    REG.str_.write(0);
     // HASH mode (MODE=0), 8-bit datatype, SHA-256, INIT=1.
     REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
     // The DIN writes that follow go to the same peripheral, so Device-memory

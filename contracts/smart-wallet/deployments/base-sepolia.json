@@ -43,8 +43,8 @@
     }
   ],
   "broadcast": "broadcast/DeployImplAndFactoryBaseSepolia.s.sol/84532/run-1792606439.json",
-  "verified": false,
-  "note": "Deployed with ./deploy.sh (script/ProductionDeploy.sol): addresses checked against the firmware constants before broadcasting, wiring checked after. Checked on chain 2026-10-21: verifier and factory codehashes equal the pins in test/DeployedBytecodeReproCheck.t.sol on every chain; the impl codehash differs per chain only in Solady's cached EIP-712 domain separator and chain id (on Base it equals EXPECTED_IMPL_CODEHASH_ON_BASE); factory.implementation, factory.c10Verifier, impl.c10Verifier and impl.entryPoint (v0.6) all as expected. Source not yet verified on https://sepolia.basescan.org (./deploy.sh verify <chain>).",
+  "verified": true,
+  "note": "Deployed with ./deploy.sh (script/ProductionDeploy.sol): addresses checked against the firmware constants before broadcasting, wiring checked after. Checked on chain 2026-10-21: verifier and factory codehashes equal the pins in test/DeployedBytecodeReproCheck.t.sol on every chain; the impl codehash differs per chain only in Solady's cached EIP-712 domain separator and chain id (on Base it equals EXPECTED_IMPL_CODEHASH_ON_BASE); factory.implementation, factory.c10Verifier, impl.c10Verifier and impl.entryPoint (v0.6) all as expected. Source verified on https://sepolia.basescan.org 2026-10-24 (all three, ./deploy.sh verify; solc v0.8.28+commit.7893614a, runs 999999, prague, viaIR).",
   "previousDeployments": [
     {
       "status": "superseded",
