@@ -3241,13 +3241,29 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         }
     });
 
+    // The bootstrap seeds, when the slot master's stretch also produced them
+    // for the deploy / rotation keygen below.
+    let mut bootstrap_seeds = None;
     if need_keygen {
-        // Derived here, on a cache miss only: a cached slot key never reads
-        // the slot master, and deriving it costs a whole BIP-39 seed
-        // (2,048 HMAC-SHA512 rounds, 0.63 s measured on the U585) per request.
-        let slot_master_entropy: Zeroizing<[u8; 32]> = Zeroizing::new(
-            crate::crypto::slot_master_entropy_from_entropy(&*entropy, account_index),
-        );
+        // Read here, on a cache miss only: a cached slot key never reads the
+        // slot master. It is the session's own when it names this account;
+        // otherwise one BIP-39 stretch (2,048 HMAC-SHA512 rounds, 0.63 s
+        // measured on the U585) derives it, and the bootstrap seeds too when
+        // this request also needs the bootstrap key.
+        let mut slot_master_entropy = Zeroizing::new([0u8; 32]);
+        match super::state::slot_master_for(
+            &entropy,
+            account_index,
+            include_init_code || register_slot,
+            &mut slot_master_entropy,
+        ) {
+            Ok(seeds) => bootstrap_seeds = seeds,
+            Err(()) => {
+                entropy.zeroize();
+                crate::fi::zeroize_barrier();
+                return NscStatus::InternalError as u32;
+            }
+        }
         ui::show_progress("Slot keygen", 0);
         let (slot_sk, _slot_pk_seed_32, _slot_pk_root_32) =
             crate::crypto::derive_c10_slot_keypair_with_progress(
@@ -3264,12 +3280,6 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         unsafe {
             *core::ptr::addr_of_mut!(super::state::SLOT_CACHE) = Some(CachedSlot::new(account_index, chain_id, slot_index, slot_sk));
         }
-        super::state::with_state(|s| {
-            s.slot_master_entropy.zeroize();
-            crate::fi::zeroize_barrier();
-            s.slot_master_entropy = *slot_master_entropy;
-            s.slot_master_derived.set_true();
-        });
     }
 
     // #1037: the cached key must be the one this request named before
@@ -3370,12 +3380,14 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
 
     if include_init_code || register_slot {
         ui::show_progress("C10 keygen", 0);
-        let (c10_sk, master_pk_seed_32, master_pk_root_32) =
-            crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
+        let (c10_sk, master_pk_seed_32, master_pk_root_32) = match bootstrap_seeds.take() {
+            Some(seeds) => super::seed_once::bootstrap_keypair(seeds, |p| ui::show_progress("C10 keygen", p)),
+            None => crate::crypto::derive_c10_master_keypair_from_entropy_with_progress(
                 &*entropy,
                 account_index,
                 |p| ui::show_progress("C10 keygen", p),
-            );
+            ),
+        };
 
         // Refresh the bootstrap pubkey cache so the address-picker
         // doesn't have to re-keygen this account on the next look-up.
