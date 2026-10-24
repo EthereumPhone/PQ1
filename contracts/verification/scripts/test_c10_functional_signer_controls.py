@@ -6,8 +6,11 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 from test_fors_auth_proof_controls import LAKE, ROOT, require_semantic_rejection
+
+sys.path.insert(0, str(ROOT.parent / "easycrypt/c10-port/tools"))
 from c10_representation_controls import changed
 from c10_functional_signer_controls import (
     GROUPS, SIGNER_CHANGES, functional_definitions, preserving_definitions, lean_fixture,

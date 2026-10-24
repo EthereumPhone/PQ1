@@ -2171,6 +2171,6 @@
     "contracts/verification/extracted/Extracted/C10FunctionalSignerHeader.lean": "d4377a673cd42133dd2c64387fd842e30edd5a6ba1a5aa463a15eecc2d929a4e",
     "contracts/verification/extracted/Extracted/C10FunctionalSignerSerialization.lean": "dc64d07144a88c5c7cc716be673fe15544cf8736a56a5a6fd8f0074384f90c14",
     "contracts/verification/extracted/Extracted/C10FunctionalSignerValues.lean": "431e8e5131946751e04f9ecadb5e9eb3198266f79ef7b3cc4efbddb6f8c69283",
-    "contracts/verification/scripts/test_c10_functional_signer_controls.py": "b1a520ed57d9ece0f8d4e8bdbb22640832ac29d28b196693835f90a2773a59b6"
+    "contracts/verification/scripts/test_c10_functional_signer_controls.py": "c3b3f1b0e6cc794c07d0a9cbc7fded7a20cf404743a76a657862606118649455"
   }
 }

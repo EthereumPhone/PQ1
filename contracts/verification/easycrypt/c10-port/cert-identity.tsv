@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	a4556e47d07aaa59a897be9b26d31aae
+split	35259df32a0173652962dcfd735978c2
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1718,3 +1718,11 @@ fork	9c2d21280c84d52c30b22111151f1135
 # nine modules add60 lemmas without a project axiom/admit. The complete
 # cold direct/CLI replay, extracted evidence, controls and combined review
 # remain required; an identity update is not proof execution evidence.
+
+# 2026-10-24 signer-control CI import correction: bind the explicit repository
+# helper path in test_c10_functional_signer_controls.py. Its test-function
+# bodies, all Lean/EasyCrypt proof sources, generators and case inventories
+# are unchanged. Recheck the corrected runner in a clean Python environment;
+# prior proof executions retain their original identities and require exact
+# dependency/toolchain applicability audits before reuse.
+# Split identity a4556e47d07aaa59a897be9b26d31aae -> 35259df32a0173652962dcfd735978c2.
