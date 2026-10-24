@@ -9,7 +9,7 @@ license = "MIT OR Apache-2.0"
 # FIPS 203 ML-KEM-1024 (RustCrypto, ACVP-validated). no_std; drop `alloc`.
 ml-kem = { version = "0.3.2", default-features = false, features = ["zeroize"] }
 # AES-256-GCM DEM — already a workspace dep (domain/secure). In-place, no alloc.
-aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+aes-gcm = { version = "0.11", default-features = false, features = ["aes"] }
 # Hybrid KDF (HMAC-SHA256) binding the ML-KEM shared secret to the HUK secret
 # so the wrap can never drop below the AES-256/HUK floor. Both already workspace deps.
 hmac = { version = "0.12", default-features = false }
