@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	37aa4d38ba9ba631ebe3ae4fa66263c3
+split	06107f7d88bea7d1871e411d02f21578
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1726,3 +1726,10 @@ fork	9c2d21280c84d52c30b22111151f1135
 # prior proof executions retain their original identities and require exact
 # dependency/toolchain applicability audits before reuse.
 # Split identity a4556e47d07aaa59a897be9b26d31aae -> 35259df32a0173652962dcfd735978c2.
+
+# 2026-10-25 leaf-padding proof correction: explicit drop_size_cat/take_size_cat
+# replaces SMT-dependent list slicing in LeafCommitmentHybrid.padded_leaf_suffix.
+# The statement, definitions, assumptions and inventories are unchanged. Direct
+# and diagnostic-sensitive CLI checks pass, with all unresolved focused controls.
+# Source binding updated; complete cold replay and fresh merge review remain
+# required. Split 37aa4d38ba9ba631ebe3ae4fa66263c3 -> 06107f7d88bea7d1871e411d02f21578.

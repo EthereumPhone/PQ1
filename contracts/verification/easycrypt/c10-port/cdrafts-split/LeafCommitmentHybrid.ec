@@ -11,7 +11,7 @@ lemma padded_leaf_suffix prefix key : size key=16 =>
 proof.
   move=> hk; rewrite /leaf_suffix_candidate /pad !size_cat hk size_nseq /=.
   have h : size prefix+32-32=size prefix by smt().
-  rewrite h drop_cat_le; first smt(size_ge0).
+  by rewrite h drop_size_cat 1:// take_size_cat 1:hk.
 qed.
 
 module LeafCommitmentReal = {
