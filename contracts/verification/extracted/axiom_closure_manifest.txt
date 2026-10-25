@@ -551,3 +551,9 @@ Extracted.C10FunctionalSigner.pure_signer_result
 Extracted.C10FunctionalSigner.actual_release_words
 Extracted.C10FunctionalSigner.extracted_signer_result
 Extracted.C10FunctionalSigner.extracted_signer_bytes
+
+# Fixed-backend initialized session and wrapper composition, 2026-10-25.
+Extracted.C10FunctionalKeygen.extracted_public_root
+Extracted.C10FunctionalKeygen.initialized_release_bytes
+secure_wrapper_model.wrapper_functional_release
+secure_wrapper_model.wrapper_functional_call_bounds

@@ -1,3 +1,5 @@
+import Extracted.C10FunctionalKeygen
+import Extracted.C10FunctionalWrapper
 import Extracted.C10FunctionalSigner
 import Extracted.C10FunctionalVerifier
 import Extracted.C10FunctionalForest
@@ -640,3 +642,8 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalSigner.actual_release_words
 #print axioms Extracted.C10FunctionalSigner.extracted_signer_result
 #print axioms Extracted.C10FunctionalSigner.extracted_signer_bytes
+
+#print axioms Extracted.C10FunctionalKeygen.extracted_public_root
+#print axioms Extracted.C10FunctionalKeygen.initialized_release_bytes
+#print axioms secure_wrapper_model.wrapper_functional_release
+#print axioms secure_wrapper_model.wrapper_functional_call_bounds

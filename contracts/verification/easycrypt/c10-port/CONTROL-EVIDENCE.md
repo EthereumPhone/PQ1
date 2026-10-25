@@ -504,3 +504,30 @@ raw audit; persistent enforcement remains #1034. These controls establish
 sensitivity of the selected consuming proofs, not falsity of every changed
 proposition or completeness against all specification errors. Full cold replay
 and inherited controls remain mandatory.
+
+## Functional session and wrapper controls
+
+The initialized-session batch uses four positive/preserving Lean fixtures and
+eight separately typechecked changes to theorem propositions. Each unchanged
+proof must reject at the named consuming theorem. These cover the actual keygen
+layer and seed padding, initialized signer message and returned bytes, wrapper
+shared bytes and verifier result, and the two-sign/one-verify event counts.
+The typed fixtures define propositions; they do not admit the altered claims.
+
+The native fixtures include eight positive/preserving checks and seventeen
+separately typechecked operator or module mutations. They cover keygen layer,
+secret and padding; request caps, the absorbing failure latch, returned-message
+ledger and final freshness check; initialized key assignment; shared byte
+encoding and decoding; and wrapper final-guard, second-sign cost, verifier cost
+and second-sign history composition. The adaptive wrapper context adds charged
+readiness refusals, later attempts and final freshness controls. Operator
+arguments have explicit types so
+that removing an argument's only use still produces a well-typed change. A type
+error is never credited as a proof rejection.
+
+Seven additional scope probes check the existing forbidden-symbol boundary for
+the seven native modules. The full gate must execute every registered target and
+control. Focused calibration alone is not full replay evidence. Raw receipts
+must distinguish ordinary proof rejection at the intended consumer from
+syntax/type failures, timeouts, signals and resource errors. These checks do not
+transfer sampled-oracle security bounds or validate physical wrapper effects.

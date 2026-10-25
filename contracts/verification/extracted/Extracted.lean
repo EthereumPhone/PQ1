@@ -1,3 +1,5 @@
+import Extracted.C10FunctionalKeygen
+import Extracted.C10FunctionalWrapper
 import Extracted.C10FunctionalSigner
 import Extracted.C10FunctionalVerifier
 import Extracted.C10FunctionalForest

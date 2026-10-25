@@ -674,3 +674,12 @@ C10FunctionalSigner
 C10FunctionalSignatureBytes
 C10FunctionalSignerWidths
 C10FunctionalSignerBytes
+
+# Functional initialized sessions and wrapper composition, 2026-10-25.
+C10FunctionalKeygen
+C10FunctionalCalls
+C10FunctionalObservations
+C10FunctionalSession
+C10FunctionalInitialization
+C10FunctionalWrapper
+C10FunctionalWrapperSession

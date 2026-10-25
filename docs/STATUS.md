@@ -1,5 +1,14 @@
 # PQSigner — STATUS (start here)
 
+**EasyCrypt fixed-backend composition (2026-10-25):** the native initialized
+adaptive byte session now uses the shared functional signer/verifier values and
+wire codec; the adaptive wrapper context retains charged refusals and retries.
+Actual extracted keygen/sign calls and the sequential secure wrapper
+also compose with those endpoints, retaining bounded failure and native query
+accounting. These remain deterministic model results; the [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#functional-initialized-sessions-and-wrapper-composition)
+states the source-lifting, arbitrary Rust client, callback, sampled-oracle and
+physical boundaries. This does not confer production authority.
+
 **Rust digest-field bridge (2026-10-08):** the extracted HT and all thirteen
 FORS decoders now agree with the fidelity-checked verifier specification for
 every digest. [Proof and remaining correspondence boundary](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence).

@@ -2039,3 +2039,54 @@ scratch/_scope_neg_op_C10FunctionalSigner.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalSignatureBytes.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalSignerWidths.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalSignerBytes.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Functional initialized sessions, shared wire codec, wrapper values/effects and scope controls.
+scratch/c10_session_keygen_positive.ec	MUST-PASS	-
+scratch/c10_session_keygen_preserving.ec	MUST-PASS	-
+scratch/c10_session_session_positive.ec	MUST-PASS	-
+scratch/c10_session_session_preserving.ec	MUST-PASS	-
+scratch/c10_session_wrapper_positive.ec	MUST-PASS	-
+scratch/c10_session_wrapper_preserving.ec	MUST-PASS	-
+scratch/c10_session_wrapper_context_positive.ec	MUST-PASS	-
+scratch/c10_session_wrapper_context_preserving.ec	MUST-PASS	-
+scratch/c10_session_keygen_layer_typed.ec	MUST-PASS	-
+scratch/c10_session_keygen_layer_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_session_keygen_secret_typed.ec	MUST-PASS	-
+scratch/c10_session_keygen_secret_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_session_keygen_padding_typed.ec	MUST-PASS	-
+scratch/c10_session_keygen_padding_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_session_raw_cap_typed.ec	MUST-PASS	-
+scratch/c10_session_raw_cap_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_session_failure_latch_typed.ec	MUST-PASS	-
+scratch/c10_session_failure_latch_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_session_returned_ledger_typed.ec	MUST-PASS	-
+scratch/c10_session_returned_ledger_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_session_forge_freshness_typed.ec	MUST-PASS	-
+scratch/c10_session_forge_freshness_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_session_initialized_backend_typed.ec	MUST-PASS	-
+scratch/c10_session_initialized_backend_reject.ec	MUST-FAIL	cannot clear _ that is/are used in the conclusion
+scratch/c10_session_shared_encoding_typed.ec	MUST-PASS	-
+scratch/c10_session_shared_encoding_reject.ec	MUST-FAIL	nothing to rewrite
+scratch/c10_session_shared_decoding_typed.ec	MUST-PASS	-
+scratch/c10_session_shared_decoding_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_session_wrapper_guard_typed.ec	MUST-PASS	-
+scratch/c10_session_wrapper_guard_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_session_wrapper_second_cost_typed.ec	MUST-PASS	-
+scratch/c10_session_wrapper_second_cost_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_session_wrapper_verification_cost_typed.ec	MUST-PASS	-
+scratch/c10_session_wrapper_verification_cost_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_session_wrapper_second_history_typed.ec	MUST-PASS	-
+scratch/c10_session_wrapper_second_history_reject.ec	MUST-FAIL	cannot prove goal (strict)
+scratch/c10_session_wrapper_refusal_charge_typed.ec	MUST-PASS	-
+scratch/c10_session_wrapper_refusal_charge_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_session_wrapper_retry_typed.ec	MUST-PASS	-
+scratch/c10_session_wrapper_retry_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_session_wrapper_freshness_typed.ec	MUST-PASS	-
+scratch/c10_session_wrapper_freshness_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/_scope_neg_op_C10FunctionalKeygen.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalCalls.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalObservations.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalInitialization.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalWrapper.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_C10FunctionalWrapperSession.ec	MUST-FAIL	FORS_C_TreePort.

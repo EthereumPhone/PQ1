@@ -257,8 +257,9 @@ This closes the complete fixed-backend verifier component under the existing
 printer and primitive interpretations. It does not identify either backend with
 concrete RustCrypto/STM32 execution or a sampled oracle, nor transfer the
 ideal-model probability bound. Complete release signing is covered below; initialized cross-language
-session composition, secure-wrapper accounting, callbacks and physical/QROM
-assumptions remain open. The [control owner](CONTROL-EVIDENCE.md#functional-complete-verifier-controls)
+session interpretation, callbacks and physical/QROM assumptions remain open.
+The fixed-backend initialized-session and wrapper composition is described below.
+The [control owner](CONTROL-EVIDENCE.md#functional-complete-verifier-controls)
 records the ten typed mutations and the strengthened supplementary layer
 examples from #1043. Full replay, exact source identities, required review and
 actual CI remain separate landing evidence.
@@ -297,13 +298,95 @@ value equality.
 This closes the complete release-signer value/encoding component under the
 existing paired-printer and primitive interpretations. It does not identify
 the supplied Lean backend with RustCrypto, STM32 SHA or EasyCrypt's sampled
-oracle. Initialized functional sessions, the secure wrapper's two signing
-calls and verification accounting, callback non-interference and physical/QROM
-assumptions remain open. No sampled-oracle probability bound transfers through
+oracle. The next section composes initialized native sessions and the wrapper's
+two signing calls and verification accounting. Callback non-interference,
+whole effectful Rust/session interpretation and physical/QROM assumptions remain
+open. No sampled-oracle probability bound transfers through
 these deterministic equalities. The [control owner](CONTROL-EVIDENCE.md#functional-complete-signer-controls)
 records the typed value, composition and native-effect mutations. Full cold
 replay, exact identities, required review and actual CI remain separate landing
 evidence; these statements confer no production authority.
+
+## Functional initialized sessions and wrapper composition
+
+The fixed-backend value relation now includes actual key preparation and the
+native adaptive byte session (2026-10-25). It uses the existing 85 shared
+definitions without extending the expression language. The backend function
+and secret are explicit experiment inputs; this is separate from the sampled
+oracle experiments and their security bounds.
+
+[`C10FunctionalKeygen.lean`](../../extracted/Extracted/C10FunctionalKeygen.lean)
+connects the actual public-key-root computation to the shared Merkle value at
+layer one, tree zero, with the actual padded public seed. Its
+`initialized_release_bytes` then composes actual key generation with the full
+release signer and shared byte encoding. Every bounded signing failure remains
+in the Result; no successful-signing premise is added. This theorem covers a
+keygen/sign call sequence, not an extracted arbitrary Rust client.
+
+[`C10FunctionalKeygen`](cdrafts-split/C10FunctionalKeygen.ec) preserves the
+native preparation's arbitrary-public-input totalization, auxiliary random and
+message outputs, key and function. It admits any backend-consistent prehistory
+and accounts for all 177,151 hash/derive calls. This total differs from the
+155,135 public-query charge: the remaining 22,016 calls derive WOTS secrets.
+[`C10FunctionalCalls`](cdrafts-split/C10FunctionalCalls.ec) retains the existing
+signer/verifier result, history and exact executed-prefix cost contracts as
+unary and total-probability statements for caller composition.
+
+[`C10FunctionalSession`](cdrafts-split/C10FunctionalSession.ec) and
+[`C10FunctionalInitialization`](cdrafts-split/C10FunctionalInitialization.ec)
+relate the actual native `ByteContext` to a value model whose adapter directly
+uses the shared signature encoder and decoder. They preserve the same adaptive
+client's observations and state, all `FullSession` fields, request admission,
+raw/signing caps, absorbing signing failure, returned-message ledger and final
+fresh-message verification. Successful signature widths are proved from the
+actual calls; the decoded counter bounds follow from the admitted wire width.
+Initialization establishes history consistency without an entry history or
+success premise. The initialized success-probability equality compares these
+two fixed-backend experiments only. It is not a transfer from the sampled-oracle
+EUF experiment. Separate losslessness statements retain the ordinary
+lossless-client obligation.
+
+The value model does not execute oracle queries. Its backend history and call
+counter are therefore not equated to the native execution. The relation retains
+native history consistency and the key/function frame; the separate unary
+contracts retain the native effects and exact costs. The request counters and
+message ledger are equated in full.
+
+[`C10FunctionalWrapper.lean`](../../extracted/Extracted/C10FunctionalWrapper.lean)
+composes the existing source-lifted sequential wrapper with the same actual
+release signer and raw verifier endpoints. A normal release has the exact
+shared signature bytes, both actual signing calls using the same OptRand,
+successful raw verification, and exactly two sign events and one verify event,
+including an arbitrary prior trace. Normal refusals retain the existing
+at-most-two-sign/one-verify bound. Dependency failure or divergence is not
+relabelled as a normal refusal with final effects. The two new Lean modules add
+four kernel-only headline closures.
+
+[`C10FunctionalWrapper`](cdrafts-split/C10FunctionalWrapper.ec) separately
+proves the native wrapper's value, exact history relation and call cost through
+readiness refusal, signing exhaustion, both signing calls, internal verification
+and the final guard. Both signing calls consume the retained backend state;
+verification is charged even when the final guard refuses release. The wrapper
+has no absorbing session-failure latch. Its environmental booleans do not prove
+the rate, entropy, sentinel or physical dependency implementations.
+
+[`C10FunctionalWrapperSession`](cdrafts-split/C10FunctionalWrapperSession.ec)
+composes the existing initialized adaptive `WrapperContext` with that value
+model. It preserves admission, caps, request counters, returned-message ledger
+and final fresh-message verification. Every admitted attempt is charged,
+including readiness refusals, and later attempts remain possible. It does not
+import the library game's absorbing failure latch. Initialization, equality of
+success probabilities and losslessness have the same fixed-backend and client
+boundaries as the byte-session statements above.
+
+This closes the named deterministic composition slices under the existing
+paired-printer, primitive and wrapper source-lifting interpretations. It does
+not prove a single cross-kernel theorem for an arbitrary effectful Rust client
+or identify the fixed backend with a sampled oracle. Callback non-interference,
+concrete backend execution, entropy freshness, physical erasure/fault resistance
+and QROM remain open. The [control owner](CONTROL-EVIDENCE.md#functional-session-and-wrapper-controls)
+describes the typed mutations. Full replay, exact identities, required review
+and actual CI remain separate landing evidence; no production authority follows.
 
 ## Quantitative loss
 
