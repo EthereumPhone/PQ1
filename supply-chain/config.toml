@@ -224,9 +224,9 @@ version = "0.2.4"
 criteria = "safe-to-run"
 
 [[exemptions.crypto-bigint]]
-version = "0.7.6"
+version = "0.7.9"
 criteria = "safe-to-deploy"
-notes = "RUSTSEC-2026-0387 dependency remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
+notes = "Yanked 0.7.6 replacement (#1062), following RUSTSEC-2026-0387 remediation (#1046): exact-version baseline exemption, not a crate audit. Advisory and classical-crypto-boundary gates remain required."
 
 [[exemptions.crypto-common]]
 version = "0.1.7"
