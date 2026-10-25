@@ -1,5 +1,10 @@
 # PQSigner — STATUS (start here)
 
+**EasyCrypt ideal-wrapper reduction (2026-10-25):** the initialized byte-facing
+wrapper now has explicit independent and physical ideal-oracle forgery bounds,
+retaining charged refusals, retries and exposure of externally released
+signatures only. [Proof, numerical examples and remaining boundary](../contracts/verification/easycrypt/c10-port/RAW-WRAPPER-EUF.md).
+
 **EasyCrypt fixed-backend composition (2026-10-25):** the native initialized
 adaptive byte session now uses the shared functional signer/verifier values and
 wire codec; the adaptive wrapper context retains charged refusals and retries.

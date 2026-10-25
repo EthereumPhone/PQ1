@@ -2090,3 +2090,141 @@ scratch/_scope_neg_op_C10FunctionalSession.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalInitialization.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalWrapper.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_C10FunctionalWrapperSession.ec	MUST-FAIL	FORS_C_TreePort.
+
+# Initialized byte-wrapper probability, released-only exposures and scope controls.
+scratch/c10_wrapper_security_WrapperByteSession_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_WrapperChainReleasedWots_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_WrapperExposureLog_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_WrapperForestRelease_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_WrapperReleasedFors_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_aggregate_fors_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_aggregate_fors_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_wrapper_security_aggregate_fors_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_aggregate_hop_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_aggregate_hop_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_wrapper_security_aggregate_hop_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_aggregate_wots_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_aggregate_wots_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_wrapper_security_aggregate_wots_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_byte_format_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_wrapper_security_byte_format_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_byte_length_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_wrapper_security_byte_length_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_candidate_budget_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_candidate_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/c10_wrapper_security_candidate_budget_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_forest_address_reject.ec	MUST-FAIL	cannot apply `split/None` on that goal
+scratch/c10_wrapper_security_forest_address_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_forest_preserving.ec	MUST-PASS	-
+scratch/c10_wrapper_security_fors_guard_reject.ec	MUST-FAIL	expecting a goal of the form: hoare, ehoare, phoare, equiv
+scratch/c10_wrapper_security_fors_guard_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_guard_preserving.ec	MUST-PASS	-
+scratch/c10_wrapper_security_query_cap_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_wrapper_security_query_cap_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_release_preserving.ec	MUST-PASS	-
+scratch/c10_wrapper_security_released_only_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/c10_wrapper_security_released_only_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_wots_early_value_positive.ec	MUST-PASS	-
+scratch/c10_wrapper_security_wots_early_value_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/c10_wrapper_security_wots_early_value_typed.ec	MUST-PASS	-
+scratch/c10_wrapper_security_wots_guard_reject.ec	MUST-FAIL	expecting a goal of the form: hoare[S], ehoare[S], phoare[S], equiv[S]
+scratch/c10_wrapper_security_wots_guard_typed.ec	MUST-PASS	-
+scratch/_scope_neg_op_WrapperActualForest.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperActualPartition.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperByteSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperCandidateBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperCandidateProjection.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperCandidateUnion.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperChainLayerPlan.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperChainReleasedWots.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperChainWotsPlanSigner.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperCoverageBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperDeferredSign.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperDeferredSigner.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperEarlyObservedWots.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperEarlySelectedCharge.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperExposureHistory.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperExposureLog.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperExposureWidths.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForestDeferred.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForestMemo.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForestPlan.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForestRelease.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForestReplay.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForsOneProjection.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForsOpeningBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForsPlan.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperForsReplay.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperHistory.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperHmsgCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperHmsgEvidence.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperHmsgMetadata.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperInternalVerify.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLateSelectedPreservation.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerMemo.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerPlan.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerPlanIdentity.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerPlanStep.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerPlanSupport.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerPlanTrace.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerRelease.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerReleaseObserver.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLayerReplay.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLossless.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperMemoProjection.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperNumericalExamples.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperOpeningFrames.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperOriginalWotsCoordinateBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperOriginalWotsCutBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperOriginalWotsUnion.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperPlanComparison.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperPlanLossless.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperPlanSigner.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperPrefixBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperPreparedCutCoupling.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperPrivateSchedule.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperPublicCharges.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperQueryAccounting.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperQueryDriver.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperReleaseContext.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperReleaseOpenings.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperReleaseSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperReleasedFors.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperReleasedWots.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperSelectedChainSampling.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperSelectedTargetBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperSelectedWotsBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperSigningPlan.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperTargetContext.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperTargetCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperTargetEvent.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperTargetLossless.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperTargetProjection.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperTargetSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperTargetSessionCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperVerifierReplay.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsCandidateBudget.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsCandidateCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsCandidateEvidence.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsChainContext.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsContextOpening.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsFreshBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsLossless.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsOpening.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPlan.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPlanComparison.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPlanEvidence.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPlanObserver.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPlanProjection.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPlanRoots.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPlanSigner.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsRelease.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsReleaseContext.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsReleaseObserver.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsReleaseSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsReplay.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsSeed.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsSessionOpening.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsSigningPlan.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsValues.ec	MUST-FAIL	FORS_C_TreePort.

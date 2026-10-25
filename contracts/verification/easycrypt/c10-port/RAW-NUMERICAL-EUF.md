@@ -6,6 +6,11 @@ manually transcribed, classical ideal-oracle byte game, with actual key
 generation, adaptive hash/sign calls, complete verification and the 4008-byte
 signature codec. It is separate from the older conditional MM45 theorem family.
 
+The adaptive two-sign/one-verify wrapper has its own
+[initialized byte-wrapper bound](RAW-WRAPPER-EUF.md), including withheld outputs,
+charged refusals and later retries. Its exposure accounting and budgets differ
+from this ordinary library game.
+
 For nonnegative configured caps `qr` and `qs`, define
 
 ```

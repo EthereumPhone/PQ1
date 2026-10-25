@@ -2393,8 +2393,13 @@ raw-query and attempt caps `qr,qs`.
 
 This closes the separate **call-accounting and abstract query-budget** component
 of the wrapper-cost gap recorded above. The Lean per-call weights are not an
-instantiation of a proved backend-cost relation to EasyCrypt, and this new
-adaptive wrapper context has no cryptographic reduction theorem. The complete
+instantiation of a proved backend-cost relation to EasyCrypt. The subsequent
+[initialized byte-wrapper security proof](RAW-WRAPPER-EUF.md) now supplies a
+classical ideal-oracle cryptographic reduction for this adaptive context,
+retaining charged refusals, retries and freshness over externally released
+signatures only. Its independent and physical ideal-model bounds compose
+wrapper-specific WOTS, ordinary FORS, coverage and public-event charges; they
+do not reuse the absorbing library theorem by renaming its game. The complete
 cross-language signer/session relation, physical abort prefixes, concrete hash,
 RNG/delay/callback interpretations, QROM assumptions and hardware claims remain
 open. Typed mutations check sensitivity to missing/extra calls, a reset prior

@@ -531,3 +531,37 @@ control. Focused calibration alone is not full replay evidence. Raw receipts
 must distinguish ordinary proof rejection at the intended consumer from
 syntax/type failures, timeouts, signals and resource errors. These checks do not
 transfer sampled-oracle security bounds or validate physical wrapper effects.
+
+## Initialized byte-wrapper security controls
+
+`tools/c10_wrapper_security_controls.py` supplies 13 positive/preserving fixtures
+and 12 separately typed rejection pairs. The procedural changes cover logging
+an unreleased result, logging a capped hash request, selecting the wrong FORS
+tree, reversing the FORS or WOTS release guard, changing final message width,
+removing final signature framing and opening a WOTS position during internal
+planning. The focused byte controls compare a copy of the actual byte driver
+directly with its unchanged original, keeping the shared session and byte view.
+
+The early WOTS-value mutant adds its existing call rule to the proof, so its
+rejection reaches the unchanged logical unopened-cut postcondition. The saved
+failed goal identifies a matching selected coordinate whose flag changes from
+false to true. The FORS address and release-guard failed obligations are also
+inspected separately; tactic diagnostics alone are not presented as general
+counterexamples.
+
+Four charge-contract changes omit half the admitted-attempt candidate budget,
+the WOTS contribution, the ordinary FORS contribution or the private-prefix
+hop. They retain a definition-only typecheck and compare the altered charge
+with the original proved contract by exact proof-term matching. Their unchanged
+positive counterparts pass. This checks charge/statement sensitivity without
+crediting an SMT search timeout as rejection, and does not assert that every
+undercharged proposition is logically false.
+
+Ninety-nine scope probes cover the new proof modules. All 99 direct targets,
+their CLI replays and the new controls join the complete inherited cold gate.
+`WrapperNumericalExamples` checks three strict numerical upper bounds in native
+arithmetic. The coordinator must audit every new rejection's raw diagnostic at
+the intended first consumer recorded by `CONSUMERS`; persistent enforcement of
+that location check remains deferred in #1034. Parsing/type errors, signals,
+resource failures and timeouts earn no rejection credit. These checks do not
+extend the theorem to concrete backends, arbitrary Rust clients or hardware.
