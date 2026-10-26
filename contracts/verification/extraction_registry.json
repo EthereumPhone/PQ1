@@ -135,6 +135,7 @@
     ]
   },
   "required_targets": [
+    "extract-sha256-portable",
     "extract-secure-wrapper",
     "extract-sign-release",
     "extract-sign-forest",
@@ -172,6 +173,45 @@
     "extract-slotkdf"
   ],
   "entries": [
+    {
+      "target": "extract-sha256-portable",
+      "make_dir": "contracts/verification",
+      "crate": "contracts/verification/tools/sha256-portable-model",
+      "rust_files": [
+        "sphincs-c10/Cargo.toml",
+        "Cargo.lock",
+        "contracts/verification/scripts/check_sha256_portable_source.py",
+        "contracts/verification/tools/sha256-portable-model/lib.rs",
+        "contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/src/consts.rs",
+        "contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/src/sha256/soft.rs",
+        "contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/LICENSE-MIT",
+        "contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/LICENSE-APACHE"
+      ],
+      "rust_files_sha256": [
+        "f1ed6be5800c485bbe6eae2361dcec5048df70b42c40aa5ff90f66b149daf270",
+        "0ee394bd8e40dcee762c670d60b0319c56075dc745760a0f1d0b0a1d5a61a27c",
+        "f3c6d20eb880eaae8d41e9a1514043fe2b7db9b3e5bd0c000faa8b40e45c666c",
+        "61491b6e4187e8330f971fdd46383e8937867b360240fcd52cc186b79ff4263a",
+        "2f820349fa7cbf9fecc1d4aabbd1a721bb1badc3f32ef9e903826960b6f42523",
+        "98e765a8e8dfa0af31f2b76570f212e6b3099522bf300e1554cbbd9fd5d02960",
+        "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+        "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+      ],
+      "raw_generated_sha256": {
+        "Funs.lean": "e9e63d985e34d9495ed642bdd88e510ba02ab6b025cbfe2781fb728848eb7a60",
+        "Types.lean": "5c0fd249fd0ff6f18e07717bca2afbe2e925f01c19a14004d375a52cfc20eee8"
+      },
+      "generated_lean": [
+        "contracts/verification/extracted/Extracted/Sha256Portable/Funs.lean",
+        "contracts/verification/extracted/Extracted/Sha256Portable/Types.lean"
+      ],
+      "generated_lean_sha256": [
+        "90b864ca79529485973bb3a932b2767ac813ed788a04972eb81056f3eaf57039",
+        "5c0fd249fd0ff6f18e07717bca2afbe2e925f01c19a14004d375a52cfc20eee8"
+      ],
+      "fresh": true,
+      "note": "Exact sha2 0.10.9 portable word kernel, with authenticated dependency source. Does not extract Digest/streaming/padding/dispatch/byte loop/hardware."
+    },
     {
       "target": "extract-secure-wrapper",
       "make_dir": "contracts/verification",

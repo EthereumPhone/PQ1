@@ -872,7 +872,7 @@ override EXTRACTED_DIR := extracted
 override PQLEAN        := $(HOME)/.local/share/pqsigner-lean
 override REPO_ROOT     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 
-override _EXTRACTION_TARGETS := extract-secure-wrapper extract-sign-release extract-sign-forest extract-shuffle-derive extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
+override _EXTRACTION_TARGETS := extract-secure-wrapper extract-sign-release extract-sign-forest extract-shuffle-derive extract-shuffle extract-wots-sign extract-xmss-auth extract-xmss-root extract-fors-auth extract-fors-root extract-fors-secret extract-wots-secret extract-wots-keygen extract-fors-pk extract-verifier extract-fors-grind-r extract-wots-find-count extract-sphincs-adrs extract-aa-userop extract-fors-index extract-merkle-verify extract-fors-recovery extract-wots-pkfromsig extract-hash-fns extract-sha256-portable extract-bip39-roundtrip extract-decode-item extract-u256-mul extract-format-decimal extract-fwmanifest-preimage extract-wots-digits extract-aa-eip1271 extract-txcore-rlp extract-pinstate extract-slotkdf extract-tx-merkle
 override _EXTRACTION_IMPL_TARGETS := $(addprefix _,$(addsuffix -impl,$(_EXTRACTION_TARGETS)))
 .PHONY: verify-extracted verify-extract-differential verify-extraction-freshness verify-extraction-regen verify-extraction-regen-self-test _verify-extraction-regen-loop _verify-extraction-regen-loop-self-test _verify-extraction-regen-wrong-waiver-self-test _verify-extraction-make-path-self-test _verify-extraction-workspace-inner-self-test _verify-extraction-alias-dryrun-self-test $(_EXTRACTION_TARGETS) $(_EXTRACTION_IMPL_TARGETS)
 
@@ -1025,6 +1025,7 @@ override _TX_MERKLE_WAIVER_MARKER := PQ1_EXPECTED_WAIVER_STAGE: extract-tx-merkl
 # wired-in negative control (the PQFW_V1->PQFW_V2 domain-tag flip must fire both
 # tripwire halves). CI-runnable (pure Python). See scripts/check_extraction_freshness.py.
 verify-extraction-freshness: ## F1 toolchain-free extraction freshness tripwire (sha256 pins) + negative control
+	@$(_FV_PYTHON3) scripts/check_sha256_portable_source.py --self-test
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py --self-test
 	@$(_FV_PYTHON3) scripts/check_extraction_freshness.py --self-test
 	@$(_FV_PYTHON3) scripts/check_extraction_freshness.py
@@ -1726,6 +1727,10 @@ _verify-lake-path-self-test:
 #   make verify-extract-differential          replay committed (Rust-generated) vectors
 #   make verify-extract-differential GEN=1    re-execute the Rust to regenerate them
 verify-extract-differential: ## Extracted-Lean vs shipped-Rust differential
+	@$(_FV_PYTHON3) scripts/check_sha256_portable_corpus.py
+	@cd $(EXTRACTED_DIR) && $(LAKE) build Extracted.Sha256Portable.Compression Extracted.Sha256Portable.DiffVectors
+	@cd $(EXTRACTED_DIR) && $(LAKE) env lean Extracted/Sha256Portable/DiffCheck.lean
+	@$(_FV_PYTHON3) scripts/test_sha256_portable_controls.py
 ifeq ($(GEN),1)
 	@cd $(REPO_ROOT) && PQ_SIGN_HEADER_GENERATE=1 cargo test --locked \
 	  --manifest-path contracts/verification/tools/fors-recovery-corpus/Cargo.toml \
@@ -2110,6 +2115,26 @@ verify-extracted-heavy: ## S33 FormatDecimalSpec M7 (~42 GB kernel-TC) — carve
 	@# their exact per-theorem closures rather than only counting records.
 	@$(_FV_PYTHON3) scripts/check_axiom_closure.py --manifest $(EXTRACTED_DIR)/axiom_closure_format_decimal_manifest.txt /tmp/pq_axiomcheck_fd.out
 	@echo "OK: format_decimal M7 axiom-discipline gate passed — kernel-only closure over exactly 3 headlines"
+
+# Exact pinned dependency source; this root is the portable word kernel only.
+_extract-sha256-portable-impl:
+	@$(_begin_private_extraction)
+	@$(_FV_PYTHON3) scripts/check_sha256_portable_source.py --check-archive
+	@mkdir -p $${EXTRACTION_TMP_ROOT}/sha256out
+	@( cd $(REPO_ROOT) && $(PQLEAN)/charon rustc --preset=aeneas --abort-on-error \
+	  --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on \
+	  --start-from 'sha256_portable::soft::sha256_digest_block_u32' \
+	  --dest-file $${EXTRACTION_TMP_ROOT}/sha256portable.llbc -- --edition=2021 \
+	  --crate-type=lib --crate-name=sha256_portable \
+	  contracts/verification/tools/sha256-portable-model/lib.rs \
+	  --out-dir $${EXTRACTION_TMP_ROOT} 2>&1 | tail -1 )
+	@$(_FV_PYTHON3) -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["has_errors"] is False else "FAIL: Charon retained extraction errors")' $${EXTRACTION_TMP_ROOT}/sha256portable.llbc
+	@$(PQLEAN)/aeneas -backend lean -split-files -abort-on-error \
+	  -dest $${EXTRACTION_TMP_ROOT}/sha256out $${EXTRACTION_TMP_ROOT}/sha256portable.llbc
+	@sed 's/^import Sha256portable\.Types$$/import Extracted.Sha256Portable.Types/' \
+	  $${EXTRACTION_TMP_ROOT}/sha256out/Funs.lean > $${EXTRACTION_TMP_ROOT}/sha256out/Funs.fixed.lean
+	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-sha256-portable \
+	  $${EXTRACTION_TMP_ROOT}/sha256out $${EXTRACTION_TMP_ROOT}/sha256out/Funs.fixed.lean
 
 _extract-sphincs-adrs-impl:
 	@$(_begin_private_extraction)

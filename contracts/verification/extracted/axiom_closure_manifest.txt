@@ -557,3 +557,11 @@ Extracted.C10FunctionalKeygen.extracted_public_root
 Extracted.C10FunctionalKeygen.initialized_release_bytes
 secure_wrapper_model.wrapper_functional_release
 secure_wrapper_model.wrapper_functional_call_bounds
+
+# Exact sha2 0.10.9 portable word compression, kernel-only, 2026-10-26.
+Sha256Portable.round2_eq
+Sha256Portable.schedule_eq
+Sha256Portable.messageSchedule_eq
+Sha256Portable.runRounds_eq
+Sha256Portable.compression_packed
+Sha256Portable.compression_spec

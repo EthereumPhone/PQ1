@@ -1030,6 +1030,57 @@ use executable `sha256_pure`; it does not mechanically extract RustCrypto's
 SHA-256 implementation or the STM32 hardware driver. CAVP/test-vector agreement
 and absence of project axioms do not close either backend correspondence.
 
+**Portable word-compression correspondence (2026-10-26).**
+`Extracted/Sha256Portable/Compression.lean` now proves
+`Sha256Portable.compression_spec`: for every eight-word initial state and
+sixteen-word block, the extracted RustCrypto portable
+`sha256_digest_block_u32` succeeds and returns the unchanged vendored
+`SphincsCVerify.Spec.Sha256Impl.compress` result. This includes modular
+arithmetic, all 64 rounds, the rolling schedule, all round constants, input
+word order, and all eight feed-forward additions. Its six audited headline
+closures contain only `propext`, `Classical.choice`, and `Quot.sound`;
+there is no hash-security or backend-correctness axiom in these results.
+
+The proof input is the original word function from **C10's selected `sha2
+0.10.9`**, not a replacement compression implementation. The proof-only module
+root in `tools/sha256-portable-model/` reaches byte-identical `soft.rs` and
+`consts.rs` copied with their licenses from the Cargo-checksummed crate.
+`scripts/check_sha256_portable_source.py` checks the consumer's dependency
+selection, package checksum, harness, and source bytes;
+`make extract-sha256-portable` additionally authenticates the cached archive,
+requires Charon's `has_errors=false`, and compares the complete Aeneas output
+inventory and committed normalized files. Only the generated import path is
+normalized. This retains the Charon/Aeneas translation and compiler trust
+boundary; it does not prove the extractor itself correct.
+
+The default extracted build and axiom census include the new compression proof.
+`verify-extract-differential` executes 112 cases in the original Rust word
+function, extracted Lean, and vendored specification, covering every input
+word position, high bits, modular overflow, and deterministic mixed inputs.
+It also rejects a change to each of the eight output words for every case.
+Typed semantic controls check round and schedule rotations, constants, word
+order, omitted rounds, and feed-forward. The additional local command
+`python3 scripts/test_sha256_portable_controls.py --source-controls` makes
+those changes in Rust, re-extracts them, and requires successful definition
+typechecking before accepting a proof rejection or counterexample. Resource failures
+and malformed fixtures do not count as successful negative controls. Round
+rotations, schedule rotations, and constants break unchanged universal proofs;
+word order, omitted rounds, and feed-forward have kernel-checked concrete
+counterexamples to the same compression equality. The corresponding unchanged
+concrete instance also passes. The counterexamples avoid treating elaborator
+resource failures as evidence of inequivalence.
+
+**Remaining backend boundary.** The word theorem does not connect the existing
+`sha256_bytes`/`sha256_parts` postulates to an entire Rust `Digest` execution.
+Byte decoding, the block loop, streaming updates, padding and length encoding,
+dispatch, unsafe conversions, accelerated backends, and the STM32 driver
+remain outside this proof. Direct extraction of the pinned full API still
+encounters generic-array/trait translation errors; extracting the portable
+byte-loop root encounters an Aeneas borrow-join failure. The successful word
+extraction does not waive those failures. No concrete SHA-256 security,
+random-oracle instantiation, QROM, physical, or side-channel guarantee follows
+from this functional compression result.
+
 ## Quantum oracle access
 
 `ByteClientOracle.hash` accepts one classical byte list and returns one digest.

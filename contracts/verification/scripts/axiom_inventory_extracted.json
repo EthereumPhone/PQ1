@@ -1,8 +1,8 @@
 {
   "source": {
     "Extracted/AxiomCheck.lean": {
-      "sha256": "941fc44bf2a7d91fc6edd21c63f576c016ef022e4cfd8677f636c6eb8b4cd9eb",
-      "axiom_mentions": 471
+      "sha256": "d8f0e9e108c7cd3cd449568ada78e55543c078545cd60655dd4bf6571b36c064",
+      "axiom_mentions": 477
     },
     "Extracted/AxiomCheckFormatDecimal.lean": {
       "sha256": "e79c14b72dab3f2e77833edafabbd5b333ff671def875ee6beca4216c354aabc",
@@ -128,6 +128,10 @@
       "sha256": "4d1bf238e3dd21c5cec17387e0dd851d867b5c4f4b27868c279e6c64be50dc7c",
       "axiom_mentions": 1
     },
+    "Extracted/Sha256Portable/AxiomCheck.lean": {
+      "sha256": "e73755eb5c824f7cbcc40a6b5109744fe460967e4e050b830b5073f237284f1a",
+      "axiom_mentions": 6
+    },
     "Extracted/Sha256Pure.lean": {
       "sha256": "2d7a63e698118eb840db49e0da56f2d5a21510d1ec38b2dfe4114d262fec2aa7",
       "axiom_mentions": 4
@@ -173,7 +177,7 @@
       "axiom_mentions": 1
     },
     "Extracted.lean": {
-      "sha256": "12c80041c6de96001642e86c334be781dbad025569bd08b8eb1137c4de2eb331",
+      "sha256": "ed6f66324550af74b1fe890f8b005e65e8c2e1fad754dbcebeb065ac7e2760d0",
       "axiom_mentions": 1
     }
   },

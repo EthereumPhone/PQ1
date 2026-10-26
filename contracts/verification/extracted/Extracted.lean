@@ -1,3 +1,4 @@
+import Extracted.Sha256Portable.Compression
 import Extracted.C10FunctionalKeygen
 import Extracted.C10FunctionalWrapper
 import Extracted.C10FunctionalSigner

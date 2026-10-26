@@ -465,7 +465,15 @@
         "contracts/verification/scripts/test_secure_wrapper_proof_controls.py",
         "contracts/verification/scripts/normalize_release_sign_extraction.py",
         "sphincs-c10/tests/release_sign_assertions.rs",
-        "contracts/verification/scripts/normalize_sign_extraction.py"
+        "contracts/verification/scripts/normalize_sign_extraction.py",
+        "sphincs-c10/Cargo.toml",
+        "contracts/verification/tools/sha256-portable-model/**",
+        "contracts/verification/scripts/check_sha256_portable_source.py",
+        "contracts/verification/scripts/check_sha256_portable_corpus.py",
+        "contracts/verification/scripts/test_sha256_portable_controls.py",
+        "contracts/verification/scripts/axiom_inventory_extracted.json",
+        "contracts/verification/scripts/check_axiom_closure.py",
+        "contracts/verification/scripts/test_c10_functional_signer_controls.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",
@@ -534,7 +542,14 @@
         "contracts/verification/easycrypt/c10-port/scratch/c10_rep_*.ec",
         "contracts/verification/easycrypt/c10-port/scratch/c10_shuffle_*.ec",
         "contracts/verification/scripts/test_c10_shuffle_controls.py",
-        "contracts/verification/scripts/test_c10_representation_controls.py"
+        "contracts/verification/scripts/test_c10_representation_controls.py",
+        "sphincs-c10/Cargo.toml",
+        "contracts/verification/tools/sha256-portable-model/**",
+        "contracts/verification/scripts/check_sha256_portable_source.py",
+        "contracts/verification/scripts/check_sha256_portable_corpus.py",
+        "contracts/verification/scripts/test_sha256_portable_controls.py",
+        "contracts/verification/scripts/check_axiom_closure.py",
+        "contracts/verification/scripts/test_c10_functional_signer_controls.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "nightly",
@@ -582,7 +597,12 @@
         "proto/src/**",
         "fw-manifest/src/**",
         "bip39/src/**",
-        "domain/src/**"
+        "domain/src/**",
+        "sphincs-c10/Cargo.toml",
+        "contracts/verification/tools/sha256-portable-model/**",
+        "contracts/verification/scripts/check_sha256_portable_source.py",
+        "contracts/verification/scripts/check_sha256_portable_corpus.py",
+        "contracts/verification/scripts/test_sha256_portable_controls.py"
       ],
       "runs_in": "lean-extracted.yml",
       "enforcement": "per_pr_blocking",

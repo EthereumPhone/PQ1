@@ -74,6 +74,8 @@ import shlex
 import tomllib
 from pathlib import Path, PurePosixPath
 
+from check_sha256_portable_source import check as check_sha256_portable_source
+
 VERIF_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
 REGISTRY = VERIF_DIR / "extraction_registry.json"
@@ -83,6 +85,10 @@ REGISTRY = VERIF_DIR / "extraction_registry.json"
 # paired paths, rewriting required_targets, or flipping fresh:false a gate
 # failure rather than a way to redefine what the gate is meant to cover.
 REQUIRED_ENTRY_PATHS = {
+    'extract-sha256-portable': (
+        ('sphincs-c10/Cargo.toml', 'Cargo.lock', 'contracts/verification/scripts/check_sha256_portable_source.py', 'contracts/verification/tools/sha256-portable-model/lib.rs', 'contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/src/consts.rs', 'contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/src/sha256/soft.rs', 'contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/LICENSE-MIT', 'contracts/verification/tools/sha256-portable-model/vendor/sha2-0.10.9/LICENSE-APACHE'),
+        ('contracts/verification/extracted/Extracted/Sha256Portable/Funs.lean', 'contracts/verification/extracted/Extracted/Sha256Portable/Types.lean'),
+    ),
     'extract-secure-wrapper': (
         ('secure/src/crypto.rs', 'secure/src/fi.rs', 'contracts/verification/tools/secure-wrapper-model/src/lib.rs', 'contracts/verification/tools/secure-wrapper-model/generated/production.rs', 'contracts/verification/tools/secure-wrapper-model/build.rs', 'contracts/verification/tools/secure-wrapper-model/generate.rs', 'contracts/verification/tools/secure-wrapper-model/Cargo.toml', 'contracts/verification/tools/secure-wrapper-model/Cargo.lock', 'contracts/verification/scripts/materialize_secure_wrapper.py', 'contracts/verification/scripts/normalize_secure_wrapper_extraction.py'),
         ('contracts/verification/extracted/Extracted/SecureWrapper/Funs.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/Types.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/FunsExternal.lean', 'contracts/verification/extracted/Extracted/SecureWrapper/TypesExternal.lean'),
@@ -258,7 +264,7 @@ REQUIRED_ENTRY_PATHS = {
 }
 REQUIRED_TARGETS = tuple(REQUIRED_ENTRY_PATHS)
 ALLOWED_WAIVED_TARGETS = frozenset({"extract-tx-merkle"})
-REGISTRY_BINDING_SHA256 = "1bc8d3f8ba0fa67f8d31e043c8f9ec95d4053d88926520527d099feaa4f88835"
+REGISTRY_BINDING_SHA256 = "0ec6115d62cf2852726e48adff0bf4b9ac987acd5045ea61367b8e12fbf94c6f"
 EXPECTED_WAIVED_DRIFT = {"extract-tx-merkle": ()}
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 SOURCE_RE = re.compile(r"Source:\s*'([^']+)'")
@@ -483,6 +489,7 @@ def evaluate(reg: dict) -> tuple[list[str], list[str], list[str], int, int]:
     try:
         floor_fails.extend(max_attempts_consistency_errors())
         floor_fails.extend(c10_profile_errors())
+        floor_fails.extend(check_sha256_portable_source())
     except OSError as exc:
         floor_fails.append(f"PinState MAX_ATTEMPTS cross-check unreadable: {exc}")
 

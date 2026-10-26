@@ -1,3 +1,4 @@
+import Extracted.Sha256Portable.Compression
 import Extracted.C10FunctionalKeygen
 import Extracted.C10FunctionalWrapper
 import Extracted.C10FunctionalSigner
@@ -647,3 +648,11 @@ import Extracted.FormatDecimalDiffVectors
 #print axioms Extracted.C10FunctionalKeygen.initialized_release_bytes
 #print axioms secure_wrapper_model.wrapper_functional_release
 #print axioms secure_wrapper_model.wrapper_functional_call_bounds
+
+-- Exact pinned RustCrypto portable word kernel; no complete Digest/backend claim.
+#print axioms Sha256Portable.round2_eq
+#print axioms Sha256Portable.schedule_eq
+#print axioms Sha256Portable.messageSchedule_eq
+#print axioms Sha256Portable.runRounds_eq
+#print axioms Sha256Portable.compression_packed
+#print axioms Sha256Portable.compression_spec
