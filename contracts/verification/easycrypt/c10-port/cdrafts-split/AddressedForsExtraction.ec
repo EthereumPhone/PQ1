@@ -1,0 +1,31 @@
+(* FORS recovery identifies the private leaf outside equal-address collisions. *)
+require import AllCore List FMap.
+require import C10RawOracle RawKeygen RawSignature RawForsPathReplay.
+require import ForsRootWitness ForsPrivateLeaves ForsOpening ForsLeafInputs.
+require import PathReplay PathInputs MemoNodeCollision NodeCollisionEvents.
+require import AddressedNodeCollision.
+
+lemma addressed_recorded_fors_extracts h s seed ht tree index secret auth root :
+  size seed=32 => size secret=16 => rows_width 11 auth => 0<=index<2048 =>
+  fors_root_witness h s seed ht tree root =>
+  fors_opening h seed ht tree index secret auth root =>
+  !addressed_node_collision h =>
+  exists sd, s.[fors_private_key ht tree index]=Some sd /\ secret=node sd.
+proof.
+  move=> hseed hw ha hi hr [hasize [d [hd [hp hv]]]] hn.
+  have [sd reference_auth [hra [hs hreference]]] :=
+    fors_root_reference_at h s seed ht tree root index hr hi.
+  move: hreference => [hrs [rd [hrd [hrp hrv]]]].
+  have he : node d=node rd.
+  + have hx := path_leaf_or_input_collision h (fors_pair seed ht tree) auth reference_auth
+      (node d) (node rd) 0 index (fors_pair_injective seed ht tree) _ _ _
+      (node_width d) (node_width rd) hp hrp _.
+    - move: ha hra; rewrite /rows_width; smt().
+    - move: ha; rewrite /rows_width; smt().
+    - move: hra; rewrite /rows_width; smt().
+    - smt().
+    smt(addressed_fors_path_collision).
+  have hx := fors_leaf_equal_or_collision h seed ht tree index secret (node sd) d rd
+    hw (node_width sd) hd hrd he.
+  exists sd; smt(addressed_fors_leaf_collision).
+qed.

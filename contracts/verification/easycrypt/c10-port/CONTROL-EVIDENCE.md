@@ -10,6 +10,29 @@ exact-statement mismatch. These controls check theorem application and that the
 proof driver actually rejects the mismatched term. Statement hashes separately
 check source drift. Neither check is a semantic counterexample to another claim.
 
+## Addressed-node continuation
+
+The addressed-node batch enrolls 45 generated fixtures and one unavailable-
+symbol scope probe for each of its 61 new modules. The fixtures comprise:
+
+| Evidence class | Count | Meaning |
+| --- | ---: | --- |
+| Finite positive/rejection pairs | 16 | Eight proved examples contradict their altered claims: the exceptional address, its two counted calls, distinct keys sharing a label, cached insertion, raw prepopulation, an actual collision, the first sample, and different address labels. |
+| Contract positive/rejection pairs | 16 | Eight original theorem applications pass; seven altered applications mismatch the theorem and one leaves the seed-width obligation open. These are application checks, not counterexamples to all possible stronger theorems. |
+| Typed program mutants and rejected comparisons | 8 | Each changed program typechecks before its comparison with the original is rejected: cached resampling, a replaced memo reply, and removed header/layer refusal guards. |
+| Original program comparisons | 3 | The original audit oracle and signer sign/finish comparisons pass. |
+| Preserving variants | 2 | Double-negating the audit fresh-key guard and parenthesizing the signer header guard preserve the checked comparisons. |
+
+The contract pairs cover address equality, exceptional-call charging, partial
+refusal, ordinary-input preservation, seed width, the actual byte-game count,
+its collision-probability bound and physical transfer. Their rejection does not
+prove a probability summand necessary or the new bound tight. Program comparisons
+exercise the actual memoized draw/reply and refusal behavior; their declared
+proof-obligation diagnostics must be reached after typing, without credit for
+parser errors, resource failures or timeouts. Scope probes check symbol hiding,
+not semantic soundness. The full isolated two-driver replay remains separate
+evidence from these control classifications and development checks.
+
 ## Probability-bound batch
 
 The 38 controls added with the honest-error and public-node bounds consist of:

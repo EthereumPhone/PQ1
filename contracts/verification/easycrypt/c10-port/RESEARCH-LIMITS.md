@@ -418,6 +418,25 @@ and actual CI remain separate landing evidence; no production authority follows.
 
 ## Quantitative loss
 
+**Addressed-node continuation (2026-10-26):**
+[`AddressedNumericalBound`](cdrafts-split/AddressedNumericalBound.ec) replaces
+the node term in the same initialized ordinary byte-game bound by the smaller
+of the previous node charge and `R*(R+1)/2^128`, with
+`R=qr+2*qs+771`. Actual keygen/signing canonicity, exact-key memo accounting,
+the two exceptional FORS-address calls per admitted signing attempt, and the
+unchanged final verifier derive this budget. No desired freshness, budget or
+success premise is imposed; failure and cached/prepopulated histories remain.
+The private observer preserves oracle outputs and proves complete collision
+coverage before applying the conditional fundamental lemma. Its only added
+state exclusion is private observer access. All latest FORS/WOTS candidate
+charges and other non-node terms remain unchanged. At `qr=qs=65536`, the
+complete expression improves from about `2^-59.28` to `2^-60.55`; see
+[the exact formula and scope](RAW-NUMERICAL-EUF.md#addressed-node-continuation).
+This closes the equal-address node-budget obligation, not concrete SHA-256,
+QROM, Rust/cross-kernel correspondence, hardware, or tighter FORS/WOTS research.
+The paired and secure-wrapper bounds below retain their separately stated
+endpoints; this continuation concerns the ordinary byte game.
+
 **Native total signing availability (2026-10-21):**
 [`ByteTotalAvailability.byte_total_initialized_availability`](cdrafts-split/ByteTotalAvailability.ec)
 bounds the original initialized byte game's `FullSession.failed` event, including
@@ -1017,13 +1036,14 @@ filtered budget is proved in the actual opening-redacted chain session, with
 unchanged cache, history and opening behavior. Existing programmed/fresh/
 selected/coordinate transfers reach the same accepted output event. The
 minimum with the old charge preserves every cap configuration. This brings
-the complete bound to about `2^-59.28`; the public-node birthday charge now
-dominates, followed by ordinary FORS openings. It closes this fixed-grinder
+the complete bound to about `2^-59.28`; at that checkpoint the public-node
+birthday charge dominated, followed by ordinary FORS openings. It closes this fixed-grinder
 candidate obligation, not every possible WOTS or FORS reduction.
 
 Finer ordinary FORS and WOTS target/candidate reductions remain possible.
-Finer target-specific node reductions and a tail charge for a smaller effective
-hash budget also remain possible. Substituting average grinding work for the
+The addressed-node continuation above closes the equal-address budget step.
+Finer component charges and a tail charge for a smaller effective
+hash budget remain possible. Substituting average grinding work for the
 proved worst-case budget is invalid. The high-128-bit node projection and
 low-129-bit encoding projection remain different, and their charges are
 reduced by separate proofs.

@@ -316,6 +316,59 @@ At `qr = qs = 65536`, the WOTS term falls by about 83.22 times to
 FORS openings. These are conservative upper probability bounds in the same
 classical ideal-oracle model, not attack costs or deployed security ratings.
 
+## Addressed-node continuation
+
+`AddressedNumericalBound.physical_byte_addressed_node_euf_bound` refines the
+same initialized ordinary byte game. It retains the latest WOTS and ordinary
+FORS candidate charges above, zero-node, accepted-encoding and coverage terms,
+and the shared/private-prefix transfer charge. Only the node-collision term
+changes:
+
+```
+R = qr + 2*qs + 771
+Cnode = min(N*(N-1)/(2*2^128), R*(R+1)/2^128)
+```
+
+`N` remains `node_public_budget(qr, qs)`. Both complete charge comparisons
+against `WotsCandidateNumericalBound` are proved for every pair of caps; the
+game bounds retain nonnegative caps, their initial state identities and the
+existing lossless-client premise.
+
+The actual successful-output partition only needs collisions between node
+inputs with the same first 64 bytes: the public seed and serialized address.
+Actual key generation starts with canonical WOTS/Merkle memo keys. Actual
+ordinary signing preserves one canonical input per address, including cached
+tree construction and arbitrary earlier raw queries. The final FORS tree's
+leaf-zero hash and root-as-secret hash share an address, so both are explicitly
+charged: at most two such calls per admitted signing attempt. Header exhaustion,
+either WOTS refusal, the absorbing session, raw caps and final verification
+remain in the experiment.
+
+`AddressedMemoSession` derives at most `R` distinct nonordinary public memo
+keys. `AddressedBuckets` assigns node inputs their address prefix and non-node
+inputs their complete exact key, with separate tags. Ordinary keys are
+injective under these labels. Thus each bucket contains at most `R+1` keys,
+and the total number of keys beyond the first per label is at most `R`.
+Memo hits do not create draws; raw prepopulation is retained and charged.
+
+`AddressedAudit` preserves every public/private sample, memo reply and query
+history exactly. Its cap gates only a private collision flag and counter.
+The coverage proof shows that any missed collision requires an oversized
+bucket, which the actual-game budget rules out. A conditional fundamental
+lemma then bounds the observed event by `R*(R+1)/2^128`. The additional
+`-AddressedAudit` exclusion protects this private proof state; it gives the
+client no new interface restriction or desired freshness/budget premise.
+No project axiom, admitted proof, success assumption or hash interpretation is
+added.
+
+At `qr = qs = 65536`, `R=197379`. The new node charge is
+`38958667020/2^128`, and the complete physical-game expression is approximately
+`5.9197344e-19` (`2^-60.55`), versus the previous `1.4322595e-18`
+(`2^-59.28`), a factor of about 2.42. These decimal evaluations illustrate the
+exact source formula. They are conservative upper probability bounds, not
+attack costs, a concrete SHA-256 claim, or a deployed security rating. The
+remaining ordinary FORS and encoding terms now dominate.
+
 ## Transfer to paired signing and verification
 
 `C10PairedSessionBound.paired_byte_wots_candidate_euf_bound` gives the identical

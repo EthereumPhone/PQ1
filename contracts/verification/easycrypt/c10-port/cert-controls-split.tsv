@@ -2228,3 +2228,110 @@ scratch/_scope_neg_op_WrapperWotsSeed.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WrapperWotsSessionOpening.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WrapperWotsSigningPlan.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WrapperWotsValues.ec	MUST-FAIL	FORS_C_TreePort.
+# Addressed-node finite, typed program, contract and scope controls.
+scratch/addressed_node_exception_included_positive.ec	MUST-PASS	-
+scratch/addressed_node_exception_included_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_two_exception_calls_positive.ec	MUST-PASS	-
+scratch/addressed_node_two_exception_calls_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_distinct_same_label_positive.ec	MUST-PASS	-
+scratch/addressed_node_distinct_same_label_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_cached_key_positive.ec	MUST-PASS	-
+scratch/addressed_node_cached_key_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_raw_prepopulation_positive.ec	MUST-PASS	-
+scratch/addressed_node_raw_prepopulation_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_collision_witness_positive.ec	MUST-PASS	-
+scratch/addressed_node_collision_witness_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_first_sample_positive.ec	MUST-PASS	-
+scratch/addressed_node_first_sample_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_different_address_positive.ec	MUST-PASS	-
+scratch/addressed_node_different_address_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_address_equality_positive.ec	MUST-PASS	-
+scratch/addressed_node_address_equality_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_exception_charge_positive.ec	MUST-PASS	-
+scratch/addressed_node_exception_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_partial_refusal_positive.ec	MUST-PASS	-
+scratch/addressed_node_partial_refusal_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_ordinary_success_positive.ec	MUST-PASS	-
+scratch/addressed_node_ordinary_success_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_ordinary_hypothesis_positive.ec	MUST-PASS	-
+scratch/addressed_node_ordinary_hypothesis_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/addressed_node_actual_byte_count_positive.ec	MUST-PASS	-
+scratch/addressed_node_actual_byte_count_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_actual_game_link_positive.ec	MUST-PASS	-
+scratch/addressed_node_actual_game_link_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_physical_transfer_positive.ec	MUST-PASS	-
+scratch/addressed_node_physical_transfer_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_node_audit_positive.ec	MUST-PASS	-
+scratch/addressed_node_sign_positive.ec	MUST-PASS	-
+scratch/addressed_node_finish_positive.ec	MUST-PASS	-
+scratch/addressed_node_audit_preserving.ec	MUST-PASS	-
+scratch/addressed_node_refusal_preserving.ec	MUST-PASS	-
+scratch/addressed_node_cached_resampling_typed.ec	MUST-PASS	-
+scratch/addressed_node_cached_resampling_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/addressed_node_returned_memo_typed.ec	MUST-PASS	-
+scratch/addressed_node_returned_memo_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/addressed_node_header_refusal_typed.ec	MUST-PASS	-
+scratch/addressed_node_header_refusal_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/addressed_node_layer_refusal_typed.ec	MUST-PASS	-
+scratch/addressed_node_layer_refusal_reject.ec	MUST-FAIL	cannot save an incomplete proof
+scratch/_scope_neg_op_AddressedActualForest.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedActualPartition.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedAudit.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedAuditBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedBucketBudget.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedBucketHistory.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedBuckets.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedByteCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedCollisionBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedControlFacts.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedCoordinateBounds.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedExposureCoverage.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedExposurePartition.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedExposurePrivate.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForestCanonicity.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForestCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForestExceptionCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForestExtraction.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsCanonicity.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsCatalog.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsException.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsExceptionCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsExtraction.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsFreshInputs.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsLog.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedForsTreeQueries.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedInputFields.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedInputKinds.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedLayerExceptionCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedLayerExtraction.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedLeafQueries.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedLinearQueries.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedMemoCalls.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedMemoCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedMemoSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedMerkleCanonicity.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedMerkleCatalog.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedMerkleTreeQueries.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedNodeCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedNodeCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryForest.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryForsExceptions.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryHistory.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryInputs.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryKeygen.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryLayer.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryShuffle.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinarySigner.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedOrdinaryTrees.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedQueryProvenance.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedSessionExceptionCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedShuffleExceptions.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedSignerExceptionCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedSignerProvenance.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedTreeLog.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWotsCanonicity.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWotsExceptionCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWotsLog.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWotsOpening.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWotsQueries.ec	MUST-FAIL	FORS_C_TreePort.
