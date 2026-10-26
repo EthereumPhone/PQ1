@@ -186,23 +186,39 @@ impl<'s> Emit<'s> {
     }
 
     /// An address detail: resolved name (SemiBold, when it fits) over the
-    /// two EIP-55 address halves.
+    /// two EIP-55 address halves, or, when the address needs three lines,
+    /// the name on the first page and the whole address on the second.
     pub(crate) fn addr(&mut self, id: &[u8], label: &[u8], addr: &[u8; 20], resolver: &NameResolver<'_>) -> Result<(), ()> {
         let addr42 = addr42(addr);
         let na = layout_name_over_address(resolver.lookup(self.chain_id, addr), &addr42);
-        match na.name {
-            Some(name) => self.detail(
+        let Some(name) = na.name else {
+            return self.addr_lines(id, label, &na.addr, None);
+        };
+        let name_line = [(name.as_bytes(), Weight::SemiBold)];
+        let [a0, a1, a2] = &na.addr.lines;
+        if na.addr.n == 2 {
+            return self.detail(
                 id,
                 label,
                 &[
-                    (name.as_bytes(), Weight::SemiBold),
-                    (na.addr.lines[0].as_bytes(), Weight::Regular),
-                    (na.addr.lines[1].as_bytes(), Weight::Regular),
+                    name_line[0],
+                    (a0.as_bytes(), Weight::Regular),
+                    (a1.as_bytes(), Weight::Regular),
                 ],
                 false,
-            ),
-            None => self.addr_lines(id, label, &na.addr, None),
+            );
         }
+        self.detail_two_pages(
+            id,
+            label,
+            &name_line,
+            &[
+                (a0.as_bytes(), Weight::Regular),
+                (a1.as_bytes(), Weight::Regular),
+                (a2.as_bytes(), Weight::Regular),
+            ],
+            false,
+        )
     }
 
     /// A docked address (2 or 3 lines), optionally headed by a fixed
