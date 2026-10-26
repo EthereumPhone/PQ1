@@ -25,7 +25,7 @@ lemma leaf_suffix_last_block prefix suffix : size suffix=32 =>
 proof.
   move=> hs; rewrite /leaf_suffix_candidate size_cat hs.
   have h : size prefix+32-32=size prefix by smt().
-  rewrite h drop_cat_le; first smt(size_ge0).
+  by rewrite h drop_size_cat.
 qed.
 lemma leaf_suffix_zero_counter prefix counter : size counter=4 =>
   leaf_suffix_candidate (prefix ++ (nseq 28 0 ++ counter)) = nseq 16 0.

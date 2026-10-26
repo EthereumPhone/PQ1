@@ -1534,7 +1534,7 @@
     "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafByteTargetBound.ec": "2e0cd791c95858dbbd959afd3df4ac78a2ee8e80cabec2efe9054ad98fb35624",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafCandidateBound.ec": "e0901a821118ac99a4109d9d95f270aa4feaa712af348bbcf8c4bd46d495911b",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafCandidateCoordinate.ec": "a5698dc643c8681c1e570a0f4e19aeb0a4c8a32c80d6860a766bc1e245d79f52",
-    "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafCandidateCount.ec": "8c689add2ec826e24eff538ffb7c2e3cf74f86fe400c42c019c6facc0e3f8636",
+    "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafCandidateCount.ec": "93972f8052cbf8cd27fdf8791a1abffbdfd7465cee049cc456eda3e45487f4e9",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafCandidateMass.ec": "a4d7b74bce786471acdd905aefad12daba4847347c7d63adf8ab1cbfa6161484",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafCandidateUnion.ec": "7190eee29b4b2f99861a2c92a5f891bd1c2015a5417a4e745dc50d39f8c7c808",
     "contracts/verification/easycrypt/c10-port/cdrafts-split/LeafForsOpeningBound.ec": "1f1930134a389c0bf346a32f27ecb1c330a48c6d9c1f4549f084f71cb11d1cbf",
