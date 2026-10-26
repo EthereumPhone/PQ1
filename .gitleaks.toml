@@ -47,6 +47,16 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Exact public C10 functional-keygen proof source digests"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
+regexTarget = "line"
+regexes = [
+  '''^\s*"contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_C10FunctionalKeygen\.ec": "3ae597b5a9c710ecab11f55cadf79302a38294a90d35b0deebdf9f15a909c41e",?\s*$''',
+  '''^\s*"contracts/verification/extracted/Extracted/C10FunctionalKeygen\.lean": "8f6e575e1f7cc7ddea3add558ea66c21931952d68d02a7c9fbcbf7aea071e9d6",?\s*$''',
+]
+
+[[rules.allowlists]]
 description = "Exact public digest and full key of the authentication-path proof-control source"
 condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
