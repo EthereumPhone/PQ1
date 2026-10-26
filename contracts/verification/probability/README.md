@@ -19,7 +19,10 @@ The actual two-query FORS grinder now has an exact client compilation and a
 prefix-error comparison with bounded adaptive work before and after the call.
 **The finite initialized forgery bound now also covers the separately defined
 byte game below, through an exact 4,008-byte codec and full-session refinement.
-Concrete signer-session correspondence remains open.** The existing
+The [stateful extension](#stateful-byte-clients-without-a-fixed-stopping-bound)
+derives the same forgery and availability charges without a uniform attempted
+interaction bound, under almost-sure termination of its directly defined PMF
+execution. Concrete signer-session correspondence remains open.** The existing
 `lean/` project stays mathlib-free and is not imported here.
 
 The [finite adaptive R-grinding session](#context-aware-adaptive-r-grinding)
@@ -619,8 +622,69 @@ examples, not asserted reachable initialized histories.
 This closes finite initialized **byte-model signing availability**. The event
 is the session's persistent failed ledger, not every refused request and not
 forgery success. No cache-visible event is transferred between oracle models.
-Existing forgery bounds and concrete SHA/Rust/EasyCrypt, cross-kernel,
-unbounded-adversary, QROM and physical boundaries remain unchanged.
+The stateful extension below removes the fixed stopping bound for its PMF
+interface. Existing forgery charges and concrete SHA/Rust/EasyCrypt,
+cross-kernel, QROM and physical boundaries remain unchanged.
+
+## Stateful byte clients without a fixed stopping bound
+
+`ByteStatefulExecution.lean` defines the initialized game directly as an
+absorbing probabilistic state machine. A client supplies a private state type
+`S`, an initializer receiving the public seed/root bytes, and a transition
+`S → PMF (C10ByteAction S C10ByteForgery)`. Each transition may finish, take
+an internal step, request a hash, or request a signature. Continuations see
+only their public reply and client state. The interpreter owns the hidden
+prefix, memo table, admitted raw/signing caps and persistent session ledger.
+The initializer and public seed may have any joint PMF, independently of the
+uniform hidden prefix. Actual key generation initializes the same retained
+cache used by subsequent execution and final verification.
+
+`TerminatingKernel.lean` distinguishes pending cutoff states from completed
+results. Completed probability masses increase monotonically to a terminal
+subprobability law. `KernelTerminatesAlmostSurely` says their total limit is
+one; only then is `kernelTerminalPMF` a normalized distribution, with exactly
+those masses. Divergence is never removed by conditional renormalization.
+`KernelLimit.lean` proves the nonnegative-sum/limit interchange and transports
+finite observed-event bounds to this terminal law.
+
+The finite bounds are derived, not supplied as hypotheses. `PMFFiniteFamily`
+samples the finite family of reply continuations with exact marginal laws;
+the continuation distributions may have infinite support. `ByteStatefulCompile`
+compiles each direct cutoff into the existing finite byte client, preserving
+the complete result, remaining caps, ledger and physical cache. Its signature
+continuations use the exact 4,008-byte codec on supported replies. Public-key
+family sampling and actual keygen support then establish exact initialized
+cutoff equality. `c10_stateful_byte_execution_cutoff` identifies those cutoffs
+with the directly defined whole execution, including its initialization step.
+
+`ByteStatefulBounds.lean` consequently proves, for every such almost-surely
+terminating initialized execution:
+
+```text
+Pr[accepted forgery] <= min(1, sharedForgeCharge cfg qr qs)
+Pr[persistent signing failure] <= min(1, c10SigningCharge cfg qr qs).
+```
+
+Neither endpoint has a fuel parameter or an expected-work substitution. The
+admitted caps, grinder limits and numerical charges are unchanged. Capped real
+forms are proved, together with the existing signing-failure bound `2^-38`
+and forgery examples below `2^-50` and `2^-34`. This does not improve the
+conservative forgery margin at larger query budgets.
+
+`ByteStatefulGeometric.lean` proves an initialized client terminates almost
+surely although its running probability after `n` client steps is `2^-n`,
+strictly positive at every finite horizon. The generic always-running client
+has zero terminal mass and fails the termination condition. Twelve boundary
+consumers also distinguish cutoff exhaustion from completion, preserve capped
+and malformed refusal, charge admitted R/WOTS failure, retain the failed
+ledger and cache, return a successful 4,008-byte signature, and sample fresh
+randomness after a hash response.
+
+This closes the uniform attempted-interaction bound for this separate classical
+stateful PMF interface. It is not a representation theorem for every effectful
+Rust or EasyCrypt adversary, an execution equivalence between those languages,
+or a transfer from an ideal oracle to concrete SHA. The cross-kernel, QROM,
+entropy, physical and full implementation-correspondence limits remain.
 
 ## Independence and correspondence boundary
 
@@ -1563,7 +1627,7 @@ From the repository root, run:
 make -C contracts/verification verify-probability
 ```
 
-The gate rebuilds every project module, checks all 2852 theorem closures against
+The gate rebuilds every project module, checks all 2923 theorem closures against
 the standard logical axioms (`propext`, `Classical.choice`, `Quot.sound`), and
 requires the complete source, statement and query inventories. It rejects
 proof escape constructs and verifies the projection-source bindings. An actual
@@ -1645,9 +1709,16 @@ cold. Run the focused provenance/fallback regressions with
 and acceptance receipts. This does not separate or inherit Rust correspondence,
 prove a new theorem, or weaken any control/census/closure requirement.
 
-1695 typed cases run 5085 compiler jobs: each baseline and changed
-definition must compile, 1485 changed behaviors must reject at the
-consuming `checked` theorem, and 210 value-preserving changes must pass.
+1754 typed cases run 5262 compiler jobs: each baseline and changed
+definition must compile, 1534 changed behaviors must reject at the
+consuming `checked` theorem, and 220 value-preserving changes must pass.
+The stateful-client extension adds 71 closures in seventeen modules and 59
+controls (49 negative, ten equivalent), preserving all 2852 preceding
+statements, 1695 fixture objects, prior non-umbrella proof-module bytes and
+52 bindings. Consumers cover continuation families, pending/completed states,
+terminal mass, termination, admission and charges, reply serialization, hidden
+prefix independence, public-key initialization, full cache preservation and
+the exact whole-execution observations.
 The byte-availability extension adds 28 closures in five modules and 40
 controls (34 negative, six equivalent). All 2824 preceding statements, 1655
 fixture objects, prior non-umbrella proof-module bytes and 52 bindings remain

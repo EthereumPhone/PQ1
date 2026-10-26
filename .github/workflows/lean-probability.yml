@@ -113,7 +113,7 @@ jobs:
         if: ${{ github.event_name == 'push' && vars.PROBABILITY_FORCE_COLD != 'true' }}
         working-directory: contracts/verification/probability
         run: |
-          lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
+          lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Analysis.SpecificLimits.Basic Mathlib.Data.ENNReal.BigOperators Mathlib.Data.Fin.Tuple.Basic Mathlib.Tactic.NormNum Mathlib.Topology.Algebra.InfiniteSum.ENNReal Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
           lake build proofwidgets/widgetJsAll
       - name: select eligible original run
         id: select
@@ -167,7 +167,7 @@ jobs:
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
         run: |
-          lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
+          lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Analysis.SpecificLimits.Basic Mathlib.Data.ENNReal.BigOperators Mathlib.Data.Fin.Tuple.Basic Mathlib.Tactic.NormNum Mathlib.Topology.Algebra.InfiniteSum.ENNReal Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
           lake build proofwidgets/widgetJsAll
       - name: runner regression controls
         run: |
@@ -240,7 +240,7 @@ jobs:
       - name: fetch pinned mathlib probability cache
         working-directory: contracts/verification/probability
         run: |
-          lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
+          lake exe cache get Mathlib.Algebra.BigOperators.Fin Mathlib.Analysis.SpecificLimits.Basic Mathlib.Data.ENNReal.BigOperators Mathlib.Data.Fin.Tuple.Basic Mathlib.Tactic.NormNum Mathlib.Topology.Algebra.InfiniteSum.ENNReal Mathlib.Combinatorics.Enumerative.Stirling Mathlib.Data.Fin.Tuple.Embedding Mathlib.Data.Fintype.BigOperators Mathlib.Data.Fintype.CardEmbedding Mathlib.Data.List.Forall2 Mathlib.Data.List.OfFn Mathlib.Data.Nat.Choose.Basic Mathlib.Logic.Equiv.Fin.Basic Mathlib.Probability.Distributions.Uniform Mathlib.Probability.ProbabilityMassFunction.Constructions Mathlib.Tactic
           lake build proofwidgets/widgetJsAll
       - name: download this attempt's shard evidence
         if: ${{ needs.controls.result == 'success' }}

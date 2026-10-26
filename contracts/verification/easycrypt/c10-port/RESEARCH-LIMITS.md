@@ -1,9 +1,37 @@
 # Remaining cryptographic and implementation limits
 
-Research checkpoint: 2026-10-24, following the initialized classical byte-game
+Research checkpoint: 2026-10-26, following the initialized classical byte-game
 bound in [RAW-NUMERICAL-EUF.md](RAW-NUMERICAL-EUF.md). This page separates
 possible next proofs from assumptions that cannot be removed by changing a
 status label. Remaining research is tracked under PQ1 #100; #295 is closed.
+
+## Separate PMF stateful-client stopping boundary
+
+The separate [Lean probability project](../../probability/README.md#stateful-byte-clients-without-a-fixed-stopping-bound)
+now covers directly defined stateful PMF byte clients without a uniform bound
+on attempted interactions. The client may sample fresh randomness after replies
+and take internal steps. Exact finite-cutoff compilation preserves the byte
+result, admitted caps, persistent ledger and full memo table; public-key family
+sampling composes actual key generation. The independently defined initialized
+execution uses that same hidden prefix, public key and cache throughout.
+
+Completed masses have a proved monotone limit. Under almost-sure termination
+of that execution, the limit has mass one and defines its terminal PMF without
+rescaling. The existing finite forgery and signing-availability bounds imply
+the same capped terminal bounds; they are not extra hypotheses. Their real
+forms, `2^-38` availability endpoint and `2^-50`/`2^-34` forgery examples retain
+the existing admitted caps and worst-case grinder charges. A whole-game
+geometric witness terminates almost surely while retaining positive pending
+mass at every finite cutoff; an always-running kernel has zero terminal mass.
+
+This removes the fixed stopping bound for the specified classical PMF client
+interface. Earlier finite-client results remain unchanged. Representation of
+arbitrary effectful Rust/EasyCrypt clients, execution equality across those
+tools, concrete SHA correspondence, ideal-oracle hardness, QROM, entropy and
+physical evidence remain separate boundaries. This extension changes no native
+EasyCrypt source or environment assumption, and does not improve the existing
+conservative forgery charges. Full replay and review remain separate evidence
+requirements.
 
 ## Functional bounded-search backend interpretation
 
@@ -929,8 +957,11 @@ The signing-availability extension adds 72 closures in fifteen modules and
 statements, fixture objects and manual bindings. That inventory had
 2824 closures and 1655 typed cases. The byte-availability extension adds 28
 closures in five modules and 40 controls (34 negative, six equivalent),
-preserving every preceding statement, fixture and manual binding. The current
-inventory is 2852 closures and 1695 typed cases. The combined forgery bound
+preserving every preceding statement, fixture and manual binding. That
+inventory had 2852 closures and 1695 typed cases. The stateful-client extension
+adds 71 closures in seventeen modules and 59 controls (49 negative, ten
+equivalent), preserving that entire preceding inventory and all 52 bindings.
+The current inventory is 2923 closures and 1754 typed cases. The combined forgery bound
 retains all six events, uses exact tagged-cache erasure for collision/zero
 charges, and transfers only the final Boolean with the public-prefix charge. These separate Lean
 results import no EasyCrypt theorem and establish no concrete hash, Rust

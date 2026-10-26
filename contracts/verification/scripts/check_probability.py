@@ -113,7 +113,7 @@ def run_controls(out: Path, lean: str, env: dict, workers: int = 4,
     fixtures = out / "controls"
     fixtures.mkdir()
     selected = cases(PROJECT)
-    require(len(selected) == 1695 and sum(not c["expected"] for c in selected) == 1485,
+    require(len(selected) == 1754 and sum(not c["expected"] for c in selected) == 1534,
             "control census differs")
     selected = shard_cases(selected, shard_index, shard_count)
     jobs = []
@@ -280,7 +280,7 @@ def main(args=None) -> None:
         result["lean"] = {"path": lean, "sha256": digest(Path(lean).read_bytes())}
         control_env = dict(env, LEAN_PATH=lean_path)
         selected = cases(PROJECT)
-        require(len(selected) == 1695 and sum(not c["expected"] for c in selected) == 1485,
+        require(len(selected) == 1754 and sum(not c["expected"] for c in selected) == 1534,
                 "control census differs")
         result["identity"] = input_identity(ROOT, PROJECT, manifest, lean, selected, lake)
         # An actual compiler-produced closure with a new assumption must reject.
@@ -334,7 +334,7 @@ def main(args=None) -> None:
         print(f"PASS shard {args.shard_index}/{args.shard_count}: {len(result['closures'])} theorem "
               f"closures; {len(result['controls'])} compiler jobs (partial control coverage)")
     else:
-        print(f"PASS: {len(result['closures'])} theorem closures; 1695 typed cases / 5085 compiler jobs")
+        print(f"PASS: {len(result['closures'])} theorem closures; 1754 typed cases / 5262 compiler jobs")
 
 
 if __name__ == "__main__":

@@ -4687,4 +4687,125 @@ def cases(project: Path) -> list[dict]:
         ("initialized-seed-id", "cfg input.1", "cfg ((fun x => x) input.1)", True),
     ])
 
+    # Stateful operational cutoffs, exact compilation and normalized terminal laws.
+    # Keep the pre-existing fixture objects byte-identical; clone only the new
+    # definitions consumed by each checked proposition.
+    stateful_prefix = (
+        "import C10Probability.ByteStatefulExamples\n"
+        "import C10Probability.ByteStatefulNumeric\n"
+        "namespace C10Probability\nopen scoped ENNReal\nnoncomputable section\n"
+        "attribute [local irreducible] digestDraw c10Keygen c10ByteObservedGame\n"
+    )
+
+    def stateful_variants(owner, name, module, consumer, variants, check_override=None):
+        match = re.search(r"^def " + re.escape(name) +
+            r"\b.*?(?=^(?:theorem|def|abbrev|instance|structure|inductive|attribute|omit|end|set_option|local instance)\b)",
+            src[owner], flags=re.M | re.S)
+        if not match:
+            raise ValueError("missing stateful definition " + name)
+        renamed = name + "StatefulCandidate"
+        rename = lambda text: re.sub(r"\b" + name + r"\b", renamed, text)
+        declaration = match.group(0).split("\n/--", 1)[0]
+        key = name + "StatefulSlice"
+        src[key] = stateful_prefix + rename(declaration) + cg_suffix
+        check = check_override if check_override is not None else theorem(src[module], consumer)
+        for label, old, new, expected in variants:
+            add("stateful-" + label, key, rename(old), rename(new), rename(check), expected)
+
+    stateful_variants("PMFFiniteFamily", "pmfTuple", "PMFFiniteFamily", "pmf_tuple_marginal", [
+        ("family-head-repeated", "p i.succ", "p 0", False),
+        ("family-tail-repeated", "(Fin.cons head)", "(fun _ => Fin.cons head (fun _ => head))", False),
+        ("family-coordinate-id", "p i.succ", "p ((fun x => x) i.succ)", True),
+    ])
+    stateful_variants("TerminatingKernel", "kernelCutoff", "", "", [
+        ("cutoff-zero-executes", "| 0, s => PMF.pure (.inr s)", "| 0, s => step s", False),
+        ("cutoff-zero-id", "| 0, s => PMF.pure (.inr s)", "| 0, s => PMF.pure (.inr ((fun x => x) s))", True),
+    ], """theorem checked {S R : Type*} (step : S → PMF (R ⊕ S)) (s : S) :
+    kernelCutoff step 0 s = PMF.pure (.inr s) := rfl
+""")
+    stateful_variants("TerminatingKernel", "kernelCutoff", "", "", [
+        ("cutoff-done-lost", "PMF.pure (.inl result)", "PMF.pure (.inr s)", False),
+    ], """theorem checked :
+    kernelCutoff (fun _ : Unit => PMF.pure (Sum.inl (β := Unit) true)) 1 () =
+      PMF.pure (.inl true) := by simp only [kernelCutoff, PMF.pure_bind]
+""")
+    stateful_variants("TerminatingKernel", "kernelCutoff", "", "", [
+        ("cutoff-next-state-lost", "kernelCutoff step n next", "kernelCutoff step n s", False),
+    ], """theorem checked :
+    kernelCutoff (fun s : ℕ => PMF.pure (Sum.inr (α := Bool) (s + 1))) 1 0 =
+      PMF.pure (.inr 1) := by simp only [kernelCutoff, PMF.pure_bind]
+""")
+    stateful_variants("TerminatingKernel", "kernelTerminalMass", "TerminatingKernel", "kernel_terminal_mass_total", [
+        ("terminal-zero", "⨆ n, kernelCutoff step n s (.inl r)", "0", False),
+        ("terminal-first-cutoff", "⨆ n, kernelCutoff step n s (.inl r)", "kernelCutoff step 0 s (.inl r)", False),
+        ("terminal-state-id", "step n s", "step n ((fun x => x) s)", True),
+    ])
+    stateful_variants("TerminatingKernel", "KernelTerminatesAlmostSurely", "TerminatingKernel", "kernel_loop_not_terminating", [
+        ("termination-zero-mass", ") = 1", ") = 0", False),
+        ("termination-unconditional", ") = 1", ") ≤ 1", False),
+    ])
+    stateful_variants("ByteStatefulKernel", "c10StatefulByteStep", "ByteStatefulKernel", "c10_stateful_byte_kernel_cutoff", [
+        ("step-tick-state", "client := next}", "client := state.client}", False),
+        ("step-hash-default", "client := next 0", "client := next 1", False),
+        ("step-hash-key", "encode (.inl key)", "encode (.inl [])", False),
+        ("step-hash-reply", "client := next reply.1, rawRemaining", "client := next 0, rawRemaining", False),
+        ("step-hash-cap", "rawRemaining := qr,", "rawRemaining := qr + 1,", False),
+        ("step-hash-cache", "rawRemaining := qr, table := reply.2}", "rawRemaining := qr, table := state.table}", False),
+        ("step-sign-admission", "if sessionAdmits state.ledger req then", "if !sessionAdmits state.ledger req then", False),
+        ("step-sign-cap", "signRemaining := qs", "signRemaining := qs + 1", False),
+        ("step-sign-ledger", "ledger := byteAfterSign state.ledger req.message reply.1", "ledger := state.ledger", False),
+        ("step-sign-cache", "\n              table := reply.2}", "\n              table := state.table}", False),
+        ("step-sign-refusal-cap", "else PMF.pure (.inr {state with client := next none})", "else PMF.pure (.inr {state with client := next none, signRemaining := qs})", False),
+        ("step-tick-id", "client := next}", "client := (fun x => x) next}", True),
+    ])
+    stateful_variants("ByteStatefulSession", "c10StatefulByteCutoff", "ByteStatefulCompile", "c10_stateful_byte_compile_exact", [
+        ("session-done-lost", "⟨some value, ledger, qr, qs⟩", "⟨none, ledger, qr, qs⟩", False),
+        ("session-tick-state", "step n next qr qs", "step n s qr qs", False),
+        ("session-hash-reply", "(next reply.1) qr qs ledger reply.2", "(next 0) qr qs ledger reply.2", False),
+        ("session-refusal-cap", "(next none) qr (qs + 1) ledger table", "(next none) qr qs ledger table", False),
+        ("session-sign-failure", "(byteAfterSign ledger req.message reply.1)", "ledger", False),
+        ("session-done-id", "⟨some value, ledger, qr, qs⟩", "⟨some ((fun x => x) value), ledger, qr, qs⟩", True),
+    ])
+    stateful_variants("ByteStatefulCompile", "c10StatefulByteCompile", "ByteStatefulCompile", "c10_stateful_byte_compile_exact", [
+        ("compile-done-lost", ".done (some value)", ".done none", False),
+        ("compile-tick-state", "step n next", "step n s", False),
+        ("compile-hash-key", ".hash key continuations", ".hash [] continuations", False),
+        ("compile-signature-encode", "reply.map wireEncode", "reply.map (fun sig => (wireEncode sig).reverse)", False),
+        ("compile-signature-decode", "reply.map wireDecode", "reply.map (fun bytes => wireDecode bytes.reverse)", False),
+        ("compile-done-id", ".done (some value)", ".done (some ((fun x => x) value))", True),
+    ])
+    stateful_variants("ByteStatefulGame", "c10StatefulByteAdversaryCompile", "ByteStatefulGame", "c10_stateful_byte_adversary_at", [
+        ("public-key-compile-swapped", "(List.ofFn fields.1) (List.ofFn fields.2)", "(List.ofFn fields.2) (List.ofFn fields.1)", False),
+        ("public-key-selection-swapped", "(bytePublicRead seed, bytePublicRead root)", "(bytePublicRead root, bytePublicRead seed)", False),
+        ("public-key-selection-id", "bytePublicRead seed", "bytePublicRead ((fun x => x) seed)", True),
+    ])
+    stateful_variants("ByteStatefulInitialized", "c10StatefulByteInitializedCutoff", "ByteStatefulInitialized", "c10_stateful_byte_initialized_eq", [
+        ("initialized-secret-unsampled", "digestDraw.bind", "(PMF.pure 0).bind", False),
+        ("initialized-secret-fixed", "prefixedPrivateInput secret", "prefixedPrivateInput 0", False),
+        ("initialized-seed-fixed", "cfg input.1 step", "cfg 0 step", False),
+        ("initialized-raw-cap", "qr qs (fun _ => none)", "0 qs (fun _ => none)", False),
+        ("initialized-sign-cap", "qr qs (fun _ => none)", "qr 0 (fun _ => none)", False),
+        ("initialized-cache-prefilled", "(fun _ => none)", "(fun _ => some 0)", False),
+        ("initialized-secret-id", "prefixedPrivateInput secret", "prefixedPrivateInput ((fun x => x) secret)", True),
+    ])
+    stateful_variants("ByteStatefulExecution", "c10StatefulByteGameStep", "ByteStatefulExecution", "c10_stateful_byte_initial_step", [
+        ("execution-init-seed", "none) input.1", "none) 0", False),
+        ("execution-init-public-key", "input.2 key.1.1 key.1.2", "input.2 key.1.2 key.1.1", False),
+        ("execution-init-cache", "emptySessionLedger, key.2", "emptySessionLedger, fun _ => none", False),
+        ("execution-init-cap", "key.1.2, qr, qs,", "key.1.2, 0, qs,", False),
+    ])
+    stateful_variants("ByteStatefulExecution", "c10StatefulByteGameStep", "ByteStatefulExecution", "c10_stateful_byte_running_cutoff", [
+        ("execution-secret-changed", ".run secret key next", ".run 0 key next", False),
+        ("execution-key-changed", ".run secret key next", ".run secret (key.2, key.1) next", False),
+        ("execution-final-candidate", "mapSessionValue some completed.1", "mapSessionValue (fun _ => some ([], [])) completed.1", False),
+        ("execution-final-ledger", "mapSessionValue some completed.1", "mapSessionValue some {completed.1 with ledger := emptySessionLedger}", False),
+        ("execution-state-id", ".run secret key next", ".run secret key ((fun x => x) next)", True),
+    ])
+    stateful_variants("ByteStatefulExecution", "c10StatefulByteObservation", "ByteStatefulExecution", "c10_stateful_byte_running_cutoff", [
+        ("observation-verdict", "| .inl result => result", "| .inl result => (!result.1, result.2)", False),
+        ("observation-pending-success", "(false, ⟨([], []), state.ledger", "(true, ⟨([], []), state.ledger", False),
+        ("observation-hidden-failure", "⟨([], []), state.ledger", "⟨([], []), emptySessionLedger", False),
+        ("observation-state-id", "state.rawRemaining, state.signRemaining", "((fun x => x) state.rawRemaining), state.signRemaining", True),
+    ])
+
     return out

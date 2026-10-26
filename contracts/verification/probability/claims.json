@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "scope": "Separate Lean PMF finite initialized C10 forgery and structured/byte signing-availability bounds. The direct byte observer retains the actual session result, ledger, caps, final verification and full physical cache. Exact erasure recovers the original byte game; full returned observation refinement to the existing structured R observer transports the unchanged failed-ledger event. Actual key generation and arbitrary joint public-seed/finite-byte-adversary PMFs independent of the uniform hidden prefix remain in initialization. The unchanged combined R/WOTS signing charge has ENNReal, finite real and capped bounds, with a kernel2^-38 endpoint at both ten-million grinder limits,2^32rawqueries and2^20signingcalls. Malformed/capped refusal is distinct from admitted signing failure. No cached-event transfer or new freshness assumption is introduced. All2824prior statements,1655fixtureobjects,52manualbindings and prior non-umbrella proof-module bytes are preserved. No concrete SHA/Rust/EasyCrypt execution, cross-kernel, unbounded-adversary, QROM, physical or stronger forgery-margin claim is made. Main lean/ stays mathlib-free.",
+  "scope": "Separate classical Lean PMF initialized C10 forgery and byte signing-availability bounds, extended to directly defined stateful byte clients with fresh probabilistic transitions and no uniform attempted-interaction bound. Exact finite-cutoff compilation preserves complete results, caps, ledgers, serialized replies and caches through actual key generation and independent hidden-prefix initialization. Monotone completed masses yield an unscaled normalized terminal law only under almost-sure termination of that execution. Existing finite bounds derive the unchanged capped terminal forgery/signing charges, real forms and numerical endpoints. A whole-game geometric witness has no finite stopping horizon; divergence retains missing mass. All 2852 preceding statements, 1695 fixture objects, 52 manual bindings and non-umbrella module bytes are preserved. No universal effectful-client representation, concrete SHA/Rust/EasyCrypt execution, cross-kernel, QROM, physical or stronger forgery-margin claim. Main lean/ remains mathlib-free.",
   "sources": {
-    "Audit.lean": "6a507e032f9d4918353b8d6100b88be75c32081e1bce7ae94de09dbc928e4715",
+    "Audit.lean": "6723814f7dfa6f044a05e05b5f910f00e7c3a16acc80c55fc8f3704c6ebceb8d",
     "C10Probability/AcceptedCollision.lean": "2fc19686a8de8b9bdf32f70520c010e2a122b3da4f98205d0115dd31fd0f8b47",
     "C10Probability/AcceptedExamples.lean": "f0794d9d5655da55153f24ac165a21e9ebc8bdb94cb72baba3fe9d80c0946c99",
     "C10Probability/AcceptedObserver.lean": "e3ef9c8f671f89c18e8f3388a54ad61e6351912884ab96c51b40a460eb15927e",
@@ -35,6 +35,18 @@
     "C10Probability/ByteSession.lean": "969ce6e1141457d2e663d73285dfc5cb2d7846f644bfd4370317732956c61b91",
     "C10Probability/ByteSessionExamples.lean": "1c423bc7e78edb664cb9e6519fa8800cc2d26f53ae95e1969e85dd4339157ef5",
     "C10Probability/ByteSessionTypes.lean": "57427791fb76da7bb6c5278208565016b8b5e616eac67abcb0ee96a7a2deadf4",
+    "C10Probability/ByteStatefulBounds.lean": "29acf850254aa59135525350467cf39b6d0d7addb26889af8b4fdd53eaa86d86",
+    "C10Probability/ByteStatefulCompile.lean": "a67806e46c5f9e4be51859754d91c5f23d5da070d7332109daa0e405b16d1d72",
+    "C10Probability/ByteStatefulExamples.lean": "21e34b0d3442f73e8f38305b77a4dff61c9195b30e41e65783f8863ecca6ebe8",
+    "C10Probability/ByteStatefulExecution.lean": "115d72d0eae0183c2534bf7a7264011a5c0cf982dc515db4fa0ee73306af4ea5",
+    "C10Probability/ByteStatefulGame.lean": "36fb74408d932e89547d4554757a4f9ec0ce8ab4324c62291718c30565932a68",
+    "C10Probability/ByteStatefulGeometric.lean": "1353edef701a93dcd0bc783069601bbe74b46c7ba1c39e4eee11779e43060446",
+    "C10Probability/ByteStatefulInitialized.lean": "7e49917eeaa9964cb4f9fb4a24a62806e56b6770e9755ed57e34bbeffe517623",
+    "C10Probability/ByteStatefulKernel.lean": "314263f7da0e7aab9ae5492d8d0cd94abd350604820a9d21ea6a6e9976355d00",
+    "C10Probability/ByteStatefulNumeric.lean": "4df6d36b286724ccbefbc52819ce17305aec7f09a1a90284774112656288eb4f",
+    "C10Probability/ByteStatefulReturn.lean": "10c30ba7fc2abbc263039977b8fbd8da16dcc97eaeffc399b32f9209f2d23b19",
+    "C10Probability/ByteStatefulSession.lean": "64fa602261c9e048a17396988e3bbf1691d7e6eeaef536576863c668550646a0",
+    "C10Probability/ByteStatefulTypes.lean": "7ffd3a2d822eb023c321ef9363caa285d3e652eb35168398d38f2c4e6dbbd691",
     "C10Probability/C10Access.lean": "0adf6b407a4ca9501f8c0baa5efe6bb2ed674ae09a0353347132c202d60eab6c",
     "C10Probability/C10AddressStability.lean": "bd898cd35605e8d1ec90c7d4278bda6dd5b1f61e9f0d0c355341b216e680287c",
     "C10Probability/C10Availability.lean": "2f5edc8b41d5882cb8b041d7f53711f8f84cc238aff957f2c638a6a790b229f9",
@@ -168,6 +180,8 @@
     "C10Probability/HypertreeRecover.lean": "b25aabc27b801cf3c0881816e9ee825bd9a2a53d8d863d47e7168dafe803eb93",
     "C10Probability/HypertreeSign.lean": "4ab708f3d197069aefb902d11f21a204287e9ebe39aadd348c73b18ab3c3a612",
     "C10Probability/HypertreeSigningReplay.lean": "81e175eb34b50f2f6d45d15726a7da975b13082d19f740d792324640fe7469d4",
+    "C10Probability/KernelLimit.lean": "a6b0cfd98ff4157ede74913710636f8d0271a33994b8a42f28258117669ae48d",
+    "C10Probability/KernelSimulation.lean": "f60b08d563c91753cd3fa5fbbf5a6e3e7fd63fda5778840dde9730c4561d2e0d",
     "C10Probability/KeyCollision.lean": "fcd6aad405882f45796804afbd3dd8ff1540cadd188478400213247d49731473",
     "C10Probability/LabelledGrind.lean": "f90241b9073ee2e7dc2fb591270d06702d6ef80dbf70c2f36fb251e983de3950",
     "C10Probability/LayerAccess.lean": "0c2f74efdededb51f1c625473abb96880789f4bc5204b2cec0a9f0cdf8b974ad",
@@ -235,6 +249,7 @@
     "C10Probability/OpeningTargetSetup.lean": "e66c24fc9c1112b6e3a000f9e15a8b30a00a88a11dd8b6a0974b88ae8be21efc",
     "C10Probability/OpeningTree.lean": "86ab1da9d3994e4bc12fdf04ce905f43fde020d9046e5ed279d9ac8d651dca87",
     "C10Probability/OpeningTreeBounds.lean": "986b772199a783f2ea38061c8f40489496511f6b4e26fe16d85af913be9a62f4",
+    "C10Probability/PMFFiniteFamily.lean": "146ec8fcca0266dbf2fb8f6fb33bc9153d9758c0ad4f82588d5e5cc165342b70",
     "C10Probability/PathBinding.lean": "66dc6bb85ec0dabedf01f8fda815ee919a949ad775aa28e0c0f0b7c54feb84c5",
     "C10Probability/PathRecovery.lean": "28a32776a72f54d4f8e6a6245024477dcbde01b2cc736c92a084022834398c05",
     "C10Probability/PathReplay.lean": "ac2c1b94ce42ecd963ecea4066dcb6d867c9cebfaf890831ac7524667b2e1d79",
@@ -333,6 +348,8 @@
     "C10Probability/TargetEvent.lean": "a772cfc5f0be3cb2d329e281ec0a04427e04bcf4014ed5fabb32618d13b5e89d",
     "C10Probability/TargetExamples.lean": "6c08c145806583cf2a1d072cb109e9af89c99ea4f9f6b3e2cb8b0e96e19bdafe",
     "C10Probability/TargetSet.lean": "fb186ca6bef60fa866e8d5b441ff804ef1326229b80e05ed128e3523b81d7627",
+    "C10Probability/TerminatingKernel.lean": "a86d37643d409cf3fc9d044ee227aab999361ef7dea9b63d7024de6570c7d35c",
+    "C10Probability/TerminatingKernelExamples.lean": "0b05365bc12690827d49479a22fd8b630a10bf1924f055ac3417544b4c928010",
     "C10Probability/TopChainOpening.lean": "01fb631a50d7ad44e5d384ce4cae60666dc24121b781c0cba093184de87b981e",
     "C10Probability/TopChainRecord.lean": "5bb2344b1d6b08ecb5d1a97d20e3aa2d99fbaa59b4484e8fa0b276e05319ef0b",
     "C10Probability/TopExposureOpening.lean": "6cff07c5d0951cc72c70a2a1bcdf11a34d2a7ccd3c3611e3ecf2cf9e7b239980",
@@ -428,7 +445,7 @@
     "C10Probability/WotsTarget.lean": "6e5cea220033931af9b2dd3bbc4982751f5a1d979ec34c7f671e47de7cc7349b",
     "C10Probability/WotsTreeOpening.lean": "024e8aef89c4e6ab9b3484bea5ae614bf0850e3faa59304654fa5a8a13187cdc",
     "C10Probability/WotsTwoLayers.lean": "59535f358a648cf44a39c11a5b3080430bdcfadb9ed98a5dcbcf56cea4d21a0b",
-    "C10Probability.lean": "066dc2ecf4c51784e7796ac9268c01f1c7cbbf7e8e62b4501fa04c206b14881e"
+    "C10Probability.lean": "7880d9b2f5c61245d0155aec0c2cb4fe18da798632d73e891400e9faf76cb43c"
   },
   "theorems": {
     "C10Probability.accepted_charge_zero": {
@@ -11838,6 +11855,290 @@
     "C10Probability.wots_two_layer_eval": {
       "file": "C10Probability/WotsTwoLayers.lean",
       "statement_sha256": "5bfb3ed9066d3fa59dee4b6a04c0354112e1abbb4fe3fd757098a5d7f39add7d"
+    },
+    "C10Probability.byte_client_map_session": {
+      "file": "C10Probability/ByteStatefulReturn.lean",
+      "statement_sha256": "be94e1464d11b34fd7ce819c83b162856e949215c778ca77a6b213daa91ba773"
+    },
+    "C10Probability.byte_client_pad_exact": {
+      "file": "C10Probability/ByteStatefulTypes.lean",
+      "statement_sha256": "e42eeb660e47bd36939f717ed6f536f7e80c45c73e6362360fd800d87180de80"
+    },
+    "C10Probability.byte_family_eval": {
+      "file": "C10Probability/ByteStatefulCompile.lean",
+      "statement_sha256": "90a3545622f9362ce7aa8407919e838939817bb05ee3f1735cabbb986e3e9e5c"
+    },
+    "C10Probability.byte_geometric_finished_running": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "6f6daebc5fd3a9078cd848f25a8216ee16b37720142c56275556cc71862e3b28"
+    },
+    "C10Probability.byte_geometric_forge_bound": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "d3d71b9ac262827d371e012cbb1d4f495dda4c954fbc04cb05cf3a5ea2b4e8d7"
+    },
+    "C10Probability.byte_geometric_initialized_completed": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "f01bd61ffe1370c19f4987eb009dc2ebfafc899b243a1e465a78b9a6a538836d"
+    },
+    "C10Probability.byte_geometric_initialized_finished": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "39e11f31802fb85669cdd83c306b8102291c23b8166a370cb8218eae783601e0"
+    },
+    "C10Probability.byte_geometric_initialized_terminates": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "86f8a34b9bad3e611087ee2140111e1562eaaacf81501b4d42ae87802ae17557"
+    },
+    "C10Probability.byte_geometric_no_fixed_horizon": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "4486571b5cca2e5ced2a9c81d5d9629fcf968a772cbbb9fc17495309ad646b25"
+    },
+    "C10Probability.byte_geometric_step_simulation": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "7455da93a0fc5cce1acb8a997c66833e42b9197fd54b561f531b895b882d4f50"
+    },
+    "C10Probability.byte_public_read_roundtrip": {
+      "file": "C10Probability/ByteStatefulGame.lean",
+      "statement_sha256": "ef78f43d4b84920e2e0c0dd3fae6d4ec5d39474337507e5c126581c76beaf45e"
+    },
+    "C10Probability.byte_stateful_cached_success": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "0fbdcad3f0dc51b6defada956093ac2d302fdf3db7c259bc8591a47b8e561273"
+    },
+    "C10Probability.byte_stateful_cutoff_zero_done": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "0b60b9c3b0e668b966a258614c71882f6451e46572eaae57f621fa4736d01e9d"
+    },
+    "C10Probability.byte_stateful_failure_absorbs": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "8bbafa9e12e1b4092e3b36e5b31be3aa0a7345b35c295894955e881fa5205aeb"
+    },
+    "C10Probability.byte_stateful_hash_cached_after_failure": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "138974dc1d235faee7be6b2c6e0316e7b0e7f561a19bf4d47169dab756c208f5"
+    },
+    "C10Probability.byte_stateful_hash_cap": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "0721dbf956fd31f2043be72c3638d8e0a24de0c7705fb73b52a5f613a6d8fef5"
+    },
+    "C10Probability.byte_stateful_malformed_keeps_cap": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "86a2d976ba6d3b0ef5f49f2b144b99039f7da0f8e0aca96d3fdf3a41ddf8cfff"
+    },
+    "C10Probability.byte_stateful_randomness_after_reply": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "39dfccad2617bb04a6d7e22e92c85fb46c5cc4dd039ec902c0d1bdc39166922f"
+    },
+    "C10Probability.byte_stateful_sign_cap": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "360f2a4ecbd7f7c11af61232bd383b6545fad49c58debc87bf6c5e50ad076272"
+    },
+    "C10Probability.byte_stateful_tick": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "0c4e8eab244aed979f10654dc71c7084ff20a57e009a6c5cec369a6636a273a8"
+    },
+    "C10Probability.byte_stateful_wots_failure": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "802bcb4debfc483731e4ca03de96806f86e285b1ea8ee1d830c9704bec52316f"
+    },
+    "C10Probability.byte_stateful_zero_r_charged": {
+      "file": "C10Probability/ByteStatefulExamples.lean",
+      "statement_sha256": "3ad4f791421f18d68ede2ce4609784d273a8fb5ca060fa3191ad2a4502163b29"
+    },
+    "C10Probability.c10_byte_cutoff_finish_pending": {
+      "file": "C10Probability/ByteStatefulReturn.lean",
+      "statement_sha256": "584df1771fa988b682150f3035c5787fc83cadb512dd8def0069396670ade39c"
+    },
+    "C10Probability.c10_byte_map_observed_driver": {
+      "file": "C10Probability/ByteStatefulReturn.lean",
+      "statement_sha256": "eaa3df1248de61381dc32e1a7b7e7eb346385c37220eacce60edbd5226d51453"
+    },
+    "C10Probability.c10_stateful_byte_adversary_at": {
+      "file": "C10Probability/ByteStatefulGame.lean",
+      "statement_sha256": "7bebf58f7f1259950af2e2f03c3c34b777dc22be734165b6f49c99a98fb217bc"
+    },
+    "C10Probability.c10_stateful_byte_compile_exact": {
+      "file": "C10Probability/ByteStatefulCompile.lean",
+      "statement_sha256": "08ed277bd647844157298e380986e9050773611fd144e397ab98eaaaf1d0caee"
+    },
+    "C10Probability.c10_stateful_byte_compiled_driver": {
+      "file": "C10Probability/ByteStatefulReturn.lean",
+      "statement_sha256": "3f525a065da3d1776386425b5d12d317dbc1ba8d6d871e620014a2af05157142"
+    },
+    "C10Probability.c10_stateful_byte_compiled_game": {
+      "file": "C10Probability/ByteStatefulGame.lean",
+      "statement_sha256": "2edebd53c0fcb2c3244e4014ada1db6550a5e1c0dfd20737938dfadc4615f5d2"
+    },
+    "C10Probability.c10_stateful_byte_cutoff_failure_bound": {
+      "file": "C10Probability/ByteStatefulInitialized.lean",
+      "statement_sha256": "3917576f81da0aff49d11a16020b10c770e97d2accea535c8a9c2c1f0d952fb3"
+    },
+    "C10Probability.c10_stateful_byte_cutoff_forge_bound": {
+      "file": "C10Probability/ByteStatefulInitialized.lean",
+      "statement_sha256": "705af16e0f447208befbcd46157c1a5f796f0be3e9a031e73d71aff6479bb94d"
+    },
+    "C10Probability.c10_stateful_byte_execution_cutoff": {
+      "file": "C10Probability/ByteStatefulExecution.lean",
+      "statement_sha256": "368908989784754852fe90afba0944117108b824d78e0e1098ba341cb9774657"
+    },
+    "C10Probability.c10_stateful_byte_failure_bound": {
+      "file": "C10Probability/ByteStatefulBounds.lean",
+      "statement_sha256": "062c2aeb4ab5f851d8d6cd258ae19f97ef5aa76e934a226a6b85fddb4ce72dfc"
+    },
+    "C10Probability.c10_stateful_byte_failure_bound_real": {
+      "file": "C10Probability/ByteStatefulBounds.lean",
+      "statement_sha256": "f8c424b148891eec640403a8c2af0829ea6dbb0f4855ae691ce1fe81b577ca34"
+    },
+    "C10Probability.c10_stateful_byte_forge_bound": {
+      "file": "C10Probability/ByteStatefulBounds.lean",
+      "statement_sha256": "c562454976e2acf4b656ccd8ad8a663866c8bb5deecda7ef38d6e6feb702d95e"
+    },
+    "C10Probability.c10_stateful_byte_forge_bound_real": {
+      "file": "C10Probability/ByteStatefulBounds.lean",
+      "statement_sha256": "893ef47abfff43340bd403da5bc4750e279348ea7c940e0b92a79ffa7010dc51"
+    },
+    "C10Probability.c10_stateful_byte_forge_example_medium": {
+      "file": "C10Probability/ByteStatefulNumeric.lean",
+      "statement_sha256": "c35c7665aaf627707e84dcc0603febf149b711e14addbbe7ef05ff7ea652f4f9"
+    },
+    "C10Probability.c10_stateful_byte_forge_example_small": {
+      "file": "C10Probability/ByteStatefulNumeric.lean",
+      "statement_sha256": "576140814a617fd5d6bea59f6c6508bade242b2f026ef5d53a4a58859229924d"
+    },
+    "C10Probability.c10_stateful_byte_initial_step": {
+      "file": "C10Probability/ByteStatefulExecution.lean",
+      "statement_sha256": "515975748bdcd7e04c3b25fdc6656d642f5a26daa181cc0cad4990ba0cf09977"
+    },
+    "C10Probability.c10_stateful_byte_initialized_eq": {
+      "file": "C10Probability/ByteStatefulInitialized.lean",
+      "statement_sha256": "aae13a99811a7c8621475ada1d1b49bd42dc45d38cc141a57863102caf400e0c"
+    },
+    "C10Probability.c10_stateful_byte_kernel_cutoff": {
+      "file": "C10Probability/ByteStatefulKernel.lean",
+      "statement_sha256": "b0b607d573a2cc11324ceee39495730392922c615c73bdd1d837a0b322210fa2"
+    },
+    "C10Probability.c10_stateful_byte_running_cutoff": {
+      "file": "C10Probability/ByteStatefulExecution.lean",
+      "statement_sha256": "66c18c1bfd9bb24eb764990a0432ccc84b7c878e5a961c7048210b8683eae06c"
+    },
+    "C10Probability.c10_stateful_byte_signing_quota_bound": {
+      "file": "C10Probability/ByteStatefulBounds.lean",
+      "statement_sha256": "85d46b1783d6b784958b4cc4832cd6e892aee0ec9fac5ba8a5cdff7bbbcabf7b"
+    },
+    "C10Probability.ennreal_tsum_iSup_monotone": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "8326d967f2d4575fb8739aa1fcee5a22da67b561ef525eb5b9ff8efed8953da7"
+    },
+    "C10Probability.geometric_kernel_completed": {
+      "file": "C10Probability/TerminatingKernelExamples.lean",
+      "statement_sha256": "888ebf4f24237844f6271004aadce9a4ff1836e4ffb07323c4da8901aeb24082"
+    },
+    "C10Probability.geometric_kernel_cutoff_state": {
+      "file": "C10Probability/ByteStatefulGeometric.lean",
+      "statement_sha256": "501f998f6f8280a9b21d5ad8a6c10465a1a19a89e4d09f79fb4745b9ca419700"
+    },
+    "C10Probability.geometric_kernel_no_fixed_horizon": {
+      "file": "C10Probability/TerminatingKernelExamples.lean",
+      "statement_sha256": "6cd93c4520940a3cbd4c1bd6a544e9bdd1b8e33b1ecb67fbd9e2eb3bc27594e5"
+    },
+    "C10Probability.geometric_kernel_running": {
+      "file": "C10Probability/TerminatingKernelExamples.lean",
+      "statement_sha256": "afd496f60cb2a8d314e055e3923c2d923fae029db0ef41ff748bff3b6cb3fda8"
+    },
+    "C10Probability.geometric_kernel_terminal_pmf": {
+      "file": "C10Probability/TerminatingKernelExamples.lean",
+      "statement_sha256": "38ada7a93b6e97fb7431beb9761ac100186174c848fc7f6dcd239186fa215496"
+    },
+    "C10Probability.geometric_kernel_terminates": {
+      "file": "C10Probability/TerminatingKernelExamples.lean",
+      "statement_sha256": "cbc09e6f4bbe89a6996f9bf5d301d3a5b7b8cdf8607c61a4007aeb48cdc5304b"
+    },
+    "C10Probability.kernel_cutoff_completed_le_observation": {
+      "file": "C10Probability/KernelLimit.lean",
+      "statement_sha256": "79b6e93727cfda7249d497cdc058c79140f43107f1d05faee57c071c07a9063d"
+    },
+    "C10Probability.kernel_cutoff_monotone": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "9016dec76e502de6322e678ab286513320313931771eb0f70f4888dc875ab916"
+    },
+    "C10Probability.kernel_cutoff_simulation": {
+      "file": "C10Probability/KernelSimulation.lean",
+      "statement_sha256": "5517988edefd18c316033e45ec39b96fe382b4d4026e0add3457e6c2089e1baf"
+    },
+    "C10Probability.kernel_cutoff_succ_le": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "5f46c9380047eb4526969093dc3241e56f69ef32cf616f9777cb371a09e9dfd0"
+    },
+    "C10Probability.kernel_cutoff_total_le_one": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "e4f852f42c710259f3a1c42def04c345a523644c9286d45870d445c519718a40"
+    },
+    "C10Probability.kernel_finished_probability": {
+      "file": "C10Probability/KernelSimulation.lean",
+      "statement_sha256": "dc52af350b19b8295b3a85d59feeb576f7777663448fca2297a29ff04a2d47a4"
+    },
+    "C10Probability.kernel_finished_simulation": {
+      "file": "C10Probability/KernelSimulation.lean",
+      "statement_sha256": "d2c1580232045404639f6bfd636a74c40b1505a7e6236085989c6d9fc113f00b"
+    },
+    "C10Probability.kernel_loop_cutoff": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "c2d08d9349efb5841840f07dff9a9621644e7bf8ebb44d0fdb2a1c3a4dcb87cb"
+    },
+    "C10Probability.kernel_loop_no_terminal_mass": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "1614fdb008b25e3d931d425824bcde7dc577fa1e18bc27d46cf71f462e07fd5f"
+    },
+    "C10Probability.kernel_loop_not_terminating": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "11708d359a5e126e7c16038b8717e704e55446e6ed3b98c6742dc90cc169ebfc"
+    },
+    "C10Probability.kernel_terminal_event_bound": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "8204c18a942e8f60e8136f5762a9256ffd4c486e52093ebbb4889f197072c1fd"
+    },
+    "C10Probability.kernel_terminal_mass_total": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "a3da1182b996f4b2c04a6aefac88b6c5c43a1770f0e7d522aec8f2d28bfc73db"
+    },
+    "C10Probability.kernel_terminal_pmf_apply": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "dab0d715c7fdbe487b944bee1e878e4225afa618f4b346de379a07cf4e62e2e1"
+    },
+    "C10Probability.kernel_terminal_pmf_continuation": {
+      "file": "C10Probability/KernelLimit.lean",
+      "statement_sha256": "8e2ffe39a258638cb883dd2303271e91c05919ab1bd20cd64a1d27a8d4fb2dbc"
+    },
+    "C10Probability.kernel_terminal_pmf_continuation_bound": {
+      "file": "C10Probability/KernelLimit.lean",
+      "statement_sha256": "8f89dd0b4a30f5f2b8fb890534f90430b32799e4be4187e9dea74177cf89af17"
+    },
+    "C10Probability.kernel_terminal_pmf_observation_bound": {
+      "file": "C10Probability/KernelLimit.lean",
+      "statement_sha256": "09ad5fd984f3d5f92b41c185a6425c986c8bc322116bced0a1ad7af007861289"
+    },
+    "C10Probability.kernel_terminal_total_le_one": {
+      "file": "C10Probability/TerminatingKernel.lean",
+      "statement_sha256": "410903c8c7e01ed87a9f20e3ba10ecee525ce91fa40c68e96f7c141d7146ed4c"
+    },
+    "C10Probability.kernel_terminal_weight_bound": {
+      "file": "C10Probability/KernelLimit.lean",
+      "statement_sha256": "945d8be7b4f9a6f8547f3eac595207b86edc62a3ae70c483b89f57f1f6932b43"
+    },
+    "C10Probability.kernel_terminal_weight_eq": {
+      "file": "C10Probability/KernelLimit.lean",
+      "statement_sha256": "52b9ab49af81e6b4a58aa4911df12131509264d5b6fd5a66e509f8dd70e4030d"
+    },
+    "C10Probability.pmf_family_bind": {
+      "file": "C10Probability/PMFFiniteFamily.lean",
+      "statement_sha256": "f99059f0ff3141bb895ee07dbaba241e3a83f4c3cb00ff7caa383179a044761e"
+    },
+    "C10Probability.pmf_family_marginal": {
+      "file": "C10Probability/PMFFiniteFamily.lean",
+      "statement_sha256": "163a8a38fa154015cf2a8e8ae34c74e77c28fb5efdb45e59a2f11ab07b1a06ad"
+    },
+    "C10Probability.pmf_tuple_marginal": {
+      "file": "C10Probability/PMFFiniteFamily.lean",
+      "statement_sha256": "13f2b3d5b2cdfefdfc5509bab785b9f1dc4371e622e5210f2c8b957253b2c97d"
     }
   },
   "bindings": {
