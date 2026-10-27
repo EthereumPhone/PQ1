@@ -561,10 +561,16 @@ individual milestones and are superseded by that owner for the combined claim.
 > workflow). They are only trustworthy if re-reconciled — a stale STATUS is worse than none. Re-run that
 > workflow over a slice before relying on its rows, and trust the **evidence pointer, not the prose**.
 >
-> **UPDATE 2026-10-27 — owner direction: USB proof of secure erasure + factory-installed final SE keys (design only).**
-> The consumer check moves from SWD to the Vault desktop app over USB-C, using **ST's ROM bootloader** (the device ships with empty flash and boots its USB DFU): fill all 2 MB of flash with fresh random data, the user unplugs and replugs, read it all back and compare, then install the release through the ROM.
+> **UPDATE 2026-10-27 — owner direction: ships ready to use; optional USB proof of secure erasure; factory-installed final SE keys (design only).**
+> PQ1 ships with the release flashed and booting. Its first screen, a simple trusted-UI screen (never a boot-time button hold), offers two choices:
+> - **Set up** (default): no computer needed. The release stages WRP + BOOT_LOCK, locks to RDP-2 and starts the seed wizard.
+> - **Check first**: the consumer check, moved from SWD to the Vault desktop app over USB-C. The release switches to booting **ST's ROM bootloader**, and the app works through its USB DFU:
+>   1. fill all 2 MB of flash with fresh random data;
+>   2. the user unplugs and replugs;
+>   3. read it all back and compare;
+>   4. reinstall the release through the ROM, and the device shows the first screen again.
 > The factory installs DHUK-derived **final** SE keys at RDP-1 and regresses to RDP-0 before shipping, so the first-boot transport→final rotation (HIGH-1 below) is slated to go away.
-> Soundness is not established. It needs the non-volatile storage the fill cannot cover to be smaller than the smallest impostor (a few hundred bytes to about 1 KB). Today that storage is: the J102-backed backup domain (~2.2 KB, which the ROM cannot reach), blank OTP (512 B), and unaudited board-chip NVM. The mechanism and its cheat detection work on EVT-3D21 silicon. (A first design, a PQ1 prover in flash, left ~4.4 KB of compressible slack and was dropped.)
+> Soundness is not established. It needs the non-volatile storage the fill cannot cover to be smaller than the smallest impostor (a few hundred bytes to about 1 KB). Today that storage is: the J102-backed backup domain (~2.2 KB, which the ROM cannot reach), blank OTP (512 B), and unaudited board-chip NVM. The mechanism and its cheat detection work on EVT-3D21 silicon. (Earlier the same day: a PQ1 prover in flash left ~4.4 KB of compressible slack and was dropped; then an empty-flash version would have made the app mandatory for every user.)
 > Open prerequisites:
 > - `DHUK-RDP12`;
 > - the RDP-1-in-transit caveat;
@@ -572,7 +578,8 @@ individual milestones and are superseded by that owner for the combined claim.
 > - removing J102;
 > - the factory OTP burn;
 > - the board-chip NVM audit;
-> - WRP/BOOT_LOCK staging moved to first boot.
+> - WRP/BOOT_LOCK staging moved to Set up;
+> - the first screen (PQ-UI design + `ui-px` port) and the release's switch to the check profile.
 > Owner doc: [`user-device-verification.md` § USB path](security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle); EVT experiment in `tools/pose/`.
 >
 > **Work-tracking migration (2026-07-19).** `docs/work-todo.md` and

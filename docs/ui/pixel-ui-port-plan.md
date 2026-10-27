@@ -300,6 +300,33 @@ on EVT shows no text frame — the code paths are ported and QEMU shows zero
 - Rebase onto `feat/pq1-board-target`, one PR per step above, `make e2e`
   + `make e2e-px` green.
 
+### 6. First screen: Set up / Check first — NOT STARTED (owner requirement 2026-10-27)
+
+PQ1 ships with the release flashed. Until setup is done, the release shows a
+**first screen** after the boot fingerprint, with two choices:
+- **Set up**, the default: no computer needed. One more deliberate confirm,
+  then the RDP-2 lock and the seed wizard.
+- **Check first**, optional: the device hands itself to ST's ROM bootloader
+  for the Vault app's USB proof of secure erasure, and the first screen
+  returns afterwards.
+
+The owner's requirement: a beautiful, simple screen that even a very
+non-technical user understands at once. It is **never** a button hold at
+power-up or a hidden gesture.
+
+Upstream first:
+- the vendored `flows/setup/first_run.py` opens with `SET UP PQ1?`, so the
+  Check first choice and its two follow-up screens (what you need; "the
+  screen turns off during the check, that's normal") are designed in PQ-UI;
+- then the screens are ported here like any family.
+
+The port replaces the legacy 16×4 lock prompt (`CONFIRM: LOCK DEVICE
+FOREVER. SWD verify OFF after lock.`, `first_boot/state.rs`
+`build_lock_confirm_pages`).
+
+Full requirements and draft copy:
+[`user-device-verification.md` § The first screen](../security/user-device-verification.md#the-first-screen-ui-and-ux-requirements).
+
 ## Flash
 
 Bench/EVT images are monolithic and fit. The A/B-slot ship shape is ~9 KB

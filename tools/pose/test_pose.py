@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import pose  # noqa: E402
 
-# Option bytes as EVT-3D21 reported them in the shipping profile (2026-10-27).
+# Option bytes as EVT-3D21 reported them in the check profile (2026-10-27).
 EVT_SHIP_OB = bytes.fromhex(
     "aa78ef937f0000087f00f90b7c00000cffff80ff807f807fffff80ffffff80ff"
     "ffff80ff807f807fffff80ffffff80ff00000000000000000000000000000000")
@@ -139,12 +139,12 @@ class Parsing(unittest.TestCase):
 
 
 class OptionBytes(unittest.TestCase):
-    def test_evt_ship_profile_decodes(self):
+    def test_evt_check_profile_decodes(self):
         ob = pose.decode_ob(EVT_SHIP_OB)
         self.assertEqual((ob["RDP"], ob["TZEN"], ob["nSWBOOT0"], ob["nBOOT0"]), (0xAA, 1, 0, 0))
         self.assertEqual((ob["SECBOOTADD0"], ob["BOOT_LOCK"], ob["SRAM2_RST"]), (0x180000, 0, 1))
         self.assertEqual(ob["SECWM1"], {"pstrt": 0x7F, "pend": 0})
-        self.assertEqual(pose.ship_profile_problems(ob), [])
+        self.assertEqual(pose.check_profile_problems(ob), [])
 
     def test_profile_rejects_each_deviation(self):
         cases = {
@@ -157,7 +157,7 @@ class OptionBytes(unittest.TestCase):
         }
         for name, blob in cases.items():
             with self.subTest(name):
-                self.assertTrue(pose.ship_profile_problems(pose.decode_ob(blob)))
+                self.assertTrue(pose.check_profile_problems(pose.decode_ob(blob)))
 
 
 class Evaluate(unittest.TestCase):

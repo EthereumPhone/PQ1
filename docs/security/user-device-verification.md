@@ -10,14 +10,25 @@ measured-boot 8-word fingerprint (`docs/security/measured-boot.md`).
 > SWD.** The owner chose a probe-free procedure that runs in the Vault desktop
 > app over the ordinary USB-C cable: a **proof of secure erasure with a power
 > cycle, done by ST's own ROM bootloader**.
-> - The device ships with **empty flash**, booting ST's mask-ROM USB DFU.
-> - The app fills all 2 MB of flash with fresh random data through it.
-> - The user unplugs and replugs.
-> - The app reads everything back.
+> It also changes the factory flow: the SEs get their **final, DHUK-derived
+> keys at the factory at RDP-1**.
 >
-> No PQ1 code runs on the device until the release is installed. This also
-> changes the factory flow: the SEs get their **final, DHUK-derived keys at
-> the factory at RDP-1**.
+> **Revised the same evening (owner): the check is optional, and the device
+> ships ready to use.** The device ships with the release flashed. Its first
+> screen offers two choices:
+> - **Set up**, the default. No computer and nothing to read: the device locks
+>   itself to RDP-2 and starts the seed wizard.
+> - **Check first**, for users who want proof. The device hands itself to ST's
+>   mask-ROM USB bootloader. Then:
+>   1. the Vault app fills all 2 MB of flash with fresh random data;
+>   2. the user unplugs and replugs;
+>   3. the app reads everything back;
+>   4. the app reinstalls the release, and the device returns to the same
+>      first screen.
+>
+> The choice is a **screen in the trusted UI** that a non-technical user
+> understands, not a button hold at power-up (owner requirement; § The first
+> screen).
 >
 > **Soundness is still open.** It needs the non-volatile storage the fill
 > cannot cover to be tiny. Today it is not: the J102 supercap keeps ~2.2 KB of
@@ -27,7 +38,8 @@ measured-boot 8-word fingerprint (`docs/security/measured-boot.md`).
 > Full design, argument, residuals, prerequisites and EVT results:
 > [§ USB path: proof of secure erasure with a power cycle](#usb-path-proof-of-secure-erasure-with-a-power-cycle)
 > at the end of this file. The SWD procedure below stays as the expert,
-> ground-truth option. Nothing in either path is production-approved.
+> ground-truth option; its step 5 prompt is now the first screen's Set up.
+> Nothing in either path is production-approved.
 
 ## The claim this design delivers
 
@@ -163,6 +175,12 @@ deliberate button sequence proceeds to the lock. An attacker pressing it in
 transit yields a device that arrives locked → fails step 3 → rejected. The
 gate converts that attack from compromise into a returned unit.
 
+> **UPDATE 2026-10-27:** under the USB path this prompt becomes the device's
+> **first screen**, with **Set up** (the default) and **Check first**
+> ([§ The first screen](#the-first-screen-ui-and-ux-requirements)). The lock
+> still runs only on the user's explicit Set up confirmation. The SWD wording
+> goes.
+
 ## Verifier tool + hardware trust
 
 - The tool is open source, reproducibly built, and trivially re-implementable
@@ -251,8 +269,8 @@ transparency log) but it is **not** the firmware proof; this procedure is.
 implemented in shipping firmware, not production-approved, and it changes the
 factory flow (§ Prerequisites). Read this whole section before touching
 first-boot provisioning, factory provisioning, SE key derivation, WRP
-staging, option-byte handling, the FSBL, or the Vault desktop app's
-onboarding flow.**
+staging, option-byte handling, the FSBL, the first-run UI, or the Vault
+desktop app's onboarding flow.**
 
 It supersedes the NO-GO in
 [`user-verification-app-path-status-2026-10-27.md`](user-verification-app-path-status-2026-10-27.md),
@@ -264,58 +282,190 @@ the STM32U585's system memory.
 > PQ1 code.** The first version of this section put a small PQ1 prover in
 > flash. Its own code left ~4.4 KB of compressible slack, enough for malware
 > that reuses it (§ Test status, first experiment). The owner moved the
-> prover into ST's mask-ROM bootloader. The device now ships with **empty
-> flash**, and no PQ1 code runs on it until the release is installed.
+> prover into ST's mask-ROM bootloader.
+>
+> **UPDATE 2026-10-27 (evening): the device ships with the release, and the
+> check is optional.** Owner direction: a user must be able to unpack PQ1,
+> plug it into power, set it up and be done, without the Vault app and
+> without reading anything. The check stays available to users who choose it
+> on the device's first screen; it needs the Vault app.
+>
+> An intermediate version (also 2026-10-27) shipped empty flash booting ST's
+> ROM, so every user needed the app. What changed:
+> - the procedure;
+> - the option-byte profiles;
+> - the factory's last step.
+>
+> The argument (§ Why ST's ROM bootloader is the prover) did not change. It
+> never depended on how the device got into ST's bootloader.
 
-### The procedure (what the user does)
+### What ships
 
-The device arrives at RDP-0 with **empty flash**. Its option bytes make it
-boot ST's mask-ROM USB bootloader (DFU) and leave every flash page
-non-secure and unprotected; this is the **shipping profile**, defined below.
-The user runs the Vault desktop app (no phone app is planned yet) over the
-normal USB-C cable:
+The factory ships each device at RDP-0 with **the release flashed** and the
+**shipping profile**, which boots it (§ The two option-byte profiles).
+- Pages 123–127 are blank, and flash holds nothing secret.
+- The SEs already hold their final per-die keys (§ factory below). No code can
+  use them at RDP-0.
 
-1. **Check and fill.** Through the ROM, the app:
+On every power-up until setup is done, the release shows the boot fingerprint
+and then **the first screen**. It offers two choices:
+- **Set up**, the default;
+- **Check first**, optional.
+
+A user who never reads anything plugs PQ1 into power, picks the highlighted
+choice, and is done. The check exists only for users who ask for it.
+
+### Path 1: Set up (the default; no computer, nothing to read)
+
+1. The user plugs PQ1 into any USB-C power: a charger or a computer.
+2. On the first screen they choose **Set up**, and confirm it once more.
+3. The release then:
+   - stages WRP on the FSBL range and BOOT_LOCK;
+   - pins boot to flash with the BOOT0 pin ignored (`nSWBOOT0=0 nBOOT0=1`);
+   - checks the OEM-key locks;
+   - clears the backup domain;
+   - locks to RDP-2 (`first-boot-requirements.md` R2.x).
+4. The seed wizard starts.
+
+This user trusts the factory's flash. Comparing the boot fingerprint words
+with the release's published words is a weaker check, because a malicious
+image can draw the right words.
+
+### Path 2: Check first (optional; needs the Vault desktop app)
+
+1. **Choose.** On the first screen the user chooses **Check first**. The
+   device tells them to open PQ1 Vault on a computer and to connect PQ1 with a
+   USB-C cable. Any USB-C data cable works: the ROM is entered through the
+   option bytes, not the BOOT0 pin or the SBU lines.
+2. **Hand-over.** The release sets the **check profile** and resets. From here
+   until the install:
+   - ST's ROM bootloader runs, and no PQ1 code runs;
+   - the screen is dark;
+   - the Vault app guides the user (no phone app is planned yet).
+3. **Check and fill.** Through the ROM, the app:
    - reads the option bytes and the OTP;
-   - mass-erases flash;
+   - mass-erases flash, which removes the factory's copy of the release;
    - writes fresh random data `R` to **all 2 MB** of flash (`R` is
      generated and kept on the host);
    - writes a random canary to SRAM2.
-2. **Unplug.** The user unplugs the device, waits at least the minimum off
+4. **Unplug.** The user unplugs the device, waits at least the minimum off
    time, and plugs it back in. The app measures how long the device was gone.
-3. **Read back.** The device boots ST's ROM again. The app reads **all** of
-   flash, plus the option bytes, the OTP and the SRAM2 canary, and requires:
+5. **Read back.** The device boots ST's ROM again. The app reads **all** of
+   flash, plus the option bytes, the OTP and the SRAM2 canary. It requires:
    - flash equals `R` byte for byte;
-   - the shipping profile;
+   - the check profile;
    - OTP equals the factory record;
    - the canary is gone;
    - the off time is at least the minimum.
-4. **Install.** Only on a full match, the app:
+6. **Install.** Only on a full match, the app:
    - mass-erases;
    - writes the published release through the ROM and reads it back;
-   - switches the option bytes to the release layout (bank 1 secure, boot
-     from flash).
+   - switches the option bytes back to the shipping profile.
 
-   The device then reboots into the release.
-5. **Lock.** The release's first boot does the rest:
-   - stages WRP on the FSBL range and BOOT_LOCK;
-   - checks the OEM-key locks;
-   - clears the backup domain;
-   - locks to RDP-2 after the trusted-UI confirmation
-     (`docs/provisioning/first-boot-requirements.md`).
+   The device boots the release and shows the first screen again. The app
+   shows the result and tells the user to choose **Set up** on the device
+   (Path 1). The device itself never shows a check result: firmware cannot
+   vouch for itself.
+7. **On a mismatch,** the app says not to use the device and installs nothing.
 
-**The shipping profile** (`tools/pose/pose.py` `ship_profile_problems`):
-- RDP 0xAA, TZEN 1.
-- nSWBOOT0 0 and nBOOT0 0, so the chip boots ST's bootloader whatever the
-  BOOT0 pin says.
-- BOOT_LOCK 0, SWAP_BANK 0, DUALBANK 1.
-- SECWM1 and SECWM2 empty. With TZEN=1 the ROM runs non-secure and can reach
-  only non-secure flash.
-- No WRP, no HDP.
+What the check proves: the release the device runs from then on was installed
+by the app onto flash that held nothing else. The factory's copy of the
+release is erased by the fill and plays no part.
 
-**Recovery is trivial.** Until step 4 switches the option bytes, the device
-boots ST's ROM on every power-up. An interrupted run is simply started again.
-There is no PQ1 code on the device for a power cut to damage.
+### The two option-byte profiles
+
+| | Shipping profile: boots the release | Check profile: boots ST's ROM |
+|---|---|---|
+| RDP | 0xAA | 0xAA |
+| TZEN | 1 | 1 |
+| `nSWBOOT0` / `nBOOT0` | 0 / 1: boot flash, BOOT0 pin ignored | 0 / 0: boot ST's bootloader, BOOT0 pin ignored |
+| SECWM1 / SECWM2 | the release layout | **empty**: with TZEN=1 the ROM runs non-secure and must reach every page |
+| WRP, HDP | none; WRP is staged at Set up | none |
+| BOOT_LOCK | 0; set at Set up | 0 |
+| SWAP_BANK / DUALBANK | 0 / 1 | 0 / 1 |
+| Set by | the factory; the app after an install | the release, on Check first |
+| Checked by | Phase A before the lock (R2.1) | the app after the readback (`tools/pose/pose.py` `check_profile_problems`) |
+
+BOOT_LOCK must stay 0 in the shipping profile. Otherwise the release could not
+switch to the check profile, because BOOT_LOCK forces boot from SECBOOTADD0.
+
+**Recovery.** If a check is interrupted after the hand-over (cable pulled,
+laptop closed), the device keeps booting ST's ROM with a dark screen. It is
+not broken.
+- Opening Vault and plugging PQ1 in again resumes the check.
+- If the user abandons the check, Vault offers to put PQ1 back without a
+  check: it reinstalls the release and switches back to the shipping profile.
+  A device whose check *failed* is not put back as if nothing happened.
+
+A power cut during the check cannot damage anything, because PQ1's own code
+is not running.
+
+### The first screen: UI and UX requirements
+
+**Owner requirement (2026-10-27):** the choice between Set up and Check first
+is part of the device's UI. It must be a beautiful, simple screen that even a
+non-technical user understands at a glance. It is **not**:
+- a button hold at power-up;
+- a boot-time window;
+- a hidden menu or a key combination.
+
+(`secure/src/hw/dev_dfu.rs`'s both-buttons hold is a dev-unit tool, not this.)
+
+Requirements:
+1. **Designed in PQ-UI** (`EthereumPhone/PQ-UI`) like every other screen, and
+   drawn by the pixel UI (`ui-px`). The vendored first-run flow
+   (`tools/pq-ui/flows/setup/first_run.py`) opens with `SET UP PQ1?`. The
+   Check first choice is added to that opening screen upstream first, then
+   ported (`docs/ui/pixel-ui-port-plan.md`).
+2. **Shown on every power-up until setup is done,** after the boot
+   fingerprint, so a user who unplugged midway sees it again.
+3. **Both choices are on the first screen.**
+   - **Set up** is the default and is highlighted: a user who reads nothing
+     and presses the obvious button sets the device up.
+   - **Check first** is visible next to it, not in a menu.
+4. **Plain words.** None of: RDP, DFU, flash, firmware, bootloader, option
+   bytes, erase, TrustZone, lock level. Use short sentences, one idea per
+   screen; the panel is 428×142.
+5. **The same controls as every other PQ1 screen.** No new gestures.
+6. **Set up asks once more before the irreversible lock.**
+   - The confirm is the same deliberate one as signing (the chord), never a
+     single tap.
+   - One plain sentence says what is given up: after setup, the computer
+     check is no longer possible. It must not sound alarming, because Set up
+     is the normal path.
+   - This replaces today's legacy 16×4 pages, `CONFIRM: LOCK DEVICE FOREVER.
+     SWD verify OFF after lock.` (`secure/src/first_boot/state.rs`
+     `build_lock_confirm_pages`).
+7. **Check first says what is needed before anything changes:** a computer
+   with PQ1 Vault and a USB-C cable. Back is available until the hand-over.
+8. **The hand-over is announced.** Before switching, the device says that its
+   screen will turn off while the computer checks it, and that this is
+   normal. From then on the Vault app guides every step:
+   - unplugging and replugging;
+   - progress;
+   - the result;
+   - "now choose Set up on PQ1".
+
+   It SHOULD switch only once a computer is on the cable, for example after
+   seeing a USB host. Then a user who picked Check first by mistake on a
+   charger is not left with a dark device. If that detection needs the
+   release's USB stack before the lock, it is an exception to R1.2 and §6 ("no
+   USB before ALL_DONE") and needs review. It must never add a command that
+   switches the device without the on-device choice.
+9. **The device never shows a check result.** Only the Vault app does. A
+   "verified" screen is exactly what malware would draw.
+10. **After a check,** the device shows the same first screen again.
+11. **A failed check is the app's job:** "Don't use this PQ1", with a support
+    path. The device shows nothing different.
+
+Draft copy, for PQ-UI to design (not final):
+
+| Screen | Text | Choices |
+|---|---|---|
+| First screen | **Welcome to PQ1.** You can check PQ1 with a computer before setup. It's optional. | **Set up** (default) · Check first |
+| Set up? | **Set up PQ1?** After setup, the computer check is no longer possible. | **Set up** (chord) · Back |
+| Check first | **Check with a computer.** Open PQ1 Vault on your computer, then connect PQ1 with a USB-C cable. | Continue · Back |
+| Hand-over | **Your computer takes it from here.** PQ1's screen turns off during the check. That's normal. | — |
 
 ### Why ST's ROM bootloader is the prover
 
@@ -346,15 +496,24 @@ The argument:
   code, the answer came from ST's ROM, and flash really is `R`: nothing else
   is on the device.
 
+**It does not matter how the device got into ST's bootloader.** In this
+design the release itself switches to the check profile. A malicious image in
+its place has three options, and none helps it:
+- skip the switch: no check starts, which the user sees;
+- boot itself instead: it must then answer the readback as an impostor,
+  which the count rules out;
+- fake the switch: same as booting itself.
+
 Compared with the first design (a PQ1 prover in flash), this removes two
 problems:
-- **Prover slack.** There is no PQ1 code on the device, so no compressible
-  prover bytes, and no "reuse the genuine prover" attack.
+- **Prover slack.** No PQ1 code runs during the check, and the fill erases
+  the shipped release, so there are no compressible prover bytes and no
+  "reuse the genuine prover" attack.
 - **Something else running.** After a pass, the only code that runs is ST's
   ROM (until the option-byte switch) and then the installed release. Leftover
   data in OTP, the option bytes or the backup domain is inert unless the
   release reads it. That is what the OTP and option-byte comparison and the
-  first-boot clean-up are for.
+  clean-up at Set up are for.
 
 **What the uncovered storage must be smaller than.** The cheapest impostor
 we can think of does not write a USB stack of its own:
@@ -376,7 +535,7 @@ target is tens of bytes. This bar is an engineering estimate, not a proof
 | Store the fill cannot cover | Size | Status and treatment |
 |---|---|---|
 | OTP, unprogrammed quad-words | 512 B on EVT-3D21 (all blank) | Write-once, so the fill cannot use it. **The factory burns every quad-word** with recorded random data. The exception is a minimal rollback-floor region, which counts. The ROM reads all 512 B, and the app compares them with the factory record, so dormant data there is caught. |
-| Option-byte fields free to hold data | roughly 10–20 B (NSBOOTADD0/1 are unused with TZEN=1; spare bits) | Counted. The ROM reads all 64 B, and the app requires the shipping profile and the factory values in every other field. The OEM1/OEM2 keys are write-only and read as zero, so they are useless as storage; see the first-boot checks below. |
+| Option-byte fields free to hold data | roughly 10–20 B (NSBOOTADD0/1 are unused with TZEN=1; spare bits) | Counted. The ROM reads all 64 B, and the app requires the check profile and the factory values in every other field. The OEM1/OEM2 keys are write-only and read as zero, so they are useless as storage; see the Set-up checks below. |
 | Backup domain (backup SRAM 2 KB, TAMP 32×4 B, RTC registers) | about 2.2 KB | **Too large, and the ROM cannot reach it.** The probe was refused with `errVENDOR`. On the EVT it survives an unplug because of J102, a Seiko CPH3225A chip supercap on VBAT, charged from VDD3V3 through D104/R114. PQ1 never has a backup battery (owner, 2026-10-27). **Hard prerequisite: remove J102.** Then measure how long the bare VBAT node keeps the backup domain, and set the app's minimum off time above that. |
 | SE050 / OPTIGA storage | tens of KB | Must be **unreachable** from MCU code during transit. That is the factory change below, plus the open RDP-0→1 caveat. |
 | Non-volatile memory in other chips on the board | unknown | **Not yet audited.** Each of these must be checked against its datasheet for non-volatile memory the MCU can write: the NV3007 LCD controller (possible MTP/OTP for panel settings), the AW21036 LED driver, the AW99703 backlight driver, and the power path (AW32901, AW35602, ET83101H). Writable non-volatile memory in the display controller would also be a WYSIWYS concern. |
@@ -384,13 +543,13 @@ target is tens of bytes. This bar is an engineering estimate, not a proof
 | ST system memory (bootloader, RSS) | — | Mask ROM, trusted, as in every path. |
 | Undocumented on-die storage | — | Assumed none. This is a silicon assumption, like the ROM. |
 
-**Checks the release's first boot must make, because the ROM cannot see
+**Checks the release must make at Set up, because the ROM cannot see
 them:**
 - **OEM1LOCK/OEM2LOCK.** A planted OEM2 key would allow a later RDP-2 →
   RDP-1 regression. The lock bits are in `FLASH_NSSR`, which the ROM does not
-  expose. First boot must refuse to lock if either is set. The bit positions
+  expose. Set up must refuse to lock if either is set. The bit positions
   are still unpinned (`shared/src/lockdown.rs` `OEM_LOCK_MASK_PINNED`).
-- **Nothing inherited.** First boot must not trust anything left in the
+- **Nothing inherited.** Set up must not trust anything left in the
   backup domain, and must set its own VTOR/SAU/MPU before trusting any
   register read. This matters only if the counting failed; it is cheap
   defence in depth.
@@ -411,14 +570,19 @@ rotates them (`first-boot-provisioning.md`). The new factory flow:
 3. Lock the SE policies so nothing answers without those credentials (SE050
    `SCP_REQUIRED`; no OPTIGA object writable outside the shield).
 4. **Regress RDP 1→0.** The hardware mass-erases flash and keeps OTP.
-5. **Burn the OTP** (Prerequisite 6), set the **shipping profile**, and write
-   nothing: flash stays empty. Ship at RDP-0.
+5. **Burn the OTP** (Prerequisite 6).
+6. **Flash the release.** Pages 123–127 stay blank.
+7. Set the **shipping profile**, which boots the release. Ship at RDP-0.
 
 At RDP-0 the DHUK reverts to the shared constant, so no MCU code — genuine
 or malicious — can talk to either SE until the device is at RDP ≥ 1 again.
+The genuine release does not try: before Set up it starts no SE traffic
+(R1.2).
 
 **Open caveat (found 2026-10-27, not yet closed): RDP 0→1 in transit.** Any
-firmware at RDP-0 can raise RDP to 1 itself. At RDP-1 the per-die DHUK
+firmware at RDP-0 can raise RDP to 1 itself. That includes whatever runs in
+place of the shipped release before a check; the genuine release never raises
+RDP before Set up. At RDP-1 the per-die DHUK
 returns, so malware would know (from the public source) how to derive the SE
 keys and could stash itself in SE storage, keeping only a small loader in
 flash or another uncovered store. Candidate closures:
@@ -438,10 +602,10 @@ unverified. Until one is closed, the SEs are **not** excluded from the count.
 
 1. **`DHUK-RDP12` must pass** (`docs/security/red-teaming.md` §6.5, issues
    #388/#400). The DHUK must be identical at RDP-1 (factory) and at RDP-2
-   (after the first-boot lock), or every unit loses its SEs at the lock. The
+   (after the lock at Set up), or every unit loses its SEs at the lock. The
    test is one-shot and needs a sacrificial part.
 2. **The factory ceremony: RDP-1 → SE provisioning → RDP 1→0 regression →
-   OTP burn → shipping profile.** It reverses `first-boot-requirements.md`
+   OTP burn → release flash → shipping profile.** It reverses `first-boot-requirements.md`
    F2 / "Factory MUST NOT program RDP" and "no factory-held final pairing
    secret" (CLAUDE.md shipping model). It needs §11 authorization, like any
    RDP or SE-credential action.
@@ -466,40 +630,67 @@ unverified. Until one is closed, the SEs are **not** excluded from the count.
    decision on the floor region's size budget.
 7. **Audit the other chips on the board for writable non-volatile memory**
    (see the table).
-8. **WRP staging moves from the factory to first boot.** The device ships with
-   empty flash, so there is nothing to protect at the factory. Invariant #10's
-   WRP-before-RDP-2 ordering still holds, done on-device.
-9. **First-boot changes:**
-   - stage WRP and BOOT_LOCK, and optionally `nSWBOOT0=0 nBOOT0=1` so the
-     BOOT0 pin no longer matters;
+8. **WRP staging moves from the factory to Set up.** WRP set at the factory
+   would stop ST's ROM from filling the FSBL pages on the check path.
+   Invariant #10's WRP-before-RDP-2 ordering still holds, done on-device.
+9. **Changes at Set up** (the lock runs on the user's Set up, never at
+   power-up):
+   - stage WRP and BOOT_LOCK;
+   - pin `nSWBOOT0=0 nBOOT0=1` if the shipping profile did not already;
    - the OEM-lock check;
    - clear the backup domain;
    - set VTOR/SAU/MPU before trusting register reads;
    - fix the RDP-burn register defect (#268).
 
-   The installer mass-erases before writing, so pages 123–127 start blank, as
-   Phase A (R2.2) requires.
+   The factory leaves pages 123–127 blank, and the installer mass-erases
+   before writing, so they start blank on both paths, as Phase A (R2.2)
+   requires.
 10. **A native option-byte writer in the Vault desktop app,** with a hard
     guard: refuse any write whose RDP byte is not 0xAA, or that changes TZEN
     or any field other than the release fields. `pose.py` deliberately has
     no option-byte writer; on the EVT, option bytes were changed with
     `STM32_Programmer_CLI`.
-11. **The Vault desktop app flow:** fill, the unplug prompt with a measured
-    off time, verify, install, the option-byte switch, the fingerprint
-    display. It also needs the release artifact it verifies against. At the
+11. **The Vault desktop app flow,** for the users who choose the check:
+    - fill;
+    - the unplug prompt with a measured off time;
+    - verify;
+    - install;
+    - the option-byte switch back to the shipping profile;
+    - the fingerprint display;
+    - "now choose Set up on PQ1";
+    - putting PQ1 back after an abandoned check.
+
+    It must be as plain as the first screen. It also needs the release artifact it verifies against. At the
     ROM's pace a run takes about 2 minutes; see the measured times in § Test
     status.
-12. **USB before the lock.** No PQ1 code runs before the release, so
-    `R1.2`/`R2.4`/§6 (USB before the lock) apply unchanged to the release's
-    first boot.
+12. **USB before the lock.** `R1.2` and §6 keep USB off until after the
+    lock. The hand-over's computer detection (first-screen requirement 8) is
+    the only candidate exception, and needs review.
 13. **SE exclusion must also cover the OPTIGA protected-update path.** No
     object may be updatable through a trust anchor (`Int`/`0xF0` metadata).
     This ties to S-2.
 14. **Optional board change:** consumers no longer need the SBU→BOOT0 circuit
-    (U111/R131/R132). First boot can make the pin irrelevant (item 9).
+    (U111/R131/R132). The shipping and check profiles both ignore the pin.
 15. **Pin the uncovered-storage budget:**
     - a written, reviewed estimate of the smallest impostor;
     - the measured total of uncovered storage after items 5–7.
+16. **The first screen** ([§ The first screen](#the-first-screen-ui-and-ux-requirements)):
+    - design it in PQ-UI and port it to `ui-px`;
+    - gate Phase A on Set up;
+    - retire the legacy lock-confirm pages.
+17. **The release's check path.** On Check first, after the hand-over:
+    - program the check profile: `nBOOT0=0`, SECWM1/SECWM2 empty, no WRP or
+      HDP, BOOT_LOCK 0;
+    - reset.
+
+    It must refuse unless all of these hold:
+    - RDP is 0xAA;
+    - pages 123–127 are blank;
+    - no wallet exists;
+    - Set up has not started.
+
+    This is the only option-byte write the release makes before Set up, and
+    it writes nothing else to flash before Set up.
 
 ### What it does NOT prove
 
@@ -516,6 +707,14 @@ boards, ST silicon), plus:
   reading out a chip gives only masked halves.
 - **A compromised host** can lie about the comparison. The mitigations are
   the same as for the SWD path.
+- **What ran before the check.** The shipped release, or whatever is in its
+  place, runs before the user picks Check first. The check proves what is in
+  flash afterwards, not what that code did while it ran.
+  - At RDP-0 it cannot reach the SEs, unless it raised RDP itself (the open
+    caveat above).
+  - No seed exists yet.
+- **Users who choose Set up without the check** get no proof. They trust the
+  factory's flash, as with any device that ships ready to use.
 
 ### Docs that still describe the old (transport-key) model
 
@@ -530,6 +729,9 @@ Update these when the factory change is implemented, not before:
 - `docs/security/threat-model.md`
 - `docs/security/production-security.md`
 - `docs/security/research-bundles/E-supply-chain.md`
+- `first-boot-requirements.md` R2.4 and `secure/src/first_boot/state.rs`
+  `build_lock_confirm_pages`: the lock prompt becomes the first screen's Set
+  up.
 
 ### Test status (EVT-3D21)
 
@@ -543,8 +745,11 @@ library only). Procedure: `tools/pose/README.md`.
 
 Pre-state: a full ST-LINK backup at
 `~/Documents/PQ1/evt3d21-backup-2026-10-27-pose-rom/` (two byte-identical
-dumps). Setup through ST-LINK:
-- `-e all`, so flash is empty, as shipped;
+dumps). ST-LINK set the check profile, standing in for the release's Check
+first path (Prerequisite 17, not implemented):
+- `-e all`, so flash was empty, as in the intermediate empty-flash design.
+  Under the current design the device would hold the release at this point,
+  and the fill's mass erase replaces it either way;
 - `-ob nSWBOOT0=0 nBOOT0=0 SECWM1_PSTRT=0x7F SECWM1_PEND=0x0`. SECWM2 was
   already empty.
 
@@ -569,7 +774,7 @@ field for field. Probe results:
 | 2 | honest `run` | yes: out at 19:12:19, back for good at :30, with a 4 s reconnect at :23 (the plug bounced on re-insertion) | Two tool bugs: it measured only the first gap, and then a udev permission race crashed its verify. A manual `verify` of the same session: **PASS**. Flash byte-exact; canary 14/4096 bytes equal, about chance. Both bugs are fixed (bounce-aware timing, udev retry). |
 | 3 | honest `run` | yes; 17 s by the kernel log (19:36:10 → :27) | The tool's 600 s wait expired before the unplug. Fixed: it now waits 3600 s and never verifies on a timeout. A manual `verify` after the unplug: **PASS**. Flash byte-exact, profile and OTP correct, canary 16/4096, about chance. |
 | C2 | After a fill, `nSWBOOT0=1 nBOOT0=1` over SWD, so the chip boots flash, which holds `R`. | reset by the option-byte reload | **FAIL**: nothing enumerates, and `verify` reports "did not come back as ST's ROM DFU". |
-| Install | `pose.py install` of the backup images through the ROM. Then `STM32_Programmer_CLI -c port=USB1` switches bank 1 back to secure and sets boot to flash. | — | The device enumerates as `PQSigner OS`. An ST-LINK dump matches the backup byte for byte, and `-ob displ` is identical to the pre-state. |
+| Install | `pose.py install` of the backup images through the ROM. Then `STM32_Programmer_CLI -c port=USB1` switches bank 1 back to secure and sets boot to flash: the switch back to the shipping profile. | — | The device enumerates as `PQSigner OS`. An ST-LINK dump matches the backup byte for byte, and `-ob displ` is identical to the pre-state. |
 
 **Honest gap:** no single run has both the tool-measured off time and a
 PASS. The off-time measurement agrees with the kernel log (2.9 s against 3 s;
@@ -586,7 +791,7 @@ Measured:
 
 What these runs establish:
 - ST's ROM alone can fill and read back every flash byte, the option bytes
-  and the OTP, with no PQ1 code on the device.
+  and the OTP, with no PQ1 code running.
 - A kept page, a page hidden as secure, and boot redirected away from the ROM
   are each detected.
 

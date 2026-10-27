@@ -28,12 +28,18 @@ Before non-trivial work:
    commands cannot be deferred by relabelling them. Unrelated playbooks need not
    run.
 6. **User-side firmware verification, factory SE provisioning, first-boot
-   rotation, WRP staging, option-byte handling, or the FSBL:** read
+   rotation, the first-run UI, WRP staging, option-byte handling, or the
+   FSBL:** read
    [`docs/security/user-device-verification.md` § USB path](docs/security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle)
-   first. Owner direction 2026-10-27 (proof of secure erasure over USB with a
-   power cycle, done by ST's ROM bootloader on a device shipped with empty
-   flash; final SE keys installed at the factory from the per-die DHUK)
-   changes several documented assumptions and is not implemented yet.
+   first. Owner direction 2026-10-27 changes several documented assumptions
+   and is not implemented yet:
+   - PQ1 ships with the release flashed and booting;
+   - its first screen offers **Set up** (the default, no computer needed) or
+     an optional **Check first**: a proof of secure erasure over USB with a
+     power cycle, done by ST's ROM bootloader through the Vault app;
+   - that screen must be a simple trusted-UI screen, never a boot-time
+     button hold;
+   - the factory installs the final SE keys from the per-die DHUK.
 
 ## Focus and review-cadence routing
 
