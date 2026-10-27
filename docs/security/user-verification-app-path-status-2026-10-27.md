@@ -1,27 +1,38 @@
 # PQ1 user-side firmware verification — status note (2026-10-27)
 
-> **UPDATE 2026-10-27 (later the same day) — NO-GO SUPERSEDED BY A NEW DESIGN, WHOSE SOUNDNESS IS STILL OPEN.**
-> The owner and Claude reworked the design so it no longer needs an immutable ROM
-> to defeat RAM- and cache-resident malware. The compression slack in the prover's
-> own bytes, the attack this note raised, is still open: about 4.4 KB measured,
-> against a bar of a few hundred bytes. Read
+> **UPDATE 2026-10-27 (later the same day): NO-GO SUPERSEDED. The prover is ST's ROM bootloader.**
+> The design now in force ships the device with **empty flash** and option bytes that boot
+> ST's mask-ROM USB bootloader (DFU). The app fills all 2 MB of flash with random data
+> through that ROM, the user unplugs and replugs, and the app reads it all back. No PQ1
+> code runs on the device before the release is installed. Read
 > [`user-device-verification.md` § USB path](user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle)
 > first. Why the NO-GO below no longer holds:
 >
-> - **Its premise was "PoSE needs a ROM".** That is true for the original
->   protocol. Two things replace the ROM: counting (random data does not
->   compress, so storage that returns it is full), and a **physical
->   unplug/replug between the fill and the readback**. The power cycle wipes
->   SRAM, caches and CPU state in hardware, so after it the only code that runs
->   is what sits in flash. Malware is left only the compression slack of the
->   prover's own bytes plus a few small stores. Whether that can be made small
->   enough is the open question.
-> - **SE storage** is excluded by provisioning the SEs at the factory with
->   final keys derived from the per-die DHUK (RDP-1), then regressing to RDP-0.
->   One caveat is still open: firmware can raise RDP to 1 itself in transit.
->   See that section.
-> - **Power-cut recovery** is no longer a trust question. After the fill the
->   device only boots the prover, and re-running the procedure recovers it.
+> - **"PoSE needs a ROM."** It has one: ST's bootloader in system memory. It writes and
+>   reads memory over USB, and reading all of `R` back is equivalent to the MAC.
+> - **Rejected option 1, "with TrustZone on, ST's bootloader runs non-secure, so secure
+>   flash reads back as zeros".** The shipping profile leaves SECWM1/SECWM2 empty, so
+>   every page is non-secure while the ROM fills and reads it. A page malware hides as
+>   secure reads back wrong and fails the profile check (EVT control C3). The release
+>   install switches bank 1 back to secure.
+> - **"Firmware that ignores the boot pin can imitate the bootloader."** Imitation does
+>   not help. After the unplug, anything other than the ROM must live in non-volatile
+>   storage, and flash must read back as 2 MB of random data. So an impostor and the data
+>   it displaced must both fit in the small storage the fill cannot cover (OTP, spare
+>   option-byte bits, the backup domain while the J102 supercap holds VBAT). The open
+>   soundness question is now only whether that storage is small enough, not the prover's
+>   own bytes.
+> - **"Production sets BOOT_LOCK and straps BOOT0 to ground."** The ROM is entered
+>   through the option bytes (`nSWBOOT0=0 nBOOT0=0`) with no pin. BOOT_LOCK is set by the
+>   release's first boot.
+> - **SE storage** is excluded by provisioning the SEs at the factory with final keys
+>   derived from the per-die DHUK (RDP-1), then regressing to RDP-0. One caveat is still
+>   open: firmware can raise RDP to 1 itself in transit.
+> - **Power-cut recovery** is no longer a trust question. Until the release is installed,
+>   the device always boots ST's ROM.
+>
+> An intermediate version (also 2026-10-27) put a PQ1 prover in flash. Its own code left
+> ~4.4 KB of compressible slack, which is why the prover moved to the ROM.
 >
 > The body below is kept unchanged as the record of the first review.
 
