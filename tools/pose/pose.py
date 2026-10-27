@@ -263,8 +263,9 @@ def cmd_verify(args):
         # The proof itself: every flash byte is the published prover or R.
         "flash_ok": not bad,
         "prover_region_ok": image == bytes(actual[:prover_bytes]),
-        # The backup domain survives an unplug while VBAT is held (it does on
-        # EVT-3D21), so it is filled and must come back, unless --no-vbat.
+        # The backup domain survives an unplug while the J102 supercap holds
+        # VBAT (it does on EVT-3D21; PQ1 has no backup battery), so it is
+        # filled and must come back, unless --no-vbat.
         "backup_domain_ok": args.no_vbat or (aux["bkpsram_retained"] and aux["tamp_retained"]),
         # Not proof against malware (which can fake it), but it stops an
         # honest run from passing when the unplug was skipped.

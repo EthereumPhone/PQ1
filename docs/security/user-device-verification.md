@@ -102,7 +102,7 @@ will be verified, so tampering at scale is detectable at scale.
   | OTP area (per-device: OTP master → transport keys) | salted hash matches this unit's factory birth certificate | transparency log (see below) |
   | MCU 96-bit UID | matches birth certificate | transparency log |
   | System memory / engineering bytes | mask ROM, not writable | n/a |
-  | Backup domain (RTC backup regs) | volatile — PQ1 has no VBAT battery; cleared by the step-4 power removal | board requirement (see hardware section) |
+  | Backup domain (RTC backup regs) | PQ1 never has a backup battery (owner, 2026-10-27). But the V10 board carries J102 (a Seiko CPH3225A chip supercap on VBAT, charged from VDD3V3 through D104/R114), which held the backup domain through a 10 s unplug on EVT-3D21. Cleared by the step-4 power removal only once J102 is removed; until then, fill and count it (§ USB path) | board requirement (see hardware section) |
 
   There is no other writable persistent store on the MCU. A device that
   arrives **not** at RDP `0xAA`, or with any flash/option-byte/OTP deviation,
@@ -201,8 +201,10 @@ transparency log) but it is **not** the firmware proof; this procedure is.
   for the device's whole life after unboxing — zero attack surface added.
   Fallback if SBU routing fails review: an accessible pogo-pad footprint, at
   the cost of the "one cable" UX.
-- **No VBAT retention** on the production board (no coin cell / supercap on
-  the backup domain), so the step-4 power removal fully clears volatile state.
+- **No backup battery, at any point** (owner, 2026-10-27). VBAT retention
+  still exists on V10 through J102 (a Seiko CPH3225A chip supercap on VBAT, charged from VDD3V3 through D104/R114). Either J102 is
+  removed, so the step-4 power removal clears the backup domain, or the
+  backup domain is filled and counted (§ USB path). Open decision.
 - **Factory birth certificate + transparency log:** per unit, factory HSM
   signs `(MCU UID, salted OTP-content hash, SE cert public keys, ship
   option-byte profile id, firmware release hash)` into an append-only public
@@ -255,7 +257,8 @@ Vault app, over the normal USB-C cable:
 1. **Fill.** The app sends fresh random data `R` (generated on the host, kept
    on the host) and the device writes it to **every flash byte outside the
    prover's own pages** (both banks, ~2 MB). The app also fills the backup
-   domain (backup SRAM, TAMP backup registers) if the board keeps VBAT.
+   domain (backup SRAM, TAMP backup registers) while the board keeps VBAT
+   alive. V10 does, through the J102 supercap; PQ1 never has a backup battery.
 2. **Unplug.** The user unplugs the device, waits a few seconds, and plugs it
    back in.
 3. **Read back.** The device boots from flash and streams **all** of flash
@@ -291,7 +294,7 @@ What is left for malware after a matching readback is the **slack**:
 | Prover pages (known bytes, not filled) | `|P|` | Malware can replace the prover with itself plus a *compressed* copy of the genuine prover. Room gained ≈ `|P| − |compress(P)|`. **Main residual; kept small by a minimal prover** (size budget is an open item). The pad after the prover image is true-random (not PRNG output), so it cannot be compressed. |
 | OTP, every unprogrammed quad-word | up to 512 B (176..512 free today; 0..176 too if the new design no longer burns the OTP master or sentinel) | Write-once, so the procedure cannot fill it; counts as slack. Malware could burn a loader there. Fix: the factory burns every unused quad-word with recorded random data. |
 | Option bytes | tens of spare bits | Counts as slack; the genuine prover reports the full profile after a pass and first boot re-verifies it. |
-| Backup domain (backup SRAM 2 KB, TAMP 32×4 B) | ~2.2 KB | **Measured: survives a 10 s unplug on EVT-3D21** (VBAT supercap; `docs/hardware/hardware_requirements.md` calls for one). Either no VBAT retention, or fill it and require it back as part of `R` (`pose.py` does; `--no-vbat` otherwise). Caveat: malware can set `BHKLOCK` (`secure/src/hw/bhk.rs`) so TAMP_BKP0–7 can be neither filled nor read. That fails closed when the backup domain is gated, which is the reason to gate it. Also, `bhk.rs`'s "a power cycle resets the backup domain" is false on a board that keeps VBAT. |
+| Backup domain (backup SRAM 2 KB, TAMP 32×4 B) | ~2.2 KB | **Measured: survives a 10 s unplug on EVT-3D21** by J102 (a Seiko CPH3225A chip supercap on VBAT, charged from VDD3V3 through D104/R114). **There is no backup battery, at any point** (owner, 2026-10-27); the supercap is the only VBAT source. Either J102 is removed (no VBAT retention), or fill it and require it back as part of `R` (`pose.py` does; `--no-vbat` otherwise). Caveat: malware can set `BHKLOCK` (`secure/src/hw/bhk.rs`) so TAMP_BKP0–7 can be neither filled nor read. That fails closed when the backup domain is gated, which is the reason to gate it. Also, `bhk.rs`'s "a power cycle resets the backup domain" is false on a board that keeps VBAT. |
 | OEM1/OEM2 regression keys, BOOT_LOCK, the rest of OPTR | 48 B keys + bits | Not usable as code storage, but a planted OEM2 key would allow a later RDP-2 → RDP-1 regression, and BOOT_LOCK=0 leaves the boot address mutable. The genuine prover must report OEM1LOCK/OEM2LOCK clear and the full expected OPTR after a pass. The prover reports raw `FLASH_NSSR`; the bit positions are still unpinned (`shared/src/lockdown.rs` `OEM_LOCK_MASK_PINNED`). |
 | SE050 / OPTIGA storage | tens of KB | Must be **unreachable** from MCU code during transit. That is what the factory change below is for, and see the RDP-1 caveat. |
 | Volatile stores (SRAM, caches, LCD GRAM, peripherals) | — | Gone after the power cycle. |
@@ -324,8 +327,8 @@ Candidate levers, none of them evaluated yet:
 - **Burn every unused OTP quad-word at the factory** with random data,
   recorded per device. This removes the OTP slack; quad-words are
   write-once, so they cannot be reused afterwards.
-- **No VBAT retention**, or fill and gate the backup domain, as the test
-  does.
+- **Remove J102** (no VBAT retention), or fill and gate the backup domain,
+  as the test does.
 - **A per-session encrypted prover** whose key reaches the device only after
   the unplug. This only helps if the key arrives through a path that is
   itself tiny, for example the buttons.
@@ -390,8 +393,10 @@ unverified. Until one is closed, the SEs are **not** excluded from the count.
 6. **WRP staging moves from the factory to first boot.** Factory-staged WRP
    would make the FSBL pages unfillable known bytes, i.e. more slack.
    Invariant #10's WRP-before-RDP-2 ordering still holds, done on-device.
-7. **No VBAT retention** (already a hardware requirement above), or fill and
-   count the backup domain.
+7. **Decide J102.** PQ1 never has a backup battery; the J102 supercap is the
+   only VBAT source. Either remove it, then measure how long the bare VBAT
+   node still holds the backup domain and set the unplug wait above that, or
+   keep it and fill and count the backup domain.
 8. **Prover size budget** and a minimal prover. The first EVT prover uses the
    generic `usb-device` + `synopsys-usb-otg` stack; a hand-rolled minimal OTG
    driver is the follow-up.
@@ -454,7 +459,7 @@ OTP fully blank on this unit). Restore afterwards: verified, the option-byte
 | Run | Prover | Unplug between fill and readback | Result |
 |---|---|---|---|
 | 1 | honest | no | flash and prover region match; SRAM canary retained (no power cycle) |
-| 2 | honest | **yes** (USB-C + ST-LINK, ~10 s) | **PASS**: flash byte-exact, canary gone (263/65536 bytes equal ≈ chance), backup SRAM + TAMP retained (VBAT) |
+| 2 | honest | **yes** (USB-C + ST-LINK, ~10 s) | **PASS**: flash byte-exact, canary gone (263/65536 bytes equal ≈ chance), backup SRAM + TAMP retained (J102 supercap on VBAT; not a battery) |
 | 3 | `cheat-skip-page` | no | **FAIL** at exactly page 192 (bank 2 page 64) |
 | 4 | `cheat-ram-hold` | no | flash comparison **passes**: 64 KB of `R` sat in SRAM, never in flash. A same-session check is fooled. |
 | 5 | `cheat-ram-hold` | **yes** | **FAIL** at pages 248–255, exactly the 64 KB held in SRAM |

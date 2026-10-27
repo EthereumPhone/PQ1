@@ -215,6 +215,11 @@ defaults today:
 
 ### VBAT power source: supercap, not battery
 
+> **UPDATE 2026-10-27 (owner): no backup battery, at any point.** On the V10
+> board the supercap is J102 (Seiko CPH3225A chip EDLC, charged from VDD3V3
+> via D104/R114). Whether it stays is an open decision under the USB proof
+> of secure erasure (`docs/security/user-device-verification.md` § USB path).
+
 Production hardware-wallet design choice: the backup-domain power
 source is a **supercapacitor**, not a coin cell. Rationale:
 

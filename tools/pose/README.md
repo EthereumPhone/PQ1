@@ -49,8 +49,8 @@ STM32_Programmer_CLI -c port=SWD mode=UR -e all -w $B/bank1.bin 0x0C000000 \
 
 `verify` passes only if all of these hold:
 - every flash byte is the prover image or the session's `R`;
-- the backup domain came back (pass `--no-vbat` on a board without VBAT
-  retention);
+- the backup domain came back (pass `--no-vbat` on a board without the J102
+  VBAT supercap; PQ1 never has a backup battery);
 - the SRAM canary is gone, which shows the unplug really happened;
 - the prover reports RDP 0xAA, TZEN 1 and blank free OTP.
 
