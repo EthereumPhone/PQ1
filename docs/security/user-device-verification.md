@@ -6,16 +6,25 @@ the end.** Companion pieces that already exist: reproducible builds
 self-lock (work-todo #36, `docs/provisioning/first-boot-provisioning.md`),
 measured-boot 8-word fingerprint (`docs/security/measured-boot.md`).
 
-> **UPDATE 2026-10-27 — owner direction: the consumer path becomes USB, not
-> SWD.** The owner chose a probe-free procedure that runs in the Vault desktop app
-> over the ordinary USB-C cable: a **proof of secure erasure with a power
-> cycle** (fill all flash with fresh random data → user unplugs and replugs →
-> read everything back). It needs no immutable ROM, but it changes the
-> factory flow: the SEs get their **final, DHUK-derived keys at the factory at
-> RDP-1**, and the device ships at RDP-0 holding only the prover. **Its
-> soundness is still open:** the prover's own bytes leave too much
-> compression slack today (§ Test status). Full design,
-> argument, residuals, prerequisites and work list:
+> **UPDATE 2026-10-27: owner direction, the consumer path becomes USB, not
+> SWD.** The owner chose a probe-free procedure that runs in the Vault desktop
+> app over the ordinary USB-C cable: a **proof of secure erasure with a power
+> cycle, done by ST's own ROM bootloader**.
+> - The device ships with **empty flash**, booting ST's mask-ROM USB DFU.
+> - The app fills all 2 MB of flash with fresh random data through it.
+> - The user unplugs and replugs.
+> - The app reads everything back.
+>
+> No PQ1 code runs on the device until the release is installed. This also
+> changes the factory flow: the SEs get their **final, DHUK-derived keys at
+> the factory at RDP-1**.
+>
+> **Soundness is still open.** It needs the non-volatile storage the fill
+> cannot cover to be tiny. Today it is not: the J102 supercap keeps ~2.2 KB of
+> backup domain alive, the OTP is blank, and the other chips on the board are
+> unaudited.
+>
+> Full design, argument, residuals, prerequisites and EVT results:
 > [§ USB path: proof of secure erasure with a power cycle](#usb-path-proof-of-secure-erasure-with-a-power-cycle)
 > at the end of this file. The SWD procedure below stays as the expert,
 > ground-truth option. Nothing in either path is production-approved.
@@ -242,96 +251,149 @@ transparency log) but it is **not** the firmware proof; this procedure is.
 implemented in shipping firmware, not production-approved, and it changes the
 factory flow (§ Prerequisites). Read this whole section before touching
 first-boot provisioning, factory provisioning, SE key derivation, WRP
-staging, the FSBL, or the companion onboarding flow.**
+staging, option-byte handling, the FSBL, or the Vault desktop app's
+onboarding flow.**
 
 It supersedes the NO-GO in
 [`user-verification-app-path-status-2026-10-27.md`](user-verification-app-path-status-2026-10-27.md),
 whose premise ("Proof of Secure Erasure needs an immutable ROM") is answered
-below.
+below. The immutable ROM it asks for already exists: ST's USB bootloader in
+the STM32U585's system memory.
+
+> **UPDATE 2026-10-27 (later the same day): the prover is now ST's ROM, not
+> PQ1 code.** The first version of this section put a small PQ1 prover in
+> flash. Its own code left ~4.4 KB of compressible slack, enough for malware
+> that reuses it (§ Test status, first experiment). The owner moved the
+> prover into ST's mask-ROM bootloader. The device now ships with **empty
+> flash**, and no PQ1 code runs on it until the release is installed.
 
 ### The procedure (what the user does)
 
-The device arrives at RDP-0 with only a small **prover** in flash. In the
-Vault desktop app (no phone app is planned yet), over the normal USB-C cable:
+The device arrives at RDP-0 with **empty flash**. Its option bytes make it
+boot ST's mask-ROM USB bootloader (DFU) and leave every flash page
+non-secure and unprotected; this is the **shipping profile**, defined below.
+The user runs the Vault desktop app (no phone app is planned yet) over the
+normal USB-C cable:
 
-1. **Fill.** The app sends fresh random data `R` (generated on the host, kept
-   on the host) and the device writes it to **every flash byte outside the
-   prover's own pages** (both banks, ~2 MB). The app also fills the backup
-   domain (backup SRAM, TAMP backup registers) while the board keeps VBAT
-   alive. V10 does, through the J102 supercap; PQ1 never has a backup battery.
-2. **Unplug.** The user unplugs the device, waits a few seconds, and plugs it
-   back in.
-3. **Read back.** The device boots from flash and streams **all** of flash
-   back; the app compares every byte with `R` plus the published prover
-   bytes, in a random chunk order the app picks after step 2.
-4. **Install + lock.** Only on a full match: the app sends the published
-   release, the prover installs it, the device reboots into it, and the
-   existing first-boot flow locks to RDP-2 after the trusted-UI confirmation
-   (`docs/provisioning/first-boot-requirements.md`).
+1. **Check and fill.** Through the ROM, the app:
+   - reads the option bytes and the OTP;
+   - mass-erases flash;
+   - writes fresh random data `R` to **all 2 MB** of flash (`R` is
+     generated and kept on the host);
+   - writes a random canary to SRAM2.
+2. **Unplug.** The user unplugs the device, waits at least the minimum off
+   time, and plugs it back in. The app measures how long the device was gone.
+3. **Read back.** The device boots ST's ROM again. The app reads **all** of
+   flash, plus the option bytes, the OTP and the SRAM2 canary, and requires:
+   - flash equals `R` byte for byte;
+   - the shipping profile;
+   - OTP equals the factory record;
+   - the canary is gone;
+   - the off time is at least the minimum.
+4. **Install.** Only on a full match, the app:
+   - mass-erases;
+   - writes the published release through the ROM and reads it back;
+   - switches the option bytes to the release layout (bank 1 secure, boot
+     from flash).
 
-### Why a ROM may not be needed (and what still has to hold)
+   The device then reboots into the release.
+5. **Lock.** The release's first boot does the rest:
+   - stages WRP on the FSBL range and BOOT_LOCK;
+   - checks the OEM-key locks;
+   - clears the backup domain;
+   - locks to RDP-2 after the trusted-UI confirmation
+     (`docs/provisioning/first-boot-requirements.md`).
+
+**The shipping profile** (`tools/pose/pose.py` `ship_profile_problems`):
+- RDP 0xAA, TZEN 1.
+- nSWBOOT0 0 and nBOOT0 0, so the chip boots ST's bootloader whatever the
+  BOOT0 pin says.
+- BOOT_LOCK 0, SWAP_BANK 0, DUALBANK 1.
+- SECWM1 and SECWM2 empty. With TZEN=1 the ROM runs non-secure and can reach
+  only non-secure flash.
+- No WRP, no HDP.
+
+**Recovery is trivial.** Until step 4 switches the option bytes, the device
+boots ST's ROM on every power-up. An interrupted run is simply started again.
+There is no PQ1 code on the device for a power cut to damage.
+
+### Why ST's ROM bootloader is the prover
 
 Perito & Tsudik's PoSE ([ePrint 2010/217](https://eprint.iacr.org/2010/217))
-puts the prover in ROM so its own bytes cannot be a hiding place. We replace
-that with two things:
+puts the prover in ROM so its own bytes cannot be a hiding place. The
+STM32U585 has one: ST's bootloader in system memory, mask ROM nobody can
+change. It already does what PoSE needs, writing memory and reading it back
+over USB. Reading all of `R` back is equivalent to the paper's MAC over it,
+only slower.
 
-- **Counting.** Random data does not compress. If the device returns the
-  correct `R` for ~2 MB of flash, ~2 MB of its non-volatile storage holds
-  `R`. Whatever is left — the only place malware can live — is the
-  difference between *all* non-volatile storage and what `R` occupies.
-- **The power cycle is the trusted reset.** Unplugging is a physical event no
-  firmware can fake or prevent. It erases every volatile store: SRAM,
-  ICACHE/DCACHE, CPU and peripheral state, the display controller's RAM.
-  After it, the CPU executes whatever bytes sit at the secure boot address in
-  flash, and nothing else on the MCU survives. So malware cannot keep itself
-  in cache or RAM across the check (the earlier "ICACHE residency" worry), and
-  SRAM never needs filling.
+The argument:
 
-What is left for malware after a matching readback is the **slack**:
+- **The power cycle is the trusted reset.** Unplugging is a physical event
+  no firmware can fake or prevent. PQ1 has no battery; for the J102
+  supercap, see below. It clears SRAM, caches, and CPU and peripheral state.
+  Afterwards the hardware boots whatever the option bytes select, and nothing
+  volatile survives.
+- **Counting.** After the power cycle, the readback is answered by one of two
+  things:
+  - ST's ROM, which reads the real flash honestly;
+  - code that the option bytes boot instead.
 
-| Store | Size | Treatment |
+  Random data does not compress, so if the answers equal `R`, the device's
+  non-volatile storage holds all ~2 MB of `R`. Flash is exactly 2 MB. Anything
+  other than the ROM that answers must therefore live, together with every
+  byte of `R` it displaced from flash, in **non-volatile storage outside flash
+  that the fill cannot cover**. If that storage is too small to hold such
+  code, the answer came from ST's ROM, and flash really is `R`: nothing else
+  is on the device.
+
+Compared with the first design (a PQ1 prover in flash), this removes two
+problems:
+- **Prover slack.** There is no PQ1 code on the device, so no compressible
+  prover bytes, and no "reuse the genuine prover" attack.
+- **Something else running.** After a pass, the only code that runs is ST's
+  ROM (until the option-byte switch) and then the installed release. Leftover
+  data in OTP, the option bytes or the backup domain is inert unless the
+  release reads it. That is what the OTP and option-byte comparison and the
+  first-boot clean-up are for.
+
+**What the uncovered storage must be smaller than.** The cheapest impostor
+we can think of does not write a USB stack of its own:
+1. It boots from a flash page it kept.
+2. It starts ST's own ROM bootloader in the non-secure world.
+3. It marks its own page secure, so every ROM access to that page traps into
+   a secure fault handler. The handler returns the matching bytes of `R` from
+   the uncovered storage.
+
+This is trap-and-emulate. The same trick can fake the option-byte and OTP
+reads and hijack the install.
+
+**Its size:** the boot stub, the fault handler and the payload, plus an equal
+amount of displaced `R`. That is plausibly a few hundred bytes to about 1 KB;
+nobody has built one. The uncovered storage must stay well below that. The
+target is tens of bytes. This bar is an engineering estimate, not a proof
+(Prerequisite 15).
+
+| Store the fill cannot cover | Size | Status and treatment |
 |---|---|---|
-| Prover pages (known bytes, not filled) | `|P|` | Malware can replace the prover with itself plus a *compressed* copy of the genuine prover. Room gained ≈ `|P| − |compress(P)|`. **Main residual; kept small by a minimal prover** (size budget is an open item). The pad after the prover image is true-random (not PRNG output), so it cannot be compressed. |
-| OTP, every unprogrammed quad-word | up to 512 B (176..512 free today; 0..176 too if the new design no longer burns the OTP master or sentinel) | Write-once, so the procedure cannot fill it; counts as slack. Malware could burn a loader there. Fix: the factory burns every unused quad-word with recorded random data. |
-| Option bytes | tens of spare bits | Counts as slack; the genuine prover reports the full profile after a pass and first boot re-verifies it. |
-| Backup domain (backup SRAM 2 KB, TAMP 32×4 B) | ~2.2 KB | **Measured: survives a 10 s unplug on EVT-3D21** by J102 (a Seiko CPH3225A chip supercap on VBAT, charged from VDD3V3 through D104/R114). **There is no backup battery, at any point** (owner, 2026-10-27); the supercap is the only VBAT source. Either J102 is removed (no VBAT retention), or fill it and require it back as part of `R` (`pose.py` does; `--no-vbat` otherwise). Caveat: malware can set `BHKLOCK` (`secure/src/hw/bhk.rs`) so TAMP_BKP0–7 can be neither filled nor read. That fails closed when the backup domain is gated, which is the reason to gate it. Also, `bhk.rs`'s "a power cycle resets the backup domain" is false on a board that keeps VBAT. |
-| OEM1/OEM2 regression keys, BOOT_LOCK, the rest of OPTR | 48 B keys + bits | Not usable as code storage, but a planted OEM2 key would allow a later RDP-2 → RDP-1 regression, and BOOT_LOCK=0 leaves the boot address mutable. The genuine prover must report OEM1LOCK/OEM2LOCK clear and the full expected OPTR after a pass. The prover reports raw `FLASH_NSSR`; the bit positions are still unpinned (`shared/src/lockdown.rs` `OEM_LOCK_MASK_PINNED`). |
-| SE050 / OPTIGA storage | tens of KB | Must be **unreachable** from MCU code during transit. That is what the factory change below is for, and see the RDP-1 caveat. |
-| Volatile stores (SRAM, caches, LCD GRAM, peripherals) | — | Gone after the power cycle. |
-| Undocumented on-die storage | — | Assumed none: the die (STM32U585, 2 MB) is the largest of its line. This is a silicon assumption, like ST mask ROM. |
+| OTP, unprogrammed quad-words | 512 B on EVT-3D21 (all blank) | Write-once, so the fill cannot use it. **The factory burns every quad-word** with recorded random data. The exception is a minimal rollback-floor region, which counts. The ROM reads all 512 B, and the app compares them with the factory record, so dormant data there is caught. |
+| Option-byte fields free to hold data | roughly 10–20 B (NSBOOTADD0/1 are unused with TZEN=1; spare bits) | Counted. The ROM reads all 64 B, and the app requires the shipping profile and the factory values in every other field. The OEM1/OEM2 keys are write-only and read as zero, so they are useless as storage; see the first-boot checks below. |
+| Backup domain (backup SRAM 2 KB, TAMP 32×4 B, RTC registers) | about 2.2 KB | **Too large, and the ROM cannot reach it.** The probe was refused with `errVENDOR`. On the EVT it survives an unplug because of J102, a Seiko CPH3225A chip supercap on VBAT, charged from VDD3V3 through D104/R114. PQ1 never has a backup battery (owner, 2026-10-27). **Hard prerequisite: remove J102.** Then measure how long the bare VBAT node keeps the backup domain, and set the app's minimum off time above that. |
+| SE050 / OPTIGA storage | tens of KB | Must be **unreachable** from MCU code during transit. That is the factory change below, plus the open RDP-0→1 caveat. |
+| Non-volatile memory in other chips on the board | unknown | **Not yet audited.** Each of these must be checked against its datasheet for non-volatile memory the MCU can write: the NV3007 LCD controller (possible MTP/OTP for panel settings), the AW21036 LED driver, the AW99703 backlight driver, and the power path (AW32901, AW35602, ET83101H). Writable non-volatile memory in the display controller would also be a WYSIWYS concern. |
+| SRAM, caches, peripherals, LCD GRAM | — | Volatile, so gone after a long enough unplug. This is a physical assumption, not counted. If SRAM survived (an unplug that is too short, or a rail that never fully collapses), malware could boot from it with SECBOOTADD0 pointing at SRAM. The app enforces a minimum measured off time. The SRAM2 canary catches honest runs that skipped the unplug, because a reset alone keeps SRAM2 (SRAM2_RST=1, measured). |
+| ST system memory (bootloader, RSS) | — | Mask ROM, trusted, as in every path. |
+| Undocumented on-die storage | — | Assumed none. This is a silicon assumption, like the ROM. |
 
-**What the slack must be smaller than (corrected 2026-10-27 after review).**
-A first draft said malware must fit a whole working USB/flash stack plus the
-compressed prover into the slack. That overstated the bar. Malware can
-**reuse the genuine prover's code**. At boot, a small stub unpacks the
-compressed genuine prover into SRAM, adds a hook and runs it. The genuine
-code then answers every readback correctly, and at the install step the hook
-patches the incoming release. A patch of a few bytes is enough to be
-catastrophic, for example making the RNG return a constant.
-
-So the real condition is: the exploitable redundancy of every known,
-boot-resident byte, plus every other slack store, must be smaller than
-**a decompressor + a hook + a few-byte release patch**, plausibly a couple
-of hundred bytes.
-
-The first EVT prover leaves about **4.4 KB** (measured, see Test status),
-an order of magnitude too much. **The USB path is therefore NOT yet sound.**
-It becomes sound only if the slack can be driven below that bar.
-
-Candidate levers, none of them evaluated yet:
-- **Store the prover pre-compressed** with a strong compressor and run it
-  from SRAM behind a tiny decompressor, so an attacker cannot compress it
-  further. The residual slack is then the stub's own redundancy plus the
-  gap between our compressor and the best one available.
-- **A hand-written minimal USB/flash prover**, instead of the generic crates.
-- **Burn every unused OTP quad-word at the factory** with random data,
-  recorded per device. This removes the OTP slack; quad-words are
-  write-once, so they cannot be reused afterwards.
-- **Remove J102** (no VBAT retention), or fill and gate the backup domain,
-  as the test does.
-- **A per-session encrypted prover** whose key reaches the device only after
-  the unplug. This only helps if the key arrives through a path that is
-  itself tiny, for example the buttons.
+**Checks the release's first boot must make, because the ROM cannot see
+them:**
+- **OEM1LOCK/OEM2LOCK.** A planted OEM2 key would allow a later RDP-2 →
+  RDP-1 regression. The lock bits are in `FLASH_NSSR`, which the ROM does not
+  expose. First boot must refuse to lock if either is set. The bit positions
+  are still unpinned (`shared/src/lockdown.rs` `OEM_LOCK_MASK_PINNED`).
+- **Nothing inherited.** First boot must not trust anything left in the
+  backup domain, and must set its own VTOR/SAU/MPU before trusting any
+  register read. This matters only if the counting failed; it is cheap
+  defence in depth.
 
 ### Why the factory must provision the SEs with final per-die keys
 
@@ -348,8 +410,9 @@ rotates them (`first-boot-provisioning.md`). The new factory flow:
    the factory holds no copy.
 3. Lock the SE policies so nothing answers without those credentials (SE050
    `SCP_REQUIRED`; no OPTIGA object writable outside the shield).
-4. **Regress RDP 1→0.** Hardware mass-erases flash and keeps OTP.
-5. Write the prover; ship at RDP-0.
+4. **Regress RDP 1→0.** The hardware mass-erases flash and keeps OTP.
+5. **Burn the OTP** (Prerequisite 6), set the **shipping profile**, and write
+   nothing: flash stays empty. Ship at RDP-0.
 
 At RDP-0 the DHUK reverts to the shared constant, so no MCU code — genuine
 or malicious — can talk to either SE until the device is at RDP ≥ 1 again.
@@ -357,15 +420,16 @@ or malicious — can talk to either SE until the device is at RDP ≥ 1 again.
 **Open caveat (found 2026-10-27, not yet closed): RDP 0→1 in transit.** Any
 firmware at RDP-0 can raise RDP to 1 itself. At RDP-1 the per-die DHUK
 returns, so malware would know (from the public source) how to derive the SE
-keys and could stash itself in SE storage, keeping only a small loader in the
-prover pages. Candidate closures:
+keys and could stash itself in SE storage, keeping only a small loader in
+flash or another uncovered store. Candidate closures:
 
 - the factory **pre-creates every SE object the wallet needs, at fixed size,
   and fills all remaining SE NVM** with objects the per-die credentials cannot
-  delete or grow, so writable SE capacity is a few hundred bytes (it then
-  joins the slack table);
+  delete or grow, so writable SE capacity is a few bytes (it then joins the
+  uncovered-storage table);
 - or an SE policy under which the per-die credentials cannot create objects;
-- or a way for the user procedure to detect RDP-1.
+- or a way for the user procedure to detect RDP-1. (The regression back to
+  RDP-0 that malware would need erases flash, so this is about the SEs only.)
 
 Which of these the SE050 (applet 7.2) and OPTIGA policy models support is
 unverified. Until one is closed, the SEs are **not** excluded from the count.
@@ -373,129 +437,197 @@ unverified. Until one is closed, the SEs are **not** excluded from the count.
 ### Prerequisites (all open; tracked in #1082)
 
 1. **`DHUK-RDP12` must pass** (`docs/security/red-teaming.md` §6.5, issues
-   #388/#400): the DHUK must be identical at RDP-1 (factory) and RDP-2 (after
-   the first-boot lock), or every unit loses its SEs at the lock.
-   One-shot, sacrificial part.
-2. **Factory RDP-1 → SE provisioning → RDP 1→0 regression** ceremony.
-   Reverses `first-boot-requirements.md` F2 / "Factory MUST NOT program RDP"
-   and "no factory-held final pairing secret" (CLAUDE.md shipping model). It
-   needs §11 authorization like any RDP/SE-credential action.
-3. **Final SE keys from the DHUK alone.** Today SE050 final keys hang off the
-   BHK on flash page 126 and the OPTIGA PBS off a TRNG salt on page 127
-   (`secure/src/hw/secret_keys.rs`); the fill destroys both pages. The
-   first-boot transport→final rotation (`secure/src/first_boot/`,
-   `rdp2-self-lock`) goes away or shrinks to a verification step.
+   #388/#400). The DHUK must be identical at RDP-1 (factory) and at RDP-2
+   (after the first-boot lock), or every unit loses its SEs at the lock. The
+   test is one-shot and needs a sacrificial part.
+2. **The factory ceremony: RDP-1 → SE provisioning → RDP 1→0 regression →
+   OTP burn → shipping profile.** It reverses `first-boot-requirements.md`
+   F2 / "Factory MUST NOT program RDP" and "no factory-held final pairing
+   secret" (CLAUDE.md shipping model). It needs §11 authorization, like any
+   RDP or SE-credential action.
+3. **Final SE keys derived from the DHUK alone.** Today:
+   - the SE050 final keys hang off the BHK on flash page 126;
+   - the OPTIGA PBS hangs off a TRNG salt on page 127
+     (`secure/src/hw/secret_keys.rs`).
+
+   The fill destroys both pages. The first-boot transport→final rotation
+   (`secure/src/first_boot/`, `rdp2-self-lock`) goes away, or shrinks to a
+   verification step.
 4. **Close the RDP-1-in-transit caveat** above.
-5. **Shipped flash = prover only** (no wallet firmware), and a decision on
-   how the prover relates to the FSBL (keep separate and overwrite at install,
-   or make the FSBL itself the prover so the verified bytes are the ones WRP
-   and RDP-2 then freeze).
-6. **WRP staging moves from the factory to first boot.** Factory-staged WRP
-   would make the FSBL pages unfillable known bytes, i.e. more slack.
-   Invariant #10's WRP-before-RDP-2 ordering still holds, done on-device.
-7. **Decide J102.** PQ1 never has a backup battery; the J102 supercap is the
-   only VBAT source. Either remove it, then measure how long the bare VBAT
-   node still holds the backup domain and set the unplug wait above that, or
-   keep it and fill and count the backup domain.
-8. **Prover size budget** and a minimal prover. The first EVT prover uses the
-   generic `usb-device` + `synopsys-usb-otg` stack; a hand-rolled minimal OTG
-   driver is the follow-up.
-9. **Power-loss UX.** After step 1 the flash is random data; an interrupted
-   procedure leaves a device that only boots the prover. Re-running from step
-   1 recovers it as long as the prover pages are intact. If they are not,
-   recovery needs SWD or RMA.
-10. **Vault desktop app flow** (fill, unplug prompt, verify, install,
-    fingerprint display) and the release artifact it verifies against.
-11. **Supersedes `R1.2`/`R2.4`/§6 USB-before-lock only for the prover**: the
-    installed release's first boot keeps those rules.
-12. **Drive the slack below the "decompressor + hook + few-byte patch" bar**
-    (see above) and measure it. This is the open soundness question of the
-    whole path.
-13. **The first-boot code needs changes, not just reuse:**
-    - the installer must leave pages 123–127 blank, because the fill leaves
-      them random and Phase A (R2.2) would halt;
-    - Phase A only *verifies* WRP and never stages it (`first_boot/mod.rs`);
-    - the RDP-burn register defect (#268) must be fixed.
-14. **SE exclusion must also cover the OPTIGA protected-update path**: no
+5. **Remove J102.** PQ1 never has a backup battery, and the ROM cannot fill
+   the backup domain. Then measure:
+   - how long the bare VBAT node keeps the backup domain;
+   - how long SRAM keeps data after the unplug.
+
+   Set the app's minimum off time above both. The EVT values in § Test
+   status are with J102 fitted.
+6. **The factory burns all OTP** except a minimal rollback-floor region, and
+   records the image per device so the app can compare it. This needs a
+   decision on the floor region's size budget.
+7. **Audit the other chips on the board for writable non-volatile memory**
+   (see the table).
+8. **WRP staging moves from the factory to first boot.** The device ships with
+   empty flash, so there is nothing to protect at the factory. Invariant #10's
+   WRP-before-RDP-2 ordering still holds, done on-device.
+9. **First-boot changes:**
+   - stage WRP and BOOT_LOCK, and optionally `nSWBOOT0=0 nBOOT0=1` so the
+     BOOT0 pin no longer matters;
+   - the OEM-lock check;
+   - clear the backup domain;
+   - set VTOR/SAU/MPU before trusting register reads;
+   - fix the RDP-burn register defect (#268).
+
+   The installer mass-erases before writing, so pages 123–127 start blank, as
+   Phase A (R2.2) requires.
+10. **A native option-byte writer in the Vault desktop app,** with a hard
+    guard: refuse any write whose RDP byte is not 0xAA, or that changes TZEN
+    or any field other than the release fields. `pose.py` deliberately has
+    no option-byte writer; on the EVT, option bytes were changed with
+    `STM32_Programmer_CLI`.
+11. **The Vault desktop app flow:** fill, the unplug prompt with a measured
+    off time, verify, install, the option-byte switch, the fingerprint
+    display. It also needs the release artifact it verifies against. At the
+    ROM's pace a run takes about 2 minutes; see the measured times in § Test
+    status.
+12. **USB before the lock.** No PQ1 code runs before the release, so
+    `R1.2`/`R2.4`/§6 (USB before the lock) apply unchanged to the release's
+    first boot.
+13. **SE exclusion must also cover the OPTIGA protected-update path.** No
     object may be updatable through a trust anchor (`Int`/`0xF0` metadata).
     This ties to S-2.
-15. **SRAM remanence.** The user must leave the device unplugged long enough
-    for every rail to collapse. `pose.py` fails a run whose SRAM canary
-    survived. Malware can fake the canary, so this guards honest runs only.
+14. **Optional board change:** consumers no longer need the SBU→BOOT0 circuit
+    (U111/R131/R132). First boot can make the pin irrelevant (item 9).
+15. **Pin the uncovered-storage budget:**
+    - a written, reviewed estimate of the smallest impostor;
+    - the measured total of uncovered storage after items 5–7.
 
 ### What it does NOT prove
 
 Same honest boundary as the SWD path above (hardware implants, counterfeit
 boards, ST silicon), plus:
 
-- **SE firmware** is NXP/Infineon's and was never user-verifiable.
+- **ST's bootloader** is trusted to do what it says. That is the same trust
+  every STM32 user already places in mask ROM; it was never user-verifiable.
+- **SE firmware** is NXP's and Infineon's, and was never user-verifiable
+  either.
 - **The factory's SE provisioning** cannot be checked by the user. A factory
   that left an extra SE credential behind still cannot read the seed: under
-  #855 each stored half is masked with a DHUK-keyed, PIN-keyed value, so a
-  chip readout gives masked halves only.
-- **A compromised host** can lie about the comparison. Same mitigations as
-  the SWD path.
+  #855 each stored half is masked with a DHUK-keyed, PIN-keyed value, so
+  reading out a chip gives only masked halves.
+- **A compromised host** can lie about the comparison. The mitigations are
+  the same as for the SWD path.
 
 ### Docs that still describe the old (transport-key) model
 
-Update these when the factory change is implemented, not before: CLAUDE.md
-(shipping model, invariants #3/#10, `rdp2-self-lock` bullet — each carries an
-UPDATE pointer here), `docs/provisioning/first-boot-provisioning.md`,
-`first-boot-requirements.md`, `factory-provisioning.md`,
-`docs/factory-mass-production-model.md`, `docs/security/HARDENING.md`,
-`docs/security/threat-model.md`, `docs/security/production-security.md`,
-`docs/security/research-bundles/E-supply-chain.md`.
+Update these when the factory change is implemented, not before:
+- CLAUDE.md: the shipping model, invariants #3/#10, the `rdp2-self-lock`
+  bullet. Each carries an UPDATE pointer here.
+- `docs/provisioning/first-boot-provisioning.md`
+- `first-boot-requirements.md`
+- `factory-provisioning.md`
+- `docs/factory-mass-production-model.md`
+- `docs/security/HARDENING.md`
+- `docs/security/threat-model.md`
+- `docs/security/production-security.md`
+- `docs/security/research-bundles/E-supply-chain.md`
 
 ### Test status (EVT-3D21)
 
-Experiment code: `tools/pose/` (prover firmware, host verifier, README).
-Board: EVT-3D21 (UID `003D0021 30465002 2033314C`), RDP 0xAA, TZEN 1.
+Board: EVT-3D21 (UID `003D0021 30465002 2033314C`, USB serial
+`2070316D3046`), RDP 0xAA, TZEN 1, J102 fitted.
 
-Pre-state: full ST-LINK backup at
-`~/Documents/PQ1/evt3d21-backup-2026-10-27-pose/` (two byte-identical dumps;
-OTP fully blank on this unit). Restore afterwards: verified, the option-byte
-`-ob displ` diff is empty, and the unit enumerates as `PQSigner OS` again.
+#### ST ROM bootloader (current design)
+
+Tool: `tools/pose/pose.py`, a native DfuSe client (Linux usbfs, standard
+library only). Procedure: `tools/pose/README.md`.
+
+Pre-state: a full ST-LINK backup at
+`~/Documents/PQ1/evt3d21-backup-2026-10-27-pose-rom/` (two byte-identical
+dumps). Setup through ST-LINK:
+- `-e all`, so flash is empty, as shipped;
+- `-ob nSWBOOT0=0 nBOOT0=0 SECWM1_PSTRT=0x7F SECWM1_PEND=0x0`. SECWM2 was
+  already empty.
+
+After this the chip enumerated as `0483:df11` with no pin and no button.
+
+What the ROM exposes (bootloader `bcdDevice` 2.00, transfer size 1024):
+- alt 0 `@Internal Flash /0x08000000/256*08Kg`: all 2 MB;
+- alt 1 `@Option Bytes /0x40022040/01*64 e`;
+- alt 2 `@OTP Memory /0x0BFA0000/01*512 e`.
+
+`pose.py`'s option-byte decode matched `STM32_Programmer_CLI -ob displ`
+field for field. Probe results:
+- SRAM2 at `0x20030000`: writes accepted and read back;
+- backup SRAM at `0x40036400`: refused (`errVENDOR`).
+
+| Run | What | Unplug | Result |
+|---|---|---|---|
+| M2 | fill only | — | An ST-LINK dump of `0x08000000`/2 MiB matched `R` byte for byte. |
+| C1 | After a fill, page 77 rewritten over SWD (a page "malware kept"), then a reset. | no | **FAIL**: mismatched pages `[77]`. The SRAM2 canary survived the reset (SRAM2_RST=1), so a reset alone does not pass the canary check. |
+| C3 | Page 255 made secure (`SECWM2` 0x7F..0x7F), which hides it from the non-secure ROM. | no | **FAIL**: page 255 reads back wrong, and the profile check reports `SECWM2 covers pages 127..127`. |
+| 1 | honest `run` | yes; 3 s by the kernel log | Flash, profile, OTP and canary all good, and the canary was gone, so power was lost. **FAIL on the off-time gate**: 2.9 s measured, against a 10 s minimum. |
+| 2 | honest `run` | yes: out at 19:12:19, back for good at :30, with a 4 s reconnect at :23 (the plug bounced on re-insertion) | Two tool bugs: it measured only the first gap, and then a udev permission race crashed its verify. A manual `verify` of the same session: **PASS**. Flash byte-exact; canary 14/4096 bytes equal, about chance. Both bugs are fixed (bounce-aware timing, udev retry). |
+| 3 | honest `run` | yes; 17 s by the kernel log (19:36:10 → :27) | The tool's 600 s wait expired before the unplug. Fixed: it now waits 3600 s and never verifies on a timeout. A manual `verify` after the unplug: **PASS**. Flash byte-exact, profile and OTP correct, canary 16/4096, about chance. |
+| C2 | After a fill, `nSWBOOT0=1 nBOOT0=1` over SWD, so the chip boots flash, which holds `R`. | reset by the option-byte reload | **FAIL**: nothing enumerates, and `verify` reports "did not come back as ST's ROM DFU". |
+| Install | `pose.py install` of the backup images through the ROM. Then `STM32_Programmer_CLI -c port=USB1` switches bank 1 back to secure and sets boot to flash. | — | The device enumerates as `PQSigner OS`. An ST-LINK dump matches the backup byte for byte, and `-ob displ` is identical to the pre-state. |
+
+**Honest gap:** no single run has both the tool-measured off time and a
+PASS. The off-time measurement agrees with the kernel log (2.9 s against 3 s;
+4.72 s against the first 4 s gap). The bounce handling and the gate logic are
+covered by unit tests (`make pose-test`).
+
+Measured:
+- **Throughput.** Mass erase: 0.27–0.44 s. A real erase: the following
+  writes over previously filled flash succeeded. Fill of 2 MiB: 93 s
+  (22 KiB/s, paced by the ROM's poll timeout per 1 KiB block). Readback of
+  2 MiB: 11.9 s.
+- **Independent cross-check.** An ST-LINK dump of `0x08000000`/2 MiB right
+  after a fill matched `R` byte for byte.
+
+What these runs establish:
+- ST's ROM alone can fill and read back every flash byte, the option bytes
+  and the OTP, with no PQ1 code on the device.
+- A kept page, a page hidden as secure, and boot redirected away from the ROM
+  are each detected.
+
+What they do not establish:
+- that the uncovered storage is small enough: J102 is still fitted, the OTP
+  is blank, and the other chips are unaudited;
+- that SE storage is unreachable (this EVT's SEs are still on dev/transport
+  keys);
+- the factory RDP-1 step and DHUK-RDP12.
+
+#### First experiment: a PQ1 prover in flash (superseded)
+
+Code: commit `68be6b139` (`tools/pose/prover/`, since removed). Backup:
+`~/Documents/PQ1/evt3d21-backup-2026-10-27-pose/`.
 
 | Run | Prover | Unplug between fill and readback | Result |
 |---|---|---|---|
 | 1 | honest | no | flash and prover region match; SRAM canary retained (no power cycle) |
-| 2 | honest | **yes** (USB-C + ST-LINK, ~10 s) | **PASS**: flash byte-exact, canary gone (263/65536 bytes equal ≈ chance), backup SRAM + TAMP retained (J102 supercap on VBAT; not a battery) |
+| 2 | honest | **yes** (USB-C + ST-LINK, ~10 s) | **PASS**: flash byte-exact, canary gone, backup SRAM + TAMP retained (J102 supercap on VBAT; not a battery) |
 | 3 | `cheat-skip-page` | no | **FAIL** at exactly page 192 (bank 2 page 64) |
 | 4 | `cheat-ram-hold` | no | flash comparison **passes**: 64 KB of `R` sat in SRAM, never in flash. A same-session check is fooled. |
 | 5 | `cheat-ram-hold` | **yes** | **FAIL** at pages 248–255, exactly the 64 KB held in SRAM |
 
-Also measured:
-- **Independent SWD cross-check.** An ST-LINK dump right after the fill
-  matched prover + `R` byte for byte, so the prover wrote what it claimed.
-- **Timings.** Erase of 254 pages: 1.0 s. Fill of 2,080,768 B over HID:
-  43 s. Readback of 2 MiB: 72 s (round-trip bound; can be pipelined).
-- **Prover size and slack.** The prover is 13.5 KB of code (generic
-  `usb-device` + `synopsys-usb-otg`) in 16 KB of pages, padded with true
-  random. xz -9e compresses the page image to ~11.9 KB, so the slack from the
-  prover region alone is ~4.4 KB. That is an order of magnitude above the
-  bar above, which is why the path is **not yet sound**.
-- **The vector table is the first easy target**: ~2 KB of mostly identical
-  handler addresses.
+**Timings:**
+- erase of 254 pages: 1.0 s;
+- fill of 2,080,768 B over HID: 43 s;
+- readback: 72 s.
 
-What these runs establish:
-- The fill → unplug → readback mechanism works on silicon.
-- The unplug defeats RAM-resident cheats (run 4 against run 5).
-- On this board the backup domain must be counted.
+**Why it was dropped.** The prover was 13.5 KB of code, using the generic
+`usb-device` and `synopsys-usb-otg` crates. Under xz -9e its 16 KB of pages
+compressed to ~11.9 KB. That left ~4.4 KB of slack where malware could keep
+itself while reusing the genuine prover: a decompressor, a hook and a
+few-byte release patch. That is an order of magnitude too much, and it
+motivated the move to ST's ROM.
 
-What they do not establish:
-- that SE storage is unreachable (this EVT's SEs are still on dev/transport
-  keys);
-- the factory RDP-1 step and DHUK-RDP12;
-- the slack bound.
-
-Review receipt: Kimi K3 adversarial review of this section, 2026-10-27.
-Its findings are folded in above:
-- the code-reuse correction;
-- BHKLOCK and the VBAT backup domain;
+**Review status:** the ST-ROM version of this section has **not yet had an
+independent adversarial review**. A Kimi K3 review was started on 2026-10-27
+and stopped at the owner's request; GPT-5.6 was not available in that session.
+The first version (a PQ1 prover in flash) was reviewed by Kimi K3, and its
+findings carried over where they still apply:
 - OEM keys and BOOT_LOCK;
 - whole-OTP accounting;
 - the OPTIGA protected-update path;
-- first-boot incompatibilities;
 - SRAM remanence.
-
-GPT-5.6 was not available in this session.

@@ -28,10 +28,11 @@ Before non-trivial work:
    commands cannot be deferred by relabelling them. Unrelated playbooks need not
    run.
 6. **User-side firmware verification, factory SE provisioning, first-boot
-   rotation, WRP staging, or the FSBL/prover:** read
+   rotation, WRP staging, option-byte handling, or the FSBL:** read
    [`docs/security/user-device-verification.md` § USB path](docs/security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle)
    first. Owner direction 2026-10-27 (proof of secure erasure over USB with a
-   power cycle; final SE keys installed at the factory from the per-die DHUK)
+   power cycle, done by ST's ROM bootloader on a device shipped with empty
+   flash; final SE keys installed at the factory from the per-die DHUK)
    changes several documented assumptions and is not implemented yet.
 
 ## Focus and review-cadence routing

@@ -562,10 +562,17 @@ individual milestones and are superseded by that owner for the combined claim.
 > workflow over a slice before relying on its rows, and trust the **evidence pointer, not the prose**.
 >
 > **UPDATE 2026-10-27 — owner direction: USB proof of secure erasure + factory-installed final SE keys (design only).**
-> The consumer check moves from SWD to the Vault desktop app over USB-C: fill all flash with fresh random data, the user unplugs and replugs, then read it all back and compare.
+> The consumer check moves from SWD to the Vault desktop app over USB-C, using **ST's ROM bootloader** (the device ships with empty flash and boots its USB DFU): fill all 2 MB of flash with fresh random data, the user unplugs and replugs, read it all back and compare, then install the release through the ROM.
 > The factory installs DHUK-derived **final** SE keys at RDP-1 and regresses to RDP-0 before shipping, so the first-boot transport→final rotation (HIGH-1 below) is slated to go away.
-> Soundness is not established: the measured prover slack is about 4.4 KB, against a bar of a few hundred bytes. The mechanism and its cheat detection work on EVT-3D21 silicon.
-> Open prerequisites: `DHUK-RDP12`, the RDP-1-in-transit caveat, final keys that do not depend on pages 126/127, and WRP staging moved to first boot.
+> Soundness is not established. It needs the non-volatile storage the fill cannot cover to be smaller than the smallest impostor (a few hundred bytes to about 1 KB). Today that storage is: the J102-backed backup domain (~2.2 KB, which the ROM cannot reach), blank OTP (512 B), and unaudited board-chip NVM. The mechanism and its cheat detection work on EVT-3D21 silicon. (A first design, a PQ1 prover in flash, left ~4.4 KB of compressible slack and was dropped.)
+> Open prerequisites:
+> - `DHUK-RDP12`;
+> - the RDP-1-in-transit caveat;
+> - final keys that do not depend on pages 126/127;
+> - removing J102;
+> - the factory OTP burn;
+> - the board-chip NVM audit;
+> - WRP/BOOT_LOCK staging moved to first boot.
 > Owner doc: [`user-device-verification.md` § USB path](security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle); EVT experiment in `tools/pose/`.
 >
 > **Work-tracking migration (2026-07-19).** `docs/work-todo.md` and

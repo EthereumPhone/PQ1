@@ -1,79 +1,102 @@
-# Proof of secure erasure: EVT experiment
+# Proof of secure erasure through ST's ROM bootloader: EVT experiment
 
 Design, argument, residuals and results:
 [`docs/security/user-device-verification.md` § USB path](../../docs/security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle).
 
-**Bench experiment only.** This is not the production prover and not a
-production-approved procedure.
+**Bench experiment only.** This is not a production-approved procedure. It is
+the reference for what the Vault desktop app does.
+
+No PQ1 code runs on the device. Its flash is empty, and its option bytes boot
+ST's mask-ROM USB bootloader (DFU, `0483:df11`) with all flash non-secure.
+`pose.py` speaks DfuSe to that ROM:
+1. it fills all 2 MB of flash with fresh random data `R`;
+2. the user unplugs and replugs;
+3. it reads all 2 MB back, plus the option bytes and the OTP, and compares.
+
+An earlier version of this experiment put a PQ1 "prover" in flash
+(`tools/pose/prover/`, removed; see commit `68be6b139`). Its own code left
+~4.4 KB of compressible slack, which is why the design moved to the ROM.
 
 ## Pieces
 
-- `prover/`: standalone `no_std` crate (own `[workspace]`), pq1, secure
-  state.
-  - It links at bank-1 page 0 (`0x0C00_0000`, the SECBOOTADD0 boot address)
-    and owns `PROVER_PAGES` = 2 pages.
-  - The page image is the code plus a true-random tail from `prover/pad.bin`.
-  - It has no option-byte, OTP or RDP write path, never powers the secure
-    elements, and refuses flash writes below its own pages.
-  - Cargo features `cheat-skip-page` and `cheat-ram-hold` build dishonest
-    provers as negative controls.
-- `pose.py`: host verifier, standard library only, raw `/dev/hidraw`.
-- `test_pose.py`: unit tests for the pure helpers
-  (`python3 -m unittest tools/pose/test_pose.py`).
+- `pose.py`: DfuSe client and verifier.
+  - Standard library only: Linux usbfs (`/dev/bus/usb`) through `ioctl`.
+    ST's udev rule `50-usb-conf.rules` gives `0483:df11` mode 0666.
+  - Its commands are listed below.
+  - **It has no option-byte write path**. Option bytes are changed with
+    `STM32_Programmer_CLI`.
+- `test_pose.py`: unit tests, including the real DfuSe client against an
+  in-memory fake of the ROM (`make pose-test`).
 
-`make pose-prover [POSE_FEATURES=cheat-…]` builds the ELF, `prover.bin`,
-`prover-padded.bin` (the 16 KiB page image), and prints the slack numbers.
+| Command | What it does |
+|---|---|
+| `info` | DfuSe alt layouts, UID (USB serial), decoded option bytes, shipping-profile problems, OTP |
+| `probe` | what the ROM can reach besides flash: option bytes, OTP, an SRAM2 write, backup SRAM |
+| `fill --session D` | mass erase, write `R` (2 MiB from `secrets`) to all flash, write a 4 KiB SRAM2 canary |
+| `verify --session D [--otp-expected F]` | read back all flash, the option bytes, the OTP and the canary, write `receipt.json` |
+| `run --session D [--min-off 10]` | `fill`, prompt to unplug, measure how long the device was gone, `verify` |
+| `install --image ADDR=FILE …` | mass erase, write the images, read them back. It prints the option-byte commands that make the device boot them. |
+
+`verify` gives **PASS** only if all of these hold:
+- every flash byte equals `R`;
+- the option bytes match the shipping profile:
+  - RDP 0xAA, TZEN 1, nSWBOOT0 0, nBOOT0 0, BOOT_LOCK 0, SWAP_BANK 0,
+    DUALBANK 1;
+  - SECWM1/SECWM2 empty, no WRP, no HDP;
+- the OTP equals the expected image (all 0xFF on the EVT);
+- under `run`, the device was gone for at least `--min-off` seconds and the
+  SRAM2 canary is gone.
+
+With SRAM2_RST=1, a reset alone keeps SRAM2 (measured), so a missing canary
+shows that power was lost. Like the off-time measurement, this only catches
+honest runs that skipped the unplug. Malware could fake both.
 
 ## Procedure on EVT-3D21 (ST-LINK + USB-C)
 
 ```bash
 B=~/Documents/PQ1/evt3d21-backup-<date>          # back up first, twice, compare
-STM32_Programmer_CLI -c port=SWD mode=UR -ob displ > $B/ob-before.txt
-STM32_Programmer_CLI -c port=SWD mode=UR -u 0x0C000000 0x100000 $B/bank1.bin \
-    -u 0x08100000 0x100000 $B/bank2.bin -u 0x0BFA0000 0x200 $B/otp.bin
+P="STM32_Programmer_CLI -c port=SWD mode=UR"
+$P -ob displ > $B/ob-before.txt
+$P -u 0x0C000000 0x100000 $B/bank1.bin -u 0x08100000 0x100000 $B/bank2.bin \
+   -u 0x0BFA0000 0x200 $B/otp.bin
 
-make pose-prover
-STM32_Programmer_CLI -c port=SWD mode=UR -e [0 1] \
-    -w tools/pose/prover/prover-padded.bin 0x0C000000 -v -rst
+# shipping profile: empty flash, boot ST's ROM, every page non-secure
+$P -e all
+$P -ob nSWBOOT0=0 nBOOT0=0 SECWM1_PSTRT=0x7F SECWM1_PEND=0x0   # SECWM2 already empty here
+lsusb -d 0483:df11
+
 python3 tools/pose/pose.py info
-python3 tools/pose/pose.py fill --session /path/to/session
-#   unplug USB-C AND the ST-LINK (SWD can back-power the MCU), wait ~10 s,
-#   replug USB-C only
-python3 tools/pose/pose.py verify --session /path/to/session \
-    --image tools/pose/prover/prover-padded.bin
+python3 tools/pose/pose.py run --session $B/sessions/run1 --min-off 10
+#   when told: unplug USB-C AND the ST-LINK (SWD can back-power the MCU),
+#   wait >10 s, replug USB-C only
 
-# restore
-STM32_Programmer_CLI -c port=SWD mode=UR -e all -w $B/bank1.bin 0x0C000000 \
-    -w $B/bank2.bin 0x08100000 -v -rst
+# install (here: restore the backup) and boot it
+python3 tools/pose/pose.py install --image 0x08000000=$B/bank1.bin --image 0x08100000=$B/bank2.bin
+STM32_Programmer_CLI -c port=USB1 -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F
+STM32_Programmer_CLI -c port=USB1 -ob nSWBOOT0=1 nBOOT0=1
 ```
 
-`verify` passes only if all of these hold:
-- every flash byte is the prover image or the session's `R`;
-- the backup domain came back (pass `--no-vbat` on a board without the J102
-  VBAT supercap; PQ1 never has a backup battery);
-- the SRAM canary is gone, which shows the unplug really happened;
-- the prover reports RDP 0xAA, TZEN 1 and blank free OTP.
+**Notes:**
+- With TZEN=1 the ROM runs non-secure. That is why bank 1 must be non-secure
+  (empty SECWM1) while the ROM fills and reads it, and why it is switched back
+  before the device boots the release.
+- A page left secure reads back wrong and fails the shipping-profile check.
+  That is control C3.
 
-`receipt.json` in the session directory records everything.
+## DfuSe as the ROM implements it (EVT-3D21, bootloader `bcdDevice` 2.00)
 
-## Wire protocol (64-byte HID reports, VID:PID 1209:7051, product "PQ1 PoSE prover")
-
-| Op | Request | Reply |
+| Alt | Layout string | Use |
 |---|---|---|
-| `0x01` HELLO | — | `0x81`, version, `PQPOSE01`, prover pages (u32), flash length (u32) |
-| `0x03` ERASE | page (u16, 0..255) | `0x83`, ok, SR (u32) |
-| `0x04` WRITE | space, offset (u32), length (u8, ×16, ≤48), pad, data at byte 8 | none; the first error is latched |
-| `0x05` READ | space, offset (u32), report count (u16) | `count` × [`0x85`, space, offset, 56 data bytes] |
-| `0x07` STATUS | — | `0x87`, failed, space, offset, SR, write count |
+| 0 | `@Internal Flash /0x08000000/256*08Kg` | all 2 MB, both banks (non-secure alias) |
+| 1 | `@Option Bytes /0x40022040/01*64 e` | `FLASH_OPTR` … `OEM2KEYR2`, 16 words |
+| 2 | `@OTP Memory /0x0BFA0000/01*512 e` | the 512-B OTP |
 
-Spaces:
-- 0: flash offset 0..2 MiB; bank 1 via the secure alias, bank 2 via the
-  non-secure alias.
-- 1: SRAM3 canary, 64 KiB.
-- 2: backup SRAM, 2 KiB.
-- 3: TAMP_BKP0–31.
-- 4: info blob, read-only. It holds the FLASH option registers, UID, flash
-  size, PWR_BDCR1, prover pages, cheat flags, FLASH_NSSR, and OTP at
-  offset 128.
+The transfer size is 1024. The protocol:
+- Commands go as DNLOAD block 0: `0x21` + address sets the pointer; `0x41`
+  alone mass-erases.
+- Data block `n ≥ 2` goes to `pointer + (n−2)·1024`.
+- Every DNLOAD is followed by GETSTATUS polling (DNBUSY → DNLOAD-IDLE).
+- UPLOAD needs an ABORT back to dfuIDLE after the set-address.
 
-Any request it cannot serve is answered `0x8F`.
+The ROM accepts SRAM2 (`0x20030000`) on alt 0. It refuses backup SRAM
+(`0x40036400`, `errVENDOR`), so the fill cannot cover the backup domain.
