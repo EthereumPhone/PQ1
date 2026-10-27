@@ -310,6 +310,13 @@ regexTarget = "line"
 regexes = ['''^\s*"contracts/verification/easycrypt/c10\-port/scratch/_scope_neg_op_C10FunctionalWotsKeygen\.ec": "4a24e131c607b1885d89675faafda1b1b781c84384f3d9fae3fd6c953fa450dc",?\s*$''']
 
 [[rules.allowlists]]
+description = "Exact public digest of the addressed ordinary-keygen scope probe"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_AddressedOrdinaryKeygen\.ec": "2cb1c96334439ab12eaaea660ac6036a6504825dfdec7e570696e4ef7d120686",?\s*$''']
+
+[[rules.allowlists]]
 description = "Exact public outside-target builder proof source digests"
 condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
