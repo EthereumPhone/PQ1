@@ -367,7 +367,7 @@ prover pages. Candidate closures:
 Which of these the SE050 (applet 7.2) and OPTIGA policy models support is
 unverified. Until one is closed, the SEs are **not** excluded from the count.
 
-### Prerequisites (all open)
+### Prerequisites (all open; tracked in #1082)
 
 1. **`DHUK-RDP12` must pass** (`docs/security/red-teaming.md` §6.5, issues
    #388/#400): the DHUK must be identical at RDP-1 (factory) and RDP-2 (after
