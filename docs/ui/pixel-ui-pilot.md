@@ -420,6 +420,11 @@ confirm through the pixel UI too; see the plan's step 3.
 7. Two branch fixes rode along: `hw/sca_trigger.rs` referenced `crate::board`
    on QEMU builds (gated on `sca-trigger`), and the QEMU mailbox transport
    lacked `get_pin_attempt_log_call`.
+8. **First screen: Set up / Check first** (owner requirement 2026-10-27,
+   not started). It is a new screen, shown on an unset device after the boot
+   fingerprint: Set up is the default, and Check first is optional. It must be
+   simple enough for a non-technical user and is never a boot-time button
+   hold. It is designed in PQ-UI first. See `pixel-ui-port-plan.md` step 6.
 
 
 ## UPDATE 2026-09-30 — re-synced to PQ-UI 198bbcb9 (the Sep-27 re-audit)

@@ -1,17 +1,22 @@
 # PQ1 user-side firmware verification — status note (2026-10-27)
 
 > **UPDATE 2026-10-27 (later the same day): NO-GO SUPERSEDED. The prover is ST's ROM bootloader.**
-> The design now in force ships the device with **empty flash** and option bytes that boot
-> ST's mask-ROM USB bootloader (DFU). The app fills all 2 MB of flash with random data
-> through that ROM, the user unplugs and replugs, and the app reads it all back. No PQ1
-> code runs on the device before the release is installed. Read
+> In the design now in force, the device ships with the release flashed and booting. Its
+> first screen offers **Set up** (the default, no computer needed) or an optional **Check
+> first**. On Check first:
+> 1. the release switches the option bytes to boot ST's mask-ROM USB bootloader (DFU);
+> 2. the app fills all 2 MB of flash with random data through that ROM;
+> 3. the user unplugs and replugs;
+> 4. the app reads it all back, then reinstalls the release.
+>
+> No PQ1 code runs during the check. Read
 > [`user-device-verification.md` § USB path](user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle)
 > first. Why the NO-GO below no longer holds:
 >
 > - **"PoSE needs a ROM."** It has one: ST's bootloader in system memory. It writes and
 >   reads memory over USB, and reading all of `R` back is equivalent to the MAC.
 > - **Rejected option 1, "with TrustZone on, ST's bootloader runs non-secure, so secure
->   flash reads back as zeros".** The shipping profile leaves SECWM1/SECWM2 empty, so
+>   flash reads back as zeros".** The check profile leaves SECWM1/SECWM2 empty, so
 >   every page is non-secure while the ROM fills and reads it. A page malware hides as
 >   secure reads back wrong and fails the profile check (EVT control C3). The release
 >   install switches bank 1 back to secure.
@@ -23,16 +28,23 @@
 >   soundness question is now only whether that storage is small enough, not the prover's
 >   own bytes.
 > - **"Production sets BOOT_LOCK and straps BOOT0 to ground."** The ROM is entered
->   through the option bytes (`nSWBOOT0=0 nBOOT0=0`) with no pin. BOOT_LOCK is set by the
->   release's first boot.
+>   through the option bytes (`nSWBOOT0=0 nBOOT0=0`) with no pin. BOOT_LOCK stays 0 until
+>   the user picks Set up, which sets it before the RDP-2 lock.
+> - **"The resident firmware decides whether to enter the bootloader."** It does: the
+>   release switches to the ROM when the user picks Check first. That is fine. A malicious
+>   image that refuses produces no check, which the user sees. One that pretends is an
+>   impostor answering the readback, which the count rules out.
 > - **SE storage** is excluded by provisioning the SEs at the factory with final keys
 >   derived from the per-die DHUK (RDP-1), then regressing to RDP-0. One caveat is still
 >   open: firmware can raise RDP to 1 itself in transit.
-> - **Power-cut recovery** is no longer a trust question. Until the release is installed,
->   the device always boots ST's ROM.
+> - **Power-cut recovery** is no longer a trust question. Once the user picks Check first,
+>   the device boots ST's ROM until the app reinstalls the release.
 >
-> An intermediate version (also 2026-10-27) put a PQ1 prover in flash. Its own code left
-> ~4.4 KB of compressible slack, which is why the prover moved to the ROM.
+> Earlier versions the same day:
+> - a PQ1 prover in flash: its own code left ~4.4 KB of compressible slack, which is why
+>   the prover moved to the ROM;
+> - empty flash booting the ROM: every user would have needed the app, so the owner made
+>   the check optional.
 >
 > The body below is kept unchanged as the record of the first review.
 

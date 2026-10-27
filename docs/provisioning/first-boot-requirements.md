@@ -13,10 +13,16 @@ Requirement keywords are RFC-2119 (**MUST / MUST NOT / SHOULD**).
 
 > **UPDATE 2026-10-27: owner direction changes this split (design only, NOT implemented).**
 > The factory raises the MCU to **RDP-1** and installs the **final** SE050/OPTIGA credentials, derived on-die from the per-die DHUK alone (no page-126 BHK, no page-127 salt).
-> It then regresses RDP 1→0 (mass erase), burns the OTP, and ships at RDP-0 with **empty flash**. The option bytes boot ST's mask-ROM USB bootloader, with all flash non-secure.
-> The user verifies the device in the Vault desktop app with a USB proof of secure erasure done by that ROM: it fills all 2 MB of flash with random data, the user unplugs and replugs, and it reads everything back. The app then installs the release through the ROM.
+> It then regresses RDP 1→0 (mass erase), burns the OTP, **flashes the release**, and ships at RDP-0 booting it: `nSWBOOT0=0 nBOOT0=1`, the release SECWM layout, **no WRP**, BOOT_LOCK=0.
+> The release's first screen, a simple trusted-UI screen and never a boot-time button hold, offers two choices:
+> - **Set up** (the default, no computer needed): the release stages WRP + BOOT_LOCK, locks to RDP-2 (Phase A, only on this choice) and starts the seed wizard.
+> - **Check first** (optional): the release switches the option bytes to boot ST's mask-ROM USB bootloader with all flash non-secure, then resets. In the Vault desktop app:
+>   1. a USB proof of secure erasure done by that ROM: the app fills all 2 MB of flash with random data, the user unplugs and replugs, and the app reads everything back;
+>   2. the app reinstalls the release through the ROM and switches back to booting it;
+>   3. the device shows the first screen again.
+>
 > This reverses "no factory RDP burn of any level", "factory MUST NOT install a final credential", and the first-boot transport→final rotation.
-> It also moves WRP staging from the factory to first boot.
+> It also moves WRP staging from the factory to Set up.
 > Until implemented, the text below still describes the current code.
 > Design, prerequisites and the open RDP-1-in-transit caveat: [`user-device-verification.md` § USB path](../security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle).
 
@@ -43,6 +49,11 @@ lock and **only then** welds it shut.
   PIN entry, and before any wallet secret exists on the device.
 - **R1.2** Phase A MUST run at earliest secure boot, before SE traffic, USB
   bring-up, or any per-device flash write.
+  *(UPDATE 2026-10-27, owner direction, not implemented: on an unset device the
+  **first screen** (R2.4) comes first, and Phase A runs only after the user
+  picks Set up. Nothing before Set up talks to an SE or writes per-device
+  flash. The first screen's computer detection for Check first is the only
+  candidate USB exception, and needs review.)*
 - **R1.3** The flow MUST be a no-op on every boot after completion: RDP
   already at Level 2 → skip Phase A; page-127 journal shows ALL_DONE → skip
   Phase B. (Idempotence is the resume mechanism, not an optimization.)
@@ -69,6 +80,24 @@ lock and **only then** welds it shut.
   over SWD not possible anymore." prompt and wait for a deliberate on-device
   button sequence. Until confirmed the device MUST stay at RDP-0, touch no
   SE/USB/journal state, and re-enter the same prompt on every boot.
+  *(UPDATE 2026-10-27, owner direction, not implemented: this prompt becomes
+  the device's **first screen**, a simple pixel-UI screen designed in PQ-UI.
+  It offers two choices:*
+  - ***Set up***, *the default: one more deliberate confirm, then R2.5;*
+  - ***Check first***, *optional: the release switches the option bytes to the
+    check profile (boot ST's ROM bootloader, SECWM1/2 empty, no WRP, BOOT_LOCK
+    0) and resets, so the Vault app can run the USB proof of secure erasure.*
+
+  *Requirements:*
+  - *plain words, with no "SWD", "lock forever" or other jargon;*
+  - *never a boot-time button hold;*
+  - *the device never shows a check result;*
+  - *the check-profile write is the only option-byte write allowed before Set
+    up, and is refused unless RDP is 0xAA, pages 123–127 are blank and no
+    wallet exists.*
+
+  *Full requirements:
+  [`user-device-verification.md` § The first screen](../security/user-device-verification.md#the-first-screen-ui-and-ux-requirements).)*
 - **R2.5 (the burn).** Only after R2.1–R2.4 pass MAY the flow program
   RDP=0xCC and issue `OBL_LAUNCH` (which resets the MCU). If the launch
   fails to reset, the flow MUST park (never continue executing below RDP-2).
@@ -137,6 +166,9 @@ journal and MUST be resumable across resets (§4). Order:
 ## 6. Things the flow MUST NOT do (summary)
 
 - Program or modify WRP or any option byte other than RDP (Phase A) — §2.1.
+  *(UPDATE 2026-10-27, owner direction, not implemented: the release would
+  program WRP + BOOT_LOCK at Set up before RDP, and the check profile on
+  Check first. See R2.4.)*
 - Write anything into the FSBL flash range, ever (invariant #10).
 - Burn RDP-2 before the WRP1A + blank-page + OTP-master + confirm-gate
   checks all pass — §2.7.
@@ -159,7 +191,7 @@ journal and MUST be resumable across resets (§4). Order:
 | R4.x journal codec | `secure/src/first_boot/journal.rs` |
 | R3.2–R3.4 SE rotations | `secure/src/se050/{mod,scp03}.rs`, `secure/src/optiga/mod.rs` |
 | R2.3 OTP-master pre-lock | `run_pre_lock_and_maybe_lock` (`E0803`); Phase-B belt-and-braces keeps `E0811` |
-| R2.4 confirm gate | **implemented 2026-07-21** — `state::build_lock_confirm_pages` + `confirm_checked` both-buttons chord + `rdp_burn_authorized`, gated before the burn in `run_pre_lock_and_maybe_lock` |
+| R2.4 confirm gate | **implemented 2026-07-21** — `state::build_lock_confirm_pages` + `confirm_checked` both-buttons chord + `rdp_burn_authorized`, gated before the burn in `run_pre_lock_and_maybe_lock`. *UPDATE 2026-10-27: to be replaced by the first screen (Set up / Check first, pixel UI); not implemented.* |
 
 Gaps between this document and the code are defects in one or the other. As of
 2026-07-21 the known device-side gaps (R2.3 mis-phasing, R2.4 confirm gate, the
@@ -224,7 +256,7 @@ QA, before any secret exists on the MCU:
   blank. The only SE pairing material in existence is the public transport
   values.
 
-*(UPDATE 2026-10-27: owner direction reverses the RDP and final-credential clauses below. See the note under §0.)*
+*(UPDATE 2026-10-27: owner direction reverses the RDP and final-credential clauses below. F1 stays, after the RDP 1→0 regression. F2 drops WRP1A, keeps BOOT_LOCK 0 and boots the release with the BOOT0 pin ignored, so the user can still choose Check first. See the note under §0.)*
 Factory MUST NOT: program RDP to any level; perform the BHK write; install
 any final (post-rotation) pairing credential; create or ever see a wallet
 seed; write anything to pages 123–127; retain any per-device secret beyond

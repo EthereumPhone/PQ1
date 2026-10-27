@@ -6,9 +6,15 @@ Design, argument, residuals and results:
 **Bench experiment only.** This is not a production-approved procedure. It is
 the reference for what the Vault desktop app does.
 
-No PQ1 code runs on the device. Its flash is empty, and its option bytes boot
-ST's mask-ROM USB bootloader (DFU, `0483:df11`) with all flash non-secure.
-`pose.py` speaks DfuSe to that ROM:
+The device ships with the release flashed and boots it. Its first screen
+offers **Set up** (the default, no computer needed) and **Check first**. Only
+a user who picks Check first goes through this check:
+- the release sets the **check profile**: boot ST's mask-ROM USB bootloader
+  (DFU, `0483:df11`) with all flash non-secure;
+- it resets, and from then on no PQ1 code runs until the check is over.
+
+That firmware path is not implemented yet. On the EVT, ST-LINK sets the check
+profile instead (below). `pose.py` speaks DfuSe to the ROM:
 1. it fills all 2 MB of flash with fresh random data `R`;
 2. the user unplugs and replugs;
 3. it reads all 2 MB back, plus the option bytes and the OTP, and compares.
@@ -30,16 +36,16 @@ An earlier version of this experiment put a PQ1 "prover" in flash
 
 | Command | What it does |
 |---|---|
-| `info` | DfuSe alt layouts, UID (USB serial), decoded option bytes, shipping-profile problems, OTP |
+| `info` | DfuSe alt layouts, UID (USB serial), decoded option bytes, check-profile problems, OTP |
 | `probe` | what the ROM can reach besides flash: option bytes, OTP, an SRAM2 write, backup SRAM |
 | `fill --session D` | mass erase, write `R` (2 MiB from `secrets`) to all flash, write a 4 KiB SRAM2 canary |
 | `verify --session D [--otp-expected F]` | read back all flash, the option bytes, the OTP and the canary, write `receipt.json` |
 | `run --session D [--min-off 10]` | `fill`, prompt to unplug, measure how long the device was gone, `verify` |
-| `install --image ADDR=FILE …` | mass erase, write the images, read them back. It prints the option-byte commands that make the device boot them. |
+| `install --image ADDR=FILE …` | mass erase, write the images, read them back. It prints the option-byte commands that switch back to the shipping profile, so the device boots the release and shows its first screen again. |
 
 `verify` gives **PASS** only if all of these hold:
 - every flash byte equals `R`;
-- the option bytes match the shipping profile:
+- the option bytes match the check profile:
   - RDP 0xAA, TZEN 1, nSWBOOT0 0, nBOOT0 0, BOOT_LOCK 0, SWAP_BANK 0,
     DUALBANK 1;
   - SECWM1/SECWM2 empty, no WRP, no HDP;
@@ -60,7 +66,9 @@ $P -ob displ > $B/ob-before.txt
 $P -u 0x0C000000 0x100000 $B/bank1.bin -u 0x08100000 0x100000 $B/bank2.bin \
    -u 0x0BFA0000 0x200 $B/otp.bin
 
-# shipping profile: empty flash, boot ST's ROM, every page non-secure
+# check profile, as the release will set it on "Check first": boot ST's ROM,
+# every page non-secure. (-e all only stands in for a device whose flash is
+# about to be filled anyway.)
 $P -e all
 $P -ob nSWBOOT0=0 nBOOT0=0 SECWM1_PSTRT=0x7F SECWM1_PEND=0x0   # SECWM2 already empty here
 lsusb -d 0483:df11
@@ -70,7 +78,7 @@ python3 tools/pose/pose.py run --session $B/sessions/run1 --min-off 10
 #   when told: unplug USB-C AND the ST-LINK (SWD can back-power the MCU),
 #   wait >10 s, replug USB-C only
 
-# install (here: restore the backup) and boot it
+# install (here: restore the backup) and switch back to booting it
 python3 tools/pose/pose.py install --image 0x08000000=$B/bank1.bin --image 0x08100000=$B/bank2.bin
 STM32_Programmer_CLI -c port=USB1 -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F
 STM32_Programmer_CLI -c port=USB1 -ob nSWBOOT0=1 nBOOT0=1
@@ -80,8 +88,11 @@ STM32_Programmer_CLI -c port=USB1 -ob nSWBOOT0=1 nBOOT0=1
 - With TZEN=1 the ROM runs non-secure. That is why bank 1 must be non-secure
   (empty SECWM1) while the ROM fills and reads it, and why it is switched back
   before the device boots the release.
-- A page left secure reads back wrong and fails the shipping-profile check.
+- A page left secure reads back wrong and fails the check-profile check.
   That is control C3.
+- The design's shipping profile boots flash with the BOOT0 pin ignored
+  (`nSWBOOT0=0 nBOOT0=1`). The EVT restore above uses the EVT's own original,
+  pin-selected setting.
 
 ## DfuSe as the ROM implements it (EVT-3D21, bootloader `bcdDevice` 2.00)
 

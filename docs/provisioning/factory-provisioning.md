@@ -46,10 +46,16 @@ Internal design notes for engineers are in
 
 > **UPDATE 2026-10-27: owner direction changes this split (design only, NOT implemented).**
 > The factory raises the MCU to **RDP-1** and installs the **final** SE050/OPTIGA credentials, derived on-die from the per-die DHUK alone (no page-126 BHK, no page-127 salt).
-> It then regresses RDP 1→0 (mass erase), burns the OTP, and ships at RDP-0 with **empty flash**. The option bytes boot ST's mask-ROM USB bootloader, with all flash non-secure.
-> The user verifies the device in the Vault desktop app with a USB proof of secure erasure done by that ROM: it fills all 2 MB of flash with random data, the user unplugs and replugs, and it reads everything back. The app then installs the release through the ROM.
+> It then regresses RDP 1→0 (mass erase), burns the OTP, **flashes the release**, and ships at RDP-0 booting it: `nSWBOOT0=0 nBOOT0=1`, the release SECWM layout, **no WRP**, BOOT_LOCK=0.
+> The release's first screen, a simple trusted-UI screen and never a boot-time button hold, offers two choices:
+> - **Set up** (the default, no computer needed): the release stages WRP + BOOT_LOCK, locks to RDP-2 (Phase A, only on this choice) and starts the seed wizard.
+> - **Check first** (optional): the release switches the option bytes to boot ST's mask-ROM USB bootloader with all flash non-secure, then resets. In the Vault desktop app:
+>   1. a USB proof of secure erasure done by that ROM: the app fills all 2 MB of flash with random data, the user unplugs and replugs, and the app reads everything back;
+>   2. the app reinstalls the release through the ROM and switches back to booting it;
+>   3. the device shows the first screen again.
+>
 > This reverses "no factory RDP burn of any level", "factory MUST NOT install a final credential", and the first-boot transport→final rotation.
-> It also moves WRP staging from the factory to first boot.
+> It also moves WRP staging from the factory to Set up.
 > Until implemented, the text below still describes the current code.
 > Design, prerequisites and the open RDP-1-in-transit caveat: [`user-device-verification.md` § USB path](../security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle).
 

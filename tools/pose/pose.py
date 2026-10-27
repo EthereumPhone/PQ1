@@ -4,9 +4,11 @@
 Design: docs/security/user-device-verification.md § USB path.
 Procedure: tools/pose/README.md.
 
-The device runs no PQ1 code. It ships with empty flash and option bytes that
-boot ST's mask-ROM bootloader (USB DFU, 0483:df11) with all flash non-secure.
-This tool is the reference for what the Vault desktop app does:
+The device ships with the release flashed and boots it. A user who wants the
+check picks "Check first" on the device's first screen; the release then sets
+the check profile (boot ST's mask-ROM bootloader, USB DFU 0483:df11, with all
+flash non-secure) and resets. No PQ1 code runs during the check. This tool is
+the reference for what the Vault desktop app does from there:
 
     pose.py info
     pose.py run     --session DIR [--min-off 10]   fill, unplug, verify
@@ -172,9 +174,11 @@ def empty_area(a):
     return a["pstrt"] > a["pend"]
 
 
-def ship_profile_problems(ob):
-    """What differs from the shipping profile: RDP-0, TrustZone on, boot ST's
-    ROM bootloader, every flash page non-secure and unprotected."""
+def check_profile_problems(ob):
+    """What differs from the check profile: RDP-0, TrustZone on, boot ST's
+    ROM bootloader, every flash page non-secure and unprotected. (The shipping
+    profile boots the release instead; the release switches to this one when
+    the user picks "Check first".)"""
     want = {"RDP": 0xAA, "TZEN": 1, "nSWBOOT0": 0, "nBOOT0": 0, "BOOT_LOCK": 0,
             "SWAP_BANK": 0, "DUALBANK": 1, "HDP1EN": 0, "HDP2EN": 0}
     bad = [f"{k}={ob[k]:#x} (want {v:#x})" for k, v in want.items() if ob[k] != v]
@@ -187,20 +191,20 @@ def ship_profile_problems(ob):
 def evaluate(r, flash, ob, otp, otp_expected, off_time_s=None, min_off_s=None,
              reenumerated=None, canary_retained=None):
     """The verdict. PASS needs every byte of flash to be the session's R, the
-    shipping option-byte profile and the expected OTP. When measured, it also
+    check option-byte profile and the expected OTP. When measured, it also
     needs an unplug at least min_off_s long and the SRAM2 canary gone (both
     only catch honest runs that skipped the unplug)."""
     bad_pages = mismatched_pages(r, flash)
-    problems = ship_profile_problems(ob)
+    problems = check_profile_problems(ob)
     checks = {
         "flash_ok": len(flash) == len(r) and not bad_pages,
-        "ship_profile_ok": not problems,
+        "check_profile_ok": not problems,
         "otp_ok": otp == otp_expected,
         "off_time_ok": None if off_time_s is None else off_time_s >= min_off_s,
         "reenumerated": reenumerated,
         "power_cycle_ok": None if canary_retained is None else not canary_retained,
     }
-    required = ["flash_ok", "ship_profile_ok", "otp_ok"]
+    required = ["flash_ok", "check_profile_ok", "otp_ok"]
     if off_time_s is not None:
         required.append("off_time_ok")
     if canary_retained is not None:
@@ -478,7 +482,7 @@ def cmd_info(args):
     finally:
         t.close()
     print(json.dumps({**ident, "option_bytes": ob,
-                      "ship_profile_problems": ship_profile_problems(ob),
+                      "check_profile_problems": check_profile_problems(ob),
                       "otp_blank": otp == b"\xff" * OTP_LEN, "otp": otp.hex()}, indent=2))
 
 
@@ -579,7 +583,10 @@ def cmd_install(args):
                 sys.exit(f"readback mismatch at pages {mismatched_pages(data, back, addr - FLASH_BASE)[:16]}")
     finally:
         t.close()
-    print("installed and read back. Now switch the option bytes, e.g. (restoring the EVT):\n"
+    print("installed and read back. Now switch the option bytes back to the shipping profile, so the\n"
+          "device boots the release and shows its first screen again (Set up / Check first).\n"
+          "The design boots flash with the BOOT0 pin ignored (nSWBOOT0=0 nBOOT0=1). Restoring the EVT,\n"
+          "which shipped with its pin-selected setting:\n"
           "  STM32_Programmer_CLI -c port=USB1 -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F\n"
           "  STM32_Programmer_CLI -c port=USB1 -ob nSWBOOT0=1 nBOOT0=1")
 
