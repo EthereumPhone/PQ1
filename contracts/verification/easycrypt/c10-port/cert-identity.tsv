@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	e10a47d75e052b61b72baa77582f89b7
+split	5ecfe16378003899ec98bc8fee275474
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1744,3 +1744,9 @@ fork	9c2d21280c84d52c30b22111151f1135
 # leaf_suffix_last_block, replacing the SMT-dependent generic drop rewrite.
 # The statement, definitions, assumptions, controls and solver budgets are
 # unchanged. Source binding updated; proof replay and fresh review are required.
+
+# 2026-10-27 addressed paired/wrapper continuation: nine additive modules,
+# 23 lemmas, seven operators and 50 controls. Initialized paired transfers and
+# wrapper-specific memo counts/partition retain all wrapper non-node charges.
+# Existing statements, assumptions, programs and controls remain unchanged.
+# Identity enrollment is not proof-execution or review evidence.

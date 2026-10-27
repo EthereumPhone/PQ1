@@ -371,6 +371,14 @@ remaining ordinary FORS and encoding terms now dominate.
 
 ## Transfer to paired signing and verification
 
+`AddressedPairedSessionBound.paired_byte_addressed_node_euf_bound` and
+`AddressedPairedKeygenBound.paired_keygen_byte_addressed_node_euf_bound` now
+transfer the addressed-node physical charge above to the corresponding paired
+experiments. They reuse the exact initialized success-probability equalities
+below, retain the configured caps and lossless-client premise, and add only
+the private `AddressedAudit` exclusion. No public-seed width or success premise
+is added. The older WOTS-candidate endpoints remain available as stated.
+
 `C10PairedSessionBound.paired_byte_wots_candidate_euf_bound` gives the identical
 WOTS-candidate upper bound for `RealGame(PairedByteContext(A)).run`. The paired
 session calls the comparison signer and verifier whose input constructions,

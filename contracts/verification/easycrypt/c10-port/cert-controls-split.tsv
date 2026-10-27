@@ -2335,3 +2335,54 @@ scratch/_scope_neg_op_AddressedWotsExceptionCount.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AddressedWotsLog.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AddressedWotsOpening.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AddressedWotsQueries.ec	MUST-FAIL	FORS_C_TreePort.
+# Addressed paired/wrapper finite, typed program, contract and scope controls.
+scratch/addressed_client_actual_game_positive.ec	MUST-PASS	-
+scratch/addressed_client_actual_game_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_budget_arithmetic_positive.ec	MUST-PASS	-
+scratch/addressed_client_budget_arithmetic_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_collision_charge_positive.ec	MUST-PASS	-
+scratch/addressed_client_collision_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_coverage_positive.ec	MUST-PASS	-
+scratch/addressed_client_coverage_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_coverage_typed.ec	MUST-PASS	-
+scratch/addressed_client_encoding_positive.ec	MUST-PASS	-
+scratch/addressed_client_encoding_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_encoding_typed.ec	MUST-PASS	-
+scratch/addressed_client_final_verifier_positive.ec	MUST-PASS	-
+scratch/addressed_client_final_verifier_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_fors_positive.ec	MUST-PASS	-
+scratch/addressed_client_fors_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_fors_typed.ec	MUST-PASS	-
+scratch/addressed_client_internal_verify_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/addressed_client_internal_verify_typed.ec	MUST-PASS	-
+scratch/addressed_client_minimum_positive.ec	MUST-PASS	-
+scratch/addressed_client_minimum_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_node_zero_positive.ec	MUST-PASS	-
+scratch/addressed_client_node_zero_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_node_zero_typed.ec	MUST-PASS	-
+scratch/addressed_client_paired_keygen_prefix_positive.ec	MUST-PASS	-
+scratch/addressed_client_paired_keygen_prefix_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_paired_prefix_positive.ec	MUST-PASS	-
+scratch/addressed_client_paired_prefix_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_program_positive.ec	MUST-PASS	-
+scratch/addressed_client_program_preserving.ec	MUST-PASS	-
+scratch/addressed_client_raw_cap_positive.ec	MUST-PASS	-
+scratch/addressed_client_raw_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_second_call_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/addressed_client_second_call_typed.ec	MUST-PASS	-
+scratch/addressed_client_two_signing_passes_positive.ec	MUST-PASS	-
+scratch/addressed_client_two_signing_passes_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_wots_positive.ec	MUST-PASS	-
+scratch/addressed_client_wots_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/addressed_client_wots_typed.ec	MUST-PASS	-
+scratch/addressed_client_wrapper_prefix_positive.ec	MUST-PASS	-
+scratch/addressed_client_wrapper_prefix_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_AddressedPairedKeygenBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedPairedSessionBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWrapperActualForest.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWrapperActualPartition.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWrapperBucketBudget.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWrapperByteCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWrapperMemoCalls.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWrapperMemoSession.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_AddressedWrapperNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.

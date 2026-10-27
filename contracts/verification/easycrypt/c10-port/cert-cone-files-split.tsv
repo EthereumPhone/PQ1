@@ -86,6 +86,8 @@ cdrafts-split/AddressedOrdinaryLayer.ec
 cdrafts-split/AddressedOrdinaryShuffle.ec
 cdrafts-split/AddressedOrdinarySigner.ec
 cdrafts-split/AddressedOrdinaryTrees.ec
+cdrafts-split/AddressedPairedKeygenBound.ec
+cdrafts-split/AddressedPairedSessionBound.ec
 cdrafts-split/AddressedQueryProvenance.ec
 cdrafts-split/AddressedSessionExceptionCount.ec
 cdrafts-split/AddressedShuffleExceptions.ec
@@ -97,6 +99,13 @@ cdrafts-split/AddressedWotsExceptionCount.ec
 cdrafts-split/AddressedWotsLog.ec
 cdrafts-split/AddressedWotsOpening.ec
 cdrafts-split/AddressedWotsQueries.ec
+cdrafts-split/AddressedWrapperActualForest.ec
+cdrafts-split/AddressedWrapperActualPartition.ec
+cdrafts-split/AddressedWrapperBucketBudget.ec
+cdrafts-split/AddressedWrapperByteCollision.ec
+cdrafts-split/AddressedWrapperMemoCalls.ec
+cdrafts-split/AddressedWrapperMemoSession.ec
+cdrafts-split/AddressedWrapperNumericalBound.ec
 cdrafts-split/AuditComplete.ec
 cdrafts-split/AuditPrefix.ec
 cdrafts-split/AuthAdvance.ec

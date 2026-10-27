@@ -33,6 +33,27 @@ parser errors, resource failures or timeouts. Scope probes check symbol hiding,
 not semantic soundness. The full isolated two-driver replay remains separate
 evidence from these control classifications and development checks.
 
+## Addressed paired/wrapper continuation
+
+This batch adds 41 generated fixtures and nine unavailable-symbol scope probes:
+
+| Evidence class | Count | Meaning |
+| --- | ---: | --- |
+| Contract positive/rejection pairs | 16 | Exact paired prefix charges, both signing passes, final verification, the raw cap, actual initialized experiment, collision charge and wrapper prefix transfer. |
+| Charge positive/type/rejection triples | 15 | Local changes to each retained non-node independent-game term typecheck and fail direct application of the original complete theorem. |
+| Original/equivalent program comparisons | 2 | The wrapper's original body and double-negated readiness guard preserve result and complete oracle state. |
+| Typed program mutants/rejected comparisons | 4 | Omitting the second signing call or internal verifier typechecks but fails the unchanged comparison proof. |
+| Arithmetic positive/rejection pairs | 4 | A concrete initialized budget and the retained-minimum inequality contradict their altered claims. |
+
+Every rejection must occur at its named consumer after successful parsing and
+typing; parser errors, resource failures and timeouts are not credited. The
+program comparisons establish sensitivity of the checked relation, not universal
+inequivalence. Contract and local-charge mismatches do not prove that 775 is
+tight, that a probability term is indispensable, or that a stronger theorem is
+false. The arithmetic examples do not establish attainability of the budget.
+The full pinned two-driver replay and exact first-diagnostic audit remain
+separate mandatory evidence.
+
 ## Probability-bound batch
 
 The 38 controls added with the honest-error and public-node bounds consist of:

@@ -434,8 +434,19 @@ complete expression improves from about `2^-59.28` to `2^-60.55`; see
 [the exact formula and scope](RAW-NUMERICAL-EUF.md#addressed-node-continuation).
 This closes the equal-address node-budget obligation, not concrete SHA-256,
 QROM, Rust/cross-kernel correspondence, hardware, or tighter FORS/WOTS research.
-The paired and secure-wrapper bounds below retain their separately stated
-endpoints; this continuation concerns the ordinary byte game.
+**Paired/wrapper continuation (2026-10-27):** the same addressed-node charge
+now transfers through the exact initialized probability equalities to
+`PairedByteContext` and `PairedKeygenByteContext`. The distinct wrapper game has
+its own proved nonordinary-key budget `qr+775*qs+771`: two actual signing calls
+at most two keys each, the conservative 771-call internal verifier, and the
+final verifier. Refusals, retries, withheld outputs, caps and persistent oracle
+histories remain. Its successful-output partition and generic observer bound
+yield `min(Q*(Q-1)/(2*2^128), Rwrapper*(Rwrapper+1)/2^128)`. All existing wrapper
+non-node charges remain, with proved comparison to the retained complete bound.
+See [paired endpoints](RAW-NUMERICAL-EUF.md#transfer-to-paired-signing-and-verification)
+and [wrapper formula](RAW-WRAPPER-EUF.md#addressed-node-continuation).
+This closes these endpoint-specific node transfers, not the remaining wrapper
+non-node tightenings or the backend, cross-language and physical boundaries.
 
 **Native total signing availability (2026-10-21):**
 [`ByteTotalAvailability.byte_total_initialized_availability`](cdrafts-split/ByteTotalAvailability.ec)

@@ -74,6 +74,31 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    # Addressed paired/wrapper continuation (2026-10-27).
+    'addressed_wrapper_byte_actual_partition',
+    'addressed_wrapper_query_byte_actual_forest',
+    'addressed_wrapper_query_context_actual_forest',
+    'addressed_wrapper_query_driver_actual_forest',
+    'nonordinary_verifier_valid_count',
+    'nonordinary_wrapper_byte_context_count',
+    'nonordinary_wrapper_byte_game_count',
+    'nonordinary_wrapper_client_count',
+    'nonordinary_wrapper_context_count',
+    'nonordinary_wrapper_driver_count',
+    'nonordinary_wrapper_valid_count',
+    'paired_byte_addressed_node_euf_bound',
+    'paired_keygen_byte_addressed_node_euf_bound',
+    'wrapper_addressed_independent_charge_tighter',
+    'wrapper_addressed_physical_charge_tighter',
+    'wrapper_byte_addressed_node_cases',
+    'wrapper_byte_addressed_node_collision',
+    'wrapper_byte_game_addressed_bucket_budget',
+    'wrapper_independent_byte_addressed_node_euf_bound',
+    'wrapper_physical_byte_addressed_node_euf_bound',
+    'wrapper_query_byte_addressed_collision',
+    'wrapper_query_byte_addressed_collision_best',
+    'wrapper_query_byte_addressed_node_euf_bound',
+
     # Addressed-node quantitative continuation (2026-10-26).
     'actual_node_pair_same_address',
     'actual_node_same_address',

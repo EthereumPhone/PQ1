@@ -1,7 +1,7 @@
 # Initialized byte-wrapper security in the classical ideal-oracle model
 
-`WrapperNumericalBound.wrapper_independent_byte_euf_bound` and
-`wrapper_physical_byte_euf_bound` bound new-message forgery in the original
+`AddressedWrapperNumericalBound.wrapper_independent_byte_addressed_node_euf_bound`
+and `wrapper_physical_byte_addressed_node_euf_bound` bound new-message forgery in the original
 `IndependentGame(WrapperByteContext(A))` and
 `RealGame(WrapperByteContext(A))`. Key preparation, adaptive requests, final
 verification and the 4008-byte signature codec execute inside these games.
@@ -14,7 +14,7 @@ Only signatures released to the client enter the exposure and signed-message
 logs. Readiness and final-guard booleans overapproximate environment outcomes;
 the theorem assumes neither successful search nor release.
 
-## Bound and hypotheses
+## Retained bound and hypotheses
 
 For nonnegative configured raw-query and admitted-attempt caps `qr, qs`, define:
 
@@ -82,10 +82,45 @@ prefix domination and coverage union apply after these wrapper-specific
 obligations have been discharged. This bound retains the original conservative
 coverage coefficient; it does not claim the later library-only tightenings.
 
-## Numerical examples
+## Addressed-node continuation
+
+The addressed-node bound uses the same initialized wrapper experiments and
+replaces only the first term of the retained formula:
+
+```
+Rwrapper = qr + 775*qs + 771
+Cnode = min(Q*(Q-1)/(2*2^128), Rwrapper*(Rwrapper+1)/2^128)
+```
+
+`AddressedWrapperMemoCalls` charges at most two nonordinary public memo keys
+for each actual signing call and conservatively charges all 771 calls of the
+internal verifier. Thus an admitted wrapper attempt costs at most `2+2+771=775`.
+This is an upper bound, not an assertion that every attempt reaches that cost.
+`AddressedWrapperMemoSession` derives the initialized adaptive budget, including
+raw calls, retries after refusals, both signing passes, withheld results and the
+final verifier's additional 771 calls. Key preparation establishes zero
+nonordinary keys. Arbitrary earlier raw prepopulation and memo hits remain in
+the actual persistent tables; no desired count or freshness premise is added.
+
+`AddressedWrapperActualForest` and `AddressedWrapperActualPartition` derive the
+equal-address collision alternative from actual successful wrapper outputs.
+`AddressedWrapperBucketBudget` and `AddressedWrapperByteCollision` then compose
+the generic address-bucket and private-observer proofs with the wrapper's own
+initialized count. The same public seed and serialized address define a node
+bucket; the private observer preserves samples, replies and histories.
+The only additional module exclusion is private `AddressedAudit` state.
+
+`AddressedWrapperNumericalBound` retains the zero-node, original WOTS encoding,
+wrapper WOTS-candidate, ordinary FORS, released-coverage and private-prefix
+terms exactly. It proves both complete charges are no greater than their
+retained counterparts. The ordinary library's later non-node tightenings are
+not automatically transferred to this distinct retry/withholding experiment.
+No production or backend interpretation changes.
+
+## Numerical examples of the retained bound
 
 The following are illustrative query budgets, not enforced deployment policy.
-Exact rational evaluation of the displayed formula gives the approximations;
+Exact rational evaluation of the retained formula gives the approximations;
 `WrapperNumericalExamples` independently checks the stated strict upper bounds
 using native EasyCrypt arithmetic.
 
