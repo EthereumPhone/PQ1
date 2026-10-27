@@ -252,7 +252,7 @@ below.
 ### The procedure (what the user does)
 
 The device arrives at RDP-0 with only a small **prover** in flash. In the
-Vault desktop app (no phone app is planned), over the normal USB-C cable:
+Vault desktop app (no phone app is planned yet), over the normal USB-C cable:
 
 1. **Fill.** The app sends fresh random data `R` (generated on the host, kept
    on the host) and the device writes it to **every flash byte outside the
