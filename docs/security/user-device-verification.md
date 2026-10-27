@@ -7,7 +7,7 @@ self-lock (work-todo #36, `docs/provisioning/first-boot-provisioning.md`),
 measured-boot 8-word fingerprint (`docs/security/measured-boot.md`).
 
 > **UPDATE 2026-10-27 — owner direction: the consumer path becomes USB, not
-> SWD.** The owner chose a probe-free procedure that runs in the Vault app
+> SWD.** The owner chose a probe-free procedure that runs in the Vault desktop app
 > over the ordinary USB-C cable: a **proof of secure erasure with a power
 > cycle** (fill all flash with fresh random data → user unplugs and replugs →
 > read everything back). It needs no immutable ROM, but it changes the
@@ -252,7 +252,7 @@ below.
 ### The procedure (what the user does)
 
 The device arrives at RDP-0 with only a small **prover** in flash. In the
-Vault app, over the normal USB-C cable:
+Vault desktop app (no phone app is planned), over the normal USB-C cable:
 
 1. **Fill.** The app sends fresh random data `R` (generated on the host, kept
    on the host) and the device writes it to **every flash byte outside the
@@ -404,7 +404,7 @@ unverified. Until one is closed, the SEs are **not** excluded from the count.
    procedure leaves a device that only boots the prover. Re-running from step
    1 recovers it as long as the prover pages are intact. If they are not,
    recovery needs SWD or RMA.
-10. **Companion / Vault app flow** (fill, unplug prompt, verify, install,
+10. **Vault desktop app flow** (fill, unplug prompt, verify, install,
     fingerprint display) and the release artifact it verifies against.
 11. **Supersedes `R1.2`/`R2.4`/§6 USB-before-lock only for the prover**: the
     installed release's first boot keeps those rules.

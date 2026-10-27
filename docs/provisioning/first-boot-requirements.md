@@ -14,7 +14,7 @@ Requirement keywords are RFC-2119 (**MUST / MUST NOT / SHOULD**).
 > **UPDATE 2026-10-27: owner direction changes this split (design only, NOT implemented).**
 > The factory raises the MCU to **RDP-1** and installs the **final** SE050/OPTIGA credentials, derived on-die from the per-die DHUK alone (no page-126 BHK, no page-127 salt).
 > It then regresses RDP 1→0 (mass erase) and ships at RDP-0 with only a small prover in flash.
-> The user verifies the device in the Vault app with a USB proof of secure erasure: fill all flash with random data, unplug and replug, read everything back.
+> The user verifies the device in the Vault desktop app with a USB proof of secure erasure: fill all flash with random data, unplug and replug, read everything back.
 > This reverses "no factory RDP burn of any level", "factory MUST NOT install a final credential", and the first-boot transport→final rotation.
 > It also moves WRP staging from the factory to first boot.
 > Until implemented, the text below still describes the current code.

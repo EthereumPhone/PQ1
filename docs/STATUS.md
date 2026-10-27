@@ -562,7 +562,7 @@ individual milestones and are superseded by that owner for the combined claim.
 > workflow over a slice before relying on its rows, and trust the **evidence pointer, not the prose**.
 >
 > **UPDATE 2026-10-27 — owner direction: USB proof of secure erasure + factory-installed final SE keys (design only).**
-> The consumer check moves from SWD to the Vault app over USB-C: fill all flash with fresh random data, the user unplugs and replugs, then read it all back and compare.
+> The consumer check moves from SWD to the Vault desktop app over USB-C: fill all flash with fresh random data, the user unplugs and replugs, then read it all back and compare.
 > The factory installs DHUK-derived **final** SE keys at RDP-1 and regresses to RDP-0 before shipping, so the first-boot transport→final rotation (HIGH-1 below) is slated to go away.
 > Soundness is not established: the measured prover slack is about 4.4 KB, against a bar of a few hundred bytes. The mechanism and its cheat detection work on EVT-3D21 silicon.
 > Open prerequisites: `DHUK-RDP12`, the RDP-1-in-transit caveat, final keys that do not depend on pages 126/127, and WRP staging moved to first boot.
