@@ -46,17 +46,17 @@ Once Phase D starts, enter the workflow's **closure mode**. Treat its recorded
 completion checklist as closed: run the stage-relevant mandatory gates, freeze,
 review, remediate stage-blocking findings, re-freeze/re-review when required,
 and land. Do not add optional reviewers, broader assurance campaigns, process
-rewrites, documentation polish, or unrelated hardening unless the user or a
-task-specific owner gate required it before the freeze, or a concrete workflow
-expansion trigger makes it a blocker. If closure stalls, report the exact
+rewrites, documentation polish, or unrelated hardening unless the user explicitly
+requests it, a task-specific owner gate required it before the freeze, or a
+concrete workflow expansion trigger makes it a blocker. If closure stalls, report the exact
 blockers and shortest compliant path before starting more work.
 
 Phase D uses one short, simultaneous three-reviewer wave under the workflow's
 hard wall-clock and output bounds. The reviewers are GPT-5.6 SOL, Claude Opus
 5, and Kimi K3. Give all three the same small, clear-context prompt. Do not
-build a packet dossier, run pairwise/cross-adjudication, or add reviewers. A
-missing mandatory answer remains an honest gap, not permission to keep browsing
-indefinitely.
+build a packet dossier or run pairwise/cross-adjudication. The workflow's
+Section 7 governs focused completion of missing mandatory answers and explicit
+owner-selected reviewer changes. Keep unresolved answers as honest gaps.
 
 Multiple intersecting playbooks do not create more reviewer prompts, campaigns,
 or phase boundaries. Reviewers derive threats from the source and invariants in

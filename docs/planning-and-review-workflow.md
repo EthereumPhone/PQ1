@@ -243,7 +243,8 @@ Phase D is **closure mode**, not another exploration or implementation phase:
   Keep only their raw outputs and a compact coordinator summary.
 - Apply the Section-7 wall-clock and output caps to the single reviewer wave.
   At the deadline, accept the compact report or record that leg as unavailable;
-  do not extend it into another campaign.
+  use only the focused completion path below for an unanswered mandatory check,
+  rather than extending the active run into another campaign.
 - If Phase D cannot progress on its recorded checklist, stop adding work and
   report the exact blocker, its evidence, and the shortest compliant route to
   either convergence or an owner decision.
@@ -364,16 +365,24 @@ digests, terminal transcripts, and packet manifests are unnecessary unless a
 stricter task-specific gate explicitly requires them.
 
 If a reviewer cannot launch, retry that same reviewer once for a mechanical
-failure. Do not substitute a fourth model or serialize the other reviews while
-waiting. If it remains unavailable, report the missing leg and the two completed
-results; do not invent completion or start another campaign.
+failure. Do not silently substitute a model or serialize the other reviews while
+waiting. An explicit owner-selected replacement or waiver takes precedence for
+its stated scope; record it and preserve it across turns. If the leg remains
+unavailable, report it honestly and apply the focused completion rules below
+only where they permit another run.
 
-### Hard review bounds
+### Review runtime bounds and report length
 
-The three reviews form one parallel wave. Each reviewer gets **15 minutes
-total** and a maximum **800-word** response. No follow-up model turns,
-cross-review, or report rewrite are allowed. Already-running mandatory tests
-are separate and run once. Reviewers must reserve the final stretch for
+The initial three reviews form one parallel wave. Each reviewer gets **15 minutes
+total** and should aim for **about 800 words**. Owner decision, 2026-10-26:
+report length is a suggestion, not an acceptance gate. An overrun alone must
+not invalidate a review, trigger another model run, block landing, or require
+owner approval. Record the length, preserve the full report, and assess its
+substance against the required checks. Runtime and raw-artifact byte limits
+remain hard bounds. Do not extend a running leg, cross-review reports, or
+rewrite a report. Focused follow-ups after the wave
+finishes are governed below. Already-running mandatory tests are separate and
+run once. Reviewers must reserve the final stretch for
 synthesis: a partial compact report at the deadline beats a timed-out leg
 (the first 8-minute wave lost an entire reviewer to a mid-exploration
 timeout — the bound exists to stop campaign creep, not to price out the
@@ -383,6 +392,48 @@ At the deadline, the reviewer returns what it has with an honest `GAP`, or the
 coordinator records the leg as timed out. A timeout never causes the other two
 reviews to restart. A stricter task-specific owner gate may require more, but it
 must say so before the target freezes.
+
+### Focused completion of mandatory gaps
+
+Owner decisions, 2026-10-26 and 2026-10-27: a completed `GAP` or a substantive
+timeout may receive focused follow-ups to finish explicitly unanswered mandatory
+checks. Additional bounded runs within the authorized task may proceed
+autonomously; completing one follow-up does not create a new approval requirement.
+Keep these runs proportionate to the remaining work and apply the progress and
+stopping rules below. Mechanical launch retries remain a separate case.
+
+- First collect the initial reports and identify the missing checks. Keep the
+  candidate commit/tree, stage, technical requirements, and acceptance gates
+  fixed. A disagreement, optional assurance, or an undesired verdict is not a
+  missing check.
+- Start with one completion wave per frozen candidate, involving only
+  the incomplete legs. Run independent legs concurrently. Each gets a fresh
+  context, at most **15 minutes**, and a suggested **800-word** report. Do not restart
+  successful legs or rerun unchanged tests merely to accompany the follow-up.
+- Use the same reviewer unless the owner explicitly selects a replacement.
+  Resolve the requested model exactly; do not silently substitute or enable
+  fallback. A new model's scoped report does not make the original leg complete.
+- Give the reviewer the frozen identity, the neutral unanswered checks, and
+  the primary sources needed to answer them. Exclude prior reports and verdicts;
+  do not ask it to agree with another model. Preserve the original report and
+  record the follow-up's model, scope, result, and runtime separately.
+- Reconcile the combined evidence against every original mandatory check.
+  A scoped `GO` closes only its demonstrated coverage. Reproduce new concrete
+  findings normally; material corrections still require Section-10 re-review.
+  A gap never becomes a waiver merely because the follow-up ends.
+- If mandatory checks remain unanswered, the coordinator may launch another
+  focused run autonomously. Before each run, record the exact remaining check,
+  what the previous attempt resolved, why this attempt can close the remainder,
+  and its stopping point. Narrow the source set or correct the concrete context
+  or tool problem; do not simply repeat an unchanged prompt.
+- Authorize only the next useful run, not an open-ended series. Keep the same
+  per-run time and artifact limits, reuse valid evidence, and run only incomplete
+  legs. Stop autonomous reruns after two consecutive attempts leave the same
+  mandatory gap unchanged, or when no concrete improvement to the next attempt
+  is available. Report the remaining evidence and shortest decision path;
+  do not seek a preferred verdict, waive the gap, or add optional reviewers.
+  A run count alone is not a reason to request owner approval. Existing scope,
+  reviewer-selection, risk-acceptance, and external-action boundaries still apply.
 
 ### One-wave execution
 
@@ -520,6 +571,8 @@ The default convergence loop is:
 2. freeze one exact candidate;
 3. run the one parallel three-reviewer wave;
 4. reproduce and fix only concrete blockers or mandatory gaps as one batch;
+   use Section 7's focused completion path for an unanswered check on an
+   unchanged candidate;
 5. re-freeze and, if code/behavior changed, run the same short wave once more;
 6. land when gates are green and coordinator triage has no reproduced blocker
    or unresolved mandatory gap.
@@ -552,9 +605,13 @@ authority, behavior, evidence claim, or acceptance gate. The coordinator may
 classify it directly; if uncertain, include it in the next combined freeze.
 
 Do not start cross-review or recursively ask models to debate. If the second
-wave still has a reproduced blocker, fix it in the active product scope. If it
-has only an unresolved disagreement or unavailable leg, stop and give the user
-the exact evidence and shortest decision path before doing more review work.
+wave still has a reproduced blocker, fix it in the active product scope. Apply
+Section 7's bounded completion path to an unanswered mandatory check. For an
+unresolved disagreement, unavailable leg without authorized replacement, or a
+gap that reaches Section 7's progress-based stopping condition, give the user
+the exact evidence and shortest decision path. Otherwise continue the focused
+completion autonomously under Section 7; do not introduce a per-run approval
+step merely because an earlier completion has already run.
 Bank editorial preferences, duplicate defenses, and optional hardening.
 
 Do not declare convergence merely because review is expensive. Conversely, do
@@ -603,8 +660,8 @@ Evidence already green: <ONE SHORT PARAGRAPH>.
 Inspect the diff and affected callers source-first for concrete security or
 correctness blockers. Keep the target immutable. Use read-only commands only;
 no edits, hardware, external writes, prior reports, status prose, or playbook
-catalogs. Ignore style and optional hardening. You have 15 minutes and
-800 words.
+catalogs. Ignore style and optional hardening. You have 15 minutes. Aim for
+about 800 words; report length is advisory.
 
 Return exactly:
 VERDICT: GO | FIX | GAP
