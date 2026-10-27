@@ -633,6 +633,10 @@ SW-key round-trip + DHUK≠SW domain separation + DHUK round-trip. `secure/src/h
   that is fail-secure for the RDP-2→RDP-1 downgrade route (an attacker computes `f(DHUK_RDP1,salt) ≠
   PBS` and both tunnels stay shut) but does NOT help against a runtime TrustZone-M disable at RDP-2 —
   see `HW-ASSUME-DHUK-RDP12`.
+  **UPDATE 2026-10-27:** this test is now **load-bearing**, not a curiosity. Under the owner direction in
+  [`user-device-verification.md` § USB path](user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle)
+  the factory installs DHUK(RDP-1)-derived final SE keys, so a DHUK change at the RDP-2 self-lock would
+  cut every unit off from its own SEs. It must pass before that factory flow is adopted.
 - Glitch the `SR.KEYVALID` gate / CCF completion during a DHUK op; confirm bus-error/timeout and
   (if enabled) ITAMP9.
 - Confirm bank-1 page 126 (the wrapped SE050 BHK) is ciphertext off a

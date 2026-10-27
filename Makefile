@@ -5478,3 +5478,17 @@ else
 	@echo "==> Muscat: Welch-T TVLA + CPA over $(TRACES_DIR)"
 	cd $(MUSCAT_DIR) && TRACES_DIR=$(TRACES_DIR) cargo run --release --example pqsigner_tvla_cpa
 endif
+
+# ---------------------------------------------------------------------------
+# Proof of secure erasure (EVT experiment) — docs/security/user-device-verification.md
+# § USB path, tools/pose/README.md. Standalone crate; pq1 only.
+# ---------------------------------------------------------------------------
+POSE_DIR := tools/pose/prover
+POSE_ELF := $(POSE_DIR)/target/thumbv8m.main-none-eabi/release/pose-prover
+POSE_FEATURES ?=
+
+pose-prover: ## Build the PoSE prover + its padded 16 KiB page image (POSE_FEATURES=cheat-skip-page|cheat-ram-hold for negative controls)
+	cd $(POSE_DIR) && cargo build --release $(if $(POSE_FEATURES),--features $(POSE_FEATURES),)
+	arm-none-eabi-objcopy -O binary $(POSE_ELF) $(POSE_DIR)/prover.bin
+	python3 tools/pose/pose.py pad $(POSE_DIR)/prover.bin $(POSE_DIR)/prover-padded.bin
+	python3 tools/pose/pose.py slack --image $(POSE_DIR)/prover-padded.bin --code $(POSE_DIR)/prover.bin

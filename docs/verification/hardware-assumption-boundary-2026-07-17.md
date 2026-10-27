@@ -751,6 +751,9 @@ Two **stacked** contingencies, routinely conflated:
    > RDP-2 on the same die. **Status: unmeasured. Source: ST prose only. Falsifying test:
    > fingerprint one sacrificial die at RDP-1, self-lock to RDP-2, fingerprint again;
    > divergence falsifies. Cost: one part, one shot, irreversible.**
+   > **UPDATE 2026-10-27:** under the owner direction to install DHUK(RDP-1)-derived final SE keys at the
+   > factory (`docs/security/user-device-verification.md` § USB path), FALSE would be **fatal**: the RDP-2
+   > self-lock would cut every unit off from its own SEs. That turns this into a hard prerequisite.
    > **Consequence if FALSE (good for us):** a 2→1 downgrade is *fail-secure* for SE
    > pairing — the attacker computes `f(DHUK_RDP1, salt) ≠ PBS`, unwraps the page-126 BHK to
    > garbage, and both tunnels stay shut. **Do not over-read this consolation: it protects

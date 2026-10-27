@@ -908,6 +908,7 @@ summary.** The full ordered silicon matrix is `first-boot-provisioning.md:208-22
 | 7.5 | **Factory handoff/receipt (`verify_factory_receipt()`)** — device-side stub; PQ-clean signing authority is an OPEN owner decision (ship-blocker) | NON-DEST (design/owner gate) | `first-boot-provisioning.md:294-318`; issues **#76, #268, #249** |
 | 7.6 | **Two ship-profile checks fail-closed until silicon-pinned** — `E0809` (WRP1A) then `E080A` (OEM-lock); flip each const with RM0456 citation + positive bench detection | NON-DEST | `first-boot-provisioning.md:159-190`; `shared/src/lockdown.rs:113-120` |
 | 7.7 | **BHK page first-write (Tier-2 Phase 2B) + WRP on page 126 + re-pair-after-BHK-loss** | DESTRUCTIVE | issues **#32, #36, #77, #204**; `dual-se-bhk-e2e` |
+| 7.8 | **USB proof of secure erasure (owner direction 2026-10-27).** Fill all flash outside the prover with random data, unplug, read back. **RAN on EVT-3D21 2026-10-27.** Honest run PASS after a real unplug. `cheat-skip-page` FAIL at page 192. `cheat-ram-hold` fools a same-session check but FAILs after the unplug (pages 248–255). The backup domain survives the unplug (VBAT). Measured prover slack ~4.4 KB: soundness still open. EVT restored from backup; option-byte diff empty | reversible (flash overwrite, backed up and restored; no RDP/OTP/OB/SE writes) | `tools/pose/`; `docs/security/user-device-verification.md` § USB path |
 
 Flip-after-bench-passes constant table: `first-boot-hardware-bringup.md:172-186`.
 
