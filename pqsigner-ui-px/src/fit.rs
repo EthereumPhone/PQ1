@@ -434,8 +434,11 @@ pub fn layout_address(addr: &[u8; 42]) -> AddrLines {
 
 /// A resolved identity over its address: the name rides `SemiBold` on its own
 /// line only when it fits one docked 22-tier line (characters and measured
-/// width) AND the address needs only two lines; otherwise the address stands
-/// alone. The address lines are the fact; the name is the advisory hierarchy.
+/// width); otherwise the address stands alone. A two-line address takes the
+/// name above it on the same page; a three-line address fills its page, so
+/// the caller shows the name on the page before it (never an address split
+/// across pages). The address lines are the fact; the name is the advisory
+/// hierarchy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct NameAddr {
     pub name: Option<Line>,
@@ -446,7 +449,7 @@ pub struct NameAddr {
 pub fn layout_name_over_address(name: Option<&[u8]>, addr: &[u8; 42]) -> NameAddr {
     let addr_lines = layout_address(addr);
     let name = name.and_then(|n| {
-        if addr_lines.n != 2 || n.is_empty() || n.len() > Region::Docked.chars(Tier::T22) {
+        if n.is_empty() || n.len() > Region::Docked.chars(Tier::T22) {
             return None;
         }
         let w = measure_q6(n, 22, true, 0)?;
@@ -753,7 +756,7 @@ mod tests {
     }
 
     #[test]
-    fn wide_addresses_take_three_lines_and_drop_the_name() {
+    fn wide_addresses_take_three_lines_and_keep_the_name() {
         // An uppercase-heavy EIP-55 string exceeds 276 px at 21 chars per line.
         let wide = *b"0xABABABABABABABABABABABABABABABABABABABAB";
         let a = layout_address(&wide);
@@ -766,7 +769,15 @@ mod tests {
         for l in a.as_slice() {
             assert!(measure_q6(l.as_bytes(), 22, false, 0).unwrap() <= 276 * 64);
         }
-        assert!(layout_name_over_address(Some(b"Name"), &wide).name.is_none());
+        // The name is kept; the caller puts it on its own page.
+        let n = layout_name_over_address(Some(b"Name"), &wide);
+        assert_eq!(n.name.unwrap().as_bytes(), b"Name");
+        assert_eq!(n.addr, a);
+        // Uniswap's Permit2: a real address in the three-line form.
+        let permit2 = *b"0x000000000022D473030F116dDEE9F6B43aC78BA3";
+        let n = layout_name_over_address(Some(b"Uniswap Permit2"), &permit2);
+        assert_eq!(n.addr.n, 3);
+        assert_eq!(n.name.unwrap().as_bytes(), b"Uniswap Permit2");
         // A narrow address keeps the two-line form.
         assert_eq!(layout_address(b"0x5afe000000000000000000000000000000000001").n, 2);
     }

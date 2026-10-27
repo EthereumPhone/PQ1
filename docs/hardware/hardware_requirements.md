@@ -199,6 +199,13 @@ hand-off):
 ## Explicitly *not* on the board
 
 - **No coin-cell battery** (supercap instead — see §Power, brownout & reset)
+  - **UPDATE 2026-10-27 (owner): no backup battery, at any point.** On V10 the
+    supercap is J102, a Seiko CPH3225A chip EDLC charged from VDD3V3 through
+    D104/R114 (not the radial part named above). It kept the backup domain
+    through a 10 s unplug on EVT-3D21. Whether J102 stays is open: the USB
+    proof of secure erasure must either fill and count the backup domain or
+    have no VBAT retention
+    (`docs/security/user-device-verification.md` § USB path).
 - **No classical-crypto coprocessor / secp256k1 accelerator** — pure-PQ design
   (CLAUDE.md invariant #5)
 - **No touchscreen, no fingerprint sensor, no extra microcontrollers** in the

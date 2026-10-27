@@ -393,6 +393,9 @@ pub const ADDR_TYPE_CONTRACT: u8 = 0x04;
 pub const ADDR_TYPE_NFT_COLLECTION: u8 = 0x08;
 pub const ADDR_TYPE_TOKEN: u8 = 0x10;
 pub const ADDR_TYPE_COLLECTION: u8 = 0x20;
+/// Every address is an EOA or a contract, so a `types` set holding both
+/// admits any address (see [`ParamSet::admits_db_name`]).
+const ADDR_TYPES_ANY_ADDRESS: u8 = ADDR_TYPE_EOA | ADDR_TYPE_CONTRACT;
 
 /// Parsed view of one field's TLV blob. All slices borrow from
 /// `ir.pool`; the struct itself is stack-only.
@@ -540,6 +543,21 @@ impl ParamSet<'_> {
                 .chunks_exact(SENDER_ADDRESS_LEN)
                 .any(|candidate| candidate == address.as_slice())
         })
+    }
+
+    /// Whether an `addressName` field may show a verified name from the
+    /// names DB instead of only the address. The DB records neither an
+    /// entry's source nor its address kind, so a `sources` restriction, or a
+    /// `types` restriction, can't be shown to hold for a name — except a
+    /// `types` set holding both `eoa` and `contract`, which every address
+    /// satisfies (Tether's USDT `approve` spender declares exactly that).
+    #[must_use]
+    pub const fn admits_db_name(&self) -> bool {
+        let types_admit_any_address = match self.addr_types {
+            None => true,
+            Some(types) => types & ADDR_TYPES_ANY_ADDRESS == ADDR_TYPES_ANY_ADDRESS,
+        };
+        types_admit_any_address && self.addr_sources.is_none()
     }
 
     /// Field-local semantic parameter presence consumed by the shared

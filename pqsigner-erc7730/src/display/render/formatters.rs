@@ -1610,10 +1610,11 @@ fn render_address_name(
     write_label_row(pages, p, field.label);
     let [_, r1, r2, r3] = pages.page_mut(p);
     // The authenticated name DB currently carries no source provenance or
-    // entity type. When a descriptor declares either restriction we cannot
-    // prove a resolved label satisfies it, so retain WYSIWYS by showing the
-    // complete address instead of substituting a possibly-disallowed name.
-    if substituted_sender || params.addr_types.is_some() || params.addr_sources.is_some() {
+    // entity type. When a descriptor declares a restriction we cannot prove a
+    // resolved label satisfies, retain WYSIWYS by showing the complete address
+    // instead of substituting a possibly-disallowed name. A `types` set that
+    // every address satisfies is no restriction (`ParamSet::admits_db_name`).
+    if substituted_sender || !params.admits_db_name() {
         write_addr_full(r1, r2, r3, &addr);
     } else {
         write_addr_full_or_name(r1, r2, r3, &addr, container.chain_id, resolver);
@@ -2998,7 +2999,7 @@ fn render_array_element(
         FormatOp::AddressName => {
             let a = canonical_address_word(word)?;
             let [_, r1, r2, r3] = pages.page_mut(p);
-            if params.addr_types.is_some() || params.addr_sources.is_some() {
+            if !params.admits_db_name() {
                 write_addr_full(r1, r2, r3, &a);
             } else {
                 write_addr_full_or_name(r1, r2, r3, &a, container.chain_id, resolver);
@@ -4222,6 +4223,55 @@ mod faithless_formatter_fixed {
                 "flipping sender byte {byte} must change the rendered pages"
             );
         }
+    }
+
+    #[test]
+    fn address_name_is_named_unless_the_descriptor_restricts_the_name() {
+        use crate::render::params::{ADDR_TYPE_CONTRACT, ADDR_TYPE_EOA, ADDR_TYPE_TOKEN};
+        use pqsigner_tx::names::bundle::NameMeta;
+
+        let spender = [0x7au8; 20];
+        let ir = ir_with_path(&slot_prog(0));
+        let mut body = [0u8; 32];
+        body[12..32].copy_from_slice(&spender);
+        let tx = envelope_chain(1);
+        let mut resolver = NameResolver::new();
+        resolver.push(NameMeta {
+            chain_id: 1,
+            address: spender,
+            name: b"Uniswap V2 Router",
+        });
+        let named = |types: Option<u8>, sources: Option<u8>| {
+            let mut params = ParamSet::default();
+            params.addr_types = types;
+            params.addr_sources = sources;
+            let mut pages = Pages::with_len(0);
+            render_address_name(
+                &field(FormatOp::AddressName),
+                &mut pages,
+                &ir,
+                &body,
+                &tx,
+                &resolver,
+                &params,
+            )
+            .expect("renders");
+            // `write_addr_full_or_name` marks a verified name with `+`; the
+            // bare address starts `0x`.
+            pages.buf[0][1][0] == b'+'
+        };
+
+        assert!(named(None, None));
+        // Tether's USDT `approve` spender: every address is an EOA or a
+        // contract, so this restricts nothing.
+        assert!(named(Some(ADDR_TYPE_EOA | ADDR_TYPE_CONTRACT), None));
+        assert!(named(Some(ADDR_TYPE_EOA | ADDR_TYPE_CONTRACT | ADDR_TYPE_TOKEN), None));
+        // A restriction the names DB can't vouch for keeps the bare address.
+        assert!(!named(Some(ADDR_TYPE_CONTRACT), None));
+        assert!(!named(Some(ADDR_TYPE_EOA), None));
+        assert!(!named(Some(ADDR_TYPE_TOKEN), None));
+        assert!(!named(Some(ADDR_TYPE_EOA | ADDR_TYPE_CONTRACT), Some(0x01)));
+        assert!(!named(None, Some(0x01)));
     }
 
     #[test]

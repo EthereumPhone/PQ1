@@ -561,6 +561,13 @@ individual milestones and are superseded by that owner for the combined claim.
 > workflow). They are only trustworthy if re-reconciled — a stale STATUS is worse than none. Re-run that
 > workflow over a slice before relying on its rows, and trust the **evidence pointer, not the prose**.
 >
+> **UPDATE 2026-10-27 — owner direction: USB proof of secure erasure + factory-installed final SE keys (design only).**
+> The consumer check moves from SWD to the Vault desktop app over USB-C: fill all flash with fresh random data, the user unplugs and replugs, then read it all back and compare.
+> The factory installs DHUK-derived **final** SE keys at RDP-1 and regresses to RDP-0 before shipping, so the first-boot transport→final rotation (HIGH-1 below) is slated to go away.
+> Soundness is not established: the measured prover slack is about 4.4 KB, against a bar of a few hundred bytes. The mechanism and its cheat detection work on EVT-3D21 silicon.
+> Open prerequisites: `DHUK-RDP12`, the RDP-1-in-transit caveat, final keys that do not depend on pages 126/127, and WRP staging moved to first boot.
+> Owner doc: [`user-device-verification.md` § USB path](security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle); EVT experiment in `tools/pose/`.
+>
 > **Work-tracking migration (2026-07-19).** `docs/work-todo.md` and
 > `docs/production-todo.md` are **retired**: every open item moved to GitHub
 > Issues (`EthereumPhone/PQ1`) under the `source:work-todo` /
@@ -904,7 +911,7 @@ bench/factory spec (retired `docs/production-todo.md` → see the migration note
 | **S-7a/b/c** | max_attempts=0 footgun; `0x6986`→Ok mis-map; extended-Lc 2-byte Le | **done** | none | `secure/src/se050/apdu.rs::{write_userid,delete_object,send_apdu}`; stress `pin_unlimited_no_lockout` | — |
 | **S-7d** | Empirical UserID-lockout SW mapping | **done** (on silicon) | none | commit `ef3d00da` (Runs 3-4, B-U585I); `secure/src/se050/apdu.rs::create_session` maps `0x6986` to `AuthMethodBlocked`; stress `userid_silicon_lockout` and `pin_counter_persists_across_reinit` | ⚠ **was marked open** — actually run. `0x6982` was a reverted red herring. (Stale-sync flag retired 2026-10-19: `se050-silicon-findings.md` §4a already records the `0x6986` revert; code maps only `0x6986`.) |
 | **S-4** | OPTIGA lower-sev cleanups (5 sub-items) | partial | bench + code | `secure/src/optiga/apdu.rs::{build_metadata_protected,build_metadata_counter,OID_COUNTER}`; current authority names E120 as lockout and F1E1 as the provisioning/reset sentinel. **UPDATE 2026-10-13 (#116):** `build_metadata_protected` is now strict-only — every secret OID (F1D1–F1D4 + duress twins) is Read = `Auto AND Conf(E140)`, checked before write and read back after `set_metadata` | The remaining sentinel lifecycle/replacement choice needs design + bench evidence; irreversible items need the board. |
-| **HIGH-1** | SCP03 default-keyed with PUBLISHED AN12436 factory keys (dev) → bus attacker extracts `half_E` | partial; journaled first-boot candidate exists, production closure OPEN | **code + factory + bench** | `secure/src/nsc/mod.rs` fence string ``Candidate SE050 profile is incomplete without non-public SCP03 transport keys``; `secure/src/first_boot/`; `secure/src/se050/mod.rs::{rotate_scp03_transport_to_final,rekey_admin_transport_to_final}`; `secure/src/scp03_logic.rs::keys_are_factory_default` | The published-key fallback is compile-fenced and the candidate implements BHK-rooted SE050 rotation plus persisted-salt OPTIGA rotation. It is not a reviewed ceremony: close the authenticated per-unit transport handoff/receipt, authenticate-before-rotate rule, old/new/KVN recovery proof, E140 order, and silicon validation. No production authority until those gates close. |
+| **HIGH-1** | SCP03 default-keyed with PUBLISHED AN12436 factory keys (dev) → bus attacker extracts `half_E` | partial; journaled first-boot candidate exists, production closure OPEN | **code + factory + bench** | `secure/src/nsc/mod.rs` fence string ``Candidate SE050 profile is incomplete without non-public SCP03 transport keys``; `secure/src/first_boot/`; `secure/src/se050/mod.rs::{rotate_scp03_transport_to_final,rekey_admin_transport_to_final}`; `secure/src/scp03_logic.rs::keys_are_factory_default` | The published-key fallback is compile-fenced and the candidate implements BHK-rooted SE050 rotation plus persisted-salt OPTIGA rotation. It is not a reviewed ceremony: close the authenticated per-unit transport handoff/receipt, authenticate-before-rotate rule, old/new/KVN recovery proof, E140 order, and silicon validation. No production authority until those gates close. **UPDATE 2026-10-27:** owner direction replaces this rotation with factory-installed DHUK-derived final keys ([§ USB path](security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle)); not implemented. |
 | **MED-2** | `e2e-test`/`dev-testkey` escape hatches ship fixed secrets; no prod-check CI gate | **done 2026-06-18** | none | `secure/src/nsc/mod.rs` `mode-production` incompatibility fence strings; `make prod-check`; per-push `prod-config-gate` CI job (`f8effd45`) | — |
 | — | **Claim 3 (PIN gate) is PROVISIONAL** | — | bench | `docs/security/threat-model.md` Claim 3 | After S-1 closes, re-establish the on-board three-way per-attempt leg with `pin-gate-hw-counter-e2e` on a ratcheted sacrificial part. The directional boot branches remain open pending a separate cold-reboot silicon receipt. |
 
@@ -952,7 +959,7 @@ bench/factory spec (retired `docs/production-todo.md` → see the migration note
 |------|------|--------|--------|
 | OPTIGA | S-2 real type-`0x11` pool + device-certificate retype closure; select HSM-anchor or irreversible neutralization policy | open | production-todo S-2 |
 | supply-chain | cargo-vet audit set + SLSA provenance / cosign→Rekor on release | open | sota §8 |
-| provisioning | Factory provisioning automation (per-device SCP03 + PBS) | open | threat-model §9.2 |
+| provisioning | Factory provisioning automation (per-device SCP03 + PBS). **UPDATE 2026-10-27:** target is now the final DHUK-derived keys at RDP-1, then RDP 1→0 ([§ USB path](security/user-device-verification.md#usb-path-proof-of-secure-erasure-with-a-power-cycle)) | open | threat-model §9.2 |
 
 ### `blocked-on: research` — long-horizon / separate project
 
