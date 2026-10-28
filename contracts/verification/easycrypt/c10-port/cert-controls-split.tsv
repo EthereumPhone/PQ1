@@ -2427,3 +2427,71 @@ scratch/_scope_neg_op_WrapperLeafSessionCost.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WrapperRefinedNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WrapperSelectedLeafBound.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_WrapperStirlingCoverage.ec	MUST-FAIL	FORS_C_TreePort.
+# Accepted WOTS pool finite, typed charge, contract and scope controls.
+scratch/wots_pool_adaptive_budget_positive.ec	MUST-PASS	-
+scratch/wots_pool_adaptive_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_budget_equivalent.ec	MUST-PASS	-
+scratch/wots_pool_cache_program_equivalent.ec	MUST-PASS	-
+scratch/wots_pool_cache_program_positive.ec	MUST-PASS	-
+scratch/wots_pool_cache_program_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/wots_pool_cache_program_typed.ec	MUST-PASS	-
+scratch/wots_pool_cached_charge_positive.ec	MUST-PASS	-
+scratch/wots_pool_cached_charge_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_conditional_cardinality_positive.ec	MUST-PASS	-
+scratch/wots_pool_conditional_cardinality_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_configured_cap_positive.ec	MUST-PASS	-
+scratch/wots_pool_configured_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_final_verifier_positive.ec	MUST-PASS	-
+scratch/wots_pool_final_verifier_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_minimum_positive.ec	MUST-PASS	-
+scratch/wots_pool_minimum_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_ordinary_encoding_positive.ec	MUST-PASS	-
+scratch/wots_pool_ordinary_encoding_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_ordinary_encoding_typed.ec	MUST-PASS	-
+scratch/wots_pool_ordinary_physical_hop_positive.ec	MUST-PASS	-
+scratch/wots_pool_ordinary_physical_hop_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_ordinary_reconstruction_positive.ec	MUST-PASS	-
+scratch/wots_pool_ordinary_reconstruction_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_seed_width_positive.ec	MUST-PASS	-
+scratch/wots_pool_seed_width_reject.ec	MUST-FAIL	[by]: cannot close goals
+scratch/wots_pool_selected_event_positive.ec	MUST-PASS	-
+scratch/wots_pool_selected_event_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_wrapper_encoding_positive.ec	MUST-PASS	-
+scratch/wots_pool_wrapper_encoding_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_wrapper_encoding_typed.ec	MUST-PASS	-
+scratch/wots_pool_wrapper_internal_verifier_positive.ec	MUST-PASS	-
+scratch/wots_pool_wrapper_internal_verifier_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_wrapper_physical_hop_positive.ec	MUST-PASS	-
+scratch/wots_pool_wrapper_physical_hop_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wots_pool_wrapper_reconstruction_positive.ec	MUST-PASS	-
+scratch/wots_pool_wrapper_reconstruction_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_SelectedActualWotsCut.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_SelectedEncodingCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_SelectedWotsCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_SelectedWotsCut.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsAcceptedDistribution.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsAcceptedPool.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsAcceptedPrefix.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsByteCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsConditionalCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsCountDomain.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsCountShapes.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsEncodingBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsEncodingCharge.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsForestCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsKeygenCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsLayerCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsMemoFacts.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsMemoOracle.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsPoolCollision.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsPoolGame.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsPoolNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsPoolRecords.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsSessionCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsSignCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsSignerCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WotsTreeCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperSelectedEncodingCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsCount.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsEncodingBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperWotsPoolNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.

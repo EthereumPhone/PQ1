@@ -1,7 +1,7 @@
 # Initialized byte-wrapper security in the classical ideal-oracle model
 
-`WrapperRefinedNumericalBound.wrapper_independent_byte_refined_euf_bound`
-and `wrapper_physical_byte_refined_euf_bound` bound new-message forgery in the original
+`WrapperWotsPoolNumericalBound.wrapper_independent_byte_wots_pool_euf_bound`
+and `wrapper_physical_byte_wots_pool_euf_bound` bound new-message forgery in the original
 `IndependentGame(WrapperByteContext(A))` and
 `RealGame(WrapperByteContext(A))`. Key preparation, adaptive requests, final
 verification and the 4008-byte signature codec execute inside these games.
@@ -174,6 +174,60 @@ come from that arithmetic utility, not an additional native numerical proof:
 
 These are conservative upper bounds, not deployment policy, attack costs or
 deployed security-bit estimates. They add no concrete backend or hardware claim.
+
+## Accepted-WOTS pool continuation
+
+The latest continuation retains every preceding term except the accepted WOTS
+encoding charge. With the same `Q` and acceptance mass `p` above, it uses:
+
+```
+A = 22169393903687611906220091621190388
+nW = qr + 10*qs + 2
+Cencoding = min(Q*(Q-1)*p/(2*2^129), nW*(nW-1)/(2*A))
+```
+
+`WrapperSelectedEncodingCases` derives a localized collision event from actual
+successful outputs. Both colliding inputs must satisfy the conservative WOTS
+count-input predicate; the proof does not replace the old all-history event
+by this smaller event without re-deriving the output partition. The seed width
+comes from actual initialization, and verification keeps the full u32 counter
+range. The predicate also covers count inputs with arbitrary message lengths.
+
+`WotsMemoOracle` splits each fresh selected draw using the exact sum-205
+acceptance probability and the full 256-bit conditional distributions. Cached
+queries return their existing digest. Accepted fresh samples enter a private
+pool, and every accepted selected call, including cache hits, is counted.
+`WotsPoolCollision` maps distinct table keys to distinct pool indices;
+`WotsAcceptedPrefix` bounds the adaptive prefix without assuming independence
+of the selected keys. The conditional encoding atom mass is exactly `1/A`.
+
+`WrapperWotsCount` proves at most ten accepted calls per admitted attempt:
+four for each actual signing pass, including reconstruction, and two for
+internal verification. The initialized budget also includes all raw requests
+and two calls for final verification. Key generation, H_msg trials, private
+derivations, tree hashes and shuffles contribute zero to this selected census.
+Their execution and public/private histories remain unchanged, including
+refusals, retries and withheld signatures.
+
+`WrapperWotsPoolNumericalBound` combines the localized cases in the same
+initialized adversary experiment and proves both complete charges no greater
+than `WrapperRefinedNumericalBound`. The only additional exclusions protect
+private `WotsMemo` and `WotsAcceptedSamples` proof state. No average-cost,
+fresh-query, successful-search or desired-result premise is added.
+
+Exact rational evaluation with `python3 tools/wots_pool_examples.py` gives:
+
+| `qr` | `qs` | Previous non-node charge | Accepted-pool charge |
+| ---: | ---: | ---: | ---: |
+| 0 | 0 | 3.24188551e-24 | 3.24188551e-24 |
+| 65,536 | 65,536 | 1.37423839e-18 | 9.95145253e-19 |
+| 1,000,000 | 1,000 | 1.53013562e-20 | 1.52360927e-20 |
+
+These rounded values illustrate the exact formulas; they are not additional
+native numerical theorems, attack costs or deployed security ratings. The
+full gate and review requirements in [CONTROL-EVIDENCE.md](CONTROL-EVIDENCE.md)
+apply to the combined ordinary/wrapper batch. Concrete SHA-256, QROM, arbitrary
+Rust-client, cross-kernel and hardware boundaries remain.
 
 ## Numerical examples of the retained bound
 

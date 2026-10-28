@@ -72,6 +72,33 @@ mismatches establish contract sensitivity, not logical necessity or tightness.
 The finite arithmetic checks do not prove that the conservative budget is
 attained. The full pinned replay and first-diagnostic audit remain mandatory.
 
+## Accepted-WOTS pool continuation
+
+`tools/wots_pool_controls.py` adds 37 generated fixtures and 30 unavailable-
+symbol scope probes for the 30 new theory modules:
+
+| Evidence class | Count | Meaning |
+| --- | ---: | --- |
+| Contract positive/rejection pairs | 24 | Exact conditional cardinality, selected event, seed-width obligation, adaptive count cap, cached-call charge, reconstruction, wrapper/internal and final verification, configured cap and both physical-prefix transfers. |
+| Actual cached-call program fixtures | 4 | The original procedure and an equivalent increment preserve the cached digest and charge one accepted call. Omitting that increment typechecks separately and fails the unchanged postcondition. |
+| Charge positive/type/rejection triples | 6 | Removing the new encoding term from either complete charge typechecks, then fails application of the original proved bound. |
+| Retained-minimum positive/rejection pair | 2 | Reversing the proved comparison is rejected; this is theorem sensitivity, not a claim of strict improvement for every cap. |
+| Preserving arithmetic variant | 1 | Regrouping the ordinary and wrapper accepted-call coefficients preserves both expressions for all integers. |
+
+Sixteen generated rejections must occur in their intended consumer. Fourteen
+are exact proof-term mismatches; the seed-width variant leaves that obligation
+open, and the cached-call program variant leaves the unchanged increment
+postcondition open. Positive and equivalent variants must pass. Missing names,
+imports, parse/type failures, resource failures and timeouts do not count.
+Contract failures do not prove that the conservative 4/10 coefficients are
+tight or that every stronger probability bound is false.
+
+All 126 new lemmas, 16 operators, ten concrete modules and two module interfaces
+are pinned in the combined inventory. The complete two-driver replay,
+first-diagnostic audit and bounded review remain mandatory; focused calibration
+alone is not a full certificate. No previous proof, control or project axiom
+is removed or weakened by this continuation.
+
 ## Probability-bound batch
 
 The 38 controls added with the honest-error and public-node bounds consist of:

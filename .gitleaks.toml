@@ -333,6 +333,13 @@ regexes = [
   '''^\s*"contracts/verification/extracted/Extracted/XmssAuthOutside\.lean": "f43183acf09d0e3fcc07478684839d42468af8bc96397e3675a38cdd5d47c0b8",?\s*$''',
 ]
 
+[[rules.allowlists]]
+description = "Exact public digest of the accepted-WOTS keygen scope probe"
+condition = "AND"
+paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"contracts/verification/easycrypt/c10-port/scratch/_scope_neg_op_WotsKeygenCount\.ec": "7b301ee5bd59ff4f6f19130f4da57847e0089ad3ccb9d504d0e8b9229da9a84c",?\s*$''']
+
 [allowlist]
 description = "PQ1 baseline: vendor sample credentials, public on-chain constants, checked-in crypto test vectors"
 

@@ -25,6 +25,7 @@ from accepted_encoding_controls import accepted_encoding_outputs, accepted_encod
 from addressed_node_controls import addressed_node_outputs, addressed_node_rows
 from addressed_client_controls import addressed_client_outputs, addressed_client_rows
 from wrapper_nonnode_controls import wrapper_nonnode_outputs, wrapper_nonnode_rows
+from wots_pool_controls import wots_pool_outputs, wots_pool_rows
 from node_domain_controls import node_domain_outputs, node_domain_rows
 from leaf_candidate_controls import leaf_candidate_outputs, leaf_candidate_rows
 from chain_candidate_controls import chain_candidate_outputs, chain_candidate_rows
@@ -122,6 +123,7 @@ def control_outputs(port):
     result.update(stirling_outputs(port))
     result.update(accepted_encoding_outputs(port))
     result.update(node_domain_outputs(port))
+    result.update(wots_pool_outputs(port))
     result.update(wrapper_nonnode_outputs(port))
     result.update(addressed_client_outputs(port))
     result.update(addressed_node_outputs(port))
@@ -150,11 +152,11 @@ def control_rows():
         stem="scratch/c10_rep_"+name.replace("-","_")
         rows.extend([stem+"_typed.ec\tMUST-PASS\t-",
                      stem+"_reject.ec\tMUST-FAIL\t"+REASONS[name]])
-    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + paired_signer_rows() + digest_caller_rows() + stirling_rows() + accepted_encoding_rows() + node_domain_rows() + leaf_candidate_rows() + chain_candidate_rows() + paired_session_rows() + paired_keygen_rows() + r_availability_rows() + total_availability_rows() + search_acceptance_rows() + functional_search_rows() + functional_wots_rows() + functional_tree_rows() + functional_build_rows() + functional_caller_rows() + functional_verifier_rows() + functional_signer_rows() + signer_composition_rows() + session_rows() + wrapper_security_rows() + wrapper_nonnode_rows() + addressed_client_rows() + addressed_node_rows()
+    return rows + caller_rows() + private_caller_rows() + tree_caller_rows() + outer_caller_rows() + shuffle_rows() + wrapper_cost_rows() + acceptance_rows() + paired_signer_rows() + digest_caller_rows() + stirling_rows() + accepted_encoding_rows() + node_domain_rows() + leaf_candidate_rows() + chain_candidate_rows() + paired_session_rows() + paired_keygen_rows() + r_availability_rows() + total_availability_rows() + search_acceptance_rows() + functional_search_rows() + functional_wots_rows() + functional_tree_rows() + functional_build_rows() + functional_caller_rows() + functional_verifier_rows() + functional_signer_rows() + signer_composition_rows() + session_rows() + wrapper_security_rows() + wrapper_nonnode_rows() + wots_pool_rows() + addressed_client_rows() + addressed_node_rows()
 
 def check_manifest_rows(rows):
     expected=control_rows()
-    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_", "scratch/c10_paired_signer_", "scratch/c10_digest_caller_", "scratch/stirling_", "scratch/accepted_encoding_", "scratch/node_domain_", "scratch/leaf_candidate_", "scratch/chain_candidate_", "scratch/c10_paired_session_", "scratch/c10_paired_keygen_", "scratch/c10_r_availability_", "scratch/c10_total_availability_", "scratch/c10_functional_", "scratch/c10_wots_value_", "scratch/c10_tree_value_", "scratch/c10_build_value_", "scratch/c10_caller_value_", "scratch/c10_verifier_value_", "scratch/c10_signer_", "scratch/c10_session_", "scratch/c10_wrapper_security_", "scratch/addressed_node_", "scratch/addressed_client_", "scratch/wrapper_nonnode_"))]
+    live=[row for row in rows if row.startswith(("scratch/c10_rep_", "scratch/c10_caller_", "scratch/c10_private_caller_", "scratch/c10_tree_caller_", "scratch/c10_outer_caller_", "scratch/c10_shuffle_", "scratch/c10_wrapper_cost_", "scratch/c10_wrapper_session_cost_", "scratch/c10_acceptance_", "scratch/c10_search_acceptance_", "scratch/c10_paired_signer_", "scratch/c10_digest_caller_", "scratch/stirling_", "scratch/accepted_encoding_", "scratch/node_domain_", "scratch/leaf_candidate_", "scratch/chain_candidate_", "scratch/c10_paired_session_", "scratch/c10_paired_keygen_", "scratch/c10_r_availability_", "scratch/c10_total_availability_", "scratch/c10_functional_", "scratch/c10_wots_value_", "scratch/c10_tree_value_", "scratch/c10_build_value_", "scratch/c10_caller_value_", "scratch/c10_verifier_value_", "scratch/c10_signer_", "scratch/c10_session_", "scratch/c10_wrapper_security_", "scratch/addressed_node_", "scratch/addressed_client_", "scratch/wrapper_nonnode_", "scratch/wots_pool_"))]
     if sorted(live)!=sorted(expected):
         raise ValueError("paired representation control enrollment changed")
 

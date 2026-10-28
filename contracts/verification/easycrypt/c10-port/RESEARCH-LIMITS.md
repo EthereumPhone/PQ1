@@ -459,6 +459,25 @@ bound for every nonnegative cap. This closes those three named wrapper transfers
 the concrete-backend, arbitrary Rust-client, cross-kernel and physical boundaries
 remain. See the [formula and exact illustrative arithmetic](RAW-WRAPPER-EUF.md#non-node-continuation).
 
+**Accepted-WOTS conditional-pool continuation (2026-10-28):**
+[`WotsPoolNumericalBound`](cdrafts-split/WotsPoolNumericalBound.ec) and
+[`WrapperWotsPoolNumericalBound`](cdrafts-split/WrapperWotsPoolNumericalBound.ec)
+replace only the encoding term in the latest ordinary and wrapper bounds by
+the minimum of its previous charge and `nW*(nW-1)/(2*A)`, where
+`A=22169393903687611906220091621190388`. The actual initialized accepted-call
+budgets are `nW=qr+4*qs+2` and `nW=qr+10*qs+2`, respectively. They include cached
+accepts, signer reconstruction, both wrapper signing passes and internal/final
+verification. The output partition is re-derived for count-shaped inputs;
+exact conditional sampling and history-to-pool coverage justify the adaptive
+birthday bound. No fresh-query, mean-work or successful-search premise is added.
+Both complete charges are proved no larger than their preceding counterparts.
+This closes the named all-draw encoding overcount for these two experiments;
+it does not establish tightness, concrete SHA-256, QROM, original Rust extraction,
+arbitrary-client or cross-kernel interpretation. Existing paired endpoints keep
+their preceding charges. See the [ordinary](RAW-NUMERICAL-EUF.md#accepted-wots-pool-continuation)
+and [wrapper](RAW-WRAPPER-EUF.md#accepted-wots-pool-continuation) formulas and
+the [control scope](CONTROL-EVIDENCE.md#accepted-wots-pool-continuation).
+
 **Native total signing availability (2026-10-21):**
 [`ByteTotalAvailability.byte_total_initialized_availability`](cdrafts-split/ByteTotalAvailability.ec)
 bounds the original initialized byte game's `FullSession.failed` event, including

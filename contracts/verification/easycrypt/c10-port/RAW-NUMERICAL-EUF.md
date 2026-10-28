@@ -369,6 +369,56 @@ exact source formula. They are conservative upper probability bounds, not
 attack costs, a concrete SHA-256 claim, or a deployed security rating. The
 remaining ordinary FORS and encoding terms now dominate.
 
+## Accepted-WOTS pool continuation
+
+`WotsPoolNumericalBound.original_byte_wots_pool_euf_bound` and
+`physical_byte_wots_pool_euf_bound` refine the same initialized ordinary byte
+game. Every addressed-node, zero-node, WOTS-chain, ordinary-FORS, Stirling
+coverage and physical-prefix term remains as above. Only the encoding term
+becomes:
+
+```
+A = 22169393903687611906220091621190388
+p = A/2^129
+nW = qr + 4*qs + 2
+Cencoding = min(Q*(Q-1)*p/(2*2^129), nW*(nW-1)/(2*A))
+```
+
+The actual output partition is re-proved for collisions between accepted
+count-shaped inputs. Its seed-width fact is derived from initialization,
+without adding a precondition on the client or narrowing the verifier's u32
+counter range. A fresh selected oracle draw is split exactly into acceptance
+and rejection distributions; cached queries retain the stored digest. The
+conditional encoding mass is `1/A`, and the adaptive accepted pool is bounded
+through complete history/pool correspondence, not a fixed-set independence
+assumption.
+
+`WotsByteCount` derives the initialized count: at most four accepted WOTS calls
+per signing request, including both signer-side reconstruction calls, at most
+two for final verification, and all admitted raw queries. Cached accepts are
+counted conservatively. Rejected trials, refusals and the absorbing session
+remain in the actual execution. Key generation and all other internal query
+classes preserve the selected count. The only added module exclusions protect
+private `WotsMemo` and `WotsAcceptedSamples` proof state.
+
+Both complete charges are proved no larger than the preceding
+`AddressedNumericalBound` charges. Exact rational evaluation with
+`python3 tools/wots_pool_examples.py` gives the following rounded physical
+ideal-model expressions:
+
+| `qr` | `qs` | Previous addressed-node charge | Accepted-pool charge |
+| ---: | ---: | ---: | ---: |
+| 0 | 0 | 3.24188179e-24 | 3.24188179e-24 |
+| 65,536 | 65,536 | 5.91973445e-19 | 4.97202047e-19 |
+| 1,000,000 | 1,000 | 7.63731591e-21 | 7.63731591e-21 |
+
+The minimum retains the old charge where it is smaller; equal displayed values
+can also hide a difference below the displayed precision. These are
+conservative probability upper bounds, not attack costs or concrete security
+ratings. The distinct retry/withholding wrapper has its own
+[accepted-pool bound](RAW-WRAPPER-EUF.md#accepted-wots-pool-continuation).
+The paired endpoints below retain their preceding stated charges.
+
 ## Transfer to paired signing and verification
 
 `AddressedPairedSessionBound.paired_byte_addressed_node_euf_bound` and
