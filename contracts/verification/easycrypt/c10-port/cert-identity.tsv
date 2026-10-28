@@ -1384,7 +1384,7 @@
 # integer and the 2^114 < |C_T| < 2^115 bracket are; the decimal is a comment), and
 # cert-cone-files-split.tsv's stale "38 gate roots" is now 50.
 #
-split	5ecfe16378003899ec98bc8fee275474
+split	a76cf99607708f28a3b2245c642f7369
 fork	9c2d21280c84d52c30b22111151f1135
 
 # 2026-09-16 master integration review: e64e9594831f9b2df2ccdaeaf5f8c213 -> ec0cec4a59a4eef2b6862c56f8475f09.
@@ -1749,4 +1749,11 @@ fork	9c2d21280c84d52c30b22111151f1135
 # 23 lemmas, seven operators and 50 controls. Initialized paired transfers and
 # wrapper-specific memo counts/partition retain all wrapper non-node charges.
 # Existing statements, assumptions, programs and controls remain unchanged.
+# Identity enrollment is not proof-execution or review evidence.
+
+# 2026-10-28 wrapper non-node continuation: eight additive native modules,
+# 30 lemmas, eight operators and 40 controls. Actual-wrapper accepted encoding,
+# Stirling coverage and ordinary FORS candidate charges retain refusal/retry
+# semantics and all other terms; both complete charges are no larger. All
+# prior statements, assumptions, programs and controls remain enrolled.
 # Identity enrollment is not proof-execution or review evidence.

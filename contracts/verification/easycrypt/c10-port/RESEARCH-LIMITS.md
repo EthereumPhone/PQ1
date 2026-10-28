@@ -448,6 +448,17 @@ and [wrapper formula](RAW-WRAPPER-EUF.md#addressed-node-continuation).
 This closes these endpoint-specific node transfers, not the remaining wrapper
 non-node tightenings or the backend, cross-language and physical boundaries.
 
+**Wrapper non-node continuation (2026-10-28):**
+[`WrapperRefinedNumericalBound`](cdrafts-split/WrapperRefinedNumericalBound.ec)
+now transfers accepted WOTS encoding collisions, exact Stirling coverage and
+ordinary FORS fixed-candidate accounting to the actual retry/withholding wrapper.
+It proves the transformed session budget, retains both fixed guesses and all
+twelve final slots, and combines the events for the same initialized adversary.
+Both complete charges are proved no larger than the preceding addressed-node
+bound for every nonnegative cap. This closes those three named wrapper transfers;
+the concrete-backend, arbitrary Rust-client, cross-kernel and physical boundaries
+remain. See the [formula and exact illustrative arithmetic](RAW-WRAPPER-EUF.md#non-node-continuation).
+
 **Native total signing availability (2026-10-21):**
 [`ByteTotalAvailability.byte_total_initialized_availability`](cdrafts-split/ByteTotalAvailability.ec)
 bounds the original initialized byte game's `FullSession.failed` event, including

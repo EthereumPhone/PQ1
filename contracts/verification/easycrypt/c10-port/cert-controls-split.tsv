@@ -2386,3 +2386,44 @@ scratch/_scope_neg_op_AddressedWrapperByteCollision.ec	MUST-FAIL	FORS_C_TreePort
 scratch/_scope_neg_op_AddressedWrapperMemoCalls.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AddressedWrapperMemoSession.ec	MUST-FAIL	FORS_C_TreePort.
 scratch/_scope_neg_op_AddressedWrapperNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+# Wrapper non-node finite, typed charge, contract and scope controls.
+scratch/wrapper_nonnode_accepted_event_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_accepted_event_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_actual_game_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_actual_game_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_budget_arithmetic_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_budget_arithmetic_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_budget_preserving.ec	MUST-PASS	-
+scratch/wrapper_nonnode_coverage_budget_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_coverage_budget_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_coverage_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_coverage_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_coverage_typed.ec	MUST-PASS	-
+scratch/wrapper_nonnode_encoding_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_encoding_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_encoding_typed.ec	MUST-PASS	-
+scratch/wrapper_nonnode_final_output_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_final_output_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_final_verifier_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_final_verifier_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_fixed_guesses_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_fixed_guesses_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_fors_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_fors_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_fors_typed.ec	MUST-PASS	-
+scratch/wrapper_nonnode_minimum_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_minimum_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_physical_prefix_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_physical_prefix_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_raw_cap_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_raw_cap_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/wrapper_nonnode_two_signing_passes_positive.ec	MUST-PASS	-
+scratch/wrapper_nonnode_two_signing_passes_reject.ec	MUST-FAIL	the given proof-term proves:
+scratch/_scope_neg_op_WrapperAcceptedEncodingCases.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperAcceptedEncodingCharge.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLeafCandidateCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLeafOpeningBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperLeafSessionCost.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperRefinedNumericalBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperSelectedLeafBound.ec	MUST-FAIL	FORS_C_TreePort.
+scratch/_scope_neg_op_WrapperStirlingCoverage.ec	MUST-FAIL	FORS_C_TreePort.

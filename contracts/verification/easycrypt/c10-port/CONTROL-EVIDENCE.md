@@ -54,6 +54,24 @@ false. The arithmetic examples do not establish attainability of the budget.
 The full pinned two-driver replay and exact first-diagnostic audit remain
 separate mandatory evidence.
 
+## Wrapper non-node continuation
+
+`tools/wrapper_nonnode_controls.py` adds 32 generated fixtures and eight
+unavailable-symbol scope probes, retaining all existing wrapper program controls:
+
+| Evidence class | Count | Meaning |
+| --- | ---: | --- |
+| Contract positive/rejection pairs | 18 | Coverage pool budget, accepted encoding event, actual initialized game, both signing plans, final verifier, raw cap, two fixed guesses, twelve final outputs and physical-prefix transfer. |
+| Charge positive/type/rejection triples | 9 | Removing the encoding, FORS or coverage term typechecks separately and fails direct application of the original combined theorem. |
+| Arithmetic positive/rejection pairs | 4 | A concrete wrapper candidate budget and the retained-minimum inequality contradict their altered claims. |
+| Preserving arithmetic variant | 1 | Regrouping the two per-attempt signing contributions preserves the budget for all integer inputs. |
+
+The fourteen generated rejections must reach the intended theorem application;
+missing imports, parsing, resource failures and timeouts do not count. Exact-term
+mismatches establish contract sensitivity, not logical necessity or tightness.
+The finite arithmetic checks do not prove that the conservative budget is
+attained. The full pinned replay and first-diagnostic audit remain mandatory.
+
 ## Probability-bound batch
 
 The 38 controls added with the honest-error and public-node bounds consist of:

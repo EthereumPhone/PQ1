@@ -1,7 +1,7 @@
 # Initialized byte-wrapper security in the classical ideal-oracle model
 
-`AddressedWrapperNumericalBound.wrapper_independent_byte_addressed_node_euf_bound`
-and `wrapper_physical_byte_addressed_node_euf_bound` bound new-message forgery in the original
+`WrapperRefinedNumericalBound.wrapper_independent_byte_refined_euf_bound`
+and `wrapper_physical_byte_refined_euf_bound` bound new-message forgery in the original
 `IndependentGame(WrapperByteContext(A))` and
 `RealGame(WrapperByteContext(A))`. Key preparation, adaptive requests, final
 verification and the 4008-byte signature codec execute inside these games.
@@ -79,8 +79,8 @@ Accepted H_msg accounting allows two internal grinds and internal verification
 per attempt, one final verification and admitted client hash calls. The
 conservative coverage pool therefore uses `qr+3*qs+1`. The existing adaptive
 prefix domination and coverage union apply after these wrapper-specific
-obligations have been discharged. This bound retains the original conservative
-coverage coefficient; it does not claim the later library-only tightenings.
+obligations have been discharged. The retained formula above uses the original
+conservative coverage coefficient; the non-node continuation below tightens it.
 
 ## Addressed-node continuation
 
@@ -116,6 +116,64 @@ terms exactly. It proves both complete charges are no greater than their
 retained counterparts. The ordinary library's later non-node tightenings are
 not automatically transferred to this distinct retry/withholding experiment.
 No production or backend interpretation changes.
+
+## Non-node continuation
+
+The wrapper-specific continuation (2026-10-28) retains the addressed-node,
+zero-node, WOTS reverse-chain and private-prefix terms. It replaces the encoding,
+ordinary FORS and coverage terms in the same initialized experiments:
+
+```
+p = 22169393903687611906220091621190388 / 2^129
+Vleaf = 155135 + qr + qs * (2 * 364892 + 771) + 771
+Cencoding = Q*(Q-1)*p/(2*2^129)
+Cfors = min(6442450944*(Q+12)/2^128,
+            6442450944*(Vleaf+2+12)/2^128)
+(m)_j = product(i = 0..j-1, max(0, m-i))
+S(0,j) = 1 if j=0, otherwise 0
+S(k+1,j) = j*S(k,j) + S(k,j-1)
+Cstirling(n) = sum(j = 1..12, n*(n-1)_j*S(12,j)/2^(132+18*j))
+```
+
+`WrapperAcceptedEncodingCases` narrows the successful-output partition to two
+accepted WOTS encodings while preserving the addressed-node case.
+`WrapperAcceptedEncodingCharge` applies the exact sum-205 acceptance mass `p`
+to the actual wrapper's public-query budget. Private `FullDigestSamples` state
+is additionally excluded from the client; no success or independence premise
+is added.
+
+`WrapperLeafCandidateCost` and `WrapperLeafSessionCost` prove the variable
+candidate budget for the actual transformed target session, including both
+hidden signing plans, refused attempts, client calls, key preparation and final
+verification. The existing original-to-transformed projection discharges
+internal verification by memo/history equivalence; the new budget still
+conservatively reserves 771 calls per admitted attempt. The two fixed suffix
+guesses (zero and all-FF) and all twelve final candidate slots remain charged.
+`WrapperSelectedLeafBound` and `WrapperLeafOpeningBound` transfer the hiding
+bound back to actual unreturned ordinary FORS openings. The minimum preserves
+the old charge even at zero signing attempts.
+
+`WrapperStirlingCoverage` uses the already-proved adaptive wrapper pool bound
+`n=qr+3*qs+1` and exact witness enumeration for the same coverage event. This
+is still a union bound, not an exact forgery probability. None of these transfers
+substitutes the ordinary library's absorbing-failure session.
+
+`WrapperRefinedNumericalBound` combines these events for one common adversary
+and proves that both complete charges are no greater than the addressed-node
+continuation for every nonnegative pair of caps. All earlier theorems remain.
+
+Exact rational evaluation with `python3 tools/wrapper_nonnode_examples.py`
+gives these illustrative physical ideal-model charges. These decimal values
+come from that arithmetic utility, not an additional native numerical proof:
+
+| `qr` | `qs` | Previous addressed-node charge | New combined charge |
+| ---: | ---: | ---: | ---: |
+| 0 | 0 | 3.24190336e-24 | 3.24188551e-24 |
+| 50,000 | 50,000 | 6.83171226e-15 | 9.79894104e-19 |
+| 1,000,000 | 1,000 | 1.77928152e-14 | 1.53013562e-20 |
+
+These are conservative upper bounds, not deployment policy, attack costs or
+deployed security-bit estimates. They add no concrete backend or hardware claim.
 
 ## Numerical examples of the retained bound
 

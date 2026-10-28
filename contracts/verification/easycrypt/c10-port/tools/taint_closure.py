@@ -74,6 +74,38 @@ EXPECT_MIN_CLOSURE = 2      # was 3; one seed left, and its chain has one consum
                             # the closure can never be smaller than seeds+1 while a consumer exists
 # Theorems that MUST NOT be in the closure.  This is the property the README asserts.
 HEADLINE = [
+    # Wrapper non-node continuation (2026-10-28).
+    'hmsg_wrapper_stirling_coverage_bound',
+    'wrapper_byte_accepted_encoding_cases',
+    'wrapper_byte_accepted_encoding_collision',
+    'wrapper_byte_fors_opening_best',
+    'wrapper_byte_leaf_opening_bound',
+    'wrapper_byte_stirling_coverage_bound',
+    'wrapper_independent_byte_refined_euf_bound',
+    'wrapper_leaf_byte_cost',
+    'wrapper_leaf_candidate_budget_ge0',
+    'wrapper_leaf_client_cost',
+    'wrapper_leaf_context_cost',
+    'wrapper_leaf_driver_cost',
+    'wrapper_leaf_exposure_cost',
+    'wrapper_leaf_finish_plan_cost',
+    'wrapper_leaf_forest_plan_cost',
+    'wrapper_leaf_fors_plan_cost',
+    'wrapper_leaf_hash_cost',
+    'wrapper_leaf_release_cost',
+    'wrapper_leaf_release_values_cost',
+    'wrapper_leaf_session_cost',
+    'wrapper_leaf_sign_plan_cost',
+    'wrapper_leaf_unreturned_coordinate_bound',
+    'wrapper_leaf_unreturned_union_bound',
+    'wrapper_physical_byte_refined_euf_bound',
+    'wrapper_query_byte_accepted_encoding_collision',
+    'wrapper_query_byte_refined_euf_bound',
+    'wrapper_refined_independent_charge_tighter',
+    'wrapper_refined_physical_charge_tighter',
+    'wrapper_selected_leaf_candidate_bound',
+    'wrapper_selected_leaf_candidate_probability',
+
     # Addressed paired/wrapper continuation (2026-10-27).
     'addressed_wrapper_byte_actual_partition',
     'addressed_wrapper_query_byte_actual_forest',
