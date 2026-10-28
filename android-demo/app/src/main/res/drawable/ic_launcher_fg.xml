@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- device body -->
+    <path android:fillColor="#00000000" android:strokeColor="#EDEDED" android:strokeWidth="3"
+        android:pathData="M32,38 h44 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-44 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z" />
+    <!-- screen lines -->
+    <path android:fillColor="#7CF29C" android:pathData="M35,47 h26 v4 h-26 z" />
+    <path android:fillColor="#5A5A60" android:pathData="M35,55 h38 v3 h-38 z" />
+    <path android:fillColor="#5A5A60" android:pathData="M35,61 h20 v3 h-20 z" />
+    <!-- buttons -->
+    <path android:fillColor="#EDEDED" android:pathData="M38,73 h8 v3 h-8 z" />
+    <path android:fillColor="#EDEDED" android:pathData="M62,73 h8 v3 h-8 z" />
+</vector>
