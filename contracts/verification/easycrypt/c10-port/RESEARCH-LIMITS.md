@@ -1162,14 +1162,35 @@ counterexamples to the same compression equality. The corresponding unchanged
 concrete instance also passes. The counterexamples avoid treating elaborator
 resource failures as evidence of inequivalence.
 
-**Remaining backend boundary.** The word theorem does not connect the existing
+**Original portable byte/block correspondence (2026-10-28).** The isolated
+[`sha256-byte` profile](../../sha256-byte/README.md) additionally proves
+`Sha256Portable.Bytes.original_compress_spec`: the original selected portable
+`soft.rs::compress` processes every complete 64-byte block in order, with the
+standard big-endian conversion and the word theorem above. This is universal
+over the eight-word initial state and bounded block slice, including empty
+input, without a success or termination premise. Its 98 audited model/word/byte
+closures contain only the three kernel axioms listed above.
+
+The profile retains the unchanged source-bound LLBC and generated Lean files,
+an experimental Aeneas borrow-processing patch, and a concrete mutable-Zip
+library model. Its entrypoint checks the full frozen input identity and mapped
+use census, current Cargo/vendor binding, pinned Lean/backend dependencies,
+fresh local compilation and exact closure enrollment. This addresses the
+byte-loop extraction failure for this one frozen profile. Translation and the
+model's correspondence to Rust's standard-library pointer/layout semantics
+remain explicit TCB; neither the compiler nor the model correspondence is
+proved sound by the kernel census. The profile does not replace the existing
+extracted or EasyCrypt toolchains. Its README records regeneration limits,
+replay commands and the focused compiler/model controls.
+
+**Remaining backend boundary.** The word and complete-block results do not connect the existing
 `sha256_bytes`/`sha256_parts` postulates to an entire Rust `Digest` execution.
-Byte decoding, the block loop, streaming updates, padding and length encoding,
+Streaming updates, padding and length encoding,
 dispatch, unsafe conversions, accelerated backends, and the STM32 driver
-remain outside this proof. Direct extraction of the pinned full API still
-encounters generic-array/trait translation errors; extracting the portable
-byte-loop root encounters an Aeneas borrow-join failure. The successful word
-extraction does not waive those failures. No concrete SHA-256 security,
+remain outside these proofs. Direct extraction of the pinned full API still
+encounters generic-array/trait translation errors. The experimental portable
+profile does not waive that failure or establish a general iterator backend.
+No concrete SHA-256 security,
 random-oracle instantiation, QROM, physical, or side-channel guarantee follows
 from this functional compression result.
 

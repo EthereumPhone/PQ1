@@ -1,0 +1,128 @@
+{
+  "profile": "original-sha256-soft-compress-mutable-zip-exact-v1",
+  "scope": "One exact frozen original SHA LLBC; all other inputs rejected. No generic mutable Zip support.",
+  "census": {
+    "bindings": [
+      {
+        "section": "type_decls",
+        "id": 7,
+        "declaration_sha256": "250d9df2e267c8c2f421ef158f4b74e8b5da6ad13264aadf5d463516ba339e38"
+      },
+      {
+        "section": "type_decls",
+        "id": 8,
+        "declaration_sha256": "c60f121555ec006ea3a45a5c72ff154011c3384b0cc183b3efb1f6d2b314b132"
+      },
+      {
+        "section": "type_decls",
+        "id": 9,
+        "declaration_sha256": "cbc6cf0d34c255060bd5498f6f7a2dae51e34b0c162e18f0b34154ee19575b0b"
+      },
+      {
+        "section": "fun_decls",
+        "id": 24,
+        "declaration_sha256": "552b2adda5d4ab4b3206827f80b4c5a40c8157fbc091b01329d8537495143b3d"
+      },
+      {
+        "section": "fun_decls",
+        "id": 26,
+        "declaration_sha256": "c0341dca9e4ba8d5bff82de3b2581326e8b65fce978b3a31a8866f9a030a24c8"
+      },
+      {
+        "section": "trait_impls",
+        "id": 9,
+        "declaration_sha256": "720a01c04d9885b977fbe1c2d800957b3000b5bbbbd34eb61ea2eabe44c09719"
+      }
+    ],
+    "transparent_functions": [
+      11,
+      28,
+      150,
+      151,
+      152,
+      153,
+      183,
+      185,
+      186,
+      187,
+      190,
+      193,
+      194,
+      195,
+      196,
+      197
+    ],
+    "sites": [
+      {
+        "kind": "mapped_call_instantiation",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/28/kind/Call/call/func",
+        "node_sha256": "d21e88c499731e2afe6c5c6207a1a0a1a478307dfa9cf8bb43d5ac6654a3b1b6"
+      },
+      {
+        "kind": "mapped_mutable_iterator_dictionary",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/28/kind/Call/call/func/Regular/generics/trait_refs/0/skip_binder/Value/1/kind",
+        "node_sha256": "41812ccb377a84ecab74d8f21ebb45ada31e715719f05d0b09fd547f550e0678"
+      },
+      {
+        "kind": "mapped_function_reference",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/28/kind/Call/call/func/Regular/kind",
+        "node_sha256": "e068ac6e3d9969e3f30eba802c7d723e4c6282e08b280b9720e01c5d073d2d33"
+      },
+      {
+        "kind": "mapped_mutable_iterator_dictionary",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/31/kind/Call/call/func/Regular/generics/trait_refs/0/skip_binder/Value/1/kind/TraitImpl/generics/trait_refs/0/skip_binder/Value/1/kind",
+        "node_sha256": "684267e1f3cbc4b0890dadcab66663a7540a308867266ea6f8a299e591055580"
+      },
+      {
+        "kind": "mapped_zip_type",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/31/kind/Call/call/func/Regular/generics/types/0/Value/1",
+        "node_sha256": "ba2c31181a4095a47f68d1aebab25dd2e9eb95eaceeaa7289cfc2e098ededb9f"
+      },
+      {
+        "kind": "mapped_zip_type",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/35/kind/Loop/statements/4/kind/Assign/1/Ref/place/ty/Value/1",
+        "node_sha256": "0dcee9094dce9a2b9b3a9c53f62ff8e5481b054ed35a75955c8204a9a5ccf489"
+      },
+      {
+        "kind": "mapped_call_instantiation",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/35/kind/Loop/statements/5/kind/Call/call/func",
+        "node_sha256": "4bb2935d30137139ce0e8e41d6363edeb95e2135b740b8fde5f90ae643a537e3"
+      },
+      {
+        "kind": "mapped_mutable_iterator_dictionary",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/35/kind/Loop/statements/5/kind/Call/call/func/Regular/generics/trait_refs/0/skip_binder/Value/1/kind",
+        "node_sha256": "be03ca4d90527a98a599c83c1d1edd97ee5443db953e78e57b793aba597aed41"
+      },
+      {
+        "kind": "mapped_function_reference",
+        "path": "function/11/Structured/body/statements/15/kind/Loop/statements/35/kind/Loop/statements/5/kind/Call/call/func/Regular/kind",
+        "node_sha256": "599eeb7297743f7fbe010e43a3247d264e8724dcfcf4157bfde0ae137519acdd"
+      },
+      {
+        "kind": "mapped_zip_type",
+        "path": "function/11/Structured/locals/locals/12/ty/Value/1",
+        "node_sha256": "fe147162c07d698747abe298d936a48e129e72e30aafb622b1df8ff773fe2fee"
+      },
+      {
+        "kind": "mapped_zip_type",
+        "path": "function/11/Structured/locals/locals/13/ty/Value/1",
+        "node_sha256": "d201427b7e7e284d1854c392c10876a8a3e1489f6ce171cf5a05c8691ca99bb8"
+      },
+      {
+        "kind": "mapped_zip_type",
+        "path": "function/11/Structured/locals/locals/20/ty/Value/1",
+        "node_sha256": "7e3ae265511772a86bb0698cc6f544f41195b0cef79ade67dfa35dcd9b6fd2ad"
+      },
+      {
+        "kind": "mapped_zip_type",
+        "path": "function/11/Structured/locals/locals/22/ty/Value/1/Ref/1/Value/1",
+        "node_sha256": "ab62538ab8418ca90d7d4026e1c1ba90d94c5afbcdcf2f9ea2170aa94aa12409"
+      },
+      {
+        "kind": "mapped_zip_type",
+        "path": "function/11/Structured/locals/locals/23/ty/Value/1/Ref/1/Value/1",
+        "node_sha256": "41c4c1b167bf9477c621690fada3084648e4940193f714003d22498403848200"
+      }
+    ]
+  }
+}

@@ -1,0 +1,108 @@
+diff --git a/src/extract/ExtractBuiltinLean.ml b/src/extract/ExtractBuiltinLean.ml
+index 73bf019..0ed9bbd 100644
+--- a/src/extract/ExtractBuiltinLean.ml
++++ b/src/extract/ExtractBuiltinLean.ml
+@@ -49,8 +49,7 @@ let lean_builtin_types =
+     mk_type "core::iter::adapters::take::Take" "core.iter.adapters.take.Take"
+       ~kind:(KStruct [ ("iter", Some "iter"); ("n", Some "n") ]);
+     (* file: "Aeneas/Std/Core/Iter.lean", line: 63 *)
+-    mk_type "core::iter::adapters::zip::Zip" "core.iter.adapters.zip.Zip"
+-      ~kind:(KStruct [ ("fst", Some "fst"); ("snd", Some "snd") ]);
++    mk_type "core::iter::adapters::zip::Zip" "PQ1Research.MutableZip.ZipState";
+     (* file: "Aeneas/Std/Scalar/CoreConvertNum.lean", line: 805 *)
+     mk_type "core::num::error::TryFromIntError" "core.num.error.TryFromIntError";
+     (* file: "Aeneas/Std/Core/Ops.lean", line: 78 *)
+@@ -622,7 +621,7 @@ let lean_builtin_funs =
+     mk_fun
+       "core::iter::adapters::zip::{core::iter::traits::iterator::Iterator<core::iter::adapters::zip::Zip<@A, \
+        @B>, (@Clause0_Item, @Clause1_Item)>}::next"
+-      "core.iter.adapters.zip.Zip.Insts.CoreIterTraitsIteratorIteratorPair.next";
++      "PQ1Research.MutableZip.next";
+     (* file: "Aeneas/Std/Core/Iter.lean", line: 520 *)
+     mk_fun
+       "core::iter::range::{core::iter::range::Step<i128>}::backward_checked"
+@@ -875,7 +874,7 @@ let lean_builtin_funs =
+       "core.iter.traits.iterator.Iterator.take.trait_default";
+     (* file: "Aeneas/Std/Core/Iter.lean", line: 710 *)
+     mk_fun "core::iter::traits::iterator::Iterator::zip"
+-      "core.iter.traits.iterator.Iterator.zip.trait_default";
++      "PQ1Research.MutableZip.make";
+     (* file: "Aeneas/Std/Core/Core.lean", line: 56 *)
+     mk_fun "core::mem::replace" "core.mem.replace" ~can_fail:false ~lift:false;
+     (* file: "Aeneas/Std/Core/Core.lean", line: 60 *)
+@@ -1518,6 +1517,10 @@ let lean_builtin_trait_decls =
+ 
+ let lean_builtin_trait_impls =
+   [
++    (* Exploratory source-scoped mutable Zip profile; not a general backend. *)
++    mk_trait_impl
++      "core::iter::traits::iterator::Iterator<core::slice::iter::IterMut<'a, @T>, &'a mut @T>"
++      "PQ1Research.MutableZip.iterMutWitness";
+     (* file: "Aeneas/Std/Alloc/Boxed.lean", line: 48 *)
+     mk_trait_impl "core::clone::Clone<Box<@T>>" "core.clone.CloneBox"
+       ~keep_params:(Some [ true; false ])
+diff --git a/src/interp/InterpBorrows.ml b/src/interp/InterpBorrows.ml
+index 6284f1a..e1f991e 100644
+--- a/src/interp/InterpBorrows.ml
++++ b/src/interp/InterpBorrows.ml
+@@ -1413,7 +1413,7 @@ and end_abs_borrows (config : config) (span : Meta.span) ~(snapshots : bool)
+       method! visit_aproj env sproj =
+         (match sproj with
+         | AProjBorrows aproj ->
+-            if check_level level then raise (FoundAProjBorrows aproj)
++            if check_level env then raise (FoundAProjBorrows aproj)
+         | AProjLoans _ | AEndedProjLoans _ | AEndedProjBorrows _ | AEmpty -> ());
+         super#visit_aproj env sproj
+ 
+@@ -2203,6 +2203,7 @@ let abs_is_destructured (span : Meta.span) (destructure_shared_values : bool)
+ 
+ exception FoundBorrowId of unique_borrow_id
+ exception FoundAbsId of AbsId.id
++exception FoundSubAbsId of AbsId.id * int
+ 
+ (** Find the first endable loan projector in an abstraction.
+ 
+@@ -2274,7 +2275,8 @@ let abs_mut_borrows_loans_in_fixed span (ctx : eval_ctx)
+ 
+       method! visit_AProjLoans env proj' =
+         if
+-          proj.sv_id = proj'.proj.sv_id
++          AbsId.Set.mem (Option.get env).abs_id fixed_abs_ids
++          && proj.sv_id = proj'.proj.sv_id
+           && projections_intersect span ctx abs.regions.owned proj.proj_ty
+                (Option.get env).regions.owned proj'.proj.proj_ty
+         then raise Found
+@@ -2553,6 +2555,18 @@ let rec simplify_dummy_values_useless_abs_aux (config : config)
+             [%ldebug
+               "There are non-ignored aloans in abs:\n"
+               ^ abs_to_string span ctx abs];
++            (* A deeper sub-abstraction may have returned all its loans while
++               the containing abstraction still has live loans. Use the existing
++               ending operation at that level, with the same fixed-abstraction
++               and endability guards as the whole-abstraction case. *)
++            let level = get_max_sub_abs abs in
++            if
++              level > 0
++              && not (AbsLevelSet.mem level abs.ended_subabs)
++              && get_first_non_ignored_aloan_in_abs span abs level level = None
++              && abs_is_endable ctx abs
++              && not (abs_mut_borrows_loans_in_fixed span ctx frozen_abs abs)
++            then raise (FoundSubAbsId (abs.abs_id, level));
+             (* There are remaining loans: we can't end the abstraction *)
+             (* Check if we can end some loan projectors (because there doesn't
+                remain corresponding borrow projectors in the context) *)
+@@ -2572,10 +2586,13 @@ let rec simplify_dummy_values_useless_abs_aux (config : config)
+     ({ ctx with env = explore_env ctx ctx.env }, fun e -> e)
+   with
+   | FoundAbsId abs_id ->
+-      (* TODO: generalize so that we can end sub-abstractions *)
+       changed := true;
+       let ctx, cc = end_abs config span ~snapshots abs_id 0 ctx in
+       comp cc (rec_call ctx)
++  | FoundSubAbsId (abs_id, level) ->
++      changed := true;
++      let ctx, cc = end_abs config span ~snapshots abs_id level ctx in
++      comp cc (rec_call ctx)
+   | FoundBorrowId bid ->
+       changed := true;
+       let ctx, cc = end_borrow config span ~snapshots bid ctx in

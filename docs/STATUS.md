@@ -1,5 +1,12 @@
 # PQSigner — STATUS (start here)
 
+**Original SHA-256 complete-block correspondence (2026-10-28):** an isolated
+source-bound experimental extraction now proves the original portable byte
+decoder and block loop against the existing word-compression specification,
+for every initial state and complete-block slice. The [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence)
+records the compiler/library-model trust boundary and the still-open full
+Digest, dispatch and callback obligations.
+
 **EasyCrypt ideal-wrapper reduction (2026-10-25):** the initialized byte-facing
 wrapper now has explicit independent and physical ideal-oracle forgery bounds,
 retaining charged refusals, retries and exposure of externally released

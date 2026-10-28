@@ -1,0 +1,71 @@
+name: Lean FV (original SHA-256 byte blocks)
+
+on:
+  push:
+    branches: [master]
+    paths: &sha_byte_paths
+      - 'contracts/verification/sha256-byte/**'
+      - 'contracts/verification/tools/sha256-portable-model/**'
+      - 'contracts/verification/scripts/check_sha256_portable_source.py'
+      - 'contracts/verification/lean/SphincsCVerify/Spec/Sha256Impl.lean'
+      - 'sphincs-c10/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/lean-sha256-byte.yml'
+  pull_request:
+    paths: *sha_byte_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lean-sha256-byte-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  original-byte-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Check source binding and gate controls
+        run: |
+          python3 contracts/verification/sha256-byte/verify.py --source-only
+          python3 contracts/verification/sha256-byte/test_gate.py -v
+      - name: Install isolated Lean toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o "$RUNNER_TEMP/elan-init.sh"
+          echo "${ELAN_SHA256}  $RUNNER_TEMP/elan-init.sh" | sha256sum -c -
+          sh "$RUNNER_TEMP/elan-init.sh" -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install leanprover/lean4:v4.35.0
+      - name: Prepare pinned upstream dependencies
+        working-directory: contracts/verification/sha256-byte
+        run: python3 prepare.py "$RUNNER_TEMP/sha-byte-aeneas"
+      - name: Fresh proof replay and axiom census
+        working-directory: contracts/verification/sha256-byte
+        run: |
+          python3 verify.py \
+            --backend "$RUNNER_TEMP/sha-byte-aeneas/backends/lean" \
+            --lean "$(elan which lean)" \
+            --output "$RUNNER_TEMP/sha-byte-replay"
+          python3 test_proofs.py "$RUNNER_TEMP/sha-byte-replay"
+      - name: Preserve replay evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sha-byte-replay-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/sha-byte-replay/result.json
+            ${{ runner.temp }}/sha-byte-replay/logs/
+            ${{ runner.temp }}/sha-byte-replay/controls/
+          if-no-files-found: warn
+          retention-days: 14
