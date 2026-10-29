@@ -86,7 +86,21 @@ solver**, authenticate a historical host or prove that the verifier is sound.
 The CI workflow is explicitly an evidence/source check, not a new proof replay.
 Recorded manifests, lockfiles, corrected dependency and mutant source identities
 are also compared with the packaged inputs; updating a patch and its checksum
-cannot reuse proof logs for the previous dependency.
+cannot reuse proof logs for the previous dependency. Every archived crate is
+bound to the selected consumer checksum and each recorded registry lock entry.
+
+Compiler consistency combines recorded evidence with explicit build trust.
+The gate compares the 12 individually recorded changed compiler/library sources
+and one unchanged upstream source with their source pins. It also checks the
+complete 51-file changed-source inventory and patch against a retained
+coordinator reconstruction receipt, and ties the recorded upstream build's
+commit, tree and binaries to this profile. That reconstruction was performed
+against the private checkout; CI checks its receipt, not a fresh patch application
+or compiler rebuild. Two additional changed compiler sources were not separately
+inventoried in the original per-run receipts. The linked C model and runtime
+libraries likewise were not all inventoried by those per-run receipts; their
+separate runtime and source comparisons remain recorded evidence, not a
+retroactive execution inventory or a proof of source-to-binary correspondence.
 
 `prepare.py` checks the four archived crate checksums, reconstructs the original
 and corrected dependencies and both mutants, and emits isolated Cargo projects

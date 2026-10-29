@@ -2,6 +2,7 @@
 """Evidence rejection controls; these do not run the symbolic solver."""
 import copy
 import gzip
+import io
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import types
 import unittest
@@ -218,6 +220,7 @@ class EvidenceTests(unittest.TestCase):
             manifest = Path(result['command'][3])
             keys = [str(manifest), str(manifest.parent / 'Cargo.lock'),
                     str(manifest.parent / 'src/lib.rs')]
+            keys.extend(key for key in identity if '/kani-candidate/' in key and '/target/' not in key)
             if name.startswith('wrong-'):
                 keys.extend(key for key in identity if key.endswith(f'/{name}/block-buffer/src/lib.rs'))
             for key in keys:
@@ -230,6 +233,61 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(case=name, key='RUSTUP_HOME'), self.assertRaisesRegex(
                     verify.Rejected, 'recorded Rustup home differs'):
                 verify.recorded_inputs(self.config, name, changed, identity, verify.HERE)
+
+    def test_coherent_archive_update_cannot_reuse_old_locks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / 'profile'
+            shutil.copytree(verify.HERE, profile)
+            archive = profile / 'frozen/crates/block-buffer-0.10.4.crate'
+            original = archive.read_bytes()
+            with tarfile.open(fileobj=io.BytesIO(original), mode='r:gz') as src:
+                with tarfile.open(archive, mode='w:gz') as dst:
+                    for member in src.getmembers():
+                        data = src.extractfile(member).read() if member.isfile() else None
+                        if member.name == 'block-buffer-0.10.4/src/sealed.rs':
+                            data += b'\n// archive identity control\n'
+                            member.size = len(data)
+                        dst.addfile(member, io.BytesIO(data) if data is not None else None)
+            config = verify.read_json(profile / 'profile.json')
+            config['crates']['block-buffer-0.10.4'] = verify.sha(archive)
+            config['frozen_sha256']['frozen/crates/block-buffer-0.10.4.crate'] = verify.sha(archive)
+            (profile / 'profile.json').write_text(json.dumps(config))
+            with self.assertRaisesRegex(verify.Rejected, 'archived crate differs from consumer lock'):
+                verify.sources(profile)
+
+    def test_compiler_patch_and_table_need_reconstruction_evidence(self):
+        for file in ('kani.patch', 'kani-sources.json'):
+            with self.subTest(file=file), tempfile.TemporaryDirectory() as tmp:
+                profile = Path(tmp) / 'profile'
+                shutil.copytree(verify.HERE, profile)
+                changed = profile / 'frozen' / file
+                if file.endswith('.patch'):
+                    changed.write_bytes(b'# source correspondence control\n' + changed.read_bytes())
+                else:
+                    table = verify.read_json(changed)
+                    table['kani-compiler/src/kani_middle/transform/check_uninit/opaque.rs'] = '0' * 64
+                    changed.write_text(json.dumps(table))
+                config = verify.read_json(profile / 'profile.json')
+                config['frozen_sha256']['frozen/' + file] = verify.sha(changed)
+                (profile / 'profile.json').write_text(json.dumps(config))
+                with self.assertRaisesRegex(verify.Rejected, 'reconstruction receipt'):
+                    verify.sources(profile)
+
+    def test_compiler_build_identity_needs_matching_runtime(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / 'profile'
+            shutil.copytree(verify.HERE, profile)
+            rel = 'frozen/receipts/upstream-identity.json'
+            path = profile / rel
+            identity = verify.read_json(path)
+            key = next(k for k in identity['tools'] if k.endswith('/kani-compiler'))
+            identity['tools'][key] = '0' * 64
+            path.write_text(json.dumps(identity))
+            config = verify.read_json(profile / 'profile.json')
+            config['frozen_sha256'][rel] = verify.sha(path)
+            (profile / 'profile.json').write_text(json.dumps(config))
+            with self.assertRaisesRegex(verify.Rejected, 'compiler build/runtime differs'):
+                verify.sources(profile)
 
     def test_preparation_reconstructs_and_rejects_forged_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -90,6 +90,49 @@ def lock_closure(lock):
     return package_closure(tomllib.loads(Path(lock).read_text())['package'])
 
 
+def check_crate_pins(config, profile, consumer):
+    for stem, expected in config['crates'].items():
+        matches = [p for p in consumer if f'{p["name"]}-{p["version"]}' == stem]
+        require(len(matches) == 1 and matches[0].get('source', '').startswith('registry+') and
+                matches[0].get('checksum') == expected == sha(profile / f'frozen/crates/{stem}.crate'),
+                f'archived crate differs from consumer lock: {stem}')
+    for name in CASES:
+        packages = tomllib.loads((profile / f'frozen/locks/{name}.lock').read_text())['package']
+        for package in packages:
+            if package.get('source', '').startswith('registry+'):
+                stem = f'{package["name"]}-{package["version"]}'
+                require(package.get('checksum') == config['crates'].get(stem) and
+                        stem in config['crates'], f'archived crate differs from proof lock: {stem}')
+
+
+def check_compiler_receipts(config, profile):
+    compiler = config['compiler']
+    reconstruction = read_json(profile / 'frozen/receipts/compiler-reconstruction.json')
+    require(reconstruction['accepted'] is True and reconstruction['candidate_clean'] is True and
+            reconstruction['equal_full_subtrees'] == ['kani-compiler', 'library', 'tests'] and
+            reconstruction['candidate_commit'] == compiler['candidate'] and
+            reconstruction['baseline'] == compiler['baseline'] and
+            reconstruction['reconstructed_tree'] ==
+            compiler['reconstructed_source_tree_without_historical_documents'] and
+            reconstruction['patch_sha256'] == sha(profile / 'frozen/kani.patch') and
+            reconstruction['changed_sources_sha256'] == sha(profile / 'frozen/kani-sources.json'),
+            'compiler patch/source inventory differs from reconstruction receipt')
+    identity = read_json(profile / 'frozen/receipts/upstream-identity.json')
+    gates = read_json(profile / 'frozen/receipts/upstream-gates.json')
+    require(gates['accepted'] is True and
+            sha(profile / 'frozen/receipts/upstream-identity.json') ==
+            gates['artifacts']['upstream-regression-v1/identity.json'],
+            'compiler build/runtime differs from retained gate receipt')
+    require(identity['commit'] == gates['source_commit'] == compiler['candidate'] and
+            identity['tree'] == gates['source_tree'] == compiler['candidate_tree'],
+            'compiler build/source identity differs')
+    runtime = read_json(profile / 'frozen/kani-runtime.json')
+    for tool in ('kani-compiler', 'kani-driver'):
+        matches = [value for path, value in identity['tools'].items()
+                   if path.endswith('/target/kani/bin/' + tool)]
+        require(matches == [runtime['target/kani/bin/' + tool]], 'compiler build/runtime differs')
+
+
 def sources(profile=HERE, root=ROOT):
     config = read_json(profile / 'profile.json')
     require(config['format'] == 1, 'unsupported profile format')
@@ -102,9 +145,11 @@ def sources(profile=HERE, root=ROOT):
         require(sha(root / name) == expected, f'consumer source changed: {name}')
     require(read_json(profile / 'frozen/kani-runtime.json')['library/kani/kani_lib.c'] ==
             sha(profile / 'frozen/kani_lib.c'), 'C model source/runtime binding differs')
-    require(lock_closure(root / 'Cargo.lock') == package_closure(
-            read_json(profile / 'frozen/consumer-lock-closure.json')),
+    consumer = read_json(profile / 'frozen/consumer-lock-closure.json')
+    require(lock_closure(root / 'Cargo.lock') == package_closure(consumer),
             'selected C10 dependency closure changed')
+    check_crate_pins(config, profile, consumer)
+    check_compiler_receipts(config, profile)
     lines = (profile / 'frozen/lib.rs').read_text().splitlines()
     for line, _, expr in ASSERTIONS.values():
         require(lines[line - 1].strip() == f'assert!({expr});', 'intended assertion changed')
@@ -197,6 +242,14 @@ def recorded_inputs(config, name, result, identity, profile):
     external = read_json(profile / 'frozen/external-runtime.json')
     require(result['environment']['RUSTUP_HOME'] == external['rustup_home'],
             'recorded Rustup home differs')
+    changed_sources = read_json(profile / 'frozen/kani-sources.json')
+    unchanged_sources = config['compiler']['unchanged_recorded_sources']
+    require(not changed_sources.keys() & unchanged_sources.keys(), 'ambiguous compiler source pin')
+    for path, expected in identity.items():
+        if '/kani-candidate/' in path and '/target/' not in path:
+            relative = path.split('/kani-candidate/', 1)[1]
+            require(changed_sources.get(relative, unchanged_sources.get(relative)) == expected,
+                    f'recorded compiler source differs: {relative}')
 
 
 def recorded(config, profile=HERE):

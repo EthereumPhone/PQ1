@@ -1,0 +1,18 @@
+{
+  "accepted": true,
+  "candidate_commit": "2a5a39e9c07e330b411e653331ef98582a729fcc",
+  "baseline": "744b3e84d6eb68fd5456826997568666791bd355",
+  "reconstructed_tree": "8feb4e41fb613494cfd2fbb75a489daedf0a0047",
+  "equal_full_subtrees": [
+    "kani-compiler",
+    "library",
+    "tests"
+  ],
+  "patch_sha256": "85e3055bff9427450041518580e54f711df8a75928bf8004887545193adb0ef2",
+  "temporary_index_matches_working_tree": false,
+  "candidate_clean": true,
+  "index_note": "The temporary baseline-plus-patch index intentionally excludes four historical documents; clean candidate status is checked separately with the real index.",
+  "changed_sources_sha256": "c927b7b9afae1d4f1fc7870cba531a4278fa70ee03f5e95afdcbe75b093868d2",
+  "changed_sources_snapshot_checked_at": "2026-10-29T21:00:18.686327+00:00",
+  "changed_sources_snapshot_check": "All 51 changed-file hashes checked against clean private candidate 2a5a39e9; earlier exact patch reconstruction receipt retained. This is a coordinator source comparison, not a compiler rebuild or source-to-binary proof."
+}

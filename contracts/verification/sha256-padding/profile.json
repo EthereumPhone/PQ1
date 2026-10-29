@@ -45,7 +45,10 @@
     "patch_scope": "Compiler/library/tests only; historical experiment documents excluded.",
     "reconstructed_source_tree_without_historical_documents": "8feb4e41fb613494cfd2fbb75a489daedf0a0047",
     "repository": "https://github.com/model-checking/kani",
-    "rust_toolchain": "nightly-2026-10-23-x86_64-unknown-linux-gnu"
+    "rust_toolchain": "nightly-2026-10-23-x86_64-unknown-linux-gnu",
+    "unchanged_recorded_sources": {
+      "kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/instrumentation_visitor.rs": "354079ebb24304c7f8dc6516ba2e50dad70f0e30466f9660d17ecece01bc7277"
+    }
   },
   "crates": {
     "block-buffer-0.10.4": "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71",
@@ -91,7 +94,9 @@
     "frozen/receipts/wrong-threshold-identity.json": "3c1b8dc916057a83ca038a7592738ae3a66693d3a8a1233d40f2c2ee88f13d3b",
     "frozen/receipts/wrong-threshold-result.json": "c5cec3598cecabb7b47c6e5bfd300f40c3ab3e9fd59989f5fe0c954bb835ae37",
     "frozen/wrong-endian.patch": "990ef7c972374593a3d64db60a2bbe6876ef90e02b3ec3feb2ba83e4bf46d3e7",
-    "frozen/wrong-threshold.patch": "4a1da8aefb803eba0f35cb7b82a6b620acd6129fe781a0b8cd59855c747b4247"
+    "frozen/wrong-threshold.patch": "4a1da8aefb803eba0f35cb7b82a6b620acd6129fe781a0b8cd59855c747b4247",
+    "frozen/receipts/compiler-reconstruction.json": "22ac5c39ea7240434c7bfad62719b5eee152d375dd63315c9313f1e8b06e4c7b",
+    "frozen/receipts/upstream-identity.json": "751d52c718c4102689cbb21c74b553ef5d168b5ad6399fe10eb6b186c45c1a75"
   },
   "generic_array_corrected_lib_sha256": "5d08f9d4395b7960b8dbad2c1d8e71f8b65eb67417947a65c0c6fa542cbd8e8d",
   "generic_array_original_lib_sha256": "20b64b4359b0e82a3523fd536ad06de25e174cead734cffd3fa5f7c48f659247",
