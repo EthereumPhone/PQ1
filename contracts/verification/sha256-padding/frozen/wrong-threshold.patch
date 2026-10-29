@@ -1,0 +1,11 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -303,7 +303,7 @@
+         }
+ 
+         let n = self.size() - suffix.len();
+-        if self.size() - pos - 1 < suffix.len() {
++        if self.size() - pos - 1 <= suffix.len() {
+             compress(&self.buffer);
+             let mut block = Block::<BlockSize>::default();
+             block[n..].copy_from_slice(suffix);

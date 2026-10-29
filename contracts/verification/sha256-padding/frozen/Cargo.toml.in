@@ -1,0 +1,19 @@
+[package]
+name = "original_padding_fixture"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+block-buffer = "=0.10.4"
+generic-array = "=0.14.7"
+typenum = "=1.20.1"
+
+[profile.dev]
+opt-level = 3
+debug = false
+incremental = false
+
+[patch.crates-io]
+generic-array = { path = "@GENERIC_ARRAY@" }

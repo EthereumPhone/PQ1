@@ -1,0 +1,224 @@
+{
+  "accepted": true,
+  "recorded_at": "2026-10-29T19:27:15.952898+00:00",
+  "prior_receipt_sha256": "1fd8c9eacc7d844fba37bfc7fe29f73d005e6867b6f31b4e06a45ba5e404ff02",
+  "revision_note": "Final ledger bookkeeping updated after the first aggregate receipt. Only that metadata artifact changed; source, tools and all gate outputs remain identical. Original receipt is retained unchanged.",
+  "source_commit": "2a5a39e9c07e330b411e653331ef98582a729fcc",
+  "source_tree": "d7c7a1d59b7b3e1c4a0eda94205ec8ba601e4398",
+  "scope": "All pinned Linux CPROVER scripts/kani-regression.sh stages plus required format/copyright/Clippy gates. Separate LLBC, performance, docs-site build and other platform CI jobs are not claimed.",
+  "build_strategy": "Compiler/driver rebuilt; 78 installed runtime files reused after exact-byte and unchanged library-source checks. Frozen runner distinction retained explicitly.",
+  "suites": [
+    {
+      "suite": "kani",
+      "passed_cases": 628,
+      "ignored": 23,
+      "acceptance_sha256": "08b5367eb6a0642532c3891f70e1b3a13941f96aa8d65e1c3698d84412f99e58"
+    },
+    {
+      "suite": "expected",
+      "passed_cases": 535,
+      "ignored": 13,
+      "acceptance_sha256": "7513df00cac78503a657ce571a203bbeba193f38a87c94db00b84b5a33e7291a"
+    },
+    {
+      "suite": "ui",
+      "passed_cases": 153,
+      "ignored": 0,
+      "acceptance_sha256": "c6993b149cb925cb01f0881edc5c600410b3a99f9aa5262d483065d3de62f546"
+    },
+    {
+      "suite": "std-checks",
+      "passed_cases": 5,
+      "ignored": 0,
+      "acceptance_sha256": "ff6b9312439d1c08e262bd0d5b7a4322061ccc3d18e44a65cafa3757bc349088"
+    },
+    {
+      "suite": "firecracker",
+      "passed_cases": 0,
+      "ignored": 2,
+      "acceptance_sha256": "e4374d133f75145b93a33934160ccc98021a685c7f11caf3ebc89d4d6a14ac5b",
+      "scope": "Both standalone cases source-ignored. Separate code-generation gate passed."
+    },
+    {
+      "suite": "prusti",
+      "passed_cases": 8,
+      "ignored": 0,
+      "acceptance_sha256": "4cc81998168c33837fe5778f3f6b873be94a8239b45d39311e5aaa85cd323cf6"
+    },
+    {
+      "suite": "smack",
+      "passed_cases": 40,
+      "ignored": 0,
+      "acceptance_sha256": "f1b54d340fe1477a16af5d67a9fea9664c0dd59782062d3fa1947fd2f76c0a1b"
+    },
+    {
+      "suite": "cargo-kani",
+      "passed_cases": 72,
+      "ignored": 0,
+      "acceptance_sha256": "0d29577246c1485ea4f1f75fcab7aacb96ec67721dd72c907723d1911ce67d88"
+    },
+    {
+      "suite": "cargo-ui",
+      "passed_cases": 30,
+      "ignored": 0,
+      "acceptance_sha256": "cb35a9b9295a557f6c7aa265de61a1b32e5ef8a24b9c5a0fbe84a01ba4ce1faa"
+    },
+    {
+      "suite": "script-based-pre",
+      "passed_cases": 93,
+      "ignored": 0,
+      "acceptance_sha256": "7ac58b8a4be59f7f62a9f2756d5e562e3457cff85156f145f774ef24efeb17ae"
+    },
+    {
+      "suite": "coverage",
+      "passed_cases": 20,
+      "ignored": 0,
+      "acceptance_sha256": "43c67c8402793dd49efcdf20734ab3e6b50ec86381a38b28d034ebd3a1368d91"
+    },
+    {
+      "suite": "cargo-coverage",
+      "passed_cases": 2,
+      "ignored": 0,
+      "acceptance_sha256": "75699ba459e3d74527c7442416f2e278b8fe9bf28f5038c3be5121b29e47358a"
+    },
+    {
+      "suite": "kani-docs",
+      "passed_cases": 13,
+      "ignored": 0,
+      "acceptance_sha256": "b50631efb0402a1438e47f6b5cc5e4aa7a434b6ca15a7dda02eb5a615a1f2cf5"
+    },
+    {
+      "suite": "kani-fixme",
+      "passed_cases": 22,
+      "ignored": 629,
+      "acceptance_sha256": "76197e2f653bd8532a5737afbbbd30e9a94fc105a11144514f31c5ab6a522ebe",
+      "scope": "Known-failure mode: accepted expected failures, not successful program verifications."
+    },
+    {
+      "suite": "json-handler",
+      "passed_cases": 7,
+      "ignored": 0,
+      "acceptance_sha256": "0d9801336eda70d975384132e7d1e2b85562472f742921a265e3857f8796be36"
+    }
+  ],
+  "unit_groups": [
+    {
+      "group": "unit-core",
+      "passed": 296,
+      "ignored": 1
+    },
+    {
+      "group": "unit-playback",
+      "passed": 31,
+      "ignored": 2
+    },
+    {
+      "group": "unit-macros",
+      "passed": 0,
+      "ignored": 0
+    }
+  ],
+  "exact_read_controls": 44,
+  "auxiliary_controls": 17,
+  "artifacts": {
+    "upstream-style-gates-v1.json": "6467b5e4a32f9e280ff521576340b3ba4d7c55d5b8658de17f330252072c5a8f",
+    "upstream-format-v3/result.json": "55bee43f1ab782769bf56b497ad59e4174df44e8026481892974880cf8097765",
+    "upstream-format-v3/command.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "upstream-python-format-v1/result.json": "413bf4f1f081d7ffc6d151da8e23bc95429d6c430b37c0630f067bb8d82fd1b3",
+    "upstream-python-format-v1/command.log": "e8ad6c9807034b0444fc30b8fd70ee06880ff9ef73195c76fb786adc4d2c35c5",
+    "upstream-copyright-v2/result.json": "9a521478a272c9b3cb9ed5dfae4d6a40e199dc3b00235b8313bf18b2f1290da3",
+    "upstream-copyright-v2/command.log": "3e2e85123c240d59ecc00b1f946d0248ffa7fb8bf51ae573599b0f05d5f2afdd",
+    "upstream-clippy-tests-v3/result.json": "bde1afcef844c06475d8cd43f0c6e37f54e72b9dac0ca0ed25b1a31e2dd53e89",
+    "upstream-clippy-tests-v3/command.log": "b243c1ad44d0c9504e46bdec7c796b0fb3f0bff4abd85b3ea5efe28fd15d38ed",
+    "upstream-clippy-sysroot-v3/result.json": "9423c28cc699e8480a5b1230835bc9a12c8fd4ba87ed7acf1ba0f4745378b0df",
+    "upstream-clippy-sysroot-v3/command.log": "9fbd5d9b9e6ce310d101fbc3a86eedbad5ed856e0f61f82347ee3203c5e4e3de",
+    "build-upstream-gates-v9/result.json": "6a4f6eafbde380feb1963033f94865709dd20a4ff69e5ffba4867633352803ee",
+    "build-upstream-gates-v9/command.log": "e90f13e05da55ae12e53f9ace9b896c8fdf5cce9a2a70a8b6061321219677ab1",
+    "runtime-library-reuse-v9.json": "6d72973186974c79b0d4e3f9f97923338094adae50322b94f0330a8e2c909f86",
+    "upstream-regression-v1/identity.json": "751d52c718c4102689cbb21c74b553ef5d168b5ad6399fe10eb6b186c45c1a75",
+    "regression-tools/identity.json": "d81dd33a2f6e88a7af5197dd54583ebd67b30f1497da2107f4f44a81bb9a5944",
+    "supplemental-gate-tools/receipt.json": "5b66038a83022e222c84dad4667492a9702bad4a7afd5828b439f29afddcb666",
+    "upstream-regression-v1/gate-ledger.json": "a3f8a74ad0b30cd1c02f27628abe8abebd9baab6ac211bac023b666391de8897",
+    "upstream-regression-v1/kani/acceptance.json": "08b5367eb6a0642532c3891f70e1b3a13941f96aa8d65e1c3698d84412f99e58",
+    "upstream-regression-v1/kani/resume-1/result.json": "0334936d474fbbc74cf522cd853c30c96dd025a037c5180e36c811a852b3adca",
+    "upstream-regression-v1/kani/resume-1/command.log": "db5e5049266769b11a0f4be646faa585908052e01974413abd3af19c89752d46",
+    "upstream-regression-v1/expected/acceptance.json": "7513df00cac78503a657ce571a203bbeba193f38a87c94db00b84b5a33e7291a",
+    "upstream-regression-v1/expected/resume-1/result.json": "d7da85b220d1154ecdcba01ceb2529708859fae28d1b03d572509f0379dd7772",
+    "upstream-regression-v1/expected/resume-1/command.log": "88439e0e38a1d50c72b8a409ffe4e0eabe8cdb99a5bcb5e0fe5aa6242e611ea8",
+    "upstream-regression-v1/ui/acceptance.json": "c6993b149cb925cb01f0881edc5c600410b3a99f9aa5262d483065d3de62f546",
+    "upstream-regression-v1/ui/run/result.json": "fa3167213d06c5de233d409ae90ba1ec6423cff6e73ee741357d5249500fca59",
+    "upstream-regression-v1/ui/run/command.log": "0000f51658309617e88e5d13aebe59dfcd8c43c82bb395f9965dd2765c9f7139",
+    "upstream-regression-v1/std-checks/acceptance.json": "ff6b9312439d1c08e262bd0d5b7a4322061ccc3d18e44a65cafa3757bc349088",
+    "upstream-regression-v1/std-checks/run/result.json": "508b80d11e4d98381ced72219a3a9718c18e966cd99cccd78fbf92999fb9a1a7",
+    "upstream-regression-v1/std-checks/run/command.log": "ece502f0a92c8272311d3b56af5eb21d977008ca5031e2934e525ad61eccca50",
+    "upstream-regression-v1/firecracker/acceptance.json": "e4374d133f75145b93a33934160ccc98021a685c7f11caf3ebc89d4d6a14ac5b",
+    "upstream-regression-v1/firecracker/run/result.json": "7f5f53a9f0b7951ee264fc99592033ce57088b575ec68276a4b19301a526e63c",
+    "upstream-regression-v1/firecracker/run/command.log": "3dacdfbc86282e185142679e0855677b4ff05d485d665701e2d31447e9c5cfb2",
+    "upstream-regression-v1/prusti/acceptance.json": "4cc81998168c33837fe5778f3f6b873be94a8239b45d39311e5aaa85cd323cf6",
+    "upstream-regression-v1/prusti/run/result.json": "9cd7bb2fab00c5eb8625ef43e4e7fad2dc32bda767c35fd6e140add8cd10163b",
+    "upstream-regression-v1/prusti/run/command.log": "56eeaf146e19901cba6d5f479c2de86e825142fa6abcc0852b68d33f08909265",
+    "upstream-regression-v1/smack/acceptance.json": "f1b54d340fe1477a16af5d67a9fea9664c0dd59782062d3fa1947fd2f76c0a1b",
+    "upstream-regression-v1/smack/run/result.json": "a844c58bb439c888168e3638f194b4c1656acd5f7c5aaed9948426532d791593",
+    "upstream-regression-v1/smack/run/command.log": "9c748800c41b16b6b3cf8a6ffaf78c5d4786e0c73f4f9a704569189d4d87af74",
+    "upstream-regression-v1/cargo-kani/acceptance.json": "0d29577246c1485ea4f1f75fcab7aacb96ec67721dd72c907723d1911ce67d88",
+    "upstream-regression-v1/cargo-kani/resume-1/result.json": "6d7d246c7a2ee3fb9dfbf3471f3a9747c04bc3abf9854866cb3d2d4a4e1ad576",
+    "upstream-regression-v1/cargo-kani/resume-1/command.log": "43f5d81471781a5102aa1d4a00bbfe7af4c5fecfac1c2eb0240d5db060dafa1e",
+    "upstream-regression-v1/cargo-ui/acceptance.json": "cb35a9b9295a557f6c7aa265de61a1b32e5ef8a24b9c5a0fbe84a01ba4ce1faa",
+    "upstream-regression-v1/cargo-ui/run/result.json": "4f61753f81002cb3617ee17c84b6ed884f214c91dac994f385781a8501f14764",
+    "upstream-regression-v1/cargo-ui/run/command.log": "310af4c564f4a060772a3ccae03163b4c96a43202f2e442c272f18f0b9722478",
+    "upstream-regression-v1/script-based-pre/acceptance.json": "7ac58b8a4be59f7f62a9f2756d5e562e3457cff85156f145f774ef24efeb17ae",
+    "upstream-regression-v1/script-based-pre/resume-2/result.json": "4a36eac1859c5c8916b5e08a94ed29c7ccc046be5c7d112a023533b7241f7d4a",
+    "upstream-regression-v1/script-based-pre/resume-2/command.log": "b01d98ff5b6e0a415d0e0d8d685f3d09acbd11d7b6a552a385e0d70e887c8d87",
+    "upstream-regression-v1/coverage/acceptance.json": "43c67c8402793dd49efcdf20734ab3e6b50ec86381a38b28d034ebd3a1368d91",
+    "upstream-regression-v1/coverage/run/result.json": "fbb09f582aa11c0d560e70ad8d0c88ab33368536e6bd63cfc8f857610205a313",
+    "upstream-regression-v1/coverage/run/command.log": "cc8db8ff7891ab82d84086000e083daa08772573a3b675e921e8ce6eb22ef605",
+    "upstream-regression-v1/cargo-coverage/acceptance.json": "75699ba459e3d74527c7442416f2e278b8fe9bf28f5038c3be5121b29e47358a",
+    "upstream-regression-v1/cargo-coverage/run/result.json": "2905f3333e4543558b749eec390e5ce4b90c56344333649e694d812edcb5adc1",
+    "upstream-regression-v1/cargo-coverage/run/command.log": "77767d43fcfa2be1a3b75f380452f54dfe231b30bfd5c2012b641ee7f5eef9d1",
+    "upstream-regression-v1/kani-docs/acceptance.json": "b50631efb0402a1438e47f6b5cc5e4aa7a434b6ca15a7dda02eb5a615a1f2cf5",
+    "upstream-regression-v1/kani-docs/resume-1/result.json": "48d196b9244dc31c97bbef7aa13b78d130e6907b68a130f7d084af2a9654c603",
+    "upstream-regression-v1/kani-docs/resume-1/command.log": "813a321d65203297cdd142c57f59652ba8b5aec95aaed8da6c70500b395be683",
+    "upstream-regression-v1/kani-fixme/acceptance.json": "76197e2f653bd8532a5737afbbbd30e9a94fc105a11144514f31c5ab6a522ebe",
+    "upstream-regression-v1/kani-fixme/run/result.json": "f1729fcd0f244f82c3dc14bae476458d66c0c112eb8519d135c4e514a6505cde",
+    "upstream-regression-v1/kani-fixme/run/command.log": "027bd4451aa77fbfde01ec0904f6f7d2a53df314146a9ab132c31137b5f81f07",
+    "upstream-regression-v1/json-handler/acceptance.json": "0d9801336eda70d975384132e7d1e2b85562472f742921a265e3857f8796be36",
+    "upstream-regression-v1/json-handler/run/result.json": "2ba2f98f1af14c7b2719531562d515445eaa30ae7c60f2ae4d37fb6238ec6636",
+    "upstream-regression-v1/json-handler/run/command.log": "963ddb5802f7a2e628335dbb9c83e12cdec235c7879af08a3720e062b31e24f4",
+    "upstream-regression-v1/unit-core/acceptance.json": "1ad01d60a81f9d726b89aac911bdd20054c30ee405c5e8a79e89384e6fbe8f44",
+    "upstream-regression-v1/unit-core/run/result.json": "ed47bae0a137d038221bc901268876002f79c91bbfcd8a55de777c2585753252",
+    "upstream-regression-v1/unit-core/run/command.log": "509aae73cc1a7a5a1ff65a994b5fb2f7e0ef7aa6dc9987c9d63dacd68fe678e5",
+    "upstream-regression-v1/unit-playback/acceptance.json": "3149a48297f3b822aa4d2bd789549216e2361980c048b1bc78d56f82f4d5e941",
+    "upstream-regression-v1/unit-playback/run/result.json": "9eceac2688f63994c1e6aaeeb0fc53f98ae0fe42202afd38e32ba79470d18b85",
+    "upstream-regression-v1/unit-playback/run/command.log": "9993bb4fcb7abb4e1aa292b957f6726a6d82df29a3896a337179aeb8b32fcd1c",
+    "upstream-regression-v1/unit-macros/acceptance.json": "b834328447059fb99408c2bf5dcb5ec2768e7d5f32960cc86bb28866a9092cab",
+    "upstream-regression-v1/unit-macros/run/result.json": "d53c8c8fa491458f391a435cc18ce945ab6832122ab7dbc712a91e2d3badb573",
+    "upstream-regression-v1/unit-macros/run/command.log": "ea2ad0df2de34b940c7d7fe4a636ef8465a5e72c60bb2f2c21de19bc60124ec6",
+    "upstream-regression-v1/check-cbmc-version/completion/result.json": "ffe88a2893298344799da6b05c9e6827c29fb472f8f97506f848cb6bbaefbcdb",
+    "upstream-regression-v1/check-cbmc-version/completion/command.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "upstream-regression-v1/check-kissat-version/run/result.json": "d3531ffc6c74eb819fd78dcc2deae2a2442a04d8e6e50a30335970163d4de108",
+    "upstream-regression-v1/check-kissat-version/run/command.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "upstream-regression-v1/compiletest-configuration/run/result.json": "3d2230273fc203dbc74d186045fc316d5fdfb1e807ead72b47545619c3aaa07f",
+    "upstream-regression-v1/compiletest-configuration/run/command.log": "bf5167301931e1b776882e8fddbaad1805afa2fe69bb8b779f3aec9a78d4e252",
+    "upstream-regression-v1/build-coverage/run/result.json": "2d59301814b187a9757ac109f7aae9457f17a719aab53a270d854f9934b6bf16",
+    "upstream-regression-v1/build-coverage/run/command.log": "3c09f004d9bcf1065e095cafd5dbfb7dbf11afcd8ebc66bb5b08dabe8efdf067",
+    "upstream-regression-v1/firecracker-codegen/run/result.json": "320654b9f1902d2b9b5156eb3bed7e3c94bacb616254eaff6085920e3a525f34",
+    "upstream-regression-v1/firecracker-codegen/run/command.log": "cdcc2550d44179acd1e951d2d98050f3046d9608c18af17c4c901387fe48a9ad",
+    "upstream-regression-v1/manifest-path/run/result.json": "6349ceae08ada8f902a5f81718ed7429c4d91ae513b31c5ee3cc9e99fcd00b0a",
+    "upstream-regression-v1/manifest-path/run/command.log": "802c0fdf806ef132dfa28df5be2877ddff435b47c42e41710b3eaadb5b314f99",
+    "upstream-regression-v1/warnings-build/run/result.json": "ef21f456bf70353587dcdb401606a3dfb5c0d60ae07b00f07bfd3ff9fc8be15a",
+    "upstream-regression-v1/warnings-build/run/command.log": "5bf026a77fc83edec3ef88815c7403e663920c4b7ebea4bcd7b0cfafef74d19e",
+    "upstream-regression-v1/firecracker-codegen/acceptance.json": "23ef8b72b8a66dc2046e96d203fe3092554e852ce49eb6c7bdf5aab92b9ada2b",
+    "upstream-regression-v1/manifest-path/acceptance.json": "38b3b3b5b9d944c4e1509088c423b915f661deeb779cd63133c14281daaa785d",
+    "upstream-regression-v1/warnings-build/acceptance.json": "60526b779460a9b8b9bda535f6c49ed5f0f46d1d8330b0a08d01c8d0847f964e",
+    "final-component-acceptance-v9/acceptance.json": "bc5200330b10838507b7a237cf3b028f9860c51f22971cb30acbd0db319faec2",
+    "final-auxiliary-acceptance-v9.json": "01e757963242a46b41b722b9c8e29902d07db68bb499720d56d42cba13e62e32",
+    "upstream-regression-v1/current-formal-identity.json": "3e9827676a509c05239dff4a7e4c75194d37d5468ee5324f848b7525a2fb60a0"
+  },
+  "checker_sha256": "1cd1b09a4631be8ba81e566d1dbe51852bff50afd8c09e9a82406c3ebf7e327f",
+  "remaining_before_adoption": [
+    "Current-compiler full padding and two mutation proofs",
+    "Exact consumer regeneration and changed-dependency correspondence claims",
+    "Appropriate merge/adoption review"
+  ],
+  "limitations": "Original generic-array pin, full Digest composition and universal Rust/compiler soundness remain unproved. Successful regression gates do not establish them."
+}

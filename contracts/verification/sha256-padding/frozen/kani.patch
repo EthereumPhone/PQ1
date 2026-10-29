@@ -1,0 +1,4244 @@
+diff --git a/kani-compiler/src/kani_middle/kani_functions.rs b/kani-compiler/src/kani_middle/kani_functions.rs
+index c5ae232..9b24aea 100644
+--- a/kani-compiler/src/kani_middle/kani_functions.rs
++++ b/kani-compiler/src/kani_middle/kani_functions.rs
+@@ -135,6 +135,20 @@ pub enum KaniModel {
+     CopyInitState,
+     #[strum(serialize = "CopyInitStateSingleModel")]
+     CopyInitStateSingle,
++    #[strum(serialize = "ClearOpaqueArgumentsModel")]
++    ClearOpaqueArguments,
++    #[strum(serialize = "StoreOpaqueArgumentModel")]
++    StoreOpaqueArgument,
++    #[strum(serialize = "LoadOpaqueArgumentModel")]
++    LoadOpaqueArgument,
++    #[strum(serialize = "FinishOpaqueArgumentsModel")]
++    FinishOpaqueArguments,
++    #[strum(serialize = "ClearOpaqueReturnModel")]
++    ClearOpaqueReturn,
++    #[strum(serialize = "StoreOpaqueReturnModel")]
++    StoreOpaqueReturn,
++    #[strum(serialize = "LoadOpaqueReturnModel")]
++    LoadOpaqueReturn,
+     #[strum(serialize = "LoadArgumentModel")]
+     LoadArgument,
+     #[strum(serialize = "InitializeMemoryInitializationStateModel")]
+@@ -167,6 +181,8 @@ pub enum KaniModel {
+     RunLoopContract,
+     #[strum(serialize = "SetPtrInitializedModel")]
+     SetPtrInitialized,
++    #[strum(serialize = "SetPtrInitializedPreservingModel")]
++    SetPtrInitializedPreserving,
+     #[strum(serialize = "SetSliceChunkPtrInitializedModel")]
+     SetSliceChunkPtrInitialized,
+     #[strum(serialize = "SetSlicePtrInitializedModel")]
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/boundary.rs b/kani-compiler/src/kani_middle/transform/check_uninit/boundary.rs
+new file mode 100644
+index 0000000..21f1ac6
+--- /dev/null
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/boundary.rs
+@@ -0,0 +1,277 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++
++//! Paired, synchronous transfers for owned opaque payloads. The shared predicate
++//! excludes all body replacement modes and nonordinary endpoints. Runtime events
++//! additionally reject missing producers and mismatched callees or sizes.
++
++use super::relevant_instruction::mk_ref;
++use super::*;
++use crate::args::ReachabilityType;
++use crate::kani_middle::codegen_units::CodegenUnit;
++use crate::kani_queries::QueryDb;
++use rustc_public::mir::mono::InstanceKind;
++use std::cell::RefCell;
++use std::rc::Rc;
++
++#[derive(Clone, Debug)]
++pub(crate) struct BoundaryCoverage {
++    enabled: bool,
++    // Collision-free within the codegen unit, shared by cloned passes.
++    identities: Rc<RefCell<HashMap<Instance, usize>>>,
++}
++
++impl BoundaryCoverage {
++    pub(crate) fn new(queries: &QueryDb, unit: &CodegenUnit) -> Self {
++        let args = queries.args();
++        Self {
++            enabled: unit.stubs.is_empty()
++                && matches!(args.reachability_analysis, ReachabilityType::Harnesses)
++                && !args
++                    .unstable_features
++                    .iter()
++                    .any(|flag| flag == "function-contracts" || flag == "loop-contracts"),
++            identities: Default::default(),
++        }
++    }
++
++    pub(crate) fn identity(&self, tcx: TyCtxt, instance: Instance) -> Result<usize, String> {
++        if !self.enabled
++            || instance.kind != InstanceKind::Item
++            || instance.is_foreign_item()
++            || !instance.has_body()
++            || KaniFunction::try_from(instance).is_ok()
++        {
++            return Err("Opaque transfer requires an instrumented ordinary body; stubs, harness parameters, intrinsics, shims and foreign calls are unsupported.".to_string());
++        }
++        // UninitPass visits every such body, and the excluded transformation
++        // modes are the ones that can replace an ordinary body's endpoints.
++        let body = instance.body().ok_or("Opaque transfer has no MIR body.")?;
++        if super::ptr_uninit::is_harness(instance, tcx)
++            && body.locals().iter().take(body.arg_locals().len() + 1).any(|local| {
++                super::ty_layout::contains_opaque(tcx, local.ty)
++                    && !local.ty.layout().is_ok_and(|layout| layout.shape().size.bytes() == 0)
++            })
++        {
++            return Err(
++                "Opaque harness parameters require an explicit initialization source.".into()
++            );
++        }
++        for local in body.locals().iter().take(body.arg_locals().len() + 1) {
++            let info = PointeeInfo::from_ty(tcx, local.ty).map_err(|e| e.to_string())?;
++            if !matches!(info.layout(), PointeeLayout::Sized { .. }) {
++                return Err("Opaque boundary requires supported sized arguments and return.".into());
++            }
++        }
++        if body.blocks.iter().any(|block| match &block.terminator.kind {
++            TerminatorKind::Call { unwind, .. }
++            | TerminatorKind::Drop { unwind, .. }
++            | TerminatorKind::Assert { unwind, .. } => matches!(unwind, UnwindAction::Cleanup(_)),
++            TerminatorKind::Resume => true,
++            _ => false,
++        }) {
++            return Err("Opaque transfer with unwind cleanup is unsupported.".into());
++        }
++        let mut identities = self.identities.borrow_mut();
++        let next = identities.len().checked_add(1).expect("opaque callee identity overflow");
++        Ok(*identities.entry(instance).or_insert(next))
++    }
++}
++
++#[derive(Clone, Debug)]
++pub(crate) enum BoundaryOp {
++    BeginCall { callee: usize, arguments: Vec<(usize, Operand)> },
++    Enter { callee: usize, arguments: Vec<(usize, Operand)> },
++    StoreReturn { callee: usize, place: Place },
++    LoadReturn { callee: usize, place: Place },
++}
++
++impl BoundaryOp {
++    pub(crate) fn position(&self) -> InsertPosition {
++        match self {
++            Self::LoadReturn { .. } => InsertPosition::After,
++            _ => InsertPosition::Before,
++        }
++    }
++}
++
++impl UninitInstrumenter<'_, '_> {
++    pub(super) fn build_boundary(
++        &mut self,
++        body: &mut MutableBody,
++        source: &mut SourceInstruction,
++        event: BoundaryOp,
++    ) {
++        let position = event.position();
++        match event {
++            BoundaryOp::BeginCall { callee, arguments } => {
++                // Validate all source forms before any channel or shadow mutation.
++                if arguments
++                    .iter()
++                    .any(|(_, op)| !matches!(op, Operand::Copy(_) | Operand::Move(_)))
++                {
++                    self.inject_unsupported_check(
++                        body,
++                        source,
++                        position,
++                        "Opaque constant argument requires materialized source storage.",
++                    );
++                    return;
++                }
++                for (_, operand) in &arguments {
++                    self.build_check_for_operation(
++                        body,
++                        source,
++                        MemoryInitOp::CheckRef { operand: operand.clone() },
++                    );
++                }
++                self.boundary_call(
++                    body,
++                    source,
++                    KaniModel::ClearOpaqueReturn,
++                    None,
++                    vec![],
++                    position,
++                );
++                if !arguments.is_empty() {
++                    let args =
++                        vec![number(body, source, callee), number(body, source, arguments.len())];
++                    self.boundary_call(
++                        body,
++                        source,
++                        KaniModel::ClearOpaqueArguments,
++                        None,
++                        args,
++                        position,
++                    );
++                    for (index, operand) in arguments {
++                        self.boundary_value(
++                            body,
++                            source,
++                            KaniModel::StoreOpaqueArgument,
++                            operand,
++                            &[index, callee],
++                            position,
++                        );
++                    }
++                }
++            }
++            BoundaryOp::Enter { callee, arguments } => {
++                if !arguments.is_empty() {
++                    for (index, operand) in &arguments {
++                        self.boundary_value(
++                            body,
++                            source,
++                            KaniModel::LoadOpaqueArgument,
++                            operand.clone(),
++                            &[*index, callee],
++                            position,
++                        );
++                    }
++                    let args =
++                        vec![number(body, source, callee), number(body, source, arguments.len())];
++                    self.boundary_call(
++                        body,
++                        source,
++                        KaniModel::FinishOpaqueArguments,
++                        None,
++                        args,
++                        position,
++                    );
++                    // Metadata is fully consumed before ordinary field/padding updates.
++                    for (_, operand) in arguments {
++                        self.build_check_for_operation(
++                            body,
++                            source,
++                            MemoryInitOp::SetRef { operand, value: true, position },
++                        );
++                    }
++                }
++            }
++            BoundaryOp::StoreReturn { callee, place } => {
++                let operand = Operand::Copy(place);
++                self.build_check_for_operation(
++                    body,
++                    source,
++                    MemoryInitOp::CheckRef { operand: operand.clone() },
++                );
++                self.boundary_value(
++                    body,
++                    source,
++                    KaniModel::StoreOpaqueReturn,
++                    operand,
++                    &[callee],
++                    position,
++                );
++            }
++            BoundaryOp::LoadReturn { callee, place } => {
++                let operand = Operand::Copy(place);
++                // All generated operations stay on this call's private normal edge.
++                self.boundary_value(
++                    body,
++                    source,
++                    KaniModel::LoadOpaqueReturn,
++                    operand.clone(),
++                    &[callee],
++                    position,
++                );
++                self.build_check_for_operation(
++                    body,
++                    source,
++                    MemoryInitOp::SetRef { operand, value: true, position },
++                );
++            }
++        }
++    }
++
++    fn boundary_value(
++        &mut self,
++        body: &mut MutableBody,
++        source: &mut SourceInstruction,
++        model: KaniModel,
++        operand: Operand,
++        values: &[usize],
++        position: InsertPosition,
++    ) {
++        let ty = operand.ty(body.locals()).unwrap();
++        let size = ty.layout().unwrap().shape().size.bytes();
++        let mut statements = vec![];
++        let pointer = mk_ref(&operand, body, &mut statements, source);
++        for statement in statements {
++            body.insert_stmt(statement, source, position);
++        }
++        let mut args = vec![pointer];
++        args.extend(values.iter().map(|v| number(body, source, *v)));
++        self.boundary_call(body, source, model, Some((size, ty)), args, position);
++    }
++
++    fn boundary_call(
++        &mut self,
++        body: &mut MutableBody,
++        source: &mut SourceInstruction,
++        model: KaniModel,
++        layout: Option<(usize, Ty)>,
++        args: Vec<Operand>,
++        position: InsertPosition,
++    ) {
++        let def = get_mem_init_fn_def(model.into(), self.mem_init_fn_cache);
++        let function = match layout {
++            Some((size, ty)) => resolve_mem_init_fn(def, size, ty),
++            None => Instance::resolve(def, &GenericArgs(vec![])).unwrap(),
++        };
++        let result = Place::from(body.new_local(
++            Ty::new_tuple(&[]),
++            source.span(body.blocks()),
++            Mutability::Not,
++        ));
++        body.insert_call(&function, source, position, args, result);
++    }
++}
++
++fn number(body: &MutableBody, source: &SourceInstruction, value: usize) -> Operand {
++    Operand::Constant(ConstOperand {
++        span: source.span(body.blocks()),
++        user_ty: None,
++        const_: MirConst::try_from_uint(value as u128, UintTy::Usize).unwrap(),
++    })
++}
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/initial_target_visitor.rs b/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/initial_target_visitor.rs
+index 03b92f3..bacef24 100644
+--- a/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/initial_target_visitor.rs
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/initial_target_visitor.rs
+@@ -8,6 +8,7 @@
+     intrinsics::Intrinsic,
+     kani_middle::transform::check_uninit::ty_layout::tys_layout_equal_to_size,
+ };
++use rustc_middle::ty::TyCtxt;
+ use rustc_public::{
+     mir::{
+         Body, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place, Rvalue,
+@@ -27,14 +28,15 @@ pub enum AnalysisTarget {
+ 
+ /// Visitor that finds initial analysis targets for delayed UB instrumentation. For our purposes,
+ /// analysis targets are *pointers* to places reading and writing from which should be tracked.
+-pub struct InitialTargetVisitor {
++pub struct InitialTargetVisitor<'tcx> {
++    tcx: TyCtxt<'tcx>,
+     body: Body,
+     targets: Vec<AnalysisTarget>,
+ }
+ 
+-impl InitialTargetVisitor {
+-    pub fn new(body: Body) -> Self {
+-        Self { body, targets: vec![] }
++impl<'tcx> InitialTargetVisitor<'tcx> {
++    pub fn new(body: Body, tcx: TyCtxt<'tcx>) -> Self {
++        Self { tcx, body, targets: vec![] }
+     }
+ 
+     pub fn into_targets(self) -> Vec<AnalysisTarget> {
+@@ -65,7 +67,7 @@ pub fn push_operand(&mut self, operand: &Operand) {
+ /// We implement MirVisitor to facilitate target finding, we look for:
+ /// - pointer casts where pointees have different padding;
+ /// - calls to `copy`-like intrinsics.
+-impl MirVisitor for InitialTargetVisitor {
++impl MirVisitor for InitialTargetVisitor<'_> {
+     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+         if let Rvalue::Cast(kind, operand, ty) = rvalue {
+             let operand_ty = operand.ty(self.body.locals()).unwrap();
+@@ -82,7 +84,7 @@ fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+                         _ => None,
+                     };
+                     if let (Some(from_ty), Some(to_ty)) = (from_ty, to_ty)
+-                        && !tys_layout_equal_to_size(from_ty, to_ty)
++                        && !tys_layout_equal_to_size(self.tcx, from_ty, to_ty)
+                     {
+                         self.push_operand(operand);
+                     }
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/mod.rs b/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/mod.rs
+index 76e8111..069dc8b 100644
+--- a/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/mod.rs
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/mod.rs
+@@ -73,7 +73,7 @@ fn transform(
+             .iter()
+             .flat_map(|instance| {
+                 let body = instance.body().unwrap();
+-                let mut visitor = InitialTargetVisitor::new(body.clone());
++                let mut visitor = InitialTargetVisitor::new(body.clone(), tcx);
+                 visitor.visit_body(&body);
+                 // Convert all places into the format of aliasing graph for later comparison.
+                 visitor.into_targets().into_iter().map(move |analysis_target| match analysis_target
+@@ -130,6 +130,7 @@ fn transform(
+                     tcx,
+                 );
+                 let (instrumentation_added, body) = UninitInstrumenter::run(
++                    tcx,
+                     body,
+                     instance,
+                     self.safety_check_type.clone(),
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/mod.rs b/kani-compiler/src/kani_middle/transform/check_uninit/mod.rs
+index 5326c70..9835328 100644
+--- a/kani-compiler/src/kani_middle/transform/check_uninit/mod.rs
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/mod.rs
+@@ -9,6 +9,7 @@
+     CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
+ };
+ use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
++use rustc_middle::ty::TyCtxt;
+ use rustc_public::{
+     mir::{
+         AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place, Rvalue,
+@@ -24,7 +25,9 @@
+ use rustc_public::mir::WithRetag;
+ pub use ty_layout::{PointeeInfo, PointeeLayout};
+ 
++pub(crate) mod boundary;
+ mod delayed_ub;
++mod opaque;
+ mod ptr_uninit;
+ mod relevant_instruction;
+ mod ty_layout;
+@@ -69,6 +72,15 @@ pub trait TargetFinder {
+ 
+ // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
+ const SKIPPED_ITEMS: &[KaniFunction] = &[
++    KaniFunction::Model(KaniModel::ClearOpaqueArguments),
++    KaniFunction::Model(KaniModel::StoreOpaqueArgument),
++    KaniFunction::Model(KaniModel::LoadOpaqueArgument),
++    KaniFunction::Model(KaniModel::FinishOpaqueArguments),
++    KaniFunction::Model(KaniModel::ClearOpaqueReturn),
++    KaniFunction::Model(KaniModel::StoreOpaqueReturn),
++    KaniFunction::Model(KaniModel::LoadOpaqueReturn),
++    KaniFunction::Model(KaniModel::InitializeMemoryInitializationState),
++    KaniFunction::Model(KaniModel::SetPtrInitializedPreserving),
+     KANI_IS_PTR_INITIALIZED,
+     KANI_SET_PTR_INITIALIZED,
+     KANI_IS_SLICE_CHUNK_PTR_INITIALIZED,
+@@ -88,16 +100,18 @@ pub trait TargetFinder {
+ ];
+ 
+ /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.
+-pub struct UninitInstrumenter<'a> {
++pub struct UninitInstrumenter<'a, 'tcx> {
++    tcx: TyCtxt<'tcx>,
+     safety_check_type: CheckType,
+     unsupported_check_type: CheckType,
+     /// Used to cache FnDef lookups of injected memory initialization functions.
+     mem_init_fn_cache: &'a mut HashMap<KaniFunction, FnDef>,
+ }
+ 
+-impl<'a> UninitInstrumenter<'a> {
++impl<'a, 'tcx> UninitInstrumenter<'a, 'tcx> {
+     /// Create the instrumenter and run it with the given parameters.
+     pub(crate) fn run(
++        tcx: TyCtxt<'tcx>,
+         body: Body,
+         instance: Instance,
+         safety_check_type: CheckType,
+@@ -106,7 +120,7 @@ pub(crate) fn run(
+         target_finder: impl TargetFinder,
+     ) -> (bool, Body) {
+         let mut instrumenter =
+-            Self { safety_check_type, unsupported_check_type, mem_init_fn_cache };
++            Self { tcx, safety_check_type, unsupported_check_type, mem_init_fn_cache };
+         let body = MutableBody::from(body);
+         let (changed, new_body) = instrumenter.instrument(body, instance, target_finder);
+         (changed, new_body.into())
+@@ -156,6 +170,14 @@ fn build_check_for_operation(
+         source: &mut SourceInstruction,
+         operation: MemoryInitOp,
+     ) {
++        if let MemoryInitOp::Boundary(event) = &operation {
++            self.build_boundary(body, source, event.clone());
++            return;
++        }
++        if let MemoryInitOp::AssignOpaque { lvalue, rvalue } = &operation {
++            self.build_opaque_assignment(body, source, lvalue.clone(), rvalue.clone());
++            return;
++        }
+         if let MemoryInitOp::Unsupported { reason } = &operation {
+             self.inject_unsupported_check(body, source, operation.position(), reason);
+             return;
+@@ -164,6 +186,36 @@ fn build_check_for_operation(
+             return;
+         };
+ 
++        // Constant operands have no local storage to address. A ZST needs no
++        // shadow-byte operation; nonzero opaque constants need an explicit
++        // allocation/initialization model rather than a compiler panic.
++        let by_value_operand = match &operation {
++            MemoryInitOp::CheckRef { operand }
++            | MemoryInitOp::CheckRefAs { operand, .. }
++            | MemoryInitOp::SetRef { operand, .. }
++            | MemoryInitOp::CreateUnion { operand, .. }
++            | MemoryInitOp::StoreArgument { operand, .. }
++            | MemoryInitOp::LoadArgument { operand, .. } => Some(operand),
++            MemoryInitOp::AssignUnion { rvalue, .. } => Some(rvalue),
++            _ => None,
++        };
++        if let Some(operand @ Operand::Constant(_)) = by_value_operand {
++            let ty = operand.ty(body.locals()).unwrap();
++            if ty
++                .layout()
++                .is_ok_and(|layout| layout.shape().is_sized() && layout.shape().size.bytes() == 0)
++            {
++                return;
++            }
++            self.inject_unsupported_check(
++                body,
++                source,
++                operation.position(),
++                "By-value constant initialization-state transfer is not supported.",
++            );
++            return;
++        }
++
+         let pointee_info = {
+             // Sanity check: since CBMC memory object primitives only accept pointers, need to
+             // ensure the correct type.
+@@ -181,7 +233,7 @@ fn build_check_for_operation(
+                     )
+                 };
+             // Calculate pointee layout for byte-by-byte memory initialization checks.
+-            match PointeeInfo::from_ty(pointee_ty) {
++            match PointeeInfo::from_ty(self.tcx, pointee_ty) {
+                 Ok(type_info) => type_info,
+                 Err(reason) => {
+                     let reason = format!(
+@@ -197,6 +249,7 @@ fn build_check_for_operation(
+             MemoryInitOp::CheckSliceChunk { .. }
+             | MemoryInitOp::Check { .. }
+             | MemoryInitOp::CheckAs { .. }
++            | MemoryInitOp::CheckRefAs { .. }
+             | MemoryInitOp::CheckRef { .. } => {
+                 self.build_get_and_check(body, source, operation, pointee_info)
+             }
+@@ -213,7 +266,10 @@ fn build_check_for_operation(
+             MemoryInitOp::StoreArgument { .. } | MemoryInitOp::LoadArgument { .. } => {
+                 self.build_argument_operation(body, source, operation, pointee_info)
+             }
+-            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
++            MemoryInitOp::Unsupported { .. }
++            | MemoryInitOp::TriviallyUnsafe { .. }
++            | MemoryInitOp::AssignOpaque { .. }
++            | MemoryInitOp::Boundary(_) => {
+                 unreachable!()
+             }
+         };
+@@ -237,13 +293,14 @@ fn build_get_and_check(
+         let mut statements = vec![];
+         let ptr_operand = operation.mk_operand(body, &mut statements, source);
+         let terminator = match pointee_info.layout() {
+-            PointeeLayout::Sized { layout } => {
++            PointeeLayout::Sized { layout, .. } => {
+                 let layout_operand = mk_layout_operand(body, &mut statements, source, layout);
+                 // Depending on whether accessing the known number of elements in the slice, need to
+                 // pass is as an argument.
+                 let (diagnostic, args) = match &operation {
+                     MemoryInitOp::Check { .. }
+                     | MemoryInitOp::CheckAs { .. }
++                    | MemoryInitOp::CheckRefAs { .. }
+                     | MemoryInitOp::CheckRef { .. } => {
+                         let diagnostic = KANI_IS_PTR_INITIALIZED;
+                         let args = vec![ptr_operand.clone(), layout_operand];
+@@ -334,7 +391,9 @@ fn build_get_and_check(
+             MemoryInitOp::Check { operand }
+             | MemoryInitOp::CheckSliceChunk { operand, .. }
+             | MemoryInitOp::CheckRef { operand } => operand.ty(body.locals()).unwrap(),
+-            MemoryInitOp::CheckAs { .. } => operation.operand_ty(body),
++            MemoryInitOp::CheckAs { .. } | MemoryInitOp::CheckRefAs { .. } => {
++                operation.operand_ty(body)
++            }
+             _ => unreachable!(),
+         };
+         body.insert_check(
+@@ -368,25 +427,36 @@ fn build_set(
+         let ptr_operand = operation.mk_operand(body, &mut statements, source);
+         let value = operation.expect_value();
+         let terminator = match pointee_info.layout() {
+-            PointeeLayout::Sized { layout } => {
++            PointeeLayout::Sized { layout, preserved } => {
+                 let layout_operand = mk_layout_operand(body, &mut statements, source, layout);
+                 // Depending on whether writing to the known number of elements in the slice, need to
+                 // pass is as an argument.
+                 let (diagnostic, args) = match &operation {
+                     MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+-                        let diagnostic = KANI_SET_PTR_INITIALIZED;
+-                        let args = vec![
+-                            ptr_operand,
+-                            layout_operand,
+-                            Operand::Constant(ConstOperand {
+-                                span: source.span(body.blocks()),
+-                                user_ty: None,
+-                                const_: MirConst::from_bool(value),
+-                            }),
+-                        ];
++                        let mut args = vec![ptr_operand, layout_operand];
++                        let diagnostic = if preserved.iter().any(|byte| *byte) {
++                            args.push(mk_layout_operand(body, &mut statements, source, preserved));
++                            KaniFunction::Model(KaniModel::SetPtrInitializedPreserving)
++                        } else {
++                            KANI_SET_PTR_INITIALIZED
++                        };
++                        args.push(Operand::Constant(ConstOperand {
++                            span: source.span(body.blocks()),
++                            user_ty: None,
++                            const_: MirConst::from_bool(value),
++                        }));
+                         (diagnostic, args)
+                     }
+                     MemoryInitOp::SetSliceChunk { .. } => {
++                        if preserved.iter().any(|byte| *byte) {
++                            self.inject_unsupported_check(
++                                body,
++                                source,
++                                operation.position(),
++                                "Opaque slice state updates require an explicit byte-write model.",
++                            );
++                            return;
++                        }
+                         let diagnostic = KANI_SET_SLICE_CHUNK_PTR_INITIALIZED;
+                         let args = vec![
+                             ptr_operand,
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/opaque.rs b/kani-compiler/src/kani_middle/transform/check_uninit/opaque.rs
+new file mode 100644
+index 0000000..502d2c1
+--- /dev/null
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/opaque.rs
+@@ -0,0 +1,330 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++
++//! Explicit local state transfers for owned MaybeUninit payloads.
++
++use super::relevant_instruction::{MemoryInitOp, mk_cast, mk_ref};
++use super::ty_layout::{contains_opaque, is_maybe_uninit};
++use super::*;
++use rustc_public::CrateDefType;
++use rustc_public::abi::FieldsShape;
++use rustc_public::mir::{CastKind, ProjectionElem};
++use rustc_public::ty::{AdtKind, ConstantKind};
++
++type OpaqueAssignmentPlan = (bool, bool, Vec<(Place, Operand)>);
++
++fn masks(tcx: TyCtxt, ty: Ty) -> Result<(Vec<bool>, Vec<bool>), String> {
++    let info = PointeeInfo::from_ty(tcx, ty).map_err(|error| error.to_string())?;
++    match info.layout() {
++        PointeeLayout::Sized { layout, preserved } => Ok((layout.clone(), preserved.clone())),
++        _ => Err(format!("Opaque transfer needs a supported sized layout: {ty}")),
++    }
++}
++
++fn constant_mask(tcx: TyCtxt, operand: &Operand) -> Result<Vec<bool>, String> {
++    let Operand::Constant(constant) = operand else { unreachable!() };
++    let ty = constant.ty();
++    let (required, _) = masks(tcx, ty)?;
++    match constant.const_.kind() {
++        ConstantKind::Allocated(allocation) => {
++            if allocation.bytes.len() != required.len() || !allocation.provenance.ptrs.is_empty() {
++                return Err("Opaque constant allocation/provenance is not supported.".to_string());
++            }
++            Ok(allocation.bytes.iter().map(Option::is_some).collect())
++        }
++        ConstantKind::ZeroSized if required.is_empty() => Ok(vec![]),
++        _ if !contains_opaque(tcx, ty) => Ok(required),
++        _ => Err("Opaque constant has no explicit initialized-byte mask.".to_string()),
++    }
++}
++
++impl UninitInstrumenter<'_, '_> {
++    pub(super) fn build_opaque_assignment(
++        &mut self,
++        body: &mut MutableBody,
++        source: &mut SourceInstruction,
++        destination: Place,
++        rvalue: Rvalue,
++    ) {
++        let plan = self.opaque_assignment_plan(body, &destination, &rvalue);
++        let (aggregate, cast, pieces) = match plan {
++            Ok(plan) => plan,
++            Err(reason) => {
++                self.inject_unsupported_check(body, source, InsertPosition::Before, &reason);
++                return;
++            }
++        };
++        // All source checks precede every shadow mutation. In particular an
++        // aggregate cannot erase a source before a later operand reads it.
++        for (target, operand) in &pieces {
++            match operand {
++                Operand::Copy(_) | Operand::Move(_) => {
++                    let operation = if cast {
++                        MemoryInitOp::CheckRefAs {
++                            operand: operand.clone(),
++                            pointee_ty: target.ty(body.locals()).unwrap(),
++                        }
++                    } else {
++                        MemoryInitOp::CheckRef { operand: operand.clone() }
++                    };
++                    self.build_check_for_operation(body, source, operation);
++                }
++                Operand::Constant(_) => {
++                    let required_ty = if cast {
++                        target.ty(body.locals()).unwrap()
++                    } else {
++                        operand.ty(body.locals()).unwrap()
++                    };
++                    let (required, _) = masks(self.tcx, required_ty).unwrap();
++                    let initialized = constant_mask(self.tcx, operand).unwrap();
++                    if required
++                        .iter()
++                        .zip(initialized)
++                        .any(|(required, initialized)| *required && !initialized)
++                    {
++                        self.inject_safety_check(body, source, InsertPosition::Before,
++                            "Undefined Behavior: Reading uninitialized data from an opaque constant.");
++                    }
++                }
++                Operand::RuntimeChecks(_) => unreachable!(),
++            }
++        }
++        if aggregate {
++            let size =
++                destination.ty(body.locals()).unwrap().layout().unwrap().shape().size.bytes();
++            self.write_exact_mask(body, source, &destination, &vec![false; size]);
++        }
++        for (target, operand) in pieces {
++            match &operand {
++                Operand::Constant(_) => {
++                    self.write_exact_mask(
++                        body,
++                        source,
++                        &target,
++                        &constant_mask(self.tcx, &operand).unwrap(),
++                    );
++                }
++                Operand::Copy(from) | Operand::Move(from) if *from == target => {}
++                Operand::Copy(_) | Operand::Move(_) => {
++                    let ty = target.ty(body.locals()).unwrap();
++                    let size = ty.layout().unwrap().shape().size.bytes();
++                    if size == 0 {
++                        continue;
++                    }
++                    let mut statements = vec![];
++                    let from = mk_ref(&operand, body, &mut statements, source);
++                    let from = mk_cast(&from, ty, body, &mut statements, source);
++                    let to = mk_ref(&Operand::Copy(target), body, &mut statements, source);
++                    for statement in statements {
++                        body.insert_stmt(statement, source, InsertPosition::Before);
++                    }
++                    let function = resolve_mem_init_fn(
++                        get_mem_init_fn_def(KANI_COPY_INIT_STATE_SINGLE, self.mem_init_fn_cache),
++                        size,
++                        ty,
++                    );
++                    let result = Place::from(body.new_local(
++                        Ty::new_tuple(&[]),
++                        source.span(body.blocks()),
++                        Mutability::Not,
++                    ));
++                    body.insert_call(
++                        &function,
++                        source,
++                        InsertPosition::Before,
++                        vec![from, to],
++                        result,
++                    );
++                }
++                Operand::RuntimeChecks(_) => unreachable!(),
++            }
++        }
++    }
++
++    fn opaque_assignment_plan(
++        &self,
++        body: &MutableBody,
++        destination: &Place,
++        rvalue: &Rvalue,
++    ) -> Result<OpaqueAssignmentPlan, String> {
++        let destination_ty = destination.ty(body.locals()).unwrap();
++        masks(self.tcx, destination_ty)?;
++        let (aggregate, cast, pieces) = match rvalue {
++            Rvalue::Use(operand, _) => (false, false, vec![(destination.clone(), operand.clone())]),
++            Rvalue::Cast(CastKind::Transmute, operand, _) => {
++                let (from_required, from_preserved) =
++                    masks(self.tcx, operand.ty(body.locals()).unwrap())?;
++                let (to_required, _) = masks(self.tcx, destination_ty)?;
++                if from_required.len() != to_required.len()
++                    || to_required.iter().enumerate().any(|(idx, required)| {
++                        *required && !from_required[idx] && !from_preserved[idx]
++                    })
++                {
++                    return Err(
++                        "Opaque cast exposes ordinary padding or changes storage size.".to_string()
++                    );
++                }
++                (false, true, vec![(destination.clone(), operand.clone())])
++            }
++            Rvalue::Aggregate(kind, operands) => {
++                let projections: Vec<ProjectionElem> = match kind {
++                    AggregateKind::Adt(def, variant, args, _, active) => {
++                        if def.kind() == AdtKind::Union
++                            && !is_maybe_uninit(self.tcx, destination_ty)
++                        {
++                            return Err("General union opaque aggregate transfer is unsupported."
++                                .to_string());
++                        }
++                        if def.kind() == AdtKind::Enum {
++                            return Err(
++                                "Opaque enum aggregate transfer is unsupported.".to_string()
++                            );
++                        }
++                        let fields = def.variant(*variant).unwrap().fields();
++                        let indices: Vec<_> = match active {
++                            Some(field) => vec![*field],
++                            None => (0..fields.len()).collect(),
++                        };
++                        indices
++                            .into_iter()
++                            .map(|idx| ProjectionElem::Field(idx, fields[idx].ty_with_args(args)))
++                            .collect()
++                    }
++                    AggregateKind::Tuple => operands
++                        .iter()
++                        .enumerate()
++                        .map(|(idx, operand)| {
++                            ProjectionElem::Field(idx, operand.ty(body.locals()).unwrap())
++                        })
++                        .collect(),
++                    AggregateKind::Array(_) => (0..operands.len())
++                        .map(|idx| ProjectionElem::ConstantIndex {
++                            offset: idx as u64,
++                            min_length: operands.len() as u64,
++                            from_end: false,
++                        })
++                        .collect(),
++                    _ => return Err("Unsupported opaque aggregate kind.".to_string()),
++                };
++                if projections.len() != operands.len() {
++                    return Err("Opaque aggregate operand/field count mismatch.".to_string());
++                }
++                let pieces = projections
++                    .into_iter()
++                    .zip(operands.iter())
++                    .map(|(projection, operand)| {
++                        let mut field = destination.clone();
++                        field.projection.push(projection);
++                        (field, operand.clone())
++                    })
++                    .collect();
++                (true, false, pieces)
++            }
++            Rvalue::Repeat(operand, _) => {
++                let shape = destination_ty.layout().unwrap().shape();
++                let FieldsShape::Array { count, .. } = shape.fields else {
++                    return Err("Opaque repetition needs a fixed-array layout.".to_string());
++                };
++                let pieces = (0..count)
++                    .map(|index| {
++                        let mut field = destination.clone();
++                        field.projection.push(ProjectionElem::ConstantIndex {
++                            offset: index,
++                            min_length: count,
++                            from_end: false,
++                        });
++                        (field, operand.clone())
++                    })
++                    .collect();
++                (true, false, pieces)
++            }
++            _ => return Err("Opaque assignment form has no state-transfer model.".to_string()),
++        };
++        // Compile-time disjointness is intentionally conservative. Different
++        // live local objects are disjoint; direct exact self-copy is supported.
++        // Other aliasing, including sources in an aggregate destination, refuses.
++        for (target, operand) in &pieces {
++            let (source_required, _) = masks(self.tcx, operand.ty(body.locals()).unwrap())?;
++            let (target_required, _) = masks(self.tcx, target.ty(body.locals()).unwrap())?;
++            if source_required.len() != target_required.len() {
++                return Err("Opaque transfer has mismatched source/destination sizes.".to_string());
++            }
++            match operand {
++                Operand::Copy(from) | Operand::Move(from) if !source_required.is_empty() => {
++                    let exact_self = !aggregate && *from == *target;
++                    // A reference argument points into caller-owned storage,
++                    // which is disjoint from this invocation's own MIR locals.
++                    // Raw pointers and arbitrary dereference chains retain refusal.
++                    let caller_storage = from.local > 0
++                        && from.local <= body.arg_count()
++                        && from.projection.first() == Some(&ProjectionElem::Deref)
++                        && from.projection.iter().filter(|p| **p == ProjectionElem::Deref).count()
++                            == 1
++                        && matches!(
++                            body.locals()[from.local].ty.kind(),
++                            TyKind::RigidTy(RigidTy::Ref(..))
++                        )
++                        && (destination.local == 0 || destination.local > body.arg_count());
++                    let disjoint = from.local != destination.local
++                        && (!from.projection.contains(&ProjectionElem::Deref) || caller_storage)
++                        && !destination.projection.contains(&ProjectionElem::Deref);
++                    if !exact_self && !disjoint {
++                        return Err(
++                            "Opaque transfer overlap is not proved disjoint or exact self-copy."
++                                .to_string(),
++                        );
++                    }
++                }
++                Operand::Constant(_) => {
++                    constant_mask(self.tcx, operand)?;
++                }
++                Operand::RuntimeChecks(_) => {
++                    return Err("Unsupported opaque runtime-check operand.".to_string());
++                }
++                _ => {}
++            }
++        }
++        Ok((aggregate, cast, pieces))
++    }
++
++    fn write_exact_mask(
++        &mut self,
++        body: &mut MutableBody,
++        source: &mut SourceInstruction,
++        target: &Place,
++        mask: &[bool],
++    ) {
++        if mask.is_empty() {
++            return;
++        }
++        let ty = target.ty(body.locals()).unwrap();
++        let mut statements = vec![];
++        let pointer = mk_ref(&Operand::Copy(target.clone()), body, &mut statements, source);
++        let layout = mk_layout_operand(body, &mut statements, source, mask);
++        for statement in statements {
++            body.insert_stmt(statement, source, InsertPosition::Before);
++        }
++        let function = resolve_mem_init_fn(
++            get_mem_init_fn_def(KANI_SET_PTR_INITIALIZED, self.mem_init_fn_cache),
++            mask.len(),
++            ty,
++        );
++        let value = Operand::Constant(ConstOperand {
++            span: source.span(body.blocks()),
++            user_ty: None,
++            const_: MirConst::from_bool(true),
++        });
++        let result = Place::from(body.new_local(
++            Ty::new_tuple(&[]),
++            source.span(body.blocks()),
++            Mutability::Not,
++        ));
++        body.insert_call(
++            &function,
++            source,
++            InsertPosition::Before,
++            vec![pointer, layout, value],
++            result,
++        );
++    }
++}
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/mod.rs b/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/mod.rs
+index ad43d69..50d7838 100644
+--- a/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/mod.rs
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/mod.rs
+@@ -30,6 +30,7 @@
+ /// pointers.
+ #[derive(Debug, Clone)]
+ pub struct UninitPass {
++    pub boundary_coverage: super::boundary::BoundaryCoverage,
+     pub safety_check_type: CheckType,
+     pub unsupported_check_type: CheckType,
+     pub mem_init_fn_cache: HashMap<KaniFunction, FnDef>,
+@@ -65,12 +66,13 @@ fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, B
+ 
+         // Call a helper that performs the actual instrumentation.
+         let (instrumentation_added, body) = UninitInstrumenter::run(
++            tcx,
+             new_body.into(),
+             instance,
+             self.safety_check_type.clone(),
+             self.unsupported_check_type.clone(),
+             &mut self.mem_init_fn_cache,
+-            CheckUninitVisitor::new(),
++            CheckUninitVisitor::new(tcx, instance, self.boundary_coverage.clone()),
+         );
+ 
+         (changed || instrumentation_added, body)
+@@ -78,7 +80,7 @@ fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, B
+ }
+ 
+ /// Checks if the instance is a harness -- an entry point of Kani analysis.
+-fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
++pub(super) fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
+     let harness_identifiers = [
+         vec![
+             rustc_span::symbol::Symbol::intern("kanitool"),
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/uninit_visitor.rs b/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/uninit_visitor.rs
+index 84b0e70..d189072 100644
+--- a/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/uninit_visitor.rs
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/ptr_uninit/uninit_visitor.rs
+@@ -6,15 +6,18 @@
+ use crate::{
+     intrinsics::Intrinsic,
+     kani_middle::nonnull_pointee,
++    kani_middle::points_to::unsupported_call,
+     kani_middle::transform::{
+         body::{InsertPosition, MutableBody, SourceInstruction},
+         check_uninit::{
+             PointeeInfo, TargetFinder,
++            boundary::{BoundaryCoverage, BoundaryOp},
+             relevant_instruction::{InitRelevantInstruction, MemoryInitOp},
+-            ty_layout::{LayoutComputationError, tys_layout_compatible_to_size},
++            ty_layout::{LayoutComputationError, contains_opaque, tys_layout_compatible_to_size},
+         },
+     },
+ };
++use rustc_middle::ty::TyCtxt;
+ use rustc_public::CrateDefType;
+ use rustc_public::{
+     mir::{
+@@ -27,18 +30,46 @@
+     },
+     ty::{AdtKind, ConstantKind, RigidTy, Ty, TyKind},
+ };
++use std::collections::HashSet;
+ 
+-pub struct CheckUninitVisitor {
++pub struct CheckUninitVisitor<'tcx> {
++    tcx: TyCtxt<'tcx>,
++    instance: Instance,
++    boundary_coverage: BoundaryCoverage,
+     locals: Vec<LocalDecl>,
++    arg_count: usize,
++    /// Select storage whose address is used anywhere in the original body. State
++    /// updates happen at initialization events, never at the address expression.
++    addressed_locals: HashSet<usize>,
++    forming_raw_address: bool,
+     /// All target instructions in the body.
+     targets: Vec<InitRelevantInstruction>,
+     /// Current analysis target, eventually needs to be added to a list of all targets.
+     current_target: InitRelevantInstruction,
+ }
+ 
+-impl TargetFinder for CheckUninitVisitor {
++impl TargetFinder for CheckUninitVisitor<'_> {
+     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
+         self.locals = body.locals().to_vec();
++        self.arg_count = body.arg_count();
++        let mut addresses = AddressedLocals {
++            tcx: self.tcx,
++            locals: &self.locals,
++            roots: HashSet::new(),
++            opaque_source: false,
++        };
++        for bb in body.blocks() {
++            addresses.visit_basic_block(bb);
++        }
++        for (idx, local) in self.locals.iter().enumerate() {
++            if contains_opaque(self.tcx, local.ty) {
++                addresses.roots.insert(idx);
++            }
++        }
++        if self.has_opaque_boundary(body.arg_count()) {
++            addresses.roots.insert(0);
++        }
++        self.addressed_locals = addresses.roots;
+         for (bb_idx, bb) in body.blocks().iter().enumerate() {
+             // Set the first target to start iterating from.
+             self.current_target = if !bb.statements.is_empty() {
+@@ -55,13 +86,44 @@ fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
+                 }
+             };
+             if bb_idx == 0 {
++                if self.has_opaque_boundary(body.arg_count()) {
++                    match self.boundary_coverage.identity(self.tcx, self.instance) {
++                        Ok(callee) => {
++                            let arguments = (1..=body.arg_count())
++                                .filter(|idx| self.nonzero_opaque(self.locals[*idx].ty))
++                                .map(|idx| (idx, Operand::Copy(Place::from(idx))))
++                                .collect();
++                            self.push_target(MemoryInitOp::Boundary(BoundaryOp::Enter {
++                                callee,
++                                arguments,
++                            }));
++                        }
++                        Err(reason) => self.push_target(MemoryInitOp::Unsupported { reason }),
++                    }
++                }
++                for idx in 1..=body.arg_count() {
++                    if self.addressed_locals.contains(&idx)
++                        && !self.locals[idx].ty.kind().is_union()
++                        && !self.nonzero_opaque(self.locals[idx].ty)
++                    {
++                        // Ordinary by-value arguments are initialized at entry;
++                        // the caller still owns checks on its source reads.
++                        self.push_target(MemoryInitOp::SetRef {
++                            operand: Operand::Copy(Place::from(idx)),
++                            value: true,
++                            position: InsertPosition::Before,
++                        });
++                    }
++                }
+                 let union_args: Vec<_> = body
+                     .locals()
+                     .iter()
+                     .enumerate()
+                     .skip(1)
+                     .take(body.arg_count())
+-                    .filter(|(_, local)| local.ty.kind().is_union())
++                    .filter(|(_, local)| {
++                        local.ty.kind().is_union() && !contains_opaque(self.tcx, local.ty)
++                    })
+                     .collect();
+                 if !union_args.is_empty() {
+                     for (idx, _) in union_args {
+@@ -78,10 +140,16 @@ fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
+     }
+ }
+ 
+-impl CheckUninitVisitor {
+-    pub fn new() -> Self {
++impl<'tcx> CheckUninitVisitor<'tcx> {
++    pub fn new(tcx: TyCtxt<'tcx>, instance: Instance, boundary_coverage: BoundaryCoverage) -> Self {
+         Self {
++            tcx,
++            instance,
++            boundary_coverage,
+             locals: vec![],
++            arg_count: 0,
++            addressed_locals: HashSet::new(),
++            forming_raw_address: false,
+             targets: vec![],
+             current_target: InitRelevantInstruction {
+                 source: SourceInstruction::Statement { idx: 0, bb: 0 },
+@@ -94,9 +162,91 @@ pub fn new() -> Self {
+     fn push_target(&mut self, source_op: MemoryInitOp) {
+         self.current_target.push_operation(source_op);
+     }
++
++    fn addressed_storage(&self, place: &Place) -> bool {
++        self.addressed_locals.contains(&place.local)
++            && !place.projection.contains(&ProjectionElem::Deref)
++    }
++
++    fn nonzero_opaque(&self, ty: Ty) -> bool {
++        contains_opaque(self.tcx, ty)
++            && !ty.layout().is_ok_and(|layout| layout.shape().size.bytes() == 0)
++    }
++
++    fn has_opaque_boundary(&self, count: usize) -> bool {
++        self.locals.iter().take(count + 1).any(|local| self.nonzero_opaque(local.ty))
++    }
++
++    fn finish_statement(&mut self) {
++        let SourceInstruction::Statement { idx, bb } = self.current_target.source else {
++            unreachable!()
++        };
++        self.targets.push(self.current_target.clone());
++        self.current_target = InitRelevantInstruction {
++            source: SourceInstruction::Statement { idx: idx + 1, bb },
++            before_instruction: vec![],
++            after_instruction: vec![],
++        };
++    }
++}
++
++// A transmute's result type can be ordinary even though its source carries
++// opaque bytes. Classify both sides; result-only routing skips the source check.
++fn rvalue_has_opaque_source(tcx: TyCtxt, rvalue: &Rvalue, locals: &[LocalDecl]) -> bool {
++    contains_opaque(tcx, rvalue.ty(locals).unwrap())
++        || matches!(rvalue, Rvalue::Cast(_, operand, _)
++            if contains_opaque(tcx, operand.ty(locals).unwrap()))
++}
++
++struct AddressedLocals<'a, 'tcx> {
++    tcx: TyCtxt<'tcx>,
++    locals: &'a [LocalDecl],
++    roots: HashSet<usize>,
++    opaque_source: bool,
++}
++
++impl MirVisitor for AddressedLocals<'_, '_> {
++    fn visit_terminator(&mut self, terminator: &Terminator, location: Location) {
++        // Drop introduces a reference during codegen even if the source never
++        // takes this local's address. Track its initialization events now so
++        // the later Drop check observes its state without initializing it.
++        if let TerminatorKind::Drop { place, .. } = &terminator.kind
++            && !place.projection.contains(&ProjectionElem::Deref)
++        {
++            self.roots.insert(place.local);
++        }
++        self.super_terminator(terminator, location);
++    }
++
++    fn visit_statement(&mut self, statement: &Statement, location: Location) {
++        if let StatementKind::Assign(place, rvalue) = &statement.kind {
++            self.opaque_source = contains_opaque(self.tcx, place.ty(self.locals).unwrap())
++                || rvalue_has_opaque_source(self.tcx, rvalue, self.locals);
++        }
++        self.super_statement(statement, location);
++        self.opaque_source = false;
++    }
++
++    fn visit_operand(&mut self, operand: &Operand, location: Location) {
++        if self.opaque_source
++            && let Operand::Copy(place) | Operand::Move(place) = operand
++        {
++            self.roots.insert(place.local);
++        }
++        self.super_operand(operand, location);
++    }
++
++    fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
++        if let Rvalue::AddressOf(_, place) | Rvalue::Ref(_, _, place) = rvalue
++            && !place.projection.contains(&ProjectionElem::Deref)
++        {
++            self.roots.insert(place.local);
++        }
++        self.super_rvalue(rvalue, location);
++    }
+ }
+ 
+-impl MirVisitor for CheckUninitVisitor {
++impl MirVisitor for CheckUninitVisitor<'_> {
+     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+         // Leave it as an exhaustive match to be notified when a new kind is added.
+         match &stmt.kind {
+@@ -114,10 +264,26 @@ fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+                 // First check rvalue.
+                 self.visit_rvalue(rvalue, location);
+ 
++                if contains_opaque(self.tcx, place.ty(&self.locals).unwrap())
++                    || rvalue_has_opaque_source(self.tcx, rvalue, &self.locals)
++                {
++                    self.push_target(MemoryInitOp::AssignOpaque {
++                        lvalue: place.clone(),
++                        rvalue: rvalue.clone(),
++                    });
++                    self.push_target(MemoryInitOp::SetRef {
++                        operand: Operand::Copy(place.clone()),
++                        value: true,
++                        position: InsertPosition::After,
++                    });
++                    self.finish_statement();
++                    return;
++                }
++
+                 // Preemptively check if we do not support computing the layout of a type because of
+                 // inner union fields. This allows to inject `assert!(false)` early.
+                 if let Err(reason @ LayoutComputationError::UnionAsField(_)) =
+-                    PointeeInfo::from_ty(place.ty(&self.locals).unwrap())
++                    PointeeInfo::from_ty(self.tcx, place.ty(&self.locals).unwrap())
+                 {
+                     self.push_target(MemoryInitOp::Unsupported {
+                         reason: format!(
+@@ -126,7 +292,7 @@ fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+                             reason
+                         ),
+                     });
+-                    return;
++                    // Continue to queue this target and advance the instruction.
+                 }
+ 
+                 // Check whether we are assigning into a dereference (*ptr = _).
+@@ -156,17 +322,6 @@ fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+                         });
+                     }
+                 }
+-                // Check whether Rvalue creates a new initialized pointer previously not captured inside shadow memory.
+-                if place.ty(&self.locals).unwrap().kind().is_raw_ptr()
+-                    && let Rvalue::AddressOf(..) = rvalue
+-                {
+-                    self.push_target(MemoryInitOp::Set {
+-                        operand: Operand::Copy(place.clone()),
+-                        value: true,
+-                        position: InsertPosition::After,
+-                    });
+-                }
+-
+                 // TODO: add support for ADTs which could have unions as subfields. Currently,
+                 // if a union as a subfield is detected, `assert!(false)` will be injected from
+                 // the type layout code.
+@@ -220,12 +375,31 @@ fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+                         _ => self
+                             .push_target(MemoryInitOp::Unsupported { reason: "Performing a union assignment with a non-supported construct as an Rvalue".to_string() }),
+                     }
++                } else if self.addressed_storage(place) {
++                    // The typed write, after its source checks, establishes the
++                    // ordinary destination data. Taking its address does not.
++                    self.push_target(MemoryInitOp::SetRef {
++                        operand: Operand::Copy(place.clone()),
++                        value: true,
++                        position: InsertPosition::After,
++                    });
++                }
++            }
++            StatementKind::StorageLive(local) | StatementKind::StorageDead(local) => {
++                if self.addressed_locals.contains(local) {
++                    self.push_target(MemoryInitOp::SetRef {
++                        operand: Operand::Copy(Place::from(*local)),
++                        value: false,
++                        position: if matches!(stmt.kind, StatementKind::StorageLive(_)) {
++                            InsertPosition::After
++                        } else {
++                            InsertPosition::Before
++                        },
++                    });
+                 }
+             }
+             StatementKind::FakeRead(_, _)
+             | StatementKind::SetDiscriminant { .. }
+-            | StatementKind::StorageLive(_)
+-            | StatementKind::StorageDead(_)
+             | StatementKind::PlaceMention(_)
+             | StatementKind::AscribeUserType { .. }
+             | StatementKind::Coverage(_)
+@@ -233,17 +407,7 @@ fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+             | StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(_))
+             | StatementKind::Nop => self.super_statement(stmt, location),
+         }
+-        // Switch to the next statement.
+-        if let SourceInstruction::Statement { idx, bb } = self.current_target.source {
+-            self.targets.push(self.current_target.clone());
+-            self.current_target = InitRelevantInstruction {
+-                source: SourceInstruction::Statement { idx: idx + 1, bb },
+-                after_instruction: vec![],
+-                before_instruction: vec![],
+-            };
+-        } else {
+-            unreachable!()
+-        }
++        self.finish_statement();
+     }
+ 
+     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+@@ -260,16 +424,59 @@ fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+         }
+         // Leave it as an exhaustive match to be notified when a new kind is added.
+         match &term.kind {
+-            TerminatorKind::Call { func, args, destination, .. } => {
++            TerminatorKind::Call { func, args, destination, target, .. } => {
+                 self.super_terminator(term, location);
++                let opaque_call = self.nonzero_opaque(destination.ty(&self.locals).unwrap())
++                    || args.iter().any(|arg| self.nonzero_opaque(arg.ty(&self.locals).unwrap()));
+                 let instance = match try_resolve_instance(&self.locals, func) {
+                     Ok(instance) => instance,
+                     Err(reason) => {
+-                        self.super_terminator(term, location);
+                         self.push_target(MemoryInitOp::Unsupported { reason });
++                        self.targets.push(self.current_target.clone());
+                         return;
+                     }
+                 };
++                if opaque_call {
++                    let coverage = self
++                        .boundary_coverage
++                        .identity(self.tcx, self.instance)
++                        .and_then(|_| self.boundary_coverage.identity(self.tcx, instance));
++                    let has_unwind = matches!(
++                        &term.kind,
++                        TerminatorKind::Call {
++                            unwind: rustc_public::mir::UnwindAction::Cleanup(_),
++                            ..
++                        }
++                    );
++                    match coverage {
++                        Ok(callee) if !has_unwind => {
++                            let arguments = args
++                                .iter()
++                                .enumerate()
++                                .filter(|(_, arg)| {
++                                    self.nonzero_opaque(arg.ty(&self.locals).unwrap())
++                                })
++                                .map(|(idx, arg)| (idx + 1, arg.clone()))
++                                .collect();
++                            self.push_target(MemoryInitOp::Boundary(BoundaryOp::BeginCall {
++                                callee,
++                                arguments,
++                            }));
++                            if target.is_some() {
++                                self.push_target(MemoryInitOp::Boundary(BoundaryOp::LoadReturn {
++                                    callee,
++                                    place: destination.clone(),
++                                }));
++                            }
++                        }
++                        Ok(_) => self.push_target(MemoryInitOp::Unsupported {
++                            reason: "Opaque call with unwind cleanup is unsupported.".into(),
++                        }),
++                        Err(reason) => self.push_target(MemoryInitOp::Unsupported { reason }),
++                    }
++                    self.targets.push(self.current_target.clone());
++                    return;
++                }
+                 match instance.kind {
+                     InstanceKind::Intrinsic => {
+                         match Intrinsic::from_instance(&instance) {
+@@ -398,14 +605,21 @@ fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+                     }
+                     _ => {}
+                 }
++                if target.is_some()
++                    && self.addressed_storage(destination)
++                    && !destination.ty(&self.locals).unwrap().kind().is_union()
++                {
++                    // InsertPosition::After splits this call's normal edge.
++                    self.push_target(MemoryInitOp::SetRef {
++                        operand: Operand::Copy(destination.clone()),
++                        value: true,
++                        position: InsertPosition::After,
++                    });
++                }
+             }
+             TerminatorKind::Drop { place, .. } => {
+                 self.super_terminator(term, location);
+-                let place_ty = place.ty(&self.locals).unwrap();
+-
+-                // When drop is codegen'ed for types that could define their own dropping
+-                // behavior, a reference is taken to the place which is later implicitly coerced
+-                // to a pointer. Hence, we need to bless this pointer as initialized.
++                // Drop may read ordinary fields, but never initializes them.
+                 match place
+                     .ty(&self.locals)
+                     .unwrap()
+@@ -414,31 +628,42 @@ fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+                     .expect("should be working with monomorphized code")
+                 {
+                     RigidTy::Adt(..) | RigidTy::Dynamic(_, _) => {
+-                        self.push_target(MemoryInitOp::SetRef {
++                        self.push_target(MemoryInitOp::CheckRef {
+                             operand: Operand::Copy(place.clone()),
+-                            value: true,
+-                            position: InsertPosition::Before,
+                         });
+                     }
+                     _ => {}
+                 }
+-
+-                if place_ty.kind().is_raw_ptr() {
+-                    self.push_target(MemoryInitOp::Set {
+-                        operand: Operand::Copy(place.clone()),
+-                        value: false,
+-                        position: InsertPosition::After,
+-                    });
+-                }
+             }
+             TerminatorKind::Goto { .. }
+             | TerminatorKind::SwitchInt { .. }
+             | TerminatorKind::Resume
+             | TerminatorKind::Abort
+-            | TerminatorKind::Return
+             | TerminatorKind::Unreachable
+             | TerminatorKind::Assert { .. }
+             | TerminatorKind::InlineAsm { .. } => self.super_terminator(term, location),
++            TerminatorKind::Return => {
++                if self.has_opaque_boundary(self.arg_count) {
++                    match self.boundary_coverage.identity(self.tcx, self.instance) {
++                        Ok(callee) => {
++                            self.push_target(MemoryInitOp::Boundary(BoundaryOp::StoreReturn {
++                                callee,
++                                place: Place::from(0),
++                            }))
++                        }
++                        Err(reason) => self.push_target(MemoryInitOp::Unsupported { reason }),
++                    }
++                } else if self.addressed_storage(&Place::from(0)) {
++                    // Return implicitly reads _0. The generic MIR visitor visits
++                    // that local without visit_place, so delayed checking alone
++                    // cannot catch a raw write that corrupted its required data.
++                    // Check before the caller initializes its return destination.
++                    self.push_target(MemoryInitOp::CheckRef {
++                        operand: Operand::Copy(Place::from(0)),
++                    });
++                }
++                self.super_terminator(term, location);
++            }
+         }
+         // Push the current target from the terminator onto the list.
+         self.targets.push(self.current_target.clone());
+@@ -451,7 +676,9 @@ fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location)
+             match elem {
+                 ProjectionElem::Deref => {
+                     let ptr_ty = intermediate_place.ty(&self.locals).unwrap();
+-                    if ptr_ty.kind().is_raw_ptr() {
++                    let address_target = self.forming_raw_address
++                        && !place.projection[idx + 1..].contains(&ProjectionElem::Deref);
++                    if ptr_ty.kind().is_raw_ptr() && !address_target {
+                         self.push_target(MemoryInitOp::Check {
+                             operand: Operand::Copy(intermediate_place.clone()),
+                         });
+@@ -460,6 +687,7 @@ fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location)
+                 ProjectionElem::Field(_, _) => {
+                     if intermediate_place.ty(&self.locals).unwrap().kind().is_union()
+                         && !ptx.is_mutating()
++                        && !self.forming_raw_address
+                     {
+                         let contains_deref_projection =
+                             { place.projection.contains(&ProjectionElem::Deref) };
+@@ -494,13 +722,20 @@ fn visit_operand(&mut self, operand: &Operand, location: Location) {
+         {
+             for (_, prov) in &allocation.provenance.ptrs {
+                 if let GlobalAlloc::Static(_) = GlobalAlloc::from(prov.0)
+-                    && constant.ty().kind().is_raw_ptr()
++                    && matches!(
++                        constant.ty().kind(),
++                        TyKind::RigidTy(RigidTy::RawPtr(..) | RigidTy::Ref(..))
++                    )
+                 {
+-                    // If a static is a raw pointer, need to mark it as initialized.
+-                    self.push_target(MemoryInitOp::Set {
+-                        operand: Operand::Constant(constant.clone()),
+-                        value: true,
+-                        position: InsertPosition::Before,
++                    // Reusing a static address cannot restore overwritten state.
++                    // Until initializer state is modeled, refuse this operation.
++                    self.push_target(MemoryInitOp::Unsupported {
++                        reason: if constant.ty().kind().is_raw_ptr() {
++                            "Static raw-pointer initialization-state transfer is not supported."
++                        } else {
++                            "Static reference initialization-state transfer is not supported."
++                        }
++                        .to_string(),
+                     });
+                 };
+             }
+@@ -509,6 +744,13 @@ fn visit_operand(&mut self, operand: &Operand, location: Location) {
+     }
+ 
+     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
++        if matches!(rvalue, Rvalue::AddressOf(..)) {
++            let previous = self.forming_raw_address;
++            self.forming_raw_address = true;
++            self.super_rvalue(rvalue, location);
++            self.forming_raw_address = previous;
++            return;
++        }
+         if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
+             match cast_kind {
+                 CastKind::PointerCoercion(PointerCoercion::Unsize) => {
+@@ -522,7 +764,13 @@ fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+                 }
+                 CastKind::Transmute => {
+                     let operand_ty = operand.ty(&self.locals).unwrap();
+-                    if !tys_layout_compatible_to_size(&operand_ty, ty) {
++                    if contains_opaque(self.tcx, operand_ty) || contains_opaque(self.tcx, *ty) {
++                        // The assignment transfer checks source storage using
++                        // the destination mask before permitting this cast.
++                        self.super_rvalue(rvalue, location);
++                        return;
++                    }
++                    if !tys_layout_compatible_to_size(self.tcx, &operand_ty, ty) {
+                         // If transmuting between two types of incompatible layouts, padding
+                         // bytes are exposed, which is UB.
+                         self.push_target(MemoryInitOp::TriviallyUnsafe {
+@@ -534,7 +782,7 @@ fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+                         TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
+                     ) = (operand_ty.kind(), ty.kind())
+                     {
+-                        if !tys_layout_compatible_to_size(&from_ty, &to_ty) {
++                        if !tys_layout_compatible_to_size(self.tcx, &from_ty, &to_ty) {
+                             // Since references are supposed to always be initialized for its type,
+                             // transmuting between two references of incompatible layout is UB.
+                             self.push_target(MemoryInitOp::TriviallyUnsafe {
+@@ -707,11 +955,14 @@ fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
+ /// Try retrieving instance for the given function operand.
+ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance, String> {
+     let ty = func.ty(locals).unwrap();
++    // This local pass must guard unsupported endpoints even when the delayed
++    // pass finds no alias-analysis targets and therefore does not run.
++    if let Some(reason) = unsupported_call(ty) {
++        return Err(reason);
++    }
+     match ty.kind() {
+         TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
+-        _ => Err(format!(
+-            "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
+-        )),
++        _ => unreachable!("unsupported_call rejects non-function items"),
+     }
+ }
+ 
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/relevant_instruction.rs b/kani-compiler/src/kani_middle/transform/check_uninit/relevant_instruction.rs
+index 973dde0..c688b30 100644
+--- a/kani-compiler/src/kani_middle/transform/check_uninit/relevant_instruction.rs
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/relevant_instruction.rs
+@@ -19,43 +19,97 @@
+ /// Memory initialization operations: set or get memory initialization state for a given pointer.
+ #[derive(AsRefStr, Clone, Debug)]
+ pub enum MemoryInitOp {
++    Boundary(super::boundary::BoundaryOp),
+     /// Check memory initialization of data bytes in a memory region starting from the pointer
+     /// `operand` and of length `sizeof(operand)` bytes.
+-    Check { operand: Operand },
++    Check {
++        operand: Operand,
++    },
+     /// Check memory initialization of the data bytes of a `pointee_ty` at the pointer `operand`,
+     /// which may point to a value of another type.
+-    CheckAs { operand: Operand, pointee_ty: Ty },
++    CheckAs {
++        operand: Operand,
++        pointee_ty: Ty,
++    },
+     /// Set memory initialization state of data bytes in a memory region starting from the pointer
+     /// `operand` and of length `sizeof(operand)` bytes.
+-    Set { operand: Operand, value: bool, position: InsertPosition },
++    Set {
++        operand: Operand,
++        value: bool,
++        position: InsertPosition,
++    },
+     /// Check memory initialization of data bytes in a memory region starting from the pointer
+     /// `operand` and of length `count * sizeof(operand)` bytes.
+-    CheckSliceChunk { operand: Operand, count: Operand },
++    CheckSliceChunk {
++        operand: Operand,
++        count: Operand,
++    },
+     /// Set memory initialization state of data bytes in a memory region starting from the pointer
+     /// `operand` and of length `count * sizeof(operand)` bytes.
+-    SetSliceChunk { operand: Operand, count: Operand, value: bool, position: InsertPosition },
++    SetSliceChunk {
++        operand: Operand,
++        count: Operand,
++        value: bool,
++        position: InsertPosition,
++    },
+     /// Set memory initialization of data bytes in a memory region starting from the reference to
+     /// `operand` and of length `sizeof(operand)` bytes.
+-    CheckRef { operand: Operand },
++    CheckRef {
++        operand: Operand,
++    },
++    /// Read by-value storage using the required-data mask of another type.
++    CheckRefAs {
++        operand: Operand,
++        pointee_ty: Ty,
++    },
+     /// Set memory initialization of data bytes in a memory region starting from the reference to
+     /// `operand` and of length `sizeof(operand)` bytes.
+-    SetRef { operand: Operand, value: bool, position: InsertPosition },
++    SetRef {
++        operand: Operand,
++        value: bool,
++        position: InsertPosition,
++    },
+     /// Unsupported memory initialization operation.
+-    Unsupported { reason: String },
++    Unsupported {
++        reason: String,
++    },
+     /// Operation that trivially accesses uninitialized memory, results in injecting `assert!(false)`.
+-    TriviallyUnsafe { reason: String },
++    TriviallyUnsafe {
++        reason: String,
++    },
+     /// Copy memory initialization state over to another operand.
+-    Copy { from: Operand, to: Operand, count: Operand },
++    Copy {
++        from: Operand,
++        to: Operand,
++        count: Operand,
++    },
+     /// Copy memory initialization state over from one union variable to another.
+-    AssignUnion { lvalue: Place, rvalue: Operand },
++    AssignUnion {
++        lvalue: Place,
++        rvalue: Operand,
++    },
++    /// Explicit transfer for owned opaque payloads, before the typed assignment.
++    AssignOpaque {
++        lvalue: Place,
++        rvalue: Rvalue,
++    },
+     /// Create a union from scratch with a given field index and store it in the provided operand.
+-    CreateUnion { operand: Operand, field: FieldIdx },
++    CreateUnion {
++        operand: Operand,
++        field: FieldIdx,
++    },
+     /// Load argument containing a union from the argument buffer together if the argument number
+     /// provided matches.
+-    LoadArgument { operand: Operand, argument_no: usize },
++    LoadArgument {
++        operand: Operand,
++        argument_no: usize,
++    },
+     /// Store argument containing a union into the argument buffer together with the argument number
+     /// provided.
+-    StoreArgument { operand: Operand, argument_no: usize },
++    StoreArgument {
++        operand: Operand,
++        argument_no: usize,
++    },
+ }
+ 
+ impl MemoryInitOp {
+@@ -76,6 +130,10 @@ pub fn mk_operand(
+             MemoryInitOp::CheckAs { operand, pointee_ty } => {
+                 mk_cast(operand, *pointee_ty, body, statements, source)
+             }
++            MemoryInitOp::CheckRefAs { operand, pointee_ty } => {
++                let pointer = mk_ref(operand, body, statements, source);
++                mk_cast(&pointer, *pointee_ty, body, statements, source)
++            }
+             MemoryInitOp::CheckRef { operand, .. }
+             | MemoryInitOp::SetRef { operand, .. }
+             | MemoryInitOp::CreateUnion { operand, .. }
+@@ -84,6 +142,8 @@ pub fn mk_operand(
+                 mk_ref(operand, body, statements, source)
+             }
+             MemoryInitOp::Copy { .. }
++            | MemoryInitOp::AssignOpaque { .. }
++            | MemoryInitOp::Boundary(_)
+             | MemoryInitOp::AssignUnion { .. }
+             | MemoryInitOp::Unsupported { .. }
+             | MemoryInitOp::TriviallyUnsafe { .. } => {
+@@ -125,7 +185,10 @@ pub fn operand_ty(&self, body: &MutableBody) -> Ty {
+             | MemoryInitOp::Set { operand, .. }
+             | MemoryInitOp::CheckSliceChunk { operand, .. }
+             | MemoryInitOp::SetSliceChunk { operand, .. } => operand.ty(body.locals()).unwrap(),
+-            MemoryInitOp::CheckAs { pointee_ty, .. } => Ty::new_ptr(*pointee_ty, Mutability::Not),
++            MemoryInitOp::CheckAs { pointee_ty, .. }
++            | MemoryInitOp::CheckRefAs { pointee_ty, .. } => {
++                Ty::new_ptr(*pointee_ty, Mutability::Not)
++            }
+             MemoryInitOp::SetRef { operand, .. }
+             | MemoryInitOp::CheckRef { operand, .. }
+             | MemoryInitOp::CreateUnion { operand, .. }
+@@ -138,7 +201,10 @@ pub fn operand_ty(&self, body: &MutableBody) -> Ty {
+                 let rvalue = Rvalue::AddressOf(RawPtrKind::Const, place.clone());
+                 rvalue.ty(body.locals()).unwrap()
+             }
+-            MemoryInitOp::Unsupported { .. } | MemoryInitOp::TriviallyUnsafe { .. } => {
++            MemoryInitOp::Unsupported { .. }
++            | MemoryInitOp::TriviallyUnsafe { .. }
++            | MemoryInitOp::AssignOpaque { .. }
++            | MemoryInitOp::Boundary(_) => {
+                 unreachable!("operands do not exist for this operation")
+             }
+             MemoryInitOp::Copy { from, to, .. } => {
+@@ -172,6 +238,9 @@ pub fn expect_count(&self) -> Operand {
+             | MemoryInitOp::Copy { count, .. } => count.clone(),
+             MemoryInitOp::Check { .. }
+             | MemoryInitOp::CheckAs { .. }
++            | MemoryInitOp::CheckRefAs { .. }
++            | MemoryInitOp::AssignOpaque { .. }
++            | MemoryInitOp::Boundary(_)
+             | MemoryInitOp::Set { .. }
+             | MemoryInitOp::CheckRef { .. }
+             | MemoryInitOp::SetRef { .. }
+@@ -192,6 +261,9 @@ pub fn expect_value(&self) -> bool {
+             MemoryInitOp::CreateUnion { .. } => true,
+             MemoryInitOp::Check { .. }
+             | MemoryInitOp::CheckAs { .. }
++            | MemoryInitOp::CheckRefAs { .. }
++            | MemoryInitOp::AssignOpaque { .. }
++            | MemoryInitOp::Boundary(_)
+             | MemoryInitOp::CheckSliceChunk { .. }
+             | MemoryInitOp::CheckRef { .. }
+             | MemoryInitOp::Unsupported { .. }
+@@ -208,6 +280,9 @@ pub fn union_field(&self) -> Option<FieldIdx> {
+             MemoryInitOp::CreateUnion { field, .. } => Some(*field),
+             MemoryInitOp::Check { .. }
+             | MemoryInitOp::CheckAs { .. }
++            | MemoryInitOp::CheckRefAs { .. }
++            | MemoryInitOp::AssignOpaque { .. }
++            | MemoryInitOp::Boundary(_)
+             | MemoryInitOp::CheckSliceChunk { .. }
+             | MemoryInitOp::CheckRef { .. }
+             | MemoryInitOp::Set { .. }
+@@ -224,11 +299,14 @@ pub fn union_field(&self) -> Option<FieldIdx> {
+ 
+     pub fn position(&self) -> InsertPosition {
+         match self {
++            MemoryInitOp::Boundary(event) => event.position(),
+             MemoryInitOp::Set { position, .. }
+             | MemoryInitOp::SetSliceChunk { position, .. }
+             | MemoryInitOp::SetRef { position, .. } => *position,
+             MemoryInitOp::Check { .. }
+             | MemoryInitOp::CheckAs { .. }
++            | MemoryInitOp::CheckRefAs { .. }
++            | MemoryInitOp::AssignOpaque { .. }
+             | MemoryInitOp::CheckSliceChunk { .. }
+             | MemoryInitOp::CheckRef { .. }
+             | MemoryInitOp::Unsupported { .. }
+@@ -275,7 +353,7 @@ pub fn push_operation(&mut self, source_op: MemoryInitOp) {
+ /// A helper to generate instrumentation for taking a reference to a given operand. Returns the
+ /// operand which is a reference and stores all instrumentation in the statements vector passed.
+ /// A new local holding `operand`, a raw pointer, cast to `*const pointee_ty`.
+-fn mk_cast(
++pub(super) fn mk_cast(
+     operand: &Operand,
+     pointee_ty: Ty,
+     body: &mut MutableBody,
+@@ -295,7 +373,7 @@ fn mk_cast(
+     Operand::Copy(Place::from(result))
+ }
+ 
+-fn mk_ref(
++pub(super) fn mk_ref(
+     operand: &Operand,
+     body: &mut MutableBody,
+     statements: &mut Vec<Statement>,
+diff --git a/kani-compiler/src/kani_middle/transform/check_uninit/ty_layout.rs b/kani-compiler/src/kani_middle/transform/check_uninit/ty_layout.rs
+index 3992e8b..591b803 100644
+--- a/kani-compiler/src/kani_middle/transform/check_uninit/ty_layout.rs
++++ b/kani-compiler/src/kani_middle/transform/check_uninit/ty_layout.rs
+@@ -5,7 +5,9 @@
+ 
+ use std::fmt::Display;
+ 
+-use rustc_public::CrateDefType;
++use rustc_middle::ty::TyCtxt;
++use rustc_public::rustc_internal;
++use rustc_public::{CrateDef, CrateDefType};
+ use rustc_public::{
+     abi::{FieldsShape, Scalar, TagEncoding, ValueRepr, VariantsShape},
+     target::{MachineInfo, MachineSize},
+@@ -43,7 +45,7 @@ fn generate_byte_mask(size_in_bytes: usize, data_chunks: Vec<DataBytes>) -> Vec<
+ // the layout of the element or the layout of the actual type is returned.
+ pub enum PointeeLayout {
+     /// Layout of sized objects.
+-    Sized { layout: Layout },
++    Sized { layout: Layout, preserved: Layout },
+     /// Layout of slices, *const/mut str is included in this case and treated as *const/mut [u8].
+     Slice { element_layout: Layout },
+     /// Layout of unions, which are shared storage for multiple fields of potentially different layouts.
+@@ -56,7 +58,7 @@ impl PointeeLayout {
+     /// Returns the size of the layout, if available.
+     pub fn maybe_size(&self) -> Option<usize> {
+         match self {
+-            PointeeLayout::Sized { layout } => Some(layout.len()),
++            PointeeLayout::Sized { layout, .. } => Some(layout.len()),
+             PointeeLayout::Slice { element_layout } => Some(element_layout.len()),
+             PointeeLayout::Union { field_layouts } => {
+                 Some(field_layouts.iter().map(|field_layout| field_layout.len()).max().unwrap())
+@@ -105,7 +107,11 @@ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+ }
+ 
+ impl PointeeInfo {
+-    pub fn from_ty(ty: Ty) -> Result<Self, LayoutComputationError> {
++    pub fn from_ty(tcx: TyCtxt, ty: Ty) -> Result<Self, LayoutComputationError> {
++        if contains_opaque(tcx, ty) {
++            let (layout, preserved) = owned_byte_layout(tcx, ty)?;
++            return Ok(Self { pointee_ty: ty, layout: PointeeLayout::Sized { layout, preserved } });
++        }
+         match ty.kind() {
+             TyKind::RigidTy(rigid_ty) => match rigid_ty {
+                 RigidTy::Adt(adt_def, args) if adt_def.kind() == AdtKind::Union => {
+@@ -118,7 +124,7 @@ pub fn from_ty(ty: Ty) -> Result<Self, LayoutComputationError> {
+                         .map(|field_def| {
+                             let ty = field_def.ty_with_args(&args);
+                             let size_in_bytes = ty.layout().unwrap().shape().size.bytes();
+-                            data_bytes_for_ty(&MachineInfo::target(), ty, 0)
++                            data_bytes_for_ty(tcx, &MachineInfo::target(), ty, 0)
+                                 .map(|data_chunks| generate_byte_mask(size_in_bytes, data_chunks))
+                         })
+                         .collect();
+@@ -130,7 +136,7 @@ pub fn from_ty(ty: Ty) -> Result<Self, LayoutComputationError> {
+                 RigidTy::Str => {
+                     let slicee_ty = Ty::unsigned_ty(UintTy::U8);
+                     let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
+-                    let data_chunks = data_bytes_for_ty(&MachineInfo::target(), slicee_ty, 0)?;
++                    let data_chunks = data_bytes_for_ty(tcx, &MachineInfo::target(), slicee_ty, 0)?;
+                     let layout = PointeeLayout::Slice {
+                         element_layout: generate_byte_mask(size_in_bytes, data_chunks),
+                     };
+@@ -138,7 +144,7 @@ pub fn from_ty(ty: Ty) -> Result<Self, LayoutComputationError> {
+                 }
+                 RigidTy::Slice(slicee_ty) => {
+                     let size_in_bytes = slicee_ty.layout().unwrap().shape().size.bytes();
+-                    let data_chunks = data_bytes_for_ty(&MachineInfo::target(), slicee_ty, 0)?;
++                    let data_chunks = data_bytes_for_ty(tcx, &MachineInfo::target(), slicee_ty, 0)?;
+                     let layout = PointeeLayout::Slice {
+                         element_layout: generate_byte_mask(size_in_bytes, data_chunks),
+                     };
+@@ -150,9 +156,10 @@ pub fn from_ty(ty: Ty) -> Result<Self, LayoutComputationError> {
+                 _ => {
+                     if ty.layout().unwrap().shape().is_sized() {
+                         let size_in_bytes = ty.layout().unwrap().shape().size.bytes();
+-                        let data_chunks = data_bytes_for_ty(&MachineInfo::target(), ty, 0)?;
++                        let data_chunks = data_bytes_for_ty(tcx, &MachineInfo::target(), ty, 0)?;
+                         let layout = PointeeLayout::Sized {
+                             layout: generate_byte_mask(size_in_bytes, data_chunks),
++                            preserved: vec![false; size_in_bytes],
+                         };
+                         Ok(PointeeInfo { pointee_ty: ty, layout })
+                     } else {
+@@ -175,18 +182,129 @@ pub fn layout(&self) -> &PointeeLayout {
+     }
+ }
+ 
++/// Identify the actual standard-library union, never a user type with the same name.
++pub fn is_maybe_uninit(tcx: TyCtxt, ty: Ty) -> bool {
++    let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() else { return false };
++    Some(rustc_internal::internal(tcx, def.def_id())) == tcx.lang_items().maybe_uninit()
++}
++
++/// Only owned fields carry opaque state. Pointer/reference pointees do not.
++pub fn contains_opaque(tcx: TyCtxt, ty: Ty) -> bool {
++    if is_maybe_uninit(tcx, ty) {
++        return true;
++    }
++    match ty.kind() {
++        TyKind::RigidTy(RigidTy::Adt(def, args)) => def.variants_iter().any(|variant| {
++            variant.fields().iter().any(|field| contains_opaque(tcx, field.ty_with_args(&args)))
++        }),
++        TyKind::RigidTy(RigidTy::Array(element, _) | RigidTy::Slice(element)) => {
++            contains_opaque(tcx, element)
++        }
++        TyKind::RigidTy(RigidTy::Tuple(fields)) => {
++            fields.iter().any(|field| contains_opaque(tcx, *field))
++        }
++        TyKind::RigidTy(RigidTy::Closure(_, args)) => {
++            closure_fields(tcx, &args).into_iter().any(|field| contains_opaque(tcx, field))
++        }
++        TyKind::RigidTy(RigidTy::Pat(base, _)) => contains_opaque(tcx, base),
++        _ => false,
++    }
++}
++
++// Use rustc's closure argument representation instead of guessing generic
++// argument positions or treating the capture tuple's layout as the environment.
++fn closure_fields(tcx: TyCtxt, args: &rustc_public::ty::GenericArgs) -> Vec<Ty> {
++    rustc_internal::internal(tcx, args)
++        .as_closure()
++        .upvar_tys()
++        .iter()
++        .map(rustc_internal::stable)
++        .collect()
++}
++
++/// Required-data and preserved-payload masks; bytes in neither mask are padding.
++/// Nonzero opaque state is supported only in structs, tuples and fixed arrays.
++fn owned_byte_layout(tcx: TyCtxt, ty: Ty) -> Result<(Layout, Layout), LayoutComputationError> {
++    let shape = ty.layout().map_err(|_| LayoutComputationError::UnsupportedType(ty))?.shape();
++    if !shape.is_sized() {
++        return Err(LayoutComputationError::UnknownUnsizedLayout(ty));
++    }
++    let size = shape.size.bytes();
++    if is_maybe_uninit(tcx, ty) {
++        return Ok((vec![false; size], vec![true; size]));
++    }
++    if !contains_opaque(tcx, ty) {
++        let chunks = data_bytes_for_ty(tcx, &MachineInfo::target(), ty, 0)?;
++        return Ok((generate_byte_mask(size, chunks), vec![false; size]));
++    }
++    let fields: Vec<(usize, Ty)> = match (ty.kind(), &shape.fields) {
++        (TyKind::RigidTy(RigidTy::Adt(def, args)), FieldsShape::Arbitrary { offsets })
++            if def.kind() == AdtKind::Struct =>
++        {
++            let fields = def.variants_iter().next().unwrap().fields();
++            if fields.len() != offsets.len() {
++                return Err(LayoutComputationError::UnsupportedType(ty));
++            }
++            fields
++                .iter()
++                .enumerate()
++                .map(|(idx, field)| (offsets[idx].bytes(), field.ty_with_args(&args)))
++                .collect()
++        }
++        (TyKind::RigidTy(RigidTy::Tuple(fields)), FieldsShape::Arbitrary { offsets }) => {
++            if fields.len() != offsets.len() {
++                return Err(LayoutComputationError::UnsupportedType(ty));
++            }
++            fields.iter().enumerate().map(|(idx, field)| (offsets[idx].bytes(), *field)).collect()
++        }
++        (TyKind::RigidTy(RigidTy::Array(element, _)), FieldsShape::Array { stride, count }) => {
++            let count =
++                usize::try_from(*count).map_err(|_| LayoutComputationError::UnsupportedType(ty))?;
++            (0..count)
++                .map(|idx| {
++                    idx.checked_mul(stride.bytes())
++                        .map(|offset| (offset, element))
++                        .ok_or(LayoutComputationError::UnsupportedType(ty))
++                })
++                .collect::<Result<_, _>>()?
++        }
++        _ => return Err(LayoutComputationError::UnsupportedType(ty)),
++    };
++    let mut required = vec![false; size];
++    let mut preserved = vec![false; size];
++    let mut occupied = vec![false; size];
++    for (offset, field) in fields {
++        let (field_required, field_preserved) = owned_byte_layout(tcx, field)?;
++        let end = offset
++            .checked_add(field_required.len())
++            .filter(|end| *end <= size)
++            .ok_or(LayoutComputationError::UnsupportedType(ty))?;
++        if occupied[offset..end].iter().any(|byte| *byte) {
++            return Err(LayoutComputationError::UnsupportedType(ty));
++        }
++        occupied[offset..end].fill(true);
++        required[offset..end].copy_from_slice(&field_required);
++        preserved[offset..end].copy_from_slice(&field_preserved);
++    }
++    Ok((required, preserved))
++}
++
+ /// Retrieve a set of data bytes with offsets for a type.
+ fn data_bytes_for_ty(
++    tcx: TyCtxt,
+     machine_info: &MachineInfo,
+     ty: Ty,
+     current_offset: usize,
+ ) -> Result<Vec<DataBytes>, LayoutComputationError> {
+     let layout = ty.layout().unwrap().shape();
++    // All statically zero-sized layouts have an empty initialization mask,
++    // including closure environments. This is only a byte-tracking fact;
++    // inhabitedness and value-validity checks remain independent.
++    if layout.is_sized() && layout.size.bytes() == 0 {
++        return Ok(vec![]);
++    }
+ 
+     match layout.fields {
+-        // A zero-sized primitive, e.g. the never type `!`, has no data bytes to track (its
+-        // layout is not a scalar, so it must not reach the scalar case below).
+-        FieldsShape::Primitive if layout.size.bytes() == 0 => Ok(vec![]),
+         FieldsShape::Primitive => Ok(vec![match layout.value_repr {
+             ValueRepr::Scalar(Scalar::Initialized { value, .. }) => {
+                 DataBytes { offset: current_offset, size: value.size(machine_info) }
+@@ -195,7 +313,7 @@ fn data_bytes_for_ty(
+         }]),
+         FieldsShape::Array { stride, count } if count > 0 => {
+             let TyKind::RigidTy(RigidTy::Array(elem_ty, _)) = ty.kind() else { unreachable!() };
+-            let elem_data_bytes = data_bytes_for_ty(machine_info, elem_ty, current_offset)?;
++            let elem_data_bytes = data_bytes_for_ty(tcx, machine_info, elem_ty, current_offset)?;
+             let mut result = vec![];
+             if !elem_data_bytes.is_empty() {
+                 for idx in 0..count {
+@@ -231,6 +349,7 @@ fn data_bytes_for_ty(
+                                         let field_offset = offsets[idx].bytes();
+                                         let field_ty = fields[idx].ty_with_args(args);
+                                         fields_data_bytes.append(&mut data_bytes_for_ty(
++                                            tcx,
+                                             machine_info,
+                                             field_ty,
+                                             field_offset + current_offset,
+@@ -268,6 +387,7 @@ fn data_bytes_for_ty(
+                                             let field_ty = fields[field_idx].ty_with_args(args);
+                                             field_data_bytes_for_variant.append(
+                                                 &mut data_bytes_for_ty(
++                                                    tcx,
+                                                     machine_info,
+                                                     field_ty,
+                                                     field_offset + current_offset,
+@@ -322,6 +442,7 @@ fn data_bytes_for_ty(
+                                 let field_offset = offsets[idx].bytes();
+                                 let field_ty = fields[idx].ty_with_args(args);
+                                 struct_data_bytes.append(&mut data_bytes_for_ty(
++                                    tcx,
+                                     machine_info,
+                                     field_ty,
+                                     field_offset + current_offset,
+@@ -334,15 +455,44 @@ fn data_bytes_for_ty(
+                 RigidTy::Pat(base_ty, ..) => {
+                     // This is similar to a structure with one field and with niche defined.
+                     let mut pat_data_bytes = vec![];
+-                    pat_data_bytes.append(&mut data_bytes_for_ty(machine_info, *base_ty, 0)?);
++                    pat_data_bytes.append(&mut data_bytes_for_ty(tcx, machine_info, *base_ty, 0)?);
+                     Ok(pat_data_bytes)
+                 }
++                RigidTy::Closure(_, args) => {
++                    // Ordinary closure environments are records with compiler-
++                    // supplied offsets. Opaque captures route through
++                    // owned_byte_layout and explicitly refuse there.
++                    let fields = closure_fields(tcx, args);
++                    if fields.len() != offsets.len() {
++                        return Err(LayoutComputationError::UnsupportedType(ty));
++                    }
++                    let mut result = vec![];
++                    for idx in layout.fields.fields_by_offset_order() {
++                        let offset = offsets[idx].bytes();
++                        let field = fields[idx];
++                        let size = field
++                            .layout()
++                            .map_err(|_| LayoutComputationError::UnsupportedType(ty))?
++                            .shape()
++                            .size
++                            .bytes();
++                        if offset.checked_add(size).is_none_or(|end| end > layout.size.bytes()) {
++                            return Err(LayoutComputationError::UnsupportedType(ty));
++                        }
++                        let absolute = current_offset
++                            .checked_add(offset)
++                            .ok_or(LayoutComputationError::UnsupportedType(ty))?;
++                        result.append(&mut data_bytes_for_ty(tcx, machine_info, field, absolute)?);
++                    }
++                    Ok(result)
++                }
+                 RigidTy::Tuple(tys) => {
+                     let mut tuple_data_bytes = vec![];
+                     for idx in layout.fields.fields_by_offset_order() {
+                         let field_offset = offsets[idx].bytes();
+                         let field_ty = tys[idx];
+                         tuple_data_bytes.append(&mut data_bytes_for_ty(
++                            tcx,
+                             machine_info,
+                             field_ty,
+                             field_offset + current_offset,
+@@ -392,7 +542,6 @@ fn data_bytes_for_ty(
+                 }),
+                 RigidTy::FnDef(_, _)
+                 | RigidTy::FnPtr(_)
+-                | RigidTy::Closure(_, _)
+                 | RigidTy::Coroutine(_, _)
+                 | RigidTy::CoroutineClosure(_, _)
+                 | RigidTy::CoroutineWitness(_, _)
+@@ -407,30 +556,49 @@ fn data_bytes_for_ty(
+ 
+ /// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+ /// bytes in `to_ty`.
+-pub fn tys_layout_compatible_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+-    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte || !to_byte)
++pub fn tys_layout_compatible_to_size(tcx: TyCtxt, from_ty: &Ty, to_ty: &Ty) -> bool {
++    tys_layout_cmp_to_size(tcx, from_ty, to_ty, |from_byte, to_byte| from_byte || !to_byte)
+ }
+ 
+ /// Returns true if `to_ty` has a smaller or equal size and padding bytes in `from_ty` are padding
+ /// bytes in `to_ty`.
+-pub fn tys_layout_equal_to_size(from_ty: &Ty, to_ty: &Ty) -> bool {
+-    tys_layout_cmp_to_size(from_ty, to_ty, |from_byte, to_byte| from_byte == to_byte)
++pub fn tys_layout_equal_to_size(tcx: TyCtxt, from_ty: &Ty, to_ty: &Ty) -> bool {
++    tys_layout_cmp_to_size(tcx, from_ty, to_ty, |from_byte, to_byte| from_byte == to_byte)
+ }
+ 
+ /// Returns true if `to_ty` has a smaller or equal size and comparator function returns true for all
+ /// byte initialization value pairs up to size.
+-fn tys_layout_cmp_to_size(from_ty: &Ty, to_ty: &Ty, cmp: impl Fn(bool, bool) -> bool) -> bool {
++fn tys_layout_cmp_to_size(
++    tcx: TyCtxt,
++    from_ty: &Ty,
++    to_ty: &Ty,
++    cmp: impl Fn(bool, bool) -> bool,
++) -> bool {
++    // Two sized zero-byte values have no data/padding relation to violate.
++    // Valid-value checks still own inhabitedness and value validity. This also
++    // covers MaybeUninit<()> without treating nonzero union payload as padding.
++    if [from_ty, to_ty].into_iter().all(|ty| {
++        ty.layout()
++            .is_ok_and(|layout| layout.shape().is_sized() && layout.shape().size.bytes() == 0)
++    }) {
++        return true;
++    }
+     // Retrieve layouts to assess compatibility.
+-    let from_ty_info = PointeeInfo::from_ty(*from_ty);
+-    let to_ty_info = PointeeInfo::from_ty(*to_ty);
++    // Opaque casts need an explicit source check and state transfer, not the
++    // ordinary padding-compatibility shortcut.
++    if contains_opaque(tcx, *from_ty) || contains_opaque(tcx, *to_ty) {
++        return false;
++    }
++    let from_ty_info = PointeeInfo::from_ty(tcx, *from_ty);
++    let to_ty_info = PointeeInfo::from_ty(tcx, *to_ty);
+     if let (Ok(from_ty_info), Ok(to_ty_info)) = (from_ty_info, to_ty_info) {
+         let from_ty_layout = match from_ty_info.layout() {
+-            PointeeLayout::Sized { layout } => layout,
++            PointeeLayout::Sized { layout, .. } => layout,
+             PointeeLayout::Slice { element_layout } => element_layout,
+             PointeeLayout::TraitObject | PointeeLayout::Union { .. } => return false,
+         };
+         let to_ty_layout = match to_ty_info.layout() {
+-            PointeeLayout::Sized { layout } => layout,
++            PointeeLayout::Sized { layout, .. } => layout,
+             PointeeLayout::Slice { element_layout } => element_layout,
+             PointeeLayout::TraitObject | PointeeLayout::Union { .. } => return false,
+         };
+diff --git a/kani-compiler/src/kani_middle/transform/check_values.rs b/kani-compiler/src/kani_middle/transform/check_values.rs
+index bbf1ce1..4463758 100644
+--- a/kani-compiler/src/kani_middle/transform/check_values.rs
++++ b/kani-compiler/src/kani_middle/transform/check_values.rs
+@@ -391,12 +391,23 @@ fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+             // Leave it as an exhaustive match to be notified when a new kind is added.
+             match &stmt.kind {
+                 StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
+-                    // Source is a *const T and it must be safe for read.
+-                    // TODO: Implement value check.
+-                    self.push_target(SourceOp::UnsupportedCheck {
+-                        check: "copy_nonoverlapping".to_string(),
+-                        ty: copy.src.ty(self.locals).unwrap(),
++                    // Every initialized u8 bit pattern is valid. This exception only
++                    // concerns value validity; pointer/range/nonoverlap checks and
++                    // initialization-state propagation remain separate obligations.
++                    let src_ty = copy.src.ty(self.locals).unwrap();
++                    let dst_ty = copy.dst.ty(self.locals).unwrap();
++                    let byte_pointers = [src_ty, dst_ty].into_iter().all(|ty| {
++                        matches!(ty.kind(), TyKind::RigidTy(RigidTy::RawPtr(pointee, _))
++                            if pointee == Ty::unsigned_ty(UintTy::U8))
+                     });
++                    if byte_pointers {
++                        self.super_statement(stmt, location);
++                    } else {
++                        self.push_target(SourceOp::UnsupportedCheck {
++                            check: "copy_nonoverlapping".to_string(),
++                            ty: src_ty,
++                        });
++                    }
+                 }
+                 StatementKind::Assign(place, rvalue) => {
+                     // First check rvalue.
+diff --git a/kani-compiler/src/kani_middle/transform/kani_intrinsics.rs b/kani-compiler/src/kani_middle/transform/kani_intrinsics.rs
+index 7def650..1f4e95f 100644
+--- a/kani-compiler/src/kani_middle/transform/kani_intrinsics.rs
++++ b/kani-compiler/src/kani_middle/transform/kani_intrinsics.rs
+@@ -99,7 +99,7 @@ fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, B
+                         (false, body)
+                     }
+                 }
+-                KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
++                KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(tcx, body)),
+                 KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
+                 // The former two are handled in contracts pass for now, while the latter is handled in the the automatic harness pass.
+                 KaniIntrinsic::WriteAny
+@@ -204,7 +204,7 @@ fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
+     ///     __kani_mem_init_sm_get(ptr, layout, len)
+     /// }
+     /// ```
+-    fn is_initialized_body(&mut self, body: Body) -> Body {
++    fn is_initialized_body(&mut self, tcx: TyCtxt, body: Body) -> Body {
+         let mut new_body = MutableBody::from(body);
+         new_body.clear_body(TerminatorKind::Return);
+         let ret_var = RETURN_LOCAL;
+@@ -243,11 +243,11 @@ fn is_initialized_body(&mut self, body: Body) -> Body {
+         // ensure the correct type.
+         let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = arg_ty.kind() else { unreachable!() };
+         // Calculate pointee layout for byte-by-byte memory initialization checks.
+-        let pointee_info = PointeeInfo::from_ty(pointee_ty);
++        let pointee_info = PointeeInfo::from_ty(tcx, pointee_ty);
+         match pointee_info {
+             Ok(pointee_info) => {
+                 match pointee_info.layout() {
+-                    PointeeLayout::Sized { layout } => {
++                    PointeeLayout::Sized { layout, .. } => {
+                         if layout.is_empty() {
+                             // Encountered a ZST, so we can short-circut here.
+                             // Initialize return variable with True.
+diff --git a/kani-compiler/src/kani_middle/transform/mod.rs b/kani-compiler/src/kani_middle/transform/mod.rs
+index 51ae234..49ab534 100644
+--- a/kani-compiler/src/kani_middle/transform/mod.rs
++++ b/kani-compiler/src/kani_middle/transform/mod.rs
+@@ -126,6 +126,7 @@ pub fn new(queries: &QueryDb, tcx: TyCtxt, unit: &CodegenUnit) -> Self {
+         transformer.add_pass(
+             queries,
+             UninitPass {
++                boundary_coverage: check_uninit::boundary::BoundaryCoverage::new(queries, unit),
+                 // Since this uses demonic non-determinism under the hood, should not assume the assertion.
+                 safety_check_type: CheckType::new_safety_check_assert_no_assume(queries),
+                 unsupported_check_type: unsupported_check_type.clone(),
+diff --git a/library/kani_core/src/mem_init.rs b/library/kani_core/src/mem_init.rs
+index 37b9da8..439bba8 100644
+--- a/library/kani_core/src/mem_init.rs
++++ b/library/kani_core/src/mem_init.rs
+@@ -11,6 +11,7 @@
+ #[allow(clippy::crate_in_macro_def)]
+ macro_rules! kani_mem_init {
+     ($core:path) => {
++        use $core as memory_init_core;
+         /// Global object for tracking memory initialization state.
+         // `#[rustc_diagnostic_item]` cannot be applied to statics (rust-lang/rust
+         // disallows it), so we identify this static via Kani's own `fn_marker` tool
+@@ -20,6 +21,25 @@ macro_rules! kani_mem_init {
+ 
+         /// Global object for tracking union initialization state across function boundaries.
+         static mut ARGUMENT_BUFFER: Option<ArgumentBuffer> = None;
++        static mut OPAQUE_ARGUMENTS: OpaqueArguments = OpaqueArguments {
++            active: false,
++            callee: 0,
++            count: 0,
++            stored: 0,
++            loaded: 0,
++            selected: 0,
++            address: memory_init_core::ptr::null(),
++            size: 0,
++            consumed: false,
++        };
++        static mut OPAQUE_RETURN: OpaqueReturn = OpaqueReturn {
++            present: false,
++            callee: 0,
++            size: 0,
++            tracked: false,
++            relative: 0,
++            value: false,
++        };
+ 
+         /// Bytewise mask, representing which bytes of a type are data and which are padding.
+         /// For example, for a type like this:
+@@ -94,6 +114,30 @@ pub fn set<const LAYOUT_SIZE: usize>(
+                 }
+             }
+ 
++            /// Typed writes establish ordinary data and clear padding while
++            /// retaining opaque payload state transferred by the instrumenter.
++            /// Invalidation clears every byte, including preserved payload.
++            #[kanitool::disable_checks(pointer)]
++            pub fn set_preserving<const LAYOUT_SIZE: usize>(
++                &mut self,
++                ptr: *const u8,
++                layout: Layout<LAYOUT_SIZE>,
++                preserved: Layout<LAYOUT_SIZE>,
++                value: bool,
++            ) {
++                let object = super::mem::pointer_object(ptr);
++                let offset = super::mem::pointer_offset(ptr);
++                if self.tracked_object_id == object
++                    && self.tracked_offset >= offset
++                    && self.tracked_offset - offset < LAYOUT_SIZE
++                {
++                    let relative = self.tracked_offset - offset;
++                    if !value || !preserved[relative] {
++                        self.value = layout[relative] && value;
++                    }
++                }
++            }
++
+             /// Copy memory initialization state by non-deterministically switching the tracked object and
+             /// adjusting the tracked offset.
+             #[kanitool::disable_checks(pointer)]
+@@ -103,6 +147,11 @@ pub fn copy<const LAYOUT_SIZE: usize>(
+                 to_ptr: *const u8,
+                 num_elts: usize,
+             ) {
++                // A byte-free copy must not initialize any destination byte.
++                // The original operation still owns its pointer/precondition checks.
++                if num_elts == 0 || LAYOUT_SIZE == 0 {
++                    return;
++                }
+                 let from_obj = super::mem::pointer_object(from_ptr);
+                 let from_offset = super::mem::pointer_offset(from_ptr);
+ 
+@@ -116,11 +165,11 @@ pub fn copy<const LAYOUT_SIZE: usize>(
+                     let should_reset: bool = super::any();
+                     if should_reset {
+                         self.tracked_object_id = to_obj;
+-                        self.tracked_offset += to_offset - from_offset;
++                        self.tracked_offset = to_offset + (self.tracked_offset - from_offset);
+                         // Note that this preserves the value.
+                     }
+                 } else {
+-                    self.bless::<LAYOUT_SIZE>(to_ptr, 1);
++                    self.bless::<LAYOUT_SIZE>(to_ptr, num_elts);
+                 }
+             }
+ 
+@@ -198,6 +247,9 @@ fn initialize_memory_initialization_state() {
+                 MEM_INIT_STATE.tracked_object_id = super::any();
+                 MEM_INIT_STATE.tracked_offset = super::any();
+                 MEM_INIT_STATE.value = false;
++                ARGUMENT_BUFFER = None;
++                OPAQUE_ARGUMENTS.active = false;
++                OPAQUE_RETURN.present = false;
+             }
+         }
+ 
+@@ -232,6 +284,21 @@ fn set_ptr_initialized<const LAYOUT_SIZE: usize, T>(
+             }
+         }
+ 
++        #[kanitool::disable_checks(pointer)]
++        #[kanitool::fn_marker = "SetPtrInitializedPreservingModel"]
++        fn set_ptr_initialized_preserving<const LAYOUT_SIZE: usize, T>(
++            ptr: *const T,
++            layout: Layout<LAYOUT_SIZE>,
++            preserved: Layout<LAYOUT_SIZE>,
++            value: bool,
++        ) {
++            if LAYOUT_SIZE == 0 {
++                return;
++            }
++            let (ptr, _) = ptr.to_raw_parts();
++            unsafe { MEM_INIT_STATE.set_preserving(ptr as *const u8, layout, preserved, value) }
++        }
++
+         /// Get initialization state of `num_elts` items laid out according to the `layout` starting at address `ptr`.
+         #[kanitool::disable_checks(pointer)]
+         #[kanitool::fn_marker = "IsSliceChunkPtrInitializedModel"]
+@@ -358,6 +425,152 @@ fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *cons
+             copy_init_state::<LAYOUT_SIZE, T>(from, to, 1);
+         }
+ 
++        /// Paired opaque calls use a separate channel from the legacy union model.
++        /// Every position is selectable: the first store always selects, and each
++        /// later store independently either replaces that selection or retains it.
++        #[derive(Clone, Copy)]
++        struct OpaqueArguments {
++            active: bool,
++            callee: usize,
++            count: usize,
++            stored: usize,
++            loaded: usize,
++            selected: usize,
++            address: *const (),
++            size: usize,
++            consumed: bool,
++        }
++
++        #[kanitool::disable_checks(pointer)]
++        #[kanitool::fn_marker = "ClearOpaqueArgumentsModel"]
++        fn clear_opaque_arguments(callee: usize, count: usize) {
++            assert!(count > 0);
++            unsafe {
++                OPAQUE_ARGUMENTS = OpaqueArguments {
++                    active: true,
++                    callee,
++                    count,
++                    stored: 0,
++                    loaded: 0,
++                    selected: 0,
++                    address: memory_init_core::ptr::null(),
++                    size: 0,
++                    consumed: false,
++                };
++            }
++        }
++
++        #[kanitool::disable_checks(pointer)]
++        #[kanitool::fn_marker = "StoreOpaqueArgumentModel"]
++        fn store_opaque_argument<const N: usize, T>(from: *const T, index: usize, callee: usize) {
++            unsafe {
++                let mut event = OPAQUE_ARGUMENTS;
++                assert!(event.active, "missing opaque caller event");
++                assert!(event.callee == callee && event.loaded == 0);
++                assert!(event.stored < event.count);
++                if event.stored == 0 || super::any() {
++                    event.selected = index;
++                    event.address = from.cast();
++                    event.size = N;
++                }
++                event.stored += 1;
++                OPAQUE_ARGUMENTS = event;
++            }
++        }
++
++        #[kanitool::disable_checks(pointer)]
++        #[kanitool::fn_marker = "LoadOpaqueArgumentModel"]
++        fn load_opaque_argument<const N: usize, T>(to: *const T, index: usize, callee: usize) {
++            unsafe {
++                let mut event = OPAQUE_ARGUMENTS;
++                assert!(event.active, "missing opaque caller event");
++                assert!(event.callee == callee && event.stored == event.count);
++                assert!(event.loaded < event.count);
++                if event.selected == index {
++                    assert!(event.size == N && !event.consumed);
++                    copy_init_state_single::<N, ()>(event.address, to.cast());
++                    event.consumed = true;
++                } else {
++                    MEM_INIT_STATE.bless::<N>(to.cast(), 1);
++                }
++                event.loaded += 1;
++                OPAQUE_ARGUMENTS = event;
++            }
++        }
++
++        #[kanitool::disable_checks(pointer)]
++        #[kanitool::fn_marker = "FinishOpaqueArgumentsModel"]
++        fn finish_opaque_arguments(callee: usize, count: usize) {
++            unsafe {
++                let event = OPAQUE_ARGUMENTS;
++                assert!(event.active, "missing opaque caller event");
++                assert!(event.callee == callee && event.count == count);
++                assert!(event.stored == count && event.loaded == count && event.consumed);
++                OPAQUE_ARGUMENTS.active = false;
++            }
++        }
++
++        /// Snapshot while the return local is alive. No callee pointer crosses
++        /// the normal-return edge; an absent event is never an Untracked event.
++        #[derive(Clone, Copy)]
++        struct OpaqueReturn {
++            present: bool,
++            callee: usize,
++            size: usize,
++            tracked: bool,
++            relative: usize,
++            value: bool,
++        }
++
++        #[kanitool::fn_marker = "ClearOpaqueReturnModel"]
++        fn clear_opaque_return() {
++            unsafe {
++                OPAQUE_RETURN.present = false;
++            }
++        }
++
++        #[kanitool::disable_checks(pointer)]
++        #[kanitool::fn_marker = "StoreOpaqueReturnModel"]
++        fn store_opaque_return<const N: usize, T>(from: *const T, callee: usize) {
++            unsafe {
++                let object = super::mem::pointer_object(from);
++                let offset = super::mem::pointer_offset(from);
++                let tracked = MEM_INIT_STATE.tracked_object_id == object
++                    && MEM_INIT_STATE.tracked_offset >= offset
++                    && MEM_INIT_STATE.tracked_offset - offset < N;
++                OPAQUE_RETURN = OpaqueReturn {
++                    present: true,
++                    callee,
++                    size: N,
++                    tracked,
++                    relative: if tracked { MEM_INIT_STATE.tracked_offset - offset } else { 0 },
++                    value: MEM_INIT_STATE.value,
++                };
++            }
++        }
++
++        #[kanitool::disable_checks(pointer)]
++        #[kanitool::fn_marker = "LoadOpaqueReturnModel"]
++        fn load_opaque_return<const N: usize, T>(to: *const T, callee: usize) {
++            unsafe {
++                let event = OPAQUE_RETURN;
++                assert!(event.present, "missing opaque return event");
++                assert!(event.callee == callee && event.size == N);
++                OPAQUE_RETURN.present = false;
++                if event.tracked {
++                    assert!(event.relative < N);
++                    if super::any() {
++                        MEM_INIT_STATE.tracked_object_id = super::mem::pointer_object(to);
++                        MEM_INIT_STATE.tracked_offset =
++                            super::mem::pointer_offset(to) + event.relative;
++                        MEM_INIT_STATE.value = event.value;
++                    }
++                } else {
++                    MEM_INIT_STATE.bless::<N>(to.cast(), 1);
++                }
++            }
++        }
++
+         /// Information about currently tracked argument, used for passing union initialization
+         /// state across function boundaries. This struct is written to by the caller and read from
+         /// by the callee.
+diff --git a/tests/expected/uninit/access-static-padding.expected b/tests/expected/uninit/access-static-padding.expected
+index 5577aa3..cee5deb 100644
+--- a/tests/expected/uninit/access-static-padding.expected
++++ b/tests/expected/uninit/access-static-padding.expected
+@@ -2,7 +2,7 @@ Checking harness check_read_assoc_const_padding_fails...
+ Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const [u8; 32]`
+ 
+ Checking harness check_read_static_padding_fails...
+-Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const [u8; 8]`
++Failed Checks: Static reference initialization-state transfer is not supported.
+ 
+ Checking harness check_read_const_padding_fails...
+ Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const [u8; 4]`
+diff --git a/tests/expected/uninit/access-static-padding.rs b/tests/expected/uninit/access-static-padding.rs
+index 5e9edb5..302cd2b 100644
+--- a/tests/expected/uninit/access-static-padding.rs
++++ b/tests/expected/uninit/access-static-padding.rs
+@@ -1,8 +1,9 @@
+ // Copyright Kani Contributors
+ // SPDX-License-Identifier: Apache-2.0 OR MIT
+ // kani-flags: -Z uninit-checks
+-//! Add a check to ensure that we correctly detect reading the padding values of a static and
+-//! also of a constant.
++//! Constant padding reads fail at their read checks. Static references currently
++//! refuse before the read because static initializer state is not modeled; that
++//! case is a capability refusal, not evidence of detecting the padding read.
+ 
+ #![feature(generic_const_exprs)]
+ 
+diff --git a/tests/expected/uninit/delayed-ub/delayed-ub.expected b/tests/expected/uninit/delayed-ub/delayed-ub.expected
+index d998801..8d6d44b 100644
+--- a/tests/expected/uninit/delayed-ub/delayed-ub.expected
++++ b/tests/expected/uninit/delayed-ub/delayed-ub.expected
+@@ -26,9 +26,9 @@ delayed_ub_laundered.safety_check.\
+ 	 - Status: FAILURE\
+ 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+ 
+-delayed_ub_static.safety_check.\
++delayed_ub_static.unsupported_construct.1\
+ 	 - Status: FAILURE\
+-	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
++	 - Description: "Static raw-pointer initialization-state transfer is not supported."
+ 
+ delayed_ub_transmute.safety_check.\
+ 	 - Status: FAILURE\
+diff --git a/tests/expected/uninit/delayed-ub/delayed-ub.rs b/tests/expected/uninit/delayed-ub/delayed-ub.rs
+index 17b6545..9b1e456 100644
+--- a/tests/expected/uninit/delayed-ub/delayed-ub.rs
++++ b/tests/expected/uninit/delayed-ub/delayed-ub.rs
+@@ -31,6 +31,8 @@ fn delayed_ub_transmute() {
+ static mut VALUE: u128 = 42;
+ 
+ /// Delayed UB via mutable pointer write into a static.
++/// The experimental initialization model refuses the static address before
++/// this read. This case records a capability limit, not read-check coverage.
+ #[kani::proof]
+ fn delayed_ub_static() {
+     unsafe {
+diff --git a/tests/expected/uninit/nested-maybe-uninit-plan.expected b/tests/expected/uninit/nested-maybe-uninit-plan.expected
+new file mode 100644
+index 0000000..fc6341b
+--- /dev/null
++++ b/tests/expected/uninit/nested-maybe-uninit-plan.expected
+@@ -0,0 +1,16 @@
++- Status: SATISFIED\
++	 - Description: "before invalid read after nested call"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read after missing last write"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read after replacing payload"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read after copying uninitialized bytes"
++
++- Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type
++
++Complete - 2 successfully verified harnesses, 4 failures, 6 total.
+diff --git a/tests/expected/uninit/nested-maybe-uninit-plan.rs b/tests/expected/uninit/nested-maybe-uninit-plan.rs
+new file mode 100644
+index 0000000..5ab6a1f
+--- /dev/null
++++ b/tests/expected/uninit/nested-maybe-uninit-plan.rs
+@@ -0,0 +1,109 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// Draft acceptance harnesses for docs/padding-memory-plan.md.
++// Positive and deliberately invalid cases are named separately; no expected
++// success is claimed on the baseline compiler.
++// kani-flags: -Z uninit-checks -Z valid-value-checks --default-unwind 5
++
++use std::mem::MaybeUninit;
++
++#[derive(Clone, Copy)]
++struct Container {
++    before: u8,
++    payload: MaybeUninit<[u8; 4]>,
++    after: u8,
++}
++
++#[inline(never)]
++fn return_second(_first: Container, second: Container) -> Container {
++    identity(second)
++}
++
++#[inline(never)]
++fn identity(value: Container) -> Container {
++    value
++}
++
++#[inline(never)]
++unsafe fn read_bytes(value: MaybeUninit<[u8; 4]>) -> [u8; 4] {
++    unsafe { value.assume_init() }
++}
++
++#[kani::proof]
++fn preserves_initialized_payload() {
++    let bytes: [u8; 4] = kani::any();
++    let before: u8 = kani::any();
++    let after: u8 = kani::any();
++    let first = Container { before: 0, payload: MaybeUninit::uninit(), after: 0 };
++    let second = Container { before, payload: MaybeUninit::new(bytes), after };
++    let moved = return_second(first, second);
++    let output = unsafe { read_bytes(moved.payload) };
++    for i in 0..4 {
++        assert!(output[i] == bytes[i]);
++    }
++    assert!(moved.before == before && moved.after == after);
++    kani::cover!(output[0] != output[3], "distinct endpoint bytes survive");
++}
++
++#[kani::proof]
++fn detects_uninitialized_payload_after_call() {
++    let empty = Container { before: 1, payload: MaybeUninit::uninit(), after: 2 };
++    let full = Container { before: 1, payload: MaybeUninit::new([3; 4]), after: 2 };
++    let moved = return_second(full, empty);
++    kani::cover!(true, "before invalid read after nested call");
++    let output = unsafe { read_bytes(moved.payload) };
++    kani::cover!(output[0] == 7, "invalid read must be rejected");
++}
++
++#[kani::proof]
++fn detects_missing_last_write() {
++    let mut value = Container { before: 1, payload: MaybeUninit::uninit(), after: 2 };
++    let ptr = value.payload.as_mut_ptr().cast::<u8>();
++    for i in 0..3 {
++        unsafe { ptr.add(i).write(kani::any()) };
++    }
++    let moved = identity(value);
++    kani::cover!(true, "before invalid read after missing last write");
++    let output = unsafe { read_bytes(moved.payload) };
++    kani::cover!(output[3] == 7, "unwritten last byte must be rejected");
++}
++
++#[kani::proof]
++fn detects_replacing_initialized_payload() {
++    let mut value = Container { before: 1, payload: MaybeUninit::new([3; 4]), after: 2 };
++    value.payload = MaybeUninit::uninit();
++    let moved = identity(value);
++    kani::cover!(true, "before invalid read after replacing payload");
++    let output = unsafe { read_bytes(moved.payload) };
++    kani::cover!(output[0] == 7, "overwritten initialization must be rejected");
++}
++
++#[kani::proof]
++fn byte_copy_preserves_initialized_prefix() {
++    let source: [u8; 4] = kani::any();
++    let mut output = [0u8; 4];
++    let n: usize = kani::any();
++    kani::assume(n <= 4);
++    output[..n].copy_from_slice(&source[..n]);
++    for i in 0..4 {
++        assert!(output[i] == if i < n { source[i] } else { 0 });
++    }
++    kani::cover!(n == 0, "zero byte copy");
++    kani::cover!(n == 4, "full byte copy");
++}
++
++#[kani::proof]
++fn byte_copy_does_not_initialize_source() {
++    let source = MaybeUninit::<[u8; 4]>::uninit();
++    let mut dest = MaybeUninit::<[u8; 4]>::uninit();
++    unsafe {
++        std::ptr::copy_nonoverlapping(
++            source.as_ptr().cast::<u8>(),
++            dest.as_mut_ptr().cast::<u8>(),
++            4,
++        );
++    }
++    kani::cover!(true, "before invalid read after copying uninitialized bytes");
++    let output = unsafe { read_bytes(dest) };
++    kani::cover!(output[0] == 7, "copied uninitialized byte must be rejected");
++}
+diff --git a/tests/expected/uninit/padding-address-plan.expected b/tests/expected/uninit/padding-address-plan.expected
+new file mode 100644
+index 0000000..eea4ba4
+--- /dev/null
++++ b/tests/expected/uninit/padding-address-plan.expected
+@@ -0,0 +1,15 @@
++read_initialized_u8.safety_check.\
++	 - Status: SUCCESS\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type
++
++- Status: SATISFIED\
++	 - Description: "ordinary local raw read succeeds"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read after taking an unwritten field address"
++
++std::mem::transmute_neo::<std::mem::MaybeUninit<(u8, u8)>, (u8, u8)>.safety_check.\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type
++
++Complete - 1 successfully verified harnesses, 1 failures, 2 total.
+diff --git a/tests/expected/uninit/padding-address-plan.rs b/tests/expected/uninit/padding-address-plan.rs
+new file mode 100644
+index 0000000..c946bb8
+--- /dev/null
++++ b/tests/expected/uninit/padding-address-plan.rs
+@@ -0,0 +1,46 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++// Draft controls; run padding-plan-check.py as well as compiletest.
++
++use std::mem::MaybeUninit;
++
++#[inline(never)]
++fn retain_field_address(pointer: *mut u8) -> *mut u8 {
++    pointer
++}
++
++#[inline(never)]
++unsafe fn read_initialized_u8(pointer: *const u8) -> u8 {
++    unsafe { *pointer }
++}
++
++#[inline(never)]
++unsafe fn read_tuple_payload(value: MaybeUninit<(u8, u8)>) -> (u8, u8) {
++    unsafe { value.assume_init() }
++}
++
++#[kani::proof]
++fn ordinary_local_raw_read() {
++    let value: u8 = kani::any();
++    let pointer = &raw const value;
++    assert!(unsafe { read_initialized_u8(pointer) } == value);
++    kani::cover!(true, "ordinary local raw read succeeds");
++}
++
++#[kani::proof]
++fn field_address_does_not_initialize_payload() {
++    let mut value = MaybeUninit::<(u8, u8)>::uninit();
++    let pointer = value.as_mut_ptr();
++    // Inspect the implementation's MIR before accepting this control: the
++    // field AddressOf must remain, rather than being optimized away.
++    let first = unsafe { std::ptr::addr_of_mut!((*pointer).0) };
++    let first = retain_field_address(first);
++    unsafe { (*pointer).1 = 3 };
++    kani::cover!(
++        first == pointer.cast::<u8>(),
++        "before invalid read after taking an unwritten field address"
++    );
++    let output = unsafe { read_tuple_payload(value) };
++    kani::cover!(output.0 == 7, "unwritten field remains observable");
++}
+diff --git a/tests/expected/uninit/padding-byte-validity-plan.expected b/tests/expected/uninit/padding-byte-validity-plan.expected
+new file mode 100644
+index 0000000..9761818
+--- /dev/null
++++ b/tests/expected/uninit/padding-byte-validity-plan.expected
+@@ -0,0 +1,37 @@
++std::ptr::copy_nonoverlapping::<u8>.precondition_instance.1\
++	 - Status: FAILURE\
++	 - Description: "memcpy src/dst overlap"
++
++std::ptr::copy_nonoverlapping::<u8>.precondition_instance.3\
++	 - Status: FAILURE\
++	 - Description: "memcpy destination region writeable"
++
++std::ptr::copy_nonoverlapping::<u16>.unsupported_construct.1\
++	 - Status: FAILURE\
++	 - Description: "Kani currently doesn't support checking validity of `copy_nonoverlapping` for `*const u16`"
++
++std::ptr::copy_nonoverlapping::<()>.unsupported_construct.1\
++	 - Status: FAILURE\
++	 - Description: "Kani currently doesn't support checking validity of `copy_nonoverlapping` for `*const ()`"
++
++invalid_bool_remains_rejected.safety_check.3\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Invalid value of type `bool`"
++
++	 - Status: SATISFIED\
++	 - Description: "nonzero source offset preserves both bytes"
++
++	 - Status: SATISFIED\
++	 - Description: "before invalid read after zero memmove"
++
++	 - Status: SATISFIED\
++	 - Description: "complete memmove read succeeds"
++
++Summary:
++Verification failed for - memmove_zero_does_not_initialize
++Verification failed for - zero_sized_copy_does_not_initialize
++Verification failed for - invalid_bool_remains_rejected
++Verification failed for - nonbyte_copy_remains_unsupported
++Verification failed for - out_of_bounds_byte_copy_is_rejected
++Verification failed for - overlapping_byte_copy_is_rejected
++Complete - 2 successfully verified harnesses, 6 failures, 8 total.
+diff --git a/tests/expected/uninit/padding-byte-validity-plan.rs b/tests/expected/uninit/padding-byte-validity-plan.rs
+new file mode 100644
+index 0000000..c5a6483
+--- /dev/null
++++ b/tests/expected/uninit/padding-byte-validity-plan.rs
+@@ -0,0 +1,94 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++// Draft controls: semantic read failures and explicit refusals are distinct.
++use std::alloc::{Layout, alloc, dealloc};
++
++#[kani::proof]
++fn copy_from_nonzero_source_offset() {
++    let source: [u8; 4] = kani::any();
++    let mut target = [0u8; 2];
++    unsafe {
++        std::ptr::copy_nonoverlapping(source.as_ptr().add(2), target.as_mut_ptr(), 2);
++    }
++    assert!(target == [source[2], source[3]]);
++    kani::cover!(true, "nonzero source offset preserves both bytes");
++}
++
++#[kani::proof]
++fn overlapping_byte_copy_is_rejected() {
++    let mut bytes = [1u8, 2, 3];
++    let ptr = bytes.as_mut_ptr();
++    kani::cover!(true, "before overlapping nonoverlapping copy");
++    unsafe { std::ptr::copy_nonoverlapping(ptr, ptr.add(1), 2) };
++    kani::cover!(bytes[2] == 2, "overlap result remains observable");
++}
++
++#[kani::proof]
++fn out_of_bounds_byte_copy_is_rejected() {
++    let source = [1u8, 2, 3];
++    let mut target = [0u8; 2];
++    kani::cover!(true, "before out of bounds byte copy");
++    unsafe { std::ptr::copy_nonoverlapping(source.as_ptr(), target.as_mut_ptr(), 3) };
++    kani::cover!(target[1] == 2, "out of bounds result remains observable");
++}
++
++#[kani::proof]
++fn nonbyte_copy_remains_unsupported() {
++    let source = 7u16;
++    let mut target = 0u16;
++    kani::cover!(true, "before nonbyte copy refusal");
++    unsafe { std::ptr::copy_nonoverlapping(&source, &mut target, 1) };
++    assert!(target == source);
++}
++
++#[kani::proof]
++fn invalid_bool_remains_rejected() {
++    let byte: u8 = kani::any();
++    kani::assume(byte == 2);
++    kani::cover!(true, "before invalid bool construction");
++    let value = unsafe { std::mem::transmute::<u8, bool>(byte) };
++    kani::cover!(value, "invalid bool remains observable");
++}
++
++#[kani::proof]
++fn zero_sized_copy_does_not_initialize() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let target = alloc(layout);
++        kani::assume(!target.is_null());
++        std::ptr::copy_nonoverlapping(&(), target.cast::<()>(), 7);
++        kani::cover!(true, "before invalid read after zero sized copy");
++        let value = target.read();
++        kani::cover!(value == 7, "zero sized copy read remains observable");
++        dealloc(target, layout);
++    }
++}
++
++#[kani::proof]
++fn memmove_zero_does_not_initialize() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let target = alloc(layout);
++        kani::assume(!target.is_null());
++        std::ptr::copy(&7u8, target, 0);
++        kani::cover!(true, "before invalid read after zero memmove");
++        let value = target.read();
++        kani::cover!(value == 7, "zero memmove read remains observable");
++        dealloc(target, layout);
++    }
++}
++
++#[kani::proof]
++fn memmove_complete_initializes_tail() {
++    unsafe {
++        let layout = Layout::new::<[u8; 2]>();
++        let target = alloc(layout);
++        kani::assume(!target.is_null());
++        let source = [7u8, 9u8];
++        std::ptr::copy(source.as_ptr(), target, 2);
++        assert!(target.read() == 7 && target.add(1).read() == 9);
++        kani::cover!(true, "complete memmove read succeeds");
++        dealloc(target, layout);
++    }
++}
+diff --git a/tests/expected/uninit/padding-closure-controls.expected b/tests/expected/uninit/padding-closure-controls.expected
+new file mode 100644
+index 0000000..86d4160
+--- /dev/null
++++ b/tests/expected/uninit/padding-closure-controls.expected
+@@ -0,0 +1,12 @@
++- Status: SATISFIED\
++	 - Description: "ordinary closure captures preserve values"
++
++read_pointer.safety_check.3\
++	 - Status: SUCCESS\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u16`"
++
++owned_opaque_capture_requires_refusal.unsupported_construct.1\
++	 - Status: FAILURE
++
++Verification failed for - owned_opaque_capture_requires_refusal
++Complete - 1 successfully verified harnesses, 1 failures, 2 total.
+diff --git a/tests/expected/uninit/padding-closure-controls.rs b/tests/expected/uninit/padding-closure-controls.rs
+new file mode 100644
+index 0000000..6597b30
+--- /dev/null
++++ b/tests/expected/uninit/padding-closure-controls.rs
+@@ -0,0 +1,37 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++use std::mem::MaybeUninit;
++
++#[inline(never)]
++fn run<F: FnMut() -> u16>(mut f: F) -> u16 {
++    f()
++}
++
++#[inline(never)]
++unsafe fn read_pointer(pointer: *const u16) -> u16 {
++    unsafe { *pointer }
++}
++
++#[kani::proof]
++fn ordinary_reference_captures_preserve_values() {
++    let value: u16 = kani::any();
++    let mut output = 0u16;
++    let mut count = 0u16;
++    let result = run(|| {
++        output = value;
++        count += 1;
++        output
++    });
++    assert!(result == value && count == 1);
++    assert!(unsafe { read_pointer(&raw const output) } == value);
++    kani::cover!(true, "ordinary closure captures preserve values");
++}
++
++#[kani::proof]
++fn owned_opaque_capture_requires_refusal() {
++    let payload = MaybeUninit::<u16>::uninit();
++    let closure = move || unsafe { payload.assume_init() };
++    let result = run(closure);
++    kani::cover!(result == 7, "opaque capture remains observable");
++}
+diff --git a/tests/expected/uninit/padding-copy-count-plan.expected b/tests/expected/uninit/padding-copy-count-plan.expected
+new file mode 100644
+index 0000000..927b3b8
+--- /dev/null
++++ b/tests/expected/uninit/padding-copy-count-plan.expected
+@@ -0,0 +1,17 @@
++- Status: SATISFIED\
++	 - Description: "before invalid read with no copy"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read after zero copy"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read of uncopied tail"
++
++- Status: SATISFIED\
++	 - Description: "complete copy read succeeds"
++
++std::ptr::read::<u8>.safety_check.\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u8`"
++
++Complete - 1 successfully verified harnesses, 3 failures, 4 total.
+diff --git a/tests/expected/uninit/padding-copy-count-plan.rs b/tests/expected/uninit/padding-copy-count-plan.rs
+new file mode 100644
+index 0000000..90435f2
+--- /dev/null
++++ b/tests/expected/uninit/padding-copy-count-plan.rs
+@@ -0,0 +1,62 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++// Draft controls; run padding-plan-check.py as well as compiletest.
++use std::alloc::{Layout, alloc, dealloc};
++
++#[kani::proof]
++fn no_copy_uninitialized_read() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let target = alloc(layout);
++        kani::assume(!target.is_null());
++        kani::cover!(true, "before invalid read with no copy");
++        let value = target.read();
++        kani::cover!(value == 7, "invalid value remains observable");
++        dealloc(target, layout);
++    }
++}
++
++#[kani::proof]
++fn zero_copy_uninitialized_read() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let target = alloc(layout);
++        kani::assume(!target.is_null());
++        let source = 7u8;
++        std::ptr::copy_nonoverlapping(&source, target, 0);
++        kani::cover!(true, "before invalid read after zero copy");
++        let value = target.read();
++        kani::cover!(value == 7, "invalid value remains observable");
++        dealloc(target, layout);
++    }
++}
++
++#[kani::proof]
++fn partial_copy_uninitialized_tail() {
++    unsafe {
++        let layout = Layout::new::<[u8; 2]>();
++        let target = alloc(layout);
++        kani::assume(!target.is_null());
++        let source = [7u8, 9u8];
++        std::ptr::copy_nonoverlapping(source.as_ptr(), target, 1);
++        kani::cover!(true, "before invalid read of uncopied tail");
++        let value = target.add(1).read();
++        kani::cover!(value == 7, "invalid tail remains observable");
++        dealloc(target, layout);
++    }
++}
++
++#[kani::proof]
++fn complete_copy_initialized_tail() {
++    unsafe {
++        let layout = Layout::new::<[u8; 2]>();
++        let target = alloc(layout);
++        kani::assume(!target.is_null());
++        let source = [7u8, 9u8];
++        std::ptr::copy_nonoverlapping(source.as_ptr(), target, 2);
++        assert!(target.read() == 7 && target.add(1).read() == 9);
++        kani::cover!(true, "complete copy read succeeds");
++        dealloc(target, layout);
++    }
++}
+diff --git a/tests/expected/uninit/padding-drop-controls.expected b/tests/expected/uninit/padding-drop-controls.expected
+new file mode 100644
+index 0000000..1ff3700
+--- /dev/null
++++ b/tests/expected/uninit/padding-drop-controls.expected
+@@ -0,0 +1,26 @@
++corrupted_local_drop.cover.1\
++	 - Status: SATISFIED\
++	 - Description: "before corrupted local drop"
++
++corrupted_local_drop.safety_check.1\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `Ordinary`"
++
++consume.cover.1\
++	 - Status: SATISFIED\
++	 - Description: "before ordinary argument drop"
++
++consume.safety_check.1\
++	 - Status: SUCCESS\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `Ordinary`"
++
++initialized_local_drop.cover.1\
++	 - Status: SATISFIED\
++	 - Description: "before ordinary local drop"
++
++initialized_local_drop.safety_check.1\
++	 - Status: SUCCESS\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `Ordinary`"
++
++Verification failed for - corrupted_local_drop
++Complete - 2 successfully verified harnesses, 1 failures, 3 total.
+diff --git a/tests/expected/uninit/padding-drop-controls.rs b/tests/expected/uninit/padding-drop-controls.rs
+new file mode 100644
+index 0000000..90caaf6
+--- /dev/null
++++ b/tests/expected/uninit/padding-drop-controls.rs
+@@ -0,0 +1,48 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++
++struct Ordinary(u16);
++
++impl Drop for Ordinary {
++    #[inline(never)]
++    fn drop(&mut self) {
++        kani::cover!(self.0 == 7, "ordinary destructor reads its field");
++    }
++}
++
++#[inline(never)]
++fn produce(value: u16) -> Ordinary {
++    Ordinary(value)
++}
++
++#[inline(never)]
++fn consume(_value: Ordinary) {
++    kani::cover!(true, "before ordinary argument drop");
++}
++
++#[kani::proof]
++fn initialized_local_drop() {
++    let _value = Ordinary(kani::any());
++    kani::cover!(true, "before ordinary local drop");
++}
++
++#[kani::proof]
++fn initialized_return_and_argument_drop() {
++    let value = produce(kani::any());
++    consume(value);
++}
++
++#[kani::proof]
++fn corrupted_local_drop() {
++    use std::alloc::{Layout, alloc, dealloc};
++    let mut value = Ordinary(42);
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let empty = alloc(layout);
++        kani::assume(!empty.is_null());
++        std::ptr::copy_nonoverlapping(empty, (&raw mut value).cast::<u8>(), 1);
++        dealloc(empty, layout);
++    }
++    kani::cover!(true, "before corrupted local drop");
++}
+diff --git a/tests/expected/uninit/padding-endpoint-controls.expected b/tests/expected/uninit/padding-endpoint-controls.expected
+new file mode 100644
+index 0000000..d97e773
+--- /dev/null
++++ b/tests/expected/uninit/padding-endpoint-controls.expected
+@@ -0,0 +1,18 @@
++modeled_opaque_producer_requires_refusal.unsupported_construct.1\
++	 - Status: FAILURE\
++	 - Description: "Opaque transfer requires an instrumented ordinary body; stubs, harness parameters, intrinsics, shims and foreign calls are unsupported."
++
++stubbed_opaque_boundary_requires_refusal.unsupported_construct.1\
++	 - Status: FAILURE
++
++fn_once_shim_requires_refusal.unsupported_construct.1\
++	 - Status: FAILURE
++
++foreign_opaque_endpoint_requires_refusal.unsupported_construct.1\
++	 - Status: FAILURE
++
++Verification failed for - modeled_opaque_producer_requires_refusal
++Verification failed for - stubbed_opaque_boundary_requires_refusal
++Verification failed for - fn_once_shim_requires_refusal
++Verification failed for - foreign_opaque_endpoint_requires_refusal
++Complete - 0 successfully verified harnesses, 4 failures, 4 total.
+diff --git a/tests/expected/uninit/padding-endpoint-controls.rs b/tests/expected/uninit/padding-endpoint-controls.rs
+new file mode 100644
+index 0000000..7391aba
+--- /dev/null
++++ b/tests/expected/uninit/padding-endpoint-controls.rs
+@@ -0,0 +1,58 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks -Z stubbing
++#![feature(fn_traits)]
++#![allow(improper_ctypes)]
++use std::mem::MaybeUninit;
++
++#[inline(never)]
++fn identity(value: MaybeUninit<u16>) -> MaybeUninit<u16> {
++    value
++}
++
++fn replacement(_: MaybeUninit<u16>) -> MaybeUninit<u16> {
++    MaybeUninit::new(99)
++}
++
++unsafe extern "C" {
++    fn external_opaque(value: MaybeUninit<u16>) -> MaybeUninit<u16>;
++}
++
++#[kani::proof]
++fn foreign_opaque_endpoint_requires_refusal() {
++    let value = MaybeUninit::new(17);
++    kani::cover!(true, "before foreign opaque call");
++    let output = unsafe { external_opaque(value) };
++    assert!(unsafe { output.assume_init() } == 17);
++}
++
++#[kani::proof]
++fn fn_once_shim_requires_refusal() {
++    let target: fn(MaybeUninit<u16>) -> MaybeUninit<u16> = identity;
++    let value = MaybeUninit::new(17);
++    kani::cover!(true, "before opaque FnOnce shim");
++    let output = std::ops::FnOnce::call_once(target, (value,));
++    assert!(unsafe { output.assume_init() } == 17);
++}
++
++#[kani::proof]
++#[kani::stub(identity, replacement)]
++fn stubbed_opaque_boundary_requires_refusal() {
++    let output = identity(MaybeUninit::new(17));
++    assert!(unsafe { output.assume_init() } == 99);
++}
++
++struct OpaqueValue(MaybeUninit<u16>);
++
++impl kani::Arbitrary for OpaqueValue {
++    fn any() -> Self {
++        Self(MaybeUninit::new(kani::any()))
++    }
++}
++
++#[kani::proof]
++fn modeled_opaque_producer_requires_refusal() {
++    let output: OpaqueValue = kani::any();
++    let value = unsafe { output.0.assume_init() };
++    kani::cover!(value == 7, "modeled opaque result remains observable");
++}
+diff --git a/tests/expected/uninit/padding-mir-controls.expected b/tests/expected/uninit/padding-mir-controls.expected
+new file mode 100644
+index 0000000..0b643a4
+--- /dev/null
++++ b/tests/expected/uninit/padding-mir-controls.expected
+@@ -0,0 +1,36 @@
++- Status: SATISFIED\
++	 - Description: "intrinsic write and read preserve value"
++
++- Status: SATISFIED\
++	 - Description: "before empty intrinsic read"
++
++- Status: SATISFIED\
++	 - Description: "typed self transfer preserves value"
++
++- Status: SATISFIED\
++	 - Description: "before empty typed self transfer read"
++
++- Status: SATISFIED\
++	 - Description: "direct return edge reached"
++
++- Status: SATISFIED\
++	 - Description: "nested return edge reached"
++
++- Status: SATISFIED\
++	 - Description: "before branching empty return read"
++
++read_intrinsic.safety_check.3\
++	 - Status: FAILURE
++
++read_intrinsic.safety_check.6\
++	 - Status: FAILURE
++
++opaque_unwind_cleanup_requires_refusal.unsupported_construct.1\
++	 - Status: FAILURE\
++	 - Description: "Opaque transfer with unwind cleanup is unsupported."
++
++Verification failed for - opaque_unwind_cleanup_requires_refusal
++Verification failed for - branching_empty_return_does_not_reuse_full_event
++Verification failed for - typed_self_transfer_preserves_empty_payload
++Verification failed for - read_intrinsic_detects_empty_payload
++Complete - 3 successfully verified harnesses, 4 failures, 7 total.
+diff --git a/tests/expected/uninit/padding-mir-controls.rs b/tests/expected/uninit/padding-mir-controls.rs
+new file mode 100644
+index 0000000..76963ca
+--- /dev/null
++++ b/tests/expected/uninit/padding-mir-controls.rs
+@@ -0,0 +1,133 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++#![feature(core_intrinsics, custom_mir)]
++#![allow(internal_features)]
++use std::intrinsics::mir::*;
++use std::mem::MaybeUninit;
++
++#[inline(never)]
++unsafe fn read_intrinsic(pointer: *const u16) -> u16 {
++    unsafe { std::intrinsics::read_via_copy(pointer) }
++}
++
++#[inline(never)]
++unsafe fn write_intrinsic(pointer: *mut u16, value: u16) {
++    unsafe { std::intrinsics::write_via_move(pointer, value) };
++}
++
++#[inline(never)]
++unsafe fn read_payload(value: MaybeUninit<u16>) -> u16 {
++    unsafe { value.assume_init() }
++}
++
++// Supply optimized MIR so that the exact self assignment remains a compiler
++// input. A source-only `value = value` may disappear before instrumentation.
++#[inline(never)]
++#[custom_mir(dialect = "runtime", phase = "optimized")]
++fn self_transfer(value: MaybeUninit<u16>) -> MaybeUninit<u16> {
++    mir! {
++        {
++            RET = Move(value);
++            RET = Move(RET);
++            Return()
++        }
++    }
++}
++
++#[inline(never)]
++fn return_full(value: u16) -> MaybeUninit<u16> {
++    MaybeUninit::new(value)
++}
++
++#[inline(never)]
++fn return_empty() -> MaybeUninit<u16> {
++    MaybeUninit::uninit()
++}
++
++#[inline(never)]
++fn panic_if(flag: bool) {
++    assert!(!flag);
++}
++
++#[inline(never)]
++#[custom_mir(dialect = "runtime", phase = "optimized")]
++fn opaque_cleanup(value: MaybeUninit<u16>, flag: bool) -> MaybeUninit<u16> {
++    mir! {
++        let unused: ();
++        {
++            Call(unused = panic_if(flag), ReturnTo(normal), UnwindCleanup(cleanup))
++        }
++        normal = {
++            RET = Move(value);
++            Return()
++        }
++        cleanup(cleanup) = {
++            UnwindTerminate(ReasonInCleanup)
++        }
++    }
++}
++
++#[kani::proof]
++fn read_write_intrinsics_preserve_values() {
++    let expected: u16 = kani::any();
++    let mut value = MaybeUninit::<u16>::uninit();
++    unsafe { write_intrinsic(value.as_mut_ptr(), expected) };
++    assert!(unsafe { read_intrinsic(value.as_ptr()) } == expected);
++    kani::cover!(true, "intrinsic write and read preserve value");
++}
++
++#[kani::proof]
++fn read_intrinsic_detects_empty_payload() {
++    let value = MaybeUninit::<u16>::uninit();
++    kani::cover!(true, "before empty intrinsic read");
++    let output = unsafe { read_intrinsic(value.as_ptr()) };
++    kani::cover!(output == 7, "empty intrinsic read remains observable");
++}
++
++#[kani::proof]
++fn typed_self_transfer_preserves_values() {
++    let expected: u16 = kani::any();
++    let value = self_transfer(MaybeUninit::new(expected));
++    assert!(unsafe { read_payload(value) } == expected);
++    kani::cover!(true, "typed self transfer preserves value");
++}
++
++#[kani::proof]
++fn typed_self_transfer_preserves_empty_payload() {
++    let value = self_transfer(MaybeUninit::uninit());
++    kani::cover!(true, "before empty typed self transfer read");
++    let output = unsafe { read_payload(value) };
++    kani::cover!(output == 7, "empty typed self transfer remains observable");
++}
++
++#[kani::proof]
++fn branching_calls_consume_distinct_events() {
++    let first: u16 = kani::any();
++    let second: u16 = kani::any();
++    let branch: bool = kani::any();
++    let value = if branch { return_full(first) } else { self_transfer(return_full(second)) };
++    assert!(unsafe { read_payload(value) } == if branch { first } else { second });
++    kani::cover!(branch, "direct return edge reached");
++    kani::cover!(!branch, "nested return edge reached");
++}
++
++#[kani::proof]
++fn branching_empty_return_does_not_reuse_full_event() {
++    let branch: bool = kani::any();
++    let mut value = return_full(17);
++    if branch {
++        value = self_transfer(return_empty());
++    }
++    kani::cover!(branch, "before branching empty return read");
++    let output = unsafe { read_payload(value) };
++    kani::cover!(branch && output == 7, "branching empty return remains observable");
++}
++
++#[kani::proof]
++fn opaque_unwind_cleanup_requires_refusal() {
++    let value = MaybeUninit::new(17);
++    kani::cover!(true, "before opaque cleanup boundary");
++    let output = opaque_cleanup(value, false);
++    assert!(unsafe { read_payload(output) } == 17);
++}
+diff --git a/tests/expected/uninit/padding-ordinary-return-controls.expected b/tests/expected/uninit/padding-ordinary-return-controls.expected
+new file mode 100644
+index 0000000..52ae7a6
+--- /dev/null
++++ b/tests/expected/uninit/padding-ordinary-return-controls.expected
+@@ -0,0 +1,27 @@
++ordinary_return.safety_check.1\
++	 - Status: SUCCESS\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u16`"
++
++ordinary_return.safety_check.1\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u16`"
++
++before_return.cover.1\
++	 - Status: SATISFIED\
++	 - Description: "before ordinary return read"
++
++explicit_read_detects_corruption.cover.1\
++	 - Status: SATISFIED\
++	 - Description: "before explicit corrupted read"
++
++std::ptr::read::<u16>.safety_check.1\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u16`"
++
++std::ptr::read::<u16>.safety_check.4\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u16`"
++
++Verification failed for - explicit_read_detects_corruption
++Verification failed for - corrupted_ordinary_return
++Complete - 1 successfully verified harnesses, 2 failures, 3 total.
+diff --git a/tests/expected/uninit/padding-ordinary-return-controls.rs b/tests/expected/uninit/padding-ordinary-return-controls.rs
+new file mode 100644
+index 0000000..18ad827
+--- /dev/null
++++ b/tests/expected/uninit/padding-ordinary-return-controls.rs
+@@ -0,0 +1,68 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++#![feature(core_intrinsics, custom_mir)]
++#![allow(internal_features)]
++use std::intrinsics::mir::*;
++use std::mem::MaybeUninit;
++
++#[inline(never)]
++fn before_return() {
++    kani::cover!(true, "before ordinary return read");
++}
++
++#[inline(never)]
++unsafe fn read_returned(pointer: *const u16) -> u16 {
++    unsafe { pointer.read() }
++}
++
++// Keep the implicit return place and its address in the input MIR. The return
++// itself is a typed read even though it has no explicit MIR operand.
++#[inline(never)]
++#[custom_mir(dialect = "runtime", phase = "optimized")]
++fn ordinary_return(source: *const u8) -> u16 {
++    mir! {
++        let pointer: *mut u16;
++        let bytes: *mut u8;
++        let unused: ();
++        {
++            RET = 0x1212_u16;
++            pointer = &raw mut RET;
++            bytes = CastPtrToPtr(pointer);
++            Call(unused = std::ptr::copy_nonoverlapping::<u8>(source, bytes, 1_usize), ReturnTo(copied), UnwindUnreachable())
++        }
++        copied = {
++            Call(unused = before_return(), ReturnTo(done), UnwindUnreachable())
++        }
++        done = {
++            Return()
++        }
++    }
++}
++
++#[kani::proof]
++fn initialized_ordinary_return() {
++    let byte: u8 = kani::any();
++    let value = ordinary_return(&byte);
++    let output = unsafe { read_returned(&raw const value) };
++    assert!(output.to_ne_bytes()[0] == byte);
++    kani::cover!(true, "initialized return remains observable");
++}
++
++#[kani::proof]
++fn corrupted_ordinary_return() {
++    let byte = MaybeUninit::<u8>::uninit();
++    let value = ordinary_return(byte.as_ptr());
++    let output = unsafe { read_returned(&raw const value) };
++    kani::cover!(output == 0x1207, "corrupted return remains observable");
++}
++
++#[kani::proof]
++fn explicit_read_detects_corruption() {
++    let byte = MaybeUninit::<u8>::uninit();
++    let mut value: u16 = 0x1212;
++    unsafe { std::ptr::copy_nonoverlapping(byte.as_ptr(), (&raw mut value).cast::<u8>(), 1) };
++    kani::cover!(true, "before explicit corrupted read");
++    let output = unsafe { read_returned(&raw const value) };
++    kani::cover!(output == 0x1207, "explicit corrupted read remains observable");
++}
+diff --git a/tests/expected/uninit/padding-plan-check.py b/tests/expected/uninit/padding-plan-check.py
+new file mode 100644
+index 0000000..ede238e
+--- /dev/null
++++ b/tests/expected/uninit/padding-plan-check.py
+@@ -0,0 +1,91 @@
++# Copyright Kani Contributors
++# SPDX-License-Identifier: Apache-2.0 OR MIT
++"""Strict standalone acceptance check for the disposable padding experiment.
++
++Usage: python3 padding-plan-check.py OUTPUT --harness NAME --expect valid|uninit
++       --cover DESCRIPTION --read-checks EXPECTATIONS.json
++EXPECTATIONS.json is a nonempty list of {"property": "exact check name",
++"location": "exact Location field"}, established from source and MIR.
++Run separately for every harness; regular Kani output is required. This adds
++absence/location requirements that compiletest's substring matcher cannot express.
++"""
++import argparse
++import json
++from pathlib import Path
++import re
++
++parser = argparse.ArgumentParser()
++parser.add_argument('output', type=Path)
++parser.add_argument('--harness', required=True)
++parser.add_argument('--expect', choices=['valid', 'uninit'], required=True)
++parser.add_argument('--cover', action='append', required=True)
++parser.add_argument('--read-checks', type=Path, required=True)
++args = parser.parse_args()
++errors = []
++expected_reads = json.loads(args.read_checks.read_text())
++if not isinstance(expected_reads, list) or not expected_reads or any(
++        not isinstance(p, dict) or set(p) != {'property', 'location'} or
++        any(not isinstance(v, str) or not v for v in p.values())
++        for p in expected_reads):
++    raise SystemExit('read expectations must be a nonempty list of exact property/location pairs')
++expected_names = [p['property'] for p in expected_reads]
++if len(set(expected_names)) != len(expected_names):
++    raise SystemExit('duplicate intended read property')
++sections = [s for s in re.split(r'(?=Checking harness )', args.output.read_text())
++            if s.splitlines() and s.splitlines()[0] == f'Checking harness {args.harness}...']
++if len(sections) != 1:
++    raise SystemExit('expected exactly one harness section')
++section = sections[0]
++properties = []
++for block in re.split(r'(?=Check \d+:)', section)[1:]:
++    fields = {}
++    lines = block.splitlines()
++    for field in ['Status', 'Description', 'Location']:
++        values = [x.strip().removeprefix(f'- {field}: ') for x in lines
++                  if x.strip().startswith(f'- {field}: ')]
++        if len(values) > 1:
++            errors.append(f'duplicate {field} in property')
++        fields[field] = values[0] if values else ''
++    match = re.fullmatch(r'Check \d+: (.+)', lines[0])
++    if match is None:
++        errors.append('malformed property header')
++    properties.append({'property': match[1] if match else '', **fields})
++if not properties:
++    errors.append('no property results')
++if len({p['property'] for p in properties}) != len(properties):
++    errors.append('duplicate property identity')
++failures = [p for p in properties if p['Status'] == 'FAILURE']
++# Only conclusive statuses from Kani's regular-output CheckStatus display are
++# accepted. UNKNOWN is displayed as UNDETERMINED; SMT failures use ERROR.
++conclusive = {'SUCCESS', 'FAILURE', 'SATISFIED', 'UNSATISFIABLE', 'UNREACHABLE'}
++if any(p['Status'] not in conclusive for p in properties):
++    errors.append('inconclusive, errored or unrecognized property result')
++for cover in args.cover:
++    matches = [p for p in properties if p['Description'] == json.dumps(cover)]
++    if len(matches) != 1 or matches[0]['Status'] != 'SATISFIED':
++        errors.append(f'cover not uniquely satisfied: {cover}')
++read_description = '"Undefined Behavior: Reading from an uninitialized pointer of type '
++for expected in expected_reads:
++    matches = [p for p in properties if p['property'] == expected['property']]
++    if len(matches) != 1:
++        errors.append(f'intended read not uniquely present: {expected["property"]}')
++        continue
++    observed = matches[0]
++    if '.safety_check.' not in observed['property'] or not observed['Description'].startswith(read_description):
++        errors.append('intended property was not an uninitialized-read safety check')
++    if observed['Location'] != expected['location']:
++        errors.append('intended read has the wrong exact source location')
++    if observed['Status'] != ('SUCCESS' if args.expect == 'valid' else 'FAILURE'):
++        errors.append('intended read has the wrong status')
++if args.expect == 'valid':
++    if failures or 'VERIFICATION:- SUCCESSFUL' not in section:
++        errors.append('positive harness did not verify')
++else:
++    if not failures or 'VERIFICATION:- FAILED' not in section:
++        errors.append('negative harness did not fail')
++    for failure in failures:
++        if failure['property'] not in expected_names:
++            errors.append('failure outside the intended read check set')
++print(json.dumps({'harness': args.harness, 'accepted': not errors,
++                  'errors': errors, 'failures': failures}, indent=2))
++raise SystemExit(bool(errors))
+diff --git a/tests/expected/uninit/padding-readdress-plan.expected b/tests/expected/uninit/padding-readdress-plan.expected
+new file mode 100644
+index 0000000..4223d41
+--- /dev/null
++++ b/tests/expected/uninit/padding-readdress-plan.expected
+@@ -0,0 +1,11 @@
++- Status: SATISFIED\
++	 - Description: "before retained-pointer invalid read"
++
++- Status: SATISFIED\
++	 - Description: "before re-addressed invalid read"
++
++read_u16.safety_check.\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type
++
++Complete - 0 successfully verified harnesses, 2 failures, 2 total.
+diff --git a/tests/expected/uninit/padding-readdress-plan.rs b/tests/expected/uninit/padding-readdress-plan.rs
+new file mode 100644
+index 0000000..f2feb98
+--- /dev/null
++++ b/tests/expected/uninit/padding-readdress-plan.rs
+@@ -0,0 +1,40 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++// Draft controls; run padding-plan-check.py with source/MIR-bound expectations.
++use std::alloc::{Layout, alloc, dealloc};
++#[inline(never)]
++unsafe fn read_u16(pointer: *const u16) -> u16 {
++    unsafe { *pointer }
++}
++#[kani::proof]
++fn retained_pointer_detects_overwrite() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let source = alloc(layout);
++        kani::assume(!source.is_null());
++        let mut value = 42u16;
++        let before = &raw mut value;
++        std::ptr::copy_nonoverlapping(source, before.cast::<u8>(), 1);
++        kani::cover!(true, "before retained-pointer invalid read");
++        let result = read_u16(before);
++        kani::cover!(result == 7, "retained-pointer value observable");
++        dealloc(source, layout);
++    }
++}
++#[kani::proof]
++fn fresh_address_does_not_initialize_overwritten_local() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let source = alloc(layout);
++        kani::assume(!source.is_null());
++        let mut value = 42u16;
++        let before = &raw mut value;
++        std::ptr::copy_nonoverlapping(source, before.cast::<u8>(), 1);
++        let after = &raw const value;
++        kani::cover!(true, "before re-addressed invalid read");
++        let result = read_u16(after);
++        kani::cover!(result == 7, "re-addressed value observable");
++        dealloc(source, layout);
++    }
++}
+diff --git a/tests/expected/uninit/padding-reference-plan.expected b/tests/expected/uninit/padding-reference-plan.expected
+new file mode 100644
+index 0000000..0eeafb4
+--- /dev/null
++++ b/tests/expected/uninit/padding-reference-plan.expected
+@@ -0,0 +1,17 @@
++reference_read.safety_check.3\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u16`"
++
++reference_read.safety_check.6\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u16`"
++
++	 - Status: SATISFIED\
++	 - Description: "before uninitialized reference formation"
++
++	 - Status: SATISFIED\
++	 - Description: "initialized reference read succeeds"
++
++Summary:
++Verification failed for - uninitialized_reference_is_rejected
++Complete - 1 successfully verified harnesses, 1 failures, 2 total.
+diff --git a/tests/expected/uninit/padding-reference-plan.rs b/tests/expected/uninit/padding-reference-plan.rs
+new file mode 100644
+index 0000000..cf856a2
+--- /dev/null
++++ b/tests/expected/uninit/padding-reference-plan.rs
+@@ -0,0 +1,30 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++use std::alloc::{Layout, alloc, dealloc};
++
++#[inline(never)]
++unsafe fn reference_read(pointer: *const u16) -> u16 {
++    let reference = unsafe { &*pointer };
++    *reference
++}
++
++#[kani::proof]
++fn initialized_reference_still_works() {
++    let value: u16 = kani::any();
++    assert!(unsafe { reference_read(&raw const value) } == value);
++    kani::cover!(true, "initialized reference read succeeds");
++}
++
++#[kani::proof]
++fn uninitialized_reference_is_rejected() {
++    unsafe {
++        let layout = Layout::new::<u16>();
++        let pointer = alloc(layout).cast::<u16>();
++        kani::assume(!pointer.is_null());
++        kani::cover!(true, "before uninitialized reference formation");
++        let value = reference_read(pointer);
++        kani::cover!(value == 7, "uninitialized reference value observable");
++        dealloc(pointer.cast::<u8>(), layout);
++    }
++}
+diff --git a/tests/expected/uninit/padding-state-controls.expected b/tests/expected/uninit/padding-state-controls.expected
+new file mode 100644
+index 0000000..8f64ef6
+--- /dev/null
++++ b/tests/expected/uninit/padding-state-controls.expected
+@@ -0,0 +1,15 @@
++typed_copy_of_corrupted_local.safety_check.1\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u16`"
++
++	 - Status: SATISFIED\
++	 - Description: "before invalid typed source copy"
++
++static_address_does_not_initialize.unsupported_construct.1\
++	 - Status: FAILURE\
++	 - Description: "Static raw-pointer initialization-state transfer is not supported."
++
++Summary:
++Verification failed for - static_address_does_not_initialize
++Verification failed for - typed_copy_of_corrupted_local
++Complete - 0 successfully verified harnesses, 2 failures, 2 total.
+diff --git a/tests/expected/uninit/padding-state-controls.rs b/tests/expected/uninit/padding-state-controls.rs
+new file mode 100644
+index 0000000..c7a0a58
+--- /dev/null
++++ b/tests/expected/uninit/padding-state-controls.rs
+@@ -0,0 +1,46 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++use std::alloc::{Layout, alloc, dealloc};
++
++#[inline(never)]
++unsafe fn read_u16(pointer: *const u16) -> u16 {
++    unsafe { *pointer }
++}
++
++#[kani::proof]
++fn typed_copy_of_corrupted_local() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let source = alloc(layout);
++        kani::assume(!source.is_null());
++        let mut value = 42u16;
++        let before = &raw mut value;
++        std::ptr::copy_nonoverlapping(source, before.cast::<u8>(), 1);
++        kani::cover!(true, "before invalid typed source copy");
++        let copied = value;
++        let after = &raw const copied;
++        kani::cover!(after != before, "distinct source and copied local storage");
++        let output = read_u16(after);
++        kani::cover!(output == 7, "typed copy value observable");
++        dealloc(source, layout);
++    }
++}
++
++static mut VALUE: u16 = 42;
++
++#[kani::proof]
++fn static_address_does_not_initialize() {
++    unsafe {
++        let layout = Layout::new::<u8>();
++        let source = alloc(layout);
++        kani::assume(!source.is_null());
++        let before = &raw mut VALUE;
++        std::ptr::copy_nonoverlapping(source, before.cast::<u8>(), 1);
++        let after = &raw const VALUE;
++        kani::cover!(true, "before invalid static read");
++        let output = read_u16(after);
++        kani::cover!(output == 7, "static read observable");
++        dealloc(source, layout);
++    }
++}
+diff --git a/tests/expected/uninit/padding-static-reference.expected b/tests/expected/uninit/padding-static-reference.expected
+new file mode 100644
+index 0000000..8906e72
+--- /dev/null
++++ b/tests/expected/uninit/padding-static-reference.expected
+@@ -0,0 +1,5 @@
++global_atomic_requires_initializer_model.unsupported_construct.1\
++	 - Status: FAILURE\
++	 - Description: "Static reference initialization-state transfer is not supported."
++
++Complete - 0 successfully verified harnesses, 1 failures, 1 total.
+diff --git a/tests/expected/uninit/padding-static-reference.rs b/tests/expected/uninit/padding-static-reference.rs
+new file mode 100644
+index 0000000..30fbd21
+--- /dev/null
++++ b/tests/expected/uninit/padding-static-reference.rs
+@@ -0,0 +1,22 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++
++// Capability boundary: this valid program is refused until static initializer
++// state is modeled. Taking a reference must not repair previously corrupted
++// storage. This is not an uninitialized-read negative control.
++use std::sync::atomic::{AtomicUsize, Ordering};
++
++static GLOBAL_ATOMIC: AtomicUsize = AtomicUsize::new(0);
++
++#[kani::proof]
++fn global_atomic_requires_initializer_model() {
++    let ordering = match kani::any() {
++        0 => Ordering::Relaxed,
++        1 => Ordering::Release,
++        2 => Ordering::Acquire,
++        3 => Ordering::AcqRel,
++        _ => Ordering::SeqCst,
++    };
++    let _old_value = GLOBAL_ATOMIC.fetch_add(1, ordering);
++}
+diff --git a/tests/expected/uninit/padding-transfer-controls.expected b/tests/expected/uninit/padding-transfer-controls.expected
+new file mode 100644
+index 0000000..65bf6fb
+--- /dev/null
++++ b/tests/expected/uninit/padding-transfer-controls.expected
+@@ -0,0 +1,28 @@
++- Status: SATISFIED\
++	 - Description: "first argument preserved"
++
++- Status: SATISFIED\
++	 - Description: "second argument preserved"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read from first argument"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read from second argument"
++
++- Status: SATISFIED\
++	 - Description: "before invalid read in drop"
++
++std::mem::transmute_neo::<std::mem::MaybeUninit<u16>, u16>.safety_check.1\
++	 - Status: FAILURE\
++	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u16`"
++
++indirect_opaque_call_requires_refusal.unsupported_construct.1\
++	 - Status: FAILURE
++
++Summary:
++Verification failed for - indirect_opaque_call_requires_refusal
++Verification failed for - drop_does_not_initialize_opaque_payload
++Verification failed for - first_argument_empty_survives_nested_return
++Verification failed for - second_argument_empty_survives_nested_return
++Complete - 1 successfully verified harnesses, 4 failures, 5 total.
+diff --git a/tests/expected/uninit/padding-transfer-controls.rs b/tests/expected/uninit/padding-transfer-controls.rs
+new file mode 100644
+index 0000000..8a9b51e
+--- /dev/null
++++ b/tests/expected/uninit/padding-transfer-controls.rs
+@@ -0,0 +1,103 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// Draft controls for existing plan items 1-3, not accepted baseline proofs.
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++use std::mem::MaybeUninit;
++
++#[derive(Clone, Copy)]
++#[repr(C)]
++struct Padded {
++    prefix: u8,
++    payload: MaybeUninit<u16>,
++    suffix: u8,
++    empty: MaybeUninit<()>,
++}
++
++#[inline(never)]
++fn identity(value: Padded) -> Padded {
++    value
++}
++
++#[inline(never)]
++fn choose(first: Padded, second: Padded, take_first: bool) -> Padded {
++    if take_first { identity(first) } else { identity(second) }
++}
++
++#[inline(never)]
++unsafe fn read_payload(value: Padded) -> u16 {
++    unsafe { value.payload.assume_init() }
++}
++
++fn make(payload: MaybeUninit<u16>, prefix: u8, suffix: u8) -> Padded {
++    Padded { prefix, payload, suffix, empty: MaybeUninit::uninit() }
++}
++
++#[kani::proof]
++fn both_positions_padded_and_zero_size_preserve_values() {
++    let first: u16 = kani::any();
++    let second: u16 = kani::any();
++    let take_first: bool = kani::any();
++    let value = choose(
++        make(MaybeUninit::new(first), 3, 5),
++        make(MaybeUninit::new(second), 7, 9),
++        take_first,
++    );
++    let result = unsafe { read_payload(value) };
++    unsafe { value.empty.assume_init() };
++    assert!(result == if take_first { first } else { second });
++    assert!(value.prefix == if take_first { 3 } else { 7 });
++    assert!(value.suffix == if take_first { 5 } else { 9 });
++    kani::cover!(take_first, "first argument preserved");
++    kani::cover!(!take_first, "second argument preserved");
++}
++
++#[kani::proof]
++fn first_argument_empty_survives_nested_return() {
++    let value = choose(make(MaybeUninit::uninit(), 3, 5), make(MaybeUninit::new(17), 7, 9), true);
++    kani::cover!(true, "before invalid read from first argument");
++    let result = unsafe { read_payload(value) };
++    kani::cover!(result == 7, "first argument read observable");
++}
++
++#[kani::proof]
++fn second_argument_empty_survives_nested_return() {
++    let value = choose(make(MaybeUninit::new(17), 3, 5), make(MaybeUninit::uninit(), 7, 9), false);
++    kani::cover!(true, "before invalid read from second argument");
++    let result = unsafe { read_payload(value) };
++    kani::cover!(result == 7, "second argument read observable");
++}
++
++struct ReadOnDrop {
++    payload: MaybeUninit<u16>,
++}
++
++impl Drop for ReadOnDrop {
++    #[inline(never)]
++    fn drop(&mut self) {
++        let result = unsafe { self.payload.assume_init() };
++        kani::cover!(result == 7, "drop read observable");
++    }
++}
++
++#[kani::proof]
++fn drop_does_not_initialize_opaque_payload() {
++    let value = ReadOnDrop { payload: MaybeUninit::uninit() };
++    kani::cover!(true, "before invalid read in drop");
++    drop(value);
++}
++
++#[inline(never)]
++fn other_identity(value: Padded) -> Padded {
++    value
++}
++
++#[kani::proof]
++fn indirect_opaque_call_requires_refusal() {
++    let take_first: bool = kani::any();
++    let target: fn(Padded) -> Padded = if take_first { identity } else { other_identity };
++    let value = make(MaybeUninit::new(17), 3, 5);
++    kani::cover!(take_first, "before first indirect target");
++    kani::cover!(!take_first, "before second indirect target");
++    let result = target(value);
++    assert!(unsafe { read_payload(result) } == 17);
++}
+diff --git a/tests/expected/uninit/padding-transfer-edge-controls.expected b/tests/expected/uninit/padding-transfer-edge-controls.expected
+new file mode 100644
+index 0000000..2f629ff
+--- /dev/null
++++ b/tests/expected/uninit/padding-transfer-edge-controls.expected
+@@ -0,0 +1,39 @@
++- Status: SATISFIED\
++	 - Description: "array tuple payloads survive"
++
++- Status: SATISFIED\
++	 - Description: "full return replaces old value"
++
++- Status: SATISFIED\
++	 - Description: "before empty return overwrite read"
++
++- Status: SATISFIED\
++	 - Description: "before delayed pointer read"
++
++- Status: SATISFIED\
++	 - Description: "self byte copy preserves data"
++
++- Status: SATISFIED\
++	 - Description: "before uninitialized self copy read"
++
++- Status: SATISFIED\
++	 - Description: "before second lifetime read"
++
++- Status: SATISFIED\
++	 - Description: "zero sized generator returns initialized payload"
++
++read_pointer.safety_check.3\
++	 - Status: FAILURE
++
++read_pointer.safety_check.6\
++	 - Status: FAILURE
++
++raw_aggregate_copy.unsupported_construct.1\
++	 - Status: FAILURE
++
++Verification failed for - raw_aggregate_aliasing_requires_refusal
++Verification failed for - repeated_storage_does_not_retain_previous_initialization
++Verification failed for - self_byte_copy_preserves_uninitialized_payload
++Verification failed for - delayed_pointer_detects_empty_return
++Verification failed for - empty_return_overwrites_initialized_destination
++Complete - 4 successfully verified harnesses, 5 failures, 9 total.
+diff --git a/tests/expected/uninit/padding-transfer-edge-controls.rs b/tests/expected/uninit/padding-transfer-edge-controls.rs
+new file mode 100644
+index 0000000..2c064b4
+--- /dev/null
++++ b/tests/expected/uninit/padding-transfer-edge-controls.rs
+@@ -0,0 +1,140 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks --default-unwind 4
++use std::mem::MaybeUninit;
++
++#[derive(Clone, Copy)]
++#[repr(C)]
++struct Packet {
++    tag: u16,
++    payload: MaybeUninit<u16>,
++    tail: u8,
++}
++
++#[inline(never)]
++unsafe fn read_payload(value: MaybeUninit<u16>) -> u16 {
++    unsafe { value.assume_init() }
++}
++
++#[inline(never)]
++unsafe fn read_pointer(value: *const u16) -> u16 {
++    unsafe { *value }
++}
++
++#[inline(never)]
++fn empty_return() -> MaybeUninit<u16> {
++    MaybeUninit::uninit()
++}
++
++#[inline(never)]
++fn full_return(value: u16) -> MaybeUninit<u16> {
++    MaybeUninit::new(value)
++}
++
++#[inline(never)]
++fn aggregate_return(value: [(u8, Packet); 2]) -> [(u8, Packet); 2] {
++    value
++}
++
++#[kani::proof]
++fn array_tuple_aggregate_preserves_values() {
++    let first: u16 = kani::any();
++    let second: u16 = kani::any();
++    let a = Packet { tag: 3, payload: MaybeUninit::new(first), tail: 5 };
++    let b = Packet { tag: 7, payload: MaybeUninit::new(second), tail: 9 };
++    let values = [(11, a), (13, b)];
++    let values = aggregate_return(values);
++    assert!(unsafe { read_payload(values[0].1.payload) } == first);
++    assert!(unsafe { read_payload(values[1].1.payload) } == second);
++    assert!(values[0].0 == 11 && values[1].0 == 13);
++    assert!(values[0].1.tag == 3 && values[1].1.tail == 9);
++    kani::cover!(first != second, "array tuple payloads survive");
++}
++
++#[kani::proof]
++fn full_return_overwrites_initialized_destination() {
++    let mut value = MaybeUninit::new(17u16);
++    let before = &raw const value;
++    let expected: u16 = kani::any();
++    value = full_return(expected);
++    assert!(before == &raw const value);
++    assert!(unsafe { read_payload(value) } == expected);
++    kani::cover!(expected != 17, "full return replaces old value");
++}
++
++#[kani::proof]
++fn empty_return_overwrites_initialized_destination() {
++    let mut value = MaybeUninit::new(17u16);
++    let before = &raw const value;
++    value = empty_return();
++    kani::cover!(before == &raw const value, "before empty return overwrite read");
++    let output = unsafe { read_payload(value) };
++    kani::cover!(output == 7, "empty overwrite remains observable");
++}
++
++#[kani::proof]
++fn delayed_pointer_detects_empty_return() {
++    let mut value = MaybeUninit::new(17u16);
++    let pointer = (&raw const value).cast::<u16>();
++    value = empty_return();
++    kani::cover!(pointer == (&raw const value).cast::<u16>(), "before delayed pointer read");
++    let output = unsafe { read_pointer(pointer) };
++    kani::cover!(output == 7, "delayed pointer value observable");
++}
++
++#[kani::proof]
++fn self_byte_copy_preserves_initialized_payload() {
++    let expected: u16 = kani::any();
++    let mut value = MaybeUninit::new(expected);
++    let pointer = value.as_mut_ptr().cast::<u8>();
++    unsafe { std::ptr::copy(pointer, pointer, 2) };
++    assert!(unsafe { read_payload(value) } == expected);
++    kani::cover!(true, "self byte copy preserves data");
++}
++
++#[kani::proof]
++fn self_byte_copy_preserves_uninitialized_payload() {
++    let mut value = MaybeUninit::<u16>::uninit();
++    let pointer = value.as_mut_ptr().cast::<u8>();
++    unsafe { std::ptr::copy(pointer, pointer, 2) };
++    kani::cover!(true, "before uninitialized self copy read");
++    let output = unsafe { read_payload(value) };
++    kani::cover!(output == 7, "uninitialized self copy observable");
++}
++
++#[kani::proof]
++fn repeated_storage_does_not_retain_previous_initialization() {
++    for iteration in 0..2 {
++        let value = if iteration == 0 { full_return(17) } else { empty_return() };
++        if iteration == 1 {
++            kani::cover!(true, "before second lifetime read");
++            let output = unsafe { read_payload(value) };
++            kani::cover!(output == 7, "second lifetime value observable");
++        }
++    }
++}
++
++#[inline(never)]
++unsafe fn raw_aggregate_copy(from: *const Packet, to: *mut Packet) {
++    unsafe { *to = *from };
++}
++
++#[kani::proof]
++fn raw_aggregate_aliasing_requires_refusal() {
++    let mut value = Packet { tag: 3, payload: MaybeUninit::new(17), tail: 5 };
++    let pointer = &raw mut value;
++    unsafe { raw_aggregate_copy(pointer, pointer) };
++    assert!(unsafe { read_payload(value.payload) } == 17);
++}
++
++#[inline(never)]
++fn build_with<F: FnMut() -> u16>(mut generator: F) -> Packet {
++    Packet { tag: 3, payload: MaybeUninit::new(generator()), tail: 5 }
++}
++
++#[kani::proof]
++fn zero_sized_closure_can_build_opaque_return() {
++    let value = build_with(|| 17);
++    assert!(unsafe { read_payload(value.payload) } == 17);
++    kani::cover!(true, "zero sized generator returns initialized payload");
++}
+diff --git a/tests/kani/Uninit/atomic.rs b/tests/kani/Uninit/atomic.rs
+index 376f365..5970026 100644
+--- a/tests/kani/Uninit/atomic.rs
++++ b/tests/kani/Uninit/atomic.rs
+@@ -30,13 +30,9 @@ fn load_ordering() -> Ordering {
+     }
+ }
+ 
+-static GLOBAL_ATOMIC: AtomicUsize = AtomicUsize::new(0);
+-
+-// Checks if memory initialization checks work with atomics defined in the global scope.
+-#[kani::proof]
+-fn global_atomic() {
+-    let old_value = GLOBAL_ATOMIC.fetch_add(1, any_ordering());
+-}
++// Static initializer state is not yet modeled without blessing address reuse.
++// The global atomic case is an explicit capability refusal in
++// tests/expected/uninit/padding-static-reference.rs, not a positive proof.
+ 
+ // Checks if memory initialization checks work with atomics.
+ #[kani::proof]
+diff --git a/tests/kani/Uninit/padding-zero-size.rs b/tests/kani/Uninit/padding-zero-size.rs
+new file mode 100644
+index 0000000..a220f7c
+--- /dev/null
++++ b/tests/kani/Uninit/padding-zero-size.rs
+@@ -0,0 +1,10 @@
++// Copyright Kani Contributors
++// SPDX-License-Identifier: Apache-2.0 OR MIT
++// kani-flags: -Z uninit-checks -Z valid-value-checks
++use std::mem::MaybeUninit;
++#[kani::proof]
++fn zero_size_read() {
++    let empty = MaybeUninit::<()>::uninit();
++    unsafe { empty.assume_init() };
++    kani::cover!(true, "zero-size payload read");
++}

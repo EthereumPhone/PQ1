@@ -1,0 +1,36 @@
+{
+  "command": [
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/kani-candidate/target/kani/bin/kani-driver",
+    "kani",
+    "--manifest-path",
+    "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/kani-architecture/padding-mutants-v4/wrong-threshold/source/Cargo.toml",
+    "--lib",
+    "--harness",
+    "padding_single_block",
+    "-Z",
+    "uninit-checks",
+    "-Z",
+    "valid-value-checks",
+    "--keep-temps"
+  ],
+  "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/kani-architecture/padding-mutants-v4/wrong-threshold/source",
+  "exit": 1,
+  "stop": null,
+  "seconds": 1379.9939772419166,
+  "start_bytes": 5954924544,
+  "peak_bytes": 6063579136,
+  "final_bytes": 6063579136,
+  "cap_bytes": 6442450944,
+  "disk_measurement_sha256": "c648f0aaf16858f9ecd0417baffbace91dbfb0ca5abc8f70ac1013c8af43cf0c",
+  "architecture_commit": "1243ad9c12c8ff3c3a435f8b66d6c93338259b6c",
+  "environment": {
+    "RUSTUP_HOME": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup",
+    "RUSTUP_TOOLCHAIN": "nightly-2026-10-23-x86_64-unknown-linux-gnu",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_PROFILE_DEV_DEBUG": "0",
+    "CARGO_INCREMENTAL": "0"
+  },
+  "spec_sha256": "8b266ef94d9d7392869edccfc1d720cda9e4e3387877387a810439e6ed093327",
+  "supervisor_sha256": "f918dab4a3b7790cc440495562722d727eee4ee7ac73ba391174abf7d94f4db2",
+  "log_sha256": "ddb805cf68ecd467bba781f973ef9d75a217f4bcc990faeac1e0e9b36b0b9b23"
+}

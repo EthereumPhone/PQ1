@@ -1,0 +1,11 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -319,7 +319,7 @@
+     /// big-endian byte order.
+     #[inline]
+     pub fn len64_padding_be(&mut self, data_len: u64, compress: impl FnMut(&Block<BlockSize>)) {
+-        self.digest_pad(0x80, &data_len.to_be_bytes(), compress);
++        self.digest_pad(0x80, &data_len.to_le_bytes(), compress);
+     }
+ 
+     /// Pad message with 0x80, zeros and 64-bit message length using
