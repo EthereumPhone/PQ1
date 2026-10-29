@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import time
@@ -19,13 +20,21 @@ from prepare import check_prepared
 from verify import CASES, HERE, Rejected, accept, read_json, require, sha, sources
 
 
-def runtime(args, config):
-    pins = read_json(HERE / 'frozen/kani-runtime.json')
+def check_runtime_files(root, pins):
     actual = {}
     for name, expected in pins.items():
-        path = args.kani_root / name
+        path = root / name
         require(sha(path) == expected, f'Kani runtime differs: {name}')
         actual[str(path)] = expected
+    return actual
+
+
+def runtime(args, config):
+    root = args.kani_root.resolve()
+    require((root / 'target/kani/bin/kani-driver').resolve().parent == root / 'target/kani/bin',
+            'driver symlink selects a different installation/model-source root')
+    pins = read_json(HERE / 'frozen/kani-runtime.json')
+    actual = check_runtime_files(root, pins)
     external = read_json(HERE / 'frozen/external-runtime.json')
     require(sha(args.rustup) == external['rustup'], 'rustup launcher differs')
     actual[str(args.rustup)] = external['rustup']
@@ -36,6 +45,25 @@ def runtime(args, config):
             require(sha(root / name) == expected, f'external runtime differs: {group}/{name}')
             actual[str(root / name)] = expected
     return toolchain, actual
+
+
+def tool_bindings(args, toolchain):
+    solvers = read_json(HERE / 'frozen/external-runtime.json')['solver_bin']
+    return {'cargo': args.rustup, 'rustup': args.rustup, 'rustc': toolchain / 'bin/rustc',
+            **{name: args.solver_bin / name for name in solvers}}
+
+
+def install_tools(directory, bindings):
+    for name, target in bindings.items():
+        (directory / name).symlink_to(target)
+
+
+def check_tool_resolution(directory, bindings, path):
+    for name, target in bindings.items():
+        selected = shutil.which(name, path=path)
+        require(selected == str(directory / name) and Path(selected).resolve() == target.resolve(),
+                f'tool resolution differs: {name}')
+    return {name: str(target.resolve()) for name, target in bindings.items()}
 
 
 def execute(args):
@@ -56,7 +84,8 @@ def execute(args):
     args.output.mkdir(parents=True)
     for name in ('bin', 'cargo-home', 'tmp'):
         (args.output / name).mkdir()
-    (args.output / 'bin/cargo').symlink_to(args.rustup)
+    bindings = tool_bindings(args, toolchain)
+    install_tools(args.output / 'bin', bindings)
     case = args.prepared / args.case
     for parent in case.parents:
         require(not any((parent / '.cargo' / name).exists() for name in ('config', 'config.toml')),
@@ -64,9 +93,7 @@ def execute(args):
     # Explicit environment: inherited Rust/Cargo/Kani flags cannot weaken a run.
     env = {key: os.environ[key] for key in ('HOME', 'USER', 'LANG', 'LC_ALL', 'TZ') if key in os.environ}
     env.update({
-        'PATH': os.pathsep.join(map(str, [args.output / 'bin', args.rustup.parent,
-                                        args.kani_root / 'target/kani/bin', args.solver_bin,
-                                        toolchain / 'bin', Path('/usr/bin'), Path('/bin')])),
+        'PATH': os.pathsep.join(map(str, [args.output / 'bin', Path('/usr/bin'), Path('/bin')])),
         'RUSTUP_HOME': str(args.rustup_home),
         'RUSTUP_TOOLCHAIN': config['compiler']['rust_toolchain'],
         'RUSTUP_AUTO_INSTALL': '0',
@@ -80,6 +107,7 @@ def execute(args):
         'LD_LIBRARY_PATH': os.pathsep.join(map(str, [toolchain / 'lib', args.compat_libs])),
         'TMPDIR': str(args.output / 'tmp'),
     })
+    resolutions = check_tool_resolution(args.output / 'bin', bindings, env['PATH'])
     command = [str(args.kani_root / 'target/kani/bin/kani-driver'), 'kani',
                '--manifest-path', str(case / 'Cargo.toml'), '--lib', '--harness',
                config['cases'][args.case]['harness'], '-Z', 'uninit-checks',
@@ -114,12 +142,15 @@ def execute(args):
     result = {'command': command, 'cwd': str(case), 'environment': env,
               'exit': code, 'stop': stop, 'seconds': time.monotonic() - start,
               'profile_sha256': sha(HERE / 'profile.json'), 'inputs': inputs, 'tools': tools,
+              'tool_resolutions': resolutions,
               'log_sha256': sha(log_path), 'solver_requested': not args.codegen_only,
               'fresh_solver_execution': False,
               'proof_accepted': False}
     (args.output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     require(check_prepared(args.prepared) == inputs and runtime(args, config)[1] == tools,
             'input or runtime changed during execution')
+    require(check_tool_resolution(args.output / 'bin', bindings, env['PATH']) == resolutions,
+            'tool resolution changed during execution')
     if args.codegen_only:
         require(code == 0 and stop is None, 'code generation did not complete')
     else:

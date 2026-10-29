@@ -56,8 +56,7 @@ def read_json(path):
     return json.loads(Path(path).read_text(), object_pairs_hook=unique)
 
 
-def lock_closure(lock, name='sphincs-c10', version='0.1.0'):
-    packages = tomllib.loads(Path(lock).read_text())['package']
+def package_closure(packages, name='sphincs-c10', version='0.1.0'):
     seen = {}
 
     def select(name, version=None, source=None):
@@ -71,15 +70,24 @@ def lock_closure(lock, name='sphincs-c10', version='0.1.0'):
         key = (package['name'], package['version'], package.get('source', ''))
         if key in seen:
             return
-        seen[key] = package
+        normalized = {**package, 'dependencies': []}
+        seen[key] = normalized
         for dep in package.get('dependencies', []):
             parts = dep.split()
             require(1 <= len(parts) <= 3, f'unrecognized Cargo dependency: {dep}')
-            visit(select(parts[0], parts[1] if len(parts) > 1 else None,
-                         parts[2].strip('()') if len(parts) > 2 else None))
+            child = select(parts[0], parts[1] if len(parts) > 1 else None,
+                           parts[2].strip('()') if len(parts) > 2 else None)
+            normalized['dependencies'].append({field: child[field] for field in
+                                               ('name', 'version', 'source') if field in child})
+            visit(child)
+        normalized['dependencies'].sort(key=lambda p: (p['name'], p['version'], p.get('source', '')))
 
     visit(select(name, version))
     return sorted(seen.values(), key=lambda p: (p['name'], p['version'], p.get('source', '')))
+
+
+def lock_closure(lock):
+    return package_closure(tomllib.loads(Path(lock).read_text())['package'])
 
 
 def sources(profile=HERE, root=ROOT):
@@ -92,8 +100,10 @@ def sources(profile=HERE, root=ROOT):
         require(sha(profile / name) == expected, f'frozen input changed: {name}')
     for name, expected in config['production_sources'].items():
         require(sha(root / name) == expected, f'consumer source changed: {name}')
-    require(lock_closure(root / 'Cargo.lock') ==
-            read_json(profile / 'frozen/consumer-lock-closure.json'),
+    require(read_json(profile / 'frozen/kani-runtime.json')['library/kani/kani_lib.c'] ==
+            sha(profile / 'frozen/kani_lib.c'), 'C model source/runtime binding differs')
+    require(lock_closure(root / 'Cargo.lock') == package_closure(
+            read_json(profile / 'frozen/consumer-lock-closure.json')),
             'selected C10 dependency closure changed')
     lines = (profile / 'frozen/lib.rs').read_text().splitlines()
     for line, _, expr in ASSERTIONS.values():

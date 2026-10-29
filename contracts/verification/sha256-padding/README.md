@@ -77,7 +77,9 @@ python3 prepare.py /absolute/new/path/padding-inputs
 
 `verify.py` authenticates every frozen file, the production source pins and the
 complete selected C10 lockfile closure. Unrelated lockfile packages do not
-invalidate that binding. It rechecks the compressed original logs against
+invalidate that binding, including dependency-name disambiguation caused by
+adding another unselected package version. Edges use resolved package identities.
+It rechecks the compressed original logs against
 their execution receipts, compiler/harness identities, exact property census,
 intended assertion locations, failure sets and covers. It **does not rerun a
 solver**, authenticate a historical host or prove that the verifier is sound.
@@ -108,7 +110,8 @@ cargo build-dev --locked
 
 This source recipe does not promise a byte-reproducible binary. The replay
 entrypoint deliberately accepts only the **retained experimental binaries**,
-runtime libraries and tools identified in `frozen/kani-runtime.json` and
+runtime libraries, linked `kani_lib.c` model source and tools identified in
+`frozen/kani-runtime.json` and
 `frozen/external-runtime.json`. Those binaries are not distributed in this
 directory. A newly rebuilt compiler requires its own evidence and reviewed
 profile renewal; changing a binary checksum is not a successful replay.
@@ -136,7 +139,10 @@ Repeat for `two-blocks`, `wrong-endian` and `wrong-threshold`, each with a new
 output directory. Independent cases may run concurrently; each has its own
 working directory, Cargo home and target. Do not run the same case concurrently
 against the same prepared directory because Kani writes a diagnostic graph in
-its working directory. `--check-only` validates source and runtime without
+its working directory. Solver commands resolve through a private directory of
+links to the authenticated executables; adjacent tools in a Rustup or Kani
+directory cannot take precedence. Resolution and runtime identities are checked
+before and after execution. `--check-only` validates source and runtime without
 execution; `--codegen-only` exercises compilation without claiming a proof.
 Each run has a 1,800-second active-time bound and a 6,144 MiB allocation cap over
 the supplied budget root. Linux monotonic time excludes laptop suspension.
@@ -159,6 +165,12 @@ The caller refresh's three commands passed. Its original collector then compared
 consumer receipt documents that bookkeeping failure and its scoped completion
 using exact census/output identity, without relabelling the failed collector
 or rerunning the successful commands.
+
+The original proof-run dependency inventory recorded generic-array's `src/lib.rs`.
+The other package files were compared byte-for-byte with the reconstructed
+archives during publication; that is a present-day correspondence check, not
+a retroactive complete run-time inventory. Fresh replay checks every prepared
+input before and after execution.
 
 The original private implementation review and the broader gate milestone are
 recorded on [#1067](https://github.com/EthereumPhone/PQ1/issues/1067).

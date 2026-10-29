@@ -1,4 +1,5 @@
 {
+  "library/kani/kani_lib.c": "4a3c653c5cf540de061dc6044b85cad196b1321119f936621e692e13a88cd6b6",
   "target/kani/bin/kani-compiler": "07d7d83f7853ca7b3fc287e09b59deef293715cc224f35fc862abe4685b377fd",
   "target/kani/bin/kani-driver": "03bee8f729ee655fba3fdfb88c3dc0cde27598599e13f3575dd2a2fb75fbb6fe",
   "target/kani/lib/libkani.rlib": "88262b502e86a23e41ca40393f120c18cef0247a1b033743737f75c90f735257",

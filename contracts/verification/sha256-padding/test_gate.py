@@ -3,15 +3,19 @@
 import copy
 import gzip
 import json
+import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
+import types
 import unittest
 
 sys.dont_write_bytecode = True
 import prepare
+import replay
 import verify
 
 
@@ -92,6 +96,65 @@ class EvidenceTests(unittest.TestCase):
             # The selected package checksum is load-bearing even with the same version.
             p.write_text(text.replace(self.config['crates']['block-buffer-0.10.4'], '0' * 64))
             self.assertNotEqual(verify.lock_closure(p), verify.lock_closure(verify.ROOT / 'Cargo.lock'))
+
+    def test_dependency_version_disambiguation_is_selective(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / 'Cargo.lock'
+            text = (verify.ROOT / 'Cargo.lock').read_text()
+            qualified = text.replace('"generic-array",', '"generic-array 0.14.7",')
+            p.write_text(qualified + '\n[[package]]\nname = "generic-array"\nversion = "1.0.0"\n')
+            self.assertEqual(verify.lock_closure(p), verify.lock_closure(verify.ROOT / 'Cargo.lock'))
+            p.write_text(p.read_text().replace('"generic-array 0.14.7",', '"generic-array 1.0.0",'))
+            self.assertNotEqual(verify.lock_closure(p), verify.lock_closure(verify.ROOT / 'Cargo.lock'))
+
+    def test_pinned_tools_win_over_adjacent_executables(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            private, verified, adjacent = (root / n for n in ('bin', 'verified', 'adjacent'))
+            for directory in (private, verified, adjacent):
+                directory.mkdir()
+            for directory, label in ((verified, 'verified'), (adjacent, 'shadow')):
+                p = directory / 'cbmc'
+                p.write_text(f'#!/bin/sh\nprintf "{label}\\n"\n')
+                p.chmod(0o755)
+            bindings = {'cbmc': verified / 'cbmc'}
+            replay.install_tools(private, bindings)
+            path = os.pathsep.join(map(str, (private, adjacent, Path('/usr/bin'), Path('/bin'))))
+            replay.check_tool_resolution(private, bindings, path)
+            self.assertEqual(subprocess.check_output(['cbmc'], env={'PATH': path}, text=True),
+                             'verified\n')
+            wrong_path = os.pathsep.join(map(str, (adjacent, private)))
+            with self.assertRaises(verify.Rejected):
+                replay.check_tool_resolution(private, bindings, wrong_path)
+            (private / 'cbmc').unlink()
+            (private / 'cbmc').symlink_to(adjacent / 'cbmc')
+            with self.assertRaises(verify.Rejected):
+                replay.check_tool_resolution(private, bindings, path)
+
+    def test_c_model_source_drift_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rel = 'library/kani/kani_lib.c'
+            p = root / rel
+            p.parent.mkdir(parents=True)
+            shutil.copyfile(verify.HERE / 'frozen/kani_lib.c', p)
+            pins = {rel: verify.read_json(verify.HERE / 'frozen/kani-runtime.json')[rel]}
+            replay.check_runtime_files(root, pins)
+            p.write_bytes(p.read_bytes() + b'\n/* altered model input */\n')
+            with self.assertRaisesRegex(verify.Rejected, 'Kani runtime differs'):
+                replay.check_runtime_files(root, pins)
+
+    def test_driver_cannot_redirect_model_source_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'requested'
+            outside = Path(tmp) / 'other-installation/kani-driver'
+            outside.parent.mkdir()
+            outside.write_text('not executed\n')
+            driver = root / 'target/kani/bin/kani-driver'
+            driver.parent.mkdir(parents=True)
+            driver.symlink_to(outside)
+            with self.assertRaisesRegex(verify.Rejected, 'different installation'):
+                replay.runtime(types.SimpleNamespace(kani_root=root), {})
 
     def test_preparation_reconstructs_and_rejects_forged_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
