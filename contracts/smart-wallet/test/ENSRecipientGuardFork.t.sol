@@ -7,7 +7,9 @@ import {Test, console2} from "forge-std/Test.sol";
 
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
+import {BlockHashAnchor} from "../src/ens/BlockHashAnchor.sol";
 import {ENSRecipientGuard} from "../src/ens/ENSRecipientGuard.sol";
+import {ENSRecipientGuardPacked} from "../src/ens/ENSRecipientGuardPacked.sol";
 
 import {MockEntryPoint06} from "./mocks/MockEntryPoint06.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
@@ -17,9 +19,14 @@ interface IERC20Min {
     function balanceOf(address a) external view returns (uint256);
 }
 
-/// @notice Gas cost and behaviour of the ENS recipient guard against REAL
-///         mainnet ENS state. Needs `ETH_RPC_URL`; skipped without it, so
-///         plain `forge test` and CI are unaffected.
+/// @notice Gas cost and behaviour of three ways to make "pay alice.eth"
+///         enforceable, against REAL mainnet state. Needs `ETH_RPC_URL`;
+///         skipped without it, so plain `forge test` and CI are unaffected.
+///
+///   1. `ENSRecipientGuard`       reads ENS at execution (Solidity MVP)
+///   2. `ENSRecipientGuardPacked` the same reads, packed calldata, assembly
+///   3. `BlockHashAnchor`         the device verifies an ENS storage proof;
+///                                the chain only checks the block hash
 ///
 ///   ETH_RPC_URL=https://ethereum-rpc.publicnode.com \
 ///     forge test --match-contract ENSRecipientGuardFork -vv
@@ -39,6 +46,12 @@ contract ENSRecipientGuardForkTest is Test {
     MockSPHINCSVerifier internal c10;
     PQSmartWallet internal w;
     ENSRecipientGuard internal guard;
+    ENSRecipientGuardPacked internal packed;
+    BlockHashAnchor internal anchor;
+    /// A real recent block and its hash, as the device would take them from
+    /// the header it verified the ENS proof against.
+    uint256 internal anchorBlock;
+    bytes32 internal anchorHash;
     /// Read in setUp, not in the measured test: a read in the same
     /// transaction would warm the slot and understate the transfer's cost.
     uint256 internal usdcBefore;
@@ -67,6 +80,11 @@ contract ENSRecipientGuardForkTest is Test {
             hex"aaaa"
         );
         guard = new ENSRecipientGuard();
+        packed = new ENSRecipientGuardPacked();
+        anchor = new BlockHashAnchor();
+        anchorBlock = block.number - 2;
+        anchorHash = blockhash(anchorBlock);
+        require(anchorHash != bytes32(0), "fork serves no block hashes");
         vm.deal(address(w), 10 ether);
         deal(USDC, address(w), 1_000e6);
         usdcBefore = IERC20Min(USDC).balanceOf(VITALIK);
@@ -101,8 +119,8 @@ contract ENSRecipientGuardForkTest is Test {
         return abi.encodeCall(w.executeBatchWithOffchainCount, (1, 0, tos, vals, ds));
     }
 
-    /// [guard.check(node, coin, expected), call(to, value, data)]
-    function _guarded(bytes32 node, address expected, address to, uint256 value, bytes memory data)
+    /// [check, call(to, value, data)] — the shape the device would sign.
+    function _checkThen(address checker, bytes memory checkData, address to, uint256 value, bytes memory data)
         internal
         view
         returns (bytes memory)
@@ -110,12 +128,33 @@ contract ENSRecipientGuardForkTest is Test {
         address[] memory tos = new address[](2);
         uint256[] memory vals = new uint256[](2);
         bytes[] memory ds = new bytes[](2);
-        tos[0] = address(guard);
-        ds[0] = abi.encodeCall(ENSRecipientGuard.check, (node, COIN_ETH, expected));
+        tos[0] = checker;
+        ds[0] = checkData;
         tos[1] = to;
         vals[1] = value;
         ds[1] = data;
         return _batch(tos, vals, ds);
+    }
+
+    /// [guard.check(node, coin, expected), call(to, value, data)]
+    function _guarded(bytes32 node, address expected, address to, uint256 value, bytes memory data)
+        internal
+        view
+        returns (bytes memory)
+    {
+        return _checkThen(
+            address(guard), abi.encodeCall(ENSRecipientGuard.check, (node, COIN_ETH, expected)), to, value, data
+        );
+    }
+
+    /// Packed guard calldata: node (32) || expected (20).
+    function _packedArgs(bytes32 node, address expected) internal pure returns (bytes memory) {
+        return abi.encodePacked(node, expected);
+    }
+
+    /// Anchor calldata: uint32 block number (4) || block hash (32).
+    function _anchorArgs(uint256 number, bytes32 hash) internal pure returns (bytes memory) {
+        return abi.encodePacked(uint32(number), hash);
     }
 
     function _op(bytes memory callData) internal view returns (UserOperation06 memory op) {
@@ -183,6 +222,38 @@ contract ENSRecipientGuardForkTest is Test {
         assertEq(IERC20Min(USDC).balanceOf(VITALIK), usdcBefore + 100e6);
     }
 
+    function test_gas_eth_packedGuard() public onlyForked {
+        _run(
+            "ETH 0.1 -> vitalik.eth, batch [packed guard, send]",
+            _checkThen(address(packed), _packedArgs(_vitalikNode(), VITALIK), VITALIK, 0.1 ether, "")
+        );
+    }
+
+    function test_gas_usdc_packedGuard() public onlyForked {
+        bytes memory t = abi.encodeCall(IERC20Min.transfer, (VITALIK, 100e6));
+        _run(
+            "USDC 100 -> vitalik.eth, batch [packed guard, transfer]",
+            _checkThen(address(packed), _packedArgs(_vitalikNode(), VITALIK), USDC, 0, t)
+        );
+        assertEq(IERC20Min(USDC).balanceOf(VITALIK), usdcBefore + 100e6);
+    }
+
+    function test_gas_eth_anchor() public onlyForked {
+        _run(
+            "ETH 0.1 -> vitalik.eth, batch [block-hash anchor, send]",
+            _checkThen(address(anchor), _anchorArgs(anchorBlock, anchorHash), VITALIK, 0.1 ether, "")
+        );
+    }
+
+    function test_gas_usdc_anchor() public onlyForked {
+        bytes memory t = abi.encodeCall(IERC20Min.transfer, (VITALIK, 100e6));
+        _run(
+            "USDC 100 -> vitalik.eth, batch [block-hash anchor, transfer]",
+            _checkThen(address(anchor), _anchorArgs(anchorBlock, anchorHash), USDC, 0, t)
+        );
+        assertEq(IERC20Min(USDC).balanceOf(VITALIK), usdcBefore + 100e6);
+    }
+
     function test_gas_guard_alone_cold() public onlyForked {
         guard.check(_vitalikNode(), COIN_ETH, VITALIK);
         console2.log("guard.check alone, cold, called from an EOA-like context:");
@@ -227,5 +298,95 @@ contract ENSRecipientGuardForkTest is Test {
     function test_check_zeroExpected_reverts() public onlyForked {
         vm.expectRevert(ENSRecipientGuard.ZeroExpected.selector);
         guard.check(_vitalikNode(), COIN_ETH, address(0));
+    }
+
+    // ── packed guard behaviour ──────────────────────────────────────
+
+    function _callOk(address target, bytes memory data) internal returns (bool ok) {
+        (ok,) = target.call(data);
+    }
+
+    function test_packed_matches_real_ens() public onlyForked {
+        assertTrue(_callOk(address(packed), _packedArgs(_vitalikNode(), VITALIK)));
+    }
+
+    function test_packed_wrongAddress_reverts() public onlyForked {
+        assertFalse(_callOk(address(packed), _packedArgs(_vitalikNode(), address(0xBAD))));
+    }
+
+    function test_packed_unregisteredName_reverts() public onlyForked {
+        bytes32 node = _namehash2("pq1-no-such-name-7f3a9c", "eth");
+        assertFalse(_callOk(address(packed), _packedArgs(node, VITALIK)));
+    }
+
+    function test_packed_zeroExpected_reverts() public onlyForked {
+        assertFalse(_callOk(address(packed), _packedArgs(_vitalikNode(), address(0))));
+    }
+
+    function test_packed_wrongLength_reverts() public onlyForked {
+        assertFalse(_callOk(address(packed), abi.encodePacked(_vitalikNode(), VITALIK, uint8(0))));
+        assertFalse(_callOk(address(packed), abi.encodePacked(_vitalikNode())));
+        assertFalse(_callOk(address(packed), ""));
+    }
+
+    function test_packed_wrongRecipient_revertsWholeBatch() public onlyForked {
+        address attacker = address(0xBAD);
+        bytes memory cd = _checkThen(address(packed), _packedArgs(_vitalikNode(), attacker), attacker, 1 ether, "");
+        vm.expectRevert();
+        ep.validateThenExecute(address(w), _op(cd), bytes32(0), 0, cd);
+        assertEq(attacker.balance, 0);
+    }
+
+    // ── anchor behaviour ────────────────────────────────────────────
+
+    function test_anchor_accepts_real_recent_block() public onlyForked {
+        assertTrue(_callOk(address(anchor), _anchorArgs(anchorBlock, anchorHash)));
+        assertTrue(_callOk(address(anchor), _anchorArgs(block.number - 256, blockhash(block.number - 256))));
+    }
+
+    /// A forged header has a hash no block has: what a companion faking the
+    /// ENS proof (fake state root) would have to get past.
+    function test_anchor_rejects_forged_hash() public onlyForked {
+        assertFalse(_callOk(address(anchor), _anchorArgs(anchorBlock, keccak256("forged header"))));
+        assertFalse(_callOk(address(anchor), _anchorArgs(anchorBlock - 1, anchorHash)));
+    }
+
+    /// BLOCKHASH is 0 for the current block and for anything older than
+    /// 256 blocks: a stale proof (or a zero hash) can never pass.
+    function test_anchor_rejects_stale_current_and_zero() public onlyForked {
+        assertFalse(_callOk(address(anchor), _anchorArgs(block.number - 257, bytes32(0))));
+        assertFalse(_callOk(address(anchor), _anchorArgs(block.number, bytes32(0))));
+        assertFalse(_callOk(address(anchor), _anchorArgs(block.number + 1, bytes32(0))));
+    }
+
+    /// Closes the loop with `tools/ens_proof_check.py`: the 36 bytes it prints
+    /// as `anchor calldata` (built from the header it verified the proof
+    /// against) must pass the anchor on a fresh fork.
+    ///   ENS_ANCHOR=0x... ETH_RPC_URL=... forge test --mt test_anchor_acceptsDeviceCalldata
+    function test_anchor_acceptsDeviceCalldata() public onlyForked {
+        bytes memory a = vm.envOr("ENS_ANCHOR", bytes(""));
+        if (a.length == 0) vm.skip(true);
+        assertTrue(_callOk(address(anchor), a));
+    }
+
+    function test_anchor_wrongLength_reverts() public onlyForked {
+        assertFalse(_callOk(address(anchor), abi.encodePacked(uint32(anchorBlock), anchorHash, uint8(0))));
+        assertFalse(_callOk(address(anchor), abi.encodePacked(uint32(anchorBlock))));
+        assertFalse(_callOk(address(anchor), ""));
+    }
+
+    function test_anchor_refusesValue() public onlyForked {
+        vm.deal(address(this), 1 ether);
+        (bool ok,) = address(anchor).call{value: 1}(_anchorArgs(anchorBlock, anchorHash));
+        assertFalse(ok);
+    }
+
+    function test_anchor_forgedHash_revertsWholeBatch() public onlyForked {
+        address attacker = address(0xBAD);
+        bytes memory cd =
+            _checkThen(address(anchor), _anchorArgs(anchorBlock, keccak256("forged header")), attacker, 1 ether, "");
+        vm.expectRevert();
+        ep.validateThenExecute(address(w), _op(cd), bytes32(0), 0, cd);
+        assertEq(attacker.balance, 0);
     }
 }
