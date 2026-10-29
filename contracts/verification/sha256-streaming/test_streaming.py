@@ -81,6 +81,46 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaises(gate.Rejected):
             self.check(text=text)
 
+    def test_balanced_reachability_swap_refused(self):
+        text = self.logs['positive']
+        for name, before_status, after_status in [
+            ('observe_step.pointer_dereference.11', 'SUCCESS', 'UNREACHABLE'),
+            ('core::ub_checks::is_valid_allocation_size.assertion.1', 'UNREACHABLE', 'SUCCESS'),
+        ]:
+            marker = name + '\n'
+            before, after = text.split(marker, 1)
+            text = before + marker + after.replace('- Status: ' + before_status,
+                                                  '- Status: ' + after_status, 1)
+        with self.assertRaisesRegex(gate.Rejected, 'reachability'):
+            self.check(text=text)
+
+    def test_extra_or_changed_environment_refused(self):
+        original = gate.read_json(gate.HERE / 'frozen/receipts/positive-result.json')
+        for key, value in [('CARGO_ENCODED_RUSTFLAGS', '--cfg\x1fweakened_model'),
+                           ('RUSTC_WRAPPER', '/tmp/example-wrapper'),
+                           ('KANIFLAGS', '--no-unwinding-checks'),
+                           ('CARGO_PROFILE_DEV_DEBUG_ASSERTIONS', 'false'),
+                           ('CARGO_TARGET_DIR', '/tmp/unbound-cache'),
+                           ('CARGO_BUILD_JOBS', '4'), ('RUSTUP_AUTO_INSTALL', '1')]:
+            result = copy.deepcopy(original)
+            result['environment'][key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(gate.Rejected, 'environment'):
+                gate.recorded_runtime(result)
+
+    def test_missing_dependency_inventory_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            profile = Path(temp) / 'profile'
+            shutil.copytree(gate.HERE, profile)
+            path = profile / 'frozen/receipts/dependency-source-auth.json'
+            data = gate.read_json(path)
+            data['packages'] = [p for p in data['packages'] if p['name'] != 'generic-array']
+            path.write_text(json.dumps(data))
+            config = gate.read_json(profile / 'profile.json')
+            config['frozen_sha256']['frozen/receipts/dependency-source-auth.json'] = gate.sha(path)
+            (profile / 'profile.json').write_text(json.dumps(config))
+            with self.assertRaisesRegex(gate.Rejected, 'dependency missing'):
+                gate.sources(profile)
+
     def test_runtime_inventory_and_flags(self):
         original = gate.read_json(gate.HERE / 'frozen/receipts/positive-result.json')
         for mutation in ('tool', 'flag', 'solver', 'environment'):

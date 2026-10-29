@@ -21,6 +21,10 @@ CASES = ('positive', 'wrong-remainder', 'lost-residual')
 HARNESS = 'symbolic::original_initialized_step'
 FLAGS = ['--lib', '--harness', 'original_initialized_step', '-Z',
          'uninit-checks', '-Z', 'valid-value-checks', '--keep-temps']
+# This host build input was omitted from the historical source inventory.
+# Its archived checksum is bound, but no retroactive source-authentication claim
+# is made. Fresh replay reconstructs and authenticates it with every other crate.
+HISTORICAL_BUILD_INPUT_EXEMPTIONS = {'version_check-0.9.5'}
 
 
 def archive_files(stem):
@@ -66,6 +70,7 @@ def sources(profile=HERE, root=ROOT):
         path = 'lib.rs' if name == 'src/lib.rs' else f'inputs/positive/{name}'
         require(sha(profile / 'frozen' / path) == expected, 'compiled input differs')
     consumer = read_json(SHARED / 'frozen/consumer-lock-closure.json')
+    registry_stems = set()
     for case in CASES:
         packages = tomllib.loads((profile / f'frozen/inputs/{case}/Cargo.lock').read_text())['package']
         require(len(packages) == 5, 'proof dependency census changed')
@@ -80,11 +85,16 @@ def sources(profile=HERE, root=ROOT):
                 require('source' not in package and 'checksum' not in package,
                         'mutant must select the local block-buffer')
             else:
+                registry_stems.add(f"{package['name']}-{package['version']}")
                 require(package.get('source') == matches[0].get('source') and
                         package.get('checksum') == matches[0].get('checksum') ==
                         shared['crates'].get(f"{package['name']}-{package['version']}"),
                         'proof registry dependency differs from consumer')
     deps = read_json(profile / 'frozen/receipts/dependency-source-auth.json')
+    recorded_stems = [f"{p['name']}-{p['version']}" for p in deps['packages']]
+    require(len(set(recorded_stems)) == len(recorded_stems), 'duplicate dependency source receipt')
+    require(registry_stems - set(recorded_stems) <= HISTORICAL_BUILD_INPUT_EXEMPTIONS,
+            'registry dependency missing its source-authentication receipt')
     for package in deps['packages']:
         stem = f"{package['name']}-{package['version']}"
         if stem not in shared['crates']:
@@ -130,12 +140,14 @@ def accept(config, case, text, exit_code, stop=None, profile=HERE):
                 f'cover differs: {name}')
     require(all(row['Status'] in ('SUCCESS', 'UNREACHABLE') for name, row in rows.items()
                 if name not in covers and name != failure), 'safety/unsupported check failed')
+    require({name for name, row in rows.items() if row['Status'] == 'UNREACHABLE'} ==
+            set(expected['unreachable_properties']), 'per-property reachability changed')
     statuses = dict(Counter(row['Status'] for row in rows.values()))
     require(statuses == expected['statuses'], 'property status census changed')
     return {'case': case, 'accepted': True, 'properties': len(rows), 'statuses': statuses}
 
 
-def recorded_runtime(result):
+def recorded_runtime(result, case='positive'):
     """Check the recorded inventory, without pretending to inspect the old host."""
     external = read_json(SHARED / 'frozen/external-runtime.json')
     config = read_json(SHARED / 'profile.json')
@@ -163,10 +175,21 @@ def recorded_runtime(result):
     require(resolutions == {'cargo': rustup, 'rustup': rustup, 'rustc': str(tc / 'bin/rustc'),
                             **{name: str(solver / name) for name in external['solver_bin']}},
             'recorded tool resolution differs')
-    require(env['RUSTUP_HOME'] == external['rustup_home'] and
-            env['RUSTUP_TOOLCHAIN'] == config['compiler']['rust_toolchain'] and
-            env['RUSTFLAGS'] == '--emit=mir' and env['CARGO_NET_OFFLINE'] == 'true',
-            'recorded compiler environment differs')
+    source = Path(result['source'])
+    output = source.with_name(source.name + '-proof')
+    target = source.with_name(source.name + '-codegen') / 'target' if case == 'positive' else output / 'target'
+    expected_env = {
+        'HOME': '/home/nicola', 'USER': 'nicola', 'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8',
+        'PATH': f'{output}/bin:/usr/bin:/bin',
+        'RUSTUP_HOME': external['rustup_home'],
+        'RUSTUP_TOOLCHAIN': config['compiler']['rust_toolchain'], 'RUSTUP_AUTO_INSTALL': '0',
+        'CARGO_HOME': '/home/nicola/.cargo', 'CARGO_NET_OFFLINE': 'true',
+        'CARGO_BUILD_JOBS': '2', 'CARGO_PROFILE_DEV_DEBUG': '0', 'CARGO_INCREMENTAL': '0',
+        'CARGO_TARGET_DIR': str(target), 'RUSTFLAGS': '--emit=mir',
+        'LD_LIBRARY_PATH': f'{tc}/lib:{driver.parents[3].parent}/kani-architecture/runtime-libs',
+        'TMPDIR': str(output / 'tmp'),
+    }
+    require(env == expected_env, 'recorded compiler environment differs')
 
 
 def recorded(config, profile=HERE):
@@ -196,7 +219,7 @@ def recorded(config, profile=HERE):
             require(sha(profile / 'frozen' / path) == expected, 'recorded proof input differs')
         require(set(result['source_sha256']) == {'Cargo.toml', 'Cargo.lock', 'src/lib.rs'},
                 'recorded source census differs')
-        recorded_runtime(result)
+        recorded_runtime(result, case)
         if case != 'positive':
             # Only library bytes change. Cargo's installation marker is inert metadata.
             files = archive_files('block-buffer-0.10.4')

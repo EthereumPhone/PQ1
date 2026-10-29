@@ -22,7 +22,19 @@
       "raw_log_sha256": "24c30774627b586d3c09182a436ce942710c38a6f9691cb9318f514a12dddeee",
       "seconds": 352.47940685402136,
       "block_buffer_lib_sha256": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
-      "expected_failure": null
+      "expected_failure": null,
+      "unreachable_properties": [
+        "core::fmt::Arguments::<'_>::from_str.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.2",
+        "core::ub_checks::is_valid_allocation_size.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.3",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.3"
+      ]
     },
     "wrong-remainder": {
       "expected_exit": 1,
@@ -38,7 +50,19 @@
       "raw_log_sha256": "ac5afc1d9399440379f520bfa78ceb18b96c563d4cc829f91d8689c105958c78",
       "seconds": 382.5299781799549,
       "block_buffer_lib_sha256": "d4a277941164627b79723c4ee5f8c5d4638e50a0bea74c147afa0fdc6cdafcb4",
-      "expected_failure": "observe_step.assertion.10"
+      "expected_failure": "observe_step.assertion.10",
+      "unreachable_properties": [
+        "core::fmt::Arguments::<'_>::from_str.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.2",
+        "core::ub_checks::is_valid_allocation_size.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.3",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.3"
+      ]
     },
     "lost-residual": {
       "expected_exit": 1,
@@ -54,7 +78,19 @@
       "raw_log_sha256": "ff5c144facec490b332266f9a0866744aec1be7ea5e4097a430f9625b19b0c7f",
       "seconds": 356.82699696393684,
       "block_buffer_lib_sha256": "282bf40716300344ea1373ea3e55c8fc40b9a983e993758719c0daa6e19e8eda",
-      "expected_failure": "observe_step.assertion.20"
+      "expected_failure": "observe_step.assertion.20",
+      "unreachable_properties": [
+        "core::fmt::Arguments::<'_>::from_str.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.2",
+        "core::ub_checks::is_valid_allocation_size.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.3",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.3"
+      ]
     }
   },
   "frozen_sha256": {

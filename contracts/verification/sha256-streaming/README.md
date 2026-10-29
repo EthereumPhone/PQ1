@@ -82,7 +82,8 @@ python3 prepare_streaming.py /absolute/new/path/streaming-inputs
 ```
 
 The first command checks frozen identities, the selected C10 source/dependency
-binding, recorded commands/runtime inventories, raw logs, all property names,
+binding, recorded commands/runtime inventories, the complete recorded environment,
+raw logs, all property names, exact per-property reachability,
 semantic assertion locations, exact failures and coverage. CI runs these three
 commands. **They do not execute a solver or authenticate the historical host.**
 The gate tests reject missing or unreachable assertions, unintended failures,
@@ -91,7 +92,15 @@ prepared inventories. Reconstructing the expected files independently prevents
 editing `prepared.json` from blessing a changed dependency or new build script.
 
 The source authentication receipt inventories the recorded source files, not
-every historical Cargo-cache file. The original positive run reused its exact
+every historical Cargo-cache file. In particular, `version_check 0.9.5`, a
+host build dependency used by generic-array's build script, is absent from that
+historical source inventory. Its lock/archive checksum is bound, but its source
+bytes at the historical execution are an explicit trusted build input. The gate
+permits this one named exception and rejects other missing registry receipts.
+Fresh replay reconstructs and authenticates that crate as well. This does not
+retroactively complete the historical inventory.
+
+The original positive run reused its exact
 code-generation target after checking source and runtime identities. Fresh
 replay uses a new Cargo home and target with offline reconstructed inputs.
 Reusing the recorded evidence does not convert it into a fresh compilation.
