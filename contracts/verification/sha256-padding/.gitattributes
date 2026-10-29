@@ -1,0 +1,2 @@
+# Unified-diff context prefixes are data, including space-only context lines.
+frozen/*.patch -whitespace
