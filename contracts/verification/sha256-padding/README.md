@@ -84,6 +84,9 @@ their execution receipts, compiler/harness identities, exact property census,
 intended assertion locations, failure sets and covers. It **does not rerun a
 solver**, authenticate a historical host or prove that the verifier is sound.
 The CI workflow is explicitly an evidence/source check, not a new proof replay.
+Recorded manifests, lockfiles, corrected dependency and mutant source identities
+are also compared with the packaged inputs; updating a patch and its checksum
+cannot reuse proof logs for the previous dependency.
 
 `prepare.py` checks the four archived crate checksums, reconstructs the original
 and corrected dependencies and both mutants, and emits isolated Cargo projects
@@ -115,9 +118,13 @@ runtime libraries, linked `kani_lib.c` model source and tools identified in
 `frozen/external-runtime.json`. Those binaries are not distributed in this
 directory. A newly rebuilt compiler requires its own evidence and reviewed
 profile renewal; changing a binary checksum is not a successful replay.
-The Kani development build can retain build-time paths, so relocation may need
-a rebuild rather than copying the binaries. The operating system and ordinary
-system libraries also remain trusted execution inputs.
+The retained driver embeds an absolute Cargo path for metadata queries. Replay
+therefore requires the original Rustup home recorded in the receipts and
+`external-runtime.json`, and hashes the Cargo binary at that location. Copying
+identical tools into a different Rustup home is refused; relocation requires a
+rebuild and reviewed evidence renewal. The operating system, ordinary system
+libraries, and host C preprocessor/headers used by `goto-cc` remain trusted
+execution inputs.
 
 With those retained tools available, set the paths below to their existing
 locations and use a new output directory inside the allocation budget root:
@@ -139,8 +146,9 @@ Repeat for `two-blocks`, `wrong-endian` and `wrong-threshold`, each with a new
 output directory. Independent cases may run concurrently; each has its own
 working directory, Cargo home and target. Do not run the same case concurrently
 against the same prepared directory because Kani writes a diagnostic graph in
-its working directory. Solver commands resolve through a private directory of
-links to the authenticated executables; adjacent tools in a Rustup or Kani
+its working directory. Prepared paths are canonicalized before containment and
+ancestor Cargo-configuration checks and execution. Solver commands resolve
+through a private directory of links to the authenticated executables; adjacent tools in a Rustup or Kani
 directory cannot take precedence. Resolution and runtime identities are checked
 before and after execution. `--check-only` validates source and runtime without
 execution; `--codegen-only` exercises compilation without claiming a proof.

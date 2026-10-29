@@ -15,5 +15,6 @@
   },
   "compat_libs": {
     "libz.so.1": "f61677c7bdb7c2aa2a243ea781bfd16afcb361cede7b4ef76127a9d8eb9a5242"
-  }
+  },
+  "rustup_home": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup"
 }

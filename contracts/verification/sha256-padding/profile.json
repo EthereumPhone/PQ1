@@ -61,7 +61,7 @@
     "frozen/crates/generic-array-0.14.7.crate": "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a",
     "frozen/crates/typenum-1.20.1.crate": "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20",
     "frozen/crates/version_check-0.9.5.crate": "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a",
-    "frozen/external-runtime.json": "9c77550beaf1365c4a1cf6e9f98ab8faca7377b854ae0f77ee6d9390c1601d91",
+    "frozen/external-runtime.json": "ad2f679bdef5c07068658c5d1f3230af06c918c2898222552049fb402045265d",
     "frozen/generic-array.patch": "58f09226434661ea5ee27f80979aa61390e1e83e76ddcb2fd0a368b057dec18d",
     "frozen/kani-runtime.json": "3b64ee6c5e0468c944bc132c8b16e8b862a6d00b7612a030dd12fdd54f582a94",
     "frozen/kani-sources.json": "c927b7b9afae1d4f1fc7870cba531a4278fa70ee03f5e95afdcbe75b093868d2",

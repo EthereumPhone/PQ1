@@ -170,6 +170,35 @@ def accept(config, name, text, exit_code, stop=None):
     return {'case': name, 'accepted': True, 'statuses': dict(Counter(r['Status'] for r in rows.values()))}
 
 
+def recorded_inputs(config, name, result, identity, profile):
+    def unique_source(suffix):
+        matches = [Path(path) for path in identity if path.endswith(suffix)]
+        require(len(matches) == 1, f'missing/ambiguous recorded source: {suffix}')
+        return matches[0]
+
+    manifest = Path(result['command'][3])
+    require(manifest.is_absolute() and manifest.name == 'Cargo.toml',
+            'recorded manifest path differs')
+    for file, frozen in [('Cargo.lock', f'locks/{name}.lock'), ('src/lib.rs', 'lib.rs')]:
+        require(identity.get(str(manifest.parent / file)) == sha(profile / 'frozen' / frozen),
+                f'recorded input differs: {file}')
+    generic = unique_source('/generic-array/src/lib.rs')
+    require(identity[str(generic)] == config['generic_array_corrected_lib_sha256'],
+            'recorded generic-array source differs')
+    text = (profile / 'frozen/Cargo.toml.in').read_text().replace(
+        '"@GENERIC_ARRAY@"', json.dumps(generic.parent.parent.as_posix()))
+    if name.startswith('wrong-'):
+        block = unique_source(f'/{name}/block-buffer/src/lib.rs')
+        require(identity[str(block)] == config['cases'][name]['block_buffer_lib_sha256'],
+                'recorded mutant block-buffer source differs')
+        text += f'block-buffer = {{ path = {json.dumps(block.parent.parent.as_posix())} }}\n'
+    require(digest(text.encode()) == identity.get(str(manifest)),
+            'recorded Cargo manifest differs')
+    external = read_json(profile / 'frozen/external-runtime.json')
+    require(result['environment']['RUSTUP_HOME'] == external['rustup_home'],
+            'recorded Rustup home differs')
+
+
 def recorded(config, profile=HERE):
     results = []
     for name in CASES:
@@ -195,6 +224,7 @@ def recorded(config, profile=HERE):
         require(argv[1:3] == ['kani', '--manifest-path'] and argv[4:] == [
             '--lib', '--harness', config['cases'][name]['harness'], '-Z', 'uninit-checks',
             '-Z', 'valid-value-checks', '--keep-temps'], 'recorded proof flags changed')
+        recorded_inputs(config, name, result, identity, profile)
         results.append(accept(config, name, data.decode(), result['exit'], result['stop']))
     return results
 

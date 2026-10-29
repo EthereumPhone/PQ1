@@ -29,16 +29,30 @@ def check_runtime_files(root, pins):
     return actual
 
 
+def check_rustup_home(home, external):
+    canonical = home.resolve()
+    require(canonical == Path(external['rustup_home']),
+            'Rustup home differs from the retained driver embedded Cargo path')
+    return canonical
+
+
+def check_cargo_ancestors(case):
+    for parent in case.resolve().parents:
+        require(not any((parent / '.cargo' / name).exists() for name in ('config', 'config.toml')),
+                f'ancestor Cargo configuration is outside this profile: {parent}')
+
+
 def runtime(args, config):
     root = args.kani_root.resolve()
     require((root / 'target/kani/bin/kani-driver').resolve().parent == root / 'target/kani/bin',
             'driver symlink selects a different installation/model-source root')
+    external = read_json(HERE / 'frozen/external-runtime.json')
+    rustup_home = check_rustup_home(args.rustup_home, external)
     pins = read_json(HERE / 'frozen/kani-runtime.json')
     actual = check_runtime_files(root, pins)
-    external = read_json(HERE / 'frozen/external-runtime.json')
     require(sha(args.rustup) == external['rustup'], 'rustup launcher differs')
     actual[str(args.rustup)] = external['rustup']
-    toolchain = args.rustup_home / 'toolchains' / config['compiler']['rust_toolchain']
+    toolchain = rustup_home / 'toolchains' / config['compiler']['rust_toolchain']
     for root, group in [(toolchain, 'rust_toolchain'), (args.solver_bin, 'solver_bin'),
                         (args.compat_libs, 'compat_libs')]:
         for name, expected in external[group].items():
@@ -68,7 +82,8 @@ def check_tool_resolution(directory, bindings, path):
 
 def execute(args):
     config = sources()
-    inputs = check_prepared(args.prepared)
+    prepared = args.prepared.resolve()
+    inputs = check_prepared(prepared)
     toolchain, tools = runtime(args, config)
     if args.check_only:
         print(json.dumps({'inputs_checked': len(inputs), 'runtime_files_checked': len(tools),
@@ -76,7 +91,7 @@ def execute(args):
         return
     require(args.output is not None and args.case is not None and args.budget_root is not None,
             '--case, --output and --budget-root are required for execution')
-    require(not args.output.exists() and not args.output.is_relative_to(args.prepared) and
+    require(not args.output.exists() and not args.output.is_relative_to(prepared) and
             not args.output.is_relative_to(HERE), 'use a new output directory outside source inputs')
     require(args.output.is_relative_to(args.budget_root), 'output is outside allocation budget')
     cap = 6144 * 1024 * 1024
@@ -86,10 +101,8 @@ def execute(args):
         (args.output / name).mkdir()
     bindings = tool_bindings(args, toolchain)
     install_tools(args.output / 'bin', bindings)
-    case = args.prepared / args.case
-    for parent in case.parents:
-        require(not any((parent / '.cargo' / name).exists() for name in ('config', 'config.toml')),
-                f'ancestor Cargo configuration is outside this profile: {parent}')
+    case = prepared / args.case
+    check_cargo_ancestors(case)
     # Explicit environment: inherited Rust/Cargo/Kani flags cannot weaken a run.
     env = {key: os.environ[key] for key in ('HOME', 'USER', 'LANG', 'LC_ALL', 'TZ') if key in os.environ}
     env.update({
@@ -147,7 +160,7 @@ def execute(args):
               'fresh_solver_execution': False,
               'proof_accepted': False}
     (args.output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
-    require(check_prepared(args.prepared) == inputs and runtime(args, config)[1] == tools,
+    require(check_prepared(prepared) == inputs and runtime(args, config)[1] == tools,
             'input or runtime changed during execution')
     require(check_tool_resolution(args.output / 'bin', bindings, env['PATH']) == resolutions,
             'tool resolution changed during execution')

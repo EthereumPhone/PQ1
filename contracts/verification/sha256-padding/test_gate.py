@@ -156,6 +156,81 @@ class EvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(verify.Rejected, 'different installation'):
                 replay.runtime(types.SimpleNamespace(kani_root=root), {})
 
+    def test_symlink_cannot_hide_ancestor_cargo_configuration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            inputs = root / 'real/inputs'
+            case = inputs / 'single-block'
+            case.mkdir(parents=True)
+            alias = root / 'alias'
+            alias.symlink_to(inputs, target_is_directory=True)
+            replay.check_cargo_ancestors(alias / 'single-block')
+            config = root / 'real/.cargo/config.toml'
+            config.parent.mkdir()
+            config.write_text('[build]\ntarget-dir = "outside"\n')
+            for path in (case, alias / 'single-block'):
+                with self.subTest(path=path), self.assertRaisesRegex(
+                        verify.Rejected, 'ancestor Cargo configuration'):
+                    replay.check_cargo_ancestors(path)
+
+    def test_embedded_cargo_root_cannot_be_relocated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            original, moved = root / 'original', root / 'moved'
+            original.mkdir()
+            (original / 'cargo').write_text('identical tool bytes\n')
+            shutil.copytree(original, moved)
+            external = {'rustup_home': str(original)}
+            self.assertEqual(replay.check_rustup_home(original, external), original)
+            alias = root / 'alias'
+            alias.symlink_to(original, target_is_directory=True)
+            self.assertEqual(replay.check_rustup_home(alias, external), original)
+            with self.assertRaisesRegex(verify.Rejected, 'embedded Cargo path'):
+                replay.check_rustup_home(moved, external)
+
+    def test_coherent_dependency_update_cannot_reuse_old_proofs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = root / 'profile'
+            shutil.copytree(verify.HERE, profile)
+            original = root / 'original'
+            prepare.prepare(original, profile)
+            before = '                destination.position += 1;'
+            after = before + ' // source-identity control'
+            patch = profile / 'frozen/generic-array.patch'
+            self.assertIn('+' + before, patch.read_text())
+            patch.write_text(patch.read_text().replace('+' + before, '+' + after, 1))
+            changed_lib = (original / 'generic-array/src/lib.rs').read_bytes().replace(
+                before.encode(), after.encode(), 1)
+            config = verify.read_json(profile / 'profile.json')
+            config['generic_array_corrected_lib_sha256'] = verify.digest(changed_lib)
+            config['frozen_sha256']['frozen/generic-array.patch'] = verify.sha(patch)
+            (profile / 'profile.json').write_text(json.dumps(config))
+            checked = verify.sources(profile)
+            prepare.prepare(root / 'changed', profile)
+            with self.assertRaisesRegex(verify.Rejected, 'recorded generic-array source differs'):
+                verify.recorded(checked, profile)
+
+    def test_recorded_case_inputs_are_cross_bound(self):
+        for name in verify.CASES:
+            result = verify.read_json(verify.HERE / f'frozen/receipts/{name}-result.json')
+            identity = verify.read_json(verify.HERE / f'frozen/receipts/{name}-identity.json')
+            manifest = Path(result['command'][3])
+            keys = [str(manifest), str(manifest.parent / 'Cargo.lock'),
+                    str(manifest.parent / 'src/lib.rs')]
+            if name.startswith('wrong-'):
+                keys.extend(key for key in identity if key.endswith(f'/{name}/block-buffer/src/lib.rs'))
+            for key in keys:
+                with self.subTest(case=name, key=key):
+                    changed = {**identity, key: '0' * 64}
+                    with self.assertRaises(verify.Rejected):
+                        verify.recorded_inputs(self.config, name, result, changed, verify.HERE)
+            changed = copy.deepcopy(result)
+            changed['environment']['RUSTUP_HOME'] += '-relocated'
+            with self.subTest(case=name, key='RUSTUP_HOME'), self.assertRaisesRegex(
+                    verify.Rejected, 'recorded Rustup home differs'):
+                verify.recorded_inputs(self.config, name, changed, identity, verify.HERE)
+
     def test_preparation_reconstructs_and_rejects_forged_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'inputs'
