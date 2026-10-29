@@ -15,6 +15,15 @@ Nothing is broadcast. Signatures stay on the phone.
     ./gradlew :app:assembleDebug
     adb install -r app/build/outputs/apk/debug/app-debug.apk
 
+Release builds for handing out are signed with the PQ1 Demo release key (certificate SHA-256
+`8206faf512e1671148be6d1543057b4249dc9dac45a3172be66af1b81250a9d8`).
+The key is not in the repo: `assembleRelease` reads `PQ1DEMO_STORE_FILE`, `PQ1DEMO_STORE_PASSWORD`,
+`PQ1DEMO_KEY_ALIAS` and `PQ1DEMO_KEY_PASSWORD` from `~/.gradle/gradle.properties`, and without
+them it builds an unsigned APK. Every update must be signed with the same key, or Android refuses
+to install it over the old one.
+
+    ./gradlew :app:assembleRelease    # app/build/outputs/apk/release/app-release.apk
+
 ## Use
 
 Tap a demo. It opens full screen and waits until PQ1 is plugged in and unlocked, then sends the

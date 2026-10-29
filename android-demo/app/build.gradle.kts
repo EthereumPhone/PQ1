@@ -16,11 +16,24 @@ android {
         versionName = "0.1"
     }
 
+    // Release key lives off-repo: PQ1DEMO_* in ~/.gradle/gradle.properties. Without them
+    // `assembleRelease` produces an unsigned APK rather than falling back to the debug key.
+    val releaseStoreFile = providers.gradleProperty("PQ1DEMO_STORE_FILE").orNull
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = providers.gradleProperty("PQ1DEMO_STORE_PASSWORD").get()
+                keyAlias = providers.gradleProperty("PQ1DEMO_KEY_ALIAS").get()
+                keyPassword = providers.gradleProperty("PQ1DEMO_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Demo-only: signed with the local debug key so `assembleRelease` installs directly.
-            signingConfig = signingConfigs.getByName("debug")
+            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 
