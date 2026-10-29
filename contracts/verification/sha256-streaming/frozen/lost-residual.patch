@@ -1,0 +1,11 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -172,7 +172,7 @@
+ 
+         let n = leftover.len();
+         self.buffer[..n].copy_from_slice(leftover);
+-        self.set_pos_unchecked(n);
++        self.set_pos_unchecked(0);
+     }
+ 
+     /// Reset buffer by setting cursor position to zero.

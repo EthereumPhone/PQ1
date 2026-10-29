@@ -1,0 +1,23 @@
+{
+  "accepted_expected_failure": true,
+  "case": "wrong-remainder",
+  "intended_failures": [
+    "observe_step.assertion.10"
+  ],
+  "properties": 867,
+  "statuses": {
+    "SUCCESS": 850,
+    "UNREACHABLE": 10,
+    "SATISFIED": 5,
+    "UNSATISFIABLE": 1,
+    "FAILURE": 1
+  },
+  "semantic_assertions": 13,
+  "property_names_sha256": "3eeff563fd8760537d35317ff1e41d5ad4a0175d161492eff2bdcc9744f6c6bf",
+  "result_sha256": "923414c970e518fc13c6b458d4927c865efbcc79c2b12713323a90255ffbcd5e",
+  "freeze_sha256": "c8af3c4daba42ee517ecc17a752c05559f06b0102434e519582b5ca5c7f777af",
+  "cover_audit_sha256": "4d49754932ca072d3d350cac4aa895bd6c617e6902039715eb6d8e9be82cb14b",
+  "checker_sha256": "f8845a510927bcb75cc231fa418ad399cd33e469cab75f95d536034593184920",
+  "mutation_source_sha256": "d4a277941164627b79723c4ee5f8c5d4638e50a0bea74c147afa0fdc6cdafcb4",
+  "scope": "One intended byte-order or residual-length failure in the unchanged full-domain indexed harness; no setup, timeout, unsupported-operation or memory-safety failure credited as a semantic control."
+}

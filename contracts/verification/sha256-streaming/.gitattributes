@@ -1,0 +1,5 @@
+# Preserve the exact accepted source bytes and unified-diff context lines.
+frozen/Cargo.toml -whitespace
+frozen/inputs/positive/Cargo.toml -whitespace
+frozen/reference.rs -whitespace
+frozen/*.patch -whitespace

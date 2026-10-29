@@ -1203,10 +1203,28 @@ raw proof logs, strict result checks and a separate fresh replay command. Its CI
 checks recorded evidence and source binding, not a new solver execution.
 Production dependencies and the default verification toolchains are unchanged.
 
-**Remaining backend boundary.** The word, complete-block and corrected-dependency
-padding results do not connect the existing
+**Original initialized streaming step (2026-10-30).** The isolated
+[`sha256-streaming` profile](../../sha256-streaming/README.md) checks the unchanged
+`block-buffer 0.10.4` update method with original `generic-array 0.14.7`, for
+every initialized 64-byte buffer, position `0..63` and input of at most 192
+bytes. A universally arbitrary byte index checks emitted/residual byte order;
+length, residual position, nonempty callbacks, callback count and adjacent frame
+preservation are also checked. All 13 semantic assertions pass. Five source
+coverage cases are reachable; the separately recorded constant-false duplicate
+cover is not credited. Wrong-remainder and lost-residual source controls fail
+only their intended assertions. The same pinned experimental Kani model is
+used, with safety/validity/unwind checks enabled and no new compiler changes.
+
+This entry is initialized independently of the original constructor. It does
+not prove that constructor, updates longer than 192 bytes, unbounded histories,
+accumulated bit length, arbitrary callbacks or full Rust alias/provenance and
+cross-tool refinement. The profile retains raw evidence and a separate replay
+command; its CI checks recorded evidence and source binding without a solver.
+
+**Remaining backend boundary.** The word, complete-block, bounded initialized
+streaming and corrected-dependency padding results do not connect the existing
 `sha256_bytes`/`sha256_parts` postulates to an entire Rust `Digest` execution.
-Streaming updates, accumulated-length/padding composition,
+General streaming updates, accumulated-length/padding composition,
 dispatch, unsafe conversions, accelerated backends, and the STM32 driver
 remain outside these proofs. Direct extraction of the pinned full API still
 encounters generic-array/trait translation errors. The experimental portable
