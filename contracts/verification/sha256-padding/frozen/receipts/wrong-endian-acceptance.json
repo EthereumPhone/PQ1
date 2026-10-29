@@ -1,0 +1,15 @@
+{
+  "mutation": "wrong-endian",
+  "accepted": true,
+  "only_failure": {
+    "property": "proofs::check.assertion.13",
+    "Status": "FAILURE",
+    "Description": "\"assertion failed: blocks[0][i] == first\"",
+    "Location": "src/lib.rs:52:13 in function proofs::check"
+  },
+  "harness_sha256": "d88ac0671472e60d70ace9fc92f07f12fcf9580904018c7226123c8b26ed19df",
+  "identity_sha256": "8d8a44ce58ab6ce1a04b31acbefec4e6eec896f85076425ec6986115e05f4c35",
+  "result_sha256": "9cc7a95083e927774809a23432f65104d7e2186287ecc966fb52a551d062c2e3",
+  "checker_sha256": "6f50022431e96fb5ee4947504fc5438cd644ac2991907f57ccd4d5b952657c57",
+  "coverage_note": "Threshold mutation refuses pos=55 at the unchanged count assertion; its later cover is unsatisfiable. The positive baseline reaches it. Other relevant covers remain satisfied. This is not a setup or capability failure."
+}

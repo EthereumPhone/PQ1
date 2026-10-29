@@ -1,0 +1,15 @@
+{
+  "mutation": "wrong-threshold",
+  "accepted": true,
+  "only_failure": {
+    "property": "proofs::check.assertion.14",
+    "Status": "FAILURE",
+    "Description": "\"assertion failed: count == if single { 1 } else { 2 }\"",
+    "Location": "src/lib.rs:38:9 in function proofs::check"
+  },
+  "harness_sha256": "d88ac0671472e60d70ace9fc92f07f12fcf9580904018c7226123c8b26ed19df",
+  "identity_sha256": "3c1b8dc916057a83ca038a7592738ae3a66693d3a8a1233d40f2c2ee88f13d3b",
+  "result_sha256": "c5cec3598cecabb7b47c6e5bfd300f40c3ab3e9fd59989f5fe0c954bb835ae37",
+  "checker_sha256": "6f50022431e96fb5ee4947504fc5438cd644ac2991907f57ccd4d5b952657c57",
+  "coverage_note": "Threshold mutation refuses pos=55 at the unchanged count assertion; its later cover is unsatisfiable. The positive baseline reaches it. Other relevant covers remain satisfied. This is not a setup or capability failure."
+}

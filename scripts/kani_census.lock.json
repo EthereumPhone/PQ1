@@ -5,6 +5,7 @@
     "aa/src/offchain_gate.rs": 10,
     "aa/src/offchain_header.rs": 6,
     "aa/src/userop.rs": 4,
+    "contracts/verification/sha256-padding/frozen/lib.rs": 2,
     "domain/src/lib.rs": 1,
     "fw-manifest/src/lib.rs": 2,
     "pqsigner-erc7730/src/display/primitives.rs": 2,
@@ -60,6 +61,10 @@
       "validate_data_len_keeps_inner_slice_in_bounds",
       "reconstruct_execute_panic_free",
       "reconstruct_execute_layout"
+    ],
+    "contracts/verification/sha256-padding/frozen/lib.rs": [
+      "padding_single_block",
+      "padding_two_blocks"
     ],
     "domain/src/lib.rs": [
       "deserialize_pin_state_panic_free"
@@ -287,12 +292,12 @@
     ]
   },
   "totals": {
-    "total_files": 31,
-    "total_harnesses": 188,
+    "total_files": 32,
+    "total_harnesses": 190,
     "mutation_enrolled_files": 23,
     "harnesses_in_enrolled_files": 173,
-    "files_outside_mutation": 8,
-    "harnesses_outside_mutation": 15,
+    "files_outside_mutation": 9,
+    "harnesses_outside_mutation": 17,
     "mutation_groups_total": 52,
     "mutation_groups_by_tier": {
       "quick": 12,
@@ -303,6 +308,7 @@
     "distinct_enrolled_harnesses": 45
   },
   "files_outside_mutation": [
+    "contracts/verification/sha256-padding/frozen/lib.rs",
     "domain/src/lib.rs",
     "pqsigner-erc7730/src/ir.rs",
     "pqsigner-erc7730/src/render/calldata_topology.rs",

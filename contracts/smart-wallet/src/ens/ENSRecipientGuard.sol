@@ -42,7 +42,7 @@ contract ENSRecipientGuard {
         if (r.code.length == 0) revert NoResolver(node);
 
         (bool ok, bytes memory ret) = r.staticcall(abi.encodeWithSelector(ADDR_MULTICOIN, node, coinType));
-        bytes memory a;
+        bytes memory a = "";
         // A malformed return makes abi.decode revert, which is the right
         // outcome: anything but a clean 20-byte answer refuses the batch.
         if (ok && ret.length >= 64) a = abi.decode(ret, (bytes));

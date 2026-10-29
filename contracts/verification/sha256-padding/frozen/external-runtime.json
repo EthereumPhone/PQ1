@@ -1,0 +1,20 @@
+{
+  "rustup": "5be191e8c70a5007074254cb74d78dbfdd25cd5a61c27de7b8e5410122ec24f4",
+  "rust_toolchain": {
+    "bin/rustc": "868823b4821483101b4e71435a11ae702dee76fca8a725b045eda1fb32318ed2",
+    "bin/cargo": "2f61a65e2f3029f4d849a6534bbd6627790142c59a74682f0025e80d6f638c7d",
+    "lib/librustc_driver-8ddbd174ff1ac129.so": "87823eec04880cd0ebf69b22030b4fc6e103ba298c0055a4ba54b2edd27eade0",
+    "lib/libLLVM.so.23.1-rust-1.101.0-nightly": "a24aea8cc0450c476b3052a28350b40ea8b6bbaa2f7961f9886c510f009ad298",
+    "lib/libLLVM-23-rust-1.101.0-nightly.so": "ccfd1258407eda67c3335f740a9e03e62b28ad830683c11524033d5013334938"
+  },
+  "solver_bin": {
+    "cbmc": "01ae2ae74a9dc5673631e42256f780393081650f4a22d6f4220566c0deb1643a",
+    "goto-cc": "8e58405a2a1c7ec56db52d955cdd0f54a5cca1be09dfdd4f754ea72d111b8215",
+    "goto-instrument": "3b4ac9c5d41f72db7c455d45f9f7de5dc7240d3b020a1c68a6b210ad435d4c0c",
+    "kissat": "d497534114b53d499b251f603cd477a08263264dcdfe6bd434e1cf06c79d60a6"
+  },
+  "compat_libs": {
+    "libz.so.1": "f61677c7bdb7c2aa2a243ea781bfd16afcb361cede7b4ef76127a9d8eb9a5242"
+  },
+  "rustup_home": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup"
+}

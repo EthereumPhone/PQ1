@@ -1,0 +1,108 @@
+{
+  "cases": {
+    "single-block": {
+      "block_buffer_lib_sha256": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
+      "expected_exit": 0,
+      "harness": "padding_single_block",
+      "property_count": 641,
+      "property_names_sha256": "8f4ae1ccb9ff25a609baf5fb5b905a36eaaeff9035ac933664b38256ae4a5fb2",
+      "raw_log_sha256": "8f8542b191d809e3f388284f3b5f5c6c4ea9e44338f6b6ad1b52a57ed2dd9535",
+      "seconds": 1158.5748908940004
+    },
+    "two-blocks": {
+      "block_buffer_lib_sha256": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
+      "expected_exit": 0,
+      "harness": "padding_two_blocks",
+      "property_count": 641,
+      "property_names_sha256": "8f4ae1ccb9ff25a609baf5fb5b905a36eaaeff9035ac933664b38256ae4a5fb2",
+      "raw_log_sha256": "00eb7e42bad5eac9a6356cd9b4a6ba13ad06bf73f300e436d64d204e917462f0",
+      "seconds": 1180.2496295289602
+    },
+    "wrong-endian": {
+      "block_buffer_lib_sha256": "534136658e7225576aca53180894e2dc0c63c00ba442d846a2f9cf6cc6b3fe9e",
+      "expected_exit": 1,
+      "harness": "padding_single_block",
+      "property_count": 641,
+      "property_names_sha256": "8f4ae1ccb9ff25a609baf5fb5b905a36eaaeff9035ac933664b38256ae4a5fb2",
+      "raw_log_sha256": "04f3eca3bbf707e14db267c6800ef5c688d9bb1ee5e20965e052df7e030d09d0",
+      "seconds": 1162.637966612936
+    },
+    "wrong-threshold": {
+      "block_buffer_lib_sha256": "51f13075b5bb0a39930168bd64d6a82b998404b7c2c6e672d16f7db3cdc402fe",
+      "expected_exit": 1,
+      "harness": "padding_single_block",
+      "property_count": 641,
+      "property_names_sha256": "8f4ae1ccb9ff25a609baf5fb5b905a36eaaeff9035ac933664b38256ae4a5fb2",
+      "raw_log_sha256": "ddb805cf68ecd467bba781f973ef9d75a217f4bcc990faeac1e0e9b36b0b9b23",
+      "seconds": 1379.9939772419166
+    }
+  },
+  "claim": "Original block-buffer 0.10.4 eager SHA-256 padding, corrected generic-array dependency, experimental Kani memory model; not full Digest or original-pin verification.",
+  "compiler": {
+    "baseline": "744b3e84d6eb68fd5456826997568666791bd355",
+    "candidate": "2a5a39e9c07e330b411e653331ef98582a729fcc",
+    "candidate_tree": "d7c7a1d59b7b3e1c4a0eda94205ec8ba601e4398",
+    "patch_scope": "Compiler/library/tests only; historical experiment documents excluded.",
+    "reconstructed_source_tree_without_historical_documents": "8feb4e41fb613494cfd2fbb75a489daedf0a0047",
+    "repository": "https://github.com/model-checking/kani",
+    "rust_toolchain": "nightly-2026-10-23-x86_64-unknown-linux-gnu",
+    "unchanged_recorded_sources": {
+      "kani-compiler/src/kani_middle/transform/check_uninit/delayed_ub/instrumentation_visitor.rs": "354079ebb24304c7f8dc6516ba2e50dad70f0e30466f9660d17ecece01bc7277"
+    }
+  },
+  "crates": {
+    "block-buffer-0.10.4": "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71",
+    "generic-array-0.14.7": "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a",
+    "typenum-1.20.1": "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20",
+    "version_check-0.9.5": "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+  },
+  "format": 1,
+  "frozen_sha256": {
+    "frozen/Cargo.toml.in": "cd77997cc85cb6f952310b28e27051c6cb0d4ea893c6f56d83c03af1dcb7eddc",
+    "frozen/consumer-lock-closure.json": "757c0528f981ec3340a3d8bbefecf65e831dfc2c75437a8373db209826e4385f",
+    "frozen/crates/block-buffer-0.10.4.crate": "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71",
+    "frozen/crates/generic-array-0.14.7.crate": "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a",
+    "frozen/crates/typenum-1.20.1.crate": "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20",
+    "frozen/crates/version_check-0.9.5.crate": "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a",
+    "frozen/external-runtime.json": "ad2f679bdef5c07068658c5d1f3230af06c918c2898222552049fb402045265d",
+    "frozen/generic-array.patch": "58f09226434661ea5ee27f80979aa61390e1e83e76ddcb2fd0a368b057dec18d",
+    "frozen/kani-runtime.json": "3b64ee6c5e0468c944bc132c8b16e8b862a6d00b7612a030dd12fdd54f582a94",
+    "frozen/kani-sources.json": "c927b7b9afae1d4f1fc7870cba531a4278fa70ee03f5e95afdcbe75b093868d2",
+    "frozen/kani.patch": "85e3055bff9427450041518580e54f711df8a75928bf8004887545193adb0ef2",
+    "frozen/kani_lib.c": "4a3c653c5cf540de061dc6044b85cad196b1321119f936621e692e13a88cd6b6",
+    "frozen/lib.rs": "d88ac0671472e60d70ace9fc92f07f12fcf9580904018c7226123c8b26ed19df",
+    "frozen/locks/single-block.lock": "1d4f7149a4c68e8e0818cee5a689b3631ce66edf27340628ee921ba9f5b5a479",
+    "frozen/locks/two-blocks.lock": "1d4f7149a4c68e8e0818cee5a689b3631ce66edf27340628ee921ba9f5b5a479",
+    "frozen/locks/wrong-endian.lock": "adbae74b5c531dc7dc2338db73b558fafc0b6d44e341a734b177278354a355c3",
+    "frozen/locks/wrong-threshold.lock": "adbae74b5c531dc7dc2338db73b558fafc0b6d44e341a734b177278354a355c3",
+    "frozen/logs/single-block.log.gz": "7b94539f60023b0338d303a4e0e6b5b5ed82a9f902640a7f02db92b25bfa5599",
+    "frozen/logs/two-blocks.log.gz": "910f037f8f583e9c406d6e41196aa06df174dff25f90d50c81316dfc3abe63b6",
+    "frozen/logs/wrong-endian.log.gz": "9cd4a21e8b151252c57adac767d24105392c4322fb5d14d85ab04f216cc4e19d",
+    "frozen/logs/wrong-threshold.log.gz": "185f4b694d74688c19a09b0d6aafe912606e9eec728a89a5bb5aa1171121760a",
+    "frozen/receipts/consumer.json": "cc40c75dabd491911d90e76185b9566c159cda30a9d8cd0ff5e79023faac761b",
+    "frozen/receipts/single-block-acceptance.json": "a5aff6ba968dd1d26ec0e291d943b714ab0abe33c355f2d3bf52db48ea0590da",
+    "frozen/receipts/single-block-identity.json": "e055346cd8506c51629896469d9be48a1dc1c5e35929dd4e7d7c4e8cab6893ab",
+    "frozen/receipts/single-block-result.json": "ec9644517999f57e3ea0a90d367a03c4fd5a2a8f422d482ac9cfca6a8de298bf",
+    "frozen/receipts/two-blocks-acceptance.json": "5ff6f1c9bfdf317e1fd6a796dc46ec92e478c545b86ced28e231a5784a9d17c9",
+    "frozen/receipts/two-blocks-identity.json": "e055346cd8506c51629896469d9be48a1dc1c5e35929dd4e7d7c4e8cab6893ab",
+    "frozen/receipts/two-blocks-result.json": "ff755617275f434c34b0db067fbc65461515c97d481dd9af22afb5b74fcc4f10",
+    "frozen/receipts/upstream-gates.json": "954af8f2b86d89aec8f9f3e069f90671cb06099fed6e13930481cecf2ca93294",
+    "frozen/receipts/wrong-endian-acceptance.json": "5b6a9692ec5fb668aa1952ba91794d4397a81aff598c8870400fc0e4cd0f611a",
+    "frozen/receipts/wrong-endian-identity.json": "8d8a44ce58ab6ce1a04b31acbefec4e6eec896f85076425ec6986115e05f4c35",
+    "frozen/receipts/wrong-endian-result.json": "9cc7a95083e927774809a23432f65104d7e2186287ecc966fb52a551d062c2e3",
+    "frozen/receipts/wrong-threshold-acceptance.json": "75f2e890383d5938c0859c1094886c768326362529a1b38787fa87c00b6705b0",
+    "frozen/receipts/wrong-threshold-identity.json": "3c1b8dc916057a83ca038a7592738ae3a66693d3a8a1233d40f2c2ee88f13d3b",
+    "frozen/receipts/wrong-threshold-result.json": "c5cec3598cecabb7b47c6e5bfd300f40c3ab3e9fd59989f5fe0c954bb835ae37",
+    "frozen/wrong-endian.patch": "990ef7c972374593a3d64db60a2bbe6876ef90e02b3ec3feb2ba83e4bf46d3e7",
+    "frozen/wrong-threshold.patch": "4a1da8aefb803eba0f35cb7b82a6b620acd6129fe781a0b8cd59855c747b4247",
+    "frozen/receipts/compiler-reconstruction.json": "22ac5c39ea7240434c7bfad62719b5eee152d375dd63315c9313f1e8b06e4c7b",
+    "frozen/receipts/upstream-identity.json": "751d52c718c4102689cbb21c74b553ef5d168b5ad6399fe10eb6b186c45c1a75"
+  },
+  "generic_array_corrected_lib_sha256": "5d08f9d4395b7960b8dbad2c1d8e71f8b65eb67417947a65c0c6fa542cbd8e8d",
+  "generic_array_original_lib_sha256": "20b64b4359b0e82a3523fd536ad06de25e174cead734cffd3fa5f7c48f659247",
+  "production_sources": {
+    "sphincs-c10/Cargo.toml": "f1ed6be5800c485bbe6eae2361dcec5048df70b42c40aa5ff90f66b149daf270",
+    "sphincs-c10/src/hash.rs": "7219cd9b24f2590af99779bcf1891c4b8bb864d3d42524be8f0e8484993d3290",
+    "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
+  }
+}

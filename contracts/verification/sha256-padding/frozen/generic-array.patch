@@ -1,0 +1,27 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+--- generic-array-0.14.7/src/lib.rs
++++ experimental-correction/src/lib.rs
+@@ -256,2 +256,4 @@
+-                for value in &mut (&mut *self.array.as_mut_ptr())[..self.position] {
+-                    ptr::drop_in_place(value);
++                // A panicking generator has initialized only this prefix.
++                let base = self.array.as_mut_ptr() as *mut T;
++                for i in 0..self.position {
++                    ptr::drop_in_place(base.add(i));
+@@ -387,8 +389,6 @@
+-            {
+-                let (destination_iter, position) = destination.iter_position();
+-
+-                destination_iter.enumerate().for_each(|(i, dst)| {
+-                    ptr::write(dst, f(i));
+-
+-                    *position += 1;
+-                });
++            // The storage is not yet a valid GenericArray<T, N>. Initialize
++            // each element through raw pointers before creating any reference.
++            let base = destination.array.as_mut_ptr() as *mut T;
++            for i in 0..N::USIZE {
++                ptr::write(base.add(i), f(i));
++                destination.position += 1;

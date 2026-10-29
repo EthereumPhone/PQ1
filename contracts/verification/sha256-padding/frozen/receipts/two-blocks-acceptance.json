@@ -1,0 +1,11 @@
+{
+  "accepted": true,
+  "range": "56..63",
+  "scope": "Every arbitrary 64-byte buffer and u64 bit length; all emitted bytes, block count and position reset. Unchanged block-buffer padding under the corrected generic-array dependency and experimental compiler. Not original-pin, full Digest or Rust alias-model correspondence.",
+  "properties": 641,
+  "reachable_covers": 4,
+  "identity_sha256": "e055346cd8506c51629896469d9be48a1dc1c5e35929dd4e7d7c4e8cab6893ab",
+  "result_sha256": "ff755617275f434c34b0db067fbc65461515c97d481dd9af22afb5b74fcc4f10",
+  "checker_sha256": "6ffc545736a2594213a5a39f4047341670455a1c5d7d6ca085640adbb6c82d3d",
+  "source_sha256": "d88ac0671472e60d70ace9fc92f07f12fcf9580904018c7226123c8b26ed19df"
+}

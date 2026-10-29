@@ -36,6 +36,13 @@ useDefault = true
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "Exact public Kani static-padding control source digest"
+condition = "AND"
+paths = ['''^contracts/verification/sha256-padding/frozen/kani-sources\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"tests/expected/uninit/access-static-padding\.rs": "0c56da990e49d309aa1f14dd0c6f047623345fe685d5ae61a6c81fdfe3cef65a",?\s*$''']
+
+[[rules.allowlists]]
 description = "EasyCrypt source-file digest bindings"
 condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
