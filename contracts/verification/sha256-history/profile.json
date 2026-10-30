@@ -1,0 +1,207 @@
+{
+  "format": 1,
+  "claim": "Universal list-level streaming history and checked UInt64 length composition; not extracted Rust or full Digest correspondence.",
+  "lean_binary_sha256": "bf8d54e4714cc4b03d3f6bb34c83b7202b87e49c8bfcbff6895c085bb90ceb38",
+  "lean_version": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)",
+  "source_sha256": {
+    "StreamingHistory.lean": "19fecc08797b9533373b6e5db4aaa85251a0da282c80a794505eaf78121045e6",
+    "source/sha2-0.10.9/src/core_api.rs": "73b160d98bfa6737688875ad73da5e3c2c93582604dc313d208200e12fdab676",
+    "source/block-buffer-0.10.4/src/lib.rs": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
+    "source/block-buffer-0.10.4/src/sealed.rs": "9327ee3e567ae779b83c2b7f4f3ff56fcb2117163e023e7b0e37759e7e8d1f5c",
+    "source/block-buffer-0.10.4/LICENSE-MIT": "d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef",
+    "source/block-buffer-0.10.4/LICENSE-APACHE": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+    "source/sha2-0.10.9/LICENSE-MIT": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
+    "source/sha2-0.10.9/LICENSE-APACHE": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+    "lean-toolchain": "ca5f1f601d34c49079e38d7e7041eb0f2a9c227fbc1df0f404820069a052330c"
+  },
+  "axioms": {
+    "split_conserves": [],
+    "split_emitted_length": [
+      "propext"
+    ],
+    "split_residual_length": [
+      "Quot.sound",
+      "propext"
+    ],
+    "split_residual_bound": [
+      "Quot.sound",
+      "propext"
+    ],
+    "step_conserves": [
+      "propext"
+    ],
+    "step_residual_bound": [
+      "Quot.sound",
+      "propext"
+    ],
+    "step_emitted_length": [
+      "Quot.sound",
+      "propext"
+    ],
+    "step_length_conservation": [
+      "Quot.sound",
+      "propext"
+    ],
+    "step_count_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "step_residual_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "advance_valid": [
+      "Quot.sound",
+      "propext"
+    ],
+    "advance_conserves": [
+      "propext"
+    ],
+    "run_valid": [
+      "Quot.sound",
+      "propext"
+    ],
+    "run_conserves": [
+      "propext"
+    ],
+    "run_length_conservation": [
+      "Quot.sound",
+      "propext"
+    ],
+    "run_count_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "run_residual_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "run_append": [],
+    "initial_valid": [
+      "propext"
+    ],
+    "initialized_history": [
+      "Quot.sound",
+      "propext"
+    ],
+    "run_prefix": [
+      "propext"
+    ],
+    "run_suffix": [
+      "propext"
+    ],
+    "run_canonical_prefix": [
+      "Quot.sound",
+      "propext"
+    ],
+    "run_canonical_suffix": [
+      "Quot.sound",
+      "propext"
+    ],
+    "state_ext": [
+      "propext"
+    ],
+    "run_segmentation": [
+      "Quot.sound",
+      "propext"
+    ],
+    "checkedAdd_ofNat": [
+      "Quot.sound",
+      "propext"
+    ],
+    "checkedMul_ofNat": [
+      "propext"
+    ],
+    "bitLength_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "bitLength_value_exact": [
+      "Quot.sound",
+      "propext"
+    ],
+    "advance_counter_checked": [
+      "Quot.sound",
+      "propext"
+    ],
+    "partial_counter_checked": [
+      "Quot.sound",
+      "propext"
+    ],
+    "history_bitLength": [
+      "Quot.sound",
+      "propext"
+    ],
+    "initialized_history_bitLength": [
+      "Quot.sound",
+      "propext"
+    ],
+    "history_update_checked": [
+      "Quot.sound",
+      "propext"
+    ],
+    "history_filled_buffer_counters": [
+      "Quot.sound",
+      "propext"
+    ],
+    "history_prefix_bitLength": [
+      "Quot.sound",
+      "propext"
+    ],
+    "last_representable_length": [],
+    "first_overflowing_length": []
+  },
+  "signature_sha256": {
+    "split_conserves": "3f4620b480f8fdd6ba73ea58403023c2d6bca2001fd15fc7bac29eb7a892add2",
+    "split_emitted_length": "44de5b06ac4c9d4d32dc2e057771cd3f01bde63a7ca0fb2ae81880e70b20cb66",
+    "split_residual_length": "06c55ceda3df0deb207f207d4ec290f5a1711f2400d4b258ded7930dc3bfe8ac",
+    "split_residual_bound": "25f5af12013fbde9a170118ce294576a12dbbfdaff88544ce2680fef6929c225",
+    "step_conserves": "621f513ee389a1db669fd3c3b8aa6099022486bb832ec18ad503a863b9e16452",
+    "step_residual_bound": "10f5a4ed0bac3d4dc7fcabd35871681857c0c74b634198d31914fe138449ea2c",
+    "step_emitted_length": "60229824b0ed985550042c34a1e7c115981adba33f7be9f5a34116acd7e1794a",
+    "step_length_conservation": "91082748c402f41cab046a6e3dbdf44216f8219ca239c67f901baf18f581fd10",
+    "step_count_exact": "2932f384f6fe59a4138035b61b27f1a2255694dfd1b740669b7f9da35f1bb29a",
+    "step_residual_exact": "a4418d0e97d8350dc7ade77b46d790b8e1ea4d6ef1fcbcc1f8494d2b14847ad2",
+    "advance_valid": "74ad820088119983ab5178667c5c58253347cbe459d1f1c23f9cee2c4f1527e1",
+    "advance_conserves": "e56257cc63bde4f557454f37cf106d05c699984adf5eae0ca7720ea660f4bd69",
+    "run_valid": "843e1940af31c682e2f94fe10fedb691ee9430f0f4a60768b41cd355d7be29a0",
+    "run_conserves": "08d2f1bc02db6bd2b3c263a003d84a735d7f9ed3c80d8039dbcf57a6c5fa8bc2",
+    "run_length_conservation": "29ffa0401b95df2b2b5a041af71a2d4be6c992fd23d32d38c2be105deafe700a",
+    "run_count_exact": "937a59034807ca1a6752039a5befba61eb81ebb4a02becf17468e5dce398e62e",
+    "run_residual_exact": "98036ecbeaa94429e390c8a3b40d8677b84d8682d91c8d58dfd3987709b86da1",
+    "run_append": "e6f7ffab5f23107aaa2c4cc16cd27207eac7716a1c9007adf278bc7800f98bbb",
+    "initial_valid": "b9a0948375090d38dc8b3d5e6e4c16a6f65a7a1f401e60a9447f51a635c40897",
+    "initialized_history": "3702f2a083ce0eab97be2ec8c6b3d2633b29356e25de0b342a4b0af1aa04156b",
+    "run_prefix": "376f0adaa00932ad667035f9e38dbca98f84daf0ba6681f6c517a3ba3460104a",
+    "run_suffix": "da5712ed8a39c46c4c0518e6087fe52bb4605c13c3e8768c5cb39b230d029491",
+    "run_canonical_prefix": "afc2c3c39ee060483136b0a9b529083938d8ccad803deb1749b6578683603964",
+    "run_canonical_suffix": "89acf7884042dd2fd1803279b69280b30c0f7b4dd4de5458d1446dadc77d81a3",
+    "state_ext": "cedf805ef71ec10c4108f3f2178b18a93cf1725a12c4066ec0300d3a380fdf69",
+    "run_segmentation": "f56961e0d3ac3ab7714d216f749fb196d90ab8183a80d27da285798ed7d4a0c1",
+    "checkedAdd_ofNat": "3927087e4d895b734e68ce2b959e6f2344eadf7d314fa525a81c4430f6480a9f",
+    "checkedMul_ofNat": "249493562a264e89cd976c1063aab09c60ef3d8fe8ac9f1481c6f1f5b0b486e4",
+    "bitLength_exact": "988283adc7900a77643e62629a2f42a0ae4a882fbb2cd64811d8a6ce25ffe29e",
+    "bitLength_value_exact": "6145f54922af537713c87463aa24506e9ae483c0ea7b500edfff0ca03f329d19",
+    "advance_counter_checked": "c5b92a3c5933ff5a6b6267186507561ba24bee459e68825c06a398e4a16f6928",
+    "partial_counter_checked": "0504947d21ee6ffc2a8fe0aba67349faedb0a240cea0a3d8395256c6f7f0c741",
+    "history_bitLength": "ed6c43c4b00f103b1b592c277be570212beff950e0da3974908de15fd8e31425",
+    "initialized_history_bitLength": "8f21a3755b7cf1d6fd29395fe4626c83cd86fa4fdb58fb88602a9052427c5227",
+    "history_update_checked": "2250c67fc9732169091bb650b454d8185d9dd4c45afa95009928bd180710af6b",
+    "history_filled_buffer_counters": "cfa345ccb06feb8e3c9b122c8711afdc8bbab3e0950bfa0d949ff166ffee6c6e",
+    "history_prefix_bitLength": "f02426f9f0748a726033a07093952c5d63314efcc301eae17fde0b791b993e83",
+    "last_representable_length": "fa51a6e55a8733628d032fd531ef2aefa48bfbe485338d78c7c65183c3c4fc1f",
+    "first_overflowing_length": "08cb1798366a71750fc3a593183da1c41c650791a000d89bbc7fb75eca753eb1"
+  },
+  "original_sources": {
+    "sha2-0.10.9/src/core_api.rs": "73b160d98bfa6737688875ad73da5e3c2c93582604dc313d208200e12fdab676",
+    "block-buffer-0.10.4/src/lib.rs": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
+    "block-buffer-0.10.4/src/sealed.rs": "9327ee3e567ae779b83c2b7f4f3ff56fcb2117163e023e7b0e37759e7e8d1f5c"
+  },
+  "trust_boundary": [
+    "Lean kernel, tactics and shipped Std/Init compiled libraries from the pinned official toolchain are trusted; this gate authenticates the executable/version, not a reproducible toolchain build.",
+    "List-level transcription and source mapping are reviewed manually, not extracted or proved equivalent to Rust.",
+    "No constructor, raw-pointer/layout/provenance, arbitrary callback or compression-state refinement theorem is supplied.",
+    "UInt64 checked operations model overflow refusal below the stated byte bound; they do not claim release Rust panics or evaluate original Rust instructions.",
+    "Existing EasyCrypt hash assumptions, cross-tool refinement, cryptographic and physical boundaries remain open."
+  ]
+}
