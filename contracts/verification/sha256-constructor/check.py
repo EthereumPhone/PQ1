@@ -84,6 +84,9 @@ def accept(config, name, text, exit_code, stop=None):
     verdict = 'SUCCESSFUL' if exit_code == 0 else 'FAILED'
     require(re.findall(r'VERIFICATION:- (\w+)', section) == [verdict], 'missing/wrong verdict')
     require(census_digest(rows) == case['census_sha256'], 'property census/status/description changed')
+    require(len(rows) == case['properties'] and
+            dict(Counter(row['Status'] for row in rows.values())) == case['statuses'],
+            'declared property/status counts differ')
     failures = {key for key, row in rows.items() if row['Status'] == 'FAILURE'}
     require(failures == set(case['failures']), 'unexpected or missing failure')
     if name in ('default', 'generate', 'focused-corrected'):
@@ -137,6 +140,24 @@ def runtime_receipt(config, result):
 
 def recorded(config, profile=HERE):
     accepted = []
+    codegen_path = profile / 'frozen/receipts/constructor-codegen.json'
+    codegen = read_json(codegen_path)
+    require(codegen['exit'] == 0 and codegen['stop'] is None and
+            codegen['solver_requested'] is False, 'shared code-generation run did not complete')
+    runtime_receipt(config, codegen)
+    baseline = profile / 'frozen/projects/constructor'
+    require(codegen['source_sha256'] == {key: sha(baseline / (key + '.in' if key.endswith('.rs') else key))
+                                       for key in ('Cargo.toml', 'Cargo.lock', 'src/lib.rs', '.cargo/config.toml')},
+            'shared code-generation source differs')
+    historical = Path(config['historical_root'])
+    driver = str(historical.parent / 'kani-candidate/target/kani/bin/kani-driver')
+    require(codegen['command'] == ['prlimit', '--fsize=16777216:16777216', '--cpu=175:180', '--',
+            driver, 'kani', '--manifest-path', str(historical / 'constructor/Cargo.toml'),
+            '--lib', '--harness', 'actual_default_shapes', '-Z', 'uninit-checks',
+            '-Z', 'valid-value-checks', '--keep-temps', '--only-codegen'],
+            'shared code-generation command differs')
+    raw_codegen = gzip.decompress((profile / 'frozen/logs/constructor-codegen.log.gz').read_bytes())
+    require(digest(raw_codegen) == codegen['log_sha256'], 'shared code-generation output differs')
     for name in CASES:
         case = config['cases'][name]
         result = read_json(profile / f'frozen/receipts/{name}.json')
@@ -146,7 +167,9 @@ def recorded(config, profile=HERE):
         require(result['source_sha256'] == {key: sha(project / (key + '.in' if key.endswith('.rs') else key)) for key in
                                            ('Cargo.toml', 'Cargo.lock', 'src/lib.rs', '.cargo/config.toml')},
                 'recorded harness/manifest/lock/config differs')
-        if 'control_source' in result:
+        control_case = name not in ('default', 'generate')
+        require(('control_source' in result) == control_case, 'missing/extra control source identity')
+        if control_case:
             selected = config['projects'][case['project']]['selected_crate']
             expected_lib = (config['original_dependency_sha256'] if name == 'focused-original'
                             else config['mutations'][name]['lib_sha256']
@@ -159,8 +182,17 @@ def recorded(config, profile=HERE):
         require(rows == read_json(profile / f'frozen/receipts/{name}-census.json'),
                 'full historical property locations/census differs')
         runtime_receipt(config, result)
+        reuse_field = 'compile_cache_reference_sha256' if control_case else 'reused_codegen_receipt_sha256'
+        require(result[reuse_field] == sha(codegen_path) and result['tool_sha256'] == codegen['tool_sha256'],
+                'shared compilation cache source/tool receipt differs')
+        if not control_case:
+            require(result['source_sha256'] == codegen['source_sha256'],
+                    'positive proof differs from reused code-generation source')
+        require(result['environment']['CARGO_TARGET_DIR'] == codegen['environment']['CARGO_TARGET_DIR'] ==
+                str(historical / 'constructor-codegen-v1/target'), 'shared cache path differs')
         command = result['command']
-        require(command[:2] == ['prlimit', '--fsize=16777216:16777216'] and command[3] == '--',
+        cpu = '--cpu=175:180' if name.startswith('focused-') else '--cpu=1795:1800'
+        require(command[:5] == ['prlimit', '--fsize=16777216:16777216', cpu, '--', driver],
                 'recorded process bounds changed')
         require(command[5:] == ['kani', '--manifest-path',
                 str(Path(config['historical_root']) / case['project'] / 'Cargo.toml'),
@@ -176,6 +208,18 @@ def finite(config, profile=HERE):
     require(sha(profile / 'frozen/receipts/miri-sysroot-digests.json') ==
             config['miri_sysroot_receipt_sha256'], 'Miri sysroot receipt differs')
     external = read_json(PARENT / 'frozen/external-runtime.json')
+    historical = Path(config['historical_root'])
+    toolchain = Path(external['rustup_home']) / 'toolchains' / padding.sources()['compiler']['rust_toolchain']
+    commands = {
+        'lock': ['prlimit', '--fsize=16777216:16777216', '--cpu=28:30', '--',
+                 str(toolchain / 'bin/cargo'), 'generate-lockfile', '--offline'],
+        'build': ['prlimit', '--fsize=16777216:16777216', '--cpu=118:120', '--',
+                  str(toolchain / 'bin/cargo'), 'build', '--offline', '--locked'],
+        'native': ['prlimit', '--fsize=16777216:16777216', '--cpu=118:120', '--',
+                   str(historical / 'cleanup-baseline-v1/target/debug/corrected_cleanup_probe')],
+        'recursive-miri': ['prlimit', '--fsize=16777216:16777216', '--cpu=178:180', '--',
+                           str(toolchain / 'bin/cargo-miri'), 'miri', 'run', '--offline', '--locked'],
+    }
     for tool in ('rustc', 'cargo'):
         require(config['finite_tool_sha256'][tool] == external['rust_toolchain']['bin/' + tool],
                 'finite Rust tool differs from retained runtime')
@@ -196,6 +240,7 @@ def finite(config, profile=HERE):
         expected_steps = ['lock', 'build', 'native', 'recursive-miri'] if name == 'baseline' else ['lock', 'build', 'native']
         require([row['step'] for row in result['results']] == expected_steps, 'cleanup steps missing/extra')
         for row in result['results']:
+            require(row['command'] == commands[row['step']], 'cleanup command differs')
             raw = gzip.decompress((profile / f'frozen/logs/cleanup-{name}-{row["step"]}.log.gz').read_bytes())
             require(digest(raw) == row['log_sha256'], 'cleanup output differs')
             expected_exit = 101 if name == 'wrong-prefix' and row['step'] == 'native' else 0
@@ -204,6 +249,7 @@ def finite(config, profile=HERE):
             if row['step'] == 'recursive-miri':
                 require(row['environment_additions'] == {'MIRIFLAGS': '-Zmiri-recursive-validation'},
                         'recursive Miri check missing/changed')
+                require('cargo-miri runner' in text, 'Miri runner marker missing')
             if row['step'] in ('native', 'recursive-miri'):
                 if name == 'baseline':
                     require(text.count(expected_line) == 1, 'cleanup success count absent')

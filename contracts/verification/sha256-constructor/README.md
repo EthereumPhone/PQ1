@@ -96,11 +96,25 @@ runtime or its production harness census. Input validation independently
 reconstructs the files and rejects changed source or extra build scripts;
 editing a generated inventory cannot authorize different inputs.
 
-The historical runners authenticated reconstructed dependency files before and
-after execution. Their result records pin project files and runtime tools;
-the main positive records did not separately serialize the complete dependency
-inventory. Frozen runner source and present-day reconstruction preserve that
-correspondence boundary rather than inventing a retrospective run inventory.
+The historical symbolic runners independently reconstructed and compared
+dependency files before and after execution. Their result records pin project
+files and runtime tools; the main positive records did not separately serialize
+the complete dependency inventory. The cleanup runner was weaker: it independently
+pinned only generic-array's `src/lib.rs`, and compared the remaining baseline
+package files against that same working directory. Its receipts therefore do
+not authenticate the historical bytes of `impls.rs`, `build.rs` or other
+dependency files. Current reconstruction does not repair that historical gap;
+the finite cleanup evidence carries this additional provenance limitation.
+
+All six symbolic runs shared a serial Cargo compilation cache. The initial
+code-generation result and log are preserved and bound to the reused receipt
+digest, positive harness/tool identities and shared target path. The source
+controls changed their selected dependency or harness and rebuilt as needed;
+they reused compilation artifacts, never a prior solver verdict. The proofs
+therefore also trust Cargo's freshness decisions: not every translated artifact
+was independently inventoried before each solver run. Fresh replay uses a new
+target directory. Frozen runner source and present-day reconstruction preserve
+these boundaries rather than inventing a retrospective run inventory.
 Recorded output is evidence, not authentication of a historical host or a
 proof that Kani/Miri, the private compiler or their memory models are sound.
 The parent's source-to-binary and system-library trust boundaries still apply.
@@ -136,10 +150,12 @@ have 180 seconds. Linux monotonic time excludes laptop suspension. Raw output
 and terminal receipts survive failure.
 
 For finite cleanup reproduction, the two prepared crates are `cleanup-v2` and
-`cleanup-wrong-prefix`. Their exact native/Miri commands, tool digests, clean
+`cleanup-wrong-prefix`. Their exact native/Miri commands, tool digests,
 environments and expected exits are in `frozen/receipts/cleanup-*.json`;
 `frozen/runners/run_cleanup_control.py` preserves the historical bounded
 runner. Its paths refer to the research workspace and are not a relocatable
 entrypoint. The retained Miri sysroot's complete digest inventory is also
 preserved. Recursive Miri is experimental. Matching output from different
 tools or without that flag is new evidence, not an exact replay of these runs.
+Historical commands sanitized inherited environment variables but used the
+existing user Cargo home, so they were not fully hermetic executions.
