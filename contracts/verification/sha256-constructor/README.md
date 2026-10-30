@@ -50,6 +50,10 @@ check generator order and exact initialized-prefix destruction, including every
 injected stop index at those sizes. Omitting the first prefix destructor fails
 at the intended `initialized-prefix drop mismatch` assertion. This does not
 establish universal panic/unwind equivalence or arbitrary destructor behavior.
+The accepted cleanup runs use fresh target directories and isolated Cargo homes.
+Both positive logs contain exactly 105 intended panic-hook messages. The gate
+also binds the Miri run-info's working directory and input to the pinned v2
+source and checks its isolated compilation/runner path.
 
 ## Remaining boundary
 
@@ -99,12 +103,22 @@ editing a generated inventory cannot authorize different inputs.
 The historical symbolic runners independently reconstructed and compared
 dependency files before and after execution. Their result records pin project
 files and runtime tools; the main positive records did not separately serialize
-the complete dependency inventory. The cleanup runner was weaker: it independently
-pinned only generic-array's `src/lib.rs`, and compared the remaining baseline
-package files against that same working directory. Its receipts therefore do
-not authenticate the historical bytes of `impls.rs`, `build.rs` or other
-dependency files. Current reconstruction does not repair that historical gap;
-the finite cleanup evidence carries this additional provenance limitation.
+the complete dependency inventory. The superseded cleanup runner was weaker:
+it independently pinned only generic-array's `src/lib.rs`, and compared the
+remaining baseline package files against that same working directory. Its Miri
+cache also reused run-info for the earlier v1 source while the receipt named
+v2. Those invalidly attributed receipts remain under `frozen/diagnostics` and
+receive no current cleanup credit. The replacement commands independently
+reconstructed and inventoried all dependency files before and after execution,
+with fresh targets and Cargo homes. The gate reconstructs both inventories
+again. This is fresh replacement evidence, not retrospective authentication of
+the old executions.
+
+All four replacement baseline commands passed. Its collector then mishandled
+Miri's string-form argument list; a separate completion checked the unchanged
+inputs, tools and saved command/log identities without repeating execution.
+The receipt preserves that collector failure and its completion. The fresh
+run-info copy identifies `cleanup-v2`; both logs expose all intended panics.
 
 All six symbolic runs shared a serial Cargo compilation cache. The initial
 code-generation result and log are preserved and bound to the reused receipt
@@ -152,10 +166,12 @@ and terminal receipts survive failure.
 For finite cleanup reproduction, the two prepared crates are `cleanup-v2` and
 `cleanup-wrong-prefix`. Their exact native/Miri commands, tool digests,
 environments and expected exits are in `frozen/receipts/cleanup-*.json`;
-`frozen/runners/run_cleanup_control.py` preserves the historical bounded
-runner. Its paths refer to the research workspace and are not a relocatable
+`frozen/runners/run_cleanup_isolated.py` preserves the corrected bounded
+runner; the initial collector and its completion are also retained. Its paths
+refer to the research workspace and are not a relocatable
 entrypoint. The retained Miri sysroot's complete digest inventory is also
 preserved. Recursive Miri is experimental. Matching output from different
 tools or without that flag is new evidence, not an exact replay of these runs.
-Historical commands sanitized inherited environment variables but used the
-existing user Cargo home, so they were not fully hermetic executions.
+Historical symbolic commands and superseded cleanup commands sanitized inherited
+environment variables but used the existing user Cargo home. The accepted
+replacement cleanup commands instead use isolated Cargo homes and fresh targets.

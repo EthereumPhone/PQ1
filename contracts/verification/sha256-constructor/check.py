@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import sys
+import tempfile
 import tomllib
 
 sys.dont_write_bytecode = True
@@ -14,6 +15,7 @@ HERE = Path(__file__).resolve().parent
 PARENT = HERE.parent / 'sha256-padding'
 sys.path.insert(0, str(PARENT))
 import verify as padding
+import prepare as padding_prepare
 from verify import Rejected, digest, read_json, require, sha
 
 CASES = ('default', 'generate', 'corrupt-byte', 'reverse-generation',
@@ -215,8 +217,6 @@ def finite(config, profile=HERE):
                  str(toolchain / 'bin/cargo'), 'generate-lockfile', '--offline'],
         'build': ['prlimit', '--fsize=16777216:16777216', '--cpu=118:120', '--',
                   str(toolchain / 'bin/cargo'), 'build', '--offline', '--locked'],
-        'native': ['prlimit', '--fsize=16777216:16777216', '--cpu=118:120', '--',
-                   str(historical / 'cleanup-baseline-v1/target/debug/corrected_cleanup_probe')],
         'recursive-miri': ['prlimit', '--fsize=16777216:16777216', '--cpu=178:180', '--',
                            str(toolchain / 'bin/cargo-miri'), 'miri', 'run', '--offline', '--locked'],
     }
@@ -226,6 +226,22 @@ def finite(config, profile=HERE):
     for name, case in config['finite'].items():
         require(name in ('baseline', 'wrong-prefix'), 'unknown cleanup case')
         result = read_json(profile / f'frozen/receipts/cleanup-{name}.json')
+        output = historical / case['run']
+        source = historical / case['project']
+        require(result['output'] == str(output) and result['source'] == str(source) and
+                result['fresh_target_directory'] is True and result['isolated_cargo_home'] is True and
+                result['environment']['CARGO_TARGET_DIR'] == str(output / 'target') and
+                result['environment']['CARGO_HOME'] == str(output / 'cargo-home'),
+                'cleanup does not use its isolated target/Cargo home')
+        if name == 'baseline':
+            require(result['initial_runner_sha256'] ==
+                    sha(profile / 'frozen/runners/run_cleanup_isolated_initial.py') and
+                    result['completion_collector_sha256'] ==
+                    sha(profile / 'frozen/runners/complete_cleanup_baseline.py'),
+                    'cleanup collector-completion identity differs')
+        commands['native'] = ['prlimit', '--fsize=16777216:16777216', '--cpu=118:120', '--',
+                              str(output / 'target/debug/corrected_cleanup_probe')]
+        cleanup_inputs(config, result, name)
         project = profile / 'frozen/projects' / case['project']
         require(result['source_sha256'] == {key: sha(project / (key + '.in' if key.endswith('.rs') else key)) for key in
                                            ('Cargo.toml', 'src/main.rs', '.cargo/config.toml')} and
@@ -250,15 +266,50 @@ def finite(config, profile=HERE):
                 require(row['environment_additions'] == {'MIRIFLAGS': '-Zmiri-recursive-validation'},
                         'recursive Miri check missing/changed')
                 require('cargo-miri runner' in text, 'Miri runner marker missing')
+                require(f'Compiling corrected_cleanup_probe v0.0.0 ({source})' in text and
+                        str(output / 'target/miri/x86_64-unknown-linux-gnu/debug/corrected_cleanup_probe') in text,
+                        'Miri did not compile/run the isolated source target')
+                run_info_path = profile / 'frozen/receipts/cleanup-miri-run-info.json'
+                info = read_json(run_info_path)
+                require(sha(run_info_path) == result['miri_run_info']['sha256'] and
+                        bytes(info['current_dir']['Unix']).decode() == str(source) ==
+                        result['miri_run_info']['current_dir'] and 'src/main.rs' in info['args'],
+                        'Miri run-info selects a different source')
             if row['step'] in ('native', 'recursive-miri'):
                 if name == 'baseline':
                     require(text.count(expected_line) == 1, 'cleanup success count absent')
+                    require(text.count('deliberate generator stop') == 105,
+                            'cleanup panic-hook count differs from pinned v2 source')
                 else:
                     require(expected_line not in text and 'initialized-prefix drop mismatch' in text and
                             'left: []' in text and 'right: [0]' in text, 'wrong cleanup failure')
     require(set(config['finite']) == {'baseline', 'wrong-prefix'}, 'missing cleanup control')
     return {'cases': 110, 'native': True, 'recursive_miri': True, 'wrong_prefix_rejected': True,
             'scope': 'finite; no universal panic or unwind equivalence'}
+
+
+def cleanup_inputs(config, result, name):
+    """Bind both retained inventories to independent crate reconstruction."""
+    with tempfile.TemporaryDirectory(prefix='cleanup-evidence-') as temp:
+        reference = Path(temp) / 'inputs'
+        inventory = padding_prepare.prepare(reference, PARENT)['files']
+        historical_inputs = str(Path(config['historical_root']) / 'inputs')
+        relocated = {f'{case}/{file}' for case in padding.CASES
+                     for file in ('Cargo.toml', '.cargo/config.toml')}
+        for file in relocated:
+            raw = (reference / file).read_text().replace(
+                json.dumps(str(reference))[1:-1], json.dumps(historical_inputs)[1:-1])
+            inventory[file] = digest(raw.encode())
+        require(result['prepared_inventory'] == inventory, 'cleanup prepared dependency inventory differs')
+        generic = reference / 'generic-array'
+        files = {f.relative_to(generic).as_posix(): f.read_bytes() for f in generic.rglob('*') if f.is_file()}
+        if name == 'wrong-prefix':
+            edit = config['mutations']['omit-prefix-drop']
+            old, new = bytes.fromhex(edit['old_hex']), bytes.fromhex(edit['new_hex'])
+            require(files['src/lib.rs'].count(old) == 1, 'cleanup mutation anchor differs')
+            files['src/lib.rs'] = files['src/lib.rs'].replace(old, new)
+        require(result['selected_dependency_inventory'] == {key: digest(raw) for key, raw in files.items()},
+                'cleanup selected dependency inventory differs')
 
 
 def main():

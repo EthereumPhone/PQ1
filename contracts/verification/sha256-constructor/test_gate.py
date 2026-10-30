@@ -188,6 +188,32 @@ class EvidenceGate(unittest.TestCase):
             with self.assertRaises(check.Rejected):
                 check.finite(self.config, profile)
 
+    def test_stale_miri_output_and_run_info_are_rejected(self):
+        for mutation in ('silent-panic-hook', 'old-working-directory', 'changed-dependency-inventory'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temp:
+                profile = Path(temp) / 'profile'
+                shutil.copytree(check.HERE / 'frozen', profile / 'frozen')
+                receipt_path = profile / 'frozen/receipts/cleanup-baseline.json'
+                receipt = check.read_json(receipt_path)
+                if mutation == 'silent-panic-hook':
+                    log = profile / 'frozen/logs/cleanup-baseline-recursive-miri.log.gz'
+                    raw = gzip.decompress(log.read_bytes()).replace(b'deliberate generator stop', b'')
+                    log.write_bytes(gzip.compress(raw, mtime=0))
+                    receipt['results'][-1]['log_sha256'] = check.digest(raw)
+                elif mutation == 'old-working-directory':
+                    info_path = profile / 'frozen/receipts/cleanup-miri-run-info.json'
+                    info = check.read_json(info_path)
+                    old = str(Path(self.config['historical_root']) / 'cleanup')
+                    info['current_dir']['Unix'] = list(old.encode())
+                    info_path.write_text(json.dumps(info))
+                    receipt['miri_run_info']['sha256'] = check.sha(info_path)
+                    receipt['miri_run_info']['current_dir'] = old
+                else:
+                    receipt['selected_dependency_inventory']['src/impls.rs'] = '0' * 64
+                receipt_path.write_text(json.dumps(receipt))
+                with self.assertRaises(check.Rejected):
+                    check.finite(self.config, profile)
+
 
 if __name__ == '__main__':
     unittest.main()

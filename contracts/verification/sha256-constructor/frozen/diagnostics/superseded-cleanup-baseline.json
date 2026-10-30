@@ -1,0 +1,115 @@
+{
+  "accepted_finite": true,
+  "accepted_negative_control": false,
+  "results": [
+    {
+      "step": "lock",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=28:30",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "generate-lockfile",
+        "--offline"
+      ],
+      "environment_additions": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.25841231702361256,
+      "peak_bytes": 6423339008,
+      "log_sha256": "e40e23a6ec3ea8351960918b00b8bca7a8d3a4bc99e3e43729ae8181258ad153"
+    },
+    {
+      "step": "build",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=118:120",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "build",
+        "--offline",
+        "--locked"
+      ],
+      "environment_additions": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.3613150781020522,
+      "peak_bytes": 6423355392,
+      "log_sha256": "bf52154e8503e9362d9a1dc375810fe5f3c002f5e429ba3f2726cd43395bfa11"
+    },
+    {
+      "step": "native",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=118:120",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/corrected-digest/cleanup-baseline-v1/target/debug/corrected_cleanup_probe"
+      ],
+      "environment_additions": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.2788422870216891,
+      "peak_bytes": 6423363584,
+      "log_sha256": "ad6c920bc989e9870e692742af79031b000ef7fd54cef73bab692fa7c91e5ca2"
+    },
+    {
+      "step": "recursive-miri",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=178:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo-miri",
+        "miri",
+        "run",
+        "--offline",
+        "--locked"
+      ],
+      "environment_additions": {
+        "MIRIFLAGS": "-Zmiri-recursive-validation"
+      },
+      "exit": 0,
+      "stop": null,
+      "seconds": 4.0264067959506065,
+      "peak_bytes": 6423371776,
+      "log_sha256": "cd00ca1201be693e9af0a84b111c1a48209f292e90705a70b54a088f072ab775"
+    }
+  ],
+  "source_sha256": {
+    "Cargo.toml": "eb0905a0bcb417096754ebe57f3477c4b4ff4df92a9ea72fce789724b74c88cd",
+    "src/main.rs": "ef9048d66ea5bffca713d1fa9b1c47d308a558def26eaa111b60189343ead307",
+    ".cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c"
+  },
+  "lock_sha256": "b0cf60cb4fe4b4e8c73b6975bb711cbac14689693d62b50bbdb062b92178e4f4",
+  "tool_sha256": {
+    "rustc": "868823b4821483101b4e71435a11ae702dee76fca8a725b045eda1fb32318ed2",
+    "cargo": "2f61a65e2f3029f4d849a6534bbd6627790142c59a74682f0025e80d6f638c7d",
+    "miri": "85f30df439309f34c040de10792cd100e4722b6b604c28606df0fee00f8f1c0f",
+    "cargo-miri": "161e6adbce9b29a54b7a5a5dbf347819bddd44e000172c68ad0226a847b530ff"
+  },
+  "miri_sysroot_receipt_sha256": "f6367840d3459577a1fd7774040b5f736759513053f38e5062651677c08ed8ce",
+  "selected_dependency_sha256": "5d08f9d4395b7960b8dbad2c1d8e71f8b65eb67417947a65c0c6fa542cbd8e8d",
+  "corrected_dependency_sha256": "5d08f9d4395b7960b8dbad2c1d8e71f8b65eb67417947a65c0c6fa542cbd8e8d",
+  "environment": {
+    "HOME": "/home/nicola",
+    "USER": "nicola",
+    "LANG": "en_US.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin:/usr/bin:/bin",
+    "RUSTUP_HOME": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup",
+    "RUSTUP_TOOLCHAIN": "nightly-2026-10-23-x86_64-unknown-linux-gnu",
+    "RUSTUP_AUTO_INSTALL": "0",
+    "CARGO_HOME": "/home/nicola/.cargo",
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_BUILD_JOBS": "2",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_TARGET_DIR": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/corrected-digest/cleanup-baseline-v1/target",
+    "LD_LIBRARY_PATH": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/lib",
+    "MIRI_SYSROOT": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/kani-architecture/miri-current-sysroot",
+    "TMPDIR": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/corrected-digest/cleanup-message-baseline-v2/tmp"
+  },
+  "scope": "Finite native and experimental recursive-Miri panic-prefix behavior at U0/U1/U8/U32/U64. No universal panic/unwind, full dependency equivalence or complete Digest claim."
+}

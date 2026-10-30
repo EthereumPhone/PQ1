@@ -1,0 +1,6 @@
+{
+  "old_record_is_not_current_evidence": true,
+  "reason": "The v2 cleanup receipt attributed recursive Miri output to v2 while a reused run-info file selected the v1 harness. v1 and v2 differed in panic-hook output and assertion message.",
+  "replacement": "Native and recursive Miri rerun in a new target and Cargo home; both produce exactly 105 intended panic-hook messages and the Miri run-info names cleanup-v2. All dependency files are independently reconstructed and inventoried before/after.",
+  "collector_boundary": "The isolated commands all passed. A string-form Miri argv collector error was then completed separately against unchanged inputs and saved command/log receipts; commands were not repeated."
+}
