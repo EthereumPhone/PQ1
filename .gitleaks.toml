@@ -36,6 +36,34 @@ useDefault = true
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "Exact public initialized-streaming evidence digest"
+condition = "AND"
+paths = ['''^contracts/verification/sha256\-streaming/frozen/receipts/finite\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"dependency_source_auth_sha256": "27612937dfaffd6ddfcd1ab0d241288dc59bbedf3de9395da49cf7d973665b47",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public initialized-streaming evidence digest"
+condition = "AND"
+paths = ['''^contracts/verification/sha256\-streaming/profile\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"frozen/receipts/dependency\-source\-auth\.json": "27612937dfaffd6ddfcd1ab0d241288dc59bbedf3de9395da49cf7d973665b47",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public initialized-streaming evidence digest"
+condition = "AND"
+paths = ['''^contracts/verification/sha256\-streaming/frozen/receipts/dependency\-source\-auth\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"src/core_api\.rs": "73b160d98bfa6737688875ad73da5e3c2c93582604dc313d208200e12fdab676",?\s*$''']
+
+[[rules.allowlists]]
+description = "Exact public initialized-streaming evidence digest"
+condition = "AND"
+paths = ['''^contracts/verification/sha256\-streaming/frozen/receipts/dependency\-source\-auth\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"src/core_api\.rs": "b52728aba8a84f980f3f9cc8a94a64d3a97f1eb5f4db144904822c2f8eefb1f8",?\s*$''']
+
+[[rules.allowlists]]
 description = "Exact public Kani static-padding control source digest"
 condition = "AND"
 paths = ['''^contracts/verification/sha256-padding/frozen/kani-sources\.json$''']

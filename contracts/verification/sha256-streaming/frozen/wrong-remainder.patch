@@ -1,0 +1,11 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -160,7 +160,7 @@
+         }
+         if pos != 0 {
+             let (left, right) = input.split_at(rem);
+-            input = right;
++            input = &input[..input.len() - rem];
+             self.buffer[pos..].copy_from_slice(left);
+             compress(slice::from_ref(&self.buffer));
+         }

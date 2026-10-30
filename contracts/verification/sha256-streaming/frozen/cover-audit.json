@@ -1,0 +1,138 @@
+{
+  "reason": "Initial checker expected one property per source-level cover. Primary compiled MIR instead duplicates the no-compression cover: one branch supplies literal false, one supplies len==62 under pos==1. Five source-level nonvacuity cases remain required; no assertion or guard is waived.",
+  "freeze_sha256": "c8af3c4daba42ee517ecc17a752c05559f06b0102434e519582b5ca5c7f777af",
+  "mir_sha256": "954a4003fb721c728e7ee716f4ea039dd821b49fdf2408612787f89600f140a7",
+  "harness_body_sha256": "6e221cf039624da982d17237dcff678350cb26af9ca47b0bf5edb94079b00a7e",
+  "compiled_covers": {
+    "symbolic::original_initialized_step.cover.1": {
+      "description": "empty update",
+      "source_location": {
+        "column": "9",
+        "comment": "[KANI_CHECK_ID_original_buffer_indexed_probe.c70449f7edc9b16f::original_buffer_indexed_probe_139] empty update",
+        "file": "src/lib.rs",
+        "function": "symbolic::original_initialized_step",
+        "line": "98",
+        "pragma": [
+          "checked:bounds-check",
+          "checked:pointer-check",
+          "checked:div-by-zero-check",
+          "checked:signed-overflow-check",
+          "checked:undefined-shift-check",
+          "checked:pointer-primitive-check"
+        ],
+        "propertyClass": "cover",
+        "propertyId": "symbolic::original_initialized_step.cover.1"
+      },
+      "positive_status": "SATISFIED"
+    },
+    "symbolic::original_initialized_step.cover.2": {
+      "description": "buffered empty update",
+      "source_location": {
+        "column": "9",
+        "comment": "[KANI_CHECK_ID_original_buffer_indexed_probe.c70449f7edc9b16f::original_buffer_indexed_probe_140] buffered empty update",
+        "file": "src/lib.rs",
+        "function": "symbolic::original_initialized_step",
+        "line": "99",
+        "pragma": [
+          "checked:bounds-check",
+          "checked:pointer-check",
+          "checked:div-by-zero-check",
+          "checked:signed-overflow-check",
+          "checked:undefined-shift-check",
+          "checked:pointer-primitive-check"
+        ],
+        "propertyClass": "cover",
+        "propertyId": "symbolic::original_initialized_step.cover.2"
+      },
+      "positive_status": "SATISFIED"
+    },
+    "symbolic::original_initialized_step.cover.3": {
+      "description": "no compression",
+      "source_location": {
+        "column": "9",
+        "comment": "[KANI_CHECK_ID_original_buffer_indexed_probe.c70449f7edc9b16f::original_buffer_indexed_probe_141] no compression",
+        "file": "src/lib.rs",
+        "function": "symbolic::original_initialized_step",
+        "line": "100",
+        "pragma": [
+          "checked:bounds-check",
+          "checked:pointer-check",
+          "checked:div-by-zero-check",
+          "checked:signed-overflow-check",
+          "checked:undefined-shift-check",
+          "checked:pointer-primitive-check"
+        ],
+        "propertyClass": "cover",
+        "propertyId": "symbolic::original_initialized_step.cover.3"
+      },
+      "positive_status": "UNSATISFIABLE"
+    },
+    "symbolic::original_initialized_step.cover.4": {
+      "description": "no compression",
+      "source_location": {
+        "column": "9",
+        "comment": "[KANI_CHECK_ID_original_buffer_indexed_probe.c70449f7edc9b16f::original_buffer_indexed_probe_142] no compression",
+        "file": "src/lib.rs",
+        "function": "symbolic::original_initialized_step",
+        "line": "100",
+        "pragma": [
+          "checked:bounds-check",
+          "checked:pointer-check",
+          "checked:div-by-zero-check",
+          "checked:signed-overflow-check",
+          "checked:undefined-shift-check",
+          "checked:pointer-primitive-check"
+        ],
+        "propertyClass": "cover",
+        "propertyId": "symbolic::original_initialized_step.cover.4"
+      },
+      "positive_status": "SATISFIED"
+    },
+    "symbolic::original_initialized_step.cover.5": {
+      "description": "exact fill",
+      "source_location": {
+        "column": "9",
+        "comment": "[KANI_CHECK_ID_original_buffer_indexed_probe.c70449f7edc9b16f::original_buffer_indexed_probe_143] exact fill",
+        "file": "src/lib.rs",
+        "function": "symbolic::original_initialized_step",
+        "line": "101",
+        "pragma": [
+          "checked:bounds-check",
+          "checked:pointer-check",
+          "checked:div-by-zero-check",
+          "checked:signed-overflow-check",
+          "checked:undefined-shift-check",
+          "checked:pointer-primitive-check"
+        ],
+        "propertyClass": "cover",
+        "propertyId": "symbolic::original_initialized_step.cover.5"
+      },
+      "positive_status": "SATISFIED"
+    },
+    "symbolic::original_initialized_step.cover.6": {
+      "description": "three blocks and residual",
+      "source_location": {
+        "column": "9",
+        "comment": "[KANI_CHECK_ID_original_buffer_indexed_probe.c70449f7edc9b16f::original_buffer_indexed_probe_144] three blocks and residual",
+        "file": "src/lib.rs",
+        "function": "symbolic::original_initialized_step",
+        "line": "102",
+        "pragma": [
+          "checked:bounds-check",
+          "checked:pointer-check",
+          "checked:div-by-zero-check",
+          "checked:signed-overflow-check",
+          "checked:undefined-shift-check",
+          "checked:pointer-primitive-check"
+        ],
+        "propertyClass": "cover",
+        "propertyId": "symbolic::original_initialized_step.cover.6"
+      },
+      "positive_status": "SATISFIED"
+    }
+  },
+  "source_cover_cases": 5,
+  "generated_cover_properties": 6,
+  "false_duplicate_property": "symbolic::original_initialized_step.cover.3",
+  "lost_residual_additional_unsatisfiable": "symbolic::original_initialized_step.cover.6"
+}

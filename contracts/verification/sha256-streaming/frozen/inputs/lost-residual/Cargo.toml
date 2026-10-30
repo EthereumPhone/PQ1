@@ -1,0 +1,21 @@
+[package]
+name = "original_buffer_indexed_probe"
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+block-buffer = "=0.10.4"
+generic-array = "=0.14.7"
+typenum = "=1.20.1"
+
+[profile.dev]
+opt-level = 3
+debug = false
+incremental = false
+overflow-checks = true
+
+
+[patch.crates-io]
+block-buffer = { path = "dependency" }

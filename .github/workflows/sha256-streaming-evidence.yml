@@ -1,0 +1,38 @@
+name: FV (recorded SHA-256 streaming evidence)
+
+on:
+  push:
+    branches: [master]
+    paths: &streaming_paths
+      - 'contracts/verification/sha256-streaming/**'
+      - 'contracts/verification/sha256-padding/**'
+      - 'sphincs-c10/src/hash.rs'
+      - 'sphincs-c10/src/params.rs'
+      - 'sphincs-c10/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/sha256-streaming-evidence.yml'
+  pull_request:
+    paths: *streaming_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: streaming-evidence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  recorded-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Check recorded evidence and source binding (no solver replay)
+        working-directory: contracts/verification/sha256-streaming
+        run: |
+          python3 streaming.py
+          python3 test_streaming.py -v
+          python3 prepare_streaming.py "$RUNNER_TEMP/streaming-inputs"

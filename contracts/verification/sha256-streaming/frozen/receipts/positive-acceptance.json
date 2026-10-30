@@ -1,0 +1,31 @@
+{
+  "accepted": true,
+  "properties": 866,
+  "statuses": {
+    "SUCCESS": 850,
+    "SATISFIED": 5,
+    "UNSATISFIABLE": 1,
+    "UNREACHABLE": 10
+  },
+  "semantic_assertions": 13,
+  "reachable_covers": 5,
+  "generated_cover_properties": 6,
+  "cover_audit_sha256": "4d49754932ca072d3d350cac4aa895bd6c617e6902039715eb6d8e9be82cb14b",
+  "property_names_sha256": "9b1524b35a43f27716b50643f6a17078a8cb0ef1d69ed9f6c3c19f07dab74b26",
+  "result_sha256": "7128f922b95e4ddb41772090174c3f90aec9e22cce383fcf727b19971fb5b02c",
+  "freeze_sha256": "c8af3c4daba42ee517ecc17a752c05559f06b0102434e519582b5ca5c7f777af",
+  "checker_sha256": "842d09ff5ae4f4cf2d514236dccd1750919aec3085194098e81288ed5aa866fa",
+  "source_sha256": {
+    "Cargo.toml": "d491eea96bd7b78a4136dc421800a31c7030f563a709d8114bab6b3a4aa7a0ec",
+    "Cargo.lock": "33feec22f0387f82515b3e7393bbe5759be9f3e975cbd8cc29e51d286a16d213",
+    "src/lib.rs": "4b91e82d485df48b5fc390fce786b24eba28e5e1b1d5f97e181852dfbb4c8dd2"
+  },
+  "scope": "Original block-buffer 0.10.4/generic-array 0.14.7 initialized u8/U64/Eager step: arbitrary 64-byte entry, arbitrary 192-byte input backing array, every pos<64, len<=192 and valid byte probe (empty case retained), arbitrary adjacent frame bytes. Exact byte concatenation, emitted/residual length, nonempty callbacks with at most two calls, and adjacent frame preservation under the pinned experimental Kani memory model.",
+  "limitations": [
+    "No original constructor/default/generate proof",
+    "No inputs longer than 192 bytes or unbounded-history composition theorem",
+    "No SHA compression result, length encoding or full Digest theorem",
+    "No complete Rust alias/provenance or Aeneas refinement theorem"
+  ],
+  "mandatory_mutant_solver_controls": "pending; finite controls already passed but do not replace symbolic controls"
+}

@@ -1,0 +1,271 @@
+original_buffer_indexed_probe::symbolic::original_initialized_step (_RNvNtCsh5mpDV2GWeN_29original_buffer_indexed_probe8symbolic25original_initialized_step)
+fn original_buffer_indexed_probe::symbolic::original_initialized_step() -> () {
+    let mut _0: ();
+    let  _1: [u8; 64];
+    let  _2: [u8; 192];
+    let  _3: usize;
+    let  _4: usize;
+    let  _5: usize;
+    let  _6: [u8; 8];
+    let  _7: [u8; 8];
+    let  _8: ();
+    let mut _9: bool;
+    let mut _10: bool;
+    let  _11: usize;
+    let mut _12: (usize, bool);
+    let  _13: ();
+    let mut _14: bool;
+    let mut _15: Observation;
+    let  _16: &[u8];
+    let mut _17: &[u8; 192];
+    let  _18: ();
+    let mut _19: bool;
+    let  _20: ();
+    let mut _21: bool;
+    let mut _22: bool;
+    let  _23: ();
+    let mut _24: bool;
+    let  _25: ();
+    let mut _26: bool;
+    let  _27: ();
+    let mut _28: bool;
+    let  _29: &[u8];
+    let mut _30: core::ops::Range<usize>;
+    let  _31: ();
+    let  _32: fn() {kani::mem_init::initialize_memory_initialization_state};
+    let  _33: ();
+    let  _34: *const [u8; 192];
+    let  _35: [bool; 192];
+    let  _36: fn(*const [u8; 192], [bool; 192], bool) {kani::mem_init::set_ptr_initialized::<192, [u8; 192]>};
+    let  _37: ();
+    let  _38: *const [u8; 192];
+    let  _39: [bool; 192];
+    let  _40: fn(*const [u8; 192], [bool; 192], bool) {kani::mem_init::set_ptr_initialized::<192, [u8; 192]>};
+    let  _41: ();
+    let  _42: *const [u8; 192];
+    let  _43: [bool; 192];
+    let  _44: fn(*const [u8; 192], [bool; 192], bool) {kani::mem_init::set_ptr_initialized::<192, [u8; 192]>};
+    let  _45: ();
+    let  _46: *const [u8; 192];
+    let  _47: [bool; 192];
+    let  _48: fn(*const [u8; 192], [bool; 192], bool) {kani::mem_init::set_ptr_initialized::<192, [u8; 192]>};
+    debug initial => _1;
+    debug input => _2;
+    debug pos => _3;
+    debug len => _4;
+    debug probe => _5;
+    debug before => _6;
+    debug after => _7;
+    debug total => _11;
+    bb0: {
+        _31 = _32() -> [return: bb37, unwind terminate];
+    }
+    bb1: {
+        _9 = Le(_4, 192_usize);
+        goto -> bb3;
+    }
+    bb2: {
+        _9 = false;
+        goto -> bb3;
+    }
+    bb3: {
+        StorageDead(_10);
+        _8 = kani::assume(move _9) -> [return: bb4, unwind unreachable];
+    }
+    bb4: {
+        StorageDead(_9);
+        StorageLive(_11);
+        _12 = CheckedAdd(_3, _4);
+        assert(!move (_12.1: bool), "attempt to compute `{} + {}`, which would overflow", _3, _4) -> [success: bb5, unwind unreachable];
+    }
+    bb5: {
+        _11 = move (_12.0: usize);
+        StorageLive(_14);
+        switchInt(_11) -> [0: bb6, otherwise: bb7];
+    }
+    bb6: {
+        _14 = Eq(_5, 0_usize);
+        goto -> bb8;
+    }
+    bb7: {
+        _14 = Lt(_5, _11);
+        goto -> bb8;
+    }
+    bb8: {
+        _13 = kani::assume(move _14) -> [return: bb9, unwind unreachable];
+    }
+    bb9: {
+        StorageDead(_14);
+        StorageLive(_15);
+        StorageLive(_16);
+        StorageLive(_17);
+        _17 = &_2;
+        StorageLive(_29);
+        _29 = _17 as &[u8];
+        StorageLive(_30);
+        _30 = Range(0_usize, _4);
+        _16 = <core::ops::Range<usize> as core::slice::SliceIndex<[u8]>>::index(move _30, move _29) -> [return: bb34, unwind unreachable];
+    }
+    bb10: {
+        StorageDead(_16);
+        StorageDead(_15);
+        StorageLive(_19);
+        switchInt(_3) -> [0: bb11, otherwise: bb12];
+    }
+    bb11: {
+        _19 = Eq(_4, 0_usize);
+        goto -> bb13;
+    }
+    bb12: {
+        _19 = false;
+        goto -> bb13;
+    }
+    bb13: {
+        _18 = kani::cover(move _19, "empty update") -> [return: bb14, unwind unreachable];
+    }
+    bb14: {
+        StorageDead(_19);
+        StorageLive(_21);
+        _22 = Eq(_3, 63_usize);
+        switchInt(_3) -> [63: bb15, otherwise: bb16];
+    }
+    bb15: {
+        _21 = Eq(_4, 0_usize);
+        goto -> bb17;
+    }
+    bb16: {
+        _21 = false;
+        goto -> bb17;
+    }
+    bb17: {
+        _20 = kani::cover(move _21, "buffered empty update") -> [return: bb18, unwind unreachable];
+    }
+    bb18: {
+        StorageDead(_21);
+        StorageLive(_24);
+        switchInt(_3) -> [1: bb19, otherwise: bb20];
+    }
+    bb19: {
+        _24 = Eq(_4, 62_usize);
+        _23 = kani::cover(move _24, "no compression") -> [return: bb35, unwind unreachable];
+    }
+    bb20: {
+        _24 = false;
+        _23 = kani::cover(move _24, "no compression") -> [return: bb36, unwind unreachable];
+    }
+    bb21: {
+        _25 = kani::cover(move _26, "exact fill") -> [return: bb22, unwind unreachable];
+    }
+    bb22: {
+        StorageDead(_26);
+        StorageLive(_28);
+        switchInt(_22) -> [0: bb24, otherwise: bb23];
+    }
+    bb23: {
+        _28 = Eq(_4, 192_usize);
+        goto -> bb25;
+    }
+    bb24: {
+        _28 = false;
+        goto -> bb25;
+    }
+    bb25: {
+        _27 = kani::cover(move _28, "three blocks and residual") -> [return: bb26, unwind unreachable];
+    }
+    bb26: {
+        StorageDead(_28);
+        StorageDead(_11);
+        StorageDead(_7);
+        StorageDead(_6);
+        StorageDead(_5);
+        StorageDead(_4);
+        StorageDead(_3);
+        goto -> bb43;
+    }
+    bb27: {
+        StorageLive(_2);
+        goto -> bb41;
+    }
+    bb28: {
+        StorageLive(_3);
+        _3 = kani::any_raw_internal::<usize>() -> [return: bb29, unwind unreachable];
+    }
+    bb29: {
+        StorageLive(_4);
+        _4 = kani::any_raw_internal::<usize>() -> [return: bb30, unwind unreachable];
+    }
+    bb30: {
+        StorageLive(_5);
+        _5 = kani::any_raw_internal::<usize>() -> [return: bb31, unwind unreachable];
+    }
+    bb31: {
+        StorageLive(_6);
+        _6 = kani::any_raw_array::<u8, 8>() -> [return: bb32, unwind unreachable];
+    }
+    bb32: {
+        StorageLive(_7);
+        _7 = kani::any_raw_array::<u8, 8>() -> [return: bb33, unwind unreachable];
+    }
+    bb33: {
+        StorageLive(_9);
+        StorageLive(_10);
+        _10 = Lt(_3, 64_usize);
+        switchInt(move _10) -> [0: bb2, otherwise: bb1];
+    }
+    bb34: {
+        StorageDead(_30);
+        StorageDead(_29);
+        StorageDead(_17);
+        _15 = observe_step(move _1, _3, move _16, move _5, move _6, move _7) -> [return: bb10, unwind unreachable];
+    }
+    bb35: {
+        StorageDead(_24);
+        StorageLive(_26);
+        _26 = Eq(_4, 63_usize);
+        goto -> bb21;
+    }
+    bb36: {
+        StorageDead(_24);
+        StorageLive(_26);
+        _26 = false;
+        goto -> bb21;
+    }
+    bb37: {
+        StorageLive(_1);
+        _1 = kani::any_raw_array::<u8, 64>() -> [return: bb27, unwind unreachable];
+    }
+    bb38: {
+        goto -> bb28;
+    }
+    bb39: {
+        _34 = &raw const _2;
+        _35 = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+        _33 = _36(_34, move _35, true) -> [return: bb38, unwind terminate];
+    }
+    bb40: {
+        _2 = kani::any_raw_array::<u8, 192>() -> [return: bb45, unwind unreachable];
+    }
+    bb41: {
+        _38 = &raw const _2;
+        _39 = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+        _37 = _40(_38, move _39, false) -> [return: bb40, unwind terminate];
+    }
+    bb42: {
+        StorageDead(_2);
+        StorageDead(_1);
+        return;
+    }
+    bb43: {
+        _42 = &raw const _2;
+        _43 = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+        _41 = _44(_42, move _43, false) -> [return: bb42, unwind terminate];
+    }
+    bb44: {
+        goto -> bb39;
+    }
+    bb45: {
+        _46 = &raw const _2;
+        _47 = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
+        _45 = _48(_46, move _47, true) -> [return: bb44, unwind terminate];
+    }
+}

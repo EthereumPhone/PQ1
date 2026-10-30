@@ -1,5 +1,16 @@
 # PQSigner — STATUS (start here)
 
+**Original initialized streaming step (2026-10-30):** a source-bound symbolic
+profile checks byte order, emitted/residual length, callback shape and adjacent
+frame preservation for every initialized buffer position and input up to 192
+bytes. Two real-source controls fail their intended assertions. The
+[research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence)
+retains the constructor, general update/history, full Digest and model boundaries.
+The source census is now 191 Kani harnesses across 33 files: 173 across 23
+mutation-enrolled files and 18 across ten files outside that manifest. The new
+research harness has its two separate source controls; it is not enrolled in
+the default firmware mutation runner.
+
 **Original SHA-256 complete-block correspondence (2026-10-28):** an isolated
 source-bound experimental extraction now proves the original portable byte
 decoder and block loop against the existing word-compression specification,

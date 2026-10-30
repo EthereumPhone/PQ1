@@ -1,0 +1,165 @@
+{
+  "utc": "2026-10-28T17:55:44.718646+00:00",
+  "source_files_match_authenticated_cargo_archives": true,
+  "packages": [
+    {
+      "name": "sha2",
+      "version": "0.10.9",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/sha2-0.10.9.crate",
+      "archive_sha256": "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/sha2-0.10.9",
+      "source_sha256": {
+        "Cargo.toml": "f5b86209df69360114aaee67a66c3fcd31d8c840b8f34b9ad383aacd63cd15da",
+        "Cargo.toml.orig": "5a6b707de6f6e175812f244c272d269add2ea5f45537fe031cc5d613d841beeb",
+        "benches/mod.rs": "c32d9f91a541821ea988c14eee710963e623ef1edf69b02b41a29bc44e04ba95",
+        "src/consts.rs": "2f820349fa7cbf9fecc1d4aabbd1a721bb1badc3f32ef9e903826960b6f42523",
+        "src/core_api.rs": "73b160d98bfa6737688875ad73da5e3c2c93582604dc313d208200e12fdab676",
+        "src/lib.rs": "b519427535b1855bbe8c3d0517b2f3d04a607cf0cb4327cc716cd5d90da5dbf1",
+        "src/sha256/aarch64.rs": "18121a25867a575fec8ef64da763693ece4e3e3e84da095254b8471234c6f1f8",
+        "src/sha256/loongarch64_asm.rs": "79e2d5e3c039581e2319f8789de9ed13a8dd819ebffd13532dbd83448c7ad662",
+        "src/sha256/soft.rs": "98e765a8e8dfa0af31f2b76570f212e6b3099522bf300e1554cbbd9fd5d02960",
+        "src/sha256/soft_compact.rs": "6273c3f5603de24143f29d0aa08f441b3919acbc251daea5f323a08570a8470f",
+        "src/sha256/x86.rs": "70f1597f2029522b35bfd026df0a8908f086523ab2a80ba3ef35e6231b56353c",
+        "src/sha256.rs": "6ced9112d4ceb4eff20b56d93a063f72ecef4c6ec3b215f08696a853b09083c3",
+        "src/sha512/aarch64.rs": "2ed929329a0fa66180e4726d028713a49f99cc223e635078fc1f3252a44981e0",
+        "src/sha512/loongarch64_asm.rs": "58a7b54d95a0e037ba80570d96ffe0dd7c0014c7fcb45b90725e522cc4992d8a",
+        "src/sha512/soft.rs": "0183ad89418b886859d2afa9bf061bc92759ae337c1d26147b4300042e63ef42",
+        "src/sha512/soft_compact.rs": "437ad870b8cd5c5590d6fe85afc63428f1994dffdc9a4592cde46c9ee857ba9f",
+        "src/sha512/x86.rs": "c7dd8bdf3212e1e8c4cc9cc6b380dc0468f79dcfd0f61a445d0d38cead45a03a",
+        "src/sha512.rs": "e088bde0980702a591f8d60dd1d41dc13f0a810e29e1e5a5d6344228b2de965d",
+        "tests/mod.rs": "61be596fd9b45a8db345950ff2ed6f87eaf4d239ac156885f36e819da0597644"
+      }
+    },
+    {
+      "name": "digest",
+      "version": "0.10.7",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/digest-0.10.7.crate",
+      "archive_sha256": "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/digest-0.10.7",
+      "source_sha256": {
+        "Cargo.toml": "f0cc2fc18c6e7f3533658b9e59d71b55e641e7d8226e5d1b915a5e7c0a1d3f36",
+        "Cargo.toml.orig": "392589a36b44e59e13c815d47584682c5b0b26864bab89992c1e42bb73aa6b93",
+        "src/core_api/ct_variable.rs": "703bd62fb693a437e319d1192988bd674f9127a6b76f73b4c58c71afc79bc013",
+        "src/core_api/rt_variable.rs": "b57f89bf3991a313e2ddde09c701375e23539e7df74d685a161707ba1fbc99e4",
+        "src/core_api/wrapper.rs": "033777bed7d140b158e15d50fda8a6e06557ce89bd0738fcca692be2c39e8b8a",
+        "src/core_api/xof_reader.rs": "f33ca7b2c17eb99d84ea460d5567af68690e4fa6c2d94069a5d6748f8c8620eb",
+        "src/core_api.rs": "b52728aba8a84f980f3f9cc8a94a64d3a97f1eb5f4db144904822c2f8eefb1f8",
+        "src/dev/fixed.rs": "1cbabc651645c1e781d31825791132b4e3741f426e99d7e40988e2a5ee49bddd",
+        "src/dev/mac.rs": "e8837d3b99dc8b6ddb398e7fad5731c2ed36931f851ed625d3ae59fb31244165",
+        "src/dev/rng.rs": "156f42e9eb8fb2083cd12dc4a9bff9d57a321d33367efe6cd42cdc02c17ed2dc",
+        "src/dev/variable.rs": "51939602b43f5a813fc725bc603a34246bbf76facaa7930cb7bf78c283ec94a7",
+        "src/dev/xof.rs": "b3971175e50f615247e4158cba87d77c369461eda22751d888725cec45b61985",
+        "src/dev.rs": "cbaeab07489efcadec917d7b7bcf2fdade79e78a4839ab3c3d8ad442f8f82833",
+        "src/digest.rs": "8beab74640774c9f6811daa6dac9b5a8867f5beeb0b552a9b5ddbc5cfc196ed0",
+        "src/lib.rs": "5128199102bf0f7638fba0bbcf42b23822e31065841fb0c4304b64f681fde961",
+        "src/mac.rs": "6303caa2c5b76513346c082dd600e007354179ad440fc83dad3d7f4240281803"
+      }
+    },
+    {
+      "name": "block-buffer",
+      "version": "0.10.4",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/block-buffer-0.10.4.crate",
+      "archive_sha256": "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/block-buffer-0.10.4",
+      "source_sha256": {
+        "Cargo.toml": "c76e4bd298cd6223882238449e31939d75613e82757ca87e249df843decf5f9a",
+        "Cargo.toml.orig": "fa80221c48c162058fb829ff845746f7db0ffbc274067b5850bc3d50a437495f",
+        "src/lib.rs": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
+        "src/sealed.rs": "9327ee3e567ae779b83c2b7f4f3ff56fcb2117163e023e7b0e37759e7e8d1f5c",
+        "tests/mod.rs": "a42403629557eea432a8797f2d81a4ab65de15ce9a2db933496c53f05669e1d7"
+      }
+    },
+    {
+      "name": "generic-array",
+      "version": "0.14.7",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7.crate",
+      "archive_sha256": "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7",
+      "source_sha256": {
+        "Cargo.toml": "4b5daed75505275d11f4854dd9172f910da61d9856ca2936d95e2e6e0c9040e4",
+        "Cargo.toml.orig": "12c6e718e7f54564e81ca6e5f5e3d0fef220a86e8dab77215e6ff38b6f6c2081",
+        "build.rs": "08fa30c4a2c1ad24fe5f987e721dfb20131f45ea5b5dc3e836dcf88a8e33248c",
+        "src/arr.rs": "c115d6926deb769ced772e9c4e1c84baf1bdea4fe4b9eb2061658a63869eab62",
+        "src/functional.rs": "7dd6ddd5db3000054cbbd76959f745c7de73c8493cbfb745be80509b306e4a83",
+        "src/hex.rs": "091fb78f6d373a6ef1c467d85c461472fcdb1e91efc294039f4c870151c3ee9f",
+        "src/impl_serde.rs": "f046daba067522b4c3e79437d04f43a001e83353c81e6b2188c37a2e63dba7a3",
+        "src/impl_zeroize.rs": "dd1af63ef2cba2120c6f775350c98eb12bb1be6ba784d5350d07d4ae5419c292",
+        "src/impls.rs": "18b285821421eea0cdbbcfcc896eef67bd55d72f8d85b5827cca6687e9c0fc27",
+        "src/iter.rs": "4f50253f4130caa0780984b64467ca1916a881410f631f7eb85a1724b3ab4ced",
+        "src/lib.rs": "20b64b4359b0e82a3523fd536ad06de25e174cead734cffd3fa5f7c48f659247",
+        "src/sequence.rs": "26679cfec035bae7298f067f37e8d42a1eda8fe241e9cf2c2977ba4bddddab1d"
+      }
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.1.7",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/crypto-common-0.1.7.crate",
+      "archive_sha256": "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/crypto-common-0.1.7",
+      "source_sha256": {
+        "Cargo.toml": "303682a6a66fdc98de8a011ac275e18c523f1535ed8de2a291a4fcad91de8348",
+        "Cargo.toml.orig": "50ba74f640a7452553988619a4ecec442ab60a1047731304b8493193a0e202b2",
+        "src/lib.rs": "5dd00d7ea362d1e4fc06141aae07a0f15166a0b8836ac8e8713f7d7f31d26a1e"
+      }
+    },
+    {
+      "name": "typenum",
+      "version": "1.20.1",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/typenum-1.20.1.crate",
+      "archive_sha256": "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/typenum-1.20.1",
+      "source_sha256": {
+        "Cargo.toml": "00785a81eae34b3298dfdde78a6bd96fe3ec000de46edd509bd13b7cab7a9870",
+        "Cargo.toml.orig": "0e53bbc04e0c3110a4af833bed984a4deebdaa9a36b5933fdd4304b2ba408733",
+        "src/array.rs": "e7112e04302b9df5491e69fdf3a2b765de18f3d7cf098702051c79e8a1e978f2",
+        "src/bit.rs": "1d2a81b9dcc3fbaaad0df29e5cbd4595b02fdc3efbc08ec35932ea521ac6619c",
+        "src/gen/consts.rs": "9aa17739639f2e3f516cd9136e05beb19492491431df71a1e2aa4e3ec78e176c",
+        "src/gen/generic_const_mappings.rs": "891e3a1917e39eebd1306765158c26c4ff2d9a85b197844100638591ec6658fb",
+        "src/gen/op.rs": "b91eadcee885bc0ab929b64492f7b04641cde71ddf8e9aa455d324f1723c61de",
+        "src/gen.rs": "77e44de90067aa126d3697e514c8641af67eb9c509399bb6fcb551071d7e64ea",
+        "src/int.rs": "62412ed76dfd63e76e5e0252ee950914629443d4023a1031c511191588d95694",
+        "src/lib.rs": "0cf99cbd6f5597dd42618d603e1f453f6484e01e8f6e72d328ca5206191bc9f3",
+        "src/marker_traits.rs": "5a58d16edc16853b4b793a6b46068d926911273aa9dc57fd9dc64df77986b7dd",
+        "src/operator_aliases.rs": "4666925ecdd4321e28d9654bad61e34defdba7fc1e8fa7b033b2283e4b542b93",
+        "src/private.rs": "c7008d1cd4215e0fc58897ea885058879e0c700a2fe0be46784f20d612753a48",
+        "src/tuple.rs": "b2a3d3906a446e5ce96a9da6da511c256475084cc78205c97c11caf7634db57f",
+        "src/type_operators.rs": "c3ea12ffc00d1d438db095d48abae94af9dd46adf0b25c90871c1c4d6f15ae7b",
+        "src/uint.rs": "525f229da5bd7cbef775b478821b5422497ed3eea319b712fee137a6ad84dd40",
+        "tests/generated.rs": "3034ec2bce8abe6c70d1d0aa87bec56f6c5f95db16dde365377973f7d8f3911d"
+      }
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.2.17",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/cpufeatures-0.2.17.crate",
+      "archive_sha256": "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cpufeatures-0.2.17",
+      "source_sha256": {
+        "Cargo.toml": "25160ea4dfa195721d352d42827b882a41f18f4c55fff58e5c3878ecae84ca44",
+        "Cargo.toml.orig": "5aee1d3bb7edabc7c62ef0b6f1c9a96fd5cf67eaab8224a5e2079735b7ff2c8f",
+        "src/aarch64.rs": "e85b099f40f51f99f82ff9ffae97078ec7991da5bca4eb61e29abf15c44a8d01",
+        "src/lib.rs": "3d633614ff24afdba603e4f2d3e36bdb7b190fff9e7f0d2b385c1f9d5d8144d1",
+        "src/loongarch64.rs": "431cf8c3cdcc55cb46275da5c778033e3bd60e03d04910e7756f5ce3a89c3a32",
+        "src/miri.rs": "acf1a7e7ae31a1de07941084c6b589a2d4c6ea5f87012c811592c865d04c02cb",
+        "src/x86.rs": "b23201081392c38084f15200b071b16f5467aadba98616cce878be16b836f03f",
+        "tests/aarch64.rs": "f6f0f55d821dbcac61e54cec8d35bf944cd09f90f3422eee2b6d55a1e9899635",
+        "tests/loongarch64.rs": "1b95140c68f673721699dcb40176540818641785f7863a99214bcad2014aa181",
+        "tests/x86.rs": "fcf476ca6ebd0845ab547cea4fe40c2ba2a2324c024264d9a86f666586f3a480"
+      }
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.4",
+      "archive": "/home/nicola/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4.crate",
+      "archive_sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+      "source": "/home/nicola/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cfg-if-1.0.4",
+      "source_sha256": {
+        "Cargo.toml": "281d508beb1fe3927cf03d3f2f8c9a5117b1e4fe97ae21b9026cf318e8c35273",
+        "Cargo.toml.orig": "5a17ee17da78f5179373b8324a1180e71efe2bcf3e3c9ca18c1bdb1e3faa9792",
+        "src/lib.rs": "c09723e0890d15810374009e96b20bf0eb2f65f383006516f34db36240835c85",
+        "tests/xcrate.rs": "bcec148e69db81b1a618bdd6f96a25d9a0442e6ecc692fe28f1206d9bffc006a"
+      }
+    }
+  ],
+  "scope": "Concrete locked software hash dependencies; Rust standard-library/compiler pin remains the previously authenticated toolchain."
+}

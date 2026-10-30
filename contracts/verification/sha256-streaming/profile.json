@@ -1,0 +1,135 @@
+{
+  "format": 1,
+  "claim": "Original initialized block-buffer 0.10.4 single-step byte trace, pos<64 and len<=192, experimental Kani model. No original constructor or full Digest theorem.",
+  "shared_profile_sha256": "5b0f965a2ed96f0e9f7636eecf70873fd2f9a8c1392c81b6d37543ee510d7682",
+  "shared_helpers_sha256": {
+    "verify.py": "0fd0ea6a4130ebd1a78d6a04159a3d95d44e817df07251cf4547e67d2e561c37",
+    "prepare.py": "cce3c373a4d402a363b4bcf20c2316b487f9db878df638812ba8cf910c71dd29",
+    "replay.py": "9aad8fd7d4902cf0573d6bc7bfd61c20438a416d22b7fc4007fd5b568063fa7d",
+    "bounded_disk_usage.py": "c648f0aaf16858f9ecd0417baffbace91dbfb0ca5abc8f70ac1013c8af43cf0c"
+  },
+  "cases": {
+    "positive": {
+      "expected_exit": 0,
+      "property_count": 866,
+      "property_names_sha256": "9b1524b35a43f27716b50643f6a17078a8cb0ef1d69ed9f6c3c19f07dab74b26",
+      "statuses": {
+        "SUCCESS": 850,
+        "SATISFIED": 5,
+        "UNSATISFIABLE": 1,
+        "UNREACHABLE": 10
+      },
+      "raw_log_sha256": "24c30774627b586d3c09182a436ce942710c38a6f9691cb9318f514a12dddeee",
+      "seconds": 352.47940685402136,
+      "block_buffer_lib_sha256": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
+      "expected_failure": null,
+      "unreachable_properties": [
+        "core::fmt::Arguments::<'_>::from_str.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.2",
+        "core::ub_checks::is_valid_allocation_size.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.3",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.3"
+      ]
+    },
+    "wrong-remainder": {
+      "expected_exit": 1,
+      "property_count": 867,
+      "property_names_sha256": "3eeff563fd8760537d35317ff1e41d5ad4a0175d161492eff2bdcc9744f6c6bf",
+      "statuses": {
+        "SUCCESS": 850,
+        "UNREACHABLE": 10,
+        "SATISFIED": 5,
+        "UNSATISFIABLE": 1,
+        "FAILURE": 1
+      },
+      "raw_log_sha256": "ac5afc1d9399440379f520bfa78ceb18b96c563d4cc829f91d8689c105958c78",
+      "seconds": 382.5299781799549,
+      "block_buffer_lib_sha256": "d4a277941164627b79723c4ee5f8c5d4638e50a0bea74c147afa0fdc6cdafcb4",
+      "expected_failure": "observe_step.assertion.10",
+      "unreachable_properties": [
+        "core::fmt::Arguments::<'_>::from_str.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.2",
+        "core::ub_checks::is_valid_allocation_size.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.3",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.3"
+      ]
+    },
+    "lost-residual": {
+      "expected_exit": 1,
+      "property_count": 866,
+      "property_names_sha256": "9b1524b35a43f27716b50643f6a17078a8cb0ef1d69ed9f6c3c19f07dab74b26",
+      "statuses": {
+        "SUCCESS": 849,
+        "SATISFIED": 4,
+        "UNSATISFIABLE": 2,
+        "UNREACHABLE": 10,
+        "FAILURE": 1
+      },
+      "raw_log_sha256": "ff5c144facec490b332266f9a0866744aec1be7ea5e4097a430f9625b19b0c7f",
+      "seconds": 356.82699696393684,
+      "block_buffer_lib_sha256": "282bf40716300344ea1373ea3e55c8fc40b9a983e993758719c0daa6e19e8eda",
+      "expected_failure": "observe_step.assertion.20",
+      "unreachable_properties": [
+        "core::fmt::Arguments::<'_>::from_str.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.1",
+        "core::num::<impl usize>::abs_diff.assertion.2",
+        "core::ub_checks::is_valid_allocation_size.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<16>.assertion.3",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.1",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.2",
+        "kani::mem_init::MemoryInitializationState::set::<24>.assertion.3"
+      ]
+    }
+  },
+  "frozen_sha256": {
+    "frozen/Cargo.toml": "d491eea96bd7b78a4136dc421800a31c7030f563a709d8114bab6b3a4aa7a0ec",
+    "frozen/cover-audit.json": "4d49754932ca072d3d350cac4aa895bd6c617e6902039715eb6d8e9be82cb14b",
+    "frozen/finite-logs/build.log.gz": "716b173b8a5765d1b4b5010ab8c9b4d7232951a4810476560cfd64248dcefba2",
+    "frozen/finite-logs/lock.log.gz": "219968f9d1dffe2ec7b1c41ca15b068a9e2a119d6823650a71691037639c2163",
+    "frozen/finite-logs/lost-residual-build.log.gz": "464dd6173b6343e1e3691ceb3f56ef38cbd15662b4123b5dc1e134c1ad9dc6d7",
+    "frozen/finite-logs/lost-residual-check.log.gz": "80bded8a06f7b1904b03cea232d6df364942f6ea4d003d755e3ce0f5f646b64a",
+    "frozen/finite-logs/lost-residual-lock.log.gz": "008f8692745949c87c271075fe87457f81ffbcd9c688dfb1cfd83617ea2f11b0",
+    "frozen/finite-logs/native.log.gz": "4c1fcf932e253b87e1691c5bd9b51590922f4049d42725672a0ff94218c76aa7",
+    "frozen/finite-logs/recursive-miri.log.gz": "a6083881ba1757af6a6e298a68f3b2a83379ce3af6c8a4b18ced6bb8bf305575",
+    "frozen/finite-logs/wrong-remainder-build.log.gz": "b3a00ae2e8950a23044850d74a0a0fb9486a0027d65e95483239eecb5f53c6a7",
+    "frozen/finite-logs/wrong-remainder-check.log.gz": "cfd64cd711868f62be463ed717c90e5016c0d4c09d91abcba0a3c2e02e718f8a",
+    "frozen/finite-logs/wrong-remainder-lock.log.gz": "008f8692745949c87c271075fe87457f81ffbcd9c688dfb1cfd83617ea2f11b0",
+    "frozen/freeze.json": "c8af3c4daba42ee517ecc17a752c05559f06b0102434e519582b5ca5c7f777af",
+    "frozen/harness-cover-mir.txt": "6e221cf039624da982d17237dcff678350cb26af9ca47b0bf5edb94079b00a7e",
+    "frozen/harness.mir.gz": "46ba8ec8dc31c6d373b26a22089247cee34d5dca04b4210274eeec9c674527a1",
+    "frozen/inputs/lost-residual/Cargo.lock": "37caba3686b2bde545d9ec1803d61c41aaea08a009c41bb2e53e5342ca972cbf",
+    "frozen/inputs/lost-residual/Cargo.toml": "db111f3da57f282ce9b644b85b9d77cdbbadddfe25b285119307254ed8e5b2ef",
+    "frozen/inputs/positive/Cargo.lock": "33feec22f0387f82515b3e7393bbe5759be9f3e975cbd8cc29e51d286a16d213",
+    "frozen/inputs/positive/Cargo.toml": "d491eea96bd7b78a4136dc421800a31c7030f563a709d8114bab6b3a4aa7a0ec",
+    "frozen/inputs/wrong-remainder/Cargo.lock": "37caba3686b2bde545d9ec1803d61c41aaea08a009c41bb2e53e5342ca972cbf",
+    "frozen/inputs/wrong-remainder/Cargo.toml": "db111f3da57f282ce9b644b85b9d77cdbbadddfe25b285119307254ed8e5b2ef",
+    "frozen/lib.rs": "4b91e82d485df48b5fc390fce786b24eba28e5e1b1d5f97e181852dfbb4c8dd2",
+    "frozen/logs/lost-residual.log.gz": "a05cea145bee171b688a92dfc33b64c908b3740a5eb9e0f4336f09a6c3d55579",
+    "frozen/logs/positive.log.gz": "bc228c2f06e5a1b1ae9a9721e74ac4eee9f0d1f8231c71fa3dd8e74c7f336bd7",
+    "frozen/logs/wrong-remainder.log.gz": "f386f0ad2510924d5cdb114062dc64aa821f0f6417256a6a5d8424cd9f4308a5",
+    "frozen/lost-residual.patch": "84c3ec5c85851db48eddd679f9ae48dc7a7126f5dd153c76d17be000f0403d4e",
+    "frozen/main.rs": "c0930dfe9d0378c9b2bdbd72a0f8667dc1a47b2be4a238f41a66b1442fbe73d5",
+    "frozen/receipts/dependency-source-auth.json": "27612937dfaffd6ddfcd1ab0d241288dc59bbedf3de9395da49cf7d973665b47",
+    "frozen/receipts/finite.json": "2ce35c9b1cb4bb636870b83f68367750a7434d70c7b884656c95eadf17e8b7fc",
+    "frozen/receipts/lost-residual-acceptance.json": "b2ce072a1beb10ef56999ee5681f98d5e09065c56afc843335961ba5ca1f2974",
+    "frozen/receipts/lost-residual-result.json": "4f741dc808a90e46434682567d2566b4661c06738fac3e50614ad0aac2a967cf",
+    "frozen/receipts/positive-acceptance.json": "909da0afb0e5998e58790505baadb93120c9f31ad1f8d9ad017c6fcb8f1e4818",
+    "frozen/receipts/positive-result.json": "7128f922b95e4ddb41772090174c3f90aec9e22cce383fcf727b19971fb5b02c",
+    "frozen/receipts/wrong-remainder-acceptance.json": "6167e0641322ffc9b886b98378da08b35143fc2a1fb9ce4cab0e0af09a8c2274",
+    "frozen/receipts/wrong-remainder-result.json": "923414c970e518fc13c6b458d4927c865efbcc79c2b12713323a90255ffbcd5e",
+    "frozen/reference.rs": "ade3828a49080c1b4e8ba1d3423e3ed9bc72cbc373d1ded87ee5f74d5043cf91",
+    "frozen/wrong-remainder.patch": "5797d67627830a845b8e89c5d3b4d02e097dcb0bb8585bf337aca5f91ab9010e"
+  }
+}

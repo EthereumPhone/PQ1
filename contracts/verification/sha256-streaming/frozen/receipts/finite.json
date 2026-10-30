@@ -1,0 +1,267 @@
+{
+  "accepted": true,
+  "evidence_level": "finite diagnostic only; no universal proof",
+  "scope": "Unchanged original block-buffer/generic-array, initialized u8/U64/Eager entry object; complete observable byte trace, residual, callback count and adjacent frame checks",
+  "native_cases": 12352,
+  "native_probes": 1574881,
+  "recursive_miri_cases": 50,
+  "recursive_miri_probes": 255,
+  "fixture_sha256": {
+    "Cargo.toml": "d491eea96bd7b78a4136dc421800a31c7030f563a709d8114bab6b3a4aa7a0ec",
+    "src/lib.rs": "4b91e82d485df48b5fc390fce786b24eba28e5e1b1d5f97e181852dfbb4c8dd2",
+    "src/main.rs": "c0930dfe9d0378c9b2bdbd72a0f8667dc1a47b2be4a238f41a66b1442fbe73d5",
+    "src/reference.rs": "ade3828a49080c1b4e8ba1d3423e3ed9bc72cbc373d1ded87ee5f74d5043cf91"
+  },
+  "lock_sha256": "33feec22f0387f82515b3e7393bbe5759be9f3e975cbd8cc29e51d286a16d213",
+  "positive_binary_sha256": "eddd509903ded89067a6f86d1eda53b39367806912da09ea7114783ccefea4ce",
+  "tool_sha256": {
+    "rustc": "868823b4821483101b4e71435a11ae702dee76fca8a725b045eda1fb32318ed2",
+    "cargo": "2f61a65e2f3029f4d849a6534bbd6627790142c59a74682f0025e80d6f638c7d",
+    "miri": "85f30df439309f34c040de10792cd100e4722b6b604c28606df0fee00f8f1c0f",
+    "cargo-miri": "161e6adbce9b29a54b7a5a5dbf347819bddd44e000172c68ad0226a847b530ff"
+  },
+  "miri_sysroot_receipt_sha256": "f6367840d3459577a1fd7774040b5f736759513053f38e5062651677c08ed8ce",
+  "dependency_source_auth_sha256": "27612937dfaffd6ddfcd1ab0d241288dc59bbedf3de9395da49cf7d973665b47",
+  "controls": [
+    {
+      "name": "wrong-remainder",
+      "source_sha256": "d4a277941164627b79723c4ee5f8c5d4638e50a0bea74c147afa0fdc6cdafcb4",
+      "binary_sha256": "169586674ccd174673e3cf5c21f2424037ff842a07a9c3df7f13e3012ef83a91",
+      "assertion": "byte == expected",
+      "expected_failure": true
+    },
+    {
+      "name": "lost-residual",
+      "source_sha256": "282bf40716300344ea1373ea3e55c8fc40b9a983e993758719c0daa6e19e8eda",
+      "binary_sha256": "9e0c64ebf6dc51542c45f938cb4443bdeddf9636a404f405aa2d99e03a07e588",
+      "assertion": "residual == total % 64",
+      "expected_failure": true
+    }
+  ],
+  "results": [
+    {
+      "name": "lock",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "generate-lockfile",
+        "--offline"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain",
+      "environment_extra": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.17999863205477595,
+      "start_bytes": 6158966784,
+      "peak_bytes": 6158974976,
+      "final_bytes": 6158974976,
+      "log_sha256": "8ffd0ac2b7141f71bc5efc5eb199fcdba5a4bb628343c8c6f435c3a1303a9f6e"
+    },
+    {
+      "name": "build",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "build",
+        "--offline",
+        "--locked"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain",
+      "environment_extra": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 1.024543092935346,
+      "start_bytes": 6158979072,
+      "peak_bytes": 6164520960,
+      "final_bytes": 6164520960,
+      "log_sha256": "2fd786e6ca25dfaf2f8ebf7060dc53b65fcea3d1870e3c43486e1bd9c1f6c977"
+    },
+    {
+      "name": "native",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-target/debug/original_buffer_indexed_probe"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain",
+      "environment_extra": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.14327257999684662,
+      "start_bytes": 6164520960,
+      "peak_bytes": 6164525056,
+      "final_bytes": 6164525056,
+      "log_sha256": "bf72ecf5d1f0d1b9fd5426e786b81dfb99646c7c38b0db109c8d86c34eea85c8"
+    },
+    {
+      "name": "recursive-miri",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo-miri",
+        "miri",
+        "run",
+        "--offline",
+        "--locked"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain",
+      "environment_extra": {
+        "MIRIFLAGS": "-Zmiri-recursive-validation"
+      },
+      "exit": 0,
+      "stop": null,
+      "seconds": 7.160333539941348,
+      "start_bytes": 6164525056,
+      "peak_bytes": 6169608192,
+      "final_bytes": 6169608192,
+      "log_sha256": "2e01c8a35f62813f07af1f324bc4239d4a2e2923162d7dffa7bf9ca650341bf1"
+    },
+    {
+      "name": "wrong-remainder-lock",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "generate-lockfile",
+        "--offline"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-wrong-remainder",
+      "environment_extra": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.12712988094426692,
+      "start_bytes": 6169710592,
+      "peak_bytes": 6169718784,
+      "final_bytes": 6169718784,
+      "log_sha256": "82d775e0235239b74985b6974326a366c6dfa5fe47bd6447d1e053c9ae43cf15"
+    },
+    {
+      "name": "wrong-remainder-build",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "build",
+        "--offline",
+        "--locked"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-wrong-remainder",
+      "environment_extra": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.38486979890149087,
+      "start_bytes": 6169718784,
+      "peak_bytes": 6170394624,
+      "final_bytes": 6170394624,
+      "log_sha256": "aadc042744682653a1bf36dcc75eaeedc75553420d085ad8b99c4bb460e695fc"
+    },
+    {
+      "name": "wrong-remainder-check",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-target/debug/original_buffer_indexed_probe",
+        "--sparse",
+        "--probe-only"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-wrong-remainder",
+      "environment_extra": {},
+      "exit": 101,
+      "stop": null,
+      "seconds": 0.1131619430379942,
+      "start_bytes": 6170398720,
+      "peak_bytes": 6170402816,
+      "final_bytes": 6170402816,
+      "log_sha256": "12c79863cd9ba8b6661f366ac90cef625d45a5242a139fec2a133df1538525df"
+    },
+    {
+      "name": "lost-residual-lock",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "generate-lockfile",
+        "--offline"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-lost-residual",
+      "environment_extra": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.13399000698700547,
+      "start_bytes": 6170505216,
+      "peak_bytes": 6170513408,
+      "final_bytes": 6170513408,
+      "log_sha256": "82d775e0235239b74985b6974326a366c6dfa5fe47bd6447d1e053c9ae43cf15"
+    },
+    {
+      "name": "lost-residual-build",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/generic-array-buffer/padding/isolation/upstream-kani/rustup/toolchains/nightly-2026-10-23-x86_64-unknown-linux-gnu/bin/cargo",
+        "build",
+        "--offline",
+        "--locked"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-lost-residual",
+      "environment_extra": {},
+      "exit": 0,
+      "stop": null,
+      "seconds": 0.3803464949596673,
+      "start_bytes": 6170513408,
+      "peak_bytes": 6170517504,
+      "final_bytes": 6170517504,
+      "log_sha256": "7018a57ffc4fc114bded8f467149459b03ebbab09ee8a521667d77a7edefcc3a"
+    },
+    {
+      "name": "lost-residual-check",
+      "command": [
+        "prlimit",
+        "--fsize=16777216:16777216",
+        "--cpu=175:180",
+        "--",
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-target/debug/original_buffer_indexed_probe",
+        "--sparse",
+        "--probe-only"
+      ],
+      "cwd": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/streaming-length-phase-a/buffer-step-indexed-plain-lost-residual",
+      "environment_extra": {},
+      "exit": 101,
+      "stop": null,
+      "seconds": 0.1134361500153318,
+      "start_bytes": 6170517504,
+      "peak_bytes": 6170521600,
+      "final_bytes": 6170521600,
+      "log_sha256": "c25d7ef4abecc22a3f12314641c42d3783c1a993d202e641fb73ecc362797528"
+    }
+  ],
+  "final_bytes": 6170525696,
+  "cap_bytes": 6442450944,
+  "observer_oracle": "Every native valid position compared to the independent full trace; sparse Miri compares boundary probes. Mutants run probe-only so the indexed observer itself must reject.",
+  "limitations": [
+    "No constructor proof",
+    "No arbitrary-byte/all-length theorem",
+    "No hash computation or full Digest theorem",
+    "Miri's recursive validity model is experimental"
+  ]
+}
