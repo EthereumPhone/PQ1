@@ -26,13 +26,16 @@ emitted bytes, not compression state, pointer addresses or callback grouping.
   `history_bitLength` derives `L` from the complete history; it does not assume
   the desired output. `history_update_checked` and `history_prefix_bitLength`
   cover each intermediate update and history prefix under the final bound.
+  `history_filled_buffer_counters` explicitly proves both sequential counter
+  additions when the update first fills a nonempty buffer, including the second
+  addition starting from the incremented count.
   `partial_counter_checked` covers a partial increment within one step; it
   does not establish Rust callback behavior.
 - `last_representable_length` and `first_overflowing_length` check the exact
   `2^61 - 1` and `2^61` byte boundaries. The model returns `none` on overflow.
   This is not a claim about the panic/wrapping behavior of every Rust profile.
 
-All 38 theorem declarations have pinned signatures and exact axiom closures.
+All 39 theorem declarations have pinned signatures and exact axiom closures.
 The closures contain only `propext` and `Quot.sound`, or no axioms. The empty
 initial state is proved valid; the concrete boundary examples and mutation
 counterexamples are kernel-checked using `decide`.

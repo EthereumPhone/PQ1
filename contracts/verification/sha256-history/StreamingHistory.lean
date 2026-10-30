@@ -330,6 +330,40 @@ theorem history_update_checked (s : State α) (earlier suffix : List (List α))
   apply advance_counter_checked _ _ (run_valid s earlier valid)
   omega
 
+/-- The two counter additions when a history update fills a nonempty buffer.
+    The second equality also holds for a zero-sized tail, whose callback Rust skips. -/
+theorem history_filled_buffer_counters (s : State α) (earlier suffix : List (List α))
+    (input : List α) (valid : Valid s)
+    (bound : s.emitted.length + s.buffered.length +
+      (earlier ++ input :: suffix).flatten.length < 2^61)
+    (nonempty : (run s earlier).buffered ≠ [])
+    (fills : 64 - (run s earlier).buffered.length ≤ input.length) :
+    let current := run s earlier
+    let tailBlocks := (split (input.drop (64 - current.buffered.length))).newBlocks
+    checkedAdd (UInt64.ofNat current.blocks) (UInt64.ofNat 1) =
+      some (UInt64.ofNat (current.blocks + 1)) ∧
+    checkedAdd (UInt64.ofNat (current.blocks + 1)) (UInt64.ofNat tailBlocks) =
+      some (UInt64.ofNat (advance current input).blocks) := by
+  dsimp only
+  have hv := run_valid s earlier valid
+  have hc := run_length_conservation s earlier valid
+  have hs := step_length_conservation (run s earlier).buffered input hv.2
+  have hn : ¬ input.length < 64 - (run s earlier).buffered.length := by omega
+  have he : (run s earlier).buffered.isEmpty = false := by
+    cases hb : (run s earlier).buffered <;> simp_all
+  have count : (step (run s earlier).buffered input).newBlocks =
+      1 + (split (input.drop (64 - (run s earlier).buffered.length))).newBlocks := by
+    simp only [step, hn, he, Bool.false_eq_true, ↓reduceIte] <;> omega
+  rw [count] at hs
+  simp only [List.flatten_append, List.flatten_cons, List.length_append] at bound
+  constructor
+  · apply checkedAdd_ofNat
+    omega
+  · simp only [advance, count]
+    rw [← Nat.add_assoc]
+    apply checkedAdd_ofNat
+    omega
+
 /-- Final-history bounds justify the length encoding of every earlier. -/
 theorem history_prefix_bitLength (s : State α) (earlier suffix : List (List α))
     (valid : Valid s)
@@ -385,6 +419,7 @@ theorem first_overflowing_length :
 #print axioms history_bitLength
 #print axioms initialized_history_bitLength
 #print axioms history_update_checked
+#print axioms history_filled_buffer_counters
 #print axioms history_prefix_bitLength
 #print axioms last_representable_length
 #print axioms first_overflowing_length

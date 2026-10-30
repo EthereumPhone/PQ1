@@ -46,7 +46,9 @@ jobs:
       - name: Fresh proof replay and semantic controls
         working-directory: contracts/verification/sha256-history
         run: |
-          python3 verify.py --lean "$(elan which lean)" \
+          set -euo pipefail
+          LEAN_BIN="$(elan which lean)"
+          python3 verify.py --lean "$LEAN_BIN" \
             --output "$RUNNER_TEMP/sha-history-replay"
       - name: Preserve replay evidence
         if: always()

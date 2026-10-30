@@ -1229,7 +1229,7 @@ history in an explicit list-level transcription of the Eager branches. Equal
 input bytes yield the same modeled state regardless of update segmentation.
 For total byte length below `2^61`, every modeled counter update fits and the
 checked `u64` final length equals eight times that total; every history prefix
-is covered. Exact boundary examples, 38 signature/axiom closures and four
+is covered. Exact boundary examples, 39 signature/axiom closures and four
 well-typed semantic controls are freshly replayed in its path-scoped CI.
 
 This closes the mathematical history/length obligation for that transcription.

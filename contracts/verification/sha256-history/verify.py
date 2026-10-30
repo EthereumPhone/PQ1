@@ -58,6 +58,7 @@ def check_sources(profile: Path = HERE) -> tuple[dict, str]:
     config = json.loads((profile / "profile.json").read_text())
     require(config["format"] == 1, "unsupported profile")
     require("StreamingHistory.lean" in config["source_sha256"], "missing proof source pin")
+    require("lean-toolchain" in config["source_sha256"], "missing toolchain pin")
     for name, digest in config["original_sources"].items():
         require(config["source_sha256"].get("source/" + name) == digest, "source map pin omitted")
     for name, digest in config["source_sha256"].items():
@@ -69,7 +70,7 @@ def check_sources(profile: Path = HERE) -> tuple[dict, str]:
     names = re.findall(r"^theorem (\w+)", source, re.M)
     printed = re.findall(r"^#print axioms (\w+)", source, re.M)
     require(names == printed == list(config["axioms"]), "theorem enrollment changed")
-    require(len(names) == len(set(names)) == 38, "theorem census changed")
+    require(len(names) == len(set(names)) == 39, "theorem census changed")
     signatures = {body.split()[1]: hashlib.sha256(body.split(":= by", 1)[0].encode()).hexdigest()
                   for kind, body in declarations(source) if kind == "theorem"}
     require(signatures == config["signature_sha256"], "theorem signatures changed")

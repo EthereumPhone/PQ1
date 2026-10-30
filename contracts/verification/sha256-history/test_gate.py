@@ -15,7 +15,7 @@ class GateControls(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        for name in ["StreamingHistory.lean", "profile.json"]:
+        for name in ["StreamingHistory.lean", "lean-toolchain", "profile.json"]:
             shutil.copyfile(verify.HERE / name, self.root / name)
         shutil.copytree(verify.HERE / "source", self.root / "source")
 
@@ -26,7 +26,7 @@ class GateControls(unittest.TestCase):
         path.write_text(json.dumps(data))
 
     def test_baseline(self):
-        self.assertEqual(len(verify.check_sources(self.root)[0]["axioms"]), 38)
+        self.assertEqual(len(verify.check_sources(self.root)[0]["axioms"]), 39)
 
     def test_changed_source(self):
         path = self.root / "StreamingHistory.lean"
@@ -37,6 +37,11 @@ class GateControls(unittest.TestCase):
     def test_missing_proof_pin(self):
         self.config(lambda c: c["source_sha256"].pop("StreamingHistory.lean"))
         with self.assertRaisesRegex(ValueError, "missing proof source"):
+            verify.check_sources(self.root)
+
+    def test_missing_toolchain_pin(self):
+        self.config(lambda c: c["source_sha256"].pop("lean-toolchain"))
+        with self.assertRaisesRegex(ValueError, "missing toolchain pin"):
             verify.check_sources(self.root)
 
     def test_missing_mapping_pin(self):

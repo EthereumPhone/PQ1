@@ -4,14 +4,15 @@
   "lean_binary_sha256": "bf8d54e4714cc4b03d3f6bb34c83b7202b87e49c8bfcbff6895c085bb90ceb38",
   "lean_version": "Lean (version 4.35.0, x86_64-unknown-linux-gnu, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)",
   "source_sha256": {
-    "StreamingHistory.lean": "fb794be67004e6bf3034811a6301c4157fbe2229367ab67d6ebd3464dc04e7b4",
+    "StreamingHistory.lean": "19fecc08797b9533373b6e5db4aaa85251a0da282c80a794505eaf78121045e6",
     "source/sha2-0.10.9/src/core_api.rs": "73b160d98bfa6737688875ad73da5e3c2c93582604dc313d208200e12fdab676",
     "source/block-buffer-0.10.4/src/lib.rs": "b437252d389042d894b1ef17859b043e827d2bd2a1bca4b5311c67dff565274d",
     "source/block-buffer-0.10.4/src/sealed.rs": "9327ee3e567ae779b83c2b7f4f3ff56fcb2117163e023e7b0e37759e7e8d1f5c",
     "source/block-buffer-0.10.4/LICENSE-MIT": "d5c22aa3118d240e877ad41c5d9fa232f9c77d757d4aac0c2f943afc0a95e0ef",
     "source/block-buffer-0.10.4/LICENSE-APACHE": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
     "source/sha2-0.10.9/LICENSE-MIT": "b4eb00df6e2a4d22518fcaa6a2b4646f249b3a3c9814509b22bd2091f1392ff1",
-    "source/sha2-0.10.9/LICENSE-APACHE": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5"
+    "source/sha2-0.10.9/LICENSE-APACHE": "a9040321c3712d8fd0b09cf52b17445de04a23a10165049ae187cd39e5c86be5",
+    "lean-toolchain": "ca5f1f601d34c49079e38d7e7041eb0f2a9c227fbc1df0f404820069a052330c"
   },
   "axioms": {
     "split_conserves": [],
@@ -139,6 +140,10 @@
       "Quot.sound",
       "propext"
     ],
+    "history_filled_buffer_counters": [
+      "Quot.sound",
+      "propext"
+    ],
     "history_prefix_bitLength": [
       "Quot.sound",
       "propext"
@@ -182,6 +187,7 @@
     "history_bitLength": "ed6c43c4b00f103b1b592c277be570212beff950e0da3974908de15fd8e31425",
     "initialized_history_bitLength": "8f21a3755b7cf1d6fd29395fe4626c83cd86fa4fdb58fb88602a9052427c5227",
     "history_update_checked": "2250c67fc9732169091bb650b454d8185d9dd4c45afa95009928bd180710af6b",
+    "history_filled_buffer_counters": "cfa345ccb06feb8e3c9b122c8711afdc8bbab3e0950bfa0d949ff166ffee6c6e",
     "history_prefix_bitLength": "f02426f9f0748a726033a07093952c5d63314efcc301eae17fde0b791b993e83",
     "last_representable_length": "fa51a6e55a8733628d032fd531ef2aefa48bfbe485338d78c7c65183c3c4fc1f",
     "first_overflowing_length": "08cb1798366a71750fc3a593183da1c41c650791a000d89bbc7fb75eca753eb1"
