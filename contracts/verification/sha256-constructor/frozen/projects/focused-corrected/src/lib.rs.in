@@ -1,0 +1,10 @@
+#![no_std]
+use generic_array::{GenericArray, typenum::U1};
+#[cfg(kani)]
+#[kani::proof]
+#[kani::unwind(2)]
+fn focused_default() {
+    let output = GenericArray::<u8,U1>::default();
+    assert!(output[0] == 0);
+    kani::cover!(output[0] == 0, "one byte default reached");
+}

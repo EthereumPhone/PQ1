@@ -1,0 +1,38 @@
+name: FV (recorded SHA-256 constructor evidence)
+
+on:
+  push:
+    branches: [master]
+    paths: &constructor_paths
+      - 'contracts/verification/sha256-constructor/**'
+      - 'contracts/verification/sha256-padding/**'
+      - 'sphincs-c10/src/hash.rs'
+      - 'sphincs-c10/src/params.rs'
+      - 'sphincs-c10/Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/sha256-constructor-evidence.yml'
+  pull_request:
+    paths: *constructor_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: constructor-evidence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  recorded-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Check recorded evidence and source binding (no solver replay)
+        working-directory: contracts/verification/sha256-constructor
+        run: |
+          python3 check.py
+          python3 test_gate.py -v
+          python3 inputs.py "$RUNNER_TEMP/constructor-inputs"

@@ -1,5 +1,14 @@
 # PQSigner — STATUS (start here)
 
+**Corrected SHA-256 constructor component (2026-10-30):** the owner-selected
+research dependency passes symbolic U32/U64 zero-default and arbitrary
+64-byte generation/order checks, with targeted byte/order and initialization
+controls. Native/recursive-Miri cleanup checks cover 110 finite cases.
+The [research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence)
+records the exact corrected target, compiler/model assumptions and remaining
+full Digest boundary. Production dependencies and original-source #1067 are
+unchanged; the full-caller translation diagnostics remain incomplete.
+
 **Original initialized streaming step (2026-10-30):** a source-bound symbolic
 profile checks byte order, emitted/residual length, callback shape and adjacent
 frame preservation for every initialized buffer position and input up to 192

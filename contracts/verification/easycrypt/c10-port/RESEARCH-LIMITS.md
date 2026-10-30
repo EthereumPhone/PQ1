@@ -1241,8 +1241,27 @@ original complete `Digest` correspondence and existing hash postulates remain
 open; neither finite source checks nor these universal model theorems substitute
 for that link.
 
+**Corrected-dependency constructor component (2026-10-30).** The owner selected
+the exact previously reviewed `generic-array 0.14.7` correction as a research
+target. The isolated [`sha256-constructor` profile](../../sha256-constructor/README.md)
+checks U32/U64 zero defaults and, for every 64-byte input, the observing
+generator's returned bytes, call count and increasing index order. All semantic
+assertions and positive covers are reached. Byte corruption and reversed-order
+controls fail only their intended assertions. A paired U1 diagnostic exposes
+initialization-check failures in the original dependency and passes for the
+correction. All default, initialization, validity and unwind guards remain.
+
+The 110 native and recursive-Miri cleanup cases, including every injected panic
+index at U0/U1/U8/U32/U64, are finite evidence; an omitted-prefix-drop mutation
+is rejected. They are not universal panic/unwind or arbitrary-closure proofs.
+Both actual corrected full-caller code-generation diagnostics hit their compiler
+CPU bound without completing translation or running a solver. The new profile
+preserves their failures and the original large-control timeout honestly.
+Production dependencies, original-source #1067 and complete `Digest`
+correspondence remain unchanged/open. Issue #1097 tracks the corrected target.
+
 **Remaining backend boundary.** The word, complete-block, bounded initialized
-streaming and corrected-dependency padding results do not connect the existing
+streaming, corrected constructors and corrected-dependency padding results do not connect the existing
 `sha256_bytes`/`sha256_parts` postulates to an entire Rust `Digest` execution.
 General Rust streaming updates, source-level accumulated-length/padding composition,
 dispatch, unsafe conversions, accelerated backends, and the STM32 driver

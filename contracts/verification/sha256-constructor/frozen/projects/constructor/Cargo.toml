@@ -1,0 +1,15 @@
+[package]
+name = "corrected_constructor_probe"
+version = "0.0.0"
+edition = "2021"
+[workspace]
+[dependencies]
+generic-array = "=0.14.7"
+typenum = "=1.20.1"
+[patch.crates-io]
+generic-array = { path = "../inputs/generic-array" }
+[profile.dev]
+opt-level = 3
+debug = false
+incremental = false
+overflow-checks = true

@@ -1,0 +1,250 @@
+{
+  "format": 1,
+  "historical_root": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/corrected-digest",
+  "corrected_dependency_sha256": "5d08f9d4395b7960b8dbad2c1d8e71f8b65eb67417947a65c0c6fa542cbd8e8d",
+  "original_dependency_sha256": "20b64b4359b0e82a3523fd536ad06de25e174cead734cffd3fa5f7c48f659247",
+  "parent_sha256": {
+    "profile.json": "5b0f965a2ed96f0e9f7636eecf70873fd2f9a8c1392c81b6d37543ee510d7682",
+    "verify.py": "0fd0ea6a4130ebd1a78d6a04159a3d95d44e817df07251cf4547e67d2e561c37",
+    "prepare.py": "cce3c373a4d402a363b4bcf20c2316b487f9db878df638812ba8cf910c71dd29",
+    "replay.py": "9aad8fd7d4902cf0573d6bc7bfd61c20438a416d22b7fc4007fd5b568063fa7d",
+    "bounded_disk_usage.py": "c648f0aaf16858f9ecd0417baffbace91dbfb0ca5abc8f70ac1013c8af43cf0c"
+  },
+  "cases": {
+    "default": {
+      "project": "constructor",
+      "harness": "actual_default_shapes",
+      "exit": 0,
+      "failures": [],
+      "census_sha256": "e1c1c4148dd365f1016f7783b406b23fb0bc513d6cd07c4704e63794f5173d9d",
+      "properties": 313,
+      "statuses": {
+        "SUCCESS": 300,
+        "UNREACHABLE": 12,
+        "SATISFIED": 1
+      }
+    },
+    "generate": {
+      "project": "constructor",
+      "harness": "generated_bytes_and_order",
+      "exit": 0,
+      "failures": [],
+      "census_sha256": "b6b3a16ea5018e257595a82f2218e834980823644d39e538ea1c52e128a1875f",
+      "properties": 265,
+      "statuses": {
+        "UNREACHABLE": 6,
+        "SUCCESS": 258,
+        "SATISFIED": 1
+      }
+    },
+    "corrupt-byte": {
+      "project": "constructor-corrupt-byte",
+      "harness": "actual_default_shapes",
+      "exit": 1,
+      "failures": [
+        "proofs::actual_default_shapes.assertion.2"
+      ],
+      "census_sha256": "e1626e282cfe9b02aefc0981c04bd294e71ccba6577b73f0e5f59d1ecf4c125d",
+      "properties": 329,
+      "statuses": {
+        "SUCCESS": 312,
+        "UNREACHABLE": 16,
+        "FAILURE": 1
+      }
+    },
+    "reverse-generation": {
+      "project": "constructor-reverse-generation",
+      "harness": "generated_bytes_and_order",
+      "exit": 1,
+      "failures": [
+        "generate64::{closure#0}.assertion.3"
+      ],
+      "census_sha256": "eeb41015f4a318f1b01a18b118d80edee50932777eccb2c868fa573aed538a7e",
+      "properties": 267,
+      "statuses": {
+        "SUCCESS": 240,
+        "UNREACHABLE": 26,
+        "FAILURE": 1
+      }
+    },
+    "focused-corrected": {
+      "project": "focused-corrected",
+      "harness": "focused_default",
+      "exit": 0,
+      "failures": [],
+      "census_sha256": "7bbcb42ff304b5e7ec4e180f7503ed3a38be28e52bc84e30c9f9f811cc3265ea",
+      "properties": 206,
+      "statuses": {
+        "SUCCESS": 196,
+        "UNREACHABLE": 9,
+        "SATISFIED": 1
+      }
+    },
+    "focused-original": {
+      "project": "focused-original",
+      "harness": "focused_default",
+      "exit": 1,
+      "failures": [
+        "core::slice::from_raw_parts_mut::<'_, u8>.safety_check.1",
+        "<core::slice::IterMut<'_, u8> as core::iter::Iterator>::fold::<(), {closure@<core::iter::Enumerate<I> as core::iter::Iterator>::fold::enumerate<&mut u8, (), {closure@core::iter::Iterator::for_each::call<(usize, &mut u8), {closure@<generic_array::GenericArray<u8, generic_array::typenum::UInt<generic_array::typenum::UTerm, generic_array::typenum::B1>> as generic_array::sequence::GenericSequence<u8>>::generate<{closure@generic_array::impls::<impl core::default::Default for generic_array::GenericArray<u8, generic_array::typenum::UInt<generic_array::typenum::UTerm, generic_array::typenum::B1>>>::default::{closure#0}}>::{closure#0}}>::{closure#0}}>::{closure#0}}>.safety_check.13"
+      ],
+      "census_sha256": "f33a51b4dd88108ecaa456ff1a7d8e4123abc1d52a4c3e606ce23df144cac978",
+      "properties": 416,
+      "statuses": {
+        "SUCCESS": 407,
+        "FAILURE": 2,
+        "UNREACHABLE": 6,
+        "SATISFIED": 1
+      }
+    }
+  },
+  "projects": {
+    "constructor": {
+      "selected_crate": "inputs/generic-array",
+      "entry": "src/lib.rs"
+    },
+    "constructor-corrupt-byte": {
+      "selected_crate": "mutants/corrupt-byte",
+      "entry": "src/lib.rs"
+    },
+    "constructor-reverse-generation": {
+      "selected_crate": "mutants/reverse-generation",
+      "entry": "src/lib.rs"
+    },
+    "focused-corrected": {
+      "selected_crate": "inputs/generic-array",
+      "entry": "src/lib.rs"
+    },
+    "focused-original": {
+      "selected_crate": "inputs/vendor/generic-array-0.14.7",
+      "entry": "src/lib.rs"
+    },
+    "cleanup-v2": {
+      "selected_crate": "inputs/generic-array",
+      "entry": "src/main.rs"
+    },
+    "cleanup-wrong-prefix": {
+      "selected_crate": "mutants/omit-prefix-drop",
+      "entry": "src/main.rs"
+    }
+  },
+  "mutations": {
+    "corrupt-byte": {
+      "old_hex": "2020202020202020202020202020202064657374696e6174696f6e2e706f736974696f6e202b3d20313b0d0a2020202020202020202020207d",
+      "new_hex": "2020202020202020202020202020202064657374696e6174696f6e2e706f736974696f6e202b3d20313b0d0a2020202020202020202020207d0d0a2020202020202020202020206966204e3a3a5553495a45203e2030207b207074723a3a77726974652862617365206173202a6d75742075382c2031293b207d",
+      "lib_sha256": "8c5eaf7c7bd7d3d37d93f75dd83fbdb22cf21acc4919c2cf34473cdb7e845a65"
+    },
+    "reverse-generation": {
+      "old_hex": "7074723a3a777269746528626173652e6164642869292c2066286929293b",
+      "new_hex": "7074723a3a777269746528626173652e6164642869292c2066284e3a3a5553495a45202d2031202d206929293b",
+      "lib_sha256": "499269f1fac1340dfca2873d643760d709a930c2852595a5d11efecb84219211"
+    },
+    "omit-prefix-drop": {
+      "old_hex": "666f72206920696e20302e2e73656c662e706f736974696f6e207b",
+      "new_hex": "666f72206920696e20312e2e73656c662e706f736974696f6e207b",
+      "lib_sha256": "4a4fb5b3d5a9bbe3c584446e6fec2d1d1d5eaa339819b5903f542097487a5e08"
+    }
+  },
+  "finite": {
+    "baseline": {
+      "project": "cleanup-v2",
+      "steps": [
+        "lock",
+        "build",
+        "native",
+        "recursive-miri"
+      ]
+    },
+    "wrong-prefix": {
+      "project": "cleanup-wrong-prefix",
+      "steps": [
+        "lock",
+        "build",
+        "native"
+      ]
+    }
+  },
+  "finite_tool_sha256": {
+    "rustc": "868823b4821483101b4e71435a11ae702dee76fca8a725b045eda1fb32318ed2",
+    "cargo": "2f61a65e2f3029f4d849a6534bbd6627790142c59a74682f0025e80d6f638c7d",
+    "miri": "85f30df439309f34c040de10792cd100e4722b6b604c28606df0fee00f8f1c0f",
+    "cargo-miri": "161e6adbce9b29a54b7a5a5dbf347819bddd44e000172c68ad0226a847b530ff"
+  },
+  "miri_sysroot_receipt_sha256": "f6367840d3459577a1fd7774040b5f736759513053f38e5062651677c08ed8ce",
+  "frozen_sha256": {
+    "frozen/receipts/focused-original.json": "9d4562e349758716e8c21d1b6df96421ff8b399828646a882c704c85fada5f75",
+    "frozen/receipts/generate.json": "1e6f4f0625cb2e4f580d03a630db8df738d666422675a912b1d24b17d1c5e03f",
+    "frozen/receipts/miri-sysroot-digests.json": "f6367840d3459577a1fd7774040b5f736759513053f38e5062651677c08ed8ce",
+    "frozen/receipts/focused-original-census.json": "8adf5b443bc1c997d2878c6ff16f29bbf8162570fdfbebc369c1ad4fb5535cdd",
+    "frozen/receipts/reverse-generation.json": "718096129cf0212483644fa751922ae508c6970582506a47ffa814a88a91facf",
+    "frozen/receipts/corrupt-byte-census.json": "c491d4638fe079a0aea14ee1555a220254f7851f6e51f923f4939de83e96b946",
+    "frozen/receipts/reverse-generation-census.json": "b9b8debd3f9728a0df8d7502fb97e82d157b1e61f63cba6cc2256c9aee1a7718",
+    "frozen/receipts/focused-corrected.json": "741ad9a60dec7175e9fe9cc88a4eba7dbe8e94f60110c062e74e1d0de257c98d",
+    "frozen/receipts/generate-census.json": "df2b5ebbb7a8d2ff667611bef8da7826720620a3264bd34b230649062302350a",
+    "frozen/receipts/corrupt-byte.json": "fcd6d382899983cf511c5b068535aeaff9a8b05d94c736cdaf56abce81ab19b1",
+    "frozen/receipts/default-census.json": "b72e0ef41e4ccb527415238b9157d8e9d137ca9dffade830fee055ff93f4743e",
+    "frozen/receipts/focused-corrected-census.json": "254a05039390d205f06604c98d80df4cd582d72a67ffdd409e773ab1690f6f8e",
+    "frozen/receipts/cleanup-baseline.json": "7f33e4e00fed12bb07b77a111e33cee63ed44ffe7d79ae42f2c5fc9b660daf14",
+    "frozen/receipts/cleanup-wrong-prefix.json": "1913ddef5a6516d1fc2c21f272bd2fc6e47f0a01502de5a35a375e35fee203ea",
+    "frozen/receipts/default.json": "80f5193a8d9bd3a341c2b23ca62454ad5a26aa45178f27b4572463efb0679954",
+    "frozen/runners/run_focused.py": "ca9dbb3ab402febc447c9c91385df98b3f92622bf81a02c592650384a6fe0f49",
+    "frozen/runners/run_constructor.py": "1d2b7a7cd58335b44c2b44cb4cc60771c939ad591a61e67b8e1d5381d93cc0b3",
+    "frozen/runners/run_full_caller_codegen.py": "1fa05471a52f26f28e0f9d6b124245d968eea73a2d4e0293bd77aae680a06011",
+    "frozen/runners/run_cleanup_control.py": "f571625b4030550f03a89ef0d084cb413ad83894289855777212303a04fb83ce",
+    "frozen/runners/run_control.py": "6375c30d74ba0f5d1a4dbdeea4d56fcaa560b59bec56a41e7a70189afa5e3fc1",
+    "frozen/diagnostics/full-caller-single-codegen-v1.json": "6196a7fd82e098b2048a9c25dfb63feb479b9899205b661c5ba3b51d7734903b",
+    "frozen/diagnostics/full-caller-lib.rs.in": "8cab3fe9e0ce84ef28c6b8cd5bb5bc23cb39426f1d268db2dca25254d1e0a5eb",
+    "frozen/diagnostics/full-caller-Cargo.toml": "713d5c8889dce5251c9aa5c409121c5b758e9b069941b44597e923c902cb2383",
+    "frozen/diagnostics/full-caller-codegen-v1.json": "486582e36b846b2e4bf1d0c92ae1b4851fc296fc5d8d4758bae434baba342e32",
+    "frozen/diagnostics/original-control-v1.log.gz": "b3c16b59e746c2ee58285bff147128d7a781d40003398e5fa7469ca46b8c43af",
+    "frozen/diagnostics/assessment.json": "655cac8a5f99c15d09cf9e5aa6ccdc9bb03cb1ca1d7817ce7708939b3e3393df",
+    "frozen/diagnostics/full-caller-single-codegen-v1.log.gz": "30e8e3456e660cbfb38a66889b6527e81830e08cf5ad5e9121bb9ba0c305e2ea",
+    "frozen/diagnostics/full-caller-codegen-v1.log.gz": "5ee97d040d5751d0d09a097fcdbd6a16a615c3e9553004d431126fdd290fbb45",
+    "frozen/diagnostics/full-caller-Cargo.lock": "09524785af414457960c4c5017fca8c2118760a62bc64f36988a0f2b07581733",
+    "frozen/diagnostics/full-caller-single-lib.rs.in": "c3b9a1ac06175e9b60d4fb205a97e23c92ecc14f32900e0673cd270ca1828ce7",
+    "frozen/diagnostics/original-control-v1.json": "7c3b94fad63a7be066b4730eaee20dde72a281197ec2d5736bbac486345ba522",
+    "frozen/diagnostics/full-caller-single-Cargo.toml": "713d5c8889dce5251c9aa5c409121c5b758e9b069941b44597e923c902cb2383",
+    "frozen/diagnostics/full-caller-single-Cargo.lock": "09524785af414457960c4c5017fca8c2118760a62bc64f36988a0f2b07581733",
+    "frozen/logs/generate.log.gz": "068886ce2b776de57fa2a5de1517678387ecf3381e5fcf35c010c10e1ce77d9d",
+    "frozen/logs/focused-original.log.gz": "2c886fccffa6d0b25478330b2af318a0845c29694c895e1fdc0483fa3ec010fc",
+    "frozen/logs/cleanup-baseline-lock.log.gz": "04c501f411b6da6f5e3553eab82cc1c48d74549187bb9309df3f02b0accdd628",
+    "frozen/logs/corrupt-byte.log.gz": "3e032a9ca8e5d9391e3381225c06448207444a2dc510fc30a960597dc5c4aa15",
+    "frozen/logs/cleanup-baseline-build.log.gz": "37698433d0b6252c4f65cd788e03ec0e3fa48cda186afa0c40c5f8d438b187af",
+    "frozen/logs/cleanup-baseline-recursive-miri.log.gz": "7ec6953abf1733a669dd2ad3010e4c41ddf2979a61050105c012c142550932cc",
+    "frozen/logs/reverse-generation.log.gz": "1bf9f8dd036a68733c1bfe51538ca33491ab75c9b002cb77eb9dab331aea8566",
+    "frozen/logs/default.log.gz": "7d0f29ae0cc21a4fc6a36d9c73ab7c12abaae0bc5d9d4b19c5d0b34907b1c3be",
+    "frozen/logs/cleanup-wrong-prefix-native.log.gz": "de2dbe10dfeadef94b40167e51227f036dfe9f616a7c711294837e1ce54894cd",
+    "frozen/logs/cleanup-wrong-prefix-lock.log.gz": "04c501f411b6da6f5e3553eab82cc1c48d74549187bb9309df3f02b0accdd628",
+    "frozen/logs/cleanup-baseline-native.log.gz": "a9fee91a05cfedef5fe2cb6aeb7e0724d8e78413a247443cf8a3e0dc735329e7",
+    "frozen/logs/cleanup-wrong-prefix-build.log.gz": "884c00a5ae2448ecf79e0e3b9f7ebda48d72e8cca2abe016910b70deffa75839",
+    "frozen/logs/focused-corrected.log.gz": "b9fb6b906394a256c0ee069fcea60bb59ae5e63c16079cc4271b82925fe0bd49",
+    "frozen/projects/constructor-reverse-generation/Cargo.toml": "af313e02dd1dcb52f8201e0daad09c1db95ae1228d13ad69eb31b911e4a60f24",
+    "frozen/projects/constructor-reverse-generation/Cargo.lock": "2535ed3b47853a310f005bb329a4b343254b6f2e816e626f7963743cf7e7a899",
+    "frozen/projects/constructor-corrupt-byte/Cargo.toml": "552936db78b30df7e6e032e2ee1a5ea9d75fbd93e9310b4c220cd0d06052392b",
+    "frozen/projects/constructor-corrupt-byte/Cargo.lock": "2535ed3b47853a310f005bb329a4b343254b6f2e816e626f7963743cf7e7a899",
+    "frozen/projects/constructor/Cargo.toml": "c7a40c484523872a6ae35c0f4684de952a20318f91c1d249dc10e4d4afc9f3a2",
+    "frozen/projects/constructor/Cargo.lock": "2535ed3b47853a310f005bb329a4b343254b6f2e816e626f7963743cf7e7a899",
+    "frozen/projects/cleanup-v2/Cargo.toml": "eb0905a0bcb417096754ebe57f3477c4b4ff4df92a9ea72fce789724b74c88cd",
+    "frozen/projects/cleanup-v2/Cargo.lock": "b0cf60cb4fe4b4e8c73b6975bb711cbac14689693d62b50bbdb062b92178e4f4",
+    "frozen/projects/focused-corrected/Cargo.toml": "33a0309a45f4837f8df2b5f1dd4a45238aa2d62682439cde72be32f2dd6fb842",
+    "frozen/projects/focused-corrected/Cargo.lock": "2535ed3b47853a310f005bb329a4b343254b6f2e816e626f7963743cf7e7a899",
+    "frozen/projects/focused-original/Cargo.toml": "7cacd6e56f8661267a35456bc53396287493c3b1e33d1f3ebf72615166fadff8",
+    "frozen/projects/focused-original/Cargo.lock": "2535ed3b47853a310f005bb329a4b343254b6f2e816e626f7963743cf7e7a899",
+    "frozen/projects/cleanup-wrong-prefix/Cargo.toml": "67e40b3d773d0550c801dd82c1c1b1a55eb0c9cb6dda266e307ab64dcbc69266",
+    "frozen/projects/cleanup-wrong-prefix/Cargo.lock": "b0cf60cb4fe4b4e8c73b6975bb711cbac14689693d62b50bbdb062b92178e4f4",
+    "frozen/projects/constructor-reverse-generation/src/lib.rs.in": "f47f6a8bc86d3087bbfcc44f1f6e869130c5a817ee3d542672ce7542f3f8f546",
+    "frozen/projects/constructor-reverse-generation/.cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c",
+    "frozen/projects/constructor-corrupt-byte/src/lib.rs.in": "f47f6a8bc86d3087bbfcc44f1f6e869130c5a817ee3d542672ce7542f3f8f546",
+    "frozen/projects/constructor-corrupt-byte/.cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c",
+    "frozen/projects/constructor/src/lib.rs.in": "f47f6a8bc86d3087bbfcc44f1f6e869130c5a817ee3d542672ce7542f3f8f546",
+    "frozen/projects/constructor/.cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c",
+    "frozen/projects/cleanup-v2/src/main.rs.in": "ef9048d66ea5bffca713d1fa9b1c47d308a558def26eaa111b60189343ead307",
+    "frozen/projects/cleanup-v2/.cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c",
+    "frozen/projects/focused-corrected/src/lib.rs.in": "aecc8ca3af43421187df7d638ec5134fa6ed8933e6ea70ff1cad7f95b30a949a",
+    "frozen/projects/focused-corrected/.cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c",
+    "frozen/projects/focused-original/src/lib.rs.in": "aecc8ca3af43421187df7d638ec5134fa6ed8933e6ea70ff1cad7f95b30a949a",
+    "frozen/projects/focused-original/.cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c",
+    "frozen/projects/cleanup-wrong-prefix/src/main.rs.in": "ef9048d66ea5bffca713d1fa9b1c47d308a558def26eaa111b60189343ead307",
+    "frozen/projects/cleanup-wrong-prefix/.cargo/config.toml": "d6de302b9c313655b8b7edf3a256bd5bcb174cbb08183f4ff72b42b5e9a0d19c"
+  }
+}

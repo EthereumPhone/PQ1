@@ -1,0 +1,20 @@
+#![allow(dead_code, unexpected_cfgs)]
+#[path = "/home/nicola/.local/state/pqsigner-research/easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/params.rs"] mod params;
+#[path = "/home/nicola/.local/state/pqsigner-research/easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/hash.rs"] mod hash;
+#[cfg(kani)]
+mod diagnostic {
+    use super::hash;
+    #[kani::proof]
+    #[kani::unwind(193)]
+    fn actual_corrected_roots() {
+        let input: [u8; 192] = kani::any();
+        let length: usize = kani::any();
+        let cut: usize = kani::any();
+        kani::assume(length <= 192 && cut <= length);
+        let contiguous = hash::sha256_bytes(&input[..length]);
+        let segmented = hash::sha256_parts(&[&input[..cut], &[], &input[cut..length]]);
+        for i in 0..32 { assert!(contiguous[i] == segmented[i]); }
+        kani::cover!(length == 0, "empty actual roots");
+        kani::cover!(length == 192 && cut == 63, "three blocks across a partial buffer");
+    }
+}
