@@ -1198,7 +1198,8 @@ uninitialized storage remains a model/validity boundary. The corrected actual
 software-caller census was regenerated unchanged, with finite native/recursive
 Miri compatibility checks; that does not establish universal dependency or
 full-caller equivalence. The supplied bit length is not yet related to the
-complete update history. The profile preserves exact source/tool identities,
+original Rust update history; the separate list-model composition below does
+not establish that source-level link. The profile preserves exact source/tool identities,
 raw proof logs, strict result checks and a separate fresh replay command. Its CI
 checks recorded evidence and source binding, not a new solver execution.
 Production dependencies and the default verification toolchains are unchanged.
@@ -1221,10 +1222,29 @@ accumulated bit length, arbitrary callbacks or full Rust alias/provenance and
 cross-tool refinement. The profile retains raw evidence and a separate replay
 command; its CI checks recorded evidence and source binding without a solver.
 
+**Streaming history and checked-length model (2026-10-30).** The isolated
+[`sha256-history` component](../../sha256-history/README.md) proves exact byte
+conservation, complete-block counts and residual order for every finite update
+history in an explicit list-level transcription of the Eager branches. Equal
+input bytes yield the same modeled state regardless of update segmentation.
+For total byte length below `2^61`, every modeled counter update fits and the
+checked `u64` final length equals eight times that total; every history prefix
+is covered. Exact boundary examples, 38 signature/axiom closures and four
+well-typed semantic controls are freshly replayed in its path-scoped CI.
+
+This closes the mathematical history/length obligation for that transcription.
+It is not extracted Rust and does not establish general-length pointer or
+constructor validity, arbitrary callback or compression-state refinement, or
+composition with the separately checked padding implementation. The mapping
+from the three pinned Rust source files is manual and remains trusted. The
+original complete `Digest` correspondence and existing hash postulates remain
+open; neither finite source checks nor these universal model theorems substitute
+for that link.
+
 **Remaining backend boundary.** The word, complete-block, bounded initialized
 streaming and corrected-dependency padding results do not connect the existing
 `sha256_bytes`/`sha256_parts` postulates to an entire Rust `Digest` execution.
-General streaming updates, accumulated-length/padding composition,
+General Rust streaming updates, source-level accumulated-length/padding composition,
 dispatch, unsafe conversions, accelerated backends, and the STM32 driver
 remain outside these proofs. Direct extraction of the pinned full API still
 encounters generic-array/trait translation errors. The experimental portable

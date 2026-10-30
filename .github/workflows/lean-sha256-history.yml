@@ -1,0 +1,58 @@
+name: Lean FV (SHA-256 history model)
+
+on:
+  push:
+    branches: [master]
+    paths: &history_paths
+      - 'contracts/verification/sha256-history/**'
+      - '.github/workflows/lean-sha256-history.yml'
+  pull_request:
+    paths: *history_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lean-sha256-history-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  history-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Check source identity and gate controls
+        working-directory: contracts/verification/sha256-history
+        run: |
+          python3 verify.py --source-only
+          python3 test_gate.py -v
+      - name: Install isolated Lean toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          ELAN_REF=464c9d28395000a2a0128e07081e4956d50eced2
+          ELAN_SHA256=a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            "https://raw.githubusercontent.com/leanprover/elan/${ELAN_REF}/elan-init.sh" \
+            -o "$RUNNER_TEMP/elan-init.sh"
+          echo "${ELAN_SHA256}  $RUNNER_TEMP/elan-init.sh" | sha256sum -c -
+          sh "$RUNNER_TEMP/elan-init.sh" -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install leanprover/lean4:v4.35.0
+      - name: Fresh proof replay and semantic controls
+        working-directory: contracts/verification/sha256-history
+        run: |
+          python3 verify.py --lean "$(elan which lean)" \
+            --output "$RUNNER_TEMP/sha-history-replay"
+      - name: Preserve replay evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sha-history-replay-${{ github.sha }}
+          path: ${{ runner.temp }}/sha-history-replay/
+          if-no-files-found: warn
+          retention-days: 14
