@@ -1,0 +1,4 @@
+[source.crates-io]
+replace-with = "frozen"
+[source.frozen]
+directory = "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/corrected-digest/inputs/vendor"

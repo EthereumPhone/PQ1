@@ -1,0 +1,7 @@
+{
+  "complete_digest_proof": false,
+  "diagnostics": "Both actual corrected caller code-generation attempts terminated at inherited 175s CPU soft limit (SIGXCPU), before a complete translation; no solver was run.",
+  "not_source_refutation": true,
+  "next_boundary": "Plan a bounded translation-cost diagnosis before further complete-caller work; no compiler/model change adopted here.",
+  "original_large_control": "1800 active seconds exhausted; excluded from accepted negative controls. Paired U1 runs establish only a local initialization-check witness."
+}

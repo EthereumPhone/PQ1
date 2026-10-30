@@ -1,0 +1,52 @@
+#![allow(deprecated)]
+
+use generic_array::{sequence::GenericSequence, typenum::{U0, U1, U8, U32, U64}, ArrayLength, GenericArray};
+use std::{cell::RefCell, panic::{catch_unwind, AssertUnwindSafe}, rc::Rc};
+
+struct Tracked {
+    index: usize,
+    dropped: Rc<RefCell<Vec<usize>>>,
+}
+
+impl Drop for Tracked {
+    fn drop(&mut self) {
+        self.dropped.borrow_mut().push(self.index);
+    }
+}
+
+fn check<N: ArrayLength<Tracked>>() -> usize {
+    let length = N::USIZE;
+    for stop in 0..=length {
+        let called = Rc::new(RefCell::new(Vec::new()));
+        let dropped = Rc::new(RefCell::new(Vec::new()));
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            let values: GenericArray<Tracked, N> = GenericArray::generate(|index| {
+                called.borrow_mut().push(index);
+                if index == stop {
+                    panic!("deliberate generator stop");
+                }
+                Tracked { index, dropped: Rc::clone(&dropped) }
+            });
+            assert_eq!(values.len(), length);
+            for (index, value) in values.iter().enumerate() {
+                assert_eq!(value.index, index);
+            }
+            drop(values);
+        }));
+        assert_eq!(result.is_err(), stop < length);
+        let expected_calls: Vec<_> = (0..if stop < length { stop + 1 } else { length }).collect();
+        let expected_drops: Vec<_> = (0..stop).collect();
+        assert_eq!(*called.borrow(), expected_calls);
+        assert_eq!(*dropped.borrow(), expected_drops, "initialized-prefix drop mismatch");
+    }
+    length + 1
+}
+
+fn main() {
+    // Keep the deliberate panic cases visible in the final count without
+    // writing an expected panic backtrace for every injected stop point.
+    std::panic::set_hook(Box::new(|info| eprintln!("{info}")));
+    let cases = check::<U0>() + check::<U1>() + check::<U8>() + check::<U32>() + check::<U64>();
+    assert_eq!(cases, 110);
+    println!("110 complete-or-panic generator cases: order and exact initialized-prefix drops passed");
+}

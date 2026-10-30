@@ -1,0 +1,17 @@
+#![allow(dead_code, unexpected_cfgs)]
+#[path = "/home/nicola/.local/state/pqsigner-research/easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/params.rs"] mod params;
+#[path = "/home/nicola/.local/state/pqsigner-research/easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/hash.rs"] mod hash;
+#[cfg(kani)]
+mod diagnostic {
+    use super::hash;
+    #[kani::proof]
+    #[kani::unwind(65)]
+    fn actual_corrected_roots() {
+        let bytes: [u8; 64] = kani::any();
+        let length: usize = kani::any();
+        kani::assume(length <= 64);
+        let output = hash::sha256_bytes(&bytes[..length]);
+        kani::cover!(length == 0 && output[0] == 0xe3, "empty input output prefix");
+        kani::cover!(length == 64, "full single block input");
+    }
+}

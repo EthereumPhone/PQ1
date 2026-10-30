@@ -1,0 +1,42 @@
+#![no_std]
+#![allow(deprecated)]
+
+use generic_array::{sequence::GenericSequence, typenum::{U32, U64}, GenericArray};
+
+pub fn defaults() -> (GenericArray<u8, U32>, GenericArray<u8, U64>) {
+    (GenericArray::default(), GenericArray::default())
+}
+
+pub fn generate64(input: &[u8; 64]) -> (GenericArray<u8, U64>, usize) {
+    let mut calls = 0;
+    let output = GenericArray::generate(|i| {
+        assert!(i == calls);
+        calls += 1;
+        input[i]
+    });
+    (output, calls)
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    #[kani::proof]
+    #[kani::unwind(65)]
+    fn actual_default_shapes() {
+        let (output, buffer) = defaults();
+        for i in 0..32 { assert!(output[i] == 0); }
+        for i in 0..64 { assert!(buffer[i] == 0); }
+        kani::cover!(output[31] == 0 && buffer[63] == 0, "both default shapes reached");
+    }
+
+    #[kani::proof]
+    #[kani::unwind(65)]
+    fn generated_bytes_and_order() {
+        let input: [u8; 64] = kani::any();
+        let (output, calls) = generate64(&input);
+        assert!(calls == 64);
+        for i in 0..64 { assert!(output[i] == input[i]); }
+        kani::cover!(input[0] == 0 && input[63] == 255, "distinct edge values reached");
+    }
+}
