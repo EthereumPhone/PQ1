@@ -45,8 +45,7 @@ So the two demos cannot drift silently:
 - when you change a flow in `android-demo/.../core/Flows.kt`, port the change here;
 - when `ERC20_DB_ROOT` changes, re-run `android-demo/tools/gen_assets.py`, then `./build.sh`.
 
-The same source builds a Linux binary (`build/pq1-demo`) with a hidraw backend, for trying the demo
-against a PQ1 on a Linux bench. It needs the `70-pq1-wallet.rules` udev rule.
+The same source also builds for Ubuntu, with a hidraw backend: see [`ubuntu-demo`](../ubuntu-demo).
 
 ## How it talks to PQ1
 

@@ -1,5 +1,5 @@
 /*
- * PQ1 Demo for macOS: the android-demo flows in a Terminal menu, for a conference booth.
+ * PQ1 Demo for macOS and Ubuntu: the android-demo flows in a Terminal menu, for a conference booth.
  *
  * Plug in PQ1, unlock it, press a key: PQ1 clear-signs the demo transaction on its own screen.
  * Nothing is broadcast; signatures never leave this process.
@@ -9,9 +9,11 @@
  * byte-identical to android-demo's goldens, which come from tools/demo_px_flows.py.
  *
  * No dependencies: the binary links libSystem only and loads IOKit + CoreFoundation with dlopen,
- * so it cross-compiles from Linux with `zig cc` and needs no macOS SDK. The hidraw backend runs
- * the same program against a PQ1 on a Linux bench. build.sh embeds the ERC-20 proofs.
+ * so it cross-compiles from Linux with `zig cc` and needs no macOS SDK. On Linux the same program
+ * runs on the hidraw backend, as one static binary (../ubuntu-demo). The build.sh scripts embed
+ * the ERC-20 proofs.
  */
+#define _GNU_SOURCE /* pipe2 */
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -1012,7 +1014,8 @@ static __attribute__((format(printf, 2, 3))) IoErr fail(IoErr e, const char *fmt
 }
 
 /*
- * hid_open:  1 connected, 0 no PQ1 on the bus, -1 error (g_ioerr).
+ * hid_open:  1 connected, 0 no PQ1 on the bus, -1 error (g_ioerr), -2 this user may not open PQ1
+ *            and the one-time permission (Linux: the udev rule) can fix that.
  * hid_write: one OUT report, bounded: IO_TIMEOUT when PQ1 doesn't take it (busy on a dialog).
  * hid_read:  1 got an IN report, 0 none within `timeout_ms`, -1 the link is gone.
  */
@@ -1286,8 +1289,16 @@ static int hid_read(uint8_t frame[REPORT], int timeout_ms)
 #include <fcntl.h>
 #include <poll.h>
 #include <strings.h>
+#include <sys/prctl.h>
+#include <sys/wait.h>
 
-/* /dev/hidrawN, for testing on a Linux bench (udev rule: 70-pq1-wallet.rules). */
+#include <pthread.h>
+
+/* /dev/hidrawN is root-only until a udev rule hands it to the logged-in user. "uaccess" needs a
+ * file that sorts before 73-seat-late.rules. */
+#define UDEV_RULE_PATH "/etc/udev/rules.d/70-pq1-wallet.rules"
+#define UDEV_RULE "SUBSYSTEM==\"hidraw\", ATTRS{idVendor}==\"1209\", ATTRS{idProduct}==\"7051\", TAG+=\"uaccess\""
+
 static int g_fd = -1;
 
 static bool hid_connected(void) { return g_fd >= 0; }
@@ -1318,22 +1329,66 @@ static int hid_open(void)
         snprintf(path, sizeof path, "/dev/%s", e->d_name);
         g_fd = open(path, O_RDWR | O_CLOEXEC);
         r = g_fd >= 0 ? 1 : -1;
-        if (r < 0) fail(IO_GONE, "cannot open %s: %s", path, strerror(errno));
+        if (r < 0 && errno == EACCES && access(UDEV_RULE_PATH, F_OK) != 0) r = -2;
+        else if (r < 0 && errno == EACCES) /* also for a moment after plugging in, until udev has run */
+            fail(IO_GONE, "This user may not open PQ1. Unplug it and plug it in again.");
+        else if (r < 0) fail(IO_GONE, "cannot open %s: %s", path, strerror(errno));
     }
     closedir(d);
     return r;
 }
 
+/* A write to hidraw blocks in the kernel for up to 5 s while PQ1 shows a dialog or its PIN prompt
+ * and reads no OUT reports, and the keys would be dead meanwhile. So a thread does the write and
+ * hid_write gives up on it after 2 s, as on macOS. The barrier in sync_link deals with a frame that
+ * still goes out later. */
+typedef struct {
+    int fd;
+    uint8_t b[REPORT + 1];
+} WriteJob;
+
+static int g_job[2] = { -1, -1 }, g_done[2];
+static bool g_writing; /* a job is out and its result has not been collected */
+static int g_write_err;
+
+static void *writer(void *arg)
+{
+    WriteJob j;
+    (void)arg;
+    while (read(g_job[0], &j, sizeof j) == (ssize_t)sizeof j) {
+        int err = write(j.fd, j.b, sizeof j.b) == (ssize_t)sizeof j.b ? 0 : errno ? errno : EIO;
+        if (write(g_done[1], &err, sizeof err) != (ssize_t)sizeof err) break;
+    }
+    return NULL;
+}
+
+static bool write_finished(int timeout_ms)
+{
+    struct pollfd p = { .fd = g_done[0], .events = POLLIN };
+    if (poll(&p, 1, timeout_ms) <= 0 || read(g_done[0], &g_write_err, sizeof g_write_err) != (ssize_t)sizeof g_write_err)
+        return false;
+    g_writing = false;
+    return true;
+}
+
 static IoErr hid_write(const uint8_t frame[REPORT])
 {
-    uint8_t b[REPORT + 1] = { 0 }; /* leading 0: no report IDs */
+    WriteJob j = { .fd = g_fd }; /* b[0] stays 0: no report IDs */
     if (g_fd < 0) return fail(IO_GONE, "PQ1 disconnected");
-    memcpy(b + 1, frame, REPORT);
-    if (write(g_fd, b, sizeof b) == (ssize_t)sizeof b) return IO_OK;
-    if (errno == ETIMEDOUT) return fail(IO_TIMEOUT, "PQ1 is not taking requests");
-    int err = errno;
+    if (g_job[0] < 0) {
+        pthread_t t;
+        if (pipe2(g_job, O_CLOEXEC) || pipe2(g_done, O_CLOEXEC) || pthread_create(&t, NULL, writer, NULL))
+            die("cannot start the USB writer: %s", strerror(errno));
+    }
+    if (g_writing && !write_finished(0)) return fail(IO_TIMEOUT, "PQ1 is not taking requests");
+    memcpy(j.b + 1, frame, REPORT);
+    if (write(g_job[1], &j, sizeof j) != (ssize_t)sizeof j) return fail(IO_GONE, "USB writer: %s", strerror(errno));
+    g_writing = true;
+    if (!write_finished(2000)) return fail(IO_TIMEOUT, "PQ1 is not taking requests");
+    if (!g_write_err) return IO_OK;
+    if (g_write_err == ETIMEDOUT) return fail(IO_TIMEOUT, "PQ1 is not taking requests");
     hid_close();
-    return fail(IO_GONE, "USB write failed (%s)", strerror(err));
+    return fail(IO_GONE, "USB write failed (%s)", strerror(g_write_err));
 }
 
 static int hid_read(uint8_t frame[REPORT], int timeout_ms)
@@ -1356,7 +1411,7 @@ static int hid_read(uint8_t frame[REPORT], int timeout_ms)
 }
 
 #else
-#error "PQ1 Demo supports macOS (and Linux for testing)"
+#error "PQ1 Demo supports macOS and Linux"
 #endif
 
 /* ── APDU v2 over the HID frames (core/Apdu.kt, core/Pq1.kt; docs/companion/usb-protocol-v2.md):
@@ -1670,8 +1725,9 @@ static void pq1_run(const Request *q, void (*on_waiting)(void), Outcome *o)
 #define AMBER "\x1b[33m"
 #define RED "\x1b[31m"
 
-/* BUSY: on the bus but not answering, i.e. showing a PIN prompt or a dialog. */
-typedef enum { CONN_NONE, CONN_BUSY, CONN_LOCKED, CONN_UNLOCKED, CONN_ERROR } Conn;
+/* BUSY: on the bus but not answering, i.e. showing a PIN prompt or a dialog.
+ * DENIED: on the bus, but this computer has not been set up to let the user open it (Linux). */
+typedef enum { CONN_NONE, CONN_BUSY, CONN_LOCKED, CONN_UNLOCKED, CONN_ERROR, CONN_DENIED } Conn;
 typedef enum { PHASE_PENDING, PHASE_SENDING, PHASE_WAITING, PHASE_DONE } Phase;
 
 static struct {
@@ -1997,6 +2053,7 @@ static void header(void)
         if (S.attempts >= 0) printf(DIM "   PIN attempts left: %d" RESET, S.attempts);
         break;
     case CONN_ERROR: printf(RED "● USB problem" RESET); break;
+    case CONN_DENIED: printf(AMBER "● Needs permission" RESET); break;
     }
     printf("    " DIM "Nothing is broadcast." RESET "\n");
     if (S.conn == CONN_UNLOCKED && S.have_wallet) {
@@ -2074,6 +2131,11 @@ static void stage(void)
             big = "USB problem";
             body = S.conn_err;
             break;
+        case CONN_DENIED:
+            big = "Press u to allow PQ1 on this computer";
+            body = "Ubuntu keeps USB devices like PQ1 from programs until an admin allows it. This is needed once "
+                   "per computer and asks for your computer password.";
+            break;
         }
         printf(" " BOLD "%s" RESET "\n" DIM, big);
         wrap(body, 1, term_cols() - 4);
@@ -2107,6 +2169,7 @@ static void stage(void)
         case CONN_LOCKED: line(AMBER, "Unlock PQ1 with the PIN. Starts by itself."); break;
         case CONN_UNLOCKED: line(AMBER, "Starting…"); break;
         case CONN_ERROR: line(AMBER, S.conn_err); break;
+        case CONN_DENIED: line(AMBER, "Press u to allow PQ1 on this computer."); break;
         }
         printf(DIM "   Esc cancels" RESET);
         break;
@@ -2161,6 +2224,10 @@ static void tick(void)
         int r = hid_open();
         if (r == 0) {
             drop();
+            return;
+        }
+        if (r == -2) {
+            set_conn(CONN_DENIED);
             return;
         }
         if (r < 0) {
@@ -2340,10 +2407,50 @@ static void edit_safe(void)
     }
 }
 
+#ifdef __linux__
+/* The one system change the demo makes, once per computer: the udev rule, by sudo in this window. */
+static void allow_pq1(void)
+{
+    static const char script[] = "printf '%s\\n' '" UDEV_RULE "' > " UDEV_RULE_PATH
+                                 " && udevadm control --reload-rules"
+                                 " && udevadm trigger --subsystem-match=hidraw"
+                                 " && udevadm settle --timeout=5";
+    int status = -1;
+    tty_raw(false);
+    printf("\x1b[H\x1b[2J\x1b[?25h\n " BOLD "Allow PQ1 on this computer" RESET "\n\n"
+           " This adds one line to " UDEV_RULE_PATH ", so the person logged in\n"
+           " at this computer can talk to PQ1 over USB. It is needed only once.\n\n"
+           " Type your computer password and press Enter. Nothing shows while you type.\n\n");
+    fflush(stdout);
+    void (*old_int)(int) = signal(SIGINT, SIG_IGN); /* Ctrl-C here is for sudo */
+    pid_t pid = fork();
+    if (pid == 0) {
+        signal(SIGINT, SIG_DFL);
+        execlp("sudo", "sudo", "-p", " Password: ", "sh", "-c", script, (char *)NULL);
+        _exit(127);
+    }
+    while (pid > 0 && waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+    signal(SIGINT, old_int);
+    tty_raw(true);
+    printf("\x1b[?25l");
+    snprintf(S.msg, sizeof S.msg, "%s",
+             pid > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0
+                 ? "PQ1 is allowed on this computer now. If it does not connect, unplug it and plug it in again."
+                 : "PQ1 was not allowed: this needs the password of an admin on this computer. Press u to try again.");
+}
+#endif
+
 static void on_key(int k)
 {
     Flow *f = flow_by_key(k);
     S.dirty = true;
+#ifdef __linux__
+    if ((k == 'u' || k == 'U') && S.conn == CONN_DENIED) {
+        allow_pq1();
+        return;
+    }
+#endif
     switch (k) {
     case KEY_CTRL_C:
     case KEY_EOF:
@@ -2524,10 +2631,59 @@ static int selftest(const char *dir)
     return g_fails ? 1 : 0;
 }
 
+#ifdef __linux__
+/* Double-clicked in Files there is no terminal: run again inside one. Returns if none is there. */
+static void open_terminal(const char *self)
+{
+    static const struct { const char *cmd, *sep; } T[] = {
+        { "gnome-terminal", "--" }, /* Ubuntu up to 25.04 */
+        { "ptyxis", "--" },         /* Ubuntu 25.10 */
+        { "kgx", "--" },
+        { "konsole", "-e" },
+        { "xfce4-terminal", "-x" },
+        { "x-terminal-emulator", "-e" },
+        { "xterm", "-e" },
+    };
+    for (size_t i = 0; i < sizeof T / sizeof T[0]; i++)
+        execlp(T[i].cmd, T[i].cmd, T[i].sep, self, "--in-terminal", (char *)NULL);
+}
+
+/* Keep the screen on while the demo runs (caffeinate on macOS). The helper ends with this process;
+ * without GNOME it just does not start, and the demo runs anyway. */
+static void keep_awake(void)
+{
+    pid_t parent = getpid();
+    if (fork() != 0) return;
+    prctl(PR_SET_PDEATHSIG, SIGTERM);
+    if (getppid() != parent) _exit(0);
+    int null = open("/dev/null", O_RDWR);
+    for (int fd = 0; null >= 0 && fd < 3; fd++) dup2(null, fd);
+    execlp("gnome-session-inhibit", "gnome-session-inhibit", "--app-id", "pq1-demo", "--reason", "PQ1 Demo is running",
+           "--inhibit", "idle:suspend", "--inhibit-only", (char *)NULL);
+    _exit(0);
+}
+#endif
+
 int main(int argc, char **argv)
 {
     static char out[1 << 16];
+    bool own_window = false;
     if (argc == 3 && !strcmp(argv[1], "--selftest")) return selftest(argv[2]);
+#ifdef __linux__
+    if (argc == 2 && !strcmp(argv[1], "--in-terminal")) {
+        own_window = true;
+        argc = 1;
+    } else if (argc == 1 && !isatty(0)) {
+        char self[4096];
+        ssize_t n = readlink("/proc/self/exe", self, sizeof self - 1);
+        if (n > 0) {
+            self[n] = 0;
+            open_terminal(self);
+        }
+        fprintf(stderr, "PQ1 Demo needs a terminal, and this computer has none it knows. Run it from one.\n");
+        return 1;
+    }
+#endif
     if (argc > 1) {
         fprintf(stderr, "usage: %s [--selftest <android-demo golden dir>]\n", argv[0]);
         return 2;
@@ -2536,8 +2692,12 @@ int main(int argc, char **argv)
     int lock = open(state_path(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
     if (lock >= 0 && flock(lock, LOCK_EX | LOCK_NB) != 0 && errno == EWOULDBLOCK) {
         fprintf(stderr, "PQ1 Demo is already running in another Terminal window.\n");
+        if (own_window) sleep(5); /* the window closes when this exits */
         return 1;
     }
+#ifdef __linux__
+    keep_awake();
+#endif
     setvbuf(stdout, out, _IOFBF, sizeof out);
     load_state();
     S.attempts = -1;
