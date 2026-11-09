@@ -122,3 +122,28 @@ Edit `goals.toml`. Keep `start` to entry points, not a list of known bugs:
 AGENTS.md asks reviewers to derive threats from the source in fresh
 contexts. The prompts are in `prompts/`. Placeholders are `${name}`, filled in
 by `sweep.py`.
+
+## Any model through OpenRouter
+
+`openrouter_hunt.py` runs one hunter per goal with a model of your choice from
+OpenRouter. It uses the same goals, hunter prompt, severity scale and finding
+schema as the sweep, but has no verifier or merge step, so its findings are
+leads to check, not results.
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+tools/security-sweep/openrouter_hunt.py --list-models gemini   # tool-capable models + prices
+tools/security-sweep/openrouter_hunt.py -m openai/gpt-5 -g pin-bypass
+tools/security-sweep/openrouter_hunt.py -m x-ai/grok-4 --all -j 3
+tools/security-sweep/openrouter_hunt.py -m qwen/qwen3-coder --focus "OOB writes in secure/src/nsc/cmd_sign_offchain.rs"
+tools/security-sweep/openrouter_hunt.py                        # asks for model and goal
+make openrouter-hunt MODEL=openai/gpt-5 HUNT_ARGS="-g sign-unseen"
+```
+
+The model gets four read-only tools (`list_dir`, `glob`, `read_file`, `grep`)
+over a `git archive` snapshot of `--ref` (default `HEAD`), so only committed
+files are sent to OpenRouter. It finishes by calling `submit_findings`; after
+`--max-turns` (80) it is forced to submit. Results go to
+`~/pq1-security-sweeps/openrouter/<date>-<commit>-<model>/<goal>.{md,json,transcript.jsonl}`.
+Useful flags: `--reasoning high` for reasoning models, `--context-chars` to
+fit small-context models (set automatically from the model's context length).

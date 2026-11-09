@@ -228,6 +228,12 @@ all: verify-pins secure nonsecure
 security-sweep: ## Weekly AI security sweep (report + issue drafts, files nothing)
 	@tools/security-sweep/sweep.py run $(SWEEP_ARGS)
 
+# Single-model bug hunt with any OpenRouter model (needs OPENROUTER_API_KEY).
+# make openrouter-hunt MODEL=openai/gpt-5 HUNT_ARGS="-g pin-bypass"; no args = interactive.
+.PHONY: openrouter-hunt
+openrouter-hunt: ## AI bug hunt with a chosen OpenRouter model (MODEL=, HUNT_ARGS=)
+	@tools/security-sweep/openrouter_hunt.py $(if $(MODEL),-m $(MODEL)) $(HUNT_ARGS)
+
 secure:
 	$(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE)" \
 	cargo build --locked --release --target $(TARGET) --target-dir target/secure \
