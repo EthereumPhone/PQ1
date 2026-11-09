@@ -50,9 +50,40 @@ MAX_TOOL_CHARS = 30_000
 _print_lock = threading.Lock()
 
 
+class Spend:
+    """Running OpenRouter spend for this run, shared by all parallel goals."""
+    lock = threading.Lock()
+    total = 0.0
+    estimated = False   # True once any call lacked usage.cost and was priced from the model list
+    pricing: dict = {}  # model pricing from /models, $/token as strings
+    max_cost: float | None = None
+
+    @classmethod
+    def add(cls, usage: dict) -> float:
+        cost = usage.get("cost")
+        if cost is None:
+            try:
+                cost = (int(usage.get("prompt_tokens") or 0) * float(cls.pricing.get("prompt", 0))
+                        + int(usage.get("completion_tokens") or 0) * float(cls.pricing.get("completion", 0)))
+            except ValueError:
+                cost = 0.0
+            cls.estimated = True
+        with cls.lock:
+            cls.total += float(cost)
+        return float(cost)
+
+    @classmethod
+    def label(cls) -> str:
+        return f"{'~' if cls.estimated else ''}${cls.total:.4f}"
+
+    @classmethod
+    def over_budget(cls) -> bool:
+        return cls.max_cost is not None and cls.total >= cls.max_cost
+
+
 def say(msg: str) -> None:
     with _print_lock:
-        print(f"[{dt.datetime.now():%H:%M:%S}] {msg}", flush=True)
+        print(f"[{dt.datetime.now():%H:%M:%S}] [spent {Spend.label()}] {msg}", flush=True)
 
 
 # --------------------------------------------------------------------------
@@ -323,10 +354,13 @@ def hunt(model: str, snap: Snapshot, prompt: str, label: str, out_stem: Path, ar
 
     log_msg({"role": "user", "content": prompt})
     for turn in range(1, args.max_turns + 2):
-        if turn > args.max_turns and not forced:
+        if (turn > args.max_turns or Spend.over_budget()) and not forced:
             forced = True
+            why = "Cost budget reached" if Spend.over_budget() else "Turn budget exhausted"
+            if Spend.over_budget():
+                say(f"{label}: --max-cost ${Spend.max_cost:.2f} reached, asking for final result")
             messages.append({"role": "user", "content":
-                             "Turn budget exhausted. Call submit_findings now with what you have traced; "
+                             f"{why}. Call submit_findings now with what you have traced; "
                              "put unfinished leads in coverage_notes."})
         prune(messages, args.context_chars)
         body = {"model": model, "messages": messages, "tools": tools, "usage": {"include": True}}
@@ -342,9 +376,12 @@ def hunt(model: str, snap: Snapshot, prompt: str, label: str, out_stem: Path, ar
         if "error" in resp:
             raise RuntimeError(f"OpenRouter error: {resp['error']}")
         usage = resp.get("usage") or {}
-        cost += float(usage.get("cost") or 0)
+        call_cost = Spend.add(usage)
+        cost += call_cost
         tokens_in += int(usage.get("prompt_tokens") or 0)
         tokens_out += int(usage.get("completion_tokens") or 0)
+        say(f"{label} t{turn}: call +${call_cost:.4f} ({int(usage.get('prompt_tokens') or 0):,} in / "
+            f"{int(usage.get('completion_tokens') or 0):,} out tokens), this goal ${cost:.4f}")
         msg = resp["choices"][0]["message"]
         log_msg(msg)
         calls = msg.get("tool_calls") or []
@@ -377,7 +414,7 @@ def hunt(model: str, snap: Snapshot, prompt: str, label: str, out_stem: Path, ar
             log_msg({"role": "tool", "name": name, "content": out[:2000]})
         if result is not None:
             break
-        if forced and turn > args.max_turns + 1:
+        if forced and (turn > args.max_turns + 1 or Spend.over_budget()):
             break
     return {"result": result, "turns": turn, "cost": cost, "tokens_in": tokens_in, "tokens_out": tokens_out}
 
@@ -462,6 +499,9 @@ def main(argv=None) -> int:
     ap.add_argument("--reasoning", choices=["minimal", "low", "medium", "high"],
                     help="OpenRouter reasoning effort, for models that support it")
     ap.add_argument("--temperature", type=float)
+    ap.add_argument("--max-cost", type=float, metavar="USD",
+                    help="stop the run at this OpenRouter spend: running goals are asked to submit, "
+                         "goals not yet started are skipped")
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT, help=f"output root (default {DEFAULT_OUT})")
     args = ap.parse_args(argv)
 
@@ -477,7 +517,10 @@ def main(argv=None) -> int:
     api_key()
 
     selected = goals if args.all else (sweep.load_goals(args.goal) if args.goal else [None])
+    Spend.max_cost = args.max_cost
     info = model_info(args.model)
+    if info:
+        Spend.pricing = info.get("pricing") or {}
     if info is None:
         say(f"warning: {args.model} not found in the OpenRouter model list; trying anyway")
     elif "tools" not in (info.get("supported_parameters") or []):
@@ -506,6 +549,9 @@ def main(argv=None) -> int:
         title = f"{goal['title'] if goal else 'Custom focus'} ({gid})"
         prompt = build_prompt(goal, args.focus, commit)
         stem = run_dir / gid
+        if Spend.over_budget():
+            say(f"{gid}: skipped, --max-cost reached")
+            return gid, "skipped"
         say(f"{gid}: started")
         try:
             run = hunt(args.model, snap, prompt, gid, stem, args)
@@ -526,10 +572,11 @@ def main(argv=None) -> int:
         subprocess.run(["chmod", "-R", "u+w", str(tmp)])
         shutil.rmtree(tmp, ignore_errors=True)
 
-    total = sum(r["cost"] for _, r in runs if r)
     print("\nSummary")
     for gid, r in runs:
-        if r is None:
+        if r == "skipped":
+            print(f"  {gid:<22} skipped (--max-cost reached)")
+        elif r is None:
             print(f"  {gid:<22} FAILED")
         elif r["result"] is None:
             print(f"  {gid:<22} no result submitted")
@@ -537,8 +584,9 @@ def main(argv=None) -> int:
             sevs = [f["severity"] for f in r["result"]["findings"]]
             counts = ", ".join(f"{s}:{sevs.count(s)}" for s in sweep.SEVERITIES if s in sevs) or "none"
             print(f"  {gid:<22} {counts}  -> {run_dir / (gid + '.md')}")
-    print(f"  total cost ${total:.2f}")
-    return 0 if all(r and r["result"] for _, r in runs) else 1
+    print(f"  total spent on OpenRouter this run: {Spend.label()}"
+          + ("  (~ = some calls priced from list prices; OpenRouter did not report cost)" if Spend.estimated else ""))
+    return 0 if all(isinstance(r, dict) and r["result"] for _, r in runs) else 1
 
 
 if __name__ == "__main__":

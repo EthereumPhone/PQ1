@@ -145,5 +145,9 @@ over a `git archive` snapshot of `--ref` (default `HEAD`), so only committed
 files are sent to OpenRouter. It finishes by calling `submit_findings`; after
 `--max-turns` (80) it is forced to submit. Results go to
 `~/pq1-security-sweeps/openrouter/<date>-<commit>-<model>/<goal>.{md,json,transcript.jsonl}`.
+Every log line shows the run's total OpenRouter spend so far (`[spent $0.4213]`),
+and each model call prints its own cost and tokens. `--max-cost 5` stops at $5:
+running goals are asked to submit, goals not yet started are skipped. A `~` means
+OpenRouter didn't report a call's cost and it was priced from the model's list price.
 Useful flags: `--reasoning high` for reasoning models, `--context-chars` to
 fit small-context models (set automatically from the model's context length).
