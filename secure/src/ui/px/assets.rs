@@ -10,12 +10,14 @@
 //! SHA-256 (`ATLAS_ROOT`, generated into `atlas_root.rs` by the bake) and
 //! treats the NS bytes as untrusted until proven:
 //!
-//! * [`verify_atlas`] re-hashes the window with volatile reads and requires
-//!   `ct_eq(ATLAS_ROOT)` through a sentinel gate BEFORE a pixel dialog;
-//! * [`atlas_root_proof`] re-hashes AFTER the dialog, and the sign handler
-//!   refuses to release a signature unless it is `OK_SENTINEL` again — a
-//!   glyph swap during the dialog (an NS world reprogramming its own flash)
-//!   is caught before release, the same way a faulted page is;
+//! * [`verify_atlas`] copies the window into secure RAM (SRAM3), hashes the
+//!   COPY and requires `ct_eq(ATLAS_ROOT)` through a sentinel gate BEFORE a
+//!   pixel dialog; every paint reads the copy, never the flash (#1133: flash
+//!   can be reprogrammed during a dialog and programmed back before a second
+//!   hash, so hashing the flash twice did not bind what was drawn);
+//! * [`atlas_root_proof`] re-hashes the copy AFTER the dialog, and the sign
+//!   handler refuses to release a signature unless it is `OK_SENTINEL` again
+//!   — a faulted or overwritten copy is caught before release;
 //! * the non-dialog painters (status / progress text through the engine)
 //!   use [`atlas`], a once-verified cached view; a bad atlas at boot makes
 //!   them fall back to the legacy glyph blitter and every pixel dialog
@@ -51,17 +53,46 @@ fn ns_image_base() -> u32 {
     crate::NS_FLASH_BASE
 }
 
-/// The fixed window as a slice. The bytes are UNTRUSTED until hashed.
+/// Secure RAM the container is copied into before it is hashed or drawn
+/// (#1133): the start of SRAM3 through its secure alias. SRAM3 (512 KiB) has
+/// no other user, MPCBB3 leaves it secure (reset default), and the SAU does
+/// not cover it, so the non-secure world can neither read nor write it.
+const ATLAS_RAM_BASE: u32 = 0x3004_0000;
+const SRAM3_LEN: usize = 512 * 1024;
+const _: () = assert!(ATLAS_LEN <= SRAM3_LEN);
+
+/// Copy the non-secure window into secure RAM (volatile reads, one pass).
+///
+/// Until 2026-11-10 every frame of a dialog was drawn straight from the
+/// non-secure flash, between a hash before the dialog and a hash after it.
+/// Non-secure exception handlers run while a dialog is up, and flash can be
+/// reprogrammed and then programmed back, so both hashes could pass around
+/// frames drawn with other glyphs. Now the hash and every paint read this
+/// copy, which only the secure world can write.
+#[inline(never)]
+fn load_copy() {
+    let src = ns_image_base().wrapping_add(ATLAS_SLOT_OFFSET) as *const u8;
+    let dst = ATLAS_RAM_BASE as *mut u8;
+    for i in 0..ATLAS_LEN {
+        // SAFETY: `src + i` lies inside the NS flash alias window (bank 2,
+        // always mapped and readable from the secure world; nothing in the
+        // secure world writes it). `dst + i` lies inside SRAM3, which no
+        // linker region, static or stack uses; the only reference ever made
+        // to it is the shared slice `window()` returns, and this function
+        // runs only from `verify_atlas`, on the single secure thread, before
+        // a new view is handed out.
+        unsafe { core::ptr::write_volatile(dst.add(i), core::ptr::read_volatile(src.add(i))) };
+    }
+}
+
+/// The secure-RAM copy as a slice. The bytes are UNTRUSTED until hashed.
 fn window() -> &'static [u8] {
-    let base = ns_image_base().wrapping_add(ATLAS_SLOT_OFFSET) as *const u8;
-    // SAFETY: `[NS_FLASH_BASE + ATLAS_SLOT_OFFSET, +ATLAS_LEN)` lies inside
-    // the STM32U585 NS flash alias (bank 2, `sau::SAU_NS_FLASH_BASE..END`),
-    // which is always mapped and readable from the secure world (the
-    // fw-update image check reads it the same way); nothing in the secure
-    // world ever writes it, and `ATLAS_LEN <= ATLAS_SPAN` keeps the slice
-    // inside the reserved window. The slice's contents are NOT trusted on
-    // address alone — every consumer goes through `atlas_root_proof`.
-    unsafe { core::slice::from_raw_parts(base, ATLAS_LEN) }
+    // SAFETY: `[ATLAS_RAM_BASE, +ATLAS_LEN)` is inside SRAM3 (asserted
+    // above), always mapped, initialised (zero after reset, then
+    // `load_copy`), and written only by `load_copy`. The contents are NOT
+    // trusted on address alone: every consumer goes through
+    // `atlas_root_proof`.
+    unsafe { core::slice::from_raw_parts(ATLAS_RAM_BASE as *const u8, ATLAS_LEN) }
 }
 
 /// A verified view: `data` hashed to `ATLAS_ROOT` and structurally parsed.
@@ -88,15 +119,13 @@ impl AtlasRef {
     }
 }
 
-/// Re-hash the whole window (volatile reads, like the fw-update image check)
-/// and compare with the pinned root: `OK_SENTINEL` iff the NS bytes are the
-/// exact container the secure image was built against.
+/// Re-hash the secure-RAM copy (volatile reads) and compare with the pinned
+/// root: `OK_SENTINEL` iff the bytes the painters read are the exact
+/// container the secure image was built against. It does NOT re-read the
+/// non-secure flash: what is in flash after the copy no longer matters.
 #[inline(never)]
 pub fn atlas_root_proof() -> u32 {
-    let hash = crate::fw_update::verify::hash_flash(
-        ns_image_base().wrapping_add(ATLAS_SLOT_OFFSET),
-        ATLAS_LEN as u32,
-    );
+    let hash = crate::fw_update::verify::hash_flash(ATLAS_RAM_BASE, ATLAS_LEN as u32);
     crate::fi::check_true_into_sentinel(|| {
         core::hint::black_box(bool::from(hash[..].ct_eq(&ATLAS_ROOT[..])))
     })
@@ -127,6 +156,7 @@ pub fn verify_atlas() -> Result<AtlasRef, ()> {
 
 #[inline(never)]
 fn verify_atlas_inner() -> Result<AtlasRef, ()> {
+    load_copy();
     crate::fi::scrub_sentinel_register();
     if atlas_root_proof() != crate::fi::OK_SENTINEL {
         return Err(());
@@ -147,7 +177,7 @@ const BOOT_BAD: u8 = 2;
 /// Once-verified verdict for the non-dialog painters.
 static BOOT_STATE: AtomicU8 = AtomicU8::new(BOOT_UNKNOWN);
 
-/// A FRESHLY VERIFIED view — re-hashes the NS window on every call, so the
+/// A FRESHLY VERIFIED view — re-copies and re-hashes the NS window on every call, so the
 /// bytes are the authority rather than a cached verdict. This is what every
 /// paint the user READS AND ACTS ON must use, including `lcd::paint_legacy`,
 /// which is where `ui::confirm`'s pages land under `ui-px`.
