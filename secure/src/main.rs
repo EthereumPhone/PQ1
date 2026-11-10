@@ -154,6 +154,9 @@ mod board;
 mod crypto;
 mod fi;
 /// Zero the dead part of the secure stack (DVT1 row 5.5).
+/// RAM-resident secure entry points that restore the flash timing (#1132).
+#[cfg(all(not(test), feature = "stm32u585"))]
+mod flash_guard;
 mod stack_guard;
 mod stack_scrub;
 /// Pre-drawn fresh-TRNG pool for FI delay lengths (#832).
@@ -1056,7 +1059,13 @@ fn setup_systick() {
     // the UPPER bits of each byte. 0xFF is the lowest priority for any
     // implemented width, so it stays correct if that ever changes; 0x00 is the
     // highest. Bits [15:0] (DebugMonitor) are preserved.
-    const SHPR3_PENDSV_LOWEST: u32 = 0xFF << 16;
+    //
+    // #1132: "lowest" now means lowest among SECURE priorities, 0x70. With
+    // `AIRCR.PRIS` every non-secure exception sits at 0x80 or above, so at
+    // 0xFF a non-secure interrupt could preempt the PendSV re-unlock dialog
+    // and change the flash latency under it; and a gateway call now runs with
+    // BASEPRI_S = 0x80 (`flash_guard`), which would have masked PendSV.
+    const SHPR3_PENDSV_LOWEST: u32 = 0x70 << 16;
     const SHPR3_SYSTICK_HIGHEST: u32 = 0x00 << 24;
     ARCH.shpr3
         .modify(|v| (v & 0x0000_FFFF) | SHPR3_PENDSV_LOWEST | SHPR3_SYSTICK_HIGHEST);
@@ -5645,10 +5654,11 @@ fn PendSV() {
 /// cortex-m-rt's default NMI handler is an infinite loop with no wipe:
 /// an NMI would park the CPU with `master_secret`, the reconstructed
 /// entropy, and the cached slot `SigningKey` still live in secure SRAM.
-/// **Reachability (honest): today NO NMI source is armed** — enabling
-/// CSS/ECCD-NMI is tracked separately (`#21-tamp-css_pvd`) — so this
-/// fires only on a fault-injection glitch, a bug, or when that work
-/// lands. The response is deliberately the HardFault one: wipe the SRAM
+/// **Reachability (corrected 2026-11-10, #1136):** the flash double-ECC NMI
+/// (`FLASH_ECCR.ECCD`) is always armed on this part; it has no enable bit.
+/// The non-secure world can raise it at will, by reading a torn quad-word in
+/// its own flash (seen on EVT-3D21), so treat this handler as reachable from
+/// non-secure code. CSS is still not enabled (`#21-tamp-css_pvd`). The response is deliberately the HardFault one: wipe the SRAM
 /// secret caches, then `sys_reset()` (startup re-zeroes `.bss`; the
 /// abnormal-reset path re-locks). NOT the destructive SE wipe — see the
 /// HardFault rationale below.

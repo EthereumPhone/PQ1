@@ -33,7 +33,9 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 
 unsafe extern "C" {
+    #[link_name = "nscram_is_unlocked"]
     fn nsc_is_unlocked() -> u32;
+    #[link_name = "nscram_tzic_status"]
     fn nsc_tzic_status() -> u32;
 }
 

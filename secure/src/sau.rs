@@ -750,6 +750,19 @@ mod stm32 {
     const EXTI_SECCFGR1_ALL: u32 = 0x00FF_FFFF;
     /// EXTI_LOCKR @ +0x70: LOCK freezes EXTI_SECCFGR/PRIVCFGR until reset.
     const EXTI_LOCKR_LOCK: u32 = 1 << 0;
+    /// SYSCFG_SECCFGR @ SYSCFG + 0x00: SYSCFGSEC (0), CLASSBSEC (1), FPUSEC (3).
+    /// Left 0 until 2026-11-10 (#1134): on EVT-3D21 non-secure code wrote
+    /// CFGR1, the I/O compensation cell (CCCSR), FPUIMR and CNSLCKR, and
+    /// cleared RCC_APB3ENR.SYSCFGEN, the clock `lock_security_config` leaves
+    /// running so its lock bits stay readable. The non-secure image has no
+    /// SYSCFG user. With SYSCFGSEC set the RCC enable/reset bits are secure too.
+    /// Re-probed on EVT-3D21 with this image: CCCSR, CCCR, FPUIMR, CFGR2, the
+    /// CFGR1 I2C fast-mode-plus bits and SYSCFGEN are blocked. CFGR1.BOOSTEN
+    /// (the analog-switch booster) is still non-secure-writable: it follows
+    /// the ADC's attribution, and ADC1/ADC4 are not secured here.
+    const SYSCFG_S: u32 = 0x5600_0400;
+    const SYSCFG_SECCFGR_IMAGE: u32 = (1 << 0) | (1 << 1) | (1 << 3);
+    const RCC_APB3ENR_SYSCFGEN_BIT: u32 = 1 << 1; // RCC_APB3ENR @ +0xA8
 
     /// Secure RCC, PWR, TAMP, RTC and EXTI (DVT1 row 3.5). Called from
     /// [`super::init`] after the TZSC image and before the lock.
@@ -772,12 +785,13 @@ mod stm32 {
         let tamp_seccfgr = unsafe { Reg32::new(TAMP_S + 0x20) };
         let exti_seccfgr1 = unsafe { Reg32::new(EXTI_S + 0x14) };
         let exti_lockr = unsafe { Reg32::new(EXTI_S + 0x70) };
+        let syscfg_seccfgr = unsafe { Reg32::new(SYSCFG_S) };
 
         // Prerequisites: PWR bus clock (already on from `rcc::init`, set
         // again so this function stands alone), RTC/TAMP APB clock, and the
         // backup-domain write enable.
         rcc_ahb3enr.set_bits(RCC_AHB3ENR_PWREN);
-        rcc_apb3enr.set_bits(RCC_APB3ENR_RTCAPBEN);
+        rcc_apb3enr.set_bits(RCC_APB3ENR_RTCAPBEN | RCC_APB3ENR_SYSCFGEN_BIT);
         cortex_m::asm::dsb();
         pwr_dbpr.set_bits(PWR_DBPR_DBP);
         cortex_m::asm::dsb();
@@ -791,6 +805,7 @@ mod stm32 {
         // `set_bits`, not `write`: `hw::lcd_te` may already have claimed its
         // TE line on builds whose `ui::init` runs before SAU.
         exti_seccfgr1.set_bits(EXTI_SECCFGR1_ALL);
+        syscfg_seccfgr.write(SYSCFG_SECCFGR_IMAGE);
         cortex_m::asm::dsb();
 
         verify_or_halt(rcc_seccfgr.read(), RCC_SECCFGR_IMAGE);
@@ -798,6 +813,7 @@ mod stm32 {
         verify_or_halt(rtc_seccfgr.read(), RTC_SECCFGR_IMAGE);
         verify_or_halt(tamp_seccfgr.read() & !TAMP_SECCFGR_BHKLOCK, TAMP_SECCFGR_IMAGE);
         verify_or_halt(exti_seccfgr1.read(), EXTI_SECCFGR1_ALL);
+        verify_or_halt(syscfg_seccfgr.read(), SYSCFG_SECCFGR_IMAGE);
 
         // Freeze the EXTI security attribution only after it reads back.
         exti_lockr.set_bits(EXTI_LOCKR_LOCK);
@@ -1031,6 +1047,11 @@ pub fn init() {
     #[cfg(not(feature = "stm32u585"))]
     qemu::configure_mpc();
 
+    // Secure vectors to RAM and the good FLASH_ACR recorded, before VTOR_S
+    // is locked below and long before the non-secure world runs (#1132).
+    #[cfg(feature = "stm32u585")]
+    crate::flash_guard::install();
+
     #[cfg(feature = "stm32u585")]
     stm32::configure_gtzc();
 
@@ -1065,6 +1086,14 @@ pub fn init() {
         ((veneer_limit + 0xFF) & 0xFFFF_FF00) - 1
     } else {
         veneer_base + 0xFF
+    };
+    // STM32U585: the NSC region is the RAM gateway entries, exactly (#1132).
+    // The flash veneers above are deliberately left OUT of any NSC region.
+    #[cfg(feature = "stm32u585")]
+    let (veneer_base, nsc_end) = {
+        let _ = (veneer_base, nsc_end);
+        let (base, limit) = crate::flash_guard::nsc_region();
+        (base, limit - 1)
     };
     configure_sau_region(1, veneer_base, nsc_end, true);
 

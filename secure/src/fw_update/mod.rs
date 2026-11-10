@@ -480,6 +480,10 @@ pub fn running_slot() -> Slot {
         // SAFETY: SCB_VTOR is the always-present core VTOR register; a plain
         // volatile read of it has no side effects and never faults.
         let vtor = unsafe { core::ptr::read_volatile(SCB_VTOR) };
+        // VTOR_S points at the RAM table once `flash_guard::install` has run
+        // (#1132); it kept the flash base the image booted from.
+        #[cfg(all(not(test), feature = "stm32u585"))]
+        let vtor = crate::flash_guard::boot_vector_base(vtor);
         if vtor == flash::SLOT_A_SECURE_ADDR {
             return Slot::A;
         }

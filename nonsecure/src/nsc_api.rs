@@ -165,65 +165,98 @@ mod transport {
 #[cfg(feature = "stm32u585")]
 mod transport {
     extern "C" {
+        #[link_name = "nscram_get_remaining_attempts"]
         fn nsc_get_remaining_attempts() -> u32;
+        #[link_name = "nscram_request_unlock"]
         fn nsc_request_unlock() -> u32;
+        #[link_name = "nscram_sign_userop"]
         fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        #[link_name = "nscram_sign_userop_batch"]
         fn nsc_sign_userop_batch(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+        #[link_name = "nscram_is_unlocked"]
         fn nsc_is_unlocked() -> u32;
+        #[link_name = "nscram_lock"]
         fn nsc_lock() -> u32;
+        #[link_name = "nscram_get_wallet_address"]
         fn nsc_get_wallet_address(out_ptr: u32, account_index: u32, show: u32) -> u32;
+        #[link_name = "nscram_get_init_code"]
         fn nsc_get_init_code(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+        #[link_name = "nscram_sign_offchain"]
         fn nsc_sign_offchain(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+        #[link_name = "nscram_offchain_status"]
         fn nsc_offchain_status(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+        #[link_name = "nscram_offchain_sync"]
         fn nsc_offchain_sync(in_ptr: u32, in_len: u32) -> u32;
 
         // Firmware-update veneers.
+        #[link_name = "nscram_fw_begin"]
         fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32;
+        #[link_name = "nscram_fw_chunk"]
         fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32) -> u32;
+        #[link_name = "nscram_fw_commit"]
         fn nsc_fw_commit() -> u32;
+        #[link_name = "nscram_fw_status"]
         fn nsc_fw_status(out_ptr: u32) -> u32;
+        #[link_name = "nscram_fw_abort"]
         fn nsc_fw_abort() -> u32;
 
         #[cfg(feature = "e2e-test")]
+        #[link_name = "nscram_test_pin_lockout"]
         fn nsc_test_pin_lockout() -> u32;
 
         #[cfg(feature = "e2e-test")]
+        #[link_name = "nscram_tzic_status"]
         fn nsc_tzic_status() -> u32;
 
         // Prodtest CMSE veneers. The secure side declares these under
         // `#[cfg(feature = "prodtest")]`; the NS side mirrors the gate
         // so non-prodtest builds don't link against missing symbols.
+        #[link_name = "nscram_get_pin_attempt_log"]
         fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_get_id"]
         fn nsc_prodtest_get_id(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_display_pattern"]
         fn nsc_prodtest_display_pattern(in_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_saes_selftest"]
         fn nsc_prodtest_saes_selftest(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_bhk_selftest"]
         fn nsc_prodtest_bhk_selftest(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_flash_rw"]
         fn nsc_prodtest_flash_rw(in_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_trng_sample"]
         fn nsc_prodtest_trng_sample(in_ptr: u32, out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_optiga_handshake"]
         fn nsc_prodtest_optiga_handshake(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_se050_handshake"]
         fn nsc_prodtest_se050_handshake(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_usb_loopback"]
         fn nsc_prodtest_usb_loopback(in_ptr: u32, out_ptr: u32, n: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_button_test"]
         fn nsc_prodtest_button_test(out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_rgb_test"]
         fn nsc_prodtest_rgb_test(in_ptr: u32, out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_rgb_osd"]
         fn nsc_prodtest_rgb_osd(in_ptr: u32, out_ptr: u32) -> u32;
         #[cfg(feature = "prodtest")]
+        #[link_name = "nscram_prodtest_rng_config"]
         fn nsc_prodtest_rng_config(out_ptr: u32) -> u32;
 
         // IWDG heartbeat registration. Gated on `iwdg` on both sides so
         // a non-iwdg build links no dangling veneer symbol.
         #[cfg(feature = "iwdg")]
+        #[link_name = "nscram_register_heartbeat"]
         fn nsc_register_heartbeat(addr: u32) -> u32;
     }
 

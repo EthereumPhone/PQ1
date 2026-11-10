@@ -1378,8 +1378,8 @@ fn negative_nmi_handler_zeroizes_and_resets() {
     // F33/RUN-5: without a named NMI handler, cortex-m-rt's default is
     // an infinite loop — an NMI would park the CPU with secrets
     // resident. The handler must exist and follow the HardFault policy:
-    // zeroize the SRAM secret caches, then sys_reset. (Today no NMI
-    // source is armed; CSS/ECCD-NMI enabling is #21-tamp-css_pvd.)
+    // zeroize the SRAM secret caches, then sys_reset. (The flash ECCD NMI
+    // is always armed and reachable from non-secure code, #1136.)
     let nmi_start = MAIN_SRC
         .find("unsafe fn NonMaskableInt()")
         .expect("NMI handler must exist (F33/RUN-5)");
@@ -2153,7 +2153,7 @@ fn negative_pendsv_priority_is_programmed_not_merely_asserted() {
         "#729: SHPR3 must be mapped — it is where PendSV/SysTick priorities live"
     );
     assert!(
-        MAIN_SRC.contains("const SHPR3_PENDSV_LOWEST: u32 = 0xFF << 16;"),
+        MAIN_SRC.contains("const SHPR3_PENDSV_LOWEST: u32 = 0x70 << 16;"),
         "#729: PendSV must be given the LOWEST priority (SHPR3[23:16])"
     );
     assert!(
@@ -2255,7 +2255,7 @@ fn negative_system_controllers_secured_rcc_pwr_tamp_rtc_exti() {
     // otherwise those writes are silently dropped and the readback halts.
     let body = fn_body(SAU_SRC, "pub fn secure_system_controllers()", "\n    }\n");
     let pos = |n: &str| body.find(n).unwrap_or_else(|| panic!("missing `{n}`"));
-    assert!(pos("rcc_apb3enr.set_bits(RCC_APB3ENR_RTCAPBEN);") < pos("rtc_seccfgr.write("));
+    assert!(pos("rcc_apb3enr.set_bits(RCC_APB3ENR_RTCAPBEN | RCC_APB3ENR_SYSCFGEN_BIT);") < pos("rtc_seccfgr.write("));
     assert!(pos("pwr_dbpr.set_bits(PWR_DBPR_DBP);") < pos("tamp_seccfgr.modify("));
     assert!(pos("pwr_dbpr.set_bits(PWR_DBPR_DBP);") < pos("pwr_seccfgr.write("));
     assert!(

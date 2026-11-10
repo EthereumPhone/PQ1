@@ -18,17 +18,29 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use sphincs_tz_shared::MAX_SIGN_RESPONSE_LEN;
 
 unsafe extern "C" {
+    #[link_name = "nscram_is_unlocked"]
     fn nsc_is_unlocked() -> u32;
+    #[link_name = "nscram_get_wallet_address"]
     fn nsc_get_wallet_address(out_ptr: u32, account_index: u32, show: u32) -> u32;
+    #[link_name = "nscram_get_init_code"]
     fn nsc_get_init_code(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+    #[link_name = "nscram_sign_offchain"]
     fn nsc_sign_offchain(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+    #[link_name = "nscram_offchain_status"]
     fn nsc_offchain_status(in_ptr: u32, out_ptr: u32, in_len: u32) -> u32;
+    #[link_name = "nscram_offchain_sync"]
     fn nsc_offchain_sync(in_ptr: u32, in_len: u32) -> u32;
+    #[link_name = "nscram_sign_userop"]
     fn nsc_sign_userop(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+    #[link_name = "nscram_sign_userop_batch"]
     fn nsc_sign_userop_batch(payload_ptr: u32, sig_out_ptr: u32, total_len: u32) -> u32;
+    #[link_name = "nscram_fw_begin"]
     fn nsc_fw_begin(manifest_ptr: u32, manifest_len: u32) -> u32;
+    #[link_name = "nscram_fw_chunk"]
     fn nsc_fw_chunk(chunk_ptr: u32, chunk_len: u32) -> u32;
+    #[link_name = "nscram_fw_status"]
     fn nsc_fw_status(out_ptr: u32) -> u32;
+    #[link_name = "nscram_get_pin_attempt_log"]
     fn nsc_get_pin_attempt_log(out_ptr: u32) -> u32;
 }
 
