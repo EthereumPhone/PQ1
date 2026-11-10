@@ -94,6 +94,7 @@ mod branch;
 mod clock;
 #[cfg(feature = "devunit-ab")]
 mod devunit;
+mod ecc_nmi;
 mod fi;
 // `px-fingerprint` paints with `px_fprint`; the 5x8 text grid stays for
 // the default build and `lcd-test`.
