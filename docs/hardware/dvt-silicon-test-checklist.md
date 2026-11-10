@@ -351,7 +351,7 @@ neither secure element was addressed. OTP blank before and after (`9f56cda7…`)
 - **Not run:** any dual-SE image (it re-provisions the test wallet on both chips; owner OK pending),
   `iota2`, and a panel (this unit has none, so #1133 was not seen on glass). The `toctou` (3.11) and
   `idle-hold` (13.10) probe images were not re-run: their premise, a non-secure handler running
-  during a gateway call, no longer exists, and they need the same new verdict 3.10 got.
+  during a gateway call, no longer exists, and they need the same new verdict 3.10 got (#1145).
 
 | Row | Result |
 |---|---|
