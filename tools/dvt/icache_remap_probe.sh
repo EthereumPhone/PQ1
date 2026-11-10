@@ -29,6 +29,8 @@ T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 cat > "$T/p.tcl" <<'TCL'
 init
+# Bench images print over semihosting; without a host their BKPTs park the core.
+arm semihosting enable
 set tries 0
 while {1} {
   halt
@@ -37,7 +39,7 @@ while {1} {
   set dscsr [lindex [mdw 0xE000EE08] 1]
   if {![expr {("0x$dscsr" >> 16) & 1}]} { break }
   incr tries
-  if {$tries > 20} { echo "PROBE: never caught the core in the non-secure state"; shutdown error }
+  if {$tries > 240} { echo "PROBE: never caught the core in the non-secure state"; shutdown error }
   resume
   sleep 250
 }
@@ -58,7 +60,7 @@ echo "PROBE: after   ICACHE_CR=[lindex [mdw 0x50030400] 1] CRR0=[lindex [mdw 0x5
 reset run
 shutdown
 TCL
-out=$(timeout 60 openocd -f interface/stlink.cfg -f target/stm32u5x.cfg -f "$T/p.tcl" 2>&1 | grep "^PROBE")
+out=$(timeout 120 openocd -f interface/stlink.cfg -f target/stm32u5x.cfg -f "$T/p.tcl" 2>&1 | grep "^PROBE")
 echo "$out"
 crr=$(echo "$out" | sed -n 's/.*after .*CRR0=\([0-9a-f]*\).*/\1/p')
 cr=$(echo "$out" | sed -n 's/.*after   ICACHE_CR=\([0-9a-f]*\).*/\1/p')
