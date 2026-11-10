@@ -330,8 +330,9 @@ Ran:
 ## EVT-3D21 run 2026-11-10 — TrustZone fixes #1131 / #1132 / #1133 — summary
 
 **UPDATE 2026-11-10: the open parts of #1131, #1132 and #1133 implemented and run on EVT-3D21**
-(master `1470cc581`). ST-LINK V3SET over J210. Claude Code, no human at the bench, mock-SE images only:
-neither secure element was addressed. OTP blank before and after (`9f56cda7…`).
+(master `1470cc581`). ST-LINK V3SET over J210. Claude Code, no human at the bench. Mock-SE images
+for everything except the last leg, a dual-SE run the owner approved the same evening (below). OTP
+blank before and after (`9f56cda7…`).
 - **What changed in the firmware.** (1) #1131: the TZSC image is deny-by-default: every GTZC1 and
   GTZC2 TZSC peripheral secure except OTG FS, both controllers locked, GTZC2's TZIC armed. (2) #1132:
   the RAM guard writes the boot `FLASH_ACR` back and reads it back on every entry, and empties ICACHE
@@ -348,8 +349,13 @@ neither secure element was addressed. OTP blank before and after (`9f56cda7…`)
   byte-identical to the image the final runs used), enumerating `1209:7051` and signing. Option
   bytes identical to the 12:15 backup. The pre-session flash is
   `~/Documents/PQ1/evt-backup-2026-11-10/flash-full.bin` (taken 12:15, before the morning fixes).
-- **Not run:** any dual-SE image (it re-provisions the test wallet on both chips; owner OK pending),
-  `iota2`, and a panel (this unit has none, so #1133 was not seen on glass). The `toctou` (3.11) and
+- **Dual-SE leg (owner OK, same evening).** Both chips were wiped and re-provisioned with the bench
+  test wallet (fixed e2e words, PIN `00000000`, `otp-hardcoded-master-key`) four times, by the
+  `e2e-test` pre-clean that runs at every boot of a dual-SE e2e image. Images carried
+  `optiga-hw-counter` because this unit's F1D0 is `Execute = LUC(E120)` (burn-down F3): an image
+  without it never resets E120 and would run it to its limit of 32. Pages 124–127 were made
+  appendable first (erase, page 125's three bench-salt records rewritten, byte-identical).
+- **Not run:** `iota2`, and a panel (this unit has none, so #1133 was not seen on glass). The `toctou` (3.11) and
   `idle-hold` (13.10) probe images were not re-run: their premise, a non-secure handler running
   during a gateway call, no longer exists, and they need the same new verdict 3.10 got (#1145).
 
@@ -363,6 +369,8 @@ neither secure element was addressed. OTP blank before and after (`9f56cda7…`)
 | 3.16 | ✅ non-secure writes to the GTZC clock enables, both TZSC attribution and lock registers, TZIC2 and `SYSCFG_CFGR1.BOOSTEN` are ignored; OTG stays non-secure-writable |
 | 13.11 | ◐ atlas copy (#1133): hashes to the pinned root on silicon; a one-bit change to the copy at either pre-release proof ends the sign in `0x6F00`; not seen on glass |
 | dev-unit update | ✅ `devunit-ab` + `ui-px` bench release: SWD first flash, signs from slot A, USB update to slot B (564 KB, 76 s), signs from slot B |
+| dual-SE (#1132) | ✅ `dual-se,optiga-hw-counter,ui-noop,usb,iwdg,e2e-test` over USB: sign; then 3 × LOCK → UNLOCK (0.7 s each, `gated_unlock` inside a gateway call, both chips verify, attempts back to 10) → sign; then 140 s idle, the PendSV re-unlock, and a sign. No reset, still enumerated |
+| dual-SE e2e runner | ◐ `dual-se,optiga-hw-counter,ui-lcd,debug-log,e2e-test` under `probe-rs run`: pre-clean (E120 reset to 0, SE050 admin wipe), provision, 25 signs through the gateway, then the runner stops at Scenario 5p. Not from this work and not from the chips: the mock-SE image of `5d1d1bf1c` stops at the same line (#1147) |
 
 **Sign times, old guard against new (USB, deploy sign, wall clock):** `ui-noop` image 8.8–11.0 s
 before, 8.5–11.2 s after (n = 3 / 10). `ui-px` dev-unit image 30.9–36.9 s on the unmodified commit,
@@ -1027,4 +1035,5 @@ Append one line per run (newest last): `date · unit · commit · target/feature
 - 2026-10-19 (afternoon) · EVT-3D21 · `43dad543` · burn-down Part A (intake, SE baselines, E140 factory PBS backup) and B1 regression set (16 targets) · ✅ A1–A4; B1 all PASS except `ns-ptr-probe` (same 5 known rows as 10-18); factory PBS = Infineon public sample · `~/Documents/PQ1/evt-burn/{A,B}/`
 - 2026-10-19 (afternoon) · EVT-3D21 · `43dad543`→`e02471e9` · burn-down Part F: pairing via `se-lcd-diag`; `dual-se-multi-unlock-e2e`; `optiga-ac-probe`; `optiga-hw-counter-e2e`; `pin-gate-hw-counter-e2e`; `pin-gate-wipe-e2e`; `se050-stress-destructive`; `se050-admin-extract-attempt-e2e` (7.2, 8.2, 7.3, 7.4, 7.5, 8.3) · ✅ all PASS after two fixes (`e02471e9`: OPTIGA `init()` kept `shield.active` across a chip reset; `optiga-ac-probe` did not compile); stress 23/0/0; no `send_command REFUSED` · `~/Documents/PQ1/evt-burn/F/`
 - 2026-11-10 · EVT-3D21 · `5d1d1bf1c` (baseline) then `1470cc581` · `build-hw-usb-test`, `gtzc-enforcement-hw` (63 probes), `fwup-transport-hw-iwdg`, `nested-gate-test-hw`, `tools/dvt/{flash_acr_stress.sh,icache_remap_probe.sh}`, non-secure write probes, `devunit-ab` + `ui-px` bench releases 26.11.10.1–.4 (SWD first flash, USB update A to B), atlas breakpoint runs (3.1, 3.10, 3.13–3.16, 13.11) · ✅ all PASS; ◐ 13.11 (no panel); page 123 repaired first (full-page restore, every sign `0x6F00`) · `~/Documents/PQ1/evt-backup-2026-11-10/run-afternoon/`
-- **EVT-3D21 state (end of the 11-10 session):** RDP 0 (`0xAA`), TZEN=1, SECWM1 0/0x7F, SECWM2 0x7F/0, SECBOOTADD0 0x180000, OTP blank (`9f56cda7…`). Flash = the `build-hw-usb-test` image of `1470cc581` (monolithic, mock-SE), enumerating and signing; page 123 erased and rewritten with its records, then appended to by this session's signs. Neither SE written.
+- 2026-11-10 (evening, owner OK) · EVT-3D21 · `211f85e1f` · secure `dual-se,optiga-hw-counter,ui-lcd,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,board-pq1` + NS `e2e-test` under `probe-rs run`; then secure `dual-se,optiga-hw-counter,ui-noop,usb,iwdg,e2e-test,stm32u585,otp-hardcoded-master-key,board-pq1` + NS `usb,iwdg`, driven over HID (LOCK / UNLOCK / sign × 3, 140 s idle) · ✅ USB leg PASS; ◐ e2e runner stops at Scenario 5p on every hardware image, `5d1d1bf1c` included (#1147) · `run-afternoon/{dual-se,dual-se-usb,e2e-ab}/`
+- **EVT-3D21 state (end of the 11-10 session):** RDP 0 (`0xAA`), TZEN=1, SECWM1 0/0x7F, SECWM2 0x7F/0, SECBOOTADD0 0x180000, OTP blank (`9f56cda7…`). Flash = the `build-hw-usb-test` image of `1470cc581` (monolithic, mock-SE), enumerating and signing. Pages 123–127 were erased and rewritten with their records (appendable again); page 123 now holds 140 records from this session's signs, page 124 is empty (10 attempts), page 125 holds the 48 B bench-salt record. **Both SEs were written:** wiped and re-provisioned four times with the bench test wallet (fixed e2e words, PIN `00000000`), hw-counter variant; OPTIGA E120 reset to 0 by each pre-clean and by each correct unlock; SE050 `0x7B10_0001..3` and the UserID re-created. Stale `0x7B0A_0000`, `0x7B0A_00A0` and `0x7B5E_00A0` are still there (delete refused, as before).
