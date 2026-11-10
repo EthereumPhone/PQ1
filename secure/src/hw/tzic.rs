@@ -33,6 +33,12 @@ use crate::hw::mmio::{Reg32, RoReg32};
 pub const GTZC_IRQN: u32 = 8;
 
 const TZIC_BASE: u32 = 0x5003_2800;
+/// GTZC2 TZIC (secure alias; STM32U585 SVD `SEC_GTZC2_TZIC`). Same register
+/// layout as GTZC1's, with two banks: bank 1 mirrors GTZC2 `TZSC_SECCFGR1`
+/// (SPI3, LPUART1, I2C3, LPTIM1/3/4, OPAMP, COMP, ADC4, VREFBUF, DAC1, ADF1),
+/// bank 2 is the system group (SYSCFG, RTC, TAMP, PWR, RCC, LPDMA1, EXTI,
+/// TZSC2, TZIC2, SRAM4, MPCBB4). Its events raise the same NVIC line.
+const TZIC2_BASE: u32 = 0x5602_3400;
 
 struct Regs {
     ier1: Reg32,
@@ -49,6 +55,12 @@ struct Regs {
     fcr4: Reg32,
     nvic_iser0: Reg32,
     nvic_icpr0: Reg32,
+    t2_ier1: Reg32,
+    t2_ier2: Reg32,
+    t2_sr1: RoReg32,
+    t2_sr2: RoReg32,
+    t2_fcr1: Reg32,
+    t2_fcr2: Reg32,
 }
 
 // SAFETY: each address is a real, 4-byte-aligned STM32U585 MMIO
@@ -72,6 +84,12 @@ const REG: Regs = unsafe {
         fcr4: Reg32::new(TZIC_BASE + 0x2C),
         nvic_iser0: Reg32::new(0xE000_E100),
         nvic_icpr0: Reg32::new(0xE000_E280),
+        t2_ier1: Reg32::new(TZIC2_BASE + 0x00),
+        t2_ier2: Reg32::new(TZIC2_BASE + 0x04),
+        t2_sr1: RoReg32::new(TZIC2_BASE + 0x10),
+        t2_sr2: RoReg32::new(TZIC2_BASE + 0x14),
+        t2_fcr1: Reg32::new(TZIC2_BASE + 0x20),
+        t2_fcr2: Reg32::new(TZIC2_BASE + 0x24),
     }
 };
 
@@ -86,35 +104,48 @@ static mut VIOLATION_COUNT: u32 = 0;
 /// which peripheral triggered the most recent IRQ even after FCR has
 /// cleared the live SR).
 static mut LAST_SR: [u32; 4] = [0; 4];
+/// The same snapshot for GTZC2's two banks.
+static mut LAST_SR2: [u32; 2] = [0; 2];
 
-/// Test-only: enable the AHB2 clocks for AES, PKA, SAES so the
-/// `gtzc-test` validation driver can exercise GTZC enforcement on
-/// all three. Without their clocks running, those peripherals are
-/// not present on the bus matrix: NS reads RAZ via the default-
-/// no-responder path and TZIC never fires, indistinguishable from
-/// a successful block. HASH and RNG are already clocked by boot
-/// init (HASH self-test + TRNG init), so this only adds the three
-/// that the production firmware never enables.
+/// Test-only: enable the bus clocks the GTZC enforcement test needs.
 ///
-/// Gated on `e2e-test`. Production firmware leaves these clocks
-/// off by design — wasted power + unnecessary attack surface for
-/// peripherals nothing in the secure world currently drives.
+/// Without its clock a peripheral is not present on the bus matrix: a
+/// non-secure read is answered by the default no-responder path, reads 0 and
+/// raises no TZIC event, which looks exactly like a successful block.
 ///
-/// RCC_AHB2ENR1 bit positions per CMSIS `stm32u585xx.h`:
-/// AES=16, PKA=19, SAES=20. Also CRS (APB1ENR1 bit 24), secured in TZSC
-/// since the DVT1 row 11.2 fix.
+/// * Plain `e2e-test` images: AES, PKA, SAES and CRS only, as before #1131
+///   (HASH and RNG are clocked by boot init). Everything else stays as the
+///   drivers left it, so a bench image keeps the clock tree a shipping image
+///   has.
+/// * `gtzc-probe-clocks` (the `make gtzc-enforcement-hw` image): every
+///   peripheral in GTZC1 `TZSC_SECCFGR1..3` and GTZC2 `TZSC_SECCFGR1`. Masks
+///   generated from the `RCC_*ENR` fields of the STM32U585 SVD; OTG, which is
+///   non-secure, is not in them. IWDG and ICACHE have no enable bit.
 #[cfg(feature = "e2e-test")]
 pub fn enable_test_target_clocks() {
-    // RCC is on AHB3 at `0x5602_0C00`; AHB2ENR1 is offset `0x8C`.
-    // SAFETY: real 4-byte-aligned MMIO register, owned by the
-    // single-threaded boot path.
-    let rcc_ahb2enr1 = unsafe { Reg32::new(0x5602_0C00 + 0x8C) };
-    rcc_ahb2enr1.set_bits((1 << 16) | (1 << 19) | (1 << 20));
-    // CRS (APB1ENR1 @ 0x9C, CRSEN = bit 24): clocked by `hw::usb_hw` on USB
-    // images only, and the gtzc image has no USB.
-    // SAFETY: real 4-byte-aligned MMIO register, as above.
-    let rcc_apb1enr1 = unsafe { Reg32::new(0x5602_0C00 + 0x9C) };
-    rcc_apb1enr1.set_bits(1 << 24);
+    // RCC is on AHB3 at `0x5602_0C00`.
+    const RCC: u32 = 0x5602_0C00;
+    #[cfg(not(feature = "gtzc-probe-clocks"))]
+    const CLOCKS: [(u32, u32); 2] = [
+        (0x8C, (1 << 16) | (1 << 19) | (1 << 20)), // AHB2ENR1: AES, PKA, SAES
+        (0x9C, 1 << 24),                           // APB1ENR1: CRS
+    ];
+    #[cfg(feature = "gtzc-probe-clocks")]
+    const CLOCKS: [(u32, u32); 8] = [
+        (0x88, 0x4007_100E), // AHB1ENR: CORDIC, FMAC, MDF1, CRC, TSC, RAMCFG, DMA2D, DCACHE1
+        (0x8C, 0x183F_1400), // AHB2ENR1: ADC12, DCMI, AES, HASH, RNG, PKA, SAES, OCTOSPIM, SDMMC1/2
+        (0x90, 0x0000_0111), // AHB2ENR2: FSMC, OCTOSPI1, OCTOSPI2
+        (0x94, 0x0000_0460), // AHB3ENR: ADC4, DAC1, ADF1
+        (0x9C, 0x017E_483F), // APB1ENR1: TIM2..7, WWDG, SPI2, USART2/3, UART4/5, I2C1/2, CRS
+        (0xA0, 0x0080_0222), // APB1ENR2: I2C4, LPTIM2, FDCAN1, UCPD1
+        (0xA4, 0x0067_7800), // APB2ENR: TIM1, SPI1, TIM8, USART1, TIM15/16/17, SAI1/2
+        (0xA8, 0x0010_F8E0), // APB3ENR: SPI3, LPUART1, I2C3, LPTIM1/3/4, OPAMP, COMP, VREFBUF
+    ];
+    for (off, mask) in CLOCKS {
+        // SAFETY: real 4-byte-aligned RCC enable registers on the secure
+        // alias, owned by the single-threaded boot path.
+        unsafe { Reg32::new(RCC + off) }.set_bits(mask);
+    }
     cortex_m::asm::dsb();
 }
 
@@ -147,8 +178,20 @@ pub fn configure(seccfgr1: u32, seccfgr2: u32, seccfgr3: u32, ier4_mask: u32) {
     REG.nvic_iser0.write(1 << GTZC_IRQN);
 }
 
-/// GTZC1 illegal-access IRQ handler. Read all four SRs, snapshot
-/// them, write-1-to-clear via FCR, bump the counter. Under
+/// Arm GTZC2's TZIC. `ier1` is the GTZC2 `TZSC_SECCFGR1` image (#1131);
+/// `ier2` selects from the system group (`sau` passes LPDMA1 only). Call
+/// after [`configure`]: the NVIC line is shared and already unmasked there,
+/// and [`on_violation`] reads and clears both controllers.
+pub fn configure_tzic2(ier1: u32, ier2: u32) {
+    REG.t2_ier1.write(ier1);
+    REG.t2_ier2.write(ier2);
+    REG.t2_fcr1.write(0xFFFF_FFFF);
+    REG.t2_fcr2.write(0xFFFF_FFFF);
+    cortex_m::asm::dsb();
+}
+
+/// GTZC illegal-access IRQ handler (GTZC1 and GTZC2 share the line). Read
+/// every SR, snapshot them, write-1-to-clear via FCR, bump the counter. Under
 /// `tzic-wipe`, also fire the production escalation (zeroize +
 /// arm + reset). Must be dispatched from `DefaultHandler` on
 /// `irqn == GTZC_IRQN`.
@@ -168,6 +211,8 @@ pub unsafe fn on_violation() {
     let s2 = REG.sr2.read();
     let s3 = REG.sr3.read();
     let s4 = REG.sr4.read();
+    let t1 = REG.t2_sr1.read();
+    let t2 = REG.t2_sr2.read();
 
     // Snapshot for thread-mode readback. Single-threaded secure
     // world; the IRQ pre-empts thread mode but doesn't re-enter
@@ -178,6 +223,9 @@ pub unsafe fn on_violation() {
         (*last)[1] = s2;
         (*last)[2] = s3;
         (*last)[3] = s4;
+        let last2 = core::ptr::addr_of_mut!(LAST_SR2);
+        (*last2)[0] = t1;
+        (*last2)[1] = t2;
         let n = core::ptr::read_volatile(core::ptr::addr_of!(VIOLATION_COUNT));
         core::ptr::write_volatile(core::ptr::addr_of_mut!(VIOLATION_COUNT), n.wrapping_add(1));
     }
@@ -188,6 +236,8 @@ pub unsafe fn on_violation() {
     REG.fcr2.write(s2);
     REG.fcr3.write(s3);
     REG.fcr4.write(s4);
+    REG.t2_fcr1.write(t1);
+    REG.t2_fcr2.write(t2);
     cortex_m::asm::dsb();
 
     // Production escalation: a single illegal NS→S access is a
@@ -289,6 +339,13 @@ pub fn violation_count() -> u32 {
     // on Cortex-M33. `read_volatile` to keep the compiler from
     // hoisting it past the IRQ-fence implied by the caller's logic.
     unsafe { core::ptr::read_volatile(core::ptr::addr_of!(VIOLATION_COUNT)) }
+}
+
+/// Last-seen GTZC2 SR snapshot. Index 0..1 corresponds to SR1..SR2.
+#[allow(dead_code)]
+pub fn last_sr2() -> [u32; 2] {
+    // SAFETY: see [`violation_count`].
+    unsafe { core::ptr::read_volatile(core::ptr::addr_of!(LAST_SR2)) }
 }
 
 /// Last-seen SR snapshot per bank. Index 0..3 corresponds to SR1..SR4.

@@ -462,6 +462,8 @@ compile_error!(
         feature = "fi-live-delays",
         // DVT 5.9 stack high-water mark: paints the dead stack. Test-only.
         feature = "stack-hwm",
+        // GTZC enforcement test: clocks every TZSC peripheral at boot.
+        feature = "gtzc-probe-clocks",
         // MSPLIM negative control: deliberately overflows the secure stack
         // at boot. Terminal bench image.
         feature = "stack-overflow-probe",

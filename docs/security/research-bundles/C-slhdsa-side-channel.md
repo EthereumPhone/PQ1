@@ -4561,6 +4561,14 @@ fi-live-delays = []
 # word in `STACK_HWM_LOW` for an SWD read. The scrub still zeroes first, so
 # no secret survives it; the pattern is written after. NEVER ship.
 stack-hwm = []
+# Test-only (`make gtzc-enforcement-hw`, DVT rows 3.1 / 3.14): turns on the bus
+# clock of EVERY TZSC peripheral at boot, so the non-secure probe of each one
+# reaches a clocked peripheral and raises its TZIC event (an unclocked one
+# reads 0 and raises nothing, which looks like a successful block). Its own
+# feature, not plain `e2e-test`: with it on in every bench image, a driver
+# that forgot its own clock enable would still work there and fail only on a
+# shipping image. NEVER ship.
+gtzc-probe-clocks = ["e2e-test"]
 # Test-only negative control for the MSPLIM stack guard (`stack_guard.rs`,
 # 2026-10-22): right after the guard is armed, `main` recurses with a large
 # frame until the limit fires. A correct image ends in the HardFault wipe and

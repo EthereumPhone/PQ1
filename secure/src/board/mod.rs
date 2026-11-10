@@ -187,10 +187,12 @@ pub const RCC_SPI1RST_BIT: u32 = 1 << 12;
 // GTZC1 TZSC security bits, for `sau::configure_gtzc`.
 //
 // From the same SVD. Note `LPUART1SEC` is deliberately absent: LPUART1 is
-// governed by **GTZC2** (`0x4602_3000`), a controller `sau.rs` does not
-// configure at all. That asymmetry is one of the reasons the `pq1`
-// console is USART2/AF7 (the vendor pin table's own reading) rather than
-// LPUART1/AF8 (the schematic net name) — same PA2/PA3 pads either way.
+// governed by **GTZC2** (`0x4602_3000`), a controller `sau.rs` did not
+// configure at all when the console was chosen (it does since #1131,
+// 2026-11-10: every GTZC2 peripheral is secure). That asymmetry was one of
+// the reasons the `pq1` console is USART2/AF7 (the vendor pin table's own
+// reading) rather than LPUART1/AF8 (the schematic net name) — same PA2/PA3
+// pads either way.
 // ---------------------------------------------------------------------------
 
 /// `USART2SEC` — `GTZC1_TZSC_SECCFGR1` bit 9.

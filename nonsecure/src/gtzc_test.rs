@@ -8,8 +8,8 @@
 //!
 //! ## Protocol
 //!
-//! For each peripheral the secure-world boot path marked SECURE
-//! (I2C1, I2C2 via SECCFGR1; AES, HASH, RNG, PKA, SAES via SECCFGR3):
+//! For each peripheral the secure-world boot path marked SECURE (since
+//! #1131 that is every GTZC1 and GTZC2 TZSC peripheral except OTG FS):
 //!
 //!   1. Print a labelled banner via semihosting so the host log
 //!      interleaves NS probes with secure-world `[S][TZIC]` lines.
@@ -41,68 +41,96 @@ struct Probe {
     label: &'static str,
 }
 
-/// Every peripheral marked SECURE in `secure/src/sau.rs`, for THIS board.
+/// Every peripheral in GTZC1 `TZSC_SECCFGR1..3` and GTZC2 `TZSC_SECCFGR1`
+/// except OTG FS, one row per bit, in register order.
 ///
-/// This list and `sau.rs`'s `SECCFGR*_IMAGE` must move together. The pass
-/// criterion is `delta == PROBES.len()`, so a peripheral secured in the image
-/// but missing here does not weaken the receipt — it makes the receipt SILENT
-/// about it while still printing PASS. That has now happened twice (I2C4, then
-/// TIM2/TIM3/UCPD1); the const asserts in `sau.rs` carry the instruction
-/// "update the pin ONLY with a matching gtzc-enforcement-hw receipt".
-/// Order matches the SECCFGR1 → SECCFGR3 ordering in the source file so
-/// log scraping is predictable.
+/// `sau.rs` is deny-by-default since #1131 (2026-11-10): its image is every
+/// documented TZSC bit minus the non-secure allow-list, and the allow-list is
+/// OTG FS. So this list is the SVD's, not a hand-kept copy of a short image,
+/// and it no longer depends on the board or on `iwdg` / `ui-lcd`. The pass
+/// criterion is still `delta == PROBES.len()`: a peripheral whose bit is
+/// clear, or whose row is missing here, shows up as a wrong count.
 ///
-/// The list is board-conditional because the secured SET is: `pq1` gives the
-/// SE050 its own **I2C4** bus (`SECCFGR1` bit 16) where `iota2` has both
-/// secure elements on I2C1, so pq1 secures one peripheral more. Keeping the
-/// probe list fixed at iota2's seven would leave the one bit that has **no
-/// functional symptom either way** — NS reachability of the SE050 bus —
-/// permanently unverified, while still reporting PASS.
+/// History, for why the rows must cover the image: the list once had seven
+/// rows while the image secured ten (I2C4, then TIM2/TIM3/UCPD1 were secured
+/// and not probed), and the receipt still printed PASS.
 ///
-/// NS-alias = SECURE-alias with bit 28 cleared (`0x5...` → `0x4...`).
-/// Addresses chosen to hit a benign register on each peripheral:
-///   * I2C status / control regs — no side-effect on the bus.
-///   * AES/HASH/SAES/PKA/RNG control regs — reading these does not
-///     advance any pipeline; they're idempotent.
+/// Each address is the non-secure alias of the peripheral's first register
+/// (STM32U585 SVD base addresses; secure alias = this with bit 28 set).
+/// Reading it is side-effect-free on every row even if enforcement were
+/// broken. The secure image must be built with `gtzc-probe-clocks`, which
+/// turns on every one of these bus clocks
+/// (`hw::tzic::enable_test_target_clocks`); a peripheral without its clock
+/// reads 0 and raises nothing, so without the feature this test FAILS on
+/// the count rather than passing silently.
 const PROBES: &[Probe] = &[
-    // APB1 — I2C1/I2C2. Base addresses confirmed against
-    // `secure/src/hw/i2c.rs:28` (`0x5000_5400`) and
-    // `secure/src/hw/i2c2_probe.rs:36` (`0x5000_5800`); NS alias =
-    // S alias with bit 28 cleared.
-    Probe { addr: 0x4000_5400, label: "I2C1_CR1"  },
-    Probe { addr: 0x4000_5800, label: "I2C2_CR1"  },
-    // AHB2 crypto block. Base addresses confirmed against
-    // `secure/src/hw/{hash,rng,saes}.rs` (S aliases `0x520C_*`); NS
-    // alias = S alias with bit 28 cleared.
-    Probe { addr: 0x420C_0000, label: "AES_CR"    },
-    Probe { addr: 0x420C_0400, label: "HASH_CR"   },
-    Probe { addr: 0x420C_0800, label: "RNG_CR"    },
-    Probe { addr: 0x420C_2000, label: "PKA_CR"    },
-    Probe { addr: 0x420C_0C00, label: "SAES_CR"   },
-    // pq1 only: I2C4 is the SE050's dedicated bus. NS alias of the
-    // `0x5000_8400` secure alias in `secure/src/board/mod.rs`.
-    #[cfg(feature = "board-pq1")]
-    Probe { addr: 0x4000_8400, label: "I2C4_CR1"  },
-    // APB1 — TIM2, TIM3, UCPD1. Added 2026-09-01 with the commits that put
-    // them in the SECCFGR1 image; before that this list covered seven
-    // peripherals while the image secured ten, so the receipt printed
-    // "7/7 PASS" for a configuration it had never probed. That is the same
-    // defect the I2C4 row above was added to fix, re-created three bits later.
-    //
-    // TIM2/TIM3 carry the `consumption-mask` PWM, which production MANDATES:
-    // an NS world that can reach the timer can clear `CR1.CEN` and flat-line
-    // the mask with no secure-side symptom. UCPD1 owns PA15/PB15 — `SE_RST`
-    // and `LCM_EN` on pq1 — a second handle on those pads underneath the
-    // per-pin `GPIOx_SECCFGR` layer. NS aliases = secure alias with bit 28
-    // cleared: TIM2_S 0x5000_0000, TIM3_S 0x5000_0400, UCPD1 0x5000_DC00
-    // (`secure/src/board/mod.rs`, `secure/src/hw/usb_hw.rs`).
-    Probe { addr: 0x4000_0000, label: "TIM2_CR1"  },
-    Probe { addr: 0x4000_0400, label: "TIM3_CR1"  },
-    Probe { addr: 0x4000_DC00, label: "UCPD1_CFG1" },
-    // APB1 — CRS (SECCFGR1 bit 15), secured with the 2026-10-15 CRS fix
-    // (DVT1 row 11.2): it trims HSI48, the USB and TRNG kernel clock. NS
-    // alias of `0x5000_6000`; the e2e test clocks enable CRSEN for it.
-    Probe { addr: 0x4000_6000, label: "CRS_CR" },
+    // GTZC1 TZSC_SECCFGR1 (APB1), bits 0..19.
+    Probe { addr: 0x4000_0000, label: "TIM2" },
+    Probe { addr: 0x4000_0400, label: "TIM3" },
+    Probe { addr: 0x4000_0800, label: "TIM4" },
+    Probe { addr: 0x4000_0C00, label: "TIM5" },
+    Probe { addr: 0x4000_1000, label: "TIM6" },
+    Probe { addr: 0x4000_1400, label: "TIM7" },
+    Probe { addr: 0x4000_2C00, label: "WWDG" },
+    Probe { addr: 0x4000_3000, label: "IWDG" },
+    Probe { addr: 0x4000_3800, label: "SPI2" },
+    Probe { addr: 0x4000_4400, label: "USART2" },
+    Probe { addr: 0x4000_4800, label: "USART3" },
+    Probe { addr: 0x4000_4C00, label: "UART4" },
+    Probe { addr: 0x4000_5000, label: "UART5" },
+    Probe { addr: 0x4000_5400, label: "I2C1" },
+    Probe { addr: 0x4000_5800, label: "I2C2" },
+    Probe { addr: 0x4000_6000, label: "CRS" },
+    Probe { addr: 0x4000_8400, label: "I2C4" },
+    Probe { addr: 0x4000_9400, label: "LPTIM2" },
+    Probe { addr: 0x4000_A400, label: "FDCAN1" },
+    Probe { addr: 0x4000_DC00, label: "UCPD1" },
+    // GTZC1 TZSC_SECCFGR2 (APB2), bits 0..8.
+    Probe { addr: 0x4001_2C00, label: "TIM1" },
+    Probe { addr: 0x4001_3000, label: "SPI1" },
+    Probe { addr: 0x4001_3400, label: "TIM8" },
+    Probe { addr: 0x4001_3800, label: "USART1" },
+    Probe { addr: 0x4001_4000, label: "TIM15" },
+    Probe { addr: 0x4001_4400, label: "TIM16" },
+    Probe { addr: 0x4001_4800, label: "TIM17" },
+    Probe { addr: 0x4001_5400, label: "SAI1" },
+    Probe { addr: 0x4001_5800, label: "SAI2" },
+    // GTZC1 TZSC_SECCFGR3 (AHB1/AHB2), bits 0..22 without bit 10 (OTG FS).
+    Probe { addr: 0x4002_5000, label: "MDF1" },
+    Probe { addr: 0x4002_1000, label: "CORDIC" },
+    Probe { addr: 0x4002_1400, label: "FMAC" },
+    Probe { addr: 0x4002_3000, label: "CRC" },
+    Probe { addr: 0x4002_4000, label: "TSC" },
+    Probe { addr: 0x4002_B000, label: "DMA2D" },
+    Probe { addr: 0x4003_0400, label: "ICACHE" },
+    Probe { addr: 0x4003_1400, label: "DCACHE1" },
+    Probe { addr: 0x4202_8000, label: "ADC12" },
+    Probe { addr: 0x4202_C000, label: "DCMI" },
+    Probe { addr: 0x420C_0000, label: "AES" },
+    Probe { addr: 0x420C_0400, label: "HASH" },
+    Probe { addr: 0x420C_0800, label: "RNG" },
+    Probe { addr: 0x420C_2000, label: "PKA" },
+    Probe { addr: 0x420C_0C00, label: "SAES" },
+    Probe { addr: 0x420C_4000, label: "OCTOSPIM" },
+    Probe { addr: 0x420C_8000, label: "SDMMC1" },
+    Probe { addr: 0x420C_8C00, label: "SDMMC2" },
+    Probe { addr: 0x420D_0400, label: "FMC" },
+    Probe { addr: 0x420D_1400, label: "OCTOSPI1" },
+    Probe { addr: 0x420D_2400, label: "OCTOSPI2" },
+    Probe { addr: 0x4002_6000, label: "RAMCFG" },
+    // GTZC2 TZSC_SECCFGR1 (SmartRun domain), bits 0..9, 11, 12.
+    Probe { addr: 0x4600_2000, label: "SPI3" },
+    Probe { addr: 0x4600_2400, label: "LPUART1" },
+    Probe { addr: 0x4600_2800, label: "I2C3" },
+    Probe { addr: 0x4600_4400, label: "LPTIM1" },
+    Probe { addr: 0x4600_4800, label: "LPTIM3" },
+    Probe { addr: 0x4600_4C00, label: "LPTIM4" },
+    Probe { addr: 0x4600_5000, label: "OPAMP" },
+    Probe { addr: 0x4600_5400, label: "COMP" },
+    Probe { addr: 0x4602_1000, label: "ADC4" },
+    Probe { addr: 0x4600_7400, label: "VREFBUF" },
+    Probe { addr: 0x4602_1800, label: "DAC1" },
+    Probe { addr: 0x4602_4000, label: "ADF1" },
 ];
 
 /// NS-side entry point under `--features gtzc-test`.

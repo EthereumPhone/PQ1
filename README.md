@@ -360,7 +360,7 @@ Any claim of "verified" in docs or marketing must carry the assumption list.
 
 | Component | Status |
 |---|---|
-| TrustZone partitioning (SAU + IDAU + MPC/GTZC) | 🟢 QEMU + HW (TZSC enforcement + USB coexistence silicon-validated 2026-05-20; only TAMP/GTZC2 follow-up open) |
+| TrustZone partitioning (SAU + IDAU + MPC/GTZC) | 🟢 QEMU + HW (TZSC enforcement + USB coexistence silicon-validated 2026-05-20; deny-by-default on GTZC1 + GTZC2 and a RAM guard against non-secure flash-timing changes since 2026-11-10, #1131 / #1132, 63/63 peripherals on EVT silicon) |
 | NSC gateway (NS pointer validation, CMSE veneers / mailbox) | 🟢 QEMU + HW |
 | BIP-39 → SPHINCS+C10 derivation, master + per-slot, multi-account (256/seed) | 🟢 QEMU + HW |
 | OPTIGA Trust M V3: IFX I2C + APDU + Shielded Connection | 🟢 HW |

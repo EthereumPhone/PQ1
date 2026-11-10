@@ -59,6 +59,8 @@ const MAIN_SRC: &str = include_str!("main.rs");
 const SAU_SRC: &str = include_str!("sau.rs");
 const RESET_CAUSE_SRC: &str = include_str!("reset_cause.rs");
 const IWDG_SRC: &str = include_str!("hw/iwdg.rs");
+const TZIC_SRC: &str = include_str!("hw/tzic.rs");
+const GTZC_TEST_SRC: &str = include_str!("../../nonsecure/src/gtzc_test.rs");
 const STACK_SCRUB_SRC: &str = include_str!("stack_scrub.rs");
 const BOOT_NS_SRC: &str = include_str!("boot_ns.rs");
 const NSC_MOD_SRC: &str = include_str!("nsc/mod.rs");
@@ -624,17 +626,25 @@ fn positive_tz2_locks_security_config_after_enabling_sau() {
         );
     }
 
-    // GTZC2 (SPI3/LPUART1/I2C3/LPTIM/ADC4/DAC1/...) must NOT be locked — it
-    // is unconfigured on this branch, and locking it would freeze its NS
-    // reset default. (TAMP/RTC are not GTZC2 peripherals: they are secured
-    // by their own SECCFGR in `secure_system_controllers`.) There is exactly ONE TZSC CR lock write
-    // (GTZC1); a second would indicate a GTZC2 lock crept in. ("GTZC2"
-    // appears in comments, so count the actual lock write instead.)
+    // GTZC2 (SPI3/LPUART1/I2C3/LPTIM/ADC4/DAC1/...) is programmed since
+    // #1131 (deny by default), so it is locked too: exactly TWO TZSC CR lock
+    // writes, one per controller, each read back. Before #1131 GTZC2 was left
+    // unconfigured and this pin required exactly one, because a lock would
+    // have frozen its non-secure reset default.
     assert_eq!(
         SAU_SRC.matches("set_bits(TZSC_CR_LCK)").count(),
-        1,
-        "tz-2: exactly one GTZC1 TZSC CR.LCK write; a second implies GTZC2 got locked"
+        2,
+        "tz-2: one TZSC CR.LCK write per controller (GTZC1 and GTZC2)"
     );
+    for needle in [
+        "const TZSC2_BASE: u32 = 0x5602_3000;",
+        "const TZSC2_CR_ADDR: u32 = TZSC2_BASE;",
+        "tzsc2_cr.set_bits(TZSC_CR_LCK);",
+        "verify_or_halt(tzsc_cr.read() & TZSC_CR_LCK, TZSC_CR_LCK);",
+        "verify_or_halt(tzsc2_cr.read() & TZSC_CR_LCK, TZSC_CR_LCK);",
+    ] {
+        assert!(SAU_SRC.contains(needle), "tz-2: sau.rs must contain `{needle}`");
+    }
 }
 
 #[test]
@@ -809,40 +819,54 @@ fn negative_stm32_gtzc_seccfgr3_protects_full_crypto_block() {
     // CLAUDE.md Invariant #4 — the AES/HASH/RNG/PKA/SAES block must
     // be SECURE so the NS world cannot read TRNG, run a parallel
     // AES op, snoop hash state, or steal SAES-derived keys. Pin the
-    // SECCFGR3 mask byte-for-byte (positions per CMSIS
-    // `GTZC_CFGR3_*_Pos`).
-    for (name, _bit) in [
-        ("const SECCFGR3_AES_BIT:  u32 = 1 << 11;", 11u32),
-        ("const SECCFGR3_HASH_BIT: u32 = 1 << 12;", 12),
-        ("const SECCFGR3_RNG_BIT:  u32 = 1 << 13;", 13),
-        ("const SECCFGR3_PKA_BIT:  u32 = 1 << 14;", 14),
-        ("const SECCFGR3_SAES_BIT: u32 = 1 << 15;", 15),
+    // SECCFGR3 bit positions byte-for-byte (STM32U585 SVD).
+    for name in [
+        "const SECCFGR3_AES_BIT:  u32 = 1 << 11;",
+        "const SECCFGR3_HASH_BIT: u32 = 1 << 12;",
+        "const SECCFGR3_RNG_BIT:  u32 = 1 << 13;",
+        "const SECCFGR3_PKA_BIT:  u32 = 1 << 14;",
+        "const SECCFGR3_SAES_BIT: u32 = 1 << 15;",
+        "const SECCFGR3_DMA2D_BIT: u32 = 1 << 5;",
+        "const SECCFGR3_SDMMC1_BIT: u32 = 1 << 17;",
+        "const SECCFGR3_SDMMC2_BIT: u32 = 1 << 18;",
+        "const SECCFGR3_ICACHE_REG_BIT: u32 = 1 << 6;",
+        "const SECCFGR3_DCACHE_REG_BIT: u32 = 1 << 7;",
+        "const SECCFGR3_RAMCFG_BIT: u32 = 1 << 22;",
     ] {
         assert!(
             SAU_SRC.contains(name),
             "GTZC SECCFGR3 bit `{name}` is load-bearing for CLAUDE.md invariant #4"
         );
     }
-    // The image must compose all five bits. It became a named const with a
-    // compile-time pin (work-todo C3, 2026-07-17) rather than an inline
-    // expression — strictly stronger, because the `const _: () = assert!(..)`
-    // below fails the BUILD, not just this test, if the composition drifts.
-    // Since #982 the image also carries the three TZSC bus masters
-    // (DMA2D first, SDMMC1/2 last); the crypto five stay in the middle.
-    assert!(SAU_SRC.contains("const SECCFGR3_IMAGE: u32 = SECCFGR3_DMA2D_BIT"));
-    assert!(SAU_SRC.contains("| SECCFGR3_AES_BIT"));
-    assert!(SAU_SRC.contains("| SECCFGR3_HASH_BIT"));
-    assert!(SAU_SRC.contains("| SECCFGR3_RNG_BIT"));
-    assert!(SAU_SRC.contains("| SECCFGR3_PKA_BIT"));
-    assert!(SAU_SRC.contains("| SECCFGR3_SAES_BIT"));
-    assert!(SAU_SRC.contains("let seccfgr3 = SECCFGR3_IMAGE;"));
-    assert!(
-        SAU_SRC.contains(
-            "== (1 << 5) | (1 << 6) | (1 << 7) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18) | (1 << 22),"
-        ),
-        "the SECCFGR3 image must stay compile-time-pinned to the five crypto peripherals \
-         plus the DMA2D/SDMMC1/SDMMC2 masters (#982)"
-    );
+    // Since #1131 the image is deny-by-default (every documented bit minus
+    // the non-secure allow-list), and the named bits are a floor it must
+    // contain. Both are `const _: () = assert!(..)`, so a drift fails the
+    // BUILD; this test pins that the asserts are still there and still exact.
+    for term in [
+        "const SECCFGR3_FLOOR: u32 = SECCFGR3_DMA2D_BIT",
+        "| SECCFGR3_ICACHE_REG_BIT",
+        "| SECCFGR3_DCACHE_REG_BIT",
+        "| SECCFGR3_RAMCFG_BIT",
+        "| SECCFGR3_AES_BIT",
+        "| SECCFGR3_HASH_BIT",
+        "| SECCFGR3_RNG_BIT",
+        "| SECCFGR3_PKA_BIT",
+        "| SECCFGR3_SAES_BIT",
+        "| SECCFGR3_SDMMC1_BIT",
+        "| SECCFGR3_SDMMC2_BIT;",
+        "&& SECCFGR3_IMAGE & SECCFGR3_FLOOR == SECCFGR3_FLOOR,",
+        "const SECCFGR3_VALID: u32 = 0x007F_FFFF;",
+        "const SECCFGR3_IMAGE: u32 = SECCFGR3_VALID & !SECCFGR3_NS_ALLOW;",
+        "&& SECCFGR3_IMAGE == 0x007F_FBFF",
+        "let seccfgr3 = SECCFGR3_IMAGE;",
+        "GTZC.tzsc_seccfgr3.write(!SECCFGR3_NS_ALLOW);",
+    ] {
+        assert_eq!(
+            SAU_SRC.matches(term).count(),
+            1,
+            "SECCFGR3 image/floor drifted: `{term}` must appear exactly once"
+        );
+    }
 }
 
 #[test]
@@ -853,16 +877,80 @@ fn negative_stm32_gtzc_seccfgr3_does_not_mark_otg_secure() {
     // USB enumeration — and given the device's "USB only" companion
     // path, that's a denied-recovery state.
     //
-    // Easiest pin: assert the comment listing OTG as "stays NS" is
-    // present, and that seccfgr3 explicitly does NOT mention an
-    // OTG bit constant.
+    // Since #1131 OTG is the one entry of the non-secure allow-list, and
+    // the allow-list is pinned by a const assert.
     assert!(
         SAU_SRC.contains("OTG (bit 10): USB OTG FS — **stays NS**"),
         "OTG NS contract must remain documented in SECCFGR3"
     );
+    for needle in [
+        "const SECCFGR1_NS_ALLOW: u32 = 0;",
+        "const SECCFGR2_NS_ALLOW: u32 = 0;",
+        "const SECCFGR3_NS_ALLOW: u32 = 1 << 10;",
+        "const TZSC2_SECCFGR1_NS_ALLOW: u32 = 0;",
+        "&& SECCFGR3_NS_ALLOW == 1 << 10",
+    ] {
+        assert_eq!(
+            SAU_SRC.matches(needle).count(),
+            1,
+            "the non-secure allow-list is OTG FS only: `{needle}` must appear exactly once"
+        );
+    }
     assert!(
         !SAU_SRC.contains("SECCFGR3_OTG_BIT"),
-        "no `SECCFGR3_OTG_BIT` allowed — OTG stays NS, so it must not appear in the secure mask"
+        "no `SECCFGR3_OTG_BIT` allowed — OTG is on the allow-list, never a secure-mask bit"
+    );
+}
+
+#[test]
+fn negative_stm32_gtzc_image_is_deny_by_default() {
+    // #1131: the TZSC image used to be a list of peripherals to secure, and
+    // ICACHE (whose remap registers redirect secure code fetches) was not on
+    // it. The image is now every documented bit minus the allow-list, on
+    // both controllers, written as all-ones outside the allow-list and read
+    // back on the documented bits.
+    for needle in [
+        "const SECCFGR1_VALID: u32 = 0x000F_FFFF;",
+        "const SECCFGR2_VALID: u32 = 0x0000_01FF;",
+        "const TZSC2_SECCFGR1_VALID: u32 = 0x0000_1BFF;",
+        "const SECCFGR1_IMAGE: u32 = SECCFGR1_VALID & !SECCFGR1_NS_ALLOW;",
+        "const SECCFGR2_IMAGE: u32 = SECCFGR2_VALID & !SECCFGR2_NS_ALLOW;",
+        "const TZSC2_SECCFGR1_IMAGE: u32 = TZSC2_SECCFGR1_VALID & !TZSC2_SECCFGR1_NS_ALLOW;",
+        "SECCFGR1_IMAGE == 0x000F_FFFF",
+        "&& SECCFGR2_IMAGE == 0x0000_01FF",
+        "&& TZSC2_SECCFGR1_IMAGE == 0x0000_1BFF,",
+        "GTZC.tzsc_seccfgr1.write(!SECCFGR1_NS_ALLOW);",
+        "GTZC.tzsc_seccfgr2.write(!SECCFGR2_NS_ALLOW);",
+        "GTZC.rcc_ahb3enr.set_bits(RCC_AHB3ENR_GTZC2EN);",
+        "const RCC_AHB3ENR_GTZC2EN: u32 = 1 << 12;",
+        "GTZC.tzsc2_seccfgr1.write(!TZSC2_SECCFGR1_NS_ALLOW);",
+        "verify_or_halt(r4 & TZSC2_SECCFGR1_VALID, TZSC2_SECCFGR1_IMAGE);",
+        "&& SECCFGR2_IMAGE & SECCFGR2_SPI1_BIT == SECCFGR2_SPI1_BIT",
+    ] {
+        assert_eq!(
+            SAU_SRC.matches(needle).count(),
+            1,
+            "deny-by-default TZSC image drifted: `{needle}` must appear exactly once"
+        );
+    }
+    // The image must not depend on a feature or a board any more: the gtzc
+    // receipt is taken on a bench feature set, and a conditional bit is a
+    // bit the receipt never saw (SPI1 under `ui-lcd` was one).
+    let start = SAU_SRC.find("pub fn configure_gtzc()").expect("configure_gtzc must exist");
+    let end = start + SAU_SRC[start..].find("crate::hw::tzic::configure(").expect("tzic arm");
+    let body = &SAU_SRC[start..end];
+    let cfgs: Vec<&str> = body.lines().filter(|l| l.trim_start().starts_with("#[cfg(")).collect();
+    assert_eq!(
+        cfgs,
+        ["        #[cfg(feature = \"e2e-test\")]"],
+        "configure_gtzc may be cfg-conditional only for the e2e test clocks"
+    );
+    // The probe list covers the image: one row per secured bit.
+    let rows = GTZC_TEST_SRC.matches("    Probe { addr: 0x").count();
+    assert_eq!(
+        rows as u32,
+        0x000F_FFFFu32.count_ones() + 0x0000_01FFu32.count_ones() + 0x007F_FBFFu32.count_ones() + 0x0000_1BFFu32.count_ones(),
+        "nonsecure/src/gtzc_test.rs must probe every secured TZSC peripheral exactly once"
     );
 }
 
@@ -875,69 +963,45 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
     assert!(SAU_SRC.contains("const SECCFGR1_I2C1_BIT: u32 = 1 << 13;"));
     assert!(SAU_SRC.contains("const SECCFGR1_I2C2_BIT: u32 = 1 << 14;"));
     // pq1 splits the two secure elements across I2C1 and its own I2C4, so
-    // that board secures a THIRD bus (bit 16). This is the one SECCFGR bit
+    // that board uses a THIRD bus (bit 16). This is the one SECCFGR bit
     // whose omission has no functional symptom at all — the SE050 works
     // fine from S-world either way; only NS reachability changes — so it is
-    // pinned here as well as by the build-time assert.
-    assert!(SAU_SRC.contains("const SECCFGR1_I2C4_BIT: u32 = 1 << 16;"));
-    // The image is now a named const with a compile-time pin (work-todo C3,
-    // 2026-07-17) rather than an inline expression — a strictly stronger form:
-    // the `const _: () = assert!(SECCFGR1_IMAGE == ...)` below fails the BUILD,
-    // not just this test, if the composition drifts. Pin the composition and
-    // all four cfg arms of its value (iwdg x board).
-    // Multi-line since UCPD1 joined the composition (2026-08-31) — pin each
-    // term so the assertion survives rustfmt reflow instead of silently
-    // becoming a needle that matches nothing.
-    for term in [
-        "const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE",
-        "| SECCFGR1_I2C1_BIT",
-        "| SECCFGR1_I2C2_BIT",
-        "| SECCFGR1_BOARD_IMAGE",
-        "| SECCFGR1_UCPD1_BIT",
-        "| SECCFGR1_CRS_BIT",
-        "| SECCFGR1_TIM2_BIT",
-        "| SECCFGR1_TIM3_BIT;",
-    ] {
-        assert!(
-            SAU_SRC.contains(term),
-            "SECCFGR1_IMAGE composition drifted — missing `{term}`"
-        );
-    }
-    // UCPD1 (bit 19) is secured on BOTH boards. On pq1 it is a second handle on
-    // PA15/PB15 (SE_RST / LCM_EN) that GPIOx_SECCFGR does not cover; on iota2
-    // the secure world owns it at boot. A cleared bit has no functional symptom
-    // on either board — only NS reachability changes.
+    // pinned here as well as by the build-time assert. Unconditional since
+    // #1131 (it used to be `board-pq1` only).
+    assert!(SAU_SRC.contains("    const SECCFGR1_I2C4_BIT: u32 = 1 << 16;"));
+    assert!(
+        !SAU_SRC.contains("#[cfg(feature = \"board-pq1\")]\n    const SECCFGR1_I2C4_BIT"),
+        "I2C4 must be Secure on every board"
+    );
+    // UCPD1 (bit 19) is a second handle on PA15/PB15 (SE_RST / LCM_EN) on pq1
+    // that GPIOx_SECCFGR does not cover; on iota2 the secure world owns it at
+    // boot. A cleared bit has no functional symptom on either board.
     assert!(SAU_SRC.contains("const SECCFGR1_UCPD1_BIT: u32 = 1 << 19;"));
     // CRS (bit 15) trims HSI48, the USB and TRNG kernel clock; the secure
     // world owns it (DVT1 row 11.2 fix), so NS must not reach it.
     assert!(SAU_SRC.contains("const SECCFGR1_CRS_BIT: u32 = 1 << 15;"));
-    // TIM2 (bit 0) carries the production-mandatory consumption mask. Leaving
-    // it unattributed lets NS clear TIM2_CR1.CEN and flat-line the PWM with no
-    // secure-side symptom — the secure world writes CCR1 and never reads back
-    // that the counter still runs.
+    // TIM2 (bit 0) and TIM3 (bit 1) carry the production-mandatory
+    // consumption mask (iota2 / pq1). Left unattributed, NS clears CR1.CEN and
+    // flat-lines the PWM with no secure-side symptom.
     assert!(SAU_SRC.contains("const SECCFGR1_TIM2_BIT: u32 = crate::board::TZSC_SECCFGR1_TIM2SEC;"));
-    assert!(SAU_SRC.contains("| SECCFGR1_TIM2_BIT"));
-    // TIM3 joined the image when pq1's mask moved to TIM3_CH1/PA6. Both are
-    // secured on both boards so the property cannot vanish on whichever board
-    // a future edit forgets.
     assert!(SAU_SRC.contains("const SECCFGR1_TIM3_BIT: u32 = crate::board::TZSC_SECCFGR1_TIM3SEC;"));
-    assert!(SAU_SRC.contains("| SECCFGR1_TIM3_BIT;"));
-    assert!(SAU_SRC.contains("const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;"));
-    assert!(SAU_SRC.contains("let seccfgr1 = SECCFGR1_IMAGE;"));
-    for arm in [
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),",                        // iota2, no iwdg
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),",             // iota2 + iwdg
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),",            // pq1, no iwdg
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),", // pq1 + iwdg
+    // The floor: every one of them is in the image, by a const assert.
+    for term in [
+        "const SECCFGR1_FLOOR: u32 = SECCFGR1_IWDG_BIT",
+        "| SECCFGR1_I2C1_BIT",
+        "| SECCFGR1_I2C2_BIT",
+        "| SECCFGR1_I2C4_BIT",
+        "| SECCFGR1_UCPD1_BIT",
+        "| SECCFGR1_CRS_BIT",
+        "| SECCFGR1_TIM2_BIT",
+        "| SECCFGR1_TIM3_BIT;",
+        "SECCFGR1_IMAGE & SECCFGR1_FLOOR == SECCFGR1_FLOOR",
+        "let seccfgr1 = SECCFGR1_IMAGE;",
     ] {
-        // EXACTLY once, not merely present. With the trailing comma these four
-        // are mutually non-containing; without it the two iota2 arms were
-        // prefixes of the two pq1 arms and could be deleted undetected.
         assert_eq!(
-            SAU_SRC.matches(arm).count(),
+            SAU_SRC.matches(term).count(),
             1,
-            "the SECCFGR1 image must stay compile-time-pinned EXACTLY once for every \
-             iwdg x board combination; arm not found exactly once: {arm}"
+            "SECCFGR1 floor drifted: `{term}` must appear exactly once"
         );
     }
 }
@@ -945,50 +1009,16 @@ fn negative_stm32_gtzc_seccfgr1_protects_se_buses() {
 #[test]
 fn negative_iwdg_is_secure_attributed_and_uses_only_secure_alias() {
     // Forced-blind architecture makes #79's source half mandatory: IWDG is
-    // bit 7 in GTZC1 SECCFGR1, included whenever `iwdg` is selected, verified
-    // with the rest of the register image, and reached only via its S alias.
-    // The separate CPU/GPDMA denial receipt remains silicon work.
-    assert!(SAU_SRC.contains("const SECCFGR1_IWDG_BIT: u32 = 1 << 7;"));
-    // The IWDG term is now its own cfg'd const OR-ed into the image, so the
-    // iwdg and board choices stay orthogonal instead of needing one hand-
-    // written total per combination.
-    assert!(SAU_SRC.contains("const SECCFGR1_IWDG_IMAGE: u32 = SECCFGR1_IWDG_BIT;"));
-    // The composition is multi-line since UCPD1 joined it, so pin each term
-    // rather than one flat string that reflows on the next edit.
-    for term in [
-        "const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE",
-        "| SECCFGR1_I2C1_BIT",
-        "| SECCFGR1_I2C2_BIT",
-        "| SECCFGR1_BOARD_IMAGE",
-        "| SECCFGR1_UCPD1_BIT",
-        "| SECCFGR1_CRS_BIT",
-        "| SECCFGR1_TIM2_BIT",
-        "| SECCFGR1_TIM3_BIT;",
-    ] {
-        assert!(
-            SAU_SRC.contains(term),
-            "SECCFGR1_IMAGE composition drifted — missing `{term}`"
-        );
-    }
-    // Both boards' iwdg-on totals stay pinned — bit 7 must be present in each.
-    //
-    // The trailing comma is load-bearing. Without it the iota2 needle is a
-    // character-for-character PREFIX of the pq1 one (which continues
-    // ` | (1 << 16)`), so `.contains()` matched the pq1 arm and BOTH iota2
-    // const asserts could be deleted from sau.rs with this test still green.
-    // Found by the 2026-08-31 adversarial review; it was introduced by the
-    // commit that added the pq1 arms.
-    for arm in [
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),",
-        "SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),",
-    ] {
-        assert_eq!(
-            SAU_SRC.matches(arm).count(),
-            1,
-            "iwdg-on SECCFGR1 arm must appear EXACTLY once (a prefix match means \
-             a sibling arm can be deleted undetected): `{arm}`"
-        );
-    }
+    // bit 7 in GTZC1 SECCFGR1, verified with the rest of the register image,
+    // and reached only via its S alias. Since #1131 the bit is set in every
+    // image (it used to follow the `iwdg` feature). The separate CPU/GPDMA
+    // denial receipt remains silicon work.
+    assert!(SAU_SRC.contains("    const SECCFGR1_IWDG_BIT: u32 = 1 << 7;"));
+    assert!(
+        !SAU_SRC.contains("#[cfg(feature = \"iwdg\")]\n    const SECCFGR1_IWDG_BIT"),
+        "IWDG must be Secure whether or not the `iwdg` driver is compiled in"
+    );
+    assert!(SAU_SRC.contains("const SECCFGR1_FLOOR: u32 = SECCFGR1_IWDG_BIT"));
     assert!(IWDG_SRC.contains("const IWDG_SECURE_ALIAS: u32 = 0x5000_3000;"));
     assert!(!IWDG_SRC.contains("const IWDG: u32 = 0x4000_3000;"));
 
@@ -1031,10 +1061,11 @@ fn negative_stm32_gtzc_postwrite_self_check_is_present() {
     assert!(SAU_SRC.contains("let r2 = GTZC.tzsc_seccfgr2.read();"));
     assert!(SAU_SRC.contains("let r3 = GTZC.tzsc_seccfgr3.read();"));
     assert!(
-        SAU_SRC.contains("verify_or_halt(r1, seccfgr1);"),
+        SAU_SRC.contains("verify_or_halt(r1 & SECCFGR1_VALID, seccfgr1);"),
         "SECCFGR1 must self-check via the unconditional verify_or_halt (F6)"
     );
-    assert!(SAU_SRC.contains("verify_or_halt(r3, seccfgr3);"));
+    assert!(SAU_SRC.contains("verify_or_halt(r2 & SECCFGR2_VALID, seccfgr2);"));
+    assert!(SAU_SRC.contains("verify_or_halt(r3 & SECCFGR3_VALID, seccfgr3);"));
     assert!(
         !SAU_SRC.contains("debug_assert_eq!(r1, seccfgr1,"),
         "the post-write self-check must not regress to debug_assert_eq! (a no-op in release)"
@@ -1085,6 +1116,23 @@ fn negative_tzic_is_armed_with_same_masks_as_tzsc() {
         "TZIC must be armed with the same SECCFGR masks as TZSC, plus GPDMA1 in IER4 (#982)"
     );
     assert!(SAU_SRC.contains("const TZIC_IER4_GPDMA1IE: u32 = 1 << 0;"));
+    // GTZC2's TZIC (#1131): armed with the GTZC2 TZSC image, plus LPDMA1
+    // from the system group, and read + cleared by the same handler (the
+    // NVIC line is shared, so an armed event nobody clears would re-fire
+    // forever).
+    assert!(SAU_SRC.contains(
+        "crate::hw::tzic::configure_tzic2(TZSC2_SECCFGR1_IMAGE, TZIC2_IER2_LPDMA1IE);"
+    ));
+    assert!(SAU_SRC.contains("const TZIC2_IER2_LPDMA1IE: u32 = 1 << 5;"));
+    for needle in [
+        "const TZIC2_BASE: u32 = 0x5602_3400;",
+        "let t1 = REG.t2_sr1.read();",
+        "let t2 = REG.t2_sr2.read();",
+        "REG.t2_fcr1.write(t1);",
+        "REG.t2_fcr2.write(t2);",
+    ] {
+        assert!(TZIC_SRC.contains(needle), "hw/tzic.rs must contain `{needle}`");
+    }
 }
 
 // ═════════════════════════════════════════════════════════════════════

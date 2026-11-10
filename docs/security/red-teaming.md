@@ -519,6 +519,17 @@ peripheral RAZ-faults and bumps `hw::tzic::VIOLATION_COUNT`. `secure/src/sau.rs`
 **Open follow-up.** **TAMP lives in GTZC2** and its SECCFGR wiring is a documented follow-up
 (`sau.rs`). Confirm the TAMP path's isolation separately (§6.3).
 
+**UPDATE 2026-11-10 (#1131, #1132).** The property is wider now and so is the test.
+- The TZSC image is deny-by-default: every GTZC1 and GTZC2 TZSC peripheral is secure and OTG FS is
+  the only non-secure one. `make gtzc-enforcement-hw` probes all 63 (pass: 63/63, one TZIC event
+  each; the secure image needs the test-only `gtzc-probe-clocks`). TAMP is not a GTZC2 peripheral;
+  it has its own `TAMP_SECCFGR` (DVT row 3.5).
+- Two attacks from non-secure code that the peripheral list did not cover, each with a RAM-only
+  regression probe: programming the ICACHE remap registers (`tools/dvt/icache_remap_probe.sh`),
+  and lowering the flash wait states through `FLASH_ACR`, which no register can secure
+  (`tools/dvt/flash_acr_stress.sh`; the defence is `secure/src/flash_guard.rs`).
+- Receipts: `docs/hardware/dvt-silicon-test-checklist.md` rows 3.1 and 3.14–3.16.
+
 ### 6.2 Measured boot / FSBL fingerprint
 
 **Target property.** After the production geometry, WRP/option-byte ceremony,

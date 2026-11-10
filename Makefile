@@ -745,6 +745,11 @@ test-key-speed: ## DWT-timed signing bench on HW
 # response printed by the runner is checked offline with tools/verify-c10-sig.
 # Exit status: 0 PASS, 1 FAIL, 2 INCONCLUSIVE (nesting not proven on this
 # silicon; not a pass for either build).
+# Since #1132 (2026-11-10) the gateway entry masks non-secure interrupts for
+# the whole call, so on current images BOTH recipes report "PASS: MASKED": the
+# non-secure handler never runs while the call is in flight and no nested call
+# can be made at all. The gate stays as a second line; what covers it is the
+# host tests in `secure/src/gateway_gate.rs` and the ELF check above.
 nested-gate-test-hw: dev-pubkey-fixture ## #896: nested gateway call refused on HW (gate present, SWD board)
 	@echo "==> Building secure (e2e-test, gate PRESENT) + NS (nested-gate-test)"
 	@# Force the secure LINK: cargo treats a previously built feature set as fresh
@@ -811,11 +816,13 @@ _nested-gate-run:
 	if [ "$$rc" != "0" ] && [ "$$rc" != "130" ]; then echo "==> $(NGT_LABEL): FAIL (PASS printed but probe-rs exited $$rc)"; exit 1; fi; \
 	echo "==> Checking the outer signature offline (tools/verify-c10-sig)"; \
 	python3 scripts/extract_semihosting_hex_block.py "$$log" "$$resp"; xrc=$$?; \
+	what="nested call $(NGT_EXPECT)"; \
+	if grep -q "\[NS\]\[ngt\] PASS: MASKED" "$$log"; then what="no nested call possible: non-secure interrupts are masked for the whole gateway call (#1132)"; fi; \
 	if [ "$$xrc" = "3" ]; then \
-		echo "==> $(NGT_LABEL): PASS (nested call $(NGT_EXPECT)); outer-signature check SKIPPED: off-chain count is not 0 and the verifier assumes 0"; exit 0; fi; \
+		echo "==> $(NGT_LABEL): PASS ($$what); outer-signature check SKIPPED: off-chain count is not 0 and the verifier assumes 0"; exit 0; fi; \
 	if [ "$$xrc" != "0" ]; then echo "==> $(NGT_LABEL): FAIL (could not extract the outer response)"; exit 1; fi; \
 	if env -u RUSTFLAGS cargo run --quiet --locked --release --manifest-path tools/verify-c10-sig/Cargo.toml -- "$$resp"; then \
-		echo "==> $(NGT_LABEL): PASS (nested call $(NGT_EXPECT); the outer signature verifies over the calldata it was given)"; exit 0; \
+		echo "==> $(NGT_LABEL): PASS ($$what; the outer signature verifies over the calldata it was given)"; exit 0; \
 	else echo "==> $(NGT_LABEL): FAIL (outer signature did not verify)"; exit 1; fi
 
 # Automated, non-destructive test of the firmware-update (CMD_FW_*)
@@ -1237,12 +1244,12 @@ test-se050-probe: ## Host tests for the SE050 probe report tool
 # writes and the iwdg SECCFGR1 bit).
 # GTZC_LOG=/path/to.log (env) preserves the semihosting log instead of
 # deleting the mktemp file on exit.
-gtzc-enforcement-hw: ## 7/7 secure-peripheral RAZ-fault on NS access (HW)
-	@echo "==> Building GTZC1 enforcement test (secure + stm32u585 + e2e-test + mock-se)"
+gtzc-enforcement-hw: ## Every TZSC peripheral except OTG reads 0 from NS and raises one TZIC event (HW)
+	@echo "==> Building GTZC enforcement test (secure + stm32u585 + e2e-test + gtzc-probe-clocks + mock-se)"
 	@FSBL_VENDOR_PUBKEY=$(DEV_VENDOR_PUBKEY) $(RUSTFLAGS_VAR)="$(RUSTFLAGS_SECURE_HW)" \
 		cargo build --locked --release --target $(TARGET) --target-dir target/secure \
 			-p sphincs-tz-secure --no-default-features \
-			--features mock-se,ui-semihosting,debug-log,e2e-test,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)$(GTZC_SECURE_EXTRA)
+			--features mock-se,ui-semihosting,debug-log,e2e-test,gtzc-probe-clocks,stm32u585,otp-hardcoded-master-key,$(BOARD_FEATURE)$(GTZC_SECURE_EXTRA)
 	@echo "==> Building GTZC1 enforcement test (NS + gtzc-test + stm32u585)"
 	@rm -f $(NONSECURE_ELF) target/nonsecure/$(TARGET)/release/deps/sphincs_tz_nonsecure-*
 	@$(RUSTFLAGS_VAR)="$(RUSTFLAGS_NONSECURE_HW)" \
@@ -3010,7 +3017,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  ui-capture bhk-hardcoded-master-key uart-console \
                  boot-pulse sca-trigger erc7730-dev-unattested optiga-reset-oids \
                  erc7730-forced-blind rng-fault-probe trng-dump sign-timing fi-live-delays stack-hwm \
-                 stack-overflow-probe rng-xor-probe \
+                 stack-overflow-probe rng-xor-probe gtzc-probe-clocks \
                  fw-rollback-e2e fwup-transport-e2e se050-scp03-allow-factory-fallback \
                  legacy-fw-rollback-unsafe prodtest factory-provisioning \
                  factory-provisioning-rehearsal factory-production-irreversible-im-sure \

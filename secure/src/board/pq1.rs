@@ -24,8 +24,9 @@
 //!   counts: it is an ordinary USART (`BRR = f_ck / baud`, on APB1) rather
 //!   than LPUART1's `BRR = 256 * f_ck / baud` on APB3; it lives in
 //!   **GTZC1** alongside every other peripheral `sau.rs` configures,
-//!   whereas LPUART1 is governed by GTZC2 — a controller the firmware does
-//!   not touch at all; and it keeps the driver a base-address change away
+//!   whereas LPUART1 is governed by GTZC2 — a controller the firmware did
+//!   not touch at all then (it secures all of it since #1131); and it keeps
+//!   the driver a base-address change away
 //!   from `iota2`'s USART1 rather than a second baud-rate algorithm.
 //! - **RGB LED enable is PB12, and the schematic says so too.** An earlier
 //!   version of this note claimed the schematic showed `RGB_EN` on PB11 and

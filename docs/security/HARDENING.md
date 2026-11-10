@@ -350,6 +350,13 @@ On every boot, before trusting the SE050:
 
 - Enable TrustZone. Configure SAU and IDAU to partition flash, SRAM, and peripherals.
 - **GTZC configuration is the #1 source of TrustZone-M leaks.** Budget real time for it and have it reviewed.
+  **UPDATE 2026-11-10 (#1131, #1132):** it was, twice in one day. The image listed what to secure, and
+  ICACHE was not on the list: its remap registers redirect secure code fetches to SRAM. The image is now
+  deny-by-default (every GTZC1 and GTZC2 TZSC peripheral secure, OTG FS the only exception). And one
+  register cannot be secured at all: `FLASH_ACR` is gated by privilege only, so non-secure code could lower
+  the flash wait states and make the secure world fetch wrong instructions. Every entry into
+  flash-resident secure code now starts in RAM, restores `FLASH_ACR`, empties ICACHE, and runs with
+  non-secure interrupts masked (`secure/src/flash_guard.rs`). Silicon receipts: DVT rows 3.14–3.16.
 - Mark as Secure: I²C to SE050, TIM used for inactivity timer, TAMP, SAES, PKA, HASH, TRNG, BKPSRAM holding secrets.
 - Block **all** DMA controllers from mastering into Secure SRAM unless the DMA instance is itself Secure.
   **UPDATE 2026-10-18 (#982):** stronger than this line asked for. The SAU filters only the CPU, and the

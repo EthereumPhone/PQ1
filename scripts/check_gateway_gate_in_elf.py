@@ -15,7 +15,13 @@ stub (`sg; b.w __acle_se_nsc_is_unlocked`) in both builds. Any
 of the body.
 
 Gate present  = an exclusive-access pair (ldaex/ldrex + stlex/strex) AND a
-                literal reference to the `GATEWAY_GATE` static's address.
+                reference to the `GATEWAY_GATE` static's address: either a
+                literal equal to it, or a literal just below it plus an
+                `add ..., #imm` that lands on it. The second form is what the
+                compiler emits when the gate shares a base literal with a
+                neighbouring static (`ldr r0, =0x30002a80; add.w r6, r0, #8`,
+                seen 2026-11-10); matching the exact literal only made this
+                script call a gated image ungated.
 Gate absent   = neither, in a body that was actually found and is non-trivial.
 
 Fails closed: a missing symbol, an empty or tiny extraction, or a missing
@@ -34,6 +40,8 @@ EXCL_LOAD = re.compile(r"\b(ldaex|ldrex)\b", re.I)
 EXCL_STORE = re.compile(r"\b(stlex|strex)\b", re.I)
 OUTLINED_CALL = re.compile(r"\bbl\s+[0-9a-f]+\s+<(OUTLINED_FUNCTION_[0-9]+)>")
 INSN_LINE = re.compile(r"^\s*[0-9a-f]+:\s")
+WORD_LITERAL = re.compile(r"\.word\s+0x([0-9a-f]+)", re.I)
+ADD_IMM = re.compile(r"\badd(?:s|w|\.w|s\.w)?\s+\w+,\s*\w+,\s*#(0x[0-9a-f]+|\d+)", re.I)
 
 
 def run(cmd):
@@ -96,6 +104,13 @@ def main():
 
     has_excl = bool(EXCL_LOAD.search(text)) and bool(EXCL_STORE.search(text))
     refs_gate = re.search(r"\b0*" + re.escape(addr) + r"\b", text, re.I) is not None
+    if not refs_gate:
+        # Base literal + immediate add. Only literals within one small-data
+        # reach below the gate count, and the sum must be exact.
+        gate = int(addr, 16)
+        words = {int(w, 16) for w in WORD_LITERAL.findall(text)}
+        imms = {int(i, 0) for i in ADD_IMM.findall(text)}
+        refs_gate = any(gate - 4095 <= w < gate and (gate - w) in imms for w in words)
     present = has_excl and refs_gate
 
     print(f"  {BODY_SYM}: {len(insns)} lines, outlined helpers folded in: "

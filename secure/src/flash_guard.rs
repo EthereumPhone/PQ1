@@ -26,35 +26,55 @@
 //! 2. **Secure exception vectors live in secure RAM.** `install` points
 //!    `VTOR_S` at a RAM table whose every entry is one RAM trampoline; it
 //!    looks the real handler up in a RAM copy of the flash table.
-//! 3. **Both run `__pq_flash_guard` first**: if `FLASH_ACR` is not the value
-//!    the secure boot left, write it back, read it back (the write applies
-//!    only after one more access; seen on silicon), and invalidate ICACHE.
-//! 4. **Non-secure interrupts are masked for the whole gateway call**
+//! 3. **Both run the guard first.** It always writes the boot value of
+//!    `FLASH_ACR` back and reads it back until it matches (the write applies
+//!    only after one more access; seen on silicon), so no flash-resident
+//!    secure instruction runs on any other value, whatever the register read
+//!    before.
+//! 4. **ICACHE is emptied whenever the non-secure world may have run since
+//!    it was last emptied**: on every gateway entry, and on every secure
+//!    exception taken outside a gateway call (`__pq_in_call` = 0). ICACHE
+//!    also serves data reads of flash, and the non-secure world can leave
+//!    lines for its own addresses that differ from the flash (a wrong
+//!    latency, or reprogramming a page). After the guard, a secure read of
+//!    non-secure flash returns the flash. Inside a gateway call the cache
+//!    is left alone, so a sign is not slowed by its own SysTick.
+//! 5. **Non-secure interrupts are masked for the whole gateway call**
 //!    (`BASEPRI_S` = 0x80; with `AIRCR.PRIS` every non-secure exception has
 //!    priority >= 0x80), so the non-secure world cannot change the latency
-//!    while flash-resident secure code runs. Secure exceptions must therefore
-//!    all sit below 0x80; `main::setup_systick` keeps PendSV there.
+//!    or its flash while flash-resident secure code runs. Secure exceptions
+//!    must therefore all sit below 0x80; `main::setup_systick` keeps PendSV
+//!    there.
 //!
 //! # What it does not cover
 //!
-//! * A bank the non-secure world put in power-down (`PDREQ1`): the flash
-//!   interface wakes it on the next access (RM0456 §7.3.4). Not exercised at
-//!   speed on silicon.
-//! * Secure READS of non-secure flash. The non-secure world can leave wrong
-//!   lines for its own addresses in ICACHE with the latency already put back.
-//!   Every such read is checked by content: the atlas copy by its hash
-//!   (`ui::px::assets`), a staged image by the FSBL at the next boot.
+//! * The CONTENT of non-secure flash. It is the non-secure world's to
+//!   write; the guard only makes a secure read return what the flash holds
+//!   and keeps it stable for the length of one gateway call. Anything the
+//!   secure world decides from it is still checked by content: the atlas
+//!   by its hash, on a secure-RAM copy (`ui::px::assets`); a staged image
+//!   by the FSBL at the next boot.
+//! * A bank the non-secure world put in power-down (`PDREQ1`/`PDREQ2`) is
+//!   woken by the flash interface on the next access (RM0456 §7.3.4); the
+//!   guard does not wait for it. Exercised at speed on EVT-3D21, see below.
 //! * The stock non-secure image has no exception handlers. A non-secure image
 //!   that relied on its own interrupts during a gateway call no longer gets
 //!   them (the `toctou`, `nested-gate` and `idle-hold` probe images do).
 //!
-//! Evidence (EVT-3D21, 2026-11-10, `make build-hw BOARD=pq1`): the image
-//! boots and the non-secure e2e runner starts; with the core in the
-//! non-secure state a RAM stub wrote `LATENCY` = 0 and called
-//! `nscram_is_unlocked`: the call returned 1, `FLASH_ACR` read 4 again and
-//! the hit counter went 0 -> 1. Not measured: the cost of the masked
-//! non-secure interrupts on a USB image, and any `ui-px` or dual-SE build on
-//! silicon.
+//! # Evidence
+//!
+//! `tools/dvt/flash_acr_stress.sh` (RAM-only stub in the non-secure state,
+//! at full speed, the 1 ms secure SysTick preempting it at arbitrary
+//! points): for each of LATENCY 0 and 1, LPM, PRFTEN, SLEEP_PD, every
+//! writable bit at once, PDREQ1, PDREQ2, both, and "LATENCY 0, then the boot
+//! value written back with no readback", the stub writes `FLASH_ACR` and
+//! calls a gateway entry; two more modes leave the bad value (or a
+//! powered-down bank 1) for 7.5 ms per iteration and let the secure SysTick
+//! run. EVT-3D21, 2026-11-10: every mode 2,000/2,000 with no wrong return
+//! value and no reset, on `make build-hw-usb-test BOARD=pq1` and on a
+//! `ui-px` `devunit-ab` image running from slot A and from slot B (secure
+//! code in bank 2, the bank the non-secure slots share). Receipt:
+//! `docs/hardware/dvt-silicon-test-checklist.md` row 3.15.
 
 use core::ptr::{addr_of, addr_of_mut, read_volatile, write_volatile};
 
@@ -79,6 +99,15 @@ static mut __pq_flash_acr_expect: u32 = 0;
 /// How many times the guard found `FLASH_ACR` changed (diagnostic).
 #[no_mangle]
 static mut __pq_flash_guard_hits: u32 = 0;
+/// How many times the guard emptied ICACHE (diagnostic).
+#[no_mangle]
+static mut __pq_icache_flushes: u32 = 0;
+/// 1 while a gateway call runs its flash-resident body: ICACHE was emptied
+/// on the way in and non-secure interrupts are masked, so the non-secure
+/// world has not run since. 0 at every other time. A secure exception taken
+/// while it is 0 empties ICACHE before its handler runs.
+#[no_mangle]
+static mut __pq_in_call: u32 = 0;
 /// The flash vector base the image booted from (what `VTOR_S` held).
 static mut BOOT_VTOR: u32 = 0;
 
@@ -106,10 +135,16 @@ pub fn boot_vector_base(vtor_now: u32) -> u32 {
     if b != 0 { b } else { vtor_now }
 }
 
-/// Times the guard had to put `FLASH_ACR` back since boot.
+/// Times the guard found `FLASH_ACR` changed since boot.
 pub fn hits() -> u32 {
     // SAFETY: a word the RAM guard increments; a torn read is impossible.
     unsafe { read_volatile(addr_of!(__pq_flash_guard_hits)) }
+}
+
+/// Times the guard emptied ICACHE since boot.
+pub fn icache_flushes() -> u32 {
+    // SAFETY: a word the RAM guard increments; a torn read is impossible.
+    unsafe { read_volatile(addr_of!(__pq_icache_flushes)) }
 }
 
 /// Move the secure vector table to RAM and record the good `FLASH_ACR`.
@@ -151,41 +186,65 @@ pub fn install() {
 // (`.data.*` is copied by cortex-m-rt before `main`), outside the NSC range.
 // `SG` and `BXNS` are emitted as opcodes: the assembler accepts the mnemonics
 // only with the security extension enabled.
+//
+// `__pq_flash_guard` / `__pq_flash_guard_inv` preserve every register (the
+// gateway path holds the caller's arguments in r0-r3). The first empties
+// ICACHE only if `FLASH_ACR` had changed, the second always.
 core::arch::global_asm!(
     r#"
     .syntax unified
     .section .data.pqram.guard,"awx",%progbits
     .balign 4
     .thumb_func
+    .global __pq_flash_guard_inv
+    .type __pq_flash_guard_inv,%function
+__pq_flash_guard_inv:
+    push {{r0, r1, r2, r3}}
+    movs r2, #1
+    b 3f
+
+    .balign 4
+    .thumb_func
     .global __pq_flash_guard
     .type __pq_flash_guard,%function
 __pq_flash_guard:
-    push {{r0, r1}}
+    push {{r0, r1, r2, r3}}
+    movs r2, #0
+3:
     ldr r1, =0x50022000
     ldr r0, =__pq_flash_acr_expect
     ldr r0, [r0]
-    ldr r1, [r1]
-    cmp r1, r0
-    beq 1f
+    ldr r3, [r1]
+    cmp r3, r0
+    beq 4f
+    movs r2, #1
+    ldr r1, =__pq_flash_guard_hits
+    ldr r3, [r1]
+    adds r3, #1
+    str r3, [r1]
     ldr r1, =0x50022000
+4:
     str r0, [r1]
-    ldr r0, [r1]
+    ldr r3, [r1]
+    cmp r3, r0
+    bne 4b
+    cbz r2, 5f
     ldr r1, =0x50030400
     ldr r0, [r1]
     orr r0, r0, #2
     str r0, [r1]
-2:
+6:
     ldr r0, [r1, #4]
     tst r0, #1
-    bne 2b
+    bne 6b
     dsb
     isb
-    ldr r1, =__pq_flash_guard_hits
+    ldr r1, =__pq_icache_flushes
     ldr r0, [r1]
     adds r0, #1
     str r0, [r1]
-1:
-    pop {{r0, r1}}
+5:
+    pop {{r0, r1, r2, r3}}
     bx lr
 
     .balign 4
@@ -194,7 +253,14 @@ __pq_flash_guard:
     .type __pq_exc_tramp,%function
 __pq_exc_tramp:
     push {{r4, lr}}
+    ldr r0, =__pq_in_call
+    ldr r0, [r0]
+    cbnz r0, 1f
+    bl __pq_flash_guard_inv
+    b 2f
+1:
     bl __pq_flash_guard
+2:
     pop {{r4, lr}}
     mrs r0, ipsr
     ldr r1, =__pq_orig_vectors
@@ -209,8 +275,16 @@ __pq_nsc_common:
     mrs r4, basepri
     mov lr, #0x80
     msr basepri, lr
-    bl __pq_flash_guard
+    bl __pq_flash_guard_inv
+    push {{r0, r1}}
+    ldr r0, =__pq_in_call
+    movs r1, #1
+    str r1, [r0]
+    pop {{r0, r1}}
     blx r12
+    ldr r1, =__pq_in_call
+    movs r2, #0
+    str r2, [r1]
     msr basepri, r4
     pop {{r4, lr}}
     mov r1, lr

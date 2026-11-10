@@ -175,11 +175,12 @@ mod stm32 {
     //! CRIT-4 fix: the TZSC_SECCFGRx registers used to be written to
     //! `0x00000000` (every peripheral NS), which put TRNG, AES, PKA,
     //! HASH, I2C1, I2C2 under NS control and defeated CLAUDE.md
-    //! invariant #4. We now use a default-secure baseline: every bit is
-    //! initialised to 1 (SECURE) and only peripherals that MUST be
-    //! driven from NS (USB OTG FS, and nothing else today) get flipped
-    //! to NS. The exact bit positions come from STM32U585 RM0456 §54
-    //! (per-peripheral TZSC mapping tables).
+    //! invariant #4. The image is deny-by-default (#1131, 2026-11-10):
+    //! every peripheral in GTZC1_TZSC and GTZC2_TZSC is SECURE, and the
+    //! only one left to the non-secure world is USB OTG FS. Before that the
+    //! image listed the peripherals to secure and left the rest non-secure,
+    //! which is how ICACHE's remap registers stayed reachable. Bit positions:
+    //! STM32U585 SVD; the implemented bits were read back from EVT-3D21.
 
     use crate::hw::mmio::Reg32;
 
@@ -220,6 +221,11 @@ mod stm32 {
     // 0x5000_0000 + AHB1PERIPH offset 0x0002_0000 + TZSC1 offset
     // 0x0001_2400).
     const TZSC_BASE: u32 = 0x5003_2400;
+    // GTZC2 TZSC (secure alias; STM32U585 SVD `SEC_GTZC2_TZSC`): the
+    // SmartRun-domain peripherals. Its register clock is RCC_AHB3ENR bit 12.
+    const TZSC2_BASE: u32 = 0x5602_3000;
+    const RCC_AHB3ENR_ADDR: u32 = 0x5602_0C00 + 0x94;
+    const RCC_AHB3ENR_GTZC2EN: u32 = 1 << 12;
 
     /// Bundled GTZC handles. One-time bound below.
     struct GtzcRegs {
@@ -229,6 +235,8 @@ mod stm32 {
         tzsc_seccfgr1: Reg32,
         tzsc_seccfgr2: Reg32,
         tzsc_seccfgr3: Reg32,
+        rcc_ahb3enr: Reg32,
+        tzsc2_seccfgr1: Reg32,
     }
 
     // SAFETY: each address is a 4-byte-aligned STM32U585 MMIO register
@@ -243,6 +251,8 @@ mod stm32 {
             tzsc_seccfgr1: Reg32::new(TZSC_BASE + 0x10),
             tzsc_seccfgr2: Reg32::new(TZSC_BASE + 0x14),
             tzsc_seccfgr3: Reg32::new(TZSC_BASE + 0x18),
+            rcc_ahb3enr: Reg32::new(RCC_AHB3ENR_ADDR),
+            tzsc2_seccfgr1: Reg32::new(TZSC2_BASE + 0x10),
         }
     };
 
@@ -259,15 +269,15 @@ mod stm32 {
     // ---- SECCFGR1 (APB1) — IWDG + I2C1 + I2C2 SECURE ----
     // Bit positions per `GTZC_CFGR1_*_Pos` in CMSIS `stm32u585xx.h`.
     //
-    // - IWDG (bit 7): Secure-owned watchdog. Selected only with the `iwdg`
-    //   feature, which is mandatory for production and for any production
-    //   forced-blind build. Runtime register access uses only 0x5000_3000.
+    // - IWDG (bit 7): Secure-owned watchdog (the `iwdg` feature, mandatory
+    //   for production and for any production forced-blind build). Secure in
+    //   every image since #1131, driver or not. Runtime register access uses
+    //   only 0x5000_3000.
     // - I2C1 (bit 13): OPTIGA Trust M (+ SE050 too, on `iota2`).
     // - I2C2 (bit 14): STSAFE-A110 on-board probe bus (`iota2`); the
     //   AW99703 backlight + AW21036 RGB LED drivers (`pq1`).
     // - I2C4 (bit 16): SE050's dedicated bus — `pq1` only.
     // All selected entries are secure-world-only; NS has no writer.
-    #[cfg(feature = "iwdg")]
     const SECCFGR1_IWDG_BIT: u32 = 1 << 7;
     const SECCFGR1_I2C1_BIT: u32 = 1 << 13;
     const SECCFGR1_I2C2_BIT: u32 = 1 << 14;
@@ -281,7 +291,6 @@ mod stm32 {
     // thing that changes is whether the non-secure world can also drive the
     // bus. `configure_gtzc` writes SECCFGR1 absolutely, so a missing bit is
     // actively driven to 0, not merely left at reset.
-    #[cfg(feature = "board-pq1")]
     const SECCFGR1_I2C4_BIT: u32 = 1 << 16;
 
     // UCPD1 (bit 19, `GTZC_CFGR1_UCPD1_Pos` — CMSIS stm32u585xx.h:20063).
@@ -361,14 +370,15 @@ mod stm32 {
     // EXCLUSIVELY from the secure world (`hw::spi_hw`, `hw::lcd_nv3007`); NS
     // never touches it. Leaving it NS lets a hostile NS image reconfigure,
     // disable, or drive the display used to confirm what is signed — a direct
-    // invariant #4 break. Marked only when the SPI1 LCD backend is compiled in.
+    // invariant #4 break. Secure in every image since #1131 (before that only
+    // when the SPI1 LCD backend was compiled in, so the gtzc receipt was taken
+    // with it non-secure).
     //
     // NOTE (F1 is PARTIAL — silicon-validation + two residuals still owed, see
     // the finding): this closes the SPI1 *peripheral* attribution, but the panel
     // GPIOE pins (PE7/12/13/14/15) stay NS (NS could drive the lines directly
     // via GPIOE, bypassing SPI1) and the SPI1 clock-enable is RCC-governed (F3),
     // so full "NS cannot touch the trusted display" needs those closed too.
-    #[cfg(feature = "spi1-arduino")]
     const SECCFGR2_SPI1_BIT: u32 = 1 << 1;
 
     // ---- SECCFGR3 (AHB2) — crypto block SECURE, OTG NS ----
@@ -441,6 +451,36 @@ mod stm32 {
     const SECCFGR3_DCACHE_REG_BIT: u32 = 1 << 7;
     const SECCFGR3_RAMCFG_BIT: u32 = 1 << 22;
 
+    // ---- Deny by default (#1131) ----
+    //
+    // The bits above are the ones with a recorded reason. The image is not
+    // built from them any more: it is every documented bit of each register
+    // minus an explicit non-secure allow-list, so a peripheral nobody thought
+    // about is secure, not reachable. The named bits stay as a floor that the
+    // image must contain.
+    //
+    // `*_VALID`: the documented bits (STM32U585 SVD, `TZSC_SECCFGRx`). Read
+    // back on EVT-3D21 (2026-11-10, all-ones write from the reset state):
+    // SECCFGR1 `0x001F_FFFF`, SECCFGR2 `0x0000_01FF`, SECCFGR3 `0x007F_FFFF`,
+    // GTZC2 SECCFGR1 `0x0000_1BFF`. SECCFGR1 bit 20 is writable on that die
+    // and not in the SVD; the write below sets it (all-ones outside the
+    // allow-list) and the readback check ignores it, so a die without it
+    // still boots.
+    const SECCFGR1_VALID: u32 = 0x000F_FFFF;
+    const SECCFGR2_VALID: u32 = 0x0000_01FF;
+    const SECCFGR3_VALID: u32 = 0x007F_FFFF;
+    const TZSC2_SECCFGR1_VALID: u32 = 0x0000_1BFF;
+    // The whole non-secure allow-list. OTG FS (SECCFGR3 bit 10) is the USB
+    // HID transport, driven by the non-secure USB stack; nothing else in
+    // `nonsecure/src` touches a TZSC peripheral outside the DVT probes.
+    const SECCFGR1_NS_ALLOW: u32 = 0;
+    const SECCFGR2_NS_ALLOW: u32 = 0;
+    const SECCFGR3_NS_ALLOW: u32 = 1 << 10;
+    const TZSC2_SECCFGR1_NS_ALLOW: u32 = 0;
+    /// GTZC2_TZIC_IER2 bit 5, `LPDMA1IE` (STM32U585 SVD): the LPDMA1
+    /// counterpart of `TZIC_IER4_GPDMA1IE`.
+    const TZIC2_IER2_LPDMA1IE: u32 = 1 << 5;
+
     /// Unconditional post-write readback verifier (finding F6).
     ///
     /// Unlike `debug_assert_eq!` — which compiles to nothing under the shipping
@@ -483,124 +523,60 @@ mod stm32 {
             mpcbb_seccfgr(MPCBB2_BASE, i).write(0x0000_0000); // all blocks non-secure
         }
 
-        // ---- GTZC1 TZSC: SECURE-allowlist policy (Trezor parity) ----
+        // ---- GTZC1 + GTZC2 TZSC: deny by default (#1131) ----
         //
-        // CRIT-4 / Pre-Production Caveat fix: restores CLAUDE.md
-        // invariant #4 ("NS never sees secure-world peripherals").
+        // CLAUDE.md invariant #4. STM32U5 TZSC resets to NS for every
+        // peripheral. Until 2026-11-10 this function marked a list of
+        // peripherals SECURE and left the rest at that reset default
+        // (Trezor's pattern). The list was right about everything on it and
+        // silent about everything else: ICACHE's remap registers, and with
+        // them every secure code fetch, were reachable from the non-secure
+        // world because nobody had put ICACHE on the list.
         //
-        // STM32U5 TZSC reset default is NS for every peripheral. We
-        // keep that as the baseline AND explicitly mark a small list
-        // of security-critical peripherals SECURE. Trezor uses the
-        // same pattern (`core/embed/sys/trustzone/stm32u5/trustzone.c`
-        // sets `GTZC_PERIPH_{RNG,SAES,HASH,IWDG,WWDG,...}` SEC,
-        // everything else stays NS).
+        // Now every TZSC peripheral is SECURE and the list is the other way
+        // round: `*_NS_ALLOW` names what the non-secure world may reach, and
+        // that is OTG FS only. A NS access to anything else is gated at the
+        // bridge (read 0, write ignored) and raises a TZIC event.
         //
-        // Locked-down peripherals (NS reads/writes will trip the GTZC
-        // illegal-access IRQ once the post-write check below validates):
-        //   - SECCFGR1: IWDG when selected; I2C1, I2C2 (SE buses)
-        //   - SECCFGR2: SPI1 (the trusted-display LCD bus, under ui-lcd — F1)
-        //   - SECCFGR3: AES, HASH, RNG, PKA, SAES (the crypto block)
+        // What that changes for the secure world: nothing. Its drivers use
+        // the secure aliases (0x5xxx_xxxx), and a secure peripheral drives
+        // only secure pins, which every pin is after reset except the ones
+        // `hw::usb_hw` hands over (PA11/PA12).
         //
-        // Intentionally LEFT NS (the NS world legitimately needs them):
-        //   - OTG (SECCFGR3 bit 10): USB HID transport to companion
-        //   - GPIO banks: governed per-pin by GPIOx_SECCFGR, not TZSC
-        //   - USART / etc.: NS-side UI + debug logging. NOT the timers:
-        //     TIM2 and TIM3 are SECURED above (they carry the consumption
-        //     mask, which production mandates), so this line no longer
-        //     covers them. (SPI1 is now
-        //     secured above; SPI2 stays NS on the non-LCD Tropic bench build)
+        // Not TZSC peripherals, secured elsewhere: RCC, PWR, TAMP, RTC, EXTI
+        // and SYSCFG by `secure_system_controllers()`; every GPDMA1/LPDMA1
+        // channel by `secure_dma_masters()`; GPIO per pin by GPIOx_SECCFGR.
         //
-        // Bus MASTERS are secured whether or not anything uses them (#982):
-        //   - SECCFGR3: DMA2D, SDMMC1, SDMMC2 (the TZSC-attributable masters)
-        //   - GPDMA1 / LPDMA1 are not TZSC peripherals; every channel is made
-        //     secure + privileged and locked by `secure_dma_masters()` below.
-        // Other peripherals (OCTOSPI, FDCAN, etc.) keep their NS reset
-        // default; they are slaves only, we don't use them from the secure
-        // side, and they're irrelevant to the threat model.
+        // ---- The register image is pinned ----
         //
-        // RCC, PWR, TAMP, RTC and EXTI are NOT TZSC peripherals: each
-        // carries its own `*_SECCFGR`. They are secured separately, by
-        // `secure_system_controllers()` below (DVT1 row 3.5).
-        // ---- C3: the register image is FEATURE-CONDITIONAL — pin it ----
-        //
-        // Pinned so a feature-combo change to the TZSC image is a build failure
-        // rather than a silent difference between what we test and what we ship.
-        // This is the register-image half of roadmap §P1.9 ("exact production
-        // register images and feature combinations"), and it composes with the
-        // proto-NS-window subset assert at the top of this file: that one pins
-        // the SAU intervals, this one pins the peripheral-security image.
-        //
-        // WHY IT MATTERS HERE, CONCRETELY: `ui-lcd` implies `spi1-arduino`
-        // (secure/Cargo.toml), so the SHIPPING image secures SPI1 — the
-        // trusted-display bus. `make gtzc-enforcement-hw` builds with
-        // `ui-semihosting`, i.e. WITHOUT `spi1-arduino`, so its 7/7 RAZ-fault
-        // receipt is taken against `seccfgr2 == 0`: the one bit that keeps NS
-        // off the trusted display is NOT covered by the enforcement test that
-        // is cited as evidence for it. Recorded as HW-ASSUME-CMSE-SAU's note
-        // and work-todo C3; closing it needs the test rebuilt on the shipping
-        // combo, which these pins make reviewable in the meantime.
-        // The image is two orthogonal choices — IWDG on/off, and which
-        // board — so it is built from two independently-cfg'd terms rather
-        // than four hand-written totals. The `assert!`s below still pin the
-        // FULL expected value for each of the four combinations, by exact
-        // equality: a subset test would let a stray extra bit through, and
-        // the whole point of this pin is that every secured peripheral was
-        // deliberately chosen.
-        #[cfg(feature = "iwdg")]
-        const SECCFGR1_IWDG_IMAGE: u32 = SECCFGR1_IWDG_BIT;
-        #[cfg(not(feature = "iwdg"))]
-        const SECCFGR1_IWDG_IMAGE: u32 = 0;
-
-        #[cfg(feature = "board-pq1")]
-        const SECCFGR1_BOARD_IMAGE: u32 = SECCFGR1_I2C4_BIT;
-        #[cfg(not(feature = "board-pq1"))]
-        const SECCFGR1_BOARD_IMAGE: u32 = 0;
-
-        const SECCFGR1_IMAGE: u32 = SECCFGR1_IWDG_IMAGE
+        // Exact equality on the documented bits, so the image cannot move
+        // without a build failure, on any feature combination or board: the
+        // image no longer depends on either. (It used to: `iwdg`, the board
+        // and `ui-lcd` each added a bit, and `make gtzc-enforcement-hw` took
+        // its receipt on a combination that left SPI1, the trusted-display
+        // bus, non-secure. That gap is gone with the conditions.)
+        const SECCFGR1_IMAGE: u32 = SECCFGR1_VALID & !SECCFGR1_NS_ALLOW;
+        const SECCFGR2_IMAGE: u32 = SECCFGR2_VALID & !SECCFGR2_NS_ALLOW;
+        const SECCFGR3_IMAGE: u32 = SECCFGR3_VALID & !SECCFGR3_NS_ALLOW;
+        const TZSC2_SECCFGR1_IMAGE: u32 = TZSC2_SECCFGR1_VALID & !TZSC2_SECCFGR1_NS_ALLOW;
+        const _: () = assert!(
+            SECCFGR1_IMAGE == 0x000F_FFFF
+                && SECCFGR2_IMAGE == 0x0000_01FF
+                && SECCFGR3_IMAGE == 0x007F_FBFF
+                && TZSC2_SECCFGR1_IMAGE == 0x0000_1BFF,
+            "TZSC image drifted: every GTZC1/GTZC2 TZSC peripheral is Secure except OTG FS \
+             (SECCFGR3 bit 10). Update ONLY with a matching gtzc-enforcement-hw receipt."
+        );
+        // The floor: every bit with a recorded reason is in the image.
+        const SECCFGR1_FLOOR: u32 = SECCFGR1_IWDG_BIT
             | SECCFGR1_I2C1_BIT
             | SECCFGR1_I2C2_BIT
-            | SECCFGR1_BOARD_IMAGE
+            | SECCFGR1_I2C4_BIT
             | SECCFGR1_UCPD1_BIT
             | SECCFGR1_CRS_BIT
             | SECCFGR1_TIM2_BIT
             | SECCFGR1_TIM3_BIT;
-
-        #[cfg(all(feature = "iwdg", not(feature = "board-pq1")))]
-        const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),
-            "TZSC_SECCFGR1 IWDG image drifted — IWDG must be Secure alongside the SE buses. \
-             Source closure is not #79 silicon denial evidence."
-        );
-        #[cfg(all(not(feature = "iwdg"), not(feature = "board-pq1")))]
-        const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 19),
-            "TZSC_SECCFGR1 image drifted — I2C1+I2C2 are the SE buses (invariant #3). \
-             Update the pin ONLY with a matching gtzc-enforcement-hw receipt."
-        );
-        #[cfg(all(feature = "iwdg", feature = "board-pq1"))]
-        const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 7) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),
-            "TZSC_SECCFGR1 pq1+IWDG image drifted — on pq1 the SE050 has its OWN bus (I2C4, \
-             bit 16) and it MUST be Secure: a clear bit hands the non-secure world the SE050 \
-             bus with no functional symptom whatsoever. Update ONLY with a matching \
-             gtzc-enforcement-hw receipt taken on pq1 silicon."
-        );
-        #[cfg(all(not(feature = "iwdg"), feature = "board-pq1"))]
-        const _: () = assert!(
-            SECCFGR1_IMAGE == (1 << 0) | (1 << 1) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 16) | (1 << 19),
-            "TZSC_SECCFGR1 pq1 image drifted — on pq1 the SE050 has its OWN bus (I2C4, bit 16) \
-             and it MUST be Secure: a clear bit hands the non-secure world the SE050 bus with \
-             no functional symptom whatsoever. Update ONLY with a matching gtzc-enforcement-hw \
-             receipt taken on pq1 silicon."
-        );
-        // SECCFGR2 is the one that differs between the tested and shipped
-        // builds. Both arms are pinned so neither can move unnoticed.
-        #[cfg(feature = "spi1-arduino")]
-        const _: () = assert!(
-            SECCFGR2_SPI1_BIT == 1 << 1,
-            "TZSC_SECCFGR2 shipping image drifted (SPI1 = the trusted-display bus)"
-        );
-        const SECCFGR3_IMAGE: u32 = SECCFGR3_DMA2D_BIT
+        const SECCFGR3_FLOOR: u32 = SECCFGR3_DMA2D_BIT
             | SECCFGR3_ICACHE_REG_BIT
             | SECCFGR3_DCACHE_REG_BIT
             | SECCFGR3_RAMCFG_BIT
@@ -612,39 +588,55 @@ mod stm32 {
             | SECCFGR3_SDMMC1_BIT
             | SECCFGR3_SDMMC2_BIT;
         const _: () = assert!(
-            SECCFGR3_IMAGE
-                == (1 << 5) | (1 << 6) | (1 << 7) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18) | (1 << 22),
-            "TZSC_SECCFGR3 image drifted — DMA2D/SDMMC1/SDMMC2 (bus masters, #982), \
-             ICACHE_REG/DCACHE_REG/RAMCFG (code-bus remap, #1131) and \
-             AES/HASH/RNG/PKA/SAES secure, OTG (bit 10) stays NS. AES..SAES are 5 of the 7 \
-             peripherals gtzc-enforcement-hw covers."
+            SECCFGR1_IMAGE & SECCFGR1_FLOOR == SECCFGR1_FLOOR
+                && SECCFGR2_IMAGE & SECCFGR2_SPI1_BIT == SECCFGR2_SPI1_BIT
+                && SECCFGR3_IMAGE & SECCFGR3_FLOOR == SECCFGR3_FLOOR,
+            "a peripheral with a recorded reason to be Secure fell out of the TZSC image: \
+             the SE buses (I2C1/I2C2/I2C4), IWDG, UCPD1, CRS, TIM2/TIM3 (consumption mask), \
+             SPI1 (trusted display), the crypto block, ICACHE/DCACHE/RAMCFG and the \
+             DMA2D/SDMMC bus masters must never be on the non-secure allow-list."
+        );
+        const _: () = assert!(
+            SECCFGR1_NS_ALLOW == 0
+                && SECCFGR2_NS_ALLOW == 0
+                && SECCFGR3_NS_ALLOW == 1 << 10
+                && TZSC2_SECCFGR1_NS_ALLOW == 0,
+            "the non-secure allow-list is OTG FS (SECCFGR3 bit 10) and nothing else"
         );
 
         let seccfgr1 = SECCFGR1_IMAGE;
-        // SPI1 (trusted-display bus) is the only APB2 peripheral we secure
-        // (F1), and only in the `spi1-arduino` LCD build.
-        #[cfg(feature = "spi1-arduino")]
-        let seccfgr2: u32 = SECCFGR2_SPI1_BIT;
-        #[cfg(not(feature = "spi1-arduino"))]
-        let seccfgr2: u32 = 0; // no APB2 peripheral secured on non-LCD builds
+        let seccfgr2 = SECCFGR2_IMAGE;
         let seccfgr3 = SECCFGR3_IMAGE;
-        GTZC.tzsc_seccfgr1.write(seccfgr1);
-        GTZC.tzsc_seccfgr2.write(seccfgr2);
-        GTZC.tzsc_seccfgr3.write(seccfgr3);
+        // All-ones outside the allow-list, so an implemented bit the SVD does
+        // not document is secure too.
+        GTZC.tzsc_seccfgr1.write(!SECCFGR1_NS_ALLOW);
+        GTZC.tzsc_seccfgr2.write(!SECCFGR2_NS_ALLOW);
+        GTZC.tzsc_seccfgr3.write(!SECCFGR3_NS_ALLOW);
         cortex_m::asm::dsb();
 
         // Post-write self-check: read back and verify UNCONDITIONALLY (F6).
-        // SECCFGR bits are R/W from the secure world, so a write-read round-trip
-        // is the right shape (every documented bit corresponds to an attached
-        // peripheral). This MUST run in release too — the previous
-        // `debug_assert_eq!` vanished under `--release`, so a skipped/faulted
-        // config write reached NS boot undetected. `verify_or_halt` fails closed.
+        // This MUST run in release too — the previous `debug_assert_eq!`
+        // vanished under `--release`, so a skipped/faulted config write
+        // reached NS boot undetected. `verify_or_halt` fails closed. The
+        // mask is the documented bits, allow-list included: OTG must read 0.
         let r1 = GTZC.tzsc_seccfgr1.read();
         let r2 = GTZC.tzsc_seccfgr2.read();
         let r3 = GTZC.tzsc_seccfgr3.read();
-        verify_or_halt(r1, seccfgr1); // TZSC_SECCFGR1
-        verify_or_halt(r2, seccfgr2); // TZSC_SECCFGR2
-        verify_or_halt(r3, seccfgr3); // TZSC_SECCFGR3
+        verify_or_halt(r1 & SECCFGR1_VALID, seccfgr1); // TZSC_SECCFGR1
+        verify_or_halt(r2 & SECCFGR2_VALID, seccfgr2); // TZSC_SECCFGR2
+        verify_or_halt(r3 & SECCFGR3_VALID, seccfgr3); // TZSC_SECCFGR3
+
+        // GTZC2: SPI3, LPUART1, I2C3, LPTIM1/3/4, OPAMP, COMP, ADC4, VREFBUF,
+        // DAC1, ADF1. Left at the non-secure reset default until #1131. With
+        // ADC12 (above) and ADC4 secure, SYSCFG_CFGR1.BOOSTEN follows them and
+        // is no longer non-secure-writable (the #1134 residual). The GTZC2
+        // register clock is left running, as GTZC1's is.
+        GTZC.rcc_ahb3enr.set_bits(RCC_AHB3ENR_GTZC2EN);
+        cortex_m::asm::dsb();
+        GTZC.tzsc2_seccfgr1.write(!TZSC2_SECCFGR1_NS_ALLOW);
+        cortex_m::asm::dsb();
+        let r4 = GTZC.tzsc2_seccfgr1.read();
+        verify_or_halt(r4 & TZSC2_SECCFGR1_VALID, TZSC2_SECCFGR1_IMAGE); // GTZC2 TZSC_SECCFGR1
 
         // Test-only: enable AES/PKA/SAES clocks so the gtzc-test
         // validation driver can prove GTZC enforcement applies to
@@ -691,9 +683,14 @@ mod stm32 {
         // legal and raise nothing — RM0456 §17.4.14, p.727). The stock NS
         // image has no DMA code at all, so the bit cannot false-fire; under
         // `tzic-wipe` such a probe escalates like a probe of the SE buses.
-        // LPDMA1's event is in GTZC2_TZIC (IER2 bit 5), which this branch
-        // does not configure; LPDMA1 reaches only SRAM4 and AHB3 anyway.
+        // LPDMA1's event is in GTZC2_TZIC (IER2 bit 5), armed just below.
         crate::hw::tzic::configure(seccfgr1, seccfgr2, seccfgr3, TZIC_IER4_GPDMA1IE);
+        // GTZC2's TZIC raises the same NVIC line (GTZC, IRQ 8). IER1 mirrors
+        // GTZC2 TZSC_SECCFGR1; IER2 gets LPDMA1 only (every LPDMA1 channel is
+        // secure, #982). RCC/PWR/RTC/TAMP/EXTI/SYSCFG events stay unarmed:
+        // the stock non-secure image reads RCC through its non-secure alias
+        // for a debug print, and under `tzic-wipe` an armed event is a wipe.
+        crate::hw::tzic::configure_tzic2(TZSC2_SECCFGR1_IMAGE, TZIC2_IER2_LPDMA1IE);
     }
 
     /// GTZC1_TZIC_IER4 bit 0, `GPDMA1IE` (STM32U585 SVD; RM0456 p.235).
@@ -925,6 +922,7 @@ mod stm32 {
     // GTZC1 TZSC control register @ TZSC_BASE + 0x00; LCK = bit 0
     // (CMSIS `GTZC_TZSC_CR_LCK_Msk`).
     const TZSC_CR_ADDR: u32 = TZSC_BASE; // + 0x00
+    const TZSC2_CR_ADDR: u32 = TZSC2_BASE; // + 0x00
     const TZSC_CR_LCK: u32 = 1 << 0;
 
     // ARMv8-M SCB AIRCR (core register) security attributes (core_cm33.h).
@@ -962,17 +960,19 @@ mod stm32 {
     /// NS-initiated `cc_open_then_reset` USB-C warm reset. `LOCKSVTAIRCR`
     /// freezes the AIRCR *security-config* bits, not the reset trigger.
     ///
-    /// GTZC2 (SPI3, LPUART1, I2C3, LPTIM1/3/4, ADC4, DAC1, ...) is
-    /// intentionally NOT locked: it is not configured on this branch, and
-    /// locking an unconfigured controller would freeze its NS reset default.
-    /// TAMP/RTC are not GTZC2 peripherals; they are secured through their own
-    /// `*_SECCFGR` in [`secure_system_controllers`], as are RCC/PWR/EXTI.
+    /// GTZC2 (SPI3, LPUART1, I2C3, LPTIM1/3/4, ADC4, DAC1, ...) is locked
+    /// too since #1131, now that `configure_gtzc` programs it; before that it
+    /// was left unlocked on purpose, because a lock would have frozen its NS
+    /// reset default. TAMP/RTC are not GTZC2 peripherals; they are secured
+    /// through their own `*_SECCFGR` in [`secure_system_controllers`], as are
+    /// RCC/PWR/EXTI.
     pub fn lock_security_config() {
         // SAFETY: core + peripheral security registers, 4-byte aligned,
         // owned exclusively by the single-threaded boot path.
         let aircr = unsafe { Reg32::new(SCB_AIRCR_ADDR) };
         let syscfg_cslckr = unsafe { Reg32::new(SYSCFG_CSLCKR_ADDR) };
         let tzsc_cr = unsafe { Reg32::new(TZSC_CR_ADDR) };
+        let tzsc2_cr = unsafe { Reg32::new(TZSC2_CR_ADDR) };
 
         // SYSCFG clock must be ON before any CSLCKR access: RCC_APB3ENR
         // is zero out of reset and nothing else in the boot enables it,
@@ -1023,10 +1023,12 @@ mod stm32 {
             AIRCR_PRIS | AIRCR_BFHFNMINS | AIRCR_SYSRESETREQS;
         verify_or_halt(aircr.read() & AIRCR_SECCFG_MASK, v & AIRCR_SECCFG_MASK);
 
-        // (2) Freeze SAU regions + AIRCR security-config, (3) freeze GTZC1
-        // TZSC per-peripheral attributes. Both lock bits are sticky-set.
+        // (2) Freeze SAU regions + AIRCR security-config, (3) freeze the
+        // GTZC1 and GTZC2 TZSC per-peripheral attributes. The lock bits are
+        // sticky-set.
         syscfg_cslckr.set_bits(CSLCKR_LOCKSAU | CSLCKR_LOCKSVTAIRCR);
         tzsc_cr.set_bits(TZSC_CR_LCK);
+        tzsc2_cr.set_bits(TZSC_CR_LCK);
         cortex_m::asm::dsb();
         cortex_m::asm::isb();
 
@@ -1040,6 +1042,7 @@ mod stm32 {
         let want = CSLCKR_LOCKSAU | CSLCKR_LOCKSVTAIRCR;
         verify_or_halt(syscfg_cslckr.read() & want, want); // SAU/AIRCR lock bits
         verify_or_halt(tzsc_cr.read() & TZSC_CR_LCK, TZSC_CR_LCK); // TZSC CR.LCK
+        verify_or_halt(tzsc2_cr.read() & TZSC_CR_LCK, TZSC_CR_LCK); // GTZC2 TZSC CR.LCK
     }
 }
 

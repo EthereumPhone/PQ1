@@ -34,6 +34,11 @@
 //! a trampoline, so `LR` inside it is not the exception-return value.)
 //!
 //! Outcomes:
+//!   * the handler never ran while the call was in flight   -> PASS (MASKED)
+//!     (since #1132, 2026-11-10: the gateway entry masks non-secure
+//!     interrupts for the whole call, so this is what both builds report
+//!     on current images; the three outcomes below need an image without
+//!     that masking)
 //!   * nested, and the result is the one this build expects -> PASS
 //!   * nested, and the result is the other one              -> FAIL
 //!   * no nested call proven                                 -> INCONCLUSIVE
@@ -368,6 +373,26 @@ fn main() -> ! {
     }
     if ticks_at_return.saturating_mul(TICK_MS) > WRAP_SAFE_MS {
         verdict_inconclusive("outer call near or past the 26.8 s DWT wrap: timing not trustworthy");
+    }
+    // #1132 (2026-11-10): the RAM gateway entry runs the whole call at
+    // BASEPRI_S = 0x80, so no non-secure exception is taken while it is in
+    // flight. The tick is held pending and taken once, in the entry's RAM
+    // tail after the secure function has returned, so the handler never sees
+    // an in-flight call and there is nothing to nest. That is a pass for
+    // BOTH builds and a stronger result than a refusal: the gate (#846) is
+    // no longer what stands between a non-secure handler and a second
+    // gateway call. Unmasked, a sign of `total` ms takes `total / TICK_MS`
+    // ticks (268 on the 2026-10-17 run); at most one means held off.
+    let expected_ticks = total / CYC_PER_MS / TICK_MS;
+    if !fired && ticks_at_return <= 1 && expected_ticks >= 50 {
+        hprintln!(
+            "[NS][ngt] PASS: MASKED: the non-secure SysTick did not run while the call was in flight ({} ms, {} tick(s) by the return, {} if unmasked); no nested call can be made",
+            total / CYC_PER_MS,
+            ticks_at_return,
+            expected_ticks
+        );
+        debug::exit(debug::EXIT_SUCCESS);
+        loop {}
     }
     let proven_nested = fired && before > guard && after > guard && handler < total;
     if !proven_nested {
