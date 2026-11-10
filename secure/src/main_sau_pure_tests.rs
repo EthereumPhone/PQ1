@@ -838,7 +838,7 @@ fn negative_stm32_gtzc_seccfgr3_protects_full_crypto_block() {
     assert!(SAU_SRC.contains("let seccfgr3 = SECCFGR3_IMAGE;"));
     assert!(
         SAU_SRC.contains(
-            "== (1 << 5) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18),"
+            "== (1 << 5) | (1 << 6) | (1 << 7) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18) | (1 << 22),"
         ),
         "the SECCFGR3 image must stay compile-time-pinned to the five crypto peripherals \
          plus the DMA2D/SDMMC1/SDMMC2 masters (#982)"
@@ -2304,6 +2304,13 @@ fn negative_every_dma_master_is_secure_and_locked_before_ns_boot() {
         "const SECCFGR3_SDMMC2_BIT: u32 = 1 << 18;",
         "| SECCFGR3_SDMMC1_BIT",
         "| SECCFGR3_SDMMC2_BIT;",
+        // Code-bus remap and SRAM control (#1131, EVT silicon 2026-11-10).
+        "const SECCFGR3_ICACHE_REG_BIT: u32 = 1 << 6;",
+        "const SECCFGR3_DCACHE_REG_BIT: u32 = 1 << 7;",
+        "const SECCFGR3_RAMCFG_BIT: u32 = 1 << 22;",
+        "| SECCFGR3_ICACHE_REG_BIT",
+        "| SECCFGR3_DCACHE_REG_BIT",
+        "| SECCFGR3_RAMCFG_BIT",
     ] {
         assert!(SAU_SRC.contains(needle), "sau.rs must contain `{needle}`");
     }

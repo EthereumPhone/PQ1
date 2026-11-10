@@ -418,6 +418,28 @@ mod stm32 {
     const SECCFGR3_DMA2D_BIT: u32 = 1 << 5;
     const SECCFGR3_SDMMC1_BIT: u32 = 1 << 17;
     const SECCFGR3_SDMMC2_BIT: u32 = 1 << 18;
+    // ICACHE_REG (bit 6), DCACHE_REG (bit 7), RAMCFG (bit 22) — STM32U585 SVD
+    // `TZSC_SECCFGR3`. Left non-secure until 2026-11-10 (#1131).
+    //
+    // ICACHE is the one that matters. Its four remap regions (`ICACHE_CRRx`)
+    // rewrite the address of every access on the CPU's code bus, with the
+    // cache on or off, and the comparator is NOT limited to the alias ranges
+    // RM0456 §8.4.6 documents. EVT-3D21 silicon, 2026-11-10: with
+    // `CRR0 = 0x00708260` (base `0x0C00_0000`, 2 MB, destination
+    // `0x0E00_0000` = the SRAM code alias, master1) a CPU read of
+    // `0x0C00_0200` returned a marker planted in SRAM1, an instruction fetch
+    // at `0x0C00_0100` executed from SRAM1, and non-secure code in the booted
+    // firmware cleared `ICACHE_CR.EN` and wrote `CRR0` without a fault. So
+    // the non-secure world could point secure fetches and the secure vector
+    // table at SRAM1, which holds host-supplied bytes (`SIGN_SNAP_BUF`).
+    // The secure world is the only ICACHE user (`hw::rcc`).
+    //
+    // DCACHE has no user and no remap; RAMCFG lets its caller erase SRAM1
+    // (fails closed, but the non-secure world has no use for it). Both are
+    // secured so nothing on this row is left to argue about.
+    const SECCFGR3_ICACHE_REG_BIT: u32 = 1 << 6;
+    const SECCFGR3_DCACHE_REG_BIT: u32 = 1 << 7;
+    const SECCFGR3_RAMCFG_BIT: u32 = 1 << 22;
 
     /// Unconditional post-write readback verifier (finding F6).
     ///
@@ -579,6 +601,9 @@ mod stm32 {
             "TZSC_SECCFGR2 shipping image drifted (SPI1 = the trusted-display bus)"
         );
         const SECCFGR3_IMAGE: u32 = SECCFGR3_DMA2D_BIT
+            | SECCFGR3_ICACHE_REG_BIT
+            | SECCFGR3_DCACHE_REG_BIT
+            | SECCFGR3_RAMCFG_BIT
             | SECCFGR3_AES_BIT
             | SECCFGR3_HASH_BIT
             | SECCFGR3_RNG_BIT
@@ -588,8 +613,9 @@ mod stm32 {
             | SECCFGR3_SDMMC2_BIT;
         const _: () = assert!(
             SECCFGR3_IMAGE
-                == (1 << 5) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18),
-            "TZSC_SECCFGR3 image drifted — DMA2D/SDMMC1/SDMMC2 (bus masters, #982) and \
+                == (1 << 5) | (1 << 6) | (1 << 7) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 14) | (1 << 15) | (1 << 17) | (1 << 18) | (1 << 22),
+            "TZSC_SECCFGR3 image drifted — DMA2D/SDMMC1/SDMMC2 (bus masters, #982), \
+             ICACHE_REG/DCACHE_REG/RAMCFG (code-bus remap, #1131) and \
              AES/HASH/RNG/PKA/SAES secure, OTG (bit 10) stays NS. AES..SAES are 5 of the 7 \
              peripherals gtzc-enforcement-hw covers."
         );

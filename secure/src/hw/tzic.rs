@@ -318,11 +318,14 @@ fn label_bank1(sr: u32) -> &'static str {
 fn label_bank3(sr: u32) -> &'static str {
     // SECCFGR3 / IER3 (AHB2) — bit positions per CMSIS
     // `GTZC_CFGR3_*_Pos`.
+    if sr & (1 << 6) != 0 { return "ICACHE"; }
+    if sr & (1 << 7) != 0 { return "DCACHE"; }
     if sr & (1 << 10) != 0 { return "OTG"; }
     if sr & (1 << 11) != 0 { return "AES"; }
     if sr & (1 << 12) != 0 { return "HASH"; }
     if sr & (1 << 13) != 0 { return "RNG"; }
     if sr & (1 << 14) != 0 { return "PKA"; }
     if sr & (1 << 15) != 0 { return "SAES"; }
+    if sr & (1 << 22) != 0 { return "RAMCFG"; }
     "(AHB2)"
 }
