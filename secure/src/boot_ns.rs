@@ -79,7 +79,15 @@ pub unsafe fn boot(ns_vector_table: u32) -> ! {
     const HANDOFF_FILL: u32 = crate::stack_scrub::hwm::PATTERN;
     #[cfg(not(feature = "stack-hwm"))]
     const HANDOFF_FILL: u32 = 0;
-    let stack_top = core::ptr::addr_of!(_stack_start) as u32;
+    // Stack seal (#1135, Arm CVE-2020-16273 guidance). While the non-secure
+    // world runs, MSP_S is otherwise EMPTY, and a non-secure `FNC_RETURN` or
+    // forged `EXC_RETURN` makes the core read a return frame from `[MSP_S]`.
+    // That address was `_stack_start`, the secure alias of the non-secure
+    // world's SRAM2; only MPCBB2 answering the read with zeros stopped it.
+    // MSP_S now rests two words lower, on `0xFEF5EDA5` twice: as a return
+    // address it is not executable, and it is not the integrity signature.
+    const STACK_SEAL: u32 = 0xFEF5_EDA5;
+    let stack_top = core::ptr::addr_of!(_stack_start) as u32 - 8;
     let stack_bottom = core::ptr::addr_of!(_stack_end) as u32;
     core::arch::asm!(
         "msr msp, {top}",
@@ -89,6 +97,8 @@ pub unsafe fn boot(ns_vector_table: u32) -> ! {
         "str {zero}, [{p}], #4",
         "b 2b",
         "3:",
+        "str {seal}, [{top}]",
+        "str {seal}, [{top}, #4]",
         "mov lr, {entry}",
         "mov r0,  #0",
         "mov r1,  #0",
@@ -108,6 +118,7 @@ pub unsafe fn boot(ns_vector_table: u32) -> ! {
         top = in(reg) stack_top,
         p = in(reg) stack_bottom,
         zero = in(reg) HANDOFF_FILL,
+        seal = in(reg) STACK_SEAL,
         options(noreturn),
     );
 }
