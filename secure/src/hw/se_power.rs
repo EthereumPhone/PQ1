@@ -151,7 +151,7 @@ fn drive_high(port: u32, pin: u32) {
 
 /// Drive `(port, pin)` low as a push-pull output. Mirror of [`drive_high`]
 /// (level first, then mode), used only by the probe's power cycle.
-#[cfg(any(feature = "optiga-probe", feature = "se050-probe", feature = "se050-stress", feature = "se050-platform-scp-tool"))]
+#[cfg(any(feature = "optiga-probe", feature = "optiga-luc-probe", feature = "se050-probe", feature = "se050-stress", feature = "se050-platform-scp-tool"))]
 fn drive_low(port: u32, pin: u32) {
     // SAFETY: as `drive_high` — real GPIO registers in the secure alias,
     // disjoint-bit RMW on a single-threaded secure-world path.
@@ -188,7 +188,7 @@ fn drive_low(port: u32, pin: u32) {
 ///
 /// Returns `false` on a board without a rail enable (`iota2`), where no
 /// power cycle happened and only the reset pulse remains.
-#[cfg(any(feature = "optiga-probe", feature = "se050-probe", feature = "se050-stress", feature = "se050-platform-scp-tool"))]
+#[cfg(any(feature = "optiga-probe", feature = "optiga-luc-probe", feature = "se050-probe", feature = "se050-stress", feature = "se050-platform-scp-tool"))]
 pub fn power_cycle(off_ms: u32) -> bool {
     let Some((rail_port, rail_pin)) = board::SE_RAIL_EN else {
         return false;

@@ -1236,6 +1236,31 @@ pub unsafe fn hmac_verify_auto_state(
     Ok(())
 }
 
+/// Probe only (`optiga-luc-probe`): build and send the Trezor-shape verify
+/// as a protected record, without reading the response.
+#[cfg(feature = "optiga-luc-probe")]
+pub unsafe fn hmac_verify_auto_state_send_only(
+    ifx: &mut IfxState,
+    shield: &mut ShieldedConnection,
+    key_oid: u16,
+    nonce_oid: u16,
+    nonce: &[u8; 16],
+    hmac: &[u8; 32],
+) -> Result<(), OptigaError> {
+    let mut ab = ApduBuf::new(CMD_DECRYPT_SYM, PARAM_HMAC_MODE);
+    ab.write_u16(key_oid);
+    ab.write_u8(SYM_SEQ_START_FINAL);
+    ab.write_u16(2 + 16);
+    ab.write_u16(nonce_oid);
+    ab.write(nonce);
+    ab.write_tlv(TAG_VERIFICATION_DATA, hmac);
+    let apdu = ab.finish();
+    let mut enc_buf = [0u8; 900];
+    let enc_len = shield.wrap_command(apdu, &mut enc_buf).map_err(|_| OptigaError::Shield)?;
+    ifx.send_only_prl(&enc_buf[..enc_len])?;
+    Ok(())
+}
+
 /// `GetDataObject` — read `length` bytes from `oid` starting at `offset`.
 ///
 /// InData: `OID(2) | Offset(2) | Length(2)` (all positional, no TLV).

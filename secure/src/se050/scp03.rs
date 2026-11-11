@@ -629,6 +629,16 @@ pub fn unwrap_response(
         if out.len() < 2 {
             return Err(UnwrapError::Overflow);
         }
+        // A success or warning status word (`9000`, `62xx`, `63xx`) always
+        // carries an R-MAC at security level 0x33 (GP Amd D §6.2.5), so one
+        // that arrives bare did not come from the card's secure-messaging
+        // layer: anyone on the bus can write two bytes. Accepting it let a
+        // man-in-the-middle forge "OK" for every command whose reply has no
+        // data (verify, delete, write, SetPlatformSCPRequest). Refuse it and
+        // leave the counter alone, like any other forgery (audit 2026-11-11).
+        if (wrapped[0] == 0x90 && wrapped[1] == 0x00) || wrapped[0] == 0x62 || wrapped[0] == 0x63 {
+            return Err(UnwrapError::RMacMismatch);
+        }
         out[0] = wrapped[0];
         out[1] = wrapped[1];
         // Counter MUST advance here. The card's SM layer consumed this

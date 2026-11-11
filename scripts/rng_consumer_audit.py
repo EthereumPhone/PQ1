@@ -112,6 +112,19 @@ EXPECTED = {
             'crate::rng::fill(&mut junk).map_err(|_| ("rng", None))?;': 1,
         }
     ),
+    # `optiga-luc-probe` only (DVT 6A.13 / 6A.14 / 6A.17 silicon probe,
+    # production-fenced through `optiga-ac-probe` in nsc/mod.rs +
+    # PROD_FORBIDDEN): a throwaway AuthRef secret on spare OID F1D5 that
+    # never leaves RAM, the auth-code host nonce/tag, and the cleanup
+    # scramble. Explicitly nonshipping code.
+    "secure/src/optiga/luc_probe.rs": Counter(
+        {
+            'crate::rng::fill(&mut host_nonce).map_err(|_| ("rng", None))?;': 1,
+            'crate::rng::fill(&mut host_tag).map_err(|_| ("rng", None))?;': 1,
+            'crate::rng::fill(&mut junk).map_err(|_| ("rng", None))?;': 1,
+            "if ctr_orig.is_none() || crate::rng::fill(&mut secret).is_err() {": 1,
+        }
+    ),
     "secure/src/hw/consumption_mask.rs": Counter(
         {
             "crate::rng::fill(&mut seed_bytes)?;": 1,

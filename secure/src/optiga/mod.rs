@@ -55,6 +55,8 @@ pub mod reset;
 pub mod reset_pin;
 #[cfg(all(feature = "optiga-ac-probe", feature = "stm32u585"))]
 pub mod ac_probe;
+#[cfg(all(feature = "optiga-luc-probe", feature = "stm32u585"))]
+pub mod luc_probe;
 #[cfg(all(feature = "optiga-probe", feature = "stm32u585"))]
 pub(crate) mod probe;
 
@@ -2808,6 +2810,15 @@ impl OptigaTrustM {
             // (`d3 03 40 e1 20` present) while observing E120.current
             // stayed at 0 after a failed auth.
             //
+            // CORRECTION 2026-11-11 (DVT 6A.13, EVT-3D21, spare objects
+            // F1D5 / E122, `optiga-luc-probe`): that observation does not
+            // hold on this silicon. The 64-byte shape advances the bound
+            // counter on a right and on a wrong MAC, shielded and in
+            // plaintext, exactly like this shape, and neither shape
+            // authorises once the counter is at its limit. The April run
+            // predates the `Execute = ALW` fix on the counter object, the
+            // likely cause. There is no counter-free shape (SE14 refuted).
+            //
             // Non-hw-counter builds keep the original shape unchanged.
             #[cfg(feature = "optiga-hw-counter")]
             let (mut hmac, verify_result) = {
@@ -3541,12 +3552,45 @@ impl OptigaTrustM {
             .map_err(|_| SeError::InternalError)
     }
 
+    /// Reset the chip so that no authorisation state outlives the operation
+    /// that needed it (#901). The next command re-opens the application and
+    /// the shielded session. If the reset sequence fails the driver is left
+    /// marked not-ready, so the next `init()` pulses RST again before any
+    /// other traffic.
+    fn end_chip_authorisation(&mut self) {
+        #[cfg(feature = "stm32u585")]
+        if self.hard_reset_and_reinit().is_err() {
+            secure_log!("[OPTIGA] post-unlock reset FAILED; chip marked not ready");
+            self.ready = false;
+            self.shield.zeroize_session();
+        }
+        #[cfg(not(feature = "stm32u585"))]
+        {
+            self.ready = false;
+            self.shield.zeroize_session();
+        }
+    }
+
     /// Answer the F1D0 challenge with `cred` and read the wallet objects.
     pub(crate) fn unlock_with_credential(
         &mut self,
         cred: &crate::pin_credential::OptigaPinCredential,
     ) -> Result<[u8; 32], UnlockError> {
-        self.authenticate_and_read(cred).map_err(|e| match e {
+        let result = self.authenticate_and_read(cred);
+        // #901: the chip keeps `Auto(F1D0)` satisfied until it is reset.
+        // Dropping the host session (LOCK, idle wipe) does not end it, and
+        // neither does a new handshake: on EVT-3D21 (2026-11-10) a session
+        // opened after LOCK read F1D1 / F1D2 and rewrote E120 with no PIN.
+        // Everything the unlock needs has been read by now, so end the
+        // authorisation here. A refused credential needs no reset: the chip
+        // clears the state itself on a failed verify (same run).
+        if !matches!(
+            result,
+            Err(OptigaError::PinIncorrect | OptigaError::PinLocked | OptigaError::NotProvisioned)
+        ) {
+            self.end_chip_authorisation();
+        }
+        result.map_err(|e| match e {
             OptigaError::PinIncorrect => {
                 if self.remaining > 0 {
                     self.remaining -= 1;

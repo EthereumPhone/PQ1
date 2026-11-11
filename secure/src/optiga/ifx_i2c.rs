@@ -476,6 +476,26 @@ impl IfxState {
         self.receive_response(resp)
     }
 
+    /// Probe only: send a protected record and return without reading the
+    /// response, so the caller can cut the chip's power mid-command.
+    #[cfg(feature = "optiga-luc-probe")]
+    pub(crate) unsafe fn send_only_prl(&mut self, msg: &[u8]) -> Result<(), IfxError> {
+        self.send_apdu_inner(msg, true)
+    }
+
+    /// Probe only: poll I2C_STATE until the chip flags a pending response;
+    /// returns the state bytes. No data is read.
+    #[cfg(feature = "optiga-luc-probe")]
+    pub(crate) unsafe fn probe_poll_ready(&mut self) -> Result<[u8; 4], IfxError> {
+        self.poll_response_ready()
+    }
+
+    /// Probe only: read the first `buf.len()` bytes of the pending frame.
+    #[cfg(feature = "optiga-luc-probe")]
+    pub(crate) unsafe fn probe_read_data_prefix(&mut self, buf: &mut [u8]) -> Result<(), IfxError> {
+        self.read_register(REG_DATA, buf)
+    }
+
     /// Fragment and send an APDU, handling data-link ACK/NACK.
     ///
     /// `presence` selects which chip-side layer processes the payload:

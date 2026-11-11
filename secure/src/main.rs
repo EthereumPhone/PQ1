@@ -67,17 +67,17 @@ macro_rules! secure_log {
 /// Probe-only switch that silences `secure_log!` (the OPTIGA probe mutes the
 /// driver's per-frame logging during its 65,536-OID sweep, where semihosting
 /// would otherwise dominate the run time). Always `false` in every other build.
-#[cfg(all(feature = "optiga-probe", not(test)))]
+#[cfg(all(any(feature = "optiga-probe", feature = "optiga-luc-probe"), not(test)))]
 pub(crate) static LOG_MUTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 #[cfg(all(feature = "debug-log", feature = "stm32u585", not(test)))]
 #[inline(always)]
 pub(crate) fn log_muted() -> bool {
-    #[cfg(feature = "optiga-probe")]
+    #[cfg(any(feature = "optiga-probe", feature = "optiga-luc-probe"))]
     {
         LOG_MUTED.load(core::sync::atomic::Ordering::Relaxed)
     }
-    #[cfg(not(feature = "optiga-probe"))]
+    #[cfg(not(any(feature = "optiga-probe", feature = "optiga-luc-probe")))]
     {
         false
     }
@@ -2545,6 +2545,16 @@ fn main() -> ! {
     //   row 1  failing step | PASS: "plain read ->"
     //   row 2  stored F1D7 Read AC hex (expect 23F1D5FD20E140)
     //   row 3  driver error | PASS: the chip's Status for the no-shield read
+    #[cfg(all(feature = "optiga-luc-probe", feature = "stm32u585"))]
+    unsafe {
+        let se = &mut *core::ptr::addr_of_mut!(SE);
+        if option_env!("LUC_MODE") == Some("6") {
+            se.optiga.luc_real_after_lock();
+        } else {
+            se.optiga.luc_probe();
+        }
+        loop { cortex_m::asm::wfi(); }
+    }
     #[cfg(all(feature = "optiga-ac-probe", feature = "stm32u585"))]
     unsafe {
         let se = &mut *core::ptr::addr_of_mut!(SE);

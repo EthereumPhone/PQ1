@@ -640,6 +640,20 @@ fn positive_scp03_bare_error_handling_unchanged() {
     assert!(bare_body.contains("return Ok(2);"));
 }
 
+#[test]
+fn negative_scp03_bare_success_status_word_is_refused() {
+    // A success / warning status word always carries an R-MAC at level 0x33.
+    // A bare `90 00` (or `62xx` / `63xx`) is two bytes anyone on the bus can
+    // write, so it must be refused before the status word is copied out or
+    // the counter advances (audit 2026-11-11).
+    let f = unwrap_response_src();
+    let bare = f.find("if n == 2 {").expect("bare-error arm exists");
+    let refuse = f
+        .find("if (wrapped[0] == 0x90 && wrapped[1] == 0x00) || wrapped[0] == 0x62 || wrapped[0] == 0x63 {\n            return Err(UnwrapError::RMacMismatch);")
+        .expect("bare success status words are refused");
+    let copy = f.find("out[0] = wrapped[0];").expect("status word copy exists");
+    assert!(bare < refuse && refuse < copy, "the refusal comes before the copy and the counter advance");
+}
 
 #[test]
 fn positive_scp03_counter_starts_at_one() {
