@@ -33,6 +33,8 @@ hw-sha256-forsleaf = ["hw-sha256-oneshot"]
 hw-sha256-forstree = ["hw-sha256-forsleaf"]
 # R grind over two prebuilt preimages through the one-shot (no five-part streams).
 hw-sha256-grindr = ["hw-sha256-oneshot"]
+# The FORS tree reports finished digests in batches through `pqsigner_hash_tick_n` (with `pqsigner-hw/tick-batch`).
+hw-sha256-tickbatch = ["hw-sha256-forstree"]
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs

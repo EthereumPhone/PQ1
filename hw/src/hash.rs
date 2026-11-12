@@ -1155,6 +1155,10 @@ pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, s
     for (k, x) in v.iter().enumerate() {
         // SAFETY: `buf + 64 + 4k`, k < 4, is inside the caller's 96 bytes.
         unsafe { buf.add(64 + 4 * k).cast::<u32>().write_unaligned(*x) };
+    }    #[cfg(feature = "tick-batch")]
+    // SAFETY: the engine is idle; the tick does not hash (tick-batch contract).
+    unsafe {
+        pqsigner_hash_tick_n(steps);
     }
 }
 
@@ -1223,7 +1227,7 @@ fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, st
             ];
         }
         REG.sr.write(SR_DINIS);
-        #[cfg(feature = "tick-hook")]
+        #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
         {
             // SAFETY: as in `final_body`: this digest is finished.
             unsafe { pqsigner_hash_tick() };
@@ -1283,7 +1287,7 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
         ]
     };
     REG.sr.write(SR_DINIS);
-    #[cfg(feature = "tick-hook")]
+    #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
     // SAFETY: as in `final_body`.
     unsafe {
         pqsigner_hash_tick();
@@ -1294,6 +1298,11 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
     for (k, x) in v.iter().enumerate() {
         // SAFETY: `out + 4k`, k < 4, inside the caller's 16 bytes.
         unsafe { out.add(4 * k).cast::<u32>().write_unaligned(*x) };
+    }
+    #[cfg(feature = "tick-batch")]
+    // SAFETY: the engine is idle; the tick does not hash.
+    unsafe {
+        pqsigner_hash_tick_n(1 + steps);
     }
 }
 
@@ -1336,7 +1345,7 @@ pub unsafe extern "C" fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *con
         ]
     };
     REG.sr.write(SR_DINIS);
-    #[cfg(feature = "tick-hook")]
+    #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
     // SAFETY: as in `final_body`.
     unsafe {
         pqsigner_hash_tick();
@@ -1418,6 +1427,8 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
     // SAFETY: caller contract (48 readable bytes).
     let t: [u32; 12] = core::array::from_fn(|i| unsafe { prf_tail.add(4 * i).cast::<u32>().read_unaligned() });
     let z = c[4] | c[5] | c[6] | c[7] | c[11] | c[15] == 0;
+    #[cfg(feature = "tick-batch")]
+    let mut ticks = 0u32;
     let mut k = 0u32;
     while k < n {
         // SAFETY: caller contract on `order` / `digits`.
@@ -1457,10 +1468,14 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
             ]
         };
         REG.sr.write(SR_DINIS);
-        #[cfg(feature = "tick-hook")]
+        #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
         // SAFETY: as in `final_body`.
         unsafe {
             pqsigner_hash_tick();
+        }
+        #[cfg(feature = "tick-batch")]
+        {
+            ticks += 1 + steps;
         }
         c[13] = ci;
         let v = if z { chain_steps::<true>(&c, v, 0, steps) } else { chain_steps::<false>(&c, v, 0, steps) };
@@ -1469,6 +1484,11 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
             unsafe { out.add(16 * i as usize + 4 * j).cast::<u32>().write_unaligned(*x) };
         }
         k += 1;
+    }
+    #[cfg(feature = "tick-batch")]
+    // SAFETY: the engine is idle; the tick does not hash. One tick per key.
+    unsafe {
+        pqsigner_hash_tick_n(ticks);
     }
 }
 
@@ -1543,7 +1563,7 @@ fn collect(d: &mut [u32; 8]) {
         ];
     }
     REG.sr.write(SR_DINIS);
-    #[cfg(feature = "tick-hook")]
+    #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
     // SAFETY: as in `final_body`: the digest is out and the engine idle.
     unsafe {
         pqsigner_hash_tick();
@@ -1579,8 +1599,21 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
     // SAFETY: caller contract.
     unsafe { issue128(buf, start) };
     let mut c = start;
+    #[cfg(feature = "tick-batch")]
+    let mut since_tick = 0u32;
     loop {
         collect(&mut d);
+        #[cfg(feature = "tick-batch")]
+        {
+            since_tick += 1;
+            if since_tick == 32 {
+                // A tick only between digests: wait out the next try first is not
+                // needed, the tick runs with that try in the engine and must not hash.
+                // SAFETY: the tick does not touch the HASH (tick-batch contract).
+                unsafe { pqsigner_hash_tick_n(32) };
+                since_tick = 0;
+            }
+        }
         let next = c + 1;
         let more = next != end;
         if more {
@@ -1595,9 +1628,15 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
             }
             // SAFETY: `out` names 32 writable bytes (caller contract).
             unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+            #[cfg(feature = "tick-batch")]
+            // SAFETY: the engine is idle (the speculative try was collected).
+            unsafe { pqsigner_hash_tick_n(since_tick + u32::from(more)) };
             return c;
         }
         if !more {
+            #[cfg(feature = "tick-batch")]
+            // SAFETY: the engine is idle.
+            unsafe { pqsigner_hash_tick_n(since_tick) };
             return end;
         }
         c = next;
@@ -1654,7 +1693,7 @@ unsafe fn gather_final16(out: *mut u8) {
         o.add(3).write_unaligned(REG.hr0.read_at(3).swap_bytes());
     }
     REG.sr.write(SR_DINIS);
-    #[cfg(feature = "tick-hook")]
+    #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
     // SAFETY: as in `final_body`.
     unsafe {
         pqsigner_hash_tick();
@@ -1696,6 +1735,14 @@ pub unsafe extern "C" fn pqsigner_sha256_4x32_16(a: *const u8, b: *const u8, c: 
         feed32(d);
         gather_final16(out);
     }
+}
+
+#[cfg(feature = "tick-batch")]
+extern "C" {
+    /// `tick-batch`: `n` digests finished since the last tick; the engine is idle
+    /// or (inside `search128`) holds a try the tick must not disturb, so the
+    /// callee must not hash. Defined by the secure world (or the bench stub).
+    fn pqsigner_hash_tick_n(n: u32);
 }
 
 #[cfg(feature = "tick-hook")]

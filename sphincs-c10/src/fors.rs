@@ -303,7 +303,17 @@ pub(crate) fn fors_tree_fast(
     let mut stack = [[0u8; N]; A + 1];
     let mut stack_heights = [0u32; A + 1];
     let mut sp: usize = 0;
+    #[cfg(feature = "hw-sha256-tickbatch")]
+    extern "C" {
+        fn pqsigner_hash_tick_n(n: u32);
+    }
     for j in 0..FORS_LEAVES as u32 {
+        // One UI tick per 64 leaves: 64 leaves x 2 digests + 63 nodes.
+        #[cfg(feature = "hw-sha256-tickbatch")]
+        if j % 64 == 63 {
+            // SAFETY: the engine is idle between calls; the tick does not hash.
+            unsafe { pqsigner_hash_tick_n(64 * 2 + 63) };
+        }
         tail[12..16].copy_from_slice(&j.to_be_bytes());
         leaf_sa[60..64].copy_from_slice(&j.to_be_bytes());
         let mut node = [0u8; N];

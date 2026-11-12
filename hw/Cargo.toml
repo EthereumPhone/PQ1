@@ -49,6 +49,9 @@ gather = ["init-restart", "oneshot"]
 prfchain = ["chain"]
 # Secure image only (autoresearch): FORS secret + leaf hash in one call (`pqsigner_fors_leaf16`).
 forsleaf = ["gather"]
+# Autoresearch product variant: the driver's fused loops report finished digests in batches
+# (`pqsigner_hash_tick_n`) instead of calling the UI tick after every digest.
+tick-batch = ["tick-hook"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []
