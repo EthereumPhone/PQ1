@@ -1132,6 +1132,72 @@ pub unsafe extern "C" fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, o
     }
 }
 
+/// C10 WOTS chain in the driver (`chain`, secure image only): over the 96-byte
+/// `seed ‖ adrs ‖ pad16(val)` buffer at `buf`, `steps` times set the chain
+/// position (bytes [56..60), big-endian) to `start_pos + i` and replace the
+/// value (bytes [64..80)) with the first 16 bytes of SHA-256 of the buffer;
+/// the final value is written back to [64..80). The same engine sequence and
+/// fault checks as `oneshot16` per step, but the 15 fixed preimage words and
+/// the running value stay in registers instead of going through SRAM.
+///
+/// # Safety
+/// `buf` names 96 readable and writable bytes; no other SHA-256 stream is in
+/// flight; `init_clock` has run.
+#[cfg(feature = "chain")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, steps: u32) {
+    // SAFETY: `buf..buf + 96` is readable (caller contract); unaligned word reads
+    // are legal on ARMv8-M Mainline.
+    let w = |i: usize| unsafe { buf.add(4 * i).cast::<u32>().read_unaligned() };
+    let c: [u32; 16] = core::array::from_fn(w);
+    let mut v = [w(16), w(17), w(18), w(19)];
+    let mut step = 0u32;
+    while step < steps {
+        // init_body (init-restart): idle, no stale DCIS, NBLW = 0, INIT.
+        if wait_ready_sr() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        REG.str_.write(0);
+        REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+        let pos = start_pos.wrapping_add(step);
+        write_word(c[0]); write_word(c[1]); write_word(c[2]); write_word(c[3]);
+        write_word(c[4]); write_word(c[5]); write_word(c[6]); write_word(c[7]);
+        write_word(c[8]); write_word(c[9]); write_word(c[10]); write_word(c[11]);
+        write_word(c[12]); write_word(c[13]); write_word(pos.swap_bytes()); write_word(c[15]);
+        write_word(v[0]); write_word(v[1]); write_word(v[2]); write_word(v[3]);
+        write_word(0); write_word(0); write_word(0); write_word(0);
+        // final_body: NBLW = 0 (init wrote it), DCAL alone.
+        REG.str_.write(STR_DCAL);
+        let mut t = 0u32;
+        while REG.sr.read() & SR_DCIS == 0 {
+            t += 1;
+            if t > 10_000_000 {
+                hash_engine_fault();
+            }
+        }
+        // SAFETY: HR0..HR3 are the first four words of the digest bank.
+        unsafe {
+            v = [
+                REG.hr0.read_at(0).swap_bytes(),
+                REG.hr0.read_at(1).swap_bytes(),
+                REG.hr0.read_at(2).swap_bytes(),
+                REG.hr0.read_at(3).swap_bytes(),
+            ];
+        }
+        REG.sr.write(!SR_DCIS);
+        #[cfg(feature = "tick-hook")]
+        // SAFETY: as in `final_body`: this digest is finished.
+        unsafe {
+            pqsigner_hash_tick();
+        }
+        step += 1;
+    }
+    for (k, x) in v.iter().enumerate() {
+        // SAFETY: `buf + 64 + 4k`, k < 4, is inside the caller's 96 bytes.
+        unsafe { buf.add(64 + 4 * k).cast::<u32>().write_unaligned(*x) };
+    }
+}
+
 #[cfg(feature = "tick-hook")]
 extern "C" {
     /// Defined by the secure world (`tick-hook`): called after every

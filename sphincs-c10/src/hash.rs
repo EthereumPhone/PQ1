@@ -331,6 +331,15 @@ pub fn chain_hash(
     bump!(CHAIN_HASH);
     // `th`'s preimage, built once (`chain_buf`); a step rewrites only chain_pos and the value.
     let mut buf = chain_buf(seed, adrs, val);
+    #[cfg(feature = "hw-sha256-chain")]
+    {
+        extern "C" {
+            fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, steps: u32);
+        }
+        // SAFETY: `buf` is 96 bytes, readable and writable, for the whole call.
+        unsafe { pqsigner_sha256_chain16(buf.as_mut_ptr(), start_pos, steps) };
+    }
+    #[cfg(not(feature = "hw-sha256-chain"))]
     for step in 0..steps {
         buf[56..60].copy_from_slice(&(start_pos + step).to_be_bytes());
         bump!(TH);

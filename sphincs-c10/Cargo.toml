@@ -19,6 +19,8 @@ hw-sha256 = []
 # `pqsigner_sha256_oneshot`, instead of the three. Only the secure image has
 # the symbol (`pqsigner-hw/oneshot`); the FSBL keeps the three-call path.
 hw-sha256-oneshot = ["hw-sha256"]
+# The WOTS chain loop through one driver call, `pqsigner_sha256_chain16` (`pqsigner-hw/chain`).
+hw-sha256-chain = ["hw-sha256-oneshot"]
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs

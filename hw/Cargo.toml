@@ -38,6 +38,9 @@ hash-probe = []
 # shipping. Mutually exclusive with `hash-probe` (the software hash would
 # land in its stages).
 hw-sha256-crosscheck = []
+# Secure image only (autoresearch): the WOTS chain loop in the driver (`pqsigner_sha256_chain16`).
+# Requires `init-restart` (its per-step sequence is that feature's).
+chain = ["init-restart", "oneshot"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

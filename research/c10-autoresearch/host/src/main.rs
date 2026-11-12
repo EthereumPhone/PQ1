@@ -39,6 +39,17 @@ pub unsafe extern "C" fn pqsigner_sha256_oneshot16(p: *const u8, n: usize, out: 
     let mut d = [0u8; 32];
     unsafe { pqsigner_sha256_oneshot(p, n, d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
 }
+/// WOTS chain hook (driver `chain16`): plain software SHA-256 per step.
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start: u32, steps: u32) {
+    let b = unsafe { std::slice::from_raw_parts_mut(buf, 96) };
+    for i in 0..steps {
+        b[56..60].copy_from_slice(&(start + i).to_be_bytes());
+        let mut d = [0u8; 32];
+        unsafe { pqsigner_sha256_oneshot(b.as_ptr(), 96, d.as_mut_ptr()) };
+        b[64..80].copy_from_slice(&d[..16]);
+    }
+}
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn main() {
