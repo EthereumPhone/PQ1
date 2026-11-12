@@ -25,6 +25,17 @@ Everything that runs in the signer. Every edit must be output-identical.
 - `hw/src/hash.rs`. It is shared with the FSBL, so put changes behind a secure-only feature, or note the FSBL impact.
 - The bench's `[profile.release]` and its dependency feature lists in `bench/Cargo.toml`. These are codegen experiments.
 
+## Evaluators (current: v3b)
+
+- `experiment_flash.sh` (**v3b, primary**): code in flash bank 1, 4 wait states, ICACHE 2-way. Pass `EXP_CFLAGS=` for the shipped 1-way setting.
+- `experiment.sh` (v2): code on the SRAM1 C-bus alias. Fast and flash-free; within about 2% of v3.
+- `experiment_b.sh`: track B, the top-layer cache (bench_b). Never auto-kept.
+- `bench_diff`: kit differential, 32 cases against `out/diff-ref.txt` from pristine master, plus the search128 edge cases.
+- PC differentials:
+  - `target-diff/release/diff-ref N E` builds from pristine master.
+  - `target/release/c10-ar-host diff N E` runs the fast path.
+  - `target-b/release/c10-ar-host diff|controls` runs the cache path.
+
 ## Metric
 
 `./experiment.sh` runs two gates, then measures:
@@ -48,10 +59,11 @@ Keep rule:
   - Ideas that reuse pass-A work in pass B, or cache state across signs, are **track B**. Measure them with a separate bench variant, and never auto-keep them.
 - No secret-dependent branches or memory access patterns. No heap. Secure RAM is a budget.
 - `hash.rs`, `wots.rs` and `hypertree.rs` are Lean-extracted and EasyCrypt line-cited. Edits there are allowed in the loop, but tag the row `[FV]`. Tag edits to the shared FSBL driver `[FSBL]`.
-- Kit safety:
-  - SRAM only: never flash, option bytes, OTP, backup registers, TAMP or GTZC.
-  - Only volatile RCC/PWR/HASH writes, and every run ends with `reset run`.
-  - Check the flash SHA-256 (f599a5dc…) and OPTR (0x9deff8aa) at session start and end.
+- Kit safety (updated 2026-11-12):
+  - The owner allowed **flash writes** on the kit (bank 1 pages, via `harness/run_flash.sh`). Never write option bytes, OTP, RDP/TZEN, backup registers, TAMP or GTZC, and never do permanent provisioning. The secure elements are not connected.
+  - Volatile RCC/PWR/HASH/FLASH_ACR/ICACHE writes are fine. Every run ends with `reset run`.
+  - At session end, re-read the option registers 0x40022040..0x4002206C and compare with the values captured before the first flash: `9deff8aa 0800007f 0bf9007f 0c00007c ffffff80 7f807f80 ff80ffff ff80ffff ff80ffff 7f807f80 ff80ffff ff80ffff`.
+  - After flash runs the kit boots the last bench image, not its original stub. The stub can be restored from the old dump (flash SHA f599a5dc…).
 - Keep the host quiet during kit runs. That means no fuzzers or mutation sweeps.
 
 ## Loop
