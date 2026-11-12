@@ -2240,8 +2240,11 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
             v2_issue43(&w, next, a0, a1);
         }
         // `d` holds digest bytes in memory order; the sum wants big-endian words.
-        let be = [d[0].swap_bytes(), d[1].swap_bytes(), d[2].swap_bytes(), d[3].swap_bytes(), d[4].swap_bytes()];
-        if v2_digit_sum(&be) == target {
+        #[cfg(not(feature = "v2-lowdigits"))]
+        let sum = v2_digit_sum(&[d[0].swap_bytes(), d[1].swap_bytes(), d[2].swap_bytes(), d[3].swap_bytes(), d[4].swap_bytes()]);
+        #[cfg(feature = "v2-lowdigits")]
+        let sum = v2_digit_sum_low(&[d[3].swap_bytes(), d[4].swap_bytes(), d[5].swap_bytes(), d[6].swap_bytes(), d[7].swap_bytes()]);
+        if sum == target {
             if more {
                 let mut discard = [0u32; 8];
                 v2_collect(&mut discard);
@@ -2255,4 +2258,25 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
         }
         c = next;
     }
+}
+
+/// MEASUREMENT (#1155 A/B): v1's digit position (the LOW 129 bits) with the same
+/// in-driver SWAR; `w` = big-endian words 3..7 of the digest.
+#[cfg(feature = "v2-lowdigits")]
+#[inline(always)]
+fn v2_digit_sum_low(w: &[u32; 5]) -> u32 {
+    #[inline(always)]
+    fn g24(v: u32) -> u32 {
+        let s = (v & 0o07070707).wrapping_add((v >> 3) & 0o07070707);
+        let s = (s & 0o00770077).wrapping_add((s >> 6) & 0o00770077);
+        (s & 0o7777).wrapping_add(s >> 12)
+    }
+    let (w3, w4, w5, w6, w7) = (w[0], w[1], w[2], w[3], w[4]);
+    let t = w4 >> 24 | (w3 & 1) << 8;
+    g24(w7 & 0x00FF_FFFF)
+        .wrapping_add(g24(w7 >> 24 | (w6 & 0xFFFF) << 8))
+        .wrapping_add(g24(w6 >> 16 | (w5 & 0xFF) << 16))
+        .wrapping_add(g24(w5 >> 8))
+        .wrapping_add(g24(w4 & 0x00FF_FFFF))
+        .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6))
 }

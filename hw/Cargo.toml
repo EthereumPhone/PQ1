@@ -58,6 +58,8 @@ no-busy-wait = []
 hra-ldm = []
 # RESEARCH (#1155): C10 v2 one-block entries (`pqsigner_v2_*`).
 v2 = ["init-restart", "oneshot", "prfchain", "forsleaf", "search"]
+# MEASUREMENT (#1155 A/B): v2 with v1's digit position (low 129 bits).
+v2-lowdigits = ["v2"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

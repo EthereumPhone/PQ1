@@ -146,7 +146,19 @@ pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32
     prf(sk_seed, pack(T_FORS_PRF, 0, u64::from(ht_idx), u64::from(tree_idx), 0, 0, u64::from(leaf_idx)))
 }
 
+/// MEASUREMENT (#1155 A/B, `v2-lowdigits`): v1's digit position, digit i = (D >> 3i) & 7.
+#[cfg(feature = "v2-lowdigits")]
+pub fn digits(d: &[u8; 32]) -> [u8; crate::params::L] {
+    let bit = |k: usize| (d[31 - k / 8] >> (k % 8)) & 1;
+    core::array::from_fn(|i| bit(3 * i) | bit(3 * i + 1) << 1 | bit(3 * i + 2) << 2)
+}
+#[cfg(feature = "v2-lowdigits")]
+pub fn digit_sum(d: &[u8; 32]) -> usize {
+    digits(d).iter().map(|&x| x as usize).sum()
+}
+
 /// WOTS digits from the TOP 129 bits (spec 0.2): digit i = (D >> (253 − 3i)) & 7.
+#[cfg(not(feature = "v2-lowdigits"))]
 pub fn digits(d: &[u8; 32]) -> [u8; crate::params::L] {
     let mut hi = [0u8; 16];
     hi.copy_from_slice(&d[0..16]);
@@ -163,6 +175,7 @@ pub fn digits(d: &[u8; 32]) -> [u8; crate::params::L] {
 /// Σ digits(d): bytes 0..15 are five 24-bit groups of eight 3-bit digits
 /// (digits 0..39); digits 40..42 are byte 15 and the top bit of byte 16. 32-bit
 /// SWAR only (the grind's predicate: it must stay under one block's engine time).
+#[cfg(not(feature = "v2-lowdigits"))]
 #[inline(always)]
 pub fn digit_sum(d: &[u8; 32]) -> usize {
     let mut sum = 0u32;
@@ -193,6 +206,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "v2-lowdigits"))]
     fn digits_and_digit_sum_match_the_bitwise_reference() {
         let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
         let check = |d: &[u8; 32]| {

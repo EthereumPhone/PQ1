@@ -314,3 +314,20 @@ Total about −92 M of 233 M (−40%).
 - The kit frozen evaluator passes, with `cached_sign` 233,078,515, identical to the round-4 head.
 
 **Not done:** the FSBL image was not rebuilt. Every driver addition is `cfg(feature = "v2")`, which the FSBL never names.
+
+### Round 5: A/B on the digit position (advisor: 0.2's top-bit digits had no measured benefit in the kept code)
+
+Measurement feature `v2-lowdigits` (`sphincs-c10` and `pqsigner-hw`): v2 with v1's digit position, the low 129 bits, and the same in-driver SWAR. 16-message average:
+
+| | top-bit (0.2) | low-bit |
+|---|---:|---:|
+| mean sign | 78.55 M | 79.35 M |
+| keygen | 25.13 M | 24.99 M |
+
+- Keygen involves no digits; it moves 0.6% from code layout alone.
+- The sign difference (1%) is inside grind-luck noise (about 2.5% standard error per side).
+- The only reason for top-bit digits was the 5-word HR read, which was discarded.
+
+**Decision for draft 0.3:** revert to v1's digit position. The Lean-extracted `extract_digits` and the Yul digit loop stay unchanged.
+
+**Spec 0.2 itself is unreviewed.** Astra and Fable reviewed 0.1, and 0.2 folds in their changes. Send 0.3 back to both before calling it the candidate.

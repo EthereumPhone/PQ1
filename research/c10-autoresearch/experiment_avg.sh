@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # experiment_avg.sh <v1|v2f> — #1155: mean single-pass sign over 16 messages (grind luck averaged), harness v3b.
 set -u
-V=${1:?v1|v2f}; D="$(cd "$(dirname "$0")" && pwd)"; cd "$D"; mkdir -p out
+V=${1:?v1|v2f|v2fl}; D="$(cd "$(dirname "$0")" && pwd)"; cd "$D"; mkdir -p out
 CRATE=bench_avg_$V LIBNAME=c10_bench_avg_$V LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN ${EXP_CFLAGS--DICACHE_2WAY}" ./build_any.sh out/avg-$V.elf > out/avg-$V-build.log 2>&1 || { echo "{\"ok\": false, \"why\": \"build failed ($V)\"}"; exit 2; }
 timeout 600 bash harness/run_flash.sh out/avg-$V.elf 0x30000000 96 240 > out/avg-$V-run.log 2>&1
 python3 - out/avg-$V.elf.openocd.log $V <<'PY'
