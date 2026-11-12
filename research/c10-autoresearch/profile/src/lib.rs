@@ -279,6 +279,22 @@ pub extern "C" fn c10_bench_main() {
         f2 += cyc() - t0; val[7] ^= x as u8;
     }
     out(21, f1 / NREP); out(22, f2 / NREP);
+    // 23: chain16 per step, one 4096-step call (no call overhead), WOTS-shaped buffer
+    let t = cyc();
+    unsafe { pqsigner_sha256_chain16(cb.as_mut_ptr(), 0, NREP) };
+    out(23, cyc().wrapping_sub(t) / NREP);
+    // 24: chain16 with steps=0 per call (pure call overhead); 25: steps=1 per call; 26: prf_chain16 steps=7 per call
+    let t = cyc();
+    for _ in 0..NREP { unsafe { pqsigner_sha256_chain16(cb.as_mut_ptr(), 0, 0) }; }
+    out(24, cyc().wrapping_sub(t) / NREP);
+    let t = cyc();
+    for _ in 0..NREP { unsafe { pqsigner_sha256_chain16(cb.as_mut_ptr(), 0, 1) }; }
+    out(25, cyc().wrapping_sub(t) / NREP);
+    extern "C" { fn pqsigner_wots_prf_chain16(sk: *const u8, tail: *const u8, sa: *const u8, steps: u32, out: *mut u8); }
+    let mut wt = [0u8; 48]; wt[..4].copy_from_slice(b"wots");
+    let t = cyc();
+    for _ in 0..(NREP / 8) { unsafe { pqsigner_wots_prf_chain16(SK_SEED.as_ptr(), wt.as_ptr(), cb.as_ptr(), 7, o16.as_mut_ptr()) }; }
+    out(26, cyc().wrapping_sub(t) / (NREP / 8));
     out(14, (dg[0] ^ sec[0] ^ val[0] ^ val[1] ^ d[0]) as u32);
     out(1, 8);
 }

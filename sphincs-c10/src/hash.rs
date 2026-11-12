@@ -596,3 +596,48 @@ pub(crate) fn fors_leaf(seed: &[u8; 32], sk_seed: &[u8; 32], leaf_adrs: &[u8; 32
         th(seed, leaf_adrs, &pad16(&s))
     }
 }
+
+/// All L chains of one WOTS key through one driver call (`hw-sha256-prfchain`):
+/// chain `i` (in `order`, or 0..L) runs `digits[i]` steps (or W-1) from its
+/// secret; results land in `out[i]`.
+#[cfg(feature = "hw-sha256-prfchain")]
+#[inline(always)]
+pub(crate) fn wots_chains(
+    seed: &[u8; 32],
+    sk_seed: &[u8; 32],
+    base_adrs: &[u8; 32],
+    layer: u32,
+    tree: u64,
+    kp: u32,
+    order: Option<&[u8]>,
+    digits: Option<&[u8; crate::params::L]>,
+    out: &mut [[u8; N]; crate::params::L],
+) {
+    extern "C" {
+        fn pqsigner_wots_chains16(
+            sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8,
+            order: *const u8, digits: *const u8, fixed_steps: u32, n: u32, out: *mut u8,
+        );
+    }
+    let mut tail = [0u8; 48];
+    tail[0..4].copy_from_slice(b"wots");
+    tail[4..8].copy_from_slice(&layer.to_be_bytes());
+    tail[32..40].copy_from_slice(&tree.to_be_bytes());
+    tail[40..44].copy_from_slice(&kp.to_be_bytes());
+    let mut seed_adrs = [0u8; 64];
+    seed_adrs[0..32].copy_from_slice(seed);
+    seed_adrs[32..64].copy_from_slice(base_adrs);
+    if let Some(o) = order {
+        assert!(o.len() == crate::params::L && o.iter().all(|&i| (i as usize) < crate::params::L));
+    }
+    // SAFETY: the buffers are live for the call; `order` (if any) has L entries < L
+    // (asserted), `digits` (if any) L entries, `out` 16 L writable bytes.
+    unsafe {
+        pqsigner_wots_chains16(
+            sk_seed.as_ptr(), tail.as_ptr(), seed_adrs.as_ptr(),
+            order.map_or(core::ptr::null(), |o| o.as_ptr()),
+            digits.map_or(core::ptr::null(), |d| d.as_ptr()),
+            (crate::params::W - 1) as u32, crate::params::L as u32, out.as_mut_ptr().cast::<u8>(),
+        )
+    };
+}

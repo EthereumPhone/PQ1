@@ -684,7 +684,7 @@ fn wait_ready() {
 /// `wait_ready`, returning the status word that showed the engine idle, so
 /// `init-restart` checks it for a stale DCIS without another bus read.
 #[cfg(feature = "init-restart")]
-#[inline]
+#[inline(always)]
 fn wait_ready_sr() -> u32 {
     let mut t = 0u32;
     loop {
@@ -1375,6 +1375,86 @@ pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: 
         write_word(0);
         write_word(0);
         gather_final16(out);
+    }
+}
+
+/// All `n` chains of one WOTS key in one call (`prfchain`, secure image only).
+/// For `k` in `0..n`, chain `i = order[k]` (or `k` when `order` is null):
+/// `s_i = SHA-256(sk_seed ‖ prf_tail with ci = i)[..16]`, then `steps_i`
+/// chain steps from position 0 over `seed_adrs` with the chain index set to
+/// `i` (`steps_i = digits[i]`, or `fixed_steps` when `digits` is null); the
+/// result goes to `out[16 i..16 i + 16]`. The fixed words are loaded once per
+/// key, the secrets and intermediate values stay in registers, and `sk_seed`
+/// is read in place.
+///
+/// # Safety
+/// `sk_seed` 32, `prf_tail` 48 and `seed_adrs` 64 readable bytes; `order` and
+/// `digits` null or `n` readable bytes, each order entry `< n`; `out` `16 n`
+/// writable bytes; no other SHA-256 stream in flight.
+#[cfg(feature = "prfchain")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_wots_chains16(
+    sk_seed: *const u8,
+    prf_tail: *const u8,
+    seed_adrs: *const u8,
+    order: *const u8,
+    digits: *const u8,
+    fixed_steps: u32,
+    n: u32,
+    out: *mut u8,
+) {
+    // SAFETY: caller contract (64 readable bytes).
+    let mut c: [u32; 16] = core::array::from_fn(|i| unsafe { seed_adrs.add(4 * i).cast::<u32>().read_unaligned() });
+    // SAFETY: caller contract (48 readable bytes).
+    let t: [u32; 12] = core::array::from_fn(|i| unsafe { prf_tail.add(4 * i).cast::<u32>().read_unaligned() });
+    let z = c[4] | c[5] | c[6] | c[7] | c[11] | c[15] == 0;
+    let mut k = 0u32;
+    while k < n {
+        // SAFETY: caller contract on `order` / `digits`.
+        let i = if order.is_null() { k } else { u32::from(unsafe { *order.add(k as usize) }) };
+        let steps = if digits.is_null() { fixed_steps } else { u32::from(unsafe { *digits.add(i as usize) }) };
+        let ci = i.swap_bytes();
+        // PRF: sk_seed ‖ tail[0..11] ‖ ci.
+        if wait_ready_sr() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        REG.str_.write(0);
+        REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+        // SAFETY: caller contract (32 readable bytes).
+        unsafe { feed_words(sk_seed, 8) };
+        write_word(t[0]); write_word(t[1]); write_word(t[2]); write_word(t[3]);
+        write_word(t[4]); write_word(t[5]); write_word(t[6]); write_word(t[7]);
+        write_word(t[8]); write_word(t[9]); write_word(t[10]); write_word(ci);
+        REG.str_.write(STR_DCAL);
+        let mut w = 0u32;
+        while REG.sr.read() & SR_DCIS == 0 {
+            w += 1;
+            if w > 10_000_000 {
+                hash_engine_fault();
+            }
+        }
+        // SAFETY: HR0..HR3.
+        let v = unsafe {
+            [
+                REG.hr0.read_at(0).swap_bytes(),
+                REG.hr0.read_at(1).swap_bytes(),
+                REG.hr0.read_at(2).swap_bytes(),
+                REG.hr0.read_at(3).swap_bytes(),
+            ]
+        };
+        REG.sr.write(!SR_DCIS);
+        #[cfg(feature = "tick-hook")]
+        // SAFETY: as in `final_body`.
+        unsafe {
+            pqsigner_hash_tick();
+        }
+        c[13] = ci;
+        let v = if z { chain_steps::<true>(&c, v, 0, steps) } else { chain_steps::<false>(&c, v, 0, steps) };
+        for (j, x) in v.iter().enumerate() {
+            // SAFETY: `out + 16 i + 4 j` is inside the caller's `16 n` bytes (i < n).
+            unsafe { out.add(16 * i as usize + 4 * j).cast::<u32>().write_unaligned(*x) };
+        }
+        k += 1;
     }
 }
 

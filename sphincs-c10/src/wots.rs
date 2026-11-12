@@ -149,6 +149,9 @@ pub fn keygen_pk(
 ) -> [u8; N] {
     let base_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
     let mut pk_elements = [[0u8; N]; L];
+    #[cfg(feature = "hw-sha256-prfchain")]
+    crate::hash::wots_chains(seed, sk_seed, &base_adrs, layer, tree, kp, None, None, &mut pk_elements);
+    #[cfg(not(feature = "hw-sha256-prfchain"))]
     for i in 0..L {
         pk_elements[i] = crate::hash::wots_secret_chain(seed, sk_seed, &base_adrs, layer, tree, kp, i as u32, (W - 1) as u32);
     }
@@ -186,6 +189,9 @@ pub(crate) fn sign_with_shuffle(
 
     let chain_order = crate::shuffle::fisher_yates(shuffle_seed, L);
 
+    #[cfg(feature = "hw-sha256-prfchain")]
+    crate::hash::wots_chains(seed, sk_seed, &base_adrs, layer, tree, kp, Some(&chain_order[..L]), Some(&digits), &mut sigma);
+    #[cfg(not(feature = "hw-sha256-prfchain"))]
     for step in 0..L {
         let i = chain_order[step] as usize;
         sigma[i] = crate::hash::wots_secret_chain(seed, sk_seed, &base_adrs, layer, tree, kp, i as u32, digits[i] as u32);
