@@ -203,7 +203,38 @@ fn controls() {
     println!("SWEEP {n} leaves: cached auth path == full rebuild ({:.1} s)", t.elapsed().as_secs_f64());
 }
 
+mod diffc {
+    include!("../../diff_cases.rs");
+}
+fn diff(n: u32, every: u32) {
+    let mut key: Option<(u32, SigningKey)> = None;
+    #[cfg(feature = "topcache")]
+    let mut cache = sphincs_c10::topcache::TopCache::empty();
+    for i in 0..n {
+        let c = diffc::case(i, every);
+        if key.as_ref().map(|k| k.0) != Some(i / every) {
+            #[cfg(feature = "topcache")]
+            let sk = sphincs_c10::topcache::keygen_with_top_cache(c.sk_seed, c.pk_seed, &mut cache);
+            #[cfg(not(feature = "topcache"))]
+            let sk = SigningKey::keygen(c.sk_seed, c.pk_seed);
+            key = Some((i / every, sk));
+        }
+        let sk = &key.as_ref().unwrap().1;
+        #[cfg(feature = "topcache")]
+        let sig = sk.sign_with_shuffle_cached(&cache, &c.msg, c.opt_rand.as_ref(), &ShuffleSeed(c.shuffle));
+        #[cfg(not(feature = "topcache"))]
+        let sig = sk.sign_with_shuffle_silent(&c.msg, c.opt_rand.as_ref(), &ShuffleSeed(c.shuffle));
+        assert!(sk.verifying_key().verify(&c.msg, &sig));
+        println!("{i} {} {}", hex::encode(sk.pk_root()), hex::encode(Sha256::digest(sig)));
+    }
+}
+
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("diff") {
+        let a: Vec<u32> = std::env::args().skip(2).map(|x| x.parse().unwrap()).collect();
+        diff(a[0], a[1]);
+        return;
+    }
     #[cfg(feature = "topcache")]
     if std::env::args().nth(1).as_deref() == Some("controls") { controls(); return; }
     let a: Vec<String> = std::env::args().collect();
