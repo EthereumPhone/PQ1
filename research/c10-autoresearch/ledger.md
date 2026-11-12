@@ -196,3 +196,84 @@ PBKDF2 notes:
   - C-bus template loads: the bench stack is in SRAM3, which has no C-bus alias, and the value is low;
   - DMA, and software SHA in the idle windows.
 - **The two issue drafts were not filed.** The permission classifier blocked creating them because the owner had not asked; they await the owner.
+
+## Round 5 (2026-11-12, late): C10 v2 one-block format (#1155), owner go
+
+- **Spec:** `c10v2-spec.md` DRAFT 0.1. Reviews by Fable and Astra are in flight.
+- **Python reference:** `c10v2/c10v2_ref.py`, forked from the clean-room v1 signer.
+  - Self-test: 8 one-bit flips across the signature, a wrong root and a wrong message are all rejected.
+  - 6 KATs in `c10v2/kat-v2-draft01.{json,txt}`.
+- **Rust v2:** `sphincs-c10` feature `v2` (`src/v2hash.rs`, plus hooks at the top of the eight `hash.rs` functions).
+  - `wots`, `fors` and `hypertree` are untouched.
+  - `compile_error!` against every fused v1-layout driver feature.
+  - `tests/v2_kat.rs`: Rust matches Python on all 6 KATs (pk_root and every signature byte), verifies the Python signatures and rejects a near-miss.
+  - The v1 suite is unchanged at 82/0.
+- **v2 kit golden:** `golden-v2.bin`, written by `host_v2`, is byte-identical to the Python reference for the bench inputs (`opt_rand`, shuffled signer).
+
+**Kit, harness v3b, generic oneshot driver path for both versions** (`experiment_v2.sh os|v2`, `bench_os` / `bench_v2`):
+
+| | v1 | v2 | change |
+|---|---:|---:|---:|
+| `cached_sign` | 440.6 M (2.75 s) | 332.5 M (2.08 s) | −24.5% |
+| `keygen` | 65.7 M | 62.0 M | −5.7% |
+
+**Reading it (digest counts from `host_os` / `host_v2`):**
+
+- **Keygen** is the clean comparison: it runs exactly 177,151 digests in both versions and has no grind. Cost per digest fell only from 371 to 350 cycles.
+- On the oneshot path, about 250 cycles per call is software overhead (buffer build, extern call, init, feed, poll). Halving the blocks barely shows.
+- **Sign** counts differ because grind luck depends on the digests (m0: 513 k digests for v1, 445 k for v2). So the −24.5% mixes format gain with luck.
+
+**Conclusion:** the oneshot path cannot measure v2. The gain lives where per-digest overhead is minimal, i.e. the fused driver loops that ship (the probe measured 198 → 119 cycles per chain step). The next step is v2 fused entries (chain, PRF+chain, search, node, FORS leaf), compared against the v1 fused head.
+
+**Estimate for the fused head**, by arithmetic from the unit costs and not measured:
+
+- chain steps: 616 k per cached sign × about 83 cycles saved ≈ 51 M;
+- grind search, 3 blocks → 1: about 20 M;
+- FORS: about 13 M;
+- PRF: about 7 M;
+- T_43: about 1.5 M.
+
+Total about −92 M of 233 M (−40%).
+
+**Spec finding while implementing:** in v1 the last FORS tree's root-wrapper `F` reuses the tweak of that tree's leaf 0, `(FORS_TREE, ht_idx, kp=12, cp=0, ha=0)`. See `fors.rs` and `SPHINCsC10Asm.sol:127`. Both calls run in every sign. The inputs differ, but the tweak repeats, which the SM-TCR argument normally excludes. v2 should give the wrapper its own address.
+
+### Round 5, continued: spec 0.2, fused v2 entries, luck-averaged measurement
+
+**Reviews.** Astra and Fable: adopt with changes, no blocking concern; every A7 width fits every value C10 uses. Folded into spec **0.2**:
+
+- `cp` byte-aligned in A7;
+- WOTS_DIGEST is `S ‖ m ‖ count ‖ A7`;
+- FORS_LAST gets type 9. Fixes v1's tweak reuse between FORS tree 12 leaf 0 and the last-slot wrapper (`hypertree.rs:255`, `SPHINCsC10Asm.sol:127`);
+- T_k are tweak-first;
+- H_MSG is `S ‖ root ‖ M ‖ R ‖ A7`;
+- digits come from the top 129 bits;
+- §3 corrected and §7 gates strengthened.
+
+**Found by Astra:** master's clean-room `independent_c10_signer.py` verify skips the WOTS+C digit-sum check. It accepts the `near-miss-WOTS-digit-sum` vector.
+
+**Spec 0.2 evidence:**
+
+- The Python reference passes its self-test.
+- Three +C-only near-misses (FORS last index, WOTS sum at layer 0, at layer 1) rebuild the correct root and are rejected only by the +C checks. Rust rejects all three.
+- Rust v2 matches Python byte for byte on 6 KATs.
+- `digits` and `digit_sum` match a bit-level reference on about 20 k digests.
+- `golden-v2.bin` (0.2) equals Python, `host_v2` and `host_v2f` (the fused routing with plain-sha2 hooks).
+
+**Fused v2 driver entries** (`pqsigner-hw/v2`): chain, PRF+chain, node, FORS leaf, count search, with NBLW=24 and the HAL order kept. Rust routing is behind `sphincs-c10/v2-fused`, with a v2-native FORS treehash and an R-grind over prebuilt preimages. The kit golden gate passes on every run below.
+
+**Grind luck dominates single-message figures.** WOTS tries for the frozen m0 are 69.9 k under v1 and 96.8 k under v2; the expected value is about 61 k. So `bench_avg_*` / `experiment_avg.sh` measure the mean single-pass sign over 16 messages: the same messages for both versions, verified on the device, keygen once. That is not a byte gate; the golden runs are.
+
+| configuration | mean sign | min..max | keygen | verify | est. cached (2 passes + verify) |
+|---|---:|---:|---:|---:|---:|
+| v1 fused head | 110.10 M | 96.9..142.6 | 36.81 M | 182.6 k | 220.4 M (1.377 s) |
+| v2 first fused cut (generic FORS, callback predicate) | 102.66 M | | 25.08 M | 107.0 k | 205.4 M |
+| + v2-native FORS + R-grind | 93.09 M | | 25.14 M | | 186.3 M |
+| + 24-bit-group `digit_sum` (was u64 SWAR: 24% of samples, about 370 cycles/try) | 82.64 M | | | | 165.4 M |
+| **+ digit sum in the driver loop (no callback)** | **78.55 M** | 69.3..100.5 | **25.13 M** | **106.6 k** | **157.2 M (0.982 s)** |
+| discard: HR0..4 by 5-register `ldm` + unrolled issue | 81.32 M | | | | (r4 spills); reverted, reproduced 78.548 M to 2 cycles |
+
+**Head: v2 is −28.7% on sign, −32% on keygen and −42% on verify against the v1 fused head**, luck-averaged.
+
+**Remaining**, from the profile: `prf_chain16` 50% (about 109 cycles/digest, engine-bound); search 16% (about 209 cycles/try, where engine time is about 135); FORS 22.5% (about 18 M/sign against an ideal of about 9 M: per-call Rust and driver overhead).
+
+**Left to try:** a FORS-subtree fused entry (≈ −9 M/sign), per-key WOTS chains (≈ −1.5 M), the search loop. Fable's estimate of −40% looks reachable.

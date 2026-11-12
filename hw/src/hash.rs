@@ -1934,3 +1934,325 @@ extern "C" {
     /// nothing to do.
     fn pqsigner_hash_tick();
 }
+
+// ---------------------------------------------------------------------------
+// RESEARCH (#1155): C10 v2 one-block entries. Every v2 preimage is `… ‖ A7`
+// (A7 = 7-byte compact address, last), 39, 43 or 55 bytes: one SHA-256 block,
+// ten to fourteen DIN words, the last holding three valid bytes (NBLW = 24).
+// NBLW is written before INIT (which leaves it alone) and again with DCAL, so
+// the HAL order (NBLW, then DCAL) holds. `a0`/`a1` are A7's two DIN words in
+// memory order: bytes 0..4, and bytes 4..7 plus one ignored byte.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "v2")]
+const V2_NBLW: u32 = 24;
+
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_begin() {
+    if ready_sr_fast() & SR_DCIS != 0 {
+        hash_engine_fault();
+    }
+    REG.str_.write(V2_NBLW);
+    REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+}
+
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_end16() -> [u32; 4] {
+    REG.str_.write(V2_NBLW | STR_DCAL);
+    let mut t = 0u32;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t += 1;
+        if t > 10_000_000 {
+            hash_engine_fault();
+        }
+    }
+    let v = read_hr4();
+    REG.sr.write(SR_DINIS);
+    #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
+    // SAFETY: as in `final_body`: the digest is out and the engine idle.
+    unsafe {
+        pqsigner_hash_tick();
+    }
+    v
+}
+
+/// A7's second DIN word with chain position `pos`: `a1` is that word (memory
+/// order `[b4, b5, b6, 0]`) with `cp` clear; `cp` is the top nibble of b5
+/// (spec 0.2), i.e. bits 12..15 of the word.
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_a1(a1: u32, pos: u32) -> u32 {
+    a1 | pos << 12
+}
+
+#[cfg(feature = "v2")]
+#[inline(always)]
+unsafe fn v2_load4(p: *const u8) -> [u32; 4] {
+    let q = p.cast::<u32>();
+    // SAFETY: callers pass 16 readable bytes.
+    unsafe { [q.read_unaligned(), q.add(1).read_unaligned(), q.add(2).read_unaligned(), q.add(3).read_unaligned()] }
+}
+
+#[cfg(feature = "v2")]
+#[inline(always)]
+unsafe fn v2_store4(p: *mut u8, v: [u32; 4]) {
+    let q = p.cast::<u32>();
+    // SAFETY: callers pass 16 writable bytes.
+    unsafe {
+        q.write_unaligned(v[0]);
+        q.add(1).write_unaligned(v[1]);
+        q.add(2).write_unaligned(v[2]);
+        q.add(3).write_unaligned(v[3]);
+    }
+}
+
+/// v2 chain loop: F over `S ‖ v ‖ A7` at positions `start..start + steps`.
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_chain_core(s: [u32; 4], mut v: [u32; 4], a0: u32, low24: u32, start: u32, steps: u32) -> [u32; 4] {
+    let mut step = 0u32;
+    while step < steps {
+        v2_begin();
+        write_word(s[0]); write_word(s[1]); write_word(s[2]); write_word(s[3]);
+        write_word(v[0]); write_word(v[1]); write_word(v[2]); write_word(v[3]);
+        write_word(a0); write_word(v2_a1(low24, start.wrapping_add(step)));
+        v = v2_end16();
+        step += 1;
+    }
+    v
+}
+
+/// # Safety
+/// `seed` 16 readable bytes, `val` 16 readable and writable; no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_chain16(seed: *const u8, val: *mut u8, a0: u32, low24: u32, start: u32, steps: u32) {
+    // SAFETY: caller contract.
+    let (s, v) = unsafe { (v2_load4(seed), v2_load4(val)) };
+    let v = v2_chain_core(s, v, a0, low24, start, steps);
+    // SAFETY: caller contract.
+    unsafe { v2_store4(val, v) };
+}
+
+/// WOTS secret (`sk_seed ‖ A7_prf`) then its chain from position 0; the
+/// secret stays in registers.
+///
+/// # Safety
+/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 16 writable; no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_prf_chain16(
+    sk_seed: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8,
+) {
+    v2_begin();
+    // SAFETY: caller contract.
+    unsafe { feed_words(sk_seed, 8) };
+    write_word(p0);
+    write_word(p1);
+    let v = v2_end16();
+    // SAFETY: caller contract.
+    let s = unsafe { v2_load4(seed) };
+    let v = v2_chain_core(s, v, a0, low24, 0, steps);
+    // SAFETY: caller contract.
+    unsafe { v2_store4(out, v) };
+}
+
+/// H: `S ‖ L ‖ R ‖ A7`, 55 bytes.
+///
+/// # Safety
+/// `seed`, `l`, `r` 16 readable bytes each, `out` 16 writable; no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *const u8, a0: u32, a1: u32, out: *mut u8) {
+    v2_begin();
+    // SAFETY: caller contract.
+    unsafe {
+        feed_words(seed, 4);
+        feed_words(l, 4);
+        feed_words(r, 4);
+    }
+    write_word(a0);
+    write_word(a1);
+    let v = v2_end16();
+    // SAFETY: caller contract.
+    unsafe { v2_store4(out, v) };
+}
+
+/// FORS leaf: secret `sk_seed ‖ A7_prf`, then F `S ‖ secret ‖ A7`; the secret
+/// stays in registers.
+///
+/// # Safety
+/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 16 writable; no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_fors_leaf16(sk_seed: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8) {
+    v2_begin();
+    // SAFETY: caller contract.
+    unsafe { feed_words(sk_seed, 8) };
+    write_word(p0);
+    write_word(p1);
+    let x = v2_end16();
+    v2_begin();
+    // SAFETY: caller contract.
+    unsafe { feed_words(seed, 4) };
+    write_word(x[0]); write_word(x[1]); write_word(x[2]); write_word(x[3]);
+    write_word(a0);
+    write_word(a1);
+    let v = v2_end16();
+    // SAFETY: caller contract.
+    unsafe { v2_store4(out, v) };
+}
+
+/// One WOTS_DIGEST try `S ‖ m ‖ be32(count) ‖ A7` (43 bytes), issued.
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_issue43(sm: &[u32; 8], count: u32, a0: u32, a1: u32) {
+    v2_begin();
+    for w in sm {
+        write_word(*w);
+    }
+    write_word(count.swap_bytes());
+    write_word(a0);
+    write_word(a1);
+    REG.str_.write(V2_NBLW | STR_DCAL);
+}
+
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_collect(d: &mut [u32; 8]) {
+    let mut t = 0u32;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t += 1;
+        if t > 10_000_000 {
+            hash_engine_fault();
+        }
+    }
+    // SAFETY: HR0..HR7, the digest bank; byte-swapped into memory order.
+    unsafe {
+        for (i, x) in d.iter_mut().enumerate() {
+            *x = REG.hr0.read_at(i).swap_bytes();
+        }
+    }
+    REG.sr.write(SR_DINIS);
+    #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
+    // SAFETY: as in `final_body`.
+    unsafe {
+        pqsigner_hash_tick();
+    }
+}
+
+/// v2 WOTS+C count search: the first `c` in `start..start + n` whose digest
+/// satisfies `pred` (digest to `out`), else `start + n`. Try `c + 1` is in the
+/// engine while `pred` checks `c`, as `search128`.
+///
+/// # Safety
+/// `sm` 32 readable bytes (`S ‖ m`), `out` 32 writable; `pred` reads only its
+/// argument; `start + n` does not overflow; no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_search43(
+    sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8,
+) -> u32 {
+    let end = start + n;
+    if n == 0 {
+        return end;
+    }
+    // SAFETY: caller contract (32 readable bytes).
+    let w: [u32; 8] = core::array::from_fn(|i| unsafe { sm.add(4 * i).cast::<u32>().read_unaligned() });
+    let mut d = [0u32; 8];
+    v2_issue43(&w, start, a0, a1);
+    let mut c = start;
+    loop {
+        v2_collect(&mut d);
+        let next = c + 1;
+        let more = next != end;
+        if more {
+            v2_issue43(&w, next, a0, a1);
+        }
+        // SAFETY: `d` is 32 readable bytes.
+        if unsafe { pred(d.as_ptr().cast::<u8>()) } {
+            if more {
+                let mut discard = [0u32; 8];
+                v2_collect(&mut discard);
+            }
+            // SAFETY: `out` names 32 writable bytes.
+            unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+            return c;
+        }
+        if !more {
+            return end;
+        }
+        c = next;
+    }
+}
+
+/// v2 WOTS+C digit sum of a digest given as its first five words in memory
+/// order (big-endian, from `read_hr`): the top 129 bits, 43 three-bit digits
+/// (spec 0.2). Five 24-bit groups of eight digits, then the last three.
+/// Wrapping arithmetic: the release profile keeps overflow checks, and this is
+/// the grind's inner loop.
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_digit_sum(w: &[u32; 5]) -> u32 {
+    #[inline(always)]
+    fn g24(v: u32) -> u32 {
+        let s = (v & 0o07070707).wrapping_add((v >> 3) & 0o07070707);
+        let s = (s & 0o00770077).wrapping_add((s >> 6) & 0o00770077);
+        (s & 0o7777).wrapping_add(s >> 12)
+    }
+    let (w0, w1, w2, w3, w4) = (w[0], w[1], w[2], w[3], w[4]);
+    let t = (w3 & 0xFF) << 1 | w4 >> 31;
+    g24(w0 >> 8)
+        .wrapping_add(g24((w0 & 0xFF) << 16 | w1 >> 16))
+        .wrapping_add(g24((w1 & 0xFFFF) << 8 | w2 >> 24))
+        .wrapping_add(g24(w2 & 0x00FF_FFFF))
+        .wrapping_add(g24(w3 >> 8))
+        .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6))
+}
+
+/// v2 count search with the WOTS+C target in the driver (no callback): the
+/// first `c` in `start..start + n` whose digest's digit sum is `target`
+/// (digest to `out`), else `start + n`. Try `c + 1` is in the engine while the
+/// sum of try `c` is computed.
+///
+/// # Safety
+/// `sm` 32 readable bytes (`S ‖ m`), `out` 32 writable; `start + n` does not
+/// overflow; no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32 {
+    let end = start.wrapping_add(n);
+    if n == 0 {
+        return end;
+    }
+    // SAFETY: caller contract (32 readable bytes).
+    let w: [u32; 8] = core::array::from_fn(|i| unsafe { sm.add(4 * i).cast::<u32>().read_unaligned() });
+    let mut d = [0u32; 8];
+    v2_issue43(&w, start, a0, a1);
+    let mut c = start;
+    loop {
+        v2_collect(&mut d);
+        let next = c.wrapping_add(1);
+        let more = next != end;
+        if more {
+            v2_issue43(&w, next, a0, a1);
+        }
+        // `d` holds digest bytes in memory order; the sum wants big-endian words.
+        let be = [d[0].swap_bytes(), d[1].swap_bytes(), d[2].swap_bytes(), d[3].swap_bytes(), d[4].swap_bytes()];
+        if v2_digit_sum(&be) == target {
+            if more {
+                let mut discard = [0u32; 8];
+                v2_collect(&mut discard);
+            }
+            // SAFETY: `out` names 32 writable bytes.
+            unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+            return c;
+        }
+        if !more {
+            return end;
+        }
+        c = next;
+    }
+}

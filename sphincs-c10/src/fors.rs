@@ -16,7 +16,7 @@ use crate::params::*;
 /// Reads enough underlying bytes (`(num_bits + bit_offset%8 + 7) / 8`,
 /// at most 8) to cover the requested span, returning the extracted value
 /// right-aligned and masked to `num_bits`.
-fn read_bits_le(digest: &[u8; 32], bit_offset: usize, num_bits: usize) -> u64 {
+pub(crate) fn read_bits_le(digest: &[u8; 32], bit_offset: usize, num_bits: usize) -> u64 {
     debug_assert!(num_bits > 0 && num_bits <= 57);
     let byte_start = 31 - (bit_offset / 8);
     let bit_in_byte = bit_offset % 8;
@@ -102,6 +102,8 @@ pub fn grind_r(
     message: &[u8; 32],
     opt_rand: Option<&[u8; N]>,
 ) -> ([u8; N], [u8; 32]) {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::grind_r_fused(sk_seed, pk_seed, pk_root, message, opt_rand);
     let seed_b32 = pad16(pk_seed);
     let root_b32 = pad16(pk_root);
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
@@ -144,6 +146,8 @@ pub fn compute_fors_root(
 ) -> [u8; N] {
     #[cfg(feature = "hw-sha256-forstree")]
     return fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, 0).0;
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::fors_tree_fused(seed, sk_seed, ht_idx, tree_idx, 0).0;
     #[allow(unreachable_code)]
     // Treehash: process 2^A leaves left-to-right with a stack.
     let n_leaves = FORS_LEAVES; // 2048
@@ -198,6 +202,8 @@ pub fn sign_fors_tree(
     leaf_idx: u32,
 ) -> ([u8; N], [[u8; N]; A]) {
     let secret = fors_secret(sk_seed, ht_idx, tree_idx, leaf_idx);
+    #[cfg(feature = "v2-fused")]
+    return (secret, crate::v2hash::fors_tree_fused(seed, sk_seed, ht_idx, tree_idx, leaf_idx).1);
     #[cfg(feature = "hw-sha256-forstree")]
     return (secret, fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, leaf_idx).1);
 

@@ -223,6 +223,9 @@ pub fn sha256_parts(parts: &[&[u8]]) -> [u8; 32] {
 /// `mstore(0x00, seed)`, `mstore(0x20, adrs)`, `mstore(0x40, val)`.
 pub fn th(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; 32]) -> [u8; N] {
     bump!(TH);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::th(seed, adrs, val);
+    #[allow(unreachable_code)]
     #[cfg(feature = "hw-sha256-gather")]
     {
         extern "C" {
@@ -255,6 +258,11 @@ pub fn th_pair(
     right: &[u8; 32],
 ) -> [u8; N] {
     bump!(TH);
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::th_pair_fused(seed, adrs, left, right);
+    #[cfg(all(feature = "v2", not(feature = "v2-fused")))]
+    return crate::v2hash::th_pair(seed, adrs, left, right);
+    #[allow(unreachable_code)]
     #[cfg(feature = "hw-sha256-gather")]
     {
         extern "C" {
@@ -296,6 +304,8 @@ pub const TH_MULTI_MAX: usize = 43;
 pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
     bump!(TH);
     assert!(vals.len() <= TH_MULTI_MAX);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::th_multi(seed, adrs, vals);
     #[cfg(feature = "hw-sha256-thmulti")]
     {
         extern "C" {
@@ -345,6 +355,9 @@ pub fn h_msg(
     message: &[u8; 32],
 ) -> [u8; 32] {
     bump!(OTHER);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::h_msg(seed, root, r, message);
+    #[allow(unreachable_code)]
     sha256_parts(&[seed, root, r, message, &[0xFFu8; 32]])
 }
 
@@ -371,6 +384,11 @@ pub fn chain_hash(
     steps: u32,
 ) -> [u8; N] {
     bump!(CHAIN_HASH);
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::chain_hash_fused(seed, adrs, val, start_pos, steps);
+    #[cfg(all(feature = "v2", not(feature = "v2-fused")))]
+    return crate::v2hash::chain_hash(seed, adrs, val, start_pos, steps);
+    #[allow(unreachable_code)]
     // `th`'s preimage, built once (`chain_buf`); a step rewrites only chain_pos and the value.
     let mut buf = chain_buf(seed, adrs, val);
     #[cfg(feature = "hw-sha256-chain")]
@@ -407,6 +425,9 @@ pub fn wots_digest(
     count: u32,
 ) -> [u8; 32] {
     bump!(OTHER);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::wots_digest(seed, wots_adrs, msg_hash, count);
+    #[allow(unreachable_code)]
     let mut buf = [0u8; 128];
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(wots_adrs);
@@ -434,6 +455,9 @@ pub fn wots_secret(
     chain_idx: u32,
 ) -> [u8; N] {
     bump!(WOTS_SECRET);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::wots_secret(sk_seed, layer, tree, kp, chain_idx);
+    #[allow(unreachable_code)]
     // One contiguous 80-byte preimage, one backend call (same bytes as the parts).
     let mut buf = [0u8; 80];
     buf[0..32].copy_from_slice(sk_seed);
@@ -467,6 +491,9 @@ pub fn wots_secret(
 /// reassemble the shared forest and forge (CWE-347 / few-time-key reuse).
 pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32) -> [u8; N] {
     bump!(FORS_SECRET);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::fors_secret(sk_seed, ht_idx, tree_idx, leaf_idx);
+    #[allow(unreachable_code)]
     // One contiguous 48-byte preimage, one backend call (same bytes as the parts).
     let mut buf = [0u8; 48];
     buf[0..32].copy_from_slice(sk_seed);
@@ -535,7 +562,7 @@ fn sha256_oneshot(data: &[u8]) -> [u8; 32] {
 /// secure image (`hw-sha256-oneshot`) the driver reads out only HR0..HR3.
 #[cfg(feature = "hw-sha256-oneshot")]
 #[inline(always)]
-fn sha256_bytes16(data: &[u8]) -> [u8; N] {
+pub(crate) fn sha256_bytes16(data: &[u8]) -> [u8; N] {
     extern "C" {
         fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, out: *mut u8);
     }
@@ -548,7 +575,7 @@ fn sha256_bytes16(data: &[u8]) -> [u8; N] {
 
 #[cfg(not(feature = "hw-sha256-oneshot"))]
 #[inline(always)]
-fn sha256_bytes16(data: &[u8]) -> [u8; N] {
+pub(crate) fn sha256_bytes16(data: &[u8]) -> [u8; N] {
     truncate(&sha256_bytes(data))
 }
 
@@ -566,6 +593,9 @@ pub(crate) fn wots_secret_chain(
     ci: u32,
     steps: u32,
 ) -> [u8; N] {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::wots_secret_chain_fused(seed, sk_seed, base_adrs, layer, tree, kp, ci, steps);
+    #[allow(unreachable_code)]
     #[cfg(feature = "hw-sha256-prfchain")]
     {
         extern "C" {
@@ -600,6 +630,9 @@ pub(crate) fn wots_secret_chain(
 /// the FORS leaf address. With `hw-sha256-forsleaf` one driver call; the secret stays in registers.
 #[inline(always)]
 pub(crate) fn fors_leaf(seed: &[u8; 32], sk_seed: &[u8; 32], leaf_adrs: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf: u32) -> [u8; N] {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::fors_leaf_fused(seed, sk_seed, leaf_adrs, ht_idx, tree_idx, leaf);
+    #[allow(unreachable_code)]
     #[cfg(feature = "hw-sha256-forsleaf")]
     {
         extern "C" {

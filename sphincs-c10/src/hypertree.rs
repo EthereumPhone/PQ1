@@ -253,6 +253,9 @@ fn sign_inner(
     set_row(&mut fors_secrets, K - 1, last_root);
     let last_leaf_adrs =
         crate::address::make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, (K - 1) as u32, 0, 0, 0);
+    // v2: the last slot's F has its own type (spec 0.2, FORS_LAST).
+    #[cfg(feature = "v2")]
+    let last_leaf_adrs = crate::address::make_adrs(0, u64::from(ht_idx), crate::v2hash::T_FORS_LAST, 0, 0, 0, 0);
     set_row(&mut fors_roots, K - 1, crate::hash::th(&seed, &last_leaf_adrs, &pad16(&last_root)));
 
     report(progress, 32);
@@ -450,6 +453,8 @@ pub fn verify(
 
     // Last tree (forced-zero): secret IS the root
     let last_adrs = crate::address::make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, (K - 1) as u32, 0, 0, 0);
+    #[cfg(feature = "v2")]
+    let last_adrs = crate::address::make_adrs(0, u64::from(ht_idx), crate::v2hash::T_FORS_LAST, 0, 0, 0, 0);
     fors_roots[K - 1] =
         crate::hash::th(&seed, &last_adrs, &pad16(&fors_secrets[K - 1]));
 

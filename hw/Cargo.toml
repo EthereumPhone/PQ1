@@ -56,6 +56,8 @@ tick-batch = ["tick-hook"]
 no-busy-wait = []
 # Autoresearch: HR0..3 through the HRA alias with one load-multiple.
 hra-ldm = []
+# RESEARCH (#1155): C10 v2 one-block entries (`pqsigner_v2_*`).
+v2 = ["init-restart", "oneshot", "prfchain", "forsleaf", "search"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

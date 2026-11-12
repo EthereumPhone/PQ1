@@ -48,6 +48,13 @@ hw-sha256-forssub = ["hw-sha256-forstree"]
 # at the top of each hash primitive — measurement-only, never shipped.
 hash-counters = []
 
+# RESEARCH (#1155): C10 v2 one-block tweakable hash (research/c10-autoresearch/c10v2-spec.md).
+# Changes every preimage, pk_root and signature. Generic hash paths only.
+v2 = []
+# RESEARCH (#1155): v2 on fused one-block driver entries (`pqsigner-hw/v2`): chain, PRF+chain,
+# node, FORS leaf, count search. The linking binary must provide `pqsigner_v2_*`.
+v2-fused = ["v2", "hw-sha256-oneshot"]
+
 # Re-export otherwise-`pub(crate)` internals (PRF, ADRS, digest, FORS tree
 # helpers) under `sphincs_c10::sim_internals`, for the security-regression
 # harnesses in `tests/` only: the FORS shared-forest forgery simulator

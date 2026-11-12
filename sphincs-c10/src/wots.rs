@@ -14,6 +14,9 @@ use crate::params::*;
 ///
 /// Matches Python: `extract_digits(d, cfg)`.
 pub fn extract_digits(digest: &[u8; 32]) -> [u8; L] {
+    #[cfg(feature = "v2")]
+    return crate::v2hash::digits(digest);
+    #[allow(unreachable_code)]
     // The digest is a 256-bit big-endian value. The Python code treats it
     // as an integer and extracts bits from the LSB upward:
     //   digit[i] = (d >> (i * log_w)) & w_mask
@@ -110,7 +113,26 @@ pub(crate) fn find_count(
         }
         panic!("WOTS+C count grinding failed after 10M iterations");
     }
+    #[cfg(feature = "v2-fused")]
+    {
+        let mut count = 0u32;
+        while count < 10_000_000 {
+            let n = GRIND_REPORT_EVERY - count % GRIND_REPORT_EVERY;
+            let n = if n > 10_000_000 - count { 10_000_000 - count } else { n };
+            let mut d = [0u8; 32];
+            let c = crate::v2hash::search_fused(seed, msg_hash, layer, tree, kp, count, n, &mut d);
+            if c < count + n {
+                return (c, d, extract_digits(&d));
+            }
+            count += n;
+            if count % GRIND_REPORT_EVERY == 0 {
+                crate::hypertree::report(progress, pct);
+            }
+        }
+        panic!("WOTS+C count grinding failed after 10M iterations");
+    }
     #[cfg(not(feature = "hw-sha256-search"))]
+    #[allow(unreachable_code)]
     let mut count = 0u32;
     #[cfg(not(feature = "hw-sha256-search"))]
     while count < 10_000_000 {
@@ -313,6 +335,9 @@ mod extract_digits_tests {
 /// so no carry crosses a field). Public data only: the grind digest of public
 /// inputs, whose accepted count is in the signature.
 pub(crate) fn digit_sum(digest: &[u8; 32]) -> usize {
+    #[cfg(feature = "v2")]
+    return crate::v2hash::digit_sum(digest);
+    #[allow(unreachable_code)]
     let mut sum: usize = 0;
     for g in 0..5 {
         // Bits 24g..24g+23 of the big-endian integer: bytes 31-3g (low)
