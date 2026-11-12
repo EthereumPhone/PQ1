@@ -1382,11 +1382,20 @@ pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: 
 #[cfg(any(feature = "prfchain", feature = "forsleaf"))]
 #[inline(always)]
 unsafe fn feed_words(p: *const u8, n: usize) {
+    // Fully unrolled for the constant `n` of every caller (4, 8, 12, 16):
+    // loads are issued in groups of four ahead of their stores.
+    let q = p.cast::<u32>();
     let mut i = 0;
-    while i < n {
+    while i + 4 <= n {
         // SAFETY: callers pass `p` naming `4n` readable bytes.
-        write_word(unsafe { p.add(4 * i).cast::<u32>().read_unaligned() });
-        i += 1;
+        let (a, b, c, d) = unsafe {
+            (q.add(i).read_unaligned(), q.add(i + 1).read_unaligned(), q.add(i + 2).read_unaligned(), q.add(i + 3).read_unaligned())
+        };
+        write_word(a);
+        write_word(b);
+        write_word(c);
+        write_word(d);
+        i += 4;
     }
 }
 

@@ -231,6 +231,21 @@ pub extern "C" fn c10_bench_main() {
     let t = cyc();
     for _ in 0..(NREP / 7) { unsafe { pqsigner_sha256_chain16(cb.as_mut_ptr(), 0, 7) }; }
     out(17, cyc().wrapping_sub(t) / ((NREP / 7) * 7));
+    // 19: fors_leaf16 per call, 20: node16 per call (direct, templates prebuilt)
+    extern "C" {
+        fn pqsigner_fors_leaf16(sk: *const u8, tail: *const u8, sa: *const u8, out: *mut u8);
+        fn pqsigner_node16(sa: *const u8, l: *const u8, r: *const u8, out: *mut u8);
+    }
+    let mut sa = [0u8; 64]; sa[..16].copy_from_slice(&PK_SEED); sa[47] = 3;
+    let tail = *b"fors\0\0\0\x07\0\0\0\x03\0\0\0\0";
+    let mut o16 = [0u8; 16];
+    let t = cyc();
+    for _ in 0..NREP { unsafe { pqsigner_fors_leaf16(SK_SEED.as_ptr(), tail.as_ptr(), sa.as_ptr(), o16.as_mut_ptr()) }; }
+    out(19, cyc().wrapping_sub(t) / NREP);
+    let l = o16;
+    let t = cyc();
+    for _ in 0..NREP { unsafe { pqsigner_node16(sa.as_ptr(), l.as_ptr(), o16.as_ptr(), o16.as_mut_ptr()) }; }
+    out(20, cyc().wrapping_sub(t) / NREP);
     out(14, (dg[0] ^ sec[0] ^ val[0] ^ val[1] ^ d[0]) as u32);
     out(1, 8);
 }
