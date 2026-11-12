@@ -50,6 +50,23 @@ pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start: u32, steps
         b[64..80].copy_from_slice(&d[..16]);
     }
 }
+/// Counter search hook (driver `search128`): sequential software search.
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_search128(buf: *const u8, start: u32, n: u32,
+    pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8) -> u32 {
+    let mut b = [0u8; 128];
+    unsafe { std::ptr::copy_nonoverlapping(buf, b.as_mut_ptr(), 128) };
+    for c in start..start + n {
+        b[124..128].copy_from_slice(&c.to_be_bytes());
+        let mut d = [0u8; 32];
+        unsafe { pqsigner_sha256_oneshot(b.as_ptr(), 128, d.as_mut_ptr()) };
+        if unsafe { pred(d.as_ptr()) } {
+            unsafe { std::ptr::copy_nonoverlapping(d.as_ptr(), out, 32) };
+            return c;
+        }
+    }
+    start + n
+}
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn main() {

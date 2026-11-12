@@ -21,6 +21,8 @@ hw-sha256 = []
 hw-sha256-oneshot = ["hw-sha256"]
 # The WOTS chain loop through one driver call, `pqsigner_sha256_chain16` (`pqsigner-hw/chain`).
 hw-sha256-chain = ["hw-sha256-oneshot"]
+# The WOTS+C count grind through `pqsigner_sha256_search128` (`pqsigner-hw/search`).
+hw-sha256-search = ["hw-sha256-oneshot"]
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs

@@ -1198,6 +1198,111 @@ pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, s
     }
 }
 
+/// Start one digest of the 128-byte message at `buf` with its last word
+/// (bytes [124..128)) replaced by `count` big-endian: init (stale-DCIS check,
+/// NBLW = 0, INIT), 32 DIN words, DCAL. `search` only.
+#[cfg(feature = "search")]
+#[inline(always)]
+unsafe fn issue128(buf: *const u8, count: u32) {
+    if wait_ready_sr() & SR_DCIS != 0 {
+        hash_engine_fault();
+    }
+    REG.str_.write(0);
+    REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+    let mut i = 0;
+    while i < 31 {
+        // SAFETY: `buf + 4i`, i < 31, is inside the caller's 128 bytes.
+        write_word(unsafe { buf.add(4 * i).cast::<u32>().read_unaligned() });
+        i += 1;
+    }
+    write_word(count.swap_bytes());
+    REG.str_.write(STR_DCAL);
+}
+
+/// Wait for the digest in flight and read all eight HR words into `d` as
+/// digest bytes; clear DCIS. `search` only.
+#[cfg(feature = "search")]
+#[inline(always)]
+fn collect(d: &mut [u32; 8]) {
+    let mut t = 0u32;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t += 1;
+        if t > 10_000_000 {
+            hash_engine_fault();
+        }
+    }
+    // SAFETY: HR0..HR7 is the digest bank; `swap_bytes` stored little-endian
+    // is the big-endian digest word in memory order.
+    unsafe {
+        *d = [
+            REG.hr0.read_at(0).swap_bytes(), REG.hr0.read_at(1).swap_bytes(),
+            REG.hr0.read_at(2).swap_bytes(), REG.hr0.read_at(3).swap_bytes(),
+            REG.hr0.read_at(4).swap_bytes(), REG.hr0.read_at(5).swap_bytes(),
+            REG.hr0.read_at(6).swap_bytes(), REG.hr0.read_at(7).swap_bytes(),
+        ];
+    }
+    REG.sr.write(!SR_DCIS);
+    #[cfg(feature = "tick-hook")]
+    // SAFETY: as in `final_body`: the digest is out and the engine idle.
+    unsafe {
+        pqsigner_hash_tick();
+    }
+}
+
+/// Counter search (`search`, secure image only): for `c` in `start..start+n`,
+/// SHA-256 the 128-byte message at `buf` with bytes [124..128) = `c`
+/// (big-endian); return the first `c` whose digest satisfies `pred` (the
+/// digest is written to `out`), or `start + n` if none does. Try `c + 1` is
+/// already in the engine while `pred` checks try `c` (and is discarded if `c`
+/// is the answer), so the check costs no engine time. The answer and its
+/// digest are exactly the sequential search's.
+///
+/// # Safety
+/// `buf` names 128 readable bytes and `out` 32 writable bytes; `pred` reads
+/// only its 32-byte argument; `start + n` does not overflow; no other SHA-256
+/// stream is in flight; `init_clock` has run.
+#[cfg(feature = "search")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_search128(
+    buf: *const u8,
+    start: u32,
+    n: u32,
+    pred: unsafe extern "C" fn(*const u8) -> bool,
+    out: *mut u8,
+) -> u32 {
+    let end = start + n;
+    if n == 0 {
+        return end;
+    }
+    let mut d = [0u32; 8];
+    // SAFETY: caller contract.
+    unsafe { issue128(buf, start) };
+    let mut c = start;
+    loop {
+        collect(&mut d);
+        let next = c + 1;
+        let more = next != end;
+        if more {
+            // SAFETY: caller contract.
+            unsafe { issue128(buf, next) };
+        }
+        // SAFETY: `d` is 32 readable bytes; `pred` reads only those.
+        if unsafe { pred(d.as_ptr().cast::<u8>()) } {
+            if more {
+                let mut discard = [0u32; 8];
+                collect(&mut discard);
+            }
+            // SAFETY: `out` names 32 writable bytes (caller contract).
+            unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+            return c;
+        }
+        if !more {
+            return end;
+        }
+        c = next;
+    }
+}
+
 #[cfg(feature = "tick-hook")]
 extern "C" {
     /// Defined by the secure world (`tick-hook`): called after every
