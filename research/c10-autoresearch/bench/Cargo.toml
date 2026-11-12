@@ -32,3 +32,5 @@ opt-level = 3
 opt-level = 3
 [profile.release.package.hmac]
 opt-level = 3
+[profile.release.package.pqsigner-hw]
+opt-level = 3
