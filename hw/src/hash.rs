@@ -1544,7 +1544,7 @@ unsafe fn issue128(buf: *const u8, count: u32) {
 /// digest bytes; clear DCIS. `search` only.
 #[cfg(feature = "search")]
 #[inline(always)]
-fn collect(d: &mut [u32; 8]) {
+fn collect<const FULL: bool>(d: &mut [u32; 8]) {
     let mut t = 0u32;
     while REG.sr.read() & SR_DCIS == 0 {
         t += 1;
@@ -1553,14 +1553,23 @@ fn collect(d: &mut [u32; 8]) {
         }
     }
     // SAFETY: HR0..HR7 is the digest bank; `swap_bytes` stored little-endian
-    // is the big-endian digest word in memory order.
+    // is the big-endian digest word in memory order. Without FULL only HR3..HR7
+    // (bytes 12..32, which hold every bit the WOTS+C digit sum reads) are read.
     unsafe {
-        *d = [
-            REG.hr0.read_at(0).swap_bytes(), REG.hr0.read_at(1).swap_bytes(),
-            REG.hr0.read_at(2).swap_bytes(), REG.hr0.read_at(3).swap_bytes(),
-            REG.hr0.read_at(4).swap_bytes(), REG.hr0.read_at(5).swap_bytes(),
-            REG.hr0.read_at(6).swap_bytes(), REG.hr0.read_at(7).swap_bytes(),
-        ];
+        if FULL {
+            d[0] = REG.hr0.read_at(0).swap_bytes();
+            d[1] = REG.hr0.read_at(1).swap_bytes();
+            d[2] = REG.hr0.read_at(2).swap_bytes();
+        } else {
+            d[0] = 0;
+            d[1] = 0;
+            d[2] = 0;
+        }
+        d[3] = REG.hr0.read_at(3).swap_bytes();
+        d[4] = REG.hr0.read_at(4).swap_bytes();
+        d[5] = REG.hr0.read_at(5).swap_bytes();
+        d[6] = REG.hr0.read_at(6).swap_bytes();
+        d[7] = REG.hr0.read_at(7).swap_bytes();
     }
     REG.sr.write(SR_DINIS);
     #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
@@ -1602,7 +1611,7 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
     #[cfg(feature = "tick-batch")]
     let mut since_tick = 0u32;
     loop {
-        collect(&mut d);
+        collect::<false>(&mut d);
         #[cfg(feature = "tick-batch")]
         {
             since_tick += 1;
@@ -1624,13 +1633,17 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
         if unsafe { pred(d.as_ptr().cast::<u8>()) } {
             if more {
                 let mut discard = [0u32; 8];
-                collect(&mut discard);
+                collect::<false>(&mut discard);
             }
+            // The hit's first 12 bytes were not read: hash try `c` once more, in full.
+            // SAFETY: caller contract.
+            unsafe { issue128(buf, c) };
+            collect::<true>(&mut d);
             // SAFETY: `out` names 32 writable bytes (caller contract).
             unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
             #[cfg(feature = "tick-batch")]
             // SAFETY: the engine is idle (the speculative try was collected).
-            unsafe { pqsigner_hash_tick_n(since_tick + u32::from(more)) };
+            unsafe { pqsigner_hash_tick_n(since_tick + u32::from(more) + 1) };
             return c;
         }
         if !more {
