@@ -106,6 +106,9 @@ pub fn grind_r(
     let root_b32 = pad16(pk_root);
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
 
+    #[cfg(feature = "hw-sha256-grindr")]
+    return grind_r_fast(sk_seed, &seed_b32, &root_b32, message, opt_rand, last_shift);
+    #[allow(unreachable_code)]
     let mut nonce = 0u32;
     while nonce < 10_000_000 {
         let mut nonce_b32 = [0u8; 32];
@@ -336,4 +339,63 @@ pub(crate) fn fors_tree_fast(
         sp += 1;
     }
     (stack[0], auth_path)
+}
+
+/// `grind_r` with both preimages built once (`hw-sha256-grindr`): per nonce
+/// only the nonce bytes of the R PRF preimage and the R bytes of the `h_msg`
+/// preimage change, and each digest is one contiguous one-shot instead of a
+/// five-part stream. Same nonces, same R, same digest. The PRF buffer holds a
+/// copy of `sk_seed` and is wiped before returning.
+#[cfg(feature = "hw-sha256-grindr")]
+fn grind_r_fast(
+    sk_seed: &[u8; 32],
+    seed_b32: &[u8; 32],
+    root_b32: &[u8; 32],
+    message: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    last_shift: usize,
+) -> ([u8; N], [u8; 32]) {
+    use crate::hash::sha256_bytes;
+    // sk_seed ‖ "R_grind" ‖ [rand] ‖ message ‖ nonce_b32 (119 or 103 bytes).
+    let mut prf = [0u8; 119];
+    prf[0..32].copy_from_slice(sk_seed);
+    prf[32..39].copy_from_slice(b"R_grind");
+    let mut off = 39;
+    if let Some(rand) = opt_rand {
+        prf[off..off + N].copy_from_slice(rand);
+        off += N;
+    }
+    prf[off..off + 32].copy_from_slice(message);
+    off += 32;
+    let nonce_at = off + 28; // to_b32(nonce): the count is the last 4 bytes
+    let prf_len = off + 32;
+    // h_msg: seed ‖ root ‖ pad16(R) ‖ message ‖ 0xFF*32.
+    let mut hm = [0u8; 160];
+    hm[0..32].copy_from_slice(seed_b32);
+    hm[32..64].copy_from_slice(root_b32);
+    hm[96..128].copy_from_slice(message);
+    hm[128..160].copy_from_slice(&[0xFFu8; 32]);
+    let mut nonce = 0u32;
+    let mut found = None;
+    while nonce < 10_000_000 {
+        prf[nonce_at..nonce_at + 4].copy_from_slice(&nonce.to_be_bytes());
+        let r = truncate(&sha256_bytes(&prf[..prf_len]));
+        hm[64..64 + N].copy_from_slice(&r);
+        let digest = sha256_bytes(&hm);
+        if read_bits_le(&digest, last_shift, A) == 0 {
+            found = Some((r, digest));
+            break;
+        }
+        nonce += 1;
+    }
+    // Wipe the sk_seed copy (volatile, so the stores are not elided).
+    for b in prf.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    match found {
+        Some(x) => x,
+        None => panic!("R grinding failed after 10M iterations"),
+    }
 }

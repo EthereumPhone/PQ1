@@ -31,6 +31,8 @@ hw-sha256-prfchain = ["hw-sha256-chain"]
 hw-sha256-forsleaf = ["hw-sha256-gather"]
 # FORS tree build over per-tree address templates (`pqsigner_node16`, `pqsigner_fors_leaf16`).
 hw-sha256-forstree = ["hw-sha256-forsleaf"]
+# R grind over two prebuilt preimages through the one-shot (no five-part streams).
+hw-sha256-grindr = ["hw-sha256-oneshot"]
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs

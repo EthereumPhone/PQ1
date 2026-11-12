@@ -135,14 +135,15 @@ fn main() {
     hooks_take();
     let s0 = sk.sign_with_shuffle_silent(&MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
     println!("COUNT signA_m0 {}", take());
-    println!("HOOKS signA_m0 chain_steps={} search_tries={} fors_leaf={} node16={} prf_chain={} gather={} oneshot16={}", 
-        { let h = hooks_take(); format!("{} {} {} {} {} {} {}", h[0], h[1], h[2], h[3], h[4], h[5], h[6]) }, "", "", "", "", "", "");
+    { let h = hooks_take(); println!("HOOKS2 signA_m0 chain_steps={} search_tries={} fors_leaf={} node16={} prf_chain={} gather={} oneshot16={}", h[0], h[1], h[2], h[3], h[4], h[5], h[6]); }
     let s0b = sk.sign_with_shuffle_silent(&MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_B));
     println!("COUNT signB_m0 {}", take());
     let ok = sk.verifying_key().verify(&MSG0, &s0);
     println!("COUNT verify_m0 {}", take());
+    hooks_take();
     let s1 = sk.sign_with_shuffle_silent(&MSG1, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
     println!("COUNT signA_m1 {}", take());
+    { let h = hooks_take(); println!("HOOKS2 signA_m1 chain_steps={} search_tries={} fors_leaf={} node16={} prf_chain={} gather={} oneshot16={}", h[0], h[1], h[2], h[3], h[4], h[5], h[6]); }
     let ok1 = sk.verifying_key().verify(&MSG1, &s1);
     take();
     assert!(ok && ok1, "verify failed");

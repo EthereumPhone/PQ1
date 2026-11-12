@@ -13,7 +13,7 @@ path = "src/lib.rs"
 [dependencies]
 # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the
 # UI-only `tick-hook`): one-call digests, unrolled DIN/HR I/O, inlined barriers, INIT-only restart.
-sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-gather", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree"] }
+sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-gather", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr"] }
 pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf"] }
 
 # Mirror of the root workspace's shipping [profile.release] (Cargo.toml), including the
