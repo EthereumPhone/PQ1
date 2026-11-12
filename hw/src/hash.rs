@@ -1183,14 +1183,18 @@ fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, st
     // NBLW = 0 for every step: STR is written once, after the first BUSY wait
     // (and again after a UI tick, which may hash); a step writes STR only with
     // DCAL (NBLW bits 0).
+    if steps != 0 {
+        // The engine is idle (the loop repeats this check per step) before STR.
+        if wait_ready_sr() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        REG.str_.write(0);
+    }
     let mut step = 0u32;
     while step < steps {
         // init_body (init-restart): idle, no stale DCIS, INIT.
         if wait_ready_sr() & SR_DCIS != 0 {
             hash_engine_fault();
-        }
-        if step == 0 {
-            REG.str_.write(0);
         }
         REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
         let pos = start_pos.wrapping_add(step);
