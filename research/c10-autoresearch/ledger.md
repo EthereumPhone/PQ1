@@ -94,3 +94,34 @@ The negative control is a one-bit mutation of `truncate`. It fails both gates, b
 
 - **H7**: three `rng_strong::fill` calls per sign are SE round trips, about 0.3 s per sign according to the source comment. Not measurable on this kit, which has no SEs.
 - `tick-hook` (UI film) after every digest, and the F-17 one-second rate limiter. These are wall-time components outside the hash work.
+
+## Milestone 2026-11-12, evening (kit 0055002D, v3/v3b flash harness)
+
+| | cached sign (2 passes + verify) | keygen |
+|---|---:|---:|
+| master, 1-way (as shipped) | 546.3 M cycles, 3.41 s | 85.5 M, 0.53 s |
+| head, output-identical | 236.7 M, 1.48 s (−57%) | 37.8 M, 0.24 s |
+| head + top-layer cache (track B) | 164.5 M, 1.03 s (−70%) | 76.1 M, 0.48 s (includes fill and the confirm build) |
+
+**Cold first sign** (keygen + sign): 3.95 s on master → 1.72 s at head → 1.50 s with the cache.
+
+**Evidence at head**
+- Golden bytes on the kit for every keep.
+- Host differential against pristine master: 400 cases, 100 keys, `opt_rand` Some and None, for both the fast path and the cache. The branch negative control produced 133/133 mismatches.
+- Kit differential: 32 cases, 8 keys, signatures hashed with software SHA on the device, all equal to master.
+- Track-B controls refuse for the intended reason (digest, confirm, subtree), and the positive control signs. The 512-leaf sweep matches a full rebuild.
+
+**Product levers measured with stubs**
+- Per-digest UI tick: +7.2%. Batching it per key or subtree brings that to +0.5%; this needs `film_tick_hash_n` in the secure world.
+- Driver at opt-level `z`: +12%. The fast paths need a secure-only crate at opt 3, which keeps the FSBL unchanged.
+- 1-way vs 2-way ICACHE: 0.15% at head.
+
+**Not measurable on the kit**
+- Film drawing: about 8 ms per 32 ms while live, per the source.
+- `rng_strong`: about 0.3 s per sign, per the source.
+
+**Open for landing**
+- F1: boot KATs and crosscheck hooks for every new driver entry.
+- FV-major re-extraction: chain, search, FORS and PRF logic now live in `hw/`.
+- The track-B FI trade: the top auth path is no longer double-computed.
+- Cleanup of warnings and dead fallback paths.
