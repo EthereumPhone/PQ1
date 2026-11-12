@@ -129,8 +129,8 @@ pub unsafe extern "C" fn pqsigner_node16(sa: *const u8, l: *const u8, r: *const 
 pub unsafe extern "C" fn pqsigner_wots_chains16(sk: *const u8, tail: *const u8, sa: *const u8, order: *const u8,
     digits: *const u8, fixed: u32, n: u32, out: *mut u8) {
     for k in 0..n as usize {
-        let i = if order.is_null() { k } else { unsafe { *order.add(k) } as usize };
-        let steps = if digits.is_null() { fixed } else { unsafe { *digits.add(i) } as u32 };
+        let i = if order.is_null() { k } else { (unsafe { *order.add(k) }) as usize };
+        let steps = if digits.is_null() { fixed } else { (unsafe { *digits.add(i) }) as u32 };
         let mut t = [0u8; 48];
         t.copy_from_slice(unsafe { std::slice::from_raw_parts(tail, 48) });
         t[44..48].copy_from_slice(&(i as u32).to_be_bytes());
