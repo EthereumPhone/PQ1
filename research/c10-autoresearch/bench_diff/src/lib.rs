@@ -40,5 +40,48 @@ pub extern "C" fn c10_bench_main() {
         out(2, i + 1);
     }
     out(3, ok);
+    out(4, search_edges());
     out(1, 8);
+}
+
+extern "C" {
+    fn pqsigner_sha256_search128(buf: *const u8, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8) -> u32;
+    fn pqsigner_sha256_oneshot(p: *const u8, n: usize, out: *mut u8);
+}
+/// Test predicate, about 1 in 64: low 6 bits of the last digest byte are zero (bytes 12..32 only are
+/// guaranteed in the search's read-out).
+unsafe extern "C" fn pred64(d: *const u8) -> bool {
+    unsafe { *d.add(31) & 0x3F == 0 }
+}
+fn plain(buf: &mut [u8; 128], c: u32) -> [u8; 32] {
+    buf[124..128].copy_from_slice(&c.to_be_bytes());
+    let mut d = [0u8; 32];
+    unsafe { pqsigner_sha256_oneshot(buf.as_ptr(), 128, d.as_mut_ptr()) };
+    d
+}
+/// search128 edge cases on silicon against a plain one-shot loop. Returns a bitmask of passed cases
+/// (all 6 bits = 0x3F).
+fn search_edges() -> u32 {
+    let mut buf = [0u8; 128];
+    for (i, b) in buf.iter_mut().enumerate().take(124) { *b = (i as u8).wrapping_mul(37) ^ 0x5A; }
+    // reference: the first two hits from 0
+    let mut hits = [0u32; 2];
+    let mut k = 0;
+    let mut c = 0u32;
+    while k < 2 { if plain(&mut buf, c)[31] & 0x3F == 0 { hits[k] = c; k += 1; } c += 1; }
+    let (h1, h2) = (hits[0], hits[1]);
+    let d1 = plain(&mut buf, h1);
+    let run = |start: u32, n: u32| -> (u32, [u8; 32]) {
+        let mut d = [0u8; 32];
+        let r = unsafe { pqsigner_sha256_search128(buf.as_ptr(), start, n, pred64, d.as_mut_ptr()) };
+        (r, d)
+    };
+    let mut m = 0u32;
+    let (r, d) = run(h1, 1); if r == h1 && d == d1 { m |= 1; }             // only try
+    let (r, d) = run(h1, 5); if r == h1 && d == d1 { m |= 2; }             // first of chunk, speculative discarded
+    if h1 >= 3 { let (r, d) = run(h1 - 3, 4); if r == h1 && d == d1 { m |= 4; } } else { m |= 4; } // last of chunk
+    let (r, _) = run(h1 + 1, h2 - h1 - 1); if r == h2 { m |= 8; }          // absent: returns start + n
+    let (r, _) = run(h1, 0); if r == h1 { m |= 16; }                       // empty chunk
+    let (r, d) = run(0, h2 + 10); if r == h1 && d == d1 { m |= 32; }       // long chunk from 0
+    m
 }

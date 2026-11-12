@@ -1,0 +1,13 @@
+[package]
+name = "diff-head"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[workspace]
+[dependencies]
+# The research tree's sphincs-c10 with NO fast features (software SHA-256): the plain fallback paths.
+sphincs-c10 = { path = "../../../sphincs-c10" }
+sha2 = "0.10"
+hex = "0.4"
+[profile.release]
+opt-level = 3
