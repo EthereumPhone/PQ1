@@ -1379,7 +1379,7 @@ pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: 
 }
 
 /// Feed `n` words from `p` (unaligned reads).
-#[cfg(any(feature = "prfchain", feature = "forsleaf"))]
+#[cfg(any(feature = "prfchain", feature = "forsleaf", feature = "search"))]
 #[inline(always)]
 unsafe fn feed_words(p: *const u8, n: usize) {
     // Fully unrolled for the constant `n` of every caller (4, 8, 12, 16):
@@ -1410,12 +1410,14 @@ unsafe fn issue128(buf: *const u8, count: u32) {
     }
     REG.str_.write(0);
     REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
-    let mut i = 0;
-    while i < 31 {
-        // SAFETY: `buf + 4i`, i < 31, is inside the caller's 128 bytes.
-        write_word(unsafe { buf.add(4 * i).cast::<u32>().read_unaligned() });
-        i += 1;
-    }
+    // SAFETY: `buf..buf + 124` is inside the caller's 128 bytes.
+    unsafe { feed_words(buf, 28) };
+    // SAFETY: words 28..31 of the same 128 bytes.
+    let q = unsafe { buf.add(112).cast::<u32>() };
+    let (a, b, c) = unsafe { (q.read_unaligned(), q.add(1).read_unaligned(), q.add(2).read_unaligned()) };
+    write_word(a);
+    write_word(b);
+    write_word(c);
     write_word(count.swap_bytes());
     REG.str_.write(STR_DCAL);
 }

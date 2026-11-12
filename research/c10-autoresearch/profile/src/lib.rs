@@ -246,6 +246,39 @@ pub extern "C" fn c10_bench_main() {
     let t = cyc();
     for _ in 0..NREP { unsafe { pqsigner_node16(sa.as_ptr(), l.as_ptr(), o16.as_ptr(), o16.as_mut_ptr()) }; }
     out(20, cyc().wrapping_sub(t) / NREP);
+    // 21: full 96-B digest, words LOADED from SRAM (ldr/str pairs, straight-line asm)
+    // 22: same with ldm 4 + 4 str groups
+    let src: [u32; 24] = core::array::from_fn(|k| 0x9E37_79B9u32.wrapping_mul(k as u32 + 1));
+    let (mut f1, mut f2) = (0u32, 0u32);
+    for _ in 0..NREP {
+        while rd(0x24) & 8 != 0 {}
+        let t0 = cyc();
+        wr(0x08, 0);
+        wr(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
+        unsafe { core::arch::asm!(
+            ".rept 24", "ldr {x}, [{s}], #4", "str {x}, [{a}]", ".endr",
+            s = inout(reg) src.as_ptr() => _, a = in(reg) (HB + 0x04) as u32, x = out(reg) _, options(nostack)) };
+        wr(0x08, 1 << 8);
+        while rd(0x24) & 2 == 0 {}
+        let mut x = 0u32;
+        for k in 0..4 { x ^= unsafe { core::ptr::read_volatile((HB + 0x310 + 4 * k) as *const u32) }; }
+        wr(0x24, !2u32);
+        f1 += cyc() - t0; val[6] ^= x as u8;
+        while rd(0x24) & 8 != 0 {}
+        let t0 = cyc();
+        wr(0x08, 0);
+        wr(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
+        unsafe { core::arch::asm!(
+            ".rept 6", "ldm {s}!, {{r4, r5, r8, r9}}", "str r4, [{a}]", "str r5, [{a}]", "str r8, [{a}]", "str r9, [{a}]", ".endr",
+            s = inout(reg) src.as_ptr() => _, a = in(reg) (HB + 0x04) as u32, out("r4") _, out("r5") _, out("r8") _, out("r9") _, options(nostack)) };
+        wr(0x08, 1 << 8);
+        while rd(0x24) & 2 == 0 {}
+        let mut x = 0u32;
+        for k in 0..4 { x ^= unsafe { core::ptr::read_volatile((HB + 0x310 + 4 * k) as *const u32) }; }
+        wr(0x24, !2u32);
+        f2 += cyc() - t0; val[7] ^= x as u8;
+    }
+    out(21, f1 / NREP); out(22, f2 / NREP);
     out(14, (dg[0] ^ sec[0] ^ val[0] ^ val[1] ^ d[0]) as u32);
     out(1, 8);
 }

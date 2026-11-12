@@ -9,6 +9,9 @@ use std::cell::RefCell;
 
 include!("../../inputs.rs");
 
+static HOOKS: std::sync::Mutex<[u64; 8]> = std::sync::Mutex::new([0; 8]);
+fn hook(i: usize, n: u64) { HOOKS.lock().unwrap()[i] += n; }
+fn hooks_take() -> [u64; 8] { std::mem::replace(&mut *HOOKS.lock().unwrap(), [0; 8]) }
 thread_local! {
     static CTX: RefCell<Option<Sha256>> = const { RefCell::new(None) };
     static N_DIGESTS: RefCell<u64> = const { RefCell::new(0) };
@@ -36,12 +39,14 @@ pub unsafe extern "C" fn pqsigner_sha256_oneshot(p: *const u8, n: usize, out: *m
 /// 16-byte one-shot (driver `oneshot16`): software SHA-256, first 16 bytes.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_oneshot16(p: *const u8, n: usize, out: *mut u8) {
+    hook(6, 1);
     let mut d = [0u8; 32];
     unsafe { pqsigner_sha256_oneshot(p, n, d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
 }
 /// WOTS chain hook (driver `chain16`): plain software SHA-256 per step.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start: u32, steps: u32) {
+    hook(0, steps as u64);
     let b = unsafe { std::slice::from_raw_parts_mut(buf, 96) };
     for i in 0..steps {
         b[56..60].copy_from_slice(&(start + i).to_be_bytes());
@@ -57,6 +62,7 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(buf: *const u8, start: u32, n
     let mut b = [0u8; 128];
     unsafe { std::ptr::copy_nonoverlapping(buf, b.as_mut_ptr(), 128) };
     for c in start..start + n {
+        hook(1, 1);
         b[124..128].copy_from_slice(&c.to_be_bytes());
         let mut d = [0u8; 32];
         unsafe { pqsigner_sha256_oneshot(b.as_ptr(), 128, d.as_mut_ptr()) };
@@ -69,6 +75,7 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(buf: *const u8, start: u32, n
 }
 /// Gather hooks (driver `gather`): software SHA-256 of the concatenated 32-byte parts, first 16 bytes.
 unsafe fn gather(parts: &[*const u8], out: *mut u8) {
+    hook(5, 1);
     let mut b = Vec::new();
     for p in parts { b.extend_from_slice(unsafe { std::slice::from_raw_parts(*p, 32) }); }
     let mut d = [0u8; 32];
@@ -81,6 +88,7 @@ pub unsafe extern "C" fn pqsigner_sha256_4x32_16(a: *const u8, b: *const u8, c: 
 /// Fused WOTS PRF + chain hook (driver `prfchain`): software SHA-256.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_wots_prf_chain16(sk: *const u8, tail: *const u8, sa: *const u8, steps: u32, out: *mut u8) {
+    hook(4, 1);
     let mut p = Vec::new();
     p.extend_from_slice(unsafe { std::slice::from_raw_parts(sk, 32) });
     p.extend_from_slice(unsafe { std::slice::from_raw_parts(tail, 48) });
@@ -94,6 +102,7 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(sk: *const u8, tail: *const u
 /// Fused FORS PRF + leaf hook (driver `forsleaf`): software SHA-256.
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_fors_leaf16(sk: *const u8, tail: *const u8, sa: *const u8, out: *mut u8) {
+    hook(2, 1);
     let mut p = Vec::new();
     p.extend_from_slice(unsafe { std::slice::from_raw_parts(sk, 32) });
     p.extend_from_slice(unsafe { std::slice::from_raw_parts(tail, 16) });
@@ -107,6 +116,7 @@ pub unsafe extern "C" fn pqsigner_fors_leaf16(sk: *const u8, tail: *const u8, sa
 /// Merkle node hook (driver `node16`): SHA-256(seed_adrs ‖ l ‖ 0^16 ‖ r ‖ 0^16)[..16].
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_node16(sa: *const u8, l: *const u8, r: *const u8, out: *mut u8) {
+    hook(3, 1);
     let mut b = [0u8; 128];
     b[..64].copy_from_slice(unsafe { std::slice::from_raw_parts(sa, 64) });
     b[64..80].copy_from_slice(unsafe { std::slice::from_raw_parts(l, 16) });
@@ -122,8 +132,11 @@ fn main() {
     take();
     let sk = SigningKey::keygen(SK_SEED, PK_SEED);
     println!("COUNT keygen {}", take());
+    hooks_take();
     let s0 = sk.sign_with_shuffle_silent(&MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
     println!("COUNT signA_m0 {}", take());
+    println!("HOOKS signA_m0 chain_steps={} search_tries={} fors_leaf={} node16={} prf_chain={} gather={} oneshot16={}", 
+        { let h = hooks_take(); format!("{} {} {} {} {} {} {}", h[0], h[1], h[2], h[3], h[4], h[5], h[6]) }, "", "", "", "", "", "");
     let s0b = sk.sign_with_shuffle_silent(&MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_B));
     println!("COUNT signB_m0 {}", take());
     let ok = sk.verifying_key().verify(&MSG0, &s0);
