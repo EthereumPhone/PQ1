@@ -523,3 +523,47 @@ fn sha256_bytes16(data: &[u8]) -> [u8; N] {
 fn sha256_bytes16(data: &[u8]) -> [u8; N] {
     truncate(&sha256_bytes(data))
 }
+
+/// `chain_hash(seed, set_chain_index(base_adrs, ci), wots_secret(sk_seed, layer, tree, kp, ci), 0, steps)`.
+/// With `hw-sha256-prfchain` the driver computes both in one call and the
+/// secret never leaves its registers.
+#[inline(always)]
+pub(crate) fn wots_secret_chain(
+    seed: &[u8; 32],
+    sk_seed: &[u8; 32],
+    base_adrs: &[u8; 32],
+    layer: u32,
+    tree: u64,
+    kp: u32,
+    ci: u32,
+    steps: u32,
+) -> [u8; N] {
+    #[cfg(feature = "hw-sha256-prfchain")]
+    {
+        extern "C" {
+            fn pqsigner_wots_prf_chain16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, steps: u32, out: *mut u8);
+        }
+        // wots_secret's preimage after sk_seed: "wots" ‖ to_b4(layer) ‖ to_b32(tree) ‖ to_b4(kp) ‖ to_b4(ci).
+        let mut tail = [0u8; 48];
+        tail[0..4].copy_from_slice(b"wots");
+        tail[4..8].copy_from_slice(&layer.to_be_bytes());
+        tail[32..40].copy_from_slice(&tree.to_be_bytes());
+        tail[40..44].copy_from_slice(&kp.to_be_bytes());
+        tail[44..48].copy_from_slice(&ci.to_be_bytes());
+        // th's first 64 bytes: seed ‖ adrs with the chain index set (bytes [20..24) of adrs).
+        let mut seed_adrs = [0u8; 64];
+        seed_adrs[0..32].copy_from_slice(seed);
+        seed_adrs[32..64].copy_from_slice(base_adrs);
+        seed_adrs[52..56].copy_from_slice(&ci.to_be_bytes());
+        let mut out = [0u8; N];
+        // SAFETY: 32, 48 and 64 readable bytes and 16 writable, live for the call.
+        unsafe { pqsigner_wots_prf_chain16(sk_seed.as_ptr(), tail.as_ptr(), seed_adrs.as_ptr(), steps, out.as_mut_ptr()) };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-prfchain"))]
+    {
+        let sk_i = wots_secret(sk_seed, layer, tree, kp, ci);
+        let chain_adrs = crate::address::set_chain_index(base_adrs, ci);
+        chain_hash(seed, &chain_adrs, &sk_i, 0, steps)
+    }
+}

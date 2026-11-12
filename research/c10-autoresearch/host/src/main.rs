@@ -78,6 +78,19 @@ unsafe fn gather(parts: &[*const u8], out: *mut u8) {
 pub unsafe extern "C" fn pqsigner_sha256_3x32_16(a: *const u8, b: *const u8, c: *const u8, out: *mut u8) { unsafe { gather(&[a, b, c], out) } }
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_4x32_16(a: *const u8, b: *const u8, c: *const u8, d: *const u8, out: *mut u8) { unsafe { gather(&[a, b, c, d], out) } }
+/// Fused WOTS PRF + chain hook (driver `prfchain`): software SHA-256.
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_wots_prf_chain16(sk: *const u8, tail: *const u8, sa: *const u8, steps: u32, out: *mut u8) {
+    let mut p = Vec::new();
+    p.extend_from_slice(unsafe { std::slice::from_raw_parts(sk, 32) });
+    p.extend_from_slice(unsafe { std::slice::from_raw_parts(tail, 48) });
+    let mut d = [0u8; 32];
+    unsafe { pqsigner_sha256_oneshot(p.as_ptr(), 80, d.as_mut_ptr()) };
+    let mut b = [0u8; 96];
+    b[..64].copy_from_slice(unsafe { std::slice::from_raw_parts(sa, 64) });
+    b[64..80].copy_from_slice(&d[..16]);
+    unsafe { pqsigner_sha256_chain16(b.as_mut_ptr(), 0, steps); std::ptr::copy_nonoverlapping(b.as_ptr().add(64), out, 16) };
+}
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn main() {

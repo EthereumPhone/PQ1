@@ -45,6 +45,8 @@ chain = ["init-restart", "oneshot"]
 search = ["init-restart", "oneshot"]
 # Secure image only (autoresearch): th / th_pair over their parts in place (`pqsigner_sha256_{3,4}x32_16`).
 gather = ["init-restart", "oneshot"]
+# Secure image only (autoresearch): WOTS secret + chain in one call (`pqsigner_wots_prf_chain16`).
+prfchain = ["chain"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

@@ -150,9 +150,7 @@ pub fn keygen_pk(
     let base_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
     let mut pk_elements = [[0u8; N]; L];
     for i in 0..L {
-        let sk_i = wots_secret(sk_seed, layer, tree, kp, i as u32);
-        let chain_adrs = set_chain_index(&base_adrs, i as u32);
-        pk_elements[i] = chain_hash(seed, &chain_adrs, &sk_i, 0, (W - 1) as u32);
+        pk_elements[i] = crate::hash::wots_secret_chain(seed, sk_seed, &base_adrs, layer, tree, kp, i as u32, (W - 1) as u32);
     }
     let pk_adrs = make_adrs(layer, tree, ADRS_WOTS_PK, kp, 0, 0, 0);
     th_multi(seed, &pk_adrs, &pk_elements)
@@ -190,9 +188,7 @@ pub(crate) fn sign_with_shuffle(
 
     for step in 0..L {
         let i = chain_order[step] as usize;
-        let sk_i = wots_secret(sk_seed, layer, tree, kp, i as u32);
-        let chain_adrs = set_chain_index(&base_adrs, i as u32);
-        sigma[i] = chain_hash(seed, &chain_adrs, &sk_i, 0, digits[i] as u32);
+        sigma[i] = crate::hash::wots_secret_chain(seed, sk_seed, &base_adrs, layer, tree, kp, i as u32, digits[i] as u32);
     }
     (sigma, count)
 }

@@ -1150,7 +1150,18 @@ pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, s
     // are legal on ARMv8-M Mainline.
     let w = |i: usize| unsafe { buf.add(4 * i).cast::<u32>().read_unaligned() };
     let c: [u32; 16] = core::array::from_fn(w);
-    let mut v = [w(16), w(17), w(18), w(19)];
+    let v = chain_core(&c, [w(16), w(17), w(18), w(19)], start_pos, steps);
+    for (k, x) in v.iter().enumerate() {
+        // SAFETY: `buf + 64 + 4k`, k < 4, is inside the caller's 96 bytes.
+        unsafe { buf.add(64 + 4 * k).cast::<u32>().write_unaligned(*x) };
+    }
+}
+
+/// The chain loop of `chain16`: `c` holds words 0..16 of the preimage (word 14,
+/// the chain position, is replaced per step), `v` the value words.
+#[cfg(feature = "chain")]
+#[inline(always)]
+fn chain_core(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, steps: u32) -> [u32; 4] {
     let mut step = 0u32;
     while step < steps {
         // init_body (init-restart): idle, no stale DCIS, NBLW = 0, INIT.
@@ -1192,9 +1203,80 @@ pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, s
         }
         step += 1;
     }
+    v
+}
+
+/// WOTS secret and its chain in one call (`prfchain`, secure image only):
+/// `v = SHA-256(sk_seed ‖ prf_tail)[..16]` (an 80-byte PRF preimage whose
+/// first 32 bytes are read from `sk_seed` in place and never copied), then
+/// `steps` chain steps from position 0 over `seed_adrs ‖ pad16(v)`; the
+/// chain end (or the secret itself, for `steps == 0`) goes to `out`. The
+/// secret and the intermediate values stay in registers.
+///
+/// # Safety
+/// `sk_seed` names 32, `prf_tail` 48 and `seed_adrs` 64 readable bytes, `out`
+/// 16 writable bytes; no other SHA-256 stream is in flight.
+#[cfg(feature = "prfchain")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
+    sk_seed: *const u8,
+    prf_tail: *const u8,
+    seed_adrs: *const u8,
+    steps: u32,
+    out: *mut u8,
+) {
+    // PRF: init, 8 words of sk_seed, 12 tail words, DCAL, HR0..3.
+    if wait_ready_sr() & SR_DCIS != 0 {
+        hash_engine_fault();
+    }
+    REG.str_.write(0);
+    REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+    // SAFETY: caller contract (32 and 48 readable bytes).
+    unsafe {
+        feed_words(sk_seed, 8);
+        feed_words(prf_tail, 12);
+    }
+    REG.str_.write(STR_DCAL);
+    let mut t = 0u32;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t += 1;
+        if t > 10_000_000 {
+            hash_engine_fault();
+        }
+    }
+    // SAFETY: HR0..HR3.
+    let v = unsafe {
+        [
+            REG.hr0.read_at(0).swap_bytes(),
+            REG.hr0.read_at(1).swap_bytes(),
+            REG.hr0.read_at(2).swap_bytes(),
+            REG.hr0.read_at(3).swap_bytes(),
+        ]
+    };
+    REG.sr.write(!SR_DCIS);
+    #[cfg(feature = "tick-hook")]
+    // SAFETY: as in `final_body`.
+    unsafe {
+        pqsigner_hash_tick();
+    }
+    // SAFETY: `seed_adrs` names 64 readable bytes (caller contract).
+    let c: [u32; 16] = core::array::from_fn(|i| unsafe { seed_adrs.add(4 * i).cast::<u32>().read_unaligned() });
+    let v = chain_core(&c, v, 0, steps);
     for (k, x) in v.iter().enumerate() {
-        // SAFETY: `buf + 64 + 4k`, k < 4, is inside the caller's 96 bytes.
-        unsafe { buf.add(64 + 4 * k).cast::<u32>().write_unaligned(*x) };
+        // SAFETY: `out + 4k`, k < 4, inside the caller's 16 bytes.
+        unsafe { out.add(4 * k).cast::<u32>().write_unaligned(*x) };
+    }
+}
+
+/// Feed `n` words from `p` (unaligned reads).
+#[cfg(feature = "prfchain")]
+#[inline(always)]
+unsafe fn feed_words(p: *const u8, n: usize) {
+    let mut i = 0;
+    while i < n {
+        // SAFETY: callers pass `p` naming `4n` readable bytes.
+        write_word(unsafe { p.add(4 * i).cast::<u32>().read_unaligned() });
+        i += 1;
     }
 }
 
