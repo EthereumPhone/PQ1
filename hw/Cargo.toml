@@ -54,6 +54,8 @@ forsleaf = ["gather"]
 tick-batch = ["tick-hook"]
 # MEASUREMENT ONLY: chain steps write INIT without waiting for BUSY to clear after DCIS.
 no-busy-wait = []
+# Autoresearch: HR0..3 through the HRA alias with one load-multiple.
+hra-ldm = []
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

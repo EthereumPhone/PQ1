@@ -712,6 +712,34 @@ fn ready_sr_fast() -> u32 {
     wait_ready_sr()
 }
 
+/// HR0..HR3 as the first 16 digest bytes' words (byte-swapped), read through the documented
+/// `HASH_HRA0..3` alias at offsets 0x0C..0x18 (RM0456 §51.6.4) with one load-multiple under
+/// `hra-ldm`; four separate HR reads otherwise. Only valid after DCIS.
+#[inline(always)]
+fn read_hr4() -> [u32; 4] {
+    #[cfg(feature = "hra-ldm")]
+    {
+        let (a, b, c, d): (u32, u32, u32, u32);
+        // SAFETY: reads four consecutive HASH registers (HRA0..HRA3) of the secure HASH block;
+        // no memory is written and the registers are only read.
+        unsafe {
+            core::arch::asm!("ldm {p}, {{r0, r1, r2, r3}}", p = in(reg) HASH_BASE + 0x0C,
+                out("r0") a, out("r1") b, out("r2") c, out("r3") d, options(nostack, readonly))
+        };
+        [a.swap_bytes(), b.swap_bytes(), c.swap_bytes(), d.swap_bytes()]
+    }
+    #[cfg(not(feature = "hra-ldm"))]
+    // SAFETY: HR0..HR3, the first four words of the digest bank.
+    unsafe {
+        [
+            REG.hr0.read_at(0).swap_bytes(),
+            REG.hr0.read_at(1).swap_bytes(),
+            REG.hr0.read_at(2).swap_bytes(),
+            REG.hr0.read_at(3).swap_bytes(),
+        ]
+    }
+}
+
 /// Reset the HASH engine: the HASHRST pulse `init_clock` gives it at boot.
 /// It clears the core, HR and the context registers (`HASH_CSRx`, which can
 /// hold the last block fed — `sk_seed` for the PRFs), which nothing else
@@ -1234,15 +1262,7 @@ fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, st
                 hash_engine_fault();
             }
         }
-        // SAFETY: HR0..HR3 are the first four words of the digest bank.
-        unsafe {
-            v = [
-                REG.hr0.read_at(0).swap_bytes(),
-                REG.hr0.read_at(1).swap_bytes(),
-                REG.hr0.read_at(2).swap_bytes(),
-                REG.hr0.read_at(3).swap_bytes(),
-            ];
-        }
+        v = read_hr4();
         REG.sr.write(SR_DINIS);
         #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
         {
@@ -1294,15 +1314,7 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
             hash_engine_fault();
         }
     }
-    // SAFETY: HR0..HR3.
-    let v = unsafe {
-        [
-            REG.hr0.read_at(0).swap_bytes(),
-            REG.hr0.read_at(1).swap_bytes(),
-            REG.hr0.read_at(2).swap_bytes(),
-            REG.hr0.read_at(3).swap_bytes(),
-        ]
-    };
+    let v = read_hr4();
     REG.sr.write(SR_DINIS);
     #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
     // SAFETY: as in `final_body`.
@@ -1352,15 +1364,7 @@ pub unsafe extern "C" fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *con
             hash_engine_fault();
         }
     }
-    // SAFETY: HR0..HR3.
-    let v = unsafe {
-        [
-            REG.hr0.read_at(0).swap_bytes(),
-            REG.hr0.read_at(1).swap_bytes(),
-            REG.hr0.read_at(2).swap_bytes(),
-            REG.hr0.read_at(3).swap_bytes(),
-        ]
-    };
+    let v = read_hr4();
     REG.sr.write(SR_DINIS);
     #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
     // SAFETY: as in `final_body`.
@@ -1475,15 +1479,7 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
                 hash_engine_fault();
             }
         }
-        // SAFETY: HR0..HR3.
-        let v = unsafe {
-            [
-                REG.hr0.read_at(0).swap_bytes(),
-                REG.hr0.read_at(1).swap_bytes(),
-                REG.hr0.read_at(2).swap_bytes(),
-                REG.hr0.read_at(3).swap_bytes(),
-            ]
-        };
+        let v = read_hr4();
         REG.sr.write(SR_DINIS);
         #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
         // SAFETY: as in `final_body`.
@@ -1554,15 +1550,7 @@ fn final16_regs() -> [u32; 4] {
             hash_engine_fault();
         }
     }
-    // SAFETY: HR0..HR3.
-    let v = unsafe {
-        [
-            REG.hr0.read_at(0).swap_bytes(),
-            REG.hr0.read_at(1).swap_bytes(),
-            REG.hr0.read_at(2).swap_bytes(),
-            REG.hr0.read_at(3).swap_bytes(),
-        ]
-    };
+    let v = read_hr4();
     REG.sr.write(SR_DINIS);
     v
 }

@@ -16,12 +16,13 @@ path = "src/lib.rs"
 tick = ["pqsigner-hw/tick-hook"]
 tick-batch = ["tick", "pqsigner-hw/tick-batch", "sphincs-c10/hw-sha256-tickbatch"]
 no-busy-wait = ["pqsigner-hw/no-busy-wait"]
+hra-ldm = ["pqsigner-hw/hra-ldm"]
 
 [dependencies]
 # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the
 # UI-only `tick-hook`): one-call digests, unrolled DIN/HR I/O, inlined barriers, INIT-only restart.
 sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub"] }
-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf"] }
+pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm"] }
 
 # Mirror of the root workspace's shipping [profile.release] (Cargo.toml), including the
 # per-package opt-level 3 overrides. Changing this is an experiment, not a harness change.
