@@ -155,12 +155,6 @@ mod inner {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// A 4-byte-aligned wrapper for preimage buffers the HASH driver reads word by
-/// word: aligned words are one bus access each, unaligned ones two.
-#[repr(C, align(4))]
-#[derive(Clone, Copy)]
-pub(crate) struct Al<T>(pub T);
-
 /// Pad a 16-byte value to 32 bytes (right-zero-padded, matching EVM uint256
 /// for an n=128-bit value: the value sits in bytes [0..16)).
 #[inline]
@@ -275,7 +269,7 @@ pub fn th_pair(
     }
     #[cfg(not(feature = "hw-sha256-gather"))]
     {
-        let mut buf_al = Al([0u8; 128]); let buf = &mut buf_al.0;
+        let mut buf = [0u8; 128];
         buf[0..32].copy_from_slice(seed);
         buf[32..64].copy_from_slice(adrs);
         buf[64..96].copy_from_slice(left);
@@ -399,14 +393,14 @@ pub fn wots_digest(
     count: u32,
 ) -> [u8; 32] {
     bump!(OTHER);
-    let mut buf_al = Al([0u8; 128]); let buf = &mut buf_al.0;
+    let mut buf = [0u8; 128];
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(wots_adrs);
     buf[64..96].copy_from_slice(msg_hash);
     // u32_to_b32: count occupies bytes [28..32) of its 32-byte slot, the
     // rest stays zero (buf is zero-initialised).
     buf[124..128].copy_from_slice(&count.to_be_bytes());
-    sha256_bytes(&buf[..])
+    sha256_bytes(&buf)
 }
 
 /// WOTS secret key derivation.
@@ -550,14 +544,14 @@ pub(crate) fn wots_secret_chain(
             fn pqsigner_wots_prf_chain16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, steps: u32, out: *mut u8);
         }
         // wots_secret's preimage after sk_seed: "wots" ‖ to_b4(layer) ‖ to_b32(tree) ‖ to_b4(kp) ‖ to_b4(ci).
-        let mut tail_al = Al([0u8; 48]); let tail = &mut tail_al.0;
+        let mut tail = [0u8; 48];
         tail[0..4].copy_from_slice(b"wots");
         tail[4..8].copy_from_slice(&layer.to_be_bytes());
         tail[32..40].copy_from_slice(&tree.to_be_bytes());
         tail[40..44].copy_from_slice(&kp.to_be_bytes());
         tail[44..48].copy_from_slice(&ci.to_be_bytes());
         // th's first 64 bytes: seed ‖ adrs with the chain index set (bytes [20..24) of adrs).
-        let mut seed_adrs_al = Al([0u8; 64]); let seed_adrs = &mut seed_adrs_al.0;
+        let mut seed_adrs = [0u8; 64];
         seed_adrs[0..32].copy_from_slice(seed);
         seed_adrs[32..64].copy_from_slice(base_adrs);
         seed_adrs[52..56].copy_from_slice(&ci.to_be_bytes());
@@ -583,12 +577,12 @@ pub(crate) fn fors_leaf(seed: &[u8; 32], sk_seed: &[u8; 32], leaf_adrs: &[u8; 32
         extern "C" {
             fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
         }
-        let mut tail_al = Al([0u8; 16]); let tail = &mut tail_al.0;
+        let mut tail = [0u8; 16];
         tail[0..4].copy_from_slice(b"fors");
         tail[4..8].copy_from_slice(&ht_idx.to_be_bytes());
         tail[8..12].copy_from_slice(&tree_idx.to_be_bytes());
         tail[12..16].copy_from_slice(&leaf.to_be_bytes());
-        let mut seed_adrs_al = Al([0u8; 64]); let seed_adrs = &mut seed_adrs_al.0;
+        let mut seed_adrs = [0u8; 64];
         seed_adrs[0..32].copy_from_slice(seed);
         seed_adrs[32..64].copy_from_slice(leaf_adrs);
         let mut out = [0u8; N];
@@ -625,12 +619,12 @@ pub(crate) fn wots_chains(
             order: *const u8, digits: *const u8, fixed_steps: u32, n: u32, out: *mut u8,
         );
     }
-    let mut tail_al = Al([0u8; 48]); let tail = &mut tail_al.0;
+    let mut tail = [0u8; 48];
     tail[0..4].copy_from_slice(b"wots");
     tail[4..8].copy_from_slice(&layer.to_be_bytes());
     tail[32..40].copy_from_slice(&tree.to_be_bytes());
     tail[40..44].copy_from_slice(&kp.to_be_bytes());
-    let mut seed_adrs_al = Al([0u8; 64]); let seed_adrs = &mut seed_adrs_al.0;
+    let mut seed_adrs = [0u8; 64];
     seed_adrs[0..32].copy_from_slice(seed);
     seed_adrs[32..64].copy_from_slice(base_adrs);
     if let Some(o) = order {

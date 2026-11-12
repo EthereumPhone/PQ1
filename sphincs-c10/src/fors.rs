@@ -290,29 +290,29 @@ pub(crate) fn fors_tree_fast(
         fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
         fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: *const u8, out: *mut u8);
     }
-    let mut leaf_sa_al = crate::hash::Al([0u8; 64]); let leaf_sa = &mut leaf_sa_al.0;
+    let mut leaf_sa = [0u8; 64];
     leaf_sa[0..32].copy_from_slice(seed);
     leaf_sa[32..64].copy_from_slice(&make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, tree_idx, 0, 0, 0));
-    let mut node_sa_al = crate::hash::Al(*leaf_sa); let node_sa = &mut node_sa_al.0;
-    let mut tail_al = crate::hash::Al([0u8; 16]); let tail = &mut tail_al.0;
+    let mut node_sa = leaf_sa;
+    let mut tail = [0u8; 16];
     tail[0..4].copy_from_slice(b"fors");
     tail[4..8].copy_from_slice(&ht_idx.to_be_bytes());
     tail[8..12].copy_from_slice(&tree_idx.to_be_bytes());
 
     let mut auth_path = [[0u8; N]; A];
-    let mut stack_al = crate::hash::Al([[0u8; N]; A + 1]); let stack = &mut stack_al.0;
+    let mut stack = [[0u8; N]; A + 1];
     let mut stack_heights = [0u32; A + 1];
     let mut sp: usize = 0;
     for j in 0..FORS_LEAVES as u32 {
         tail[12..16].copy_from_slice(&j.to_be_bytes());
         leaf_sa[60..64].copy_from_slice(&j.to_be_bytes());
-        let mut node_al = crate::hash::Al([0u8; N]); let node = &mut node_al.0;
+        let mut node = [0u8; N];
         // SAFETY: 32, 16, 64 readable bytes and 16 writable, live for the call.
         unsafe { pqsigner_fors_leaf16(sk_seed.as_ptr(), tail.as_ptr(), leaf_sa.as_ptr(), node.as_mut_ptr()) };
         let mut node_h = 0u32;
         while sp > 0 && stack_heights[sp - 1] == node_h {
             sp -= 1;
-            let sibling = crate::hash::Al(stack[sp]);
+            let sibling = stack[sp];
             let parent_idx = j >> (node_h + 1);
             // Auth path: the same selection as `sign_fors_tree` (public indices only).
             let target_at_h = target_idx >> node_h;
@@ -321,20 +321,20 @@ pub(crate) fn fors_tree_fast(
             let right_leaf_start = left_leaf_start + (1 << node_h);
             if sibling_idx & 1 == 0 {
                 if (sibling_idx << node_h) == left_leaf_start {
-                    auth_path[node_h as usize] = sibling.0;
+                    auth_path[node_h as usize] = sibling;
                 }
             } else if (sibling_idx << node_h) == right_leaf_start {
-                auth_path[node_h as usize] = *node;
+                auth_path[node_h as usize] = node;
             }
             node_sa[56..60].copy_from_slice(&(node_h + 1).to_be_bytes());
             node_sa[60..64].copy_from_slice(&parent_idx.to_be_bytes());
-            let mut parent = crate::hash::Al([0u8; N]);
+            let mut parent = [0u8; N];
             // SAFETY: 64, 16, 16 readable bytes and 16 writable, live for the call.
-            unsafe { pqsigner_node16(node_sa.as_ptr(), sibling.0.as_ptr(), node.as_ptr(), parent.0.as_mut_ptr()) };
-            *node = parent.0;
+            unsafe { pqsigner_node16(node_sa.as_ptr(), sibling.as_ptr(), node.as_ptr(), parent.as_mut_ptr()) };
+            node = parent;
             node_h += 1;
         }
-        stack[sp] = *node;
+        stack[sp] = node;
         stack_heights[sp] = node_h;
         sp += 1;
     }
@@ -357,7 +357,7 @@ fn grind_r_fast(
 ) -> ([u8; N], [u8; 32]) {
     use crate::hash::sha256_bytes;
     // sk_seed ‖ "R_grind" ‖ [rand] ‖ message ‖ nonce_b32 (119 or 103 bytes).
-    let mut prf_al = crate::hash::Al([0u8; 119]); let prf = &mut prf_al.0;
+    let mut prf = [0u8; 119];
     prf[0..32].copy_from_slice(sk_seed);
     prf[32..39].copy_from_slice(b"R_grind");
     let mut off = 39;
@@ -370,7 +370,7 @@ fn grind_r_fast(
     let nonce_at = off + 28; // to_b32(nonce): the count is the last 4 bytes
     let prf_len = off + 32;
     // h_msg: seed ‖ root ‖ pad16(R) ‖ message ‖ 0xFF*32.
-    let mut hm_al = crate::hash::Al([0u8; 160]); let hm = &mut hm_al.0;
+    let mut hm = [0u8; 160];
     hm[0..32].copy_from_slice(seed_b32);
     hm[32..64].copy_from_slice(root_b32);
     hm[96..128].copy_from_slice(message);
@@ -381,7 +381,7 @@ fn grind_r_fast(
         prf[nonce_at..nonce_at + 4].copy_from_slice(&nonce.to_be_bytes());
         let r = truncate(&sha256_bytes(&prf[..prf_len]));
         hm[64..64 + N].copy_from_slice(&r);
-        let digest = sha256_bytes(&hm[..]);
+        let digest = sha256_bytes(&hm);
         if read_bits_le(&digest, last_shift, A) == 0 {
             found = Some((r, digest));
             break;

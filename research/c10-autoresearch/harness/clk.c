@@ -46,11 +46,7 @@ static void clock_up(void) {
   REG(RCC_S + 0x00) |= 0x01000000u; spin_until(RCC_S + 0x00, 0x02000000u, 0x02000000u, 0xE3);   /* PLL1ON, PLL1RDY */
   REG(RCC_S + 0x1C) = (REG(RCC_S + 0x1C) & ~3u) | 3u; spin_until(RCC_S + 0x1C, 0xCu, 0xCu, 0xE4);  /* SW = PLL1 */
 #ifdef FLASHRUN
-#ifdef ICACHE_2WAY
-  REG(ICACHE_S) = 1u | 4u | (3u << 16);                                  /* experiment: EN + WAYSEL (2-way), hit/miss monitors */
-#else
-  REG(ICACHE_S) = 1u | (3u << 16);                                       /* rcc.rs: ICACHE_CR = 1 (EN, 1-way); + hit/miss monitors */
-#endif
+  REG(ICACHE_S) = 1u;                                                    /* rcc.rs: ICACHE_CR = 1 (EN, 1-way) */
   BENCH.user[8] = REG(ICACHE_S) | (REG(FLASH_S + 0x00) << 8);
 #endif
   BENCH.user[9] = REG(RCC_S + 0x1C); BENCH.user[10] = REG(PWR_S + 0x0C);
@@ -65,7 +61,6 @@ static void clock_down(void) {
   BENCH.user[11] = REG(RCC_S + 0x1C);
   REG(RCC_S + 0x94) = sv_ahb3;
 #ifdef FLASHRUN
-  BENCH.user[6] = REG(ICACHE_S + 0x10); BENCH.user[7] = REG(ICACHE_S + 0x14);  /* HMONR, MMONR (16-bit, saturates) */
   REG(ICACHE_S) = 0u; __asm volatile("dsb\n isb");
   REG(FLASH_S + 0x00) = sv_acr;
 #endif
