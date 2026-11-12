@@ -15,6 +15,7 @@ path = "src/lib.rs"
 # runs film_tick_hash's live-film counter path (load, add, store, every 64th call an out-of-line no-op).
 tick = ["pqsigner-hw/tick-hook"]
 tick-batch = ["tick", "pqsigner-hw/tick-batch", "sphincs-c10/hw-sha256-tickbatch"]
+no-busy-wait = ["pqsigner-hw/no-busy-wait"]
 
 [dependencies]
 # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the

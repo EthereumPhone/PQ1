@@ -701,6 +701,17 @@ fn wait_ready_sr() -> u32 {
     }
 }
 
+/// The per-digest idle check before INIT: under `no-busy-wait` (measurement only) one SR read for
+/// the stale-DCIS check, without waiting for BUSY to clear; otherwise `wait_ready_sr`.
+#[cfg(feature = "init-restart")]
+#[inline(always)]
+fn ready_sr_fast() -> u32 {
+    #[cfg(feature = "no-busy-wait")]
+    return REG.sr.read();
+    #[cfg(not(feature = "no-busy-wait"))]
+    wait_ready_sr()
+}
+
 /// Reset the HASH engine: the HASHRST pulse `init_clock` gives it at boot.
 /// It clears the core, HR and the context registers (`HASH_CSRx`, which can
 /// hold the last block fed — `sk_seed` for the PRFs), which nothing else
@@ -1196,8 +1207,14 @@ fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, st
     }
     let mut step = 0u32;
     while step < steps {
-        // init_body (init-restart): idle, no stale DCIS, INIT.
+        // init_body (init-restart): idle, no stale DCIS, INIT. `no-busy-wait` (measurement only):
+        // read SR once for the stale-DCIS check and do not wait for BUSY to clear.
+        #[cfg(not(feature = "no-busy-wait"))]
         if wait_ready_sr() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        #[cfg(feature = "no-busy-wait")]
+        if REG.sr.read() & SR_DCIS != 0 {
             hash_engine_fault();
         }
         REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
@@ -1259,7 +1276,7 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
     out: *mut u8,
 ) {
     // PRF: init, 8 words of sk_seed, 12 tail words, DCAL, HR0..3.
-    if wait_ready_sr() & SR_DCIS != 0 {
+    if ready_sr_fast() & SR_DCIS != 0 {
         hash_engine_fault();
     }
     REG.str_.write(0);
@@ -1317,7 +1334,7 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
 #[cfg(feature = "forsleaf")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8) {
-    if wait_ready_sr() & SR_DCIS != 0 {
+    if ready_sr_fast() & SR_DCIS != 0 {
         hash_engine_fault();
     }
     REG.str_.write(0);
@@ -1350,7 +1367,7 @@ pub unsafe extern "C" fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *con
     unsafe {
         pqsigner_hash_tick();
     }
-    if wait_ready_sr() & SR_DCIS != 0 {
+    if ready_sr_fast() & SR_DCIS != 0 {
         hash_engine_fault();
     }
     REG.str_.write(0);
@@ -1440,7 +1457,7 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
         let steps = if digits.is_null() { fixed_steps } else { u32::from(unsafe { *digits.add(i as usize) }) };
         let ci = i.swap_bytes();
         // PRF: sk_seed ‖ tail[0..11] ‖ ci.
-        if wait_ready_sr() & SR_DCIS != 0 {
+        if ready_sr_fast() & SR_DCIS != 0 {
             hash_engine_fault();
         }
         REG.str_.write(0);
@@ -1685,7 +1702,7 @@ unsafe fn feed_words(p: *const u8, n: usize) {
 #[cfg(feature = "search")]
 #[inline(always)]
 unsafe fn issue128(buf: *const u8, count: u32) {
-    if wait_ready_sr() & SR_DCIS != 0 {
+    if ready_sr_fast() & SR_DCIS != 0 {
         hash_engine_fault();
     }
     REG.str_.write(0);
@@ -1840,7 +1857,7 @@ unsafe fn feed32(p: *const u8) {
 #[cfg(feature = "gather")]
 #[inline(always)]
 fn gather_init() {
-    if wait_ready_sr() & SR_DCIS != 0 {
+    if ready_sr_fast() & SR_DCIS != 0 {
         hash_engine_fault();
     }
     REG.str_.write(0);
