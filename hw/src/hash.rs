@@ -1350,6 +1350,34 @@ pub unsafe extern "C" fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *con
     unsafe { gather_final16(out) };
 }
 
+/// Merkle node (`forsleaf`, secure image only): first 16 bytes of
+/// SHA-256(seed_adrs ‖ l ‖ 0^16 ‖ r ‖ 0^16), i.e. `th_pair(seed, adrs,
+/// pad16(l), pad16(r))` with the two 16-byte children read in place.
+///
+/// # Safety
+/// `seed_adrs` 64, `l` and `r` 16 readable bytes each, `out` 16 writable; no
+/// other SHA-256 stream in flight.
+#[cfg(feature = "forsleaf")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: *const u8, out: *mut u8) {
+    gather_init();
+    // SAFETY: caller contract.
+    unsafe {
+        feed_words(seed_adrs, 16);
+        feed_words(l, 4);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        feed_words(r, 4);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        gather_final16(out);
+    }
+}
+
 /// Feed `n` words from `p` (unaligned reads).
 #[cfg(any(feature = "prfchain", feature = "forsleaf"))]
 #[inline(always)]

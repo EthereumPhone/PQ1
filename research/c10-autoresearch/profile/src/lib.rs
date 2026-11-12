@@ -164,9 +164,12 @@ pub extern "C" fn c10_bench_main() {
     // 29: time from the 16th DIN write to BUSY clear (one block of engine time).
     // 30: time from DCAL to DCIS in that full digest.
     let (mut f, mut g, mut h) = (0u32, 0u32, 0u32);
+    let mut busy_after = 0u32;
     for i in 0..NREP {
+        let tb = cyc();
         while rd(0x24) & 8 != 0 {}
         let t0 = cyc();
+        busy_after += t0 - tb;
         wr(0x08, 0);
         wr(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
         unsafe { core::arch::asm!(
@@ -203,7 +206,7 @@ pub extern "C" fn c10_bench_main() {
         g += t5 - t4;
         wr(0x08, 1 << 8); while rd(0x24) & 2 == 0 {} wr(0x24, !2u32);
     }
-    out(28, f / NREP); out(29, g / NREP); out(30, h / NREP);
+    out(28, f / NREP); out(29, g / NREP); out(30, h / NREP); out(18, busy_after / NREP);
     // 12: grind_r once (cycles) ; 13: sign_fors_tree once
     let t = cyc();
     let (_r, dg) = si::grind_r(&SK_SEED, &PK_SEED, &[0u8; 16], &MSG0, Some(&OPT_RAND));
@@ -221,6 +224,13 @@ pub extern "C" fn c10_bench_main() {
     let fr = si::compute_fors_root(&seed, &SK_SEED, 77, 12);
     out(16, cyc().wrapping_sub(t));
     val[5] ^= fr[0];
+    // 17: chain16 per step (7-step calls on a WOTS-shaped buffer: zero words in place)
+    extern "C" { fn pqsigner_sha256_chain16(buf: *mut u8, start: u32, steps: u32); }
+    let mut cb = [0u8; 96];
+    cb[..16].copy_from_slice(&PK_SEED); cb[32 + 3] = 1; cb[32 + 11] = 5; cb[32 + 19] = 9; cb[32 + 23] = 4;
+    let t = cyc();
+    for _ in 0..(NREP / 7) { unsafe { pqsigner_sha256_chain16(cb.as_mut_ptr(), 0, 7) }; }
+    out(17, cyc().wrapping_sub(t) / ((NREP / 7) * 7));
     out(14, (dg[0] ^ sec[0] ^ val[0] ^ val[1] ^ d[0]) as u32);
     out(1, 8);
 }
