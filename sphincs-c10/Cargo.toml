@@ -28,7 +28,7 @@ hw-sha256-gather = ["hw-sha256-oneshot"]
 # WOTS secret + chain in one driver call (`pqsigner-hw/prfchain`); sk_seed is never copied.
 hw-sha256-prfchain = ["hw-sha256-chain"]
 # FORS secret + leaf hash in one driver call (`pqsigner-hw/forsleaf`).
-hw-sha256-forsleaf = ["hw-sha256-gather"]
+hw-sha256-forsleaf = ["hw-sha256-oneshot"]
 # FORS tree build over per-tree address templates (`pqsigner_node16`, `pqsigner_fors_leaf16`).
 hw-sha256-forstree = ["hw-sha256-forsleaf"]
 # R grind over two prebuilt preimages through the one-shot (no five-part streams).
