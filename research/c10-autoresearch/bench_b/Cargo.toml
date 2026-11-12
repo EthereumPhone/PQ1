@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [workspace]
 
 [features]
+no-busy-wait = ["pqsigner-hw/no-busy-wait"]
 # Measurement variant: the product's UI tick after every digest (pqsigner-hw/tick-hook), with a stub that
 # runs film_tick_hash's live-film counter path (load, add, store, every 64th call an out-of-line no-op).
 tick = ["pqsigner-hw/tick-hook"]
