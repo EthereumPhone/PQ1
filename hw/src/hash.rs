@@ -1161,20 +1161,39 @@ pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, s
 /// the chain position, is replaced per step), `v` the value words.
 #[cfg(feature = "chain")]
 #[inline(always)]
-fn chain_core(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, steps: u32) -> [u32; 4] {
+fn chain_core(c: &[u32; 16], v: [u32; 4], start_pos: u32, steps: u32) -> [u32; 4] {
+    // WOTS chain preimages have six structurally zero words: the pad half of
+    // `pad16(pk_seed)` (4..8), the address type ADRS_WOTS (11) and the hash
+    // address (15). Public shape, so the branch leaks nothing; the zero path
+    // writes literal zeros and keeps fewer words live.
+    if c[4] | c[5] | c[6] | c[7] | c[11] | c[15] == 0 {
+        chain_steps::<true>(c, v, start_pos, steps)
+    } else {
+        chain_steps::<false>(c, v, start_pos, steps)
+    }
+}
+
+#[cfg(feature = "chain")]
+#[inline(always)]
+fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, steps: u32) -> [u32; 4] {
+    let k = |i: usize| if Z && matches!(i, 4 | 5 | 6 | 7 | 11 | 15) { 0 } else { c[i] };
+    let (c0, c1, c2, c3, c4, c5, c6, c7) = (k(0), k(1), k(2), k(3), k(4), k(5), k(6), k(7));
+    let (c8, c9, c10, c11, c12, c13, c15) = (k(8), k(9), k(10), k(11), k(12), k(13), k(15));
+    // NBLW = 0 for every step: one STR write before the loop, as `init`
+    // does per digest; a step writes STR only with DCAL (NBLW bits 0).
+    REG.str_.write(0);
     let mut step = 0u32;
     while step < steps {
-        // init_body (init-restart): idle, no stale DCIS, NBLW = 0, INIT.
+        // init_body (init-restart): idle, no stale DCIS, INIT.
         if wait_ready_sr() & SR_DCIS != 0 {
             hash_engine_fault();
         }
-        REG.str_.write(0);
         REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
         let pos = start_pos.wrapping_add(step);
-        write_word(c[0]); write_word(c[1]); write_word(c[2]); write_word(c[3]);
-        write_word(c[4]); write_word(c[5]); write_word(c[6]); write_word(c[7]);
-        write_word(c[8]); write_word(c[9]); write_word(c[10]); write_word(c[11]);
-        write_word(c[12]); write_word(c[13]); write_word(pos.swap_bytes()); write_word(c[15]);
+        write_word(c0); write_word(c1); write_word(c2); write_word(c3);
+        write_word(c4); write_word(c5); write_word(c6); write_word(c7);
+        write_word(c8); write_word(c9); write_word(c10); write_word(c11);
+        write_word(c12); write_word(c13); write_word(pos.swap_bytes()); write_word(c15);
         write_word(v[0]); write_word(v[1]); write_word(v[2]); write_word(v[3]);
         write_word(0); write_word(0); write_word(0); write_word(0);
         // final_body: NBLW = 0 (init wrote it), DCAL alone.
