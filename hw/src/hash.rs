@@ -970,14 +970,22 @@ unsafe fn final_body(out: *mut u8) {
     // Match the STM32 HAL order exactly: set NBLW first (clearing DCAL),
     // THEN set DCAL in a separate write. Some combinations of the U5 HASH
     // IP reportedly latch NBLW incorrectly if DCAL is set in the same cycle.
-    REG.str_.write(remaining_bits);
-    // Both writes go to the same register, so they reach it in order without
-    // a barrier: the secure image drops it (`inline-barriers`), the FSBL
-    // keeps it. Nonzero NBLW without the barrier is exercised by both boot
-    // self-tests ("abc" and the 131-byte vector end on NBLW = 24) and, in
-    // every sign, by `grind_r`'s 119-byte PRF (NBLW = 24, ~2^11 a pass).
-    #[cfg(not(feature = "inline-barriers"))]
-    cortex_m::asm::dsb();
+    // `init-restart` (secure image): `init` already wrote STR = 0, so a
+    // whole-word message (NBLW = 0) needs only the DCAL write.
+    #[cfg(feature = "init-restart")]
+    let two_writes = remaining_bits != 0;
+    #[cfg(not(feature = "init-restart"))]
+    let two_writes = true;
+    if two_writes {
+        REG.str_.write(remaining_bits);
+        // Both writes go to the same register, so they reach it in order without
+        // a barrier: the secure image drops it (`inline-barriers`), the FSBL
+        // keeps it. Nonzero NBLW without the barrier is exercised by both boot
+        // self-tests ("abc" and the 131-byte vector end on NBLW = 24) and, in
+        // every sign, by `grind_r`'s 119-byte PRF (NBLW = 24, ~2^11 a pass).
+        #[cfg(not(feature = "inline-barriers"))]
+        cortex_m::asm::dsb();
+    }
     REG.str_.write(remaining_bits | STR_DCAL);
     #[cfg(feature = "hash-probe")]
     probe::stage(probe::LAST);
@@ -1049,6 +1057,11 @@ unsafe fn final_body(out: *mut u8) {
     xcheck_digest(out);
 
     // Clear DCIS (write 0 to bit 1 per STM32U5 RM — SR.DCIS is rc_w0).
+    // DCIS and DINIS are rc_w0 and the rest read-only: one write clears DCIS
+    // alone (`init-restart`, secure image); the FSBL keeps the read-modify-write.
+    #[cfg(feature = "init-restart")]
+    REG.sr.write(!SR_DCIS);
+    #[cfg(not(feature = "init-restart"))]
     REG.sr.modify(|sr| sr & !SR_DCIS);
 
     state.pending = 0;
