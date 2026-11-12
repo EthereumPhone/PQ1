@@ -1028,7 +1028,7 @@ unsafe fn final_body_n<const W: usize>(out: *mut u8) {
     // registers hold each 4-byte digest chunk in natural byte order when
     // interpreted via to_be_bytes on the little-endian CPU.
     #[cfg(not(feature = "unrolled-io"))]
-    for i in 0..8 {
+    for i in 0..W {
         // SAFETY: `RoReg32::read_at(i)` is `unsafe fn` because it
         // computes `addr + i * 4` and reads at that offset without
         // bounds-checking against a typed array length. Precondition:
@@ -1071,10 +1071,11 @@ unsafe fn final_body_n<const W: usize>(out: *mut u8) {
     xcheck_digest(out);
 
     // Clear DCIS (write 0 to bit 1 per STM32U5 RM — SR.DCIS is rc_w0).
-    // DCIS and DINIS are rc_w0 and the rest read-only: one write clears DCIS
-    // alone (`init-restart`, secure image); the FSBL keeps the read-modify-write.
+    // DCIS and DINIS are rc_w0; writing DINIS's 1 and 0 everywhere else clears
+    // DCIS alone and keeps the reserved bits at 0 (`init-restart`, secure image;
+    // the FSBL keeps the read-modify-write).
     #[cfg(feature = "init-restart")]
-    REG.sr.write(!SR_DCIS);
+    REG.sr.write(SR_DINIS);
     #[cfg(not(feature = "init-restart"))]
     REG.sr.modify(|sr| sr & !SR_DCIS);
 
@@ -1179,14 +1180,17 @@ fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, st
     let k = |i: usize| if Z && matches!(i, 4 | 5 | 6 | 7 | 11 | 15) { 0 } else { c[i] };
     let (c0, c1, c2, c3, c4, c5, c6, c7) = (k(0), k(1), k(2), k(3), k(4), k(5), k(6), k(7));
     let (c8, c9, c10, c11, c12, c13, c15) = (k(8), k(9), k(10), k(11), k(12), k(13), k(15));
-    // NBLW = 0 for every step: one STR write before the loop, as `init`
-    // does per digest; a step writes STR only with DCAL (NBLW bits 0).
-    REG.str_.write(0);
+    // NBLW = 0 for every step: STR is written once, after the first BUSY wait
+    // (and again after a UI tick, which may hash); a step writes STR only with
+    // DCAL (NBLW bits 0).
     let mut step = 0u32;
     while step < steps {
         // init_body (init-restart): idle, no stale DCIS, INIT.
         if wait_ready_sr() & SR_DCIS != 0 {
             hash_engine_fault();
+        }
+        if step == 0 {
+            REG.str_.write(0);
         }
         REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
         let pos = start_pos.wrapping_add(step);
@@ -1214,11 +1218,13 @@ fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, st
                 REG.hr0.read_at(3).swap_bytes(),
             ];
         }
-        REG.sr.write(!SR_DCIS);
+        REG.sr.write(SR_DINIS);
         #[cfg(feature = "tick-hook")]
-        // SAFETY: as in `final_body`: this digest is finished.
-        unsafe {
-            pqsigner_hash_tick();
+        {
+            // SAFETY: as in `final_body`: this digest is finished.
+            unsafe { pqsigner_hash_tick() };
+            // The tick may run a digest of its own and leave NBLW nonzero.
+            REG.str_.write(0);
         }
         step += 1;
     }
@@ -1272,7 +1278,7 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
             REG.hr0.read_at(3).swap_bytes(),
         ]
     };
-    REG.sr.write(!SR_DCIS);
+    REG.sr.write(SR_DINIS);
     #[cfg(feature = "tick-hook")]
     // SAFETY: as in `final_body`.
     unsafe {
@@ -1325,7 +1331,7 @@ pub unsafe extern "C" fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *con
             REG.hr0.read_at(3).swap_bytes(),
         ]
     };
-    REG.sr.write(!SR_DCIS);
+    REG.sr.write(SR_DINIS);
     #[cfg(feature = "tick-hook")]
     // SAFETY: as in `final_body`.
     unsafe {
@@ -1412,6 +1418,10 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
     while k < n {
         // SAFETY: caller contract on `order` / `digits`.
         let i = if order.is_null() { k } else { u32::from(unsafe { *order.add(k as usize) }) };
+        if i >= n {
+            // An out-of-range chain index would write outside `out`.
+            hash_engine_fault();
+        }
         let steps = if digits.is_null() { fixed_steps } else { u32::from(unsafe { *digits.add(i as usize) }) };
         let ci = i.swap_bytes();
         // PRF: sk_seed ‖ tail[0..11] ‖ ci.
@@ -1442,7 +1452,7 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
                 REG.hr0.read_at(3).swap_bytes(),
             ]
         };
-        REG.sr.write(!SR_DCIS);
+        REG.sr.write(SR_DINIS);
         #[cfg(feature = "tick-hook")]
         // SAFETY: as in `final_body`.
         unsafe {
@@ -1464,6 +1474,10 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
 unsafe fn feed_words(p: *const u8, n: usize) {
     // Fully unrolled for the constant `n` of every caller (4, 8, 12, 16):
     // loads are issued in groups of four ahead of their stores.
+    if n % 4 != 0 {
+        // Every caller passes 4, 8, 12, 16 or 28; a remainder would be dropped.
+        hash_engine_fault();
+    }
     let q = p.cast::<u32>();
     let mut i = 0;
     while i + 4 <= n {
@@ -1524,7 +1538,7 @@ fn collect(d: &mut [u32; 8]) {
             REG.hr0.read_at(6).swap_bytes(), REG.hr0.read_at(7).swap_bytes(),
         ];
     }
-    REG.sr.write(!SR_DCIS);
+    REG.sr.write(SR_DINIS);
     #[cfg(feature = "tick-hook")]
     // SAFETY: as in `final_body`: the digest is out and the engine idle.
     unsafe {
@@ -1635,7 +1649,7 @@ unsafe fn gather_final16(out: *mut u8) {
         o.add(2).write_unaligned(REG.hr0.read_at(2).swap_bytes());
         o.add(3).write_unaligned(REG.hr0.read_at(3).swap_bytes());
     }
-    REG.sr.write(!SR_DCIS);
+    REG.sr.write(SR_DINIS);
     #[cfg(feature = "tick-hook")]
     // SAFETY: as in `final_body`.
     unsafe {

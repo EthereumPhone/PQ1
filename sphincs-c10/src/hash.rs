@@ -428,7 +428,14 @@ pub fn wots_secret(
     buf[64..72].copy_from_slice(&tree.to_be_bytes()); // to_b32(tree): bytes [40..64) stay zero
     buf[72..76].copy_from_slice(&kp.to_be_bytes());
     buf[76..80].copy_from_slice(&chain_idx.to_be_bytes());
-    sha256_bytes16(&buf)
+    let out = sha256_bytes16(&buf);
+    // Wipe the sk_seed copy (volatile, so the stores are not elided).
+    for b in buf.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +460,14 @@ pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32
     buf[36..40].copy_from_slice(&ht_idx.to_be_bytes());
     buf[40..44].copy_from_slice(&tree_idx.to_be_bytes());
     buf[44..48].copy_from_slice(&leaf_idx.to_be_bytes());
-    sha256_bytes16(&buf)
+    let out = sha256_bytes16(&buf);
+    // Wipe the sk_seed copy (volatile, so the stores are not elided).
+    for b in buf.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    out
 }
 
 /// `chain_hash`'s 96-byte `th` preimage `seed ‖ adrs ‖ pad16(val)`: the value's
