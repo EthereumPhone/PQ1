@@ -33,6 +33,12 @@ pub unsafe extern "C" fn pqsigner_sha256_oneshot(p: *const u8, n: usize, out: *m
     pqsigner_sha256_init();
     unsafe { pqsigner_sha256_update(p, n); pqsigner_sha256_final(out) };
 }
+/// 16-byte one-shot (driver `oneshot16`): software SHA-256, first 16 bytes.
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_oneshot16(p: *const u8, n: usize, out: *mut u8) {
+    let mut d = [0u8; 32];
+    unsafe { pqsigner_sha256_oneshot(p, n, d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
+}
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn main() {

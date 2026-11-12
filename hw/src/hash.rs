@@ -951,6 +951,17 @@ pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
 /// As `pqsigner_sha256_final`.
 #[inline(always)]
 unsafe fn final_body(out: *mut u8) {
+    // SAFETY: as `final_body_n`, with all eight words.
+    unsafe { final_body_n::<8>(out) }
+}
+
+/// `final_body` reading out only the first `W` digest words (`W * 4` bytes to
+/// `out`). The signer's tweakable hashes keep 16 bytes (`W = 4`).
+///
+/// # Safety
+/// As `final_body`, with `[out, out + 4 * W)` writable.
+#[inline(always)]
+unsafe fn final_body_n<const W: usize>(out: *mut u8) {
     #[cfg(feature = "hash-probe")]
     probe::final_entered();
     // SAFETY: category 5 — exclusive mutable borrow of `static mut
@@ -1051,7 +1062,10 @@ unsafe fn final_body(out: *mut u8) {
                 unsafe { out.add($i * 4).cast::<u32>().write_unaligned(REG.hr0.read_at($i).to_be()) };
             )*};
         }
-        hr_out!(0 1 2 3 4 5 6 7);
+        hr_out!(0 1 2 3);
+        if W == 8 {
+            hr_out!(4 5 6 7);
+        }
     }
     #[cfg(feature = "hw-sha256-crosscheck")]
     xcheck_digest(out);
@@ -1099,6 +1113,22 @@ pub unsafe extern "C" fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out
         init_body();
         update_body(ptr, len);
         final_body(out);
+    }
+}
+
+/// `pqsigner_sha256_oneshot` that writes only the first 16 digest bytes
+/// (HR0..HR3) to `out`: the signer's tweakable hashes truncate to n = 16.
+///
+/// # Safety
+/// As `pqsigner_sha256_oneshot`, with `out` naming 16 writable bytes.
+#[cfg(feature = "oneshot")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, out: *mut u8) {
+    // SAFETY: as `pqsigner_sha256_oneshot`; `final_body_n::<4>` writes 16 bytes.
+    unsafe {
+        init_body();
+        update_body(ptr, len);
+        final_body_n::<4>(out);
     }
 }
 

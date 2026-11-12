@@ -14,7 +14,7 @@ One fixed evaluator, one change at a time, and only measured wins are kept.
 - `inputs.rs`: the seeds, messages, opt_rand and shuffle seeds.
 - `golden.bin`: pk_root, then sig(m0), then sig(m1), all from unmodified master.
 - `harness/`: the startup code, the linker script, the clock raise to 160 MHz and the SWD runner.
-- `bench/src/lib.rs` and `host/src/main.rs`.
+- `bench/src/lib.rs` and `host/src/main.rs`. The one allowed host change: adding a software SHA-256 hook for a new driver entry point. Each such hook must be plain sha2 output.
 - `evaluate.py` and `experiment.sh`.
 
 ## What you may edit

@@ -227,7 +227,7 @@ pub fn th(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; 32]) -> [u8; N] {
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(adrs);
     buf[64..96].copy_from_slice(val);
-    truncate(&sha256_bytes(&buf))
+    sha256_bytes16(&buf)
 }
 
 /// `th_pair(seed, adrs, left, right)` — tweakable hash with two 32-byte inputs.
@@ -247,7 +247,7 @@ pub fn th_pair(
     buf[32..64].copy_from_slice(adrs);
     buf[64..96].copy_from_slice(left);
     buf[96..128].copy_from_slice(right);
-    truncate(&sha256_bytes(&buf))
+    sha256_bytes16(&buf)
 }
 
 /// Maximum number of values `th_multi` accepts: `L = 43` (WOTS+C pubkey
@@ -277,7 +277,7 @@ pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
         let off = 64 + 32 * i;
         buf[off..off + N].copy_from_slice(&vals[i]);
     }
-    truncate(&sha256_bytes(&buf[..64 + 32 * vals.len()]))
+    sha256_bytes16(&buf[..64 + 32 * vals.len()])
 }
 
 /// `h_msg(seed, root, R, message)` — domain-separated message hash.
@@ -334,8 +334,8 @@ pub fn chain_hash(
     for step in 0..steps {
         buf[56..60].copy_from_slice(&(start_pos + step).to_be_bytes());
         bump!(TH);
-        let d = sha256_bytes(&buf);
-        buf[64..64 + N].copy_from_slice(&d[..N]);
+        let d = sha256_bytes16(&buf);
+        buf[64..64 + N].copy_from_slice(&d);
     }
     chain_value(&buf)
 }
@@ -391,7 +391,7 @@ pub fn wots_secret(
     buf[64..72].copy_from_slice(&tree.to_be_bytes()); // to_b32(tree): bytes [40..64) stay zero
     buf[72..76].copy_from_slice(&kp.to_be_bytes());
     buf[76..80].copy_from_slice(&chain_idx.to_be_bytes());
-    truncate(&sha256_bytes(&buf))
+    sha256_bytes16(&buf)
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +416,7 @@ pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32
     buf[36..40].copy_from_slice(&ht_idx.to_be_bytes());
     buf[40..44].copy_from_slice(&tree_idx.to_be_bytes());
     buf[44..48].copy_from_slice(&leaf_idx.to_be_bytes());
-    truncate(&sha256_bytes(&buf))
+    sha256_bytes16(&buf)
 }
 
 /// `chain_hash`'s 96-byte `th` preimage `seed ‖ adrs ‖ pad16(val)`: the value's
@@ -464,4 +464,25 @@ fn sha256_oneshot(data: &[u8]) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(data);
     h.finalize().into()
+}
+
+/// `truncate(sha256_bytes(data))`: the first n = 16 digest bytes. In the
+/// secure image (`hw-sha256-oneshot`) the driver reads out only HR0..HR3.
+#[cfg(feature = "hw-sha256-oneshot")]
+#[inline(always)]
+fn sha256_bytes16(data: &[u8]) -> [u8; N] {
+    extern "C" {
+        fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, out: *mut u8);
+    }
+    let mut out = [0u8; N];
+    // SAFETY: `data` is valid for `data.len()` bytes of reads and `out` for 16
+    // bytes of writes for the whole call.
+    unsafe { pqsigner_sha256_oneshot16(data.as_ptr(), data.len(), out.as_mut_ptr()) };
+    out
+}
+
+#[cfg(not(feature = "hw-sha256-oneshot"))]
+#[inline(always)]
+fn sha256_bytes16(data: &[u8]) -> [u8; N] {
+    truncate(&sha256_bytes(data))
 }
