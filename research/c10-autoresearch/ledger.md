@@ -163,3 +163,19 @@ PBKDF2 notes:
 **Not kit-measurable** (SEs and UI): RNG draws, prewarm, speculative signing, the film drawing cost.
 
 **Digest count is at the FI-design minimum** (Fable round 3 agrees). Remaining levers are owner decisions or product-side.
+
+## Round 4 (in progress): new tools and probes
+
+- **PC-sampling profiler** (`harness/run_profile.sh` + `prof_report.py`). OpenOCD reads DWT_PCSR back to back while the bench runs, giving 5.7 k samples per sign.
+  - Split: `wots_chains16` 63%, `fors_subtree16` 14%, `search128` 11%, `hits_target` 6% (overlapped), `th_multi16` 2%, one-shot paths about 2%; about 98% of signing time is in the hash-driver routines.
+  - Hottest PCs are the store after DCAL (the write stalls while block 1 loads) and the DCIS poll, i.e. engine-bound.
+  - Grind: 25% of its samples are on one DIN store that stalls while block 1 loads.
+- **GPDMA feed** (`probe_dma`).
+  - The DMA writes DIN at about 2.3 cycles per word.
+  - TCF is set before the HASH has taken the last words (NBWP = 16). DCAL must wait for NBWP == 8, or the digest is wrong.
+  - A DMA-fed 96-byte digest costs 225 cycles against 214 for the CPU straight-line feed: no gain on its own.
+- **Software SHA-256**: about 5.3 k cycles per block (`sha2`, opt 3). A hardware+software hybrid in the ~130-cycle idle windows would give about +2.5%: not worth it.
+- **USB HID**: 64-byte reports at 1 ms, so about 59 B/ms of payload.
+  - A Type-2 result (about 4.15 KB) takes about 70 ms after signing; a rotation output (about 12.6 KB) about 215 ms.
+  - A bulk/WebUSB transport would take under 10 ms. This is product-side.
+- **Floor arithmetic.** About 1.09 M blocks × 66 cycles ≈ 72 M of engine time per pass, plus about 22 M of block-1 feed that cannot overlap on a single-context engine. That is about 94 M against about 113–117 M now, so roughly 17% headroom. Of that, about 4 M is the BUSY wait (#1151); the rest is polling latency, read-out and per-digest control.
