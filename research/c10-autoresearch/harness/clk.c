@@ -37,6 +37,9 @@ static void clock_up(void) {
   sv_acr = REG(FLASH_S + 0x00);
   REG(ICACHE_S) = 0u; __asm volatile("dsb\n isb");
   REG(FLASH_S + 0x00) = (sv_acr & ~0xFu) | 4u; while ((REG(FLASH_S + 0x00) & 0xFu) != 4u) {}
+#ifdef PRFTEN
+  REG(FLASH_S + 0x00) |= 1u << 8;                                          /* experiment: FLASH_ACR.PRFTEN */
+#endif
 #endif
   REG(RCC_S + 0x94) = sv_ahb3 | 0x4u; (void)REG(RCC_S + 0x94);          /* AHB3ENR.PWREN */
   REG(PWR_S + 0x0C) |= 0x00030000u; spin_until(PWR_S + 0x0C, 0x8000u, 0x8000u, 0xE1);   /* VOS range 1, VOSRDY */
