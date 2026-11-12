@@ -125,8 +125,19 @@ pub unsafe extern "C" fn pqsigner_node16(sa: *const u8, l: *const u8, r: *const 
     unsafe { pqsigner_sha256_oneshot(b.as_ptr(), 128, d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
 }
 /// Per-key WOTS chains hook (driver `wots_chains16`): software, via the fused PRF+chain hook.
+pub static FAULT_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
+static CHAINS_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_wots_chains16(sk: *const u8, tail: *const u8, sa: *const u8, order: *const u8,
+    digits: *const u8, fixed: u32, n: u32, out: *mut u8) {
+    let call = CHAINS_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if call == FAULT_AT.load(std::sync::atomic::Ordering::Relaxed) {
+        unsafe { wots_chains16_body(sk, tail, sa, order, digits, fixed, n, out); *out ^= 0x80 };
+        return;
+    }
+    unsafe { wots_chains16_body(sk, tail, sa, order, digits, fixed, n, out) }
+}
+unsafe fn wots_chains16_body(sk: *const u8, tail: *const u8, sa: *const u8, order: *const u8,
     digits: *const u8, fixed: u32, n: u32, out: *mut u8) {
     for k in 0..n as usize {
         let i = if order.is_null() { k } else { (unsafe { *order.add(k) }) as usize };
@@ -142,22 +153,79 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(sk: *const u8, tail: *const u8, 
 }
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
+fn sign(sk: &SigningKey, #[cfg(feature = "topcache")] cache: &sphincs_c10::topcache::TopCache, m: &[u8; 32], sh: &[u8; 32]) -> [u8; 4008] {
+    #[cfg(feature = "topcache")]
+    return sk.sign_with_shuffle_cached(cache, m, Some(&OPT_RAND), &ShuffleSeed(*sh));
+    #[cfg(not(feature = "topcache"))]
+    sk.sign_with_shuffle_silent(m, Some(&OPT_RAND), &ShuffleSeed(*sh))
+}
+
+#[cfg(feature = "topcache")]
+fn controls() {
+    use sphincs_c10::topcache::{keygen_with_top_cache, TopCache};
+    let refuses = |name: &str, f: &dyn Fn()| {
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f()));
+        let why = match &r { Err(e) => e.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| e.downcast_ref::<String>().cloned()).unwrap_or_default(), Ok(_) => String::new() };
+        println!("CONTROL {name} {} {why}", if r.is_err() { "REFUSED" } else { "SIGNED" });
+    };
+    std::panic::set_hook(Box::new(|_| {}));
+    refuses("flipped-node", &|| {
+        let mut c = TopCache::empty();
+        let sk = keygen_with_top_cache(SK_SEED, PK_SEED, &mut c);
+        for i in 0..32 { c.corrupt_node_for_test(i); }
+        let _ = sk.sign_with_shuffle_cached(&c, &MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
+    });
+    refuses("keygen-fault-one-leaf", &|| {
+        let mut c = TopCache::empty();
+        FAULT_AT.store(CHAINS_CALLS.load(std::sync::atomic::Ordering::Relaxed) + 100, std::sync::atomic::Ordering::Relaxed);
+        let _ = keygen_with_top_cache(SK_SEED, PK_SEED, &mut c);
+        FAULT_AT.store(u64::MAX, std::sync::atomic::Ordering::Relaxed);
+    });
+    FAULT_AT.store(u64::MAX, std::sync::atomic::Ordering::Relaxed);
+    refuses("other-key-cache", &|| {
+        let mut mine = TopCache::empty();
+        let sk = keygen_with_top_cache(SK_SEED, PK_SEED, &mut mine);
+        let mut other = TopCache::empty();
+        let mut sk2 = SK_SEED; sk2[0] ^= 1;
+        let _ = keygen_with_top_cache(sk2, PK_SEED, &mut other);
+        let _ = sk.sign_with_shuffle_cached(&other, &MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
+    });
+    refuses("positive-control-valid-cache", &|| {
+        let mut c = TopCache::empty();
+        let sk = keygen_with_top_cache(SK_SEED, PK_SEED, &mut c);
+        let _ = sk.sign_with_shuffle_cached(&c, &MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
+    });
+    let _ = std::panic::take_hook();
+    let mut c = TopCache::empty();
+    let sk = keygen_with_top_cache(SK_SEED, PK_SEED, &mut c);
+    let t = std::time::Instant::now();
+    let n = sphincs_c10::topcache::sweep_against_full_build(&c, &PK_SEED, &SK_SEED, sk.pk_root());
+    println!("SWEEP {n} leaves: cached auth path == full rebuild ({:.1} s)", t.elapsed().as_secs_f64());
+}
+
 fn main() {
+    #[cfg(feature = "topcache")]
+    if std::env::args().nth(1).as_deref() == Some("controls") { controls(); return; }
     let a: Vec<String> = std::env::args().collect();
     let (mode, path) = (a.get(1).map(String::as_str).unwrap_or("check"), a.get(2).cloned().unwrap_or("golden.bin".into()));
     take();
+    #[cfg(feature = "topcache")]
+    let mut cache = sphincs_c10::topcache::TopCache::empty();
+    #[cfg(feature = "topcache")]
+    let sk = sphincs_c10::topcache::keygen_with_top_cache(SK_SEED, PK_SEED, &mut cache);
+    #[cfg(not(feature = "topcache"))]
     let sk = SigningKey::keygen(SK_SEED, PK_SEED);
     println!("COUNT keygen {}", take());
     hooks_take();
-    let s0 = sk.sign_with_shuffle_silent(&MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
+    let s0 = sign(&sk, #[cfg(feature = "topcache")] &cache, &MSG0, &SHUFFLE_A);
     println!("COUNT signA_m0 {}", take());
     { let h = hooks_take(); println!("HOOKS2 signA_m0 chain_steps={} search_tries={} fors_leaf={} node16={} prf_chain={} gather={} oneshot16={}", h[0], h[1], h[2], h[3], h[4], h[5], h[6]); }
-    let s0b = sk.sign_with_shuffle_silent(&MSG0, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_B));
+    let s0b = sign(&sk, #[cfg(feature = "topcache")] &cache, &MSG0, &SHUFFLE_B);
     println!("COUNT signB_m0 {}", take());
     let ok = sk.verifying_key().verify(&MSG0, &s0);
     println!("COUNT verify_m0 {}", take());
     hooks_take();
-    let s1 = sk.sign_with_shuffle_silent(&MSG1, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
+    let s1 = sign(&sk, #[cfg(feature = "topcache")] &cache, &MSG1, &SHUFFLE_A);
     println!("COUNT signA_m1 {}", take());
     { let h = hooks_take(); println!("HOOKS2 signA_m1 chain_steps={} search_tries={} fors_leaf={} node16={} prf_chain={} gather={} oneshot16={}", h[0], h[1], h[2], h[3], h[4], h[5], h[6]); }
     let ok1 = sk.verifying_key().verify(&MSG1, &s1);
@@ -170,6 +238,8 @@ fn main() {
     g.extend_from_slice(&s1);
     println!("PK_ROOT {}", hex::encode(sk.pk_root()));
     println!("GOLDEN_SHA256 {}", hex::encode(Sha256::digest(&g)));
+    #[cfg(feature = "topcache")]
+    println!("TOPCACHE_HITS {}", sphincs_c10::topcache::HITS.load(std::sync::atomic::Ordering::Relaxed));
     match mode {
         "write" => { std::fs::write(&path, &g).unwrap(); println!("WROTE {path}"); }
         _ => {

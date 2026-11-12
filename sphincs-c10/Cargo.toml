@@ -35,6 +35,8 @@ hw-sha256-forstree = ["hw-sha256-forsleaf"]
 hw-sha256-grindr = ["hw-sha256-oneshot"]
 # The FORS tree reports finished digests in batches through `pqsigner_hash_tick_n` (with `pqsigner-hw/tick-batch`).
 hw-sha256-tickbatch = ["hw-sha256-forstree"]
+# TRACK-B EXPERIMENT: cached top hypertree layer (`topcache`), never shipped as-is.
+top-cache = []
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs

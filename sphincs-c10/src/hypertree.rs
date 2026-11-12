@@ -53,7 +53,7 @@ pub fn sign(
     msg_hash: &[u8; 32],
     opt_rand: Option<&[u8; N]>,
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), &ShuffleSeed::zero())
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), &ShuffleSeed::zero(), #[cfg(feature = "top-cache")] None)
 }
 
 /// Like [`sign`] but invokes `progress(percent)` (`0..=100`) at each
@@ -72,13 +72,27 @@ pub fn sign_with_shuffle(
     shuffle: &ShuffleSeed,
     progress: fn(u8),
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &ProgressSink(Some(progress)), shuffle)
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &ProgressSink(Some(progress)), shuffle, #[cfg(feature = "top-cache")] None)
 }
 
 /// [`sign_with_shuffle`] without a progress callback. Arrow-free
 /// signature, so it exists in BOTH cfg shapes and is the entry point
 /// the Aeneas Lean extraction (and the byte-equality test oracle)
 /// uses (work-todo §33 P0).
+/// TRACK-B EXPERIMENT: silent shuffled sign with the top layer from `cache`.
+#[cfg(feature = "top-cache")]
+pub fn sign_with_shuffle_cached(
+    sk_seed: &[u8; 32],
+    pk_seed: &[u8; N],
+    pk_root: &[u8; N],
+    msg_hash: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    shuffle: &ShuffleSeed,
+    cache: &crate::topcache::TopCache,
+) -> [u8; SIGNATURE_LEN] {
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), shuffle, Some(cache))
+}
+
 pub fn sign_with_shuffle_silent(
     sk_seed: &[u8; 32],
     pk_seed: &[u8; N],
@@ -87,7 +101,7 @@ pub fn sign_with_shuffle_silent(
     opt_rand: Option<&[u8; N]>,
     shuffle: &ShuffleSeed,
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), shuffle)
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), shuffle, #[cfg(feature = "top-cache")] None)
 }
 
 /// Optional progress callback, newtype-wrapped so `fn(u8)` (an arrow
@@ -166,6 +180,7 @@ fn sign_inner(
     opt_rand: Option<&[u8; N]>,
     progress: &ProgressSink,
     shuffle: &ShuffleSeed,
+    #[cfg(feature = "top-cache")] top: Option<&crate::topcache::TopCache>,
 ) -> [u8; SIGNATURE_LEN] {
     let seed = pad16(pk_seed);
     let mut sig = [0u8; SIGNATURE_LEN];
@@ -290,6 +305,12 @@ fn sign_inner(
         // same for every signature.
         let pct_lo = (32 + layer * 33) as u8;
         let pct_hi = (32 + (layer + 1) * 33) as u8;
+        #[cfg(feature = "top-cache")]
+        let (auth_path, _subtree_root) = match top {
+            Some(c) if layer as usize == D - 1 => c.auth_path(&seed, sk_seed, idx_leaf, pk_root),
+            _ => merkle::build_subtree_with_auth(&seed, sk_seed, layer, idx_tree as u64, idx_leaf, progress, pct_lo, pct_hi),
+        };
+        #[cfg(not(feature = "top-cache"))]
         let (auth_path, _subtree_root) = merkle::build_subtree_with_auth(
             &seed, sk_seed, layer, idx_tree as u64, idx_leaf, progress, pct_lo, pct_hi,
         );

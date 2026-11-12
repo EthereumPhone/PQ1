@@ -36,6 +36,8 @@ pub(crate) mod wots;
 // `crate::crypto::c10_sign_verified_with_progress` and the SCA target
 // crates construct `ShuffleSeed` values to drive `sign_with_shuffle`.
 pub mod shuffle;
+#[cfg(feature = "top-cache")]
+pub mod topcache;
 
 /// TEST-ONLY +C-gate near-miss vector generator. Gated behind the
 /// `near-miss-gen` feature (off by default, NEVER shipped). Produces
@@ -261,6 +263,19 @@ impl SigningKey {
 
     /// Read-only access to the secret seed (for KDF purposes within
     /// the secure world only).
+    /// TRACK-B EXPERIMENT: `sign_with_shuffle_silent` with the top layer taken from `cache`.
+    #[cfg(feature = "top-cache")]
+    #[must_use]
+    pub fn sign_with_shuffle_cached(
+        &self,
+        cache: &topcache::TopCache,
+        msg_hash: &[u8; 32],
+        opt_rand: Option<&[u8; N]>,
+        shuffle: &shuffle::ShuffleSeed,
+    ) -> [u8; SIGNATURE_LEN] {
+        hypertree::sign_with_shuffle_cached(&self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand, shuffle, cache)
+    }
+
     #[must_use]
     pub fn sk_seed(&self) -> &[u8; 32] {
         &self.sk_seed
