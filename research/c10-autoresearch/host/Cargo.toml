@@ -11,7 +11,7 @@ publish = false
 topcache = ["sphincs-c10/top-cache"]
 
 [dependencies]
-sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti"] }
+sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub"] }
 sha2 = { version = "0.10", default-features = false }
 hex = "0.4"
 

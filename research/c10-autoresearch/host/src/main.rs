@@ -164,6 +164,31 @@ pub unsafe extern "C" fn pqsigner_th_multi16(seed: *const u8, adrs: *const u8, v
     let mut d = [0u8; 32];
     unsafe { pqsigner_sha256_oneshot(b.as_ptr(), b.len(), d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
 }
+/// FORS 16-leaf subtree hook (driver `fors_subtree16`): software, via the leaf and node hooks.
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_fors_subtree16(sk: *const u8, tail: *const u8, lsa: *const u8, nsa: *const u8, j0: u32, out: *mut u8) {
+    let mut t = [0u8; 16]; t.copy_from_slice(unsafe { std::slice::from_raw_parts(tail, 16) });
+    let mut l = [0u8; 64]; l.copy_from_slice(unsafe { std::slice::from_raw_parts(lsa, 64) });
+    let mut nd = [0u8; 64]; nd.copy_from_slice(unsafe { std::slice::from_raw_parts(nsa, 64) });
+    let mut stack: Vec<([u8; 16], u32)> = Vec::new();
+    for j in j0..j0 + 16 {
+        t[12..16].copy_from_slice(&j.to_be_bytes());
+        l[60..64].copy_from_slice(&j.to_be_bytes());
+        let mut node = [0u8; 16];
+        unsafe { pqsigner_fors_leaf16(sk, t.as_ptr(), l.as_ptr(), node.as_mut_ptr()) };
+        let mut h = 0u32;
+        while stack.last().map(|x| x.1) == Some(h) {
+            let (left, _) = stack.pop().unwrap();
+            nd[56..60].copy_from_slice(&(h + 1).to_be_bytes());
+            nd[60..64].copy_from_slice(&(j >> (h + 1)).to_be_bytes());
+            let mut p = [0u8; 16];
+            unsafe { pqsigner_node16(nd.as_ptr(), left.as_ptr(), node.as_ptr(), p.as_mut_ptr()) };
+            node = p; h += 1;
+        }
+        stack.push((node, h));
+    }
+    unsafe { std::ptr::copy_nonoverlapping(stack[0].0.as_ptr(), out, 16) };
+}
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn sign(sk: &SigningKey, #[cfg(feature = "topcache")] cache: &sphincs_c10::topcache::TopCache, m: &[u8; 32], sh: &[u8; 32]) -> [u8; 4008] {

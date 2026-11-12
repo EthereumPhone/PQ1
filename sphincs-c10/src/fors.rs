@@ -307,19 +307,43 @@ pub(crate) fn fors_tree_fast(
     extern "C" {
         fn pqsigner_hash_tick_n(n: u32);
     }
-    for j in 0..FORS_LEAVES as u32 {
-        // One UI tick per 64 leaves: 64 leaves x 2 digests + 63 nodes.
-        #[cfg(feature = "hw-sha256-tickbatch")]
-        if j % 64 == 63 {
-            // SAFETY: the engine is idle between calls; the tick does not hash.
-            unsafe { pqsigner_hash_tick_n(64 * 2 + 63) };
-        }
-        tail[12..16].copy_from_slice(&j.to_be_bytes());
-        leaf_sa[60..64].copy_from_slice(&j.to_be_bytes());
+    #[cfg(feature = "hw-sha256-forssub")]
+    extern "C" {
+        fn pqsigner_fors_subtree16(sk_seed: *const u8, tail: *const u8, leaf_sa: *const u8, node_sa: *const u8, j0: u32, out: *mut u8);
+    }
+    let mut jn = 0u32;
+    while jn < FORS_LEAVES as u32 {
         let mut node = [0u8; N];
-        // SAFETY: 32, 16, 64 readable bytes and 16 writable, live for the call.
-        unsafe { pqsigner_fors_leaf16(sk_seed.as_ptr(), tail.as_ptr(), leaf_sa.as_ptr(), node.as_mut_ptr()) };
         let mut node_h = 0u32;
+        let j: u32;
+        // A whole 16-leaf subtree in one driver call, except the one holding the revealed leaf.
+        #[cfg(feature = "hw-sha256-forssub")]
+        let batched = jn % 16 == 0 && (jn >> 4) != (target_idx >> 4);
+        #[cfg(not(feature = "hw-sha256-forssub"))]
+        let batched = false;
+        if batched {
+            #[cfg(feature = "hw-sha256-forssub")]
+            // SAFETY: 32, 16, 64, 64 readable bytes and 16 writable, live for the call; jn % 16 == 0.
+            unsafe {
+                pqsigner_fors_subtree16(sk_seed.as_ptr(), tail.as_ptr(), leaf_sa.as_ptr(), node_sa.as_ptr(), jn, node.as_mut_ptr())
+            };
+            node_h = 4;
+            j = jn + 15;
+            jn += 16;
+        } else {
+            j = jn;
+            jn += 1;
+            // One UI tick per individually built block of 16 leaves.
+            #[cfg(feature = "hw-sha256-tickbatch")]
+            if j % 16 == 15 {
+                // SAFETY: the engine is idle between calls; the tick does not hash.
+                unsafe { pqsigner_hash_tick_n(16 * 2 + 15) };
+            }
+            tail[12..16].copy_from_slice(&j.to_be_bytes());
+            leaf_sa[60..64].copy_from_slice(&j.to_be_bytes());
+            // SAFETY: 32, 16, 64 readable bytes and 16 writable, live for the call.
+            unsafe { pqsigner_fors_leaf16(sk_seed.as_ptr(), tail.as_ptr(), leaf_sa.as_ptr(), node.as_mut_ptr()) };
+        }
         while sp > 0 && stack_heights[sp - 1] == node_h {
             sp -= 1;
             let sibling = stack[sp];

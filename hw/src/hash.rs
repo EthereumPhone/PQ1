@@ -1525,6 +1525,135 @@ pub unsafe extern "C" fn pqsigner_th_multi16(seed: *const u8, adrs: *const u8, v
     }
 }
 
+/// One DCAL + wait + HR0..HR3 read-out + DCIS clear, value returned in registers.
+#[cfg(feature = "forsleaf")]
+#[inline(always)]
+fn final16_regs() -> [u32; 4] {
+    REG.str_.write(STR_DCAL);
+    let mut t = 0u32;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t += 1;
+        if t > 10_000_000 {
+            hash_engine_fault();
+        }
+    }
+    // SAFETY: HR0..HR3.
+    let v = unsafe {
+        [
+            REG.hr0.read_at(0).swap_bytes(),
+            REG.hr0.read_at(1).swap_bytes(),
+            REG.hr0.read_at(2).swap_bytes(),
+            REG.hr0.read_at(3).swap_bytes(),
+        ]
+    };
+    REG.sr.write(SR_DINIS);
+    v
+}
+
+/// A 16-leaf FORS subtree in one call (`forsleaf`, secure image only): leaves
+/// `j0..j0+16` (each `th(leaf_sa with ha = j, pad16(PRF(sk_seed ‖ tail with leaf = j)))`)
+/// and the 15 nodes above them (`node_sa` with height and index set), in the
+/// treehash order of `fors_tree_fast`; the height-4 root goes to `out`. No
+/// auth-path logic: the caller builds the subtree that holds the revealed leaf
+/// leaf by leaf.
+///
+/// # Safety
+/// `sk_seed` 32, `tail` 16, `leaf_sa` and `node_sa` 64 readable bytes each, `out`
+/// 16 writable; `j0` a multiple of 16; no other SHA-256 stream in flight.
+#[cfg(feature = "forsleaf")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_fors_subtree16(
+    sk_seed: *const u8,
+    tail: *const u8,
+    leaf_sa: *const u8,
+    node_sa: *const u8,
+    j0: u32,
+    out: *mut u8,
+) {
+    // SAFETY: caller contract (16 and 64 readable bytes).
+    let t: [u32; 3] = core::array::from_fn(|i| unsafe { tail.add(4 * i).cast::<u32>().read_unaligned() });
+    let la: [u32; 15] = core::array::from_fn(|i| unsafe { leaf_sa.add(4 * i).cast::<u32>().read_unaligned() });
+    let na: [u32; 14] = core::array::from_fn(|i| unsafe { node_sa.add(4 * i).cast::<u32>().read_unaligned() });
+    let mut stack = [[0u32; 4]; 5];
+    let mut heights = [0u32; 5];
+    let mut sp = 0usize;
+    let mut j = j0;
+    while j < j0 + 16 {
+        let jb = j.swap_bytes();
+        // PRF: sk_seed ‖ "fors" ‖ ht ‖ tree ‖ leaf.
+        gather_init();
+        // SAFETY: caller contract.
+        unsafe { feed_words(sk_seed, 8) };
+        write_word(t[0]);
+        write_word(t[1]);
+        write_word(t[2]);
+        write_word(jb);
+        let sec = final16_regs();
+        // Leaf: seed ‖ adrs(ha = j) ‖ pad16(secret).
+        gather_init();
+        for w in la {
+            write_word(w);
+        }
+        write_word(jb);
+        write_word(sec[0]);
+        write_word(sec[1]);
+        write_word(sec[2]);
+        write_word(sec[3]);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        let mut node = final16_regs();
+        let mut h = 0u32;
+        while sp > 0 && heights[sp - 1] == h {
+            sp -= 1;
+            let left = stack[sp];
+            gather_init();
+            for w in na {
+                write_word(w);
+            }
+            write_word((h + 1).swap_bytes());
+            write_word((j >> (h + 1)).swap_bytes());
+            write_word(left[0]);
+            write_word(left[1]);
+            write_word(left[2]);
+            write_word(left[3]);
+            write_word(0);
+            write_word(0);
+            write_word(0);
+            write_word(0);
+            write_word(node[0]);
+            write_word(node[1]);
+            write_word(node[2]);
+            write_word(node[3]);
+            write_word(0);
+            write_word(0);
+            write_word(0);
+            write_word(0);
+            node = final16_regs();
+            h += 1;
+        }
+        stack[sp] = node;
+        heights[sp] = h;
+        sp += 1;
+        j += 1;
+    }
+    for (k, x) in stack[0].iter().enumerate() {
+        // SAFETY: `out + 4k`, k < 4, inside the caller's 16 bytes.
+        unsafe { out.add(4 * k).cast::<u32>().write_unaligned(*x) };
+    }
+    #[cfg(feature = "tick-batch")]
+    // SAFETY: the engine is idle; the tick does not hash.
+    unsafe {
+        pqsigner_hash_tick_n(16 * 2 + 15);
+    }
+    #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
+    // SAFETY: as in `final_body` (one call stands for the subtree's 47 digests here).
+    unsafe {
+        pqsigner_hash_tick();
+    }
+}
+
 /// Feed `n` words from `p` (unaligned reads).
 #[cfg(any(feature = "prfchain", feature = "forsleaf", feature = "search"))]
 #[inline(always)]
