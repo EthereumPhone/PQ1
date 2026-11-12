@@ -32,9 +32,12 @@ bad = 0
 for l in sys.stdin:
     f = l.split()
     if f and f[0] == "LOAD" and int(f[5], 16) > 0:
-        a = int(f[2], 16); e = a + int(f[5], 16)
+        # load (physical) address must be secure SRAM; the run address may be its C-bus alias (harness v2)
+        a = int(f[3], 16); e = a + int(f[5], 16); v = int(f[2], 16); ve = v + int(f[5], 16)
         if a < 0x30000000 or e > 0x300C0000:
             print("REFUSE: LOAD segment 0x%x..0x%x outside secure SRAM 0x30000000..0x300C0000" % (a, e)); bad = 1
+        if not ((0x30000000 <= v and ve <= 0x300C0000) or (0x0E000000 <= v and ve <= 0x0E030000 and v - 0x0E000000 == a - 0x30000000)):
+            print("REFUSE: run address 0x%x..0x%x is neither secure SRAM nor its SRAM1 C-bus alias" % (v, ve)); bad = 1
 sys.exit(bad)' || exit 4
 TCL=$(mktemp --suffix=.tcl); LOG="$ELF.openocd.log"
 cat > "$TCL" <<TCLEOF
