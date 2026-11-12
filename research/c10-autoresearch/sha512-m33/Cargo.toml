@@ -1,0 +1,7 @@
+[package]
+name = "sha512-m33"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "AUTORESEARCH: SHA-512 compression hand-scheduled for ARMv8-M Mainline (Thumb-2); portable Rust elsewhere."
+[dependencies]

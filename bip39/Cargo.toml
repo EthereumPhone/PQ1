@@ -20,11 +20,16 @@ build = "build.rs"
 [features]
 default = ["full-wordlist"]
 full-wordlist = ["dep:sha2", "dep:hmac", "dep:zeroize"]
+# AUTORESEARCH: PBKDF2 iterations as raw SHA-512 compressions (sha512_fast.rs); output-identical.
+fast-pbkdf2 = ["full-wordlist"]
+# AUTORESEARCH: the PBKDF2 compressions through the hand-scheduled Thumb-2 SHA-512 (sha512-m33).
+fast-pbkdf2-asm = ["fast-pbkdf2", "dep:sha512-m33"]
 
 [dependencies]
 sha2    = { version = "0.10", default-features = false, optional = true }
 hmac    = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true }
+sha512-m33 = { path = "../research/c10-autoresearch/sha512-m33", optional = true }
 
 [dev-dependencies]
 hex  = { workspace = true }
