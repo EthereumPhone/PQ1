@@ -42,3 +42,55 @@ The negative control is a one-bit mutation of `truncate`. It fails both gates, b
 
 - **ICACHE**: `rcc.rs` writes `ICACHE_CR = 1`, which sets EN and clears WAYSEL, so the cache runs 1-way (direct-mapped). The reset default is 2-way.
 - **Flash prefetch**: `FLASH_ACR.PRFTEN` is not set; latency is 4 wait states.
+
+## Session 2026-11-12, after 15 experiments (evaluator versions)
+
+- **v1** (`link_sram.ld`): code fetched over the S-bus from SRAM. Superseded.
+- **v2** (`link_cbus.ld`): code on the SRAM1 C-bus alias 0x0E000000, data and peripherals on the S-bus. Every v1 win held, including HR0..3.
+- **v3** (`link_flash.ld`, `experiment_flash.sh`): code in flash bank 1 at 0x0C000000, with ICACHE_CR = 1 (1-way) and FLASH_ACR at 4 WS, exactly as `rcc.rs`. This is the **primary evaluator** from 8bfb1de17 on. The owner allowed flashing the kit, but nothing permanent (no option bytes, OTP or SE). v3 is within about 2% of v2.
+
+## Measured floors (kit, 160 MHz)
+
+| what | cycles |
+|---|---:|
+| 96-byte digest, straight-line asm, from registers | 214 |
+| 96-byte digest, fed from SRAM | 225 |
+| HASH last block (DCAL to DCIS) | ~65 |
+| BUSY after DCIS | ~9 |
+| DIN or SR access | ~2.6 (the earlier "9 per word" was size-optimized loop overhead in the probe) |
+| `chain16` loop | 242 per step, at the floor |
+| per-call overhead before batching | ~320 |
+| count-search try, in situ | ~295 |
+| R-grind try | ~1,770 before 4b13db307, ~925 after |
+
+**Host counts per pass for m0:**
+
+| primitive | count |
+|---|---:|
+| chain steps | 308,826 |
+| search tries | 69,934 (m1: 87,120) |
+| FORS leaves | 26,624 |
+| FORS nodes | 26,611 |
+| PRF+chain calls | 44,118 |
+| R-grind tries | about 4,000 (m1: about 175; expected value 2,048) |
+
+**Composition of a pass at 8bfb1de17:**
+
+| part | share |
+|---|---:|
+| chain steps (at the floor) | ~60% |
+| search tries | ~16% |
+| FORS | ~15% |
+| PRFs | ~5% |
+| other | ~4% |
+
+## Open landing conditions found so far
+
+- **0477a87c7** copies sk_seed into unwiped stack buffers (`wots_secret`/`fors_secret` one-shot), as Fable round 1 found. The hot paths now bypass it (prf_chain, fors_leaf, wots_chains16), but the plain functions still do it.
+- **Signer logic in the HASH driver** (chain iteration, count search, FORS leaf, per-key chains) moves proof obligations from the extracted Rust into `hw/`. Every keep after fe9ed862b is [FV-major] to land.
+- Every driver change is behind a secure-only feature, so FSBL bytes do not change. Exception: the opt-level 3 override for `pqsigner-hw` also reaches the FSBL's copy unless it is scoped.
+
+## Levers outside the bench (firmware level)
+
+- **H7**: three `rng_strong::fill` calls per sign are SE round trips, about 0.3 s per sign according to the source comment. Not measurable on this kit, which has no SEs.
+- `tick-hook` (UI film) after every digest, and the F-17 one-second rate limiter. These are wall-time components outside the hash work.

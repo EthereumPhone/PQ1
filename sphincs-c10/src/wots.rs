@@ -87,7 +87,7 @@ pub(crate) fn find_count(
             digit_sum(unsafe { &*d.cast::<[u8; 32]>() }) == TARGET_SUM
         }
         // `wots_digest`'s preimage; the driver writes the count into [124..128).
-        let mut buf = [0u8; 128];
+        let mut buf_al = crate::hash::Al([0u8; 128]); let buf = &mut buf_al.0;
         buf[0..32].copy_from_slice(seed);
         buf[32..64].copy_from_slice(&wots_adrs);
         buf[64..96].copy_from_slice(msg_hash);
