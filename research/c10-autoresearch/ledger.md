@@ -125,3 +125,41 @@ The negative control is a one-bit mutation of `truncate`. It fails both gates, b
 - FV-major re-extraction: chain, search, FORS and PRF logic now live in `hw/`.
 - The track-B FI trade: the top auth path is no longer double-computed.
 - Cleanup of warnings and dead fallback paths.
+
+## Round 3 (2026-11-12, late): paths beyond the hash floor
+
+| experiment | result | verdict |
+|---|---|---|
+| `-C target-cpu=cortex-m33 -C target-feature=-fpregs` | −0.7% sign, −1.2% keygen | kept; now the bench default |
+| `FLASH_ACR.PRFTEN` | −0.02% | discarded (noise) |
+| Hand-scheduled asm chain step | +3.3% (+3.9% with aligned loop heads) | discarded; the compiler loop is already at the instruction floor |
+| HASH context restore as a midstate | full restore is 108 cycles with ldm/stm bursts at 2.5 cycles per word, about the cost of the block it saves | dead |
+| Sparse context restore | 36 of 38 CSRs carry state after one block (state ×2 + FIFO) | dead |
+| No BUSY wait before INIT | −3.7% sign, −4.5% keygen; kit differential 32/32; soak 12/12 | **undocumented**, filed as #1151 for ST confirmation |
+| PBKDF2 (cold path) | 94.1 M → 51.8 M cycles (0.59 → 0.32 s, −45%), via a raw-compression loop plus a generated Thumb-2 SHA-512 (`sha512-m33`, 3.1 KB) | kept as research; filed as #1152 |
+
+PBKDF2 notes:
+- Compilers top out around 13.7 k cycles per block (gcc).
+- The unrolled 28 KB form gave no gain because it thrashed the 8 KB ICACHE from flash.
+- The U585 has no hardware SHA-512.
+
+**Combined, kit, flash:**
+
+| configuration | cached sign |
+|---|---:|
+| output-identical | 234.7 M (1.47 s) |
+| + no-busy-wait | 226.0 M (1.41 s) |
+| + top cache | 163.4 M (1.02 s) |
+| + both | 157.8 M (0.99 s), **−71% vs master 3.41 s** |
+
+**Filed for later decision:**
+- #1148 top cache
+- #1149 batched tick
+- #1150 opt-3 crate
+- #1151 BUSY wait
+- #1152 PBKDF2
+- #1153 wall time outside hashing: RNG draws, prewarm during review, speculative signing, the F-17 1 s floor
+
+**Not kit-measurable** (SEs and UI): RNG draws, prewarm, speculative signing, the film drawing cost.
+
+**Digest count is at the FI-design minimum** (Fable round 3 agrees). Remaining levers are owner decisions or product-side.
