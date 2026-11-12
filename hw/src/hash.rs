@@ -1303,6 +1303,100 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
     }
 }
 
+/// Feed the eight words of a 32-byte part straight from its memory.
+#[cfg(feature = "gather")]
+#[inline(always)]
+unsafe fn feed32(p: *const u8) {
+    // SAFETY: `p` names 32 readable bytes (callers' contract).
+    unsafe {
+        let q = p.cast::<u32>();
+        write_word(q.read_unaligned());
+        write_word(q.add(1).read_unaligned());
+        write_word(q.add(2).read_unaligned());
+        write_word(q.add(3).read_unaligned());
+        write_word(q.add(4).read_unaligned());
+        write_word(q.add(5).read_unaligned());
+        write_word(q.add(6).read_unaligned());
+        write_word(q.add(7).read_unaligned());
+    }
+}
+
+/// Init (stale-DCIS check, NBLW = 0, INIT) for the gather digests.
+#[cfg(feature = "gather")]
+#[inline(always)]
+fn gather_init() {
+    if wait_ready_sr() & SR_DCIS != 0 {
+        hash_engine_fault();
+    }
+    REG.str_.write(0);
+    REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+}
+
+/// DCAL, wait, write HR0..HR3 (16 digest bytes) to `out`, clear DCIS.
+#[cfg(feature = "gather")]
+#[inline(always)]
+unsafe fn gather_final16(out: *mut u8) {
+    REG.str_.write(STR_DCAL);
+    let mut t = 0u32;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t += 1;
+        if t > 10_000_000 {
+            hash_engine_fault();
+        }
+    }
+    // SAFETY: HR0..HR3; `out` names 16 writable bytes (callers' contract).
+    unsafe {
+        let o = out.cast::<u32>();
+        o.write_unaligned(REG.hr0.read_at(0).swap_bytes());
+        o.add(1).write_unaligned(REG.hr0.read_at(1).swap_bytes());
+        o.add(2).write_unaligned(REG.hr0.read_at(2).swap_bytes());
+        o.add(3).write_unaligned(REG.hr0.read_at(3).swap_bytes());
+    }
+    REG.sr.write(!SR_DCIS);
+    #[cfg(feature = "tick-hook")]
+    // SAFETY: as in `final_body`.
+    unsafe {
+        pqsigner_hash_tick();
+    }
+}
+
+/// First 16 bytes of SHA-256(a ‖ b ‖ c), three 32-byte parts read in place
+/// (`gather`, secure image only): `th` without its 96-byte preimage copy.
+///
+/// # Safety
+/// `a`, `b`, `c` name 32 readable bytes each, `out` 16 writable bytes; no
+/// other SHA-256 stream is in flight.
+#[cfg(feature = "gather")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_3x32_16(a: *const u8, b: *const u8, c: *const u8, out: *mut u8) {
+    gather_init();
+    // SAFETY: caller contract.
+    unsafe {
+        feed32(a);
+        feed32(b);
+        feed32(c);
+        gather_final16(out);
+    }
+}
+
+/// First 16 bytes of SHA-256(a ‖ b ‖ c ‖ d) (`gather`): `th_pair` in place.
+///
+/// # Safety
+/// As `pqsigner_sha256_3x32_16`, with a fourth 32-byte part `d`.
+#[cfg(feature = "gather")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_4x32_16(a: *const u8, b: *const u8, c: *const u8, d: *const u8, out: *mut u8) {
+    gather_init();
+    // SAFETY: caller contract.
+    unsafe {
+        feed32(a);
+        feed32(b);
+        feed32(c);
+        feed32(d);
+        gather_final16(out);
+    }
+}
+
 #[cfg(feature = "tick-hook")]
 extern "C" {
     /// Defined by the secure world (`tick-hook`): called after every

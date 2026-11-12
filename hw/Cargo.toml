@@ -43,6 +43,8 @@ hw-sha256-crosscheck = []
 chain = ["init-restart", "oneshot"]
 # Secure image only (autoresearch): the WOTS+C count search in the driver (`pqsigner_sha256_search128`).
 search = ["init-restart", "oneshot"]
+# Secure image only (autoresearch): th / th_pair over their parts in place (`pqsigner_sha256_{3,4}x32_16`).
+gather = ["init-restart", "oneshot"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

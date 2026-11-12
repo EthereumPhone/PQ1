@@ -223,11 +223,24 @@ pub fn sha256_parts(parts: &[&[u8]]) -> [u8; 32] {
 /// `mstore(0x00, seed)`, `mstore(0x20, adrs)`, `mstore(0x40, val)`.
 pub fn th(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; 32]) -> [u8; N] {
     bump!(TH);
-    let mut buf = [0u8; 96];
-    buf[0..32].copy_from_slice(seed);
-    buf[32..64].copy_from_slice(adrs);
-    buf[64..96].copy_from_slice(val);
-    sha256_bytes16(&buf)
+    #[cfg(feature = "hw-sha256-gather")]
+    {
+        extern "C" {
+            fn pqsigner_sha256_3x32_16(a: *const u8, b: *const u8, c: *const u8, out: *mut u8);
+        }
+        let mut out = [0u8; N];
+        // SAFETY: three 32-byte inputs and a 16-byte output, live for the call.
+        unsafe { pqsigner_sha256_3x32_16(seed.as_ptr(), adrs.as_ptr(), val.as_ptr(), out.as_mut_ptr()) };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-gather"))]
+    {
+        let mut buf = [0u8; 96];
+        buf[0..32].copy_from_slice(seed);
+        buf[32..64].copy_from_slice(adrs);
+        buf[64..96].copy_from_slice(val);
+        sha256_bytes16(&buf)
+    }
 }
 
 /// `th_pair(seed, adrs, left, right)` — tweakable hash with two 32-byte inputs.
@@ -242,12 +255,27 @@ pub fn th_pair(
     right: &[u8; 32],
 ) -> [u8; N] {
     bump!(TH);
-    let mut buf = [0u8; 128];
-    buf[0..32].copy_from_slice(seed);
-    buf[32..64].copy_from_slice(adrs);
-    buf[64..96].copy_from_slice(left);
-    buf[96..128].copy_from_slice(right);
-    sha256_bytes16(&buf)
+    #[cfg(feature = "hw-sha256-gather")]
+    {
+        extern "C" {
+            fn pqsigner_sha256_4x32_16(a: *const u8, b: *const u8, c: *const u8, d: *const u8, out: *mut u8);
+        }
+        let mut out = [0u8; N];
+        // SAFETY: four 32-byte inputs and a 16-byte output, live for the call.
+        unsafe {
+            pqsigner_sha256_4x32_16(seed.as_ptr(), adrs.as_ptr(), left.as_ptr(), right.as_ptr(), out.as_mut_ptr())
+        };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-gather"))]
+    {
+        let mut buf = [0u8; 128];
+        buf[0..32].copy_from_slice(seed);
+        buf[32..64].copy_from_slice(adrs);
+        buf[64..96].copy_from_slice(left);
+        buf[96..128].copy_from_slice(right);
+        sha256_bytes16(&buf)
+    }
 }
 
 /// Maximum number of values `th_multi` accepts: `L = 43` (WOTS+C pubkey

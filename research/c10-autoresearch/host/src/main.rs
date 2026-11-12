@@ -67,6 +67,17 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(buf: *const u8, start: u32, n
     }
     start + n
 }
+/// Gather hooks (driver `gather`): software SHA-256 of the concatenated 32-byte parts, first 16 bytes.
+unsafe fn gather(parts: &[*const u8], out: *mut u8) {
+    let mut b = Vec::new();
+    for p in parts { b.extend_from_slice(unsafe { std::slice::from_raw_parts(*p, 32) }); }
+    let mut d = [0u8; 32];
+    unsafe { pqsigner_sha256_oneshot(b.as_ptr(), b.len(), d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
+}
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_3x32_16(a: *const u8, b: *const u8, c: *const u8, out: *mut u8) { unsafe { gather(&[a, b, c], out) } }
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_sha256_4x32_16(a: *const u8, b: *const u8, c: *const u8, d: *const u8, out: *mut u8) { unsafe { gather(&[a, b, c, d], out) } }
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn main() {
