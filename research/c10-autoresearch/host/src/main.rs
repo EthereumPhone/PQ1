@@ -91,6 +91,19 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(sk: *const u8, tail: *const u
     b[64..80].copy_from_slice(&d[..16]);
     unsafe { pqsigner_sha256_chain16(b.as_mut_ptr(), 0, steps); std::ptr::copy_nonoverlapping(b.as_ptr().add(64), out, 16) };
 }
+/// Fused FORS PRF + leaf hook (driver `forsleaf`): software SHA-256.
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_fors_leaf16(sk: *const u8, tail: *const u8, sa: *const u8, out: *mut u8) {
+    let mut p = Vec::new();
+    p.extend_from_slice(unsafe { std::slice::from_raw_parts(sk, 32) });
+    p.extend_from_slice(unsafe { std::slice::from_raw_parts(tail, 16) });
+    let mut d = [0u8; 32];
+    unsafe { pqsigner_sha256_oneshot(p.as_ptr(), 48, d.as_mut_ptr()) };
+    let mut b = [0u8; 96];
+    b[..64].copy_from_slice(unsafe { std::slice::from_raw_parts(sa, 64) });
+    b[64..80].copy_from_slice(&d[..16]);
+    unsafe { pqsigner_sha256_oneshot(b.as_ptr(), 96, d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
+}
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn main() {

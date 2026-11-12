@@ -47,6 +47,8 @@ search = ["init-restart", "oneshot"]
 gather = ["init-restart", "oneshot"]
 # Secure image only (autoresearch): WOTS secret + chain in one call (`pqsigner_wots_prf_chain16`).
 prfchain = ["chain"]
+# Secure image only (autoresearch): FORS secret + leaf hash in one call (`pqsigner_fors_leaf16`).
+forsleaf = ["gather"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

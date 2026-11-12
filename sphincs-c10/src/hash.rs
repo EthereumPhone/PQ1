@@ -567,3 +567,32 @@ pub(crate) fn wots_secret_chain(
         chain_hash(seed, &chain_adrs, &sk_i, 0, steps)
     }
 }
+
+/// `th(seed, leaf_adrs, pad16(fors_secret(sk_seed, ht_idx, tree_idx, leaf)))` with `leaf_adrs`
+/// the FORS leaf address. With `hw-sha256-forsleaf` one driver call; the secret stays in registers.
+#[inline(always)]
+pub(crate) fn fors_leaf(seed: &[u8; 32], sk_seed: &[u8; 32], leaf_adrs: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf: u32) -> [u8; N] {
+    #[cfg(feature = "hw-sha256-forsleaf")]
+    {
+        extern "C" {
+            fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
+        }
+        let mut tail = [0u8; 16];
+        tail[0..4].copy_from_slice(b"fors");
+        tail[4..8].copy_from_slice(&ht_idx.to_be_bytes());
+        tail[8..12].copy_from_slice(&tree_idx.to_be_bytes());
+        tail[12..16].copy_from_slice(&leaf.to_be_bytes());
+        let mut seed_adrs = [0u8; 64];
+        seed_adrs[0..32].copy_from_slice(seed);
+        seed_adrs[32..64].copy_from_slice(leaf_adrs);
+        let mut out = [0u8; N];
+        // SAFETY: 32, 16 and 64 readable bytes and 16 writable, live for the call.
+        unsafe { pqsigner_fors_leaf16(sk_seed.as_ptr(), tail.as_ptr(), seed_adrs.as_ptr(), out.as_mut_ptr()) };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-forsleaf"))]
+    {
+        let s = fors_secret(sk_seed, ht_idx, tree_idx, leaf);
+        th(seed, leaf_adrs, &pad16(&s))
+    }
+}

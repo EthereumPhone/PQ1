@@ -147,9 +147,8 @@ pub fn compute_fors_root(
 
     for j in 0..n_leaves {
         // Compute leaf: th(seed, leaf_adrs, secret)
-        let secret = fors_secret(sk_seed, ht_idx, tree_idx, j as u32);
         let leaf_adrs = make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, tree_idx, 0, 0, j as u32);
-        let mut node = th(seed, &leaf_adrs, &pad16(&secret));
+        let mut node = crate::hash::fors_leaf(seed, sk_seed, &leaf_adrs, ht_idx, tree_idx, j as u32);
         let mut node_h = 0u32;
 
         // Merge with stack while heights match
@@ -206,9 +205,8 @@ pub fn sign_fors_tree(
     let target_idx = leaf_idx;
 
     for j in 0..n_leaves {
-        let s = fors_secret(sk_seed, ht_idx, tree_idx, j as u32);
         let leaf_adrs = make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, tree_idx, 0, 0, j as u32);
-        let mut node = th(seed, &leaf_adrs, &pad16(&s));
+        let mut node = crate::hash::fors_leaf(seed, sk_seed, &leaf_adrs, ht_idx, tree_idx, j as u32);
         let mut node_h = 0u32;
 
         while sp > 0 && stack_heights[sp - 1] == node_h {

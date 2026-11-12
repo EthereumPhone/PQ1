@@ -1268,8 +1268,71 @@ pub unsafe extern "C" fn pqsigner_wots_prf_chain16(
     }
 }
 
+/// FORS leaf in one call (`forsleaf`, secure image only):
+/// `s = SHA-256(sk_seed ‖ prf_tail)[..16]` (48-byte PRF; `sk_seed` read in
+/// place), then `SHA-256(seed_adrs ‖ s ‖ 0^16)[..16]` to `out`. The secret
+/// stays in registers.
+///
+/// # Safety
+/// `sk_seed` 32, `prf_tail` 16 and `seed_adrs` 64 readable bytes, `out` 16
+/// writable; no other SHA-256 stream in flight.
+#[cfg(feature = "forsleaf")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8) {
+    if wait_ready_sr() & SR_DCIS != 0 {
+        hash_engine_fault();
+    }
+    REG.str_.write(0);
+    REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+    // SAFETY: caller contract.
+    unsafe {
+        feed_words(sk_seed, 8);
+        feed_words(prf_tail, 4);
+    }
+    REG.str_.write(STR_DCAL);
+    let mut t = 0u32;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t += 1;
+        if t > 10_000_000 {
+            hash_engine_fault();
+        }
+    }
+    // SAFETY: HR0..HR3.
+    let v = unsafe {
+        [
+            REG.hr0.read_at(0).swap_bytes(),
+            REG.hr0.read_at(1).swap_bytes(),
+            REG.hr0.read_at(2).swap_bytes(),
+            REG.hr0.read_at(3).swap_bytes(),
+        ]
+    };
+    REG.sr.write(!SR_DCIS);
+    #[cfg(feature = "tick-hook")]
+    // SAFETY: as in `final_body`.
+    unsafe {
+        pqsigner_hash_tick();
+    }
+    if wait_ready_sr() & SR_DCIS != 0 {
+        hash_engine_fault();
+    }
+    REG.str_.write(0);
+    REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+    // SAFETY: caller contract.
+    unsafe { feed_words(seed_adrs, 16) };
+    write_word(v[0]);
+    write_word(v[1]);
+    write_word(v[2]);
+    write_word(v[3]);
+    write_word(0);
+    write_word(0);
+    write_word(0);
+    write_word(0);
+    // SAFETY: caller contract (16 writable bytes).
+    unsafe { gather_final16(out) };
+}
+
 /// Feed `n` words from `p` (unaligned reads).
-#[cfg(feature = "prfchain")]
+#[cfg(any(feature = "prfchain", feature = "forsleaf"))]
 #[inline(always)]
 unsafe fn feed_words(p: *const u8, n: usize) {
     let mut i = 0;
