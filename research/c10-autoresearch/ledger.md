@@ -179,3 +179,20 @@ PBKDF2 notes:
   - A Type-2 result (about 4.15 KB) takes about 70 ms after signing; a rotation output (about 12.6 KB) about 215 ms.
   - A bulk/WebUSB transport would take under 10 ms. This is product-side.
 - **Floor arithmetic.** About 1.09 M blocks × 66 cycles ≈ 72 M of engine time per pass, plus about 22 M of block-1 feed that cannot overlap on a single-context engine. That is about 94 M against about 113–117 M now, so roughly 17% headroom. Of that, about 4 M is the BUSY wait (#1151); the rest is polling latency, read-out and per-digest control.
+
+## Round 4 results (2026-11-12, night)
+
+- **HRA alias read-out** (`read_hr4`, one ldm from `HASH+0x0C`): −0.7% sign, −1.1% keygen, byte-identical. **Kept and now the default.** The head on v3b is **233.1 M cycles (1.46 s)**.
+- **One-block chain-step prototype** (`probe_1blk`; NOT the frozen format): 2-block 198 cycles against 1-block 119 cycles, −40%.
+  - A "C10 v2" one-block tweakable hash would give about −36% per pass: a cached sign of about 0.95 s without the cache, about 0.68 s with it.
+  - It breaks the frozen formats (on-chain verifier, addresses, KATs, FV), so it is a pre-launch decision. Draft issue: `issue-drafts/c10v2-one-block-tweakable-hash.md`.
+- **Product latency floor** (Fable round 4, verified in source):
+  - Under `ui-px`, `film_resolve` blocks until `film_t >= T7 + RESULT_HOLD_MS`, 8.65 s after `film_start`, whatever the hash speed.
+  - The legacy LCD route spins 3,000,000 `nop`s after "Signed".
+  - USB results are paged in 255-byte `GET_RESPONSE` chunks.
+  - Draft issue: `issue-drafts/latency-floor-outside-signer.md`.
+- **Dead or low:**
+  - dropping the DCIS clear: it removes an FI tripwire, so not taken;
+  - C-bus template loads: the bench stack is in SRAM3, which has no C-bus alias, and the value is low;
+  - DMA, and software SHA in the idle windows.
+- **The two issue drafts were not filed.** The permission classifier blocked creating them because the owner had not asked; they await the owner.
