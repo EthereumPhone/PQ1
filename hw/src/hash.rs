@@ -1492,6 +1492,39 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
     }
 }
 
+/// `th_multi` in place (`gather`, secure image only): first 16 bytes of
+/// SHA-256(seed ‖ adrs ‖ pad16(v_0) ‖ … ‖ pad16(v_{n-1})), with `seed` and `adrs`
+/// (32 bytes each) and the `n` 16-byte values read where they are.
+///
+/// # Safety
+/// `seed`, `adrs` 32 readable bytes each, `vals` `16 n` readable bytes, `out`
+/// 16 writable; no other SHA-256 stream in flight.
+#[cfg(feature = "gather")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_th_multi16(seed: *const u8, adrs: *const u8, vals: *const u8, n: u32, out: *mut u8) {
+    gather_init();
+    // SAFETY: caller contract.
+    unsafe {
+        feed32(seed);
+        feed32(adrs);
+        let mut i = 0usize;
+        while i < n as usize {
+            let q = vals.add(16 * i).cast::<u32>();
+            let (a, b, c, d) = (q.read_unaligned(), q.add(1).read_unaligned(), q.add(2).read_unaligned(), q.add(3).read_unaligned());
+            write_word(a);
+            write_word(b);
+            write_word(c);
+            write_word(d);
+            write_word(0);
+            write_word(0);
+            write_word(0);
+            write_word(0);
+            i += 1;
+        }
+        gather_final16(out);
+    }
+}
+
 /// Feed `n` words from `p` (unaligned reads).
 #[cfg(any(feature = "prfchain", feature = "forsleaf", feature = "search"))]
 #[inline(always)]

@@ -296,6 +296,20 @@ pub const TH_MULTI_MAX: usize = 43;
 pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
     bump!(TH);
     assert!(vals.len() <= TH_MULTI_MAX);
+    #[cfg(feature = "hw-sha256-thmulti")]
+    {
+        extern "C" {
+            fn pqsigner_th_multi16(seed: *const u8, adrs: *const u8, vals: *const u8, n: u32, out: *mut u8);
+        }
+        let mut out = [0u8; N];
+        // SAFETY: 32 + 32 readable bytes, `16 * vals.len()` readable bytes (the
+        // `[[u8; N]]` slice is contiguous) and 16 writable, live for the call.
+        unsafe {
+            pqsigner_th_multi16(seed.as_ptr(), adrs.as_ptr(), vals.as_ptr().cast::<u8>(), vals.len() as u32, out.as_mut_ptr())
+        };
+        return out;
+    }
+    #[allow(unreachable_code)]
     let mut buf = [0u8; 64 + 32 * TH_MULTI_MAX];
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(adrs);

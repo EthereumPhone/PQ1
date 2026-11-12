@@ -37,6 +37,8 @@ hw-sha256-grindr = ["hw-sha256-oneshot"]
 hw-sha256-tickbatch = ["hw-sha256-forstree"]
 # TRACK-B EXPERIMENT: cached top hypertree layer (`topcache`), never shipped as-is.
 top-cache = []
+# th_multi with its values fed in place (`pqsigner_th_multi16`, `pqsigner-hw/gather`).
+hw-sha256-thmulti = ["hw-sha256-oneshot"]
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs

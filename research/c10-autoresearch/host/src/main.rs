@@ -151,6 +151,19 @@ unsafe fn wots_chains16_body(sk: *const u8, tail: *const u8, sa: *const u8, orde
         unsafe { pqsigner_wots_prf_chain16(sk, t.as_ptr(), a.as_ptr(), steps, out.add(16 * i)) };
     }
 }
+/// th_multi hook (driver `th_multi16`): software SHA-256 of seed ‖ adrs ‖ pad16(v_i)..., first 16 bytes.
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_th_multi16(seed: *const u8, adrs: *const u8, vals: *const u8, n: u32, out: *mut u8) {
+    let mut b = Vec::new();
+    b.extend_from_slice(unsafe { std::slice::from_raw_parts(seed, 32) });
+    b.extend_from_slice(unsafe { std::slice::from_raw_parts(adrs, 32) });
+    for i in 0..n as usize {
+        b.extend_from_slice(unsafe { std::slice::from_raw_parts(vals.add(16 * i), 16) });
+        b.extend_from_slice(&[0u8; 16]);
+    }
+    let mut d = [0u8; 32];
+    unsafe { pqsigner_sha256_oneshot(b.as_ptr(), b.len(), d.as_mut_ptr()); std::ptr::copy_nonoverlapping(d.as_ptr(), out, 16) };
+}
 fn take() -> u64 { N_DIGESTS.with(|n| std::mem::replace(&mut *n.borrow_mut(), 0)) }
 
 fn sign(sk: &SigningKey, #[cfg(feature = "topcache")] cache: &sphincs_c10::topcache::TopCache, m: &[u8; 32], sh: &[u8; 32]) -> [u8; 4008] {
