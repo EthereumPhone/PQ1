@@ -7,6 +7,9 @@
  * Only volatile core/debug registers are written (VTOR, MSPLIM, DEMCR, DWT_CTRL, DWT_CYCCNT). */
 #include "bench.h"
 extern uint32_t __bss_start__[], __bss_end__[], __stack_top[], __stack_limit[];
+#ifdef FLASHRUN
+extern uint32_t __data_start__[], __data_end__[], __data_load__[];
+#endif
 void _cstart(void);
 
 __attribute__((naked, noreturn, section(".entry"))) void _start(void) {
@@ -60,6 +63,9 @@ void bench_halt(uint32_t code) { BENCH.status = ST_HALT | (code & 0xFFFFu); for 
 __attribute__((noreturn, used)) void _cstart(void) {
   *(volatile uint32_t *)0xE000ED08u = (uint32_t)bench_vectors;          /* VTOR_S */
   __asm volatile("dsb\n isb" ::: "memory");
+#ifdef FLASHRUN
+  { uint32_t *s = __data_load__; for (uint32_t *p = __data_start__; p < __data_end__; ) *p++ = *s++; }
+#endif
   for (uint32_t *p = __bss_start__; p < __bss_end__; ) *p++ = 0;
   for (uint32_t i = 0; i < BENCH_RESULTS_WORDS; i++) ((volatile uint32_t *)BENCH_RESULTS_ADDR)[i] = 0;
   BENCH.status = ST_STARTED;

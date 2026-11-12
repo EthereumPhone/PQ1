@@ -10,6 +10,11 @@ static void pq_halt(uint32_t c) { bench_halt(c); }
 #define PWR_S 0x56020800u
 #if defined(CLK160) && !defined(QEMU)
 static uint32_t sv_ahb3, sv_pllcfgr, sv_plldivr, sv_vosr, sv_cr, sv_cfgr1;
+#ifdef FLASHRUN
+static uint32_t sv_acr;
+#define FLASH_S 0x50022000u
+#define ICACHE_S 0x50030400u
+#endif
 static void spin_until(uint32_t addr, uint32_t mask, uint32_t want, uint32_t code) {
   for (uint32_t i = 0; i < 20000000u; i++) if ((REG(addr) & mask) == want) return;
   pq_halt(code);
@@ -26,6 +31,13 @@ static void clock_up(void) {
   sv_vosr = REG(PWR_S + 0x0C); sv_cr = REG(RCC_S + 0x00); sv_cfgr1 = REG(RCC_S + 0x1C);
   
   if ((sv_cfgr1 & 0xFu) != 0 || (sv_cr & 0x01000000u)) pq_halt(0xE0);   /* not MSIS / PLL1 already on: do nothing */
+#ifdef FLASHRUN
+  /* harness v3: flash latency 4 wait states (VOS1, 160 MHz) BEFORE the clock goes up, as rcc.rs does
+   * (ICACHE off while the wait states change). FLASH_ACR and ICACHE_CR are volatile registers. */
+  sv_acr = REG(FLASH_S + 0x00);
+  REG(ICACHE_S) = 0u; __asm volatile("dsb\n isb");
+  REG(FLASH_S + 0x00) = (sv_acr & ~0xFu) | 4u; while ((REG(FLASH_S + 0x00) & 0xFu) != 4u) {}
+#endif
   REG(RCC_S + 0x94) = sv_ahb3 | 0x4u; (void)REG(RCC_S + 0x94);          /* AHB3ENR.PWREN */
   REG(PWR_S + 0x0C) |= 0x00030000u; spin_until(PWR_S + 0x0C, 0x8000u, 0x8000u, 0xE1);   /* VOS range 1, VOSRDY */
   REG(RCC_S + 0x28) = 0x00040009u;                                       /* PLL1: src MSIS, M=/1, REN, MBOOST=/1 */
@@ -33,6 +45,10 @@ static void clock_up(void) {
   REG(RCC_S + 0x34) = 0x0101024Fu;                                       /* N=80, P=Q=R=/2 -> 160 MHz */
   REG(RCC_S + 0x00) |= 0x01000000u; spin_until(RCC_S + 0x00, 0x02000000u, 0x02000000u, 0xE3);   /* PLL1ON, PLL1RDY */
   REG(RCC_S + 0x1C) = (REG(RCC_S + 0x1C) & ~3u) | 3u; spin_until(RCC_S + 0x1C, 0xCu, 0xCu, 0xE4);  /* SW = PLL1 */
+#ifdef FLASHRUN
+  REG(ICACHE_S) = 1u;                                                    /* rcc.rs: ICACHE_CR = 1 (EN, 1-way) */
+  BENCH.user[8] = REG(ICACHE_S) | (REG(FLASH_S + 0x00) << 8);
+#endif
   BENCH.user[9] = REG(RCC_S + 0x1C); BENCH.user[10] = REG(PWR_S + 0x0C);
 }
 static void clock_down(void) {
@@ -44,6 +60,10 @@ static void clock_down(void) {
   REG(PWR_S + 0x0C) = sv_vosr;                                                      /* VOS back */
   BENCH.user[11] = REG(RCC_S + 0x1C);
   REG(RCC_S + 0x94) = sv_ahb3;
+#ifdef FLASHRUN
+  REG(ICACHE_S) = 0u; __asm volatile("dsb\n isb");
+  REG(FLASH_S + 0x00) = sv_acr;
+#endif
 }
 #else
 static void clock_up(void) {}
