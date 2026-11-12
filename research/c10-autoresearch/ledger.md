@@ -277,3 +277,40 @@ Total about −92 M of 233 M (−40%).
 **Remaining**, from the profile: `prf_chain16` 50% (about 109 cycles/digest, engine-bound); search 16% (about 209 cycles/try, where engine time is about 135); FORS 22.5% (about 18 M/sign against an ideal of about 9 M: per-call Rust and driver overhead).
 
 **Left to try:** a FORS-subtree fused entry (≈ −9 M/sign), per-key WOTS chains (≈ −1.5 M), the search loop. Fable's estimate of −40% looks reachable.
+
+### Round 5: on-chain v2 verifier (`SPHINCsC10v2Asm.sol`, spec 0.2)
+
+`contracts/smart-wallet/src/verifiers/SPHINCsC10v2Asm.sol` sits next to v1 and is not deployed.
+
+**Construction:**
+
+- 16-byte packed preimages, each written in ascending address order with A7 last (`shl(200, a7)`), per Astra's overlap finding.
+- Branchless left/right selection before the stores.
+- The T_k buffer is tweak-first.
+- WOTS digits from the top bits.
+
+**`test/SPHINCsC10v2Asm.t.sol`, 5/5 pass:**
+
+- every Python reference KAT is accepted (the same KATs Rust v2 reproduces byte for byte);
+- the 3 +C-only near-misses are rejected;
+- 12 one-bit flips across every signature region, a wrong root and a wrong message are rejected;
+- v1 and v2 do not cross-verify.
+
+**Mutation controls:**
+
+- Deleting the WOTS+C digit-sum check fails the near-miss test (n1 accepted).
+- Deleting the FORS+C last-index check fails it too (n0 accepted).
+- Restored: 5/5.
+
+**Gas, measured:** verify 180,812 (v1) → **164,218 (v2), −9.2%**. Runtime size 1,238 → 1,213 B.
+
+- Every verify runs exactly 361 hashes for both versions, because the digit sum is fixed at 205.
+- The saving is the precompile word count; STATICCALL's 100-gas base is unchanged.
+
+**v1 regression after all v2 edits:**
+
+- `cargo test -p sphincs-c10` 82/0.
+- The host gate passes on the fused head and the oneshot path.
+- The kit frozen evaluator passes, with `cached_sign` 233,078,515, identical to the round-4 head.
+
+**Not done:** the FSBL image was not rebuilt. Every driver addition is `cfg(feature = "v2")`, which the FSBL never names.
