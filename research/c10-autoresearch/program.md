@@ -57,7 +57,7 @@ Keep rule:
 ## Loop
 
 1. Pick the top untried hypothesis from `ledger.md`, from Fable 5.2's ranked lists (`fable-hypotheses-*.md`) or from the profile.
-2. Edit, then commit (`exp: <idea>`).
+2. Edit, then commit (`exp: <idea>`). Stage only `sphincs-c10/`, `hw/` and `bench/Cargo.toml` (`git add <paths>`, never `commit -a`): a `commit -a` swept harness edits into an experiment commit, and its revert removed them.
 3. Run `./experiment.sh > out/exp.json`.
 4. Append a row to `results.tsv` (untracked): commit, cached_sign, keygen, total, status (`keep`/`discard`/`crash`/`gate-fail`), description.
 5. On a keep, leave the commit. Otherwise run `git reset --hard HEAD~1`.

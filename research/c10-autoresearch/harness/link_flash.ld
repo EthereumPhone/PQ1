@@ -13,7 +13,7 @@ ENTRY(_start)
 SECTIONS {
   .results (NOLOAD) : { . = . + 0x100; } > RESULTS
   .vtable  : { KEEP(*(.vtable)) } > FLASH
-  .text    : { KEEP(*(.entry)) *(.text*) *(.rodata*) . = ALIGN(8); } > FLASH
+  .text    : { KEEP(*(.entry)) . = . + (DEFINED(PAD) ? PAD : 0); *(.text*) *(.rodata*) . = ALIGN(8); } > FLASH
   .data    : { __data_start__ = .; *(.data*) . = ALIGN(8); __data_end__ = .; } > RAM AT > FLASH
   __data_load__ = LOADADDR(.data);
   .bss (NOLOAD) : { . = ALIGN(8); __bss_start__ = .; *(.bss*) *(COMMON) . = ALIGN(8); __bss_end__ = .; } > RAM
