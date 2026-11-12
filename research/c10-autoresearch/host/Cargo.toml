@@ -7,7 +7,7 @@ publish = false
 [workspace]
 
 [dependencies]
-sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-gather", "hw-sha256-prfchain", "hw-sha256-forsleaf"] }
+sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-gather", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree"] }
 sha2 = { version = "0.10", default-features = false }
 hex = "0.4"
 

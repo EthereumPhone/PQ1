@@ -139,6 +139,9 @@ pub fn compute_fors_root(
     ht_idx: u32,
     tree_idx: u32,
 ) -> [u8; N] {
+    #[cfg(feature = "hw-sha256-forstree")]
+    return fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, 0).0;
+    #[allow(unreachable_code)]
     // Treehash: process 2^A leaves left-to-right with a stack.
     let n_leaves = FORS_LEAVES; // 2048
     let mut stack = [[0u8; N]; A + 1]; // 17 entries, 272 bytes
@@ -192,6 +195,8 @@ pub fn sign_fors_tree(
     leaf_idx: u32,
 ) -> ([u8; N], [[u8; N]; A]) {
     let secret = fors_secret(sk_seed, ht_idx, tree_idx, leaf_idx);
+    #[cfg(feature = "hw-sha256-forstree")]
+    return (secret, fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, leaf_idx).1);
 
     // Build the tree and extract the auth path via Treehash.
     // For each level h, we need the sibling of our path node at that level.
@@ -263,4 +268,72 @@ pub fn sign_fors_tree(
 pub fn compute_fors_pk(seed: &[u8; 32], ht_idx: u32, roots: &[[u8; N]; K]) -> [u8; N] {
     let roots_adrs = make_adrs(0, u64::from(ht_idx), ADRS_FORS_ROOTS, 0, 0, 0, 0);
     th_multi(seed, &roots_adrs, roots)
+}
+
+/// FORS tree build over per-tree `seed ‖ adrs` templates (`hw-sha256-forstree`):
+/// the same leaves, nodes, order and auth-path selection as `sign_fors_tree` /
+/// `compute_fors_root`, but each hash patches only the address words that
+/// change (leaf: hash address; node: height and index) and passes the 16-byte
+/// children in place. Returns the root and, for `target_idx`, the auth path.
+#[cfg(feature = "hw-sha256-forstree")]
+pub(crate) fn fors_tree_fast(
+    seed: &[u8; 32],
+    sk_seed: &[u8; 32],
+    ht_idx: u32,
+    tree_idx: u32,
+    target_idx: u32,
+) -> ([u8; N], [[u8; N]; A]) {
+    extern "C" {
+        fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
+        fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: *const u8, out: *mut u8);
+    }
+    let mut leaf_sa = [0u8; 64];
+    leaf_sa[0..32].copy_from_slice(seed);
+    leaf_sa[32..64].copy_from_slice(&make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, tree_idx, 0, 0, 0));
+    let mut node_sa = leaf_sa;
+    let mut tail = [0u8; 16];
+    tail[0..4].copy_from_slice(b"fors");
+    tail[4..8].copy_from_slice(&ht_idx.to_be_bytes());
+    tail[8..12].copy_from_slice(&tree_idx.to_be_bytes());
+
+    let mut auth_path = [[0u8; N]; A];
+    let mut stack = [[0u8; N]; A + 1];
+    let mut stack_heights = [0u32; A + 1];
+    let mut sp: usize = 0;
+    for j in 0..FORS_LEAVES as u32 {
+        tail[12..16].copy_from_slice(&j.to_be_bytes());
+        leaf_sa[60..64].copy_from_slice(&j.to_be_bytes());
+        let mut node = [0u8; N];
+        // SAFETY: 32, 16, 64 readable bytes and 16 writable, live for the call.
+        unsafe { pqsigner_fors_leaf16(sk_seed.as_ptr(), tail.as_ptr(), leaf_sa.as_ptr(), node.as_mut_ptr()) };
+        let mut node_h = 0u32;
+        while sp > 0 && stack_heights[sp - 1] == node_h {
+            sp -= 1;
+            let sibling = stack[sp];
+            let parent_idx = j >> (node_h + 1);
+            // Auth path: the same selection as `sign_fors_tree` (public indices only).
+            let target_at_h = target_idx >> node_h;
+            let sibling_idx = target_at_h ^ 1;
+            let left_leaf_start = (j >> (node_h + 1)) << (node_h + 1);
+            let right_leaf_start = left_leaf_start + (1 << node_h);
+            if sibling_idx & 1 == 0 {
+                if (sibling_idx << node_h) == left_leaf_start {
+                    auth_path[node_h as usize] = sibling;
+                }
+            } else if (sibling_idx << node_h) == right_leaf_start {
+                auth_path[node_h as usize] = node;
+            }
+            node_sa[56..60].copy_from_slice(&(node_h + 1).to_be_bytes());
+            node_sa[60..64].copy_from_slice(&parent_idx.to_be_bytes());
+            let mut parent = [0u8; N];
+            // SAFETY: 64, 16, 16 readable bytes and 16 writable, live for the call.
+            unsafe { pqsigner_node16(node_sa.as_ptr(), sibling.as_ptr(), node.as_ptr(), parent.as_mut_ptr()) };
+            node = parent;
+            node_h += 1;
+        }
+        stack[sp] = node;
+        stack_heights[sp] = node_h;
+        sp += 1;
+    }
+    (stack[0], auth_path)
 }
