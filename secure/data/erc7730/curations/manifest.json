@@ -406,11 +406,11 @@
     },
     {
       "path": "Cargo.lock",
-      "sha256": "0ee394bd8e40dcee762c670d60b0319c56075dc745760a0f1d0b0a1d5a61a27c"
+      "sha256": "68be16a0f8038d04464fb87b88adfe3a87b6b70c6303ae5f69ce1af92a35d668"
     },
     {
       "path": "Cargo.toml",
-      "sha256": "b122439ab028d5d8d278e5d61beb539825bfa83ce762d2179ddd7fd0ca3887fc"
+      "sha256": "f060bee7211aa27e944beb8fcade5833e39d4144a64cbea81107eb8eb1d8b9a7"
     },
     {
       "path": "dbgen/Cargo.toml",
