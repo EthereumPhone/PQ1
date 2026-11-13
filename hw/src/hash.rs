@@ -2105,6 +2105,79 @@ pub unsafe extern "C" fn pqsigner_v2_fors_leaf16(sk_seed: *const u8, p0: u32, p1
     unsafe { v2_store4(out, v) };
 }
 
+/// `ha` (node or leaf index, < 2^11) in A7's second DIN word: A7 bits 11..1,
+/// i.e. the low nibble of byte 5 (word bits 8..11) and bits 7..1 of byte 6
+/// (word bits 17..23).
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_ha(x: u32) -> u32 {
+    (x & 0x7F) << 17 | (x >> 7) << 8
+}
+
+/// Root of the v2 FORS subtree of height `h` over leaves `j0..j0 + 2^h` of one
+/// FORS tree: leaf `j` is `F(S ‖ PRF(sk_seed ‖ A7_prf(ha = j)) ‖ A7(ha = j))`
+/// and the node at height `k` with index `i` is `H(S ‖ L ‖ R ‖ A7(cp = k, ha = i))`.
+/// `p0`/`p1` and `a0`/`a1` are the FORS_PRF and FORS_TREE A7 words of the tree
+/// with `cp = ha = 0`. Each auth-path node of a FORS tree is one such subtree,
+/// and `h = 11` gives the tree root, so the signer keeps the auth-path logic.
+///
+/// # Safety
+/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 16 writable; no other
+/// stream in flight. `h <= 11`, `j0` a multiple of `2^h` and `j0 + 2^h <= 2^11`
+/// (checked: a violation halts like an engine fault).
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
+    sk_seed: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8,
+) {
+    if h > 11 || j0 & ((1 << h) - 1) != 0 || j0 + (1 << h) > 1 << 11 {
+        hash_engine_fault();
+    }
+    // SAFETY: caller contract.
+    let s = unsafe { v2_load4(seed) };
+    let mut stack = [[0u32; 4]; 12];
+    let mut sp = 0usize;
+    let end = j0 + (1 << h);
+    let mut j = j0;
+    while j < end {
+        let ha = v2_ha(j);
+        v2_begin();
+        // SAFETY: caller contract.
+        unsafe { feed_words(sk_seed, 8) };
+        write_word(p0);
+        write_word(p1 | ha);
+        let x = v2_end16();
+        v2_begin();
+        write_word(s[0]); write_word(s[1]); write_word(s[2]); write_word(s[3]);
+        write_word(x[0]); write_word(x[1]); write_word(x[2]); write_word(x[3]);
+        write_word(a0);
+        write_word(a1 | ha);
+        let mut node = v2_end16();
+        // While `node` is a right child below the subtree root, fold in its left
+        // sibling (pushed earlier): stack depth stays at most h + 1.
+        let mut k = 0u32;
+        let mut idx = j;
+        while k < h && idx & 1 == 1 {
+            sp -= 1;
+            idx >>= 1;
+            k += 1;
+            let l = stack[sp];
+            v2_begin();
+            write_word(s[0]); write_word(s[1]); write_word(s[2]); write_word(s[3]);
+            write_word(l[0]); write_word(l[1]); write_word(l[2]); write_word(l[3]);
+            write_word(node[0]); write_word(node[1]); write_word(node[2]); write_word(node[3]);
+            write_word(a0);
+            write_word(a1 | k << 12 | v2_ha(idx));
+            node = v2_end16();
+        }
+        stack[sp] = node;
+        sp += 1;
+        j += 1;
+    }
+    // SAFETY: caller contract.
+    unsafe { v2_store4(out, stack[0]) };
+}
+
 /// One WOTS_DIGEST try `S ‖ m ‖ be32(count) ‖ A7` (43 bytes), issued.
 #[cfg(feature = "v2")]
 #[inline(always)]

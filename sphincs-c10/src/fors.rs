@@ -147,7 +147,7 @@ pub fn compute_fors_root(
     #[cfg(feature = "hw-sha256-forstree")]
     return fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, 0).0;
     #[cfg(feature = "v2-fused")]
-    return crate::v2hash::fors_tree_fused(seed, sk_seed, ht_idx, tree_idx, 0).0;
+    return crate::v2hash::fors_root_fused(seed, sk_seed, ht_idx, tree_idx);
     #[allow(unreachable_code)]
     // Treehash: process 2^A leaves left-to-right with a stack.
     let n_leaves = FORS_LEAVES; // 2048
@@ -203,7 +203,7 @@ pub fn sign_fors_tree(
 ) -> ([u8; N], [[u8; N]; A]) {
     let secret = fors_secret(sk_seed, ht_idx, tree_idx, leaf_idx);
     #[cfg(feature = "v2-fused")]
-    return (secret, crate::v2hash::fors_tree_fused(seed, sk_seed, ht_idx, tree_idx, leaf_idx).1);
+    return (secret, crate::v2hash::fors_auth_fused(seed, sk_seed, ht_idx, tree_idx, leaf_idx));
     #[cfg(feature = "hw-sha256-forstree")]
     return (secret, fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, leaf_idx).1);
 

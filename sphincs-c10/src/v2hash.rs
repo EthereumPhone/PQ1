@@ -26,11 +26,14 @@ pub const T_FORS_LAST: u32 = 9;
 pub const CP_SHIFT: u32 = 12;
 const CP_MASK: u64 = 0xF << CP_SHIFT;
 
-/// A7 (spec §1): fixed field positions whatever the type.
+/// A7 (spec §1): fixed field positions whatever the type. A field that does
+/// not fit its width is rejected in every build (spec §1; Astra 0.3 review:
+/// `ha = 2048` would otherwise encode as `cp = 1, ha = 0`). Callers derive every
+/// field from bounded indices, so this never fires on a valid path.
 #[inline(always)]
 pub fn pack(ty: u64, layer: u64, tree: u64, kp: u64, ci: u64, cp: u64, ha: u64) -> u64 {
-    debug_assert!(ty < 16 && layer < 2 && tree < (1 << 18) && kp < (1 << 9));
-    debug_assert!(ci < (1 << 6) && cp < 16 && ha < (1 << 11));
+    assert!(ty < 16 && layer < 2 && tree < (1 << 18) && kp < (1 << 9));
+    assert!(ci < (1 << 6) && cp < 16 && ha < (1 << 11));
     ty << 52 | layer << 51 | tree << 33 | kp << 24 | ci << 18 | cp << CP_SHIFT | ha << 1
 }
 
@@ -164,6 +167,9 @@ extern "C" {
     fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *const u8, a0: u32, a1: u32, out: *mut u8);
     fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8);
+    fn pqsigner_v2_fors_subtree16(
+        sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8,
+    );
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
 }
 
@@ -220,44 +226,36 @@ pub fn search_fused(seed: &[u8; 32], msg_hash: &[u8; 32], layer: u32, tree: u64,
     unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, n, crate::params::TARGET_SUM as u32, d.as_mut_ptr()) }
 }
 
-/// v2-native FORS tree (`v2-fused`): root and the auth path of `leaf_idx`, by
-/// treehash, with A7 words computed from fields (no 32-byte ADRS, no padding).
+/// Root of the FORS subtree of height `h` over leaves `j0..j0 + 2^h` of FORS
+/// tree `t` at `ht_idx`, in one driver call (`v2-fused`).
 #[cfg(feature = "v2-fused")]
-pub fn fors_tree_fused(seed: &[u8; 32], sk_seed: &[u8; 32], ht_idx: u32, t: u32, leaf_idx: u32) -> ([u8; N], [[u8; N]; crate::params::A]) {
-    use crate::params::{A, FORS_LEAVES};
+fn fors_subtree_fused(seed: &[u8; 32], sk_seed: &[u8; 32], ht_idx: u32, t: u32, j0: u32, h: u32) -> [u8; N] {
     let (ht, tt) = (u64::from(ht_idx), u64::from(t));
-    let mut auth = [[0u8; N]; A];
-    let mut stack = [[0u8; N]; A + 1];
-    let mut heights = [0u32; A + 1];
-    let mut sp = 0usize;
-    for j in 0..FORS_LEAVES as u32 {
-        let (p0, p1) = words(pack(T_FORS_PRF, 0, ht, tt, 0, 0, u64::from(j)));
-        let (a0, a1) = words(pack(T_FORS_TREE, 0, ht, tt, 0, 0, u64::from(j)));
-        let mut node = [0u8; N];
-        // SAFETY: 32 and 16 readable bytes, 16 writable.
-        unsafe { pqsigner_v2_fors_leaf16(sk_seed.as_ptr(), p0, p1, seed.as_ptr(), a0, a1, node.as_mut_ptr()) };
-        if j == leaf_idx ^ 1 {
-            auth[0] = node;
-        }
-        let mut h = 0u32;
-        while sp > 0 && heights[sp - 1] == h {
-            sp -= 1;
-            let parent = j >> (h + 1);
-            let (a0, a1) = words(pack(T_FORS_TREE, 0, ht, tt, 0, u64::from(h + 1), u64::from(parent)));
-            let mut up = [0u8; N];
-            // SAFETY: 16 readable bytes each, 16 writable.
-            unsafe { pqsigner_v2_node16(seed.as_ptr(), stack[sp].as_ptr(), node.as_ptr(), a0, a1, up.as_mut_ptr()) };
-            node = up;
-            h += 1;
-            if (h as usize) < A && parent == (leaf_idx >> h) ^ 1 {
-                auth[h as usize] = node;
-            }
-        }
-        stack[sp] = node;
-        heights[sp] = h;
-        sp += 1;
-    }
-    (stack[0], auth)
+    let (p0, p1) = words(pack(T_FORS_PRF, 0, ht, tt, 0, 0, 0));
+    let (a0, a1) = words(pack(T_FORS_TREE, 0, ht, tt, 0, 0, 0));
+    let mut out = [0u8; N];
+    // SAFETY: 32 and 16 readable bytes, 16 writable; `h <= A` and `j0` is a
+    // multiple of `2^h` inside the tree (both callers below).
+    unsafe { pqsigner_v2_fors_subtree16(sk_seed.as_ptr(), seed.as_ptr(), p0, p1, a0, a1, j0, h, out.as_mut_ptr()) };
+    out
+}
+
+/// FORS tree root (`v2-fused`): the subtree of height `A` at leaf 0.
+#[cfg(feature = "v2-fused")]
+pub fn fors_root_fused(seed: &[u8; 32], sk_seed: &[u8; 32], ht_idx: u32, t: u32) -> [u8; N] {
+    fors_subtree_fused(seed, sk_seed, ht_idx, t, 0, crate::params::A as u32)
+}
+
+/// Auth path of `leaf_idx` (`v2-fused`): `auth[h]` is the sibling at height
+/// `h`, the root of the height-`h` subtree at leaf `((leaf_idx >> h) ^ 1) << h`.
+/// Together with the leaf these subtrees cover the tree once, so the digest
+/// count equals treehash's; the root is rebuilt from the path by the caller.
+#[cfg(feature = "v2-fused")]
+pub fn fors_auth_fused(seed: &[u8; 32], sk_seed: &[u8; 32], ht_idx: u32, t: u32, leaf_idx: u32) -> [[u8; N]; crate::params::A] {
+    core::array::from_fn(|h| {
+        let h = h as u32;
+        fors_subtree_fused(seed, sk_seed, ht_idx, t, ((leaf_idx >> h) ^ 1) << h, h)
+    })
 }
 
 /// v2 R grind (`v2-fused`): v1's R PRF (unchanged, spec §6) and H_MSG over two

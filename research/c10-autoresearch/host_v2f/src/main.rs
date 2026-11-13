@@ -382,6 +382,44 @@ pub unsafe extern "C" fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32
     c[32..].copy_from_slice(&a7b(a0, a1));
     unsafe { std::ptr::copy_nonoverlapping(sw(&c).as_ptr(), out, 16) };
 }
+/// A7 bytes of (a0, a1) with `cp << 12 | ha << 1` added as an integer (spec §1),
+/// not through the driver's word patch, so a wrong patch shows up here.
+fn a7_with(a0: u32, a1: u32, cp: u32, ha: u32) -> [u8; 7] {
+    let v = a7b(a0, a1).iter().fold(0u64, |v, &x| v << 8 | u64::from(x));
+    assert_eq!(v & 0xFFFE, 0, "base A7 must have cp = ha = 0");
+    let o = (v | u64::from(cp) << 12 | u64::from(ha) << 1).to_be_bytes();
+    o[1..8].try_into().unwrap()
+}
+/// Recursive mirror of the driver's iterative subtree treehash.
+fn v2_subtree(sk: &[u8; 32], seed: &[u8; 16], w: [u32; 4], j0: u32, h: u32) -> [u8; 16] {
+    let [p0, p1, a0, a1] = w;
+    if h == 0 {
+        let mut b = [0u8; 39];
+        b[..32].copy_from_slice(sk);
+        b[32..].copy_from_slice(&a7_with(p0, p1, 0, j0));
+        let x = sw(&b);
+        let mut c = [0u8; 39];
+        c[..16].copy_from_slice(seed);
+        c[16..32].copy_from_slice(&x[..16]);
+        c[32..].copy_from_slice(&a7_with(a0, a1, 0, j0));
+        return sw(&c)[..16].try_into().unwrap();
+    }
+    let l = v2_subtree(sk, seed, w, j0, h - 1);
+    let r = v2_subtree(sk, seed, w, j0 + (1 << (h - 1)), h - 1);
+    let mut b = [0u8; 55];
+    b[..16].copy_from_slice(seed);
+    b[16..32].copy_from_slice(&l);
+    b[32..48].copy_from_slice(&r);
+    b[48..].copy_from_slice(&a7_with(a0, a1, h, j0 >> h));
+    sw(&b)[..16].try_into().unwrap()
+}
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32,
+    j0: u32, h: u32, out: *mut u8) {
+    assert!(h <= 11 && j0 % (1 << h) == 0 && j0 + (1 << h) <= 1 << 11, "subtree bounds");
+    let r = v2_subtree(&unsafe { rd::<32>(sk) }, &unsafe { rd::<16>(seed) }, [p0, p1, a0, a1], j0, h);
+    unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out, 16) };
+}
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32 {
     // Plain sha2 and a plain digit sum (spec 0.3: v1's LOW 129 bits, digit i = (D >> 3i) & 7).
