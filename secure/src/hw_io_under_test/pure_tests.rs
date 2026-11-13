@@ -67,6 +67,7 @@ const SECURE_HW_HASH_SRC: &str = include_str!("../hw/hash.rs");
 const FSBL_HASH_SRC: &str = include_str!("../../../fsbl/src/hash.rs");
 const FSBL_MAIN_SRC_HW: &str = include_str!("../../../fsbl/src/main.rs");
 const HW_CARGO_SRC: &str = include_str!("../../../hw/Cargo.toml");
+const HW_LIB_SRC: &str = include_str!("../../../hw/src/lib.rs");
 const FSBL_CARGO_SRC: &str = include_str!("../../../fsbl/Cargo.toml");
 const C10_CARGO_SRC: &str = include_str!("../../../sphincs-c10/Cargo.toml");
 const C10_HASH_SRC: &str = include_str!("../../../sphincs-c10/src/hash.rs");
@@ -3215,7 +3216,7 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
         .filter_map(|l| l.strip_prefix("feature = \"").map(|f| f.trim_end_matches(',').trim_end_matches('"')))
         .filter(|f| !shipping.contains(f))
         .collect();
-    assert_eq!(research.len(), 27, "26 through round 11, v2-asm-t43 in round 12");
+    assert_eq!(research.len(), 28, "26 through round 11, v2-asm-t43 in round 12, oneshot-speed in round 13");
     for r in &research {
         assert!(!SECURE_CARGO_TOML_SRC.contains(&format!("\"pqsigner-hw/{r}\"")), "the secure crate raises {r}");
         assert!(!FSBL_CARGO_SRC.contains(&format!("\"{r}\"")), "the FSBL names {r}");
@@ -3316,6 +3317,33 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
         ["unsafe {", "init_body();", "update_body(ptr, len);", "final_body_n::<4>(out);", "}"]
     );
     assert!(HW_HASH_SRC.contains("#[cfg(feature = \"oneshot\")]\n#[no_mangle]\npub unsafe extern \"C\" fn pqsigner_sha256_oneshot16("));
+    // Round 13 (`oneshot-speed`, a research feature the FSBL refuses and the secure crate does not
+    // raise): speed optimisation inside the "z" profile, on exactly the five streaming / one-shot
+    // entries and only under the feature; the crate's nightly gate is behind the same feature.
+    let speed = "#[cfg_attr(feature = \"oneshot-speed\", optimize(speed))]";
+    assert_eq!(HW_HASH_SRC.matches("optimize(").count(), 5);
+    let hl: std::vec::Vec<&str> = HW_HASH_SRC.lines().collect();
+    let mut sped: std::vec::Vec<&str> = hl
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.contains("optimize("))
+        .map(|(i, l)| {
+            assert_eq!(*l, speed, "line {}: optimize outside the oneshot-speed cfg_attr", i + 1);
+            let mut j = i + 1;
+            while hl[j].starts_with("#[") {
+                j += 1;
+            }
+            hl[j].split(" fn ").nth(1).expect("fn").split('(').next().expect("name")
+        })
+        .collect();
+    sped.sort_unstable();
+    assert_eq!(
+        sped,
+        ["pqsigner_sha256_final", "pqsigner_sha256_init", "pqsigner_sha256_oneshot", "pqsigner_sha256_oneshot16", "pqsigner_sha256_update"]
+    );
+    assert!(HW_CARGO_SRC.contains("\noneshot-speed = [\"oneshot\"]\n"));
+    assert_eq!(HW_LIB_SRC.matches("feature(").count(), 1);
+    assert!(HW_LIB_SRC.contains("\n#![cfg_attr(feature = \"oneshot-speed\", feature(optimize_attribute))]\n"));
     for b in [
         "init_body() {",
         "update_body(ptr: *const u8, len: usize) {",

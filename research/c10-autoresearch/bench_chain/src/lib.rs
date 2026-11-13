@@ -276,6 +276,7 @@ fn chain(sk: &SigningKey, msg_hash: &[u8; 32], seeds: ([u8; 32], [u8; 32]), ph: 
     Ok(sig_a)
 }
 
+#[cfg(not(feature = "residue"))]
 #[no_mangle]
 pub extern "C" fn c10_bench_main() {
     for i in 0..32 {
@@ -337,4 +338,142 @@ pub extern "C" fn c10_bench_main() {
         out(20, DELAY_ITERS / NMSG);
     }
     out(1, 100);
+}
+
+// Round 13 residue mode (`--features residue`): the round-9 dead-stack scan (residue.rs) around the
+// product driver entries with secret preimages, as the signer calls them: 0 `oneshot16` on the
+// 80-byte `wots_secret` preimage (sk_seed first), 1 `oneshot` on an 80-byte secret-PRF preimage,
+// 2 the streaming init / update / final with the key in its own update. Patterns: the secret and
+// the digest (a first call gives it), then a second call on a cleared dead stack and the scan.
+// The secret buffers are statics, so the scanner never sees them in place. Result: 0 'RES1',
+// 1 stage 401, 2 cases, 3 the mask of cases with residue.
+#[cfg(feature = "residue")]
+include!("../../residue.rs");
+#[cfg(feature = "residue")]
+extern "C" {
+    fn pqsigner_sha256_oneshot16(p: *const u8, n: usize, out: *mut u8);
+    fn pqsigner_sha256_oneshot(p: *const u8, n: usize, out: *mut u8);
+    fn pqsigner_sha256_init();
+    fn pqsigner_sha256_update(p: *const u8, n: usize);
+    fn pqsigner_sha256_final(out: *mut u8);
+}
+/// `res_clear` leaves the 64 bytes just below sp alone, but `res_found` scans them: the bench's own
+/// `res_add` frame can leave pattern words there that a shallow driver call never overwrites.
+/// Zero them too (interrupts are masked; nothing below sp is live).
+#[cfg(feature = "residue")]
+#[inline(always)]
+fn res_clear_margin() {
+    let sp = res_sp();
+    let mut a = (sp - 64) & !3;
+    while a < sp {
+        // SAFETY: secure SRAM below the live stack (bench: interrupts masked).
+        unsafe { core::ptr::write_volatile(a as *mut u32, 0) };
+        a += 4;
+    }
+}
+/// Diagnostic: the lowest-offset hit, as (sp - address, word).
+#[cfg(feature = "residue")]
+#[inline(always)]
+fn res_first_hit() -> (usize, u32) {
+    let sp = res_sp();
+    // SAFETY: as `res_found`.
+    let n = unsafe { core::ptr::addr_of!(RES_N).read_volatile() };
+    // SAFETY: as `res_found`.
+    let pats = unsafe { core::slice::from_raw_parts(core::ptr::addr_of!(RES_PATS).cast::<u32>(), n) };
+    let mut a = sp - 4;
+    while a > sp - RES_DEPTH {
+        // SAFETY: as `res_found`.
+        let w = u32::from_le_bytes(unsafe { core::ptr::read_volatile(a as *const [u8; 4]) });
+        if w != 0 && pats.contains(&w) {
+            return (sp - a, w);
+        }
+        a -= 1;
+    }
+    (0, 0)
+}
+/// Positive control (`residue-control`, case 3): copies the key into its own frame and returns,
+/// so its dead frame holds the secret: the scan must flag it.
+#[cfg(feature = "residue")]
+#[inline(never)]
+unsafe fn leak(buf: *const u8, d: *mut u8) {
+    let mut f = [0u8; 48];
+    for (k, b) in f.iter_mut().enumerate() {
+        // SAFETY: `buf` names 80 readable bytes.
+        *b = unsafe { buf.add(k % 32).read_volatile() };
+    }
+    // SAFETY: `d` names 32 writable bytes.
+    unsafe { d.write_volatile(core::hint::black_box(&f)[0]) };
+}
+#[cfg(feature = "residue")]
+static mut RBUF: [u8; 80] = [0; 80];
+#[cfg(feature = "residue")]
+static mut RD: [u8; 32] = [0; 32];
+#[cfg(feature = "residue")]
+#[no_mangle]
+pub extern "C" fn c10_bench_main() {
+    for i in 0..32 {
+        out(i, 0);
+    }
+    out(0, 0x5245_5331);
+    // SAFETY: single-threaded; keeps the runner's SIG0/SIG1 symbols in the image. First HASH use.
+    unsafe {
+        core::ptr::addr_of_mut!(SIG0).cast::<u8>().write_volatile(0);
+        core::ptr::addr_of_mut!(SIG1).cast::<u8>().write_volatile(0);
+        pqsigner_hw::hash::init_clock();
+    }
+    let mut mask = 0u32;
+    let mut sk = [0u8; 32];
+    for (i, b) in sk.iter_mut().enumerate() {
+        *b = (i as u8).wrapping_mul(151) ^ 0x6D;
+    }
+    let ncase = if cfg!(feature = "residue-control") { 4u32 } else { 3 };
+    // SAFETY (all calls): the statics are valid for the lengths given; single-threaded bench.
+    unsafe {
+        let buf = core::ptr::addr_of_mut!(RBUF).cast::<u8>();
+        let d = core::ptr::addr_of_mut!(RD).cast::<u8>();
+        for case in 0..ncase {
+            for k in 0..80 {
+                buf.add(k).write_volatile(if k < 32 { sk[k] } else { (k as u8).wrapping_mul(29) ^ case as u8 });
+            }
+            if case == 0 {
+                // wots_secret: sk_seed || "wots" || layer || to_b32(tree) || kp || ci
+                for (k, b) in b"wots".iter().enumerate() {
+                    buf.add(32 + k).write_volatile(*b);
+                }
+            }
+            let run = || match case {
+                0 => pqsigner_sha256_oneshot16(buf, 80, d),
+                1 => pqsigner_sha256_oneshot(buf, 80, d),
+                3 => leak(buf, d),
+                _ => {
+                    pqsigner_sha256_init();
+                    pqsigner_sha256_update(buf, 32);
+                    pqsigner_sha256_update(buf.add(32), 48);
+                    pqsigner_sha256_final(d);
+                }
+            };
+            run();
+            let mut dig = [0u8; 32];
+            for (k, b) in dig.iter_mut().enumerate() {
+                *b = d.add(k).read_volatile();
+            }
+            res_reset();
+            res_add(&sk);
+            res_add(&dig[..if case == 0 { 16 } else { 32 }]);
+            res_clear();
+            res_clear_margin();
+            run();
+            if res_found() {
+                mask |= 1 << case;
+                if case < 3 {
+                    let (off, w) = res_first_hit();
+                    out(4 + 2 * case as usize, off as u32);
+                    out(5 + 2 * case as usize, w);
+                }
+            }
+        }
+    }
+    out(2, ncase);
+    out(3, mask);
+    out(1, 401);
 }

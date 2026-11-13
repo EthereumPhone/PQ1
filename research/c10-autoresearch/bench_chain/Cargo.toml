@@ -27,6 +27,11 @@ research = [
 # The product's per-digest UI tick (what `ui-px` builds today), with bench_avg_v1's stub of
 # film_tick_hash's live-film counter path (the time-paced frame draw is not modelled).
 tick = ["pqsigner-hw/tick-hook"]
+# Round 13 lever: the five streaming / one-shot entries at speed optimisation (pqsigner-hw/oneshot-speed).
+oneshot-speed = ["pqsigner-hw/oneshot-speed"]
+# Round 13: the dead-stack residue scan around the product driver entries (replaces the chain run).
+residue = []
+residue-control = ["residue"]
 # #1149's batched tick (research driver only).
 tick-batch = ["tick", "research", "pqsigner-hw/tick-batch", "sphincs-c10/hw-sha256-tickbatch"]
 

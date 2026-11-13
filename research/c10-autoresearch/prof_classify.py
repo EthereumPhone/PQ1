@@ -12,8 +12,10 @@ for l in subprocess.run(['arm-none-eabi-nm', '-C', '-S', '--size-sort', elf], ca
         syms.append((int(p[0], 16), int(p[1], 16), p[3]))
 syms.sort()
 starts = [s[0] for s in syms]
-halt = collections.Counter(pcs).most_common(1)[0][0]
-run = [p for p in pcs if p != halt and p != 0xffffffff]
+# DWT_PCSR reads 0xFFFFFFFF while the core is halted; that is the only value dropped. (prof_report.py
+# also drops the most common PC as the halt loop, which discards the hottest driver PC, the DCIS poll,
+# whenever the sampling window ends before the bench halts.)
+run = [p for p in pcs if p != 0xffffffff]
 
 def name_of(q):
     i = bisect.bisect_right(starts, q) - 1
@@ -25,7 +27,7 @@ def cls(n):
     if n.startswith(('pqsigner_sha256', 'pqsigner_wots', 'pqsigner_fors', 'pqsigner_node16', 'pqsigner_th_multi16',
                      'pqsigner_v1_grind', 'pq1_', 'pqsigner_hw::')):
         return 'driver'
-    if n.startswith('sphincs_c10::'):
+    if 'sphincs_c10::' in n:
         return 'signer'
     if n.startswith(('pqsigner_fi::', 'subtle::', 'zeroize::', '<subtle', '<zeroize')):
         return 'fi_chain'
@@ -35,21 +37,42 @@ def cls(n):
         return 'bench_glue'
     return 'other'
 
-by = collections.Counter(); cat = collections.Counter()
+# Outlined fragments (MachineOutliner, "z" code) and out-of-line helpers have no class of their
+# own: give each the class its callers share (from the disassembly's direct calls), else 'other'.
+import re
+callers = collections.defaultdict(set)
+cur = None
+for l in subprocess.run(['arm-none-eabi-objdump', '-d', '-C', '--no-show-raw-insn', elf], capture_output=True, text=True).stdout.splitlines():
+    m = re.match(r'^[0-9a-f]+ <(.+)>:', l)
+    if m:
+        cur = m.group(1)
+        continue
+    m = re.search(r'\tbl?x?\s+[0-9a-f]+ <([^>+]+)>', l)
+    if m and cur:
+        callers[m.group(1)].add(cur)
+def cls2(n, depth=0):
+    c = cls(n)
+    if c != 'other' or depth > 3:
+        return c
+    cs = {cls2(x, depth + 1) for x in callers.get(n, ())}
+    return cs.pop() if len(cs) == 1 else 'other'
+by = collections.Counter(); cat = collections.Counter(); memo = {}
 for p in run:
     n = name_of(p & ~1)
+    if n not in memo:
+        memo[n] = cls2(n)
     by[n[:100]] += 1
-    cat[cls(n)] += 1
+    cat[memo[n]] += 1
 n = len(run)
 print('samples: %d total, %d while running' % (len(pcs), n))
 for k, c in cat.most_common():
     print('  %-11s %6.2f%%  %6d' % (k, 100 * c / n, c))
 print('top outside the driver:')
 for name, c in by.most_common(60):
-    if cls(name) != 'driver':
+    if memo.get(name, cls(name)) != 'driver':
         print('  %6.2f%%  %6d  %s' % (100 * c / n, c, name))
 print('top driver:')
 for name, c in by.most_common(12):
-    if cls(name) == 'driver':
+    if memo.get(name, cls(name)) == 'driver':
         print('  %6.2f%%  %6d  %s' % (100 * c / n, c, name))
 print(json.dumps({k: round(100 * c / n, 3) for k, c in cat.items()}))
