@@ -79,6 +79,8 @@ v2 = ["init-restart", "oneshot", "prfchain", "forsleaf", "search"]
 v2-prf2 = ["v2"]
 # Round 7: hand-scheduled v2 chain loop (output-identical; same checks).
 v2-asm-chain = ["v2"]
+# Round 10: the v2 whole-key WOTS loop (PRF + chains) as one standalone global_asm function.
+v2-asm-key-ga = ["v2-asm-chain"]
 # Round 7: hand-scheduled v2 count search (output-identical; same checks).
 v2-asm-search = ["v2"]
 # Round 7: FORS subtree with asm digest transitions (output-identical; same checks).

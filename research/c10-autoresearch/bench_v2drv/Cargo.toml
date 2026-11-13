@@ -22,12 +22,13 @@ stale = []
 stale-positive = ["stale"]
 stale-search = ["stale"]
 stale-v1 = ["stale"]
+stale-v2key = ["stale"]
 # Round 9 standing gate: run only the v2 dead-stack residue suite (stage 400).
 residue = []
 
 [dependencies]
 # The kit image's driver configuration (as bench_avg_v2f), against software SHA-256.
-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "hra-ldm", "v2", "v2-asm-chain", "v2-asm-search", "v2-asm-fors", "v1-asm-chain"] }
+pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "hra-ldm", "v2", "v2-asm-chain", "v2-asm-key-ga", "v2-asm-search", "v2-asm-fors", "v1-asm-chain"] }
 sha2 = { version = "0.10", default-features = false }
 
 [profile.release]
