@@ -110,47 +110,52 @@ contract SPHINCsC10Asm {
                 // straight into its value word of the next preimage seed || adrs || L || R, L at
                 // 0x40 if its index is even, else R at 0x60; the sibling's 16 bytes are copied into
                 // the other word. The root goes to its T_13 slot (fresh zero memory below).
-                pop(staticcall(gas(), 0x02, 0x00, 0x60, add(0x40, shl(5, and(treeIdx, 1))), 16))
+                // slots (one MUL per walk): byte 2k+1 = 0x40 + 0x20 * bit k of the leaf index (the word
+                // of the node at height k), byte 2k = 0xA0 minus that (its sibling's word); exhaustive
+                // unit gate test/gas/C10Lanes.t.sol
+                let t := treeIdx
+                let sbit := and(mul(t, 0x10000800040002000100008000400020001000080004000000000000000000), 0x10001000100010001000100010001000100010001000000000000000000000) // C10-LANES-V1
+                let slots := sub(add(0x6040604060406040604060406040604060406040604000000000000000000000, shl(1, sbit)), shl(9, sbit)) // C10-LANES-V1
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, byte(1, slots), 16))
 
                 let treeAdrsBase := or(shl(160, htIdx), or(shl(128, 3), shl(96, i)))
                 // AUTH_START=224, auth per tree = 11*16 = 176
                 let authPtr := add(sigBase, add(224, mul(i, 176)))
 
-                // Walk A=11 auth path levels, unrolled: with x = 32 * treeIdx the node at height k
-                // is in the word 0x40 + and(shr(k, x), 0x20) and its sibling in the other; ADRS =
-                // treeAdrsBase | h<<32 | treeIdx>>h. Height 11 (the root) goes to its T_13 slot.
-                let x := shl(5, treeIdx)
-                calldatacopy(sub(0x60, and(shr(0, x), 0x20)), add(authPtr, 0), 16)
+                // Walk A=11 auth path levels, unrolled: the node at height k is in the word
+                // byte(2k+1, slots) and its sibling in byte(2k, slots); ADRS = treeAdrsBase | h<<32 |
+                // treeIdx>>h. Height 11 (the root) goes to its T_13 slot.
+                calldatacopy(byte(0, slots), add(authPtr, 0), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 1)), shr(1, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(1, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(1, x), 0x20)), add(authPtr, 16), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(3, slots), 16))
+                calldatacopy(byte(2, slots), add(authPtr, 16), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 2)), shr(2, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(2, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(2, x), 0x20)), add(authPtr, 32), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(5, slots), 16))
+                calldatacopy(byte(4, slots), add(authPtr, 32), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 3)), shr(3, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(3, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(3, x), 0x20)), add(authPtr, 48), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(7, slots), 16))
+                calldatacopy(byte(6, slots), add(authPtr, 48), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 4)), shr(4, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(4, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(4, x), 0x20)), add(authPtr, 64), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(9, slots), 16))
+                calldatacopy(byte(8, slots), add(authPtr, 64), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 5)), shr(5, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(5, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(5, x), 0x20)), add(authPtr, 80), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(11, slots), 16))
+                calldatacopy(byte(10, slots), add(authPtr, 80), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 6)), shr(6, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(6, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(6, x), 0x20)), add(authPtr, 96), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(13, slots), 16))
+                calldatacopy(byte(12, slots), add(authPtr, 96), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 7)), shr(7, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(7, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(7, x), 0x20)), add(authPtr, 112), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(15, slots), 16))
+                calldatacopy(byte(14, slots), add(authPtr, 112), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 8)), shr(8, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(8, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(8, x), 0x20)), add(authPtr, 128), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(17, slots), 16))
+                calldatacopy(byte(16, slots), add(authPtr, 128), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 9)), shr(9, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(9, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(9, x), 0x20)), add(authPtr, 144), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(19, slots), 16))
+                calldatacopy(byte(18, slots), add(authPtr, 144), 16)
                 mstore(0x20, or(or(treeAdrsBase, shl(32, 10)), shr(10, treeIdx)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(10, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(10, x), 0x20)), add(authPtr, 160), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(21, slots), 16))
+                calldatacopy(byte(20, slots), add(authPtr, 160), 16)
                 mstore(0x20, or(treeAdrsBase, shl(32, 11)))
                 pop(staticcall(gas(), 0x02, 0x00, 0x80, add(add(TB, 0x40), shl(5, i)), 16))
             }
@@ -1376,42 +1381,44 @@ contract SPHINCsC10Asm {
                 let pkAdrs := or(shl(224, layer), or(shl(160, idxTree), or(shl(128, 1), shl(96, idxLeaf))))
                 mstore(add(TB, 0x20), pkAdrs)
                 // the WOTS pk lands in its value word of the first Merkle preimage
-                pop(staticcall(gas(), 0x02, TB, 0x5A0, add(0x40, shl(5, and(idxLeaf, 1))), 16))
+                let t := idxLeaf
+                let sbit := and(mul(t, 0x10000800040002000100008000400020001000080004000000000000000000), 0x10001000100010001000100010001000100010001000000000000000000000) // C10-LANES-V1
+                let slots := sub(add(0x6040604060406040604060406040604060406040604000000000000000000000, shl(1, sbit)), shl(9, sbit)) // C10-LANES-V1
+                pop(staticcall(gas(), 0x02, TB, 0x5A0, byte(1, slots), 16))
 
                 // Merkle auth path (9 levels)
                 let authOff := add(countOff, 4)
                 let treeAdrs := or(shl(224, layer), or(shl(160, idxTree), shl(128, 2)))
                 let merklePtr := add(sigBase, authOff)
 
-                // in-place walk as in FORS, unrolled (x = 32 * idxLeaf; ha = idxLeaf >> h); the
+                // in-place walk as in FORS, unrolled (words from slots; ha = idxLeaf >> h); the
                 // root (height 9, index 0) lands on 0x40, the next layer's digest node word
                 let tb := and(treeAdrs, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000)
-                let x := shl(5, idxLeaf)
-                calldatacopy(sub(0x60, and(shr(0, x), 0x20)), add(merklePtr, 0), 16)
+                calldatacopy(byte(0, slots), add(merklePtr, 0), 16)
                 mstore(0x20, or(or(tb, shl(32, 1)), shr(1, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(1, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(1, x), 0x20)), add(merklePtr, 16), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(3, slots), 16))
+                calldatacopy(byte(2, slots), add(merklePtr, 16), 16)
                 mstore(0x20, or(or(tb, shl(32, 2)), shr(2, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(2, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(2, x), 0x20)), add(merklePtr, 32), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(5, slots), 16))
+                calldatacopy(byte(4, slots), add(merklePtr, 32), 16)
                 mstore(0x20, or(or(tb, shl(32, 3)), shr(3, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(3, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(3, x), 0x20)), add(merklePtr, 48), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(7, slots), 16))
+                calldatacopy(byte(6, slots), add(merklePtr, 48), 16)
                 mstore(0x20, or(or(tb, shl(32, 4)), shr(4, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(4, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(4, x), 0x20)), add(merklePtr, 64), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(9, slots), 16))
+                calldatacopy(byte(8, slots), add(merklePtr, 64), 16)
                 mstore(0x20, or(or(tb, shl(32, 5)), shr(5, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(5, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(5, x), 0x20)), add(merklePtr, 80), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(11, slots), 16))
+                calldatacopy(byte(10, slots), add(merklePtr, 80), 16)
                 mstore(0x20, or(or(tb, shl(32, 6)), shr(6, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(6, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(6, x), 0x20)), add(merklePtr, 96), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(13, slots), 16))
+                calldatacopy(byte(12, slots), add(merklePtr, 96), 16)
                 mstore(0x20, or(or(tb, shl(32, 7)), shr(7, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(7, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(7, x), 0x20)), add(merklePtr, 112), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(15, slots), 16))
+                calldatacopy(byte(14, slots), add(merklePtr, 112), 16)
                 mstore(0x20, or(or(tb, shl(32, 8)), shr(8, idxLeaf)))
-                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, and(shr(8, x), 0x20)), 16))
-                calldatacopy(sub(0x60, and(shr(8, x), 0x20)), add(merklePtr, 128), 16)
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(17, slots), 16))
+                calldatacopy(byte(16, slots), add(merklePtr, 128), 16)
                 mstore(0x20, or(tb, shl(32, 9)))
                 pop(staticcall(gas(), 0x02, 0x00, 0x80, 0x40, 16))
 

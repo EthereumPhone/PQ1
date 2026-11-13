@@ -123,8 +123,8 @@ MUTANTS = [
     ("v1-count-31bit", V1, "let count := shr(224, calldataload(add(sigBase, countOff)))",
      "let count := and(shr(224, calldataload(add(sigBase, countOff))), 0x7FFFFFFF)",
      "count >= 2^31 hashed with the top bit cleared (trace-only)"),
-    ("v1-l1h8-sibling-32", V1, "calldatacopy(sub(0x60, and(shr(8, x), 0x20)), add(merklePtr, 128), 16)",
-     "calldatacopy(sub(0x60, and(shr(8, x), 0x20)), add(merklePtr, 128), add(16, mul(layer, 16)))",
+    ("v1-l1h8-sibling-32", V1, "calldatacopy(byte(16, slots), add(merklePtr, 128), 16)",
+     "calldatacopy(byte(16, slots), add(merklePtr, 128), add(16, mul(layer, 16)))",
      "last sibling (offset 3992) copied as 32 bytes: ABI padding leaks into its low half (trailing-junk only, GAP-1 site)"),
     ("v1-e7-zero-after-hmsg", V1, "            mstore(0x60, 0)\n", "",
      "E7: low half of the R word not cleared after H_msg (message bytes leak into FORS H)"),
@@ -134,6 +134,8 @@ MUTANTS = [
      "E8: FORS height-3 ha from the wrong shift"),
     ("v1-b7-block1", V1, "if and(nd, shl(30, 1)) {", "if and(nd, shl(31, 1)) {",
      "B7: v1 chain 10's single-step block keyed on the wrong bit"),
+    ("v1-d1-sib", V1, "calldatacopy(byte(4, slots), add(authPtr, 32), 16)", "calldatacopy(byte(5, slots), add(authPtr, 32), 16)",
+     "D1: v1 FORS height-3 sibling copied over the node"),
     ("v1-root-cmp", V1, "valid := eq(and(mload(0x40), N_MASK), root)", "valid := eq(and(mload(0x40), N_MASK), and(mload(0x40), N_MASK))",
      "final root comparison"),
 ]
@@ -144,7 +146,11 @@ def lanes_pin_ok():
     def lines(rel):
         return sorted({l.strip() for l in open(os.path.join(SW, rel)) if l.rstrip().endswith(tag)})
     want = lines("test/gas/C10Lanes.t.sol")
-    return bool(want) and lines(V2) == want
+    tag1 = "// C10-LANES-V1"
+    def lines1(rel):
+        return sorted({l.strip() for l in open(os.path.join(SW, rel)) if l.rstrip().endswith(tag1)})
+    want1 = lines1("test/gas/C10Lanes.t.sol")
+    return bool(want) and lines(V2) == want and bool(want1) and lines1(V1) == want1
 
 
 def pin_ok():

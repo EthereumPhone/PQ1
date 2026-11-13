@@ -37,4 +37,26 @@ contract C10LanesTest is Test {
             }
         }
     }
+
+    /// v1 (32-byte words): byte(2k+1, slots) = 0x40 + 0x20 * bit k of t (the word of the node at
+    /// height k), byte(2k, slots) = 0xA0 minus that (its sibling's word). Lines tagged
+    /// C10-LANES-V1 are the v1 verifier's (gate.sh text pin).
+    function _slotsV1(uint256 t) internal pure returns (uint256 s) {
+        assembly {
+            let sbit := and(mul(t, 0x10000800040002000100008000400020001000080004000000000000000000), 0x10001000100010001000100010001000100010001000000000000000000000) // C10-LANES-V1
+            let slots := sub(add(0x6040604060406040604060406040604060406040604000000000000000000000, shl(1, sbit)), shl(9, sbit)) // C10-LANES-V1
+            s := slots
+        }
+    }
+
+    function test_v1_slots_exhaustive() public pure {
+        for (uint256 t = 0; t < 2048; t++) {
+            uint256 s = _slotsV1(t);
+            for (uint256 k = 0; k <= 10; k++) {
+                uint256 b = (s >> (8 * (31 - (2 * k + 1)))) & 0xFF;
+                assertEq(b, ((t >> k) & 1) == 0 ? 0x40 : 0x60, "v1 node word");
+                assertEq((s >> (8 * (31 - 2 * k))) & 0xFF, 0xA0 - b, "v1 sibling word");
+            }
+        }
+    }
 }

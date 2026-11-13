@@ -28,6 +28,13 @@ for f in src/verifiers/SPHINCsC10v2Asm.sol src/verifiers/SPHINCsC10v2Ts200Asm.so
   echo "  ok $f"
 done
 
+echo "== text pin: the C10-LANES-V1 lines of the unit gate are the only such lines of the v1 verifier"
+LV=$(grep -h '// C10-LANES-V1$' test/gas/C10Lanes.t.sol | sed 's/^ *//' | sort -u)
+[ -n "$LV" ] || { echo "FAIL: no C10-LANES-V1 lines in the unit test"; exit 1; }
+[ "$(grep -h '// C10-LANES-V1$' src/verifiers/SPHINCsC10Asm.sol | sed 's/^ *//' | sort -u)" = "$LV" ] \
+  || { echo "FAIL: v1 C10-LANES-V1 lines differ from the unit-tested ones"; exit 1; }
+echo "  ok src/verifiers/SPHINCsC10Asm.sol (v1 lanes)"
+
 echo "== generated blocks match their generators"
 python3 "$ROOT/research/c10-gas/gen_v2_walks.py" --check src/verifiers/SPHINCsC10v2Asm.sol && echo "  ok v2 walks"
 python3 "$ROOT/research/c10-gas/gen_v2_chains.py" --check src/verifiers/SPHINCsC10v2Asm.sol && echo "  ok v2 chains"
