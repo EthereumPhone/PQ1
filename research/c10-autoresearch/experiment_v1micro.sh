@@ -25,9 +25,9 @@ c, d = q(18); r['grind_residue_mask'] = hex(d >> 24); d &= 0xFFFFFF; r['grind_pe
 c, d = q(20); r['oneshot160'] = round(c / d, 1)
 c, d = q(22); r['node16'] = round(c / d, 1)
 c, d = q(24); r['fors_leaf16'] = round(c / d, 1)
-c, d = q(26); r['keycheck_keys'] = c; r['keycheck_bad'] = d
+c, d = q(26); r['keycheck_keys'] = c; r['keycheck_bad'] = d & 0xFF; r['key_residue'] = d >> 8
 if c != 8 or d != 0: r['ok'] = False
-c, d = q(28); r['subcheck_trees'] = c; r['subcheck_bad'] = d
+c, d = q(28); r['subcheck_trees'] = c; r['subcheck_bad'] = d & 0xFF; r['sub_residue'] = d >> 8
 if c != 4 or d != 0: r['ok'] = False
 for i, nw in zip((30,), (32,)):
     c, d = q(i); r['raw%d_loop' % nw] = round(c / 2000, 1); r['raw%d_init_dcis' % nw] = round(d / 2000, 1)

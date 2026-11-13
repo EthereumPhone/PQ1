@@ -134,6 +134,33 @@ macro_rules! winsweep {
     }};
 }
 
+/// Zero the dead stack below sp (keeping a 64-byte margin for this frame's own use).
+#[inline(always)]
+fn dead_clear() {
+    let sp: usize;
+    // SAFETY: reads sp only.
+    unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
+    for a in (sp - 2048)..(sp - 64) {
+        // SAFETY: secure SRAM below the live stack (bench, no interrupts).
+        unsafe { core::ptr::write_volatile(a as *mut u8, 0) };
+    }
+}
+/// Whether any 4-byte window of `secret` appears in the dead stack below sp.
+#[inline(always)]
+fn dead_has(secret: &[u8]) -> bool {
+    let sp: usize;
+    // SAFETY: reads sp only.
+    unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
+    for a in (sp - 2048)..(sp - 4) {
+        // SAFETY: secure SRAM below the live stack (bench, no interrupts).
+        let w: [u8; 4] = unsafe { core::array::from_fn(|i| core::ptr::read_volatile((a + i) as *const u8)) };
+        for k in 0..secret.len() - 3 {
+            if w == secret[k..k + 4] { return true; }
+        }
+    }
+    false
+}
+
 /// About 1 in 64, and only when the unread head d[0..12] is zero (as the driver passes it).
 unsafe extern "C" fn pred64z(p: *const u8) -> bool {
     // SAFETY: the driver passes 32 readable bytes.
@@ -447,8 +474,22 @@ pub extern "C" fn c10_bench_main() {
             for i in 0..12 { sab[33 + i] = i as u8 + steps as u8; }
             sab[33 + 20..33 + 24].copy_from_slice(&[0, 0, 1, 2]);
             let mut ob = [0u8; 16 * 43 + 1];
+            // The first four chain starts (WOTS secrets), computed before the call so the scan
+            // right after it sees only the call's residue.
+            let mut starts = [0u8; 64];
+            for i in 0..4u32 {
+                use sha2::{Digest, Sha256};
+                let mut h = Sha256::new();
+                h.update(&skb[1..33]);
+                h.update(&tb[1..45]);
+                h.update(i.to_be_bytes());
+                starts[16 * i as usize..16 * i as usize + 16].copy_from_slice(&h.finalize()[..16]);
+            }
+            dead_clear();
             pqsigner_wots_chains16(skb.as_ptr().add(1), tb.as_ptr().add(1), sab.as_ptr().add(1), core::ptr::null(), core::ptr::null(), steps, 43, ob.as_mut_ptr().add(1));
+            let key_res = dead_has(&skb[1..33]) || dead_has(&starts[..16]) || dead_has(&starts[16..32]) || dead_has(&starts[32..48]) || dead_has(&starts[48..]);
             let mut ok = true;
+            let prf_res = false;
             for i in 0..43u32 {
                 use sha2::{Digest, Sha256};
                 let mut h = Sha256::new();
@@ -474,6 +515,7 @@ pub extern "C" fn c10_bench_main() {
             }
             nk += 1;
             if !ok { bad += 1; }
+            if key_res || prf_res { bad += 0x100; }
         }
         // Aliased case (out == sk_seed, n = 2, steps 1): the Rust loop's order (chain 0's output
         // overwrites sk_seed[0..16] before chain 1's PRF) must hold.
@@ -524,7 +566,9 @@ pub extern "C" fn c10_bench_main() {
             for i in 0..56 { nab[1 + i] = (i as u8).wrapping_mul(19) ^ 0x2D; }
             let j0 = 16 * (case * 37 + 3);
             let mut ob = [0u8; 17];
+            dead_clear();
             pqsigner_fors_subtree16(skb.as_ptr().add(1), tb.as_ptr().add(1), lab.as_ptr().add(1), nab.as_ptr().add(1), j0, ob.as_mut_ptr().add(1));
+            if dead_has(&skb[1..33]) { bad += 0x100; }
             let mut st = [[0u8; 16]; 5];
             let mut hs = [0u32; 5];
             let mut sp = 0usize;
