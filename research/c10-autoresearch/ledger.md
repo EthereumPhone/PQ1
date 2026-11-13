@@ -781,3 +781,83 @@ Gate 5 is now 2,523/0. Mutant: the straddling-digit field `bfi r11, r2, #1, #2` 
 - **16-message mean:** sign **60.21 M (−8.2% vs 65.59 M at round start)**, keygen 19.69 M, verify 119.2k, est. cached sign 0.753 s (raw mean, not luck-corrected).
 - **Gates:** gate 5 2,523/0; stale-search control fires; kit golden; golden + cache (3 hits, m0 0.4835 s single message).
 - **The spin constants are phase-sensitive to code layout:** any edit near these loops needs a re-sweep.
+
+### H3: `v2-asm-fors`, keep (commit `f075e48d1`)
+
+**What changed.** The FORS subtree keeps its tree logic in Rust (leaf order, fold decisions, node stack), which now runs inside each digest's engine window. Three asm transitions (into PRF, F and H) do the critical path:
+- wait for DCIS with straight-line polls, then a 2^24-guarded loop;
+- read HR, clear SR;
+- BUSY/stale check;
+- INIT, feed the next message from staging (`ss` = S, a0, a1'; `ps` = sk_seed, p0, p1'), DCAL.
+
+The staged `sk_seed` copy is wiped with volatile writes. prf2 keeps the Rust subtree.
+
+**Results:**
+- `fors_subtree16`: 142.4 → **111.9** cycles per digest;
+- v2 mean sign 60.21 → **57.82 M (−4.0%)**.
+
+**Evidence:**
+- gate 5: 2,523/0;
+- an L/R-swap mutant in the H transition gives 33 failures; restored, 0;
+- guard and stale controls;
+- goldens plain and cached;
+- ts200, split810 and all-three goldens plain and cached;
+- gate 5 for split810: 2,530/0.
+
+### H4: `v1-asm-chain` (deployed format), keep (commit `c5fc39130`)
+
+**Probe of a v1 two-block step** (96-byte message, NBLW = 0), timed from INIT:
+
+| point | cycles |
+|---|---:|
+| 16 stores done | 26 |
+| 17th store (block 1 starts) | 31 |
+| 18th store | waits for block 1 |
+| 24th store + DCAL | 88 |
+| DCIS | 156 |
+
+So the floor is about 160–168 cycles per step.
+
+**What changed.** An asm loop for the WOTS-shaped (`Z`) chain:
+- staged block-1 words;
+- `lr` serves as the CR value, then as the zero register after INIT;
+- loop control after the stalling store;
+- a timed first poll.
+
+The same checks as the Rust loop.
+
+**The timed spin is context-dependent:**
+
+| context | Rust | best asm | best spin |
+|---|---:|---:|---:|
+| standalone `chain16` | 206.9 | 180.9 | 18 |
+| per-key `wots_chains16` (the signer's path) | 198.6 | 188.3 | 14 |
+
+At 18 the per-key path was slightly *slower* than Rust, and v1's mean rose +0.56%. Tuned at 14 for the per-key path: v1 mean sign 110.10 → **106.49 M (−3.3%)**, keygen 36.81 → 35.02 M (−4.9%), golden cached sign 233.08 → 225.84 M (−3.1%).
+
+**Evidence:**
+- kit differential: 32/32 equal to pristine master;
+- v1 golden;
+- `stale-v1` control fires, its positive control completes;
+- gate 5: 2,523/0;
+- FSBL image byte-identical (`make fsbl BOARD=iota2`).
+
+The asm's in-loop stale check (as in H3) cannot be reached by a control: the entry check fires first.
+
+### Round 7 close (luck-corrected expected means, kit 160 MHz)
+
+| configuration | round start | round end | est. cached sign start → end |
+|---|---:|---:|---:|
+| v2 0.3 | 64.52 M | **56.93 M (−11.8%)** | 0.808 → **0.712 s** |
+| v2 0.3 + top cache | 43.62 M | **37.83 M (−13.3%)** | 0.546 → **0.474 s** |
+| all three options + cache | 25.65 M | 24.50 M (−4.5%) | 0.321 → 0.307 s |
+| v1, deployed (raw 16-message mean; keys unchanged) | 110.10 M | **106.49 M (−3.3%)** | 1.377 → 1.332 s |
+
+- **All three options + cache:** no FORS gain, because prf2 keeps the Rust subtree. A prf2 transition is the next step there.
+
+**Next:**
+- prf2 FORS transitions;
+- v1 PRF/FORS paths;
+- v1 `search128`: three blocks per try (128 bytes + padding), so the predicate is likely hidden; profile first.
+- `node16`/T_43 are small.
+- **Product:** H1–H4 compile out under the per-digest tick (#1149).
