@@ -957,6 +957,13 @@ Spins tuned in the signer, not the microbench: key-loop step **13** (golden keyg
 | est. cached sign from the mean | 1.332 s | **1.168 s** |
 
 - **v2 0.3:** 57.54 M, unchanged (no v2 work).
-- **Gates at head:** gate 5 2,523/0.
+- **Gates at head (`276677480`, after the 512 B scrub and the `wots.rs` line-count fix):**
+  - v1: golden (cached 197.66 M), kdiff 32/32 (it includes `opt_rand = None` cases), and the microbench checks (key 8/8, subtree 4/4, search 12/12, grind 4/4 with residue 0).
+  - v2: gate 5 2,523/0 and the v2 golden. The v2 stale controls were not re-run; the v2 crates name none of the round-8 features.
+- **Landing conditions found this round:**
+  - `v1-asm-search` must ship with `hw-sha256-search-colocate`; without it the 1-way aliasing can come back.
+  - The grind scrub size (512 B against a 376 B inner frame) and the stack headroom below that call must be re-checked in the product build.
+  - The host gate never runs `grind_r_drv` or any v1 asm (software hooks), so the v1 evidence is kit-only.
+  - `wots.rs` keeps its line count: the attribute shares the `fn` line.
 - **FSBL** byte-identical after every `hash.rs` edit (`e34d6e8ecabb3109f8ca…`): every addition sits behind `v1-asm-key`, `v1-asm-fors`, `v1-asm-search` or `v1-grindr`, which the FSBL never names.
 - **Product caveat (#1149):** under `tick-hook` without `tick-batch` all asm paths compile out, and the grind entry ticks per digest.
