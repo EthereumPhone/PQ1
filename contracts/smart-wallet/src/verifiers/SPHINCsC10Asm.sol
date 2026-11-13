@@ -91,6 +91,10 @@ contract SPHINCsC10Asm {
 
             let sigBase := sig.offset
             mstore(TB, seed) // after H_msg: TB held its all-ones word
+            // In-place hashing (below) writes only the top 16 bytes of the value words at 0x40
+            // and 0x60; their low halves (0x50..0x5F, 0x70..0x7F) must be and stay zero. 0x40 is
+            // rewritten whole by every leaf/digest/chain start; 0x60 still holds H_msg's message.
+            mstore(0x60, 0)
             // K-1=12 normal trees
             for { let i := 0 } lt(i, 12) { i := add(i, 1) } {
                 let treeIdx := and(shr(mul(i, 11), dVal), 0x7FF) // 11-bit indices
@@ -102,8 +106,11 @@ contract SPHINCsC10Asm {
                 let leafAdrs := or(shl(160, htIdx), or(shl(128, 3), or(shl(96, i), treeIdx)))
                 mstore(0x20, leafAdrs)
                 mstore(0x40, secretVal)
-                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
-                let node := and(mload(OUT), N_MASK)
+                // In-place walk: each node's 16 bytes are written by the precompile (outsize 16)
+                // straight into its value word of the next preimage seed || adrs || L || R, L at
+                // 0x40 if its index is even, else R at 0x60; the sibling's 16 bytes are copied into
+                // the other word. The root goes to its T_13 slot (fresh zero memory below).
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, add(0x40, shl(5, and(treeIdx, 1))), 16))
 
                 let treeAdrsBase := or(shl(160, htIdx), or(shl(128, 3), shl(96, i)))
                 let pathIdx := treeIdx
@@ -111,19 +118,15 @@ contract SPHINCsC10Asm {
                 let authPtr := add(sigBase, add(224, mul(i, 176)))
 
                 // Walk A=11 auth path levels
-                for { let h := 0 } lt(h, 11) { h := add(h, 1) } {
-                    let sibling := and(calldataload(add(authPtr, shl(4, h))), N_MASK)
-                    let parentIdx := shr(1, pathIdx)
-                    mstore(0x20, or(treeAdrsBase, or(shl(32, add(h, 1)), parentIdx)))
-                    // Branchless Merkle swap
-                    let s := shl(5, and(pathIdx, 1))
-                    mstore(xor(0x40, s), node)
-                    mstore(xor(0x60, s), sibling)
-                    pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
-                    node := and(mload(OUT), N_MASK)
-                    pathIdx := parentIdx
+                for { let h := 0 } lt(h, 10) { h := add(h, 1) } {
+                    calldatacopy(sub(0x60, shl(5, and(pathIdx, 1))), add(authPtr, shl(4, h)), 16)
+                    pathIdx := shr(1, pathIdx)
+                    mstore(0x20, or(treeAdrsBase, or(shl(32, add(h, 1)), pathIdx)))
+                    pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, shl(5, and(pathIdx, 1))), 16))
                 }
-                mstore(add(add(TB, 0x40), shl(5, i)), node)
+                calldatacopy(sub(0x60, shl(5, and(pathIdx, 1))), add(authPtr, 160), 16)
+                mstore(0x20, or(treeAdrsBase, or(shl(32, 11), shr(1, pathIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(add(TB, 0x40), shl(5, i)), 16))
             }
 
             // Last tree (forced-zero)
@@ -131,19 +134,17 @@ contract SPHINCsC10Asm {
                 let lastSecret := and(calldataload(add(sigBase, add(16, shl(4, 12)))), N_MASK) // 16+12*16=208
                 mstore(0x20, or(shl(160, htIdx), or(shl(128, 3), shl(96, 12))))
                 mstore(0x40, lastSecret)
-                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
-                mstore(add(TB, 0x1C0), and(mload(OUT), N_MASK)) // TB + 0x40 + 12*0x20
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, add(TB, 0x1C0), 16)) // TB + 0x40 + 12*0x20
             }
 
             // Compress 13 roots: sha256(seed || rootsAdrs || 13 roots)
             // = 32 + 32 + 13*32 = 480 = 0x1E0
             // rootsAdrs also carries htIdx in the tree field (position binding).
             mstore(add(TB, 0x20), or(shl(160, htIdx), shl(128, 4)))
-            pop(staticcall(gas(), 0x02, TB, 0x1E0, OUT, 32))
-            let forsPk := and(mload(OUT), N_MASK)
+            // the FORS pk lands on the node word (0x40) of the layer-0 WOTS digest preimage
+            pop(staticcall(gas(), 0x02, TB, 0x1E0, 0x40, 16))
 
             // Hypertree (D=2, subtree_h=9, w=8, l=43, target_sum=205)
-            let currentNode := forsPk
             let idxTree := htIdx
             let sigOff := 2336 // HT_START
 
@@ -156,12 +157,14 @@ contract SPHINCsC10Asm {
                 let countOff := add(sigOff, 688)
                 let count := shr(224, calldataload(add(sigBase, countOff)))
 
+                // digest preimage seed || wotsAdrs || node || count; the node (16 bytes, low
+                // half zero) is already at 0x40
                 mstore(0x00, seed)
                 mstore(0x20, wotsAdrs)
-                mstore(0x40, currentNode)
                 mstore(0x60, count)
                 pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
                 let d := mload(OUT)
+                mstore(0x60, 0) // restore the zero low half of the R word for the Merkle walk
 
                 // Validate digit sum = 205 (43 base-8 digits (d >> 3i) & 7, 3 bits each), summed
                 // branch-free (exactness argument and unit gate: test/gas/C10DigitSum.t.sol)
@@ -173,56 +176,51 @@ contract SPHINCsC10Asm {
                 let wotsPtr := add(sigBase, sigOff)
                 for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
                     let digit := and(shr(mul(i, 3), d), 0x7)
-                    let steps := sub(7, digit)
-                    let val := and(calldataload(add(wotsPtr, shl(4, i))), N_MASK)
+                    // in place: the value word at 0x40 (low half zero) is overwritten by each
+                    // step's 16-byte output; the ADRS word for position p is chainBase + p<<32
+                    // (cp field zero in chainBase, p < 7)
+                    mstore(0x40, and(calldataload(add(wotsPtr, shl(4, i))), N_MASK))
                     let chainBase := and(
                         or(wotsAdrs, shl(64, i)),
                         0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFF
                     )
-
-                    for { let step := 0 } lt(step, steps) { step := add(step, 1) } {
-                        mstore(0x20, or(chainBase, shl(32, add(digit, step))))
-                        mstore(0x40, val)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
-                        val := and(mload(OUT), N_MASK)
+                    let aEnd := add(chainBase, shl(32, 7))
+                    for { let a := add(chainBase, shl(32, digit)) } lt(a, aEnd) { a := add(a, shl(32, 1)) } {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                     }
-                    mstore(add(add(TB, 0x40), shl(5, i)), val)
+                    mstore(add(add(TB, 0x40), shl(5, i)), mload(0x40))
                 }
 
                 // PK compression: sha256(seed || pkAdrs || 43 endpoints)
                 // = 32 + 32 + 43*32 = 1440 = 0x5A0
                 let pkAdrs := or(shl(224, layer), or(shl(160, idxTree), or(shl(128, 1), shl(96, idxLeaf))))
                 mstore(add(TB, 0x20), pkAdrs)
-                pop(staticcall(gas(), 0x02, TB, 0x5A0, OUT, 32))
-                let wotsPk := and(mload(OUT), N_MASK)
+                // the WOTS pk lands in its value word of the first Merkle preimage
+                pop(staticcall(gas(), 0x02, TB, 0x5A0, add(0x40, shl(5, and(idxLeaf, 1))), 16))
 
                 // Merkle auth path (9 levels)
                 let authOff := add(countOff, 4)
                 let treeAdrs := or(shl(224, layer), or(shl(160, idxTree), shl(128, 2)))
-                let merkleNode := wotsPk
                 let mIdx := idxLeaf
                 let merklePtr := add(sigBase, authOff)
 
+                // in-place walk as in FORS; the root (index 0) lands on 0x40, the next layer's
+                // digest node word
                 for { let h := 0 } lt(h, 9) { h := add(h, 1) } {
-                    let sibling := and(calldataload(add(merklePtr, shl(4, h))), N_MASK)
-                    let parentIdx := shr(1, mIdx)
+                    calldatacopy(sub(0x60, shl(5, and(mIdx, 1))), add(merklePtr, shl(4, h)), 16)
+                    mIdx := shr(1, mIdx)
                     mstore(0x20, or(
                         and(treeAdrs, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000),
-                        or(shl(32, add(h, 1)), parentIdx)
+                        or(shl(32, add(h, 1)), mIdx)
                     ))
-                    let s := shl(5, and(mIdx, 1))
-                    mstore(xor(0x40, s), merkleNode)
-                    mstore(xor(0x60, s), sibling)
-                    pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
-                    merkleNode := and(mload(OUT), N_MASK)
-                    mIdx := parentIdx
+                    pop(staticcall(gas(), 0x02, 0x00, 0x80, add(0x40, shl(5, and(mIdx, 1))), 16))
                 }
 
-                currentNode := merkleNode
                 sigOff := add(authOff, 144) // 9*16
             }
 
-            valid := eq(currentNode, root)
+            valid := eq(and(mload(0x40), N_MASK), root)
             mstore(0x00, valid)
             return(0x00, 0x20)
         }
