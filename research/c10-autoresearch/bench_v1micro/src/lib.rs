@@ -216,7 +216,12 @@ fn residue_suite() -> (u32, u32) {
             res_add(&sha256(&[&sk, &ftail[..12], &j.to_be_bytes()])[..16]);
         }
         res_clear();
-        pqsigner_fors_subtree16(sk.as_ptr(), ftail.as_ptr(), sa.as_ptr(), sa.as_ptr(), j0, o.as_mut_ptr());
+        let mut fsa = [0u8; 64];
+        fsa[..16].copy_from_slice(&[0x3C; 16]);
+        fsa[40..44].copy_from_slice(&0x2345u32.to_be_bytes());
+        fsa[44..48].copy_from_slice(&3u32.to_be_bytes());
+        fsa[48..52].copy_from_slice(&9u32.to_be_bytes());
+        pqsigner_fors_subtree16(sk.as_ptr(), ftail.as_ptr(), fsa.as_ptr(), fsa.as_ptr(), j0, o.as_mut_ptr());
         if res_found() { mask |= 1 << 2; }
         // 3, 4: grind with and without rand: sk_seed and rand.
         let rand = [0x9Au8; 16];
@@ -482,8 +487,15 @@ pub extern "C" fn c10_bench_main() {
             pqsigner_sha256_chain16(b.as_mut_ptr(), 0, 15);
         }
         rec(cyc().wrapping_sub(t), 30_000);
-        // [8,9] fors_subtree16, 200 calls -> (cycles, calls); 47 digests per call.
+        // [8,9] fors_subtree16 on the FORS shape (as the signer calls it), 200 calls ->
+        // (cycles, calls); 47 digests per call.
         let ftail = [0x33u8; 16];
+        let mut fsa = [0u8; 64];
+        fsa[..16].copy_from_slice(&[0x5A; 16]);
+        fsa[40..44].copy_from_slice(&0x1234u32.to_be_bytes());
+        fsa[44..48].copy_from_slice(&3u32.to_be_bytes());
+        fsa[48..52].copy_from_slice(&5u32.to_be_bytes());
+        let (sa, na) = (fsa, fsa);
         let t = cyc();
         for i in 0..200u32 {
             pqsigner_fors_subtree16(sk.as_ptr(), ftail.as_ptr(), sa.as_ptr(), na.as_ptr(), 16 * i, o.as_mut_ptr());
@@ -627,6 +639,15 @@ pub extern "C" fn c10_bench_main() {
             for i in 0..12 { tb[1 + i] = (i as u8).wrapping_mul(7) ^ 0x66; }
             for i in 0..60 { lab[1 + i] = (i as u8).wrapping_mul(11) ^ case as u8; }
             for i in 0..56 { nab[1 + i] = (i as u8).wrapping_mul(19) ^ 0x2D; }
+            if case < 2 {
+                // The FORS shape (zero-word transitions): pad16's zero half, layer, tree high
+                // word, ci and the leaf height are zero.
+                for x in [&mut lab, &mut nab] {
+                    for w in [4usize, 5, 6, 7, 8, 9, 13, 14] {
+                        x[1 + 4 * w..5 + 4 * w].copy_from_slice(&[0; 4]);
+                    }
+                }
+            }
             let j0 = 16 * (case * 37 + 3);
             let mut ob = [0u8; 17];
             pqsigner_fors_subtree16(skb.as_ptr().add(1), tb.as_ptr().add(1), lab.as_ptr().add(1), nab.as_ptr().add(1), j0, ob.as_mut_ptr().add(1));

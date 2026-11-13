@@ -2196,6 +2196,82 @@ fn v1x_node(na: *const u32, l: *const u32) {
     }
 }
 
+/// `v1x_leaf` for the FORS shape (round 9): block 0 is `s0..s3 ‖ 0^4 ‖ 0 ‖ 0 ‖ w10 w11 w12 ‖ 0 ‖ 0
+/// ‖ be32(j)` (pad16's zero half, layer 0, the tree's high word, ci and height 0; checked in
+/// Rust), so only `lz = [s0..s3, w10, w11, w12, be32(j)]` is loaded and the zeros come from a
+/// register.
+#[cfg(all(feature = "v1-asm-fors", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1x_leaf_z(lz: *const u32) {
+    // SAFETY: as `v1x_prf`; reads 32 bytes at `lz` (4-aligned).
+    unsafe {
+        core::arch::asm!(
+            v1x_head!(),
+            "rev r0, r0\n",
+            v1x_init!(),
+            "ldm r5, {{r8, r9, r10, r12}}\n",      // s0..s3
+            "movs.w lr, #0\n",
+            v1x_st4!("r8", "r9", "r10", "r12"),
+            v1x_st4!("lr", "lr", "lr", "lr"),
+            "add r8, r5, #16\n",
+            "ldm r8, {{r8, r9, r10, r12}}\n",      // w10, w11, w12, be32(j)
+            "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n",
+            "str r8, [r4, #-8]\n", "str r9, [r4, #-8]\n", "str r10, [r4, #-8]\n",
+            "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n",
+            "str r12, [r4, #-8]\n",
+            "str r0, [r4, #-8]\n",                 // word 16: block 0 starts
+            "rev r1, r1\n", "rev r2, r2\n", "rev r3, r3\n", "mov.w r8, #256\n",
+            v1x_st4!("r1", "r2", "r3", "lr"),      // the first store waits for block 0
+            "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n",
+            "str r8, [r4, #-4]\n",                 // DCAL
+            v1x_tail!(),
+            fault = sym hash_engine_fault,
+            out("r0") _, out("r1") _, out("r2") _, out("r3") _,
+            in("r4") HASH_BASE + 0x0C, in("r5") lz,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+}
+
+/// `v1x_node` for the FORS shape (round 9): block 0 is `s0..s3 ‖ 0^4 ‖ 0 ‖ 0 ‖ w10 w11 w12 ‖ 0 ‖
+/// be32(h) ‖ be32(i)`; `nz = [s0..s3, w10, w11, w12, be32(h), be32(i)]`.
+#[cfg(all(feature = "v1-asm-fors", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1x_node_z(nz: *const u32, l: *const u32) {
+    // SAFETY: as `v1x_prf`; reads 36 bytes at `nz` and 16 at `l` (both 4-aligned).
+    unsafe {
+        core::arch::asm!(
+            v1x_head!(),
+            v1x_init!(),
+            "ldm r5, {{r8, r9, r10, r12}}\n",      // s0..s3
+            "movs.w lr, #0\n",
+            v1x_st4!("r8", "r9", "r10", "r12"),
+            v1x_st4!("lr", "lr", "lr", "lr"),
+            "add r8, r5, #16\n",
+            "ldm r8, {{r8, r9, r10, r12}}\n",      // w10, w11, w12, be32(h)
+            "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n",
+            "str r8, [r4, #-8]\n", "str r9, [r4, #-8]\n", "str r10, [r4, #-8]\n",
+            "ldr r8, [r5, #32]\n",                 // be32(i)
+            "str lr, [r4, #-8]\n",
+            "str r12, [r4, #-8]\n",
+            "str r8, [r4, #-8]\n",
+            "ldm r11, {{r8, r9, r10, r12}}\n",
+            "str r8, [r4, #-8]\n",                 // word 16: block 0 starts
+            "rev r0, r0\n", "rev r1, r1\n", "rev r2, r2\n", "rev r3, r3\n", "mov.w r8, #256\n",
+            v1x_st4!("r9", "r10", "r12", "lr"),    // the first store waits for block 0
+            "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n",
+            v1x_st4!("r0", "r1", "r2", "r3"),
+            v1x_st4!("lr", "lr", "lr", "lr"),
+            "str r8, [r4, #-4]\n",                 // DCAL
+            v1x_tail!(),
+            fault = sym hash_engine_fault,
+            out("r0") _, out("r1") _, out("r2") _, out("r3") _,
+            in("r4") HASH_BASE + 0x0C, in("r5") nz, in("r11") l,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+}
+
 /// A 16-leaf FORS subtree in one call (`forsleaf`, secure image only): leaves
 /// `j0..j0+16` (each `th(leaf_sa with ha = j, pad16(PRF(sk_seed ‖ tail with leaf = j)))`)
 /// and the 15 nodes above them (`node_sa` with height and index set), in the
@@ -2230,6 +2306,12 @@ pub unsafe extern "C" fn pqsigner_fors_subtree16(
         let mut na16 = [0u32; 16];
         na16[..14].copy_from_slice(&na);
         let mut tp = [t[0], t[1], t[2], j0.swap_bytes()];
+        // The FORS shape (round 9): pad16's zero half, layer 0, the tree's high word, ci and
+        // (for leaves) the height are zero. Public data; the zero-word transitions need it.
+        let zf = la[4] | la[5] | la[6] | la[7] | la[8] | la[9] | la[13] | la[14] == 0
+            && na[4] | na[5] | na[6] | na[7] | na[8] | na[9] | na[13] == 0;
+        let mut lz = [la[0], la[1], la[2], la[3], la[10], la[11], la[12], 0];
+        let mut nz = [na[0], na[1], na[2], na[3], na[10], na[11], na[12], 0, 0];
         let mut sp = 0usize;
         // `j0 + 16` before any digest, as the loop below evaluates it first.
         let end = j0 + 16;
@@ -2244,15 +2326,26 @@ pub unsafe extern "C" fn pqsigner_fors_subtree16(
         REG.str_.write(STR_DCAL);
         let mut j = j0;
         loop {
-            la16[15] = j.swap_bytes();
-            v1x_leaf(la16.as_ptr());
+            if zf {
+                lz[7] = j.swap_bytes();
+                v1x_leaf_z(lz.as_ptr());
+            } else {
+                la16[15] = j.swap_bytes();
+                v1x_leaf(la16.as_ptr());
+            }
             // `j` is a right child at each height whose bit is set (j0 is a multiple of 16).
             let mut h = 0u32;
             while h < 4 && (j >> h) & 1 == 1 {
                 sp -= 1;
-                na16[14] = (h + 1).swap_bytes();
-                na16[15] = (j >> (h + 1)).swap_bytes();
-                v1x_node(na16.as_ptr(), stack[sp].as_ptr());
+                if zf {
+                    nz[7] = (h + 1).swap_bytes();
+                    nz[8] = (j >> (h + 1)).swap_bytes();
+                    v1x_node_z(nz.as_ptr(), stack[sp].as_ptr());
+                } else {
+                    na16[14] = (h + 1).swap_bytes();
+                    na16[15] = (j >> (h + 1)).swap_bytes();
+                    v1x_node(na16.as_ptr(), stack[sp].as_ptr());
+                }
                 h += 1;
             }
             j += 1;
