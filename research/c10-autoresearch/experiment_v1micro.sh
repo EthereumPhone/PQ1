@@ -12,7 +12,8 @@ o = w[64:96]
 r = {'ok': w[0] == 0x444F4E45 and o[1] == 100}
 def q(i): return (o[i], o[i + 1])
 c, d = q(2); r['chains16_keygen_per_digest'] = round(c / d, 1)
-c, d = q(4); r['chains16_prf_only_per_chain'] = round(c / d, 1)
+c, d = q(4); r['grindcheck'] = c; r['grindcheck_fail'] = d
+if c != 4 or d != 0: r['ok'] = False
 c, d = q(6); r['chain16_x15_per_step'] = round(c / d, 1)
 c, d = q(8); r['fors_subtree16_per_call'] = round(c / d, 1); r['fors_subtree16_per_digest'] = round(c / d / 47, 1)
 c, d = q(10); r['searchcheck'] = c; r['searchcheck_fail'] = d
@@ -20,7 +21,7 @@ if c != 12 or d != 0: r['ok'] = False
 c, d = q(12); r['search128_prednever_per_try'] = round(c / d, 1)
 c, d = q(14); r['search128_205_per_try'] = round(c / d, 1) if d else None; r['search128_205_tries'] = d
 c, d = q(16); r['th_multi16_43_per_call'] = round(c / d, 1)
-c, d = q(18); r['oneshot119'] = round(c / d, 1)
+c, d = q(18); r['grind_per_nonce'] = round(c / d, 1) if d else None; r['grind_nonces'] = d
 c, d = q(20); r['oneshot160'] = round(c / d, 1)
 c, d = q(22); r['node16'] = round(c / d, 1)
 c, d = q(24); r['fors_leaf16'] = round(c / d, 1)

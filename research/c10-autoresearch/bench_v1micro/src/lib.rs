@@ -16,6 +16,7 @@ extern "C" {
     fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8);
     fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: *const u8, out: *mut u8);
     fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
+    fn pqsigner_v1_grind_r(sk: *const u8, rand: *const u8, msg: *const u8, seed: *const u8, root: *const u8, max: u32, r_out: *mut u8, d_out: *mut u8) -> u32;
 }
 #[no_mangle]
 pub static mut SIG0: [u8; 4008] = [0; 4008];
@@ -176,6 +177,65 @@ fn search_check() -> (u32, u32) {
     (checks, fails)
 }
 
+fn grind_check() -> (u32, u32, u32, u32) {
+    let (mut checks, mut fails, mut cy, mut nn) = (0u32, 0u32, 0u32, 0u32);
+    for case in 0..4u32 {
+        let mut skb = [0u8; 33];
+        let mut rb = [0u8; 17];
+        let mut mb = [0u8; 33];
+        let mut sb = [0u8; 33];
+        let mut tb = [0u8; 33];
+        for i in 0..32 {
+            skb[1 + i] = (i as u8).wrapping_mul(97) ^ case as u8;
+            mb[1 + i] = (i as u8).wrapping_mul(31) ^ (3 * case) as u8;
+            sb[1 + i] = if i < 16 { (i as u8) ^ 0xA1 } else { 0 };
+            tb[1 + i] = if i < 16 { (i as u8).wrapping_mul(5) ^ 0x3E } else { 0 };
+        }
+        for i in 0..16 { rb[1 + i] = (i as u8).wrapping_mul(13) ^ 0x77 ^ case as u8; }
+        let with_rand = case & 1 == 0;
+        // Reference: the sign path's own loop through the generic one-shot.
+        let mut prf = [0u8; 119];
+        prf[..32].copy_from_slice(&skb[1..33]);
+        prf[32..39].copy_from_slice(b"R_grind");
+        let mut off = 39;
+        if with_rand { prf[off..off + 16].copy_from_slice(&rb[1..17]); off += 16; }
+        prf[off..off + 32].copy_from_slice(&mb[1..33]);
+        off += 32;
+        let plen = off + 32;
+        let mut hm = [0u8; 160];
+        hm[..32].copy_from_slice(&sb[1..33]);
+        hm[32..64].copy_from_slice(&tb[1..33]);
+        hm[96..128].copy_from_slice(&mb[1..33]);
+        hm[128..160].copy_from_slice(&[0xFF; 32]);
+        let (mut wn, mut wr, mut wd) = (0u32, [0u8; 16], [0u8; 32]);
+        for nonce in 0..100_000u32 {
+            prf[off + 28..off + 32].copy_from_slice(&nonce.to_be_bytes());
+            let mut r = [0u8; 32];
+            // SAFETY: valid buffers.
+            unsafe { pqsigner_sha256_oneshot(prf.as_ptr(), plen, r.as_mut_ptr()) };
+            hm[64..80].copy_from_slice(&r[..16]);
+            let mut d = [0u8; 32];
+            // SAFETY: valid buffers.
+            unsafe { pqsigner_sha256_oneshot(hm.as_ptr(), 160, d.as_mut_ptr()) };
+            let v = u32::from(d[15]) | u32::from(d[14]) << 8;
+            if (v >> 4) & 0x7FF == 0 { wn = nonce; wr.copy_from_slice(&r[..16]); wd = d; break; }
+        }
+        let mut ro = [0u8; 17];
+        let mut dout = [0u8; 33];
+        let t = cyc();
+        // SAFETY: valid buffers at odd addresses.
+        let n = unsafe {
+            pqsigner_v1_grind_r(skb.as_ptr().add(1), if with_rand { rb.as_ptr().add(1) } else { core::ptr::null() }, mb.as_ptr().add(1),
+                sb.as_ptr().add(1), tb.as_ptr().add(1), 100_000, ro.as_mut_ptr().add(1), dout.as_mut_ptr().add(1))
+        };
+        cy = cy.wrapping_add(cyc().wrapping_sub(t));
+        nn += n + 1;
+        checks += 1;
+        if n != wn || ro[1..17] != wr || dout[1..33] != wd { fails += 1; }
+    }
+    (checks, fails, cy, nn)
+}
+
 #[cfg(feature = "win")]
 #[no_mangle]
 pub extern "C" fn c10_bench_main() {
@@ -269,12 +329,10 @@ pub extern "C" fn c10_bench_main() {
             pqsigner_wots_chains16(sk.as_ptr(), tail.as_ptr(), sa.as_ptr(), core::ptr::null(), core::ptr::null(), 7, 43, o.as_mut_ptr());
         }
         rec(cyc().wrapping_sub(t), 50 * 43 * 8);
-        // [4,5] wots_chains16 PRF only (steps 0): per chain.
-        let t = cyc();
-        for _ in 0..200 {
-            pqsigner_wots_chains16(sk.as_ptr(), tail.as_ptr(), sa.as_ptr(), core::ptr::null(), core::ptr::null(), 0, 43, o.as_mut_ptr());
-        }
-        rec(cyc().wrapping_sub(t), 200 * 43);
+        // [4,5] v1 R grind entry against a one-shot loop, with and without rand, odd addresses:
+        // (grinds checked, failures); [18,19] its (cycles, nonces).
+        let (gc, gf, gcy, gn) = grind_check();
+        rec(gc, gf);
         // [6,7] chain16, 15 steps per call, 2,000 calls.
         let mut b = [0u8; 96];
         b[..16].copy_from_slice(&[0x5A; 16]);
@@ -323,14 +381,8 @@ pub extern "C" fn c10_bench_main() {
             pqsigner_th_multi16(sa.as_ptr(), sa.as_ptr().add(32), o.as_ptr(), 43, d.as_mut_ptr());
         }
         rec(cyc().wrapping_sub(t), 500);
-        // [18,19] oneshot 119 B (grind_r PRF shape), 2,000 calls.
+        rec(gcy, gn);
         let mut ob = [0x44u8; 160];
-        let t = cyc();
-        for i in 0..2000u32 {
-            ob[118] = i as u8;
-            pqsigner_sha256_oneshot(ob.as_ptr(), 119, d.as_mut_ptr());
-        }
-        rec(cyc().wrapping_sub(t), 2000);
         // [20,21] oneshot 160 B (h_msg shape), 2,000 calls.
         let t = cyc();
         for i in 0..2000u32 {

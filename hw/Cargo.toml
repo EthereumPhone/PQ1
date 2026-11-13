@@ -55,6 +55,8 @@ v1-asm-key = ["v1-asm-chain", "prfchain"]
 v1-asm-fors = ["forsleaf"]
 # Round 8: v1 count search (search128, WOTS-shaped zero words) in asm; the predicate callback is called from the loop (secure-only, output-identical).
 v1-asm-search = ["search"]
+# Round 8: the v1 R grind (PRF + h_msg per nonce) as one driver call (secure-only, output-identical).
+v1-grindr = ["search"]
 # Secure image only (autoresearch): FORS secret + leaf hash in one call (`pqsigner_fors_leaf16`).
 forsleaf = ["gather"]
 # Autoresearch product variant: the driver's fused loops report finished digests in batches

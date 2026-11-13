@@ -2755,6 +2755,192 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
     }
 }
 
+/// v1 R grind in one call (`v1-grindr`, round 8, secure image only; the FSBL never names
+/// it). For `nonce` in `0..max`: `R = SHA-256(sk_seed ‖ "R_grind" ‖ [rand] ‖ message ‖
+/// 0^28 ‖ be32(nonce))[..16]` (119 or 103 bytes; `sk_seed` read in place, never copied),
+/// then `D = SHA-256(seed ‖ root ‖ R ‖ 0^16 ‖ message ‖ 0xFF^32)`; the first nonce whose `D`
+/// has bits 132..143 clear (`read_bits_le(D, 132, 11) == 0`: `HR3 & 0x7FF0 == 0`) writes R
+/// to `r_out`, D to `d_out` and is returned; `max` if none. Every digest: idle and no stale
+/// DCIS, STR 0, INIT, the words, NBLW then NBLW | DCAL as the one-shot (DCAL alone for whole
+/// words), DCIS poll with the 10,000,000 guard, SR clear.
+///
+/// # Safety
+/// `sk_seed` 32, `rand` 16 (or null), `message`, `seed`, `root` 32 readable bytes; `r_out`
+/// 16 and `d_out` 32 writable; no other SHA-256 stream in flight.
+#[cfg(feature = "v1-grindr")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v1_grind_r(
+    sk_seed: *const u8,
+    rand: *const u8,
+    message: *const u8,
+    seed: *const u8,
+    root: *const u8,
+    max: u32,
+    r_out: *mut u8,
+    d_out: *mut u8,
+) -> u32 {
+    // The PRF bytes after sk_seed, up to the nonce: "R_grind" ‖ [rand] ‖ message ‖ 0^28.
+    let mut tb = [0u8; 88];
+    tb[..7].copy_from_slice(b"R_grind");
+    let mut off = 7;
+    // SAFETY: caller contract (16 and 32 readable bytes); `tb` has room (7 + 16 + 32 + 28 < 88).
+    unsafe {
+        if !rand.is_null() {
+            core::ptr::copy_nonoverlapping(rand, tb.as_mut_ptr().add(off), 16);
+            off += 16;
+        }
+        core::ptr::copy_nonoverlapping(message, tb.as_mut_ptr().add(off), 32);
+    }
+    off += 32;
+    let tw: [u32; 22] = core::array::from_fn(|i| u32::from_le_bytes([tb[4 * i], tb[4 * i + 1], tb[4 * i + 2], tb[4 * i + 3]]));
+    // SAFETY: caller contract (32 readable bytes each; public data).
+    let ld8 = |p: *const u8| -> [u32; 8] { core::array::from_fn(|i| unsafe { p.add(4 * i).cast::<u32>().read_unaligned() }) };
+    let (sw, rw, mw) = (ld8(seed), ld8(root), ld8(message));
+    let mut rr = [0u32; 4];
+    let mut dd = [0u32; 8];
+    // The nonce's first byte is the top byte of tail word (off + 28) / 4: 20 with rand, 16 without.
+    let found = if off == 55 {
+        // SAFETY: caller contract.
+        unsafe { v1_grind_body::<20>(sk_seed, &tw, &sw, &rw, &mw, max, &mut rr, &mut dd) }
+    } else {
+        // SAFETY: caller contract.
+        unsafe { v1_grind_body::<16>(sk_seed, &tw, &sw, &rw, &mw, max, &mut rr, &mut dd) }
+    };
+    // `tb`/`tw` hold the caller's rand: wipe them (volatile, so the stores stay).
+    for b in tb.iter_mut() {
+        // SAFETY: a valid, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    let mut tw = tw;
+    for w in tw.iter_mut() {
+        // SAFETY: a valid, exclusive reference.
+        unsafe { core::ptr::write_volatile(w, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    if found < max {
+        // SAFETY: caller contract (16 and 32 writable bytes).
+        unsafe {
+            for k in 0..4 {
+                r_out.add(4 * k).cast::<u32>().write_unaligned(rr[k]);
+            }
+            for k in 0..8 {
+                d_out.add(4 * k).cast::<u32>().write_unaligned(dd[k]);
+            }
+        }
+    }
+    #[cfg(feature = "tick-batch")]
+    // SAFETY: the engine is idle; the tick does not hash.
+    unsafe {
+        pqsigner_hash_tick_n(found.saturating_add(1).saturating_mul(2));
+    }
+    found
+}
+
+/// The nonce loop of `pqsigner_v1_grind_r`; `A` is the tail word holding the nonce's
+/// first byte (its top byte), the 3-byte final word follows.
+#[cfg(feature = "v1-grindr")]
+#[inline(always)]
+#[allow(clippy::too_many_arguments)]
+unsafe fn v1_grind_body<const A: usize>(
+    sk_seed: *const u8,
+    tw: &[u32; 22],
+    sw: &[u32; 8],
+    rw: &[u32; 8],
+    mw: &[u32; 8],
+    max: u32,
+    rr: &mut [u32; 4],
+    dd: &mut [u32; 8],
+) -> u32 {
+    let wait = || {
+        let mut t = 0u32;
+        while REG.sr.read() & SR_DCIS == 0 {
+            t += 1;
+            if t > 10_000_000 {
+                hash_engine_fault();
+            }
+        }
+    };
+    let mut nonce = 0u32;
+    while nonce < max {
+        // R PRF.
+        if ready_sr_fast() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        REG.str_.write(0);
+        REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+        // SAFETY: caller contract (32 readable bytes).
+        unsafe { feed_words(sk_seed, 8) };
+        for w in tw.iter().take(A) {
+            write_word(*w);
+        }
+        write_word(tw[A] | (nonce >> 24) << 24);
+        write_word(nonce.swap_bytes() >> 8);
+        REG.str_.write(24);
+        REG.str_.write(24 | STR_DCAL);
+        wait();
+        let r = read_hr4();
+        REG.sr.write(SR_DINIS);
+        #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
+        // SAFETY: as in `final_body`: this digest is finished; the next INIT rewrites STR.
+        unsafe {
+            pqsigner_hash_tick();
+        }
+        // h_msg.
+        if ready_sr_fast() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        REG.str_.write(0);
+        REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
+        for w in sw {
+            write_word(*w);
+        }
+        for w in rw {
+            write_word(*w);
+        }
+        write_word(r[0]);
+        write_word(r[1]);
+        write_word(r[2]);
+        write_word(r[3]);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        write_word(0);
+        for w in mw {
+            write_word(*w);
+        }
+        for _ in 0..8 {
+            write_word(0xFFFF_FFFF);
+        }
+        REG.str_.write(STR_DCAL);
+        wait();
+        // SAFETY: HR3, inside the digest bank.
+        if unsafe { REG.hr0.read_at(3) } & 0x7FF0 == 0 {
+            // SAFETY: HR0..HR7, the digest bank; byte-swapped into memory order.
+            unsafe {
+                for (i, x) in dd.iter_mut().enumerate() {
+                    *x = REG.hr0.read_at(i).swap_bytes();
+                }
+            }
+            REG.sr.write(SR_DINIS);
+            #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
+            // SAFETY: as in `final_body`.
+            unsafe {
+                pqsigner_hash_tick();
+            }
+            *rr = r;
+            return nonce;
+        }
+        REG.sr.write(SR_DINIS);
+        #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
+        // SAFETY: as in `final_body`.
+        unsafe {
+            pqsigner_hash_tick();
+        }
+        nonce += 1;
+    }
+    max
+}
+
 /// Feed the eight words of a 32-byte part straight from its memory.
 #[cfg(feature = "gather")]
 #[inline(always)]

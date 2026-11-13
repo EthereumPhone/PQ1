@@ -108,7 +108,10 @@ pub fn grind_r(
     let root_b32 = pad16(pk_root);
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
 
+    #[cfg(feature = "hw-sha256-grindr-drv")]
+    return grind_r_drv(sk_seed, &seed_b32, &root_b32, message, opt_rand, last_shift);
     #[cfg(feature = "hw-sha256-grindr")]
+    #[allow(unreachable_code)]
     return grind_r_fast(sk_seed, &seed_b32, &root_b32, message, opt_rand, last_shift);
     #[allow(unreachable_code)]
     let mut nonce = 0u32;
@@ -379,6 +382,51 @@ pub(crate) fn fors_tree_fast(
         sp += 1;
     }
     (stack[0], auth_path)
+}
+
+/// `grind_r` as one driver call (`hw-sha256-grindr-drv`): the driver runs the
+/// same nonce loop (the same two preimages, `sk_seed` read in place, never
+/// copied) and stops at the first nonce whose `h_msg` digest has bits
+/// `last_shift..last_shift + A` clear. The decision is re-checked here with
+/// this crate's `read_bits_le`. Same nonces, same R, same digest.
+#[cfg(feature = "hw-sha256-grindr-drv")]
+fn grind_r_drv(
+    sk_seed: &[u8; 32],
+    seed_b32: &[u8; 32],
+    root_b32: &[u8; 32],
+    message: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    last_shift: usize,
+) -> ([u8; N], [u8; 32]) {
+    extern "C" {
+        fn pqsigner_v1_grind_r(
+            sk_seed: *const u8,
+            rand: *const u8,
+            message: *const u8,
+            seed: *const u8,
+            root: *const u8,
+            max: u32,
+            r_out: *mut u8,
+            d_out: *mut u8,
+        ) -> u32;
+    }
+    // The driver's bit test is fixed to this parameter set: bits 132..143 (K = 13, A = 11).
+    const _: () = assert!((K - 1) * A == 132 && A == 11 && N == 16);
+    let mut r = [0u8; N];
+    let mut d = [0u8; 32];
+    let rand = match opt_rand {
+        Some(x) => x.as_ptr(),
+        None => core::ptr::null(),
+    };
+    // SAFETY: 32, 16 (or null), 32, 32, 32 readable bytes and 16, 32 writable, live for the call.
+    let c = unsafe {
+        pqsigner_v1_grind_r(sk_seed.as_ptr(), rand, message.as_ptr(), seed_b32.as_ptr(), root_b32.as_ptr(), 10_000_000, r.as_mut_ptr(), d.as_mut_ptr())
+    };
+    if c >= 10_000_000 {
+        panic!("R grinding failed after 10M iterations");
+    }
+    assert!(read_bits_le(&d, last_shift, A) == 0, "R grind: driver bit test disagrees");
+    (r, d)
 }
 
 /// `grind_r` with both preimages built once (`hw-sha256-grindr`): per nonce
