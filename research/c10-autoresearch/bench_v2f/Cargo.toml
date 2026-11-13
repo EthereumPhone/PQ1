@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [workspace]
 
 [features]
+asm = ["pqsigner-hw/v2-asm-chain"]
 # RESEARCH (format-options check): candidate v2 format variants (sphincs-c10 + matching driver).
 ts200 = ["sphincs-c10/v2-ts200"]
 prf2 = ["sphincs-c10/v2-prf2", "pqsigner-hw/v2-prf2"]
@@ -26,7 +27,7 @@ hra-ldm = ["pqsigner-hw/hra-ldm"]
 # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the
 # UI-only `tick-hook`): one-call digests, unrolled DIN/HR I/O, inlined barriers, INIT-only restart.
 sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "v2-fused"] }
-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "hra-ldm", "v2"] }
+pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "hra-ldm", "v2", "v2-asm-chain"] }
 
 # Mirror of the root workspace's shipping [profile.release] (Cargo.toml), including the
 # per-package opt-level 3 overrides. Changing this is an experiment, not a harness change.

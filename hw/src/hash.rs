@@ -2096,7 +2096,157 @@ fn v2_wipe8(d: &mut [u32; 8]) {
 }
 
 /// v2 chain loop: F over `S ‖ v ‖ A7` at positions `start..start + steps`.
-#[cfg(feature = "v2")]
+/// `v2-asm-chain` (round 7): the same chain loop, hand-scheduled. Every digest
+/// is fed, checked and cleared exactly as in the Rust loop below (BUSY spin with
+/// a 2^24 hang guard, stale-DCIS tripwire before INIT, DCIS poll with a 2^24
+/// guard, SR clear after the read), so the output and the fault checks are the
+/// same. What changes is the schedule: `S` stays in r8..r11, the HR read lands
+/// in r0..r3, and loop control runs inside the engine window after DCAL instead
+/// of between DCIS and the next DCAL.
+/// Spin iterations (3 cycles each) after the window's loop control, so the
+/// first DCIS poll lands just after the engine finishes. Tuned on the kit.
+#[cfg(feature = "v2-asm-chain")]
+const V2_ASM_SPIN: u32 = 13;
+
+#[cfg(all(feature = "v2-asm-chain", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v2_chain_core(s: [u32; 4], v: [u32; 4], a0: u32, low24: u32, start: u32, steps: u32) -> [u32; 4] {
+    let a1 = v2_a1(low24, start);
+    let end = v2_a1(low24, start.wrapping_add(steps));
+    if a1 == end {
+        return v;
+    }
+    let (o0, o1, o2, o3): (u32, u32, u32, u32);
+    // SAFETY: drives only the secure HASH block (CR, DIN, STR, SR, HRA0..3 at
+    // r4 = HASH_BASE + 0x0C); pushes/pops two words of its own; on a hang or a
+    // stale DCIS it calls `hash_engine_fault`, which does not return.
+    unsafe {
+        core::arch::asm!(
+            "push {{r12, lr}}",            // [sp] = a0, [sp + 4] = end
+            "movw lr, #0x24",              // lr = CR value (8-bit data, SHA-256, INIT), kept live
+            "movt lr, #0x6",
+            "b 3f",
+            // engine window after DCAL: loop control, then a timed wait
+            "1:",
+            "add.w r5, r5, #4096",
+            "ldr r12, [sp, #4]",
+            "cmp r5, r12",
+            "beq 20f",
+            "movs r12, #{spin}",
+            "10:",
+            "subs r12, r12, #1",
+            "bne 10b",
+            // first DCIS poll; a hit falls through
+            "ldr r12, [r4, #0x18]",
+            "lsls r12, r12, #30",
+            "bpl 11f",
+            "4:",
+            "ldm r4, {{r0, r1, r2, r3}}",
+            "movs r12, #1",
+            "str r12, [r4, #0x18]",        // clear DCIS
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            // issue: BUSY clear and no stale DCIS, INIT, 10 DIN words, DCAL
+            "3:",
+            "ldr r12, [r4, #0x18]",
+            "tst r12, #10",
+            "bne 40f",
+            "41:",
+            "str lr, [r4, #-12]",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "ldr r12, [sp]",
+            "str r10, [r4, #-8]",
+            "str r11, [r4, #-8]",
+            "str r0, [r4, #-8]",
+            "str r1, [r4, #-8]",
+            "str r2, [r4, #-8]",
+            "str r3, [r4, #-8]",
+            "str r12, [r4, #-8]",
+            "str r5, [r4, #-8]",
+            "mov.w r12, #280",
+            "str r12, [r4, #-4]",
+            "b 1b",
+            // DCIS not yet: seven more straight polls, then a counted poll (2^24)
+            "11:",
+            ".rept 7",
+            "ldr r12, [r4, #0x18]",
+            "lsls r12, r12, #30",
+            "bmi 4b",
+            ".endr",
+            "mov.w lr, #16777216",
+            "12:",
+            "ldr r12, [r4, #0x18]",
+            "lsls r12, r12, #30",
+            "bmi 13f",
+            "subs lr, lr, #1",
+            "bne 12b",
+            "b 99f",
+            "13:",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "b 4b",
+            // BUSY still set, or a stale DCIS: spin on BUSY (2^24), then DCIS must be clear
+            "40:",
+            "mov.w lr, #16777216",
+            "42:",
+            "tst r12, #8",
+            "beq 43f",
+            "subs lr, lr, #1",
+            "beq 99f",
+            "ldr r12, [r4, #0x18]",
+            "b 42b",
+            "43:",
+            "tst r12, #2",
+            "bne 99f",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "b 41b",
+            // last digest: counted poll, read, clear, exit
+            "20:",
+            "mov.w lr, #16777216",
+            "21:",
+            "ldr r12, [r4, #0x18]",
+            "lsls r12, r12, #30",
+            "bmi 22f",
+            "subs lr, lr, #1",
+            "bne 21b",
+            "b 99f",
+            "22:",
+            "ldm r4, {{r0, r1, r2, r3}}",
+            "movs r12, #1",
+            "str r12, [r4, #0x18]",
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "pop {{r12, lr}}",
+            "b 98f",
+            "99:",
+            "bl {fault}",
+            "98:",
+            spin = const V2_ASM_SPIN,
+            fault = sym hash_engine_fault,
+            inout("r0") v[0] => o0,
+            inout("r1") v[1] => o1,
+            inout("r2") v[2] => o2,
+            inout("r3") v[3] => o3,
+            in("r4") HASH_BASE + 0x0C,
+            inout("r5") a1 => _,
+            in("r8") s[0],
+            in("r9") s[1],
+            in("r10") s[2],
+            in("r11") s[3],
+            inout("r12") a0 => _,
+            inout("lr") end => _,
+        );
+    }
+    [o0, o1, o2, o3]
+}
+
+#[cfg(all(feature = "v2", not(all(feature = "v2-asm-chain", not(all(feature = "tick-hook", not(feature = "tick-batch")))))))]
 #[inline(always)]
 fn v2_chain_core(s: [u32; 4], mut v: [u32; 4], a0: u32, low24: u32, start: u32, steps: u32) -> [u32; 4] {
     // The second A7 word is the loop variable (`cp` is its bits 12..15, so a

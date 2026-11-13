@@ -7,6 +7,8 @@ publish = false
 [workspace]
 
 [features]
+# Round 7: driver-only feature (kit); a no-op on the host so experiment_v2b.sh VARF=asm builds.
+asm = []
 # Track-B variant: keygen fills + confirms the top-layer cache; every pass signs through it.
 topcache = ["sphincs-c10/top-cache"]
 # RESEARCH (format-options check): candidate v2 format variants.

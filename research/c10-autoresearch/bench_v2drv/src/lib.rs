@@ -489,6 +489,32 @@ pub extern "C" fn c10_bench_main() {
     out(17, probe);
     out(1, 100);
 
+    #[cfg(feature = "stale")]
+    {
+        // Round 7 control: a completed digest left uncleared (stale DCIS). The next
+        // chain step must refuse it and halt through `pqsigner_hash_fault`.
+        out(1, 300);
+        // SAFETY: raw secure HASH registers (CR, DIN, STR, SR); one 10-word message.
+        unsafe {
+            let r = |o: u32| core::ptr::read_volatile((0x520C_0400 + o) as *const u32);
+            let w = |o: u32, v: u32| core::ptr::write_volatile((0x520C_0400 + o) as *mut u32, v);
+            while r(0x24) & 8 != 0 {}
+            w(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
+            for i in 0..10u32 {
+                w(0x04, i);
+            }
+            w(0x08, 24 | 1 << 8);
+            while r(0x24) & 2 == 0 {}
+            #[cfg(feature = "stale-positive")]
+            w(0x24, 1);
+        }
+        let s = [0x5Au8; 16];
+        let mut v = [0x11u8; 16];
+        // SAFETY: valid buffers.
+        unsafe { pqsigner_v2_chain16(s.as_ptr(), v.as_mut_ptr(), 0x0102_0304, 0x0000_0500, 0, 3) };
+        out(1, 301);
+    }
+
     #[cfg(feature = "guard")]
     {
         // Misaligned j0: the driver must halt through `pqsigner_hash_fault`.

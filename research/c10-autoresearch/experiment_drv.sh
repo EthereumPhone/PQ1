@@ -16,8 +16,13 @@ r = dict(status=hex(w[0]), magic=hex(o[0]), stage=o[1], checks=o[2], failed=o[3]
          first_fail=(o[15], o[16]) if o[3] else None, v1_probes=o[17])
 groups = ['v1-oneshot', 'chain16', 'prf_chain16', 'node16', 'fors_leaf16', 'fors_subtree16', 'search43_target', 'v1-stream', 'wots_chains16', 'wots_pk16', 'grind_r']
 r['per_group'] = dict(zip(groups, o[4:15]))
-if sys.argv[2] == 'guard':
+feats = sys.argv[2].split(',')
+if 'guard' in feats:
     r['ok'] = w[0] == 0x484100F0 and o[1] == 200 and o[3] == 0
+elif 'stale-positive' in feats:
+    r['ok'] = w[0] == 0x444F4E45 and o[1] == 301 and o[3] == 0
+elif 'stale' in feats:
+    r['ok'] = w[0] == 0x484100F0 and o[1] == 300 and o[3] == 0
 else:
     r['ok'] = w[0] == 0x444F4E45 and o[0] == 0x44525632 and o[1] == 100 and o[3] == 0 and o[2] > 0
 print(json.dumps(r))
