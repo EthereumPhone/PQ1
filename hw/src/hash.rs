@@ -2504,6 +2504,125 @@ fn v2_ha(x: u32) -> u32 {
     (x & 0x7F) << 17 | (x >> 7) << 8
 }
 
+/// `v2-asm-fors` (round 7): one digest-to-digest transition of the FORS subtree,
+/// hand-scheduled. Wait for DCIS (straight-line polls, then a 2^24-guarded loop),
+/// read HR0..3 (returned, byte-swapped as `read_hr4`), clear DCIS, wait BUSY clear
+/// (2^24 guard) and refuse a stale DCIS, INIT, feed the next message, DCAL. The
+/// Rust caller prepares the next message's fixed words while the engine runs.
+#[cfg(feature = "v2-asm-fors")]
+macro_rules! v2x_head {
+    () => {
+        concat!(
+            ".rept 16\n", "ldr r12, [{hb}, #0x18]\n", "lsls r12, r12, #30\n", "bmi 4f\n", ".endr\n",
+            "mov.w r10, #16777216\n",
+            "3:\n", "ldr r12, [{hb}, #0x18]\n", "lsls r12, r12, #30\n", "bmi 4f\n", "subs r10, r10, #1\n", "bne 3b\n", "b 99f\n",
+            "4:\n",
+            "ldm {hb}, {{r0, r1, r2, r3}}\n",
+            "movs r12, #1\n", "str r12, [{hb}, #0x18]\n",
+            "rev r0, r0\n", "rev r1, r1\n", "rev r2, r2\n", "rev r3, r3\n",
+            "ldr r12, [{hb}, #0x18]\n", "tst r12, #10\n", "bne 40f\n",
+            "41:\n",
+            "str {cr}, [{hb}, #-12]\n",
+        )
+    };
+}
+#[cfg(feature = "v2-asm-fors")]
+macro_rules! v2x_tail {
+    () => {
+        concat!(
+            "mov.w r12, #280\n", "str r12, [{hb}, #-4]\n",
+            "b 98f\n",
+            "40:\n", "mov.w r10, #16777216\n",
+            "42:\n", "tst r12, #8\n", "beq 43f\n", "subs r10, r10, #1\n", "beq 99f\n", "ldr r12, [{hb}, #0x18]\n", "b 42b\n",
+            "43:\n", "tst r12, #2\n", "beq 41b\n",
+            "99:\n", "bl {fault}\n",
+            "98:\n",
+        )
+    };
+}
+#[cfg(feature = "v2-asm-fors")]
+macro_rules! v2x_store4 {
+    ($a:literal, $b:literal, $c:literal, $d:literal) => {
+        concat!("str ", $a, ", [{hb}, #-8]\n", "str ", $b, ", [{hb}, #-8]\n", "str ", $c, ", [{hb}, #-8]\n", "str ", $d, ", [{hb}, #-8]\n")
+    };
+}
+
+/// Transition into F: message `S ‖ x ‖ a0 ‖ a1'` with `x` the digest in flight;
+/// `ss` = `[S0..S3, a0, a1']`.
+#[cfg(feature = "v2-asm-fors")]
+#[inline(always)]
+fn v2x_f(ss: *const u32) -> [u32; 4] {
+    let (v0, v1, v2, v3): (u32, u32, u32, u32);
+    // SAFETY: drives only the secure HASH block; reads 24 bytes at `ss`; on a hang or
+    // a stale DCIS it calls `hash_engine_fault`, which does not return.
+    unsafe {
+        core::arch::asm!(
+            v2x_head!(),
+            "ldm {ss}, {{r8, r9, r10, r12}}\n",
+            v2x_store4!("r8", "r9", "r10", "r12"),
+            v2x_store4!("r0", "r1", "r2", "r3"),
+            "ldrd r8, r9, [{ss}, #16]\n", "str r8, [{hb}, #-8]\n", "str r9, [{hb}, #-8]\n",
+            v2x_tail!(),
+            hb = in(reg) HASH_BASE + 0x0C, cr = in(reg) CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT, ss = in(reg) ss,
+            fault = sym hash_engine_fault,
+            out("r0") v0, out("r1") v1, out("r2") v2, out("r3") v3,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+    [v0, v1, v2, v3]
+}
+
+/// Transition into H: message `S ‖ L ‖ R ‖ a0 ‖ a1'` with `R` the digest in flight,
+/// `L` the four words at `l`.
+#[cfg(feature = "v2-asm-fors")]
+#[inline(always)]
+fn v2x_h(ss: *const u32, l: *const u32) -> [u32; 4] {
+    let (v0, v1, v2, v3): (u32, u32, u32, u32);
+    // SAFETY: as `v2x_f`; also reads 16 bytes at `l`.
+    unsafe {
+        core::arch::asm!(
+            v2x_head!(),
+            "ldm {ss}, {{r8, r9, r10, r12}}\n",
+            v2x_store4!("r8", "r9", "r10", "r12"),
+            "ldm {l}, {{r8, r9, r10, r12}}\n",
+            v2x_store4!("r8", "r9", "r10", "r12"),
+            v2x_store4!("r0", "r1", "r2", "r3"),
+            "ldrd r8, r9, [{ss}, #16]\n", "str r8, [{hb}, #-8]\n", "str r9, [{hb}, #-8]\n",
+            v2x_tail!(),
+            hb = in(reg) HASH_BASE + 0x0C, cr = in(reg) CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT, ss = in(reg) ss, l = in(reg) l,
+            fault = sym hash_engine_fault,
+            out("r0") v0, out("r1") v1, out("r2") v2, out("r3") v3,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+    [v0, v1, v2, v3]
+}
+
+/// Transition into the next leaf's PRF: message `ps[0..10]` (`sk_seed`, p0, p1').
+#[cfg(feature = "v2-asm-fors")]
+#[inline(always)]
+fn v2x_prf(ps: *const u32) -> [u32; 4] {
+    let (v0, v1, v2, v3): (u32, u32, u32, u32);
+    // SAFETY: as `v2x_f`; reads 40 bytes at `ps`.
+    unsafe {
+        core::arch::asm!(
+            v2x_head!(),
+            "ldm {ps}, {{r8, r9, r10, r12}}\n",
+            v2x_store4!("r8", "r9", "r10", "r12"),
+            "ldr r8, [{ps}, #16]\n", "ldr r9, [{ps}, #20]\n", "ldr r10, [{ps}, #24]\n", "ldr r12, [{ps}, #28]\n",
+            v2x_store4!("r8", "r9", "r10", "r12"),
+            "ldrd r8, r9, [{ps}, #32]\n", "str r8, [{hb}, #-8]\n", "str r9, [{hb}, #-8]\n",
+            "movs r8, #0\n", "movs r9, #0\n", "movs r10, #0\n", "movs r12, #0\n",
+            v2x_tail!(),
+            hb = in(reg) HASH_BASE + 0x0C, cr = in(reg) CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT, ps = in(reg) ps,
+            fault = sym hash_engine_fault,
+            out("r0") v0, out("r1") v1, out("r2") v2, out("r3") v3,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+    [v0, v1, v2, v3]
+}
+
 /// Root of the v2 FORS subtree of height `h` over leaves `j0..j0 + 2^h` of one
 /// FORS tree: leaf `j` is `F(S ‖ PRF(sk_seed ‖ A7_prf(ha = j)) ‖ A7(ha = j))`
 /// and the node at height `k` with index `i` is `H(S ‖ L ‖ R ‖ A7(cp = k, ha = i))`.
@@ -2529,6 +2648,63 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
     let mut stack = [[0u32; 4]; 12];
     let mut sp = 0usize;
     let end = j0 + (1 << h);
+    #[cfg(all(feature = "v2-asm-fors", not(feature = "v2-prf2"), not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+    {
+        // Staging for the asm transitions: `ss` = S, a0, a1'; `ps` = sk_seed, p0, p1'
+        // (a copy of the secret seed: wiped below with volatile writes).
+        let mut ss = [s[0], s[1], s[2], s[3], a0, 0];
+        let mut ps = [0u32; 10];
+        let q = sk_seed.cast::<u32>();
+        for (i, w) in ps.iter_mut().take(8).enumerate() {
+            // SAFETY: caller contract, `sk_seed` names 32 readable bytes.
+            *w = unsafe { q.add(i).read_unaligned() };
+        }
+        ps[8] = p0;
+        ps[9] = p1 | v2_ha(j0);
+        v2_begin();
+        for w in ps {
+            write_word(w);
+        }
+        REG.str_.write(V2_NBLW | STR_DCAL);
+        let mut j = j0;
+        loop {
+            ss[5] = a1 | v2_ha(j);
+            let _ = v2x_f(ss.as_ptr());
+            let mut k = 0u32;
+            let mut idx = j;
+            while k < h && idx & 1 == 1 {
+                sp -= 1;
+                idx >>= 1;
+                k += 1;
+                ss[5] = a1 | k << 12 | v2_ha(idx);
+                let _ = v2x_h(ss.as_ptr(), stack[sp].as_ptr());
+            }
+            j += 1;
+            let node = if j < end {
+                ps[9] = p1 | v2_ha(j);
+                v2x_prf(ps.as_ptr())
+            } else {
+                v2_wait_dcis();
+                let v = read_hr4();
+                REG.sr.write(SR_DINIS);
+                v
+            };
+            stack[sp] = node;
+            sp += 1;
+            if j == end {
+                break;
+            }
+        }
+        for w in ps.iter_mut() {
+            // SAFETY: a valid, aligned, exclusive reference.
+            unsafe { core::ptr::write_volatile(w, 0) };
+        }
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+        // SAFETY: caller contract.
+        unsafe { v2_store4(out, stack[0]) };
+        return;
+    }
+    #[allow(unreachable_code)]
     let mut j = j0;
     // `v2-prf2`: the two secrets of the current leaf pair.
     #[cfg(feature = "v2-prf2")]

@@ -65,6 +65,8 @@ v2-prf2 = ["v2"]
 v2-asm-chain = ["v2"]
 # Round 7: hand-scheduled v2 count search (output-identical; same checks).
 v2-asm-search = ["v2"]
+# Round 7: FORS subtree with asm digest transitions (output-identical; same checks).
+v2-asm-fors = ["v2"]
 # Round 7: the fold-multiply digit sum in the Rust search (137 -> 126 cycles/try; asm gives 114).
 v2-fold-sum = ["v2"]
 v2-split810 = ["v2"]
