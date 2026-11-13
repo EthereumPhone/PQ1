@@ -139,7 +139,10 @@ contract SPHINCsC10v2Split810Asm {
             let idxTree := htIdx
             let sigOff := 2336
             for { let layer := 0 } lt(layer, 2) { layer := add(layer, 1) } {
-                let hl := add(8, shl(1, layer)) // subtree height: 8 at layer 0, 10 at layer 1
+                let hl := 9 // subtree height: 8 at layer 0, 10 at layer 1
+                // shl(hl, 1) is 1 << hl, the leaf-index mask for a variable height; Yul's
+                // shl(shift, value) order is intended (slither reads a constant value as reversed).
+                // slither-disable-next-line incorrect-shift
                 let idxLeaf := and(idxTree, sub(shl(hl, 1), 1))
                 idxTree := shr(hl, idxTree)
                 let kpBase := or(or(shl(51, layer), shl(33, idxTree)), shl(23, idxLeaf))
@@ -512,14 +515,9 @@ contract SPHINCsC10v2Split810Asm {
                 calldatacopy(byte(14, slots), add(merklePtr, 112), 16)
                 mstore(0x35, shl(112, cpha))
                 pop(staticcall(gas(), 0x02, 0x00, 55, byte(17, slots), 16))
-                if layer {
-                    calldatacopy(byte(16, slots), add(merklePtr, 128), 16)
-                    mstore(0x35, shl(128, cpha))
-                    pop(staticcall(gas(), 0x02, 0x00, 55, byte(19, slots), 16))
-                    calldatacopy(byte(18, slots), add(merklePtr, 144), 16)
-                    mstore(0x35, shl(144, cpha))
-                    pop(staticcall(gas(), 0x02, 0x00, 55, 0x10, 16))
-                }
+                calldatacopy(byte(16, slots), add(merklePtr, 128), 16)
+                mstore(0x35, shl(128, cpha))
+                pop(staticcall(gas(), 0x02, 0x00, 55, 0x10, 16))
                 // END generated Merkle walk
                 sigOff := add(countOff, add(4, shl(4, hl))) // 4 + hl*16: 132 (layer 0), 164 (layer 1)
             }

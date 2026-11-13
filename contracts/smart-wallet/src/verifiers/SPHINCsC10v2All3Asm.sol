@@ -140,6 +140,9 @@ contract SPHINCsC10v2All3Asm {
             let sigOff := 2336
             for { let layer := 0 } lt(layer, 2) { layer := add(layer, 1) } {
                 let hl := add(8, shl(1, layer)) // subtree height: 8 at layer 0, 10 at layer 1
+                // shl(hl, 1) is 1 << hl, the leaf-index mask for a variable height; Yul's
+                // shl(shift, value) order is intended (slither reads a constant value as reversed).
+                // slither-disable-next-line incorrect-shift
                 let idxLeaf := and(idxTree, sub(shl(hl, 1), 1))
                 idxTree := shr(hl, idxTree)
                 let kpBase := or(or(shl(51, layer), shl(33, idxTree)), shl(23, idxLeaf))
