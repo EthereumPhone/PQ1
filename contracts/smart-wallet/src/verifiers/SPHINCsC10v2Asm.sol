@@ -137,27 +137,274 @@ contract SPHINCsC10v2Asm {
                 // TB since the FORS roots: nothing writes TB..TB+15 after that)
                 mstore(add(TB, 0x10), shl(200, or(shl(52, 1), kpBase)))
                 let wotsPtr := add(sigBase, sigOff)
-                // Chain i (o = 16 i) runs from position digit_i = dd & 7 (dd = d >> 3i) to 7 in
-                // place: the value stays at 0x10 of the F preimage S || v16 || A7 and each step's
-                // output (outsize 16) overwrites it. The A7 word of chain i at position p is
-                // chainA + p<<212 with chainA = (kpBase | i<<18) << 200 (type 0, WOTS_HASH; ci =
-                // A7 bits 23..18, cp = bits 15..12; i < 43 and p < 7, so no add carries).
-                let dd := d
+                // Chain i runs from position digit_i = (d >> 3i) & 7 to 7 in place: the value stays
+                // at 0x10 of the F preimage S || v16 || A7 and each step's output (outsize 16)
+                // overwrites it. The A7 word of chain i at position p is chainA | i<<218 | p<<212
+                // (type 0, WOTS_HASH; ci = A7 bits 23..18, cp = bits 15..12; i < 43 and p < 7, so the
+                // `add`s never carry). The end value is copied to T_43 slot i with a 32-byte store:
+                // its trailing 16 bytes are overwritten by slot i+1, and for i = 42 they fall past
+                // the 712 bytes T_43 hashes. Unrolled over the 43 chains (generated).
                 let chainA := shl(200, kpBase)
-                for { let o := 0 } lt(o, 688) { o := add(o, 16) } {
-                    calldatacopy(0x10, add(wotsPtr, o), 16)
-                    let a := add(chainA, shl(212, and(dd, 7)))
-                    let aEnd := add(chainA, shl(212, 7))
-                    for { } lt(a, aEnd) { a := add(a, shl(212, 1)) } {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
-                    }
-                    // 32-byte copy of the 16-byte end value: its trailing 16 bytes are overwritten by
-                    // slot i+1, and for i = 42 they fall past the 712 bytes T_43 hashes.
-                    mstore(add(add(TB, 24), o), mload(0x10))
-                    dd := shr(3, dd)
-                    chainA := add(chainA, shl(218, 1))
+                // BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)
+                calldatacopy(0x10, add(wotsPtr, 0), 16) // chain 0
+                for { let a := add(chainA, or(shl(218, 0), shl(212, and(shr(0, d), 7)))) } lt(a, add(chainA, or(shl(218, 0), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
                 }
+                mstore(add(TB, 24), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 16), 16) // chain 1
+                for { let a := add(chainA, or(shl(218, 1), shl(212, and(shr(3, d), 7)))) } lt(a, add(chainA, or(shl(218, 1), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 40), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 32), 16) // chain 2
+                for { let a := add(chainA, or(shl(218, 2), shl(212, and(shr(6, d), 7)))) } lt(a, add(chainA, or(shl(218, 2), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 56), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 48), 16) // chain 3
+                for { let a := add(chainA, or(shl(218, 3), shl(212, and(shr(9, d), 7)))) } lt(a, add(chainA, or(shl(218, 3), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 72), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 64), 16) // chain 4
+                for { let a := add(chainA, or(shl(218, 4), shl(212, and(shr(12, d), 7)))) } lt(a, add(chainA, or(shl(218, 4), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 88), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 80), 16) // chain 5
+                for { let a := add(chainA, or(shl(218, 5), shl(212, and(shr(15, d), 7)))) } lt(a, add(chainA, or(shl(218, 5), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 104), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 96), 16) // chain 6
+                for { let a := add(chainA, or(shl(218, 6), shl(212, and(shr(18, d), 7)))) } lt(a, add(chainA, or(shl(218, 6), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 120), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 112), 16) // chain 7
+                for { let a := add(chainA, or(shl(218, 7), shl(212, and(shr(21, d), 7)))) } lt(a, add(chainA, or(shl(218, 7), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 136), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 128), 16) // chain 8
+                for { let a := add(chainA, or(shl(218, 8), shl(212, and(shr(24, d), 7)))) } lt(a, add(chainA, or(shl(218, 8), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 152), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 144), 16) // chain 9
+                for { let a := add(chainA, or(shl(218, 9), shl(212, and(shr(27, d), 7)))) } lt(a, add(chainA, or(shl(218, 9), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 168), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 160), 16) // chain 10
+                for { let a := add(chainA, or(shl(218, 10), shl(212, and(shr(30, d), 7)))) } lt(a, add(chainA, or(shl(218, 10), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 184), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 176), 16) // chain 11
+                for { let a := add(chainA, or(shl(218, 11), shl(212, and(shr(33, d), 7)))) } lt(a, add(chainA, or(shl(218, 11), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 200), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 192), 16) // chain 12
+                for { let a := add(chainA, or(shl(218, 12), shl(212, and(shr(36, d), 7)))) } lt(a, add(chainA, or(shl(218, 12), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 216), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 208), 16) // chain 13
+                for { let a := add(chainA, or(shl(218, 13), shl(212, and(shr(39, d), 7)))) } lt(a, add(chainA, or(shl(218, 13), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 232), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 224), 16) // chain 14
+                for { let a := add(chainA, or(shl(218, 14), shl(212, and(shr(42, d), 7)))) } lt(a, add(chainA, or(shl(218, 14), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 248), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 240), 16) // chain 15
+                for { let a := add(chainA, or(shl(218, 15), shl(212, and(shr(45, d), 7)))) } lt(a, add(chainA, or(shl(218, 15), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 264), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 256), 16) // chain 16
+                for { let a := add(chainA, or(shl(218, 16), shl(212, and(shr(48, d), 7)))) } lt(a, add(chainA, or(shl(218, 16), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 280), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 272), 16) // chain 17
+                for { let a := add(chainA, or(shl(218, 17), shl(212, and(shr(51, d), 7)))) } lt(a, add(chainA, or(shl(218, 17), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 296), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 288), 16) // chain 18
+                for { let a := add(chainA, or(shl(218, 18), shl(212, and(shr(54, d), 7)))) } lt(a, add(chainA, or(shl(218, 18), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 312), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 304), 16) // chain 19
+                for { let a := add(chainA, or(shl(218, 19), shl(212, and(shr(57, d), 7)))) } lt(a, add(chainA, or(shl(218, 19), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 328), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 320), 16) // chain 20
+                for { let a := add(chainA, or(shl(218, 20), shl(212, and(shr(60, d), 7)))) } lt(a, add(chainA, or(shl(218, 20), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 344), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 336), 16) // chain 21
+                for { let a := add(chainA, or(shl(218, 21), shl(212, and(shr(63, d), 7)))) } lt(a, add(chainA, or(shl(218, 21), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 360), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 352), 16) // chain 22
+                for { let a := add(chainA, or(shl(218, 22), shl(212, and(shr(66, d), 7)))) } lt(a, add(chainA, or(shl(218, 22), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 376), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 368), 16) // chain 23
+                for { let a := add(chainA, or(shl(218, 23), shl(212, and(shr(69, d), 7)))) } lt(a, add(chainA, or(shl(218, 23), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 392), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 384), 16) // chain 24
+                for { let a := add(chainA, or(shl(218, 24), shl(212, and(shr(72, d), 7)))) } lt(a, add(chainA, or(shl(218, 24), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 408), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 400), 16) // chain 25
+                for { let a := add(chainA, or(shl(218, 25), shl(212, and(shr(75, d), 7)))) } lt(a, add(chainA, or(shl(218, 25), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 424), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 416), 16) // chain 26
+                for { let a := add(chainA, or(shl(218, 26), shl(212, and(shr(78, d), 7)))) } lt(a, add(chainA, or(shl(218, 26), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 440), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 432), 16) // chain 27
+                for { let a := add(chainA, or(shl(218, 27), shl(212, and(shr(81, d), 7)))) } lt(a, add(chainA, or(shl(218, 27), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 456), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 448), 16) // chain 28
+                for { let a := add(chainA, or(shl(218, 28), shl(212, and(shr(84, d), 7)))) } lt(a, add(chainA, or(shl(218, 28), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 472), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 464), 16) // chain 29
+                for { let a := add(chainA, or(shl(218, 29), shl(212, and(shr(87, d), 7)))) } lt(a, add(chainA, or(shl(218, 29), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 488), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 480), 16) // chain 30
+                for { let a := add(chainA, or(shl(218, 30), shl(212, and(shr(90, d), 7)))) } lt(a, add(chainA, or(shl(218, 30), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 504), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 496), 16) // chain 31
+                for { let a := add(chainA, or(shl(218, 31), shl(212, and(shr(93, d), 7)))) } lt(a, add(chainA, or(shl(218, 31), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 520), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 512), 16) // chain 32
+                for { let a := add(chainA, or(shl(218, 32), shl(212, and(shr(96, d), 7)))) } lt(a, add(chainA, or(shl(218, 32), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 536), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 528), 16) // chain 33
+                for { let a := add(chainA, or(shl(218, 33), shl(212, and(shr(99, d), 7)))) } lt(a, add(chainA, or(shl(218, 33), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 552), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 544), 16) // chain 34
+                for { let a := add(chainA, or(shl(218, 34), shl(212, and(shr(102, d), 7)))) } lt(a, add(chainA, or(shl(218, 34), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 568), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 560), 16) // chain 35
+                for { let a := add(chainA, or(shl(218, 35), shl(212, and(shr(105, d), 7)))) } lt(a, add(chainA, or(shl(218, 35), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 584), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 576), 16) // chain 36
+                for { let a := add(chainA, or(shl(218, 36), shl(212, and(shr(108, d), 7)))) } lt(a, add(chainA, or(shl(218, 36), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 600), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 592), 16) // chain 37
+                for { let a := add(chainA, or(shl(218, 37), shl(212, and(shr(111, d), 7)))) } lt(a, add(chainA, or(shl(218, 37), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 616), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 608), 16) // chain 38
+                for { let a := add(chainA, or(shl(218, 38), shl(212, and(shr(114, d), 7)))) } lt(a, add(chainA, or(shl(218, 38), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 632), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 624), 16) // chain 39
+                for { let a := add(chainA, or(shl(218, 39), shl(212, and(shr(117, d), 7)))) } lt(a, add(chainA, or(shl(218, 39), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 648), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 640), 16) // chain 40
+                for { let a := add(chainA, or(shl(218, 40), shl(212, and(shr(120, d), 7)))) } lt(a, add(chainA, or(shl(218, 40), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 664), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 656), 16) // chain 41
+                for { let a := add(chainA, or(shl(218, 41), shl(212, and(shr(123, d), 7)))) } lt(a, add(chainA, or(shl(218, 41), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 680), mload(0x10))
+                calldatacopy(0x10, add(wotsPtr, 672), 16) // chain 42
+                for { let a := add(chainA, or(shl(218, 42), shl(212, and(shr(126, d), 7)))) } lt(a, add(chainA, or(shl(218, 42), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
+                    mstore(0x20, a)
+                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                }
+                mstore(add(TB, 696), mload(0x10))
+                // END generated chains
                 // T_43: the WOTS pk lands in its half of the first Merkle preimage (in-place walk
                 // as in FORS); the root (index 0 at height 9) lands at 0x10, the next layer's m16.
                 pop(staticcall(gas(), 0x02, TB, 712, add(0x10, shl(4, and(idxLeaf, 1))), 16))

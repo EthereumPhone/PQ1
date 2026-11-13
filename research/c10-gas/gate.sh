@@ -18,6 +18,9 @@ for f in src/verifiers/SPHINCsC10v2Asm.sol src/verifiers/SPHINCsC10Asm.sol; do
   echo "  ok $f"
 done
 
+echo "== generated blocks match their generators"
+python3 "$ROOT/research/c10-gas/gen_v2_chains.py" --check src/verifiers/SPHINCsC10v2Asm.sol && echo "  ok v2 chains"
+
 echo "== equivalence + per-primitive + unit + gas bench (fuzz runs $RUNS)"
 LOG="${GATE_LOG:-$(mktemp -t c10-gas-gate.XXXXXX)}"
 rc=0
