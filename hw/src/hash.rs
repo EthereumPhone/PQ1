@@ -1886,13 +1886,13 @@ fn v1_key_asm(st: *mut u32) {
     }
 }
 
-/// `v1-asm-key-ga` (round 9, secure-only; the FSBL never names it): `v1_key_asm` as a
-/// standalone AAPCS function in `global_asm!`. There r6 and r7 are ordinary callee-saved
-/// registers (saved in the prologue with r4..r11 and lr, sp kept 8-byte aligned), so LLVM's
-/// frame-pointer (r7) and base-pointer (r6) uses never meet this code: nothing in it runs
-/// inside a Rust frame. The two extra registers hold c3 and c8 between steps, so a step's
-/// block 0 loads four words (one `ldm`) instead of six. Same digests, same per-digest checks.
-/// Called as `pq1_v1_key_loop(st)` with the staging layout of `v1_key_asm`.
+// `v1-asm-key-ga` (round 9, secure-only; the FSBL never names it): `v1_key_asm` as a
+// standalone AAPCS function in `global_asm!`. There r6 and r7 are ordinary callee-saved
+// registers (saved in the prologue with r4..r11 and lr, sp kept 8-byte aligned), so LLVM's
+// frame-pointer (r7) and base-pointer (r6) uses never meet this code: nothing in it runs
+// inside a Rust frame. The two extra registers hold c3 and c8 between steps, so a step's
+// block 0 loads four words (one `ldm`) instead of six. Same digests, same per-digest checks.
+// Called as `pq1_v1_key_loop(st)` with the staging layout of `v1_key_asm`.
 #[cfg(all(feature = "v1-asm-key-ga", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 core::arch::global_asm!(
     ".syntax unified",
@@ -2575,20 +2575,20 @@ fn v1x_node_z(nz: *const u32, l: *const u32) {
     }
 }
 
-/// `v1-asm-fors-ga` (round 10, secure-only; the FSBL never names it): the whole 16-leaf FORS
-/// subtree of the FORS shape (see `v1x_leaf_z`) as one standalone AAPCS function in
-/// `global_asm!`, tree logic included (the E9 pattern: r6/r7 are ordinary callee-saved registers
-/// here). The leaf's seven fixed words stay in r5..r11 across its wait, so a leaf loads only
-/// `be32(j)`; a node loads `be32(h)`, `be32(i)` and `L[0]` between stores and `L[1..3]` after the
-/// 17th store; a PRF finds `sk_seed[0..7)` preloaded (registers only, read in place with single
-/// loads) and loads `sk_seed[7]`, the tail and `be32(j)` after INIT. The finished node's push,
-/// the index updates and the constant reloads run in the engine windows. Every digest keeps the
-/// checks of the Rust loop (DCIS poll with a 2^24 guard, SR clear, BUSY wait with a 2^24 guard
-/// and stale-DCIS refusal before INIT, NBLW 0). It issues leaf `j0`'s PRF itself, so the caller
-/// never holds `sk_seed` words its prologue would push (round 10: the residue gate caught that);
-/// `ctx`:
-/// 0..7 leaf words 0..3, 10..12; 7..14 node words 0..3, 10..12; 14..17 tail; 17 `sk_seed`;
-/// 18 `j0`; 19..23 the root (out).
+// `v1-asm-fors-ga` (round 10, secure-only; the FSBL never names it): the whole 16-leaf FORS
+// subtree of the FORS shape (see `v1x_leaf_z`) as one standalone AAPCS function in
+// `global_asm!`, tree logic included (the E9 pattern: r6/r7 are ordinary callee-saved registers
+// here). The leaf's seven fixed words stay in r5..r11 across its wait, so a leaf loads only
+// `be32(j)`; a node loads `be32(h)`, `be32(i)` and `L[0]` between stores and `L[1..3]` after the
+// 17th store; a PRF finds `sk_seed[0..7)` preloaded (registers only, read in place with single
+// loads) and loads `sk_seed[7]`, the tail and `be32(j)` after INIT. The finished node's push,
+// the index updates and the constant reloads run in the engine windows. Every digest keeps the
+// checks of the Rust loop (DCIS poll with a 2^24 guard, SR clear, BUSY wait with a 2^24 guard
+// and stale-DCIS refusal before INIT, NBLW 0). It issues leaf `j0`'s PRF itself, so the caller
+// never holds `sk_seed` words its prologue would push (round 10: the residue gate caught that);
+// `ctx`:
+// 0..7 leaf words 0..3, 10..12; 7..14 node words 0..3, 10..12; 14..17 tail; 17 `sk_seed`;
+// 18 `j0`; 19..23 the root (out).
 #[cfg(all(feature = "v1-asm-fors-ga", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 core::arch::global_asm!(
     ".syntax unified",
@@ -3496,16 +3496,16 @@ fn v1_search_asm(st: *mut u32, start: u32, end: u32) -> (u32, u32) {
     (c, flag)
 }
 
-/// `v1-asm-search-ga` (round 10, secure-only; the FSBL never names it): the WOTS+C count search
-/// for the WOTS digest shape as one standalone AAPCS function in `global_asm!` (the E9 pattern).
-/// Block 0 (`S`'s four words, three address words, zeros elsewhere) is constant across tries and
-/// stays in callee-saved r5..r11, which also survive the per-try `pred` call; only word 16 is
-/// loaded before the 17th store. The previous try's digest words, the block-1 words and the count
-/// go through the block-0 window; the last-try test runs in the engine window (two wait loops).
-/// Per try the same checks as the Rust loop (DCIS poll with a 2^24 guard, SR clear; BUSY wait with
-/// a 2^24 guard and stale-DCIS refusal before INIT; NBLW 0). Results and `pred` arguments as
-/// `v1_search_asm`. In `.text.pq1_c10_search` with `search128` and the signer's predicate, so a
-/// direct-mapped ICACHE cannot alias the loop and its per-try callback (round 8).
+// `v1-asm-search-ga` (round 10, secure-only; the FSBL never names it): the WOTS+C count search
+// for the WOTS digest shape as one standalone AAPCS function in `global_asm!` (the E9 pattern).
+// Block 0 (`S`'s four words, three address words, zeros elsewhere) is constant across tries and
+// stays in callee-saved r5..r11, which also survive the per-try `pred` call; only word 16 is
+// loaded before the 17th store. The previous try's digest words, the block-1 words and the count
+// go through the block-0 window; the last-try test runs in the engine window (two wait loops).
+// Per try the same checks as the Rust loop (DCIS poll with a 2^24 guard, SR clear; BUSY wait with
+// a 2^24 guard and stale-DCIS refusal before INIT; NBLW 0). Results and `pred` arguments as
+// `v1_search_asm`. In `.text.pq1_c10_search` with `search128` and the signer's predicate, so a
+// direct-mapped ICACHE cannot alias the loop and its per-try callback (round 8).
 #[cfg(all(feature = "v1-asm-search-ga", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 core::arch::global_asm!(
     ".syntax unified",
@@ -4611,24 +4611,15 @@ pub unsafe extern "C" fn pqsigner_v2_prf_chain16(
     unsafe { v2_store4(out, v) };
 }
 
-/// A whole WOTS key's chains in one call: for chain `ci` in `0..43`, the secret
-/// `sk_seed ‖ A7_prf(ci)`, then `steps` chain steps from position 0, written to
-/// `out + 16 ci`. `p0`/`p1` and `a0`/`low24` are the WOTS_PRF and WOTS_HASH A7
-/// words of the key pair with `ci = cp = 0`; `ci` sits at A7 bits 23..18, i.e.
-/// bits 2..7 of the second DIN word.
-///
-/// # Safety
-/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 688 writable; `steps <= 15`;
-/// no other stream in flight.
-/// `v2-asm-key-ga` (round 10, research format, secure-only): every chain of one v2 WOTS key
-/// (`steps` 1..=15, one PRF per chain) as one standalone AAPCS function in `global_asm!` (the E9
-/// pattern). Each chain's PRF is issued from asm: `sk_seed[0..7)` load (registers only, single
-/// loads) during the previous chain's last step, `sk_seed[7]` and `p0`, `p1 | c` after INIT; the
-/// previous chain's output store, the next chain's index words and the `S` reload run in the PRF's
-/// engine window. The chain steps are the `v2-asm-chain` schedule. Every digest keeps the Rust
-/// loop's checks (DCIS poll with a 2^24 guard, SR clear, BUSY wait with a 2^24 guard and stale-DCIS
-/// refusal before INIT, NBLW 24 at DCAL). `ctx`: 0 `sk_seed`, 1 `p0`, 2 `p1`, 3..7 `S`, 7 `a0`,
-/// 8 `low24`, 9 `steps`, 10 chain count (43), 11 `out`.
+// `v2-asm-key-ga` (round 10, research format, secure-only): every chain of one v2 WOTS key
+// (`steps` 1..=15, one PRF per chain) as one standalone AAPCS function in `global_asm!` (the E9
+// pattern). Each chain's PRF is issued from asm: `sk_seed[0..7)` load (registers only, single
+// loads) during the previous chain's last step, `sk_seed[7]` and `p0`, `p1 | c` after INIT; the
+// previous chain's output store, the next chain's index words and the `S` reload run in the PRF's
+// engine window. The chain steps are the `v2-asm-chain` schedule. Every digest keeps the Rust
+// loop's checks (DCIS poll with a 2^24 guard, SR clear, BUSY wait with a 2^24 guard and stale-DCIS
+// refusal before INIT, NBLW 24 at DCAL). `ctx`: 0 `sk_seed`, 1 `p0`, 2 `p1`, 3..7 `S`, 7 `a0`,
+// 8 `low24`, 9 `steps`, 10 chain count (43), 11 `out`.
 #[cfg(all(feature = "v2-asm-key-ga", not(feature = "v2-dt32"), not(feature = "v2-prf2"), not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 core::arch::global_asm!(
     ".syntax unified",
@@ -4934,15 +4925,15 @@ core::arch::global_asm!(
     fault = sym hash_engine_fault,
 );
 
-/// `v2-dt32` (round 11): the same loop with the HASH's DATATYPE 00 (32-bit words, no byte swap;
-/// CR = 0x60004 at every INIT of this loop). Every DIN word is the big-endian value of four message
-/// bytes, so a digest read from HR feeds the next message as it is: the chain step drops its four
-/// `rev`s. The constant words are byte-swapped once at entry (`S`, `a0`, `p0`, `p1`, `low24`; in
-/// that form the chain position is bit 20 and `c` is `ci << (V2_CI_LSB + 24)`), `sk_seed` words
-/// as they are preloaded, and each chain's output back to memory order in the PRF window. The last
-/// word's three valid bytes sit in its top bits with NBLW 24 (kit probe, round 11: equal to
-/// software SHA-256 for every NBLW). Every other digest on the engine writes its own CR value at
-/// INIT, so nothing else inherits the data type.
+// `v2-dt32` (round 11): the same loop with the HASH's DATATYPE 00 (32-bit words, no byte swap;
+// CR = 0x60004 at every INIT of this loop). Every DIN word is the big-endian value of four message
+// bytes, so a digest read from HR feeds the next message as it is: the chain step drops its four
+// `rev`s. The constant words are byte-swapped once at entry (`S`, `a0`, `p0`, `p1`, `low24`; in
+// that form the chain position is bit 20 and `c` is `ci << (V2_CI_LSB + 24)`), `sk_seed` words
+// as they are preloaded, and each chain's output back to memory order in the PRF window. The last
+// word's three valid bytes sit in its top bits with NBLW 24 (kit probe, round 11: equal to
+// software SHA-256 for every NBLW). Every other digest on the engine writes its own CR value at
+// INIT, so nothing else inherits the data type.
 #[cfg(all(feature = "v2-asm-key-ga", feature = "v2-dt32", not(feature = "v2-prf2"), not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 core::arch::global_asm!(
     ".syntax unified",
@@ -5275,6 +5266,15 @@ extern "C" {
     fn pq1_v2_key_loop(ctx: *mut u32);
 }
 
+/// A whole WOTS key's chains in one call: for chain `ci` in `0..43`, the secret
+/// `sk_seed ‖ A7_prf(ci)`, then `steps` chain steps from position 0, written to
+/// `out + 16 ci`. `p0`/`p1` and `a0`/`low24` are the WOTS_PRF and WOTS_HASH A7
+/// words of the key pair with `ci = cp = 0`; `ci` sits at A7 bits 23..18, i.e.
+/// bits 2..7 of the second DIN word.
+///
+/// # Safety
+/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 688 writable; `steps <= 15`;
+/// no other stream in flight.
 #[cfg(feature = "v2")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_wots_chains16(
@@ -5552,27 +5552,16 @@ fn v2x_prf(sk: *const u8, pp: *const u32) -> [u32; 4] {
     [v0, v1, v2, v3]
 }
 
-/// Root of the v2 FORS subtree of height `h` over leaves `j0..j0 + 2^h` of one
-/// FORS tree: leaf `j` is `F(S ‖ PRF(sk_seed ‖ A7_prf(ha = j)) ‖ A7(ha = j))`
-/// and the node at height `k` with index `i` is `H(S ‖ L ‖ R ‖ A7(cp = k, ha = i))`.
-/// `p0`/`p1` and `a0`/`a1` are the FORS_PRF and FORS_TREE A7 words of the tree
-/// with `cp = ha = 0`. Each auth-path node of a FORS tree is one such subtree,
-/// and `h = 11` gives the tree root, so the signer keeps the auth-path logic.
-///
-/// # Safety
-/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 16 writable; no other
-/// stream in flight. `h <= 11`, `j0` a multiple of `2^h` and `j0 + 2^h <= 2^11`
-/// (checked: a violation halts like an engine fault).
-/// `v2-asm-fors-ga` (round 11, research format, secure-only): the v2 FORS subtree (any height
-/// 0..=11) as one standalone AAPCS function in `global_asm!` (the E10 pattern). `S` and `a0` stay
-/// in r5..r9; a leaf (F) has `a1 | ha(j)` preloaded and loads nothing; a node (H) has `L[0..3)`
-/// preloaded and loads `L[3]` and its A7 word after INIT; a PRF has `sk_seed[0..7)` preloaded
-/// (registers only, single loads) and loads `sk_seed[7]`, `p0`, `p1 | ha(j)` after INIT. The asm
-/// issues leaf `j0`'s PRF itself, so the caller never holds `sk_seed` words (round 10's lesson).
-/// The treehash, the A7 words and the node stack run in the engine windows. Every digest keeps
-/// the checks of the Rust loop (DCIS poll with a 2^24 guard, SR clear, BUSY wait with a 2^24
-/// guard and stale-DCIS refusal before INIT, NBLW 24 at DCAL). `ctx`: 0..4 `S`, 4 `a0`, 5 `a1`,
-/// 6 `p0`, 7 `p1`, 8 `sk_seed`, 9 `j0`, 10 `h`, 11..15 the root (out).
+// `v2-asm-fors-ga` (round 11, research format, secure-only): the v2 FORS subtree (any height
+// 0..=11) as one standalone AAPCS function in `global_asm!` (the E10 pattern). `S` and `a0` stay
+// in r5..r9; a leaf (F) has `a1 | ha(j)` preloaded and loads nothing; a node (H) has `L[0..3)`
+// preloaded and loads `L[3]` and its A7 word after INIT; a PRF has `sk_seed[0..7)` preloaded
+// (registers only, single loads) and loads `sk_seed[7]`, `p0`, `p1 | ha(j)` after INIT. The asm
+// issues leaf `j0`'s PRF itself, so the caller never holds `sk_seed` words (round 10's lesson).
+// The treehash, the A7 words and the node stack run in the engine windows. Every digest keeps
+// the checks of the Rust loop (DCIS poll with a 2^24 guard, SR clear, BUSY wait with a 2^24
+// guard and stale-DCIS refusal before INIT, NBLW 24 at DCAL). `ctx`: 0..4 `S`, 4 `a0`, 5 `a1`,
+// 6 `p0`, 7 `p1`, 8 `sk_seed`, 9 `j0`, 10 `h`, 11..15 the root (out).
 #[cfg(all(feature = "v2-asm-fors-ga", not(feature = "v2-dt32"), not(feature = "v2-prf2"), not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 core::arch::global_asm!(
     ".syntax unified",
@@ -5950,11 +5939,11 @@ core::arch::global_asm!(
     fault = sym hash_engine_fault,
 );
 
-/// `v2-dt32` (round 11): the same subtree with DATATYPE 00 (as the `v2-dt32` key loop): F and H
-/// take the digest in flight without a swap, and the node stack holds big-endian words, so only
-/// the root is swapped back. `S`, `a0`, `a1`, `p0`, `p1` are swapped once at entry; in that form
-/// `ha(x)` is `(x & 0x7F) << 9 | (x >> 7) << 16` and the height is bit 20; `sk_seed` words are
-/// swapped as they are preloaded.
+// `v2-dt32` (round 11): the same subtree with DATATYPE 00 (as the `v2-dt32` key loop): F and H
+// take the digest in flight without a swap, and the node stack holds big-endian words, so only
+// the root is swapped back. `S`, `a0`, `a1`, `p0`, `p1` are swapped once at entry; in that form
+// `ha(x)` is `(x & 0x7F) << 9 | (x >> 7) << 16` and the height is bit 20; `sk_seed` words are
+// swapped as they are preloaded.
 #[cfg(all(feature = "v2-asm-fors-ga", feature = "v2-dt32", not(feature = "v2-prf2"), not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 core::arch::global_asm!(
     ".syntax unified",
@@ -6350,6 +6339,17 @@ extern "C" {
     fn pq1_v2_fors_sub(ctx: *mut u32);
 }
 
+/// Root of the v2 FORS subtree of height `h` over leaves `j0..j0 + 2^h` of one
+/// FORS tree: leaf `j` is `F(S ‖ PRF(sk_seed ‖ A7_prf(ha = j)) ‖ A7(ha = j))`
+/// and the node at height `k` with index `i` is `H(S ‖ L ‖ R ‖ A7(cp = k, ha = i))`.
+/// `p0`/`p1` and `a0`/`a1` are the FORS_PRF and FORS_TREE A7 words of the tree
+/// with `cp = ha = 0`. Each auth-path node of a FORS tree is one such subtree,
+/// and `h = 11` gives the tree root, so the signer keeps the auth-path logic.
+///
+/// # Safety
+/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 16 writable; no other
+/// stream in flight. `h <= 11`, `j0` a multiple of `2^h` and `j0 + 2^h <= 2^11`
+/// (checked: a violation halts like an engine fault).
 #[cfg(feature = "v2")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
@@ -6875,6 +6875,317 @@ fn v2_search_asm(sm: *const u8, a0: u32, a1: u32, start: u32, end: u32, target: 
     (c, flag)
 }
 
+// `v2-dt32` (round 11): the v2 count search as one standalone AAPCS function in `global_asm!`,
+// with DATATYPE 00 (big-endian DIN words: the count goes out as its own value, no swap). `S ‖ m`
+// words 0..6 stay in r5..r9, r11 across tries (reloaded in the engine window, where the digit sum
+// uses them as scratch); words 6..7 and the A7 words load with one `ldm` after INIT. The digit
+// sum is the round-7 v2 fold sum with its exact early reject, unchanged (HR words are big-endian
+// in either data type). The last-try test runs in the engine window (two wait loops). Per try the
+// same checks as the Rust loop (DCIS poll with a 2^24 guard, SR clear; BUSY wait with a 2^24 guard
+// and stale-DCIS refusal before INIT; NBLW 24). Returns `(c, flag)` as `v2_search_asm` through
+// `ctx` 13/14; `ctx`: 0..8 `S ‖ m` (big-endian), 8 `a0`, 9 `a1` (big-endian), 10 start, 11 end,
+// 12 target.
+#[cfg(all(feature = "v2-dt32", feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+core::arch::global_asm!(
+    ".syntax unified",
+    ".section .text.pq1_v2_search_dt,\"ax\",%progbits",
+    ".p2align 2",
+    ".global pq1_v2_search_dt",
+    ".type pq1_v2_search_dt,%function",
+    ".thumb_func",
+    "pq1_v2_search_dt:",
+    "push {{r4, r5, r6, r7, r8, r9, r10, r11, lr}}",
+    "sub sp, sp, #60",
+    // frame: 0 sm0..sm7 (big-endian words), 32 a0, 36 a1, 40 the next count to issue, 44 end, 48 target, 52 ctx
+    // ctx: 0..8 sm (big-endian), 8 a0, 9 a1 (big-endian), 10 start, 11 end, 12 target, 13 c, 14 flag (out)
+    "str r0, [sp, #52]",
+    "mov r12, r0",
+    "mov lr, sp",
+    "ldm r12!, {{r0, r1, r2, r3, r5, r6, r7, r8}}",
+    "stm lr!, {{r0, r1, r2, r3, r5, r6, r7, r8}}",
+    "ldm r12, {{r0, r1, r2, r3, r5}}",
+    "stm lr!, {{r0, r1}}",
+    "str r2, [sp, #40]",
+    "str r3, [sp, #44]",
+    "str r5, [sp, #48]",
+    "movw r4, #{hb_lo}",
+    "movt r4, #{hb_hi}",
+    "mov r12, sp",
+    "ldm r12, {{r5, r6, r7, r8, r9}}",
+    "ldr r11, [sp, #20]",
+    "movw lr, #0x4",
+    "movt lr, #0x6",
+    // the first try (start): its own issue, then the next count and the wait loop to use
+    "ldr r12, [r4, #0x24]",
+    "tst r12, #10",
+    "bne 80f",
+    "81:",
+    "str lr, [r4]",
+    "str r5, [r4, #4]",
+    "str r6, [r4, #4]",
+    "str r7, [r4, #4]",
+    "str r8, [r4, #4]",
+    "str r9, [r4, #4]",
+    "str r11, [r4, #4]",
+    "add r12, sp, #24",
+    "ldm r12, {{r5, r6, r7, r8}}",
+    "str r5, [r4, #4]",
+    "str r6, [r4, #4]",
+    "ldr r9, [sp, #40]",
+    "str r9, [r4, #4]",
+    "str r7, [r4, #4]",
+    "str r8, [r4, #4]",
+    "mov.w r12, #280",
+    "str r12, [r4, #8]",
+    "mov r12, sp",
+    "ldm r12, {{r5, r6, r7, r8, r9}}",
+    "ldr r11, [sp, #20]",
+    "movw lr, #0x4",
+    "movt lr, #0x6",
+    "ldr r0, [sp, #40]",
+    "adds r0, r0, #1",
+    "str r0, [sp, #40]",
+    "ldr r1, [sp, #44]",
+    "cmp r0, r1",
+    "beq 50f",
+    // ==== a try in flight and another to issue ====
+    "10:",
+    ".rept 16",
+    "ldr r0, [r4, #0x24]",
+    "lsls r0, r0, #30",
+    "bmi 11f",
+    ".endr",
+    "mov.w r1, #16777216",
+    "12:",
+    "ldr r0, [r4, #0x24]",
+    "lsls r0, r0, #30",
+    "bmi 11f",
+    "subs r1, r1, #1",
+    "bne 12b",
+    "b 99f",
+    "11:",
+    "addw r12, r4, #796",
+    "ldm r12, {{r0, r1, r2, r3, r10}}",
+    "movs r12, #1",
+    "str r12, [r4, #0x24]",
+    "ldr r12, [r4, #0x24]",
+    "tst r12, #10",
+    "bne 13f",
+    "14:",
+    "str lr, [r4]",
+    "str r5, [r4, #4]",
+    "str r6, [r4, #4]",
+    "str r7, [r4, #4]",
+    "str r8, [r4, #4]",
+    "str r9, [r4, #4]",
+    "str r11, [r4, #4]",
+    "add r12, sp, #24",
+    "ldm r12, {{r5, r6, r7, r8}}",
+    "str r5, [r4, #4]",
+    "str r6, [r4, #4]",
+    "ldr r9, [sp, #40]",
+    "str r9, [r4, #4]",
+    "str r7, [r4, #4]",
+    "str r8, [r4, #4]",
+    "mov.w r12, #280",
+    "str r12, [r4, #8]",
+    // engine window: the digit sum of the previous try, then the constants back
+    "movw lr, #0x71C7",
+    "movt lr, #0x071C",
+    "movw r9, #0xF03F",
+    "movt r9, #0x3F03",
+    "and r5, r10, lr",
+    "and r11, lr, r10, lsr #3",
+    "add r5, r5, r11",
+    "and r11, lr, r3, lsr #1",
+    "add r5, r5, r11",
+    "and r11, lr, r3, lsr #4",
+    "add r5, r5, r11",
+    "and r11, lr, r2, lsr #2",
+    "add r5, r5, r11",
+    "and r11, lr, r2, lsr #5",
+    "add r5, r5, r11",
+    "and r11, r5, r9",
+    "and r5, r9, r5, lsr #6",
+    "add r5, r5, r11",
+    "movw r11, #0x1001",
+    "movt r11, #0x0100",
+    "mul r5, r5, r11",
+    "lsr r5, r5, #24",
+    "lsr r11, r10, #30",
+    "bfi r11, r3, #2, #1",
+    "add r5, r5, r11",
+    "lsr r11, r3, #31",
+    "bfi r11, r2, #1, #2",
+    "add r5, r5, r11",
+    "ldr r12, [sp, #48]",
+    "add r11, r5, #77",
+    "cmp r11, r12",
+    "blo 15f",
+    "and r11, r1, lr",
+    "and r12, lr, r1, lsr #3",
+    "add r11, r11, r12",
+    "and r12, r11, r9",
+    "and r11, r9, r11, lsr #6",
+    "add r11, r11, r12",
+    "movw r12, #0x1001",
+    "movt r12, #0x0100",
+    "mul r11, r11, r12",
+    "add r5, r5, r11, lsr #24",
+    "lsr r11, r1, #30",
+    "bfi r11, r0, #2, #1",
+    "add r5, r5, r11",
+    "ldr r12, [sp, #48]",
+    "cmp r5, r12",
+    "beq 60f",
+    "15:",
+    "mov r12, sp",
+    "ldm r12, {{r5, r6, r7, r8, r9}}",
+    "ldr r11, [sp, #20]",
+    "movw lr, #0x4",
+    "movt lr, #0x6",
+    "ldr r0, [sp, #40]",
+    "adds r0, r0, #1",
+    "str r0, [sp, #40]",
+    "ldr r1, [sp, #44]",
+    "cmp r0, r1",
+    "beq 50f",
+    "b 10b",
+    // ==== the last try in flight: nothing to issue ====
+    "50:",
+    ".rept 16",
+    "ldr r0, [r4, #0x24]",
+    "lsls r0, r0, #30",
+    "bmi 51f",
+    ".endr",
+    "mov.w r1, #16777216",
+    "52:",
+    "ldr r0, [r4, #0x24]",
+    "lsls r0, r0, #30",
+    "bmi 51f",
+    "subs r1, r1, #1",
+    "bne 52b",
+    "b 99f",
+    "51:",
+    "addw r12, r4, #796",
+    "ldm r12, {{r0, r1, r2, r3, r10}}",
+    "movs r12, #1",
+    "str r12, [r4, #0x24]",
+    "movw lr, #0x71C7",
+    "movt lr, #0x071C",
+    "movw r9, #0xF03F",
+    "movt r9, #0x3F03",
+    "and r5, r10, lr",
+    "and r11, lr, r10, lsr #3",
+    "add r5, r5, r11",
+    "and r11, lr, r3, lsr #1",
+    "add r5, r5, r11",
+    "and r11, lr, r3, lsr #4",
+    "add r5, r5, r11",
+    "and r11, lr, r2, lsr #2",
+    "add r5, r5, r11",
+    "and r11, lr, r2, lsr #5",
+    "add r5, r5, r11",
+    "and r11, r5, r9",
+    "and r5, r9, r5, lsr #6",
+    "add r5, r5, r11",
+    "movw r11, #0x1001",
+    "movt r11, #0x0100",
+    "mul r5, r5, r11",
+    "lsr r5, r5, #24",
+    "lsr r11, r10, #30",
+    "bfi r11, r3, #2, #1",
+    "add r5, r5, r11",
+    "lsr r11, r3, #31",
+    "bfi r11, r2, #1, #2",
+    "add r5, r5, r11",
+    "ldr r12, [sp, #48]",
+    "add r11, r5, #77",
+    "cmp r11, r12",
+    "blo 55f",
+    "and r11, r1, lr",
+    "and r12, lr, r1, lsr #3",
+    "add r11, r11, r12",
+    "and r12, r11, r9",
+    "and r11, r9, r11, lsr #6",
+    "add r11, r11, r12",
+    "movw r12, #0x1001",
+    "movt r12, #0x0100",
+    "mul r11, r11, r12",
+    "add r5, r5, r11, lsr #24",
+    "lsr r11, r1, #30",
+    "bfi r11, r0, #2, #1",
+    "add r5, r5, r11",
+    "ldr r12, [sp, #48]",
+    "cmp r5, r12",
+    "beq 61f",
+    "55:",
+    "ldr r0, [sp, #44]",
+    "movs r1, #0",
+    "b 70f",
+    "60:",
+    "ldr r0, [sp, #40]",
+    "subs r0, r0, #1",
+    "movs r1, #1",
+    "b 70f",
+    "61:",
+    "ldr r0, [sp, #40]",
+    "subs r0, r0, #1",
+    "movs r1, #2",
+    "70:",
+    "ldr r12, [sp, #52]",
+    "str r0, [r12, #52]",
+    "str r1, [r12, #56]",
+    "b 98f",
+    // BUSY still set, or a stale DCIS before INIT: lr counts (HR words live), the CR value is re-made
+    "80:",
+    "mov.w lr, #16777216",
+    "82:",
+    "tst r12, #8",
+    "beq 83f",
+    "subs lr, lr, #1",
+    "beq 99f",
+    "ldr r12, [r4, #0x24]",
+    "b 82b",
+    "83:",
+    "movw lr, #0x4",
+    "movt lr, #0x6",
+    "tst r12, #2",
+    "beq 81b",
+    "b 99f",
+    "13:",
+    "mov.w lr, #16777216",
+    "17:",
+    "tst r12, #8",
+    "beq 18f",
+    "subs lr, lr, #1",
+    "beq 99f",
+    "ldr r12, [r4, #0x24]",
+    "b 17b",
+    "18:",
+    "movw lr, #0x4",
+    "movt lr, #0x6",
+    "tst r12, #2",
+    "beq 14b",
+    "b 99f",
+    "99:",
+    "bl {fault}",
+    "98:",
+    "add sp, sp, #60",
+    "pop {{r4, r5, r6, r7, r8, r9, r10, r11, pc}}",
+    ".size pq1_v2_search_dt, . - pq1_v2_search_dt",
+
+    hb_lo = const HASH_BASE & 0xFFFF,
+    hb_hi = const HASH_BASE >> 16,
+    fault = sym hash_engine_fault,
+);
+
+#[cfg(all(feature = "v2-dt32", feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+extern "C" {
+    /// The `v2-dt32` search above.
+    fn pq1_v2_search_dt(ctx: *mut u32);
+}
+
 /// v2 count search with the WOTS+C target in the driver (no callback): the
 /// first `c` in `start..start + n` whose digest's digit sum is `target`
 /// (digest to `out`), else `start + n`. Try `c + 1` is in the engine while the
@@ -6913,6 +7224,23 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
         // contract promises only 32 readable bytes, so copy it (public data).
         // SAFETY: caller contract, `sm` names 32 readable bytes.
         let smw: [u32; 8] = core::array::from_fn(|i| unsafe { sm.cast::<u32>().add(i).read_unaligned() });
+        #[cfg(feature = "v2-dt32")]
+        let (c, flag) = {
+            let mut ctx = [0u32; 15];
+            for (k, w) in smw.iter().enumerate() {
+                ctx[k] = w.swap_bytes();
+            }
+            ctx[8] = a0.swap_bytes();
+            ctx[9] = a1.swap_bytes();
+            ctx[10] = start;
+            ctx[11] = end;
+            ctx[12] = target;
+            // SAFETY: the function's contract (the context above; it issues try `start`); the
+            // engine is idle and STR holds NBLW 24 (`v2_entry`).
+            unsafe { pq1_v2_search_dt(ctx.as_mut_ptr()) };
+            (ctx[13], ctx[14])
+        };
+        #[cfg(not(feature = "v2-dt32"))]
         let (c, flag) = v2_search_asm(smw.as_ptr().cast::<u8>(), a0, a1, start, end, target);
         if flag == 0 {
             return end;
