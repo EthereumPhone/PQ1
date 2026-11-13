@@ -1591,7 +1591,7 @@ pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: 
 /// per chain), 9 steps, 10..21 tail words 0..10, 21 `sk_seed`, 22 out pointer, 23 i
 /// (starts at u32::MAX), 24 n.
 #[cfg(feature = "v1-asm-key")]
-const V1K_SPIN_STEP: u32 = 13;
+const V1K_SPIN_STEP: u32 = 10;
 #[cfg(feature = "v1-asm-key")]
 const V1K_SPIN_PRF: u32 = 14;
 #[cfg(feature = "v1-asm-key")]
@@ -1629,36 +1629,39 @@ fn v1_key_asm(st: *mut u32) {
             "tst r8, #10",
             "bne 40f",
             "41:",
+            // block 0: c0..c2 arrive preloaded in r9..r11 (loaded in the previous digest's
+            // window); the other words load between the stores.
             "str lr, [r4, #-12]",          // INIT
+            "str r9, [r4, #-8]",           // c0
+            "str r10, [r4, #-8]",          // c1
+            "str r11, [r4, #-8]",          // c2
+            "add r8, r12, #12",
+            "ldm r8, {{r8, r9, r10, r11}}", // c3, c8, c9, c10
             "movs.w lr, #0",
-            "ldm r12, {{r8, r9, r10, r11}}",
-            "str r8, [r4, #-8]",
-            "str r9, [r4, #-8]",
-            "str r10, [r4, #-8]",
-            "str r11, [r4, #-8]",
+            "str r8, [r4, #-8]",           // c3
             "str lr, [r4, #-8]",
             "str lr, [r4, #-8]",
             "str lr, [r4, #-8]",
             "str lr, [r4, #-8]",
-            "ldr r8, [r12, #16]",
-            "ldr r9, [r12, #20]",
-            "ldr r10, [r12, #24]",
-            "str r8, [r4, #-8]",
-            "str r9, [r4, #-8]",
-            "str r10, [r4, #-8]",
+            "str r9, [r4, #-8]",           // c8
+            "str r10, [r4, #-8]",          // c9
+            "str r11, [r4, #-8]",          // c10
             "str lr, [r4, #-8]",
-            "ldrd r8, r9, [r12, #28]",
-            "rev r10, r5",
+            "ldrd r8, r9, [r12, #28]",     // c12, c13 = rev(i)
+            "rev r10, r5",                 // position
             "str r8, [r4, #-8]",
             "str r9, [r4, #-8]",
             "str r10, [r4, #-8]",
             "str lr, [r4, #-8]",
             "str r0, [r4, #-8]",           // word 16: block 0 starts
+            // block-0 window: swaps, position, end test (flags live to the bne), next c0..c2
             "rev r1, r1",
             "rev r2, r2",
             "rev r3, r3",
             "add r5, r5, #1",
             "ldr r11, [r12, #36]",
+            "cmp r5, r11",
+            "ldm r12, {{r9, r10, r11}}",
             "mov.w r8, #256",
             "str r1, [r4, #-8]",           // waits for block 0
             "str r2, [r4, #-8]",
@@ -1670,7 +1673,6 @@ fn v1_key_asm(st: *mut u32) {
             "str r8, [r4, #-4]",           // DCAL (NBLW = 0)
             "movw lr, #0x24",
             "movt lr, #0x6",
-            "cmp r5, r11",
             "bne 1b",
             // ---- chain done: the next chain's PRF, or the last read-out ----
             "ldr r5, [r12, #84]",          // sk_seed
@@ -1752,6 +1754,7 @@ fn v1_key_asm(st: *mut u32) {
             "str r9, [r4, #-8]",
             "str r11, [r4, #-8]",          // rev(i)
             "str r3, [r4, #-4]",           // DCAL (NBLW = 0)
+            "ldm r12, {{r9, r10, r11}}",   // the first step's c0..c2
             "movs r8, #{spin_prf}",
             "30:",
             "subs r8, r8, #1",
@@ -1796,12 +1799,12 @@ fn v1_key_asm(st: *mut u32) {
             "lsls r8, r8, #30",
             "bmi 4b",
             ".endr",
-            "mov.w r9, #16777216",
+            "mov.w r0, #16777216",         // r0..r3 are dead before the HR read; r9..r11 hold c0..c2
             "12:",
             "ldr r8, [r4, #0x18]",
             "lsls r8, r8, #30",
             "bmi 4b",
-            "subs r9, r9, #1",
+            "subs r0, r0, #1",
             "bne 12b",
             "b 99f",
             "21:",
@@ -1824,25 +1827,27 @@ fn v1_key_asm(st: *mut u32) {
             "lsls r8, r8, #30",
             "bmi 6b",
             ".endr",
-            "mov.w r9, #16777216",
+            "mov.w r0, #16777216",
             "32:",
             "ldr r8, [r4, #0x18]",
             "lsls r8, r8, #30",
             "bmi 6b",
-            "subs r9, r9, #1",
+            "subs r0, r0, #1",
             "bne 32b",
             "b 99f",
             // ---- BUSY still set, or a stale DCIS (step INIT / PRF INIT) ----
             "40:",
-            "mov.w r9, #16777216",
+            "mov.w lr, #16777216",         // r0..r3 hold the digest, r9..r11 c0..c2
             "42:",
             "tst r8, #8",
             "beq 43f",
-            "subs r9, r9, #1",
+            "subs lr, lr, #1",
             "beq 99f",
             "ldr r8, [r4, #0x18]",
             "b 42b",
             "43:",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
             "tst r8, #2",
             "beq 41b",
             "b 99f",
