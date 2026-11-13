@@ -173,6 +173,7 @@ extern "C" {
     fn pqsigner_v2_fors_subtree16(
         sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8,
     );
+    fn pqsigner_v2_grind_r(prf: *const u8, len: u32, hm: *const u8, start: u32, n: u32, out_r: *mut u8, out_d: *mut u8) -> u32;
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
 }
 
@@ -299,21 +300,16 @@ pub fn grind_r_fused(sk_seed: &[u8; 32], pk_seed: &[u8; N], pk_root: &[u8; N], m
     hm[16..32].copy_from_slice(pk_root);
     hm[32..64].copy_from_slice(message);
     put7(&mut hm[80..87], pack(T_H_MSG, 0, 0, 0, 0, 0, 0));
-    let last_shift = (K - 1) * A;
-    let mut nonce = 0u32;
-    while nonce < 10_000_000 {
-        prf[len - 4..len].copy_from_slice(&nonce.to_be_bytes());
-        let r = sha256_bytes16(&prf[..len]);
-        hm[64..80].copy_from_slice(&r);
-        let d = sha256_bytes(&hm);
-        if crate::fors::read_bits_le(&d, last_shift, A) == 0 {
-            for b in prf.iter_mut() {
-                // SAFETY: `b` is a valid, aligned, exclusive reference.
-                unsafe { core::ptr::write_volatile(b, 0) };
-            }
-            return (r, d);
-        }
-        nonce += 1;
+    // The whole grind in one driver call (round 6 H7); the FORS+C rule is
+    // re-checked here with this crate's bit reader before R is used.
+    let (mut r, mut d) = ([0u8; N], [0u8; 32]);
+    // SAFETY: `len` and 87 readable bytes, 16 and 32 writable; 0 + 10M fits.
+    let nonce = unsafe { pqsigner_v2_grind_r(prf.as_ptr(), len as u32, hm.as_ptr(), 0, 10_000_000, r.as_mut_ptr(), d.as_mut_ptr()) };
+    for b in prf.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
     }
-    panic!("R grinding failed after 10M iterations");
+    assert!(nonce < 10_000_000, "R grinding failed after 10M iterations");
+    assert!(crate::fors::read_bits_le(&d, (K - 1) * A, A) == 0, "v2 R grind: driver FORS+C check disagrees");
+    (r, d)
 }

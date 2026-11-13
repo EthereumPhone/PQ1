@@ -5,8 +5,8 @@
 // §1; byte layouts, §2), not from v2hash.rs or the driver.
 //
 // Result window (32 words at 0x3000_0100): 0 magic 'DRV2', 1 stage (100 = done),
-// 2 checks run, 3 checks failed, 4..13 failures per group, 14 first failing
-// group, 15 its case index, 16 v1 probes.
+// 2 checks run, 3 checks failed, 4..14 failures per group, 15 first failing
+// group, 16 its case index, 17 v1 probes.
 #![no_std]
 use sha2::{Digest, Sha256};
 
@@ -25,6 +25,7 @@ extern "C" {
     fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8);
     fn pqsigner_v2_wots_chains16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_wots_pk16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, k0: u32, k1: u32, steps: u32, out: *mut u8);
+    fn pqsigner_v2_grind_r(prf: *const u8, len: u32, hm: *const u8, start: u32, n: u32, out_r: *mut u8, out_d: *mut u8) -> u32;
     fn pqsigner_v2_fors_subtree16(sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8);
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
 }
@@ -71,15 +72,15 @@ impl Rng {
 struct Tally {
     run: u32,
     fail: u32,
-    per: [u32; 10],
+    per: [u32; 11],
 }
 impl Tally {
     fn check(&mut self, group: usize, case: u32, ok: bool) {
         self.run += 1;
         if !ok {
             if self.fail == 0 {
-                out(14, group as u32);
-                out(15, case);
+                out(15, group as u32);
+                out(16, case);
             }
             self.fail += 1;
             self.per[group] += 1;
@@ -179,7 +180,7 @@ pub extern "C" fn c10_bench_main() {
     unsafe { pqsigner_hw::hash::init_clock() };
     out(1, 1);
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
-    let mut t = Tally { run: 0, fail: 0, per: [0; 10] };
+    let mut t = Tally { run: 0, fail: 0, per: [0; 11] };
     let mut probe = 0u32;
     macro_rules! between {
         () => {{
@@ -394,12 +395,53 @@ pub extern "C" fn c10_bench_main() {
     }
     between!();
 
+    // 9. grind_r: the first nonce whose last FORS index is 0, found in software;
+    //    a run that stops one try short must report exhaustion.
+    out(1, 10);
+    let mut c = 0u32;
+    for k in 0..6u32 {
+        let len = if k % 2 == 0 { 103usize } else { 119 };
+        let (mut p, mut h) = ([0u8; 119], [0u8; 87]);
+        rng.fill(&mut p);
+        rng.fill(&mut h);
+        let start = rng.below(1 << 20);
+        let sw_try = |nonce: u32, p: &mut [u8; 119], h: &mut [u8; 87]| -> ([u8; 16], [u8; 32]) {
+            p[len - 4..len].copy_from_slice(&nonce.to_be_bytes());
+            let r: [u8; 16] = sha(&[&p[..len]])[..16].try_into().unwrap();
+            h[64..80].copy_from_slice(&r);
+            (r, sha(&[&h[..]]))
+        };
+        let mut hit = None;
+        for nonce in start..start + 40_000 {
+            let (r, d) = sw_try(nonce, &mut p, &mut h);
+            if ((u32::from(d[14]) << 8 | u32::from(d[15])) >> 4) & 0x7FF == 0 {
+                hit = Some((nonce, r, d));
+                break;
+            }
+        }
+        let Some((nonce, r, d)) = hit else { continue };
+        let (mut gr, mut gd) = ([0u8; 16], [0u8; 32]);
+        between!();
+        // SAFETY: `len` and 87 readable, 16 and 32 writable; no overflow.
+        let got = unsafe { pqsigner_v2_grind_r(p.as_ptr(), len as u32, h.as_ptr(), start, nonce - start + 3, gr.as_mut_ptr(), gd.as_mut_ptr()) };
+        t.check(10, c, got == nonce && gr == r && gd == d);
+        c += 1;
+        if nonce > start {
+            between!();
+            // SAFETY: as above.
+            let got = unsafe { pqsigner_v2_grind_r(p.as_ptr(), len as u32, h.as_ptr(), start, nonce - start, gr.as_mut_ptr(), gd.as_mut_ptr()) };
+            t.check(10, c, got == nonce);
+            c += 1;
+        }
+    }
+    between!();
+
     out(2, t.run);
     out(3, t.fail);
     for (i, x) in t.per.iter().enumerate() {
         out(4 + i, *x);
     }
-    out(16, probe);
+    out(17, probe);
     out(1, 100);
 
     #[cfg(feature = "guard")]

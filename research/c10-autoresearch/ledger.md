@@ -488,3 +488,15 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 - **16-message mean:** v2 70.86 → **69.80 M (−1.50%)**; with the cache 49.16 → **48.47 M (−1.39%)**. Per message 0.88–1.35 M, larger with more grind tries (one STR write fewer per try).
 - **Costs:** verify rises about 2 k (single-digest entries now pay the entry setup); keygen −1.7%.
 - **Est. cached sign:** 0.873 s, or **0.607 s** with the cache.
+
+### H7: R grind in the driver (`pqsigner_v2_grind_r`), keep (output-identical)
+
+- **The entry:** the whole FORS+C R grind in one call. The nonce is patched into a driver-side copy of the PRF input (103 or 119 bytes, wiped with volatile writes before return). R is written into H_MSG's words 16..19, and the last FORS index is checked as `(HR3 >> 4) & 0x7FF`. Rust re-checks the result with `fors::read_bits_le`.
+- **Evidence:**
+  - host golden-v2, plain and `topcache` (the mirror is plain sha2);
+  - kit golden, and golden + cache (3 hits, m0 cached **0.549 s**);
+  - gate 5 with a `grind_r` group: the first hit found in software, plus a run stopped one try short that must report exhaustion. 2,089 checks, 0 failures, 930 v1 probes.
+- **16-message mean:** v2 69.80 → **69.07 M (−1.05%)**; with the cache 48.47 → **47.71 M (−1.57%)**. Per message 0.05–2.1 M, since R-grind tries vary.
+- **Est. cached sign:** 0.864 s, or **0.597 s** with the cache. Fable estimated about 0.7 M (`fable-hypotheses-5.md`, "not worth doing"); measured about 0.73 M mean.
+
+Fable's round-6 list is in `fable-hypotheses-5.md`.

@@ -2260,6 +2260,82 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
     unsafe { v2_store4(out, stack[0]) };
 }
 
+/// v2 R grind (FORS+C) in the driver: for `nonce` in `start..start + n`,
+/// `R = SHA-256(prf[..len] with be32(nonce) as its last 4 bytes)[..16]`, then
+/// `D = SHA-256(hm with R at bytes 64..80)` (H_MSG, 87 bytes). The first nonce
+/// whose last FORS index `(D >> 132) & 0x7FF` (D big-endian; bits 4..14 of HR3)
+/// is 0 is returned, with R to `out_r` and D to `out_d`; else `start + n`.
+/// `len` is 103 or 119 (v1's R PRF, spec §6), like 87 ≡ 3 (mod 4), so NBLW = 24
+/// throughout. The local copy of the PRF input holds `sk_seed`; it is wiped with
+/// volatile writes before returning.
+///
+/// # Safety
+/// `prf` `len` and `hm` 87 readable bytes, `out_r` 16 and `out_d` 32 writable;
+/// `start + n` does not overflow; no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_grind_r(
+    prf: *const u8, len: u32, hm: *const u8, start: u32, n: u32, out_r: *mut u8, out_d: *mut u8,
+) -> u32 {
+    v2_entry();
+    if len != 103 && len != 119 {
+        hash_engine_fault();
+    }
+    let len = len as usize;
+    let nw = (len + 3) / 4;
+    let mut pb = [0u8; 120];
+    let mut hb = [0u8; 88];
+    // SAFETY: caller contract (`len` and 87 readable bytes).
+    unsafe {
+        core::ptr::copy_nonoverlapping(prf, pb.as_mut_ptr(), len);
+        core::ptr::copy_nonoverlapping(hm, hb.as_mut_ptr(), 87);
+    }
+    let mut hw = [0u32; 22];
+    for (i, w) in hw.iter_mut().enumerate() {
+        *w = u32::from_le_bytes([hb[4 * i], hb[4 * i + 1], hb[4 * i + 2], hb[4 * i + 3]]);
+    }
+    let end = start.wrapping_add(n);
+    let mut c = start;
+    let mut found = end;
+    while c != end {
+        pb[len - 4..len].copy_from_slice(&c.to_be_bytes());
+        v2_begin();
+        let mut i = 0;
+        while i < nw {
+            write_word(u32::from_le_bytes([pb[4 * i], pb[4 * i + 1], pb[4 * i + 2], pb[4 * i + 3]]));
+            i += 1;
+        }
+        let r = v2_end16();
+        hw[16] = r[0];
+        hw[17] = r[1];
+        hw[18] = r[2];
+        hw[19] = r[3];
+        v2_begin();
+        for w in hw {
+            write_word(w);
+        }
+        REG.str_.write(V2_NBLW | STR_DCAL);
+        let mut d = [0u32; 8];
+        v2_collect(&mut d);
+        if (d[3].swap_bytes() >> 4) & 0x7FF == 0 {
+            // SAFETY: `out_r` 16 and `out_d` 32 writable bytes.
+            unsafe {
+                v2_store4(out_r, r);
+                core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out_d, 32);
+            }
+            found = c;
+            break;
+        }
+        c = c.wrapping_add(1);
+    }
+    for b in pb.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    found
+}
+
 /// One WOTS_DIGEST try `S ‖ m ‖ be32(count) ‖ A7` (43 bytes), issued.
 #[cfg(feature = "v2")]
 #[inline(always)]

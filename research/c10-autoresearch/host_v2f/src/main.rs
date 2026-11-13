@@ -461,6 +461,25 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(sk: *const u8, seed: *const 
     unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out, 16) };
 }
 #[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_grind_r(prf: *const u8, len: u32, hm: *const u8, start: u32, n: u32, out_r: *mut u8, out_d: *mut u8) -> u32 {
+    let mut p = unsafe { std::slice::from_raw_parts(prf, len as usize) }.to_vec();
+    let mut h = unsafe { rd::<87>(hm) };
+    let l = len as usize;
+    for c in start..start + n {
+        p[l - 4..].copy_from_slice(&c.to_be_bytes());
+        let r: [u8; 16] = sw(&p)[..16].try_into().unwrap();
+        h[64..80].copy_from_slice(&r);
+        let d = sw(&h);
+        // Last FORS index: (D >> 132) & 0x7FF, D big-endian; D >> 128 is bytes 0..16.
+        let idx = ((u128::from_be_bytes(d[..16].try_into().unwrap()) >> 4) & 0x7FF) as u32;
+        if idx == 0 {
+            unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out_r, 16); std::ptr::copy_nonoverlapping(d.as_ptr(), out_d, 32) };
+            return c;
+        }
+    }
+    start + n
+}
+#[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32 {
     // Plain sha2 and a plain digit sum (spec 0.3: v1's LOW 129 bits, digit i = (D >> 3i) & 7).
     let sm = unsafe { rd::<32>(sm) };
