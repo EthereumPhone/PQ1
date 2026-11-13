@@ -1729,3 +1729,131 @@ For the product, the open question is whether the signer holds secrets in callee
 **Coverage limit (Astra):** selected inputs and patterns within 4 KiB of dead stack. Not signer-held secrets, not arbitrary configurations, and not all leakage.
 
 **Gate acceptance (Astra):** the v1 control build is now judged by a control-aware `experiment_v1micro.sh`. It must complete with every other correctness check passing, so a faulted control run fails the gate.
+
+## Round 15 (2026-11-14): wall-clock items the kit cannot measure (source-only trace)
+
+No code changes, no kit runs. Three read-only traces with file:line evidence; I verified their load-bearing citations. Fable then checked the synthesis. The SE driver figures are estimates from source unless marked measured.
+
+### Where each item runs (cached Type-2 sign, pixel route)
+
+In `secure/src/nsc/cmd_sign_userop.rs`, in order:
+1. parse, trailers and pages, then the **confirm** (~2076–2101);
+2. atlas re-hash (~2111), the entropy blob from its SRAM cache, page-123 reads and the cap check;
+3. **`film_start` (~2356)**: the busy film starts here, *before* slot-key lookup and any cache-miss keygen;
+4. `c10_sign_verified_with_progress` (~2821), which runs:
+   - **`pre_sign`** (crypto.rs ~95);
+   - the **three strong-RNG draws** under `ChipWaitTicks` (~241–328);
+   - sign A, delay, sign B, compare, delay, verify, CFI;
+5. two more verifies (~2855);
+6. the page-123 commit: normally one 16-byte tally append (a quad-word program with a busy-flag spin) when the registered slot's reconciled count is unchanged; otherwise one more append first (`last_userop_count_set`, `hw/flash.rs` ~2866), with compaction when the page is full;
+7. the output;
+8. **`film_resolve(Signed)` (~3056)**, then return (~3072).
+
+The batch handler draws once per batch and uses the same landing. Deploy and rotation commands sign twice, so they make 6 draws and call `pre_sign` twice.
+
+### 1. The film floor: the largest wall-clock item, by far
+
+`film_resolve` draws until the film is done (lcd.rs ~2300–2345). `pqsigner-ui-px/src/loading.rs`:
+- `done` needs film time ≥ T7 + `RESULT_HOLD_MS` = 6,200 + 2,450 = **8,650 ms** (~352);
+- an answer after T5 = 4,800 ms adds whole 850 ms turns (`wraps_for`, ~250).
+
+So on the pixel route, **if the answer comes by T5 (`t_ready` ≤ 4.8 s), the host gets the result ≥ 8.65 s after `film_start`, however fast the sign is**, and in every case at least 3.85 s after the answer. The source does not establish that every cached sign finishes before T5, nor the exact host latency. The cost is arithmetic from constants (certain); on-glass timing has not been measured.
+
+**Scope:**
+- the pixel route only (`ui-px` is outside `make release`; the investor and EF images use it);
+- an atlas failure returns at once;
+- the film-less resolve is 400 + 2,450 = 2,850 ms (loading.rs ~408);
+- other routes end in a 3,000,000-iteration nop loop (≥ ~19 ms at 160 MHz).
+
+**Film CPU during the sign** (estimates from measured pieces):
+- a frame starts every ~32 ms (two TE refreshes), or every 28 ms with no TE stamp;
+- chip waits (`busy_poll`) draw back to back at 16 ms;
+- per frame ~5 ms CPU on DMA images (EVT, 2026-10-22: 3.7 ms render plus ~1 ms band-buffer wait, since removed);
+- so about 12–16% of wall time with DMA and TE stamps, ~60% with DMA but no stamps, and ~40% without DMA (arithmetic only; `PX_SHIP_FEATURES` lists no `ui-px-dma`, but the investor/EF release script does).
+
+Whether a unit has TE stamps is decided by a runtime self-test, not by source.
+
+### 2. The three strong-RNG draws (OptRand 16 B, two 32-B shuffle seeds)
+
+**What they do.** Each `rng_strong::fill` does a platform TRNG fill, then one OPTIGA and one SE050 GetRandom per ≤ 32-B chunk (`rng_strong_fold.rs` ~760–766, `MAX_SOURCE_BLOCK` 32), XOR-combined (~1026–1031). That is one round trip per chip per fill, six per sign. That count holds on the successful, already-open-session path: the OPTIGA re-handshakes near nonce reuse, and both drivers retry once with session recovery on a failure (`optiga/mod.rs` ~358, `se050/mod.rs` ~1050).
+
+**Per draw, from source:**
+
+| | OPTIGA | SE050 |
+|---|---|---|
+| command APDU | 6 B | 10 B |
+| protection | 19-B CCM-8 record (software AES) | 30-B SCP03 C-ENC + C-MAC (software AES/CMAC) |
+| transport frames | 25 B out, 23 + N B back | 36 B out; a 48 / 64-B T=1 frame back (the 42 / 58-B protected response plus 6 B of T=1) |
+| I2C transactions (minimum) | 8 | 4 |
+| guard delays | 50 µs nominal (`optiga/i2c.rs` ~45) | — |
+
+Each not-ready poll costs extra (`ifx_i2c.rs` ~359; `t1oi2c.rs` ~309). The bus runs at 400 kHz (`board/mod.rs`, TIMINGR `0x1090378F`).
+
+**FI-checked CPU work:**
+- ~94 random delays per fill outside the platform fill, each drawing its own length: ~0.01 ms on the raw-TRNG-word path, **0.37 ms if it falls back** to the hardened 1-byte fill (`fi.rs` ~41–74);
+- the pooled delays inside the platform fill: 106 / 206 for 16 / 32 B, measured ~8 µs each.
+
+**Estimate per sign (all three fills):**
+- **baseline estimate ~25–35 ms, including guards and FI CPU work**: ~600 B ≈ 13.5 ms, OPTIGA guards 1.7–5 ms, FI ~9 ms;
+- **plus ~100 ms if the delay fallback dominates** (94 × 0.37 ms × 3);
+- **plus chip processing and poll waits, which the source does not determine.** `crypto.rs` ~313–315 records "tens of ms of FI-checked CPU work" per draw and ~54 ms pauses at each draw boundary (EVT, 2026-10-22).
+
+**Where "0.3 s" comes from:** commit `48a20b25d` (owner, EVT, 2026-10-21): "303 ms @0, the longest pause of the run", from the film-gaps recorder. That is **the longest film gap, not a draw duration**, and it was measured *before* the 2026-10-22 fixes. Those fixes cover FI delays drawing their own length (0.37 ms × 86 per draw, `docs/ui/pixel-ui-pilot.md` ~143), the SE050's fixed 259-B reads, and `ChipWaitTicks` now drawing the film during chip waits. So the 0.3 s is **unconfirmed for today's image**.
+
+### 3. `pre_sign` (`secure/src/sign_rate.rs` 239–258)
+
+- SRAM only, no flash write: a 250-sign session cap, then `wait_for_min_interval` (F-17: `MIN_SIGN_INTERVAL_MS` = 1,000), then the tick is stamped.
+- **Start to start:** it binds only when the previous sign started < 1 s ago. That happens to the second sign of a deploy or rotation command once a sign drops under ~1 s; #1149's 1.15 s leaves ~150 ms.
+- The wait is `wfi` on the ~1 ms SysTick. Wall cost: max(0, 1,000 ms − time since the previous sign started).
+- That a normal confirm dwell makes it zero is an inference, not a measured result.
+
+**Defect found (fail-open, FI): flagged for the owner and security review, not fixed here.**
+- In `wait_for_min_interval`'s error arm (~377–391), when the first voted read of `LAST_SIGN_MS` disagrees, the code waits for one clean voted read and then **returns without checking the interval**, contradicting its own "fail-CLOSED" comment.
+- One fault on that read skips the 1 s floor.
+- The 250 cap and the caller's postcondition (`crypto.rs` 94–98, which checks only the count) still hold.
+
+### Levers: proposals only, none implemented
+
+Ranked by end-to-end effect. A cached pixel sign answers before T5, so b–f save **0 ms** end-to-end in the common case.
+
+| # | lever | effect | gate | invariants |
+|---:|---|---|---|---|
+| a | shorten the film: don't block the host on `RESULT_HOLD_MS` (the result frame stays on the glass); fewer `REVS` | up to −2.45 s and −2.55 s; the only lever that moves the common case | **owner (UX / designer)** | no crypto or FI invariant; trusted-UI review |
+| f | thin film frames during hashing | pays only past T5 (cache miss, deploy, rotation), in 850 ms steps; frees 12–60% of CPU while signing | owner (UX; risks the 10-22 stutter fixes) | none |
+| e | check the FI-delay raw-word path is not falling back | up to ~0.1 s per sign if it is | measurement, ungated: a performance diagnostic. The fallback still draws hardware randomness, so it does not by itself breach the carve-out | delay-length sourcing (hardware TRNG either way) |
+| d | one draw per source per sign (raise `MAX_SOURCE_BLOCK`, one fill of 80 B) | 2 × 2 round trips and ~190 delays fewer | **security / FI review** | three-source composition kept; the three separately gated fills and their all-zero checks merge; pinned tests change; chip length limits unverified |
+| b | draw OptRand + seeds during the confirm dwell | hides the draws behind the human | **security review** | freshness becomes "per confirmed request"; the draws leave their place after `CFI_STEP_RATE_LIMIT`; needs consume-once and zeroize-on-decline |
+| c | overlap SE I/O with hashing | only seed B can overlap sign A | **security / FI review** | changes the CFI step order; needs secure-world concurrency |
+
+None touches invariant #4, and none needs a software PRNG.
+
+**What this means for #1149:** on the pixel UI a cached sign that answers by T5 returns in 8.65 s whether hashing takes 3.0 s or 1.15 s. #1149 pays on long signs (in 0.85 s steps), on the non-pixel route, and as headroom once the film is shortened. Shortening the film is the user-visible decision.
+
+### EVT measurement plan (for the owner)
+
+**Build:**
+- the recorder build: `FEAT_S=dual-se,dev-testkey,ui-lcd,ui-px,ui-px-dma,dev-dfu,stm32u585,usb,board-pq1,stack-hwm,ui-px-film-gaps` (`docs/ui/pixel-ui-pilot.md` ~118). This is a `dev-testkey` bench profile; today's investor/EF images default to `devunit-die-keys` (`tools/devunit/release.sh` ~48);
+- flash with `tools/evt-dev-flash.sh`; sign with `tools/hid_sign.py`;
+- record the commit and the feature set;
+- for the end-to-end figure, build again with **both** `ui-px-film-gaps` and `stack-hwm` off. The recorder costs time, and `stack-hwm` holds `film_resolve` until a press or 60 s (lcd.rs ~2348, ~2410).
+
+**New instrumentation is needed.** The recorder's WHERE, SE050 and FI pages show only the three longest pauses, phases spanning frames are split, and other pauses are discarded (`film_gaps.rs` ~239, ~360, ~417). So the plan needs a small dev-only addition:
+- per-fill, per-source duration totals;
+- whole-sign deltas of the counters;
+- phase timestamps (confirm, `film_start`, `pre_sign`, each fill, sign A/B, the verifies, commit, `t_ready`, `film_resolve` exit);
+- elapsed time recorded host-side in `hid_sign.py` (~278 has none).
+
+This is a code change for a later round, with the owner's go.
+
+**Capture for N ≥ 30 signs** (min / median / max; the first sign after unlock reported separately from warm ones):
+1. Each of the three fills as a duration, split by source: platform TRNG, OPTIGA, SE050. This comes from the new per-fill totals; the recorder's pages give only the three longest pauses.
+2. Wire time against chip latency: OPTIGA not-ready poll counts and SE050 start-byte polls, or a logic-analyser trace of I2C1 / I2C4 (the LA1010 is on this host).
+3. Deltas of `DELAY_RAW_DRAWS` and `DELAY_RAW_FALLBACKS` per sign (the "FI ms n slow" page): a fallback rate per draw.
+4. `t_ready` against T5, any wraps, and the `film_resolve` wait. Whether TE stamps are present (GATE page).
+5. Host request-to-response time (`hid_sign.py`) and USB time after return.
+6. One deploy or rotation command, to see `pre_sign`'s wait on the second sign.
+
+**The output must show:**
+- a per-sign table: confirm→`film_start`, `film_start`→sign start, `pre_sign` wait, draws (per fill, per source), sign A, sign B, the verifies, commit, `t_ready`, the film wait, and the host total;
+- the fallback rate;
+- whether 0.3 s still holds.
