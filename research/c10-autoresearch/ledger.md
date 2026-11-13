@@ -1077,6 +1077,12 @@ Under the keep rule it is a discard. It is the fallback if the colocation landin
 
 **Evidence:** kdiff 32/32, residue gate, `c9`/`c10` swap mutant (7/8 wrong), stale controls (key, positive, fors, search). Mutant A (Rust entry check removed): the function's own PRF stale check halts. FSBL identical.
 
+**Astra (after the round-9 report; reviewed source blob `8e5591c9`): no defects.**
+- **ABI:** prologue and epilogue balance at the single return; `sp` is 8-aligned at the fault call; r4..r11 restored. Saving r6/r7 across this external call preserves LLVM's frame and base pointers (AAPCS32).
+- **Directives:** the section/global/type/thumb_func/size directives give a global `STT_FUNC` with the Thumb bit; `hb_lo`/`hb_hi` give 0x520C040C; the private fault hook is valid as a `sym` operand.
+- **DIN order and preloads:** the order is exact, the `ldm` fills ascending registers, both preload sites establish `st[0..5]`, and every path into INIT keeps them.
+- **Equivalence:** a mechanical comparison against `v1_key_asm` found only the setup, return, block 0 and preload widths changed.
+
 ### Not done (ranked low: ~0.1–0.2 M each for new asm)
 - search zero-word block 0;
 - `th_multi16` with the next value's loads in the stall;
