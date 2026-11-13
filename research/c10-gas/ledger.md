@@ -331,3 +331,17 @@ edited here.
 | C2 | chain block tests `if iszero(and(d, bit))` instead of `if and(nd, bit)` with `nd := not(d)` (Fable) | v2 | 101,296..101,466 -> 102,058..102,228 (**+0.76k**) | 100,282..100,452 -> 101,044..101,214 (+0.76k) | 9,979 -> 10,151 / 10,715 -> 10,886 | bench only | **discard** (solc keeps the ISZERO and the stack layout gets worse) |
 | C3 | sibling slots as their own bytes of `slots` (Fable): `slots = sbit + C - (sbit << 8)` puts 0x30 - slot in the even byte of each lane, so a level reads its sibling slot with one BYTE (exhaustive unit gate extended to the sibling bytes) | v2 + variants | 0.3 101,296..101,466 -> **101,126..101,296** (-170); ts200 -> 103,384..103,454; split810 -> 101,858..101,950; all3 -> 103,978..104,034 | 0.3 100,282..100,452 -> 100,022..100,192 (-260); ts200 -> 102,280..102,350; split810 -> 100,765..100,857; all3 -> 102,885..102,941 | 9,979 -> 10,063 / 10,715 -> 10,830 (+115 B) | gate.sh green | keep (small; ~2.3k gas per kB) |
 | C4 | FORS loop strength reduction (Fable): running `dg` (digest >> 11 i), `base` (+1<<24 per tree), secret / auth-path / T_13-slot pointers; the loop ends on the slot pointer; split810 re-derived (kp step 1<<23) | v2 + variants | 0.3 101,126..101,296 -> **100,637..100,820** (-0.48k); ts200 -> 102,900..102,978; split810 -> 101,347..101,437; all3 -> 103,466..103,522 | 0.3 100,022..100,192 -> **99,509..99,680** (-0.51k); ts200 -> 101,766..101,836; split810 -> 100,254..100,344; all3 -> 102,373..102,429 | 10,063 -> 10,049 / 10,830 -> 10,816 | gate.sh green | keep |
+
+### Track A's `variant_controls.sh`, re-targeted on this branch (item 2)
+
+Every patch applies again to the mechanically derived variants and every row is as expected (22
+rows, `PASS`, files restored): kp FORS `base := add(base, shl(23, 1))` -> 24; kp hypertree
+`shl(23, idxLeaf)` -> 24 (unchanged); ci 17->18 now rewrites the 43 per-chain `mstore8(0x24,
+or(kb, 2i))` sites (asserting 43); layer heights (8,10)->(9,9) now sets `hl := 9` and swaps the
+generated split810 hypertree walk for the 0.3 one (via `gen_v2_walks.py`). The stacked row
+still turns split810 into exactly the 0.3 verifier (accepts all 6 0.3 KATs). Merge note:
+Track A's branch `research/c10-autoresearch` has no commit touching this script or the variant
+verifiers since `0895dcc79`, so there is no textual conflict today; but the script now targets
+the derived variants and imports `research/c10-gas/gen_v2_walks.py`, so taking it without this
+branch's verifiers breaks it, and any later Track A edit to the script or the variants will
+conflict with this branch.
