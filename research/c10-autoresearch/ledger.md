@@ -1406,3 +1406,124 @@ Gate 5's interleaved v1 probe had only been the byte-mode one-shot and the strea
 - v1 kit differential 32/32 with search edges 0x3F.
 
 **Not done this round:** item 4b, the FORS-PRF loads. Fable estimates ~0.15 M. It is ranked second for the next batch, after the T_43 feed.
+
+## Round 12 (2026-11-13): v2 profile, T_43 feed, v2 closing note
+
+### The round-11 landing fix (accepted, merged)
+Three real driver breaks were found by master's secure source-shape tests and fixed in `0d045f658`:
+- the FSBL fence was missing 26 research features;
+- the crosscheck read 32 bytes from the 16-byte one-shot's output;
+- the fused entries bypassed the crosscheck (now a `compile_error!`).
+
+The four tests were rewritten for the new shape (`0f378e451`..`0ba427076`), with 56 planted violations. Astra: FIX, FIX, GO, GO. From round 12 on, every driver keep re-runs the secure suite and the FSBL footprint test and updates the pinned sequences, each with a planted violation.
+
+### Profile at head (PC sampling, 16-sign mean bench, 2-way, before E18)
+
+| function | share of the run |
+|---|---:|
+| `pq1_v2_key_loop` | 63.9% |
+| `pq1_v2_fors_sub` | 15.1% |
+| `pq1_v2_search_dt` | 14.1% |
+| `oneshot16` (the T_43 compression, ~1,240 cyc/call) | 2.5% |
+| grind | 1.8% |
+| bench main | 0.55% |
+| `node16` | 0.47% |
+| memcpy | 0.43% |
+| other (signer Rust, verify, wrappers) | ~1.1% |
+
+Per sign, as share × the whole run (≈ 830 M) ÷ 16, so with 1/16 of keygen and the verify included:
+
+| row | per sign |
+|---|---:|
+| key loop | 33.2 M |
+| FORS | 7.85 M |
+| search | 7.32 M |
+| T_43 | 1.29 M |
+| grind | 0.95 M |
+| bench main (bench-only) | 0.29 M |
+| `node16` | 0.24 M |
+| memcpy | 0.22 M |
+| the rest (signer Rust, wrappers, verify) | ~0.56 M |
+
+The rows sum to ≈ 51.9 M: the 50.70 M sign plus ≈ 1.2 M of keygen and verify. The non-entry rows (bench main, `node16`, memcpy, the rest) come to **~1.3 M per sign**. That is round 11's separate "unattributed ~1.6 M" row; it is not T_43, which had its own row.
+
+### E18: the T_43 compression as a `global_asm!` feed, keep (`9a3deab71`, `gen_v2t43.py`)
+
+**What changed.** While a block is in the engine, the HASH takes only the next block's first word; the next store waits. So the feed time after each block is on the critical path: about 48 cycles per block in the generic one-shot.
+- The new feed stores the trigger word, loads the next 12 words in the engine window, and stores them back to back. It then loads 3 more words plus the next trigger with one `ldm`.
+- The ten middle blocks are unrolled: no register is free for a counter.
+- DATATYPE 10, as before. The input is memory bytes, so DATATYPE 00 would only add a `rev` per word (tight Rust feeds measured 1,970 against 2,125 cycles).
+- Same checks as `init`/`final`. Not built with `tick-hook`, so no new tick site.
+
+**The 712-byte DATATYPE 00 probe came first (`bench_v2micro --features t43`):** every length 640..776 and 200 v2-shape messages, 474 checks, 0 failures; a byte one-shot after a 32-bit digest 6/6.
+
+**Results:**
+- `wots_pk16` 95.3 → **94.2** cycles/digest (T_43 ~1,242 → ~862 cycles);
+- v2 mean 50.70 → **50.35 M** (2-way), 50.82 → **50.44 M** (1-way);
+- keygen 17.13 → 16.95 M;
+- golden cached sign 96.86 → 96.06 M; with the top cache 63.98 → 63.53 M.
+
+**Evidence:**
+- gate 5 2,940/0;
+- the golden matrix, plain and cached (3 hits each);
+- the residue gate is clean in the default build and with `prf2`, where the Rust key loop runs before the feed (v2 9 cases, v1 7);
+- a new `stale-v2t43` control calls `pq1_v2_t43` with DCIS left set: it halts through the fault hook, and with `stale-positive` (DCIS cleared) the same call returns;
+- the swapped-store mutant fails all 40 `wots_pk16` checks;
+- FSBL identical;
+- landing tests: research features 26 → 27 and `global_asm!` blocks 8 → 9, each with planted violations R1–R3 caught;
+- full plant set: 54 caught by the test, 5 stopped by the host compile;
+- secure suite 2,984/0; FSBL footprint ok.
+
+**Astra:** GO, no findings (178 words counted exactly; guards, ABI, cfg and generator identity; tests not weaker).
+
+### E19: FORS wait-ladder spins, discard
+`gen_v2fors_dt.py` takes optional F, H and PRF spins; the defaults reproduce the checked-in asm. Swept in the 16-message mean (baseline 50.346 M):
+
+| spin | F | H | PRF |
+|---|---:|---:|---:|
+| 4 | 50.400 M | 50.321 M | — |
+| 6 | 50.348 M | — | — |
+| 8 | 50.400 M | 50.480 M | 50.745 M |
+| 11 | 50.427 M | 50.718 M | 50.983 M |
+| 14 | 50.665 M | 50.956 M | 51.221 M |
+
+F and H together at 4: 50.397 M. The windows are already full of work. The best result, H = 4, is −0.05% and phase-sensitive: below the bar.
+
+### Not tried, with reasons
+- **FORS PRF tail (~8 cycles): not attempted.** By my reading it is register-bound, on the unprobed assumption that HR must be read before INIT. HR must be read into r0..r3 before INIT, r5..r11 hold `sk_seed[0..7)`, and r12 and lr do the status work. Parking HR in the frame to free three registers costs about what it saves.
+- **Key-loop PRF tail: not attempted.** Register-bound by Fable's round-11 reading. Its spin is tuned (13, round 11).
+
+### Closing note: v2 headroom (kit 160 MHz, head `9a3deab71`)
+
+| entry | now | engine floor | practical headroom per sign |
+|---|---:|---:|---:|
+| WOTS key loop | 91.7 cyc/digest | ~90 | ~0.1–0.2 M: per-chain PRF tail; all registers in use; spin tuned |
+| FORS subtree | 97.7 cyc/digest | ~92 | ~0.05–0.1 M: spins measured at ≤0.05%; the PRF tail and H's CR re-make are register-bound |
+| search | 103.0 cyc/try | ~94 | ~0.1 M, and only if HR survives INIT (unproven); the digit sum fills the window |
+| T_43 | ~862 cyc/call | ~800 | ~0.06 M |
+| grind | ~0.95 M/sign | | ~0.2 M: the highest risk (`sk_seed` in a wiped buffer, two-block messages) |
+| `node16` | 169 cyc/call | ~120 | ~0.05 M |
+
+Total practical driver headroom is about **0.55–0.75 M (1.1–1.5%)** of a 50.35 M sign. That is below the ~2% mark, so v2 driver work is closing.
+
+**Hardware axes:** the same as v1, measure only. ICACHE 2-way against 1-way: −0.19% (50.35 against 50.44 M). Prefetch and no-busy-wait are owner settings.
+
+**Outside the driver (signer-crate edits are off limits while the Lean re-proof merges):** the non-entry rows come to about 1.3 M per sign. Of that, bench main (0.29 M) is bench-only and `node16` (0.24 M) is a driver entry already in the table. The remaining ~0.8 M is memcpy (0.22 M), signer Rust and wrappers, and the verify (0.12 M). Their callers have not been attributed; a call-graph profile is the first step.
+
+**Estimates:** the floors above are estimates, not measurements. The profile was taken before E18.
+
+### Round 12 close (kit 160 MHz, keys/signatures unchanged)
+
+| v2 0.3 | round 11 end | round 12 end |
+|---|---:|---:|
+| mean sign, 2-way | 50.70 M | **50.35 M (−0.7%)** |
+| mean sign, 1-way | 50.82 M | **50.44 M** |
+| keygen | 17.13 M | 16.95 M |
+| golden cached sign (plain) | 96.86 M | **96.06 M (0.600 s)** |
+| golden cached sign with the top cache | 63.98 M | **63.53 M (0.397 s)** |
+
+**v2 since round 7 start:** 65.59 → 50.35 M (−23.2%).
+
+**v1:** closed. No v1 path changed in round 12, and it was not re-measured after E18.
+
+**Signer crate:** no edits. **FSBL:** identical.

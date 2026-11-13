@@ -801,9 +801,22 @@ pub extern "C" fn c10_bench_main() {
         }
         let s = [0x5Au8; 16];
         let mut v = [0x11u8; 16];
-        #[cfg(not(any(feature = "stale-search", feature = "stale-v1", feature = "stale-v2key", feature = "stale-v2fors")))]
+        #[cfg(not(any(feature = "stale-search", feature = "stale-v1", feature = "stale-v2key", feature = "stale-v2fors", feature = "stale-v2t43")))]
         // SAFETY: valid buffers.
         unsafe { pqsigner_v2_chain16(s.as_ptr(), v.as_mut_ptr(), 0x0102_0304, 0x0000_0500, 0, 3) };
+        #[cfg(feature = "stale-v2t43")]
+        {
+            // Round 12: the T_43 feed's own check before INIT (called directly: in `wots_pk16` the
+            // key loop's check would fire first).
+            extern "C" {
+                fn pq1_v2_t43(src: *const u32, out: *mut u8);
+            }
+            let m = [0x2D2D_2D2Du32; 178];
+            let mut o = [0u8; 16];
+            let _ = (&s, &mut v);
+            // SAFETY: 178 readable aligned words, 16 writable bytes.
+            unsafe { pq1_v2_t43(m.as_ptr(), o.as_mut_ptr()) };
+        }
         #[cfg(feature = "stale-v2fors")]
         {
             // Round 11: the v2 subtree's own first-PRF check (its Rust entry waits for BUSY only).

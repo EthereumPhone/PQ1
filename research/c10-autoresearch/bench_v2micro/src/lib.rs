@@ -83,7 +83,7 @@ unsafe fn drain() {
 /// the big-endian value of four message bytes, the last partial word holds its bytes in the top
 /// bits, and NBLW = 8 x (len % 4) is written before DCAL (then NBLW | DCAL, as the driver does).
 /// Returns the eight HR words as digest bytes.
-#[cfg(feature = "nblw32")]
+#[cfg(any(feature = "nblw32", feature = "t43"))]
 fn dt32_digest(msg: &[u8]) -> [u8; 32] {
     unsafe {
         while hr(0x24) & 8 != 0 {}
@@ -178,7 +178,7 @@ extern "C" {
     fn pqsigner_sha256_oneshot_ext(p: *const u8, n: usize, out: *mut u8);
 }
 
-#[cfg(not(feature = "nblw32"))]
+#[cfg(not(any(feature = "nblw32", feature = "t43")))]
 #[no_mangle]
 pub extern "C" fn c10_bench_main() {
     for i in 0..32 {
@@ -354,4 +354,150 @@ unsafe extern "C" fn never(p: *const u8) -> bool {
         s += u32::from(b & 7) + u32::from((b >> 3) & 7) + u32::from(b >> 6);
     }
     s == 1000
+}
+
+// Round 12: the T_43 one-shot (wots_pk16's 712-byte compression) — timing of the current
+// `oneshot16` call against tight feeds in DATATYPE 10 (memory words as loaded) and 00 (each word
+// byte-swapped), all compared with `oneshot16`'s 16 bytes; then the multi-block DATATYPE 00 probe
+// (every length 640..=776, i.e. every NBLW across the 712-byte shape's block boundaries, and 200
+// random 712-byte messages) against software SHA-256, each followed by a byte-data one-shot.
+// Result window: 2 cycles/call oneshot16, 3 feed10, 4 feed00, 5 feed00 with `rev` in the store
+// (as an asm feed would), 6 mismatches of the three feeds vs oneshot16, [8..16) (checks, fails)
+// per NBLW 0/8/16/24, 16 (checks, 17 fails) of the byte one-shot after a 32-bit digest.
+#[cfg(feature = "t43")]
+extern "C" {
+    #[link_name = "pqsigner_sha256_oneshot16"]
+    fn oneshot16_ext(p: *const u8, n: usize, out: *mut u8);
+}
+#[cfg(feature = "t43")]
+#[inline(always)]
+unsafe fn t43_feed<const SWAP: bool>(words: &[u32; 178]) -> [u32; 4] {
+    unsafe {
+        while hr(0x24) & 8 != 0 {}
+        if hr(0x24) & 2 != 0 {
+            bench_halt(0x00F2);
+        }
+        hw(0x08, 0);
+        hw(0x00, if SWAP { 0 } else { 0b10 << 4 } | (1 << 17) | (1 << 18) | (1 << 2));
+        for w in words.iter() {
+            hw(0x04, if SWAP { w.swap_bytes() } else { *w });
+        }
+        hw(0x08, 1 << 8);
+        while hr(0x24) & 2 == 0 {}
+        let r = [hr(0x310), hr(0x314), hr(0x318), hr(0x31C)];
+        hw(0x24, 1);
+        r
+    }
+}
+#[cfg(feature = "t43")]
+#[no_mangle]
+pub extern "C" fn c10_bench_main() {
+    use sha2::{Digest, Sha256};
+    for i in 0..32 {
+        out(i, 0);
+    }
+    out(0, 0x5434_3332);
+    // SAFETY: single-threaded; keeps the runner's symbols.
+    unsafe {
+        core::ptr::addr_of_mut!(SIG0).cast::<u8>().write_volatile(0);
+        core::ptr::addr_of_mut!(SIG1).cast::<u8>().write_volatile(0);
+        pqsigner_hw::hash::init_clock();
+    }
+    let mut x: u32 = 0x2545_F491;
+    let mut rnd = || {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        x
+    };
+    let mut buf = [0u32; 178];
+    for w in buf.iter_mut() {
+        *w = rnd();
+    }
+    let bytes = |b: &[u32; 178]| -> [u8; 712] {
+        let mut o = [0u8; 712];
+        for (k, w) in b.iter().enumerate() {
+            o[4 * k..4 * k + 4].copy_from_slice(&w.to_le_bytes());
+        }
+        o
+    };
+    let mut d16 = [0u8; 16];
+    const N: u32 = 2000;
+    // SAFETY: 712 readable, 16 writable bytes.
+    let t = cyc();
+    for _ in 0..N {
+        unsafe { oneshot16_ext(buf.as_ptr().cast::<u8>(), 712, d16.as_mut_ptr()) };
+    }
+    out(2, cyc().wrapping_sub(t) / N);
+    let want: [u8; 16] = Sha256::digest(bytes(&buf))[..16].try_into().unwrap();
+    let mut bad = u32::from(d16 != want);
+    let as16 = |r: [u32; 4]| -> [u8; 16] {
+        let mut o = [0u8; 16];
+        for (k, w) in r.iter().enumerate() {
+            o[4 * k..4 * k + 4].copy_from_slice(&w.to_be_bytes());
+        }
+        o
+    };
+    let mut r = [0u32; 4];
+    let t = cyc();
+    for _ in 0..N {
+        r = unsafe { t43_feed::<false>(&buf) };
+    }
+    out(3, cyc().wrapping_sub(t) / N);
+    bad += u32::from(as16(r) != want) << 1;
+    let t = cyc();
+    for _ in 0..N {
+        r = unsafe { t43_feed::<true>(&buf) };
+    }
+    out(4, cyc().wrapping_sub(t) / N);
+    bad += u32::from(as16(r) != want) << 2;
+    out(5, 0);
+    out(6, bad);
+    // The multi-block DATATYPE 00 probe.
+    let mut cnt = [[0u32; 2]; 4];
+    let mut msg = [0u8; 776];
+    for len in 640..=776usize {
+        for _ in 0..2 {
+            for b in msg[..len].iter_mut() {
+                *b = rnd() as u8;
+            }
+            let want: [u8; 32] = Sha256::digest(&msg[..len]).into();
+            let c = len % 4;
+            cnt[c][0] += 1;
+            if dt32_digest(&msg[..len]) != want {
+                cnt[c][1] += 1;
+            }
+        }
+    }
+    for _ in 0..200 {
+        for b in msg[..712].iter_mut() {
+            *b = rnd() as u8;
+        }
+        let want: [u8; 32] = Sha256::digest(&msg[..712]).into();
+        cnt[0][0] += 1;
+        if dt32_digest(&msg[..712]) != want {
+            cnt[0][1] += 1;
+        }
+    }
+    for (k, c) in cnt.iter().enumerate() {
+        out(8 + 2 * k, c[0]);
+        out(9 + 2 * k, c[1]);
+    }
+    let mut fails = 0u32;
+    for len in [0usize, 55, 64, 712, 713, 776] {
+        for b in msg[..len].iter_mut() {
+            *b = rnd() as u8;
+        }
+        let want: [u8; 16] = Sha256::digest(&msg[..len])[..16].try_into().unwrap();
+        let _ = dt32_digest(&msg[..701]);
+        let mut d = [0u8; 16];
+        // SAFETY: `len` readable, 16 writable bytes.
+        unsafe { oneshot16_ext(msg.as_ptr(), len, d.as_mut_ptr()) };
+        if d != want {
+            fails += 1;
+        }
+    }
+    out(16, 6);
+    out(17, fails);
+    out(1, 100);
 }
