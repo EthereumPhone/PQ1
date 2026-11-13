@@ -35,10 +35,14 @@ contract SPHINCsC10Asm {
         // assumptions that don't hold.
         assembly {
             let N_MASK := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000
-            // Scratch slot for SHA-256 precompile output. Sits above every
-            // other memory region the verifier touches (WOTS endpoints at
-            // 0x80 + 42*32 = 0x5C0 is the highest legitimate write).
-            let OUT := 0x600
+            // T_k buffer for the two multi-value hashes, laid out as their
+            // preimage seed || adrs || v_0 .. v_{k-1} (32-byte words), so the
+            // FORS roots and WOTS endpoints are written in place and hashed
+            // without a copy: TB .. TB + 0x5A0 = 0x620, above the 0x00..0x7F
+            // single-hash scratch.
+            let TB := 0x80
+            // Scratch slot for SHA-256 precompile output, above the T_k buffer.
+            let OUT := 0x620
 
             if iszero(eq(sig.length, 4008)) {
                 mstore(0x00, 0x08c379a000000000000000000000000000000000000000000000000000000000)
@@ -86,6 +90,11 @@ contract SPHINCsC10Asm {
             if and(shr(132, dVal), 0x7FF) { revert(0, 0) }
 
             let sigBase := sig.offset
+            mstore(TB, seed) // after H_msg: TB held its all-ones word
+            // In-place hashing (below) writes only the top 16 bytes of the value words at 0x40
+            // and 0x60; their low halves (0x50..0x5F, 0x70..0x7F) must be and stay zero. 0x40 is
+            // rewritten whole by every leaf/digest/chain start; 0x60 still holds H_msg's message.
+            mstore(0x60, 0)
             // K-1=12 normal trees
             for { let i := 0 } lt(i, 12) { i := add(i, 1) } {
                 let treeIdx := and(shr(mul(i, 11), dVal), 0x7FF) // 11-bit indices
@@ -97,28 +106,58 @@ contract SPHINCsC10Asm {
                 let leafAdrs := or(shl(160, htIdx), or(shl(128, 3), or(shl(96, i), treeIdx)))
                 mstore(0x20, leafAdrs)
                 mstore(0x40, secretVal)
-                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
-                let node := and(mload(OUT), N_MASK)
+                // In-place walk: each node's 16 bytes are written by the precompile (outsize 16)
+                // straight into its value word of the next preimage seed || adrs || L || R, L at
+                // 0x40 if its index is even, else R at 0x60; the sibling's 16 bytes are copied into
+                // the other word. The root goes to its T_13 slot (fresh zero memory below).
+                // slots (one MUL per walk): byte 2k+1 = 0x40 + 0x20 * bit k of the leaf index (the word
+                // of the node at height k), byte 2k = 0xA0 minus that (its sibling's word); exhaustive
+                // unit gate test/gas/C10Lanes.t.sol
+                let t := treeIdx
+                let sbit := and(mul(t, 0x10000800040002000100008000400020001000080004000000000000000000), 0x10001000100010001000100010001000100010001000000000000000000000) // C10-LANES-V1
+                let slots := sub(add(0x6040604060406040604060406040604060406040604000000000000000000000, shl(1, sbit)), shl(9, sbit)) // C10-LANES-V1
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, byte(1, slots), 16))
 
                 let treeAdrsBase := or(shl(160, htIdx), or(shl(128, 3), shl(96, i)))
-                let pathIdx := treeIdx
                 // AUTH_START=224, auth per tree = 11*16 = 176
                 let authPtr := add(sigBase, add(224, mul(i, 176)))
 
-                // Walk A=11 auth path levels
-                for { let h := 0 } lt(h, 11) { h := add(h, 1) } {
-                    let sibling := and(calldataload(add(authPtr, shl(4, h))), N_MASK)
-                    let parentIdx := shr(1, pathIdx)
-                    mstore(0x20, or(treeAdrsBase, or(shl(32, add(h, 1)), parentIdx)))
-                    // Branchless Merkle swap
-                    let s := shl(5, and(pathIdx, 1))
-                    mstore(xor(0x40, s), node)
-                    mstore(xor(0x60, s), sibling)
-                    pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
-                    node := and(mload(OUT), N_MASK)
-                    pathIdx := parentIdx
-                }
-                mstore(add(0x80, shl(5, i)), node)
+                // Walk A=11 auth path levels, unrolled: the node at height k is in the word
+                // byte(2k+1, slots) and its sibling in byte(2k, slots); ADRS = treeAdrsBase | h<<32 |
+                // treeIdx>>h. Height 11 (the root) goes to its T_13 slot.
+                calldatacopy(byte(0, slots), add(authPtr, 0), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 1)), shr(1, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(3, slots), 16))
+                calldatacopy(byte(2, slots), add(authPtr, 16), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 2)), shr(2, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(5, slots), 16))
+                calldatacopy(byte(4, slots), add(authPtr, 32), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 3)), shr(3, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(7, slots), 16))
+                calldatacopy(byte(6, slots), add(authPtr, 48), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 4)), shr(4, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(9, slots), 16))
+                calldatacopy(byte(8, slots), add(authPtr, 64), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 5)), shr(5, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(11, slots), 16))
+                calldatacopy(byte(10, slots), add(authPtr, 80), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 6)), shr(6, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(13, slots), 16))
+                calldatacopy(byte(12, slots), add(authPtr, 96), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 7)), shr(7, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(15, slots), 16))
+                calldatacopy(byte(14, slots), add(authPtr, 112), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 8)), shr(8, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(17, slots), 16))
+                calldatacopy(byte(16, slots), add(authPtr, 128), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 9)), shr(9, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(19, slots), 16))
+                calldatacopy(byte(18, slots), add(authPtr, 144), 16)
+                mstore(0x20, or(or(treeAdrsBase, shl(32, 10)), shr(10, treeIdx)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(21, slots), 16))
+                calldatacopy(byte(20, slots), add(authPtr, 160), 16)
+                mstore(0x20, or(treeAdrsBase, shl(32, 11)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, add(add(TB, 0x40), shl(5, i)), 16))
             }
 
             // Last tree (forced-zero)
@@ -126,23 +165,17 @@ contract SPHINCsC10Asm {
                 let lastSecret := and(calldataload(add(sigBase, add(16, shl(4, 12)))), N_MASK) // 16+12*16=208
                 mstore(0x20, or(shl(160, htIdx), or(shl(128, 3), shl(96, 12))))
                 mstore(0x40, lastSecret)
-                // 0x80 + 12*0x20 = 0x80 + 0x180 = 0x200
-                pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
-                mstore(0x200, and(mload(OUT), N_MASK))
+                pop(staticcall(gas(), 0x02, 0x00, 0x60, add(TB, 0x1C0), 16)) // TB + 0x40 + 12*0x20
             }
 
             // Compress 13 roots: sha256(seed || rootsAdrs || 13 roots)
             // = 32 + 32 + 13*32 = 480 = 0x1E0
             // rootsAdrs also carries htIdx in the tree field (position binding).
-            mstore(0x20, or(shl(160, htIdx), shl(128, 4)))
-            for { let i := 0 } lt(i, 13) { i := add(i, 1) } {
-                mstore(add(0x40, shl(5, i)), mload(add(0x80, shl(5, i))))
-            }
-            pop(staticcall(gas(), 0x02, 0x00, 0x1E0, OUT, 32))
-            let forsPk := and(mload(OUT), N_MASK)
+            mstore(add(TB, 0x20), or(shl(160, htIdx), shl(128, 4)))
+            // the FORS pk lands on the node word (0x40) of the layer-0 WOTS digest preimage
+            pop(staticcall(gas(), 0x02, TB, 0x1E0, 0x40, 16))
 
             // Hypertree (D=2, subtree_h=9, w=8, l=43, target_sum=205)
-            let currentNode := forsPk
             let idxTree := htIdx
             let sigOff := 2336 // HT_START
 
@@ -155,77 +188,384 @@ contract SPHINCsC10Asm {
                 let countOff := add(sigOff, 688)
                 let count := shr(224, calldataload(add(sigBase, countOff)))
 
+                // digest preimage seed || wotsAdrs || node || count; the node (16 bytes, low
+                // half zero) is already at 0x40
                 mstore(0x00, seed)
                 mstore(0x20, wotsAdrs)
-                mstore(0x40, currentNode)
                 mstore(0x60, count)
                 pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
                 let d := mload(OUT)
+                mstore(0x60, 0) // restore the zero low half of the R word for the Merkle walk
 
-                // Validate digit sum = 205 (43 base-8 digits, 3 bits each)
-                let digitSum := 0
-                for { let ii := 0 } lt(ii, 43) { ii := add(ii, 1) } {
-                    digitSum := add(digitSum, and(shr(mul(ii, 3), d), 0x7))
-                }
+                // Validate digit sum = 205 (43 base-8 digits (d >> 3i) & 7, 3 bits each), summed
+                // branch-free (exactness argument and unit gate: test/gas/C10DigitSum.t.sol)
+                let lanes := add(add(and(d, 0x1c0e070381c0e070381c0e070381c0e07), and(shr(3, d), 0xe070381c0e070381c0e070381c0e07)), and(shr(6, d), 0xe070381c0e070381c0e070381c0e07)) // C10-SWAR-DIGITSUM
+                let digitSum := and(shr(126, mul(lanes, 0x40201008040201008040201008040201)), 0x1FF) // C10-SWAR-DIGITSUM
                 if iszero(eq(digitSum, 205)) { revert(0, 0) }
 
                 // 43 WOTS chains (w=8: max 7 steps per chain)
                 let wotsPtr := add(sigBase, sigOff)
-                for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
-                    let digit := and(shr(mul(i, 3), d), 0x7)
-                    let steps := sub(7, digit)
-                    let val := and(calldataload(add(wotsPtr, shl(4, i))), N_MASK)
-                    let chainBase := and(
-                        or(wotsAdrs, shl(64, i)),
-                        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFF
-                    )
-
-                    for { let step := 0 } lt(step, steps) { step := add(step, 1) } {
-                        mstore(0x20, or(chainBase, shl(32, add(digit, step))))
-                        mstore(0x40, val)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
-                        val := and(mload(OUT), N_MASK)
-                    }
-                    mstore(add(0x80, shl(5, i)), val)
+                // Chain i from position digit_i = (d >> 3i) & 7 to 7 in place: the value word at
+                // 0x40 (low half zero) is overwritten by each step's 16-byte output; the ADRS word
+                // for chain i at position p is wotsAdrs | i<<64 | p<<32 (ci = bits 64..95, cp =
+                // bits 32..63, both zero in wotsAdrs; i < 43 and p < 7 fit their lowest byte).
+                // wotsAdrs is stored once; per chain only the ci byte (0x37) and per step only the cp
+                // byte (0x3B) are written. Unrolled over the 43 chains (generated); steps as a loop.
+                mstore(0x20, wotsAdrs)
+                // BEGIN generated chains (research/c10-gas/gen_v2_chains.py v1; do not edit by hand)
+                mstore(0x40, and(calldataload(add(wotsPtr, 0)), N_MASK)) // chain 0
+                mstore8(0x37, 0) // ADRS ci byte
+                for { let p := and(shr(0, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
+                mstore(add(TB, 64), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 16)), N_MASK)) // chain 1
+                mstore8(0x37, 1) // ADRS ci byte
+                for { let p := and(shr(3, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 96), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 32)), N_MASK)) // chain 2
+                mstore8(0x37, 2) // ADRS ci byte
+                for { let p := and(shr(6, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 128), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 48)), N_MASK)) // chain 3
+                mstore8(0x37, 3) // ADRS ci byte
+                for { let p := and(shr(9, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 160), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 64)), N_MASK)) // chain 4
+                mstore8(0x37, 4) // ADRS ci byte
+                for { let p := and(shr(12, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 192), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 80)), N_MASK)) // chain 5
+                mstore8(0x37, 5) // ADRS ci byte
+                for { let p := and(shr(15, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 224), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 96)), N_MASK)) // chain 6
+                mstore8(0x37, 6) // ADRS ci byte
+                for { let p := and(shr(18, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 256), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 112)), N_MASK)) // chain 7
+                mstore8(0x37, 7) // ADRS ci byte
+                for { let p := and(shr(21, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 288), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 128)), N_MASK)) // chain 8
+                mstore8(0x37, 8) // ADRS ci byte
+                for { let p := and(shr(24, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 320), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 144)), N_MASK)) // chain 9
+                mstore8(0x37, 9) // ADRS ci byte
+                for { let p := and(shr(27, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 352), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 160)), N_MASK)) // chain 10
+                mstore8(0x37, 10) // ADRS ci byte
+                for { let p := and(shr(30, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 384), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 176)), N_MASK)) // chain 11
+                mstore8(0x37, 11) // ADRS ci byte
+                for { let p := and(shr(33, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 416), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 192)), N_MASK)) // chain 12
+                mstore8(0x37, 12) // ADRS ci byte
+                for { let p := and(shr(36, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 448), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 208)), N_MASK)) // chain 13
+                mstore8(0x37, 13) // ADRS ci byte
+                for { let p := and(shr(39, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 480), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 224)), N_MASK)) // chain 14
+                mstore8(0x37, 14) // ADRS ci byte
+                for { let p := and(shr(42, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 512), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 240)), N_MASK)) // chain 15
+                mstore8(0x37, 15) // ADRS ci byte
+                for { let p := and(shr(45, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 544), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 256)), N_MASK)) // chain 16
+                mstore8(0x37, 16) // ADRS ci byte
+                for { let p := and(shr(48, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 576), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 272)), N_MASK)) // chain 17
+                mstore8(0x37, 17) // ADRS ci byte
+                for { let p := and(shr(51, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 608), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 288)), N_MASK)) // chain 18
+                mstore8(0x37, 18) // ADRS ci byte
+                for { let p := and(shr(54, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 640), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 304)), N_MASK)) // chain 19
+                mstore8(0x37, 19) // ADRS ci byte
+                for { let p := and(shr(57, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 672), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 320)), N_MASK)) // chain 20
+                mstore8(0x37, 20) // ADRS ci byte
+                for { let p := and(shr(60, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 704), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 336)), N_MASK)) // chain 21
+                mstore8(0x37, 21) // ADRS ci byte
+                for { let p := and(shr(63, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 736), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 352)), N_MASK)) // chain 22
+                mstore8(0x37, 22) // ADRS ci byte
+                for { let p := and(shr(66, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 768), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 368)), N_MASK)) // chain 23
+                mstore8(0x37, 23) // ADRS ci byte
+                for { let p := and(shr(69, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 800), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 384)), N_MASK)) // chain 24
+                mstore8(0x37, 24) // ADRS ci byte
+                for { let p := and(shr(72, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 832), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 400)), N_MASK)) // chain 25
+                mstore8(0x37, 25) // ADRS ci byte
+                for { let p := and(shr(75, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 864), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 416)), N_MASK)) // chain 26
+                mstore8(0x37, 26) // ADRS ci byte
+                for { let p := and(shr(78, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 896), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 432)), N_MASK)) // chain 27
+                mstore8(0x37, 27) // ADRS ci byte
+                for { let p := and(shr(81, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 928), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 448)), N_MASK)) // chain 28
+                mstore8(0x37, 28) // ADRS ci byte
+                for { let p := and(shr(84, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 960), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 464)), N_MASK)) // chain 29
+                mstore8(0x37, 29) // ADRS ci byte
+                for { let p := and(shr(87, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 992), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 480)), N_MASK)) // chain 30
+                mstore8(0x37, 30) // ADRS ci byte
+                for { let p := and(shr(90, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1024), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 496)), N_MASK)) // chain 31
+                mstore8(0x37, 31) // ADRS ci byte
+                for { let p := and(shr(93, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1056), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 512)), N_MASK)) // chain 32
+                mstore8(0x37, 32) // ADRS ci byte
+                for { let p := and(shr(96, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1088), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 528)), N_MASK)) // chain 33
+                mstore8(0x37, 33) // ADRS ci byte
+                for { let p := and(shr(99, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1120), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 544)), N_MASK)) // chain 34
+                mstore8(0x37, 34) // ADRS ci byte
+                for { let p := and(shr(102, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1152), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 560)), N_MASK)) // chain 35
+                mstore8(0x37, 35) // ADRS ci byte
+                for { let p := and(shr(105, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1184), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 576)), N_MASK)) // chain 36
+                mstore8(0x37, 36) // ADRS ci byte
+                for { let p := and(shr(108, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1216), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 592)), N_MASK)) // chain 37
+                mstore8(0x37, 37) // ADRS ci byte
+                for { let p := and(shr(111, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1248), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 608)), N_MASK)) // chain 38
+                mstore8(0x37, 38) // ADRS ci byte
+                for { let p := and(shr(114, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1280), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 624)), N_MASK)) // chain 39
+                mstore8(0x37, 39) // ADRS ci byte
+                for { let p := and(shr(117, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1312), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 640)), N_MASK)) // chain 40
+                mstore8(0x37, 40) // ADRS ci byte
+                for { let p := and(shr(120, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1344), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 656)), N_MASK)) // chain 41
+                mstore8(0x37, 41) // ADRS ci byte
+                for { let p := and(shr(123, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1376), mload(0x40))
+                mstore(0x40, and(calldataload(add(wotsPtr, 672)), N_MASK)) // chain 42
+                mstore8(0x37, 42) // ADRS ci byte
+                for { let p := and(shr(126, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
+                }
+                mstore(add(TB, 1408), mload(0x40))
+                // END generated chains
 
                 // PK compression: sha256(seed || pkAdrs || 43 endpoints)
                 // = 32 + 32 + 43*32 = 1440 = 0x5A0
                 let pkAdrs := or(shl(224, layer), or(shl(160, idxTree), or(shl(128, 1), shl(96, idxLeaf))))
-                mstore(0x20, pkAdrs)
-                for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
-                    mstore(add(0x40, shl(5, i)), mload(add(0x80, shl(5, i))))
-                }
-                pop(staticcall(gas(), 0x02, 0x00, 0x5A0, OUT, 32))
-                let wotsPk := and(mload(OUT), N_MASK)
+                mstore(add(TB, 0x20), pkAdrs)
+                // the WOTS pk lands in its value word of the first Merkle preimage
+                let t := idxLeaf
+                let sbit := and(mul(t, 0x10000800040002000100008000400020001000080004000000000000000000), 0x10001000100010001000100010001000100010001000000000000000000000) // C10-LANES-V1
+                let slots := sub(add(0x6040604060406040604060406040604060406040604000000000000000000000, shl(1, sbit)), shl(9, sbit)) // C10-LANES-V1
+                pop(staticcall(gas(), 0x02, TB, 0x5A0, byte(1, slots), 16))
 
                 // Merkle auth path (9 levels)
                 let authOff := add(countOff, 4)
                 let treeAdrs := or(shl(224, layer), or(shl(160, idxTree), shl(128, 2)))
-                let merkleNode := wotsPk
-                let mIdx := idxLeaf
                 let merklePtr := add(sigBase, authOff)
 
-                for { let h := 0 } lt(h, 9) { h := add(h, 1) } {
-                    let sibling := and(calldataload(add(merklePtr, shl(4, h))), N_MASK)
-                    let parentIdx := shr(1, mIdx)
-                    mstore(0x20, or(
-                        and(treeAdrs, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000),
-                        or(shl(32, add(h, 1)), parentIdx)
-                    ))
-                    let s := shl(5, and(mIdx, 1))
-                    mstore(xor(0x40, s), merkleNode)
-                    mstore(xor(0x60, s), sibling)
-                    pop(staticcall(gas(), 0x02, 0x00, 0x80, OUT, 32))
-                    merkleNode := and(mload(OUT), N_MASK)
-                    mIdx := parentIdx
-                }
+                // in-place walk as in FORS, unrolled (words from slots; ha = idxLeaf >> h); the
+                // root (height 9, index 0) lands on 0x40, the next layer's digest node word
+                let tb := and(treeAdrs, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000)
+                calldatacopy(byte(0, slots), add(merklePtr, 0), 16)
+                mstore(0x20, or(or(tb, shl(32, 1)), shr(1, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(3, slots), 16))
+                calldatacopy(byte(2, slots), add(merklePtr, 16), 16)
+                mstore(0x20, or(or(tb, shl(32, 2)), shr(2, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(5, slots), 16))
+                calldatacopy(byte(4, slots), add(merklePtr, 32), 16)
+                mstore(0x20, or(or(tb, shl(32, 3)), shr(3, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(7, slots), 16))
+                calldatacopy(byte(6, slots), add(merklePtr, 48), 16)
+                mstore(0x20, or(or(tb, shl(32, 4)), shr(4, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(9, slots), 16))
+                calldatacopy(byte(8, slots), add(merklePtr, 64), 16)
+                mstore(0x20, or(or(tb, shl(32, 5)), shr(5, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(11, slots), 16))
+                calldatacopy(byte(10, slots), add(merklePtr, 80), 16)
+                mstore(0x20, or(or(tb, shl(32, 6)), shr(6, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(13, slots), 16))
+                calldatacopy(byte(12, slots), add(merklePtr, 96), 16)
+                mstore(0x20, or(or(tb, shl(32, 7)), shr(7, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(15, slots), 16))
+                calldatacopy(byte(14, slots), add(merklePtr, 112), 16)
+                mstore(0x20, or(or(tb, shl(32, 8)), shr(8, idxLeaf)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, byte(17, slots), 16))
+                calldatacopy(byte(16, slots), add(merklePtr, 128), 16)
+                mstore(0x20, or(tb, shl(32, 9)))
+                pop(staticcall(gas(), 0x02, 0x00, 0x80, 0x40, 16))
 
-                currentNode := merkleNode
                 sigOff := add(authOff, 144) // 9*16
             }
 
-            valid := eq(currentNode, root)
+            valid := eq(and(mload(0x40), N_MASK), root)
             mstore(0x00, valid)
             return(0x00, 0x20)
         }

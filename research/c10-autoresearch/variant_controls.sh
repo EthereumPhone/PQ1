@@ -75,6 +75,26 @@ sub() { python3 - "$1" "$2" "$3" <<'PY' || SUBFAIL=1
 import sys; p, a, b = sys.argv[1:]; s = open(p).read(); assert s.count(a) == 1, (p, a, s.count(a)); open(p, 'w').write(s.replace(a, b))
 PY
 }
+# research/c10-gas (gas track) derives the variants mechanically from the optimized 0.3 verifier
+# (research/c10-gas/derive_v2_variants.py): the chain index is a per-chain constant byte
+# (`mstore8(0x24, or(kb, 2*i))`, 43 sites) and the hypertree walk is generated straight-line code,
+# so the ci and layer-height reverts below rewrite those sites (asserting their counts) instead of
+# a single `shl(17, i)` / loop bound.
+ci17to18() { python3 - "$1" <<'PY' || SUBFAIL=1
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+s2, n = re.subn(r"mstore8\(0x24, or\(kb, (\d+)\)\)", lambda m: f"mstore8(0x24, or(kb, {2 * int(m.group(1))}))", s)
+assert n == 43, (p, n); open(p, "w").write(s2)
+PY
+}
+heights99() { python3 - "$1" "$D/../c10-gas" <<'PY' || SUBFAIL=1
+import sys; p, gd = sys.argv[1:]; sys.path.insert(0, gd)
+import gen_v2_walks as g
+s = open(p).read(); a, b = g.merkle(split810=True), g.merkle(split810=False); h = "let hl := add(8, shl(1, layer))"
+assert s.count(a) == 1 and s.count(h) == 1, p
+open(p, "w").write(s.replace(a, b).replace(h, "let hl := 9"))
+PY
+}
 WOTS_A='if iszero(eq(digitSum, 200)) { revert(0, 0) }'; WOTS_B='if and(0, iszero(eq(digitSum, 200))) { revert(0, 0) }'
 WOTS5_A='if iszero(eq(digitSum, 205)) { revert(0, 0) }'; WOTS5_B='if and(0, iszero(eq(digitSum, 205))) { revert(0, 0) }'
 FORS_A='if and(shr(132, digest), 0x7FF) { revert(0, 0) }'; FORS_B='if and(0, and(shr(132, digest), 0x7FF)) { revert(0, 0) }'
@@ -91,12 +111,12 @@ U='own=6/6 n0=0 n1=0 n2=0 x03=0/6'; WD='own=6/6 n0=0 n1=1 n2=1 x03=0/6'; FD='own
 DEAD='own=0/6 n0=0 n1=0 n2=0 x03=0/6'
 layout_rows() { # $1 = split810 | all3
   local f="${F[$1]}"
-  sub "$f" 'shl(23, i))' 'shl(24, i))';                 row "$1" "kp shift 23->24 (FORS addresses)" "$DEAD";   cp "$T/$1" "$f"
+  sub "$f" 'base := add(base, shl(23, 1))' 'base := add(base, shl(24, 1))'; row "$1" "kp shift 23->24 (FORS addresses)" "$DEAD"; cp "$T/$1" "$f"
   sub "$f" 'shl(23, idxLeaf)' 'shl(24, idxLeaf)';       row "$1" "kp shift 23->24 (hypertree)" "$DEAD";        cp "$T/$1" "$f"
-  sub "$f" 'shl(17, i)' 'shl(18, i)';                   row "$1" "ci shift 17->18" "$DEAD";                    cp "$T/$1" "$f"
-  sub "$f" 'let hl := add(8, shl(1, layer))' 'let hl := 9'; row "$1" "layer heights (8,10)->(9,9)" "$DEAD";      cp "$T/$1" "$f"
-  sub "$f" 'shl(23, i))' 'shl(24, i))'; sub "$f" 'shl(23, idxLeaf)' 'shl(24, idxLeaf)'
-  sub "$f" 'shl(17, i)' 'shl(18, i)'; sub "$f" 'let hl := add(8, shl(1, layer))' 'let hl := 9'
+  ci17to18 "$f";                                        row "$1" "ci shift 17->18 (43 chain ci bytes)" "$DEAD"; cp "$T/$1" "$f"
+  heights99 "$f";                                       row "$1" "layer heights (8,10)->(9,9)" "$DEAD";      cp "$T/$1" "$f"
+  sub "$f" 'base := add(base, shl(23, 1))' 'base := add(base, shl(24, 1))'; sub "$f" 'shl(23, idxLeaf)' 'shl(24, idxLeaf)'
+  ci17to18 "$f"; heights99 "$f"
   # all four reverted = the 0.3 layout: split810 then accepts 0.3 KATs; all3 still has target 200
   if [ "$1" = split810 ]; then row "$1" "ALL four layout reverts stacked" 'own=0/6 n0=0 n1=0 n2=0 x03=6/6'
   else row "$1" "ALL four layout reverts stacked" "$DEAD"; fi
