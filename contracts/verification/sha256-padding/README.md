@@ -266,7 +266,7 @@ its census is identical.
 +#[path = ".../easycrypt-head-byte-profile-20261113/candidate/sphincs-c10/src/address.rs"] mod address;
 ```
 
-  Here `...` is `/home/nicola/.local/state/pqsigner-research`. The vectors
+  Here `...` is the research state directory `~/.local/state/pqsigner-research`. The vectors
   and the `main` body are unchanged. `address.rs` is compiled for name
   resolution only; `main` still calls only `sha256_bytes` and
   `sha256_parts`.
