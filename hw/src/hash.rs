@@ -2039,6 +2039,149 @@ fn final16_regs() -> [u32; 4] {
     v
 }
 
+/// `v1-asm-fors` (round 8, secure-only; the FSBL never names it): the digest-to-digest
+/// transitions of the v1 FORS subtree, hand-scheduled. Each waits for the digest in
+/// flight (straight-line polls, then a 2^24-guarded loop), reads HR0..3, clears DCIS,
+/// waits for BUSY to clear (2^24 guard) and refuses a stale DCIS, INIT, feeds the next
+/// message with NBLW 0, DCAL. Work that does not feed block 0 sits after the 17th DIN
+/// store, where the CPU would otherwise stall on block 0. The Rust caller runs the
+/// tree logic while the engine works.
+#[cfg(feature = "v1-asm-fors")]
+macro_rules! v1x_head {
+    () => {
+        concat!(
+            "movw lr, #0x24\n", "movt lr, #0x6\n",
+            ".rept 16\n", "ldr r12, [r4, #0x18]\n", "lsls r12, r12, #30\n", "bmi 4f\n", ".endr\n",
+            "mov.w r10, #16777216\n",
+            "3:\n", "ldr r12, [r4, #0x18]\n", "lsls r12, r12, #30\n", "bmi 4f\n", "subs r10, r10, #1\n", "bne 3b\n", "b 99f\n",
+            "4:\n",
+            "ldm r4, {{r0, r1, r2, r3}}\n",
+            "movs r12, #1\n", "str r12, [r4, #0x18]\n",
+        )
+    };
+}
+#[cfg(feature = "v1-asm-fors")]
+macro_rules! v1x_init {
+    () => {
+        concat!("ldr r12, [r4, #0x18]\n", "tst r12, #10\n", "bne 40f\n", "41:\n", "str lr, [r4, #-12]\n")
+    };
+}
+#[cfg(feature = "v1-asm-fors")]
+macro_rules! v1x_tail {
+    () => {
+        concat!(
+            "b 98f\n",
+            "40:\n", "mov.w r10, #16777216\n",
+            "42:\n", "tst r12, #8\n", "beq 43f\n", "subs r10, r10, #1\n", "beq 99f\n", "ldr r12, [r4, #0x18]\n", "b 42b\n",
+            "43:\n", "tst r12, #2\n", "beq 41b\n",
+            "99:\n", "bl {fault}\n",
+            "98:\n",
+        )
+    };
+}
+#[cfg(feature = "v1-asm-fors")]
+macro_rules! v1x_st4 {
+    ($a:literal, $b:literal, $c:literal, $d:literal) => {
+        concat!("str ", $a, ", [r4, #-8]\n", "str ", $b, ", [r4, #-8]\n", "str ", $c, ", [r4, #-8]\n", "str ", $d, ", [r4, #-8]\n")
+    };
+}
+#[cfg(feature = "v1-asm-fors")]
+macro_rules! v1x_blk0 {
+    () => {
+        concat!(
+            "ldm r5!, {{r8, r9, r10, r12}}\n", v1x_st4!("r8", "r9", "r10", "r12"),
+            "ldm r5!, {{r8, r9, r10, r12}}\n", v1x_st4!("r8", "r9", "r10", "r12"),
+            "ldm r5!, {{r8, r9, r10, r12}}\n", v1x_st4!("r8", "r9", "r10", "r12"),
+            "ldm r5!, {{r8, r9, r10, r12}}\n", v1x_st4!("r8", "r9", "r10", "r12"),
+        )
+    };
+}
+
+/// Transition into the PRF of the next leaf: message `sk_seed ‖ tp[0..4]` (12 words, one
+/// block), `sk_seed` read in place with single-word loads (no copy). Returns the digest
+/// in flight (a finished leaf or node).
+#[cfg(all(feature = "v1-asm-fors", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1x_prf(sk: *const u8, tp: *const u32) -> [u32; 4] {
+    let (v0, v1, v2, v3): (u32, u32, u32, u32);
+    // SAFETY: drives only the secure HASH block (r4); reads 32 bytes at `sk` and 16 at
+    // `tp`; on a hang or a stale DCIS it calls `hash_engine_fault`, which does not return.
+    unsafe {
+        core::arch::asm!(
+            v1x_head!(),
+            v1x_init!(),
+            "ldr r8, [r5]\n", "ldr r9, [r5, #4]\n", "ldr r10, [r5, #8]\n", "ldr r12, [r5, #12]\n",
+            v1x_st4!("r8", "r9", "r10", "r12"),
+            "ldr r8, [r5, #16]\n", "ldr r9, [r5, #20]\n", "ldr r10, [r5, #24]\n", "ldr r12, [r5, #28]\n",
+            v1x_st4!("r8", "r9", "r10", "r12"),
+            "ldm r11, {{r8, r9, r10, r12}}\n",
+            v1x_st4!("r8", "r9", "r10", "r12"),
+            "mov.w r8, #256\n", "str r8, [r4, #-4]\n",
+            "rev r0, r0\n", "rev r1, r1\n", "rev r2, r2\n", "rev r3, r3\n",
+            v1x_tail!(),
+            fault = sym hash_engine_fault,
+            out("r0") v0, out("r1") v1, out("r2") v2, out("r3") v3,
+            in("r4") HASH_BASE + 0x0C, in("r5") sk, in("r11") tp,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+    [v0, v1, v2, v3]
+}
+
+/// Transition into the leaf: message `la[0..16] ‖ x ‖ 0^4` (24 words, two blocks) with
+/// `x` the PRF digest in flight, which stays in registers.
+#[cfg(all(feature = "v1-asm-fors", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1x_leaf(la: *const u32) {
+    // SAFETY: as `v1x_prf`; reads 64 bytes at `la` (4-aligned).
+    unsafe {
+        core::arch::asm!(
+            v1x_head!(),
+            "rev r0, r0\n",
+            v1x_init!(),
+            v1x_blk0!(),
+            "str r0, [r4, #-8]\n",                 // word 16: block 0 starts
+            "rev r1, r1\n", "rev r2, r2\n", "rev r3, r3\n", "movs.w lr, #0\n", "mov.w r8, #256\n",
+            v1x_st4!("r1", "r2", "r3", "lr"),      // the first store waits for block 0
+            "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n",
+            "str r8, [r4, #-4]\n",                 // DCAL
+            v1x_tail!(),
+            fault = sym hash_engine_fault,
+            out("r0") _, out("r1") _, out("r2") _, out("r3") _,
+            in("r4") HASH_BASE + 0x0C, inout("r5") la => _,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+}
+
+/// Transition into a node: message `na[0..16] ‖ L ‖ 0^4 ‖ R ‖ 0^4` (32 words, three
+/// blocks) with `R` the digest in flight and `L` the four words at `l`.
+#[cfg(all(feature = "v1-asm-fors", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1x_node(na: *const u32, l: *const u32) {
+    // SAFETY: as `v1x_prf`; reads 64 bytes at `na` and 16 at `l` (both 4-aligned).
+    unsafe {
+        core::arch::asm!(
+            v1x_head!(),
+            v1x_init!(),
+            v1x_blk0!(),
+            "ldm r11, {{r8, r9, r10, r12}}\n",
+            "str r8, [r4, #-8]\n",                 // word 16: block 0 starts
+            "rev r0, r0\n", "rev r1, r1\n", "rev r2, r2\n", "rev r3, r3\n", "movs.w lr, #0\n", "mov.w r8, #256\n",
+            v1x_st4!("r9", "r10", "r12", "lr"),    // the first store waits for block 0
+            "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n", "str lr, [r4, #-8]\n",
+            v1x_st4!("r0", "r1", "r2", "r3"),
+            v1x_st4!("lr", "lr", "lr", "lr"),
+            "str r8, [r4, #-4]\n",                 // DCAL
+            v1x_tail!(),
+            fault = sym hash_engine_fault,
+            out("r0") _, out("r1") _, out("r2") _, out("r3") _,
+            in("r4") HASH_BASE + 0x0C, inout("r5") na => _, in("r11") l,
+            out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
+        );
+    }
+}
+
 /// A 16-leaf FORS subtree in one call (`forsleaf`, secure image only): leaves
 /// `j0..j0+16` (each `th(leaf_sa with ha = j, pad16(PRF(sk_seed ‖ tail with leaf = j)))`)
 /// and the 15 nodes above them (`node_sa` with height and index set), in the
@@ -2064,6 +2207,73 @@ pub unsafe extern "C" fn pqsigner_fors_subtree16(
     let la: [u32; 15] = core::array::from_fn(|i| unsafe { leaf_sa.add(4 * i).cast::<u32>().read_unaligned() });
     let na: [u32; 14] = core::array::from_fn(|i| unsafe { node_sa.add(4 * i).cast::<u32>().read_unaligned() });
     let mut stack = [[0u32; 4]; 5];
+    #[cfg(all(feature = "v1-asm-fors", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+    {
+        // Block-0 staging for the asm transitions (4-aligned): the leaf's 15 fixed words and
+        // its hash address; the node's 14 fixed words, height and index; the PRF tail.
+        let mut la16 = [0u32; 16];
+        la16[..15].copy_from_slice(&la);
+        let mut na16 = [0u32; 16];
+        na16[..14].copy_from_slice(&na);
+        let mut tp = [t[0], t[1], t[2], j0.swap_bytes()];
+        let mut sp = 0usize;
+        // PRF of leaf j0.
+        gather_init();
+        // SAFETY: caller contract.
+        unsafe { feed_words(sk_seed, 8) };
+        write_word(tp[0]);
+        write_word(tp[1]);
+        write_word(tp[2]);
+        write_word(tp[3]);
+        REG.str_.write(STR_DCAL);
+        let end = j0 + 16;
+        let mut j = j0;
+        loop {
+            la16[15] = j.swap_bytes();
+            v1x_leaf(la16.as_ptr());
+            // `j` is a right child at each height whose bit is set (j0 is a multiple of 16).
+            let mut h = 0u32;
+            while h < 4 && (j >> h) & 1 == 1 {
+                sp -= 1;
+                na16[14] = (h + 1).swap_bytes();
+                na16[15] = (j >> (h + 1)).swap_bytes();
+                v1x_node(na16.as_ptr(), stack[sp].as_ptr());
+                h += 1;
+            }
+            j += 1;
+            let node = if j < end {
+                tp[3] = j.swap_bytes();
+                v1x_prf(sk_seed, tp.as_ptr())
+            } else {
+                let mut w = 0u32;
+                while REG.sr.read() & SR_DCIS == 0 {
+                    w += 1;
+                    if w > 10_000_000 {
+                        hash_engine_fault();
+                    }
+                }
+                let v = read_hr4();
+                REG.sr.write(SR_DINIS);
+                v
+            };
+            stack[sp] = node;
+            sp += 1;
+            if j == end {
+                break;
+            }
+        }
+        for (k, x) in stack[0].iter().enumerate() {
+            // SAFETY: `out + 4k`, k < 4, inside the caller's 16 bytes.
+            unsafe { out.add(4 * k).cast::<u32>().write_unaligned(*x) };
+        }
+        #[cfg(feature = "tick-batch")]
+        // SAFETY: the engine is idle; the tick does not hash.
+        unsafe {
+            pqsigner_hash_tick_n(16 * 2 + 15);
+        }
+        return;
+    }
+    #[allow(unreachable_code)]
     let mut heights = [0u32; 5];
     let mut sp = 0usize;
     let mut j = j0;
