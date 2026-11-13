@@ -2052,6 +2052,49 @@ unsafe fn v2_store4(p: *mut u8, v: [u32; 4]) {
     }
 }
 
+/// `ci`'s least significant bit in A7's second DIN word (`[b4, b5, b6, 0]`):
+/// draft 0.3 puts `ci` at A7 bits 23..18 (word bits 7..2); the `v2-split810`
+/// research variant moves it to bits 22..17 (word bits 6..1) to give `kp` 10 bits.
+#[cfg(all(feature = "v2", not(feature = "v2-split810")))]
+const V2_CI_LSB: u32 = 2;
+#[cfg(all(feature = "v2", feature = "v2-split810"))]
+const V2_CI_LSB: u32 = 1;
+
+/// `ha`'s least significant bit in A7's second DIN word (see `v2_ha`).
+#[cfg(all(feature = "v2", feature = "v2-prf2"))]
+const V2_HA_LSB: u32 = 1 << 17;
+
+/// RESEARCH (`v2-prf2`): close a PRF digest that carries two secrets, keep
+/// half `half` (0 = bytes 0..16, 1 = bytes 16..32) and wipe the local copy.
+#[cfg(all(feature = "v2", feature = "v2-prf2"))]
+#[inline(always)]
+fn v2_prf2_half(half: u32) -> [u32; 4] {
+    REG.str_.write(V2_NBLW | STR_DCAL);
+    let mut d = [0u32; 8];
+    v2_collect(&mut d);
+    let v = if half == 0 { [d[0], d[1], d[2], d[3]] } else { [d[4], d[5], d[6], d[7]] };
+    v2_wipe8(&mut d);
+    v
+}
+
+/// RESEARCH (`v2-prf2`): close a two-secret PRF digest into `d` (both halves).
+#[cfg(all(feature = "v2", feature = "v2-prf2"))]
+#[inline(always)]
+fn v2_prf2_both(d: &mut [u32; 8]) {
+    REG.str_.write(V2_NBLW | STR_DCAL);
+    v2_collect(d);
+}
+
+#[cfg(all(feature = "v2", feature = "v2-prf2"))]
+#[inline(always)]
+fn v2_wipe8(d: &mut [u32; 8]) {
+    for x in d.iter_mut() {
+        // SAFETY: `x` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(x, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
 /// v2 chain loop: F over `S ‖ v ‖ A7` at positions `start..start + steps`.
 #[cfg(feature = "v2")]
 #[inline(always)]
@@ -2099,8 +2142,17 @@ pub unsafe extern "C" fn pqsigner_v2_prf_chain16(
     // SAFETY: caller contract.
     unsafe { feed_words(sk_seed, 8) };
     write_word(p0);
-    write_word(p1);
-    let v = v2_end16();
+    #[cfg(not(feature = "v2-prf2"))]
+    let v = {
+        write_word(p1);
+        v2_end16()
+    };
+    // `v2-prf2`: chain `ci`'s secret is half `ci & 1` of the PRF over `ci & !1`.
+    #[cfg(feature = "v2-prf2")]
+    let v = {
+        write_word(p1 & !(1 << V2_CI_LSB));
+        v2_prf2_half(p1 >> V2_CI_LSB & 1)
+    };
     // SAFETY: caller contract.
     let s = unsafe { v2_load4(seed) };
     let v = v2_chain_core(s, v, a0, low24, 0, steps);
@@ -2130,17 +2182,36 @@ pub unsafe extern "C" fn pqsigner_v2_wots_chains16(
     let s = unsafe { v2_load4(seed) };
     let mut ci = 0u32;
     while ci < 43 {
-        let c = ci << 2;
+        let c = ci << V2_CI_LSB;
         v2_begin();
         // SAFETY: caller contract.
         unsafe { feed_words(sk_seed, 8) };
         write_word(p0);
         write_word(p1 | c);
-        let v = v2_end16();
-        let v = v2_chain_core(s, v, a0, low24 | c, 0, steps);
-        // SAFETY: `out + 16 ci`, ci < 43, inside the caller's 688 bytes.
-        unsafe { v2_store4(out.add(16 * ci as usize), v) };
-        ci += 1;
+        #[cfg(not(feature = "v2-prf2"))]
+        {
+            let v = v2_end16();
+            let v = v2_chain_core(s, v, a0, low24 | c, 0, steps);
+            // SAFETY: `out + 16 ci`, ci < 43, inside the caller's 688 bytes.
+            unsafe { v2_store4(out.add(16 * ci as usize), v) };
+            ci += 1;
+        }
+        // `v2-prf2`: one PRF (even `ci`) gives chains `ci` and `ci + 1`; chain 42 is unpaired.
+        #[cfg(feature = "v2-prf2")]
+        {
+            let mut d = [0u32; 8];
+            v2_prf2_both(&mut d);
+            let v = v2_chain_core(s, [d[0], d[1], d[2], d[3]], a0, low24 | c, 0, steps);
+            // SAFETY: `out + 16 ci`, ci < 43, inside the caller's 688 bytes.
+            unsafe { v2_store4(out.add(16 * ci as usize), v) };
+            if ci + 1 < 43 {
+                let v = v2_chain_core(s, [d[4], d[5], d[6], d[7]], a0, low24 | (ci + 1) << V2_CI_LSB, 0, steps);
+                // SAFETY: `out + 16 (ci + 1)`, ci + 1 < 43.
+                unsafe { v2_store4(out.add(16 * (ci + 1) as usize), v) };
+            }
+            v2_wipe8(&mut d);
+            ci += 2;
+        }
     }
 }
 
@@ -2211,8 +2282,17 @@ pub unsafe extern "C" fn pqsigner_v2_fors_leaf16(sk_seed: *const u8, p0: u32, p1
     // SAFETY: caller contract.
     unsafe { feed_words(sk_seed, 8) };
     write_word(p0);
-    write_word(p1);
-    let x = v2_end16();
+    #[cfg(not(feature = "v2-prf2"))]
+    let x = {
+        write_word(p1);
+        v2_end16()
+    };
+    // `v2-prf2`: leaf `j`'s secret is half `j & 1` of the PRF over `j & !1`.
+    #[cfg(feature = "v2-prf2")]
+    let x = {
+        write_word(p1 & !V2_HA_LSB);
+        v2_prf2_half(u32::from(p1 & V2_HA_LSB != 0))
+    };
     v2_begin();
     // SAFETY: caller contract.
     unsafe { feed_words(seed, 4) };
@@ -2259,14 +2339,34 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
     let mut sp = 0usize;
     let end = j0 + (1 << h);
     let mut j = j0;
+    // `v2-prf2`: the two secrets of the current leaf pair.
+    #[cfg(feature = "v2-prf2")]
+    let mut pair = [0u32; 8];
     while j < end {
         let ha = v2_ha(j);
-        v2_begin();
-        // SAFETY: caller contract.
-        unsafe { feed_words(sk_seed, 8) };
-        write_word(p0);
-        write_word(p1 | ha);
-        let x = v2_end16();
+        #[cfg(not(feature = "v2-prf2"))]
+        let x = {
+            v2_begin();
+            // SAFETY: caller contract.
+            unsafe { feed_words(sk_seed, 8) };
+            write_word(p0);
+            write_word(p1 | ha);
+            v2_end16()
+        };
+        // One PRF per leaf pair, at the even leaf (or at `j0` when a height-0
+        // subtree starts on an odd leaf).
+        #[cfg(feature = "v2-prf2")]
+        let x = {
+            if j & 1 == 0 || j == j0 {
+                v2_begin();
+                // SAFETY: caller contract.
+                unsafe { feed_words(sk_seed, 8) };
+                write_word(p0);
+                write_word(p1 | v2_ha(j & !1));
+                v2_prf2_both(&mut pair);
+            }
+            if j & 1 == 0 { [pair[0], pair[1], pair[2], pair[3]] } else { [pair[4], pair[5], pair[6], pair[7]] }
+        };
         v2_begin();
         write_word(s[0]); write_word(s[1]); write_word(s[2]); write_word(s[3]);
         write_word(x[0]); write_word(x[1]); write_word(x[2]); write_word(x[3]);
@@ -2294,6 +2394,8 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
         sp += 1;
         j += 1;
     }
+    #[cfg(feature = "v2-prf2")]
+    v2_wipe8(&mut pair);
     // SAFETY: caller contract.
     unsafe { v2_store4(out, stack[0]) };
 }

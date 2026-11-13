@@ -32,10 +32,20 @@ const CP_MASK: u64 = 0xF << CP_SHIFT;
 /// field from bounded indices, so this never fires on a valid path.
 #[inline(always)]
 pub fn pack(ty: u64, layer: u64, tree: u64, kp: u64, ci: u64, cp: u64, ha: u64) -> u64 {
-    assert!(ty < 16 && layer < 2 && tree < (1 << 18) && kp < (1 << 9));
+    assert!(ty < 16 && layer < 2 && tree < (1 << 18) && kp < (1 << KP_BITS));
     assert!(ci < (1 << 6) && cp < 16 && ha < (1 << 11));
-    ty << 52 | layer << 51 | tree << 33 | kp << 24 | ci << 18 | cp << CP_SHIFT | ha << 1
+    ty << 52 | layer << 51 | tree << 33 | kp << KP_SHIFT | ci << CI_SHIFT | cp << CP_SHIFT | ha << 1
 }
+
+/// `kp`'s width: 9 bits (draft 0.3), 10 under the RESEARCH variant
+/// `v2-split810`, whose top layer has 1,024 key pairs. `kp` then occupies
+/// bits 32..23 and `ci` moves down into the old zero bits, to 22..17.
+#[cfg(not(feature = "v2-split810"))]
+const KP_BITS: u32 = 9;
+#[cfg(feature = "v2-split810")]
+const KP_BITS: u32 = 10;
+const KP_SHIFT: u32 = 33 - KP_BITS;
+const CI_SHIFT: u32 = KP_SHIFT - 6;
 
 #[inline(always)]
 fn be4(b: &[u8; 32], o: usize) -> u64 {
@@ -128,6 +138,7 @@ pub fn wots_digest(seed: &[u8; 32], wots_adrs: &[u8; 32], msg_hash: &[u8; 32], c
 }
 
 /// The PRFs: `sk_seed ‖ A7`, 39 bytes; the sk_seed copy is wiped.
+#[cfg_attr(feature = "v2-prf2", allow(dead_code))]
 fn prf(sk_seed: &[u8; 32], a: u64) -> [u8; N] {
     let mut b = [0u8; 39];
     b[0..32].copy_from_slice(sk_seed);
@@ -141,11 +152,37 @@ fn prf(sk_seed: &[u8; 32], a: u64) -> [u8; N] {
     out
 }
 
+/// RESEARCH (`v2-prf2`, format-options check): one PRF digest carries two
+/// secrets. Index `2j` takes bytes 0..16 and `2j + 1` bytes 16..32 of the
+/// digest over the A7 of index `2j`; both the input copy and the digest are
+/// wiped. (This reference path recomputes the digest per half.)
+#[cfg(feature = "v2-prf2")]
+fn prf_half(sk_seed: &[u8; 32], a_even: u64, half: u32) -> [u8; N] {
+    let mut b = [0u8; 39];
+    b[0..32].copy_from_slice(sk_seed);
+    put7(&mut b[32..39], a_even);
+    let mut d = sha256_bytes(&b);
+    let mut out = [0u8; N];
+    out.copy_from_slice(&d[N * half as usize..N * half as usize + N]);
+    for x in b.iter_mut().chain(d.iter_mut()) {
+        // SAFETY: `x` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(x, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    out
+}
+
 pub fn wots_secret(sk_seed: &[u8; 32], layer: u32, tree: u64, kp: u32, chain_idx: u32) -> [u8; N] {
+    #[cfg(feature = "v2-prf2")]
+    return prf_half(sk_seed, pack(T_WOTS_PRF, u64::from(layer), tree, u64::from(kp), u64::from(chain_idx & !1), 0, 0), chain_idx & 1);
+    #[cfg(not(feature = "v2-prf2"))]
     prf(sk_seed, pack(T_WOTS_PRF, u64::from(layer), tree, u64::from(kp), u64::from(chain_idx), 0, 0))
 }
 
 pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32) -> [u8; N] {
+    #[cfg(feature = "v2-prf2")]
+    return prf_half(sk_seed, pack(T_FORS_PRF, 0, u64::from(ht_idx), u64::from(tree_idx), 0, 0, u64::from(leaf_idx & !1)), leaf_idx & 1);
+    #[cfg(not(feature = "v2-prf2"))]
     prf(sk_seed, pack(T_FORS_PRF, 0, u64::from(ht_idx), u64::from(tree_idx), 0, 0, u64::from(leaf_idx)))
 }
 

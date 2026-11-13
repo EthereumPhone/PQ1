@@ -42,7 +42,7 @@ def run(slack):
             i = rnd.randrange(43); ds[i] = min(7, ds[i] + 1)
         cases.append(digest_from_digits(ds, rnd.getrandbits(127)))
     for D in cases:
-        for target in (205, 150, 128, 301, 0):
+        for target in (205, 200, 150, 128, 301, 0):  # 200: the ts200 variant (format-options check)
             n += 1
             bad += accept(D, target, slack) != truth(D, target)
     return n, bad

@@ -90,10 +90,21 @@ impl Tally {
 
 // ---- spec model ----------------------------------------------------------------
 
+/// A7 field layout (spec §1). RESEARCH variant `split810`: kp 10 bits at
+/// 32..23, ci at 22..17 (format-options check, 2026-11-13).
+#[cfg(not(feature = "split810"))]
+const KP_BITS: u32 = 9;
+#[cfg(feature = "split810")]
+const KP_BITS: u32 = 10;
+const KP_SHIFT: u32 = 33 - KP_BITS;
+const CI_SHIFT: u32 = KP_SHIFT - 6;
+/// Random `kp` values cover the whole field.
+const KP_RANGE: u32 = 1 << KP_BITS;
+
 /// A7 (spec §1) as an integer; widths checked.
 fn a7(ty: u64, layer: u64, tree: u64, kp: u64, ci: u64, cp: u64, ha: u64) -> u64 {
-    assert!(ty < 16 && layer < 2 && tree < 1 << 18 && kp < 1 << 9 && ci < 1 << 6 && cp < 16 && ha < 1 << 11);
-    ty << 52 | layer << 51 | tree << 33 | kp << 24 | ci << 18 | cp << 12 | ha << 1
+    assert!(ty < 16 && layer < 2 && tree < 1 << 18 && kp < 1 << KP_BITS && ci < 1 << 6 && cp < 16 && ha < 1 << 11);
+    ty << 52 | layer << 51 | tree << 33 | kp << KP_SHIFT | ci << CI_SHIFT | cp << 12 | ha << 1
 }
 fn a7b(a: u64) -> [u8; 7] {
     core::array::from_fn(|k| (a >> (8 * (6 - k))) as u8)
@@ -117,7 +128,21 @@ fn hh(s: &[u8; 16], l: &[u8; 16], r: &[u8; 16], a: u64) -> [u8; 16] {
     sha(&[s, l, r, &a7b(a)])[..16].try_into().unwrap()
 }
 fn prf(sk: &[u8; 32], a: u64) -> [u8; 16] {
-    sha(&[sk, &a7b(a)])[..16].try_into().unwrap()
+    #[cfg(not(feature = "prf2"))]
+    return sha(&[sk, &a7b(a)])[..16].try_into().unwrap();
+    // RESEARCH variant `prf2`: the digest over the even index carries index
+    // 2j (bytes 0..16) and 2j + 1 (bytes 16..32); the pair bit is ci's LSB for
+    // WOTS_PRF (type 5) and ha's LSB for FORS_PRF (type 6).
+    #[cfg(feature = "prf2")]
+    {
+        let bit = match a >> 52 {
+            5 => CI_SHIFT,
+            6 => 1,
+            t => panic!("prf on A7 type {t}"),
+        };
+        let half = (a >> bit & 1) as usize;
+        sha(&[sk, &a7b(a & !(1u64 << bit))])[16 * half..16 * half + 16].try_into().unwrap()
+    }
 }
 fn wd(sm: &[u8; 32], count: u32, a: u64) -> [u8; 32] {
     sha(&[sm, &count.to_be_bytes(), &a7b(a)])
@@ -195,7 +220,7 @@ pub extern "C" fn c10_bench_main() {
         let (mut s, mut v) = ([0u8; 16], [0u8; 16]);
         rng.fill(&mut s);
         rng.fill(&mut v);
-        let (layer, tree, kp, ci) = (rng.below(2), rng.below(512), rng.below(512), rng.below(43));
+        let (layer, tree, kp, ci) = (rng.below(2), rng.below(512), rng.below(KP_RANGE), rng.below(43));
         let start = rng.below(16);
         let steps = rng.below(16 - start + 1);
         let base = a7(0, layer.into(), tree.into(), kp.into(), ci.into(), 0, 0);
@@ -216,7 +241,7 @@ pub extern "C" fn c10_bench_main() {
         let (mut sk, mut s) = ([0u8; 32], [0u8; 16]);
         rng.fill(&mut sk);
         rng.fill(&mut s);
-        let (layer, tree, kp, ci) = (u64::from(rng.below(2)), u64::from(rng.below(512)), u64::from(rng.below(512)), u64::from(rng.below(43)));
+        let (layer, tree, kp, ci) = (u64::from(rng.below(2)), u64::from(rng.below(512)), u64::from(rng.below(KP_RANGE)), u64::from(rng.below(43)));
         let steps = rng.below(8);
         let pa = a7(5, layer, tree, kp, ci, 0, 0);
         let base = a7(0, layer, tree, kp, ci, 0, 0);
@@ -299,7 +324,7 @@ pub extern "C" fn c10_bench_main() {
     for _ in 0..20 {
         let mut sm = [0u8; 32];
         rng.fill(&mut sm);
-        let a = a7(7, rng.below(2).into(), rng.below(512).into(), rng.below(512).into(), 0, 0, 0);
+        let a = a7(7, rng.below(2).into(), rng.below(512).into(), rng.below(KP_RANGE).into(), 0, 0, 0);
         let (a0, a1) = words(a);
         let start = rng.u32() >> 1;
         let mut d = [0xEEu8; 32];
@@ -367,7 +392,7 @@ pub extern "C" fn c10_bench_main() {
         let (mut sk, mut s) = ([0u8; 32], [0u8; 16]);
         rng.fill(&mut sk);
         rng.fill(&mut s);
-        let (layer, tree, kp) = (u64::from(rng.below(2)), u64::from(rng.below(1 << 18)), u64::from(rng.below(512)));
+        let (layer, tree, kp) = (u64::from(rng.below(2)), u64::from(rng.below(1 << 18)), u64::from(rng.below(KP_RANGE)));
         let steps = if c % 2 == 0 { 7 } else { rng.below(16) };
         let mut got = [0u8; 688];
         let ((p0, p1), (a0, a1)) = (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)));
@@ -392,7 +417,7 @@ pub extern "C" fn c10_bench_main() {
         let (mut sk, mut s) = ([0u8; 32], [0u8; 16]);
         rng.fill(&mut sk);
         rng.fill(&mut s);
-        let (layer, tree, kp) = (u64::from(rng.below(2)), u64::from(rng.below(1 << 18)), u64::from(rng.below(512)));
+        let (layer, tree, kp) = (u64::from(rng.below(2)), u64::from(rng.below(1 << 18)), u64::from(rng.below(KP_RANGE)));
         let ((p0, p1), (a0, a1), (k0, k1)) =
             (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)), words(a7(1, layer, tree, kp, 0, 0, 0)));
         let mut got = [0u8; 16];

@@ -57,6 +57,14 @@ v2-fused = ["v2", "hw-sha256-oneshot"]
 # MEASUREMENT ONLY (spec §6, #1158): PRF value in the last FORS slot instead of tree 12's root.
 # Changes signature bytes (not keys); the verifier is unchanged. Not adopted.
 v2-fors-last-prf = ["v2"]
+# RESEARCH (format-options security check, 2026-11-13; c10v2_ref.py --variant): candidate v2 format
+# changes, each off by default and not adopted. ts200: WOTS+C target sum 200 (verifier changes).
+# prf2: one PRF digest -> two secrets (keys change; verifier unchanged). split810: layer heights
+# (8, 10), A7 kp 10 bits / ci at bits 22..17 (verifier changes). Fused builds need the matching
+# `pqsigner-hw` features.
+v2-ts200 = ["v2"]
+v2-prf2 = ["v2"]
+v2-split810 = ["v2"]
 
 # Re-export otherwise-`pub(crate)` internals (PRF, ADRS, digest, FORS tree
 # helpers) under `sphincs_c10::sim_internals`, for the security-regression

@@ -11,6 +11,9 @@ path = "src/lib.rs"
 [workspace]
 
 [features]
+# RESEARCH (format-options check): the driver variants under test.
+prf2 = ["pqsigner-hw/v2-prf2"]
+split810 = ["pqsigner-hw/v2-split810"]
 # Control: end with an out-of-range subtree call, which must halt through the
 # driver's fault hook (status HALT|0x00F0, stage 200) instead of returning.
 guard = []

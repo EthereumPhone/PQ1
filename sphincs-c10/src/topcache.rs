@@ -16,8 +16,12 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Height of the stored nodes.
 pub const HC: usize = 4;
+/// Height of the top layer's single tree (9; 10 under the `v2-split810` research variant).
+const TOP_H: usize = layer_h((D - 1) as u32);
+/// Leaves of the top tree.
+const TOP_LEAVES: usize = 1 << TOP_H;
 /// Number of stored nodes.
-pub const NC: usize = SUBTREE_LEAVES >> HC;
+pub const NC: usize = TOP_LEAVES >> HC;
 
 /// Cache uses since boot (proves a warm sign used the cache).
 pub static HITS: AtomicU32 = AtomicU32::new(0);
@@ -68,10 +72,10 @@ impl TopCache {
     fn build(&mut self, seed: &[u8; 32], sk_seed: &[u8; 32], rot: u8) -> [u8; N] {
         let layer = (D - 1) as u32;
         let tree = 0u64;
-        let mut stack = [[0u8; N]; SUBTREE_H + 1];
-        let mut heights = [0u32; SUBTREE_H + 1];
+        let mut stack = [[0u8; N]; TOP_H + 1];
+        let mut heights = [0u32; TOP_H + 1];
         let mut sp = 0usize;
-        for kp in 0..SUBTREE_LEAVES {
+        for kp in 0..TOP_LEAVES {
             let mut node = leaf(seed, sk_seed, layer, tree, kp as u32, rot);
             let mut h = 0u32;
             loop {
@@ -102,12 +106,12 @@ impl TopCache {
         sk_seed: &[u8; 32],
         idx_leaf: u32,
         pk_root: &[u8; N],
-    ) -> ([[u8; N]; SUBTREE_H], [u8; N]) {
+    ) -> ([[u8; N]; MAX_LAYER_H], [u8; N]) {
         assert!(self.valid, "top cache not valid");
         assert!(Self::digest_of(&self.nodes) == self.digest, "top cache digest mismatch");
         let layer = (D - 1) as u32;
         let tree = 0u64;
-        let mut auth = [[0u8; N]; SUBTREE_H];
+        let mut auth = [[0u8; N]; MAX_LAYER_H];
         // 1. Rebuild the 2^HC-leaf subtree containing idx_leaf, collecting heights 0..HC.
         let lo = idx_leaf as usize & !((1 << HC) - 1);
         let mut stack = [[0u8; N]; HC + 1];
@@ -139,7 +143,7 @@ impl TopCache {
         // 2. Hash the stored nodes up to the root, taking the target's siblings on the way.
         let mut level = self.nodes;
         let mut width = NC;
-        for h in HC..SUBTREE_H {
+        for h in HC..TOP_H {
             auth[h] = level[((idx_leaf >> h) ^ 1) as usize];
             for p in 0..width / 2 {
                 let adrs = make_adrs(layer, tree, ADRS_TREE, 0, 0, h as u32 + 1, p as u32);
@@ -206,7 +210,7 @@ pub fn keygen_with_top_cache(sk_seed: [u8; 32], pk_seed: [u8; N], cache: &mut To
 pub fn sweep_against_full_build(cache: &TopCache, pk_seed: &[u8; N], sk_seed: &[u8; 32], pk_root: &[u8; N]) -> u32 {
     let seed = pad16(pk_seed);
     let mut n = 0;
-    for leaf in 0..SUBTREE_LEAVES as u32 {
+    for leaf in 0..TOP_LEAVES as u32 {
         let (a, r) = cache.auth_path(&seed, sk_seed, leaf, pk_root);
         let (b, s) = crate::merkle::build_subtree_with_auth(
             &seed, sk_seed, (D - 1) as u32, 0, leaf, &crate::hypertree::progress_none(), 0, 0,

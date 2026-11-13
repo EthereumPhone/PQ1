@@ -267,7 +267,33 @@ fn diff(n: u32, every: u32) {
     }
 }
 
+/// The last R-grind nonce the mirror returned (format-options luck accounting).
+static LAST_NONCE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(u32::MAX);
+
+/// `luck16`: for the 16 messages of `bench_avg_v2f` (same derivation), print the
+/// R-grind nonce and both WOTS counts, so kit per-message cycles can be split
+/// into deterministic work and grind luck.
+fn luck16() {
+    use sphincs_c10::params::{L, N, SIG_FORS_TOTAL};
+    let sk = SigningKey::keygen(SK_SEED, PK_SEED);
+    let h0 = (sphincs_c10::params::SIG_HT_LAYER0 - L * N - 4) / N;
+    for i in 0..16u32 {
+        let mut m = MSG0;
+        m[0..4].copy_from_slice(&i.to_le_bytes());
+        m[4] ^= 0xA5;
+        let s = sk.sign_with_shuffle_silent(&m, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
+        let c0 = u32::from_be_bytes(s[SIG_FORS_TOTAL + L * N..SIG_FORS_TOTAL + L * N + 4].try_into().unwrap());
+        let o1 = SIG_FORS_TOTAL + L * N + 4 + h0 * N + L * N;
+        let c1 = u32::from_be_bytes(s[o1..o1 + 4].try_into().unwrap());
+        println!("LUCK {i} nonce={} count0={c0} count1={c1}", LAST_NONCE.load(std::sync::atomic::Ordering::Relaxed));
+    }
+}
+
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("luck16") {
+        luck16();
+        return;
+    }
     if std::env::args().nth(1).as_deref() == Some("diff") {
         let a: Vec<u32> = std::env::args().skip(2).map(|x| x.parse().unwrap()).collect();
         diff(a[0], a[1]);
@@ -331,6 +357,34 @@ fn a7b(a0: u32, a1: u32) -> [u8; 7] {
     let (x, y) = (a0.to_le_bytes(), a1.to_le_bytes());
     [x[0], x[1], x[2], x[3], y[0], y[1], y[2]]
 }
+/// `ci`'s A7 shift (spec §1; the split810 variant moves it down one bit).
+#[cfg(not(feature = "split810"))]
+const CI_SHIFT: u32 = 18;
+#[cfg(feature = "split810")]
+const CI_SHIFT: u32 = 17;
+fn a7_int(a0: u32, a1: u32) -> u64 {
+    a7b(a0, a1).iter().fold(0u64, |v, &x| v << 8 | u64::from(x))
+}
+fn a7_bytes(v: u64) -> [u8; 7] {
+    v.to_be_bytes()[1..8].try_into().unwrap()
+}
+/// The PRF output for an A7 given as an integer: under prf2 the digest over the
+/// A7 with the pair bit (`ci` or `ha` LSB, at `bit`) cleared, half = that bit.
+fn prf_at(sk: &[u8; 32], a: u64, #[allow(unused)] bit: u32) -> [u8; 16] {
+    let mut b = [0u8; 39];
+    b[..32].copy_from_slice(sk);
+    #[cfg(not(feature = "prf2"))]
+    {
+        b[32..].copy_from_slice(&a7_bytes(a));
+        return sw(&b)[..16].try_into().unwrap();
+    }
+    #[cfg(feature = "prf2")]
+    {
+        let half = (a >> bit & 1) as usize;
+        b[32..].copy_from_slice(&a7_bytes(a & !(1u64 << bit)));
+        sw(&b)[16 * half..16 * half + 16].try_into().unwrap()
+    }
+}
 unsafe fn rd<const K: usize>(p: *const u8) -> [u8; K] {
     let mut o = [0u8; K];
     unsafe { std::ptr::copy_nonoverlapping(p, o.as_mut_ptr(), K) };
@@ -353,11 +407,7 @@ pub unsafe extern "C" fn pqsigner_v2_chain16(seed: *const u8, val: *mut u8, a0: 
 }
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, steps: u32, out: *mut u8) {
-    let mut b = [0u8; 39];
-    b[..32].copy_from_slice(&unsafe { rd::<32>(sk) });
-    b[32..].copy_from_slice(&a7b(p0, p1));
-    let mut x = [0u8; 16];
-    x.copy_from_slice(&sw(&b)[..16]);
+    let x = prf_at(&unsafe { rd::<32>(sk) }, a7_int(p0, p1), CI_SHIFT);
     let mut v = v2_chain(&unsafe { rd::<16>(seed) }, x, a0, a1, 0, steps);
     // Fault injection for the track-B controls (shares the v1 hook's counter).
     let call = CHAINS_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -368,12 +418,10 @@ pub unsafe extern "C" fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32
 }
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_wots_chains16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, steps: u32, out: *mut u8) {
-    // ci enters as an integer (A7 bits 23..18), not through the driver's word patch.
+    // ci enters as an integer (A7 bits 23..18; split810 22..17), not through the driver's word patch.
     for ci in 0..43u32 {
-        let mut b = [0u8; 39];
-        b[..32].copy_from_slice(&unsafe { rd::<32>(sk) });
-        b[32..].copy_from_slice(&a7_ci(p0, p1, ci));
-        let x: [u8; 16] = sw(&b)[..16].try_into().unwrap();
+        let pa = a7_ci(p0, p1, ci).iter().fold(0u64, |v, &x| v << 8 | u64::from(x));
+        let x = prf_at(&unsafe { rd::<32>(sk) }, pa, CI_SHIFT);
         let ab = a7_ci(a0, a1, ci);
         let (c0, c1) = (u32::from_le_bytes([ab[0], ab[1], ab[2], ab[3]]), u32::from_le_bytes([ab[4], ab[5], ab[6], 0]));
         let mut v = v2_chain(&unsafe { rd::<16>(seed) }, x, c0, c1, 0, steps);
@@ -397,8 +445,8 @@ pub unsafe extern "C" fn pqsigner_v2_wots_pk16(sk: *const u8, p0: u32, p1: u32, 
 }
 fn a7_ci(a0: u32, a1: u32, ci: u32) -> [u8; 7] {
     let v = a7b(a0, a1).iter().fold(0u64, |v, &x| v << 8 | u64::from(x));
-    assert_eq!(v >> 18 & 0x3F, 0, "base A7 must have ci = 0");
-    let o = (v | u64::from(ci) << 18).to_be_bytes();
+    assert_eq!(v >> CI_SHIFT & 0x3F, 0, "base A7 must have ci = 0");
+    let o = (v | u64::from(ci) << CI_SHIFT).to_be_bytes();
     o[1..8].try_into().unwrap()
 }
 #[no_mangle]
@@ -412,10 +460,7 @@ pub unsafe extern "C" fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *c
 }
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8) {
-    let mut b = [0u8; 39];
-    b[..32].copy_from_slice(&unsafe { rd::<32>(sk) });
-    b[32..].copy_from_slice(&a7b(p0, p1));
-    let x = sw(&b);
+    let x = prf_at(&unsafe { rd::<32>(sk) }, a7_int(p0, p1), 1);
     let mut c = [0u8; 39];
     c[..16].copy_from_slice(&unsafe { rd::<16>(seed) });
     c[16..32].copy_from_slice(&x[..16]);
@@ -434,10 +479,8 @@ fn a7_with(a0: u32, a1: u32, cp: u32, ha: u32) -> [u8; 7] {
 fn v2_subtree(sk: &[u8; 32], seed: &[u8; 16], w: [u32; 4], j0: u32, h: u32) -> [u8; 16] {
     let [p0, p1, a0, a1] = w;
     if h == 0 {
-        let mut b = [0u8; 39];
-        b[..32].copy_from_slice(sk);
-        b[32..].copy_from_slice(&a7_with(p0, p1, 0, j0));
-        let x = sw(&b);
+        let pa = a7_with(p0, p1, 0, j0).iter().fold(0u64, |v, &x| v << 8 | u64::from(x));
+        let x = prf_at(sk, pa, 1);
         let mut c = [0u8; 39];
         c[..16].copy_from_slice(seed);
         c[16..32].copy_from_slice(&x[..16]);
@@ -474,6 +517,7 @@ pub unsafe extern "C" fn pqsigner_v2_grind_r(prf: *const u8, len: u32, hm: *cons
         let idx = ((u128::from_be_bytes(d[..16].try_into().unwrap()) >> 4) & 0x7FF) as u32;
         if idx == 0 {
             unsafe { std::ptr::copy_nonoverlapping(r.as_ptr(), out_r, 16); std::ptr::copy_nonoverlapping(d.as_ptr(), out_d, 32) };
+            LAST_NONCE.store(c, std::sync::atomic::Ordering::Relaxed);
             return c;
         }
     }

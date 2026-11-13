@@ -58,6 +58,10 @@ no-busy-wait = []
 hra-ldm = []
 # RESEARCH (#1155): C10 v2 one-block entries (`pqsigner_v2_*`).
 v2 = ["init-restart", "oneshot", "prfchain", "forsleaf", "search"]
+# RESEARCH (format-options check, 2026-11-13), must match sphincs-c10's feature of the same name:
+# prf2 = one PRF digest -> two secrets in the WOTS/FORS entries; split810 = A7 ci at bits 22..17.
+v2-prf2 = ["v2"]
+v2-split810 = ["v2"]
 # Unrolled DIN feed and HR read-out. Secure image only: the FSBL keeps the
 # rolled loops so its bytes, and the silicon boot proof taken on them, stand.
 unrolled-io = []

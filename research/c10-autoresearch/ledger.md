@@ -587,3 +587,60 @@ The chain loop sat about 16 cycles above the unit-cost floor (about 111). The di
   - transcribed against `sum((D >> 3i) & 7)` on 1,111,280 checks: 200k random digests, all 256 single-bit digests, 2,000 exact boundary digests (digits 0..31 sum to 128, digits 32..42 all 7), and 20k near-target digests, at 5 targets;
   - 0 mismatches. The 77 → 76 control gives exactly 2,000 mismatches, the boundary cases.
 - **H7's Rust FORS+C re-check:** a `host_v2f` mirror that returns the first nonce whatever its index stops the sign at `v2hash.rs:313` ("driver FORS+C check disagrees"). Restored: GOLDEN OK.
+
+## Format options: security check and measurements (2026-11-13)
+
+Owner: "check that the 3 format changes do not impact security before committing. Run tests on them and do an analysis." The full write-up is in `format-options-security.md`. Each option sits behind its own off-by-default flag:
+- `sphincs-c10`: `v2-ts200`, `v2-prf2`, `v2-split810`;
+- `pqsigner-hw`: `v2-prf2`, `v2-split810`;
+- Python: `c10v2_ref.py --variant`;
+- Yul: `SPHINCsC10v2{Ts200,Split810,All3}Asm.sol`.
+
+Draft 0.3 is byte-identical with every flag off.
+
+| configuration | luck-free mean sign | with top cache | est. cached sign (with cache) |
+|---|---:|---:|---:|
+| 0.3 head | 64.52 M | 43.62 M | 0.546 s |
+| ts200 | 58.54 M (−9.3%) | 37.64 M (−13.7%) | 0.471 s |
+| prf2 | 61.93 M (−4.0%) | 41.93 M (−3.9%) | 0.525 s |
+| split810 | 75.33 M (+16.7%) | 32.85 M (−24.7%) | 0.411 s |
+| all three | 66.27 M | 25.65 M (−41.2%) | 0.321 s |
+
+- **Luck-free means.**
+  - `luck_fit.py` fits each configuration's 16 per-message kit cycles against that message's exact WOTS tries and R nonces, taken from the host (`c10-ar-host luck16`).
+  - c_w = 140–143 cycles/try, c_r ≈ 496 cycles/nonce, residual SD ≤ 5k cycles.
+  - Raw means are in the doc.
+- **Security verdicts:**
+  - **ts200:** no change for honest operation. A key whose WOTS key signs a second digest (fault, bug, or reuse across formats) keeps about 1.7 bits less margin: median 2^55.3 → 2^53.7.
+  - **prf2:** no change under the PRF assumption, provided the sk_seed-keyed inputs stay block-prefix-free. They do: "R_grind" is not a producible A7. About 48 whole PRF outputs per key become public at the cap.
+  - **split810:** no change to the bounds. The A7 widening checks out. It is conditional on #1148, because the cache becomes structural.
+- **New finding: reusing a key across formats.** The same seed signing under two v2 variants is unsafe:
+  - **0.3 + ts200:** median 2^53–2^55 per forgery try. Keys are unchanged, so the address does not move either.
+  - **0.3 + prf2:** median 2^77; the even-index secrets are shared.
+  - **0.3 + split810:** large overlap. Astra found it; I verified it. 0.3's `(kp, ci)` equals split810's `(2kp + ⌊ci/32⌋, 2ci mod 64)` byte for byte. 38% of split810's WOTS PRF addresses equal a 0.3 address, and FORS trees 0..6 equal split810's 0, 2, …, 12.
+  - Rule: fix the variant before any v2 key signs, or bind the format identifier into key derivation or the tweaks.
+- **Tests:**
+  - **Reference and host:** Python selftest and cross-format checks per variant. Rust matches the Python KATs per variant and combined. Host fused routing, plain and with the cache, equals the generic golden.
+  - **Cache controls under split810:** 3 refusals, 1 positive control, and a sweep of all 1,024 leaves.
+  - **Kit:** goldens for all four configurations. Gate 5: 0.3 2,091/0, prf2 2,091/0, split810 2,098/0, prf2+split810 2,098/0.
+  - `h9_predicate.py` at 200: 0 mismatches, and the control fires.
+  - **Forge:** 19/19, plus 21 mutation controls.
+- **Verify gas, measured in the callee:**
+
+  | verifier | gas | delta vs 0.3 |
+  |---|---:|---:|
+  | 0.3 | 157,585 | |
+  | ts200 | 160,735 | +3,150 |
+  | split810 | 157,653 | +68 |
+  | all three | 160,803 | +3,218 |
+
+- **Review (GPT-6 Astra, read-only, independent):**
+  - no format break in any isolated variant;
+  - cross-variant reuse rated HIGH;
+  - `variant_controls.sh` did not assert its results: fixed, every row now checks its expectation and the run passes;
+  - `near-miss-gen` + split810 is now a `compile_error!`;
+  - wording corrections folded into the doc: top keys double, the cache reuses only the stored nodes, HR residue now holds a sibling secret.
+- **Regression after the edits:**
+  - v1: suite 82/0; kit 233,078,450; track B 163,351,100 (3 hits).
+  - 0.3: golden passes plain and with the cache; mean 65,593,849 (65,593,725 before the edits); gate 5 2,091/0.
+  - Option bytes identical to the baseline.

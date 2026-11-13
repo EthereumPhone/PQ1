@@ -40,7 +40,7 @@ pub fn compute_pk_root_with_progress(sk_seed: &[u8; 32], pk_seed: &[u8; N], prog
 fn compute_pk_root_inner(sk_seed: &[u8; 32], pk_seed: &[u8; N], progress: &ProgressSink, pct_lo: u8, pct_hi: u8) -> [u8; N] {
     let seed = pad16(pk_seed);
     // Build subtree at top layer (layer=1, tree=0)
-    merkle::compute_subtree_root(&seed, sk_seed, 1, 0, progress, pct_lo, pct_hi)
+    merkle::compute_subtree_root(&seed, sk_seed, (D - 1) as u32, 0, progress, pct_lo, pct_hi)
 }
 
 /// Full SPHINCS+C10 signing.
@@ -303,8 +303,9 @@ fn sign_inner(
     let mut idx_tree = ht_idx;
 
     for layer in 0..(D as u32) {
-        let idx_leaf = idx_tree & ((1u32 << SUBTREE_H) - 1);
-        idx_tree >>= SUBTREE_H;
+        let lh = layer_h(layer);
+        let idx_leaf = idx_tree & ((1u32 << lh) - 1);
+        idx_tree >>= lh;
 
         // Build the subtree and get the auth path. HT layers: layer 0 =
         // 32%-65%, layer 1 = 65%-98%. The build is ~85% of a sign, so it
@@ -354,9 +355,9 @@ fn sign_inner(
         sig[offset..offset + 4].copy_from_slice(&count.to_be_bytes());
         offset += 4;
 
-        // Write auth path (SUBTREE_H * N bytes)
+        // Write auth path (layer_h(layer) * N bytes)
         let mut h = 0;
-        while h < SUBTREE_H {
+        while h < lh {
             let row = auth_path[h];
             write16(&mut sig, offset, &row);
             offset += N;
@@ -471,8 +472,9 @@ pub fn verify(
     let mut idx_tree = ht_idx;
 
     for layer in 0..(D as u32) {
-        let idx_leaf = idx_tree & ((1u32 << SUBTREE_H) - 1);
-        idx_tree >>= SUBTREE_H;
+        let lh = layer_h(layer);
+        let idx_leaf = idx_tree & ((1u32 << lh) - 1);
+        idx_tree >>= lh;
 
         // Parse WOTS chain values
         let mut wots_sigma = [[0u8; N]; L];
@@ -491,8 +493,8 @@ pub fn verify(
         offset += 4;
 
         // Parse auth path
-        let mut auth_path = [[0u8; N]; SUBTREE_H];
-        for h in 0..SUBTREE_H {
+        let mut auth_path = [[0u8; N]; MAX_LAYER_H];
+        for h in 0..lh {
             auth_path[h].copy_from_slice(&sig[offset..offset + N]);
             offset += N;
         }

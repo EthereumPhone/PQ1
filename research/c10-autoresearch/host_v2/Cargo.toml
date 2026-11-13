@@ -9,6 +9,10 @@ publish = false
 [features]
 # Track-B variant: keygen fills + confirms the top-layer cache; every pass signs through it.
 topcache = ["sphincs-c10/top-cache"]
+# RESEARCH (format-options check): candidate v2 format variants.
+ts200 = ["sphincs-c10/v2-ts200"]
+prf2 = ["sphincs-c10/v2-prf2"]
+split810 = ["sphincs-c10/v2-split810"]
 
 [dependencies]
 sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256-oneshot", "v2"] }

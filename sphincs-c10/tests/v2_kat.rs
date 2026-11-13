@@ -8,14 +8,30 @@
 use sphincs_c10::params::{N, SIGNATURE_LEN, VERIFYING_KEY_LEN};
 use sphincs_c10::{SigningKey, VerifyingKey};
 
+/// Which KAT set this build must reproduce (draft 0.3 unless a variant feature is on).
+fn tag() -> &'static str {
+    match (cfg!(feature = "v2-ts200"), cfg!(feature = "v2-prf2"), cfg!(feature = "v2-split810")) {
+        (false, false, false) => "draft03",
+        (true, false, false) => "ts200",
+        (false, true, false) => "prf2",
+        (false, false, true) => "split810",
+        (true, true, true) => "all3",
+        _ => panic!("no KAT set for this variant combination"),
+    }
+}
+
+fn kat_text(kind: &str) -> String {
+    let path = format!("{}/../research/c10-autoresearch/c10v2/{kind}-v2-{}.txt", env!("CARGO_MANIFEST_DIR"), tag());
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
 fn hex(s: &str) -> Vec<u8> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
 }
 
 #[test]
 fn v2_matches_python_reference_kats() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../research/c10-autoresearch/c10v2/kat-v2-draft03.txt");
-    let text = std::fs::read_to_string(path).expect("KAT file");
+    let text = kat_text("kat");
     let mut n = 0;
     for line in text.lines() {
         let f: Vec<&str> = line.split(' ').collect();
@@ -47,8 +63,7 @@ fn v2_matches_python_reference_kats() {
 /// reject every one.
 #[test]
 fn v2_rejects_plus_c_only_near_misses() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../research/c10-autoresearch/c10v2/nearmiss-v2-draft03.txt");
-    let text = std::fs::read_to_string(path).expect("near-miss file");
+    let text = kat_text("nearmiss");
     let mut n = 0;
     for line in text.lines() {
         let f: Vec<&str> = line.split(' ').collect();

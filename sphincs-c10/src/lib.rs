@@ -36,6 +36,10 @@ pub(crate) mod v2hash;
     feature = "hw-sha256-prfchain", feature = "hw-sha256-forsleaf", feature = "hw-sha256-forstree", feature = "hw-sha256-grindr",
     feature = "hw-sha256-thmulti", feature = "hw-sha256-forssub")))]
 compile_error!("`v2` routes through the generic hash functions only; the fused driver paths build v1 preimages");
+// The near-miss generator still splits `ht_idx` by the uniform `SUBTREE_H` (Astra review of the
+// format options, 2026-11-13); it is not ported to the asymmetric research split.
+#[cfg(all(feature = "near-miss-gen", feature = "v2-split810"))]
+compile_error!("`near-miss-gen` assumes uniform layer heights; it is not ported to `v2-split810`");
 pub(crate) mod hypertree;
 pub(crate) mod merkle;
 pub(crate) mod wots;

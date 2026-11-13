@@ -26,9 +26,9 @@ pub fn compute_subtree_root(
     pct_lo: u8,
     pct_hi: u8,
 ) -> [u8; N] {
-    let n_leaves = SUBTREE_LEAVES; // 512
-    let mut stack = [[0u8; N]; SUBTREE_H + 1]; // 13 entries = 208 bytes
-    let mut stack_heights = [0u32; SUBTREE_H + 1];
+    let n_leaves = 1usize << layer_h(layer); // 512
+    let mut stack = [[0u8; N]; MAX_LAYER_H + 1]; // 10 entries = 160 bytes
+    let mut stack_heights = [0u32; MAX_LAYER_H + 1];
     let mut sp: usize = 0;
 
     for kp in 0..n_leaves {
@@ -56,7 +56,7 @@ pub fn compute_subtree_root(
     }
 
     debug_assert_eq!(sp, 1);
-    debug_assert_eq!(stack_heights[0], SUBTREE_H as u32);
+    debug_assert_eq!(stack_heights[0], layer_h(layer) as u32);
     stack[0]
 }
 
@@ -91,11 +91,12 @@ pub(crate) fn build_subtree_with_auth(
     progress: &crate::hypertree::ProgressSink,
     pct_lo: u8,
     pct_hi: u8,
-) -> ([[u8; N]; SUBTREE_H], [u8; N]) {
-    let n_leaves = SUBTREE_LEAVES;
-    let mut auth_path = [[0u8; N]; SUBTREE_H];
-    let mut stack = [[0u8; N]; SUBTREE_H + 1];
-    let mut stack_heights = [0u32; SUBTREE_H + 1];
+) -> ([[u8; N]; MAX_LAYER_H], [u8; N]) {
+    let lh = layer_h(layer);
+    let n_leaves = 1usize << lh;
+    let mut auth_path = [[0u8; N]; MAX_LAYER_H];
+    let mut stack = [[0u8; N]; MAX_LAYER_H + 1];
+    let mut stack_heights = [0u32; MAX_LAYER_H + 1];
     let mut sp: usize = 0;
 
     // For auth path extraction, we track "completed subtree roots" that
@@ -104,8 +105,8 @@ pub(crate) fn build_subtree_with_auth(
     //
     // We use the "keep" array: for each height h, the node that covers
     // the sibling's subtree is saved when it's completed.
-    let mut keep = [[0u8; N]; SUBTREE_H];
-    let mut keep_set = [false; SUBTREE_H];
+    let mut keep = [[0u8; N]; MAX_LAYER_H];
+    let mut keep_set = [false; MAX_LAYER_H];
 
     for kp in 0..n_leaves {
         let mut node = wots::keygen_pk(seed, sk_seed, layer, tree, kp as u32);
@@ -156,7 +157,7 @@ pub(crate) fn build_subtree_with_auth(
     let root = stack[0];
 
     // Copy the authentication path from the keep array
-    for h in 0..SUBTREE_H {
+    for h in 0..lh {
         debug_assert!(keep_set[h], "Auth path node at height {} not found", h);
         auth_path[h] = keep[h];
     }
@@ -172,11 +173,11 @@ pub fn verify_auth_path(
     tree: u64,
     leaf_node: &[u8; N],
     leaf_idx: u32,
-    auth_path: &[[u8; N]; SUBTREE_H],
+    auth_path: &[[u8; N]; MAX_LAYER_H],
 ) -> [u8; N] {
     let mut node = *leaf_node;
     let mut idx = leaf_idx;
-    for h in 0..SUBTREE_H {
+    for h in 0..layer_h(layer) {
         let parent_idx = idx >> 1;
         let adrs = make_adrs(layer, tree, ADRS_TREE, 0, 0, (h + 1) as u32, parent_idx);
         let sibling = &auth_path[h];
