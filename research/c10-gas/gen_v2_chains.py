@@ -177,6 +177,30 @@ def block_v1_bytes_loop(indent=I):
     return "\n".join(out) + "\n"
 
 
+def block_v1_bytes_blocks(indent=I):
+    """Size option for v1: byte-wise ADRS with straight-line 4/2/1 step blocks (needs nd)."""
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py v1; do not edit by hand)"]
+    call = "pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))"
+    for i in range(43):
+        out += [f"{indent}mstore(0x40, and(calldataload(add(wotsPtr, {16 * i})), N_MASK)) // chain {i}",
+                f"{indent}mstore8(0x37, {i}) // ADRS ci byte", f"{indent}{{"]
+        j = indent + "    "
+        out.append(f"{j}let p := and(shr({3 * i}, d), 7)")
+        out.append(f"{j}if and(nd, shl({3 * i + 2}, 1)) {{")
+        for k in range(4):
+            out += [f"{j}    mstore8(0x3B, {'p' if k == 0 else f'add(p, {k})'})", f"{j}    {call}"]
+        out.append(f"{j}}}")
+        out.append(f"{j}if and(nd, shl({3 * i + 1}, 1)) {{")
+        out += [f"{j}    mstore8(0x3B, or(p, 4))", f"{j}    {call}", f"{j}    mstore8(0x3B, add(or(p, 4), 1))", f"{j}    {call}"]
+        out.append(f"{j}}}")
+        out.append(f"{j}if and(nd, shl({3 * i}, 1)) {{")
+        out += [f"{j}    mstore8(0x3B, 6)", f"{j}    {call}"]
+        out.append(f"{j}}}")
+        out += [f"{indent}}}", f"{indent}mstore(add(TB, {0x40 + 32 * i}), mload(0x40))"]
+    out.append(f"{indent}// END generated chains")
+    return "\n".join(out) + "\n"
+
+
 def splice(src, new):
     b = src.index("// BEGIN generated chains")
     b = src.rindex("\n", 0, b) + 1
@@ -190,7 +214,7 @@ if __name__ == "__main__":
     arg = sys.argv[3] if len(sys.argv) > 3 else "218"
     src = open(path).read()
     if arg == "v1":
-        new = splice(src, block_v1())
+        new = splice(src, block_v1_bytes_loop())
     elif arg == "split810":
         new = splice(src, block_bytes_loop(split810=True))
     else:

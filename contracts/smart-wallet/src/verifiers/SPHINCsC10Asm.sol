@@ -208,1170 +208,310 @@ contract SPHINCsC10Asm {
                 // Chain i from position digit_i = (d >> 3i) & 7 to 7 in place: the value word at
                 // 0x40 (low half zero) is overwritten by each step's 16-byte output; the ADRS word
                 // for chain i at position p is wotsAdrs | i<<64 | p<<32 (ci = bits 64..95, cp =
-                // bits 32..63, both zero in wotsAdrs; i < 43, p < 7, so the adds never carry).
-                // Unrolled over the 43 chains (generated); 7 - digit_i = bits 3i..3i+2 of nd selects
-                // straight-line blocks of 4, 2 and 1 steps at consecutive positions.
-                let nd := not(d)
+                // bits 32..63, both zero in wotsAdrs; i < 43 and p < 7 fit their lowest byte).
+                // wotsAdrs is stored once; per chain only the ci byte (0x37) and per step only the cp
+                // byte (0x3B) are written. Unrolled over the 43 chains (generated); steps as a loop.
+                mstore(0x20, wotsAdrs)
                 // BEGIN generated chains (research/c10-gas/gen_v2_chains.py v1; do not edit by hand)
                 mstore(0x40, and(calldataload(add(wotsPtr, 0)), N_MASK)) // chain 0
-                {
-                    let a := add(wotsAdrs, or(shl(64, 0), shl(32, and(shr(0, d), 7))))
-                    if and(nd, shl(2, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(1, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(0, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 0) // ADRS ci byte
+                for { let p := and(shr(0, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 64), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 16)), N_MASK)) // chain 1
-                {
-                    let a := add(wotsAdrs, or(shl(64, 1), shl(32, and(shr(3, d), 7))))
-                    if and(nd, shl(5, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(4, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(3, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 1) // ADRS ci byte
+                for { let p := and(shr(3, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 96), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 32)), N_MASK)) // chain 2
-                {
-                    let a := add(wotsAdrs, or(shl(64, 2), shl(32, and(shr(6, d), 7))))
-                    if and(nd, shl(8, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(7, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(6, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 2) // ADRS ci byte
+                for { let p := and(shr(6, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 128), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 48)), N_MASK)) // chain 3
-                {
-                    let a := add(wotsAdrs, or(shl(64, 3), shl(32, and(shr(9, d), 7))))
-                    if and(nd, shl(11, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(10, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(9, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 3) // ADRS ci byte
+                for { let p := and(shr(9, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 160), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 64)), N_MASK)) // chain 4
-                {
-                    let a := add(wotsAdrs, or(shl(64, 4), shl(32, and(shr(12, d), 7))))
-                    if and(nd, shl(14, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(13, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(12, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 4) // ADRS ci byte
+                for { let p := and(shr(12, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 192), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 80)), N_MASK)) // chain 5
-                {
-                    let a := add(wotsAdrs, or(shl(64, 5), shl(32, and(shr(15, d), 7))))
-                    if and(nd, shl(17, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(16, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(15, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 5) // ADRS ci byte
+                for { let p := and(shr(15, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 224), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 96)), N_MASK)) // chain 6
-                {
-                    let a := add(wotsAdrs, or(shl(64, 6), shl(32, and(shr(18, d), 7))))
-                    if and(nd, shl(20, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(19, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(18, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 6) // ADRS ci byte
+                for { let p := and(shr(18, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 256), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 112)), N_MASK)) // chain 7
-                {
-                    let a := add(wotsAdrs, or(shl(64, 7), shl(32, and(shr(21, d), 7))))
-                    if and(nd, shl(23, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(22, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(21, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 7) // ADRS ci byte
+                for { let p := and(shr(21, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 288), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 128)), N_MASK)) // chain 8
-                {
-                    let a := add(wotsAdrs, or(shl(64, 8), shl(32, and(shr(24, d), 7))))
-                    if and(nd, shl(26, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(25, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(24, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 8) // ADRS ci byte
+                for { let p := and(shr(24, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 320), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 144)), N_MASK)) // chain 9
-                {
-                    let a := add(wotsAdrs, or(shl(64, 9), shl(32, and(shr(27, d), 7))))
-                    if and(nd, shl(29, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(28, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(27, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 9) // ADRS ci byte
+                for { let p := and(shr(27, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 352), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 160)), N_MASK)) // chain 10
-                {
-                    let a := add(wotsAdrs, or(shl(64, 10), shl(32, and(shr(30, d), 7))))
-                    if and(nd, shl(32, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(31, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(30, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 10) // ADRS ci byte
+                for { let p := and(shr(30, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 384), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 176)), N_MASK)) // chain 11
-                {
-                    let a := add(wotsAdrs, or(shl(64, 11), shl(32, and(shr(33, d), 7))))
-                    if and(nd, shl(35, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(34, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(33, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 11) // ADRS ci byte
+                for { let p := and(shr(33, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 416), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 192)), N_MASK)) // chain 12
-                {
-                    let a := add(wotsAdrs, or(shl(64, 12), shl(32, and(shr(36, d), 7))))
-                    if and(nd, shl(38, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(37, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(36, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 12) // ADRS ci byte
+                for { let p := and(shr(36, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 448), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 208)), N_MASK)) // chain 13
-                {
-                    let a := add(wotsAdrs, or(shl(64, 13), shl(32, and(shr(39, d), 7))))
-                    if and(nd, shl(41, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(40, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(39, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 13) // ADRS ci byte
+                for { let p := and(shr(39, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 480), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 224)), N_MASK)) // chain 14
-                {
-                    let a := add(wotsAdrs, or(shl(64, 14), shl(32, and(shr(42, d), 7))))
-                    if and(nd, shl(44, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(43, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(42, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 14) // ADRS ci byte
+                for { let p := and(shr(42, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 512), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 240)), N_MASK)) // chain 15
-                {
-                    let a := add(wotsAdrs, or(shl(64, 15), shl(32, and(shr(45, d), 7))))
-                    if and(nd, shl(47, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(46, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(45, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 15) // ADRS ci byte
+                for { let p := and(shr(45, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 544), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 256)), N_MASK)) // chain 16
-                {
-                    let a := add(wotsAdrs, or(shl(64, 16), shl(32, and(shr(48, d), 7))))
-                    if and(nd, shl(50, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(49, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(48, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 16) // ADRS ci byte
+                for { let p := and(shr(48, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 576), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 272)), N_MASK)) // chain 17
-                {
-                    let a := add(wotsAdrs, or(shl(64, 17), shl(32, and(shr(51, d), 7))))
-                    if and(nd, shl(53, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(52, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(51, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 17) // ADRS ci byte
+                for { let p := and(shr(51, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 608), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 288)), N_MASK)) // chain 18
-                {
-                    let a := add(wotsAdrs, or(shl(64, 18), shl(32, and(shr(54, d), 7))))
-                    if and(nd, shl(56, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(55, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(54, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 18) // ADRS ci byte
+                for { let p := and(shr(54, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 640), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 304)), N_MASK)) // chain 19
-                {
-                    let a := add(wotsAdrs, or(shl(64, 19), shl(32, and(shr(57, d), 7))))
-                    if and(nd, shl(59, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(58, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(57, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 19) // ADRS ci byte
+                for { let p := and(shr(57, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 672), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 320)), N_MASK)) // chain 20
-                {
-                    let a := add(wotsAdrs, or(shl(64, 20), shl(32, and(shr(60, d), 7))))
-                    if and(nd, shl(62, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(61, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(60, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 20) // ADRS ci byte
+                for { let p := and(shr(60, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 704), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 336)), N_MASK)) // chain 21
-                {
-                    let a := add(wotsAdrs, or(shl(64, 21), shl(32, and(shr(63, d), 7))))
-                    if and(nd, shl(65, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(64, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(63, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 21) // ADRS ci byte
+                for { let p := and(shr(63, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 736), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 352)), N_MASK)) // chain 22
-                {
-                    let a := add(wotsAdrs, or(shl(64, 22), shl(32, and(shr(66, d), 7))))
-                    if and(nd, shl(68, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(67, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(66, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 22) // ADRS ci byte
+                for { let p := and(shr(66, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 768), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 368)), N_MASK)) // chain 23
-                {
-                    let a := add(wotsAdrs, or(shl(64, 23), shl(32, and(shr(69, d), 7))))
-                    if and(nd, shl(71, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(70, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(69, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 23) // ADRS ci byte
+                for { let p := and(shr(69, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 800), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 384)), N_MASK)) // chain 24
-                {
-                    let a := add(wotsAdrs, or(shl(64, 24), shl(32, and(shr(72, d), 7))))
-                    if and(nd, shl(74, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(73, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(72, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 24) // ADRS ci byte
+                for { let p := and(shr(72, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 832), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 400)), N_MASK)) // chain 25
-                {
-                    let a := add(wotsAdrs, or(shl(64, 25), shl(32, and(shr(75, d), 7))))
-                    if and(nd, shl(77, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(76, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(75, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 25) // ADRS ci byte
+                for { let p := and(shr(75, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 864), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 416)), N_MASK)) // chain 26
-                {
-                    let a := add(wotsAdrs, or(shl(64, 26), shl(32, and(shr(78, d), 7))))
-                    if and(nd, shl(80, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(79, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(78, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 26) // ADRS ci byte
+                for { let p := and(shr(78, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 896), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 432)), N_MASK)) // chain 27
-                {
-                    let a := add(wotsAdrs, or(shl(64, 27), shl(32, and(shr(81, d), 7))))
-                    if and(nd, shl(83, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(82, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(81, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 27) // ADRS ci byte
+                for { let p := and(shr(81, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 928), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 448)), N_MASK)) // chain 28
-                {
-                    let a := add(wotsAdrs, or(shl(64, 28), shl(32, and(shr(84, d), 7))))
-                    if and(nd, shl(86, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(85, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(84, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 28) // ADRS ci byte
+                for { let p := and(shr(84, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 960), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 464)), N_MASK)) // chain 29
-                {
-                    let a := add(wotsAdrs, or(shl(64, 29), shl(32, and(shr(87, d), 7))))
-                    if and(nd, shl(89, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(88, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(87, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 29) // ADRS ci byte
+                for { let p := and(shr(87, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 992), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 480)), N_MASK)) // chain 30
-                {
-                    let a := add(wotsAdrs, or(shl(64, 30), shl(32, and(shr(90, d), 7))))
-                    if and(nd, shl(92, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(91, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(90, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 30) // ADRS ci byte
+                for { let p := and(shr(90, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1024), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 496)), N_MASK)) // chain 31
-                {
-                    let a := add(wotsAdrs, or(shl(64, 31), shl(32, and(shr(93, d), 7))))
-                    if and(nd, shl(95, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(94, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(93, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 31) // ADRS ci byte
+                for { let p := and(shr(93, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1056), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 512)), N_MASK)) // chain 32
-                {
-                    let a := add(wotsAdrs, or(shl(64, 32), shl(32, and(shr(96, d), 7))))
-                    if and(nd, shl(98, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(97, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(96, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 32) // ADRS ci byte
+                for { let p := and(shr(96, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1088), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 528)), N_MASK)) // chain 33
-                {
-                    let a := add(wotsAdrs, or(shl(64, 33), shl(32, and(shr(99, d), 7))))
-                    if and(nd, shl(101, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(100, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(99, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 33) // ADRS ci byte
+                for { let p := and(shr(99, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1120), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 544)), N_MASK)) // chain 34
-                {
-                    let a := add(wotsAdrs, or(shl(64, 34), shl(32, and(shr(102, d), 7))))
-                    if and(nd, shl(104, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(103, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(102, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 34) // ADRS ci byte
+                for { let p := and(shr(102, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1152), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 560)), N_MASK)) // chain 35
-                {
-                    let a := add(wotsAdrs, or(shl(64, 35), shl(32, and(shr(105, d), 7))))
-                    if and(nd, shl(107, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(106, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(105, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 35) // ADRS ci byte
+                for { let p := and(shr(105, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1184), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 576)), N_MASK)) // chain 36
-                {
-                    let a := add(wotsAdrs, or(shl(64, 36), shl(32, and(shr(108, d), 7))))
-                    if and(nd, shl(110, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(109, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(108, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 36) // ADRS ci byte
+                for { let p := and(shr(108, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1216), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 592)), N_MASK)) // chain 37
-                {
-                    let a := add(wotsAdrs, or(shl(64, 37), shl(32, and(shr(111, d), 7))))
-                    if and(nd, shl(113, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(112, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(111, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 37) // ADRS ci byte
+                for { let p := and(shr(111, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1248), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 608)), N_MASK)) // chain 38
-                {
-                    let a := add(wotsAdrs, or(shl(64, 38), shl(32, and(shr(114, d), 7))))
-                    if and(nd, shl(116, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(115, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(114, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 38) // ADRS ci byte
+                for { let p := and(shr(114, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1280), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 624)), N_MASK)) // chain 39
-                {
-                    let a := add(wotsAdrs, or(shl(64, 39), shl(32, and(shr(117, d), 7))))
-                    if and(nd, shl(119, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(118, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(117, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 39) // ADRS ci byte
+                for { let p := and(shr(117, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1312), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 640)), N_MASK)) // chain 40
-                {
-                    let a := add(wotsAdrs, or(shl(64, 40), shl(32, and(shr(120, d), 7))))
-                    if and(nd, shl(122, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(121, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(120, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 40) // ADRS ci byte
+                for { let p := and(shr(120, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1344), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 656)), N_MASK)) // chain 41
-                {
-                    let a := add(wotsAdrs, or(shl(64, 41), shl(32, and(shr(123, d), 7))))
-                    if and(nd, shl(125, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(124, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(123, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 41) // ADRS ci byte
+                for { let p := and(shr(123, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1376), mload(0x40))
                 mstore(0x40, and(calldataload(add(wotsPtr, 672)), N_MASK)) // chain 42
-                {
-                    let a := add(wotsAdrs, or(shl(64, 42), shl(32, and(shr(126, d), 7))))
-                    if and(nd, shl(128, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 2)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 3)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 4))
-                    }
-                    if and(nd, shl(127, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        mstore(0x20, add(a, shl(32, 1)))
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                        a := add(a, shl(32, 2))
-                    }
-                    if and(nd, shl(126, 1)) {
-                        mstore(0x20, a)
-                        pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
-                    }
+                mstore8(0x37, 42) // ADRS ci byte
+                for { let p := and(shr(126, d), 7) } lt(p, 7) { p := add(p, 1) } {
+                    mstore8(0x3B, p) // ADRS cp byte
+                    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                 }
                 mstore(add(TB, 1408), mload(0x40))
                 // END generated chains
