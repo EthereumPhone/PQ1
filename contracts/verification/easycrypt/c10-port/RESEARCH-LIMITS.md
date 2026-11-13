@@ -2832,3 +2832,216 @@ stateful oracle, or prove the complete cross-language session relation. The
 absorbing-failure game, separate secure-wrapper experiment, physical effects,
 concrete hash assumptions, QROM and separate #295 probability-monad scope keep
 their existing boundaries.
+
+Source-binding re-pin after the C10 signing-speed research merge (2026-11-13):
+this records the correspondence review behind the updated
+`cert-source-binding.json`. Compared: `origin/master` 0bf8153f2 against the
+merge head 150bc6f2b, plus the extraction-only `lean_extract` gate a78cc4fdf.
+`sphincs-c10/src` is identical at 150bc6f2b and at the re-pin commit, apart
+from that gate. The EasyCrypt sources, the split identity (`INPUTS_SHA256`
+aef0eac186e018a1ae8392f83768cbea), statement pins, census and numerical
+bounds are unchanged. Only the hashes of 7 Rust files, 34 Lean files and 2
+proof-control scripts move.
+
+The raw models (`RawWots/RawFors/RawMerkle/RawLayer/RawKeygen/RawSigner`), the
+`C10Bytes`/radix adapters and the transcript test cover essentially the whole
+default-feature path: `th`, `th_pair`, `th_multi`, `chain_hash`, `h_msg`,
+`wots_digest`, `wots_secret`, `fors_secret`, `pad16`, `make_adrs`/
+`set_chain_index`, `extract_digits`, `find_count`, WOTS `keygen_pk`/
+`sign_with_shuffle`/`pk_from_sig`, Merkle `compute_subtree_root`/
+`build_subtree_with_auth`/`verify_auth_path`, FORS `grind_r`/
+`compute_fors_root`/`sign_fors_tree`/`compute_fors_pk`/index extraction,
+`compute_pk_root`, `sign_inner` and `verify`, and the `params` constants.
+Every diff hunk in the seven files was therefore classified, not just a subset:
+(a) does not touch the modelled default path; (b) semantics-preserving refactor
+of modelled code; (c) semantic change. **No hunk is (c).**
+
+- `hash.rs` — (a): every `v2`/`v2-fused` early return and every
+  `hw-sha256-{gather,thmulti,chain,prfchain,forsleaf}` block, plus
+  `wots_chains` (`hw-sha256-prfchain` only). The `hw-sha256-oneshot` variant of
+  `sha256_bytes16` reads four digest words from the driver; like every
+  hardware backend, it is outside the byte model. The volatile wipe of the
+  local preimage in `wots_secret`/`fors_secret` (cfg-gated out of
+  `lean_extract` only) writes a dead local and never feeds an output.
+  (b): `th`/`th_pair`/`th_multi` now end in `sha256_bytes16(buf)`. In the
+  modelled software path this is literally `truncate(&sha256_bytes(data))`, the
+  old expression. `chain_hash` writes `sha256_bytes16(buf)` (16 bytes) where
+  it wrote `sha256_bytes(buf)[..16]`: identical bytes. `wots_secret` and
+  `fors_secret` now build one contiguous 80-/48-byte buffer:
+  `sk ‖ "wots" ‖ BE32(layer) ‖ 0^24 ‖ BE64(tree) ‖ BE32(kp) ‖ BE32(ci)` and
+  `sk ‖ "fors" ‖ BE32(ht) ‖ BE32(tree) ‖ BE32(leaf)`. They hash it with
+  `sha256_bytes16`. The old code hashed the same parts in the same order with
+  `sha256_parts`, a streaming update over each part, and then `truncate`.
+  `u64_to_b32` placed the 8 BE tree bytes at [24..32) of a zero word, i.e. at
+  [64..72) here, so the SHA-256 input bytes are identical. The new
+  `wots_secret_chain` (default path: `wots_secret`, then `set_chain_index`,
+  then `chain_hash(.., 0, steps)`) and `fors_leaf` (`fors_secret`, then
+  `th(seed, leaf_adrs, pad16(s))`) are the former inline call sequences,
+  moved verbatim.
+- `wots.rs` — (a): the `hw-sha256-search` and `v2-fused` grind blocks (the
+  default grind loop only gains `cfg(not(hw-sha256-search))` attributes); the
+  `v2-fused` early return in `keygen_pk`; the `hw-sha256-prfchain`
+  `wots_chains` calls in `keygen_pk`/`sign_with_shuffle`, with
+  `cfg(not(hw-sha256-prfchain))` guards on the default loops.
+  (b): the `keygen_pk` and `sign_with_shuffle` loop bodies call
+  `wots_secret_chain(.., i, W-1)` and `wots_secret_chain(.., i, digits[i])`.
+  These are the same three calls with the same arguments in the same order.
+- `fors.rs` — (a): `read_bits_le` visibility; the
+  `v2-fused`/`hw-sha256-grindr(-drv)`/`hw-sha256-forstree` early returns; the
+  feature-only `fors_tree_fast`, `grind_r_drv` and `grind_r_fast`.
+  (b): `compute_fors_root` and `sign_fors_tree` build each leaf with
+  `fors_leaf`. The leaf address is now computed before the PRF call; both are
+  pure, so the leaf value is unchanged.
+- `hypertree.rs` — (a): `top-cache` parameters, entry points and the cached
+  top-layer `match`; the `v2-fors-last-prf` and `v2` address overrides (the
+  default last-tree code is unchanged under `cfg(not(..))`).
+  (b): `compute_pk_root_inner` passes `(D - 1) as u32` = 1, the old literal.
+  The signer and verifier layer loops use `lh = layer_h(layer)` in place of
+  `SUBTREE_H` for the leaf mask, tree shift, auth-path writes and parse
+  bounds. The verifier's auth-path array is `[_; MAX_LAYER_H]`.
+- `merkle.rs` — (b): `n_leaves = 1 << layer_h(layer)` (512), stacks of
+  `MAX_LAYER_H + 1` (10) entries, auth-path/keep arrays of `MAX_LAYER_H`, and
+  loops bounded by `layer_h(layer)`. (a): one `debug_assert`.
+- `params.rs` — (b): `MAX_LAYER_H = SUBTREE_H` and
+  `layer_h(_) = SUBTREE_H` unless `v2-split810`; a compile-time assertion
+  that the layer heights sum to `H`. (a): `TARGET_SUM` stays 205 unless
+  `v2-ts200`; the new `SIG_HT_LAYER0` (= `SIG_HT_LAYER`) is used only by
+  research tooling.
+- `lib.rs` — (a): the `v2hash`/`topcache` modules, research `compile_error!`
+  gates and the `top-cache` `sign_with_shuffle_cached`, all feature-gated. A
+  doc comment for `sk_seed()` now precedes the inserted function (doc layout
+  only).
+
+The 34 Lean files are inputs of the Lean side of the paired bridges
+(`C10HashInputBridge`, `C10AddressInputBridge`, `C10Functional*`,
+`SignHypertreeLayer`/`SignLayerSerializeCaller` factors). The bridges rely on
+two things: the extracted definitions being the current Rust, and the
+headline statements proved about them. Both still hold.
+
+- 19 regenerated Aeneas modules (`Hash`, `WotsSecret`, `ForsSecret`,
+  `WotsKeygen`, `WotsSign`, `ForsRoot`, `ForsAuth`, `Merkle`, `XmssRoot`,
+  `XmssAuth`, `Verify`, `Fors`, `ForsPk`, `ForsRecovery`, `GrindR`,
+  `FindCount` (Funs+Types), `PkFromSig`, `Wots`) come from the pinned
+  charon/aeneas. Every target replays exactly (`make verify-extraction-regen`,
+  35 fresh + the unchanged tx-merkle waiver). Eight of them (`Fors`, `ForsPk`,
+  `ForsRecovery`, `GrindR`, `FindCount` Funs+Types, `PkFromSig`, `Wots`)
+  drift only in `Source:` spans.
+- 2 hand-written externals (`WotsSecret`/`ForsSecret` `FunsExternal`): the
+  only edit is a comment.
+- 11 proof modules (`HashSpecs/{Th,ThPair,ThMulti,ChainHash,Truncate}`,
+  `WotsSecretSpec`, `ForsSecretSpec`, `MerkleVerifySpec`,
+  `HypertreeLayerSpec`, `ForsAuthOutside`, `XmssAuthOutside`) were re-proved
+  with unchanged headline statements. Added: `hash.sha256_bytes16_spec`,
+  `wotsSecretBuf_eq`, `forsSecretBuf_eq`. Removed: `u64_to_b32_spec`, because
+  the function is no longer extracted and the lemma was not a headline.
+- 2 factor modules (`SignHypertreeLayer`, `SignLayerSerializeCaller`): their
+  hand-mirrored layer bodies follow the new extraction (`params.layer_h layer`;
+  `sign_inner_loop3_loop1 sig off height path 0`). They remain tied to it by
+  the unchanged factor theorems `signer_layer_serialization_factor` (`rfl`)
+  and `signer_body_compute_factor`.
+  `signerSerializeLayer_bind` names the loop with that new argument order; the
+  equality it states is otherwise the same.
+
+All 464 extracted headline closures match the per-headline manifest
+(`make verify-extracted`), with no `sorry` and no new axiom. Outside the 34
+bound inputs, one headline statement changes form:
+`SignWriteSpec.firmware_write_xmss_path` now names
+`sign_inner_loop3_loop1 sig offset 9#usize path 0#usize`, the regenerated
+argument order. Its hypotheses and postcondition are unchanged. Also outside
+the bound inputs, `WotsKeygenSpec` gains `wots_secret_chain_spec`, consumed by
+both WOTS loop proofs, and `WotsSignSpec` drops a now-unused private
+overflow lemma.
+
+Evidence (local runs on this worktree; the logs are not committed receipts):
+- `fullsign_model/check.py` against the head Rust: 5 keygen cases, 20
+  signatures and 160 negative verifications match the manual raw-oracle
+  computation byte-for-byte, with equal hook/R/H_msg/verify call counts.
+- `easycrypt_transcript` passes (4 tests, normal and `lean_extract`).
+- `cargo test -p sphincs-c10 --release --features sim-internals`: 110 passed,
+  including `primitive_kat` (committed golden vectors), `signing_suite`,
+  `wire_format_stability` and `independent_signer_xcheck` (`v2_kat` is
+  gated on the research `v2` feature and does not run there).
+- The `verify-extract-differential` corpora were generated by master's Rust,
+  and the merge did not touch `contracts/verification`. The head Rust
+  reproduces them in `GEN=0` mode.
+- The `lean_extract` gate leaves `make build-hw` secure and non-secure ELFs
+  byte-identical (iota2 and pq1).
+- On hardware, the research ledger records a v1 kit differential of 32/32
+  plus a v1 golden check (`research/c10-autoresearch/ledger.md`, re-run at
+  research commit b28509e94, not this worktree).
+  This is a sampled differential, not proof of equivalence for every input or
+  every research feature. The full-sign harness above uses host SHA hooks and
+  does not exercise hardware backends.
+
+Two of the pinned inputs are proof-control scripts:
+`test_fors_auth_proof_controls.py` and `test_wots_sign_proof_controls.py`.
+Their mutation anchors were moved to the new extracted text (the `fors_leaf`
+call and leaf address; the single `wots_secret_chain` call). Every anchor
+occurs exactly once (asserted by the scripts), and each typed mutation is
+still rejected by the committed consuming proofs (24 and 19 mutations; the
+WOTS signing loop proof now consumes the new `wots_secret_chain_spec`). The chain-start mutation
+moved with the helper body: it is now in the `chain` family of
+`test_wots_keygen_proof_controls.py`, against `wots_secret_chain_spec`.
+
+The same review covers six Rust bindings in the separate Lean PMF project,
+`contracts/verification/probability/claims.json` (`bindings`):
+`wots.rs`, `fors.rs`, `hash.rs`, `merkle.rs`, `params.rs` and `hypertree.rs`.
+The two other Rust bindings, `address.rs` and `shuffle.rs`, are unchanged.
+These bindings pin the Rust sources from which the PMF programs were manually
+transcribed. The PMF project's own README (§ projection-source bindings) says
+they detect drift and are not an extraction or correspondence proof. The same
+`claims.json` also binds the EasyCrypt raw models, all unchanged.
+The programs transcribe these default-path functions:
+
+- WOTS count search (`wots_digest` input, `find_count`): `RawWots` (count),
+  PMF `WotsProgram`.
+- WOTS chains, compression and use (`chain_hash`, `wots_secret`, `th_multi`,
+  `keygen_pk`, `sign_with_shuffle`, `pk_from_sig`): `RawWots`, `RawKeygen`,
+  `KeygenPrefixes`; PMF `ChainProgram`/`WotsChain` and `WotsCompression`.
+- FORS (`fors_secret`, the leaf `th`, `th_pair` nodes, `compute_fors_root`,
+  `sign_fors_tree`, `compute_fors_pk`): `RawFors`, `RawForest`,
+  `RawForsComparison`, `ForsBuilderSecret`; PMF `ForsInputs`.
+- R/H_msg grind (`grind_r` with its R PRF input, `h_msg`):
+  `C10RawGrind`, `C10HashDomains` (which also fixes the pair-input layout);
+  PMF `C10R*` session modules.
+- Merkle build, path and verify (`compute_subtree_root`,
+  `build_subtree_with_auth`, `verify_auth_path`): `RawMerkle`,
+  `RawPathComparison`, `PathReplay`, `RawMerkleRootWitness`.
+- Layer, signer and verifier (`sign_inner`, `verify`, `compute_pk_root`):
+  `RawLayer`, `RawSigner`, `RawSignature`, `FullSession`.
+- Address bytes (`make_adrs`, `set_chain_index`): PMF `AddressBytes`.
+- The `params` constants.
+
+Two transcription families depend only on unchanged files: shuffle
+(`ShuffleSeed::derive`, shuffle-block hashing, `fisher_yates` in the
+unchanged `shuffle.rs`: `RawShuffle`; PMF `ShuffleDerive`, `WotsShuffle`,
+`ForestShuffle`) and address bytes (the unchanged `address.rs`). Their callers
+in `wots.rs` and `hypertree.rs` pass the same arguments as before
+(`fisher_yates(shuffle_seed, L)`, `shuffle.derive(&wots_label)`, unchanged
+hunks).
+
+Every default-path function above in the six drifted files falls under the
+classification earlier in this section. Every hunk in those files is (a) or
+(b), so no transcribed program changes. Only those six hashes
+move; the PMF sources, theorem statements and query inventory are untouched.
+
+Independent review: GPT-6 Astra conformance review (read-only, against the
+diffs, the `.ec` raw models, the PMF programs and the Lean sources).
+- Round 1: CONFORMS WITH CORRECTIONS. Found no class-(c) hunk. Asked to name
+  the two control scripts, drop the unrun `v2_kat` claim, label the evidence
+  as local, disclose the `firmware_write_xmss_path` form change, and scope the
+  hardware claim.
+- Round 2, including the PMF paragraph: CONFORMS WITH CORRECTIONS. Asked for
+  the shuffle family, correct raw-model/PMF associations (`C10RawGrind` is
+  the R/H_msg grind) and the omitted `wots.rs` feature-gated hunks. It again
+  found no class-(c) change.
+- Round 3: CONFORMS, with no findings.
+A separate Astra review of the Lean proof and statement diff returned
+CONFORMS: eight hand-written theorem declarations changed, were added or were
+removed, with no weakening. All nine `--kill` substitutions are byte-identical
+to their homes, and no control was silently dropped. The re-hash below
+follows these verdicts.
+
+The pinned Rust, Lean and control-script inputs (and the six PMF Rust
+bindings) are re-hashed with no change to either source set. This is a reviewed binding update, not a refinement proof, and not a new
+EasyCrypt replay.
