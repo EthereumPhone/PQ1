@@ -12,6 +12,9 @@ extern "C" {
     fn pqsigner_v2_wots_chains16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_wots_pk16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, k0: u32, k1: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_fors_subtree16(sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8);
+    fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, steps: u32);
+    fn pqsigner_wots_chains16(sk: *const u8, prf_tail: *const u8, seed_adrs: *const u8, order: *const u8, digits: *const u8, fixed_steps: u32, n: u32, out: *mut u8);
+    fn pqsigner_sha256_search128(buf: *const u8, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8) -> u32;
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
 }
 #[no_mangle]
@@ -177,33 +180,33 @@ pub extern "C" fn c10_bench_main() {
         let t = cyc();
         spin(1000);
         rec(dstar, cyc().wrapping_sub(t));
-        // 10. Unrolled asm: K back-to-back DIN stores after INIT (engine idle), 256 reps;
-        //     then K back-to-back SR loads and K HR0 loads. Words: (st2, st14), (sr2, sr14), (hr2, hr14).
-        macro_rules! timed {
-            ($k:literal, $ins:literal, $off:expr, $init:expr) => {{
-                let mut tot = 0u32;
-                for _ in 0..256 {
-                    if $init {
-                        while hr(0x24) & 8 != 0 {}
-                        hw(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
-                        let _ = hr(0x24);
-                    }
-                    let t = cyc();
-                    core::arch::asm!(concat!(".rept ", $k), $ins, ".endr", a = in(reg) HB + $off, v = inout(reg) 0x1234_5678u32 => _, options(nostack));
-                    tot += cyc().wrapping_sub(t);
-                }
-                tot
-            }};
+        // 10. A v1-shaped two-block step (96-byte message, NBLW = 0): t1 after 16 stores,
+        //     t2 after the 17th, t3 after 24 stores + DCAL, t4 at DCIS seen. Sums over 256.
+        let (mut s1, mut s2, mut s3, mut s4) = (0u32, 0u32, 0u32, 0u32);
+        for _ in 0..256 {
+            while hr(0x24) & 8 != 0 {}
+            hw(0x08, 0);
+            let t0 = cyc();
+            hw(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
+            core::arch::asm!(".rept 16", "str {v}, [{a}]", ".endr", a = in(reg) HB + 4, v = in(reg) 0x1234_5678u32, options(nostack));
+            let t1 = cyc();
+            core::arch::asm!("str {v}, [{a}]", a = in(reg) HB + 4, v = in(reg) 0x1234_5678u32, options(nostack));
+            let t2 = cyc();
+            core::arch::asm!(".rept 7", "str {v}, [{a}]", ".endr", a = in(reg) HB + 4, v = in(reg) 0u32, options(nostack));
+            hw(0x08, 1 << 8);
+            let t3 = cyc();
+            while hr(0x24) & 2 == 0 {}
+            let t4 = cyc();
+            let _ = hr(0x310);
+            hw(0x24, 1);
+            s1 += t1.wrapping_sub(t0);
+            s2 += t2.wrapping_sub(t0);
+            s3 += t3.wrapping_sub(t0);
+            s4 += t4.wrapping_sub(t0);
         }
-        let a = timed!(2, "str {v}, [{a}]", 4, true);
-        let b = timed!(14, "str {v}, [{a}]", 4, true);
-        rec(a, b);
-        let a = timed!(2, "ldr {v}, [{a}]", 0x24, false);
-        let b = timed!(14, "ldr {v}, [{a}]", 0x24, false);
-        rec(a, b);
-        let a = timed!(2, "ldr {v}, [{a}]", 0x310, false);
-        let b = timed!(14, "ldr {v}, [{a}]", 0x310, false);
-        rec(a, b);
+        rec(s1, s2);
+        rec(s3, s4);
+        rec(0, 0);
         hw(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
         // 11. search43 with the real target 205: 16 searches, (cycles, tries).
         let (mut cy, mut tries) = (0u32, 0u32);
@@ -215,6 +218,40 @@ pub extern "C" fn c10_bench_main() {
             tries += r + 1;
         }
         rec(cy, tries);
+        // 12. v1 (deployed format): chain16 over seed ‖ adrs(WOTS, zero words) ‖ pad16(v),
+        //     15 steps per call, 2,000 calls; and search128 with a never-true predicate.
+        let mut b = [0u8; 96];
+        b[..16].copy_from_slice(&[0x5A; 16]);
+        b[32..44].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        b[48..52].copy_from_slice(&[0, 0, 0, 7]);
+        b[64..80].copy_from_slice(&[0x11; 16]);
+        let t = cyc();
+        for _ in 0..2000 {
+            pqsigner_sha256_chain16(b.as_mut_ptr(), 0, 15);
+        }
+        rec(cyc().wrapping_sub(t), 30_000);
+        // v1 wots_chains16 (keygen shape: 43 chains x (PRF + 7 steps)), 50 keys.
+        let tail = [0x22u8; 48];
+        let mut sa = [0u8; 64];
+        sa[..16].copy_from_slice(&[0x5A; 16]);
+        sa[32..44].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        let t = cyc();
+        for _ in 0..50 {
+            pqsigner_wots_chains16(sk.as_ptr(), tail.as_ptr(), sa.as_ptr(), core::ptr::null(), core::ptr::null(), 7, 43, o.as_mut_ptr());
+        }
+        rec(cyc().wrapping_sub(t), 50 * 43 * 8);
+        let _ = (never as unsafe extern "C" fn(*const u8) -> bool, pqsigner_sha256_search128 as unsafe extern "C" fn(*const u8, u32, u32, unsafe extern "C" fn(*const u8) -> bool, *mut u8) -> u32);
     }
     out(1, 100);
+}
+
+unsafe extern "C" fn never(p: *const u8) -> bool {
+    // A digit-sum-shaped predicate that never holds (sum of the 43 low digits is at most 301).
+    let mut s = 0u32;
+    for i in 0..16 {
+        // SAFETY: the driver passes 32 readable bytes.
+        let b = unsafe { *p.add(16 + i) };
+        s += u32::from(b & 7) + u32::from((b >> 3) & 7) + u32::from(b >> 6);
+    }
+    s == 1000
 }

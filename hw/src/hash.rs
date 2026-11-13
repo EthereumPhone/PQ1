@@ -1217,9 +1217,169 @@ fn chain_core(c: &[u32; 16], v: [u32; 4], start_pos: u32, steps: u32) -> [u32; 4
     }
 }
 
+/// `v1-asm-chain` (round 7, secure-only; the FSBL never names it): the WOTS-shaped
+/// (`Z`) v1 chain loop, hand-scheduled. Per step it does what the Rust loop does
+/// (BUSY spin with a 2^24 guard, stale-DCIS refusal, INIT, the 16 block-1 words
+/// with position `pos`, the value and four zero words, DCAL; DCIS poll with a
+/// 2^24 guard; HR0..3; SR clear). The 18th store waits for block 1, so loop
+/// control sits after it; a timed spin places the first DCIS poll.
+#[cfg(feature = "v1-asm-chain")]
+const V1_ASM_SPIN: u32 = 14;
+
+#[cfg(all(feature = "v1-asm-chain", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1_chain_asm(blk: &[u32; 10], v: [u32; 4], start_pos: u32) -> [u32; 4] {
+    let (o0, o1, o2, o3): (u32, u32, u32, u32);
+    // SAFETY: drives only the secure HASH block (r4 = HASH_BASE + 0x0C); reads the
+    // 40-byte staging array; on a hang or a stale DCIS it calls `hash_engine_fault`.
+    unsafe {
+        core::arch::asm!(
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "b 3f",
+            // engine window after DCAL: CR value back in lr, loop control, timed wait
+            "1:",
+            "movs r8, #{spin}",
+            "10:",
+            "subs r8, r8, #1",
+            "bne 10b",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bpl 11f",
+            "4:",
+            "ldm r4, {{r0, r1, r2, r3}}",
+            "movs r8, #1",
+            "str r8, [r4, #0x18]",
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "3:",
+            "ldr r8, [r4, #0x18]",
+            "tst r8, #10",
+            "bne 40f",
+            "41:",
+            "str lr, [r4, #-12]",          // INIT
+            "movs.w lr, #0",               // lr = 0 until the window
+            "ldm r12, {{r8, r9, r10, r11}}",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str r11, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "ldr r8, [r12, #16]",
+            "ldr r9, [r12, #20]",
+            "ldr r10, [r12, #24]",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "ldrd r8, r9, [r12, #28]",
+            "rev r10, r5",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str r0, [r4, #-8]",           // word 16: block 1 starts
+            "str r1, [r4, #-8]",           // waits for block 1
+            "add r5, r5, #1",
+            "ldr r11, [r12, #36]",
+            "str r2, [r4, #-8]",
+            "str r3, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "mov.w r8, #256",
+            "str r8, [r4, #-4]",           // DCAL (NBLW = 0)
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "cmp r5, r11",
+            "bne 1b",
+            // last digest: counted poll, read, clear
+            "mov.w r9, #16777216",
+            "21:",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 22f",
+            "subs r9, r9, #1",
+            "bne 21b",
+            "b 99f",
+            "22:",
+            "ldm r4, {{r0, r1, r2, r3}}",
+            "movs r8, #1",
+            "str r8, [r4, #0x18]",
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "b 98f",
+            // DCIS not yet: seven straight polls, then a counted poll
+            "11:",
+            ".rept 7",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 4b",
+            ".endr",
+            "mov.w r9, #16777216",
+            "12:",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 4b",
+            "subs r9, r9, #1",
+            "bne 12b",
+            "b 99f",
+            // BUSY still set, or a stale DCIS
+            "40:",
+            "mov.w r9, #16777216",
+            "42:",
+            "tst r8, #8",
+            "beq 43f",
+            "subs r9, r9, #1",
+            "beq 99f",
+            "ldr r8, [r4, #0x18]",
+            "b 42b",
+            "43:",
+            "tst r8, #2",
+            "beq 41b",
+            "99:",
+            "bl {fault}",
+            "98:",
+            spin = const V1_ASM_SPIN,
+            fault = sym hash_engine_fault,
+            inout("r0") v[0] => o0,
+            inout("r1") v[1] => o1,
+            inout("r2") v[2] => o2,
+            inout("r3") v[3] => o3,
+            in("r4") HASH_BASE + 0x0C,
+            inout("r5") start_pos => _,
+            out("r8") _,
+            out("r9") _,
+            out("r10") _,
+            out("r11") _,
+            in("r12") blk.as_ptr(),
+            out("lr") _,
+        );
+    }
+    [o0, o1, o2, o3]
+}
+
 #[cfg(feature = "chain")]
 #[inline(always)]
 fn chain_steps<const Z: bool>(c: &[u32; 16], mut v: [u32; 4], start_pos: u32, steps: u32) -> [u32; 4] {
+    #[cfg(all(feature = "v1-asm-chain", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+    if Z && steps != 0 {
+        // The engine is idle (no stale DCIS) before STR, as below.
+        if wait_ready_sr() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        REG.str_.write(0);
+        let blk = [c[0], c[1], c[2], c[3], c[8], c[9], c[10], c[12], c[13], start_pos.wrapping_add(steps)];
+        return v1_chain_asm(&blk, v, start_pos);
+    }
     let k = |i: usize| if Z && matches!(i, 4 | 5 | 6 | 7 | 11 | 15) { 0 } else { c[i] };
     let (c0, c1, c2, c3, c4, c5, c6, c7) = (k(0), k(1), k(2), k(3), k(4), k(5), k(6), k(7));
     let (c8, c9, c10, c11, c12, c13, c15) = (k(8), k(9), k(10), k(11), k(12), k(13), k(15));

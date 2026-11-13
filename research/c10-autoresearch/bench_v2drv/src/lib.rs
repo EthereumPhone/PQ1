@@ -27,6 +27,7 @@ extern "C" {
     fn pqsigner_v2_wots_pk16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, k0: u32, k1: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_grind_r(prf: *const u8, len: u32, hm: *const u8, start: u32, n: u32, out_r: *mut u8, out_d: *mut u8) -> u32;
     fn pqsigner_v2_fors_subtree16(sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8);
+    fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, steps: u32);
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
 }
 
@@ -531,9 +532,18 @@ pub extern "C" fn c10_bench_main() {
         }
         let s = [0x5Au8; 16];
         let mut v = [0x11u8; 16];
-        #[cfg(not(feature = "stale-search"))]
+        #[cfg(not(any(feature = "stale-search", feature = "stale-v1")))]
         // SAFETY: valid buffers.
         unsafe { pqsigner_v2_chain16(s.as_ptr(), v.as_mut_ptr(), 0x0102_0304, 0x0000_0500, 0, 3) };
+        #[cfg(feature = "stale-v1")]
+        {
+            // v1 WOTS-shaped buffer (the zero words of `chain_core`'s Z path).
+            let mut b = [0u8; 96];
+            b[..16].copy_from_slice(&[0x5A; 16]);
+            b[32..44].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+            // SAFETY: 96 readable and writable bytes.
+            unsafe { pqsigner_sha256_chain16(b.as_mut_ptr(), 0, 3) };
+        }
         #[cfg(feature = "stale-search")]
         {
             let sm = [0x33u8; 32];

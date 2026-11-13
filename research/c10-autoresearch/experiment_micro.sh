@@ -17,9 +17,8 @@ for i, n in enumerate(names):
 if o[17]:  # round 7 probes
     r['floor_poll_min'] = o[16]; r['floor_poll_mean'] = round(o[17] / 1000, 1)
     r['floor_spin_d'] = o[18]; r['spin_cyc_per_iter'] = round(o[19] / 1000, 2)
-    for n, i in (('din_store', 20), ('sr_load', 22), ('hr_load', 24)):
-        a, b = o[i] / 256, o[i + 1] / 256
-        r[n + '_per_access'] = round((b - a) / 12, 2); r[n + '_k2'] = round(a, 1)
+    r['v1step_t1_16st'] = o[20] / 256; r['v1step_t2_17th'] = o[21] / 256; r['v1step_t3_dcal'] = o[22] / 256; r['v1step_t4_dcis'] = o[23] / 256
     r['search205_per_try'] = round(o[26] / o[27], 1) if o[27] else None; r['search205_tries'] = o[27]
+    r['v1_chain16_x15'] = round(o[28] / o[29], 1) if o[29] else None; r['v1_wots_chains16'] = round(o[30] / o[31], 1) if o[31] else None
 print(json.dumps(r))
 PY
