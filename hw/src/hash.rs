@@ -1911,12 +1911,17 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
     // SAFETY: caller contract (48 readable bytes).
     let t: [u32; 12] = core::array::from_fn(|i| unsafe { prf_tail.add(4 * i).cast::<u32>().read_unaligned() });
     let z = c[4] | c[5] | c[6] | c[7] | c[11] | c[15] == 0;
-    #[cfg(all(feature = "v1-asm-key", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
     // The asm stores chain i's output after chain i + 1's PRF has read `sk_seed`; the loop
     // below stores it first. Take the asm path only when `out` cannot overlap `sk_seed`
     // (public pointers), so both paths give the same bytes for every input.
-    let (o, k) = (out as usize, sk_seed as usize);
-    if z && order.is_null() && digits.is_null() && fixed_steps != 0 && n != 0 && (o.saturating_add(16 * n as usize) <= k || k + 32 <= o) {
+    #[cfg(all(feature = "v1-asm-key", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+    if z
+        && order.is_null()
+        && digits.is_null()
+        && fixed_steps != 0
+        && n != 0
+        && ((out as usize).saturating_add(16 * n as usize) <= sk_seed as usize || sk_seed as usize + 32 <= out as usize)
+    {
         // The engine is idle (no stale DCIS) before STR, as in the loop below; every
         // digest of the asm loop writes STR only with DCAL (NBLW 0).
         if wait_ready_sr() & SR_DCIS != 0 {
