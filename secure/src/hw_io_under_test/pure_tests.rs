@@ -3220,26 +3220,32 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
         assert!(!SECURE_CARGO_TOML_SRC.contains(&format!("\"pqsigner-hw/{r}\"")), "the secure crate raises {r}");
         assert!(!FSBL_CARGO_SRC.contains(&format!("\"{r}\"")), "the FSBL names {r}");
     }
-    // A research cfg: its first, positive feature is a research one (`all`),
-    // or every feature it names is (`any`). A `global_asm!` carries one on the
-    // line above it; an inline `asm!` sits in a function whose own attributes
-    // carry one — the item's gate, not the nearest cfg line above.
+    // A research cfg, as a whole attribute line and nothing else on it:
+    // `feature = "R"`; `all(feature = "R", …)` (R required); or `any(…)` made
+    // only of `feature = "R"` terms — R always a research feature. A
+    // `global_asm!` carries one on the line above it; an inline `asm!` sits in
+    // a function whose own attributes carry one. The function is the nearest
+    // item header at column 0 above the asm, and it must be a recognised `fn`
+    // header: anything else fails rather than borrow a neighbour's gate.
     let is_research = |c: &str| -> bool {
-        let Some(b) = c.trim().strip_prefix("#[cfg(") else { return false };
-        if let Some(r) = b.strip_prefix("feature = \"").or_else(|| b.strip_prefix("all(feature = \"")) {
+        let Some(b) = c.trim().strip_prefix("#[cfg(").and_then(|b| b.strip_suffix(")]")) else { return false };
+        if let Some(r) = b.strip_prefix("feature = \"").and_then(|r| r.strip_suffix('"')) {
+            return research.contains(&r);
+        }
+        if let Some(r) = b.strip_prefix("all(feature = \"").and_then(|r| r.strip_suffix(')')) {
             return research.contains(&r.split('"').next().expect("feature"));
         }
-        let Some(r) = b.strip_prefix("any(") else { return false };
-        let named: std::vec::Vec<&str> = r.split("feature = \"").skip(1).map(|x| x.split('"').next().expect("feature")).collect();
-        !named.is_empty() && named.iter().all(|f| research.contains(f))
+        let Some(r) = b.strip_prefix("any(").and_then(|r| r.strip_suffix(')')) else { return false };
+        r.split(", ").all(|t| {
+            t.strip_prefix("feature = \"").and_then(|f| f.strip_suffix('"')).is_some_and(|f| research.contains(&f))
+        })
     };
     let lines: std::vec::Vec<&str> = HW_HASH_SRC.lines().collect();
     let is_fn = |l: &str| {
-        ["fn ", "unsafe fn ", "pub fn ", "pub unsafe fn ", "pub(crate) fn ", "pub unsafe extern \"C\" fn ", "unsafe extern \"C\" fn "]
+        ["fn ", "unsafe fn ", "pub fn ", "pub unsafe fn ", "pub(crate) fn ", "pub unsafe extern \"C\" fn "]
             .iter()
             .any(|p| l.starts_with(p))
     };
-    let (mut inline, mut global) = (0, 0);
     // The barrier: exactly this statement, inside `dsb()`'s inline-barriers
     // block, is exempt — any other asm on its line or of its shape is not.
     let barrier = "        unsafe { core::arch::asm!(\"dsb sy\", options(nomem, nostack, preserves_flags)) };";
@@ -3247,6 +3253,7 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
         "fn dsb() {{\n    #[cfg(not(feature = \"inline-barriers\"))]\n    cortex_m::asm::dsb();\n    #[cfg(feature = \"inline-barriers\")]\n    {{\n        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);\n        // SAFETY: `dsb sy` only waits for earlier memory accesses to complete;\n        // it reads or writes no register or memory the compiler tracks, which\n        // is what cortex-m's own inline form declares.\n{barrier}\n        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);\n    }}\n}}\n"
     )));
     assert_eq!(lines.iter().filter(|l| l.contains("\"dsb sy\"")).count(), 1, "one dsb sy asm string");
+    let (mut inline, mut global) = (0, 0);
     for (i, l) in lines.iter().enumerate() {
         if *l == barrier {
             continue;
@@ -3256,12 +3263,19 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
             global += 1;
         } else if l.contains("core::arch::asm!(") {
             let mut j = i;
-            while !is_fn(lines[j]) {
+            while lines[j].is_empty()
+                || lines[j].starts_with(char::is_whitespace)
+                || ["//", "#[", "}", ")"].iter().any(|p| lines[j].starts_with(p))
+            {
                 j -= 1;
             }
+            assert!(is_fn(lines[j]), "asm at line {}: enclosing item `{}` is not a recognised fn", i + 1, lines[j]);
             let mut k = j - 1;
             let mut gated = false;
             while lines[k].starts_with("#[") || lines[k].starts_with("//") {
+                if lines[k].starts_with("#[cfg") {
+                    assert!(lines[k].ends_with(")]"), "attribute line {} carries more than the attribute", k + 1);
+                }
                 gated |= is_research(lines[k]);
                 k -= 1;
             }
@@ -3740,6 +3754,12 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
         }
         got.reverse();
         assert_eq!(got, want, "tick at line {} in {want_fn}", i + 1);
+        // Nothing attached ahead of the wait: an attribute there (`#[cfg(any())]`)
+        // would remove the wait and leave the window as pinned.
+        while lines[k].trim().is_empty() || lines[k].trim_start().starts_with("//") {
+            k -= 1;
+        }
+        assert!(!lines[k].trim_start().starts_with("#["), "tick at line {}: an attribute before its DCIS wait", i + 1);
     }
     assert_eq!(site, pinned.len(), "every pinned tick present");
     // The two wait helpers the pins name are guarded DCIS waits.
@@ -3748,8 +3768,32 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     ));
     assert_eq!(HW_HASH_SRC.matches("let wait = || {").count(), 1);
     assert!(HW_HASH_SRC.contains(
-        "fn v2_wait_dcis() {\n    let mut t = V2_POLLS;\n    while REG.sr.read() & SR_DCIS == 0 {\n        t -= 1;\n        if t == 0 {\n            hash_engine_fault();\n        }\n    }\n}\n"
+        "#[cfg(feature = \"v2\")]\n#[inline(always)]\nfn v2_wait_dcis() {\n    let mut t = V2_POLLS;\n    while REG.sr.read() & SR_DCIS == 0 {\n        t -= 1;\n        if t == 0 {\n            hash_engine_fault();\n        }\n    }\n}\n"
     ));
+    // And the names the windows and helpers use are those helpers: none is
+    // rebound (a `let wait = || ();` or `let v2_wait_dcis = || ();` next to a
+    // pinned window would turn its wait into a no-op). `wait` is bound twice
+    // in the file: the probe's stage stamp in the finalizer and the grind's
+    // closure pinned above.
+    let binds = |n: &str| {
+        lines
+            .iter()
+            .filter(|l| {
+                let t = l.trim_start();
+                [format!("let {n} "), format!("let {n}:"), format!("let mut {n} "), format!("let mut {n}:"), format!("macro_rules! {n} ")]
+                    .iter()
+                    .any(|p| t.starts_with(p.as_str()))
+                    || [format!(" as {n};"), format!(" as {n},"), format!(" as {n}}}"), format!("fn {n}("), format!("fn {n}<")]
+                        .iter()
+                        .any(|p| t.contains(p.as_str()))
+                    || [format!("static {n}"), format!("static mut {n}"), format!("const {n}")].iter().any(|p| t.starts_with(p.as_str()))
+            })
+            .count()
+    };
+    assert_eq!(binds("wait"), 2, "the probe's stage stamp and the grind's wait closure");
+    for n in ["v2_wait_dcis", "read_hr4", "hash_engine_fault", "pqsigner_hash_tick", "REG", "write_word"] {
+        assert_eq!(binds(n), 1, "{n} bound once");
+    }
     // The batch ticks (`tick-batch`, measurement only; the callee must not
     // hash): each under that feature, which implies `tick-hook`; no secure
     // feature raises it, the FSBL never names it, and the secure world does
