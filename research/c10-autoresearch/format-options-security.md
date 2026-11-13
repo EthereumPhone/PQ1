@@ -138,6 +138,7 @@ Every v2 variant derives the same `(sk_seed, pk_seed)` from a seed. So one seed 
   - Moving `kp` and `ci` down one bit maps 0.3's `(kp, ci)` onto split810's `(2kp + ⌊ci/32⌋, 2ci mod 64)` with identical A7 bytes, so identical secrets and chain tweaks.
   - 38% of split810's WOTS PRF addresses (67,584 of 176,128 over two trees) equal a 0.3 address.
   - FORS trees 0..6 of 0.3 are byte-identical to split810's trees 0, 2, …, 12 at every `ht_idx`.
+- **0.3 and `v2-fors-last-prf` (spec §6, #1158): the same class as ts200.** The flag replaces the last FORS slot's value, so the FORS public key at every `ht_idx` changes while `pk_root` does not. Switching it on or off for a key that has already signed makes each used layer-0 WOTS key sign two different nodes: a two-time key at about 2^53–2^55 [argued from §1's numbers]. Any decision on §6 falls under the same rule.
 - **Also shared:** the R-candidate stream `PRF(sk_seed, "R_grind", opt_rand, M, nonce)` is the same in every variant. Fresh `opt_rand` makes it differ per signature.
 
 **Rule if any variant is adopted:**
@@ -151,7 +152,7 @@ v1 and v2 do not have this problem: their preimage lengths are disjoint (spec §
 ## 5. Measurements [measured]
 
 Method:
-- 16 messages (`bench_avg_v2f`), one signing pass each, every signature verified on-device. Each configuration is also gated by its own kit golden against host goldens. The host goldens come from the generic Rust path, which equals Python's KATs, and are re-checked through the fused routing and through the cache.
+- 16 messages (`bench_avg_v2f`), one signing pass each, every signature verified on-device. Each configuration, plain and with the cache, is also gated byte for byte by its own kit golden against host goldens (`experiment_v2.sh` and `experiment_v2b.sh` with `GOLDEN`/`VARF`; 3 cache hits each). The host goldens come from the generic Rust path, which equals Python's KATs, and are re-checked through the fused routing and through the cache.
 - Variants that change keys also change every message's grind luck. So `luck_fit.py` fits, per configuration, `cycles_i = det + c_w·wots_tries_i + c_r·r_nonces_i`, with exact per-message counts from the host (`c10-ar-host luck16`).
 - **Fit quality:** c_w = 140–143 cycles per try (the microbenchmark gave 137) and c_r ≈ 496 cycles per nonce. Residual standard deviation is 1.3–5.0k cycles on signs of 25–92 M.
 - **"Expected" below means** det + c_w·E[tries] + c_r·E[nonces]; the expected try counts are exact.
@@ -185,6 +186,7 @@ Method:
 | Fused routing against the generic golden (host mirror, `host_v2f`), plain and with cache | equal for ts200, prf2, split810 and all three; cache used 3 times each |
 | Top-cache controls under split810 | 3 refusals and 1 positive control; the 1,024-leaf sweep equals a full rebuild |
 | Kit golden (`experiment_v2.sh` with `GOLDEN`) | ok for ts200, prf2, split810 and all three |
+| Kit golden with the top cache (`experiment_v2b.sh` with `GOLDEN`, `VARF`) | ok for ts200, prf2, split810 and all three, 3 cache hits each |
 | Gate 5, driver against software SHA-256 on the kit | 0.3: 2,091/0 · prf2: 2,091/0 · split810: 2,098/0 · prf2 + split810: 2,098/0 |
 | H9 early reject at target 200 (`h9_predicate.py`) | 0 mismatches in 1.33 M checks; the 76-slack control fires |
 | Solidity (`SPHINCsC10v2Variants.t.sol`, 14 tests, plus the 0.3 suite's 5) | 19/19 |
@@ -192,7 +194,9 @@ Method:
 | `near-miss-gen` with `v2-split810` | `compile_error!`: the generator assumes uniform heights (Astra); not ported |
 | Structural checks (`format_options_checks.py`) | A7 injectivity (both layouts), prefix-freeness, pair-reveal rates, FORS term |
 | Margin numerics (`format_options_numerics.py`, `cross`) | as in §1 and §4 |
-| v1 regression | `cargo test -p sphincs-c10` 82/0; kit results in the ledger, round "format options" |
+| v1 regression | `cargo test -p sphincs-c10` 82/0; `--cfg lean_extract` 79/0; kit golden 233,078,450 (233,078,504 before); track B 163,351,100 (3 hits) |
+| Shared code with every flag off | the FSBL image (`make fsbl BOARD=iota2`) is byte-identical to the parent commit's. The split refactor touched `merkle.rs`, `hypertree.rs`, `params.rs` and `topcache.rs`, which the FSBL and the Aeneas extraction read |
+| Re-run at the committed head | per-variant Rust KATs, forge 19/19, and both analysis scripts (numerics identical to the first run) |
 
 ## 7. Independent review: GPT-6 Astra
 
@@ -219,7 +223,7 @@ Astra had read-only access to the working tree and was given the questions, not 
 
 ## 8. Not done
 
-- No formal-verification work was re-run for any variant.
+- **Proofs and extraction:** no formal-verification work was re-run for any variant. With every flag off, the `lean_extract` test configuration passes 79/0. The Aeneas extraction itself was not regenerated after the shared-file refactor.
 - The Yul variants have no per-primitive gate (the same gap as 0.3).
 - prf2's DPA effect is unmeasured.
 - The split810 FI trade is #1148's open decision.

@@ -640,6 +640,12 @@ Draft 0.3 is byte-identical with every flag off.
   - `variant_controls.sh` did not assert its results: fixed, every row now checks its expectation and the run passes;
   - `near-miss-gen` + split810 is now a `compile_error!`;
   - wording corrections folded into the doc: top keys double, the cache reuses only the stored nodes, HR residue now holds a sibling secret.
+- **After the advisor's check:**
+  - kit goldens with the cache for all four variant configurations, 3 hits each;
+  - the FSBL image is byte-identical to the parent commit's;
+  - `lean_extract` 79/0;
+  - re-runs at the committed head pass.
+  - `v2-fors-last-prf` belongs to the same reuse class as ts200: it keeps `pk_root` and changes the FORS pk.
 - **Regression after the edits:**
   - v1: suite 82/0; kit 233,078,450; track B 163,351,100 (3 hits).
   - 0.3: golden passes plain and with the cache; mean 65,593,849 (65,593,725 before the edits); gate 5 2,091/0.
