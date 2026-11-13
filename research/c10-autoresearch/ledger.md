@@ -472,3 +472,9 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
   - gate 5 with a `wots_pk16` group (40 keys against a software T_43): 2,061 checks, 0 failures.
 - **16-message mean:** v2 71.29 → **70.86 M (−0.61%)**, 431–437 k on every message. With the cache 49.39 → **49.16 M**. Est. cached sign **0.887 s / 0.615 s**. Kit m0 with the cache: 0.570 s.
 - **Size of the win:** about 0.6 of the ~0.7 M estimate; part of `memclr` was other buffers.
+
+### H5: count-search collect reads only HR3..HR7, discard
+
+- **The variant:** 5 HR words per try instead of 8; a hit recomputes its digest to read all eight.
+- **Result:** gate 5 passes and the golden is reproduced, but signA_m0 went 67.16 → **69.00 M (+1.84 M)**. Reverted, and the restore reproduces 67.16 M.
+- **Reading:** same direction as v1's lever 3 (fewer HR reads, no gain). The reshaped loop costs more than three skipped reads save.
