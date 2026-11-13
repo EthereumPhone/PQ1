@@ -3220,30 +3220,48 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
         assert!(!SECURE_CARGO_TOML_SRC.contains(&format!("\"pqsigner-hw/{r}\"")), "the secure crate raises {r}");
         assert!(!FSBL_CARGO_SRC.contains(&format!("\"{r}\"")), "the FSBL names {r}");
     }
+    // A research cfg: its first, positive feature is a research one (`all`),
+    // or every feature it names is (`any`). A `global_asm!` carries one on the
+    // line above it; an inline `asm!` sits in a function whose own attributes
+    // carry one — the item's gate, not the nearest cfg line above.
+    let is_research = |c: &str| -> bool {
+        let Some(b) = c.trim().strip_prefix("#[cfg(") else { return false };
+        if let Some(r) = b.strip_prefix("feature = \"").or_else(|| b.strip_prefix("all(feature = \"")) {
+            return research.contains(&r.split('"').next().expect("feature"));
+        }
+        let Some(r) = b.strip_prefix("any(") else { return false };
+        let named: std::vec::Vec<&str> = r.split("feature = \"").skip(1).map(|x| x.split('"').next().expect("feature")).collect();
+        !named.is_empty() && named.iter().all(|f| research.contains(f))
+    };
     let lines: std::vec::Vec<&str> = HW_HASH_SRC.lines().collect();
+    let is_fn = |l: &str| {
+        ["fn ", "unsafe fn ", "pub fn ", "pub unsafe fn ", "pub(crate) fn ", "pub unsafe extern \"C\" fn ", "unsafe extern \"C\" fn "]
+            .iter()
+            .any(|p| l.starts_with(p))
+    };
     let (mut inline, mut global) = (0, 0);
     for (i, l) in lines.iter().enumerate() {
-        let is_global = l.contains("core::arch::global_asm!(");
-        if !(is_global || l.contains("core::arch::asm!(")) || l.contains("core::arch::asm!(\"dsb sy\"") {
+        if l.contains("core::arch::asm!(\"dsb sy\"") {
             continue;
         }
-        let mut j = i - 1;
-        while !lines[j].trim_start().starts_with("#[cfg(") {
-            j -= 1;
-        }
-        let first = lines[j]
-            .trim_start()
-            .strip_prefix("#[cfg(all(feature = \"")
-            .or_else(|| lines[j].trim_start().strip_prefix("#[cfg(feature = \""))
-            .unwrap_or_else(|| panic!("asm at line {} gated by {}", i + 1, lines[j]))
-            .split('"')
-            .next()
-            .expect("feature");
-        assert!(research.contains(&first), "asm at line {} under {} — not a research feature", i + 1, lines[j]);
-        if is_global {
+        if l.starts_with("core::arch::global_asm!(") {
+            assert!(is_research(lines[i - 1]), "global_asm at line {} gated by {}", i + 1, lines[i - 1]);
             global += 1;
-        } else {
+        } else if l.contains("core::arch::asm!(") {
+            let mut j = i;
+            while !is_fn(lines[j]) {
+                j -= 1;
+            }
+            let mut k = j - 1;
+            let mut gated = false;
+            while lines[k].starts_with("#[") || lines[k].starts_with("//") {
+                gated |= is_research(lines[k]);
+                k -= 1;
+            }
+            assert!(gated, "asm at line {} in `{}`, which no research cfg gates", i + 1, lines[j]);
             inline += 1;
+        } else {
+            assert!(!l.contains("asm!("), "asm form at line {}: {l}", i + 1);
         }
     }
     assert_eq!((inline, global), (16, 8), "research asm blocks");
