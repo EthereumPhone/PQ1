@@ -3228,7 +3228,13 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
     // item header at column 0 above the asm, and it must be a recognised `fn`
     // header: anything else fails rather than borrow a neighbour's gate.
     let is_research = |c: &str| -> bool {
+        if c.matches("#[").count() != 1 || c.contains(';') || c.contains(']') && !c.trim_end().ends_with(")]") {
+            return false;
+        }
         let Some(b) = c.trim().strip_prefix("#[cfg(").and_then(|b| b.strip_suffix(")]")) else { return false };
+        if b.contains(']') {
+            return false;
+        }
         if let Some(r) = b.strip_prefix("feature = \"").and_then(|r| r.strip_suffix('"')) {
             return research.contains(&r);
         }
@@ -3473,6 +3479,14 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     assert!(fin.find("REG.sr.modify(|sr| sr & !SR_DCIS);").expect("DCIS cleared") < call);
     assert!(fin.find("state.pending = 0;").expect("state reset") < call);
     assert_eq!(fin[call..].trim_end(), "pqsigner_hash_tick();\n    }", "nothing after the tick");
+    // The read-outs follow the finalizer's one guarded DCIS wait.
+    let wait = fin
+        .find("    // Wait for digest.\n    let mut t = 0u32;\n    while REG.sr.read() & SR_DCIS == 0 {\n        t += 1;\n        if t > 10_000_000 {\n")
+        .expect("the finalizer's guarded DCIS wait");
+    assert_eq!(fin.matches("SR_DCIS == 0").count(), 1);
+    assert!(wait < fin.find("out.add(i * 4), 4);").expect("rolled read-out"));
+    assert!(wait < fin.find("hr_out!(0 1 2 3);").expect("unrolled read-out"));
+    assert!(fin[wait..].contains("            hash_engine_fault();\n        }\n    }\n"));
     assert!(fin[..call].contains("    #[cfg(feature = \"tick-hook\")]\n    // SAFETY:"));
     assert!(HW_HASH_SRC.contains("#[cfg(feature = \"tick-hook\")]\nextern \"C\" {"));
     // Round 11 (autoresearch): the fused entries — secure-only research
@@ -3710,6 +3724,48 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     let is_fn = |l: &str| {
         ["fn ", "unsafe fn ", "pub fn ", "pub unsafe fn ", "pub(crate) fn ", "pub unsafe extern \"C\" fn "].iter().any(|p| l.starts_with(p))
     };
+    // And the names the windows and helpers use are those helpers: none is
+    // rebound (a `let wait = || ();` or `let v2_wait_dcis = || ();` next to a
+    // pinned window would turn its wait into a no-op). `wait` is bound twice
+    // in the file: the probe's stage stamp in the finalizer and the grind's
+    // closure pinned above.
+    let binds = |n: &str| {
+        lines
+            .iter()
+            .filter(|l| {
+                let t = l.trim_start();
+                [format!("let {n} "), format!("let {n}:"), format!("let mut {n} "), format!("let mut {n}:"), format!("macro_rules! {n} ")]
+                    .iter()
+                    .any(|p| t.starts_with(p.as_str()))
+                    || [format!(" as {n};"), format!(" as {n},"), format!(" as {n}}}"), format!("fn {n}("), format!("fn {n}<")]
+                        .iter()
+                        .any(|p| t.contains(p.as_str()))
+                    || [format!("static {n}"), format!("static mut {n}"), format!("const {n}")].iter().any(|p| t.starts_with(p.as_str()))
+            })
+            .count()
+    };
+    // Function names the windows and helpers call appear in code only as
+    // calls or definitions (`name(`) or asm `sym` operands: no tuple or
+    // pattern rebinding either.
+    for n in ["v2_wait_dcis", "read_hr4", "hash_engine_fault", "pqsigner_hash_tick", "write_word", "final16_regs"] {
+        for (i, l) in lines.iter().enumerate() {
+            let code = l.split("//").next().expect("code");
+            let mut at = 0;
+            while let Some(p) = code[at..].find(n) {
+                let (st, en) = (at + p, at + p + n.len());
+                let before = code[..st].chars().next_back();
+                let after = code[en..].chars().next();
+                let word = !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+                    && !after.is_some_and(|c| c.is_alphanumeric() || c == '_');
+                assert!(
+                    !word || after == Some('(') || code[..st].ends_with("sym "),
+                    "line {}: `{n}` used other than as a call or an asm `sym` operand: {l}",
+                    i + 1
+                );
+                at = en;
+            }
+        }
+    }
     let mut site = 0;
     for (i, l) in lines.iter().enumerate() {
         if !l.contains("pqsigner_hash_tick()") || l.contains("fn pqsigner_hash_tick") || (fin_at < i && i < fin_end) {
@@ -3741,6 +3797,12 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
                 "the subtree's closing tick"
             );
             assert_eq!(lines[i + 1..i + 3].join("\n"), "    }\n}", "nothing after the closing tick");
+            // The subtree's digests end in `final16_regs`: DCAL, the guarded
+            // wait, the read-out, the clear.
+            assert!(HW_HASH_SRC.contains(
+                "#[cfg(feature = \"forsleaf\")]\n#[inline(always)]\nfn final16_regs() -> [u32; 4] {\n    REG.str_.write(STR_DCAL);\n    let mut t = 0u32;\n    while REG.sr.read() & SR_DCIS == 0 {\n        t += 1;\n        if t > 10_000_000 {\n            hash_engine_fault();\n        }\n    }\n    let v = read_hr4();\n    REG.sr.write(SR_DINIS);\n    v\n}\n"
+            ));
+            assert_eq!(binds("final16_regs"), 1);
             continue;
         }
         let mut got: std::vec::Vec<&str> = std::vec::Vec::new();
@@ -3770,26 +3832,6 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     assert!(HW_HASH_SRC.contains(
         "#[cfg(feature = \"v2\")]\n#[inline(always)]\nfn v2_wait_dcis() {\n    let mut t = V2_POLLS;\n    while REG.sr.read() & SR_DCIS == 0 {\n        t -= 1;\n        if t == 0 {\n            hash_engine_fault();\n        }\n    }\n}\n"
     ));
-    // And the names the windows and helpers use are those helpers: none is
-    // rebound (a `let wait = || ();` or `let v2_wait_dcis = || ();` next to a
-    // pinned window would turn its wait into a no-op). `wait` is bound twice
-    // in the file: the probe's stage stamp in the finalizer and the grind's
-    // closure pinned above.
-    let binds = |n: &str| {
-        lines
-            .iter()
-            .filter(|l| {
-                let t = l.trim_start();
-                [format!("let {n} "), format!("let {n}:"), format!("let mut {n} "), format!("let mut {n}:"), format!("macro_rules! {n} ")]
-                    .iter()
-                    .any(|p| t.starts_with(p.as_str()))
-                    || [format!(" as {n};"), format!(" as {n},"), format!(" as {n}}}"), format!("fn {n}("), format!("fn {n}<")]
-                        .iter()
-                        .any(|p| t.contains(p.as_str()))
-                    || [format!("static {n}"), format!("static mut {n}"), format!("const {n}")].iter().any(|p| t.starts_with(p.as_str()))
-            })
-            .count()
-    };
     assert_eq!(binds("wait"), 2, "the probe's stage stamp and the grind's wait closure");
     for n in ["v2_wait_dcis", "read_hr4", "hash_engine_fault", "pqsigner_hash_tick", "REG", "write_word"] {
         assert_eq!(binds(n), 1, "{n} bound once");
