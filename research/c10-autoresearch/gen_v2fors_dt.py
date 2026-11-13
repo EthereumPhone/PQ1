@@ -1,6 +1,12 @@
 # Generates the global_asm! text for pq1_v2_fors_sub (round 11, E13).
+import sys
+# Round 12 (E19): optional timed spins before the F, H, PRF waits (argv: SF SH SP; 3 cycles/iteration).
+SP_F, SP_H, SP_P = (int(x) for x in (sys.argv[1:4] if len(sys.argv) >= 4 else (0, 0, 0)))
 L=[]
 def a(*xs): L.extend(xs)
+def spin(n, lab):
+    if n:
+        a(f'movs r0, #{n}', f'{lab}:', 'subs r0, r0, #1', f'bne {lab}b')
 def c(t): L.append('// '+t)
 def din(*regs):
     for r in regs: a(f'str {r}, [r4, #-8]')
@@ -45,6 +51,7 @@ c('==== F (leaf j; its PRF in flight): S, a0 in r5..r9, a1 | ha(j) in r10 ====')
 a('10:', 'mov r12, sp', 'ldm r12, {{r5, r6, r7, r8, r9}}', 'ldr r0, [sp, #40]')
 ha('r10', 'r0', 'r1')
 a('ldr r1, [sp, #20]', 'orr r10, r10, r1')
+spin(SP_F, 40)
 ladder(11, 12)
 a('11:', 'ldm r4, {{r0, r1, r2, r3}}', 'movs r12, #1', 'str r12, [r4, #0x18]',
   'ldr r12, [r4, #0x18]', 'tst r12, #10', 'bne 13f',
@@ -63,6 +70,7 @@ a('orr r3, r3, r0, lsl #20', 'ldr r1, [sp, #20]', 'orr r3, r3, r1', 'str r3, [sp
   'ldr r2, [r3, #12]', 'str r2, [sp, #72]',
   'ldm r3, {{r10, r11, r12}}')
 c('H (R in flight): L0..L2 in r10..r12; lr does the status work, so the CR value is re-made')
+spin(SP_H, 41)
 ladder(21, 22)
 a('21:', 'ldm r4, {{r0, r1, r2, r3}}', 'mov.w lr, #1', 'str lr, [r4, #0x18]',
   'ldr lr, [r4, #0x18]', 'tst lr, #10', 'bne 23f',
@@ -81,6 +89,7 @@ a('ldr r1, [sp, #32]', 'orr r2, r2, r1', 'str r2, [sp, #28]',
   'ldr r9, [r12, #16]', 'ldr r10, [r12, #20]', 'ldr r11, [r12, #24]',
   'rev r5, r5', 'rev r6, r6', 'rev r7, r7', 'rev r8, r8', 'rev r9, r9', 'rev r10, r10', 'rev r11, r11')
 c('PRF (the finished node in flight): sk_seed[0..7) in r5..r11')
+spin(SP_P, 42)
 ladder(31, 32)
 a('31:', 'ldm r4, {{r0, r1, r2, r3}}', 'movs r12, #1', 'str r12, [r4, #0x18]',
   'ldr r12, [r4, #0x18]', 'tst r12, #10', 'bne 33f',
