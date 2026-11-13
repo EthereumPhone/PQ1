@@ -2788,15 +2788,16 @@ pub unsafe extern "C" fn pqsigner_v1_grind_r(
     let found = unsafe { v1_grind_r_inner(sk_seed, rand, message, seed, root, max, r_out, d_out) };
     // The inner frame held the PRF tail words (rand, message) in compiler-chosen slots beyond
     // the arrays it wipes (round 8: a dead-stack scan found rand bytes in spill slots). Zero
-    // the dead stack below sp that the inner call used (its frame is under 400 bytes).
-    // SAFETY: writes only the 1,024 bytes directly below sp, which no live object occupies;
+    // the dead stack below sp that the inner call used (its frame is 376 bytes in the bench
+    // build; landing must re-check the size and the stack headroom below this call).
+    // SAFETY: writes only the 512 bytes directly below sp, which no live object occupies;
     // asm without `nostack` may use the stack below sp.
     unsafe {
         core::arch::asm!(
             "mov {p}, sp",
-            "sub {p}, {p}, #1024",
+            "sub {p}, {p}, #512",
             "movs {z}, #0",
-            "mov.w {c}, #256",
+            "mov.w {c}, #128",
             "1:",
             "str {z}, [{p}], #4",
             "subs {c}, {c}, #1",
