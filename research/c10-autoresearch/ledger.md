@@ -478,3 +478,13 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 - **The variant:** 5 HR words per try instead of 8; a hit recomputes its digest to read all eight.
 - **Result:** gate 5 passes and the golden is reproduced, but signA_m0 went 67.16 → **69.00 M (+1.84 M)**. Reverted, and the restore reproduces 67.16 M.
 - **Reading:** same direction as v1's lever 3 (fewer HR reads, no gain). The reshaped loop costs more than three skipped reads save.
+
+### H6: NBLW written once per v2 entry, INIT-only per digest, keep (output-identical)
+
+- **The change:** `v2_begin` wrote STR = NBLW before every INIT, the HAL order. INIT leaves STR alone, and every v2 digest's own DCAL write carries the same NBLW = 24. Now `v2_entry()` (wait idle, STR = 24) runs once at the start of each v2 entry; each digest inside does only the ready/stale-DCIS check and INIT. NBLW is still set before every data phase and with every DCAL.
+- **Evidence:**
+  - gate 5: 2,061/0, with all 917 interleaved v1 digests (NBLW = 0) correct, so the 24 → 0 → 24 transitions at entry boundaries hold;
+  - kit golden, and golden + cache (3 hits, m0 cached 0.5625 s).
+- **16-message mean:** v2 70.86 → **69.80 M (−1.50%)**; with the cache 49.16 → **48.47 M (−1.39%)**. Per message 0.88–1.35 M, larger with more grind tries (one STR write fewer per try).
+- **Costs:** verify rises about 2 k (single-digest entries now pay the entry setup); keygen −1.7%.
+- **Est. cached sign:** 0.873 s, or **0.607 s** with the cache.

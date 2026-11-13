@@ -1947,13 +1947,22 @@ extern "C" {
 #[cfg(feature = "v2")]
 const V2_NBLW: u32 = 24;
 
+/// Start of every v2 entry: wait until idle, then NBLW = 24 in STR. Every
+/// digest inside the entry then needs only INIT (`v2_begin`): INIT leaves STR
+/// alone, and each `v2_end16`/issue rewrites the same NBLW with DCAL.
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_entry() {
+    let _ = ready_sr_fast();
+    REG.str_.write(V2_NBLW);
+}
+
 #[cfg(feature = "v2")]
 #[inline(always)]
 fn v2_begin() {
     if ready_sr_fast() & SR_DCIS != 0 {
         hash_engine_fault();
     }
-    REG.str_.write(V2_NBLW);
     REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
 }
 
@@ -2029,6 +2038,7 @@ fn v2_chain_core(s: [u32; 4], mut v: [u32; 4], a0: u32, low24: u32, start: u32, 
 #[cfg(feature = "v2")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_chain16(seed: *const u8, val: *mut u8, a0: u32, low24: u32, start: u32, steps: u32) {
+    v2_entry();
     // SAFETY: caller contract.
     let (s, v) = unsafe { (v2_load4(seed), v2_load4(val)) };
     let v = v2_chain_core(s, v, a0, low24, start, steps);
@@ -2046,6 +2056,7 @@ pub unsafe extern "C" fn pqsigner_v2_chain16(seed: *const u8, val: *mut u8, a0: 
 pub unsafe extern "C" fn pqsigner_v2_prf_chain16(
     sk_seed: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8,
 ) {
+    v2_entry();
     v2_begin();
     // SAFETY: caller contract.
     unsafe { feed_words(sk_seed, 8) };
@@ -2073,6 +2084,7 @@ pub unsafe extern "C" fn pqsigner_v2_prf_chain16(
 pub unsafe extern "C" fn pqsigner_v2_wots_chains16(
     sk_seed: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8,
 ) {
+    v2_entry();
     if steps > 15 {
         hash_engine_fault();
     }
@@ -2133,6 +2145,7 @@ pub unsafe extern "C" fn pqsigner_v2_wots_pk16(
 #[cfg(feature = "v2")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *const u8, a0: u32, a1: u32, out: *mut u8) {
+    v2_entry();
     v2_begin();
     // SAFETY: caller contract.
     unsafe {
@@ -2155,6 +2168,7 @@ pub unsafe extern "C" fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *c
 #[cfg(feature = "v2")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_fors_leaf16(sk_seed: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8) {
+    v2_entry();
     v2_begin();
     // SAFETY: caller contract.
     unsafe { feed_words(sk_seed, 8) };
@@ -2197,6 +2211,7 @@ fn v2_ha(x: u32) -> u32 {
 pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
     sk_seed: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8,
 ) {
+    v2_entry();
     if h > 11 || j0 & ((1 << h) - 1) != 0 || j0 + (1 << h) > 1 << 11 {
         hash_engine_fault();
     }
@@ -2319,6 +2334,7 @@ fn v2_digit_sum(w: &[u32; 5]) -> u32 {
 #[cfg(feature = "v2")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32 {
+    v2_entry();
     let end = start.wrapping_add(n);
     if n == 0 {
         return end;
