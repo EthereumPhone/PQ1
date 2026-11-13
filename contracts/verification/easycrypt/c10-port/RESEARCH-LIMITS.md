@@ -2838,10 +2838,12 @@ this records the correspondence review behind the updated
 `cert-source-binding.json`. Compared: `origin/master` 0bf8153f2 against the
 merge head 150bc6f2b, plus the extraction-only `lean_extract` gate a78cc4fdf.
 `sphincs-c10/src` is identical at 150bc6f2b and at the re-pin commit, apart
-from that gate. The EasyCrypt sources, the split identity (`INPUTS_SHA256`
-aef0eac186e018a1ae8392f83768cbea), statement pins, census and numerical
+from that gate. The EasyCrypt sources, statement pins, census and numerical
 bounds are unchanged. Only the hashes of 7 Rust files, 34 Lean files and 2
-proof-control scripts move.
+proof-control scripts move. Because `cert-source-binding.json` is itself a
+hashed identity input, the split identity (`INPUTS_SHA256`) moves from
+aef0eac186e018a1ae8392f83768cbea to a1a5220f68fd3fbd0a0ce9b495322b4f, and
+is re-baselined in `cert-identity.tsv`; no other identity input changed.
 
 The raw models (`RawWots/RawFors/RawMerkle/RawLayer/RawKeygen/RawSigner`), the
 `C10Bytes`/radix adapters and the transcript test cover essentially the whole
