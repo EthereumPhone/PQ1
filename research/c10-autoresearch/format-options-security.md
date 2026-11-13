@@ -12,9 +12,9 @@ Every claim below carries a label:
 
 | change | honest operation | conditions and new risks | speed, luck-free mean of 16 messages per pass | verifier | formal-verification cost |
 |---|---|---|---|---|---|
-| **ts200**: WOTS+C target sum 200 | **No change** to any bound [computed + argued] | The fault fallback is about 1.7 bits weaker. **Keys do not change**, so a seed that ever signed under 205 must never sign under 200: that reuses every WOTS key, and a forgery then costs about 2^53. | **−5.98 M (−9.3%)**; −13.7% with the top cache | +3,150 gas (+2.0%); on-device verify +1.1k cycles | Mechanical: 205 is a literal in the Lean Yul model; EasyCrypt keeps the sum parametric |
-| **prf2**: two secrets per PRF digest | **No change** under the PRF assumption [argued], **provided** the sk_seed-keyed inputs stay block-prefix-free; they are today [computed] | Whole 32-byte PRF outputs now become public: about 48 per key at the 2^16 cap. Even-index secrets equal 0.3's, so a seed used under both loses most of its WOTS margin (median 2^77). | **−2.59 M (−4.0%)**; −3.9% with the cache; keygen −0.93 M (−4.3%) | none (keys change) | Key-generation code changes, so the extracted PRF specs and KAT pins change |
-| **split810**: layer heights (8, 10) | **No change** to the FORS term or to per-key WOTS use [computed + argued]. The top layer has 1,024 WOTS keys instead of 512: +1 bit on a top-only multi-key term, +0.003 bits on a total-key term [reviewer] | A7 widened. **Conditional on #1148**: the cache becomes structural, since without it signing is +17% slower. Keygen doubles. | **−10.77 M (−24.7%)** with the cache; +10.8 M without | +68 gas | Structural: both formal models assume one height per layer (`h = h' * d`, `SubtreeH * D = H`) |
+| **ts200**: WOTS+C target sum 200 | **Proven-bound total unchanged** (§8): its only T-dependent term, accepted-encoding collisions, falls ×0.30 at the reference caps [computed]. The one-time forgery chance per try is 2^-129 for any T [computed] | The fault fallback is about 1.7 bits weaker. **Keys do not change**, so a seed that ever signed under 205 must never sign under 200: that reuses every WOTS key, and a forgery then costs about 2^53. | **−5.98 M (−9.3%)**; −13.7% with the top cache | +3,150 gas (+2.0%); on-device verify +1.1k cycles | Mechanical: 205 is a literal in the Lean Yul model; EasyCrypt keeps the sum parametric |
+| **prf2**: two secrets per PRF digest | **No proven-bound constant changes** (§8) [computed]; in the ideal model the two halves are independent uniform secrets [argued], **provided** the sk_seed-keyed inputs stay block-prefix-free; they are today [computed] | Whole 32-byte PRF outputs now become public: about 48 per key at the 2^16 cap. Even-index secrets equal 0.3's, so a seed used under both loses most of its WOTS margin (median 2^77). | **−2.59 M (−4.0%)**; −3.9% with the cache; keygen −0.93 M (−4.3%) | none (keys change) | Key-generation code changes, so the extracted PRF specs and KAT pins change |
+| **split810**: layer heights (8, 10) | **The proven bound loosens: ×1.21 (0.28 bits) at 2^16 signatures** (§8) [computed]. The bound charges every hash the model signer makes, and it rebuilds the whole 10-high top subtree per signature. Per-key WOTS use and the FORS few-time term are unchanged [computed + argued]; the top layer has 1,024 WOTS keys instead of 512 [reviewer] | A7 widened. **Conditional on #1148**: the cache becomes structural, since without it signing is +17% slower. Keygen doubles. | **−10.77 M (−24.7%)** with the cache; +10.8 M without | +68 gas | Structural: both formal models assume one height per layer (`h = h' * d`, `SubtreeH * D = H`) |
 | all three | as above | as above | with the cache 25.65 M per pass, an estimated **0.32 s** cached sign | +3,218 gas | sum of the above |
 
 "Luck-free" is explained in §5: each configuration's 16 per-message cycle counts are fitted against that message's exact grind work, computed on the host.
@@ -221,9 +221,47 @@ Astra had read-only access to the working tree and was given the questions, not 
 - source-level wipes are not complete residue evidence;
 - the cache summary overstated what is computed once.
 
-## 8. Not done
+## 8. The proven bound, instantiated per variant [computed]
 
-- **Proofs and extraction:** no formal-verification work was re-run for any variant. With every flag off, the `lean_extract` test configuration passes 79/0. The Aeneas extraction itself was not regenerated after the shared-file refactor.
+Added 2026-11-13 after the owner asked whether the changes alter C10's security bounds. §1–§3 checked specific attack terms. This section evaluates the bound the project has actually proved.
+
+**What is proved.** The EasyCrypt artifact (`contracts/verification/easycrypt/c10-port`, `RAW-NUMERICAL-EUF.md`, `RAW-WRAPPER-EUF.md`) proves explicit numerical EUF bounds for C10 in a classical ideal-oracle byte game:
+- `WotsPoolNumericalBound` for the ordinary game;
+- `WrapperWotsPoolNumericalBound` for the FI wrapper (two signs and a verify), the shape the device runs.
+
+Every constant in those formulas is a proved hash-call budget or a proved universe size.
+
+**The script.** `c10v2/bound_variants.py` re-derives each constant from the parameters:
+- the target sum gives the accepted-encoding count A;
+- each layer's signing cost contains one subtree build, `303·2^h − 1` calls (`DomainLayerCost.ec`); the rest of the layer cost is affine in h, and the heights sum to 18 either way;
+- keygen is one build of the top layer;
+- the WOTS cut universe is `8 · 301 · (2^18 + 2^h_top)` (`WotsCoordinateUniverse.ec`);
+- the FORS universe, the coverage term, verify's 771 calls and the accepted-call caps do not change.
+
+**The anchor.** With v1's parameters, the script reproduces both project evaluators exactly, as rationals, term by term, at five cap pairs: `tools/wots_pool_examples.py` (ordinary and wrapper pool) and `tools/wrapper_nonnode_examples.py`. It asserts this before printing.
+
+**Results at qr = qs = 2^16** (the project's reference caps):
+
+| variant | ordinary bound | FI wrapper bound | terms that move |
+|---|---:|---:|---|
+| v1, and v2 0.3 | 4.972e-19 (2^-60.80) | 9.952e-19 (2^-59.80) | none: same constants |
+| ts200 | ×1.0000 | ×1.0000 | encoding ×0.30 (better) |
+| prf2 | ×1.0000 | ×1.0000 | none |
+| split810 | **×1.213 (2^-60.52)** | **×1.213 (2^-59.52)** | WOTS ×1.215, FORS ×1.213, zero and prefix ×1.003 |
+| all three | ×1.213 | ×1.213 | as split810, plus encoding ×0.30 |
+
+- **ts200:** the encoding term is `min(Q²·p/2^130, n²/(2A))`. Moving T toward the mean raises A, which shrinks the second branch and grows the first. At these caps the second branch is active, so the term falls ×0.30; if the first branch were active it would rise ×3.34. Either way the term is about 10^-5 of the total. The FORS term dominates (91%).
+- **split810:** the per-signature hash budget rises from 364,892 to 442,460, because the model signer rebuilds the top subtree on every signature and a 10-high subtree costs twice a 9-high one. This is proof accounting rather than a new attack: the top tree is the same fixed tree on every signature, so a proof that charged it once would tighten v1 as well. That is a proof change nobody has made, so as stated today the bound for split810 is 21% looser.
+- **Range:** the bounds are informative only up to about 2^26 raw hash queries. Beyond that the coverage term exceeds 1 for every variant.
+
+**What this does not establish:**
+- The theorems are proved for v1's byte format: 32-byte seed blocks, width- and offset-based domain separation, and v1's FORS_LAST tweak sharing. For every v2 variant, 0.3 included, the table shows what the bound becomes *if* the proof ports with the same charge structure. It is not a proof about v2; porting the byte model to the one-block A7 encoding is the "re-run proofs" cost of adopting v2.
+- prf2's "no constant changes" holds in the ideal model only. A port has to re-prove that the private table keeps its distribution when one oracle output supplies two secrets. Length extension lies outside the ideal model; §2 and `format_options_checks.py` B cover the real-SHA-256 condition.
+- The fault-case margins (§1) and cross-format reuse (§4) are outside the bound: the theorem assumes one honest format and no faults.
+
+## 9. Not done
+
+- **Proofs and extraction:** no formal-verification work was re-run for any variant; §8 evaluates the proven formula with re-derived constants, which is not a proof about v2. With every flag off, the `lean_extract` test configuration passes 79/0. The Aeneas extraction itself was not regenerated after the shared-file refactor.
 - The Yul variants have no per-primitive gate (the same gap as 0.3).
 - prf2's DPA effect is unmeasured.
 - The split810 FI trade is #1148's open decision.
