@@ -61,18 +61,46 @@ contract SPHINCsC10v2Asm {
                 // In-place auth walk: every node is written (16 bytes) straight into its half of
                 // the next H preimage S || L16 || R16 || A7, left at 0x10 if its index is even,
                 // else right at 0x20; the 16-byte sibling is copied into the other half.
-                pop(staticcall(gas(), 0x02, 0x00, 39, add(0x10, shl(4, and(treeIdx, 1))), 16))
-                let pathIdx := treeIdx
+                // Unrolled: the node at height h-1 sits in the half given by bit h-1 of its index
+                // (x = 16 * treeIdx, so and(shr(k, x), 0x10) = 16 * bit k); its sibling goes in the
+                // other half; A7 = aw | cp<<212 | ha<<201 with cp = h and ha = treeIdx >> h; the
+                // parent lands in the half given by bit h. Height 11 (the root) goes to T_13 slot i.
+                let x := shl(4, treeIdx)
+                let aw := shl(200, base)
+                pop(staticcall(gas(), 0x02, 0x00, 39, add(0x10, and(x, 0x10)), 16))
                 let authPtr := add(sigBase, add(224, mul(i, 176)))
-                for { let h := 0 } lt(h, 10) { h := add(h, 1) } {
-                    calldatacopy(sub(0x20, shl(4, and(pathIdx, 1))), add(authPtr, shl(4, h)), 16)
-                    pathIdx := shr(1, pathIdx)
-                    mstore(0x30, shl(200, or(base, or(shl(12, add(h, 1)), shl(1, pathIdx)))))
-                    pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, shl(4, and(pathIdx, 1))), 16))
-                }
-                // height 11, the root: into its T_13 slot
-                calldatacopy(sub(0x20, shl(4, and(pathIdx, 1))), add(authPtr, 160), 16)
-                mstore(0x30, shl(200, or(base, or(shl(12, 11), shl(1, shr(1, pathIdx))))))
+                calldatacopy(sub(0x20, and(shr(0, x), 0x10)), add(authPtr, 0), 16)
+                mstore(0x30, or(or(aw, shl(212, 1)), shl(201, shr(1, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(1, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(1, x), 0x10)), add(authPtr, 16), 16)
+                mstore(0x30, or(or(aw, shl(212, 2)), shl(201, shr(2, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(2, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(2, x), 0x10)), add(authPtr, 32), 16)
+                mstore(0x30, or(or(aw, shl(212, 3)), shl(201, shr(3, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(3, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(3, x), 0x10)), add(authPtr, 48), 16)
+                mstore(0x30, or(or(aw, shl(212, 4)), shl(201, shr(4, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(4, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(4, x), 0x10)), add(authPtr, 64), 16)
+                mstore(0x30, or(or(aw, shl(212, 5)), shl(201, shr(5, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(5, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(5, x), 0x10)), add(authPtr, 80), 16)
+                mstore(0x30, or(or(aw, shl(212, 6)), shl(201, shr(6, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(6, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(6, x), 0x10)), add(authPtr, 96), 16)
+                mstore(0x30, or(or(aw, shl(212, 7)), shl(201, shr(7, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(7, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(7, x), 0x10)), add(authPtr, 112), 16)
+                mstore(0x30, or(or(aw, shl(212, 8)), shl(201, shr(8, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(8, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(8, x), 0x10)), add(authPtr, 128), 16)
+                mstore(0x30, or(or(aw, shl(212, 9)), shl(201, shr(9, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(9, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(9, x), 0x10)), add(authPtr, 144), 16)
+                mstore(0x30, or(or(aw, shl(212, 10)), shl(201, shr(10, treeIdx))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(10, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(10, x), 0x10)), add(authPtr, 160), 16)
+                mstore(0x30, or(aw, shl(212, 11)))
                 pop(staticcall(gas(), 0x02, 0x00, 55, add(TB, add(24, shl(4, i))), 16))
             }
             {
@@ -129,15 +157,39 @@ contract SPHINCsC10v2Asm {
                 // as in FORS); the root (index 0 at height 9) lands at 0x10, the next layer's m16.
                 pop(staticcall(gas(), 0x02, TB, 712, add(0x10, shl(4, and(idxLeaf, 1))), 16))
 
+                // Unrolled as in FORS (x = 16 * idxLeaf; ha = idxLeaf >> h); the root (height 9,
+                // index 0) lands at 0x10.
                 let treeBase := or(or(shl(52, 2), shl(51, layer)), shl(33, idxTree))
-                let mIdx := idxLeaf
+                let aw := shl(200, treeBase)
+                let x := shl(4, idxLeaf)
                 let merklePtr := add(sigBase, add(countOff, 4))
-                for { let h := 0 } lt(h, 9) { h := add(h, 1) } {
-                    calldatacopy(sub(0x20, shl(4, and(mIdx, 1))), add(merklePtr, shl(4, h)), 16)
-                    mIdx := shr(1, mIdx)
-                    mstore(0x30, shl(200, or(treeBase, or(shl(12, add(h, 1)), shl(1, mIdx)))))
-                    pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, shl(4, and(mIdx, 1))), 16))
-                }
+                calldatacopy(sub(0x20, and(shr(0, x), 0x10)), add(merklePtr, 0), 16)
+                mstore(0x30, or(or(aw, shl(212, 1)), shl(201, shr(1, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(1, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(1, x), 0x10)), add(merklePtr, 16), 16)
+                mstore(0x30, or(or(aw, shl(212, 2)), shl(201, shr(2, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(2, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(2, x), 0x10)), add(merklePtr, 32), 16)
+                mstore(0x30, or(or(aw, shl(212, 3)), shl(201, shr(3, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(3, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(3, x), 0x10)), add(merklePtr, 48), 16)
+                mstore(0x30, or(or(aw, shl(212, 4)), shl(201, shr(4, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(4, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(4, x), 0x10)), add(merklePtr, 64), 16)
+                mstore(0x30, or(or(aw, shl(212, 5)), shl(201, shr(5, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(5, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(5, x), 0x10)), add(merklePtr, 80), 16)
+                mstore(0x30, or(or(aw, shl(212, 6)), shl(201, shr(6, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(6, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(6, x), 0x10)), add(merklePtr, 96), 16)
+                mstore(0x30, or(or(aw, shl(212, 7)), shl(201, shr(7, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(7, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(7, x), 0x10)), add(merklePtr, 112), 16)
+                mstore(0x30, or(or(aw, shl(212, 8)), shl(201, shr(8, idxLeaf))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(8, x), 0x10)), 16))
+                calldatacopy(sub(0x20, and(shr(8, x), 0x10)), add(merklePtr, 128), 16)
+                mstore(0x30, or(aw, shl(212, 9)))
+                pop(staticcall(gas(), 0x02, 0x00, 55, 0x10, 16))
                 sigOff := add(countOff, 148) // 4 + 9*16
             }
             valid := eq(and(mload(0x10), N_MASK), pkRoot)

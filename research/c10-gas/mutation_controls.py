@@ -55,6 +55,11 @@ MUTANTS = [
     ("v2-e3-digit7", V2, "calldatacopy(0x10, add(wotsPtr, shl(4, i)), 16)",
      "calldatacopy(0x10, add(wotsPtr, shl(4, i)), 16) if eq(digit, 7) { mstore(0x10, 0) }",
      "E3: zero-step (digit 7) chains lose their signature value"),
+    ("v2-e4-fors-h8-sibslot", V2, "calldatacopy(sub(0x20, and(shr(7, x), 0x10)), add(authPtr, 112), 16)",
+     "calldatacopy(sub(0x20, and(shr(8, x), 0x10)), add(authPtr, 112), 16)",
+     "E4: FORS height-8 sibling slot from the wrong index bit"),
+    ("v2-e4-merkle-h5-ha", V2, "shl(201, shr(5, idxLeaf))", "shl(201, shr(4, idxLeaf))",
+     "E4: hypertree height-5 ha from the wrong shift"),
     ("v2-a7-last", V2, "shl(200, or(shl(52, 9), shl(33, htIdx)))", "shl(200, or(shl(52, 3), shl(33, htIdx)))",
      "FORS_LAST tweak type"),
     # ── v1 ──
