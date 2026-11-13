@@ -2094,6 +2094,38 @@ pub unsafe extern "C" fn pqsigner_v2_wots_chains16(
     }
 }
 
+/// A whole WOTS public key in one call: the 43 chains of `pqsigner_v2_wots_chains16`
+/// written into the T_43 preimage `S ‖ A7(WOTS_PK) ‖ 0x00 ‖ v_0 ‖ … ‖ v_42`
+/// (712 bytes, in a driver-side buffer that is written in full and never
+/// zero-filled), then its one-shot compression, first 16 bytes to `out`.
+/// `k0`/`k1` are the WOTS_PK A7 words (`k1`'s top byte is the 0x00 pad).
+///
+/// # Safety
+/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 16 writable; `steps <= 15`;
+/// no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_wots_pk16(
+    sk_seed: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, k0: u32, k1: u32, steps: u32,
+    out: *mut u8,
+) {
+    let mut buf = core::mem::MaybeUninit::<[u32; 178]>::uninit();
+    let b = buf.as_mut_ptr().cast::<u32>();
+    // SAFETY: `b` names 178 writable words. Words 0..6 are written here and
+    // 6..178 by `pqsigner_v2_wots_chains16` (43 x 4), so all 712 bytes are
+    // initialized before the one-shot reads them; caller contract for the rest.
+    unsafe {
+        let s = v2_load4(seed);
+        for (i, w) in s.iter().enumerate() {
+            b.add(i).write(*w);
+        }
+        b.add(4).write(k0);
+        b.add(5).write(k1);
+        pqsigner_v2_wots_chains16(sk_seed, p0, p1, seed, a0, low24, steps, b.add(6).cast::<u8>());
+        pqsigner_sha256_oneshot16(b.cast::<u8>(), 712, out);
+    }
+}
+
 /// H: `S ‖ L ‖ R ‖ A7`, 55 bytes.
 ///
 /// # Safety

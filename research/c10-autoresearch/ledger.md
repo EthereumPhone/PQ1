@@ -462,3 +462,13 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 - **Why the measured mean (−1.79 M) is not the saving:** the slot value enters the FORS public key, which every WOTS+C grind hashes, so the counts change. The per-message delta spreads from −14.9 to +17.3 M: grind luck, not a saving.
 - **The deterministic saving** is one full FORS tree per pass: 6,142 digests, about 0.94 M from the subtree entry's measured per-tree cost, i.e. about 1.3% of the current pass.
 - **Adoption needs:** the owner's decision plus a review against the FORS+C argument (spec §6), and new KATs and golden, since signature bytes change.
+
+### H4: whole-key WOTS entry (`pqsigner_v2_wots_pk16`), keep (output-identical)
+
+- **The entry:** H2's chains plus the T_43 compression in one call. The 712-byte preimage is a driver-side `MaybeUninit` buffer written in full (6 header words, then 43 × 4 chain words) and handed to the existing `oneshot16`, so it is never zero-filled. The Rust buffer is gone.
+- **Evidence:**
+  - host golden-v2 (plain and `topcache`), and cache controls unchanged (3 refuse, 1 signs, 512-leaf sweep);
+  - kit golden and golden + cache (3 hits);
+  - gate 5 with a `wots_pk16` group (40 keys against a software T_43): 2,061 checks, 0 failures.
+- **16-message mean:** v2 71.29 → **70.86 M (−0.61%)**, 431–437 k on every message. With the cache 49.39 → **49.16 M**. Est. cached sign **0.887 s / 0.615 s**. Kit m0 with the cache: 0.570 s.
+- **Size of the win:** about 0.6 of the ~0.7 M estimate; part of `memclr` was other buffers.

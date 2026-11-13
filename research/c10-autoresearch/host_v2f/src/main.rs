@@ -384,6 +384,17 @@ pub unsafe extern "C" fn pqsigner_v2_wots_chains16(sk: *const u8, p0: u32, p1: u
         unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out.add(16 * ci as usize), 16) };
     }
 }
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_wots_pk16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32,
+    k0: u32, k1: u32, steps: u32, out: *mut u8) {
+    let mut b = [0u8; 712];
+    b[..16].copy_from_slice(&unsafe { rd::<16>(seed) });
+    b[16..20].copy_from_slice(&k0.to_le_bytes());
+    b[20..24].copy_from_slice(&k1.to_le_bytes());
+    assert_eq!(b[23], 0, "T_43 pad byte");
+    unsafe { pqsigner_v2_wots_chains16(sk, p0, p1, seed, a0, a1, steps, b[24..].as_mut_ptr()) };
+    unsafe { std::ptr::copy_nonoverlapping(sw(&b).as_ptr(), out, 16) };
+}
 fn a7_ci(a0: u32, a1: u32, ci: u32) -> [u8; 7] {
     let v = a7b(a0, a1).iter().fold(0u64, |v, &x| v << 8 | u64::from(x));
     assert_eq!(v >> 18 & 0x3F, 0, "base A7 must have ci = 0");

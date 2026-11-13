@@ -167,7 +167,9 @@ extern "C" {
     fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *const u8, a0: u32, a1: u32, out: *mut u8);
     fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8);
-    fn pqsigner_v2_wots_chains16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, steps: u32, out: *mut u8);
+    fn pqsigner_v2_wots_pk16(
+        sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, k0: u32, k1: u32, steps: u32, out: *mut u8,
+    );
     fn pqsigner_v2_fors_subtree16(
         sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8,
     );
@@ -227,21 +229,21 @@ pub fn search_fused(seed: &[u8; 32], msg_hash: &[u8; 32], layer: u32, tree: u64,
     unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, n, crate::params::TARGET_SUM as u32, d.as_mut_ptr()) }
 }
 
-/// WOTS public key of key pair `kp` (`v2-fused`): all 43 chains to the end in
-/// one driver call, written straight into the T_43 preimage
-/// `S ‖ A7(WOTS_PK) ‖ 0x00 ‖ v_0 ‖ … ‖ v_42`, then one compression.
+/// WOTS public key of key pair `kp` (`v2-fused`): all 43 chains to the end and
+/// the T_43 compression `S ‖ A7(WOTS_PK) ‖ 0x00 ‖ v_0 ‖ … ‖ v_42`, in one
+/// driver call.
 #[cfg(feature = "v2-fused")]
 pub fn wots_pk_fused(seed: &[u8; 32], sk_seed: &[u8; 32], layer: u32, tree: u64, kp: u32) -> [u8; N] {
-    use crate::params::{L, W};
     let (l, k) = (u64::from(layer), u64::from(kp));
     let (p0, p1) = words(pack(T_WOTS_PRF, l, tree, k, 0, 0, 0));
     let (a0, a1) = words(pack(T_WOTS_HASH, l, tree, k, 0, 0, 0));
-    let mut b = [0u8; 24 + N * L];
-    b[0..16].copy_from_slice(&seed[..16]);
-    put7(&mut b[16..23], pack(T_WOTS_PK, l, tree, k, 0, 0, 0));
-    // SAFETY: 32 and 16 readable bytes; `b[24..]` is 16 * 43 writable bytes; steps = 7.
-    unsafe { pqsigner_v2_wots_chains16(sk_seed.as_ptr(), p0, p1, seed.as_ptr(), a0, a1, (W - 1) as u32, b[24..].as_mut_ptr()) };
-    sha256_bytes16(&b)
+    let (k0, k1) = words(pack(T_WOTS_PK, l, tree, k, 0, 0, 0));
+    let mut out = [0u8; N];
+    // SAFETY: 32 and 16 readable bytes, 16 writable; steps = W - 1 = 7.
+    unsafe {
+        pqsigner_v2_wots_pk16(sk_seed.as_ptr(), p0, p1, seed.as_ptr(), a0, a1, k0, k1, (crate::params::W - 1) as u32, out.as_mut_ptr())
+    };
+    out
 }
 
 /// Root of the FORS subtree of height `h` over leaves `j0..j0 + 2^h` of FORS
