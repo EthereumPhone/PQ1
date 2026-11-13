@@ -1240,3 +1240,130 @@ Total practical driver headroom: about **1.5–1.7 M (~1.8%)** of a 90 M sign. T
 - **Product:** this reaches users only with the batched tick (#1149); with today's per-digest tick, v1 is about 120 M.
 - **No signer-crate edits** this round, so no new extraction drift.
 - **FSBL** byte-identical throughout.
+
+## Round 11 (2026-11-13): v2 (research format): global_asm FORS, 32-bit DATATYPE, search
+
+### E12 review, fixed first (`5554efeba`)
+See round 10's E12 entry: the overlap guard, the aliased gate-5 case (2,525/0, mutant-checked), and `bench_v2fb` now running E12.
+
+### E13: v2 FORS subtree as a `global_asm!` function, keep (`ff7cfe71a`, `gen_v2fors_ga.py`)
+
+**What changed** (the E10 pattern on one-block digests, any height 0..11):
+- `S` and `a0` live in r5..r9;
+- F (leaf) loads nothing;
+- H (node) preloads `L[0..3)` and loads `L[3]` and its A7 word after INIT;
+- the PRF preloads `sk_seed[0..7)` (registers only);
+- the asm issues the first PRF, so the caller never holds `sk_seed` words (the round-10 residue lesson).
+
+**Results:** subtree 110.6 → **101.0** cycles/digest; v2 mean 56.27 → **55.48 M** (2-way), 55.59 M (1-way).
+
+**Evidence:**
+- gate 5 2,525/0 (every height at the first, last and a random position);
+- residue gate (the v2 subtree at h = 4 and 7);
+- the full golden matrix, plain and cached;
+- a new `stale-v2fors` control fires. This is the function's own first-PRF check: the Rust entry only waits for BUSY;
+- `L1`/`L2` swap mutant: 33 failures;
+- FSBL identical.
+
+**Astra:** no defects.
+
+### DATATYPE 00 settled on the kit before use (`58d10c31b`)
+
+The `nblw32` probe (`bench_v2micro`):
+- DIN words are the big-endian value of four message bytes, the last partial word's bytes sit in its **top** bits, and NBLW = 8 × (len % 4) (the RM's "valid bits after internal data swapping");
+- equal to software SHA-256 for every length 0..160 and 1,200 v2-shape messages (NBLW 0/8/16/24: 164/160/160/1,360 checks, 0 failures);
+- a byte-data one-shot right after a 32-bit digest is correct;
+- the tail-in-low-bytes mutant fails every partial-word case.
+
+**No other path inherits the data type.** Every other digest path writes its own CR value (DATATYPE 10) at INIT. Astra listed every CR write in the driver (E14 review). Gate 5 also interleaves a v1 digest after every v2 call.
+
+### E14: the v2 key loop with DATATYPE 00, keep (`c7f4163b9`, `gen_v2key_dt.py`)
+
+**What changed:**
+- digests read from HR feed the next message as they are: a chain step drops its four `rev`s;
+- the constants are swapped once at entry; in big-endian form the chain position is bit 20 and the chain index is `ci << (lsb + 24)`;
+- `sk_seed` words are swapped in the preload window, and the outputs are swapped back in the PRF window.
+
+**Results:**
+- `wots_chains16` 102.3 → **94.6** cycles/digest;
+- v2 mean 55.48 → **52.71 M** (2-way), 52.83 M (1-way);
+- keygen 19.02 → 17.64 M.
+
+**Evidence:** gate 5, residue gate, the full golden matrix, `stale-v2key`, little-endian-position mutant (77 failures), FSBL identical.
+
+**Astra:** no defects.
+
+### E15: the v2 FORS subtree with DATATYPE 00, keep (`1f6eb91cc`, `gen_v2fors_dt.py`)
+
+**What changed:** F and H take the digest in flight unswapped, and the node stack holds big-endian words; only the root is swapped back. In big-endian form, `ha(x)` is `(x & 0x7F) << 9 | (x >> 7) << 16` and the height is bit 20.
+
+**Results:** subtree 101.0 → **97.7** cycles/digest; v2 mean 52.71 → **52.45 M** (2-way), 52.57 M (1-way).
+
+**Evidence:** gate 5, residue gate, golden matrix, `stale-v2fors`, little-endian-height mutant, FSBL identical.
+
+**Astra:** no defects (exhaustive over x and k; 85,912 modelled messages).
+
+### E16: the 32-bit key loop keeps `a0` in r6 and the DCAL value in r7, keep (`ebbd9e66c`)
+
+**What changed:** r6 and r7 are free in the function and carry `sk_seed` preloads only around the PRF. A chain step now loads nothing and builds no constant.
+
+**Results:**
+- `wots_chains16` 94.6 → **91.7** cycles/digest;
+- v2 mean 52.45 → **51.43 M** (2-way), 51.56 M (1-way);
+- keygen 17.13 M.
+
+**Evidence:** gate 5, residue gate, golden matrix, `stale-v2key`, `a0`/`a1` swap mutant, FSBL identical.
+
+**Astra:** no defects.
+
+### E17: v2 count search with DATATYPE 00 as a `global_asm!` function, keep (`07d6f3aa9`, `gen_v2search_dt.py`)
+
+**What changed:**
+- `S ‖ m` words 0..6 stay in registers across tries; the digit sum uses them as scratch in the engine window and then reloads them;
+- words 6..7 and the A7 words load with one `ldm` after INIT;
+- the count goes out as its own value;
+- the fold sum and exact early reject are verbatim;
+- the last-try test runs in the engine window;
+- no timed spin (swept 1/2/4/6 and none).
+
+**Results:**
+- 114.0 → **103.0** cycles/try (real target 115.1 → 105.1, the same 249,343 tries);
+- v2 mean 51.43 → **50.70 M** (2-way), 50.82 M (1-way).
+
+**Evidence:** gate 5 (all search groups, including the dense digit-sum sweep), the golden matrix, stale-search, `sm6`/`sm7` swap mutant (197 failures), FSBL identical.
+
+**Also in this commit:**
+- the comments in front of every `global_asm!` block are plain `//` (doc comments there gave "unused doc comment" warnings);
+- three v2 entry functions get their doc comments back. The E12, E13 and E17 insertions had landed between each function and its doc.
+
+**Astra:** pending at the time of writing.
+
+### Round 11 close (kit 160 MHz, keys/signatures unchanged)
+
+| v2 0.3 | round 10 end | round 11 end |
+|---|---:|---:|
+| mean sign, 2-way | 56.21 M | **50.70 M (−9.8%)** |
+| mean sign, 1-way | 56.23 M | **50.82 M** |
+| keygen | 19.03 M | 17.13 M |
+| golden cached sign (plain) | 107.32 M (0.671 s) | **96.86 M (0.605 s)** |
+| golden cached sign with the top cache | 70.74 M | **63.98 M (0.400 s)** |
+
+**v2 since round 7 start:** 65.59 → 50.70 M (−22.7%).
+
+**v1:** unchanged (closed, 89.97 M); gate 5's v1 groups and the v1 residue suite still pass.
+
+**Signer crate:** no edits under `sphincs-c10/src`, so no new extraction drift.
+
+**FSBL:** byte-identical throughout.
+
+### v2 headroom at head (kit 160 MHz)
+
+| entry | now | ~floor | practical headroom per sign |
+|---|---:|---:|---:|
+| key loop | 91.7 /digest | ~90 | ~0.3 M (poll lag; all registers in use) |
+| FORS subtree | 97.7 /digest | ~91 | ~0.3 M (H's CR re-make and two loads, PRF tail loads) |
+| search | 103.0 /try | ~91 | ~0.3 M (the digit sum fills the window) |
+| T_43 one-shot (`wots_pk16`) | ~2.5% of the run | | ~0.3 M (a dedicated feed) |
+| grind | ~1.9% of the run | | ~0.2 M |
+
+Total practical v2 headroom: about **1.4 M (~2.8%)** of a 50.7 M sign. It is close to the ~2% closing mark, and every remaining item is ≤ 0.3 M.
