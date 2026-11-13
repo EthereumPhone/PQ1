@@ -5,8 +5,9 @@ pragma solidity 0.8.28;
 /// Same scheme and 4,008-byte signature as `SPHINCsC10Asm` (v1); every hash preimage is the
 /// one-block v2 layout: 16-byte seed and values, the 7-byte compact address A7. NOT deployed.
 ///
-/// Memory: 0x00.. scratch for one-block preimages (S at 0x00..0x10, never overwritten);
-/// 0x800.. the T_k buffer `S || A7 || 0x00 || v_0 ..`; 0x780 the precompile output.
+/// Memory: 0x00..0x4F scratch for one-block preimages (S at 0x00..0x10, never overwritten);
+/// 0x60 the 32-byte H_MSG / WOTS_DIGEST outputs; 0x80.. the T_k buffer `S || A7 || 0x00 || v_0 ..`
+/// (S written once). Every other hash writes its 16-byte output in place.
 /// Packed 16-byte stores overlap (each mstore writes 32 bytes), so every preimage is written in
 /// ascending address order with A7 last (`shl(200, a7)` puts its 7 bytes at the store address).
 contract SPHINCsC10v2Asm {
@@ -17,8 +18,8 @@ contract SPHINCsC10v2Asm {
     {
         assembly {
             let N_MASK := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000
-            let OUT := 0x780
-            let TB := 0x800
+            let OUT := 0x60
+            let TB := 0x80
             if iszero(eq(sig.length, 4008)) {
                 mstore(0x00, 0x08c379a000000000000000000000000000000000000000000000000000000000)
                 mstore(0x04, 0x20)
@@ -42,7 +43,7 @@ contract SPHINCsC10v2Asm {
             mstore(0x00, pkSeed)
             mstore(0x10, pkRoot)
             mstore(0x20, message)
-            mstore(0x40, and(calldataload(sigBase), N_MASK))
+            mstore(0x40, calldataload(sigBase)) // R; its low half is overwritten by the A7 store
             mstore(0x50, shl(200, shl(52, 8)))
             pop(staticcall(gas(), 0x02, 0x00, 87, OUT, 32))
             let digest := mload(OUT)
@@ -56,7 +57,7 @@ contract SPHINCsC10v2Asm {
                 let treeIdx := and(shr(mul(i, 11), digest), 0x7FF)
                 let base := or(or(shl(52, 3), shl(33, htIdx)), shl(24, i))
                 // leaf F: S || secret || A7(3, ht, kp=i, ha=leaf)
-                mstore(0x10, and(calldataload(add(sigBase, add(16, shl(4, i)))), N_MASK))
+                mstore(0x10, calldataload(add(sigBase, add(16, shl(4, i))))) // low half: next store
                 mstore(0x20, shl(200, or(base, shl(1, treeIdx))))
                 // In-place auth walk: every node is written (16 bytes) straight into its half of
                 // the next H preimage S || L16 || R16 || A7, left at 0x10 if its index is even,
@@ -105,7 +106,7 @@ contract SPHINCsC10v2Asm {
             }
             {
                 // the last slot: F(S, A7(FORS_LAST=9, tree=ht), slot)
-                mstore(0x10, and(calldataload(add(sigBase, 208)), N_MASK))
+                mstore(0x10, calldataload(add(sigBase, 208))) // low half: next store
                 mstore(0x20, shl(200, or(shl(52, 9), shl(33, htIdx))))
                 pop(staticcall(gas(), 0x02, 0x00, 39, add(TB, add(24, 192)), 16))
             }
@@ -132,8 +133,8 @@ contract SPHINCsC10v2Asm {
                 let digitSum := and(shr(126, mul(lanes, 0x40201008040201008040201008040201)), 0x1FF) // C10-SWAR-DIGITSUM
                 if iszero(eq(digitSum, 205)) { revert(0, 0) } // WOTS+C target sum
 
-                // chains into the T_43 buffer: S || A7(1, layer, tree, kp) || 0x00 || v_0..v_42
-                mstore(TB, pkSeed)
+                // chains into the T_43 buffer: S || A7(1, layer, tree, kp) || 0x00 || v_0..v_42 (S at
+                // TB since the FORS roots: nothing writes TB..TB+15 after that)
                 mstore(add(TB, 0x10), shl(200, or(shl(52, 1), kpBase)))
                 let wotsPtr := add(sigBase, sigOff)
                 // Chain i (o = 16 i) runs from position digit_i = dd & 7 (dd = d >> 3i) to 7 in
