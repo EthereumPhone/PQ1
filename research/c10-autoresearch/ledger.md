@@ -1431,12 +1431,21 @@ The four tests were rewritten for the new shape (`0f378e451`..`0ba427076`), with
 | memcpy | 0.43% |
 | other (signer Rust, verify, wrappers) | ~1.1% |
 
-Per sign that is about:
-- key loop 32.1 M, FORS 7.85 M, search 7.32 M;
-- T_43 1.2 M, grind 0.95 M, `node16` 0.24 M;
-- glue ~0.6 M.
+Per sign, as share × the whole run (≈ 830 M) ÷ 16, so with 1/16 of keygen and the verify included:
 
-The sum is ≈ 50.3 M against the measured 50.70 M. The "unattributed ~1.6 M" of round 11 is mostly T_43 (~1.2 M); the rest is glue and verify.
+| row | per sign |
+|---|---:|
+| key loop | 33.2 M |
+| FORS | 7.85 M |
+| search | 7.32 M |
+| T_43 | 1.29 M |
+| grind | 0.95 M |
+| bench main (bench-only) | 0.29 M |
+| `node16` | 0.24 M |
+| memcpy | 0.22 M |
+| the rest (signer Rust, wrappers, verify) | ~0.56 M |
+
+The rows sum to ≈ 51.9 M: the 50.70 M sign plus ≈ 1.2 M of keygen and verify. The non-entry rows (bench main, `node16`, memcpy, the rest) come to **~1.3 M per sign**. That is round 11's separate "unattributed ~1.6 M" row; it is not T_43, which had its own row.
 
 ### E18: the T_43 compression as a `global_asm!` feed, keep (`9a3deab71`, `gen_v2t43.py`)
 
@@ -1457,6 +1466,8 @@ The sum is ≈ 50.3 M against the measured 50.70 M. The "unattributed ~1.6 M" of
 **Evidence:**
 - gate 5 2,940/0;
 - the golden matrix, plain and cached (3 hits each);
+- the residue gate is clean in the default build and with `prf2`, where the Rust key loop runs before the feed (v2 9 cases, v1 7);
+- a new `stale-v2t43` control calls `pq1_v2_t43` with DCIS left set: it halts through the fault hook, and with `stale-positive` (DCIS cleared) the same call returns;
 - the swapped-store mutant fails all 40 `wots_pk16` checks;
 - FSBL identical;
 - landing tests: research features 26 → 27 and `global_asm!` blocks 8 → 9, each with planted violations R1–R3 caught;
@@ -1479,8 +1490,8 @@ The sum is ≈ 50.3 M against the measured 50.70 M. The "unattributed ~1.6 M" of
 F and H together at 4: 50.397 M. The windows are already full of work. The best result, H = 4, is −0.05% and phase-sensitive: below the bar.
 
 ### Not tried, with reasons
-- **FORS PRF tail (~8 cycles):** register-bound. HR must be read into r0..r3 before INIT, r5..r11 hold `sk_seed[0..7)`, and r12 and lr do the status work. Parking HR in the frame to free three registers costs about what it saves.
-- **Key-loop PRF tail:** register-bound in the same way (Fable, round 11). Its spin is tuned (13, round 11).
+- **FORS PRF tail (~8 cycles): not attempted.** By my reading it is register-bound, on the unprobed assumption that HR must be read before INIT. HR must be read into r0..r3 before INIT, r5..r11 hold `sk_seed[0..7)`, and r12 and lr do the status work. Parking HR in the frame to free three registers costs about what it saves.
+- **Key-loop PRF tail: not attempted.** Register-bound by Fable's round-11 reading. Its spin is tuned (13, round 11).
 
 ### Closing note: v2 headroom (kit 160 MHz, head `9a3deab71`)
 
@@ -1497,7 +1508,9 @@ Total practical driver headroom is about **0.55–0.75 M (1.1–1.5%)** of a 50.
 
 **Hardware axes:** the same as v1, measure only. ICACHE 2-way against 1-way: −0.19% (50.35 against 50.44 M). Prefetch and no-busy-wait are owner settings.
 
-**Outside the driver (signer-crate edits are off limits while the Lean re-proof merges):** the glue left in the profile is about 0.6 M per sign: memcpy 0.22 M, signer Rust and wrappers about 0.3 M, verify, and the bench's own main. Its callers have not been attributed; a call-graph profile is the first step.
+**Outside the driver (signer-crate edits are off limits while the Lean re-proof merges):** the non-entry rows come to about 1.3 M per sign. Of that, bench main (0.29 M) is bench-only and `node16` (0.24 M) is a driver entry already in the table. The remaining ~0.8 M is memcpy (0.22 M), signer Rust and wrappers, and the verify (0.12 M). Their callers have not been attributed; a call-graph profile is the first step.
+
+**Estimates:** the floors above are estimates, not measurements. The profile was taken before E18.
 
 ### Round 12 close (kit 160 MHz, keys/signatures unchanged)
 
@@ -1511,6 +1524,6 @@ Total practical driver headroom is about **0.55–0.75 M (1.1–1.5%)** of a 50.
 
 **v2 since round 7 start:** 65.59 → 50.35 M (−23.2%).
 
-**v1:** unchanged (closed).
+**v1:** closed. No v1 path changed in round 12, and it was not re-measured after E18.
 
 **Signer crate:** no edits. **FSBL:** identical.

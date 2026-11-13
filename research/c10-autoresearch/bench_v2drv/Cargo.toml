@@ -24,6 +24,7 @@ stale-search = ["stale"]
 stale-v1 = ["stale"]
 stale-v2key = ["stale"]
 stale-v2fors = ["stale"]
+stale-v2t43 = ["stale"]
 # Round 9 standing gate: run only the v2 dead-stack residue suite (stage 400).
 residue = []
 
