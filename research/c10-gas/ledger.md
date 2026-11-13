@@ -399,8 +399,12 @@ layer 1 + root compare 30,905.
 | interpreter: WOTS step loop control (192 steps x ~35) | ~6,700 | 7% | ~2.6k of it with straight-line step blocks, at +6.1 kB (the `head` option) |
 | interpreter: everything else (per-chain and per-level bookkeeping, A7/ADRS bytes, sibling copies, T_k headers, digests, SWAR, ABI) | ~21,200 | 21% | < 1k left without growing code (Fable's batch-2 estimate, mostly realized by C1-C4) |
 
-Semantics-preserving headroom at this size point is therefore about 1k; the remaining choices
-are size-vs-gas (the menu above) rather than new optimizations. v1 is in the same position
+The phase figures are measured; the split of the interpreter share into rows is an estimate
+(opcode counts, partly from Fable's ranking made for the blocks build). No further
+semantics-preserving saving was found at this size point: the remaining ideas were estimated at
+about 1k or less, and the two loop-shape attempts that lost gas (E5a, B1) were measured on the
+older word-wise chain loop, not re-measured on the byte-wise one. The remaining choices are
+size-vs-gas (the menu above) rather than new optimizations. v1 is in the same position
 (111,772 deploy / 6,601 B; bytes + blocks 109,232 at 12,028 B).
 
 **Format-level levers (proposals only, none adopted; each changes keys, signatures and the
@@ -447,3 +451,17 @@ Batch-3 closing checks: mutation controls `all --runs 64` **44/44 caught** (incl
 C3 sibling lanes (pin + 11 tests), C4 dg/kp, D1 sibling, D2 ci, split810 kb, all3 ci). Full
 `forge test` (minus test/gas): 180 passed, 2 failed (the two v1 codehash pins; v1 runtime
 codehash now `0x8b475ebe…`), 32 skipped. Every keep passed gate.sh at both profiles.
+
+Re-checks at HEAD before handback: `build_options.py` re-run for all four options at HEAD after
+making the blocks generators self-contained (`block_bytes` and `block_v1_bytes_blocks` now emit
+their own `let nd := not(d)`; C5/D2 had removed it from the preambles, so `head` would not have
+compiled): every option reproduces exactly (head 99,509..99,680 / 10,816 B; no-blocks 102,123 /
+4,683 B; last-step 101,839..101,908 / 6,038 B; rolled 108,049 / 2,179 B; all with the reduced v2
+gate green). Gate coverage per option: `no-blocks` = HEAD (full gate both profiles + variants,
+44/44 controls, Astra); `head` = commit 04dc81fea (full gate both profiles + variants; Astra did
+not read the byte-wise blocks); `rolled` and `last-step`: reduced v2 gate only (default profile,
+64 runs, no variants) — either needs the full gate if picked. `variant_controls.sh` re-run at
+HEAD: all 22 rows as expected. Fixed-seed fuzz (4,000 runs, seed 0x1155c10, all non-deep fuzz
+tests of C10Equivalence and the three variant suites): pass. Gas is digit-independent again for
+both v2 and v1 at HEAD (the batch-2 `verificationGasLimit` spread question no longer applies to
+the committed builds; it applies to the `head` option).

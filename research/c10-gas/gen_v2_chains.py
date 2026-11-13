@@ -48,7 +48,8 @@ def block_bytes(indent=I, split810=False):
     in place; per chain only byte 4 (ci) and per step only byte 5 (cp << 4) are written with
     mstore8. Position algebra (s = 7 - digit = 4 b2 + 2 b1 + b0, blocks run 4, 2, 1): the 4-block
     starts at digit, the 2-block at digit | 4, the 1-block is always position 6."""
-    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)"]
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)",
+           f"{indent}let nd := not(d) // block 2^j of chain i runs iff bit 3i+j of nd is set"]
     call = "pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))"
     for i in range(43):
         out.append(f"{indent}calldatacopy(0x10, add(wotsPtr, {16 * i}), 16) // chain {i}")
@@ -179,7 +180,8 @@ def block_v1_bytes_loop(indent=I):
 
 def block_v1_bytes_blocks(indent=I):
     """Size option for v1: byte-wise ADRS with straight-line 4/2/1 step blocks (needs nd)."""
-    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py v1; do not edit by hand)"]
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py v1; do not edit by hand)",
+           f"{indent}let nd := not(d) // block 2^j of chain i runs iff bit 3i+j of nd is set"]
     call = "pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))"
     for i in range(43):
         out += [f"{indent}mstore(0x40, and(calldataload(add(wotsPtr, {16 * i})), N_MASK)) // chain {i}",
