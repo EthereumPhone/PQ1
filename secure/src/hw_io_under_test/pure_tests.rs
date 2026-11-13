@@ -3492,7 +3492,8 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     // Round 11 (autoresearch): the fused entries — secure-only research
     // features that no secure feature raises (the barriers test) — tick per
     // digest as well. Every such call is behind `tick-hook` without
-    // `tick-batch` (under which no asm pipeline is compiled), and follows its
+    // `tick-batch` (batch builds report digests through the non-hashing
+    // `pqsigner_hash_tick_n` instead), and follows its
     // digest's DCIS clear directly, with the digest read out of HR since DCIS
     // rose and nothing fed, NBLW/DCAL written or INIT started in between. The
     // one call not after a clear is the FORS subtree's closing tick, after
