@@ -1151,7 +1151,7 @@ Under the keep rule it is a discard. It is the fallback if the colocation landin
 - `a0`/`a2` swap mutant 5/24;
 - FSBL identical.
 
-**Astra:** pending at the time of writing.
+**Astra:** no defects. It checked the DIN sequence, the context and frame, counts and flags for n = 1, 2, 3 and in general, the base-in-list `ldm` (defined: no writeback), the predicate ABI and alignment, and section placement. 906 model cases, every preimage and predicate argument checked against SHA-256.
 
 ### Product-shaped measurement (measurement only; bench crates only, no firmware image flashed)
 
@@ -1197,3 +1197,42 @@ Total practical driver headroom: about **1.5–1.7 M (~1.8%)** of a 90 M sign. T
 | no-busy-wait (#1151) | −0.24% (round 8) | owner |
 
 **Untried: none safe within the rules.** The remaining levers are owner decisions (#1149 batched tick, by far the largest: about 25% in the product; 2-way ICACHE; prefetch; #1151) or format work.
+
+### E12 (v2): whole-key WOTS loop as a `global_asm!` function, keep (`193a18780`, generator `gen_v2key_ga.py`)
+
+**What changed.** For the research format, steps 1..15 (not `v2-prf2`), the E2 and E9 patterns:
+- each chain's PRF is issued from asm, with `sk_seed[0..7)` preloaded during the previous chain's last step (registers only);
+- `sk_seed[7]` and `p0`, `p1 | c` load after INIT;
+- the previous chain's output store, the next chain's index words and the `S` reload run in the PRF's engine window;
+- the chain steps keep the `v2-asm-chain` schedule.
+
+**Results:**
+- `wots_chains16` 106.2 → **102.3** cycles/digest (now below the bare `chain16` at 103.3); `wots_pk16` 109.8 → 106.0;
+- v2 mean 57.54 → **56.21 M** (2-way), 56.23 M (1-way);
+- keygen 19.69 → 19.03 M;
+- v2 golden cached sign 110.04 → 107.32 M (0.671 s).
+
+**Evidence:**
+- gate 5 2,523/0 (40 key cases with random steps, 40 public-key cases, v1 digests interleaved);
+- residue gate (v2 cases 0/1);
+- a new `stale-v2key` control fires. The Rust entry waits only for BUSY, so this is the loop's own first-PRF check;
+- `p1|c` mutant: 77 gate-5 failures;
+- FSBL identical.
+
+**Astra:** pending at the time of writing.
+
+### Round 10 close (kit 160 MHz, keys/signatures unchanged)
+
+| | round 9 end | round 10 end |
+|---|---:|---:|
+| v1 mean sign, 2-way | 91.15 M | **89.97 M (−1.3%)** |
+| v1 mean sign, 1-way (shipped) | 91.31 M | **90.18 M (−1.2%)** |
+| v1 golden cached sign | 193.30 M (1.208 s) | **190.35 M (1.190 s)** |
+| v1 cached sign estimated from the mean | 1.141 s | **1.126 s** |
+| v2 0.3 mean sign | 57.54 M | **56.21 M (−2.3%)** |
+
+- **Since the end of round 7:** v1 106.49 → 89.97 M (**−15.5%**).
+- **Since the start of round 7:** v1 110.10 → 89.97 M (−18.3%).
+- **Product:** this reaches users only with the batched tick (#1149); with today's per-digest tick, v1 is about 120 M.
+- **No signer-crate edits** this round, so no new extraction drift.
+- **FSBL** byte-identical throughout.
