@@ -58,32 +58,31 @@ contract SPHINCsC10v2Asm {
                 // leaf F: S || secret || A7(3, ht, kp=i, ha=leaf)
                 mstore(0x10, and(calldataload(add(sigBase, add(16, shl(4, i)))), N_MASK))
                 mstore(0x20, shl(200, or(base, shl(1, treeIdx))))
-                pop(staticcall(gas(), 0x02, 0x00, 39, OUT, 32))
-                let node := and(mload(OUT), N_MASK)
+                // In-place auth walk: every node is written (16 bytes) straight into its half of
+                // the next H preimage S || L16 || R16 || A7, left at 0x10 if its index is even,
+                // else right at 0x20; the 16-byte sibling is copied into the other half.
+                pop(staticcall(gas(), 0x02, 0x00, 39, add(0x10, shl(4, and(treeIdx, 1))), 16))
                 let pathIdx := treeIdx
                 let authPtr := add(sigBase, add(224, mul(i, 176)))
-                for { let h := 0 } lt(h, 11) { h := add(h, 1) } {
-                    let sibling := and(calldataload(add(authPtr, shl(4, h))), N_MASK)
-                    let parentIdx := shr(1, pathIdx)
-                    let x := mul(and(pathIdx, 1), xor(node, sibling))
-                    mstore(0x10, xor(node, x)) // left
-                    mstore(0x20, xor(sibling, x)) // right
-                    mstore(0x30, shl(200, or(base, or(shl(12, add(h, 1)), shl(1, parentIdx)))))
-                    pop(staticcall(gas(), 0x02, 0x00, 55, OUT, 32))
-                    node := and(mload(OUT), N_MASK)
-                    pathIdx := parentIdx
+                for { let h := 0 } lt(h, 10) { h := add(h, 1) } {
+                    calldatacopy(sub(0x20, shl(4, and(pathIdx, 1))), add(authPtr, shl(4, h)), 16)
+                    pathIdx := shr(1, pathIdx)
+                    mstore(0x30, shl(200, or(base, or(shl(12, add(h, 1)), shl(1, pathIdx)))))
+                    pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, shl(4, and(pathIdx, 1))), 16))
                 }
-                mstore(add(TB, add(24, shl(4, i))), node)
+                // height 11, the root: into its T_13 slot
+                calldatacopy(sub(0x20, shl(4, and(pathIdx, 1))), add(authPtr, 160), 16)
+                mstore(0x30, shl(200, or(base, or(shl(12, 11), shl(1, shr(1, pathIdx))))))
+                pop(staticcall(gas(), 0x02, 0x00, 55, add(TB, add(24, shl(4, i))), 16))
             }
             {
                 // the last slot: F(S, A7(FORS_LAST=9, tree=ht), slot)
                 mstore(0x10, and(calldataload(add(sigBase, 208)), N_MASK))
                 mstore(0x20, shl(200, or(shl(52, 9), shl(33, htIdx))))
-                pop(staticcall(gas(), 0x02, 0x00, 39, OUT, 32))
-                mstore(add(TB, add(24, 192)), and(mload(OUT), N_MASK))
+                pop(staticcall(gas(), 0x02, 0x00, 39, add(TB, add(24, 192)), 16))
             }
-            pop(staticcall(gas(), 0x02, TB, 232, OUT, 32))
-            let currentNode := and(mload(OUT), N_MASK)
+            // T_13: the FORS pk lands at 0x10, the m16 field of the layer-0 WOTS_DIGEST preimage
+            pop(staticcall(gas(), 0x02, TB, 232, 0x10, 16))
 
             let idxTree := htIdx
             let sigOff := 2336
@@ -93,8 +92,8 @@ contract SPHINCsC10v2Asm {
                 let kpBase := or(or(shl(51, layer), shl(33, idxTree)), shl(24, idxLeaf))
                 let countOff := add(sigOff, 688)
                 let count := shr(224, calldataload(add(sigBase, countOff)))
-                // WOTS_DIGEST: S || m16 || be32(count) || A7(7, layer, tree, kp), 43 bytes.
-                mstore(0x10, currentNode)
+                // WOTS_DIGEST: S || m16 || be32(count) || A7(7, layer, tree, kp), 43 bytes; m16 (the
+                // node being signed) is already at 0x10.
                 mstore(0x20, shl(224, count))
                 mstore(0x24, shl(200, or(shl(52, 7), kpBase)))
                 pop(staticcall(gas(), 0x02, 0x00, 43, OUT, 32))
@@ -121,27 +120,22 @@ contract SPHINCsC10v2Asm {
                     }
                     mstore(add(TB, add(24, shl(4, i))), val)
                 }
-                pop(staticcall(gas(), 0x02, TB, 712, OUT, 32))
-                let merkleNode := and(mload(OUT), N_MASK)
+                // T_43: the WOTS pk lands in its half of the first Merkle preimage (in-place walk
+                // as in FORS); the root (index 0 at height 9) lands at 0x10, the next layer's m16.
+                pop(staticcall(gas(), 0x02, TB, 712, add(0x10, shl(4, and(idxLeaf, 1))), 16))
 
                 let treeBase := or(or(shl(52, 2), shl(51, layer)), shl(33, idxTree))
                 let mIdx := idxLeaf
                 let merklePtr := add(sigBase, add(countOff, 4))
                 for { let h := 0 } lt(h, 9) { h := add(h, 1) } {
-                    let sibling := and(calldataload(add(merklePtr, shl(4, h))), N_MASK)
-                    let parentIdx := shr(1, mIdx)
-                    let x := mul(and(mIdx, 1), xor(merkleNode, sibling))
-                    mstore(0x10, xor(merkleNode, x))
-                    mstore(0x20, xor(sibling, x))
-                    mstore(0x30, shl(200, or(treeBase, or(shl(12, add(h, 1)), shl(1, parentIdx)))))
-                    pop(staticcall(gas(), 0x02, 0x00, 55, OUT, 32))
-                    merkleNode := and(mload(OUT), N_MASK)
-                    mIdx := parentIdx
+                    calldatacopy(sub(0x20, shl(4, and(mIdx, 1))), add(merklePtr, shl(4, h)), 16)
+                    mIdx := shr(1, mIdx)
+                    mstore(0x30, shl(200, or(treeBase, or(shl(12, add(h, 1)), shl(1, mIdx)))))
+                    pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, shl(4, and(mIdx, 1))), 16))
                 }
-                currentNode := merkleNode
                 sigOff := add(countOff, 148) // 4 + 9*16
             }
-            valid := eq(currentNode, pkRoot)
+            valid := eq(and(mload(0x10), N_MASK), pkRoot)
             mstore(0x00, valid)
             return(0x00, 0x20)
         }
