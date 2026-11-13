@@ -3215,7 +3215,7 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
         .filter_map(|l| l.strip_prefix("feature = \"").map(|f| f.trim_end_matches(',').trim_end_matches('"')))
         .filter(|f| !shipping.contains(f))
         .collect();
-    assert_eq!(research.len(), 26);
+    assert_eq!(research.len(), 27, "26 through round 11, v2-asm-t43 in round 12");
     for r in &research {
         assert!(!SECURE_CARGO_TOML_SRC.contains(&format!("\"pqsigner-hw/{r}\"")), "the secure crate raises {r}");
         assert!(!FSBL_CARGO_SRC.contains(&format!("\"{r}\"")), "the FSBL names {r}");
@@ -3291,7 +3291,7 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
             assert!(!l.contains("asm!("), "asm form at line {}: {l}", i + 1);
         }
     }
-    assert_eq!((inline, global), (16, 8), "research asm blocks");
+    assert_eq!((inline, global), (16, 9), "research asm blocks (round 12: the T_43 feed)");
     // Each streaming symbol is its body and nothing else, and the one-shot is
     // the three bodies in order and nothing else, so the paths cannot drift.
     fn code(b: &str) -> std::vec::Vec<std::string::String> {

@@ -89,6 +89,8 @@ v2-asm-search = ["v2"]
 v2-asm-fors = ["v2"]
 # Round 11: the v2 FORS subtree as one standalone global_asm function (E10 pattern).
 v2-asm-fors-ga = ["v2-asm-fors"]
+# Round 12: the T_43 compression of wots_pk16 as one standalone global_asm function (DATATYPE 10).
+v2-asm-t43 = ["v2"]
 # Round 7: the fold-multiply digit sum in the Rust search (137 -> 126 cycles/try; asm gives 114).
 v2-fold-sum = ["v2"]
 v2-split810 = ["v2"]
