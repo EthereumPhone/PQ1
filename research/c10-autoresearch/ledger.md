@@ -1336,7 +1336,7 @@ The `nblw32` probe (`bench_v2micro`):
 - the comments in front of every `global_asm!` block are plain `//` (doc comments there gave "unused doc comment" warnings);
 - three v2 entry functions get their doc comments back. The E12, E13 and E17 insertions had landed between each function and its doc.
 
-**Astra:** pending at the time of writing.
+**Astra:** no defects, GO. Checked: the frame and ABI; DIN bytes and reloads after every digit-sum path; the fold decisions against the reference; hit and exhaustion count pairs for ranges of 1, 2 and 3; DCIS/BUSY/stale guards at both INIT sites, with BUSY slow paths rebuilding CR=0x60004; and that the nine comment hunks are non-executable. 882 controlled model cases and 240 SHA-256 differential cases.
 
 ### Round 11 close (kit 160 MHz, keys/signatures unchanged)
 
