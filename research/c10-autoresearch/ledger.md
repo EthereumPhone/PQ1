@@ -884,3 +884,79 @@ The asm's in-loop stale check (as in H3) cannot be reached by a control: the ent
 
   The 2-way-tuned spins hold.
 - **"0.337":** not found in any session transcript (only timestamps), log or #1155 comment. The closest reported figure is 0.321 s (≈ 0.32 s), for all three options plus the cache.
+
+## Round 8 (2026-11-13): v1 (deployed format) driver wave, output-identical only
+
+Constraint as round 7: no change to any security bound; keys and signatures byte-identical. All work is on v1, the deployed format; v2 is untouched (v2f mean 57.54 M at head, unchanged: no leak).
+
+### Test zero: v1 per-entry costs and floors [`bench_v1micro`, `experiment_v1micro.sh`]
+
+**Profile first** (PC sampling over the 16-message v1 bench, 106.49 M mean sign): `wots_chains16` 62.8%, `fors_subtree16` 15.9%, `search128` 8.5% + `hits_target` 4.3%, `oneshot` (mostly the R grind) 2.55%, `th_multi16` 2.1%, memcpy/memclr ~1.5%.
+
+| entry (v1) | start of round | floor (INIT→DCIS + ~14) |
+|---|---:|---:|
+| keygen-shape key (43 × (PRF + 7 steps)) | 189.6 cyc/digest | ~161 per step |
+| `chain16` × 15 | 185.8 /step | ~161 |
+| `fors_subtree16` | 10,897 /call (231.9 /digest) | ~7,500 /call |
+| `search128` | 300 /try (pred false 304, digit sum 299: the predicate is already hidden) | ~226 |
+| R grind (two one-shots) | 423 + 422 + Rust per nonce | ~395 |
+| raw INIT→DCIS, asm stores: 1 / 2 / 3 blocks | 82 / 147 / 212 | |
+
+**Block-0 window probe** (`--features win`): ALU work placed between the 17th DIN store (block 0 starts) and the 18th is free up to **44–46 cycles** for 2- and 3-block messages (147 → 149 at 48, then 1:1). That window is where every round-8 change puts non-feed work.
+
+### E1: `v1-asm-chain` reorder, keep (`8ef5b8a7e`)
+`rev r1..r3`, the position add, the end reload and the DCAL constant moved into the block-0 window; r1..r3 enter byte-swapped. `chain16` × 15 185.8 → 178.7; keygen shape 189.6 → 186.7; v1 mean 106.49 → 105.95 M. Golden, kdiff 32/32, gate 5, stale-v1 + positive, FSBL identical; a dropped-`rev` mutant fails the golden.
+
+### E2: `v1-asm-key`, keep (`4d9816b67`, fixes `41d61c303`, `c155c600e`)
+Whole WOTS key of the keygen shape (no order/digits, WOTS zero words, steps > 0; ~1,024 keys/sign) in one asm loop: the 80-byte PRF (`sk_seed` single `ldr` in place, never copied) and the chain steps; the previous chain's output store and the next index in the PRF's block-0 window. Keygen shape 186.7 → ~171 cyc/digest; v1 mean 105.95 → 101.43 M, keygen 34.76 → 32.47 M.
+- **Astra (defect, fixed):** with `out` overlapping `sk_seed` the asm stored chain i after chain i+1's PRF read `sk_seed`; the Rust loop stores first. Reproduced (`out == sk_seed`, n = 2). The asm path is now taken only for disjoint ranges; the aliased case is in the microbench check (8/8).
+- **My bug, fixed:** inserting the guard's `let` between the `#[cfg]` and the `if` moved the attribute onto the `let`: the v2 crates stopped compiling and a `tick-hook` build would have called a compiled-out fn. Caught by the v2f leak check.
+- **Evidence:** software-SHA key check (7 step counts, odd `sk_seed`/tail/seed_adrs/out, plus aliasing); stale control fires, positive completes; mutant A (Rust entry check removed): the asm PRF check still halts; mutant B (both removed): passes through; `rev(i)`-store mutant 7/7 keys wrong; golden, kdiff 32/32, FSBL identical.
+
+### E3: `v1-asm-fors`, keep (`cd1186608`, fix `0fc20a171`)
+The v2 H3 pattern on v1: asm transitions into PRF (1 block), leaf (2 blocks), node (3 blocks), tree logic in Rust in the engine windows, `rev`s and the DCAL constant after the 17th store, the PRF secret only in registers. Subtree 10,897 → 8,670 cyc/call (184.5 /digest); v1 mean 101.43 → 98.26 M.
+- **Astra:** messages, digest ownership, tree control and ABI conform (its model: 1,006 starts). Fixed: `j0 + 16` is now computed before the first digest (Rust order; an overflowing `j0` panics before any digest in both).
+- **Evidence:** software-SHA subtree check 4/4 at odd addresses; stale-fors control; L/R-swap mutant 4/4 wrong; golden, kdiff, FSBL identical.
+- **Left:** ~1,170 cyc/call above the floor, ~620 of it block-0 loads (leaf/node feed 16 words from staging, ~20 load cycles each).
+
+### E4: `v1-asm-search`, keep (`0feade4bd`, fixes `0fc20a171`, `23df79045` [FV])
+`search128` in asm for the WOTS+C preimage shape (words 4..8 and 20..31 zero, checked in Rust): block 0 from an aligned staging copy (public data), HR3..HR7 in one `ldm`, the `d` words and block-1 loads in the block-0 window, and the signer's `pred` callback called by `blx` from the post-DCAL window (no signer change, no new digit-sum code). 300 → 246 cyc/try; v1 mean 98.28 → 95.97 M.
+- **Astra:** flags, staging, callback ABI (callee-saved state, 8-byte stack at `blx` and in the pushed slow path) conform (708 modelled cases). Fixed: the `tick-batch` end-of-call count could overflow near n = 2^32 (now saturating); documented that the asm ticks once per call (the signer calls with ≤ 4,096 tries), not every 32 tries.
+- **1-way ICACHE regression, found and fixed.** After E5 shifted the layout, the 1-way mean was 98.58 M against 93.30 M 2-way (max sign +18 M). The asm loop (3520..3816 mod 8 KB) and `hits_target` (3512..3788) sat on the same lines of the direct-mapped cache and evicted each other on every try. Both now live in one section, `.text.pq1_c10_search` (driver: `v1-asm-search`; signer: new `hw-sha256-search-colocate`, one `cfg_attr` in `wots.rs` [FV], layout only). Contiguous, 2,350 B < 8 KB, so they cannot alias in any link layout. 1-way 93.48 M, 2-way 93.37 M.
+- **Evidence:** one-shot-reference search check 12/12 (odd address, n = 1/2/3, hit at start, no hit, `d[0..12]` zero); stale-search control; count mutant 4/12 cases wrong; golden, kdiff, FSBL identical.
+
+### E5: `v1-grindr`, keep (`dea4f6e91`)
+The v1 R grind (119/103-byte PRF + 160-byte `h_msg` per nonce) as one driver call, plain Rust: `sk_seed` read in place (the signer's 119-byte `sk_seed` copy is gone), tail words built once, nonce patched (NBLW 24 as the one-shot writes it), HR3 only per nonce (`HR3 & 0x7FF0 == 0` ⟺ `read_bits_le(D, 132, 11) == 0`), the hit re-checked by the signer's `read_bits_le`; the rand-holding buffers are wiped. ~508 cyc/nonce. v1 mean 95.18 → 93.30 M (−2.0%).
+- **Evidence:** grind check 4/4 against the one-shot loop (rand and none, odd addresses); nonce-word mutant 4/4 caught; golden, kdiff, FSBL identical.
+- **Gap:** the nonce's top byte (`(nonce >> 24) << 24`) is zero for every nonce below 2^24 (cap 10 M), so no test reaches it; it is correct by inspection only.
+- **Astra (fixed, `f5944ec36`):** outputs and the stopping nonce conform (30,042 modelled cases, all 65,536 predicate-byte pairs).
+  - The tail words were wiped through a shadow copy (`let mut tw = tw`).
+  - A new **dead-stack residue scan** in the grind check (any 4-byte window of `rand` or `sk_seed` below `sp` after the call) showed more than that: the compiler had also spilled tail words (rand, message) into other slots. Fixing `tw` alone still left rand behind.
+  - The body now runs in its own `#[inline(never)]` frame, and the entry zeroes the 1 KiB of dead stack below `sp` after it.
+  - Residue 0 with the scrub; rand found in both rand cases with the scrub skipped (mutant). `sk_seed` was never found.
+  - Also fixed: the `tick-batch` count over-reported by two on exhaustion.
+  - 513 cyc/nonce. Mean, golden, kdiff and FSBL re-run: 2-way 93.37 M, 1-way 93.52 M.
+- **Not checked:** the same residue scan has not been run on the round-7/8 asm entries or on the old Rust paths. The asm keeps secrets in registers only, but the Rust wrappers' spills are unmeasured.
+
+### Tuning (`f2e3db6dc`)
+Spins tuned in the signer, not the microbench: key-loop step **13** (golden keygen 32.47 → 32.07 M; the microbench had ranked 14 first); search **1** (mean 95.18/95.37/95.56 M at 1/2/3). PRF and chain-end spins are flat (±0.3 cyc/digest).
+
+### Probes and measure-only
+- **BUSY slow path:** 0 PC samples in every out-of-line BUSY loop. BUSY has cleared by the SR read everywhere, so nothing to fix.
+- **`no-busy-wait` (#1151)** on the new loops (BUSY bit dropped from the INIT masks under the feature, then reverted): v1 mean 93.30 → 93.08 M (**−0.24%**), golden passes. It is now worth almost nothing.
+- **memcpy/memclr:** the new staging arrays cost ≈0.2 M/sign. The remaining ~1.5 M/sign is inside the inlined signer (64 call sites in the bench's LTO body). Not pursued: it is an [FV] area.
+
+### Round 8 close (kit 160 MHz, 16-message means, keys/signatures unchanged)
+
+| v1 (deployed) | round 7 end | round 8 end |
+|---|---:|---:|
+| mean sign, 2-way ICACHE | 106.49 M | **93.37 M (−12.3%)** |
+| mean sign, 1-way (shipped) | 106.58 M | **93.52 M (−12.3%)** |
+| golden keygen | 35.05 M | 32.07 M (−8.5%) |
+| golden cached sign (2 passes + verify) | 225.84 M (1.412 s) | **197.67 M (1.235 s, −12.5%)** |
+| est. cached sign from the mean | 1.332 s | **1.168 s** |
+
+- **v2 0.3:** 57.54 M, unchanged (no v2 work).
+- **Gates at head:** gate 5 2,523/0.
+- **FSBL** byte-identical after every `hash.rs` edit (`e34d6e8ecabb3109f8ca…`): every addition sits behind `v1-asm-key`, `v1-asm-fors`, `v1-asm-search` or `v1-grindr`, which the FSBL never names.
+- **Product caveat (#1149):** under `tick-hook` without `tick-batch` all asm paths compile out, and the grind entry ticks per digest.
