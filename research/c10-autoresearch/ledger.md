@@ -971,3 +971,132 @@ Spins tuned in the signer, not the microbench: key-loop step **13** (golden keyg
   - `wots.rs` keeps its line count: the attribute shares the `fn` line.
 - **FSBL** byte-identical after every `hash.rs` edit (`e34d6e8ecabb3109f8ca…`): every addition sits behind `v1-asm-key`, `v1-asm-fors`, `v1-asm-search` or `v1-grindr`, which the FSBL never names.
 - **Product caveat (#1149):** under `tick-hook` without `tick-batch` all asm paths compile out, and the grind entry ticks per digest.
+
+## Round 9 (2026-11-13): residue gate, then v1 driver work (output-identical only)
+
+### Standing gate: dead-stack residue scan (`225f67e0f`, `gate_residue.sh`, shared `residue.rs`)
+
+**Method.** For each driver entry that touches a secret:
+1. compute the secrets first, in software;
+2. build their patterns: every 4-byte window in memory order at every byte offset, and every aligned word byte-reversed (so a raw HR value spilled before its `rev` also matches); zero windows are skipped;
+3. zero the dead stack;
+4. call the entry;
+5. scan 4 KiB below `sp`.
+
+The scan and clear run inlined in the caller, and the patterns live in a static, so the scanner never scans its own frame.
+
+**v1 suite** (`bench_v1micro`, 7 cases, part of `experiment_v1micro.sh`'s ok):
+- key loop: `sk_seed`, all 43 chain starts, the intermediate values of 8 chains;
+- sign-shape keys: the starts and every value below the digit;
+- FORS subtree: `sk_seed` and the 16 leaf secrets;
+- grind, with and without rand;
+- `prf_chain16`;
+- `chain16` from a secret.
+
+**v2 suite** (`bench_v2drv --features residue`, 9 cases over the round-7 asm entries): `wots_chains16`, `wots_pk16`, `prf_chain16`, `fors_leaf16`, `fors_subtree16` at h = 4 and 7, `chain16`, `grind_r` at 119 and 103 B.
+
+**Result:** no residue anywhere (v1 mask 0x0, v2 mask 0x0). No fix was needed in the round-7 v2 entries.
+
+**The gate can fire** (leaky mutants; the correctness checks stay green throughout):
+- v1 combined mutant → mask 0xd:
+  - a raw (byte-reversed) key-loop chain start stored below `sp`;
+  - a FORS leaf secret below `sp`;
+  - the grind with its scrub skipped (rand found; the no-rand grind case stays clean, so `sk_seed` never spills).
+- v2 mutant (the FORS PRF output stored below `sp` in `v2x_f`) → mask 0x30.
+
+**Gaps:**
+- No v1 grind and no v2 search secret (the search has no secret inputs).
+- The fault path's frame is not scanned (it resets).
+
+### E6: key-loop block-0 preload, keep (`e4a5b47d2`)
+
+**What changed:**
+- `c0..c2` load into r9..r11 in the previous digest's block-0 window, together with the end compare (the flags live to the `bne` after DCAL).
+- The step then loads `c3/c8/c9/c10` with one `ldm`, and `c12/c13` with `ldrd`.
+- The slow-path counters moved to dead registers: r0 before the HR read; `lr` in the BUSY path, with the CR value re-made.
+
+**Discarded first variant:** single `ldr`s interleaved between DIN stores were slower at every spin (best keygen 32.38 M against 32.07 M). Loads mixed into a peripheral store sequence cost more than one grouped `ldm`.
+
+**Spin** re-swept in the signer: 10.
+
+**Results:**
+- golden keygen 32.07 → **31.61 M**;
+- cached sign 197.66 → 195.81 M;
+- v1 mean 93.37 → **92.42 M** (2-way), 93.52 → 92.62 M (1-way).
+
+**Evidence:** kdiff 32/32, residue gate, `c8`/`c9` swap mutant (7/8 keys wrong), FSBL identical.
+
+**Astra:** no defects. It checked every path into INIT, flag survival, the slow-path lifetimes, and that the base-in-list `ldm` is defined (Arm ARM: only writeback makes it UNPREDICTABLE). 54 modelled cases.
+
+### E7: FORS zero-word transitions, keep (`39cd967aa`)
+
+**What changed:** for the FORS shape, `v1x_leaf_z`/`v1x_node_z` load only the 8/9 non-zero block-0 words (two grouped `ldm`) and store the zeros from a register. The zero words are pad16's zero half, the layer, the tree's high word, ci and the leaf height, checked in Rust (public).
+
+**Results:**
+- subtree on the FORS shape 8,672 → **8,396** cycles/call;
+- golden cached sign 195.81 → 194.73 M;
+- v1 mean 92.42 → **92.02 M** (2-way), 92.62 → 92.24 M (1-way).
+
+**Evidence:**
+- the subtree check now covers both shapes (4/4);
+- residue gate, kdiff;
+- `w11`/`w12` swap mutant: 2/4 subtrees wrong, exactly the FORS-shaped cases;
+- FSBL identical.
+
+**Astra:** no defects (symbolic DIN trace equal to the generic transitions).
+
+### E8: in-driver digit sum, discard (patch kept: `discarded/r9-E8-search-sum.patch`, `511f5c75c`)
+
+**What it was:** a WOTS entry with the round-7 v2 fold sum (same digit position) in the engine window. The signer reaches it through one `link_name` line in `wots.rs`, and the predicate only confirms a hit (a disagreement fails closed). It would retire the colocation attribute and its feature.
+
+**Exact:** a dense gate-5-style sweep, 938/0. That is 6 keys × targets 0..301 over 96-try windows, plus windows starting at and just before each hit, against one-shot digests and the reference digit sum. The WOTS entry also equals the callback search on three real target-205 searches.
+
+**Speed-negative:**
+- microbench 247.0 against 246 cycles/try;
+- v1 mean **92.20 M** (spin 6; 92.27 M at spin 2) against 92.02 M with the callback.
+
+Under the keep rule it is a discard. It is the fallback if the colocation landing condition is rejected.
+
+### E9: key loop as a `global_asm!` function using r6/r7, keep (`609fa4f31`)
+
+**The r6/r7 judgement.** Pushing and popping r6/r7 inside an inline `asm!` would sidestep LLVM's reservation (r7 frame pointer, r6 base pointer). That is only sound if every exit restores them, and the diverging fault path does not. As a standalone AAPCS function in `global_asm!` they are ordinary callee-saved registers:
+- prologue `push {r4-r11, lr}; sub sp, #4`, so `sp` is 8-aligned at the fault call;
+- epilogue `add sp, #4; pop {r4-r11, pc}`;
+- no Rust frame is live inside it, so LLVM's frame-pointer and base-pointer assumptions never apply.
+
+**What changed:** the asm text is generated from `v1_key_asm`. The two extra registers carry `c3` and `c8`, so a step's block 0 loads 4 words with one `ldm` instead of 6.
+
+**Bug caught by the key check:** the first build listed `ldm r8, {r8, r9, r10, r6}` expecting that order. `ldm` always fills ascending registers from ascending addresses, so 7/8 keys came out wrong.
+
+**Spin** re-swept in the signer: 10.
+
+**Results:**
+- golden keygen 31.61 → **31.23 M**;
+- cached sign 194.73 → **193.30 M**;
+- v1 mean 92.02 → **91.15 M** (2-way), 92.24 → **91.31 M** (1-way).
+
+**Evidence:** kdiff 32/32, residue gate, `c9`/`c10` swap mutant (7/8 wrong), stale controls (key, positive, fors, search). Mutant A (Rust entry check removed): the function's own PRF stale check halts. FSBL identical.
+
+### Not done (ranked low: ~0.1–0.2 M each for new asm)
+- search zero-word block 0;
+- `th_multi16` with the next value's loads in the stall;
+- grind asm transitions;
+- v2 work.
+
+### Round 9 close (kit 160 MHz, keys/signatures unchanged)
+
+| v1 (deployed) | round 8 end | round 9 end |
+|---|---:|---:|
+| mean sign, 2-way | 93.37 M | **91.15 M (−2.4%)** |
+| mean sign, 1-way (shipped) | 93.52 M | **91.31 M (−2.4%)** |
+| golden keygen | 32.07 M | 31.23 M |
+| golden cached sign | 197.66 M (1.235 s) | **193.30 M (1.208 s)** |
+| cached sign estimated from the mean | 1.168 s | **1.141 s** |
+
+**Since round 7:** v1 mean 106.49 → 91.15 M (−14.4%).
+
+**v2:** gate 5 2,523/0, v2 golden, v2f mean 57.54 M (unchanged).
+
+**FSBL** byte-identical throughout.
+
+**No signer-crate edits this round**, so no new extraction drift. `check_extraction_freshness.py` still shows the same 22 drifted pins. The round-8 `fors.rs`/`wots.rs` edits sit under targets already drifted by rounds 1–7: `sign-release`, `sign-forest`, `fors-*`, `wots-*`, `xmss-*`, `verifier`.
