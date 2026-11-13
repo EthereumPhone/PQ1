@@ -2226,6 +2226,8 @@ pub unsafe extern "C" fn pqsigner_fors_subtree16(
         na16[..14].copy_from_slice(&na);
         let mut tp = [t[0], t[1], t[2], j0.swap_bytes()];
         let mut sp = 0usize;
+        // `j0 + 16` before any digest, as the loop below evaluates it first.
+        let end = j0 + 16;
         // PRF of leaf j0.
         gather_init();
         // SAFETY: caller contract.
@@ -2235,7 +2237,6 @@ pub unsafe extern "C" fn pqsigner_fors_subtree16(
         write_word(tp[2]);
         write_word(tp[3]);
         REG.str_.write(STR_DCAL);
-        let end = j0 + 16;
         let mut j = j0;
         loop {
             la16[15] = j.swap_bytes();
@@ -2456,7 +2457,9 @@ fn collect<const FULL: bool>(d: &mut [u32; 8]) {
 /// big-endian last), DCAL; then `pred` on the previous try's digest (`d[0..3]` zero,
 /// `d[3..8]` HR3..HR7 in memory order), called from the engine window. Returns `(c, flag)`:
 /// 0 = no hit (`c = end`); 1 = try `c` hit and `c + 1` is in flight; 2 = try `c` hit, nothing
-/// in flight. `st`: words 0..20 the message words 0..19, 33 `pred`, 40..48 `d`.
+/// in flight. `st`: words 0..20 the message words 0..19, 33 `pred`, 40..48 `d`. Under
+/// `tick-batch` the caller ticks once per call (the signer calls with at most 4,096 tries),
+/// not every 32 tries as the Rust loop does.
 #[cfg(feature = "v1-asm-search")]
 const V1S_SPIN: u32 = 1;
 
@@ -2696,7 +2699,7 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
             // SAFETY: the engine is idle; the tick does not hash. Tries start..=c, the
             // speculative try, and the recompute.
             unsafe {
-                pqsigner_hash_tick_n(c - start + 1 + u32::from(flag == 1) + 1)
+                pqsigner_hash_tick_n((c - start).saturating_add(2 + u32::from(flag == 1)))
             };
             return c;
         }
