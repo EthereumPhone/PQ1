@@ -1591,7 +1591,7 @@ pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: 
 /// per chain), 9 steps, 10..21 tail words 0..10, 21 `sk_seed`, 22 out pointer, 23 i
 /// (starts at u32::MAX), 24 n.
 #[cfg(feature = "v1-asm-key")]
-const V1K_SPIN_STEP: u32 = 14;
+const V1K_SPIN_STEP: u32 = 13;
 #[cfg(feature = "v1-asm-key")]
 const V1K_SPIN_PRF: u32 = 14;
 #[cfg(feature = "v1-asm-key")]
