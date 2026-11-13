@@ -27,6 +27,10 @@ stale-v2fors = ["stale"]
 stale-v2t43 = ["stale"]
 # Round 9 standing gate: run only the v2 dead-stack residue suite (stage 400).
 residue = []
+# Round 14: the v2 residue suite plus two positive controls (frame copy; a key word at sp - 4).
+residue-control = ["residue"]
+# Round 13 lever: the streaming / one-shot entries at speed optimisation (gate 5 runs them in the v1 probes).
+oneshot-speed = ["pqsigner-hw/oneshot-speed"]
 
 [dependencies]
 # The kit image's driver configuration (as bench_avg_v2f), against software SHA-256.

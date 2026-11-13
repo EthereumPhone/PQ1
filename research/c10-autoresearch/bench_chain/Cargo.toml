@@ -1,0 +1,63 @@
+[package]
+name = "c10-bench-chain"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+path = "src/lib.rs"
+
+[workspace]
+
+[features]
+# Round 13: the product sign chain (secure/src/crypto.rs `c10_sign_verified_with_progress_inner`)
+# with DWT phase stamps. Default = the secure image's driver today (feature `hw-sha256`: one-call
+# digests only). `research` adds the rounds 7..12 fused v1 driver paths (as bench_avg_v1).
+research = [
+    "sphincs-c10/hw-sha256-chain", "sphincs-c10/hw-sha256-search", "sphincs-c10/hw-sha256-prfchain",
+    "sphincs-c10/hw-sha256-forsleaf", "sphincs-c10/hw-sha256-forstree", "sphincs-c10/hw-sha256-grindr",
+    "sphincs-c10/hw-sha256-thmulti", "sphincs-c10/hw-sha256-forssub", "sphincs-c10/hw-sha256-grindr-drv",
+    "sphincs-c10/hw-sha256-search-colocate",
+    "pqsigner-hw/chain", "pqsigner-hw/search", "pqsigner-hw/gather", "pqsigner-hw/prfchain", "pqsigner-hw/forsleaf",
+    "pqsigner-hw/hra-ldm", "pqsigner-hw/v1-asm-chain", "pqsigner-hw/v1-asm-key", "pqsigner-hw/v1-asm-key-ga",
+    "pqsigner-hw/v1-asm-fors", "pqsigner-hw/v1-asm-fors-ga", "pqsigner-hw/v1-asm-search", "pqsigner-hw/v1-asm-search-ga",
+    "pqsigner-hw/v1-grindr",
+]
+# The product's per-digest UI tick (what `ui-px` builds today), with bench_avg_v1's stub of
+# film_tick_hash's live-film counter path (the time-paced frame draw is not modelled).
+tick = ["pqsigner-hw/tick-hook"]
+# Round 13 lever: the five streaming / one-shot entries at speed optimisation (pqsigner-hw/oneshot-speed).
+oneshot-speed = ["pqsigner-hw/oneshot-speed"]
+# Round 13: the dead-stack residue scan around the product driver entries (replaces the chain run).
+residue = []
+residue-control = ["residue"]
+# #1149's batched tick (research driver only).
+tick-batch = ["tick", "research", "pqsigner-hw/tick-batch", "sphincs-c10/hw-sha256-tickbatch"]
+
+[dependencies]
+# The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus `tick-hook`).
+sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot"] }
+pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart"] }
+pqsigner-fi = { path = "../../../pqsigner-fi" }
+subtle = { version = "2.6.1", default-features = false }
+zeroize = { version = "1.8.2", default-features = false }
+
+# Exact mirror of the root workspace's shipping [profile.release] and its per-package overrides.
+# Unlike the other bench crates, pqsigner-hw is NOT at opt-level 3 here: the root has no such
+# override, so the shipped driver builds at "z". BENCH_CARGO_ARGS='--config
+# profile.release.package.pqsigner-hw.opt-level=3' measures the other bench crates' setting.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+overflow-checks = true
+panic = "abort"
+debug = false
+
+[profile.release.package.sphincs-c10]
+opt-level = 3
+[profile.release.package.sha2]
+opt-level = 3
+[profile.release.package.hmac]
+opt-level = 3

@@ -384,7 +384,8 @@ pub const SECURE_IMAGE_ONLY: bool = cfg!(any(
     feature = "v2-asm-fors-ga",
     feature = "v2-fold-sum",
     feature = "v2-split810",
-    feature = "v2-asm-t43"
+    feature = "v2-asm-t43",
+    feature = "oneshot-speed"
 ));
 
 #[cfg(feature = "hw-sha256-crosscheck")]
@@ -838,6 +839,7 @@ fn dsb() {
 /// serialise calls to `init` / `update` / `final` — only one
 /// SHA-256 streaming computation may be in flight at a time
 /// because category-5 `static mut STATE` is shared across them.
+#[cfg_attr(feature = "oneshot-speed", optimize(speed))]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_init() {
     // SAFETY: this symbol's own FFI contract, forwarded unchanged.
@@ -926,6 +928,7 @@ unsafe fn init_body() {
 /// and properly aligned for `u8` reads, `ptr..ptr+len` all live
 /// readable memory). `pqsigner_sha256_init` must have been called
 /// first; no other SHA-256 stream may be interleaved.
+#[cfg_attr(feature = "oneshot-speed", optimize(speed))]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_update(ptr: *const u8, len: usize) {
     // SAFETY: this symbol's own FFI contract, forwarded unchanged.
@@ -1014,6 +1017,7 @@ unsafe fn update_body(ptr: *const u8, len: usize) {
 /// aligned memory. `pqsigner_sha256_init` (and zero or more
 /// `_update` calls) must precede this call; no other SHA-256 stream
 /// may be interleaved.
+#[cfg_attr(feature = "oneshot-speed", optimize(speed))]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_final(out: *mut u8) {
     // SAFETY: this symbol's own FFI contract, forwarded unchanged.
@@ -1193,6 +1197,7 @@ unsafe fn final_body_n<const W: usize>(out: *mut u8) {
 /// Category 3 — FFI symbol. `(ptr, len)` names a single valid, live byte
 /// slice and `out` 32 bytes of valid, writable memory, as for `update` and
 /// `final`; no other SHA-256 stream may be in flight.
+#[cfg_attr(feature = "oneshot-speed", optimize(speed))]
 #[cfg(feature = "oneshot")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8) {
@@ -1210,6 +1215,7 @@ pub unsafe extern "C" fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out
 ///
 /// # Safety
 /// As `pqsigner_sha256_oneshot`, with `out` naming 16 writable bytes.
+#[cfg_attr(feature = "oneshot-speed", optimize(speed))]
 #[cfg(feature = "oneshot")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, out: *mut u8) {

@@ -18,6 +18,10 @@
 
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
+// Round 13 (`oneshot-speed`, secure-only): the five streaming / one-shot SHA-256 entries are
+// optimised for speed inside the size-optimised ("z") release profile. Nightly
+// `optimize_attribute`; the FSBL never names the feature, so its bytes are unchanged.
+#![cfg_attr(feature = "oneshot-speed", feature(optimize_attribute))]
 #![warn(clippy::pedantic)]
 
 pub mod hash;

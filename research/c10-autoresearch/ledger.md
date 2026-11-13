@@ -1107,6 +1107,14 @@ Under the keep rule it is a discard. It is the fallback if the colocation landin
 
 **No signer-crate edits this round**, so no new extraction drift. `check_extraction_freshness.py` still shows the same 22 drifted pins. The round-8 `fors.rs`/`wots.rs` edits sit under targets already drifted by rounds 1–7: `sign-release`, `sign-forest`, `fors-*`, `wots-*`, `xmss-*`, `verifier`.
 
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** The residue-clean claims of this round were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** v1 7/7 clean (key loop, sign-shape keys, FORS subtree, grind with and without rand, `prf_chain16`, `chain16`); v2 9/9 clean (`wots_chains16`, `wots_pk16`, `prf_chain16`, `fors_leaf16`, `fors_subtree16` h = 4 and 7, `chain16`, `grind_r` 119 and 103 bytes); the controls fire (v1 0x180, v2 0x600).
+> - **Today's implementations pass the corrected scan.** That covers the gate's suites and E9's key loop, which is still current.
+> - **The historical runs cannot be re-validated where the code has been superseded.** E6's and E7's paths gave way to E9 and E10 and are not built in today's configuration. Their "residue gate" evidence stands only as made, on the scanner with the blind band.
+> - **Round 8's earlier scans** (the grind check; the v1 key loop and subtree, `255d55d09`) are likewise historical. The same entries as they are today pass.
+> - **Changed:** the round-13 v2 hits that the fixed scanner first showed were harness artifacts, not driver residue. `prf_chain16` and `chain16` showed the bench caller's own r5/r6, saved by the entries' `push {r4, r5, r6, r7, lr}` (Astra, from the disassembly). `wots_pk16` showed the scanner's own last pattern from the previous case, which shares its table; with the case order swapped it moved to case 0.
+
 ## Round 10 (2026-11-13): global_asm FORS and search, product-shaped measurement, v1 closing note
 
 ### E10: FORS subtree as a `global_asm!` function, keep (`c33268ebf`, generator `gen_fors_ga.py`)
@@ -1240,6 +1248,13 @@ Total practical driver headroom: about **1.5–1.7 M (~1.8%)** of a 90 M sign. T
 - **Product:** this reaches users only with the batched tick (#1149); with today's per-digest tick, v1 is about 120 M.
 - **No signer-crate edits** this round, so no new extraction drift.
 - **FSBL** byte-identical throughout.
+
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** This round's residue claims (the leak caught in E10's first build, then fixed; E10–E12 "residue gate clean"; E12's v2 cases 0/1) were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** v1 7/7 and v2 9/9 clean; controls fire.
+> - **E10 and E11 (both current) pass the corrected scan.**
+> - **E12's 8-bit v2 key loop** was superseded by E14–E16 and is not built in today's configuration, so its "residue gate clean" stands only as made, on the scanner with the blind band.
+> - **The leak caught in E10's first build was real and independently found:** it was in the observable band, at the prologue push of the asm function the Rust wrapper called. Its fix (the asm issues the first PRF) stands, and the fixed scanner finds today's entry clean.
 
 ## Round 11 (2026-11-13): v2 (research format): global_asm FORS, 32-bit DATATYPE, search
 
@@ -1407,6 +1422,12 @@ Gate 5's interleaved v1 probe had only been the byte-mode one-shot and the strea
 
 **Not done this round:** item 4b, the FORS-PRF loads. Fable estimates ~0.15 M. It is ranked second for the next batch, after the T_43 feed.
 
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** The residue-clean claims of E13–E16 (v2 FORS subtree h = 4 and 7; the dt32 key loop) were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** v2 9/9 clean, including `wots_chains16` and `wots_pk16` (the dt32 key loop of E14–E16) and `fors_subtree16` h = 4 and 7 (the dt32 FORS of E15); controls fire. So **E14, E15 and E16, which are current, pass.**
+> - **E13's 8-bit FORS** was superseded by E15 and is not built today, so its claim stands only as made.
+> - E17's search hashes only public data and is not in the suite.
+
 ## Round 12 (2026-11-13): v2 profile, T_43 feed, v2 closing note
 
 ### The round-11 landing fix (accepted, merged)
@@ -1527,3 +1548,184 @@ Total practical driver headroom is about **0.55–0.75 M (1.1–1.5%)** of a 50.
 **v1:** closed. No v1 path changed in round 12, and it was not re-measured after E18.
 
 **Signer crate:** no edits. **FSBL:** identical.
+
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** E18's residue claims ("clean in the default build and with `prf2`") were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** default v2 9/9 clean, and `prf2` 9/9 clean (`prf2` controls 0x600). **E18, which is current, passes in both builds.**
+
+## Round 13 (2026-11-13): signer-glue attribution profile (the product sign chain)
+
+**Merge:** `origin/master` `e4a1127e7` (fast-forward). The gates were unchanged:
+- v1 golden cached sign 190.35 M;
+- kdiff 32/32;
+- gate 5 2,940/0;
+- v2 golden 96.06 M plain, 63.53 M cached.
+
+### The bench (`29d51c511`)
+`bench_chain` mirrors `c10_sign_verified_with_progress_inner` (secure/src/crypto.rs) step for step:
+- the rate step and CFI bumps;
+- OptRand and the two shuffle seeds with their zero checks and wipes;
+- sign A, `wait_random`, sign B;
+- `subtle` `ct_eq` of the two 4,008-byte signatures;
+- `wait_random`, verify behind `check_true_into_sentinel`, the CFI check, the release copy.
+
+It takes 13 DWT phase stamps per chain, averaged over 16 messages, and keygen once (the slot-cache miss).
+
+**Product-shaped by default**, unlike the other bench crates:
+- the secure image's one-shot driver only;
+- `pqsigner-hw` at the root profile's `"z"`: the root has no opt-3 override for it, while every other bench crate builds it at 3;
+- generic `thumbv8m.main` with no `target-cpu`, as the firmware;
+- the shipped 1-way ICACHE.
+
+**Stubbed** (not kit-measurable on 0055002D, which has no SEs):
+- the three `rng_strong::fill` draws. The EVT measures ~0.3 s for the three together (crypto.rs comment, owner 2026-10-21), about 48 M cycles, each ending in tens of ms of FI-checked CPU work;
+- the UI progress sink, `ChipWaitTicks` and `busy_poll`;
+- the delay byte;
+- `pre_sign`'s interval (outside the inner function);
+- the film's time-paced frame draws (~8 ms frames while a film is live).
+
+### DWT phases (cycles, mean of 16 chains)
+
+| configuration | sign pass | chain | keygen (cache miss) |
+|---|---:|---:|---:|
+| **product today**: one-shot driver, per-digest tick | 242.1 M | **484.6 M (3.03 s)** | 77.6 M |
+| product, no tick | 233.4 M | 467.3 M | 74.4 M |
+| research driver, per-digest tick (asm compiles out) | 161.0 M | 322.3 M | 48.1 M |
+| **#1149**: research driver, batched tick | 91.7 M | **183.7 M (1.148 s)** | 31.4 M |
+| research driver, no tick | 91.4 M | 183.2 M | 31.4 M |
+
+In every configuration, the FI chain outside the two signs and the verify costs (re-measured with complete accounting after Astra's review). The 13 phases are contiguous from the chain's first internal stamp through the caller's extraction of the result. Only the caller's own timing overhead, 325–364 cycles per chain, lies outside them:
+- `ct_eq` 116 k;
+- the release (the return copy and the drops on the way out) 30 k;
+- the rest ~15 k (rate/CFI 2.7 k, OptRand 0.2 k, seeds 1.2 k, two delays ~3.9 k, verify gate 3.1 k, CFI check 3.3 k);
+- **0.16 M in all (0.03% today, 0.09% with #1149)**.
+
+The re-run chains are 485.8 M (product), 464.5 M (product + `oneshot-speed`, −4.4%) and 183.6 M (#1149). The bench's own code changed slightly, so these sit about 0.25% above the first runs.
+
+The verify is 0.21–0.24 M. Progress callbacks: 185 per chain. Ticks: 979 k per chain today (one per digest), 8.2 k batched.
+
+**Axes** (chain, product / #1149):
+
+| axis | product | #1149 |
+|---|---:|---:|
+| driver at opt 3 | 445.4 M (−8.1%) | 180.7 M (−1.6%) |
+| `target-cpu=cortex-m33` | 493.4 M (+1.8%) | 182.8 M (−0.5%) |
+| 2-way ICACHE | 478.6 M (−1.2%) | 183.2 M (−0.3%) |
+
+### PC-sampling attribution (`prof_classify.py`)
+
+| bucket | product today: share | product: per chain | #1149: share | #1149: per chain |
+|---|---:|---:|---:|---:|
+| HASH driver (its outlined fragments assigned by caller) | 75.6% | ~366 M | 92.4% | ~170 M |
+| signer Rust (`sign_with_shuffle` body 9.7%, `wots::keygen_pk` 6.5%) | 16.3% | ~79 M | 6.6%¹ | ~12 M |
+| memcpy / memclr (signer buffer builds and copies) | 4.2% | ~20 M | 0.7% | ~1.2 M |
+| UI tick (stub; DWT: 17.4 M / 0.5 M) | 3.9% | ~19 M | 0.1% | ~0.2 M |
+| FI chain + bench glue (DWT) | 0.03% | 0.16 M | 0.09% | 0.16 M |
+| **outside the driver** | **~24%** | **~118 M** | **~7.6%** | **~14 M** |
+
+¹ `hits_target` (5.6%) runs as the search asm's callback inside the engine window, so it is mostly overlapped. About 4 M per chain is not overlapped.
+
+**The sampling window holds about 2% keygen.** The categories exclude only `0xFFFFFFFF` (the halted core).
+- `prof_report.py`'s "drop the most common PC as the halt" heuristic dropped the hottest driver PC (the DCIS poll in `oneshot16`, 22% of samples) here, because the window ended before the bench halted.
+- The round-12 profile was not affected (its dropped PC was `0xFFFFFFFF`). Earlier ones should be read with this in mind.
+
+### Levers, ranked by measured share
+
+| # | lever | effect | owner? |
+|---:|---|---|---|
+| 1 | Land the rounds 7–12 research driver together with #1149's batched tick | chain 484.6 → 183.7 M (−62%) | **owner** |
+| 2 | `oneshot-speed` (E20, below) | product chain −4.5% (golden −6.4%), +192 B | owner to enable |
+| 3 | Driver at opt 3 via the root profile | −8.1% today, −1.6% after lever 1 | **owner** |
+| 4 | Signer memcpy / per-hash Rust overhead | 4.2% + 16.3% today, ~0.7% after lever 1 | proposal (FV) |
+| 5 | The UI tick | 3.6% today, ~0.3% batched | lever 1 |
+| 6 | The SE draws (~0.3 s, ~48 M) and film frames (~8 ms per frame while live) | not kit-measurable | owner |
+| 7 | 2-way ICACHE (−1.2% / −0.3%); `target-cpu` (worse or noise) | noise to small | owner |
+| 8 | The FI chain (0.03–0.08%) | negligible | **not touched** |
+
+1. **The research driver with #1149.** The two are inseparable: the asm paths compile out under the per-digest tick, which is why the driver alone only reaches 161 M. Owner decisions: secure flash (already over budget with `ui-px`), film cadence, and the tick-must-not-hash contract.
+2. **`oneshot-speed`** helps only until lever 1 lands. Enabling it in the product is the owner's call: flash and a nightly feature.
+3. **Driver at opt 3 through the root profile** moves the FSBL bytes, so it is the owner's call.
+4. **Signer memcpy and per-hash Rust overhead.** The sources (Fable): `chain_buf`/`chain_value` by-value copies, the `th` buffer builds, `wots_secret`'s 80-byte build plus its volatile wipe. This is a `sphincs-c10` proposal only (FV-extracted).
+5. **The UI tick.** Already covered by lever 1.
+6. **The SE draws and film frames.** These are the largest wall-clock items after lever 1. The kit has no SEs, so neither can be measured here.
+7. **2-way ICACHE and `target-cpu`.** Small or noise, and both are owner settings.
+8. **The FI chain.** Nothing to gain, and it is off limits.
+
+### E20: `oneshot-speed`, keep (`57f13afa3`; enabling it in the product is the owner's call)
+
+**What changed.** `#[cfg_attr(feature = "oneshot-speed", optimize(speed))]` on the five streaming / one-shot entries (init, update, final, oneshot, oneshot16), with the crate gate `#![cfg_attr(feature = "oneshot-speed", feature(optimize_attribute))]` (nightly). The feature implies `oneshot`, is in `SECURE_IMAGE_ONLY`, and nothing in `fsbl/` or `secure/` names it.
+- **With the feature off, nothing changes:** the FSBL is byte-identical, and the product-shaped `bench_chain` image built against the pre-E20 and the current driver is byte-identical (`01d8d41ef396…` both).
+- **With it on:** attributes only, and no FI-chain code is touched. But the five entries' machine code (layout, timing, spills) changes, and that has not been FI-evaluated (Astra). Output identity is shown by the goldens and gate 5, not by construction.
+
+**Results:**
+- the MachineOutliner fragments and the slice-index helper are gone (re-profiled);
+- product chain 484.6 → **462.8 M (−4.5%)**, keygen 77.6 → 72.1 M;
+- v1 one-shot golden in product codegen (`bench_os`, driver at `z`, generic target): cached sign 494.2 → **462.7 M (−6.4%)**;
+- text +192 B.
+
+**Evidence:**
+- `golden.bin` bytes equal, with and without the feature;
+- gate 5 2,940/0 in product codegen both ways (1,125 one-shot and streaming probes against software SHA-256);
+- a new residue mode in `bench_chain`: `oneshot16` on the `wots_secret` preimage, `oneshot` on a secret-PRF preimage, and streaming with the key in its own update. Clean with and without the feature; the positive control (`residue-control`) fires;
+- FSBL identical (`e34d6e8ecabb3109f8ca`);
+- landing tests: research features 27 → 28, and the attribute is pinned to exactly the five entries under the feature, with the crate gate behind it. Plants S1b, S2, S3, S4 and S5 are caught; S1 is stopped by the compile;
+- full plant set: 57 caught by the tests, 6 stopped by the host compile;
+- secure suite 2,984/0; FSBL footprint ok.
+
+**Residue scanner: two defects found and fixed (Astra review plus an endpoint control).** `residue.rs` is shared by the standing gate since round 9.
+- **The 64 bytes below sp were scanned but never cleared.** The bench's own `res_add` frame could read as a residue there: mask 0x7 at sp−60 in `bench_chain`. `res_clear` now clears up to sp; interrupts are masked and nothing below sp is live.
+- **The words nearest sp were never truly observed.** The loop stopped at `a < sp − 4`. Worse, at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` are out-of-line calls whose pushes overwrite the band being scanned before it is read.
+  - A new endpoint control (a key word written at sp−4) did not fire until the loads became one inline-asm `ldr` (`res_ld`) and the pattern test a call-free loop. Both positive controls now fire (mask 0x18).
+  - Rounds 9–12's gate therefore had a blind band of the top few words below sp. That is where a driver entry's prologue pushes the caller's callee-saved registers.
+
+**With the fixed scanner:**
+- the v1 suite is clean (7 cases);
+- the product one-shot cases are clean, with and without `oneshot-speed`;
+- **the v2 suite flags 0x44–0x46** (`prf_chain16` and `chain16`, and in one build `wots_pk16`). The hits sit at sp−16 and sp−12, which are the r5 and r6 slots of the entries' `push {r4, r5, r6, r7, lr}`. These are values the bench caller held in callee-saved registers, saved as AAPCS requires: the round-10 "caller-held secret spilled by the prologue" class, and codegen-sensitive.
+  - **Astra confirmed it from the disassembly:** the bench's software pattern computation leaves its final word in r5 before `prf_chain16` and in r6 before `chain16`. The recomputed words (`0x3eebfed4`, `0xeacefe30`) match the logs. These are not driver spills.
+  - The `wots_pk16` hit (one build only) has no diagnostic evidence yet.
+
+Separating bench-held from driver-held values needs the v2 suite to compute its patterns outside the calling frame. Until then the v2 standing residue gate is red for that reason. E20 does not touch those entries.
+
+For the product, the open question is whether the signer holds secrets in callee-saved registers across driver calls. That is signer codegen, so a proposal only.
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** "The v2 standing residue gate is red" (above) is **resolved: the hits were harness artifacts and the gate is green.**
+> - The v2 suite now computes its patterns out of line and runs each case in its own frame.
+> - `prf_chain16` and `chain16` were the bench caller's r5/r6 values.
+> - `wots_pk16` was the scanner's own last-loaded pattern from the previous case (case 0's table is identical to case 1's), saved by the next entry's prologue. Swapping the order moved the hit to case 0, with the same word and the same pattern index 1583 of 1584.
+> - No driver change was needed. The product's open question (does the signer hold secrets in callee-saved registers across driver calls) remains a signer-side proposal.
+
+## Round 14 (2026-11-14): residue finding — isolate, diagnose, correct the record
+
+**Isolation (`bench_v2drv`, residue mode).**
+- The secrets live in statics, written by an out-of-line `res_setup`.
+- Each case's patterns are computed by an out-of-line `res_pats`, so the calling frame never loads a secret byte.
+- Each case's clear, driver call and scan run in an out-of-line `res_case` frame. A pattern the scan leaves in a callee-saved register is restored on return and cannot reach the next case's driver prologue.
+- The caller passes only static addresses and public A7 words.
+
+**Diagnosis of the round-13 hits.**
+
+| entry | round-13 hit | under isolation | cause |
+|---|---|---|---|
+| `prf_chain16` | sp − 16 (`0x3eebfed4`) | clean | the bench's software pattern computation left its last word in r5; the entry's `push {r4, r5, r6, r7, lr}` saved it (Astra, disassembly) |
+| `chain16` | sp − 12 (`0xeacefe30`) | clean | the same, r6 |
+| `wots_pk16` | sp − 12 (`0x327590f0`, pattern 1583 of 1584) | clean | the previous case's scan left its last pattern (the same table) in r6; the entry's prologue saved it. With the order swapped, case 0 flags instead, with the same word and index |
+
+**Per-entry verdict under the fixed scanner** (`gate_residue.sh`, extended: each suite's `residue-control` build must flag its two positive controls, a frame copy of the key and a key word at sp − 4, and nothing else):
+
+| suite | entries | verdict | controls |
+|---|---|---|---|
+| v1 (`bench_v1micro`, 7) | key loop, sign-shape keys, FORS subtree, grind with and without rand, `prf_chain16`, `chain16` | **clean** | 0x180 (both fire) |
+| v2 (`bench_v2drv`, 9) | `wots_chains16`, `wots_pk16`, `prf_chain16`, `fors_leaf16`, `fors_subtree16` h4 / h7, `chain16`, `grind_r` 119 / 103 | **clean** | 0x600 (both fire) |
+| v2 with `prf2` | the same 9 | **clean** | 0x600 |
+| product (`bench_chain`, 3) | `oneshot16` on the `wots_secret` preimage, `oneshot` on a secret-PRF preimage, streaming with the key in its own update | **clean** (round 13: also with `oneshot-speed`) | 0x18 (both fire) |
+
+**No driver fix was needed**, so no goldens, kdiff, gate 5 or FSBL re-runs: no driver code changed this round. The rounds 9–12 records carry dated UPDATE notes:
+- every entry as it is today passes the corrected scan;
+- the superseded implementations (E6, E7, E12, E13) cannot be re-validated, so their claims stand only as made on the old scanner;
+- E10's independently found wrapper spill and its fix stand;
+- the only changed verdict is round 13's interim "v2 gate red".
+
+**Coverage limit (Astra):** selected inputs and patterns within 4 KiB of dead stack. Not signer-held secrets, not arbitrary configurations, and not all leakage.
+
+**Gate acceptance (Astra):** the v1 control build is now judged by a control-aware `experiment_v1micro.sh`. It must complete with every other correctness check passing, so a faulted control run fails the gate.

@@ -175,105 +175,212 @@ include!("../../residue.rs");
 /// dead stack, the call, the scan. Returns (cases, bitmask of cases with residue). Bits:
 /// 0 wots_chains16, 1 wots_pk16, 2 prf_chain16, 3 fors_leaf16, 4 fors_subtree16 h=4,
 /// 5 fors_subtree16 h=7, 6 chain16 from a secret, 7 grind_r 119 B, 8 grind_r 103 B.
+///
+/// Round 14: the calling frame holds no secret. The secrets are generated into statics by
+/// `res_setup` and each case's patterns are computed by `res_pats`, both out of line, so the
+/// caller's callee-saved registers never carry a secret word into a driver entry's prologue
+/// push (round 13 found the bench's own r5/r6 there). The caller passes only static addresses
+/// and public A7 words. Each case's nearest hit is recorded as (sp - address) << 16 | the low
+/// 16 bits of the word, in result words 20 + bit.
 #[cfg(feature = "residue")]
-fn residue_suite(rng: &mut Rng) -> (u32, u32) {
-    let mut mask = 0u32;
-    let (mut sk, mut s) = ([0u8; 32], [0u8; 16]);
-    rng.fill(&mut sk);
-    rng.fill(&mut s);
-    let (layer, tree, kp) = (1u64, 0x2_3456u64, u64::from(rng.below(KP_RANGE)));
-    let ((p0, p1), (a0, a1), (k0, k1)) =
-        (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)), words(a7(1, layer, tree, kp, 0, 0, 0)));
-    let mut o = [0u8; 688];
-    let key_pats = || {
-        res_reset();
-        res_add(&sk);
-        for ci in 0..43u64 {
-            let mut v = prf(&sk, a7(5, layer, tree, kp, ci, 0, 0));
-            res_add(&v);
-            if ci < 8 {
-                for p in 0..6u64 {
-                    v = f(&s, &v, a7(0, layer, tree, kp, ci, p, 0));
-                    res_add(&v);
+static mut RSK: [u8; 32] = [0; 32];
+#[cfg(feature = "residue")]
+static mut RS: [u8; 16] = [0; 16];
+#[cfg(feature = "residue")]
+static mut RV: [u8; 16] = [0; 16];
+#[cfg(feature = "residue")]
+static mut RPB: [u8; 119] = [0; 119];
+#[cfg(feature = "residue")]
+static mut RHB: [u8; 87] = [0; 87];
+#[cfg(feature = "residue")]
+static mut RO: [u8; 688] = [0; 688];
+
+/// The public A7 parameters of the suite.
+#[cfg(feature = "residue")]
+#[derive(Clone, Copy)]
+struct RParams {
+    layer: u64,
+    tree: u64,
+    kp: u64,
+    ht: u64,
+    tt: u64,
+}
+
+#[cfg(feature = "residue")]
+#[inline(never)]
+fn res_setup(rng: &mut Rng) {
+    // SAFETY: single-threaded bench statics.
+    unsafe {
+        rng.fill(&mut *core::ptr::addr_of_mut!(RSK));
+        rng.fill(&mut *core::ptr::addr_of_mut!(RS));
+    }
+}
+
+/// Case `bit`'s patterns into the pattern table (and, for chain16 and the grind, the secret
+/// inputs into their statics). Out of line: its registers are restored on return.
+#[cfg(feature = "residue")]
+#[inline(never)]
+fn res_pats(bit: u32, q: RParams, rng: &mut Rng) {
+    // SAFETY: single-threaded bench statics.
+    let (sk, s) = unsafe { (*core::ptr::addr_of!(RSK), *core::ptr::addr_of!(RS)) };
+    let (layer, tree, kp, ht, tt) = (q.layer, q.tree, q.kp, q.ht, q.tt);
+    res_reset();
+    match bit {
+        0 | 1 => {
+            res_add(&sk);
+            for ci in 0..43u64 {
+                let mut v = prf(&sk, a7(5, layer, tree, kp, ci, 0, 0));
+                res_add(&v);
+                if ci < 8 {
+                    for p in 0..6u64 {
+                        v = f(&s, &v, a7(0, layer, tree, kp, ci, p, 0));
+                        res_add(&v);
+                    }
                 }
             }
         }
-    };
-    // SAFETY (all calls): valid buffers of the documented sizes; arguments in range.
-    unsafe {
-        key_pats();
-        res_clear();
-        pqsigner_v2_wots_chains16(sk.as_ptr(), p0, p1, s.as_ptr(), a0, a1, 7, o.as_mut_ptr());
-        if res_found() { mask |= 1 << 0; }
-        key_pats();
-        res_clear();
-        pqsigner_v2_wots_pk16(sk.as_ptr(), p0, p1, s.as_ptr(), a0, a1, k0, k1, 7, o.as_mut_ptr());
-        if res_found() { mask |= 1 << 1; }
-        // prf_chain16, chain 5, 6 steps.
-        let (q0, q1) = words(a7(5, layer, tree, kp, 5, 0, 0));
-        let (b0, b1) = words(a7(0, layer, tree, kp, 5, 0, 0));
-        res_reset();
-        res_add(&sk);
-        let mut v = prf(&sk, a7(5, layer, tree, kp, 5, 0, 0));
-        res_add(&v);
-        for p in 0..5u64 {
-            v = f(&s, &v, a7(0, layer, tree, kp, 5, p, 0));
+        2 => {
+            res_add(&sk);
+            let mut v = prf(&sk, a7(5, layer, tree, kp, 5, 0, 0));
             res_add(&v);
+            for p in 0..5u64 {
+                v = f(&s, &v, a7(0, layer, tree, kp, 5, p, 0));
+                res_add(&v);
+            }
         }
-        res_clear();
-        pqsigner_v2_prf_chain16(sk.as_ptr(), q0, q1, s.as_ptr(), b0, b1, 6, o.as_mut_ptr());
-        if res_found() { mask |= 1 << 2; }
-        // FORS: leaf, subtrees of height 4 and 7.
-        let (ht, tt) = (0x1_2345u64, 7u64);
-        let j = 1234u64;
-        let ((f0, f1), (l0, l1)) = (words(a7(6, 0, ht, tt, 0, 0, j)), words(a7(3, 0, ht, tt, 0, 0, j)));
-        res_reset();
-        res_add(&sk);
-        res_add(&prf(&sk, a7(6, 0, ht, tt, 0, 0, j)));
-        res_clear();
-        pqsigner_v2_fors_leaf16(sk.as_ptr(), f0, f1, s.as_ptr(), l0, l1, o.as_mut_ptr());
-        if res_found() { mask |= 1 << 3; }
-        let ((g0, g1), (m0, m1)) = (words(a7(6, 0, ht, tt, 0, 0, 0)), words(a7(3, 0, ht, tt, 0, 0, 0)));
-        for (bit, h, j0) in [(4u32, 4u32, 16 * 21u32), (5, 7, 128 * 5)] {
-            res_reset();
+        3 => {
+            res_add(&sk);
+            res_add(&prf(&sk, a7(6, 0, ht, tt, 0, 0, 1234)));
+        }
+        4 | 5 => {
+            let (h, j0) = if bit == 4 { (4u32, 16 * 21u32) } else { (7, 128 * 5) };
             res_add(&sk);
             for jj in j0..j0 + (1 << h) {
                 res_add(&prf(&sk, a7(6, 0, ht, tt, 0, 0, u64::from(jj))));
             }
-            res_clear();
-            pqsigner_v2_fors_subtree16(sk.as_ptr(), s.as_ptr(), g0, g1, m0, m1, j0, h, o.as_mut_ptr());
-            if res_found() { mask |= 1 << bit; }
         }
-        // chain16 from a secret start (chain 9), 6 steps.
-        let base = a7(0, layer, tree, kp, 9, 0, 0);
-        let (c0, c1) = words(base);
-        let mut v = prf(&sk, a7(5, layer, tree, kp, 9, 0, 0));
-        res_reset();
-        let mut w = v;
-        res_add(&w);
-        for p in 0..5u64 {
-            w = f(&s, &w, base | p << 12);
+        6 => {
+            let base = a7(0, layer, tree, kp, 9, 0, 0);
+            let v = prf(&sk, a7(5, layer, tree, kp, 9, 0, 0));
+            // SAFETY: single-threaded bench static.
+            unsafe { *core::ptr::addr_of_mut!(RV) = v };
+            let mut w = v;
             res_add(&w);
+            for p in 0..5u64 {
+                w = f(&s, &w, base | p << 12);
+                res_add(&w);
+            }
         }
-        res_clear();
-        pqsigner_v2_chain16(s.as_ptr(), v.as_mut_ptr(), c0, c1, 0, 6);
-        if res_found() { mask |= 1 << 6; }
-        // grind_r: the PRF preimage's sk_seed bytes (0..32) and, at 119 B, rand (39..55).
-        for (bit, len) in [(7u32, 119usize), (8, 103)] {
-            let (mut pb, mut hb) = ([0u8; 119], [0u8; 87]);
-            rng.fill(&mut pb);
-            rng.fill(&mut hb);
-            pb[..32].copy_from_slice(&sk);
-            res_reset();
-            res_add(&pb[..32]);
-            if len == 119 { res_add(&pb[39..55]); }
-            res_clear();
-            let (mut gr, mut gd) = ([0u8; 16], [0u8; 32]);
-            let _ = pqsigner_v2_grind_r(pb.as_ptr(), len as u32, hb.as_ptr(), 0, 3000, gr.as_mut_ptr(), gd.as_mut_ptr());
-            if res_found() { mask |= 1 << bit; }
+        _ => {
+            // SAFETY: single-threaded bench statics.
+            unsafe {
+                let pb = &mut *core::ptr::addr_of_mut!(RPB);
+                rng.fill(pb);
+                rng.fill(&mut *core::ptr::addr_of_mut!(RHB));
+                pb[..32].copy_from_slice(&sk);
+                res_add(&pb[..32]);
+                if bit == 7 {
+                    res_add(&pb[39..55]);
+                }
+            }
         }
     }
-    (9, mask)
+}
+
+/// The public driver arguments of the suite (A7 words), computed once by the caller.
+#[cfg(feature = "residue")]
+#[derive(Clone, Copy)]
+struct RArgs {
+    w: [u32; 20],
+}
+
+/// Positive control (`residue-control`, case 9): copies the key into its own frame and returns.
+#[cfg(feature = "residue")]
+#[inline(never)]
+fn res_leak() {
+    let mut f = [0u8; 48];
+    for (k, b) in f.iter_mut().enumerate() {
+        // SAFETY: single-threaded bench static, 32 bytes.
+        *b = unsafe { core::ptr::addr_of!(RSK).cast::<u8>().add(k % 32).read_volatile() };
+    }
+    core::hint::black_box(&f);
+}
+
+/// One case in a frame of its own: clear, the driver call, the scan. Round 14: the scan's last
+/// pattern can stay in a callee-saved register; in its own frame that register is restored on
+/// return, so it cannot reach the next case's driver prologue (round 13's single `wots_pk16`
+/// hit was exactly that: case 0's last pattern, which case 1 shares, saved at sp - 12).
+#[cfg(feature = "residue")]
+#[inline(never)]
+fn res_case(bit: u32, x: &RArgs) -> bool {
+    let w = x.w;
+    let sk = core::ptr::addr_of!(RSK).cast::<u8>();
+    let s = core::ptr::addr_of!(RS).cast::<u8>();
+    let o = core::ptr::addr_of_mut!(RO).cast::<u8>();
+    res_clear();
+    // SAFETY (all calls): the statics are valid buffers of the documented sizes; arguments in range.
+    unsafe {
+        match bit {
+            0 => pqsigner_v2_wots_chains16(sk, w[0], w[1], s, w[2], w[3], 7, o),
+            1 => pqsigner_v2_wots_pk16(sk, w[0], w[1], s, w[2], w[3], w[4], w[5], 7, o),
+            2 => pqsigner_v2_prf_chain16(sk, w[6], w[7], s, w[8], w[9], 6, o),
+            3 => pqsigner_v2_fors_leaf16(sk, w[10], w[11], s, w[12], w[13], o),
+            4 => pqsigner_v2_fors_subtree16(sk, s, w[14], w[15], w[16], w[17], 16 * 21, 4, o),
+            5 => pqsigner_v2_fors_subtree16(sk, s, w[14], w[15], w[16], w[17], 128 * 5, 7, o),
+            6 => pqsigner_v2_chain16(s, core::ptr::addr_of_mut!(RV).cast::<u8>(), w[18], w[19], 0, 6),
+            7 | 8 => {
+                let len = if bit == 7 { 119u32 } else { 103 };
+                let (mut gr, mut gd) = ([0u8; 16], [0u8; 32]);
+                let _ = pqsigner_v2_grind_r(
+                    core::ptr::addr_of!(RPB).cast::<u8>(),
+                    len,
+                    core::ptr::addr_of!(RHB).cast::<u8>(),
+                    0,
+                    3000,
+                    gr.as_mut_ptr(),
+                    gd.as_mut_ptr(),
+                );
+            }
+            9 => res_leak(),
+            _ => {
+                // Positive control (`residue-control`, case 10): a key word just below sp.
+                let sp = res_sp();
+                core::ptr::write_volatile((sp - 4) as *mut [u8; 4], *sk.cast::<[u8; 4]>());
+            }
+        }
+    }
+    if !res_found() {
+        return false;
+    }
+    let (off, wd) = res_first_hit();
+    out(20 + (bit as usize).min(8), (off as u32) << 16 | (wd & 0xFFFF));
+    out(29, wd);
+    true
+}
+
+#[cfg(feature = "residue")]
+fn residue_suite(rng: &mut Rng) -> (u32, u32) {
+    let mut mask = 0u32;
+    res_setup(rng);
+    let q = RParams { layer: 1, tree: 0x2_3456, kp: u64::from(rng.below(KP_RANGE)), ht: 0x1_2345, tt: 7 };
+    let (layer, tree, kp, ht, tt) = (q.layer, q.tree, q.kp, q.ht, q.tt);
+    let ((p0, p1), (a0, a1), (k0, k1)) =
+        (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)), words(a7(1, layer, tree, kp, 0, 0, 0)));
+    let (q0, q1) = words(a7(5, layer, tree, kp, 5, 0, 0));
+    let (b0, b1) = words(a7(0, layer, tree, kp, 5, 0, 0));
+    let ((f0, f1), (l0, l1)) = (words(a7(6, 0, ht, tt, 0, 0, 1234)), words(a7(3, 0, ht, tt, 0, 0, 1234)));
+    let ((g0, g1), (m0, m1)) = (words(a7(6, 0, ht, tt, 0, 0, 0)), words(a7(3, 0, ht, tt, 0, 0, 0)));
+    let (c0, c1) = words(a7(0, layer, tree, kp, 9, 0, 0));
+    let x = RArgs { w: [p0, p1, a0, a1, k0, k1, q0, q1, b0, b1, f0, f1, l0, l1, g0, g1, m0, m1, c0, c1] };
+    let n = if cfg!(feature = "residue-control") { 11u32 } else { 9 };
+    for bit in 0..n {
+        // The controls (9, 10) use case 0's table, which holds the key.
+        res_pats(if bit >= 9 { 0 } else { bit }, q, rng);
+        if res_case(bit, &x) {
+            mask |= 1 << bit;
+        }
+    }
+    (n, mask)
 }
 
 /// The v1 count-search predicate for the control: about 1 in 64 (the digest's last byte only).

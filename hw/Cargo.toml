@@ -110,6 +110,8 @@ oneshot = []
 # a back-to-back boot self-test through both entry points. Secure image
 # only, as `unrolled-io`; the FSBL keeps the per-digest reset.
 init-restart = ["oneshot"]
+# Round 13: the streaming / one-shot entries at speed optimisation inside the "z" profile (secure-only).
+oneshot-speed = ["oneshot"]
 
 [dependencies.cortex-m-semihosting]
 workspace = true
