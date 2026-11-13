@@ -650,3 +650,103 @@ Draft 0.3 is byte-identical with every flag off.
   - v1: suite 82/0; kit 233,078,450; track B 163,351,100 (3 hits).
   - 0.3: golden passes plain and with the cache; mean 65,593,849 (65,593,725 before the edits); gate 5 2,091/0.
   - Option bytes identical to the baseline.
+
+## Round 7 (2026-11-13): driver wave, output-identical only
+
+The owner asked for a wave with new hypotheses, noting there is "still a bit of juice left in the hash driver", and asked that no security bound change. This wave therefore takes output-identical changes only: no format, parameter or preimage change. Fable's list is `fable-hypotheses-6.md`.
+
+### Test zero: what the HASH peripheral actually costs [measured, `bench_v2micro` probes 8–11]
+
+| quantity | cycles |
+|---|---:|
+| DIN store, back to back (unrolled asm) | **1.0** |
+| SR load, HR load | **1.0** each |
+| DCAL → DCIS (spin-threshold probe: 19 × 3-cycle spins, then one SR read) | ~60 |
+| DCAL → DCIS seen by a tight poll | 69 |
+| DCIS → BUSY clear | ~9 |
+| INIT, 10 DIN, DCAL, DCIS, HR read + SR clear, BUSY clear (one tight step) | 96 |
+| a 39-cycle gap between INIT and the first DIN | adds 38: INIT needs no settle time |
+
+- **The bus is zero-wait.** Fable's model assumed 2.6 cycles per access, taken from the context-restore burst figure. At 1 cycle per access, the per-digest excess is serial CPU work between DCIS and the next DCAL, plus poll-phase lag, not bus cost.
+- **The chain step:** the steady state is 111 cycles (per-call overhead fitted out), against a floor of about 96.
+
+### H1: `v2-asm-chain`, keep (commit `a7d048304`)
+
+**What changed.** A hand-scheduled chain loop in inline asm, shared by `chain16`, `prf_chain16` and `wots_chains16`:
+- `S` stays in r8..r11, the HR read lands in r0..r3, and the CR value is pinned in `lr`;
+- loop control runs inside the engine window;
+- a timed spin precedes a single first DCIS poll, whose hit falls through;
+- straight-line and counted slow polls sit out of line.
+
+**Checks kept:** the same as the Rust loop. BUSY spin with a 2^24 guard, stale-DCIS tripwire, DCIS poll with a 2^24 guard, SR clear.
+
+**Asm without the timed poll:** 116.3, no change. The compiler's critical path was the same length.
+
+**Timed-spin sweep** (cycles per `chain16` digest):
+
+| spin | 12 | 13 | 14 | 15 | 16 | 18 | 20 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| cycles | 108.0 | **103.3** | 107.1 | 110.8 | 114.5 | 122.0 | 129.5 |
+
+Spin 13 gives a steady state of about 97 cycles, at the floor. One step early costs about 5 cycles; late costs the overshoot.
+
+**Microbench:** `chain16` 116.2 → 103.3, `wots_chains16` 117.0 → 106.2, `wots_pk16` 120.5 → 109.8.
+
+**16-message mean:** sign 65.59 → **61.81 M (−5.8%)**, keygen 21.58 → 19.69 M (−8.8%), est. cached sign 0.821 → 0.773 s.
+
+**Evidence:**
+- gate 5: 2,091/0;
+- guard halt;
+- a **new stale-DCIS control** (`bench_v2drv --features stale`): a digest left uncleared must make `chain16` fault. It fires on asm and on the Rust loop. The positive control (cleared) completes. A mutant asm with the stale check removed passes the stale digest through (stage 301, caught); restored, it faults.
+- kit golden;
+- golden + cache: 3 hits, m0 cached 0.497 s.
+
+### H2: `v2-asm-search`, keep (commit `b3e488e25`)
+
+**What changed.** A hand-scheduled count search:
+- HR3..HR7 in one `ldm`, and `S‖m` via two `ldm`;
+- the CR value in `lr`;
+- the digit sum and exact early reject moved entirely into the next try's engine window;
+- a timed first poll;
+- hit handling stays in the existing Rust (drain the try in flight, recompute, collect 8 words).
+
+**First attempt:** the same `g24` sum in asm was 134–138 per try. The sum overran the engine window: each spin iteration added directly to the time per try.
+
+**Exact sum, re-derived:**
+- ten whole 3-bit digits per word (w7, w6 >> 1, w5 >> 2, plus the two straddling digits);
+- paired under A = 0o0707070707, folded to 12-bit fields, summed by one multiply by 0x01001001.
+
+**A first version was wrong** and the microbench caught it. It multiplied by 0x01041041 over 6-bit fields; the next partial product lands at bit 30, inside the 7-bit result. It found hits after 45,148 tries instead of 249,343.
+
+**The fold version:**
+- was checked in Python against the reference digit sum on 300k vectors, including all-7 and patterned words, before the kit run;
+- finds the same 249,343 tries.
+
+**Microbench:** early reject 137 → 114 cycles per try; real target 205: 140 → 115.1.
+
+**16-message mean:** sign 61.81 → **60.07 M (−2.8%)**.
+
+**Evidence:**
+- gate 5: 2,091/0, search group 0;
+- a **stale-search control**, its positive control, and a mutant (the stale check removed: caught, stage 301), then restored;
+- kit golden; golden + cache: m0 cached 0.482 s.
+
+### Round 7 standing (v2 0.3 format, 16-message mean, kit at 160 MHz)
+
+| | mean sign | est. cached sign | with top cache (m0, kit golden) |
+|---|---:|---:|---:|
+| start of round 7 | 65.59 M | 0.821 s | 0.521 s |
+| **after H1 + H2** | **60.07 M (−8.4%)** | **0.752 s** | **0.482 s** |
+
+- **v1 (deployed format):** unchanged. Kit golden 233,078,552.
+- **FSBL:** `make fsbl BOARD=iota2` image byte-identical to the round's parent (every addition is behind `v2-asm-*`, which the FSBL never names).
+- **Security:** output-identical, so the scheme and its bounds are unchanged; same FI checks. The asm is new review surface, and it replaces Rust that had no FV coverage either: the driver is not extracted.
+
+### Not done, next
+
+- **`fors_subtree16`:** 142.4 per digest against a ~100 floor, 79.8k digests per pass, ≤ ~3 M. The same treatment applies, but the tree bookkeeping makes it the largest asm piece.
+- **v1:**
+  - the timed-poll treatment for `chain_steps` (two-block messages, so only the poll lag and post-DCIS path move);
+  - Fable's item 13, the `search128` digit sum and early reject in the driver. Not yet measured: v1's two-block try gives the predicate a ~130-cycle window, so the gain may be smaller than Fable's 3–5 M.
+- **Group B** (owner decisions): dropping the per-digest SR clear; #1151's no-BUSY-wait. On the asm loops, BUSY clears within the post-DCIS work, so the latter is now worth less.
+- **Bench-side tuning only:** the timed-spin constants (13, 1) are tuned on this kit at 160 MHz with ICACHE 2-way; a different clock or code placement needs a re-sweep. An early poll costs a few cycles, a late one the overshoot.
