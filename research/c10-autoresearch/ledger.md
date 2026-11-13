@@ -407,3 +407,5 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 - Per-key WOTS chains: `prf_chain16` is 65% of samples and engine-bound, so ≤ about 2%.
 - The search collect reads 8 HR words where 5 suffice: about 0.5 M.
 - Loop micro-tuning in the subtree entry: about 1 M.
+
+**Control for the Rust re-check:** a `host_v2f` mirror that reports a false hit (count `start + 1` with the wrong sum) stops the sign at `wots.rs:125` ("v2 grind: driver digit sum disagrees"). Restored: GOLDEN OK. Note: the `e7dc446bd` message says keygen and verify are unchanged; that was measured before the `pack` asserts went into the same commit (see the table above).
