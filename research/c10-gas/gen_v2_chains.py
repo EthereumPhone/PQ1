@@ -75,6 +75,41 @@ def block_bytes(indent=I, split810=False):
     return "\n".join(out) + "\n"
 
 
+def block_bytes_loop(indent=I, split810=False):
+    """Size option "no B4": byte-wise A7, chains unrolled, steps as a loop over cp."""
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)"]
+    for i in range(43):
+        ci = f"or(kb, {2 * i})" if split810 else f"{4 * i}"
+        out += [f"{indent}calldatacopy(0x10, add(wotsPtr, {16 * i}), 16) // chain {i}",
+                f"{indent}mstore8(0x24, {ci}) // A7 byte 4: ci",
+                f"{indent}for {{ let p := {_digit16(i)} }} lt(p, 0x70) {{ p := add(p, 0x10) }} {{",
+                f"{indent}    mstore8(0x25, p)",
+                f"{indent}    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))",
+                f"{indent}}}",
+                f"{indent}mstore(add(TB, {24 + 16 * i}), mload(0x10))"]
+    out.append(f"{indent}// END generated chains")
+    return "\n".join(out) + "\n"
+
+
+def block_bytes_rolled(indent=I, split810=False):
+    """Size option "compact": byte-wise A7, one loop over the 43 chains, steps as a loop."""
+    ci = "or(kb, shr(3, o))" if split810 else "shr(2, o)"
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)",
+           f"{indent}let dd := d",
+           f"{indent}for {{ let o := 0 }} lt(o, 688) {{ o := add(o, 16) }} {{ // o = 16 * chain index",
+           f"{indent}    calldatacopy(0x10, add(wotsPtr, o), 16)",
+           f"{indent}    mstore8(0x24, {ci}) // A7 byte 4: ci",
+           f"{indent}    for {{ let p := shl(4, and(dd, 7)) }} lt(p, 0x70) {{ p := add(p, 0x10) }} {{",
+           f"{indent}        mstore8(0x25, p)",
+           f"{indent}        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))",
+           f"{indent}    }}",
+           f"{indent}    mstore(add(add(TB, 24), o), mload(0x10))",
+           f"{indent}    dd := shr(3, dd)",
+           f"{indent}}}",
+           f"{indent}// END generated chains"]
+    return "\n".join(out) + "\n"
+
+
 def block_v1(indent=I):
     """The same blocks for the v1 (32-byte) layout: value word at 0x40 (low half zero), ADRS word
     at 0x20 = wotsAdrs | i<<64 | p<<32, 96-byte preimage, endpoint to TB + 0x40 + 32 i."""

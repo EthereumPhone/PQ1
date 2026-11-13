@@ -12,7 +12,8 @@ Each level hashes S || L16 || R16 || A7 in place:
 The per-level slots and (cp, ha) pairs come from two words (cpha, slots) computed once per walk with one MUL
 each (lines tagged C10-LANES; exhaustive unit gate test/gas/C10Lanes.t.sol):
   cpha  = (t * K2 & M2) | C2: 16-bit lane h-1 (from the top) = h<<12 | (t>>h)<<1, h = 1..11;
-  slots = (t * K1 & M1) + M1: byte 2k+1 = 0x10 + 16 * bit k of t, k = 0..10.
+  slots = sbit + C - (sbit << 8), sbit = t * K1 & M1: byte 2k+1 = 0x10 + 16 * bit k of t (the slot
+          of the node at height k), byte 2k = 0x30 - that (the slot of its sibling), k = 0..10.
 Valid for t < 2^11 (FORS tree index, hypertree leaf index of height <= 11).
 
   --check FILE [split810]   fail if the file's blocks differ from this output
@@ -25,14 +26,15 @@ LANES = [
     "let cpha := or(and(mul(t, 0x1000080004000200010000800040002000100008000400000000000000000), "
     "0x7fe03fe01fe00fe007e003e001e000e00060002000000000000000000000000), "
     "0x100020003000400050006000700080009000a000b00000000000000000000000) // C10-LANES",
-    "let slots := add(and(mul(t, 0x10000800040002000100008000400020001000080004000000000000000000), "
-    "0x10001000100010001000100010001000100010001000000000000000000000), "
+    "let sbit := and(mul(t, 0x10000800040002000100008000400020001000080004000000000000000000), "
     "0x10001000100010001000100010001000100010001000000000000000000000) // C10-LANES",
+    "let slots := sub(add(sbit, 0x2010201020102010201020102010201020102010201000000000000000000000), "
+    "shl(8, sbit)) // C10-LANES",
 ]
 
 
 def level(ind, h, ptr, out):
-    return [f"{ind}calldatacopy(sub(0x30, byte({2 * h - 1}, slots)), add({ptr}, {16 * (h - 1)}), 16)",
+    return [f"{ind}calldatacopy(byte({2 * h - 2}, slots), add({ptr}, {16 * (h - 1)}), 16)",
             f"{ind}mstore(0x35, shl({16 * (h - 1)}, cpha))",
             f"{ind}pop(staticcall(gas(), 0x02, 0x00, 55, {out}, 16))"]
 
