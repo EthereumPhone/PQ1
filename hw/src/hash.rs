@@ -2143,56 +2143,12 @@ fn v2_collect(d: &mut [u32; 8]) {
     }
 }
 
-/// v2 WOTS+C count search: the first `c` in `start..start + n` whose digest
-/// satisfies `pred` (digest to `out`), else `start + n`. Try `c + 1` is in the
-/// engine while `pred` checks `c`, as `search128`.
-///
-/// # Safety
-/// `sm` 32 readable bytes (`S ‖ m`), `out` 32 writable; `pred` reads only its
-/// argument; `start + n` does not overflow; no other stream in flight.
-#[cfg(feature = "v2")]
-#[no_mangle]
-pub unsafe extern "C" fn pqsigner_v2_search43(
-    sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8,
-) -> u32 {
-    let end = start + n;
-    if n == 0 {
-        return end;
-    }
-    // SAFETY: caller contract (32 readable bytes).
-    let w: [u32; 8] = core::array::from_fn(|i| unsafe { sm.add(4 * i).cast::<u32>().read_unaligned() });
-    let mut d = [0u32; 8];
-    v2_issue43(&w, start, a0, a1);
-    let mut c = start;
-    loop {
-        v2_collect(&mut d);
-        let next = c + 1;
-        let more = next != end;
-        if more {
-            v2_issue43(&w, next, a0, a1);
-        }
-        // SAFETY: `d` is 32 readable bytes.
-        if unsafe { pred(d.as_ptr().cast::<u8>()) } {
-            if more {
-                let mut discard = [0u32; 8];
-                v2_collect(&mut discard);
-            }
-            // SAFETY: `out` names 32 writable bytes.
-            unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
-            return c;
-        }
-        if !more {
-            return end;
-        }
-        c = next;
-    }
-}
-
-/// v2 WOTS+C digit sum of a digest given as its first five words in memory
-/// order (big-endian, from `read_hr`): the top 129 bits, 43 three-bit digits
-/// (spec 0.2). Five 24-bit groups of eight digits, then the last three.
-/// Wrapping arithmetic: the release profile keeps overflow checks, and this is
-/// the grind's inner loop.
+/// WOTS+C digit sum in v1's digit position (spec 0.3): digit i = bits
+/// 3i..3i+2 of the digest as a 256-bit big-endian integer, i.e. its LOW 129
+/// bits. `w` = big-endian words 3..7 of the digest. Five 24-bit groups of eight
+/// digits from the bottom, then digits 40..42 (bits 120..128). Wrapping
+/// arithmetic: the release profile keeps overflow checks, and this is the
+/// grind's inner loop.
 #[cfg(feature = "v2")]
 #[inline(always)]
 fn v2_digit_sum(w: &[u32; 5]) -> u32 {
@@ -2202,13 +2158,13 @@ fn v2_digit_sum(w: &[u32; 5]) -> u32 {
         let s = (s & 0o00770077).wrapping_add((s >> 6) & 0o00770077);
         (s & 0o7777).wrapping_add(s >> 12)
     }
-    let (w0, w1, w2, w3, w4) = (w[0], w[1], w[2], w[3], w[4]);
-    let t = (w3 & 0xFF) << 1 | w4 >> 31;
-    g24(w0 >> 8)
-        .wrapping_add(g24((w0 & 0xFF) << 16 | w1 >> 16))
-        .wrapping_add(g24((w1 & 0xFFFF) << 8 | w2 >> 24))
-        .wrapping_add(g24(w2 & 0x00FF_FFFF))
-        .wrapping_add(g24(w3 >> 8))
+    let (w3, w4, w5, w6, w7) = (w[0], w[1], w[2], w[3], w[4]);
+    let t = w4 >> 24 | (w3 & 1) << 8;
+    g24(w7 & 0x00FF_FFFF)
+        .wrapping_add(g24(w7 >> 24 | (w6 & 0xFFFF) << 8))
+        .wrapping_add(g24(w6 >> 16 | (w5 & 0xFF) << 16))
+        .wrapping_add(g24(w5 >> 8))
+        .wrapping_add(g24(w4 & 0x00FF_FFFF))
         .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6))
 }
 
@@ -2240,10 +2196,7 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
             v2_issue43(&w, next, a0, a1);
         }
         // `d` holds digest bytes in memory order; the sum wants big-endian words.
-        #[cfg(not(feature = "v2-lowdigits"))]
-        let sum = v2_digit_sum(&[d[0].swap_bytes(), d[1].swap_bytes(), d[2].swap_bytes(), d[3].swap_bytes(), d[4].swap_bytes()]);
-        #[cfg(feature = "v2-lowdigits")]
-        let sum = v2_digit_sum_low(&[d[3].swap_bytes(), d[4].swap_bytes(), d[5].swap_bytes(), d[6].swap_bytes(), d[7].swap_bytes()]);
+        let sum = v2_digit_sum(&[d[3].swap_bytes(), d[4].swap_bytes(), d[5].swap_bytes(), d[6].swap_bytes(), d[7].swap_bytes()]);
         if sum == target {
             if more {
                 let mut discard = [0u32; 8];
@@ -2260,23 +2213,3 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
     }
 }
 
-/// MEASUREMENT (#1155 A/B): v1's digit position (the LOW 129 bits) with the same
-/// in-driver SWAR; `w` = big-endian words 3..7 of the digest.
-#[cfg(feature = "v2-lowdigits")]
-#[inline(always)]
-fn v2_digit_sum_low(w: &[u32; 5]) -> u32 {
-    #[inline(always)]
-    fn g24(v: u32) -> u32 {
-        let s = (v & 0o07070707).wrapping_add((v >> 3) & 0o07070707);
-        let s = (s & 0o00770077).wrapping_add((s >> 6) & 0o00770077);
-        (s & 0o7777).wrapping_add(s >> 12)
-    }
-    let (w3, w4, w5, w6, w7) = (w[0], w[1], w[2], w[3], w[4]);
-    let t = w4 >> 24 | (w3 & 1) << 8;
-    g24(w7 & 0x00FF_FFFF)
-        .wrapping_add(g24(w7 >> 24 | (w6 & 0xFFFF) << 8))
-        .wrapping_add(g24(w6 >> 16 | (w5 & 0xFF) << 16))
-        .wrapping_add(g24(w5 >> 8))
-        .wrapping_add(g24(w4 & 0x00FF_FFFF))
-        .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6))
-}

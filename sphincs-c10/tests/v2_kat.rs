@@ -14,7 +14,7 @@ fn hex(s: &str) -> Vec<u8> {
 
 #[test]
 fn v2_matches_python_reference_kats() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../research/c10-autoresearch/c10v2/kat-v2-draft02.txt");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../research/c10-autoresearch/c10v2/kat-v2-draft03.txt");
     let text = std::fs::read_to_string(path).expect("KAT file");
     let mut n = 0;
     for line in text.lines() {
@@ -41,13 +41,13 @@ fn v2_matches_python_reference_kats() {
     assert_eq!(n, 6, "all KAT vectors ran");
 }
 
-/// Spec 0.2 §7.3: signatures that rebuild the CORRECT root (checked on the
+/// Spec 0.3 §7.3: signatures that rebuild the CORRECT root (checked on the
 /// Python side with the +C checks off) and break exactly one +C rule — the
 /// FORS last index, the WOTS digit sum at layer 0, at layer 1. Rust must
 /// reject every one.
 #[test]
 fn v2_rejects_plus_c_only_near_misses() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../research/c10-autoresearch/c10v2/nearmiss-v2-draft02.txt");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../research/c10-autoresearch/c10v2/nearmiss-v2-draft03.txt");
     let text = std::fs::read_to_string(path).expect("near-miss file");
     let mut n = 0;
     for line in text.lines() {

@@ -383,25 +383,8 @@ pub unsafe extern "C" fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32
     unsafe { std::ptr::copy_nonoverlapping(sw(&c).as_ptr(), out, 16) };
 }
 #[no_mangle]
-pub unsafe extern "C" fn pqsigner_v2_search43(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32,
-    pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8) -> u32 {
-    let sm = unsafe { rd::<32>(sm) };
-    for c in start..start + n {
-        let mut b = [0u8; 43];
-        b[..32].copy_from_slice(&sm);
-        b[32..36].copy_from_slice(&c.to_be_bytes());
-        b[36..].copy_from_slice(&a7b(a0, a1));
-        let d = sw(&b);
-        if unsafe { pred(d.as_ptr()) } {
-            unsafe { std::ptr::copy_nonoverlapping(d.as_ptr(), out, 32) };
-            return c;
-        }
-    }
-    start + n
-}
-#[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32 {
-    // Plain sha2 and a plain digit sum (top 129 bits, 43 three-bit digits).
+    // Plain sha2 and a plain digit sum (spec 0.3: v1's LOW 129 bits, digit i = (D >> 3i) & 7).
     let sm = unsafe { rd::<32>(sm) };
     for c in start..start + n {
         let mut b = [0u8; 43];
@@ -409,12 +392,8 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
         b[32..36].copy_from_slice(&c.to_be_bytes());
         b[36..].copy_from_slice(&a7b(a0, a1));
         let d = sw(&b);
-        let x = u128::from_be_bytes(d[..16].try_into().unwrap());
-        let mut s = 0u32;
-        for i in 0..42 {
-            s += ((x >> (125 - 3 * i)) & 7) as u32;
-        }
-        s += (((x & 3) << 1) as u32) | u32::from(d[16] >> 7);
+        let bit = |k: usize| u32::from((d[31 - k / 8] >> (k % 8)) & 1);
+        let s: u32 = (0..43).map(|i| bit(3 * i) | bit(3 * i + 1) << 1 | bit(3 * i + 2) << 2).sum();
         if s == target {
             unsafe { std::ptr::copy_nonoverlapping(d.as_ptr(), out, 32) };
             return c;

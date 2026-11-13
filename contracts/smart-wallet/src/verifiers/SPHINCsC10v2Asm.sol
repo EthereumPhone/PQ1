@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// @notice RESEARCH (#1155) — C10 v2 verifier, research/c10-autoresearch/c10v2-spec.md DRAFT 0.2.
+/// @notice RESEARCH (#1155) — C10 v2 verifier, research/c10-autoresearch/c10v2-spec.md DRAFT 0.3.
 /// Same scheme and 4,008-byte signature as `SPHINCsC10Asm` (v1); every hash preimage is the
 /// one-block v2 layout: 16-byte seed and values, the 7-byte compact address A7. NOT deployed.
 ///
@@ -99,10 +99,10 @@ contract SPHINCsC10v2Asm {
                 mstore(0x24, shl(200, or(shl(52, 7), kpBase)))
                 pop(staticcall(gas(), 0x02, 0x00, 43, OUT, 32))
                 let d := mload(OUT)
-                // digits: the TOP 129 bits, digit i = (d >> (253 - 3i)) & 7
+                // digits as v1 (spec 0.3): the LOW 129 bits, digit i = (d >> 3i) & 7
                 let digitSum := 0
                 for { let ii := 0 } lt(ii, 43) { ii := add(ii, 1) } {
-                    digitSum := add(digitSum, and(shr(sub(253, mul(ii, 3)), d), 0x7))
+                    digitSum := add(digitSum, and(shr(mul(ii, 3), d), 0x7))
                 }
                 if iszero(eq(digitSum, 205)) { revert(0, 0) } // WOTS+C target sum
 
@@ -111,7 +111,7 @@ contract SPHINCsC10v2Asm {
                 mstore(add(TB, 0x10), shl(200, or(shl(52, 1), kpBase)))
                 let wotsPtr := add(sigBase, sigOff)
                 for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
-                    let digit := and(shr(sub(253, mul(i, 3)), d), 0x7)
+                    let digit := and(shr(mul(i, 3), d), 0x7)
                     let val := and(calldataload(add(wotsPtr, shl(4, i))), N_MASK)
                     let chainBase := or(kpBase, shl(18, i)) // type 0 (WOTS_HASH)
                     for { let p := digit } lt(p, 7) { p := add(p, 1) } {

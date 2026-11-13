@@ -14,9 +14,6 @@ use crate::params::*;
 ///
 /// Matches Python: `extract_digits(d, cfg)`.
 pub fn extract_digits(digest: &[u8; 32]) -> [u8; L] {
-    #[cfg(feature = "v2")]
-    return crate::v2hash::digits(digest);
-    #[allow(unreachable_code)]
     // The digest is a 256-bit big-endian value. The Python code treats it
     // as an integer and extracts bits from the LSB upward:
     //   digit[i] = (d >> (i * log_w)) & w_mask
@@ -335,9 +332,6 @@ mod extract_digits_tests {
 /// so no carry crosses a field). Public data only: the grind digest of public
 /// inputs, whose accepted count is in the signature.
 pub(crate) fn digit_sum(digest: &[u8; 32]) -> usize {
-    #[cfg(feature = "v2")]
-    return crate::v2hash::digit_sum(digest);
-    #[allow(unreachable_code)]
     let mut sum: usize = 0;
     for g in 0..5 {
         // Bits 24g..24g+23 of the big-endian integer: bytes 31-3g (low)

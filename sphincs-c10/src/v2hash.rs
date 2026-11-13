@@ -146,93 +146,8 @@ pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32
     prf(sk_seed, pack(T_FORS_PRF, 0, u64::from(ht_idx), u64::from(tree_idx), 0, 0, u64::from(leaf_idx)))
 }
 
-/// MEASUREMENT (#1155 A/B, `v2-lowdigits`): v1's digit position, digit i = (D >> 3i) & 7.
-#[cfg(feature = "v2-lowdigits")]
-pub fn digits(d: &[u8; 32]) -> [u8; crate::params::L] {
-    let bit = |k: usize| (d[31 - k / 8] >> (k % 8)) & 1;
-    core::array::from_fn(|i| bit(3 * i) | bit(3 * i + 1) << 1 | bit(3 * i + 2) << 2)
-}
-#[cfg(feature = "v2-lowdigits")]
-pub fn digit_sum(d: &[u8; 32]) -> usize {
-    digits(d).iter().map(|&x| x as usize).sum()
-}
-
-/// WOTS digits from the TOP 129 bits (spec 0.2): digit i = (D >> (253 − 3i)) & 7.
-#[cfg(not(feature = "v2-lowdigits"))]
-pub fn digits(d: &[u8; 32]) -> [u8; crate::params::L] {
-    let mut hi = [0u8; 16];
-    hi.copy_from_slice(&d[0..16]);
-    let hi = u128::from_be_bytes(hi); // bits 255..128
-    let mut out = [0u8; crate::params::L];
-    for (i, o) in out.iter_mut().enumerate().take(crate::params::L - 1) {
-        *o = ((hi >> (125 - 3 * i)) & 7) as u8;
-    }
-    // Digit 42: bits 129..127.
-    out[crate::params::L - 1] = (((hi & 3) << 1) as u8) | (d[16] >> 7);
-    out
-}
-
-/// Σ digits(d): bytes 0..15 are five 24-bit groups of eight 3-bit digits
-/// (digits 0..39); digits 40..42 are byte 15 and the top bit of byte 16. 32-bit
-/// SWAR only (the grind's predicate: it must stay under one block's engine time).
-#[cfg(not(feature = "v2-lowdigits"))]
-#[inline(always)]
-pub fn digit_sum(d: &[u8; 32]) -> usize {
-    let mut sum = 0u32;
-    let mut g = 0;
-    while g < 15 {
-        let v = u32::from(d[g]) << 16 | u32::from(d[g + 1]) << 8 | u32::from(d[g + 2]);
-        let s = (v & 0o07070707) + ((v >> 3) & 0o07070707); // four 6-bit fields, each <= 14
-        let s = (s & 0o00770077) + ((s >> 6) & 0o00770077); // two 12-bit fields, each <= 28
-        sum += (s & 0o7777) + (s >> 12);
-        g += 3;
-    }
-    let t = u32::from(d[15]) << 1 | u32::from(d[16] >> 7); // digits 40, 41, 42
-    sum += (t & 7) + ((t >> 3) & 7) + (t >> 6);
-    sum as usize
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Bit-by-bit reference: digit i = bits (255 - 3i) .. (253 - 3i) of the big-endian digest.
-    fn reference(d: &[u8; 32]) -> [u8; crate::params::L] {
-        let bit = |k: usize| (d[31 - k / 8] >> (k % 8)) & 1; // k = 0 is the LSB of byte 31
-        core::array::from_fn(|i| {
-            let lsb = 253 - 3 * i;
-            bit(lsb) | bit(lsb + 1) << 1 | bit(lsb + 2) << 2
-        })
-    }
-
-    #[test]
-    #[cfg(not(feature = "v2-lowdigits"))]
-    fn digits_and_digit_sum_match_the_bitwise_reference() {
-        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
-        let check = |d: &[u8; 32]| {
-            let want = reference(d);
-            assert_eq!(digits(d), want, "{d:02x?}");
-            assert_eq!(digit_sum(d), want.iter().map(|&v| v as usize).sum::<usize>(), "{d:02x?}");
-        };
-        check(&[0u8; 32]);
-        check(&[0xFFu8; 32]);
-        for k in 0..256 {
-            let mut d = [0u8; 32];
-            d[31 - k / 8] = 1 << (k % 8);
-            check(&d);
-        }
-        for _ in 0..20_000 {
-            let mut d = [0u8; 32];
-            for b in d.iter_mut() {
-                x ^= x << 13;
-                x ^= x >> 7;
-                x ^= x << 17;
-                *b = x as u8;
-            }
-            check(&d);
-        }
-    }
-}
+// WOTS digits are v1's (spec 0.3): `wots::extract_digits` and `wots::digit_sum`
+// run unchanged under v2.
 
 // ---- fused driver entries (`v2-fused`: `pqsigner-hw/v2`) --------------------
 
@@ -249,9 +164,6 @@ extern "C" {
     fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *const u8, a0: u32, a1: u32, out: *mut u8);
     fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8);
-    fn pqsigner_v2_search43(
-        sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8,
-    ) -> u32;
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
 }
 
@@ -300,15 +212,10 @@ pub fn fors_leaf_fused(seed: &[u8; 32], sk_seed: &[u8; 32], leaf_adrs: &[u8; 32]
 /// most `n` tries) whose digest's digit sum is the target.
 #[cfg(feature = "v2-fused")]
 pub fn search_fused(seed: &[u8; 32], msg_hash: &[u8; 32], layer: u32, tree: u64, kp: u32, start: u32, n: u32, d: &mut [u8; 32]) -> u32 {
-    unsafe extern "C" fn hits(d: *const u8) -> bool {
-        // SAFETY: the driver passes its 32-byte digest.
-        digit_sum(unsafe { &*d.cast::<[u8; 32]>() }) == crate::params::TARGET_SUM
-    }
     let mut sm = [0u8; 32];
     sm[..16].copy_from_slice(&seed[..16]);
     sm[16..].copy_from_slice(&msg_hash[..16]);
     let (a0, a1) = words(pack(T_WOTS_DIGEST, u64::from(layer), tree, u64::from(kp), 0, 0, 0));
-    let _ = hits;
     // SAFETY: 32 readable bytes, 32 writable; `start + n` does not overflow (caller).
     unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, n, crate::params::TARGET_SUM as u32, d.as_mut_ptr()) }
 }

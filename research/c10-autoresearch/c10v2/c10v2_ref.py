@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 c10v2_ref.py — reference C10 v2 (one-block tweakable hash), written from
-../c10v2-spec.md (DRAFT 0.2). Research only (#1155); nothing has landed.
+../c10v2-spec.md (DRAFT 0.3). Research only (#1155); nothing has landed.
 
 Forked from contracts/verification/scripts/independent_c10_signer.py (the
 clean-room v1 signer). Only the hash layer changes; the scheme around it
@@ -106,9 +106,9 @@ def wots_pk(S, sk_seed, layer, tree, kp):
 
 
 def digits(d32):
-    # v2: the TOP 129 bits (bytes 0..16), digit i = bits 255-3i .. 253-3i.
+    # Spec 0.3: v1's position, the LOW 129 bits, digit i = (D >> 3i) & 7.
     Di = int.from_bytes(d32, "big")
-    return [(Di >> (253 - i * LOG_W)) & W_MASK for i in range(L)]
+    return [(Di >> (i * LOG_W)) & W_MASK for i in range(L)]
 
 
 def wots_sign(S, sk_seed, layer, tree, kp, node16, cheat=False):
@@ -311,7 +311,7 @@ def emit(path, n):
         assert verify(ps, root, m, nm, plus_c=False) and not verify(ps, root, m, nm)
         near.append(dict(kind=str(cheat), pk_seed=ps.hex(), pk_root=root.hex(), msg=m.hex(), sig=nm.hex()))
     with open(path, "w") as f:
-        json.dump(dict(spec="c10v2-spec.md DRAFT 0.2", vectors=out, plus_c_near_misses=near), f, indent=1)
+        json.dump(dict(spec="c10v2-spec.md DRAFT 0.3", vectors=out, plus_c_near_misses=near), f, indent=1)
 
 
 if __name__ == "__main__":

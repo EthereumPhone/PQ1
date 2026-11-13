@@ -331,3 +331,28 @@ Measurement feature `v2-lowdigits` (`sphincs-c10` and `pqsigner-hw`): v2 with v1
 **Decision for draft 0.3:** revert to v1's digit position. The Lean-extracted `extract_digits` and the Yul digit loop stay unchanged.
 
 **Spec 0.2 itself is unreviewed.** Astra and Fable reviewed 0.1, and 0.2 folds in their changes. Send 0.3 back to both before calling it the candidate.
+
+### Round 5: draft 0.3 (2026-11-13)
+
+**Change:** WOTS digits back to v1's position (low 129 bits) everywhere:
+- Python `digits()`;
+- Rust: the v2 hooks in `wots::extract_digits` and `wots::digit_sum` are deleted, so both functions are byte-identical to master's again (checked by function-body diff against `0bf8153f2`);
+- `v2hash::digits`/`digit_sum` and their test removed;
+- the driver's in-loop SWAR is now the low-bit one (`v2_digit_sum`, words 3..7);
+- the Yul loop uses v1's shape, `shr(mul(i, 3), d)`;
+- feature `v2-lowdigits`, its callback search entry `pqsigner_v2_search43` and `bench_avg_v2fl` are deleted.
+
+**Evidence:**
+- `c10v2_ref.py selftest` OK. KATs regenerated: `c10v2/kat-v2-draft03.{json,txt}`, `nearmiss-v2-draft03.txt`, the forge `c10v2_kat_vectors.json`. They come from `c10v2/kat_export.py`, which reproduces the committed 0.2 files exactly from `kat-v2-draft02.json`. `pk_root`s are unchanged (keygen has no digits); all 6 signatures change.
+- Rust `v2_kat` 2/2; forge `SPHINCsC10v2AsmTest` 5/5.
+- **Near-miss mutation controls redone on the 0.3 vectors**, in both Rust and Solidity. Deleting the WOTS sum check accepts exactly `wots0` and `wots1`; deleting the FORS+C check accepts exactly `fors`; unmutated, all three are rejected. Stale 0.2 vectors would still have been rejected, vacuously, by a root mismatch.
+- `golden-v2.bin` rewritten. It equals `host_v2` (generic), `host_v2f` (fused routing on a plain-sha2 mirror) and Python. The kit fused build reproduces it (`experiment_v2.sh v2f`: ok, cached 150.28 M on m0).
+- **Regression against the earlier low-digit A/B run:** the same 16 messages give mean sign 79,349,200 against 79,348,884, each message within about 10 k cycles. The refactor changed nothing but code placement.
+- v1: suite 82/0; the kit frozen evaluator passes, `cached_sign` 233,078,551 (head 233,078,515).
+
+| configuration (16-message mean) | mean sign | keygen | verify | est. cached |
+|---|---:|---:|---:|---:|
+| v1 fused head | 110.10 M | 36.81 M | 182.6 k | 220.4 M (1.377 s) |
+| **v2 draft 0.3 head** | **79.35 M (−27.9%)** | **24.97 M (−32%)** | **105.6 k (−42%)** | **158.8 M (0.993 s)** |
+
+**Gas at 0.3:** 163,186 against v1's 180,812 (−9.7%). The 0.2 figure, 164,218, used different vectors and digit shifts.

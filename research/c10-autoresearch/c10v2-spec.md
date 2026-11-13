@@ -1,6 +1,6 @@
-# C10 v2: one-block tweakable hash (DRAFT 0.2, for review)
+# C10 v2: one-block tweakable hash (DRAFT 0.3, for review)
 
-Status: research draft for #1155. Nothing has landed. 2026-11-12.
+Status: research draft for #1155. Nothing has landed. 0.2 on 2026-11-12, 0.3 on 2026-11-13.
 
 **History.**
 
@@ -11,10 +11,15 @@ Status: research draft for #1155. Nothing has landed. 2026-11-12.
   - a dedicated tweak for the last FORS root;
   - T_k tweak-first;
   - the H_MSG field order;
-  - WOTS digits taken from the top of the digest;
+  - WOTS digits taken from the top of the digest (reverted in 0.3);
   - §3 rewritten, because 0.1 overclaimed;
   - stronger §7 gates;
   - v1 accounting fixes.
+- **0.3:** WOTS digits go back to v1's position, the low 129 bits of the digest.
+  - On the kit, top-bit digits bought nothing measurable: mean single-pass sign 78.55 M (top) against 79.35 M (low), over the same 16 messages, inside grind noise.
+  - With v1's position, v2 runs v1's `wots::extract_digits` and `wots::digit_sum` unchanged, so the formally verified extraction code is not touched.
+  - Nothing else changes. Keys (`pk_root`) are identical to 0.2; signatures and KATs differ.
+  - **Nobody has reviewed 0.2's changes yet.** A review of 0.3 covers both.
 
 ## What changes and what does not
 
@@ -37,11 +42,12 @@ SHA-256 block (≤ 55 bytes).
 - the signature layout and length (4,008 B), and the key shapes (`pk_seed16`, `pk_root16`, `sk_seed32`);
 - the FORS+C rule (the last FORS index must be 0) and the WOTS+C rule (the digit sum must be 205);
 - FORS index and `ht_idx` extraction from H_MSG;
+- WOTS digit extraction from WOTS_DIGEST (0.3: v1's low 129 bits);
 - the R derivation, which is signer-only (§6).
 
 **Changed:**
 
-- every hash preimage, and WOTS digit extraction (§2);
+- every hash preimage (§2);
 - so every `pk_root`, wallet address, signature byte and KAT;
 - and the on-chain verifier.
 
@@ -117,10 +123,10 @@ Notes:
   targets. With A7 last, an internal-state collision of the prefix would carry
   across every address. That is not a break below the security level, and
   tweak-first is free.
-- **WOTS digits** come from the **top** 129 bits of the WOTS_DIGEST output:
-  `digit_i = (D >> (253 − 3i)) & 7` for i = 0..42, with D the digest as a
-  256-bit big-endian integer. These are bytes 0..16, so the signer's grind
-  reads 5 HR words. The digit sum must equal 205; v1 takes the low 129 bits.
+- **WOTS digits** are v1's: `digit_i = (D >> 3i) & 7` for i = 0..42, with D
+  the WOTS_DIGEST output as a 256-bit big-endian integer, i.e. its low 129
+  bits (bytes 15..31). The digit sum must equal 205. Draft 0.2 took the top 129
+  bits instead; 0.3 reverts that (see History).
 - **`m16`** in WOTS_DIGEST is the 16-byte node being signed. That is the FORS
   pk at layer 0 and the layer-0 root at layer 1; v1 zero-pads the same 16 bytes.
 - **H_MSG** puts R last so that its first 64 bytes are constant across the R
@@ -184,7 +190,13 @@ Fable's per-pass estimate from the ledger's unit counts is about −40% (range
 −36% to −44%). Cached sign would go from 233 M to about 135–145 M cycles, with
 no top cache. This is arithmetic, not a measurement.
 
-**Measured so far (2026-11-12):** on the generic oneshot path, about 250 cycles
+**Measured at 0.3 (2026-11-13, kit, fused v2 entries, luck-averaged over 16
+messages; ledger round 5):** mean single-pass sign 79.35 M against 110.10 M for
+the v1 fused head (−27.9%); keygen 25.0 M against 36.8 M (−32%); verify about
+106 k against 183 k (−42%). Estimated cached sign (2 passes + verify): 0.99 s
+against 1.38 s. Forge verify gas: 163,186 against 180,812 (−9.7%).
+
+**Measured earlier (2026-11-12):** on the generic oneshot path, about 250 cycles
 of per-call overhead swamp the block saving. That is −5.7% on keygen, so the
 gain exists only on the fused driver entries.
 
@@ -248,3 +260,17 @@ review against the FORS+C argument and is not adopted here.
 6. **Regression:** v1 golden, the v1 KATs and FSBL image identity are unchanged.
 7. **Measurement:** kit v2 cached sign on the fused entries against the v1
    fused head; forge gas for v1 against v2.
+
+**Gate status at 0.3 (2026-11-13).**
+
+- **Met:** 1 (Python self-test); 2 (6 KATs, Rust = Python byte for byte); 3 in
+  Python, Rust and Solidity, each near-miss mutation-controlled (deleting the
+  WOTS sum check accepts exactly the two WOTS near-misses, deleting the FORS+C
+  check accepts exactly the FORS one); 4 partly (KATs, bit flips, +C set,
+  cross-version); 6 for v1 golden and KATs (suite 82/0, kit v1 golden);
+  7 (figures in §4).
+- **Kit golden for v2:** `golden-v2.bin` (0.3) equals Python, `host_v2` and
+  `host_v2f`, and the kit's fused v2 build reproduces it byte for byte.
+- **Not met:** the per-primitive preimage checks in gate 4; gate 5 as stated
+  (per-entry differential and the NBLW interleaving test; the kit golden
+  exercises the entries only end to end); FSBL image identity in gate 6.

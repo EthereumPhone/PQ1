@@ -6,7 +6,7 @@ import {SPHINCsC10v2Asm} from "../src/verifiers/SPHINCsC10v2Asm.sol";
 import {SPHINCsC10Asm} from "../src/verifiers/SPHINCsC10Asm.sol";
 
 /// RESEARCH (#1155): the v2 verifier against the Python reference KATs
-/// (research/c10-autoresearch/c10v2/c10v2_ref.py, spec DRAFT 0.2), which the
+/// (research/c10-autoresearch/c10v2/c10v2_ref.py, spec DRAFT 0.3), which the
 /// Rust v2 signer reproduces byte for byte.
 contract SPHINCsC10v2AsmTest is Test {
     SPHINCsC10v2Asm internal v2;
@@ -44,7 +44,7 @@ contract SPHINCsC10v2AsmTest is Test {
         }
     }
 
-    /// Spec 0.2 §7.3: these rebuild the correct root and break exactly one +C rule.
+    /// Spec 0.3 §7.3: these rebuild the correct root and break exactly one +C rule.
     function test_v2_rejects_plus_c_only_near_misses() public view {
         for (uint256 i = 0; i < 3; i++) {
             (bytes32 s, bytes32 r, bytes32 m, bytes memory sig) = _vec(string.concat("n", vm.toString(i)));
