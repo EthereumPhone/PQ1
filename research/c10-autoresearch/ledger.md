@@ -1367,3 +1367,22 @@ The `nblw32` probe (`bench_v2micro`):
 | grind | ~1.9% of the run | | ~0.2 M |
 
 Total practical v2 headroom: about **1.4 M (~2.8%)** of a 50.7 M sign. It is close to the ~2% closing mark, and every remaining item is ≤ 0.3 M.
+
+**Fable's check of the table above.** Fable read the generators; nothing was run. Digest counts come from the ledger deltas:
+- The floors are too low. Search needs `ldm` ×4 plus `ldr` after INIT, 11 DIN words and 5 HR reads, so its floor is ~94, not ~91. The key loop is essentially at its floor; only the per-chain PRF tail and the ladders remain, ~0.1–0.2 M.
+- FORS: H pays ~6 cycles before DCAL and the PRF ~8; about half of that is removable (~0.15–0.25 M).
+- T_43 is under-estimated. It runs through the generic byte-mode `oneshot16` over 12 blocks, so a dedicated 32-bit feed is worth ~0.25–0.4 M. That needs a multi-block (712 B) DATATYPE 00 probe first; the round-11 probe covered ≤160 B.
+- Missing row: ~1.6 M (3%) is unattributed (glue, `node16`, H_MSG, verify). There is no v2 profile at head.
+
+Realistic headroom is **~0.9–1.3 M (1.8–2.6%)**, so v2 is not closed yet.
+
+**Next, in order:**
+1. a T_43 32-bit feed (with the multi-block probe);
+2. the FORS PRF tail and a ladder spin (E16 pattern);
+3. H's CR re-make;
+4. key-loop PRF tail and spin;
+5. search (depends on HR surviving INIT, which is unproven);
+6. grind in asm (the highest risk: `sk_seed` in a wiped buffer, two-block messages);
+7. `node16` (Rust `feed_words`, ~0.05 M).
+
+A v2 profile at head is a precondition for the closing note.
