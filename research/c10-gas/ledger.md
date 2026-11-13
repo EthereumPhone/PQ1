@@ -138,3 +138,36 @@ Mutation controls on the final candidates (`mutation_controls.py all --runs 64`)
 caught only by the trailing-junk tests; `v{1,2}-count-31bit` only by the trace comparison;
 `v1-e7-zero-after-{hmsg,digest}` (the zero-low-half invariant) by 11 tests each, including the
 per-primitive trace ("SHA-256 call #… differs").
+
+### Closing checks (after the advisor's pre-handback review)
+
+- Full `forge test` (minus test/gas) at HEAD `296a99260`: 180 passed, **2 failed**, 32 skipped —
+  only the two v1 codehash pins (`PinnedCodehashes.test_codehash_pinned_or_print`,
+  `SPHINCsC10AsmTest.test_verifierBytecodeFrozen`); final v1 runtime codehash `0xe7e8af11…`.
+  The wallet-level suites (`PQSmartWalletRealSig`, `PQMultiOpBundle`, `ERC7562ValidationRules`,
+  …) pass against the optimized v1.
+- v2 consumers outside this track: `SPHINCsC10v2Asm.t.sol`, `SPHINCsC10v2Variants.t.sol` (pass;
+  its "delta vs 0.3" lines now compare optimized 0.3 with the unoptimized ts200/split810/all3
+  variants, so they are no longer like-for-like), and
+  `research/c10-autoresearch/nearmiss_controls.sh`, which text-patches the v2 verifier's two +C
+  check lines (both kept verbatim, still apply). No codehash pin. Stale line citations
+  `SPHINCsC10Asm.sol:127` in `c10v2-spec.md` and the autoresearch ledger (the v1 FORS_LAST
+  tweak reuse) now point elsewhere if v1 changes.
+- v1 landing is a re-proof, not a re-pin: the Lean Yul model (`Interpreter/Yul.lean`) has only
+  `sha256 (inOff inLen outOff)` with a fixed 32-byte output and no `calldatacopy`, so
+  `parse_c10` / `execC10Asm_eq` cannot even parse the E7-E9 code without extending the
+  interpreter; the Halmos/cross_validation discharge is invalidated too.
+- Astra conformance review of the final snapshot (cumulative, not per keep): no divergence for
+  successful precompile calls; checked every removed mask, 16-byte in-place output, the v1
+  zero-low-half invariant (incl. the dispatcher's 0x80 byte at 0x5F), the unrolled levels, chain
+  bounds, the SWAR sum and check order. One finding: at EVM call depth 1024 every STATICCALL
+  fails without writing output, so the *attempted* (never executed) precompile inputs differ from
+  the third call on (stale in-place values vs the reference's untouched output slot). Argued, not
+  tested: the observable result is still identical — reference and candidate both read an
+  all-zero H_MSG digest and an all-zero WOTS digest (their 32-byte output slots are never written
+  and are zero there), so both revert empty at the layer-0 digit sum after the same length/key
+  checks. Depth 1024 is unreachable in practice since EIP-150. Scope of the equivalence claim:
+  identical (success, returndata) for all calldata at any depth with sufficient gas; identical
+  SHA-256 input sequences whenever the precompile calls succeed; the out-of-gas threshold moves.
+- Deep conditioned-garbage fuzz ran 24 runs per version (inline config overrides the env runs),
+  plus 14 fixed cases each.
