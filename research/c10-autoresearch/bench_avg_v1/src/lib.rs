@@ -37,6 +37,44 @@ pub extern "C" fn pqsigner_hash_fault() -> ! {
     // SAFETY: harness halt.
     unsafe { bench_halt(0x00F0) }
 }
+// Round 10 product-shaped measurement: the same stubs as `bench` (the secure world's
+// `pqsigner_hash_tick` -> `film_tick_hash` per-call path; the time-paced frame draw is not modelled).
+#[cfg(feature = "tick")]
+mod tick {
+    use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    static FILM_LIVE: AtomicBool = AtomicBool::new(true);
+    static FILM_HASHES: AtomicU32 = AtomicU32::new(0);
+    #[inline(never)]
+    fn film_tick_paced() {
+        core::hint::black_box(());
+    }
+    /// Stub of the secure world's `pqsigner_hash_tick` -> `film_tick_hash` (ui/px/lcd.rs), drawing nothing.
+    #[no_mangle]
+    pub extern "C" fn pqsigner_hash_tick() {
+        if !FILM_LIVE.load(Ordering::Relaxed) {
+            return;
+        }
+        let n = FILM_HASHES.load(Ordering::Relaxed).wrapping_add(1);
+        FILM_HASHES.store(n, Ordering::Relaxed);
+        if n % 64 == 0 {
+            film_tick_paced();
+        }
+    }
+    /// Batched form: `k` digests at once; a frame check when the count crosses a multiple of 64.
+    #[no_mangle]
+    pub extern "C" fn pqsigner_hash_tick_n(k: u32) {
+        if !FILM_LIVE.load(Ordering::Relaxed) {
+            return;
+        }
+        let o = FILM_HASHES.load(Ordering::Relaxed);
+        let n = o.wrapping_add(k);
+        FILM_HASHES.store(n, Ordering::Relaxed);
+        if n / 64 != o / 64 {
+            film_tick_paced();
+        }
+    }
+}
+
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
     // SAFETY: harness halt.
