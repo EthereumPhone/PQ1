@@ -39,6 +39,8 @@ pub mod wordlist;
 
 #[cfg(feature = "full-wordlist")]
 mod full;
+#[cfg(feature = "fast-pbkdf2")]
+mod sha512_fast;
 #[cfg(feature = "full-wordlist")]
 pub use full::*;
 

@@ -19,12 +19,57 @@ hw-sha256 = []
 # `pqsigner_sha256_oneshot`, instead of the three. Only the secure image has
 # the symbol (`pqsigner-hw/oneshot`); the FSBL keeps the three-call path.
 hw-sha256-oneshot = ["hw-sha256"]
+# The WOTS chain loop through one driver call, `pqsigner_sha256_chain16` (`pqsigner-hw/chain`).
+hw-sha256-chain = ["hw-sha256-oneshot"]
+# The WOTS+C count grind through `pqsigner_sha256_search128` (`pqsigner-hw/search`).
+hw-sha256-search = ["hw-sha256-oneshot"]
+# Round 8 (autoresearch): `hits_target` in the driver search's section (`.text.pq1_c10_search`), so the
+# search loop and its per-try callback never alias in a direct-mapped ICACHE. Layout only.
+hw-sha256-search-colocate = ["hw-sha256-search"]
+# th / th_pair without the preimage copy (`pqsigner-hw/gather`).
+hw-sha256-gather = ["hw-sha256-oneshot"]
+# WOTS secret + chain in one driver call (`pqsigner-hw/prfchain`); sk_seed is never copied.
+hw-sha256-prfchain = ["hw-sha256-chain"]
+# FORS secret + leaf hash in one driver call (`pqsigner-hw/forsleaf`).
+hw-sha256-forsleaf = ["hw-sha256-oneshot"]
+# FORS tree build over per-tree address templates (`pqsigner_node16`, `pqsigner_fors_leaf16`).
+hw-sha256-forstree = ["hw-sha256-forsleaf"]
+# R grind over two prebuilt preimages through the one-shot (no five-part streams).
+hw-sha256-grindr = ["hw-sha256-oneshot"]
+# Round 8 (autoresearch): the R grind as one driver call (`pqsigner_v1_grind_r`), output-identical.
+hw-sha256-grindr-drv = ["hw-sha256-grindr"]
+# The FORS tree reports finished digests in batches through `pqsigner_hash_tick_n` (with `pqsigner-hw/tick-batch`).
+hw-sha256-tickbatch = ["hw-sha256-forstree"]
+# TRACK-B EXPERIMENT: cached top hypertree layer (`topcache`), never shipped as-is.
+top-cache = []
+# th_multi with its values fed in place (`pqsigner_th_multi16`, `pqsigner-hw/gather`).
+hw-sha256-thmulti = ["hw-sha256-oneshot"]
+# FORS: whole 16-leaf subtrees per driver call (`pqsigner_fors_subtree16`).
+hw-sha256-forssub = ["hw-sha256-forstree"]
 
 # Atomic per-category hash-call counters (work-todo §18 SCA step a):
 # count sk_seed-touching PRF calls (wots_secret / fors_secret) vs
 # public tree/chain hashes per sign. Adds a relaxed atomic increment
 # at the top of each hash primitive — measurement-only, never shipped.
 hash-counters = []
+
+# RESEARCH (#1155): C10 v2 one-block tweakable hash (research/c10-autoresearch/c10v2-spec.md).
+# Changes every preimage, pk_root and signature. Generic hash paths only.
+v2 = []
+# RESEARCH (#1155): v2 on fused one-block driver entries (`pqsigner-hw/v2`): chain, PRF+chain,
+# node, FORS leaf, count search. The linking binary must provide `pqsigner_v2_*`.
+v2-fused = ["v2", "hw-sha256-oneshot"]
+# MEASUREMENT ONLY (spec §6, #1158): PRF value in the last FORS slot instead of tree 12's root.
+# Changes signature bytes (not keys); the verifier is unchanged. Not adopted.
+v2-fors-last-prf = ["v2"]
+# RESEARCH (format-options security check, 2026-11-13; c10v2_ref.py --variant): candidate v2 format
+# changes, each off by default and not adopted. ts200: WOTS+C target sum 200 (verifier changes).
+# prf2: one PRF digest -> two secrets (keys change; verifier unchanged). split810: layer heights
+# (8, 10), A7 kp 10 bits / ci at bits 22..17 (verifier changes). Fused builds need the matching
+# `pqsigner-hw` features.
+v2-ts200 = ["v2"]
+v2-prf2 = ["v2"]
+v2-split810 = ["v2"]
 
 # Re-export otherwise-`pub(crate)` internals (PRF, ADRS, digest, FORS tree
 # helpers) under `sphincs_c10::sim_internals`, for the security-regression

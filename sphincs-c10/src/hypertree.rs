@@ -40,7 +40,7 @@ pub fn compute_pk_root_with_progress(sk_seed: &[u8; 32], pk_seed: &[u8; N], prog
 fn compute_pk_root_inner(sk_seed: &[u8; 32], pk_seed: &[u8; N], progress: &ProgressSink, pct_lo: u8, pct_hi: u8) -> [u8; N] {
     let seed = pad16(pk_seed);
     // Build subtree at top layer (layer=1, tree=0)
-    merkle::compute_subtree_root(&seed, sk_seed, 1, 0, progress, pct_lo, pct_hi)
+    merkle::compute_subtree_root(&seed, sk_seed, (D - 1) as u32, 0, progress, pct_lo, pct_hi)
 }
 
 /// Full SPHINCS+C10 signing.
@@ -53,7 +53,7 @@ pub fn sign(
     msg_hash: &[u8; 32],
     opt_rand: Option<&[u8; N]>,
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), &ShuffleSeed::zero())
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), &ShuffleSeed::zero(), #[cfg(feature = "top-cache")] None)
 }
 
 /// Like [`sign`] but invokes `progress(percent)` (`0..=100`) at each
@@ -72,13 +72,27 @@ pub fn sign_with_shuffle(
     shuffle: &ShuffleSeed,
     progress: fn(u8),
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &ProgressSink(Some(progress)), shuffle)
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &ProgressSink(Some(progress)), shuffle, #[cfg(feature = "top-cache")] None)
 }
 
 /// [`sign_with_shuffle`] without a progress callback. Arrow-free
 /// signature, so it exists in BOTH cfg shapes and is the entry point
 /// the Aeneas Lean extraction (and the byte-equality test oracle)
 /// uses (work-todo §33 P0).
+/// TRACK-B EXPERIMENT: silent shuffled sign with the top layer from `cache`.
+#[cfg(feature = "top-cache")]
+pub fn sign_with_shuffle_cached(
+    sk_seed: &[u8; 32],
+    pk_seed: &[u8; N],
+    pk_root: &[u8; N],
+    msg_hash: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    shuffle: &ShuffleSeed,
+    cache: &crate::topcache::TopCache,
+) -> [u8; SIGNATURE_LEN] {
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), shuffle, Some(cache))
+}
+
 pub fn sign_with_shuffle_silent(
     sk_seed: &[u8; 32],
     pk_seed: &[u8; N],
@@ -87,7 +101,7 @@ pub fn sign_with_shuffle_silent(
     opt_rand: Option<&[u8; N]>,
     shuffle: &ShuffleSeed,
 ) -> [u8; SIGNATURE_LEN] {
-    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), shuffle)
+    sign_inner(sk_seed, pk_seed, pk_root, msg_hash, opt_rand, &progress_none(), shuffle, #[cfg(feature = "top-cache")] None)
 }
 
 /// Optional progress callback, newtype-wrapped so `fn(u8)` (an arrow
@@ -166,6 +180,7 @@ fn sign_inner(
     opt_rand: Option<&[u8; N]>,
     progress: &ProgressSink,
     shuffle: &ShuffleSeed,
+    #[cfg(feature = "top-cache")] top: Option<&crate::topcache::TopCache>,
 ) -> [u8; SIGNATURE_LEN] {
     let seed = pad16(pk_seed);
     let mut sig = [0u8; SIGNATURE_LEN];
@@ -234,10 +249,19 @@ fn sign_inner(
     }
 
     // Last tree (forced-zero): the "secret" is the tree root
+    #[cfg(not(feature = "v2-fors-last-prf"))]
     let last_root = fors::compute_fors_root(&seed, sk_seed, ht_idx, (K - 1) as u32);
+    // MEASUREMENT ONLY (spec §6, #1158; not adopted, changes signature bytes):
+    // the slot carries leaf 0's PRF value of tree 12 instead of the whole tree's
+    // root. Deterministic per ht_idx; the verifier only computes F over it.
+    #[cfg(feature = "v2-fors-last-prf")]
+    let last_root = crate::hash::fors_secret(sk_seed, ht_idx, (K - 1) as u32, 0);
     set_row(&mut fors_secrets, K - 1, last_root);
     let last_leaf_adrs =
         crate::address::make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, (K - 1) as u32, 0, 0, 0);
+    // v2: the last slot's F has its own type (spec 0.2, FORS_LAST).
+    #[cfg(feature = "v2")]
+    let last_leaf_adrs = crate::address::make_adrs(0, u64::from(ht_idx), crate::v2hash::T_FORS_LAST, 0, 0, 0, 0);
     set_row(&mut fors_roots, K - 1, crate::hash::th(&seed, &last_leaf_adrs, &pad16(&last_root)));
 
     report(progress, 32);
@@ -279,8 +303,9 @@ fn sign_inner(
     let mut idx_tree = ht_idx;
 
     for layer in 0..(D as u32) {
-        let idx_leaf = idx_tree & ((1u32 << SUBTREE_H) - 1);
-        idx_tree >>= SUBTREE_H;
+        let lh = layer_h(layer);
+        let idx_leaf = idx_tree & ((1u32 << lh) - 1);
+        idx_tree >>= lh;
 
         // Build the subtree and get the auth path. HT layers: layer 0 =
         // 32%-65%, layer 1 = 65%-98%. The build is ~85% of a sign, so it
@@ -290,6 +315,12 @@ fn sign_inner(
         // same for every signature.
         let pct_lo = (32 + layer * 33) as u8;
         let pct_hi = (32 + (layer + 1) * 33) as u8;
+        #[cfg(feature = "top-cache")]
+        let (auth_path, _subtree_root) = match top {
+            Some(c) if layer as usize == D - 1 => c.auth_path(&seed, sk_seed, idx_leaf, pk_root),
+            _ => merkle::build_subtree_with_auth(&seed, sk_seed, layer, idx_tree as u64, idx_leaf, progress, pct_lo, pct_hi),
+        };
+        #[cfg(not(feature = "top-cache"))]
         let (auth_path, _subtree_root) = merkle::build_subtree_with_auth(
             &seed, sk_seed, layer, idx_tree as u64, idx_leaf, progress, pct_lo, pct_hi,
         );
@@ -324,9 +355,9 @@ fn sign_inner(
         sig[offset..offset + 4].copy_from_slice(&count.to_be_bytes());
         offset += 4;
 
-        // Write auth path (SUBTREE_H * N bytes)
+        // Write auth path (layer_h(layer) * N bytes)
         let mut h = 0;
-        while h < SUBTREE_H {
+        while h < lh {
             let row = auth_path[h];
             write16(&mut sig, offset, &row);
             offset += N;
@@ -429,6 +460,8 @@ pub fn verify(
 
     // Last tree (forced-zero): secret IS the root
     let last_adrs = crate::address::make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, (K - 1) as u32, 0, 0, 0);
+    #[cfg(feature = "v2")]
+    let last_adrs = crate::address::make_adrs(0, u64::from(ht_idx), crate::v2hash::T_FORS_LAST, 0, 0, 0, 0);
     fors_roots[K - 1] =
         crate::hash::th(&seed, &last_adrs, &pad16(&fors_secrets[K - 1]));
 
@@ -439,8 +472,9 @@ pub fn verify(
     let mut idx_tree = ht_idx;
 
     for layer in 0..(D as u32) {
-        let idx_leaf = idx_tree & ((1u32 << SUBTREE_H) - 1);
-        idx_tree >>= SUBTREE_H;
+        let lh = layer_h(layer);
+        let idx_leaf = idx_tree & ((1u32 << lh) - 1);
+        idx_tree >>= lh;
 
         // Parse WOTS chain values
         let mut wots_sigma = [[0u8; N]; L];
@@ -459,8 +493,8 @@ pub fn verify(
         offset += 4;
 
         // Parse auth path
-        let mut auth_path = [[0u8; N]; SUBTREE_H];
-        for h in 0..SUBTREE_H {
+        let mut auth_path = [[0u8; N]; MAX_LAYER_H];
+        for h in 0..lh {
             auth_path[h].copy_from_slice(&sig[offset..offset + N]);
             offset += N;
         }

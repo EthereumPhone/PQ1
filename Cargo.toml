@@ -94,6 +94,7 @@ members = [
     # See `xtask/Cargo.toml` for the cargo-xtask convention. Phase 4 of the
     # modularity refactor.
     "xtask",
+    "research/c10-autoresearch/sha512-m33",
 ]
 # Excluded from the workspace because cargo-fuzz needs nightly +
 # libFuzzer + sanitizers (separate toolchain from the firmware) and

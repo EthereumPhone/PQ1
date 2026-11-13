@@ -1,0 +1,35 @@
+Open On-Chip Debugger 0.12.0
+Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
+Info : auto-selecting first available session transport "dapdirect_swd". To override use 'transport select <transport>'.
+Info : STLINK V3J8M3 (API v3) VID:PID 0483:374E
+Info : Target voltage: 3.286715
+Info : Unable to match requested speed 500 kHz, using 200 kHz
+Info : Unable to match requested speed 500 kHz, using 200 kHz
+Info : clock speed 200 kHz
+Info : stlink_dap_op_connect(connect)
+Info : SWD DPIDR 0x0be12477
+Info : [stm32u5x.cpu] Cortex-M33 r0p4 processor detected
+Info : [stm32u5x.cpu] target has 8 breakpoints, 4 watchpoints
+Info : gdb port disabled
+Info : Unable to match requested speed 480 kHz, using 200 kHz
+Info : Unable to match requested speed 480 kHz, using 200 kHz
+CPU in Secure state
+[stm32u5x.cpu] halted due to debug-request, current mode: Thread 
+xPSR: 0xf9000000 pc: 0x080007c0 msp: 0x200c0000
+OPTR:
+0x40022040: 9deff8aa 
+
+UID:
+0x0bfa0700: 0055002d 4731500e 20383451 
+
+pc (/32): 0x080007c0
+
+register xpsr not found in current target
+
+dumped 2097152 bytes in 66.998596s (30.568 KiB/s)
+
+Info : Unable to match requested speed 480 kHz, using 200 kHz
+Info : Unable to match requested speed 480 kHz, using 200 kHz
+shutdown command invoked

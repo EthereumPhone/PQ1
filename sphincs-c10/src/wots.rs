@@ -70,7 +70,72 @@ pub(crate) fn find_count(
     pct: u8,
 ) -> (u32, [u8; 32], [u8; L]) {
     let wots_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
+    #[cfg(feature = "hw-sha256-search")]
+    {
+        extern "C" {
+            fn pqsigner_sha256_search128(
+                buf: *const u8,
+                start: u32,
+                n: u32,
+                pred: unsafe extern "C" fn(*const u8) -> bool,
+                out: *mut u8,
+            ) -> u32;
+        }
+        /// The grind predicate, for the driver: `digit_sum(digest) == TARGET_SUM`.
+        #[cfg_attr(feature = "hw-sha256-search-colocate", link_section = ".text.pq1_c10_search")] unsafe extern "C" fn hits_target(d: *const u8) -> bool {
+            // SAFETY: the driver passes a pointer to its 32-byte digest.
+            digit_sum(unsafe { &*d.cast::<[u8; 32]>() }) == TARGET_SUM
+        }
+        // `wots_digest`'s preimage; the driver writes the count into [124..128).
+        let mut buf = [0u8; 128];
+        buf[0..32].copy_from_slice(seed);
+        buf[32..64].copy_from_slice(&wots_adrs);
+        buf[64..96].copy_from_slice(msg_hash);
+        let mut count = 0u32;
+        while count < 10_000_000 {
+            // Chunks end where the sequential loop reports progress.
+            let n = GRIND_REPORT_EVERY - count % GRIND_REPORT_EVERY;
+            let n = if n > 10_000_000 - count { 10_000_000 - count } else { n };
+            let mut d = [0u8; 32];
+            // SAFETY: `buf` is 128 readable bytes, `d` 32 writable; `count + n`
+            // is at most 10,000,000.
+            let c = unsafe { pqsigner_sha256_search128(buf.as_ptr(), count, n, hits_target, d.as_mut_ptr()) };
+            if c < count + n {
+                return (c, d, extract_digits(&d));
+            }
+            count += n;
+            if count % GRIND_REPORT_EVERY == 0 {
+                crate::hypertree::report(progress, pct);
+            }
+        }
+        panic!("WOTS+C count grinding failed after 10M iterations");
+    }
+    #[cfg(feature = "v2-fused")]
+    {
+        let mut count = 0u32;
+        while count < 10_000_000 {
+            let n = GRIND_REPORT_EVERY - count % GRIND_REPORT_EVERY;
+            let n = if n > 10_000_000 - count { 10_000_000 - count } else { n };
+            let mut d = [0u8; 32];
+            let c = crate::v2hash::search_fused(seed, msg_hash, layer, tree, kp, count, n, &mut d);
+            if c < count + n {
+                // The driver accepted on its own SWAR sum; the decision rests on
+                // this crate's `digit_sum` (master's, unchanged) again: a wrong
+                // SWAR or a faulted compare stops the sign here (Fable 0.3 review).
+                assert!(digit_sum(&d) == TARGET_SUM, "v2 grind: driver digit sum disagrees");
+                return (c, d, extract_digits(&d));
+            }
+            count += n;
+            if count % GRIND_REPORT_EVERY == 0 {
+                crate::hypertree::report(progress, pct);
+            }
+        }
+        panic!("WOTS+C count grinding failed after 10M iterations");
+    }
+    #[cfg(not(feature = "hw-sha256-search"))]
+    #[allow(unreachable_code)]
     let mut count = 0u32;
+    #[cfg(not(feature = "hw-sha256-search"))]
     while count < 10_000_000 {
         let d = wots_digest(seed, &wots_adrs, msg_hash, count);
         // Rejected trials (all but the last) need only the digit sum, not
@@ -105,12 +170,16 @@ pub fn keygen_pk(
     tree: u64,
     kp: u32,
 ) -> [u8; N] {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::wots_pk_fused(seed, sk_seed, layer, tree, kp);
+    #[allow(unreachable_code)]
     let base_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
     let mut pk_elements = [[0u8; N]; L];
+    #[cfg(feature = "hw-sha256-prfchain")]
+    crate::hash::wots_chains(seed, sk_seed, &base_adrs, layer, tree, kp, None, None, &mut pk_elements);
+    #[cfg(not(feature = "hw-sha256-prfchain"))]
     for i in 0..L {
-        let sk_i = wots_secret(sk_seed, layer, tree, kp, i as u32);
-        let chain_adrs = set_chain_index(&base_adrs, i as u32);
-        pk_elements[i] = chain_hash(seed, &chain_adrs, &sk_i, 0, (W - 1) as u32);
+        pk_elements[i] = crate::hash::wots_secret_chain(seed, sk_seed, &base_adrs, layer, tree, kp, i as u32, (W - 1) as u32);
     }
     let pk_adrs = make_adrs(layer, tree, ADRS_WOTS_PK, kp, 0, 0, 0);
     th_multi(seed, &pk_adrs, &pk_elements)
@@ -146,11 +215,12 @@ pub(crate) fn sign_with_shuffle(
 
     let chain_order = crate::shuffle::fisher_yates(shuffle_seed, L);
 
+    #[cfg(feature = "hw-sha256-prfchain")]
+    crate::hash::wots_chains(seed, sk_seed, &base_adrs, layer, tree, kp, Some(&chain_order[..L]), Some(&digits), &mut sigma);
+    #[cfg(not(feature = "hw-sha256-prfchain"))]
     for step in 0..L {
         let i = chain_order[step] as usize;
-        let sk_i = wots_secret(sk_seed, layer, tree, kp, i as u32);
-        let chain_adrs = set_chain_index(&base_adrs, i as u32);
-        sigma[i] = chain_hash(seed, &chain_adrs, &sk_i, 0, digits[i] as u32);
+        sigma[i] = crate::hash::wots_secret_chain(seed, sk_seed, &base_adrs, layer, tree, kp, i as u32, digits[i] as u32);
     }
     (sigma, count)
 }

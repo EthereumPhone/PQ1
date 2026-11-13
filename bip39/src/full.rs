@@ -776,7 +776,26 @@ fn pbkdf2_hmac_sha512(
     let mut u_prev = mac.finalize().into_bytes();
     out.copy_from_slice(&u_prev);
 
+    // `fast-pbkdf2` (autoresearch): iterations 2..=iters as two raw SHA-512 compressions each.
+    #[cfg(feature = "fast-pbkdf2")]
+    {
+        use sha2::Digest;
+        let mut key_block = [0u8; 128];
+        if password.len() > 128 {
+            key_block[..64].copy_from_slice(&sha2::Sha512::digest(password));
+        } else {
+            key_block[..password.len()].copy_from_slice(password);
+        }
+        let mut u1 = [0u8; 64];
+        u1.copy_from_slice(&u_prev);
+        crate::sha512_fast::pbkdf2_tail(&key_block, &u1, iters, out, progress.map(|f| (f, pct_lo, pct_hi)), PBKDF2_REPORT_EVERY);
+        key_block.zeroize();
+        u1.zeroize();
+        u_prev.as_mut_slice().zeroize();
+        return;
+    }
     // T = U_1 ^ U_2 ^ ... ^ U_iters, where U_n = HMAC(password, U_{n-1}).
+    #[allow(unreachable_code)]
     for i in 1..iters {
         let mut mac = keyed.clone();
         mac.update(&u_prev);

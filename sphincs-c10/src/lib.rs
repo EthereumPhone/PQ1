@@ -28,6 +28,18 @@ pub mod params;
 pub(crate) mod address;
 pub(crate) mod fors;
 pub(crate) mod hash;
+/// RESEARCH (#1155): the C10 v2 one-block hash layer. Every v1 hash function
+/// returns through it when `v2` is on.
+#[cfg(feature = "v2")]
+pub(crate) mod v2hash;
+#[cfg(all(feature = "v2", any(feature = "hw-sha256-chain", feature = "hw-sha256-search", feature = "hw-sha256-gather",
+    feature = "hw-sha256-prfchain", feature = "hw-sha256-forsleaf", feature = "hw-sha256-forstree", feature = "hw-sha256-grindr",
+    feature = "hw-sha256-thmulti", feature = "hw-sha256-forssub")))]
+compile_error!("`v2` routes through the generic hash functions only; the fused driver paths build v1 preimages");
+// The near-miss generator still splits `ht_idx` by the uniform `SUBTREE_H` (Astra review of the
+// format options, 2026-11-13); it is not ported to the asymmetric research split.
+#[cfg(all(feature = "near-miss-gen", feature = "v2-split810"))]
+compile_error!("`near-miss-gen` assumes uniform layer heights; it is not ported to `v2-split810`");
 pub(crate) mod hypertree;
 pub(crate) mod merkle;
 pub(crate) mod wots;
@@ -36,6 +48,8 @@ pub(crate) mod wots;
 // `crate::crypto::c10_sign_verified_with_progress` and the SCA target
 // crates construct `ShuffleSeed` values to drive `sign_with_shuffle`.
 pub mod shuffle;
+#[cfg(feature = "top-cache")]
+pub mod topcache;
 
 /// TEST-ONLY +C-gate near-miss vector generator. Gated behind the
 /// `near-miss-gen` feature (off by default, NEVER shipped). Produces
@@ -261,6 +275,19 @@ impl SigningKey {
 
     /// Read-only access to the secret seed (for KDF purposes within
     /// the secure world only).
+    /// TRACK-B EXPERIMENT: `sign_with_shuffle_silent` with the top layer taken from `cache`.
+    #[cfg(feature = "top-cache")]
+    #[must_use]
+    pub fn sign_with_shuffle_cached(
+        &self,
+        cache: &topcache::TopCache,
+        msg_hash: &[u8; 32],
+        opt_rand: Option<&[u8; N]>,
+        shuffle: &shuffle::ShuffleSeed,
+    ) -> [u8; SIGNATURE_LEN] {
+        hypertree::sign_with_shuffle_cached(&self.sk_seed, &self.pk_seed, &self.pk_root, msg_hash, opt_rand, shuffle, cache)
+    }
+
     #[must_use]
     pub fn sk_seed(&self) -> &[u8; 32] {
         &self.sk_seed

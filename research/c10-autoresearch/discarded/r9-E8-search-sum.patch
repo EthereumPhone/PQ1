@@ -1,0 +1,664 @@
+diff --git a/hw/Cargo.toml b/hw/Cargo.toml
+index c354dc6ea..f28a5c503 100644
+--- a/hw/Cargo.toml
++++ b/hw/Cargo.toml
+@@ -55,6 +55,9 @@ v1-asm-key = ["v1-asm-chain", "prfchain"]
+ v1-asm-fors = ["forsleaf"]
+ # Round 8: v1 count search (search128, WOTS-shaped zero words) in asm; the predicate callback is called from the loop (secure-only, output-identical).
+ v1-asm-search = ["search"]
++# Round 9: the WOTS+C count search with the digit sum in the driver (`pqsigner_v1_search128_wots`); the predicate
++# only confirms the hit (secure-only, output-identical).
++v1-asm-search-sum = ["v1-asm-search"]
+ # Round 8: the v1 R grind (PRF + h_msg per nonce) as one driver call (secure-only, output-identical).
+ v1-grindr = ["search"]
+ # Secure image only (autoresearch): FORS secret + leaf hash in one call (`pqsigner_fors_leaf16`).
+diff --git a/hw/src/hash.rs b/hw/src/hash.rs
+index 28e3e6678..dd07edcc4 100644
+--- a/hw/src/hash.rs
++++ b/hw/src/hash.rs
+@@ -2734,6 +2734,393 @@ fn v1_search_asm(st: *mut u32, start: u32, end: u32) -> (u32, u32) {
+     (c, flag)
+ }
+ 
++/// `v1-asm-search-sum` (round 9, secure-only; the FSBL never names it): the WOTS+C count
++/// search with the digit sum in the driver. Per try the loop does what `v1_search_asm` does
++/// (DCIS poll with a 2^24 guard, HR3..HR7, SR clear; for a next try BUSY wait with a 2^24
++/// guard and stale-DCIS refusal, INIT, the 32 words, DCAL), but instead of calling `pred`
++/// it parks the raw HR3..HR7 words in the staging array during the block-0 window and, in the
++/// engine window, computes the exact digit sum of the low 129 bits (the round-7 v2 fold sum:
++/// spec 0.3 uses v1's digit position) with the same exact early reject (digits 32..42 add at
++/// most 77). Returns `(c, flag)` as `v1_search_asm`. `st`: 0..20 message words, 34 target,
++/// 40..45 the parked HR words.
++#[cfg(feature = "v1-asm-search-sum")]
++const V1SS_SPIN: u32 = 2;
++
++#[cfg(all(feature = "v1-asm-search-sum", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
++#[inline(always)]
++fn v1_search_sum_asm(st: *mut u32, start: u32, end: u32) -> (u32, u32) {
++    let (c, flag): (u32, u32);
++    // SAFETY: drives only the secure HASH block (r4 = HASH_BASE); reads the 48-word staging
++    // array at `st` and writes its words 40..45; pushes and pops its own 6-word frame (8-byte
++    // aligned) around each sum; on a hang or a stale DCIS it calls `hash_engine_fault`.
++    unsafe {
++        core::arch::asm!(
++            "movw lr, #0x24",
++            "movt lr, #0x6",
++            "1:",
++            "movs r12, #{spin}",
++            "10:",
++            "subs r12, r12, #1",
++            "bne 10b",
++            "ldr r12, [r4, #0x24]",
++            "lsls r12, r12, #30",
++            "bpl 11f",
++            "4:",
++            "add r12, r4, #0x31C",            // HR3
++            "ldm r12, {{r0, r1, r2, r3, r10}}", // HR3..HR7 (raw: big-endian digest words)
++            "movs r12, #1",
++            "str r12, [r4, #0x24]",
++            "add r11, r8, #1",
++            "cmp r11, r9",
++            "beq 50f",
++            // issue try r11
++            "ldr r12, [r4, #0x24]",
++            "tst r12, #10",
++            "bne 40f",
++            "41:",
++            "str lr, [r4]",                   // INIT
++            "ldrd r12, lr, [r5]",
++            "str r12, [r4, #4]",
++            "str lr, [r4, #4]",
++            "ldrd r12, lr, [r5, #8]",
++            "str r12, [r4, #4]",
++            "str lr, [r4, #4]",
++            "movs r12, #0",
++            "str r12, [r4, #4]",
++            "str r12, [r4, #4]",
++            "str r12, [r4, #4]",
++            "str r12, [r4, #4]",
++            "ldrd r12, lr, [r5, #32]",
++            "str r12, [r4, #4]",
++            "str lr, [r4, #4]",
++            "ldrd r12, lr, [r5, #40]",
++            "str r12, [r4, #4]",
++            "str lr, [r4, #4]",
++            "ldrd r12, lr, [r5, #48]",
++            "str r12, [r4, #4]",
++            "str lr, [r4, #4]",
++            "ldrd r12, lr, [r5, #56]",
++            "str r12, [r4, #4]",
++            "str lr, [r4, #4]",
++            "ldr r12, [r5, #64]",
++            "str r12, [r4, #4]",              // word 16: block 0 starts
++            // block-0 window: park the previous try's HR words, block-1 words
++            "str r0, [r5, #160]",
++            "str r1, [r5, #164]",
++            "str r2, [r5, #168]",
++            "str r3, [r5, #172]",
++            "str r10, [r5, #176]",
++            "ldrd r0, r1, [r5, #68]",
++            "ldr r2, [r5, #76]",
++            "rev r3, r11",
++            "movs r12, #0",
++            "mov.w r10, #256",
++            "str r0, [r4, #4]",               // waits for block 0
++            "str r1, [r4, #4]",
++            "str r2, [r4, #4]",
++            ".rept 11",
++            "str r12, [r4, #4]",
++            ".endr",
++            "str r3, [r4, #4]",               // count
++            "str r10, [r4, #8]",              // DCAL (NBLW = 0)
++            // engine window: the digit sum of try r8
++            "add r12, r5, #160",
++            "ldm r12, {{r0, r1, r2, r3, r10}}",
++            "ldr r12, [r5, #136]",            // target
++            "push {{r5, r8, r9, r11, r12, lr}}", // [sp, #16] = target
++            "movw lr, #0x71C7",                // A = 0o0707070707
++            "movt lr, #0x071C",
++            "movw r9, #0xF03F",                // B = 0x3F03F03F (12-bit fold)
++            "movt r9, #0x3F03",
++            "and r5, r10, lr",
++            "and r11, lr, r10, lsr #3",
++            "add r5, r5, r11",
++            "and r11, lr, r3, lsr #1",
++            "add r5, r5, r11",
++            "and r11, lr, r3, lsr #4",
++            "add r5, r5, r11",
++            "and r11, lr, r2, lsr #2",
++            "add r5, r5, r11",
++            "and r11, lr, r2, lsr #5",
++            "add r5, r5, r11",
++            "and r11, r5, r9",
++            "and r5, r9, r5, lsr #6",
++            "add r5, r5, r11",
++            "movw r11, #0x1001",               // fields at 0, 12, 24 summed into bits 24..31
++            "movt r11, #0x0100",
++            "mul r5, r5, r11",
++            "lsr r5, r5, #24",
++            "lsr r11, r10, #30",
++            "bfi r11, r3, #2, #1",
++            "add r5, r5, r11",
++            "lsr r11, r3, #31",
++            "bfi r11, r2, #1, #2",
++            "add r5, r5, r11",
++            "ldr r12, [sp, #16]",              // target
++            "add r11, r5, #77",                // digits 32..42 add at most 77
++            "cmp r11, r12",
++            "blo 68f",
++            "and r11, r1, lr",
++            "and r12, lr, r1, lsr #3",
++            "add r11, r11, r12",
++            "and r12, r11, r9",
++            "and r11, r9, r11, lsr #6",
++            "add r11, r11, r12",
++            "movw r12, #0x1001",
++            "movt r12, #0x0100",
++            "mul r11, r11, r12",
++            "add r5, r5, r11, lsr #24",
++            "lsr r11, r1, #30",
++            "bfi r11, r0, #2, #1",
++            "add r5, r5, r11",
++            "ldr r12, [sp, #16]",
++            "cmp r5, r12",
++            "ite eq",
++            "moveq r0, #1",
++            "movne r0, #0",
++            "b 66f",
++            "68:",
++            "movs r0, #0",                     // early reject
++            "66:",
++            "pop {{r5, r8, r9, r11, r12, lr}}",
++            "cmp r0, #0",
++            "bne 60f",
++            "mov r8, r11",
++            "movw lr, #0x24",
++            "movt lr, #0x6",
++            "b 1b",
++            // last try: nothing to issue; the sum of try r8 now
++            "50:",
++            "ldr r12, [r5, #136]",
++            "push {{r5, r8, r9, r11, r12, lr}}",
++            "movw lr, #0x71C7",                // A = 0o0707070707
++            "movt lr, #0x071C",
++            "movw r9, #0xF03F",                // B = 0x3F03F03F (12-bit fold)
++            "movt r9, #0x3F03",
++            "and r5, r10, lr",
++            "and r11, lr, r10, lsr #3",
++            "add r5, r5, r11",
++            "and r11, lr, r3, lsr #1",
++            "add r5, r5, r11",
++            "and r11, lr, r3, lsr #4",
++            "add r5, r5, r11",
++            "and r11, lr, r2, lsr #2",
++            "add r5, r5, r11",
++            "and r11, lr, r2, lsr #5",
++            "add r5, r5, r11",
++            "and r11, r5, r9",
++            "and r5, r9, r5, lsr #6",
++            "add r5, r5, r11",
++            "movw r11, #0x1001",               // fields at 0, 12, 24 summed into bits 24..31
++            "movt r11, #0x0100",
++            "mul r5, r5, r11",
++            "lsr r5, r5, #24",
++            "lsr r11, r10, #30",
++            "bfi r11, r3, #2, #1",
++            "add r5, r5, r11",
++            "lsr r11, r3, #31",
++            "bfi r11, r2, #1, #2",
++            "add r5, r5, r11",
++            "ldr r12, [sp, #16]",              // target
++            "add r11, r5, #77",                // digits 32..42 add at most 77
++            "cmp r11, r12",
++            "blo 69f",
++            "and r11, r1, lr",
++            "and r12, lr, r1, lsr #3",
++            "add r11, r11, r12",
++            "and r12, r11, r9",
++            "and r11, r9, r11, lsr #6",
++            "add r11, r11, r12",
++            "movw r12, #0x1001",
++            "movt r12, #0x0100",
++            "mul r11, r11, r12",
++            "add r5, r5, r11, lsr #24",
++            "lsr r11, r1, #30",
++            "bfi r11, r0, #2, #1",
++            "add r5, r5, r11",
++            "ldr r12, [sp, #16]",
++            "cmp r5, r12",
++            "ite eq",
++            "moveq r0, #1",
++            "movne r0, #0",
++            "b 67f",
++            "69:",
++            "movs r0, #0",                     // early reject
++            "67:",
++            "pop {{r5, r8, r9, r11, r12, lr}}",
++            "cmp r0, #0",
++            "bne 61f",
++            "mov r8, r9",
++            "movs r0, #0",
++            "b 97f",
++            "60:",
++            "movs r0, #1",
++            "b 97f",
++            "61:",
++            "movs r0, #2",
++            "b 97f",
++            // DCIS not yet: seven straight polls, then a counted poll (2^24)
++            "11:",
++            ".rept 7",
++            "ldr r12, [r4, #0x24]",
++            "lsls r12, r12, #30",
++            "bmi 4b",
++            ".endr",
++            "mov.w r0, #16777216",
++            "12:",
++            "ldr r12, [r4, #0x24]",
++            "lsls r12, r12, #30",
++            "bmi 4b",
++            "subs r0, r0, #1",
++            "bne 12b",
++            "b 99f",
++            // BUSY still set, or a stale DCIS (the HR words are live: the counter is pushed)
++            "40:",
++            "push {{r0, r1}}",
++            "mov.w r0, #16777216",
++            "42:",
++            "tst r12, #8",
++            "beq 43f",
++            "subs r0, r0, #1",
++            "beq 99f",
++            "ldr r12, [r4, #0x24]",
++            "b 42b",
++            "43:",
++            "pop {{r0, r1}}",
++            "tst r12, #2",
++            "beq 41b",
++            "99:",
++            "bl {fault}",
++            "97:",
++            spin = const V1SS_SPIN,
++            fault = sym hash_engine_fault,
++            out("r0") flag,
++            out("r1") _,
++            out("r2") _,
++            out("r3") _,
++            in("r4") HASH_BASE,
++            in("r5") st,
++            inout("r8") start => c,
++            in("r9") end,
++            out("r10") _,
++            out("r11") _,
++            out("r12") _,
++            out("lr") _,
++        );
++    }
++    (c, flag)
++}
++
++/// The WOTS+C count search with the digit sum in the driver (`v1-asm-search-sum`): the first
++/// `c` in `start..start + n` whose digest's digit sum (low 129 bits, 3-bit digits) is `target`;
++/// its digest to `out`. On a hit the caller's `pred` (when given) is asked about the same 32
++/// bytes the callback search would have passed it (`d[0..12]` zero), and must agree: a
++/// disagreement halts through `hash_engine_fault` (fail closed). Messages that are not of the
++/// WOTS shape go through `pqsigner_sha256_search128` with `pred` (or fault when `pred` is
++/// `None`, the test entry's case).
++#[cfg(feature = "v1-asm-search-sum")]
++#[inline(always)]
++unsafe fn v1_search_sum(
++    buf: *const u8,
++    start: u32,
++    n: u32,
++    target: u32,
++    pred: Option<unsafe extern "C" fn(*const u8) -> bool>,
++    out: *mut u8,
++) -> u32 {
++    let end = start + n;
++    if n == 0 {
++        return end;
++    }
++    // SAFETY: caller contract (128 readable bytes); unaligned word reads are legal.
++    let w = |i: usize| unsafe { buf.add(4 * i).cast::<u32>().read_unaligned() };
++    let z = w(4) | w(5) | w(6) | w(7) == 0 && (20..31).all(|i| w(i) == 0);
++    #[cfg(not(all(feature = "tick-hook", not(feature = "tick-batch"))))]
++    if z {
++        let mut st = [0u32; 48];
++        for (i, x) in st.iter_mut().take(20).enumerate() {
++            *x = w(i);
++        }
++        st[34] = target;
++        // SAFETY: caller contract.
++        unsafe { issue128(buf, start) };
++        let (c, flag) = v1_search_sum_asm(st.as_mut_ptr(), start, end);
++        if flag == 0 {
++            #[cfg(feature = "tick-batch")]
++            // SAFETY: the engine is idle; the tick does not hash.
++            unsafe {
++                pqsigner_hash_tick_n(n)
++            };
++            return end;
++        }
++        let mut d = [0u32; 8];
++        if flag == 1 {
++            collect::<false>(&mut d);
++        }
++        // SAFETY: caller contract.
++        unsafe { issue128(buf, c) };
++        collect::<true>(&mut d);
++        if let Some(p) = pred {
++            // The signer's own predicate decides: the bytes the callback search passes it.
++            let mut dz = d;
++            dz[0] = 0;
++            dz[1] = 0;
++            dz[2] = 0;
++            // SAFETY: 32 readable bytes; `pred` reads only those (caller contract).
++            if !unsafe { p(dz.as_ptr().cast::<u8>()) } {
++                hash_engine_fault();
++            }
++        }
++        // SAFETY: `out` names 32 writable bytes (caller contract).
++        unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
++        #[cfg(feature = "tick-batch")]
++        // SAFETY: the engine is idle; the tick does not hash.
++        unsafe {
++            pqsigner_hash_tick_n((c - start).saturating_add(2 + u32::from(flag == 1)))
++        };
++        return c;
++    }
++    match pred {
++        // SAFETY: caller contract.
++        Some(p) => unsafe { pqsigner_sha256_search128(buf, start, n, p, out) },
++        None => {
++            let _ = (z, target);
++            hash_engine_fault()
++        }
++    }
++}
++
++/// `search128` for the WOTS+C grind with the C10 target (205) summed in the driver
++/// (`v1-asm-search-sum`). The signer links its `search128` call here (`hw-sha256-search-sum`),
++/// so the signature is `search128`'s; `pred` confirms the hit.
++///
++/// # Safety
++/// As `pqsigner_sha256_search128`; `pred` must be the WOTS+C target-205 digit-sum predicate.
++#[cfg(feature = "v1-asm-search-sum")]
++#[no_mangle]
++pub unsafe extern "C" fn pqsigner_v1_search128_wots(
++    buf: *const u8,
++    start: u32,
++    n: u32,
++    pred: unsafe extern "C" fn(*const u8) -> bool,
++    out: *mut u8,
++) -> u32 {
++    // SAFETY: this function's contract.
++    unsafe { v1_search_sum(buf, start, n, 205, Some(pred), out) }
++}
++
++/// Test entry (`v1-asm-search-sum`): the same search for any `target`, no predicate (WOTS-shape
++/// messages only).
++///
++/// # Safety
++/// As `pqsigner_sha256_search128`, without `pred`; `buf` of the WOTS shape.
++#[cfg(feature = "v1-asm-search-sum")]
++#[no_mangle]
++pub unsafe extern "C" fn pqsigner_v1_search128_target(buf: *const u8, start: u32, n: u32, target: u32, out: *mut u8) -> u32 {
++    // SAFETY: this function's contract.
++    unsafe { v1_search_sum(buf, start, n, target, None, out) }
++}
++
+ /// Counter search (`search`, secure image only): for `c` in `start..start+n`,
+ /// SHA-256 the 128-byte message at `buf` with bytes [124..128) = `c`
+ /// (big-endian); return the first `c` whose digest satisfies `pred` (the
+@@ -2748,10 +3135,6 @@ fn v1_search_asm(st: *mut u32, start: u32, end: u32) -> (u32, u32) {
+ /// stream is in flight; `init_clock` has run.
+ #[cfg(feature = "search")]
+ #[no_mangle]
+-// `v1-asm-search` calls `pred` once per try: keep the loop and the signer's predicate in one
+-// section (the signer names the same one), so a direct-mapped ICACHE (the shipped 1-way
+-// setting) can never map them onto the same lines whatever the link layout.
+-#[cfg_attr(feature = "v1-asm-search", link_section = ".text.pq1_c10_search")]
+ pub unsafe extern "C" fn pqsigner_sha256_search128(
+     buf: *const u8,
+     start: u32,
+diff --git a/research/c10-autoresearch/bench/Cargo.toml b/research/c10-autoresearch/bench/Cargo.toml
+index a0e9d1de2..9ac9ba070 100644
+--- a/research/c10-autoresearch/bench/Cargo.toml
++++ b/research/c10-autoresearch/bench/Cargo.toml
+@@ -21,8 +21,8 @@ hra-ldm = ["pqsigner-hw/hra-ldm"]
+ [dependencies]
+ # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the
+ # UI-only `tick-hook`): one-call digests, unrolled DIN/HR I/O, inlined barriers, INIT-only restart.
+-sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub", "hw-sha256-grindr-drv", "hw-sha256-search-colocate"] }
+-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr"] }
++sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub", "hw-sha256-grindr-drv", "hw-sha256-search-sum"] }
++pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr", "v1-asm-search-sum"] }
+ 
+ # Mirror of the root workspace's shipping [profile.release] (Cargo.toml), including the
+ # per-package opt-level 3 overrides. Changing this is an experiment, not a harness change.
+diff --git a/research/c10-autoresearch/bench_avg_v1/Cargo.toml b/research/c10-autoresearch/bench_avg_v1/Cargo.toml
+index ffb90db40..76e436ec1 100644
+--- a/research/c10-autoresearch/bench_avg_v1/Cargo.toml
++++ b/research/c10-autoresearch/bench_avg_v1/Cargo.toml
+@@ -21,8 +21,8 @@ hra-ldm = ["pqsigner-hw/hra-ldm"]
+ [dependencies]
+ # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the
+ # UI-only `tick-hook`): one-call digests, unrolled DIN/HR I/O, inlined barriers, INIT-only restart.
+-sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub", "hw-sha256-grindr-drv", "hw-sha256-search-colocate"] }
+-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr"] }
++sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub", "hw-sha256-grindr-drv", "hw-sha256-search-sum"] }
++pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr", "v1-asm-search-sum"] }
+ 
+ # Mirror of the root workspace's shipping [profile.release] (Cargo.toml), including the
+ # per-package opt-level 3 overrides. Changing this is an experiment, not a harness change.
+diff --git a/research/c10-autoresearch/bench_diff/Cargo.toml b/research/c10-autoresearch/bench_diff/Cargo.toml
+index 976e596f6..5c2a25998 100644
+--- a/research/c10-autoresearch/bench_diff/Cargo.toml
++++ b/research/c10-autoresearch/bench_diff/Cargo.toml
+@@ -20,9 +20,9 @@ tick-batch = ["tick", "pqsigner-hw/tick-batch", "sphincs-c10/hw-sha256-tickbatch
+ [dependencies]
+ # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the
+ # UI-only `tick-hook`): one-call digests, unrolled DIN/HR I/O, inlined barriers, INIT-only restart.
+-sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub", "hw-sha256-grindr-drv", "hw-sha256-search-colocate"] }
++sphincs-c10 = { path = "../../../sphincs-c10", features = ["hw-sha256", "hw-sha256-oneshot", "hw-sha256-chain", "hw-sha256-search", "hw-sha256-prfchain", "hw-sha256-forsleaf", "hw-sha256-forstree", "hw-sha256-grindr", "hw-sha256-thmulti", "hw-sha256-forssub", "hw-sha256-grindr-drv", "hw-sha256-search-sum"] }
+ sha2 = { version = "0.10", default-features = false }
+-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr"] }
++pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr", "v1-asm-search-sum"] }
+ 
+ # Mirror of the root workspace's shipping [profile.release] (Cargo.toml), including the
+ # per-package opt-level 3 overrides. Changing this is an experiment, not a harness change.
+diff --git a/research/c10-autoresearch/bench_v1micro/Cargo.toml b/research/c10-autoresearch/bench_v1micro/Cargo.toml
+index c4d5dfda8..1855d069d 100644
+--- a/research/c10-autoresearch/bench_v1micro/Cargo.toml
++++ b/research/c10-autoresearch/bench_v1micro/Cargo.toml
+@@ -22,7 +22,7 @@ stale-search = ["stale"]
+ 
+ [dependencies]
+ # The v1 kit image's driver configuration (as bench_avg_v1).
+-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr"] }
++pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-fors", "v1-asm-search", "v1-grindr", "v1-asm-search-sum"] }
+ sha2 = { version = "0.10", default-features = false }
+ 
+ [profile.release]
+diff --git a/research/c10-autoresearch/bench_v1micro/src/lib.rs b/research/c10-autoresearch/bench_v1micro/src/lib.rs
+index 1d62ca42f..cfaf89497 100644
+--- a/research/c10-autoresearch/bench_v1micro/src/lib.rs
++++ b/research/c10-autoresearch/bench_v1micro/src/lib.rs
+@@ -17,6 +17,8 @@ extern "C" {
+     fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8);
+     fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: *const u8, out: *mut u8);
+     fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
++    fn pqsigner_v1_search128_target(buf: *const u8, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
++    fn pqsigner_v1_search128_wots(buf: *const u8, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8) -> u32;
+     fn pqsigner_v1_grind_r(sk: *const u8, rand: *const u8, msg: *const u8, seed: *const u8, root: *const u8, max: u32, r_out: *mut u8, d_out: *mut u8) -> u32;
+ }
+ #[no_mangle]
+@@ -320,6 +322,77 @@ fn search_check() -> (u32, u32) {
+     (checks, fails)
+ }
+ 
++/// Round 9: the in-driver digit sum against the reference, gate-5 style. For 6 WOTS-shaped
++/// keys: 96 consecutive tries' digests by the one-shot path and their reference digit sums;
++/// then for every target in a dense set the driver's first hit in those 96 tries (and two
++/// short windows starting at and just before a hit) must equal the reference's. Then the WOTS
++/// entry against the callback search128 on 3 real target-205 searches.
++fn sum_sweep() -> (u32, u32) {
++    let (mut checks, mut fails) = (0u32, 0u32);
++    let mut x: u32 = 0x1234_5678;
++    let mut rnd = || { x ^= x << 13; x ^= x >> 17; x ^= x << 5; x };
++    for _key in 0..6 {
++        let mut mb = [0u8; 129];
++        for i in 0..16 { mb[1 + i] = rnd() as u8; }
++        for i in 32..64 { mb[1 + i] = rnd() as u8; }
++        for i in 64..80 { mb[1 + i] = rnd() as u8; }
++        let start = rnd() >> 4;
++        let mut sums = [0u32; 96];
++        let mut digs = [[0u8; 32]; 96];
++        for k in 0..96u32 {
++            let mut m = [0u8; 128];
++            m.copy_from_slice(&mb[1..]);
++            m[124..128].copy_from_slice(&(start + k).to_be_bytes());
++            // SAFETY: 128 readable, 32 writable bytes.
++            unsafe { pqsigner_sha256_oneshot(m.as_ptr(), 128, digs[k as usize].as_mut_ptr()) };
++            sums[k as usize] = digit_sum(&digs[k as usize]);
++        }
++        let mut targets = [0u32; 64];
++        let mut nt = 0;
++        for t in 135..=165u32 { targets[nt] = t; nt += 1; }
++        for t in (170..=210u32).step_by(2) { targets[nt] = t; nt += 1; }
++        for t in [0u32, 60, 100, 120, 128, 224, 250, 301] { targets[nt] = t; nt += 1; }
++        for &tg in targets[..nt].iter() {
++            let first = sums.iter().position(|&v| v == tg);
++            let mut run = |s0: u32, n: u32| {
++                let mut d = [0u8; 32];
++                // SAFETY: 128 readable bytes at an odd address, 32 writable.
++                let r = unsafe { pqsigner_v1_search128_target(mb.as_ptr().add(1), start + s0, n, tg, d.as_mut_ptr()) };
++                let want = sums[s0 as usize..(s0 + n) as usize].iter().position(|&v| v == tg).map(|p| s0 + p as u32);
++                checks += 1;
++                let ok = match want {
++                    Some(k) => r == start + k && d == digs[k as usize],
++                    None => r == start + s0 + n,
++                };
++                if !ok { fails += 1; }
++            };
++            run(0, 96);
++            if let Some(f) = first {
++                let f = f as u32;
++                run(f, 1);
++                if f > 0 { run(f - 1, 2); }
++                if f + 3 <= 96 { run(f, 3); }
++            }
++        }
++    }
++    // The WOTS entry (target 205, hits_target-style predicate) against the callback search.
++    let mut sb = [0u8; 128];
++    for i in 0..16 { sb[i] = 0x5A ^ i as u8; }
++    for i in 32..44 { sb[i] = i as u8; }
++    for m in 0..3u8 {
++        sb[64] = m;
++        sb[65] = 0x77;
++        let (mut d1, mut d2) = ([0u8; 32], [0u8; 32]);
++        // SAFETY: valid buffers.
++        let r1 = unsafe { pqsigner_v1_search128_wots(sb.as_ptr(), 0, 1 << 22, pred_205, d1.as_mut_ptr()) };
++        // SAFETY: valid buffers.
++        let r2 = unsafe { pqsigner_sha256_search128(sb.as_ptr(), 0, 1 << 22, pred_205, d2.as_mut_ptr()) };
++        checks += 1;
++        if r1 != r2 || d1 != d2 { fails += 1; }
++    }
++    (checks, fails)
++}
++
+ fn grind_check() -> (u32, u32, u32, u32) {
+     let (mut checks, mut fails, mut cy, mut nn) = (0u32, 0u32, 0u32, 0u32);
+     for case in 0..4u32 {
+@@ -511,16 +584,17 @@ pub extern "C" fn c10_bench_main() {
+         sb[64..80].copy_from_slice(&[0x77; 16]);
+         let mut d = [0u8; 32];
+         let _ = pred_false;
+-        // [12,13] search128, digit-sum predicate that never holds: 20,000 tries.
+-        let t = cyc();
+-        let _ = pqsigner_sha256_search128(sb.as_ptr(), 0, 20_000, pred_never, d.as_mut_ptr());
+-        rec(cyc().wrapping_sub(t), 20_000);
+-        // [14,15] search128 with the real target 205: 8 searches, (cycles, tries).
++        // [12,13] in-driver digit-sum search: dense sweep against one-shot digests and the
++        // reference digit sum, plus the WOTS entry against the callback search: (checks, fails).
++        let (sc, sf) = sum_sweep();
++        rec(sc, sf);
++        // [14,15] the WOTS entry (target 205, predicate confirms the hit): 8 searches, (cycles, tries).
+         let (mut cy, mut tries) = (0u32, 0u32);
++        let _ = pred_never;
+         for m in 0..8u8 {
+             sb[70] = m;
+             let t = cyc();
+-            let r = pqsigner_sha256_search128(sb.as_ptr(), 0, 1 << 22, pred_205, d.as_mut_ptr());
++            let r = pqsigner_v1_search128_wots(sb.as_ptr(), 0, 1 << 22, pred_205, d.as_mut_ptr());
+             cy = cy.wrapping_add(cyc().wrapping_sub(t));
+             tries += r + 1;
+         }
+diff --git a/research/c10-autoresearch/experiment_v1micro.sh b/research/c10-autoresearch/experiment_v1micro.sh
+index eeffb92d7..0bfa7d362 100755
+--- a/research/c10-autoresearch/experiment_v1micro.sh
++++ b/research/c10-autoresearch/experiment_v1micro.sh
+@@ -18,8 +18,9 @@ c, d = q(6); r['chain16_x15_per_step'] = round(c / d, 1)
+ c, d = q(8); r['fors_subtree16_per_call'] = round(c / d, 1); r['fors_subtree16_per_digest'] = round(c / d / 47, 1)
+ c, d = q(10); r['searchcheck'] = c; r['searchcheck_fail'] = d
+ if c != 12 or d != 0: r['ok'] = False
+-c, d = q(12); r['search128_prednever_per_try'] = round(c / d, 1)
+-c, d = q(14); r['search128_205_per_try'] = round(c / d, 1) if d else None; r['search128_205_tries'] = d
++c, d = q(12); r['sumsweep_checks'] = c; r['sumsweep_fail'] = d
++if c < 900 or d != 0: r['ok'] = False
++c, d = q(14); r['search_wots_per_try'] = round(c / d, 1) if d else None; r['search_wots_tries'] = d
+ c, d = q(16); r['th_multi16_43_per_call'] = round(c / d, 1)
+ c, d = q(18); r['grind_per_nonce'] = round(c / d, 1) if d else None; r['grind_nonces'] = d
+ c, d = q(20); r['residue_cases'] = c; r['residue_mask'] = hex(d)
+diff --git a/research/c10-autoresearch/sweep_v1spin.sh b/research/c10-autoresearch/sweep_v1spin.sh
+index f8a45cefc..c4cae1ad4 100755
+--- a/research/c10-autoresearch/sweep_v1spin.sh
++++ b/research/c10-autoresearch/sweep_v1spin.sh
+@@ -7,6 +7,6 @@ orig=$(grep -oP "const $N: u32 = \K[0-9]+" "$H")
+ for v in "$@"; do
+   sed -i "s/const $N: u32 = [0-9]*;/const $N: u32 = $v;/" "$H"
+   r=$("$D/experiment_v1micro.sh")
+-  echo "$N=$v $(echo "$r" | python3 -c 'import json,sys; r=json.load(sys.stdin); print({k: r.get(k) for k in ("ok","chains16_keygen_per_digest","chains16_prf_only_per_chain","chain16_x15_per_step","fors_subtree16_per_digest","search128_prednever_per_try","search128_205_per_try","searchcheck_fail")})')"
++  echo "$N=$v $(echo "$r" | python3 -c 'import json,sys; r=json.load(sys.stdin); print({k: r.get(k) for k in ("ok","chains16_keygen_per_digest","chains16_prf_only_per_chain","chain16_x15_per_step","fors_subtree16_per_digest","search_wots_per_try","sumsweep_fail")})')"
+ done
+ sed -i "s/const $N: u32 = [0-9]*;/const $N: u32 = $orig;/" "$H"
+diff --git a/sphincs-c10/Cargo.toml b/sphincs-c10/Cargo.toml
+index 14e20c736..511c1e9e5 100644
+--- a/sphincs-c10/Cargo.toml
++++ b/sphincs-c10/Cargo.toml
+@@ -23,9 +23,9 @@ hw-sha256-oneshot = ["hw-sha256"]
+ hw-sha256-chain = ["hw-sha256-oneshot"]
+ # The WOTS+C count grind through `pqsigner_sha256_search128` (`pqsigner-hw/search`).
+ hw-sha256-search = ["hw-sha256-oneshot"]
+-# Round 8 (autoresearch): `hits_target` in the driver search's section (`.text.pq1_c10_search`), so the
+-# search loop and its per-try callback never alias in a direct-mapped ICACHE. Layout only.
+-hw-sha256-search-colocate = ["hw-sha256-search"]
++# Round 9 (autoresearch): the WOTS+C search links to the driver entry with the digit sum in the driver
++# (`pqsigner_v1_search128_wots`, same signature; `hits_target` confirms the hit). Link name only.
++hw-sha256-search-sum = ["hw-sha256-search"]
+ # th / th_pair without the preimage copy (`pqsigner-hw/gather`).
+ hw-sha256-gather = ["hw-sha256-oneshot"]
+ # WOTS secret + chain in one driver call (`pqsigner-hw/prfchain`); sk_seed is never copied.
+diff --git a/sphincs-c10/src/wots.rs b/sphincs-c10/src/wots.rs
+index ee59b80ec..940190305 100644
+--- a/sphincs-c10/src/wots.rs
++++ b/sphincs-c10/src/wots.rs
+@@ -73,7 +73,7 @@ pub(crate) fn find_count(
+     #[cfg(feature = "hw-sha256-search")]
+     {
+         extern "C" {
+-            fn pqsigner_sha256_search128(
++            #[cfg_attr(feature = "hw-sha256-search-sum", link_name = "pqsigner_v1_search128_wots")] fn pqsigner_sha256_search128(
+                 buf: *const u8,
+                 start: u32,
+                 n: u32,
+@@ -82,7 +82,7 @@ pub(crate) fn find_count(
+             ) -> u32;
+         }
+         /// The grind predicate, for the driver: `digit_sum(digest) == TARGET_SUM`.
+-        #[cfg_attr(feature = "hw-sha256-search-colocate", link_section = ".text.pq1_c10_search")] unsafe extern "C" fn hits_target(d: *const u8) -> bool {
++        unsafe extern "C" fn hits_target(d: *const u8) -> bool {
+             // SAFETY: the driver passes a pointer to its 32-byte digest.
+             digit_sum(unsafe { &*d.cast::<[u8; 32]>() }) == TARGET_SUM
+         }

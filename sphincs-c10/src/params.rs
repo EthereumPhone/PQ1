@@ -30,6 +30,34 @@ pub const SUBTREE_H: usize = H / D; // 9
 /// Number of leaves in each subtree.
 pub const SUBTREE_LEAVES: usize = 1 << SUBTREE_H; // 512
 
+/// Largest per-layer subtree height (array bound). `SUBTREE_H` unless the
+/// RESEARCH variant `v2-split810` (format-options check, 2026-11-13; not
+/// adopted) splits the hypertree into layer heights (8, 10).
+#[cfg(not(feature = "v2-split810"))]
+pub const MAX_LAYER_H: usize = SUBTREE_H;
+#[cfg(feature = "v2-split810")]
+pub const MAX_LAYER_H: usize = 10;
+
+/// Subtree height at hypertree layer `layer` (0 = bottom).
+#[inline(always)]
+#[must_use]
+pub const fn layer_h(layer: u32) -> usize {
+    #[cfg(feature = "v2-split810")]
+    {
+        if layer == 0 {
+            8
+        } else {
+            10
+        }
+    }
+    #[cfg(not(feature = "v2-split810"))]
+    {
+        let _ = layer;
+        SUBTREE_H
+    }
+}
+const _: () = assert!(layer_h(0) + layer_h(1) == H && layer_h(0) <= MAX_LAYER_H && layer_h(1) <= MAX_LAYER_H);
+
 /// Number of FORS trees.
 pub const K: usize = 13;
 
@@ -49,7 +77,11 @@ pub const LOG_W: usize = 3;
 pub const L: usize = 43;
 
 /// WOTS+C target digit sum for count-grinding.
+#[cfg(not(feature = "v2-ts200"))]
 pub const TARGET_SUM: usize = 205;
+/// RESEARCH (format-options check, 2026-11-13): v2 with target sum 200. Not adopted.
+#[cfg(feature = "v2-ts200")]
+pub const TARGET_SUM: usize = 200;
 
 /// Bit mask for extracting a single base-w digit.
 pub const W_MASK: u8 = (W - 1) as u8; // 0x07
@@ -73,7 +105,13 @@ const SIG_FORS_AUTH: usize = (K - 1) * A * N;
 pub const SIG_FORS_TOTAL: usize = SIG_R + SIG_FORS_SECRETS + SIG_FORS_AUTH; // 2336
 
 /// One hypertree layer: L chain values + 4-byte count + SUBTREE_H auth nodes.
+/// (Under the research variant `v2-split810` the two layers differ, 820 and
+/// 852 bytes; use `layer_h`. The total `SIGNATURE_LEN` is unchanged.)
 pub const SIG_HT_LAYER: usize = L * N + 4 + SUBTREE_H * N; // 836
+
+/// The layer-0 section of the signature (research tooling: equals
+/// `SIG_HT_LAYER` unless the layer heights differ).
+pub const SIG_HT_LAYER0: usize = L * N + 4 + layer_h(0) * N;
 
 /// Total signature size.
 pub const SIGNATURE_LEN: usize = SIG_FORS_TOTAL + D * SIG_HT_LAYER; // 4008

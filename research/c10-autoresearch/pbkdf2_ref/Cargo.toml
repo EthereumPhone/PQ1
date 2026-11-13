@@ -1,0 +1,9 @@
+[package]
+name = "pbkdf2-ref"
+version = "0.1.0"
+edition = "2021"
+publish = false
+[workspace]
+[dependencies]
+sphincs-tz-bip39 = { path = "../../../bip39" }
+hex = "0.4"

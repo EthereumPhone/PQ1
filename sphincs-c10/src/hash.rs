@@ -223,11 +223,27 @@ pub fn sha256_parts(parts: &[&[u8]]) -> [u8; 32] {
 /// `mstore(0x00, seed)`, `mstore(0x20, adrs)`, `mstore(0x40, val)`.
 pub fn th(seed: &[u8; 32], adrs: &[u8; 32], val: &[u8; 32]) -> [u8; N] {
     bump!(TH);
-    let mut buf = [0u8; 96];
-    buf[0..32].copy_from_slice(seed);
-    buf[32..64].copy_from_slice(adrs);
-    buf[64..96].copy_from_slice(val);
-    truncate(&sha256_bytes(&buf))
+    #[cfg(feature = "v2")]
+    return crate::v2hash::th(seed, adrs, val);
+    #[allow(unreachable_code)]
+    #[cfg(feature = "hw-sha256-gather")]
+    {
+        extern "C" {
+            fn pqsigner_sha256_3x32_16(a: *const u8, b: *const u8, c: *const u8, out: *mut u8);
+        }
+        let mut out = [0u8; N];
+        // SAFETY: three 32-byte inputs and a 16-byte output, live for the call.
+        unsafe { pqsigner_sha256_3x32_16(seed.as_ptr(), adrs.as_ptr(), val.as_ptr(), out.as_mut_ptr()) };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-gather"))]
+    {
+        let mut buf = [0u8; 96];
+        buf[0..32].copy_from_slice(seed);
+        buf[32..64].copy_from_slice(adrs);
+        buf[64..96].copy_from_slice(val);
+        sha256_bytes16(&buf)
+    }
 }
 
 /// `th_pair(seed, adrs, left, right)` — tweakable hash with two 32-byte inputs.
@@ -242,12 +258,32 @@ pub fn th_pair(
     right: &[u8; 32],
 ) -> [u8; N] {
     bump!(TH);
-    let mut buf = [0u8; 128];
-    buf[0..32].copy_from_slice(seed);
-    buf[32..64].copy_from_slice(adrs);
-    buf[64..96].copy_from_slice(left);
-    buf[96..128].copy_from_slice(right);
-    truncate(&sha256_bytes(&buf))
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::th_pair_fused(seed, adrs, left, right);
+    #[cfg(all(feature = "v2", not(feature = "v2-fused")))]
+    return crate::v2hash::th_pair(seed, adrs, left, right);
+    #[allow(unreachable_code)]
+    #[cfg(feature = "hw-sha256-gather")]
+    {
+        extern "C" {
+            fn pqsigner_sha256_4x32_16(a: *const u8, b: *const u8, c: *const u8, d: *const u8, out: *mut u8);
+        }
+        let mut out = [0u8; N];
+        // SAFETY: four 32-byte inputs and a 16-byte output, live for the call.
+        unsafe {
+            pqsigner_sha256_4x32_16(seed.as_ptr(), adrs.as_ptr(), left.as_ptr(), right.as_ptr(), out.as_mut_ptr())
+        };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-gather"))]
+    {
+        let mut buf = [0u8; 128];
+        buf[0..32].copy_from_slice(seed);
+        buf[32..64].copy_from_slice(adrs);
+        buf[64..96].copy_from_slice(left);
+        buf[96..128].copy_from_slice(right);
+        sha256_bytes16(&buf)
+    }
 }
 
 /// Maximum number of values `th_multi` accepts: `L = 43` (WOTS+C pubkey
@@ -268,6 +304,22 @@ pub const TH_MULTI_MAX: usize = 43;
 pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
     bump!(TH);
     assert!(vals.len() <= TH_MULTI_MAX);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::th_multi(seed, adrs, vals);
+    #[cfg(feature = "hw-sha256-thmulti")]
+    {
+        extern "C" {
+            fn pqsigner_th_multi16(seed: *const u8, adrs: *const u8, vals: *const u8, n: u32, out: *mut u8);
+        }
+        let mut out = [0u8; N];
+        // SAFETY: 32 + 32 readable bytes, `16 * vals.len()` readable bytes (the
+        // `[[u8; N]]` slice is contiguous) and 16 writable, live for the call.
+        unsafe {
+            pqsigner_th_multi16(seed.as_ptr(), adrs.as_ptr(), vals.as_ptr().cast::<u8>(), vals.len() as u32, out.as_mut_ptr())
+        };
+        return out;
+    }
+    #[allow(unreachable_code)]
     let mut buf = [0u8; 64 + 32 * TH_MULTI_MAX];
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(adrs);
@@ -277,7 +329,7 @@ pub fn th_multi(seed: &[u8; 32], adrs: &[u8; 32], vals: &[[u8; N]]) -> [u8; N] {
         let off = 64 + 32 * i;
         buf[off..off + N].copy_from_slice(&vals[i]);
     }
-    truncate(&sha256_bytes(&buf[..64 + 32 * vals.len()]))
+    sha256_bytes16(&buf[..64 + 32 * vals.len()])
 }
 
 /// `h_msg(seed, root, R, message)` — domain-separated message hash.
@@ -303,6 +355,9 @@ pub fn h_msg(
     message: &[u8; 32],
 ) -> [u8; 32] {
     bump!(OTHER);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::h_msg(seed, root, r, message);
+    #[allow(unreachable_code)]
     sha256_parts(&[seed, root, r, message, &[0xFFu8; 32]])
 }
 
@@ -329,13 +384,27 @@ pub fn chain_hash(
     steps: u32,
 ) -> [u8; N] {
     bump!(CHAIN_HASH);
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::chain_hash_fused(seed, adrs, val, start_pos, steps);
+    #[cfg(all(feature = "v2", not(feature = "v2-fused")))]
+    return crate::v2hash::chain_hash(seed, adrs, val, start_pos, steps);
+    #[allow(unreachable_code)]
     // `th`'s preimage, built once (`chain_buf`); a step rewrites only chain_pos and the value.
     let mut buf = chain_buf(seed, adrs, val);
+    #[cfg(feature = "hw-sha256-chain")]
+    {
+        extern "C" {
+            fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, steps: u32);
+        }
+        // SAFETY: `buf` is 96 bytes, readable and writable, for the whole call.
+        unsafe { pqsigner_sha256_chain16(buf.as_mut_ptr(), start_pos, steps) };
+    }
+    #[cfg(not(feature = "hw-sha256-chain"))]
     for step in 0..steps {
         buf[56..60].copy_from_slice(&(start_pos + step).to_be_bytes());
         bump!(TH);
-        let d = sha256_bytes(&buf);
-        buf[64..64 + N].copy_from_slice(&d[..N]);
+        let d = sha256_bytes16(&buf);
+        buf[64..64 + N].copy_from_slice(&d);
     }
     chain_value(&buf)
 }
@@ -356,6 +425,9 @@ pub fn wots_digest(
     count: u32,
 ) -> [u8; 32] {
     bump!(OTHER);
+    #[cfg(feature = "v2")]
+    return crate::v2hash::wots_digest(seed, wots_adrs, msg_hash, count);
+    #[allow(unreachable_code)]
     let mut buf = [0u8; 128];
     buf[0..32].copy_from_slice(seed);
     buf[32..64].copy_from_slice(wots_adrs);
@@ -383,15 +455,25 @@ pub fn wots_secret(
     chain_idx: u32,
 ) -> [u8; N] {
     bump!(WOTS_SECRET);
-    let tree_b32 = u64_to_b32(tree);
-    truncate(&sha256_parts(&[
-        sk_seed,
-        b"wots",
-        &layer.to_be_bytes(), // to_b4(layer) — 4 bytes
-        &tree_b32, // to_b32(tree) — 32 bytes
-        &kp.to_be_bytes(), // to_b4(kp) — 4 bytes
-        &chain_idx.to_be_bytes(), // to_b4(chain_idx) — 4 bytes
-    ]))
+    #[cfg(feature = "v2")]
+    return crate::v2hash::wots_secret(sk_seed, layer, tree, kp, chain_idx);
+    #[allow(unreachable_code)]
+    // One contiguous 80-byte preimage, one backend call (same bytes as the parts).
+    let mut buf = [0u8; 80];
+    buf[0..32].copy_from_slice(sk_seed);
+    buf[32..36].copy_from_slice(b"wots");
+    buf[36..40].copy_from_slice(&layer.to_be_bytes());
+    buf[64..72].copy_from_slice(&tree.to_be_bytes()); // to_b32(tree): bytes [40..64) stay zero
+    buf[72..76].copy_from_slice(&kp.to_be_bytes());
+    buf[76..80].copy_from_slice(&chain_idx.to_be_bytes());
+    let out = sha256_bytes16(&buf);
+    // Wipe the sk_seed copy (volatile, so the stores are not elided).
+    for b in buf.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -409,13 +491,24 @@ pub fn wots_secret(
 /// reassemble the shared forest and forge (CWE-347 / few-time-key reuse).
 pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32) -> [u8; N] {
     bump!(FORS_SECRET);
-    truncate(&sha256_parts(&[
-        sk_seed,
-        b"fors",
-        &ht_idx.to_be_bytes(), // to_b4 — hypertree-position binding
-        &tree_idx.to_be_bytes(), // to_b4
-        &leaf_idx.to_be_bytes(), // to_b4
-    ]))
+    #[cfg(feature = "v2")]
+    return crate::v2hash::fors_secret(sk_seed, ht_idx, tree_idx, leaf_idx);
+    #[allow(unreachable_code)]
+    // One contiguous 48-byte preimage, one backend call (same bytes as the parts).
+    let mut buf = [0u8; 48];
+    buf[0..32].copy_from_slice(sk_seed);
+    buf[32..36].copy_from_slice(b"fors");
+    buf[36..40].copy_from_slice(&ht_idx.to_be_bytes());
+    buf[40..44].copy_from_slice(&tree_idx.to_be_bytes());
+    buf[44..48].copy_from_slice(&leaf_idx.to_be_bytes());
+    let out = sha256_bytes16(&buf);
+    // Wipe the sk_seed copy (volatile, so the stores are not elided).
+    for b in buf.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    out
 }
 
 /// `chain_hash`'s 96-byte `th` preimage `seed ‖ adrs ‖ pad16(val)`: the value's
@@ -463,4 +556,149 @@ fn sha256_oneshot(data: &[u8]) -> [u8; 32] {
     let mut h = Sha256::new();
     h.update(data);
     h.finalize().into()
+}
+
+/// `truncate(sha256_bytes(data))`: the first n = 16 digest bytes. In the
+/// secure image (`hw-sha256-oneshot`) the driver reads out only HR0..HR3.
+#[cfg(feature = "hw-sha256-oneshot")]
+#[inline(always)]
+pub(crate) fn sha256_bytes16(data: &[u8]) -> [u8; N] {
+    extern "C" {
+        fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, out: *mut u8);
+    }
+    let mut out = [0u8; N];
+    // SAFETY: `data` is valid for `data.len()` bytes of reads and `out` for 16
+    // bytes of writes for the whole call.
+    unsafe { pqsigner_sha256_oneshot16(data.as_ptr(), data.len(), out.as_mut_ptr()) };
+    out
+}
+
+#[cfg(not(feature = "hw-sha256-oneshot"))]
+#[inline(always)]
+pub(crate) fn sha256_bytes16(data: &[u8]) -> [u8; N] {
+    truncate(&sha256_bytes(data))
+}
+
+/// `chain_hash(seed, set_chain_index(base_adrs, ci), wots_secret(sk_seed, layer, tree, kp, ci), 0, steps)`.
+/// With `hw-sha256-prfchain` the driver computes both in one call and the
+/// secret never leaves its registers.
+#[inline(always)]
+pub(crate) fn wots_secret_chain(
+    seed: &[u8; 32],
+    sk_seed: &[u8; 32],
+    base_adrs: &[u8; 32],
+    layer: u32,
+    tree: u64,
+    kp: u32,
+    ci: u32,
+    steps: u32,
+) -> [u8; N] {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::wots_secret_chain_fused(seed, sk_seed, base_adrs, layer, tree, kp, ci, steps);
+    #[allow(unreachable_code)]
+    #[cfg(feature = "hw-sha256-prfchain")]
+    {
+        extern "C" {
+            fn pqsigner_wots_prf_chain16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, steps: u32, out: *mut u8);
+        }
+        // wots_secret's preimage after sk_seed: "wots" ‖ to_b4(layer) ‖ to_b32(tree) ‖ to_b4(kp) ‖ to_b4(ci).
+        let mut tail = [0u8; 48];
+        tail[0..4].copy_from_slice(b"wots");
+        tail[4..8].copy_from_slice(&layer.to_be_bytes());
+        tail[32..40].copy_from_slice(&tree.to_be_bytes());
+        tail[40..44].copy_from_slice(&kp.to_be_bytes());
+        tail[44..48].copy_from_slice(&ci.to_be_bytes());
+        // th's first 64 bytes: seed ‖ adrs with the chain index set (bytes [20..24) of adrs).
+        let mut seed_adrs = [0u8; 64];
+        seed_adrs[0..32].copy_from_slice(seed);
+        seed_adrs[32..64].copy_from_slice(base_adrs);
+        seed_adrs[52..56].copy_from_slice(&ci.to_be_bytes());
+        let mut out = [0u8; N];
+        // SAFETY: 32, 48 and 64 readable bytes and 16 writable, live for the call.
+        unsafe { pqsigner_wots_prf_chain16(sk_seed.as_ptr(), tail.as_ptr(), seed_adrs.as_ptr(), steps, out.as_mut_ptr()) };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-prfchain"))]
+    {
+        let sk_i = wots_secret(sk_seed, layer, tree, kp, ci);
+        let chain_adrs = crate::address::set_chain_index(base_adrs, ci);
+        chain_hash(seed, &chain_adrs, &sk_i, 0, steps)
+    }
+}
+
+/// `th(seed, leaf_adrs, pad16(fors_secret(sk_seed, ht_idx, tree_idx, leaf)))` with `leaf_adrs`
+/// the FORS leaf address. With `hw-sha256-forsleaf` one driver call; the secret stays in registers.
+#[inline(always)]
+pub(crate) fn fors_leaf(seed: &[u8; 32], sk_seed: &[u8; 32], leaf_adrs: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf: u32) -> [u8; N] {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::fors_leaf_fused(seed, sk_seed, leaf_adrs, ht_idx, tree_idx, leaf);
+    #[allow(unreachable_code)]
+    #[cfg(feature = "hw-sha256-forsleaf")]
+    {
+        extern "C" {
+            fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
+        }
+        let mut tail = [0u8; 16];
+        tail[0..4].copy_from_slice(b"fors");
+        tail[4..8].copy_from_slice(&ht_idx.to_be_bytes());
+        tail[8..12].copy_from_slice(&tree_idx.to_be_bytes());
+        tail[12..16].copy_from_slice(&leaf.to_be_bytes());
+        let mut seed_adrs = [0u8; 64];
+        seed_adrs[0..32].copy_from_slice(seed);
+        seed_adrs[32..64].copy_from_slice(leaf_adrs);
+        let mut out = [0u8; N];
+        // SAFETY: 32, 16 and 64 readable bytes and 16 writable, live for the call.
+        unsafe { pqsigner_fors_leaf16(sk_seed.as_ptr(), tail.as_ptr(), seed_adrs.as_ptr(), out.as_mut_ptr()) };
+        out
+    }
+    #[cfg(not(feature = "hw-sha256-forsleaf"))]
+    {
+        let s = fors_secret(sk_seed, ht_idx, tree_idx, leaf);
+        th(seed, leaf_adrs, &pad16(&s))
+    }
+}
+
+/// All L chains of one WOTS key through one driver call (`hw-sha256-prfchain`):
+/// chain `i` (in `order`, or 0..L) runs `digits[i]` steps (or W-1) from its
+/// secret; results land in `out[i]`.
+#[cfg(feature = "hw-sha256-prfchain")]
+#[inline(always)]
+pub(crate) fn wots_chains(
+    seed: &[u8; 32],
+    sk_seed: &[u8; 32],
+    base_adrs: &[u8; 32],
+    layer: u32,
+    tree: u64,
+    kp: u32,
+    order: Option<&[u8]>,
+    digits: Option<&[u8; crate::params::L]>,
+    out: &mut [[u8; N]; crate::params::L],
+) {
+    extern "C" {
+        fn pqsigner_wots_chains16(
+            sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8,
+            order: *const u8, digits: *const u8, fixed_steps: u32, n: u32, out: *mut u8,
+        );
+    }
+    let mut tail = [0u8; 48];
+    tail[0..4].copy_from_slice(b"wots");
+    tail[4..8].copy_from_slice(&layer.to_be_bytes());
+    tail[32..40].copy_from_slice(&tree.to_be_bytes());
+    tail[40..44].copy_from_slice(&kp.to_be_bytes());
+    let mut seed_adrs = [0u8; 64];
+    seed_adrs[0..32].copy_from_slice(seed);
+    seed_adrs[32..64].copy_from_slice(base_adrs);
+    if let Some(o) = order {
+        assert!(o.len() == crate::params::L && o.iter().all(|&i| (i as usize) < crate::params::L));
+    }
+    // SAFETY: the buffers are live for the call; `order` (if any) has L entries < L
+    // (asserted), `digits` (if any) L entries, `out` 16 L writable bytes.
+    unsafe {
+        pqsigner_wots_chains16(
+            sk_seed.as_ptr(), tail.as_ptr(), seed_adrs.as_ptr(),
+            order.map_or(core::ptr::null(), |o| o.as_ptr()),
+            digits.map_or(core::ptr::null(), |d| d.as_ptr()),
+            (crate::params::W - 1) as u32, crate::params::L as u32, out.as_mut_ptr().cast::<u8>(),
+        )
+    };
 }

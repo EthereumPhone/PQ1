@@ -1688,6 +1688,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha512-m33"
+version = "0.1.0"
+
+[[package]]
 name = "signature"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1722,6 +1726,7 @@ dependencies = [
  "hex",
  "hmac 0.12.1",
  "sha2 0.10.9",
+ "sha512-m33",
  "zeroize",
 ]
 

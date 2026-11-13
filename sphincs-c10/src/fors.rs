@@ -16,7 +16,7 @@ use crate::params::*;
 /// Reads enough underlying bytes (`(num_bits + bit_offset%8 + 7) / 8`,
 /// at most 8) to cover the requested span, returning the extracted value
 /// right-aligned and masked to `num_bits`.
-fn read_bits_le(digest: &[u8; 32], bit_offset: usize, num_bits: usize) -> u64 {
+pub(crate) fn read_bits_le(digest: &[u8; 32], bit_offset: usize, num_bits: usize) -> u64 {
     debug_assert!(num_bits > 0 && num_bits <= 57);
     let byte_start = 31 - (bit_offset / 8);
     let bit_in_byte = bit_offset % 8;
@@ -102,10 +102,18 @@ pub fn grind_r(
     message: &[u8; 32],
     opt_rand: Option<&[u8; N]>,
 ) -> ([u8; N], [u8; 32]) {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::grind_r_fused(sk_seed, pk_seed, pk_root, message, opt_rand);
     let seed_b32 = pad16(pk_seed);
     let root_b32 = pad16(pk_root);
     let last_shift = (K - 1) * A; // bit offset of the last FORS index
 
+    #[cfg(feature = "hw-sha256-grindr-drv")]
+    return grind_r_drv(sk_seed, &seed_b32, &root_b32, message, opt_rand, last_shift);
+    #[cfg(feature = "hw-sha256-grindr")]
+    #[allow(unreachable_code)]
+    return grind_r_fast(sk_seed, &seed_b32, &root_b32, message, opt_rand, last_shift);
+    #[allow(unreachable_code)]
     let mut nonce = 0u32;
     while nonce < 10_000_000 {
         let mut nonce_b32 = [0u8; 32];
@@ -139,6 +147,11 @@ pub fn compute_fors_root(
     ht_idx: u32,
     tree_idx: u32,
 ) -> [u8; N] {
+    #[cfg(feature = "hw-sha256-forstree")]
+    return fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, 0).0;
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::fors_root_fused(seed, sk_seed, ht_idx, tree_idx);
+    #[allow(unreachable_code)]
     // Treehash: process 2^A leaves left-to-right with a stack.
     let n_leaves = FORS_LEAVES; // 2048
     let mut stack = [[0u8; N]; A + 1]; // 17 entries, 272 bytes
@@ -147,9 +160,8 @@ pub fn compute_fors_root(
 
     for j in 0..n_leaves {
         // Compute leaf: th(seed, leaf_adrs, secret)
-        let secret = fors_secret(sk_seed, ht_idx, tree_idx, j as u32);
         let leaf_adrs = make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, tree_idx, 0, 0, j as u32);
-        let mut node = th(seed, &leaf_adrs, &pad16(&secret));
+        let mut node = crate::hash::fors_leaf(seed, sk_seed, &leaf_adrs, ht_idx, tree_idx, j as u32);
         let mut node_h = 0u32;
 
         // Merge with stack while heights match
@@ -193,6 +205,10 @@ pub fn sign_fors_tree(
     leaf_idx: u32,
 ) -> ([u8; N], [[u8; N]; A]) {
     let secret = fors_secret(sk_seed, ht_idx, tree_idx, leaf_idx);
+    #[cfg(feature = "v2-fused")]
+    return (secret, crate::v2hash::fors_auth_fused(seed, sk_seed, ht_idx, tree_idx, leaf_idx));
+    #[cfg(feature = "hw-sha256-forstree")]
+    return (secret, fors_tree_fast(seed, sk_seed, ht_idx, tree_idx, leaf_idx).1);
 
     // Build the tree and extract the auth path via Treehash.
     // For each level h, we need the sibling of our path node at that level.
@@ -206,9 +222,8 @@ pub fn sign_fors_tree(
     let target_idx = leaf_idx;
 
     for j in 0..n_leaves {
-        let s = fors_secret(sk_seed, ht_idx, tree_idx, j as u32);
         let leaf_adrs = make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, tree_idx, 0, 0, j as u32);
-        let mut node = th(seed, &leaf_adrs, &pad16(&s));
+        let mut node = crate::hash::fors_leaf(seed, sk_seed, &leaf_adrs, ht_idx, tree_idx, j as u32);
         let mut node_h = 0u32;
 
         while sp > 0 && stack_heights[sp - 1] == node_h {
@@ -265,4 +280,210 @@ pub fn sign_fors_tree(
 pub fn compute_fors_pk(seed: &[u8; 32], ht_idx: u32, roots: &[[u8; N]; K]) -> [u8; N] {
     let roots_adrs = make_adrs(0, u64::from(ht_idx), ADRS_FORS_ROOTS, 0, 0, 0, 0);
     th_multi(seed, &roots_adrs, roots)
+}
+
+/// FORS tree build over per-tree `seed ‖ adrs` templates (`hw-sha256-forstree`):
+/// the same leaves, nodes, order and auth-path selection as `sign_fors_tree` /
+/// `compute_fors_root`, but each hash patches only the address words that
+/// change (leaf: hash address; node: height and index) and passes the 16-byte
+/// children in place. Returns the root and, for `target_idx`, the auth path.
+#[cfg(feature = "hw-sha256-forstree")]
+pub(crate) fn fors_tree_fast(
+    seed: &[u8; 32],
+    sk_seed: &[u8; 32],
+    ht_idx: u32,
+    tree_idx: u32,
+    target_idx: u32,
+) -> ([u8; N], [[u8; N]; A]) {
+    extern "C" {
+        fn pqsigner_fors_leaf16(sk_seed: *const u8, prf_tail: *const u8, seed_adrs: *const u8, out: *mut u8);
+        fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: *const u8, out: *mut u8);
+    }
+    let mut leaf_sa = [0u8; 64];
+    leaf_sa[0..32].copy_from_slice(seed);
+    leaf_sa[32..64].copy_from_slice(&make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, tree_idx, 0, 0, 0));
+    let mut node_sa = leaf_sa;
+    let mut tail = [0u8; 16];
+    tail[0..4].copy_from_slice(b"fors");
+    tail[4..8].copy_from_slice(&ht_idx.to_be_bytes());
+    tail[8..12].copy_from_slice(&tree_idx.to_be_bytes());
+
+    let mut auth_path = [[0u8; N]; A];
+    let mut stack = [[0u8; N]; A + 1];
+    let mut stack_heights = [0u32; A + 1];
+    let mut sp: usize = 0;
+    #[cfg(feature = "hw-sha256-tickbatch")]
+    extern "C" {
+        fn pqsigner_hash_tick_n(n: u32);
+    }
+    #[cfg(feature = "hw-sha256-forssub")]
+    extern "C" {
+        fn pqsigner_fors_subtree16(sk_seed: *const u8, tail: *const u8, leaf_sa: *const u8, node_sa: *const u8, j0: u32, out: *mut u8);
+    }
+    let mut jn = 0u32;
+    while jn < FORS_LEAVES as u32 {
+        let mut node = [0u8; N];
+        let mut node_h = 0u32;
+        let j: u32;
+        // A whole 16-leaf subtree in one driver call, except the one holding the revealed leaf.
+        #[cfg(feature = "hw-sha256-forssub")]
+        let batched = jn % 16 == 0 && (jn >> 4) != (target_idx >> 4);
+        #[cfg(not(feature = "hw-sha256-forssub"))]
+        let batched = false;
+        if batched {
+            #[cfg(feature = "hw-sha256-forssub")]
+            // SAFETY: 32, 16, 64, 64 readable bytes and 16 writable, live for the call; jn % 16 == 0.
+            unsafe {
+                pqsigner_fors_subtree16(sk_seed.as_ptr(), tail.as_ptr(), leaf_sa.as_ptr(), node_sa.as_ptr(), jn, node.as_mut_ptr())
+            };
+            node_h = 4;
+            j = jn + 15;
+            jn += 16;
+        } else {
+            j = jn;
+            jn += 1;
+            // One UI tick per individually built block of 16 leaves.
+            #[cfg(feature = "hw-sha256-tickbatch")]
+            if j % 16 == 15 {
+                // SAFETY: the engine is idle between calls; the tick does not hash.
+                unsafe { pqsigner_hash_tick_n(16 * 2 + 15) };
+            }
+            tail[12..16].copy_from_slice(&j.to_be_bytes());
+            leaf_sa[60..64].copy_from_slice(&j.to_be_bytes());
+            // SAFETY: 32, 16, 64 readable bytes and 16 writable, live for the call.
+            unsafe { pqsigner_fors_leaf16(sk_seed.as_ptr(), tail.as_ptr(), leaf_sa.as_ptr(), node.as_mut_ptr()) };
+        }
+        while sp > 0 && stack_heights[sp - 1] == node_h {
+            sp -= 1;
+            let sibling = stack[sp];
+            let parent_idx = j >> (node_h + 1);
+            // Auth path: the same selection as `sign_fors_tree` (public indices only).
+            let target_at_h = target_idx >> node_h;
+            let sibling_idx = target_at_h ^ 1;
+            let left_leaf_start = (j >> (node_h + 1)) << (node_h + 1);
+            let right_leaf_start = left_leaf_start + (1 << node_h);
+            if sibling_idx & 1 == 0 {
+                if (sibling_idx << node_h) == left_leaf_start {
+                    auth_path[node_h as usize] = sibling;
+                }
+            } else if (sibling_idx << node_h) == right_leaf_start {
+                auth_path[node_h as usize] = node;
+            }
+            node_sa[56..60].copy_from_slice(&(node_h + 1).to_be_bytes());
+            node_sa[60..64].copy_from_slice(&parent_idx.to_be_bytes());
+            let mut parent = [0u8; N];
+            // SAFETY: 64, 16, 16 readable bytes and 16 writable, live for the call.
+            unsafe { pqsigner_node16(node_sa.as_ptr(), sibling.as_ptr(), node.as_ptr(), parent.as_mut_ptr()) };
+            node = parent;
+            node_h += 1;
+        }
+        stack[sp] = node;
+        stack_heights[sp] = node_h;
+        sp += 1;
+    }
+    (stack[0], auth_path)
+}
+
+/// `grind_r` as one driver call (`hw-sha256-grindr-drv`): the driver runs the
+/// same nonce loop (the same two preimages, `sk_seed` read in place, never
+/// copied) and stops at the first nonce whose `h_msg` digest has bits
+/// `last_shift..last_shift + A` clear. The decision is re-checked here with
+/// this crate's `read_bits_le`. Same nonces, same R, same digest.
+#[cfg(feature = "hw-sha256-grindr-drv")]
+fn grind_r_drv(
+    sk_seed: &[u8; 32],
+    seed_b32: &[u8; 32],
+    root_b32: &[u8; 32],
+    message: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    last_shift: usize,
+) -> ([u8; N], [u8; 32]) {
+    extern "C" {
+        fn pqsigner_v1_grind_r(
+            sk_seed: *const u8,
+            rand: *const u8,
+            message: *const u8,
+            seed: *const u8,
+            root: *const u8,
+            max: u32,
+            r_out: *mut u8,
+            d_out: *mut u8,
+        ) -> u32;
+    }
+    // The driver's bit test is fixed to this parameter set: bits 132..143 (K = 13, A = 11).
+    const _: () = assert!((K - 1) * A == 132 && A == 11 && N == 16);
+    let mut r = [0u8; N];
+    let mut d = [0u8; 32];
+    let rand = match opt_rand {
+        Some(x) => x.as_ptr(),
+        None => core::ptr::null(),
+    };
+    // SAFETY: 32, 16 (or null), 32, 32, 32 readable bytes and 16, 32 writable, live for the call.
+    let c = unsafe {
+        pqsigner_v1_grind_r(sk_seed.as_ptr(), rand, message.as_ptr(), seed_b32.as_ptr(), root_b32.as_ptr(), 10_000_000, r.as_mut_ptr(), d.as_mut_ptr())
+    };
+    if c >= 10_000_000 {
+        panic!("R grinding failed after 10M iterations");
+    }
+    assert!(read_bits_le(&d, last_shift, A) == 0, "R grind: driver bit test disagrees");
+    (r, d)
+}
+
+/// `grind_r` with both preimages built once (`hw-sha256-grindr`): per nonce
+/// only the nonce bytes of the R PRF preimage and the R bytes of the `h_msg`
+/// preimage change, and each digest is one contiguous one-shot instead of a
+/// five-part stream. Same nonces, same R, same digest. The PRF buffer holds a
+/// copy of `sk_seed` and is wiped before returning.
+#[cfg(feature = "hw-sha256-grindr")]
+fn grind_r_fast(
+    sk_seed: &[u8; 32],
+    seed_b32: &[u8; 32],
+    root_b32: &[u8; 32],
+    message: &[u8; 32],
+    opt_rand: Option<&[u8; N]>,
+    last_shift: usize,
+) -> ([u8; N], [u8; 32]) {
+    use crate::hash::sha256_bytes;
+    // sk_seed ‖ "R_grind" ‖ [rand] ‖ message ‖ nonce_b32 (119 or 103 bytes).
+    let mut prf = [0u8; 119];
+    prf[0..32].copy_from_slice(sk_seed);
+    prf[32..39].copy_from_slice(b"R_grind");
+    let mut off = 39;
+    if let Some(rand) = opt_rand {
+        prf[off..off + N].copy_from_slice(rand);
+        off += N;
+    }
+    prf[off..off + 32].copy_from_slice(message);
+    off += 32;
+    let nonce_at = off + 28; // to_b32(nonce): the count is the last 4 bytes
+    let prf_len = off + 32;
+    // h_msg: seed ‖ root ‖ pad16(R) ‖ message ‖ 0xFF*32.
+    let mut hm = [0u8; 160];
+    hm[0..32].copy_from_slice(seed_b32);
+    hm[32..64].copy_from_slice(root_b32);
+    hm[96..128].copy_from_slice(message);
+    hm[128..160].copy_from_slice(&[0xFFu8; 32]);
+    let mut nonce = 0u32;
+    let mut found = None;
+    while nonce < 10_000_000 {
+        prf[nonce_at..nonce_at + 4].copy_from_slice(&nonce.to_be_bytes());
+        let r = truncate(&sha256_bytes(&prf[..prf_len]));
+        hm[64..64 + N].copy_from_slice(&r);
+        let digest = sha256_bytes(&hm);
+        if read_bits_le(&digest, last_shift, A) == 0 {
+            found = Some((r, digest));
+            break;
+        }
+        nonce += 1;
+    }
+    // Wipe the sk_seed copy (volatile, so the stores are not elided).
+    for b in prf.iter_mut() {
+        // SAFETY: `b` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(b, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    match found {
+        Some(x) => x,
+        None => panic!("R grinding failed after 10M iterations"),
+    }
 }
