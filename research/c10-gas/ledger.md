@@ -214,3 +214,66 @@ EntryPoint overhead and calldata, both unchanged.
 The saving is the verifier's, one for one: verification gas of a Type-2 UserOp drops by ~43-48k
 (deploy profile), i.e. ~22-24% of `validateUserOp`; the rest of the UserOp is unchanged.
 | B7 | v1 mirror of B2 + B4 (cheap: the chain generator gains a v1 mode): 43 chains unrolled, steps in straight-line blocks of 4/2/1 keyed on `not(d)`, value word at 0x40, ADRS `wotsAdrs \\| i<<64 \\| p<<32` | v1 | 123,829 -> **115,785..115,914** (-7.9..8.0k) | 122,144 -> 112,318..112,413 (-9.7..9.8k) | 2,067 -> 11,955 / 2,453 -> 13,210 | gate.sh green | keep (v1 landing remains an owner decision; no pins/scripts/Lean touched) |
+
+### Wallet-level numbers at the end of batch 2 (after B7)
+
+| path | default ref -> cand | deploy profile ref -> cand |
+|---|---|---|
+| v1 `validateUserOp` | 224,690 -> 165,016 (**-59,674**) | 213,946 -> 160,904 (-53,042) |
+| v2 `validateUserOp` | 206,367 -> 152,716 (**-53,651**) | 196,770 -> 149,208 (-47,562) |
+| v1 `isValidSignature` | 194,906 -> 135,585 (-59,321) | 184,326 -> 131,844 (-52,482) |
+| v2 `isValidSignature` | 177,286 -> 123,731 (-53,555) | 167,866 -> 120,349 (-47,517) |
+
+(v2 rows unchanged since B6 because B6 was measured after B5; the v1 rows include B7.) At the
+deploy profile a Type-2 UserOp's verification costs ~24-25% less gas than with the reference
+verifier; the signature bytes (calldata) are unchanged.
+
+## Batch 2 result
+
+| verifier | callee-only (default) | deploy profile | runtime size default / deploy |
+|---|---:|---:|---:|
+| v2 0.3 | 117,568 -> **103,908..103,982** (ref 157,585: -34%) | 113,680 -> **100,766..100,879** (ref 148,387: -32%) | 1,848 -> 11,016 / 3,022 -> 18,820 B |
+| v2 ts200 | (unoptimized 160,735) -> 106,182..106,234 | 151,387 -> 103,008..103,051 | 11,016 / 18,820 B |
+| v2 split810 | (157,653) -> 104,043..104,123 | 148,460 -> 100,929..100,971 | 11,466 / 19,272 B |
+| v2 all3 | (160,803) -> 106,277..106,339 | 151,460 -> 103,100..103,126 | 11,466 / 19,272 B |
+| v1 | 123,829 -> **115,785..115,914** (ref 175,205: -34%) | 122,144 -> **112,318..112,413** (ref 164,847: -32%) | 2,067 -> 11,955 / 2,453 -> 13,210 B |
+
+Gas is now slightly digit-dependent (straight-line step blocks), hence the min..max ranges over
+the KATs. Size: the deploy-profile v2 runtime is within 5.3 kB (split810 5.3 kB) of the EIP-170
+limit of 24,576 B; further code growth at the deploy profile must be checked against it.
+
+Astra conformance review of the cumulative batch-2 code (snapshot of v1, v2, split810 candidates
++ references + generators): no divergence when precompile calls succeed. It checked the generated
+blocks against their generators, every chain index x digit (positions digit..6 in order, ADRS/A7
+fields, no carries, split810 ci<<17), the cpha/slots words exhaustively (all 2,048 indices, all 11
+heights), every H preimage byte through the walks (A7 bytes 0..4 survive; the 0x35 store spills
+only to unused scratch up to 0x54), root slots, the split810 offsets (layers 2336/3156, counts
+3024/3844, auth 3028/3848), check order and returndata; it reports 344 full controlled-digest
+traces per pair compared byte by byte. Its only finding is the batch-1 depth-1024 case (attempted,
+never executed precompile inputs differ from the third call on; both versions revert empty), which
+it confirms was already present in the batch-1 candidates.
+
+Fable end-of-batch-2 estimate of the remaining v2 overhead (deploy, ~33.8k): call args + pop ~7.6k
+(irreducible), per-chain fixed cost ~12k, walk levels ~8.5k, chain step ADRS stores ~2.9k, FORS
+per-tree setup ~2.3k, the rest ~1.2k; realistic batch-3 headroom ~3-4k for v2.
+
+Batch-2 closing checks: mutation controls `all --runs 64` (now scoped per verifier to its
+semantic suites, gas benches excluded) **36/36 caught**, incl. 4 on the derived variants
+(ts200 target, split810 layer-1 levels and section offset, all3 ci position) and the pin-only
+`v2-b5-lanes-pin` (an unused-bit change of the cpha constant, semantically equivalent, caught by
+the C10-LANES text pin). Fixed-seed fuzz (`FOUNDRY_FUZZ_RUNS=4000 FOUNDRY_FUZZ_SEED=0x1155c10`) of
+every non-deep fuzz test in C10Equivalence and the three C10VariantEquivalence suites: all pass
+(deep: 24 per version; the variant suites' inline `runs = 16` is not applied to the inherited
+test, so their deep fuzz ran 256 per gate run). B1/E5a show via-IR stack layout can reverse a
+paper saving, so every idea is measured.
+
+Ranked next hypotheses (Fable, end of batch 2; v2 headroom ~3-4k): (1) byte-wise chain ADRS
+(`mstore8` of ci once per chain, of cp per step; the 1-block is always cp 6) ~1.5-2k and ~6-7 kB
+smaller at the deploy profile; (2) block tests on `d` with `iszero` instead of `not(d)` ~0.75k;
+(3) sibling slots as their own BYTE lanes in `slots` ~0.75k; (4) FORS loop strength reduction
+~0.3k; (5) 12-tree FORS unroll ~0.6-1k for +4-5 kB (size-limit risk; only after (1)). v1: BYTE
+slots for both destinations ~3k (top), byte-wise chain ADRS ~1.5k, `d` tests ~0.75k.
+Full `forge test` (minus test/gas) at the end of batch 2: 180 passed, 2 failed, 32 skipped — the
+same two v1 codehash pins only (v1 runtime codehash now `0x9ac7abc2…`); `SPHINCsC10v2Variants`,
+`SPHINCsC10v2Asm.t.sol` and the wallet suites pass. No pin, source-pin or transcription script,
+Lean file, factory or deployment constant was edited.
