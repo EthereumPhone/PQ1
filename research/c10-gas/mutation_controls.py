@@ -50,6 +50,11 @@ MUTANTS = [
     ("v2-swar-lane14", V2, "and(shr(3, d), 0xe070381c0e070381c0e070381c0e07)",
      "and(shr(3, d), 0x1c0e070381c0e070381c0e070381c0e07)",
      "SWAR digit sum counts would-be digit 43 (verifier copy only; text pin)"),
+    ("v2-e3-chain-short", V2, "let aEnd := add(chainA, shl(212, 7))", "let aEnd := add(chainA, shl(212, 6))",
+     "E3: WOTS chains stop one step early"),
+    ("v2-e3-digit7", V2, "calldatacopy(0x10, add(wotsPtr, shl(4, i)), 16)",
+     "calldatacopy(0x10, add(wotsPtr, shl(4, i)), 16) if eq(digit, 7) { mstore(0x10, 0) }",
+     "E3: zero-step (digit 7) chains lose their signature value"),
     ("v2-a7-last", V2, "shl(200, or(shl(52, 9), shl(33, htIdx)))", "shl(200, or(shl(52, 3), shl(33, htIdx)))",
      "FORS_LAST tweak type"),
     # ── v1 ──

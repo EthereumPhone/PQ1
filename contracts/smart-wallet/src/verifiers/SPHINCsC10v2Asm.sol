@@ -110,15 +110,20 @@ contract SPHINCsC10v2Asm {
                 let wotsPtr := add(sigBase, sigOff)
                 for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
                     let digit := and(shr(mul(i, 3), d), 0x7)
-                    let val := and(calldataload(add(wotsPtr, shl(4, i))), N_MASK)
-                    let chainBase := or(kpBase, shl(18, i)) // type 0 (WOTS_HASH)
-                    for { let p := digit } lt(p, 7) { p := add(p, 1) } {
-                        mstore(0x10, val)
-                        mstore(0x20, shl(200, or(chainBase, shl(12, p))))
-                        pop(staticcall(gas(), 0x02, 0x00, 39, OUT, 32))
-                        val := and(mload(OUT), N_MASK)
+                    // Chain i from position `digit` to 7 in place: the value stays at 0x10 of the F
+                    // preimage S || v16 || A7 and each step's output (outsize 16) overwrites it. The
+                    // A7 word for position p is chainA + p<<212 (cp = bits 15..12 of A7; p < 7, no
+                    // carry), so one add per step.
+                    calldatacopy(0x10, add(wotsPtr, shl(4, i)), 16)
+                    let chainA := shl(200, or(kpBase, shl(18, i))) // type 0 (WOTS_HASH), cp = 0
+                    let aEnd := add(chainA, shl(212, 7))
+                    for { let a := add(chainA, shl(212, digit)) } lt(a, aEnd) { a := add(a, shl(212, 1)) } {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
                     }
-                    mstore(add(TB, add(24, shl(4, i))), val)
+                    // 32-byte copy of the 16-byte end value: its trailing 16 bytes are overwritten by
+                    // slot i+1, and for i = 42 they fall past the 712 bytes T_43 hashes.
+                    mstore(add(TB, add(24, shl(4, i))), mload(0x10))
                 }
                 // T_43: the WOTS pk lands in its half of the first Merkle preimage (in-place walk
                 // as in FORS); the root (index 0 at height 9) lands at 0x10, the next layer's m16.
