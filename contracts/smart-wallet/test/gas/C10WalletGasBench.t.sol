@@ -16,10 +16,10 @@ import {MockSPHINCSVerifier} from "../mocks/MockSPHINCSVerifier.sol";
 
 /// RESEARCH (#1155 gas track): what a user pays. MEASUREMENT ONLY, no production wiring.
 ///
-/// The wallet implementation is bound (immutable) to one verifier address; each test puts the
-/// runtime code of one verifier there with `vm.etch` (all four verifiers are stateless, no
-/// immutables), so the reference and the candidate run behind the identical wallet, calldata and
-/// storage, and the difference is the verifier alone.
+/// The wallet implementation is bound (immutable) to one verifier address; each test contract
+/// puts the runtime code of one verifier there with `vm.etch` in setUp (all four verifiers are
+/// stateless, no immutables), so the reference and the candidate run behind the identical
+/// wallet, calldata and storage, and the difference is the verifier alone.
 ///
 ///   * Type-2 `validateUserOp` (slot key, ownerIndex 1): v1 with the Rust-generated userOp vector
 ///     of test/c10_test_vectors.json (as PQSmartWalletRealSig.t.sol); v2 with the same userOp and
@@ -32,9 +32,11 @@ import {MockSPHINCSVerifier} from "../mocks/MockSPHINCSVerifier.sol";
 ///
 /// Gas = `gasleft()` around the external call from this test (includes the call's own overhead
 /// and ABI encoding of the 4 KB argument in the test, identical for ref and cand). The verifier
-/// address is cold in each test, as in a real transaction. Not measured: EntryPoint overhead,
-/// calldata (unchanged: same signature bytes).
-contract C10WalletGasBenchTest is Test {
+/// account is cold in the measured test, as in a real transaction (checked by the no-etch
+/// control contract). Not measured: EntryPoint overhead, calldata (unchanged: same signature bytes). Each figure is ONE
+/// signature: since the straight-line chain blocks, verifier gas varies slightly with the digit
+/// pattern (tens of gas over the KATs).
+abstract contract C10WalletGasBenchBase is Test {
     address constant ENTRY_POINT_ADDR = address(0x4337);
     bytes32 constant H = keccak256("PQ1 #1155 gas bench: EIP-1271 message");
 
@@ -78,7 +80,13 @@ contract C10WalletGasBenchTest is Test {
             fx = vm.readFile("test/gas/c10_wallet_bench_vectors.json");
             haveFixture = true;
         }
+        _install();
     }
+
+    /// Which verifier code sits at the verifier address for this contract's tests. Done in setUp,
+    /// a separate call, so the verifier account is cold again in the measured test (an etch in
+    /// the test itself leaves it warm: about -2.8k, measured).
+    function _install() internal virtual;
 
     function _op(bytes memory c10Sig) internal view returns (UserOperation06 memory op) {
         op.sender = senderFromVec;
@@ -115,15 +123,6 @@ contract C10WalletGasBenchTest is Test {
         revert("verifier not called");
     }
 
-    function test_print_signing_inputs() public {
-        console2.log("SIGNING-INPUT v1-1271-nested");
-        console2.logBytes32(_nestedHash(walletV1));
-        console2.log("SIGNING-INPUT v2-1271-nested");
-        console2.logBytes32(_nestedHash(walletV2));
-        console2.log("SIGNING-INPUT userop-digest");
-        console2.logBytes32(walletV1.sphincsDigest(_op(userOpSigV1)));
-    }
-
     function _validate(PQSmartWallet w, bytes memory c10Sig, string memory label) internal returns (uint256 used) {
         UserOperation06 memory op = _op(c10Sig);
         vm.prank(ENTRY_POINT_ADDR);
@@ -143,57 +142,104 @@ contract C10WalletGasBenchTest is Test {
         console2.log(string.concat("WALLETGAS isValidSignature ", label), used);
     }
 
-    function test_validateUserOp_v1_ref() public {
-        _etch(false, false);
-        _validate(walletV1, userOpSigV1, "v1 ref");
-    }
-
-    function test_validateUserOp_v1_cand() public {
-        _etch(false, true);
-        _validate(walletV1, userOpSigV1, "v1 cand");
-    }
-
-    function test_validateUserOp_v2_ref() public {
-        vm.skip(!haveFixture);
-        _etch(true, false);
-        _validate(walletV2, vm.parseJsonBytes(fx, ".v2_userop_sig"), "v2 ref");
-    }
-
-    function test_validateUserOp_v2_cand() public {
-        vm.skip(!haveFixture);
-        _etch(true, true);
-        _validate(walletV2, vm.parseJsonBytes(fx, ".v2_userop_sig"), "v2 cand");
-    }
-
-    function test_isValidSignature_v1_ref() public {
-        vm.skip(!haveFixture);
-        _etch(false, false);
-        _1271(walletV1, vm.parseJsonBytes(fx, ".v1_1271_sig"), "v1 ref");
-    }
-
-    function test_isValidSignature_v1_cand() public {
-        vm.skip(!haveFixture);
-        _etch(false, true);
-        _1271(walletV1, vm.parseJsonBytes(fx, ".v1_1271_sig"), "v1 cand");
-    }
-
-    function test_isValidSignature_v2_ref() public {
-        vm.skip(!haveFixture);
-        _etch(true, false);
-        _1271(walletV2, vm.parseJsonBytes(fx, ".v2_1271_sig"), "v2 ref");
-    }
-
-    function test_isValidSignature_v2_cand() public {
-        vm.skip(!haveFixture);
-        _etch(true, true);
-        _1271(walletV2, vm.parseJsonBytes(fx, ".v2_1271_sig"), "v2 cand");
-    }
-
     /// The fixture's v2 signatures were made for these exact inputs.
-    function test_fixture_matches_inputs() public {
+    function _checkFixture() internal {
         vm.skip(!haveFixture);
         assertEq(vm.parseJsonBytes32(fx, ".v1_1271_nested"), _nestedHash(walletV1));
         assertEq(vm.parseJsonBytes32(fx, ".v2_1271_nested"), _nestedHash(walletV2));
         assertEq(vm.parseJsonBytes32(fx, ".userop_digest"), walletV1.sphincsDigest(_op(userOpSigV1)));
+    }
+}
+
+/// v1 (deployed format) verifier at the wallet's verifier address.
+abstract contract C10WalletGasBenchV1 is C10WalletGasBenchBase {
+    function _label() internal pure virtual returns (string memory);
+
+    function test_validateUserOp() public {
+        _validate(walletV1, userOpSigV1, _label());
+    }
+
+    function test_isValidSignature() public {
+        vm.skip(!haveFixture);
+        _1271(walletV1, vm.parseJsonBytes(fx, ".v1_1271_sig"), _label());
+    }
+}
+
+/// v2 DRAFT 0.3 verifier at the wallet's verifier address.
+abstract contract C10WalletGasBenchV2 is C10WalletGasBenchBase {
+    function _label() internal pure virtual returns (string memory);
+
+    function test_validateUserOp() public {
+        vm.skip(!haveFixture);
+        _validate(walletV2, vm.parseJsonBytes(fx, ".v2_userop_sig"), _label());
+    }
+
+    function test_isValidSignature() public {
+        vm.skip(!haveFixture);
+        _1271(walletV2, vm.parseJsonBytes(fx, ".v2_1271_sig"), _label());
+    }
+}
+
+contract C10WalletGasBenchV1RefTest is C10WalletGasBenchV1 {
+    function _install() internal override {
+        _etch(false, false);
+    }
+
+    function _label() internal pure override returns (string memory) {
+        return "v1 ref";
+    }
+}
+
+contract C10WalletGasBenchV1CandTest is C10WalletGasBenchV1 {
+    function _install() internal override {
+        _etch(false, true);
+    }
+
+    function _label() internal pure override returns (string memory) {
+        return "v1 cand";
+    }
+}
+
+/// Control: no etch at all (the candidate deployed in setUp, as in PQSmartWalletRealSig.t.sol);
+/// must equal C10WalletGasBenchV1CandTest. Also prints the signing inputs for the fixture and
+/// checks the fixture against them.
+contract C10WalletGasBenchV1CandNoEtchTest is C10WalletGasBenchV1 {
+    function _install() internal override {}
+
+    function _label() internal pure override returns (string memory) {
+        return "v1 cand (no etch)";
+    }
+
+    function test_print_signing_inputs() public {
+        console2.log("SIGNING-INPUT v1-1271-nested");
+        console2.logBytes32(_nestedHash(walletV1));
+        console2.log("SIGNING-INPUT v2-1271-nested");
+        console2.logBytes32(_nestedHash(walletV2));
+        console2.log("SIGNING-INPUT userop-digest");
+        console2.logBytes32(walletV1.sphincsDigest(_op(userOpSigV1)));
+    }
+
+    function test_fixture_matches_inputs() public {
+        _checkFixture();
+    }
+}
+
+contract C10WalletGasBenchV2RefTest is C10WalletGasBenchV2 {
+    function _install() internal override {
+        _etch(true, false);
+    }
+
+    function _label() internal pure override returns (string memory) {
+        return "v2 ref";
+    }
+}
+
+contract C10WalletGasBenchV2CandTest is C10WalletGasBenchV2 {
+    function _install() internal override {
+        _etch(true, true);
+    }
+
+    function _label() internal pure override returns (string memory) {
+        return "v2 cand";
     }
 }

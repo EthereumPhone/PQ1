@@ -152,6 +152,23 @@ contract C10GasBenchTest is Test {
         _phases("v2 cand", address(new SPHINCsC10v2Asm()));
     }
 
+    /// Per-vector callee-only gas (the cost depends slightly on the digit pattern since the
+    /// straight-line chain blocks); research/c10-gas/gas_bound.py fits and bounds it.
+    function test_gas_per_vector() public {
+        address c2 = address(new SPHINCsC10v2Asm());
+        Vec[] memory v2s = _v2Vecs();
+        _calleeGas(c2, v2s[0]);
+        for (uint256 i = 0; i < v2s.length; i++) {
+            console2.log(string.concat("PERVEC v2 v", vm.toString(i)), _calleeGas(c2, v2s[i]));
+        }
+        address c1 = address(new SPHINCsC10Asm());
+        Vec[] memory v1s = _v1Vecs();
+        _calleeGas(c1, v1s[0]);
+        for (uint256 i = 0; i < v1s.length; i++) {
+            console2.log(string.concat("PERVEC v1 vec", vm.toString(i)), _calleeGas(c1, v1s[i]));
+        }
+    }
+
     function test_gas_v1() public {
         _bench("v1", address(new RefSPHINCsC10Asm()), address(new SPHINCsC10Asm()), _v1Vecs());
     }

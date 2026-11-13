@@ -215,18 +215,48 @@ The saving is the verifier's, one for one: verification gas of a Type-2 UserOp d
 (deploy profile), i.e. ~22-24% of `validateUserOp`; the rest of the UserOp is unchanged.
 | B7 | v1 mirror of B2 + B4 (cheap: the chain generator gains a v1 mode): 43 chains unrolled, steps in straight-line blocks of 4/2/1 keyed on `not(d)`, value word at 0x40, ADRS `wotsAdrs \\| i<<64 \\| p<<32` | v1 | 123,829 -> **115,785..115,914** (-7.9..8.0k) | 122,144 -> 112,318..112,413 (-9.7..9.8k) | 2,067 -> 11,955 / 2,453 -> 13,210 | gate.sh green | keep (v1 landing remains an owner decision; no pins/scripts/Lean touched) |
 
-### Wallet-level numbers at the end of batch 2 (after B7)
+### Wallet-level numbers at the end of batch 2 (after B7), corrected for a warm verifier
+
+The first B6 run etched the verifier code inside the measured test, which leaves the verifier
+account warm (about -2.5k against a real transaction; checked: an etch-free control read 2.8k
+more). The bench now etches in `setUp` (one test contract per verifier) and carries an etch-free
+control contract, which agrees with the etched candidate to ~0.1k. The B6 rows above are
+therefore ~2.5k low in absolute terms; their ref-to-candidate deltas are unaffected. Each figure is
+ONE signature. (`PQSmartWalletRealSig`'s own bench reads ~2.1k higher than the control because it
+SLOADs the `wallet` state variable inside its measured window.)
 
 | path | default ref -> cand | deploy profile ref -> cand |
 |---|---|---|
-| v1 `validateUserOp` | 224,690 -> 165,016 (**-59,674**) | 213,946 -> 160,904 (-53,042) |
-| v2 `validateUserOp` | 206,367 -> 152,716 (**-53,651**) | 196,770 -> 149,208 (-47,562) |
-| v1 `isValidSignature` | 194,906 -> 135,585 (-59,321) | 184,326 -> 131,844 (-52,482) |
-| v2 `isValidSignature` | 177,286 -> 123,731 (-53,555) | 167,866 -> 120,349 (-47,517) |
+| v1 `validateUserOp` | 227,041 -> 167,731 (**-59,310**) | 216,288 -> 163,855 (-52,433) |
+| v2 `validateUserOp` | 208,736 -> 155,091 (**-53,645**) | 199,143 -> 151,587 (-47,556) |
+| v1 `isValidSignature` | 197,336 -> 138,015 (-59,321) | 186,768 -> 134,286 (-52,482) |
+| v2 `isValidSignature` | 179,716 -> 126,161 (-53,555) | 170,308 -> 122,791 (-47,517) |
 
-(v2 rows unchanged since B6 because B6 was measured after B5; the v1 rows include B7.) At the
-deploy profile a Type-2 UserOp's verification costs ~24-25% less gas than with the reference
-verifier; the signature bytes (calldata) are unchanged.
+At the deploy profile a Type-2 UserOp's `validateUserOp` costs ~24% less gas than with the
+reference verifier; the signature bytes (calldata) are unchanged.
+
+### Gas is now digit-dependent: sample spread, not a bound
+
+Since B4 the verifier cost depends on how many 4- and 2-blocks the chains take. The min..max
+ranges in this ledger are spreads over the KATs (6 for v2, 4 for v1). `gas_bound.py` fits gas =
+a + b n4 + c n2 to the per-vector gas (`C10GasBench.test_gas_per_vector`) and evaluates it over
+every (n4, n2) reachable with the fixed step sum; the fits are NOT exact (and at the deploy
+profile have implausible signs), so the extremes are estimates only: default v2 ~103.6k..104.4k,
+v1 ~115.4k..116.5k; deploy v2 ~100.5k..101.2k, v1 ~112.0k..112.9k, i.e. within ~0.5k (~0.5%) of
+the samples. A `verificationGasLimit` margin of a few thousand gas covers it; a rigorous bound
+would need a per-block cost read from the bytecode.
+
+### Size against gas, per step (deploy profile, v2 0.3)
+
+| step | runtime size | callee gas |
+|---|---:|---:|
+| batch 1 end | 3,022 B | 113,680 |
+| B2 unrolled chain loop | +7,179 B -> 10,201 | -5,940 |
+| B4 4/2/1 blocks | +9,451 B -> 19,652 | -3,473..-3,586 |
+| B5 cpha/slots walks | -832 B -> 18,820 | -3,388 |
+
+B4 is the step to drop if deploy size matters (it buys the least gas per byte). split810/all3 sit
+at 19,272 B; EIP-170 allows 24,576 B.
 
 ## Batch 2 result
 
@@ -277,3 +307,18 @@ Full `forge test` (minus test/gas) at the end of batch 2: 180 passed, 2 failed, 
 same two v1 codehash pins only (v1 runtime codehash now `0x9ac7abc2…`); `SPHINCsC10v2Variants`,
 `SPHINCsC10v2Asm.t.sol` and the wallet suites pass. No pin, source-pin or transcription script,
 Lean file, factory or deployment constant was edited.
+
+Coverage notes. Astra's batch-2 review read v1, v2 and split810; ts200 and all3 rest on the
+derivation check (`derive_v2_variants.py --check`) and their own equivalence suites. The three
+variant references are byte copies of the 0895dcc79 variants (diff = contract name only), with
+no codehash anchor. The 12-tree FORS unroll was not attempted (Fable: -0.6..1k for +4-5 kB, a
+size-limit risk). The depth-1024 argument still holds for the batch-2 code: the
+`mstore(0x35, ...)` spill ends at 0x54, below the digest slot at 0x60, so reference and candidate
+both read an all-zero digest and revert empty (argued, not tested).
+
+Track A's `research/c10-autoresearch/variant_controls.sh` text-patches the variant verifiers. Its
+`shl(17, i)` patches (row "ci shift 17->18" and the combined "(9,9) layout" row) no longer apply:
+the chain index is now a per-chain constant `shl(217, N)` in the generated block, so those rows
+would report "mutation did not apply". Its other patches (`shl(23, i))`, `shl(23, idxLeaf)`,
+`let hl := add(8, shl(1, layer))`, the target-sum and FORS+C revert lines) still apply once. Not
+edited here.
