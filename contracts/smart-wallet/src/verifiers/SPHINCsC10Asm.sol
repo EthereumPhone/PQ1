@@ -35,10 +35,14 @@ contract SPHINCsC10Asm {
         // assumptions that don't hold.
         assembly {
             let N_MASK := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000000000000000000000000000
-            // Scratch slot for SHA-256 precompile output. Sits above every
-            // other memory region the verifier touches (WOTS endpoints at
-            // 0x80 + 42*32 = 0x5C0 is the highest legitimate write).
-            let OUT := 0x600
+            // T_k buffer for the two multi-value hashes, laid out as their
+            // preimage seed || adrs || v_0 .. v_{k-1} (32-byte words), so the
+            // FORS roots and WOTS endpoints are written in place and hashed
+            // without a copy: TB .. TB + 0x5A0 = 0x620, above the 0x00..0x7F
+            // single-hash scratch.
+            let TB := 0x80
+            // Scratch slot for SHA-256 precompile output, above the T_k buffer.
+            let OUT := 0x620
 
             if iszero(eq(sig.length, 4008)) {
                 mstore(0x00, 0x08c379a000000000000000000000000000000000000000000000000000000000)
@@ -86,6 +90,7 @@ contract SPHINCsC10Asm {
             if and(shr(132, dVal), 0x7FF) { revert(0, 0) }
 
             let sigBase := sig.offset
+            mstore(TB, seed) // after H_msg: TB held its all-ones word
             // K-1=12 normal trees
             for { let i := 0 } lt(i, 12) { i := add(i, 1) } {
                 let treeIdx := and(shr(mul(i, 11), dVal), 0x7FF) // 11-bit indices
@@ -118,7 +123,7 @@ contract SPHINCsC10Asm {
                     node := and(mload(OUT), N_MASK)
                     pathIdx := parentIdx
                 }
-                mstore(add(0x80, shl(5, i)), node)
+                mstore(add(add(TB, 0x40), shl(5, i)), node)
             }
 
             // Last tree (forced-zero)
@@ -126,19 +131,15 @@ contract SPHINCsC10Asm {
                 let lastSecret := and(calldataload(add(sigBase, add(16, shl(4, 12)))), N_MASK) // 16+12*16=208
                 mstore(0x20, or(shl(160, htIdx), or(shl(128, 3), shl(96, 12))))
                 mstore(0x40, lastSecret)
-                // 0x80 + 12*0x20 = 0x80 + 0x180 = 0x200
                 pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
-                mstore(0x200, and(mload(OUT), N_MASK))
+                mstore(add(TB, 0x1C0), and(mload(OUT), N_MASK)) // TB + 0x40 + 12*0x20
             }
 
             // Compress 13 roots: sha256(seed || rootsAdrs || 13 roots)
             // = 32 + 32 + 13*32 = 480 = 0x1E0
             // rootsAdrs also carries htIdx in the tree field (position binding).
-            mstore(0x20, or(shl(160, htIdx), shl(128, 4)))
-            for { let i := 0 } lt(i, 13) { i := add(i, 1) } {
-                mstore(add(0x40, shl(5, i)), mload(add(0x80, shl(5, i))))
-            }
-            pop(staticcall(gas(), 0x02, 0x00, 0x1E0, OUT, 32))
+            mstore(add(TB, 0x20), or(shl(160, htIdx), shl(128, 4)))
+            pop(staticcall(gas(), 0x02, TB, 0x1E0, OUT, 32))
             let forsPk := and(mload(OUT), N_MASK)
 
             // Hypertree (D=2, subtree_h=9, w=8, l=43, target_sum=205)
@@ -185,17 +186,14 @@ contract SPHINCsC10Asm {
                         pop(staticcall(gas(), 0x02, 0x00, 0x60, OUT, 32))
                         val := and(mload(OUT), N_MASK)
                     }
-                    mstore(add(0x80, shl(5, i)), val)
+                    mstore(add(add(TB, 0x40), shl(5, i)), val)
                 }
 
                 // PK compression: sha256(seed || pkAdrs || 43 endpoints)
                 // = 32 + 32 + 43*32 = 1440 = 0x5A0
                 let pkAdrs := or(shl(224, layer), or(shl(160, idxTree), or(shl(128, 1), shl(96, idxLeaf))))
-                mstore(0x20, pkAdrs)
-                for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
-                    mstore(add(0x40, shl(5, i)), mload(add(0x80, shl(5, i))))
-                }
-                pop(staticcall(gas(), 0x02, 0x00, 0x5A0, OUT, 32))
+                mstore(add(TB, 0x20), pkAdrs)
+                pop(staticcall(gas(), 0x02, TB, 0x5A0, OUT, 32))
                 let wotsPk := and(mload(OUT), N_MASK)
 
                 // Merkle auth path (9 levels)
