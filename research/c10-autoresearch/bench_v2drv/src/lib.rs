@@ -553,6 +553,30 @@ pub extern "C" fn c10_bench_main() {
         }
         t.check(8, c, ok);
     }
+    // Round 11: `out == sk_seed` (aliased). The Rust loop's order: chain k's output lands in the
+    // buffer before chain k + 1's PRF reads `sk_seed`. Sequential software reference.
+    {
+        let mut buf = [0u8; 688];
+        rng.fill(&mut buf[..32]);
+        let mut s = [0u8; 16];
+        rng.fill(&mut s);
+        let (layer, tree, kp) = (1u64, 0x1_2345u64, u64::from(rng.below(KP_RANGE)));
+        let mut want = buf;
+        for ci in 0..43u64 {
+            let sk: [u8; 32] = want[..32].try_into().unwrap();
+            let mut v = prf(&sk, a7(5, layer, tree, kp, ci, 0, 0));
+            for p in 0..3u64 {
+                v = f(&s, &v, a7(0, layer, tree, kp, ci, p, 0));
+            }
+            want[16 * ci as usize..16 * ci as usize + 16].copy_from_slice(&v);
+        }
+        let ((p0, p1), (a0, a1)) = (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)));
+        between!();
+        let bp = buf.as_mut_ptr();
+        // SAFETY: one 688-byte buffer serves as `sk_seed` (its first 32 bytes) and as `out`.
+        unsafe { pqsigner_v2_wots_chains16(bp, p0, p1, s.as_ptr(), a0, a1, 3, bp) };
+        t.check(8, 40, buf == want);
+    }
     between!();
 
     // 8. wots_pk16: the whole key, T_43 = S || A7(WOTS_PK) || 0x00 || v_0..v_42.

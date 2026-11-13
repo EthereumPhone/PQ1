@@ -4948,8 +4948,11 @@ pub unsafe extern "C" fn pqsigner_v2_wots_chains16(
     }
     // SAFETY: caller contract.
     let s = unsafe { v2_load4(seed) };
+    // The asm stores chain k after chain k + 1's PRF has read `sk_seed`; the loop below stores it
+    // first. Take the asm path only when `out` (688 bytes) cannot overlap `sk_seed` (public
+    // pointers), so both paths give the same bytes for every input (Astra, round 11).
     #[cfg(all(feature = "v2-asm-key-ga", not(feature = "v2-prf2"), not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
-    if steps != 0 {
+    if steps != 0 && ((out as usize).saturating_add(688) <= sk_seed as usize || (sk_seed as usize).saturating_add(32) <= out as usize) {
         let mut ctx = [sk_seed as u32, p0, p1, s[0], s[1], s[2], s[3], a0, low24, steps, 43, out as u32];
         // SAFETY: the loop's contract (the context above); caller contract for `sk_seed` (32
         // readable bytes) and `out` (688 writable bytes); the engine is idle, STR holds NBLW 24.
