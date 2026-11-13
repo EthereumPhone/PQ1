@@ -1591,7 +1591,7 @@ pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: 
 /// per chain), 9 steps, 10..21 tail words 0..10, 21 `sk_seed`, 22 out pointer, 23 i
 /// (starts at u32::MAX), 24 n.
 #[cfg(feature = "v1-asm-key")]
-const V1K_SPIN_STEP: u32 = 13;
+const V1K_SPIN_STEP: u32 = 14;
 #[cfg(feature = "v1-asm-key")]
 const V1K_SPIN_PRF: u32 = 14;
 #[cfg(feature = "v1-asm-key")]
@@ -1912,7 +1912,11 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
     let t: [u32; 12] = core::array::from_fn(|i| unsafe { prf_tail.add(4 * i).cast::<u32>().read_unaligned() });
     let z = c[4] | c[5] | c[6] | c[7] | c[11] | c[15] == 0;
     #[cfg(all(feature = "v1-asm-key", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
-    if z && order.is_null() && digits.is_null() && fixed_steps != 0 && n != 0 {
+    // The asm stores chain i's output after chain i + 1's PRF has read `sk_seed`; the loop
+    // below stores it first. Take the asm path only when `out` cannot overlap `sk_seed`
+    // (public pointers), so both paths give the same bytes for every input.
+    let (o, k) = (out as usize, sk_seed as usize);
+    if z && order.is_null() && digits.is_null() && fixed_steps != 0 && n != 0 && (o.saturating_add(16 * n as usize) <= k || k + 32 <= o) {
         // The engine is idle (no stale DCIS) before STR, as in the loop below; every
         // digest of the asm loop writes STR only with DCAL (NBLW 0).
         if wait_ready_sr() & SR_DCIS != 0 {
