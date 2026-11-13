@@ -273,8 +273,35 @@ fn residue_suite() -> (u32, u32) {
         res_clear();
         pqsigner_sha256_chain16(b.as_mut_ptr(), 0, 6);
         if res_found() { mask |= 1 << 6; }
+        // Round 14 positive controls (`residue-control`): 7 a function that copies the key into its
+        // own frame, 8 a key word written just below sp. Both must be flagged.
+        #[cfg(feature = "residue-control")]
+        {
+            res_reset();
+            res_add(&sk);
+            res_clear();
+            res_leak(&sk);
+            if res_found() { mask |= 1 << 7; }
+            res_reset();
+            res_add(&sk);
+            res_clear();
+            let sp = res_sp();
+            core::ptr::write_volatile((sp - 4) as *mut [u8; 4], [sk[0], sk[1], sk[2], sk[3]]);
+            if res_found() { mask |= 1 << 8; }
+        }
     }
-    (7, mask)
+    (if cfg!(feature = "residue-control") { 9 } else { 7 }, mask)
+}
+
+/// Round 14 positive control: the key copied into this function's own (then dead) frame.
+#[cfg(feature = "residue-control")]
+#[inline(never)]
+fn res_leak(sk: &[u8; 32]) {
+    let mut f = [0u8; 48];
+    for (k, b) in f.iter_mut().enumerate() {
+        *b = sk[k % 32];
+    }
+    core::hint::black_box(&f);
 }
 
 /// About 1 in 64, and only when the unread head d[0..12] is zero (as the driver passes it).

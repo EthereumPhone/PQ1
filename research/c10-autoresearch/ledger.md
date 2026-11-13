@@ -1107,6 +1107,12 @@ Under the keep rule it is a discard. It is the fallback if the colocation landin
 
 **No signer-crate edits this round**, so no new extraction drift. `check_extraction_freshness.py` still shows the same 22 drifted pins. The round-8 `fors.rs`/`wots.rs` edits sit under targets already drifted by rounds 1–7: `sign-release`, `sign-forest`, `fors-*`, `wots-*`, `xmss-*`, `verifier`.
 
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** The residue-clean claims of this round were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** v1 7/7 clean (key loop, sign-shape keys, FORS subtree, grind with and without rand, `prf_chain16`, `chain16`); v2 9/9 clean (`wots_chains16`, `wots_pk16`, `prf_chain16`, `fors_leaf16`, `fors_subtree16` h = 4 and 7, `chain16`, `grind_r` 119 and 103 bytes); the controls fire (v1 0x180, v2 0x600).
+> - **This round's "no residue anywhere" (v1 mask 0x0, v2 mask 0x0) and the "residue gate" evidence of E6, E7 and E9 stand**, now on a scanner that sees the band. Round 8's earlier scans (the grind check; the v1 key loop and subtree, `255d55d09`) are covered by the same v1 re-run and also stand.
+> - **Changed:** the round-13 v2 hits that the fixed scanner first showed were harness artifacts, not driver residue. `prf_chain16` and `chain16` showed the bench caller's own r5/r6, saved by the entries' `push {r4, r5, r6, r7, lr}` (Astra, from the disassembly). `wots_pk16` showed the scanner's own last pattern from the previous case, which shares its table; with the case order swapped it moved to case 0.
+
 ## Round 10 (2026-11-13): global_asm FORS and search, product-shaped measurement, v1 closing note
 
 ### E10: FORS subtree as a `global_asm!` function, keep (`c33268ebf`, generator `gen_fors_ga.py`)
@@ -1240,6 +1246,11 @@ Total practical driver headroom: about **1.5–1.7 M (~1.8%)** of a 90 M sign. T
 - **Product:** this reaches users only with the batched tick (#1149); with today's per-digest tick, v1 is about 120 M.
 - **No signer-crate edits** this round, so no new extraction drift.
 - **FSBL** byte-identical throughout.
+
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** This round's residue claims (the leak caught in E10's first build, then fixed; E10–E12 "residue gate clean"; E12's v2 cases 0/1) were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** v1 7/7 and v2 9/9 clean; controls fire.
+> - **The claims stand.** The leak caught in E10's first build was real: it was in the observable band, at the prologue push of the asm function the Rust wrapper called. Its fix (the asm issues the first PRF) stands, and the fixed scanner confirms the entry is clean.
 
 ## Round 11 (2026-11-13): v2 (research format): global_asm FORS, 32-bit DATATYPE, search
 
@@ -1407,6 +1418,10 @@ Gate 5's interleaved v1 probe had only been the byte-mode one-shot and the strea
 
 **Not done this round:** item 4b, the FORS-PRF loads. Fable estimates ~0.15 M. It is ranked second for the next batch, after the T_43 feed.
 
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** The residue-clean claims of E13–E16 (v2 FORS subtree h = 4 and 7; the dt32 key loop) were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** v2 9/9 clean, including `wots_chains16` and `wots_pk16` (the dt32 key loop) and `fors_subtree16` h = 4 and 7 (the dt32 FORS); controls fire. **The claims stand.** E17's search hashes only public data and is not in the suite.
+
 ## Round 12 (2026-11-13): v2 profile, T_43 feed, v2 closing note
 
 ### The round-11 landing fix (accepted, merged)
@@ -1527,6 +1542,10 @@ Total practical driver headroom is about **0.55–0.75 M (1.1–1.5%)** of a 50.
 **v1:** closed. No v1 path changed in round 12, and it was not re-measured after E18.
 
 **Signer crate:** no edits. **FSBL:** identical.
+
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** E18's residue claims ("clean in the default build and with `prf2`") were made with a scanner blind to the top band: the residue scanner (`residue.rs`) used for it had a blind top band. `res_found` stopped at `a < sp − 4`, and at opt-level `z` its `read_volatile::<[u8; 4]>` and `<[u32]>::contains` were out-of-line calls whose own pushes overwrote the words just below sp before they were read. That is where a driver entry's prologue saves the caller's callee-saved registers. (`res_clear` also left the 64 bytes below sp uncleared, which could only add false positives.) Fixed in rounds 13–14: the clear runs up to sp, the scan runs through sp − 4 with inline-asm loads and a call-free pattern loop, each v2 case runs in its own frame with its patterns computed out of line, and every suite's control build must flag a frame-copy control and a key word written at sp − 4.
+> - **Re-run under the fixed scanner:** default v2 9/9 clean, and `prf2` 9/9 clean (`prf2` controls 0x600). **The claims stand.**
 
 ## Round 13 (2026-11-13): signer-glue attribution profile (the product sign chain)
 
@@ -1663,3 +1682,36 @@ The verify is 0.21–0.24 M. Progress callbacks: 185 per chain. Ticks: 979 k per
 Separating bench-held from driver-held values needs the v2 suite to compute its patterns outside the calling frame. Until then the v2 standing residue gate is red for that reason. E20 does not touch those entries.
 
 For the product, the open question is whether the signer holds secrets in callee-saved registers across driver calls. That is signer codegen, so a proposal only.
+
+> **UPDATE 2026-11-13 (re-run 2026-11-14, round 14).** "The v2 standing residue gate is red" (above) is **resolved: the hits were harness artifacts and the gate is green.**
+> - The v2 suite now computes its patterns out of line and runs each case in its own frame.
+> - `prf_chain16` and `chain16` were the bench caller's r5/r6 values.
+> - `wots_pk16` was the scanner's own last-loaded pattern from the previous case (case 0's table is identical to case 1's), saved by the next entry's prologue. Swapping the order moved the hit to case 0, with the same word and the same pattern index 1583 of 1584.
+> - No driver change was needed. The product's open question (does the signer hold secrets in callee-saved registers across driver calls) remains a signer-side proposal.
+
+## Round 14 (2026-11-14): residue finding — isolate, diagnose, correct the record
+
+**Isolation (`bench_v2drv`, residue mode).**
+- The secrets live in statics, written by an out-of-line `res_setup`.
+- Each case's patterns are computed by an out-of-line `res_pats`, so the calling frame never loads a secret byte.
+- Each case's clear, driver call and scan run in an out-of-line `res_case` frame. A pattern the scan leaves in a callee-saved register is restored on return and cannot reach the next case's driver prologue.
+- The caller passes only static addresses and public A7 words.
+
+**Diagnosis of the round-13 hits.**
+
+| entry | round-13 hit | under isolation | cause |
+|---|---|---|---|
+| `prf_chain16` | sp − 16 (`0x3eebfed4`) | clean | the bench's software pattern computation left its last word in r5; the entry's `push {r4, r5, r6, r7, lr}` saved it (Astra, disassembly) |
+| `chain16` | sp − 12 (`0xeacefe30`) | clean | the same, r6 |
+| `wots_pk16` | sp − 12 (`0x327590f0`, pattern 1583 of 1584) | clean | the previous case's scan left its last pattern (the same table) in r6; the entry's prologue saved it. With the order swapped, case 0 flags instead, with the same word and index |
+
+**Per-entry verdict under the fixed scanner** (`gate_residue.sh`, extended: each suite's `residue-control` build must flag its two positive controls, a frame copy of the key and a key word at sp − 4, and nothing else):
+
+| suite | entries | verdict | controls |
+|---|---|---|---|
+| v1 (`bench_v1micro`, 7) | key loop, sign-shape keys, FORS subtree, grind with and without rand, `prf_chain16`, `chain16` | **clean** | 0x180 (both fire) |
+| v2 (`bench_v2drv`, 9) | `wots_chains16`, `wots_pk16`, `prf_chain16`, `fors_leaf16`, `fors_subtree16` h4 / h7, `chain16`, `grind_r` 119 / 103 | **clean** | 0x600 (both fire) |
+| v2 with `prf2` | the same 9 | **clean** | 0x600 |
+| product (`bench_chain`, 3) | `oneshot16` on the `wots_secret` preimage, `oneshot` on a secret-PRF preimage, streaming with the key in its own update | **clean** (round 13: also with `oneshot-speed`) | 0x18 (both fire) |
+
+**No driver fix was needed**, so no goldens, kdiff, gate 5 or FSBL re-runs: no driver code changed this round. The rounds 9–12 records carry dated UPDATE notes. Every residue-clean claim there stands, now on a scanner that sees the band; the only changed verdict is round 13's interim "v2 gate red".

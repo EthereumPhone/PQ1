@@ -19,6 +19,8 @@ stale = []
 stale-positive = ["stale"]
 stale-fors = ["stale"]
 stale-search = ["stale"]
+# Round 14: two residue positive controls (frame copy; a key word at sp - 4) after the 7 cases.
+residue-control = []
 
 [dependencies]
 # The v1 kit image's driver configuration (as bench_avg_v1).
