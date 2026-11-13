@@ -21,6 +21,18 @@ SW = os.path.join(ROOT, "contracts", "smart-wallet")
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
 V2 = "src/verifiers/SPHINCsC10v2Asm.sol"
 V1 = "src/verifiers/SPHINCsC10Asm.sol"
+VTS = "src/verifiers/SPHINCsC10v2Ts200Asm.sol"
+VSP = "src/verifiers/SPHINCsC10v2Split810Asm.sol"
+VA3 = "src/verifiers/SPHINCsC10v2All3Asm.sol"
+# forge --match-contract regex per mutated file: the semantic gates for that verifier only (the
+# gas benches are excluded; a mutant that only a gas bench notices counts as MISSED)
+SUITES = {
+    V1: "^(C10EquivalenceTest|C10PrimitiveTraceTest|C10DigitSumTest)$",
+    V2: "^(C10EquivalenceTest|C10PrimitiveTraceTest|C10DigitSumTest|C10LanesTest)$",
+    VTS: "^C10VariantEquivalenceTs200Test$",
+    VSP: "^C10VariantEquivalenceSplit810Test$",
+    VA3: "^C10VariantEquivalenceAll3Test$",
+}
 
 # (id, file, old, new, what it breaks). Keep `old` unique in the CURRENT candidate.
 MUTANTS = [
@@ -67,8 +79,8 @@ MUTANTS = [
      "B5: FORS root level hashed with height 10's (cp, ha)"),
     ("v2-b5-merkle-a7base", V2, "mstore(0x30, shl(200, treeBase)) // A7 bytes 0..4 for every level (the chains overwrote 0x30)",
      "pop(0)", "B5: hypertree A7 bytes 0..4 left as the last chain step's"),
-    ("v2-b5-lanes-pin", V2, "0x100020003000400050006000700080009000a000b00000000000000000000000) // C10-LANES",
-     "0x100020003000400050006000700080009000a000b00000000000000000000001) // C10-LANES",
+    ("v2-b5-lanes-pin", V2, "let t := treeIdx\n" + " " * 16 + "let cpha := or(and(mul(t, 0x1000080004000200010000800040002000100008000400000000000000000), 0x7fe03fe01fe00fe007e003e001e000e00060002000000000000000000000000), 0x100020003000400050006000700080009000a000b00000000000000000000000) // C10-LANES",
+     "let t := treeIdx\n" + " " * 16 + "let cpha := or(and(mul(t, 0x1000080004000200010000800040002000100008000400000000000000000), 0x7fe03fe01fe00fe007e003e001e000e00060002000000000000000000000000), 0x100020003000400050006000700080009000a000b00000000000000000000001) // C10-LANES",
      "B5: unused low bits of the cp/ha constant changed (semantically equivalent; text pin only)"),
     ("v2-e5-ci-step", V2, "add(chainA, or(shl(218, 7), shl(212, and(shr(21, d), 7))))",
      "add(chainA, or(shl(218, 8), shl(212, and(shr(21, d), 7))))", "B2: chain 7 hashed under ci = 8"),
@@ -76,6 +88,16 @@ MUTANTS = [
      "B2: chain 1 end value stored one byte off in T_43"),
     ("v2-a7-last", V2, "shl(200, or(shl(52, 9), shl(33, htIdx)))", "shl(200, or(shl(52, 3), shl(33, htIdx)))",
      "FORS_LAST tweak type"),
+    # ── v1 ──
+    # ── research variants (derived files; mutated directly) ──
+    ("vts-target", VTS, "if iszero(eq(digitSum, 200))", "if iszero(eq(digitSum, 205))",
+     "ts200: target sum back to 205"),
+    ("vsp-layer1-levels", VSP, "                if layer {\n", "                if 0 {\n",
+     "split810: layer 1's heights 9..10 skipped"),
+    ("vsp-sigoff", VSP, "sigOff := add(countOff, add(4, shl(4, hl)))", "sigOff := add(countOff, add(4, shl(4, 9)))",
+     "split810: layer-0 section length as in (9, 9)"),
+    ("va3-ci", VA3, "or(shl(217, 5), shl(212, and(shr(15, d), 7)))", "or(shl(218, 5), shl(212, and(shr(15, d), 7)))",
+     "all3: chain 5 hashed with the draft-0.3 ci position"),
     # ── v1 ──
     ("v1-len-reason", V1, '"Invalid sig length"', '"Invalid sig lengtH"',
      "revert data of the length check (returndata compare)"),
@@ -97,6 +119,8 @@ MUTANTS = [
      "E7: count bytes leak into the first Merkle H preimage"),
     ("v1-e8-fors-h3-ha", V1, "shr(3, treeIdx)))", "shr(2, treeIdx)))",
      "E8: FORS height-3 ha from the wrong shift"),
+    ("v1-b7-block1", V1, "if and(nd, shl(30, 1)) {", "if and(nd, shl(31, 1)) {",
+     "B7: v1 chain 10's single-step block keyed on the wrong bit"),
     ("v1-root-cmp", V1, "valid := eq(and(mload(0x40), N_MASK), root)", "valid := eq(and(mload(0x40), N_MASK), and(mload(0x40), N_MASK))",
      "final root comparison"),
 ]
@@ -120,10 +144,10 @@ def pin_ok():
     return bool(want) and all(lines(rel) == want for rel in (V1, V2))
 
 
-def run_gates(runs):
+def run_gates(runs, regex):
     env = dict(os.environ, FOUNDRY_FUZZ_RUNS=str(runs))
-    p = subprocess.run([FORGE, "test", "--match-path", "test/gas/C10*.t.sol"], cwd=SW, env=env,
-                       capture_output=True, text=True)
+    p = subprocess.run([FORGE, "test", "--match-path", "test/gas/C10*.t.sol", "--match-contract", regex],
+                       cwd=SW, env=env, capture_output=True, text=True)
     out = p.stdout + p.stderr
     fails = re.findall(r"^\[FAIL.*\] (test\w+)\(", out, re.M)
     first = re.search(r"EQUIVALENCE FAIL[^\n\"]*|SHA-256 call #[^\n\"]*", out)
@@ -133,8 +157,8 @@ def run_gates(runs):
 
 def main():
     which = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "all"
-    if which not in ("v1", "v2", "all"):
-        sys.exit(f"unknown selection {which!r}: use v1, v2 or all")
+    if which not in ("v1", "v2", "vts", "vsp", "va3", "all"):
+        sys.exit(f"unknown selection {which!r}: use v1, v2, vts, vsp, va3 or all")
     runs = int(sys.argv[sys.argv.index("--runs") + 1]) if "--runs" in sys.argv else 64
     sel = [m for m in MUTANTS if which == "all" or m[0].startswith(which + "-")]
     if "--only" in sys.argv:
@@ -142,10 +166,12 @@ def main():
         sel = [m for m in sel if m[0] == only]
     if not sel:
         sys.exit("no mutants selected")
-    rc, fails, _, _, out = run_gates(runs)
-    if rc != 0:
-        print("BASELINE NOT GREEN — fix the candidate first:\n", "\n".join(fails), out[-3000:])
-        sys.exit(2)
+    regexes = sorted({SUITES[m[1]] for m in sel})
+    for rx in regexes:
+        rc, fails, _, _, out = run_gates(runs, rx)
+        if rc != 0:
+            print(f"BASELINE NOT GREEN ({rx}) — fix the candidate first:\n", "\n".join(fails), out[-3000:])
+            sys.exit(2)
     print(f"baseline green; {len(sel)} mutants, fuzz runs {runs}")
     ok = True
     for mid, rel, old, new, what in sel:
@@ -159,7 +185,7 @@ def main():
         try:
             open(path, "w").write(src.replace(old, new))
             pin = pin_ok() and lanes_pin_ok()
-            rc, fails, first, _, out = run_gates(runs)
+            rc, fails, first, _, out = run_gates(runs, SUITES[rel])
         finally:
             open(path, "w").write(src)
         semantic = [f for f in fails if not f.startswith("test_gas")]
@@ -180,9 +206,10 @@ def main():
             print(f"CAUGHT  {mid:26s} by {len(semantic)} tests: {', '.join(semantic)[:200]}")
             if first:
                 print(f"          first: {first[:150]}")
-    rc, fails, _, _, _ = run_gates(runs)
-    print("post-run baseline", "green" if rc == 0 else "RED: " + ", ".join(fails))
-    sys.exit(0 if ok and rc == 0 else 1)
+    post = [run_gates(runs, rx) for rx in regexes]
+    red = [f for r in post if r[0] != 0 for f in r[1]]
+    print("post-run baseline", "RED: " + ", ".join(red) if red else "green")
+    sys.exit(0 if ok and not red else 1)
 
 
 if __name__ == "__main__":

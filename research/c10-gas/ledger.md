@@ -213,3 +213,4 @@ EntryPoint overhead and calldata, both unchanged.
 
 The saving is the verifier's, one for one: verification gas of a Type-2 UserOp drops by ~43-48k
 (deploy profile), i.e. ~22-24% of `validateUserOp`; the rest of the UserOp is unchanged.
+| B7 | v1 mirror of B2 + B4 (cheap: the chain generator gains a v1 mode): 43 chains unrolled, steps in straight-line blocks of 4/2/1 keyed on `not(d)`, value word at 0x40, ADRS `wotsAdrs \\| i<<64 \\| p<<32` | v1 | 123,829 -> **115,785..115,914** (-7.9..8.0k) | 122,144 -> 112,318..112,413 (-9.7..9.8k) | 2,067 -> 11,955 / 2,453 -> 13,210 | gate.sh green | keep (v1 landing remains an owner decision; no pins/scripts/Lean touched) |

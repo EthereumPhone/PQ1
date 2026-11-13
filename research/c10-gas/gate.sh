@@ -31,6 +31,7 @@ done
 echo "== generated blocks match their generators"
 python3 "$ROOT/research/c10-gas/gen_v2_walks.py" --check src/verifiers/SPHINCsC10v2Asm.sol && echo "  ok v2 walks"
 python3 "$ROOT/research/c10-gas/gen_v2_chains.py" --check src/verifiers/SPHINCsC10v2Asm.sol && echo "  ok v2 chains"
+python3 "$ROOT/research/c10-gas/gen_v2_chains.py" --check src/verifiers/SPHINCsC10Asm.sol v1 && echo "  ok v1 chains"
 python3 "$ROOT/research/c10-gas/derive_v2_variants.py" --check && echo "  ok v2 variants derived from the 0.3 candidate"
 
 echo "== equivalence + per-primitive + unit + gas bench (fuzz runs $RUNS)"
