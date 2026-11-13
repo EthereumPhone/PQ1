@@ -1386,3 +1386,23 @@ Realistic headroom is **~0.9–1.3 M (1.8–2.6%)**, so v2 is not closed yet.
 7. `node16` (Rust `feed_words`, ~0.05 M).
 
 A v2 profile at head is a precondition for the closing note.
+
+### The "v1 entry right after a v2 one" control (`b28509e94`)
+
+Gate 5's interleaved v1 probe had only been the byte-mode one-shot and the streaming API, not a v1 driver entry. Gate 5 now also runs a v1 entry after every call to the DATATYPE-00 functions (FORS subtree, search, key loop, pk16).
+
+**What it runs:** one of the v1 global_asm entries, rotating between the whole-key loop, the FORS subtree and the count search, in the input shape that selects each asm path. Each is checked against software SHA-256 from the v1 spec.
+
+**Results:**
+- gate 5: **2,940/0**, with 412 v1-entry probes; the evaluator now requires at least one probe and no v1-entry failure;
+- control: the v1 FORS asm writing CR with DATATYPE 00 fails 137 of 412, i.e. every FORS probe;
+- control: the same change in the v1 key-loop and search asm fails 209 of 412: every key probe, plus every search probe whose tries hit (the n = 5 runs mostly miss on both sides);
+- guard, `stale-v2fors`, `stale-v2key` and `stale-search` still fire.
+
+**Re-run at head (`b28509e94`):**
+- FSBL `e34d6e8ecabb3109f8ca` (identical);
+- residue gate clean (v1 7 cases, v2 9 cases);
+- v1 golden passes;
+- v1 kit differential 32/32 with search edges 0x3F.
+
+**Not done this round:** item 4b, the FORS-PRF loads. Fable estimates ~0.15 M. It is ranked second for the next batch, after the T_43 feed.
