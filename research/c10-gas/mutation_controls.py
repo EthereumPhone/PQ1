@@ -85,7 +85,7 @@ MUTANTS = [
      "E7: count bytes leak into the first Merkle H preimage"),
     ("v1-e8-fors-h3-ha", V1, "shr(3, treeIdx)))", "shr(2, treeIdx)))",
      "E8: FORS height-3 ha from the wrong shift"),
-    ("v1-root-cmp", V1, "valid := eq(currentNode, root)", "valid := eq(currentNode, currentNode)",
+    ("v1-root-cmp", V1, "valid := eq(and(mload(0x40), N_MASK), root)", "valid := eq(and(mload(0x40), N_MASK), and(mload(0x40), N_MASK))",
      "final root comparison"),
 ]
 
@@ -117,6 +117,9 @@ def main():
         sys.exit(f"unknown selection {which!r}: use v1, v2 or all")
     runs = int(sys.argv[sys.argv.index("--runs") + 1]) if "--runs" in sys.argv else 64
     sel = [m for m in MUTANTS if which == "all" or m[0].startswith(which + "-")]
+    if "--only" in sys.argv:
+        only = sys.argv[sys.argv.index("--only") + 1]
+        sel = [m for m in sel if m[0] == only]
     if not sel:
         sys.exit("no mutants selected")
     rc, fails, _, _, out = run_gates(runs)

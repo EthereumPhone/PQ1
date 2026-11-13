@@ -105,3 +105,36 @@ v2 is not pinned anywhere yet; its adoption already changes all of the above.
 | E7 | port E2+E3 (in place) to the 32-byte layout: 16-byte outputs into the top half of the value words at 0x40/0x60, siblings by 16-byte `calldatacopy`, chains in place at 0x40 with the ADRS word as loop variable (+1<<32), roots into T_13 slots, T_13 onto the digest node word, T_43 into the first Merkle word, root onto 0x40. Invariant: low halves 0x50..0x5F / 0x70..0x7F are zero; restored by `mstore(0x60, 0)` after H_msg (message) and after each WOTS digest (count) | v1 | 161,521 -> 139,852 (**-21,669**) | 151,160 -> 137,084 (-14,076) | 1,239 -> 1,219 | gate.sh green (first attempt) | keep |
 | E8 | port E4: unroll the FORS 11-level and hypertree 9-level walks (x = 32*index, word = 0x40 + and(shr(k, x), 0x20); ADRS = base \| h<<32 \| index>>h) | v1 | 139,852 -> 125,269 (**-14,583**) | 137,084 -> 123,329 (-13,755) | 1,219 -> 2,068 (deploy 1,661 -> 2,478) | gate.sh green | keep |
 | E9 | port E5a': chain outer loop with one 16-byte cursor (slot = TB + 0x40 + 2*cursor), digest shifted 3 per chain, ADRS base +1<<64 per chain (the old ci-insert mask was a no-op on these words) | v1 | 125,269 -> 123,829 (**-1,440**) | 123,329 -> 122,144 (-1,185) | 2,068 -> 2,067 | gate.sh green | keep |
+
+## Batch 1 result (2026-11-13)
+
+| verifier | callee-only (default) | deploy profile (production) | runtime size default / deploy |
+|---|---:|---:|---:|
+| v2 0.3 | 157,585 -> **117,568** (-40,017, -25.4%) | 148,387 -> **113,680** (-34,707, -23.4%) | 1,207 -> 1,848 / 1,804 -> 3,022 B |
+| v1 (deployed format) | 175,205 -> **123,829** (-51,376, -29.3%) | 164,847 -> **122,144** (-42,703, -25.9%) | 1,238 -> 2,067 / 1,889 -> 2,453 B |
+
+Floor (361 warm calls + precompile execution): v2 67,012, v1 73,756; remaining interpreter
+overhead ~50.6k (v2) / ~50.1k (v1). After optimization v1 costs only ~6.3k (callee-only) more than
+v2, against ~17.6k before: most of the old gap was interpreter overhead, not preimage length.
+
+Final checks: `gate.sh 256` green (both profiles); fixed-seed high-count fuzz
+(`FOUNDRY_FUZZ_RUNS=4000 FOUNDRY_FUZZ_SEED=0x1155c10`, all C10Equivalence fuzz tests: 4,000 runs
+each of mutations / ABI encodings / raw calldata per version, deep 24 per version): all pass.
+
+## Format-level ideas (proposals only, NOT adopted: each changes the format and a security bound)
+
+- **Higher WOTS+C target sum (e.g. 210).** Verify chain steps per layer = 43*7 - target: 96 at
+  205, 91 at 210, 86 at 215. Each step is ~230 gas after this batch (184 precompile + call, ~45
+  interpreter), so 210 saves ~2.3k and 215 ~4.6k per verify. Costs: the signer grinds
+  P(sum = t)^-1 digests per layer (205: 3.26e-5, 210: 8.54e-6 = 3.8x, 215: 1.95e-6 = 17x), and the
+  number of valid digit vectors drops (log2: 114.1 -> 112.2 -> 110.0), which enters the WOTS+C
+  bound; needs the `bound_variants.py` analysis and a review like ts200's (which went the other
+  way, +3.15k verify gas). Not recommended without that analysis.
+- The rest of the floor is the format: 361 hashes x (100 warm CALL + 60 + 12/word). Nothing in
+  this batch touched it; only fewer or shorter hashes would.
+Mutation controls on the final candidates (`mutation_controls.py all --runs 64`): 26/26 caught
+(one, `v1-root-cmp`, was STALE after E7, re-targeted and caught alone with `--only`). Notable:
+`v1-l1h8-sibling-32` (last sibling copied as 32 bytes, so ABI padding enters its low half) is
+caught only by the trailing-junk tests; `v{1,2}-count-31bit` only by the trace comparison;
+`v1-e7-zero-after-{hmsg,digest}` (the zero-low-half invariant) by 11 tests each, including the
+per-primitive trace ("SHA-256 call #… differs").
