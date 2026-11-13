@@ -374,3 +374,76 @@ owner who prefers -2.6k gas per verify over 6.1 kB of deploy bytecode (one-time 
 
 v1 options (deploy profile): bytes + loop (HEAD) 111,772 / 6,601 B; bytes + blocks 109,232..109,304
 / 12,028 B; full ADRS words + blocks (D1) 109,737..109,817 / 13,590 B; reference 164,847 / 1,889 B.
+
+### Wallet-level numbers at the end of batch 3 (deploy profile, cold verifier, one signature each)
+
+| path | reference -> candidate |
+|---|---|
+| v1 `validateUserOp` | 216,288 -> 163,213 (-53,075) |
+| v2 `validateUserOp` | 199,143 -> 152,885 (-46,258) |
+| v1 `isValidSignature` | 186,768 -> 133,693 (-53,075) |
+| v2 `isValidSignature` | 170,308 -> 124,044 (-46,264) |
+
+## Closing note: where the v2 verifier stands (track B)
+
+At HEAD (`no-blocks` build, deploy profile) a v2 verify costs **102,123** gas callee-only with a
+4,683-byte runtime (reference 148,387 / 1,804 B). By phase (deploy, from the +C near-misses):
+dispatch + H_MSG + checks 801; FORS + layer-0 digest 39,085; layer 0 + layer-1 digest 31,343;
+layer 1 + root compare 30,905.
+
+| component | gas | share | reducible? |
+|---|---:|---:|---|
+| SHA-256 precompile execution (361 calls: 60 + 12 per word) | 30,912 | 30% | only by fewer or shorter hashes (format) |
+| warm STATICCALL to 0x02 (361 x 100) | 36,100 | 35% | only by fewer hashes (format) or EVM repricing |
+| interpreter: CALL argument pushes + POP (361 x ~20) | ~7,200 | 7% | no (the minimum any caller pays) |
+| interpreter: WOTS step loop control (192 steps x ~35) | ~6,700 | 7% | ~2.6k of it with straight-line step blocks, at +6.1 kB (the `head` option) |
+| interpreter: everything else (per-chain and per-level bookkeeping, A7/ADRS bytes, sibling copies, T_k headers, digests, SWAR, ABI) | ~21,200 | 21% | < 1k left without growing code (Fable's batch-2 estimate, mostly realized by C1-C4) |
+
+Semantics-preserving headroom at this size point is therefore about 1k; the remaining choices
+are size-vs-gas (the menu above) rather than new optimizations. v1 is in the same position
+(111,772 deploy / 6,601 B; bytes + blocks 109,232 at 12,028 B).
+
+**Format-level levers (proposals only, none adopted; each changes keys, signatures and the
+security argument):**
+
+1. **Higher WOTS+C target sum** (205 -> 210 / 215): 10 / 20 fewer chain steps per verify,
+   ~-2.5k / ~-5k gas at ~250 gas per step. Cost: the number of valid digit vectors drops from
+   2^114.1 to 2^112.2 / 2^110.0 (the WOTS+C term of the bound), and the signer grinds 3.8x / 17x
+   more digests per layer (device signing time). Needs the `bound_variants.py` analysis and a
+   review like ts200's.
+2. **Smaller FORS** (one tree fewer, or one level less in every tree): 12 hashes fewer, about
+   -3.1k each way. Cost: lower few-time FORS security at the same number of signatures per
+   hypertree leaf; needs re-parameterizing (k, a) and redoing the FORS+C / position-binding
+   analysis, plus new KATs and signer.
+3. **Lower hypertree** (h < 18): 2 hashes fewer per removed level (~-0.5k), but fewer signing
+   positions per key, which weakens the multi-target margin (the P14 bootstrap caveat) and the
+   65,536-use caps' basis. Poor gas per unit of security.
+4. **No CALL per hash** (e.g. tweakable hashes on the KECCAK256 opcode, ~30 + 6 per word with no
+   100-gas CALL): would cut most of the 67k floor, but contradicts the decided "SHA-256 inside the
+   PQ stack" rule (the device signs with the STM32 SHA-256 peripheral; software Keccak would make
+   signing several times slower) and replaces the scheme's hash assumption. Listed for
+   completeness only; not recommended.
+5. Outside our control: an EVM change that prices precompile calls below the 100-gas warm access
+   (or a SHA-256 opcode) would remove most of the 36,100 CALL share without any format change.
+
+This closes the semantics-preserving v2 work: further gas comes only from a size-vs-gas choice
+from the menu, or from a format decision with its security review.
+
+Astra conformance review of the cumulative batch-3 code (v1, v2, split810 vs references): no
+mismatch when the precompile calls succeed. It checked the byte-wise chain A7/ADRS (what else
+writes 0x20..0x3F between the per-layer store and each step; split810's kb = 128 * (idxLeaf & 1);
+all 43 chains x positions 0..6; digit 7 makes no call), the v1 0x37/0x3B bytes, the walk words
+exhaustively (2,048 indices x 11 heights, both versions, incl. the sibling bytes), the
+strength-reduced FORS loop (12 iterations, same per-tree offsets and addresses), the v1
+zero-low-half invariant, and the generators; it reports 25,992 ordered precompile inputs over
+72 synthetic-digest executions plus 3 real-SHA executions, all matching. Its qualification is
+again failed-call memory semantics: if ONE precompile call failed and execution continued, the
+next preimage would differ (stale reference output slot vs in-place candidate). Unchanged
+argument: a single failure needs a gas-starved call, after which at most 9 gas remain and
+execution ends in out-of-gas; at call depth 1024 every call fails and both versions revert empty
+at the layer-0 digit sum. Not demonstrated reachable; still argued, not tested.
+
+Batch-3 closing checks: mutation controls `all --runs 64` **44/44 caught** (incl. C1 ci/digit,
+C3 sibling lanes (pin + 11 tests), C4 dg/kp, D1 sibling, D2 ci, split810 kb, all3 ci). Full
+`forge test` (minus test/gas): 180 passed, 2 failed (the two v1 codehash pins; v1 runtime
+codehash now `0x8b475ebe…`), 32 skipped. Every keep passed gate.sh at both profiles.
