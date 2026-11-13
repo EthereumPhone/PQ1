@@ -200,22 +200,24 @@ contract SPHINCsC10Asm {
 
                 // 43 WOTS chains (w=8: max 7 steps per chain)
                 let wotsPtr := add(sigBase, sigOff)
-                for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
-                    let digit := and(shr(mul(i, 3), d), 0x7)
-                    // in place: the value word at 0x40 (low half zero) is overwritten by each
-                    // step's 16-byte output; the ADRS word for position p is chainBase + p<<32
-                    // (cp field zero in chainBase, p < 7)
-                    mstore(0x40, and(calldataload(add(wotsPtr, shl(4, i))), N_MASK))
-                    let chainBase := and(
-                        or(wotsAdrs, shl(64, i)),
-                        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFF
-                    )
+                // Chain i (o = 16 i) from position digit_i = dd & 7 (dd = d >> 3i) to 7 in place:
+                // the value word at 0x40 (low half zero) is overwritten by each step's 16-byte
+                // output; the ADRS word for chain i at position p is chainBase + p<<32 with
+                // chainBase = wotsAdrs + i<<64 (ci = bits 64..95, cp = bits 32..63, both zero in
+                // wotsAdrs; i < 43, p < 7, so no add carries).
+                let dd := d
+                let chainBase := wotsAdrs
+                for { let o := 0 } lt(o, 688) { o := add(o, 16) } {
+                    mstore(0x40, and(calldataload(add(wotsPtr, o)), N_MASK))
+                    let a := add(chainBase, shl(32, and(dd, 7)))
                     let aEnd := add(chainBase, shl(32, 7))
-                    for { let a := add(chainBase, shl(32, digit)) } lt(a, aEnd) { a := add(a, shl(32, 1)) } {
+                    for { } lt(a, aEnd) { a := add(a, shl(32, 1)) } {
                         mstore(0x20, a)
                         pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))
                     }
-                    mstore(add(add(TB, 0x40), shl(5, i)), mload(0x40))
+                    mstore(add(add(TB, 0x40), shl(1, o)), mload(0x40)) // slot TB + 0x40 + 32 i
+                    dd := shr(3, dd)
+                    chainBase := add(chainBase, shl(64, 1))
                 }
 
                 // PK compression: sha256(seed || pkAdrs || 43 endpoints)
