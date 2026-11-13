@@ -66,6 +66,11 @@ fn serialization_forest_fragment(initial: &[u8; SIGNATURE_LEN], fors_secrets: &[
 }}
 fn serialization_layer_fragment(initial: &[u8; SIGNATURE_LEN], initial_offset: usize,
     wots_sigma: &[[u8; N]; L], count: u32, auth_path: &[[u8; N]; SUBTREE_H]) -> ([u8; SIGNATURE_LEN], usize) {{
+    // The fragment's auth-path loop is bounded by the caller's `lh = layer_h(layer)`.
+    // Every layer has height SUBTREE_H in this (non-research) build; fail to
+    // compile if that ever stops holding instead of serializing a wrong height.
+    const _: () = assert!(layer_h(0) == SUBTREE_H && layer_h(1) == SUBTREE_H && D == 2);
+    let lh = SUBTREE_H;
     let mut sig = *initial;
     let mut offset = initial_offset;
     {layer_fragment}
