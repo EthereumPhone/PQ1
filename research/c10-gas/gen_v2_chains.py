@@ -91,6 +91,31 @@ def block_bytes_loop(indent=I, split810=False):
     return "\n".join(out) + "\n"
 
 
+def block_bytes_last(indent=I, split810=False):
+    """Size option: unrolled chains; steps up to position 5 in a loop, the last step (always
+    position 6 when the chain has any) straight-line."""
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)"]
+    call = "pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))"
+    for i in range(43):
+        ci = f"or(kb, {2 * i})" if split810 else f"{4 * i}"
+        out += [f"{indent}calldatacopy(0x10, add(wotsPtr, {16 * i}), 16) // chain {i}",
+                f"{indent}mstore8(0x24, {ci}) // A7 byte 4: ci",
+                f"{indent}{{",
+                f"{indent}    let p := {_digit16(i)}",
+                f"{indent}    if lt(p, 0x70) {{",
+                f"{indent}        for {{ }} lt(p, 0x60) {{ p := add(p, 0x10) }} {{",
+                f"{indent}            mstore8(0x25, p)",
+                f"{indent}            {call}",
+                f"{indent}        }}",
+                f"{indent}        mstore8(0x25, 0x60)",
+                f"{indent}        {call}",
+                f"{indent}    }}",
+                f"{indent}}}",
+                f"{indent}mstore(add(TB, {24 + 16 * i}), mload(0x10))"]
+    out.append(f"{indent}// END generated chains")
+    return "\n".join(out) + "\n"
+
+
 def block_bytes_rolled(indent=I, split810=False):
     """Size option "compact": byte-wise A7, one loop over the 43 chains, steps as a loop."""
     ci = "or(kb, shr(3, o))" if split810 else "shr(2, o)"
@@ -135,6 +160,23 @@ def block_v1(indent=I):
     return "\n".join(out) + "\n"
 
 
+def block_v1_bytes_loop(indent=I):
+    """v1, byte-wise ADRS (batch 3): `mstore(0x20, wotsAdrs)` once per layer; per chain the ci byte
+    (ADRS bits 64..71, memory 0x37), per step the cp byte (bits 32..39, memory 0x3B); value word at
+    0x40 (low half zero), 96-byte preimage; steps as a loop."""
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py v1; do not edit by hand)"]
+    for i in range(43):
+        out += [f"{indent}mstore(0x40, and(calldataload(add(wotsPtr, {16 * i})), N_MASK)) // chain {i}",
+                f"{indent}mstore8(0x37, {i}) // ADRS ci byte",
+                f"{indent}for {{ let p := and(shr({3 * i}, d), 7) }} lt(p, 7) {{ p := add(p, 1) }} {{",
+                f"{indent}    mstore8(0x3B, p) // ADRS cp byte",
+                f"{indent}    pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))",
+                f"{indent}}}",
+                f"{indent}mstore(add(TB, {0x40 + 32 * i}), mload(0x40))"]
+    out.append(f"{indent}// END generated chains")
+    return "\n".join(out) + "\n"
+
+
 def splice(src, new):
     b = src.index("// BEGIN generated chains")
     b = src.rindex("\n", 0, b) + 1
@@ -150,9 +192,9 @@ if __name__ == "__main__":
     if arg == "v1":
         new = splice(src, block_v1())
     elif arg == "split810":
-        new = splice(src, block_bytes(split810=True))
+        new = splice(src, block_bytes_loop(split810=True))
     else:
-        new = splice(src, block_bytes())
+        new = splice(src, block_bytes_loop())
     if mode == "--check":
         sys.exit(0 if new == src else "generated chain block differs from gen_v2_chains.py output")
     open(path, "w").write(new)

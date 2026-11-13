@@ -82,7 +82,7 @@ def split810(b):
     b = sub(b, "                mstore(0x20, shl(200, kpBase)) // A7 of chain 0 at position 0\n",
             "                mstore(0x20, shl(200, kpBase)) // A7 of chain 0 at position 0\n"
             "                let kb := byte(4, shl(200, kpBase)) // A7 byte 4 without ci: kp bit 0 at bit 7\n")
-    b = gen_v2_chains.splice(b, gen_v2_chains.block_bytes(split810=True))
+    b = gen_v2_chains.splice(b, gen_v2_chains.block_bytes_loop(split810=True))
     # Merkle: heights 1..8 for both layers, 9..10 for layer 1 only (gen_v2_walks.merkle(split810))
     b = sub(b, "// the FORS one (generated); the root (index 0 at height 9) lands at 0x10, the next\n"
                "                // layer's m16.",

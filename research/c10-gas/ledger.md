@@ -345,3 +345,27 @@ verifiers since `0895dcc79`, so there is no textual conflict today; but the scri
 the derived variants and imports `research/c10-gas/gen_v2_walks.py`, so taking it without this
 branch's verifiers breaks it, and any later Track A edit to the script or the variants will
 conflict with this branch.
+
+### Size-vs-gas menu (v2 0.3; `build_options.py`, every option passes the v2 equivalence, per-primitive and lanes gates)
+
+Options differ only in the generated chain block (walks as committed after C4). Gas over the 6
+KATs; constant where the steps are a loop.
+
+| option | callee gas default | callee gas deploy | runtime default | runtime deploy | gas per kB vs the next smaller |
+|---|---:|---:|---:|---:|---|
+| batch-1 end (E5b), reference point | 117,568 | 113,680 | 1,848 | 3,022 | — |
+| `rolled`: one loop over the chains, byte-wise A7, step loop | 108,565 | 108,049 | 1,931 | **2,179** | — |
+| **`no-blocks`: chains unrolled, byte-wise A7, step loop (HEAD after C5)** | **102,633** | **102,123** | 4,434 | **4,683** | -5.9k for +2.5 kB (2.4k/kB) |
+| `last-step`: as no-blocks, last step straight-line | 102,349..102,418 | 101,839..101,908 | 5,789 | 6,038 | -0.25k for +1.4 kB (0.2k/kB) |
+| `head` (C4): chains unrolled, straight-line 4/2/1 blocks | 100,637..100,820 | 99,509..99,680 | 10,049 | 10,816 | -2.6k for +6.1 kB (0.4k/kB) |
+| batch-2 end (B5): blocks with full A7 words | 103,908..103,982 | 100,766..100,879 | 11,016 | 18,820 | dominated |
+| reference | 157,585 | 148,387 | 1,207 | 1,804 | — |
+
+The straight-line step blocks (B4) buy the least gas per byte (0.4k gas per kB; a lean rework,
+`last-step`, does worse at 0.2k/kB). Following the batch-3 objective, C5 drops them from the
+committed candidate; `head` stays one generator call away (`gen_v2_chains.block_bytes`) for an
+owner who prefers -2.6k gas per verify over 6.1 kB of deploy bytecode (one-time ~1.2M gas).
+
+| # | experiment | verifier | callee-only before -> after (default) | deploy before -> after | size default / deploy | gates | decision |
+|---|---|---|---|---|---|---|---|
+| C5 | drop B4: chain steps as a loop over the cp byte (`no-blocks`); variants re-derived | v2 + variants | 0.3 100,637..100,820 -> **102,633** (+1.9k, constant); ts200 -> 105,183; split810 -> 103,289; all3 -> 105,839 | 0.3 99,509..99,680 -> **102,123** (+2.5k); ts200 -> 104,673; split810 -> 102,781; all3 -> 105,331 | 10,049 -> **4,434** / 10,816 -> **4,683** (split810 4,843) | gate.sh green | keep (size objective; gas digit-independent again) |

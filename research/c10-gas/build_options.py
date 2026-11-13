@@ -29,6 +29,7 @@ OPTIONS = {
     "head": lambda: g.block_bytes(),               # unrolled chains, straight-line 4/2/1 blocks
     "no-blocks": lambda: g.block_bytes_loop(),     # unrolled chains, step loop (HEAD without B4)
     "rolled": lambda: g.block_bytes_rolled(),      # one loop over the chains, step loop
+    "last-step": lambda: g.block_bytes_last(),     # unrolled chains, loop to cp 5 + straight last step
 }
 
 
