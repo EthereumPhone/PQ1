@@ -49,6 +49,8 @@ gather = ["init-restart", "oneshot"]
 prfchain = ["chain"]
 # Round 7: hand-scheduled v1 WOTS chain loop (secure-only, output-identical; same checks).
 v1-asm-chain = ["chain"]
+# Round 8: whole-key v1 WOTS loop (PRF + chains of the keygen shape) in asm (secure-only, output-identical; same checks).
+v1-asm-key = ["v1-asm-chain", "prfchain"]
 # Secure image only (autoresearch): FORS secret + leaf hash in one call (`pqsigner_fors_leaf16`).
 forsleaf = ["gather"]
 # Autoresearch product variant: the driver's fused loops report finished digests in batches

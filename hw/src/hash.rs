@@ -1580,6 +1580,307 @@ pub unsafe extern "C" fn pqsigner_node16(seed_adrs: *const u8, l: *const u8, r: 
     }
 }
 
+/// `v1-asm-key` (round 8, secure-only; the FSBL never names it): every chain of one
+/// WOTS key of the keygen shape (no order, no digits, `fixed_steps` > 0, WOTS-shaped
+/// zero words) in one asm loop. Per chain: the 80-byte PRF (`sk_seed` read in place
+/// with single loads, never copied; tail words, then `rev(i)`), then `fixed_steps`
+/// chain steps exactly as `v1_chain_asm`. The previous chain's output store and the
+/// next chain index run in the PRF's block-0 window; every digest has the same checks
+/// as the Rust loop (BUSY spin with a 2^24 guard, stale-DCIS refusal, DCIS poll with a
+/// 2^24 guard, SR clear). `st`: 0..4 c0..c3, 4 c8, 5 c9, 6 c10, 7 c12, 8 rev(i) (set
+/// per chain), 9 steps, 10..21 tail words 0..10, 21 `sk_seed`, 22 out pointer, 23 i
+/// (starts at u32::MAX), 24 n.
+#[cfg(feature = "v1-asm-key")]
+const V1K_SPIN_STEP: u32 = 13;
+#[cfg(feature = "v1-asm-key")]
+const V1K_SPIN_PRF: u32 = 14;
+#[cfg(feature = "v1-asm-key")]
+const V1K_SPIN_END: u32 = 12;
+
+#[cfg(all(feature = "v1-asm-key", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1_key_asm(st: *mut u32) {
+    // SAFETY: drives only the secure HASH block (r4 = HASH_BASE + 0x0C); reads and
+    // updates the 25-word staging array at `st`, reads 32 bytes at st[21] (`sk_seed`)
+    // with single loads, writes 16 bytes per chain at st[22] (advanced by 16); on a
+    // hang or a stale DCIS it calls `hash_engine_fault`.
+    unsafe {
+        core::arch::asm!(
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "ldr r5, [r12, #84]",          // sk_seed
+            "b 60f",
+            // ---- chain step loop (as v1_chain_asm) ----
+            "1:",
+            "movs r8, #{spin}",
+            "10:",
+            "subs r8, r8, #1",
+            "bne 10b",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bpl 11f",
+            "4:",
+            "ldm r4, {{r0, r1, r2, r3}}",
+            "movs r8, #1",
+            "str r8, [r4, #0x18]",
+            "rev r0, r0",
+            "3:",
+            "ldr r8, [r4, #0x18]",
+            "tst r8, #10",
+            "bne 40f",
+            "41:",
+            "str lr, [r4, #-12]",          // INIT
+            "movs.w lr, #0",
+            "ldm r12, {{r8, r9, r10, r11}}",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str r11, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "ldr r8, [r12, #16]",
+            "ldr r9, [r12, #20]",
+            "ldr r10, [r12, #24]",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "ldrd r8, r9, [r12, #28]",
+            "rev r10, r5",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str r0, [r4, #-8]",           // word 16: block 0 starts
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "add r5, r5, #1",
+            "ldr r11, [r12, #36]",
+            "mov.w r8, #256",
+            "str r1, [r4, #-8]",           // waits for block 0
+            "str r2, [r4, #-8]",
+            "str r3, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str lr, [r4, #-8]",
+            "str r8, [r4, #-4]",           // DCAL (NBLW = 0)
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "cmp r5, r11",
+            "bne 1b",
+            // ---- chain done: the next chain's PRF, or the last read-out ----
+            "ldr r5, [r12, #84]",          // sk_seed
+            "ldr r8, [r12, #92]",
+            "ldr r9, [r12, #96]",
+            "adds r8, r8, #1",
+            "cmp r8, r9",
+            "beq 70f",
+            "movs r8, #{spin_end}",
+            "20:",
+            "subs r8, r8, #1",
+            "bne 20b",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bpl 21f",
+            "5:",
+            "ldm r4, {{r0, r1, r2, r3}}",  // chain output, swapped in the PRF's block-0 window
+            "movs r8, #1",
+            "str r8, [r4, #0x18]",
+            "60:",
+            "ldr r8, [r4, #0x18]",
+            "tst r8, #10",
+            "bne 50f",
+            "51:",
+            "str lr, [r4, #-12]",          // INIT (PRF)
+            "ldr r8, [r5]",
+            "ldr r9, [r5, #4]",
+            "ldr r10, [r5, #8]",
+            "ldr r11, [r5, #12]",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str r11, [r4, #-8]",
+            "ldr r8, [r5, #16]",
+            "ldr r9, [r5, #20]",
+            "ldr r10, [r5, #24]",
+            "ldr r11, [r5, #28]",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str r11, [r4, #-8]",
+            "ldrd r8, r9, [r12, #40]",
+            "ldrd r10, r11, [r12, #48]",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str r11, [r4, #-8]",
+            "ldrd r8, r9, [r12, #56]",
+            "ldrd r10, r11, [r12, #64]",
+            "str r8, [r4, #-8]",
+            "str r9, [r4, #-8]",
+            "str r10, [r4, #-8]",
+            "str r11, [r4, #-8]",
+            "ldr r8, [r12, #72]",
+            "str r8, [r4, #-8]",           // word 16 (tail 8): block 0 starts
+            // block-0 window: next chain index, the previous chain's output
+            "ldr r10, [r12, #92]",
+            "adds r10, r10, #1",           // Z: first chain (i was u32::MAX)
+            "str r10, [r12, #92]",
+            "rev r11, r10",
+            "str r11, [r12, #32]",         // c13 = rev(i)
+            "beq 52f",
+            "ldr r9, [r12, #88]",
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "str r0, [r9]",
+            "str r1, [r9, #4]",
+            "str r2, [r9, #8]",
+            "str r3, [r9, #12]",
+            "add r9, r9, #16",
+            "str r9, [r12, #88]",
+            "52:",
+            "ldrd r8, r9, [r12, #76]",     // tail 9, 10
+            "movs r5, #0",
+            "mov.w r3, #256",
+            "str r8, [r4, #-8]",           // waits for block 0
+            "str r9, [r4, #-8]",
+            "str r11, [r4, #-8]",          // rev(i)
+            "str r3, [r4, #-4]",           // DCAL (NBLW = 0)
+            "movs r8, #{spin_prf}",
+            "30:",
+            "subs r8, r8, #1",
+            "bne 30b",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bpl 31f",
+            "6:",
+            "ldm r4, {{r0, r1, r2, r3}}",  // chain secret; r1..r3 swapped in the step's window
+            "movs r8, #1",
+            "str r8, [r4, #0x18]",
+            "rev r0, r0",
+            "b 3b",
+            // ---- last chain: counted poll, read, clear, store ----
+            "70:",
+            "mov.w r9, #16777216",
+            "71:",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 72f",
+            "subs r9, r9, #1",
+            "bne 71b",
+            "b 99f",
+            "72:",
+            "ldm r4, {{r0, r1, r2, r3}}",
+            "movs r8, #1",
+            "str r8, [r4, #0x18]",
+            "ldr r9, [r12, #88]",
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "str r0, [r9]",
+            "str r1, [r9, #4]",
+            "str r2, [r9, #8]",
+            "str r3, [r9, #12]",
+            "b 98f",
+            // ---- DCIS not yet: seven straight polls, then a counted poll ----
+            "11:",
+            ".rept 7",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 4b",
+            ".endr",
+            "mov.w r9, #16777216",
+            "12:",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 4b",
+            "subs r9, r9, #1",
+            "bne 12b",
+            "b 99f",
+            "21:",
+            ".rept 7",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 5b",
+            ".endr",
+            "mov.w r9, #16777216",
+            "22:",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 5b",
+            "subs r9, r9, #1",
+            "bne 22b",
+            "b 99f",
+            "31:",
+            ".rept 7",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 6b",
+            ".endr",
+            "mov.w r9, #16777216",
+            "32:",
+            "ldr r8, [r4, #0x18]",
+            "lsls r8, r8, #30",
+            "bmi 6b",
+            "subs r9, r9, #1",
+            "bne 32b",
+            "b 99f",
+            // ---- BUSY still set, or a stale DCIS (step INIT / PRF INIT) ----
+            "40:",
+            "mov.w r9, #16777216",
+            "42:",
+            "tst r8, #8",
+            "beq 43f",
+            "subs r9, r9, #1",
+            "beq 99f",
+            "ldr r8, [r4, #0x18]",
+            "b 42b",
+            "43:",
+            "tst r8, #2",
+            "beq 41b",
+            "b 99f",
+            "50:",
+            "mov.w r9, #16777216",
+            "53:",
+            "tst r8, #8",
+            "beq 54f",
+            "subs r9, r9, #1",
+            "beq 99f",
+            "ldr r8, [r4, #0x18]",
+            "b 53b",
+            "54:",
+            "tst r8, #2",
+            "beq 51b",
+            "99:",
+            "bl {fault}",
+            "98:",
+            spin = const V1K_SPIN_STEP,
+            spin_end = const V1K_SPIN_END,
+            spin_prf = const V1K_SPIN_PRF,
+            fault = sym hash_engine_fault,
+            out("r0") _,
+            out("r1") _,
+            out("r2") _,
+            out("r3") _,
+            in("r4") HASH_BASE + 0x0C,
+            out("r5") _,
+            out("r8") _,
+            out("r9") _,
+            out("r10") _,
+            out("r11") _,
+            in("r12") st,
+            out("lr") _,
+        );
+    }
+}
+
 /// All `n` chains of one WOTS key in one call (`prfchain`, secure image only).
 /// For `k` in `0..n`, chain `i = order[k]` (or `k` when `order` is null):
 /// `s_i = SHA-256(sk_seed ‖ prf_tail with ci = i)[..16]`, then `steps_i`
@@ -1610,6 +1911,27 @@ pub unsafe extern "C" fn pqsigner_wots_chains16(
     // SAFETY: caller contract (48 readable bytes).
     let t: [u32; 12] = core::array::from_fn(|i| unsafe { prf_tail.add(4 * i).cast::<u32>().read_unaligned() });
     let z = c[4] | c[5] | c[6] | c[7] | c[11] | c[15] == 0;
+    #[cfg(all(feature = "v1-asm-key", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+    if z && order.is_null() && digits.is_null() && fixed_steps != 0 && n != 0 {
+        // The engine is idle (no stale DCIS) before STR, as in the loop below; every
+        // digest of the asm loop writes STR only with DCAL (NBLW 0).
+        if wait_ready_sr() & SR_DCIS != 0 {
+            hash_engine_fault();
+        }
+        REG.str_.write(0);
+        let mut st = [
+            c[0], c[1], c[2], c[3], c[8], c[9], c[10], c[12], 0, fixed_steps,
+            t[0], t[1], t[2], t[3], t[4], t[5], t[6], t[7], t[8], t[9], t[10],
+            sk_seed as u32, out as u32, u32::MAX, n,
+        ];
+        v1_key_asm(st.as_mut_ptr());
+        #[cfg(feature = "tick-batch")]
+        // SAFETY: the engine is idle; the tick does not hash. One tick per key.
+        unsafe {
+            pqsigner_hash_tick_n(n * (1 + fixed_steps));
+        }
+        return;
+    }
     #[cfg(feature = "tick-batch")]
     let mut ticks = 0u32;
     let mut k = 0u32;
