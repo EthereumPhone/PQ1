@@ -936,7 +936,7 @@ The v1 R grind (119/103-byte PRF + 160-byte `h_msg` per nonce) as one driver cal
   - Residue 0 with the scrub; rand found in both rand cases with the scrub skipped (mutant). `sk_seed` was never found.
   - Also fixed: the `tick-batch` count over-reported by two on exhaustion.
   - 513 cyc/nonce. Mean, golden, kdiff and FSBL re-run: 2-way 93.37 M, 1-way 93.52 M.
-- **Not checked:** the same residue scan has not been run on the round-7/8 asm entries or on the old Rust paths. The asm keeps secrets in registers only, but the Rust wrappers' spills are unmeasured.
+- **Residue scan on the other v1 entries (`255d55d09`):** after the key loop, no `sk_seed` window and none of the first four chain starts (WOTS secrets, references computed before the call) in the dead stack; after the subtree, no `sk_seed` window. The scan's liveness is shown by the grind's no-scrub mutant. Not run on the round-7 v2 entries or the old Rust paths.
 
 ### Tuning (`f2e3db6dc`)
 Spins tuned in the signer, not the microbench: key-loop step **13** (golden keygen 32.47 → 32.07 M; the microbench had ranked 14 first); search **1** (mean 95.18/95.37/95.56 M at 1/2/3). PRF and chain-end spins are flat (±0.3 cyc/digest).
