@@ -22,17 +22,9 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::hypertree::progress_none]:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 112:0-121:1 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 126:0-135:1 -/
 def hypertree.progress_none : Result hypertree.ProgressSink := do
   ok ()
-
-/-- [sphincs_c10::params::SUBTREE_LEAVES]
-    Source: 'sphincs-c10/src/params.rs', lines 31:0-31:49
-    Visibility: public -/
-@[global_simps, irreducible]
-def params.SUBTREE_LEAVES : Result Std.Usize := do
-  let i ← params.SUBTREE_H
-  1#usize <<< i
 
 /-- [sphincs_c10::merkle::REPORT_EVERY]
     Source: 'sphincs-c10/src/merkle.rs', lines 66:0-66:42 -/
@@ -163,7 +155,8 @@ def merkle.compute_subtree_root
   (pct_lo : Std.U8) (pct_hi : Std.U8) :
   Result (Array Std.U8 16#usize)
   := do
-  let n_leaves ← params.SUBTREE_LEAVES
+  let i ← params.layer_h layer
+  let n_leaves ← 1#usize <<< i
   let a := Array.repeat 16#usize 0#u8
   let stack := Array.repeat 10#usize a
   let stack_heights := Array.repeat 10#usize 0#u32
@@ -181,7 +174,9 @@ def hypertree.compute_pk_root_inner
   Result (Array Std.U8 16#usize)
   := do
   let seed ← hash.pad16 pk_seed
-  merkle.compute_subtree_root seed sk_seed 1#u32 0#u64 progress pct_lo pct_hi
+  let i ← params.D - 1#usize
+  let i1 ← lift (UScalar.cast .U32 i)
+  merkle.compute_subtree_root seed sk_seed i1 0#u64 progress pct_lo pct_hi
 
 /-- [sphincs_c10::hypertree::compute_pk_root]:
     Source: 'sphincs-c10/src/hypertree.rs', lines 27:0-29:1

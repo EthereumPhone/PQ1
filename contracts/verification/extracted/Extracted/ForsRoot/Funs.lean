@@ -21,13 +21,25 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::params::FORS_LEAVES]
-    Source: 'sphincs-c10/src/params.rs', lines 40:0-40:38
+    Source: 'sphincs-c10/src/params.rs', lines 68:0-68:38
     Visibility: public -/
 @[global_simps, irreducible]
 def params.FORS_LEAVES : Result Std.Usize := 1#usize <<< params.A
 
+/-- [sphincs_c10::hash::fors_leaf]:
+    Source: 'sphincs-c10/src/hash.rs', lines 632:0-659:1 -/
+def hash.fors_leaf
+  (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)
+  (leaf_adrs : Array Std.U8 32#usize) (ht_idx : Std.U32) (tree_idx : Std.U32)
+  (leaf : Std.U32) :
+  Result (Array Std.U8 16#usize)
+  := do
+  let s ← hash.fors_secret sk_seed ht_idx tree_idx leaf
+  let a ← hash.pad16 s
+  hash.th seed leaf_adrs a
+
 /-- [sphincs_c10::fors::compute_fors_root]: loop body 1:
-    Source: 'sphincs-c10/src/fors.rs', lines 156:8-172:9
+    Source: 'sphincs-c10/src/fors.rs', lines 168:8-184:9
     Visibility: public -/
 @[rust_loop_body]
 def fors.compute_fors_root_loop0_loop0.body
@@ -60,7 +72,7 @@ def fors.compute_fors_root_loop0_loop0.body
   else ok (done (sp, node, node_h))
 
 /-- [sphincs_c10::fors::compute_fors_root]: loop 1:
-    Source: 'sphincs-c10/src/fors.rs', lines 156:8-172:9
+    Source: 'sphincs-c10/src/fors.rs', lines 168:8-184:9
     Visibility: public -/
 @[rust_loop]
 def fors.compute_fors_root_loop0_loop0
@@ -76,7 +88,7 @@ def fors.compute_fors_root_loop0_loop0
     (sp, node, node_h)
 
 /-- [sphincs_c10::fors::compute_fors_root]: loop body 0:
-    Source: 'sphincs-c10/src/fors.rs', lines 148:4-177:5
+    Source: 'sphincs-c10/src/fors.rs', lines 161:4-189:5
     Visibility: public -/
 @[rust_loop_body]
 def fors.compute_fors_root_loop0.body
@@ -94,24 +106,22 @@ def fors.compute_fors_root_loop0.body
   match o with
   | none => ok (done stack)
   | some j =>
-    let i ← lift (UScalar.cast .U32 j)
-    let secret ← hash.fors_secret sk_seed ht_idx tree_idx i
-    let i1 ← lift (core.convert.num.FromU64U32.from ht_idx)
-    let i2 ← lift (UScalar.cast .U32 j)
+    let i ← lift (core.convert.num.FromU64U32.from ht_idx)
+    let i1 ← lift (UScalar.cast .U32 j)
     let leaf_adrs ←
-      address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2
-    let a ← hash.pad16 secret
-    let node ← hash.th seed leaf_adrs a
+      address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1
+    let i2 ← lift (UScalar.cast .U32 j)
+    let node ← hash.fors_leaf seed sk_seed leaf_adrs ht_idx tree_idx i2
     let (sp1, node1, node_h) ←
       fors.compute_fors_root_loop0_loop0 seed ht_idx tree_idx stack
         stack_heights sp j node 0#u32
-    let a1 ← Array.update stack sp1 node1
-    let a2 ← Array.update stack_heights sp1 node_h
+    let a ← Array.update stack sp1 node1
+    let a1 ← Array.update stack_heights sp1 node_h
     let sp2 ← sp1 + 1#usize
-    ok (cont (iter1, a1, a2, sp2))
+    ok (cont (iter1, a, a1, sp2))
 
 /-- [sphincs_c10::fors::compute_fors_root]: loop 0:
-    Source: 'sphincs-c10/src/fors.rs', lines 148:4-177:5
+    Source: 'sphincs-c10/src/fors.rs', lines 161:4-189:5
     Visibility: public -/
 @[rust_loop]
 def fors.compute_fors_root_loop0
@@ -128,7 +138,7 @@ def fors.compute_fors_root_loop0
     (iter, stack, stack_heights, sp)
 
 /-- [sphincs_c10::fors::compute_fors_root]:
-    Source: 'sphincs-c10/src/fors.rs', lines 136:0-182:1
+    Source: 'sphincs-c10/src/fors.rs', lines 144:0-194:1
     Visibility: public -/
 def fors.compute_fors_root
   (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)

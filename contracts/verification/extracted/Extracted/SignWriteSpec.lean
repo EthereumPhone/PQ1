@@ -190,7 +190,7 @@ theorem sign_write_loop (body : SignWriteState → Result SignWriteResult)
 
 @[step] theorem firmware_write_xmss_path (sig : C10Signature) (offset : Std.Usize)
     (path : XmssAuth) (hb : offset.val+144 ≤ 4008) :
-    hypertree.sign_inner_loop3_loop1 9#usize sig offset path 0#usize ⦃ r =>
+    hypertree.sign_inner_loop3_loop1 sig offset 9#usize path 0#usize ⦃ r =>
       r.2.val = offset.val+144 ∧ SignatureWrites sig r.1 offset.val 144
         (blockBytes (fun i => path.val[i]!)) ⦄ := by
   unfold hypertree.sign_inner_loop3_loop1

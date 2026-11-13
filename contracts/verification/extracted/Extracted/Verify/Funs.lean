@@ -23,7 +23,7 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::params::SIG_HT_LAYER]
-    Source: 'sphincs-c10/src/params.rs', lines 76:0-76:58
+    Source: 'sphincs-c10/src/params.rs', lines 110:0-110:58
     Visibility: public -/
 @[global_simps, irreducible]
 def params.SIG_HT_LAYER : Result Std.Usize := do
@@ -34,7 +34,7 @@ def params.SIG_HT_LAYER : Result Std.Usize := do
   i1 + i3
 
 /-- [sphincs_c10::params::SIG_FORS_AUTH]
-    Source: 'sphincs-c10/src/params.rs', lines 70:0-70:45 -/
+    Source: 'sphincs-c10/src/params.rs', lines 102:0-102:45 -/
 @[global_simps, irreducible]
 def params.SIG_FORS_AUTH : Result Std.Usize := do
   let i ← params.K - 1#usize
@@ -42,16 +42,16 @@ def params.SIG_FORS_AUTH : Result Std.Usize := do
   i1 * params.N
 
 /-- [sphincs_c10::params::SIG_FORS_SECRETS]
-    Source: 'sphincs-c10/src/params.rs', lines 65:0-65:38 -/
+    Source: 'sphincs-c10/src/params.rs', lines 97:0-97:38 -/
 @[global_simps, irreducible]
 def params.SIG_FORS_SECRETS : Result Std.Usize := params.K * params.N
 
 /-- [sphincs_c10::params::SIG_R]
-    Source: 'sphincs-c10/src/params.rs', lines 62:0-62:23 -/
+    Source: 'sphincs-c10/src/params.rs', lines 94:0-94:23 -/
 @[global_simps, irreducible] def params.SIG_R : Std.Usize := params.N
 
 /-- [sphincs_c10::params::SIG_FORS_TOTAL]
-    Source: 'sphincs-c10/src/params.rs', lines 73:0-73:75
+    Source: 'sphincs-c10/src/params.rs', lines 105:0-105:75
     Visibility: public -/
 @[global_simps, irreducible]
 def params.SIG_FORS_TOTAL : Result Std.Usize := do
@@ -61,7 +61,7 @@ def params.SIG_FORS_TOTAL : Result Std.Usize := do
   i1 + i2
 
 /-- [sphincs_c10::params::SIGNATURE_LEN]
-    Source: 'sphincs-c10/src/params.rs', lines 79:0-79:67
+    Source: 'sphincs-c10/src/params.rs', lines 117:0-117:67
     Visibility: public -/
 @[global_simps, irreducible]
 def params.SIGNATURE_LEN : Result Std.Usize := do
@@ -71,7 +71,7 @@ def params.SIGNATURE_LEN : Result Std.Usize := do
   i2 + i1
 
 /-- [sphincs_c10::hypertree::verify]: loop body 0:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 404:4-407:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 435:4-438:5
     Visibility: public -/
 @[rust_loop_body]
 def hypertree.verify_loop0.body
@@ -100,7 +100,7 @@ def hypertree.verify_loop0.body
     ok (cont (iter1, i, a2))
 
 /-- [sphincs_c10::hypertree::verify]: loop 0:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 404:4-407:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 435:4-438:5
     Visibility: public -/
 @[rust_loop]
 def hypertree.verify_loop0
@@ -115,7 +115,7 @@ def hypertree.verify_loop0
     (iter, offset, fors_secrets)
 
 /-- [sphincs_c10::hypertree::verify]: loop body 2:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 412:8-415:9
+    Source: 'sphincs-c10/src/hypertree.rs', lines 443:8-446:9
     Visibility: public -/
 @[rust_loop_body]
 def hypertree.verify_loop1_loop0.body
@@ -146,7 +146,7 @@ def hypertree.verify_loop1_loop0.body
     ok (cont (iter1, i, a4))
 
 /-- [sphincs_c10::hypertree::verify]: loop 2:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 412:8-415:9
+    Source: 'sphincs-c10/src/hypertree.rs', lines 443:8-446:9
     Visibility: public -/
 @[rust_loop]
 def hypertree.verify_loop1_loop0
@@ -163,7 +163,7 @@ def hypertree.verify_loop1_loop0
     (iter, offset, auth_paths)
 
 /-- [sphincs_c10::hypertree::verify]: loop body 1:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 411:4-416:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 442:4-447:5
     Visibility: public -/
 @[rust_loop_body]
 def hypertree.verify_loop1.body
@@ -185,7 +185,7 @@ def hypertree.verify_loop1.body
     ok (cont (iter1, offset1, auth_paths1))
 
 /-- [sphincs_c10::hypertree::verify]: loop 1:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 411:4-416:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 442:4-447:5
     Visibility: public -/
 @[rust_loop]
 def hypertree.verify_loop1
@@ -201,7 +201,7 @@ def hypertree.verify_loop1
     (iter, offset, auth_paths)
 
 /-- [sphincs_c10::hypertree::verify]: loop body 3:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 419:4-428:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 450:4-459:5
     Visibility: public -/
 @[rust_loop_body]
 def hypertree.verify_loop2.body
@@ -227,7 +227,7 @@ def hypertree.verify_loop2.body
     ok (cont (iter1, a3))
 
 /-- [sphincs_c10::hypertree::verify]: loop 3:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 419:4-428:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 450:4-459:5
     Visibility: public -/
 @[rust_loop]
 def hypertree.verify_loop2
@@ -244,7 +244,7 @@ def hypertree.verify_loop2
     (iter, fors_roots)
 
 /-- [sphincs_c10::hypertree::verify]: loop body 5:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 447:8-450:9
+    Source: 'sphincs-c10/src/hypertree.rs', lines 481:8-484:9
     Visibility: public -/
 @[rust_loop_body]
 def hypertree.verify_loop3_loop0.body
@@ -272,7 +272,7 @@ def hypertree.verify_loop3_loop0.body
     ok (cont (iter1, i1, a2))
 
 /-- [sphincs_c10::hypertree::verify]: loop 5:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 447:8-450:9
+    Source: 'sphincs-c10/src/hypertree.rs', lines 481:8-484:9
     Visibility: public -/
 @[rust_loop]
 def hypertree.verify_loop3_loop0
@@ -286,7 +286,7 @@ def hypertree.verify_loop3_loop0
     (iter, offset, wots_sigma)
 
 /-- [sphincs_c10::hypertree::verify]: loop body 6:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 463:8-466:9
+    Source: 'sphincs-c10/src/hypertree.rs', lines 497:8-500:9
     Visibility: public -/
 @[rust_loop_body]
 def hypertree.verify_loop3_loop1.body
@@ -314,7 +314,7 @@ def hypertree.verify_loop3_loop1.body
     ok (cont (iter1, i, a2))
 
 /-- [sphincs_c10::hypertree::verify]: loop 6:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 463:8-466:9
+    Source: 'sphincs-c10/src/hypertree.rs', lines 497:8-500:9
     Visibility: public -/
 @[rust_loop]
 def hypertree.verify_loop3_loop1
@@ -328,7 +328,7 @@ def hypertree.verify_loop3_loop1
     (iter, offset, auth_path)
 
 /-- [sphincs_c10::hypertree::verify]: loop body 4:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 441:4-488:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 474:4-522:5
     Visibility: public -/
 @[rust_loop_body]
 def hypertree.verify_loop3.body
@@ -343,41 +343,41 @@ def hypertree.verify_loop3.body
   match o with
   | none => ok (done current_node)
   | some layer =>
-    let i ← params.SUBTREE_H
-    let i1 ← 1#u32 <<< i
-    let i2 ← i1 - 1#u32
-    let idx_leaf ← lift (idx_tree &&& i2)
-    let idx_tree1 ← idx_tree >>> i
+    let lh ← params.layer_h layer
+    let i ← 1#u32 <<< lh
+    let i1 ← i - 1#u32
+    let idx_leaf ← lift (idx_tree &&& i1)
+    let idx_tree1 ← idx_tree >>> lh
     let a := Array.repeat 16#usize 0#u8
     let wots_sigma := Array.repeat 43#usize a
     let (offset1, wots_sigma1) ←
       hypertree.verify_loop3_loop0 { start := 0#usize, «end» := params.L }
         sig offset wots_sigma
-    let i3 ← Array.index_usize sig offset1
-    let i4 ← offset1 + 1#usize
-    let i5 ← Array.index_usize sig i4
-    let i6 ← offset1 + 2#usize
-    let i7 ← Array.index_usize sig i6
-    let i8 ← offset1 + 3#usize
-    let i9 ← Array.index_usize sig i8
+    let i2 ← Array.index_usize sig offset1
+    let i3 ← offset1 + 1#usize
+    let i4 ← Array.index_usize sig i3
+    let i5 ← offset1 + 2#usize
+    let i6 ← Array.index_usize sig i5
+    let i7 ← offset1 + 3#usize
+    let i8 ← Array.index_usize sig i7
     let count ←
-      lift (core.num.U32.from_be_bytes (Array.make 4#usize [ i3, i5, i7, i9 ]))
+      lift (core.num.U32.from_be_bytes (Array.make 4#usize [ i2, i4, i6, i8 ]))
     let offset2 ← offset1 + 4#usize
     let a1 := Array.repeat 16#usize 0#u8
     let auth_path := Array.repeat 9#usize a1
     let (offset3, auth_path1) ←
-      hypertree.verify_loop3_loop1 { start := 0#usize, «end» := i } sig
+      hypertree.verify_loop3_loop1 { start := 0#usize, «end» := lh } sig
         offset2 auth_path
-    let i10 ← lift (UScalar.cast .U64 idx_tree1)
+    let i9 ← lift (UScalar.cast .U64 idx_tree1)
     let wots_pk ←
-      wots.pk_from_sig seed layer i10 idx_leaf current_node wots_sigma1 count
-    let i11 ← lift (UScalar.cast .U64 idx_tree1)
+      wots.pk_from_sig seed layer i9 idx_leaf current_node wots_sigma1 count
+    let i10 ← lift (UScalar.cast .U64 idx_tree1)
     let current_node1 ←
-      merkle.verify_auth_path seed layer i11 wots_pk idx_leaf auth_path1
+      merkle.verify_auth_path seed layer i10 wots_pk idx_leaf auth_path1
     ok (cont (iter1, offset3, current_node1, idx_tree1))
 
 /-- [sphincs_c10::hypertree::verify]: loop 4:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 441:4-488:5
+    Source: 'sphincs-c10/src/hypertree.rs', lines 474:4-522:5
     Visibility: public -/
 @[rust_loop]
 def hypertree.verify_loop3
@@ -393,7 +393,7 @@ def hypertree.verify_loop3
     (iter, offset, current_node, idx_tree)
 
 /-- [sphincs_c10::hypertree::verify]:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 369:0-494:1
+    Source: 'sphincs-c10/src/hypertree.rs', lines 400:0-528:1
     Visibility: public -/
 def hypertree.verify
   (pk_seed : Array Std.U8 16#usize) (pk_root : Array Std.U8 16#usize)

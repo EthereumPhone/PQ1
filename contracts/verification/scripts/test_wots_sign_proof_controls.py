@@ -23,12 +23,15 @@ FAMILIES = {
         ("skip-first", "{ start := 0#usize, «end» := params.L }", "{ start := 1#usize, «end» := params.L }"),
         ("short-loop", "{ start := 0#usize, «end» := params.L }", "{ start := 0#usize, «end» := 42#usize }"),
         ("constant-order-index", "Array.index_usize chain_order step", "Array.index_usize chain_order 0#usize"),
-        ("wrong-secret-seed", "hash.wots_secret sk_seed layer tree kp i2", "hash.wots_secret seed layer tree kp i2"),
-        ("wrong-secret-layer", "hash.wots_secret sk_seed layer tree kp i2", "hash.wots_secret sk_seed 0#u32 tree kp i2"),
-        ("wrong-chain-address", "address.set_chain_index base_adrs i3", "address.set_chain_index base_adrs 0#u32"),
+        # Research refactor: one `hash.wots_secret_chain` call (wots_secret ->
+        # set_chain_index -> chain_hash at start 0); its inputs are mutated
+        # here, its body (incl. chain start and separate chain index) by the
+        # "chain" family in test_wots_keygen_proof_controls.py.
+        ("wrong-secret-seed", "hash.wots_secret_chain seed sk_seed base_adrs layer tree kp i2 i4", "hash.wots_secret_chain seed seed base_adrs layer tree kp i2 i4"),
+        ("wrong-secret-layer", "hash.wots_secret_chain seed sk_seed base_adrs layer tree kp i2 i4", "hash.wots_secret_chain seed sk_seed base_adrs 0#u32 tree kp i2 i4"),
+        ("wrong-chain-index", "hash.wots_secret_chain seed sk_seed base_adrs layer tree kp i2 i4", "hash.wots_secret_chain seed sk_seed base_adrs layer tree kp 0#u32 i4"),
         ("wrong-digit", "Array.index_usize digits i1", "Array.index_usize digits 0#usize"),
-        ("wrong-chain-start", "hash.chain_hash seed chain_adrs sk_i 0#u32 i5", "hash.chain_hash seed chain_adrs sk_i 1#u32 i5"),
-        ("wrong-chain-steps", "hash.chain_hash seed chain_adrs sk_i 0#u32 i5", "hash.chain_hash seed chain_adrs sk_i 0#u32 7#u32"),
+        ("wrong-chain-steps", "hash.wots_secret_chain seed sk_seed base_adrs layer tree kp i2 i4", "hash.wots_secret_chain seed sk_seed base_adrs layer tree kp i2 7#u32"),
         ("wrong-write-slot", "Array.update sigma i1 a", "Array.update sigma step a"),
         ("discard-signature", "ok (sigma1, count)", "ok (sigma, count)"),
         ("discard-count", "ok (sigma1, count)", "ok (sigma1, 0#u32)"),

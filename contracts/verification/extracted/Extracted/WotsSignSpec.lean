@@ -4,6 +4,7 @@ import Extracted.WotsSign.Funs
 import Extracted.ShuffleOrder
 import Extracted.FindCountSpec
 import Extracted.WotsSecretSpec
+import Extracted.WotsKeygenSpec
 
 open Aeneas Aeneas.Std Result
 set_option maxHeartbeats 3000000
@@ -23,9 +24,6 @@ noncomputable def wotsSignChains (seed sk d : Std.Array Std.U8 32#usize)
   ⟨(List.range 43).map (wotsSignChain seed sk d layer tree kp), by simp⟩
 
 attribute [local irreducible] wotsSignChain wotsSignChains
-
-private theorem sign_chain_no_overflow (x : Std.U32) (hx : x.val < 8) :
-    (0#u32).val + x.val ≤ Std.U32.max := by scalar_tac
 
 private theorem sign_index_in_bounds (a : Std.Array α 43#usize) (x : Std.Usize)
     (hx : x.val < 43) : x.val < a.length := by scalar_tac
@@ -74,10 +72,6 @@ theorem wots_sign_loop_spec (seed sk d : Std.Array Std.U8 32#usize)
         exact Nat.mod_eq_of_lt (by scalar_tac)
       have hcast : UScalar.cast .U32 (UScalar.cast .Usize byte) = (⟨BitVec.ofNat 32 byte.val⟩ : Std.U32) :=
         u32_eq_ofNat (by omega) hidx32
-      let* ⟨secret, hs⟩ ← wots_secret_spec sk layer tree kp (UScalar.cast .U32 (UScalar.cast .Usize byte))
-      let* ⟨adrs, hadrs⟩ ← set_chain_index_spec base (UScalar.cast .U32 (UScalar.cast .Usize byte))
-      rw [hbase, hidx32, specSetChainIndex_fresh] at hadrs
-      have hadeq : adrsArr layer tree 0 kp.val byte.val 0 0 = adrs := adrsArr_eq_of_map_val _ _ _ _ _ _ _ _ hadrs
       have hidxlen : (UScalar.cast .Usize byte).val < digits.val.length := by
         rw [digits.property]
         change (UScalar.cast .Usize byte).val < 43
@@ -92,12 +86,12 @@ theorem wots_sign_loop_spec (seed sk d : Std.Array Std.U8 32#usize)
         change digit.val % 4294967296 = wotsDigit d byte.val
         rw [Nat.mod_eq_of_lt (by omega), hdv]
       have hdcast := u32_eq_ofNat (n := wotsDigit d byte.val) (by have := wotsDigit_lt d byte.val; omega) hdc
-      let* ⟨a, a_post⟩ ← hash.chain_hash_spec seed adrs secret 0#u32 (UScalar.cast .U32 digit)
-        (sign_chain_no_overflow _ (by rw [hdc]; exact wotsDigit_lt d byte.val))
+      let* ⟨a, a_post⟩ ← wots_secret_chain_spec seed sk base layer tree kp
+        (UScalar.cast .U32 (UScalar.cast .Usize byte)) (UScalar.cast .U32 digit) hbase
       let* ⟨a1, a1_post⟩ ← Array.update_spec sig (UScalar.cast .Usize byte) a
         (sign_index_in_bounds sig _ (by omega))
       have hvalue : a = wotsSignChain seed sk d layer tree kp byte.val := by
-        rw [a_post, ← hadeq, hs, hcast, hdcast]
+        rw [a_post, hidx32, hcast, hdcast]
         exact (by unfold wotsSignChain; rfl)
       refine ⟨by rw [hend']; exact hend, by omega, ?_, by omega⟩
       intro t ht

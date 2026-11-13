@@ -198,3 +198,122 @@ The original private implementation review and the broader gate milestone are
 recorded on [#1067](https://github.com/EthereumPhone/PQ1/issues/1067).
 Their recommendations apply to their named snapshots and stages. They do not
 substitute for this profile's merge review or authorize production adoption.
+
+## Consumer re-recording after the C10 signing-speed research merge (2026-11-13)
+
+The research merge changed `sphincs-c10/src/hash.rs`, `params.rs`,
+`sphincs-c10/Cargo.toml` and `Cargo.lock`, so the consumer source pins above
+went stale. This section records how the consumer evidence was re-recorded on
+the head sources.
+
+**Why a re-recording was needed.** The new default-path
+`hash::wots_secret_chain` calls `crate::address::set_chain_index`. The
+recorded probe only mounted `params.rs` and `hash.rs` (`#[path] mod`), so on
+the head sources it no longer compiles (`error[E0433]: could not find
+`address` in the crate root`). The old census, native and Miri runs could not
+simply be re-pinned.
+
+**Consumption review, origin/master `0bf8153f2` vs head:**
+
+- **Default features.** `sha256_bytes`, `sha256_oneshot` (`Sha256::new`,
+  then one `update`, then `finalize`) and `sha256_parts` (`new`, then one
+  `update` per part, then `finalize`) are byte-unchanged.
+- **`sha256_bytes16`.** Without `hw-sha256-oneshot` it is
+  `truncate(&sha256_bytes(data))`: the same `Digest` use followed by a copy of
+  the first 16 bytes.
+- **Call mix.** `wots_secret`/`fors_secret` move from `sha256_parts` (5 or 6
+  updates) to one contiguous `sha256_bytes`. The dependency's streaming path
+  is reached by fewer calls, not differently. No new `Digest` type or
+  constructor instantiation appears.
+- **Hardware paths.** The `hw-sha256*` paths call driver hooks and never
+  reach `sha2`.
+- **Manifest.** `sphincs-c10/Cargo.toml` gains features only; its `sha2`
+  dependency specification is unchanged.
+- **Lockfile.** The only `Cargo.lock` change is the local `sha512-m33` path
+  crate (a `bip39` dependency). The selected closure in
+  `frozen/consumer-lock-closure.json` is unchanged (`verify.lock_closure`
+  equality).
+
+**Re-recording, run v3 in the research archive.** The archive is
+`kani-architecture/refresh-digest-consumers-v3.py` (sha256
+`6195ad06…`), derived from the v2 collector and checker. It keeps every
+v2 assertion except the two pinned to v2's inputs (source pins and census
+equal to v2's); those become recorded comparisons. It adds the v2 checker's
+completion re-validation (log hashes, probe files, retained binaries, Miri
+sysroot) and v2's exact native-log hash. A first v3 run without those
+completion assertions is kept as `digest-caller-probe-v3-run1-superseded`;
+its census is identical.
+
+- **Toolchain.** It uses the same retained toolchain: `rustc 868823b4…`,
+  `cargo 2f61a65e…`, `miri 85f30df4…` and `cargo-miri 161e6adb…`, asserted
+  equal to the v2 receipt. It also uses the same `ready.json` binaries, the
+  same Miri sysroot receipt `f6367840…`, the same environment overrides, the
+  same corrected `generic-array` (`5d08f9d4…`) and the same three commands
+  (`-Zprint-mono-items` build, native run, recursive Miri).
+- **Sources.** The executed sources are a snapshot of PQSigner_OS commit
+  `ed32d4960`, each file asserted byte-equal to that commit:
+  - `hash.rs` `ef105972…`;
+  - `params.rs` `b7a789cd…`;
+  - `address.rs` `84f5708f…`.
+- **Probe change.** The probe's `Cargo.toml`/`Cargo.lock` are v2's verbatim.
+  The whole `src/main.rs` diff is:
+
+```
+-#[path = ".../easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/params.rs"] mod params;
+-#[path = ".../easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/hash.rs"] mod hash;
++#[path = ".../easycrypt-head-byte-profile-20261113/candidate/sphincs-c10/src/params.rs"] mod params;
++#[path = ".../easycrypt-head-byte-profile-20261113/candidate/sphincs-c10/src/hash.rs"] mod hash;
++#[path = ".../easycrypt-head-byte-profile-20261113/candidate/sphincs-c10/src/address.rs"] mod address;
+```
+
+  Here `...` is `/home/nicola/.local/state/pqsigner-research`. The vectors
+  and the `main` body are unchanged. `address.rs` is compiled for name
+  resolution only; `main` still calls only `sha256_bytes` and
+  `sha256_parts`.
+- **Results.** All three commands exit 0. The census is computed exactly as
+  in v2: `MONO_ITEM` lines naming `generic_array::` or `block_buffer::`. It
+  is **byte-identical to v2**: 44 emitted items, 40 in the root crate,
+  `::generate::` ×2, `ArrayBuilder` ×6, `::len64_padding_be` ×1,
+  `::digest_pad` ×1, `::into_inner` ×2, and zero for every other tracked
+  constructor. Both builds emit 725 `MONO_ITEM`s. Native and recursive Miri
+  each pass all 16 one-shot and 48 streaming cases; the native log is
+  byte-identical to v2. **No constructor or instantiation changed in this
+  selected force-soft probe census.** That is not a claim about other
+  production callers or features.
+- **Receipt.** `frozen/receipts/consumer.json` (sha256 `4d194626…`) is the
+  v3 receipt, byte for byte. It chains to the v2 receipt
+  (`prior_receipt_sha256` `cc40c75d…`) and the v2 census
+  (`prior_census_sha256` `976c53b8…`). It records the probe diff, the census
+  diff (empty) and the executed source pins.
+- **Deviation from v2.** The v2 bounded-build supervisor
+  (`run-bounded-build-v2.py`) refuses to start: the research tree is now
+  15.7 GB, over its 6 GiB allocation cap. The three short commands (about
+  6 s in total) therefore ran directly, without the disk-cap monitor; the
+  receipt states this.
+
+**Pins updated.**
+
+- `profile.json` `production_sources`: `Cargo.toml`, `hash.rs` and
+  `params.rs` re-hashed, and `address.rs` added because the probe now
+  compiles it.
+- `frozen_sha256` for the receipt.
+- The streaming and constructor profiles' copies of this `profile.json` hash.
+
+No solver, Kani or proof evidence changed. The padding, streaming and
+constructor proof logs remain about the frozen dependency harnesses, not the
+consumer.
+
+**Independent review.** A GPT-6 Astra read-only conformance review compared
+the v3 collector with the v2 collector and checker, the probe diff, the census
+and logs, the receipt chain and the planned pins.
+
+- **Round 1: DOES NOT CONFORM.** Its lockfile finding was an artifact of how
+  the review prompt was built: shell substitution pasted another checkout's
+  diff into it. It also correctly found that v3 had dropped v2's exact
+  native-log hash and the checker's completion re-validation. Both were
+  restored and v3 was re-run. It asked for wording fixes on `address.rs`
+  ("compiled, not executed"), the scope of the census claim and the re-pin
+  guard (now checked against the git HEAD blob).
+- **Round 2: CONFORMS,** with no findings.
+
+The pins above were applied after round 2.

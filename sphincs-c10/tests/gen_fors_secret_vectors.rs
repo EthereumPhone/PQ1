@@ -31,7 +31,8 @@ mod backend {
     pub fn check(expected: &[u8]) {
         INPUTS.with(|s| {
             let s = s.borrow();
-            assert_eq!(s.iter().map(Vec::len).collect::<Vec<_>>(), [32, 4, 4, 4, 4]);
+            // The preimage became one contiguous call in the research driver's contiguous-buffer refactor; output byte-identical.
+            assert_eq!(s.iter().map(Vec::len).collect::<Vec<_>>(), [48]);
             assert_eq!(s.concat(), expected);
         });
     }

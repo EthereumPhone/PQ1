@@ -27,4 +27,13 @@ namespace sphincs_c10
   rw [truncate16_val]
   simp_all [Array.from_slice, List.slice, params.N]
 
+/-- `hash.sha256_bytes16` (the extracted `truncate(&sha256_bytes(data))`
+    helper every tweakable hash now calls) returns exactly
+    `truncate16 (sha256_pure data)`: the composition of the one-shot
+    `sha256_bytes` boundary spec and `truncate_spec` above. -/
+@[step] theorem hash.sha256_bytes16_spec (data : Slice Std.U8) :
+    hash.sha256_bytes16 data ⦃ r => r = truncate16 (sha256_pure data.val) ⦄ := by
+  unfold hash.sha256_bytes16
+  step*
+
 end sphincs_c10

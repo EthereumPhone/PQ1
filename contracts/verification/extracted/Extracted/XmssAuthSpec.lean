@@ -284,16 +284,16 @@ theorem xmss_auth_copy_spec
       ∀ k, k < 9 → r.1.val[k]! =
         xmssRootNode seed sk layer tree k (xmssAuthSibling leaf.val k) ⦄ := by
   unfold merkle.build_subtree_with_auth
-  simp only [params.SUBTREE_LEAVES, params.SUBTREE_H, params.H, params.D]
+  simp only [params.layer_h, params.SUBTREE_H, params.H, params.D]
   step* <;> first | scalar_tac | skip
-  · have hx9 : x.val = 9 := by omega
+  · have hx9 : lh.val = 9 := by omega
     have := System.Platform.numBits_eq
     omega
   have hn : n_leaves.val = 512 := by
     rw [n_leaves_post1]
     simp only [Usize.size, Usize.numBits]
     rcases System.Platform.numBits_eq with hb | hb <;>
-      norm_num [Nat.shiftLeft_eq, UScalarTy.numBits, hb, x_post]
+      norm_num [Nat.shiftLeft_eq, UScalarTy.numBits, hb, lh_post]
   let* ⟨stack, keep, hroot, flags, hkeep⟩ ←
     xmss_auth_loop_spec seed sk layer leaf tree progress pct_lo pct_hi n_leaves
       { start := 0#usize, «end» := n_leaves }
@@ -306,7 +306,7 @@ theorem xmss_auth_copy_spec
   step* <;> first | scalar_tac | skip
   let* ⟨path, hpath⟩ ← xmss_auth_copy_spec keep
     (Array.repeat 9#usize (Array.repeat 16#usize 0#u8))
-    { start := 0#usize, «end» := i }
+    { start := 0#usize, «end» := lh }
     (by scalar_tac) (by simp) (by intro k hk; simp at hk)
   constructor
   · rw [root_post, ← getElem!_pos stack.val 0 (by simpa using stack.property)]

@@ -15,7 +15,7 @@ set_option maxRecDepth 2048
 namespace sphincs_c10
 
 /-- [sphincs_c10::hypertree::ProgressSink]
-    Source: 'sphincs-c10/src/hypertree.rs', lines 108:0-108:31 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 122:0-122:31 -/
 @[reducible]
 def hypertree.ProgressSink := Unit
 

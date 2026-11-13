@@ -66,7 +66,7 @@ def signerSerializeLayer (sig : C10Signature) (offset : Std.Usize)
     Result (C10Signature × Std.Usize) := do
   let (sig1,off1) ← hypertree.sign_inner_loop3_loop0 sig offset chains 0#usize
   let (sig2,off2) ← signerWriteCount sig1 off1 count
-  hypertree.sign_inner_loop3_loop1 9#usize sig2 off2 path 0#usize
+  hypertree.sign_inner_loop3_loop1 sig2 off2 9#usize path 0#usize
 
 /-- Keep the caller's computed height as a parameter when factoring its body;
     the current constant instantiation is exactly the proven nine-row writer. -/
@@ -75,7 +75,7 @@ def signerSerializeLayerHeight (height : Std.Usize) (sig : C10Signature) (offset
     Result (C10Signature × Std.Usize) := do
   let (sig1,off1) ← hypertree.sign_inner_loop3_loop0 sig offset chains 0#usize
   let (sig2,off2) ← signerWriteCount sig1 off1 count
-  hypertree.sign_inner_loop3_loop1 height sig2 off2 path 0#usize
+  hypertree.sign_inner_loop3_loop1 sig2 off2 height path 0#usize
 
 theorem signerSerializeLayerHeight_nine (sig : C10Signature) (offset : Std.Usize)
     (chains : WotsChains) (count : Std.U32) (path : XmssAuth) :
@@ -211,5 +211,18 @@ theorem firmware_serialize_layer_at_params (sig : C10Signature) (offset : Std.Us
   rw [serialization_subtree_height]
   simpa only [bind_tc_ok, signerSerializeLayerHeight_nine] using
     firmware_serialize_layer sig offset chains count path hb
+
+/-- The same contract at the height the regenerated firmware now computes,
+    `params.layer_h layer` (= `SUBTREE_H`, i.e. 9, for every layer): the
+    research refactor binds the layer height through `layer_h`, so this is the
+    form `hypertree.sign_inner_loop3.body` actually instantiates. -/
+theorem firmware_serialize_layer_at_layer_h (layer : Std.U32) (sig : C10Signature)
+    (offset : Std.Usize) (chains : WotsChains) (count : Std.U32) (path : XmssAuth)
+    (hb : offset.val+836 ≤ 4008) :
+    (do let height ← params.layer_h layer
+        signerSerializeLayerHeight height sig offset chains count path) ⦃ r =>
+      r.2.val = offset.val+836 ∧ r.1 = serializedLayer sig offset.val chains count path ⦄ := by
+  simpa only [params.layer_h] using
+    firmware_serialize_layer_at_params sig offset chains count path hb
 
 end Extracted.Equiv

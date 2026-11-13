@@ -66,6 +66,6 @@ set_option maxRecDepth 100000 in
     norm_num
     rw [thPairBuf_eq _ _ _ _ l_seed l_adrs l_left l_right]
     simp only [List.append_assoc]
-  rw [r_post, a_post, hbuf, th_pair_pure_def]
+  rw [r_post, hbuf, th_pair_pure_def]
 
 end sphincs_c10

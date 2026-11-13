@@ -11,6 +11,7 @@ timeout. Fixtures are fresh external files; positive control runs first.
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import pwd
+import re
 import subprocess
 import tempfile
 
@@ -61,9 +62,11 @@ def main():
          "{ start := 52#usize, «end» := 56#usize }"),
         ("value-offset", "{ start := 64#usize, «end» := i1 }",
          "{ start := 48#usize, «end» := 64#usize }"),
-        ("digest-wrong-half",
-         "(core.slice.index.SliceIndexRangeToUsizeSlice Std.U8)) d\n        { «end» := params.N }",
-         "(core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) d\n        { start := params.N, «end» := 32#usize }"),
+        # Research refactor: the loop hashes with `hash.sha256_bytes16` (the
+        # first N digest bytes, a shared helper) and writes the 16-byte result
+        # back; the digest-half selection moved into that helper and is
+        # controlled by the separate `truncate` fixture below.
+        ("digest-stale-buffer", "let s3 ← lift (Array.to_slice buf1)", "let s3 ← lift (Array.to_slice buf)"),
         ("position-ignores-start", "let i ← start_pos + step", "let i ← 0#u32 + step"),
         ("no-value-writeback", "ok (cont (iter1, buf2))", "ok (cont (iter1, buf1))"),
     ]
@@ -87,7 +90,44 @@ def main():
             require_semantic_rejection(run(name, changed), name)
         with ThreadPoolExecutor(max_workers=3) as pool:
             list(pool.map(negative, mutations))
-    print(f"OK: chain_hash proof positive baseline + {len(mutations)} typed semantic loop mutations rejected")
+
+        # Digest-half selection: renamed copies of `hash.truncate` and
+        # `hash.sha256_bytes16` re-checked with the committed `truncate_spec` /
+        # `sha256_bytes16_spec` (HashSpecs/Truncate.lean).
+        def trename(source):
+            source = source.replace("hash.truncate_spec", "hash.truncateP_spec")
+            source = source.replace("hash.sha256_bytes16_spec", "hash.sha256_bytes16P_spec")
+            source = re.sub(r"hash\.truncate(?![A-Za-z0-9_])", "hash.truncateP", source)
+            return re.sub(r"hash\.sha256_bytes16(?![A-Za-z0-9_])", "hash.sha256_bytes16P", source)
+        tspec = (ROOT / "Extracted/HashSpecs/Truncate.lean").read_text()
+        tdefs = trename(block(generated, "def hash.truncate\n") + "\n\n"
+                        + block(generated, "def hash.sha256_bytes16\n"))
+        tproofs = trename(tspec[tspec.index("@[step] theorem hash.truncate_spec"):tspec.index("\nend sphincs_c10")])
+        tprefix = ("import Extracted.HashSpecs.Truncate\nset_option linter.unusedSimpArgs false\n"
+                   "open Aeneas Aeneas.Std Result ControlFlow Error\nopen Extracted.SetSlice\nnamespace sphincs_c10\n")
+        def trun(name, changed, with_proof=True):
+            path = Path(td) / ("truncate-" + name + ".lean")
+            source = tprefix + changed + "\n\n" + (tproofs if with_proof else "") + "\nend sphincs_c10\n"
+            assert "sorry" not in source and "axiom " not in source
+            path.write_text(source)
+            return subprocess.run([str(LAKE), "env", "lean", str(path)], cwd=ROOT,
+                                  text=True, capture_output=True, timeout=600)
+        result = trun("positive", tdefs)
+        assert result.returncode == 0, result.stdout + result.stderr
+        tmutations = [
+            ("digest-wrong-half",
+             "(core.slice.index.SliceIndexRangeToUsizeSlice Std.U8)) digest\n      { «end» := params.N }",
+             "(core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) digest\n      { start := params.N, «end» := 32#usize }"),
+            ("digest-not-hashed", "let a ← hash.sha256_bytes data", "let a ← ok (Array.repeat 32#usize 0#u8)"),
+        ]
+        for name, before, after in tmutations:
+            assert tdefs.count(before) == 1, (name, "ambiguous mutation")
+            changed = tdefs.replace(before, after)
+            typed = trun(name + "-definition", changed, with_proof=False)
+            assert typed.returncode == 0, (name, typed.stdout, typed.stderr)
+            require_semantic_rejection(trun(name, changed), "truncate/" + name)
+    print(f"OK: chain_hash proof positive baseline + {len(mutations)} typed semantic loop mutations rejected; "
+          f"truncate/sha256_bytes16 positive baseline + {len(tmutations)} typed semantic mutations rejected")
 
 
 if __name__ == "__main__":

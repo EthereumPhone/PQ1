@@ -200,7 +200,7 @@ theorem verify_auth_path_spec (seed : Std.Array Std.U8 32#usize)
     merkle.verify_auth_path seed layer tree leaf_node leaf_idx auth_path
       ⦃ r => r = authFold seed layer tree auth_path.val leaf_node leaf_idx.val 0 ⦄ := by
   unfold merkle.verify_auth_path
-  simp only [params.SUBTREE_H, params.H, params.D]
+  simp only [params.layer_h, params.SUBTREE_H, params.H, params.D]
   step* <;> first | scalar_tac | skip
   apply verify_auth_path_loop_value _ _ _ _ _ _ _ _ (by rw [i_post]) (by simp)
   show authFold seed layer tree (List.drop 0 auth_path.val) leaf_node leaf_idx.val 0

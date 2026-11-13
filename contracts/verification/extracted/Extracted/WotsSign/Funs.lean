@@ -4,6 +4,7 @@ import Aeneas
 import Extracted.WotsSign.Types
 import Extracted.WotsSign.FunsExternal
 import Extracted.PkFromSig.Funs
+import Extracted.WotsKeygen.Funs
 open Aeneas Aeneas.Std Result ControlFlow Error
 set_option linter.dupNamespace false
 set_option linter.hashCommand false
@@ -21,7 +22,7 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::wots::sign_with_shuffle]: loop body 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 149:4-154:5 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 221:4-224:5 -/
 @[rust_loop_body]
 def wots.sign_with_shuffle_loop.body
   (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)
@@ -40,17 +41,14 @@ def wots.sign_with_shuffle_loop.body
     let i ← Array.index_usize chain_order step
     let i1 ← lift (UScalar.cast .Usize i)
     let i2 ← lift (UScalar.cast .U32 i1)
-    let sk_i ← hash.wots_secret sk_seed layer tree kp i2
-    let i3 ← lift (UScalar.cast .U32 i1)
-    let chain_adrs ← address.set_chain_index base_adrs i3
-    let i4 ← Array.index_usize digits i1
-    let i5 ← lift (UScalar.cast .U32 i4)
-    let a ← hash.chain_hash seed chain_adrs sk_i 0#u32 i5
+    let i3 ← Array.index_usize digits i1
+    let i4 ← lift (UScalar.cast .U32 i3)
+    let a ← hash.wots_secret_chain seed sk_seed base_adrs layer tree kp i2 i4
     let a1 ← Array.update sigma i1 a
     ok (cont (iter1, a1))
 
 /-- [sphincs_c10::wots::sign_with_shuffle]: loop 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 149:4-154:5 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 221:4-224:5 -/
 @[rust_loop]
 def wots.sign_with_shuffle_loop
   (iter : core.ops.range.Range Std.Usize) (seed : Array Std.U8 32#usize)
@@ -67,7 +65,7 @@ def wots.sign_with_shuffle_loop
     (iter, sigma)
 
 /-- [sphincs_c10::wots::sign_with_shuffle]:
-    Source: 'sphincs-c10/src/wots.rs', lines 130:0-156:1 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 199:0-226:1 -/
 def wots.sign_with_shuffle
   (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)
   (layer : Std.U32) (tree : Std.U64) (kp : Std.U32)

@@ -27,7 +27,7 @@ def literalLayerSerialization : LayerSerialization := fun height sig offset chai
     let s2 ← lift (Array.to_slice a)
     let s3 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s1 s2
     let sig2 := index_mut_back s3
-    let result ← hypertree.sign_inner_loop3_loop1 height sig2 i10 path 0#usize
+    let result ← hypertree.sign_inner_loop3_loop1 sig2 i10 height path 0#usize
     continuation result
 
 def provenLayerSerialization : LayerSerialization := fun height sig offset chains count path continuation => do
@@ -49,7 +49,7 @@ def signerLayerUsingSerialization (serialize : LayerSerialization)
   match o with
   | none => ok (done (sig, offset, current_node))
   | some layer =>
-    let i ← params.SUBTREE_H
+    let i ← params.layer_h layer
     let i1 ← 1#u32 <<< i
     let i2 ← i1 - 1#u32
     let idx_leaf ← lift (idx_tree &&& i2)
@@ -100,7 +100,7 @@ theorem signerSerializeLayer_bind {α : Type} (height : Std.Usize) (sig : C10Sig
     let s2 ← lift (Array.to_slice a)
     let s3 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s1 s2
     let sig2 := index_mut_back s3
-    let result ← hypertree.sign_inner_loop3_loop1 height sig2 i10 path 0#usize
+    let result ← hypertree.sign_inner_loop3_loop1 sig2 i10 height path 0#usize
     continuation result) = (do
       let result ← signerSerializeLayerHeight height sig offset chains count path
       continuation result) := by

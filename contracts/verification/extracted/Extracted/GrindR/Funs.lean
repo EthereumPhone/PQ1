@@ -21,7 +21,7 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::fors::grind_r]: loop body 0:
-    Source: 'sphincs-c10/src/fors.rs', lines 110:4-131:1
+    Source: 'sphincs-c10/src/fors.rs', lines 118:4-139:1
     Visibility: public -/
 @[rust_loop_body]
 def fors.grind_r_loop.body
@@ -81,7 +81,7 @@ def fors.grind_r_loop.body
        ok (cont nonce1)
 
 /-- [sphincs_c10::fors::grind_r]: loop 0:
-    Source: 'sphincs-c10/src/fors.rs', lines 110:4-131:1
+    Source: 'sphincs-c10/src/fors.rs', lines 118:4-139:1
     Visibility: public -/
 @[rust_loop]
 def fors.grind_r_loop
@@ -97,7 +97,7 @@ def fors.grind_r_loop
     nonce
 
 /-- [sphincs_c10::fors::grind_r]:
-    Source: 'sphincs-c10/src/fors.rs', lines 98:0-131:1
+    Source: 'sphincs-c10/src/fors.rs', lines 98:0-139:1
     Visibility: public -/
 def fors.grind_r
   (sk_seed : Array Std.U8 32#usize) (pk_seed : Array Std.U8 16#usize)

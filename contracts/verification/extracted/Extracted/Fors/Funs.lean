@@ -74,12 +74,12 @@ def fors.read_bits_le
   ok (i4 &&& mask)
 
 /-- [sphincs_c10::params::A]
-    Source: 'sphincs-c10/src/params.rs', lines 37:0-37:24
+    Source: 'sphincs-c10/src/params.rs', lines 65:0-65:24
     Visibility: public -/
 @[global_simps, irreducible] def params.A : Std.Usize := 11#usize
 
 /-- [sphincs_c10::params::K]
-    Source: 'sphincs-c10/src/params.rs', lines 34:0-34:24
+    Source: 'sphincs-c10/src/params.rs', lines 62:0-62:24
     Visibility: public -/
 @[global_simps, irreducible] def params.K : Std.Usize := 13#usize
 

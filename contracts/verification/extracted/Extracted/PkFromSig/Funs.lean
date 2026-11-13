@@ -23,22 +23,22 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::params::TARGET_SUM]
-    Source: 'sphincs-c10/src/params.rs', lines 52:0-52:34
+    Source: 'sphincs-c10/src/params.rs', lines 81:0-81:34
     Visibility: public -/
 @[global_simps, irreducible] def params.TARGET_SUM : Std.Usize := 205#usize
 
 /-- [sphincs_c10::params::ADRS_WOTS]
-    Source: 'sphincs-c10/src/params.rs', lines 97:0-97:29
+    Source: 'sphincs-c10/src/params.rs', lines 135:0-135:29
     Visibility: public -/
 @[global_simps, irreducible] def params.ADRS_WOTS : Std.U32 := 0#u32
 
 /-- [sphincs_c10::params::ADRS_WOTS_PK]
-    Source: 'sphincs-c10/src/params.rs', lines 98:0-98:32
+    Source: 'sphincs-c10/src/params.rs', lines 136:0-136:32
     Visibility: public -/
 @[global_simps, irreducible] def params.ADRS_WOTS_PK : Std.U32 := 1#u32
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop body 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 180:4-182:5
+    Source: 'sphincs-c10/src/wots.rs', lines 250:4-252:5
     Visibility: public -/
 @[rust_loop_body]
 def wots.pk_from_sig_loop0.body
@@ -58,7 +58,7 @@ def wots.pk_from_sig_loop0.body
     ok (cont (iter1, sum1))
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 180:4-182:5
+    Source: 'sphincs-c10/src/wots.rs', lines 250:4-252:5
     Visibility: public -/
 @[rust_loop]
 def wots.pk_from_sig_loop0
@@ -71,7 +71,7 @@ def wots.pk_from_sig_loop0
     (iter, sum)
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop body 1:
-    Source: 'sphincs-c10/src/wots.rs', lines 189:4-193:5
+    Source: 'sphincs-c10/src/wots.rs', lines 259:4-263:5
     Visibility: public -/
 @[rust_loop_body]
 def wots.pk_from_sig_loop1.body
@@ -102,7 +102,7 @@ def wots.pk_from_sig_loop1.body
     ok (cont (iter1, a2))
 
 /-- [sphincs_c10::wots::pk_from_sig]: loop 1:
-    Source: 'sphincs-c10/src/wots.rs', lines 189:4-193:5
+    Source: 'sphincs-c10/src/wots.rs', lines 259:4-263:5
     Visibility: public -/
 @[rust_loop]
 def wots.pk_from_sig_loop1
@@ -118,7 +118,7 @@ def wots.pk_from_sig_loop1
     (iter, pk_elements)
 
 /-- [sphincs_c10::wots::pk_from_sig]:
-    Source: 'sphincs-c10/src/wots.rs', lines 162:0-196:1
+    Source: 'sphincs-c10/src/wots.rs', lines 232:0-266:1
     Visibility: public -/
 def wots.pk_from_sig
   (seed : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)

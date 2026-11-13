@@ -34,7 +34,8 @@ FAMILIES = {
         ("copy-read", "let a ← Array.index_usize keep h", "let a ← Array.index_usize keep 0#usize"),
         ("copy-write", "Array.update auth_path h a", "Array.update auth_path 0#usize a"),
         ("copy-skip-first", "merkle.build_subtree_with_auth_loop1.body keep\n      iter1 auth_path1", "merkle.build_subtree_with_auth_loop1.body keep\n      {start := 1#usize, «end» := iter1.«end»} auth_path1"),
-        ("copy-length", "{ start := 0#usize, «end» := i }", "{ start := 0#usize, «end» := 8#usize }"),
+        # Research refactor: the copy loop is bounded by `lh ← params.layer_h layer`.
+        ("copy-length", "{ start := 0#usize, «end» := lh }", "{ start := 0#usize, «end» := 8#usize }"),
         ("returned-path", "ok (auth_path1, root)", "ok (auth_path, root)"),
     ]),
     "spec-auth": ("XmssAuthBridge.lean", [

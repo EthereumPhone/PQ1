@@ -21,7 +21,7 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::hypertree::sign_inner]: loop body 4:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 281:4-354:5 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 305:4-385:5 -/
 @[rust_loop_body]
 def hypertree.release_sign_inner_loop3.body
   (sk_seed : Array Std.U8 32#usize) (progress : hypertree.ProgressSink)
@@ -38,21 +38,21 @@ def hypertree.release_sign_inner_loop3.body
   match o with
   | none => ok (done sig)
   | some layer =>
-    let i ← params.SUBTREE_H
-    let i1 ← 1#u32 <<< i
-    let i2 ← i1 - 1#u32
-    let idx_leaf ← lift (idx_tree &&& i2)
-    let idx_tree1 ← idx_tree >>> i
-    let i3 ← layer * 33#u32
-    let i4 ← 32#u32 + i3
-    let pct_lo ← lift (UScalar.cast .U8 i4)
-    let i5 ← layer + 1#u32
-    let i6 ← i5 * 33#u32
-    let i7 ← 32#u32 + i6
-    let pct_hi ← lift (UScalar.cast .U8 i7)
-    let i8 ← lift (UScalar.cast .U64 idx_tree1)
+    let lh ← params.layer_h layer
+    let i ← 1#u32 <<< lh
+    let i1 ← i - 1#u32
+    let idx_leaf ← lift (idx_tree &&& i1)
+    let idx_tree1 ← idx_tree >>> lh
+    let i2 ← layer * 33#u32
+    let i3 ← 32#u32 + i2
+    let pct_lo ← lift (UScalar.cast .U8 i3)
+    let i4 ← layer + 1#u32
+    let i5 ← i4 * 33#u32
+    let i6 ← 32#u32 + i5
+    let pct_hi ← lift (UScalar.cast .U8 i6)
+    let i7 ← lift (UScalar.cast .U64 idx_tree1)
     let (auth_path, _) ←
-      merkle.build_subtree_with_auth seed sk_seed layer i8 idx_leaf progress
+      merkle.build_subtree_with_auth seed sk_seed layer i7 idx_leaf progress
         pct_lo pct_hi
     hypertree.report progress pct_hi
     let wots_label ←
@@ -69,33 +69,33 @@ def hypertree.release_sign_inner_loop3.body
              ] : Array Std.U8 7#usize)
     let s ← lift (Array.to_slice wots_label)
     let wots_shuffle_seed ← sphincs_c10.shuffle.ShuffleSeed.derive shuffle s
-    let i9 ← lift (UScalar.cast .U64 idx_tree1)
+    let i8 ← lift (UScalar.cast .U64 idx_tree1)
     let (wots_sigma, count) ←
-      wots.sign_with_shuffle seed sk_seed layer i9 idx_leaf current_node
+      wots.sign_with_shuffle seed sk_seed layer i8 idx_leaf current_node
         wots_shuffle_seed progress pct_hi
     let (sig1, offset1) ←
       hypertree.sign_inner_loop3_loop0 sig offset wots_sigma 0#usize
-    let i10 ← offset1 + 4#usize
+    let i9 ← offset1 + 4#usize
     let (s1, index_mut_back) ←
       core.array.Array.index_mut (core.ops.index.IndexMutSlice
         (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) sig1
-        { start := offset1, «end» := i10 }
+        { start := offset1, «end» := i9 }
     let a ← lift (core.num.U32.to_be_bytes count)
     let s2 ← lift (Array.to_slice a)
     let s3 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s1 s2
     let sig2 := index_mut_back s3
     let (sig3, offset2) ←
-      hypertree.sign_inner_loop3_loop1 i sig2 i10 auth_path 0#usize
-    let i11 ← lift (UScalar.cast .U64 idx_tree1)
+      hypertree.sign_inner_loop3_loop1 sig2 i9 lh auth_path 0#usize
+    let i10 ← lift (UScalar.cast .U64 idx_tree1)
     let wots_pk ←
-      wots.pk_from_sig seed layer i11 idx_leaf current_node wots_sigma count
-    let i12 ← lift (UScalar.cast .U64 idx_tree1)
+      wots.pk_from_sig seed layer i10 idx_leaf current_node wots_sigma count
+    let i11 ← lift (UScalar.cast .U64 idx_tree1)
     let current_node1 ←
-      merkle.verify_auth_path seed layer i12 wots_pk idx_leaf auth_path
+      merkle.verify_auth_path seed layer i11 wots_pk idx_leaf auth_path
     ok (cont (iter1, sig3, offset2, current_node1, idx_tree1))
 
 /-- [sphincs_c10::hypertree::sign_inner]: loop 4:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 281:4-354:5 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 305:4-385:5 -/
 @[rust_loop]
 def hypertree.release_sign_inner_loop3
   (iter : core.ops.range.Range Std.U32) (sk_seed : Array Std.U8 32#usize)
@@ -112,7 +112,7 @@ def hypertree.release_sign_inner_loop3
     (iter, sig, offset, current_node, idx_tree)
 
 /-- [sphincs_c10::hypertree::sign_inner]:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 161:0-366:1 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 175:0-397:1 -/
 def hypertree.release_sign_inner
   (sk_seed : Array Std.U8 32#usize) (pk_seed : Array Std.U8 16#usize)
   (pk_root : Array Std.U8 16#usize) (msg_hash : Array Std.U8 32#usize)

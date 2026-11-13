@@ -24,17 +24,19 @@ FAMILIES = {
         ("offset", "cont (iter1, i, a2)", "cont (iter1, offset, a2)"),
     ]),
     "layer": ("HypertreeLayerSpec.lean", "hypertree.verify_loop3", [
-        ("leaf-mask", "idx_tree &&& i2", "idx_tree &&& 255#u32"),
-        ("tree-shift", "idx_tree >>> i", "idx_tree >>> 8#usize"),
+        # Research refactor: the layer height is `lh ← params.layer_h layer`
+        # (= SUBTREE_H), so the extracted temporaries are renumbered.
+        ("leaf-mask", "idx_tree &&& i1", "idx_tree &&& 255#u32"),
+        ("tree-shift", "idx_tree >>> lh", "idx_tree >>> 8#usize"),
         ("chains", "«end» := params.L", "«end» := 42#usize"),
-        ("counter-high", "[ i3, i5, i7, i9 ]", "[ 0#u8, i5, i7, i9 ]"),
-        ("counter-order", "[ i3, i5, i7, i9 ]", "[ i9, i7, i5, i3 ]"),
+        ("counter-high", "[ i2, i4, i6, i8 ]", "[ 0#u8, i4, i6, i8 ]"),
+        ("counter-order", "[ i2, i4, i6, i8 ]", "[ i8, i6, i4, i2 ]"),
         ("counter-offset", "offset1 + 4#usize", "offset1 + 3#usize"),
-        ("siblings", "«end» := i } sig", "«end» := 8#usize } sig"),
-        ("layer-address", "wots.pk_from_sig seed layer i10", "wots.pk_from_sig seed 0#u32 i10"),
-        ("tree-address", "wots.pk_from_sig seed layer i10", "wots.pk_from_sig seed layer 0#u64"),
-        ("leaf-address", "i10 idx_leaf current_node", "i10 0#u32 current_node"),
-        ("node-handoff", "i11 wots_pk idx_leaf", "i11 current_node idx_leaf"),
+        ("siblings", "«end» := lh } sig", "«end» := 8#usize } sig"),
+        ("layer-address", "wots.pk_from_sig seed layer i9", "wots.pk_from_sig seed 0#u32 i9"),
+        ("tree-address", "wots.pk_from_sig seed layer i9", "wots.pk_from_sig seed layer 0#u64"),
+        ("leaf-address", "i9 idx_leaf current_node", "i9 0#u32 current_node"),
+        ("node-handoff", "i10 wots_pk idx_leaf", "i10 current_node idx_leaf"),
         ("tree-handoff", "current_node1, idx_tree1))", "current_node1, idx_tree))"),
     ]),
     "loop": ("HypertreeContinuationSpec.lean", "hypertree.verify_loop3", [

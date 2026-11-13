@@ -26,6 +26,25 @@ def wotsKeygenPure (seed sk : Std.Array Std.U8 32#usize)
   th_multi_pure seed (adrsArr layer tree 1 kp.val 0 0 0)
     ⟨wotsKeygenChains seed sk layer tree kp, by simp [wotsKeygenChains]; scalar_tac⟩
 
+/-- `hash.wots_secret_chain` (sphincs-c10 `hash::wots_secret_chain`, the
+    non-fused path): chain `ci`'s secret, chained `steps` times from position 0
+    under the chain-`ci` address of a fresh WOTS base address. Shared by the
+    keygen and signing loops. -/
+theorem wots_secret_chain_spec (seed sk base_adrs : Std.Array Std.U8 32#usize)
+    (layer : Std.U32) (tree : Std.U64) (kp ci steps : Std.U32)
+    (hbase : base_adrs.val.map (·.val) = specMakeAdrs layer.val tree.val 0 kp.val 0 0 0) :
+    hash.wots_secret_chain seed sk base_adrs layer tree kp ci steps ⦃ r =>
+      r = chain_hash_pure seed (adrsArr layer tree 0 kp.val ci.val 0 0)
+        (wotsSecretPure sk layer tree kp ci) 0#u32 steps ⦄ := by
+  unfold hash.wots_secret_chain
+  let* ⟨sk_i, hsk⟩ ← wots_secret_spec sk layer tree kp ci
+  let* ⟨chain_adrs, hchain⟩ ← set_chain_index_spec base_adrs ci
+  rw [hbase, specSetChainIndex_fresh] at hchain
+  have hchain_eq : adrsArr layer tree 0 kp.val ci.val 0 0 = chain_adrs :=
+    adrsArr_eq_of_map_val _ _ _ _ _ _ _ _ hchain
+  let* ⟨r, hr⟩ ← hash.chain_hash_spec seed chain_adrs sk_i 0#u32 steps (by scalar_tac)
+  rw [hr, ← hchain_eq, hsk]
+
 theorem wots_keygen_loop_spec (seed sk : Std.Array Std.U8 32#usize)
     (layer : Std.U32) (tree : Std.U64) (kp : Std.U32)
     (base_adrs : Std.Array Std.U8 32#usize) (iter : core.ops.range.Range Std.Usize)
@@ -62,20 +81,18 @@ theorem wots_keygen_loop_spec (seed sk : Std.Array Std.U8 32#usize)
         exact Nat.mod_eq_of_lt (by scalar_tac)
       have hcast : UScalar.cast .U32 j = (⟨BitVec.ofNat 32 j.val⟩ : Std.U32) :=
         u32_eq_ofNat (by omega) hcastj
-      let* ⟨sk_i, hsk⟩ ← wots_secret_spec sk layer tree kp (UScalar.cast .U32 j)
-      let* ⟨chain_adrs, hchain⟩ ← set_chain_index_spec base_adrs (UScalar.cast .U32 j)
-      rw [hbase, hcastj, specSetChainIndex_fresh] at hchain
-      have hchain_eq : adrsArr layer tree 0 kp.val j.val 0 0 = chain_adrs :=
-        adrsArr_eq_of_map_val _ _ _ _ _ _ _ _ hchain
-      step* <;> first | (simp only [UScalar.cast_val_eq]; scalar_tac) | scalar_tac | skip
+      let* ⟨i3, hi3v⟩ ← Usize.sub_spec
       have hi3 : i3 = 7#usize := by apply UScalar.eq_of_val_eq; scalar_tac
+      let* ⟨a, a_post⟩ ← wots_secret_chain_spec seed sk base_adrs layer tree kp
+        (UScalar.cast .U32 j) (UScalar.cast .U32 i3) hbase
+      step* <;> first | (simp only [UScalar.cast_val_eq]; scalar_tac) | scalar_tac | skip
       refine ⟨by rw [hend']; exact hbnd, by omega, ?_, by rw [hend']; omega⟩
       intro jj hjj
       rw [a1_post, Array.set_val_eq]
       have hpklen : pk.val.length = 43 := by simpa using pk.property
       by_cases hjb : jj = j.val
       · subst hjb
-        rw [List.set_getElem!_eq _ _ _ _ ⟨by omega, rfl⟩, a_post, ← hchain_eq, hsk, hcast, hi3]
+        rw [List.set_getElem!_eq _ _ _ _ ⟨by omega, rfl⟩, a_post, hcastj, hcast, hi3]
         have hc7 : UScalar.cast .U32 7#usize = 7#u32 := by
           apply UScalar.eq_of_val_eq
           simp [UScalar.cast_val_eq]

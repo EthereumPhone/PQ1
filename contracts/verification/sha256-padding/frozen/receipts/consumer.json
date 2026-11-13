@@ -1,9 +1,11 @@
 {
   "accepted": true,
   "source_pins": {
-    "sphincs-c10/src/hash.rs": "7219cd9b24f2590af99779bcf1891c4b8bb864d3d42524be8f0e8484993d3290",
-    "sphincs-c10/src/params.rs": "827bc33e6665125484d354f57f2aea1fbf4f1e7a64aa330801cdb72f311eb911"
+    "sphincs-c10/src/hash.rs": "ef105972e155dd7d84c3275c06e57c655ef664ce16b492ae955861a2dd8be167",
+    "sphincs-c10/src/params.rs": "b7a789cd2eb9ac09aacd22f20f8751192c809701db19d10f06295824ea0cc0d7",
+    "sphincs-c10/src/address.rs": "84f5708f1dee711f9cf0dd11c14b8770618e3353f839329b24da6cca6e34ce00"
   },
+  "source_commit": "ed32d49601d0e2a0b10950bcf9f63b6b4e92da4b",
   "corrected_dependency_sha256": "5d08f9d4395b7960b8dbad2c1d8e71f8b65eb67417947a65c0c6fa542cbd8e8d",
   "results": [
     {
@@ -18,17 +20,17 @@
         "RUSTFLAGS": "-Zprint-mono-items=yes -Zmir-opt-level=0 -Copt-level=0 -Cdebuginfo=0 -Cpanic=abort -Coverflow-checks=on"
       },
       "exit": 0,
-      "seconds": 2.017712100991048,
-      "log_sha256": "e6421748367037a37a2334a719e6e992c191474b6c1ee39b73c613e2bb3d8072"
+      "seconds": 1.0724242830037838,
+      "log_sha256": "d46e04626224247d3c01e1a74c0a82ec418882824ce2b693eb6ca2c3feaa5eb7"
     },
     {
       "step": "native",
       "command": [
-        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/kani-architecture/digest-caller-probe-v2/corrected/target/debug/digest_caller_probe"
+        "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/kani-architecture/digest-caller-probe-v3/corrected/target/debug/digest_caller_probe"
       ],
       "environment": {},
       "exit": 0,
-      "seconds": 0.0019729939522221684,
+      "seconds": 0.0018208890105597675,
       "log_sha256": "f53b0ace55993e727a3b11bf62a16c1ff0b9ed596c40217a9b1c4abf12ad37e2"
     },
     {
@@ -44,8 +46,8 @@
         "MIRIFLAGS": "-Zmiri-recursive-validation"
       },
       "exit": 0,
-      "seconds": 7.741929605952464,
-      "log_sha256": "cad313d0999db9bd0b8f1090f2344e8f88fba0e309e653a5f0b77526366da578"
+      "seconds": 4.5606832500052406,
+      "log_sha256": "37f992adfce267763001926bcd1b54faa84bcf3d565d52e2488e6bb4b1576b53"
     }
   ],
   "constructor_census": {
@@ -64,8 +66,24 @@
       "::digest_pad": 1,
       "::into_inner": 2
     },
-    "full_output_byte_identical": true
+    "full_output_byte_identical_to_prior": true,
+    "prior_total_emitted_items": 44,
+    "prior_root_crate_mono_items": 40,
+    "prior_occurrences": {
+      "::generate::": 2,
+      "ArrayBuilder": 6,
+      "::iter_position": 0,
+      "::from_iter": 0,
+      "::from_exact_iter": 0,
+      "::inverted_zip": 0,
+      "::clone": 0,
+      "GenericArrayIter": 0,
+      "::len64_padding_be": 1,
+      "::digest_pad": 1,
+      "::into_inner": 2
+    }
   },
+  "census_diff_vs_prior": "",
   "tool_hashes_at_completion": {
     "rustc": "868823b4821483101b4e71435a11ae702dee76fca8a725b045eda1fb32318ed2",
     "cargo": "2f61a65e2f3029f4d849a6534bbd6627790142c59a74682f0025e80d6f638c7d",
@@ -73,19 +91,20 @@
     "cargo-miri": "161e6adbce9b29a54b7a5a5dbf347819bddd44e000172c68ad0226a847b530ff"
   },
   "miri_sysroot_receipt_sha256": "f6367840d3459577a1fd7774040b5f736759513053f38e5062651677c08ed8ce",
-  "prior_receipt_sha256": "b2f282a2bbc19d024172477b8e645591fa8e9c19b2b397bb82a6e271ebbff36d",
-  "prior_census_sha256": "8e690a0612c1d5368ee78c979172c6122686976e727c81982b7754eb1da66a1f",
-  "collector_result_sha256": "b2104829d12d433932e782bfd90f46e89a4d13417d41d7a8870b9d76174742ae",
-  "checker_sha256": "fa327dc5a244ee9cc362b395ee197e2d186ff678a15fa55a95e18e35166d925b",
+  "prior_receipt_sha256": "cc40c75dabd491911d90e76185b9566c159cda30a9d8cd0ff5e79023faac761b",
+  "prior_census_sha256": "976c53b81e92b8c74bfd933ecadc236f60c2d68404fe0bbeec45d7a467b27667",
+  "probe_diff_vs_prior": "--- v2/src/main.rs\n+++ v3/src/main.rs\n@@ -2,2 +2,3 @@\n-#[path = \"/home/nicola/.local/state/pqsigner-research/easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/params.rs\"] mod params;\n-#[path = \"/home/nicola/.local/state/pqsigner-research/easycrypt-original-byte-profile-20261028/candidate/sphincs-c10/src/hash.rs\"] mod hash;\n+#[path = \"/home/nicola/.local/state/pqsigner-research/easycrypt-head-byte-profile-20261113/candidate/sphincs-c10/src/params.rs\"] mod params;\n+#[path = \"/home/nicola/.local/state/pqsigner-research/easycrypt-head-byte-profile-20261113/candidate/sphincs-c10/src/hash.rs\"] mod hash;\n+#[path = \"/home/nicola/.local/state/pqsigner-research/easycrypt-head-byte-profile-20261113/candidate/sphincs-c10/src/address.rs\"] mod address;\n",
+  "collector_sha256": "6195ad06e9505c010df004132c43f5d177fe5c9d04127a114f3c1a1ae7d70985",
+  "collector_seconds": 5.920964214994456,
+  "supervisor": "none: the v2 bounded-build supervisor (run-bounded-build-v2.py) refuses to start because the research tree now exceeds its 6 GiB allocation cap; the three commands ran directly with the same environment",
   "files": {
-    "mono.log": "e6421748367037a37a2334a719e6e992c191474b6c1ee39b73c613e2bb3d8072",
+    "mono.log": "d46e04626224247d3c01e1a74c0a82ec418882824ce2b693eb6ca2c3feaa5eb7",
     "selected-mono.txt": "976c53b81e92b8c74bfd933ecadc236f60c2d68404fe0bbeec45d7a467b27667",
     "Cargo.toml": "41ba38c340071115a386e7561272216d56b70dc0f5d4db17d368092fdf78670e",
-    "recursive-miri.log": "cad313d0999db9bd0b8f1090f2344e8f88fba0e309e653a5f0b77526366da578",
+    "recursive-miri.log": "37f992adfce267763001926bcd1b54faa84bcf3d565d52e2488e6bb4b1576b53",
     "native.log": "f53b0ace55993e727a3b11bf62a16c1ff0b9ed596c40217a9b1c4abf12ad37e2",
     "Cargo.lock": "5a05d76ec40dd86db7b16c21a1ad46ec8353543251d099de30132ebd1000a9e2",
-    "src/main.rs": "3ccee57a2c9f7991371c015068224645d16fc2484e3db61aa28a206978434ad9"
+    "src/main.rs": "be2da9e841cdd0c48d982d20539e2131ba43f4573dca1c4def1a99c24b6cbf05"
   },
-  "completion_note": "All three execution commands passed. The collector compared 44 total emitted items with the prior count of 40 root-crate items. Exact output bytes match the prior census, including four sha2-CGU records. This completion restores that established counting scope; no execution rerun or newly reached constructor is accepted.",
-  "scope": "Actual-source force-soft census plus 64 native and 64 experimental recursive-Miri finite compatibility cases. Corrected dependency only; no original-pin, universal Digest, ARM, dispatch, callback or unwind-equivalence proof."
+  "scope": "Actual-source force-soft census plus 64 native and 64 experimental recursive-Miri finite compatibility cases, on the C10 research-merge head sources. Corrected dependency only; no original-pin, universal Digest, ARM, dispatch, callback or unwind-equivalence proof."
 }

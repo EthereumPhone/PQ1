@@ -27,8 +27,9 @@ FAMILIES = {
         ("initial-height", "stack_heights sp kp node 0#u32", "stack_heights sp kp node 1#u32"),
         ("returned-root", "Array.index_usize stack1 0#usize", "Array.index_usize stack1 1#usize"),
         ("public-seed", "let seed ← hash.pad16 pk_seed", "let seed ← hash.pad16 (Array.repeat 16#usize 0#u8)"),
-        ("public-layer", "merkle.compute_subtree_root seed sk_seed 1#u32 0#u64", "merkle.compute_subtree_root seed sk_seed 0#u32 0#u64"),
-        ("public-tree", "merkle.compute_subtree_root seed sk_seed 1#u32 0#u64", "merkle.compute_subtree_root seed sk_seed 1#u32 1#u64"),
+        # Research refactor: the top layer is passed as `(D - 1) as u32`.
+        ("public-layer", "params.D - 1#usize", "params.D - 2#usize"),
+        ("public-tree", "merkle.compute_subtree_root seed sk_seed i1 0#u64", "merkle.compute_subtree_root seed sk_seed i1 1#u64"),
     ]),
     "spec-root": ("XmssRootBridge.lean", [
         ("leaf-index", "| 0, idx => lf idx", "| 0, idx => lf 0"),

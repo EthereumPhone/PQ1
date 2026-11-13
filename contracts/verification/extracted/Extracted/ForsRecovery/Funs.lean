@@ -23,12 +23,12 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::params::ADRS_FORS_TREE]
-    Source: 'sphincs-c10/src/params.rs', lines 100:0-100:34
+    Source: 'sphincs-c10/src/params.rs', lines 138:0-138:34
     Visibility: public -/
 @[global_simps, irreducible] def params.ADRS_FORS_TREE : Std.U32 := 3#u32
 
 /-- [sphincs_c10::hypertree::reconstruct_fors_root]: loop body 0:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 509:4-527:5 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 543:4-561:5 -/
 @[rust_loop_body]
 def hypertree.reconstruct_fors_root_loop.body
   (seed : Array Std.U8 32#usize) (ht_idx : Std.U32) (tree_idx : Std.U32)
@@ -67,7 +67,7 @@ def hypertree.reconstruct_fors_root_loop.body
     ok (cont (iter1, node1, parent_idx))
 
 /-- [sphincs_c10::hypertree::reconstruct_fors_root]: loop 0:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 509:4-527:5 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 543:4-561:5 -/
 @[rust_loop]
 def hypertree.reconstruct_fors_root_loop
   (iter : core.ops.range.Range Std.Usize) (seed : Array Std.U8 32#usize)
@@ -82,7 +82,7 @@ def hypertree.reconstruct_fors_root_loop
     (iter, node, path_idx)
 
 /-- [sphincs_c10::hypertree::reconstruct_fors_root]:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 497:0-529:1 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 531:0-563:1 -/
 def hypertree.reconstruct_fors_root
   (seed : Array Std.U8 32#usize) (ht_idx : Std.U32) (tree_idx : Std.U32)
   (leaf_idx : Std.U32) (secret : Array Std.U8 16#usize)
