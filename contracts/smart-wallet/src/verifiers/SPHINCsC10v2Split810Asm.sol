@@ -154,263 +154,1167 @@ contract SPHINCsC10v2Split810Asm {
                 // its trailing 16 bytes are overwritten by slot i+1, and for i = 42 they fall past
                 // the 712 bytes T_43 hashes. Unrolled over the 43 chains (generated).
                 let chainA := shl(200, kpBase)
+                let nd := not(d) // chain i takes 7 - digit_i = bits 3i..3i+2 of nd steps: blocks of 4, 2, 1
                 // BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)
                 calldatacopy(0x10, add(wotsPtr, 0), 16) // chain 0
-                for { let a := add(chainA, or(shl(217, 0), shl(212, and(shr(0, d), 7)))) } lt(a, add(chainA, or(shl(217, 0), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 0), shl(212, and(shr(0, d), 7))))
+                    if and(nd, shl(2, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(1, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(0, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 24), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 16), 16) // chain 1
-                for { let a := add(chainA, or(shl(217, 1), shl(212, and(shr(3, d), 7)))) } lt(a, add(chainA, or(shl(217, 1), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 1), shl(212, and(shr(3, d), 7))))
+                    if and(nd, shl(5, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(4, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(3, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 40), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 32), 16) // chain 2
-                for { let a := add(chainA, or(shl(217, 2), shl(212, and(shr(6, d), 7)))) } lt(a, add(chainA, or(shl(217, 2), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 2), shl(212, and(shr(6, d), 7))))
+                    if and(nd, shl(8, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(7, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(6, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 56), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 48), 16) // chain 3
-                for { let a := add(chainA, or(shl(217, 3), shl(212, and(shr(9, d), 7)))) } lt(a, add(chainA, or(shl(217, 3), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 3), shl(212, and(shr(9, d), 7))))
+                    if and(nd, shl(11, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(10, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(9, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 72), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 64), 16) // chain 4
-                for { let a := add(chainA, or(shl(217, 4), shl(212, and(shr(12, d), 7)))) } lt(a, add(chainA, or(shl(217, 4), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 4), shl(212, and(shr(12, d), 7))))
+                    if and(nd, shl(14, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(13, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(12, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 88), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 80), 16) // chain 5
-                for { let a := add(chainA, or(shl(217, 5), shl(212, and(shr(15, d), 7)))) } lt(a, add(chainA, or(shl(217, 5), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 5), shl(212, and(shr(15, d), 7))))
+                    if and(nd, shl(17, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(16, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(15, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 104), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 96), 16) // chain 6
-                for { let a := add(chainA, or(shl(217, 6), shl(212, and(shr(18, d), 7)))) } lt(a, add(chainA, or(shl(217, 6), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 6), shl(212, and(shr(18, d), 7))))
+                    if and(nd, shl(20, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(19, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(18, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 120), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 112), 16) // chain 7
-                for { let a := add(chainA, or(shl(217, 7), shl(212, and(shr(21, d), 7)))) } lt(a, add(chainA, or(shl(217, 7), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 7), shl(212, and(shr(21, d), 7))))
+                    if and(nd, shl(23, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(22, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(21, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 136), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 128), 16) // chain 8
-                for { let a := add(chainA, or(shl(217, 8), shl(212, and(shr(24, d), 7)))) } lt(a, add(chainA, or(shl(217, 8), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 8), shl(212, and(shr(24, d), 7))))
+                    if and(nd, shl(26, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(25, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(24, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 152), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 144), 16) // chain 9
-                for { let a := add(chainA, or(shl(217, 9), shl(212, and(shr(27, d), 7)))) } lt(a, add(chainA, or(shl(217, 9), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 9), shl(212, and(shr(27, d), 7))))
+                    if and(nd, shl(29, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(28, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(27, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 168), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 160), 16) // chain 10
-                for { let a := add(chainA, or(shl(217, 10), shl(212, and(shr(30, d), 7)))) } lt(a, add(chainA, or(shl(217, 10), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 10), shl(212, and(shr(30, d), 7))))
+                    if and(nd, shl(32, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(31, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(30, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 184), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 176), 16) // chain 11
-                for { let a := add(chainA, or(shl(217, 11), shl(212, and(shr(33, d), 7)))) } lt(a, add(chainA, or(shl(217, 11), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 11), shl(212, and(shr(33, d), 7))))
+                    if and(nd, shl(35, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(34, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(33, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 200), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 192), 16) // chain 12
-                for { let a := add(chainA, or(shl(217, 12), shl(212, and(shr(36, d), 7)))) } lt(a, add(chainA, or(shl(217, 12), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 12), shl(212, and(shr(36, d), 7))))
+                    if and(nd, shl(38, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(37, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(36, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 216), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 208), 16) // chain 13
-                for { let a := add(chainA, or(shl(217, 13), shl(212, and(shr(39, d), 7)))) } lt(a, add(chainA, or(shl(217, 13), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 13), shl(212, and(shr(39, d), 7))))
+                    if and(nd, shl(41, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(40, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(39, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 232), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 224), 16) // chain 14
-                for { let a := add(chainA, or(shl(217, 14), shl(212, and(shr(42, d), 7)))) } lt(a, add(chainA, or(shl(217, 14), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 14), shl(212, and(shr(42, d), 7))))
+                    if and(nd, shl(44, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(43, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(42, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 248), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 240), 16) // chain 15
-                for { let a := add(chainA, or(shl(217, 15), shl(212, and(shr(45, d), 7)))) } lt(a, add(chainA, or(shl(217, 15), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 15), shl(212, and(shr(45, d), 7))))
+                    if and(nd, shl(47, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(46, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(45, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 264), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 256), 16) // chain 16
-                for { let a := add(chainA, or(shl(217, 16), shl(212, and(shr(48, d), 7)))) } lt(a, add(chainA, or(shl(217, 16), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 16), shl(212, and(shr(48, d), 7))))
+                    if and(nd, shl(50, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(49, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(48, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 280), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 272), 16) // chain 17
-                for { let a := add(chainA, or(shl(217, 17), shl(212, and(shr(51, d), 7)))) } lt(a, add(chainA, or(shl(217, 17), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 17), shl(212, and(shr(51, d), 7))))
+                    if and(nd, shl(53, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(52, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(51, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 296), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 288), 16) // chain 18
-                for { let a := add(chainA, or(shl(217, 18), shl(212, and(shr(54, d), 7)))) } lt(a, add(chainA, or(shl(217, 18), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 18), shl(212, and(shr(54, d), 7))))
+                    if and(nd, shl(56, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(55, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(54, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 312), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 304), 16) // chain 19
-                for { let a := add(chainA, or(shl(217, 19), shl(212, and(shr(57, d), 7)))) } lt(a, add(chainA, or(shl(217, 19), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 19), shl(212, and(shr(57, d), 7))))
+                    if and(nd, shl(59, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(58, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(57, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 328), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 320), 16) // chain 20
-                for { let a := add(chainA, or(shl(217, 20), shl(212, and(shr(60, d), 7)))) } lt(a, add(chainA, or(shl(217, 20), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 20), shl(212, and(shr(60, d), 7))))
+                    if and(nd, shl(62, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(61, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(60, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 344), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 336), 16) // chain 21
-                for { let a := add(chainA, or(shl(217, 21), shl(212, and(shr(63, d), 7)))) } lt(a, add(chainA, or(shl(217, 21), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 21), shl(212, and(shr(63, d), 7))))
+                    if and(nd, shl(65, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(64, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(63, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 360), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 352), 16) // chain 22
-                for { let a := add(chainA, or(shl(217, 22), shl(212, and(shr(66, d), 7)))) } lt(a, add(chainA, or(shl(217, 22), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 22), shl(212, and(shr(66, d), 7))))
+                    if and(nd, shl(68, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(67, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(66, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 376), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 368), 16) // chain 23
-                for { let a := add(chainA, or(shl(217, 23), shl(212, and(shr(69, d), 7)))) } lt(a, add(chainA, or(shl(217, 23), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 23), shl(212, and(shr(69, d), 7))))
+                    if and(nd, shl(71, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(70, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(69, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 392), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 384), 16) // chain 24
-                for { let a := add(chainA, or(shl(217, 24), shl(212, and(shr(72, d), 7)))) } lt(a, add(chainA, or(shl(217, 24), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 24), shl(212, and(shr(72, d), 7))))
+                    if and(nd, shl(74, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(73, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(72, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 408), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 400), 16) // chain 25
-                for { let a := add(chainA, or(shl(217, 25), shl(212, and(shr(75, d), 7)))) } lt(a, add(chainA, or(shl(217, 25), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 25), shl(212, and(shr(75, d), 7))))
+                    if and(nd, shl(77, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(76, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(75, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 424), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 416), 16) // chain 26
-                for { let a := add(chainA, or(shl(217, 26), shl(212, and(shr(78, d), 7)))) } lt(a, add(chainA, or(shl(217, 26), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 26), shl(212, and(shr(78, d), 7))))
+                    if and(nd, shl(80, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(79, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(78, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 440), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 432), 16) // chain 27
-                for { let a := add(chainA, or(shl(217, 27), shl(212, and(shr(81, d), 7)))) } lt(a, add(chainA, or(shl(217, 27), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 27), shl(212, and(shr(81, d), 7))))
+                    if and(nd, shl(83, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(82, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(81, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 456), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 448), 16) // chain 28
-                for { let a := add(chainA, or(shl(217, 28), shl(212, and(shr(84, d), 7)))) } lt(a, add(chainA, or(shl(217, 28), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 28), shl(212, and(shr(84, d), 7))))
+                    if and(nd, shl(86, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(85, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(84, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 472), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 464), 16) // chain 29
-                for { let a := add(chainA, or(shl(217, 29), shl(212, and(shr(87, d), 7)))) } lt(a, add(chainA, or(shl(217, 29), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 29), shl(212, and(shr(87, d), 7))))
+                    if and(nd, shl(89, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(88, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(87, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 488), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 480), 16) // chain 30
-                for { let a := add(chainA, or(shl(217, 30), shl(212, and(shr(90, d), 7)))) } lt(a, add(chainA, or(shl(217, 30), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 30), shl(212, and(shr(90, d), 7))))
+                    if and(nd, shl(92, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(91, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(90, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 504), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 496), 16) // chain 31
-                for { let a := add(chainA, or(shl(217, 31), shl(212, and(shr(93, d), 7)))) } lt(a, add(chainA, or(shl(217, 31), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 31), shl(212, and(shr(93, d), 7))))
+                    if and(nd, shl(95, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(94, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(93, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 520), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 512), 16) // chain 32
-                for { let a := add(chainA, or(shl(217, 32), shl(212, and(shr(96, d), 7)))) } lt(a, add(chainA, or(shl(217, 32), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 32), shl(212, and(shr(96, d), 7))))
+                    if and(nd, shl(98, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(97, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(96, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 536), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 528), 16) // chain 33
-                for { let a := add(chainA, or(shl(217, 33), shl(212, and(shr(99, d), 7)))) } lt(a, add(chainA, or(shl(217, 33), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 33), shl(212, and(shr(99, d), 7))))
+                    if and(nd, shl(101, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(100, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(99, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 552), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 544), 16) // chain 34
-                for { let a := add(chainA, or(shl(217, 34), shl(212, and(shr(102, d), 7)))) } lt(a, add(chainA, or(shl(217, 34), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 34), shl(212, and(shr(102, d), 7))))
+                    if and(nd, shl(104, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(103, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(102, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 568), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 560), 16) // chain 35
-                for { let a := add(chainA, or(shl(217, 35), shl(212, and(shr(105, d), 7)))) } lt(a, add(chainA, or(shl(217, 35), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 35), shl(212, and(shr(105, d), 7))))
+                    if and(nd, shl(107, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(106, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(105, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 584), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 576), 16) // chain 36
-                for { let a := add(chainA, or(shl(217, 36), shl(212, and(shr(108, d), 7)))) } lt(a, add(chainA, or(shl(217, 36), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 36), shl(212, and(shr(108, d), 7))))
+                    if and(nd, shl(110, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(109, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(108, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 600), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 592), 16) // chain 37
-                for { let a := add(chainA, or(shl(217, 37), shl(212, and(shr(111, d), 7)))) } lt(a, add(chainA, or(shl(217, 37), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 37), shl(212, and(shr(111, d), 7))))
+                    if and(nd, shl(113, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(112, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(111, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 616), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 608), 16) // chain 38
-                for { let a := add(chainA, or(shl(217, 38), shl(212, and(shr(114, d), 7)))) } lt(a, add(chainA, or(shl(217, 38), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 38), shl(212, and(shr(114, d), 7))))
+                    if and(nd, shl(116, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(115, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(114, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 632), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 624), 16) // chain 39
-                for { let a := add(chainA, or(shl(217, 39), shl(212, and(shr(117, d), 7)))) } lt(a, add(chainA, or(shl(217, 39), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 39), shl(212, and(shr(117, d), 7))))
+                    if and(nd, shl(119, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(118, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(117, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 648), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 640), 16) // chain 40
-                for { let a := add(chainA, or(shl(217, 40), shl(212, and(shr(120, d), 7)))) } lt(a, add(chainA, or(shl(217, 40), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 40), shl(212, and(shr(120, d), 7))))
+                    if and(nd, shl(122, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(121, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(120, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 664), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 656), 16) // chain 41
-                for { let a := add(chainA, or(shl(217, 41), shl(212, and(shr(123, d), 7)))) } lt(a, add(chainA, or(shl(217, 41), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 41), shl(212, and(shr(123, d), 7))))
+                    if and(nd, shl(125, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(124, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(123, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 680), mload(0x10))
                 calldatacopy(0x10, add(wotsPtr, 672), 16) // chain 42
-                for { let a := add(chainA, or(shl(217, 42), shl(212, and(shr(126, d), 7)))) } lt(a, add(chainA, or(shl(217, 42), shl(212, 7)))) { a := add(a, shl(212, 1)) } {
-                    mstore(0x20, a)
-                    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                {
+                    let a := add(chainA, or(shl(217, 42), shl(212, and(shr(126, d), 7))))
+                    if and(nd, shl(128, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 2)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 3)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 4))
+                    }
+                    if and(nd, shl(127, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        mstore(0x20, add(a, shl(212, 1)))
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                        a := add(a, shl(212, 2))
+                    }
+                    if and(nd, shl(126, 1)) {
+                        mstore(0x20, a)
+                        pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
+                    }
                 }
                 mstore(add(TB, 696), mload(0x10))
                 // END generated chains

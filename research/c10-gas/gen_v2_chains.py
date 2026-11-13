@@ -14,12 +14,21 @@ I = " " * 16
 def block(indent=I, ci_shift=218):
     """ci_shift = 200 + the A7 bit of the chain-index field: 218 for draft 0.3, 217 for split810."""
     out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)"]
+    step = lambda ind, off: [f"{ind}mstore(0x20, {'a' if off == 0 else f'add(a, shl(212, {off}))'})",
+                             f"{ind}pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))"]
     for i in range(43):
         out.append(f"{indent}calldatacopy(0x10, add(wotsPtr, {16 * i}), 16) // chain {i}")
-        out.append(f"{indent}for {{ let a := add(chainA, or(shl({ci_shift}, {i}), shl(212, and(shr({3 * i}, d), 7)))) }}"
-                   f" lt(a, add(chainA, or(shl({ci_shift}, {i}), shl(212, 7)))) {{ a := add(a, shl(212, 1)) }} {{")
-        out.append(f"{indent}    mstore(0x20, a)")
-        out.append(f"{indent}    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))")
+        out.append(f"{indent}{{")
+        j = indent + "    "
+        out.append(f"{j}let a := add(chainA, or(shl({ci_shift}, {i}), shl(212, and(shr({3 * i}, d), 7))))")
+        for blk in (4, 2, 1):
+            bit = 3 * i + {4: 2, 2: 1, 1: 0}[blk]
+            out.append(f"{j}if and(nd, shl({bit}, 1)) {{")
+            for k in range(blk):
+                out += step(j + "    ", k)
+            if blk > 1:
+                out.append(f"{j}    a := add(a, shl(212, {blk}))")
+            out.append(f"{j}}}")
         out.append(f"{indent}}}")
         out.append(f"{indent}mstore(add(TB, {24 + 16 * i}), mload(0x10))")
     out.append(f"{indent}// END generated chains")
