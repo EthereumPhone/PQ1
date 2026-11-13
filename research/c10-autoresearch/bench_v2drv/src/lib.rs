@@ -164,6 +164,114 @@ fn subtree(sk: &[u8; 32], s: &[u8; 16], ht: u64, t: u64, j0: u32, h: u32) -> [u8
     hh(s, &l, &r, a7(3, 0, ht, t, 0, u64::from(h), u64::from(j0 >> h)))
 }
 
+
+include!("../../residue.rs");
+
+/// Round 9 standing gate, v2 side (round-7 asm entries): secrets' patterns first, a cleared
+/// dead stack, the call, the scan. Returns (cases, bitmask of cases with residue). Bits:
+/// 0 wots_chains16, 1 wots_pk16, 2 prf_chain16, 3 fors_leaf16, 4 fors_subtree16 h=4,
+/// 5 fors_subtree16 h=7, 6 chain16 from a secret, 7 grind_r 119 B, 8 grind_r 103 B.
+#[cfg(feature = "residue")]
+fn residue_suite(rng: &mut Rng) -> (u32, u32) {
+    let mut mask = 0u32;
+    let (mut sk, mut s) = ([0u8; 32], [0u8; 16]);
+    rng.fill(&mut sk);
+    rng.fill(&mut s);
+    let (layer, tree, kp) = (1u64, 0x2_3456u64, u64::from(rng.below(KP_RANGE)));
+    let ((p0, p1), (a0, a1), (k0, k1)) =
+        (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)), words(a7(1, layer, tree, kp, 0, 0, 0)));
+    let mut o = [0u8; 688];
+    let key_pats = || {
+        res_reset();
+        res_add(&sk);
+        for ci in 0..43u64 {
+            let mut v = prf(&sk, a7(5, layer, tree, kp, ci, 0, 0));
+            res_add(&v);
+            if ci < 8 {
+                for p in 0..6u64 {
+                    v = f(&s, &v, a7(0, layer, tree, kp, ci, p, 0));
+                    res_add(&v);
+                }
+            }
+        }
+    };
+    // SAFETY (all calls): valid buffers of the documented sizes; arguments in range.
+    unsafe {
+        key_pats();
+        res_clear();
+        pqsigner_v2_wots_chains16(sk.as_ptr(), p0, p1, s.as_ptr(), a0, a1, 7, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 0; }
+        key_pats();
+        res_clear();
+        pqsigner_v2_wots_pk16(sk.as_ptr(), p0, p1, s.as_ptr(), a0, a1, k0, k1, 7, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 1; }
+        // prf_chain16, chain 5, 6 steps.
+        let (q0, q1) = words(a7(5, layer, tree, kp, 5, 0, 0));
+        let (b0, b1) = words(a7(0, layer, tree, kp, 5, 0, 0));
+        res_reset();
+        res_add(&sk);
+        let mut v = prf(&sk, a7(5, layer, tree, kp, 5, 0, 0));
+        res_add(&v);
+        for p in 0..5u64 {
+            v = f(&s, &v, a7(0, layer, tree, kp, 5, p, 0));
+            res_add(&v);
+        }
+        res_clear();
+        pqsigner_v2_prf_chain16(sk.as_ptr(), q0, q1, s.as_ptr(), b0, b1, 6, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 2; }
+        // FORS: leaf, subtrees of height 4 and 7.
+        let (ht, tt) = (0x1_2345u64, 7u64);
+        let j = 1234u64;
+        let ((f0, f1), (l0, l1)) = (words(a7(6, 0, ht, tt, 0, 0, j)), words(a7(3, 0, ht, tt, 0, 0, j)));
+        res_reset();
+        res_add(&sk);
+        res_add(&prf(&sk, a7(6, 0, ht, tt, 0, 0, j)));
+        res_clear();
+        pqsigner_v2_fors_leaf16(sk.as_ptr(), f0, f1, s.as_ptr(), l0, l1, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 3; }
+        let ((g0, g1), (m0, m1)) = (words(a7(6, 0, ht, tt, 0, 0, 0)), words(a7(3, 0, ht, tt, 0, 0, 0)));
+        for (bit, h, j0) in [(4u32, 4u32, 16 * 21u32), (5, 7, 128 * 5)] {
+            res_reset();
+            res_add(&sk);
+            for jj in j0..j0 + (1 << h) {
+                res_add(&prf(&sk, a7(6, 0, ht, tt, 0, 0, u64::from(jj))));
+            }
+            res_clear();
+            pqsigner_v2_fors_subtree16(sk.as_ptr(), s.as_ptr(), g0, g1, m0, m1, j0, h, o.as_mut_ptr());
+            if res_found() { mask |= 1 << bit; }
+        }
+        // chain16 from a secret start (chain 9), 6 steps.
+        let base = a7(0, layer, tree, kp, 9, 0, 0);
+        let (c0, c1) = words(base);
+        let mut v = prf(&sk, a7(5, layer, tree, kp, 9, 0, 0));
+        res_reset();
+        let mut w = v;
+        res_add(&w);
+        for p in 0..5u64 {
+            w = f(&s, &w, base | p << 12);
+            res_add(&w);
+        }
+        res_clear();
+        pqsigner_v2_chain16(s.as_ptr(), v.as_mut_ptr(), c0, c1, 0, 6);
+        if res_found() { mask |= 1 << 6; }
+        // grind_r: the PRF preimage's sk_seed bytes (0..32) and, at 119 B, rand (39..55).
+        for (bit, len) in [(7u32, 119usize), (8, 103)] {
+            let (mut pb, mut hb) = ([0u8; 119], [0u8; 87]);
+            rng.fill(&mut pb);
+            rng.fill(&mut hb);
+            pb[..32].copy_from_slice(&sk);
+            res_reset();
+            res_add(&pb[..32]);
+            if len == 119 { res_add(&pb[39..55]); }
+            res_clear();
+            let (mut gr, mut gd) = ([0u8; 16], [0u8; 32]);
+            let _ = pqsigner_v2_grind_r(pb.as_ptr(), len as u32, hb.as_ptr(), 0, 3000, gr.as_mut_ptr(), gd.as_mut_ptr());
+            if res_found() { mask |= 1 << bit; }
+        }
+    }
+    (9, mask)
+}
+
 /// A v1-shaped digest (NBLW = 0 for multiples of 4, any length) between v2 calls.
 fn v1_probe(rng: &mut Rng, t: &mut Tally, case: u32) {
     let mut buf = [0u8; 200];
@@ -206,6 +314,16 @@ pub extern "C" fn c10_bench_main() {
     unsafe { pqsigner_hw::hash::init_clock() };
     out(1, 1);
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
+    #[cfg(feature = "residue")]
+    {
+        out(1, 400);
+        let (c, m) = residue_suite(&mut rng);
+        out(2, c);
+        out(3, m);
+        out(1, 401);
+        return;
+    }
+    #[allow(unreachable_code)]
     let mut t = Tally { run: 0, fail: 0, per: [0; 11] };
     let mut probe = 0u32;
     macro_rules! between {

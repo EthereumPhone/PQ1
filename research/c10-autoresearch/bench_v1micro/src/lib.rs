@@ -9,6 +9,7 @@ const OUT: *mut u32 = 0x3000_0100 as *mut u32;
 extern "C" {
     fn bench_halt(code: u32) -> !;
     fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, steps: u32);
+    fn pqsigner_wots_prf_chain16(sk: *const u8, prf_tail: *const u8, seed_adrs: *const u8, steps: u32, out: *mut u8);
     fn pqsigner_wots_chains16(sk: *const u8, prf_tail: *const u8, seed_adrs: *const u8, order: *const u8, digits: *const u8, fixed_steps: u32, n: u32, out: *mut u8);
     fn pqsigner_fors_subtree16(sk_seed: *const u8, tail: *const u8, leaf_sa: *const u8, node_sa: *const u8, j0: u32, out: *mut u8);
     fn pqsigner_sha256_search128(buf: *const u8, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8) -> u32;
@@ -134,31 +135,141 @@ macro_rules! winsweep {
     }};
 }
 
-/// Zero the dead stack below sp (keeping a 64-byte margin for this frame's own use).
-#[inline(always)]
-fn dead_clear() {
-    let sp: usize;
-    // SAFETY: reads sp only.
-    unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
-    for a in (sp - 2048)..(sp - 64) {
-        // SAFETY: secure SRAM below the live stack (bench, no interrupts).
-        unsafe { core::ptr::write_volatile(a as *mut u8, 0) };
+include!("../../residue.rs");
+
+fn sha256(parts: &[&[u8]]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    for x in parts {
+        h.update(x);
     }
+    h.finalize().into()
 }
-/// Whether any 4-byte window of `secret` appears in the dead stack below sp.
-#[inline(always)]
-fn dead_has(secret: &[u8]) -> bool {
-    let sp: usize;
-    // SAFETY: reads sp only.
-    unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
-    for a in (sp - 2048)..(sp - 4) {
-        // SAFETY: secure SRAM below the live stack (bench, no interrupts).
-        let w: [u8; 4] = unsafe { core::array::from_fn(|i| core::ptr::read_volatile((a + i) as *const u8)) };
-        for k in 0..secret.len() - 3 {
-            if w == secret[k..k + 4] { return true; }
+/// v1 chain step over `sa` (64 B) with chain index `ci` and position `pos`.
+fn v1_step(sa: &[u8], ci: u32, pos: u32, v: &[u8; 16]) -> [u8; 16] {
+    let mut c = [0u8; 64];
+    c.copy_from_slice(sa);
+    c[52..56].copy_from_slice(&ci.to_be_bytes());
+    c[56..60].copy_from_slice(&pos.to_be_bytes());
+    sha256(&[&c, v, &[0u8; 16]])[..16].try_into().unwrap()
+}
+/// v1 WOTS chain start (PRF output) for chain `ci`.
+fn v1_start(sk: &[u8], tail: &[u8], ci: u32) -> [u8; 16] {
+    sha256(&[sk, &tail[..44], &ci.to_be_bytes()])[..16].try_into().unwrap()
+}
+
+/// Round 9 standing gate, v1 side: for each driver entry that touches secrets, the secrets'
+/// patterns (computed first), a cleared dead stack, the call, the scan. Returns (cases,
+/// bitmask of cases with residue). Case bits: 0 key loop, 1 sign-shape keys (Rust PRF +
+/// v1 chain asm), 2 FORS subtree, 3 grind with rand, 4 grind without, 5 prf_chain16,
+/// 6 chain16.
+fn residue_suite() -> (u32, u32) {
+    let mut mask = 0u32;
+    let mut sk = [0u8; 32];
+    for i in 0..32 { sk[i] = (i as u8).wrapping_mul(151) ^ 0x6D; }
+    let mut tail = [0u8; 48];
+    for i in 0..48 { tail[i] = (i as u8).wrapping_mul(17) ^ 0x2B; }
+    let mut sa = [0u8; 64];
+    sa[..16].copy_from_slice(&[0x3C; 16]);
+    for i in 0..12 { sa[32 + i] = 0x40 + i as u8; }
+    let mut o = [0u8; 688];
+    // SAFETY (all calls): valid buffers of the documented sizes.
+    unsafe {
+        // 0: keygen-shape key loop, 7 steps: sk_seed, all 43 chain starts, the intermediate
+        //    values of chains 0..8 (the end values are the public outputs).
+        res_reset();
+        res_add(&sk);
+        for ci in 0..43u32 {
+            let mut v = v1_start(&sk, &tail, ci);
+            res_add(&v);
+            if ci < 8 {
+                for pos in 0..6 {
+                    v = v1_step(&sa, ci, pos, &v);
+                    res_add(&v);
+                }
+            }
         }
+        res_clear();
+        pqsigner_wots_chains16(sk.as_ptr(), tail.as_ptr(), sa.as_ptr(), core::ptr::null(), core::ptr::null(), 7, 43, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 0; }
+        // 1: sign shape (order + digits): starts and every value below each chain's digit.
+        let order: [u8; 43] = core::array::from_fn(|i| ((i * 17) % 43) as u8);
+        let digits: [u8; 43] = core::array::from_fn(|i| ((i * 5 + 3) % 8) as u8);
+        res_reset();
+        res_add(&sk);
+        for ci in 0..43u32 {
+            let mut v = v1_start(&sk, &tail, ci);
+            for pos in 0..u32::from(digits[ci as usize]) {
+                res_add(&v);
+                v = v1_step(&sa, ci, pos, &v);
+            }
+        }
+        res_clear();
+        pqsigner_wots_chains16(sk.as_ptr(), tail.as_ptr(), sa.as_ptr(), order.as_ptr(), digits.as_ptr(), 0, 43, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 1; }
+        // 2: FORS subtree: sk_seed and the 16 leaf secrets.
+        let ftail = [0x55u8; 16];
+        let j0 = 16 * 9u32;
+        res_reset();
+        res_add(&sk);
+        for j in j0..j0 + 16 {
+            res_add(&sha256(&[&sk, &ftail[..12], &j.to_be_bytes()])[..16]);
+        }
+        res_clear();
+        pqsigner_fors_subtree16(sk.as_ptr(), ftail.as_ptr(), sa.as_ptr(), sa.as_ptr(), j0, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 2; }
+        // 3, 4: grind with and without rand: sk_seed and rand.
+        let rand = [0x9Au8; 16];
+        let rand: [u8; 16] = core::array::from_fn(|i| rand[i] ^ (i as u8).wrapping_mul(37));
+        let msg = [0x21u8; 32];
+        let mut seed = [0u8; 32];
+        seed[..16].copy_from_slice(&[0x13; 16]);
+        let mut root = [0u8; 32];
+        root[..16].copy_from_slice(&[0x31; 16]);
+        for (bit, rp) in [(3u32, rand.as_ptr()), (4, core::ptr::null())] {
+            res_reset();
+            res_add(&sk);
+            if !rp.is_null() { res_add(&rand); }
+            res_clear();
+            let mut r = [0u8; 16];
+            let mut d = [0u8; 32];
+            let _ = pqsigner_v1_grind_r(sk.as_ptr(), rp, msg.as_ptr(), seed.as_ptr(), root.as_ptr(), 100_000, r.as_mut_ptr(), d.as_mut_ptr());
+            if res_found() { mask |= 1 << bit; }
+        }
+        // 5: prf_chain16 (round 7 v1 chain asm behind a Rust PRF), 6 steps: the start and
+        //    the intermediate values.
+        res_reset();
+        res_add(&sk);
+        let mut v = v1_start(&sk, &tail, 0);
+        res_add(&v);
+        let mut sa0 = sa;
+        sa0[52..56].copy_from_slice(&0u32.to_be_bytes());
+        for pos in 0..5 {
+            v = v1_step(&sa0, 0, pos, &v);
+            res_add(&v);
+        }
+        let mut t0 = tail;
+        t0[44..48].copy_from_slice(&0u32.to_be_bytes());
+        res_clear();
+        pqsigner_wots_prf_chain16(sk.as_ptr(), t0.as_ptr(), sa0.as_ptr(), 6, o.as_mut_ptr());
+        if res_found() { mask |= 1 << 5; }
+        // 6: chain16 from a secret start value: the start and the intermediates.
+        let mut b = [0u8; 96];
+        b[..64].copy_from_slice(&sa0);
+        let start = v1_start(&sk, &tail, 5);
+        b[64..80].copy_from_slice(&start);
+        res_reset();
+        let mut v = start;
+        res_add(&v);
+        for pos in 0..5 {
+            v = v1_step(&sa0, 0, pos, &v);
+            res_add(&v);
+        }
+        res_clear();
+        pqsigner_sha256_chain16(b.as_mut_ptr(), 0, 6);
+        if res_found() { mask |= 1 << 6; }
     }
-    false
+    (7, mask)
 }
 
 /// About 1 in 64, and only when the unread head d[0..12] is zero (as the driver passes it).
@@ -206,7 +317,6 @@ fn search_check() -> (u32, u32) {
 
 fn grind_check() -> (u32, u32, u32, u32) {
     let (mut checks, mut fails, mut cy, mut nn) = (0u32, 0u32, 0u32, 0u32);
-    let mut residue = 0u32;
     for case in 0..4u32 {
         let mut skb = [0u8; 33];
         let mut rb = [0u8; 17];
@@ -250,16 +360,6 @@ fn grind_check() -> (u32, u32, u32, u32) {
         }
         let mut ro = [0u8; 17];
         let mut dout = [0u8; 33];
-        // Clear the dead stack first, so the scan below sees only the grind call's residue.
-        {
-            let sp: usize;
-            // SAFETY: reads sp only.
-            unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
-            for a in (sp - 2048)..(sp - 64) {
-                // SAFETY: secure SRAM below the live stack, below this frame's own use (64-byte margin).
-                unsafe { core::ptr::write_volatile(a as *mut u8, 0) };
-            }
-        }
         let t = cyc();
         // SAFETY: valid buffers at odd addresses.
         let n = unsafe {
@@ -270,27 +370,8 @@ fn grind_check() -> (u32, u32, u32, u32) {
         nn += n + 1;
         checks += 1;
         if n != wn || ro[1..17] != wr || dout[1..33] != wd { fails += 1; }
-        // Residue: any 4-byte window of rand or sk_seed in the dead stack below sp (the
-        // callee's frame) after the call counts as a failure (one per call at most).
-        let sp: usize;
-        // SAFETY: reads sp only.
-        unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
-        let (mut lr_, mut ls_) = (false, false);
-        for a in (sp - 2048)..(sp - 4) {
-            // SAFETY: secure SRAM below the live stack (bench stack, no interrupts).
-            let w: [u8; 4] = unsafe { core::array::from_fn(|i| core::ptr::read_volatile((a + i) as *const u8)) };
-            for k in 0..13 {
-                if with_rand && w == rb[1 + k..5 + k] { lr_ = true; }
-            }
-            for k in 0..29 {
-                if w == skb[1 + k..5 + k] { ls_ = true; }
-            }
-        }
-        if lr_ { residue |= 1 << case; }
-        if ls_ { residue |= 1 << (4 + case); }
-        if lr_ || ls_ { fails += 1; }
     }
-    (checks, fails, cy, (nn & 0xFF_FFFF) | (residue & 0xFF) << 24)
+    (checks, fails, cy, nn)
 }
 
 #[cfg(feature = "win")]
@@ -440,13 +521,10 @@ pub extern "C" fn c10_bench_main() {
         rec(cyc().wrapping_sub(t), 500);
         rec(gcy, gn);
         let mut ob = [0x44u8; 160];
-        // [20,21] oneshot 160 B (h_msg shape), 2,000 calls.
-        let t = cyc();
-        for i in 0..2000u32 {
-            ob[70] = i as u8;
-            pqsigner_sha256_oneshot(ob.as_ptr(), 160, d.as_mut_ptr());
-        }
-        rec(cyc().wrapping_sub(t), 2000);
+        // [20,21] round 9 residue suite: (cases, bitmask of cases with residue).
+        let (rc, rm) = residue_suite();
+        rec(rc, rm);
+        let _ = &mut ob;
         // [22,23] node16, 5,000 calls; [24,25] fors_leaf16, 5,000 calls.
         let t = cyc();
         for _ in 0..5000 {
@@ -474,22 +552,8 @@ pub extern "C" fn c10_bench_main() {
             for i in 0..12 { sab[33 + i] = i as u8 + steps as u8; }
             sab[33 + 20..33 + 24].copy_from_slice(&[0, 0, 1, 2]);
             let mut ob = [0u8; 16 * 43 + 1];
-            // The first four chain starts (WOTS secrets), computed before the call so the scan
-            // right after it sees only the call's residue.
-            let mut starts = [0u8; 64];
-            for i in 0..4u32 {
-                use sha2::{Digest, Sha256};
-                let mut h = Sha256::new();
-                h.update(&skb[1..33]);
-                h.update(&tb[1..45]);
-                h.update(i.to_be_bytes());
-                starts[16 * i as usize..16 * i as usize + 16].copy_from_slice(&h.finalize()[..16]);
-            }
-            dead_clear();
             pqsigner_wots_chains16(skb.as_ptr().add(1), tb.as_ptr().add(1), sab.as_ptr().add(1), core::ptr::null(), core::ptr::null(), steps, 43, ob.as_mut_ptr().add(1));
-            let key_res = dead_has(&skb[1..33]) || dead_has(&starts[..16]) || dead_has(&starts[16..32]) || dead_has(&starts[32..48]) || dead_has(&starts[48..]);
             let mut ok = true;
-            let prf_res = false;
             for i in 0..43u32 {
                 use sha2::{Digest, Sha256};
                 let mut h = Sha256::new();
@@ -515,7 +579,6 @@ pub extern "C" fn c10_bench_main() {
             }
             nk += 1;
             if !ok { bad += 1; }
-            if key_res || prf_res { bad += 0x100; }
         }
         // Aliased case (out == sk_seed, n = 2, steps 1): the Rust loop's order (chain 0's output
         // overwrites sk_seed[0..16] before chain 1's PRF) must hold.
@@ -566,9 +629,7 @@ pub extern "C" fn c10_bench_main() {
             for i in 0..56 { nab[1 + i] = (i as u8).wrapping_mul(19) ^ 0x2D; }
             let j0 = 16 * (case * 37 + 3);
             let mut ob = [0u8; 17];
-            dead_clear();
             pqsigner_fors_subtree16(skb.as_ptr().add(1), tb.as_ptr().add(1), lab.as_ptr().add(1), nab.as_ptr().add(1), j0, ob.as_mut_ptr().add(1));
-            if dead_has(&skb[1..33]) { bad += 0x100; }
             let mut st = [[0u8; 16]; 5];
             let mut hs = [0u32; 5];
             let mut sp = 0usize;
