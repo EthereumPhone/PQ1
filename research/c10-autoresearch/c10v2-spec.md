@@ -55,7 +55,13 @@ SHA-256 block (≤ 55 bytes).
 
 A7 is a 56-bit unsigned integer, serialized big-endian as 7 bytes. Every field
 has a fixed position whatever the type, and unused fields are zero.
-Constructors reject any field value that does not fit its width.
+Constructors reject any field value that does not fit its width: `a7()` in
+the Python reference and `v2hash::pack` in Rust, the latter with `assert!` in
+every build since the 0.3 review (it was `debug_assert!`, and `ha = 2048`
+encoded as `cp = 1, ha = 0`). The Yul verifier builds no field from a caller
+value; each is a masked digest slice or a loop counter. The driver patches
+`cp`/`ha` into a DIN word only from bounded loop indices, and
+`pqsigner_v2_fors_subtree16` checks its own bounds.
 
 | bits | field | width | range used by C10 |
 |---|---|---|---|
@@ -76,7 +82,7 @@ Constructors reject any field value that does not fit its width.
 - Bytes 5..6 are `cp << 12 | ha << 1`.
 
 So `cp` is the top nibble of byte 5, and a chain step adds a constant to one
-DIN word. Both reviewers checked every width against the code, including
+DIN word. Both 0.1 reviewers checked every width against the code, including
 hostile signatures: the verifier derives every field from masked digest bits or
 bounded loops. The WOTS `count` is a separate `uint32` and never enters A7.
 
@@ -172,6 +178,21 @@ the same function in both versions. Every changed primitive therefore has
 inputs disjoint from every v1 primitive. That matters because the KDF tags are
 not changing (§5).
 
+**The key-derivation inputs are not separated by length** (Fable, 0.3 review).
+`domain/src/lib.rs` hashes `"pk_seed" ‖ master[..32]` and
+`"sk_seed" ‖ master[..32]`, 39 bytes each: the length of v2's F and both PRFs,
+where v1 had no 39-byte primitive. For a v2 input to equal one of them, its
+first 7 bytes would have to spell the ASCII tag. Those bytes are `S` (F) or
+`sk_seed` (the PRFs), both SHA-256 outputs, and the remaining 32 bytes would
+have to equal the secret `master`. So that separation rests on a fixed 7-byte
+prefix against hash outputs, plus secret keying. The slot KDF inputs (48, 50,
+56, 84, 93 bytes) share no length with v2.
+
+**H_MSG with R last** makes its first block, `S ‖ root ‖ M`, independent of R.
+H_MSG therefore relies on plain collision resistance in `M` rather than on
+randomized hashing. `M` is already an unrandomized SHA-256 digest of the signed
+object, so this adds no assumption.
+
 **What this argument is not:**
 
 - It is an injectivity statement plus the ROM/QROM treatment of the simple
@@ -196,6 +217,11 @@ the v1 fused head (−27.9%); keygen 25.0 M against 36.8 M (−32%); verify abou
 106 k against 183 k (−42%). Estimated cached sign (2 passes + verify): 0.99 s
 against 1.38 s. Forge verify gas: 163,186 against 180,812 (−9.7%).
 
+**With the FORS-subtree driver entry and the 0.3 review fixes (2026-11-13,
+same method; signer-only, the format is unchanged):** mean single-pass sign
+75.94 M (−31.0% against v1), keygen 25.27 M (−31.4%), verify 121 k (−34%).
+Estimated cached sign: 0.95 s against 1.38 s.
+
 **Measured earlier (2026-11-12):** on the generic oneshot path, about 250 cycles
 of per-call overhead swamp the block saving. That is −5.7% on keygen, so the
 gain exists only on the fused driver entries.
@@ -219,7 +245,16 @@ The rest of the verifier's cost (calldata, mstore packing, loops) needs forge.
 - **Firmware signing stays v1 (default assumption).** The FSBL, fwsign and
   fw-manifest verify C10 v1, and flashed FSBLs are the trust root.
   `sphincs-c10` carries both versions.
-- **KDF tags unchanged.** §3 shows the inputs are disjoint across versions.
+- **KDF tags unchanged.** §3 gives the separation argument; for the 39-byte
+  `pk_seed`/`sk_seed` derivations it is the tag prefix, not the length.
+- **The FORS_LAST fix (type 9) is v2-only.** Firmware signing stays v1, so the
+  tweak reuse of #1158 remains in the FSBL/fwsign trust-root path until v1
+  itself is changed.
+- **Cost outside the signer and verifier:** the formal-verification stack is
+  pinned to v1 preimages. Adopting v2 voids, and requires redoing, the
+  Yul-to-spec transcription check (`check_c10_transcription.py`), the Lean hash
+  and interpreter model of the verifier, the Aeneas extraction of the v2 hash
+  paths, and the codehash and initCode pins.
 
 ## 6. Signer-only freedom (not part of the verifier contract)
 
@@ -261,16 +296,42 @@ review against the FORS+C argument and is not adopted here.
 7. **Measurement:** kit v2 cached sign on the fused entries against the v1
    fused head; forge gas for v1 against v2.
 
-**Gate status at 0.3 (2026-11-13).**
+**Gate status at 0.3 (2026-11-13), after the 0.3 reviews (Astra, Fable: both
+"adopt with changes", no format-level break found).**
 
-- **Met:** 1 (Python self-test); 2 (6 KATs, Rust = Python byte for byte); 3 in
-  Python, Rust and Solidity, each near-miss mutation-controlled (deleting the
-  WOTS sum check accepts exactly the two WOTS near-misses, deleting the FORS+C
-  check accepts exactly the FORS one); 4 partly (KATs, bit flips, +C set,
-  cross-version); 6 for v1 golden and KATs (suite 82/0, kit v1 golden);
-  7 (figures in §4).
+- **Met:**
+  - 1: Python self-test.
+  - 2: 6 KATs, Rust = Python byte for byte. This covers the generic `v2` path
+    with `opt_rand = None`. The measured configuration (`v2-fused`,
+    `opt_rand = Some`) is gated by `host_v2f` (fused routing on a plain-sha2
+    mirror) and by the kit golden.
+  - 3: in Python, Rust and Solidity, with committed mutation controls
+    (`nearmiss_controls.sh`). Deleting the WOTS sum check accepts exactly the
+    two WOTS near-misses; deleting the FORS+C check accepts exactly the FORS one.
+  - 4, partly: KATs, bit flips, the +C set and cross-version rejection. Fable
+    independently emulated the Yul `mstore` sequence on all 9 vectors, and Astra
+    modelled the packed stores on 2,000 cases. Neither model is a committed test.
+  - 5: `bench_v2drv` on the kit (`experiment_drv.sh`). It runs every fused v2
+    entry (chain, PRF+chain, node, FORS leaf, FORS subtree at every height 0..11,
+    count search) against software SHA-256: 1,878 checks, 0 failures. A v1
+    digest (oneshot or streamed, any length 0..200, so NBLW = 0) runs between
+    every v2 call: 835, all correct. Search boundaries are covered: n = 0, a hit
+    on the first try, a hit on the last of six, exhaustion, and a start next to
+    `u32::MAX` (count's top byte). Controls:
+    - an out-of-range subtree call halts through the fault hook;
+    - a corrupted `ha` patch plus a corrupted digit sum fail exactly the subtree
+      and search groups (55 failures), and nothing else.
+  - 6: v1 golden and KATs (suite 82/0, kit v1 golden).
+  - 7: see §4 and the ledger.
 - **Kit golden for v2:** `golden-v2.bin` (0.3) equals Python, `host_v2` and
   `host_v2f`, and the kit's fused v2 build reproduces it byte for byte.
-- **Not met:** the per-primitive preimage checks in gate 4; gate 5 as stated
-  (per-entry differential and the NBLW interleaving test; the kit golden
-  exercises the entries only end to end); FSBL image identity in gate 6.
+- **The grind's accept decision** is the driver's SWAR sum (exact on the kit,
+  gate 5). Since the review, Rust re-checks it with master's `wots::digit_sum`
+  before using the count, and stops the sign on a disagreement.
+- **Not met:**
+  - the per-primitive Yul preimage checks in gate 4;
+  - FSBL image identity in gate 6. Must be closed before any shared
+    `hw/src/hash.rs` change lands.
+- **Inherited from v1, not fixed here:** the Rust verifier turns a WOTS
+  digit-sum mismatch into a zero node instead of rejecting (#1159). It diverges
+  from Yul only on constructed keys.

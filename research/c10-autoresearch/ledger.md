@@ -356,3 +356,54 @@ Measurement feature `v2-lowdigits` (`sphincs-c10` and `pqsigner-hw`): v2 with v1
 | **v2 draft 0.3 head** | **79.35 M (−27.9%)** | **24.97 M (−32%)** | **105.6 k (−42%)** | **158.8 M (0.993 s)** |
 
 **Gas at 0.3:** 163,186 against v1's 180,812 (−9.7%). The 0.2 figure, 164,218, used different vectors and digit shifts.
+
+### Round 5: FORS-subtree fusion, gate 5 and the 0.3 reviews (2026-11-13)
+
+**FORS-subtree entry** (`pqsigner_v2_fors_subtree16`, signer-only, output-identical):
+- It returns the root of the aligned FORS subtree of height `h` (0..11) at leaf `j0`, by an in-driver stack treehash.
+- `auth[h]` of leaf `L` is exactly the subtree of height `h` at `((L >> h) ^ 1) << h`. So `sign_fors_tree` is 11 driver calls and the last-slot tree is one (`h = 11`). The auth logic stays in Rust (`v2hash::fors_auth_fused` / `fors_root_fused`), with 13 fewer digests per tree than treehash plus rebuild.
+- `v2_ha` patches `ha` into A7's second DIN word: `(x & 0x7F) << 17 | (x >> 7) << 8`.
+
+**Evidence:**
+- `host_v2f` reproduces the 0.3 golden with a recursive mirror that builds A7 as an integer, independent of the word patch. Control: corrupting the height-7 node index breaks it.
+- Kit golden reproduced.
+- 16-message mean: **saves 3.544–3.566 M on every message** (constant, as FORS work is), with keygen and verify unchanged. Mean sign 79.35 → 75.79 M (−4.5%).
+- About half the ~9 M estimate. The profile shows the entry is now engine- and bus-bound: about 45% of its samples are in the DCIS poll and most of the rest stall on DIN stores (about 150 cycles/digest against about 110 for a bare chain step).
+
+**Gate 5** (`bench_v2drv`, `experiment_drv.sh`):
+- Every fused v2 entry against software SHA-256 on the kit, with a v1 digest (NBLW = 0, oneshot or streamed, length 0..200) between every v2 call.
+- 1,878 checks, 0 failures; 835 v1 probes, all correct.
+- Covered: subtree at every height 0..11 at the first, last and a random position; search with n = 0, first-try hit, last-of-six hit, exhaustion, and a start at `u32::MAX − 16`.
+- Controls: the `guard` build halts through the fault hook on a misaligned `j0`. A corrupted `v2_ha` plus a corrupted SWAR fail exactly the subtree (26) and search (29) groups, and nothing else.
+
+**Reviews of 0.3 (covering 0.2):** both "adopt with changes"; no format-level break, no field alias, no store-order bug.
+- **Astra** (GPT-6, `codex exec`): the first run was cut off by OpenAI's content filter before its final answer; resumed with neutral wording.
+  - Its checks: the low-bit SWAR exact on 100,258 digests; a Yul packed-store model matches the spec on 2,000 cases.
+  - Findings:
+    1. Release Rust `pack` only `debug_assert!`ed ranges (`ha = 2048` encodes as `cp = 1`). Fixed: `assert!`.
+    2. The Rust verifier turns a WOTS digit-sum mismatch into a zero node and keeps climbing; Yul and Python reject. Inherited from v1, it diverges on constructed keys only. Filed for master as **#1159**.
+  - Most important gate: 5, now met.
+- **Fable 5.2:** emulated the Yul `mstore` sequence on all 9 vectors (each near-miss stops at its intended check).
+  - The fused grind accepted on the driver SWAR alone. Fixed: Rust re-checks with master's `wots::digit_sum` and stops the sign on a disagreement.
+  - Spec overclaims, fixed in the spec:
+    - the 39-byte `"pk_seed"`/`"sk_seed" ‖ master` KDF inputs share v2's F/PRF length, so the separation there is the tag prefix;
+    - FORS_LAST is v2-only (#1158 stays in the v1 firmware-signing path);
+    - the FV stack pinned to v1 is a cost of adopting v2.
+  - Near-miss controls are now committed as `nearmiss_controls.sh` (same results as the manual run).
+
+**Head after the fixes** (16-message mean; kit golden-v2 reproduced; v1 kit evaluator 233,078,514; option bytes re-read, identical to the baseline):
+
+| configuration | mean sign | keygen | verify | est. cached |
+|---|---:|---:|---:|---:|
+| v1 fused head | 110.10 M | 36.81 M | 182.6 k | 1.377 s |
+| v2 0.3 | 79.35 M | 24.97 M | 105.6 k | 0.993 s |
+| v2 0.3 + FORS subtree | 75.79 M | 25.00 M | 105.6 k | 0.948 s |
+| **v2 0.3 + FORS subtree + review fixes** | **75.94 M (−31.0%)** | **25.27 M (−31.4%)** | **121.4 k (−34%)** | **0.950 s** |
+
+The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in verify, which runs `pack` per hash on the generic path. Kept: correctness over 0.2% of sign.
+
+**Left:**
+- The last FORS tree, about 0.9 M/pass; a spec §6 decision, see #1158.
+- Per-key WOTS chains: `prf_chain16` is 65% of samples and engine-bound, so ≤ about 2%.
+- The search collect reads 8 HR words where 5 suffice: about 0.5 M.
+- Loop micro-tuning in the subtree entry: about 1 M.

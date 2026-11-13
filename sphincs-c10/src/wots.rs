@@ -119,6 +119,10 @@ pub(crate) fn find_count(
             let mut d = [0u8; 32];
             let c = crate::v2hash::search_fused(seed, msg_hash, layer, tree, kp, count, n, &mut d);
             if c < count + n {
+                // The driver accepted on its own SWAR sum; the decision rests on
+                // this crate's `digit_sum` (master's, unchanged) again: a wrong
+                // SWAR or a faulted compare stops the sign here (Fable 0.3 review).
+                assert!(digit_sum(&d) == TARGET_SUM, "v2 grind: driver digit sum disagrees");
                 return (c, d, extract_digits(&d));
             }
             count += n;
