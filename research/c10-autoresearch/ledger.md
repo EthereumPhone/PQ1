@@ -434,3 +434,23 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 - **Saving:** 23.8 M on every message (constant: the top-layer build).
 - **Projection check:** the round-4 projection was 0.68 s; m0 alone reads 0.60 s because its grinds are lucky.
 - **Still track B:** the FI trade (the top auth path is not double-computed per sign) and the keygen-confirm design need the owner's decision on #1148.
+
+### H2: per-key WOTS entry (`pqsigner_v2_wots_chains16`), keep (output-identical)
+
+- **The entry:** one driver call computes a key's 43 chains (PRF, then `steps` steps each) straight into the T_43 preimage buffer (`v2hash::wots_pk_fused`, routed from `wots::keygen_pk` under `v2-fused`). `ci` is patched into A7's second DIN word as `ci << 2`.
+- **Not used for:** signing chains, which keep the F-16 shuffle, or the cache's rotated confirm build, which stays a different computation on purpose.
+- **Evidence:**
+  - host golden-v2, plain and `topcache`; the mirror builds `ci` into A7 as an integer;
+  - kit golden reproduced;
+  - gate 5 extended with a `wots_chains16` group (40 whole keys, `steps` 7 or random 0..15): 1,969 checks, 0 failures, 876 v1 probes.
+- **Note on digest counts:** the plain host count 486,372 → 486,216 per pass comes from the earlier FORS-subtree commit (12 auth trees × 13 digests), not from this change.
+
+| 16-message mean | before | after | per message |
+|---|---:|---:|---:|
+| v2, sign | 75.94 M | **71.29 M (−6.1%)** | −4.62..−4.65 M |
+| v2, keygen | 25.27 M | 22.66 M (−10%) | |
+| v2 + top cache, sign | 52.10 M | **49.39 M (−5.2%)** | −2.68..−2.72 M |
+| est. cached sign | 0.950 / 0.652 s | **0.892 / 0.618 s** | |
+
+- **Size of the win:** about 3× the round-5 estimate (≈ −1.5 M). The per-chain Rust path (`set_chain_index` on a 32-byte ADRS, `a7_of` parsing it back, two `pack`s with release asserts, the call) cost about 100 cycles per chain, × 44 k chains per pass.
+- **Against v1's fused head:** −35.2% (plain), −55.1% (with the cache).

@@ -5,8 +5,8 @@
 // §1; byte layouts, §2), not from v2hash.rs or the driver.
 //
 // Result window (32 words at 0x3000_0100): 0 magic 'DRV2', 1 stage (100 = done),
-// 2 checks run, 3 checks failed, 4..11 failures per group, 12 first failing
-// group, 13 its case index.
+// 2 checks run, 3 checks failed, 4..12 failures per group, 13 first failing
+// group, 14 its case index, 15 v1 probes.
 #![no_std]
 use sha2::{Digest, Sha256};
 
@@ -23,6 +23,7 @@ extern "C" {
     fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *const u8, a0: u32, a1: u32, out: *mut u8);
     fn pqsigner_v2_fors_leaf16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, out: *mut u8);
+    fn pqsigner_v2_wots_chains16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8);
     fn pqsigner_v2_fors_subtree16(sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8);
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
 }
@@ -69,15 +70,15 @@ impl Rng {
 struct Tally {
     run: u32,
     fail: u32,
-    per: [u32; 8],
+    per: [u32; 9],
 }
 impl Tally {
     fn check(&mut self, group: usize, case: u32, ok: bool) {
         self.run += 1;
         if !ok {
             if self.fail == 0 {
-                out(12, group as u32);
-                out(13, case);
+                out(13, group as u32);
+                out(14, case);
             }
             self.fail += 1;
             self.per[group] += 1;
@@ -177,7 +178,7 @@ pub extern "C" fn c10_bench_main() {
     unsafe { pqsigner_hw::hash::init_clock() };
     out(1, 1);
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
-    let mut t = Tally { run: 0, fail: 0, per: [0; 8] };
+    let mut t = Tally { run: 0, fail: 0, per: [0; 9] };
     let mut probe = 0u32;
     macro_rules! between {
         () => {{
@@ -338,12 +339,37 @@ pub extern "C" fn c10_bench_main() {
     }
     between!();
 
+    // 7. wots_chains16: a whole key's 43 chains (PRF then `steps` steps each).
+    out(1, 8);
+    for c in 0..40u32 {
+        let (mut sk, mut s) = ([0u8; 32], [0u8; 16]);
+        rng.fill(&mut sk);
+        rng.fill(&mut s);
+        let (layer, tree, kp) = (u64::from(rng.below(2)), u64::from(rng.below(1 << 18)), u64::from(rng.below(512)));
+        let steps = if c % 2 == 0 { 7 } else { rng.below(16) };
+        let mut got = [0u8; 688];
+        let ((p0, p1), (a0, a1)) = (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)));
+        between!();
+        // SAFETY: 32 and 16 readable, 688 writable; steps <= 15.
+        unsafe { pqsigner_v2_wots_chains16(sk.as_ptr(), p0, p1, s.as_ptr(), a0, a1, steps, got.as_mut_ptr()) };
+        let mut ok = true;
+        for ci in 0..43u64 {
+            let mut v = prf(&sk, a7(5, layer, tree, kp, ci, 0, 0));
+            for p in 0..u64::from(steps) {
+                v = f(&s, &v, a7(0, layer, tree, kp, ci, p, 0));
+            }
+            ok &= got[16 * ci as usize..16 * ci as usize + 16] == v;
+        }
+        t.check(8, c, ok);
+    }
+    between!();
+
     out(2, t.run);
     out(3, t.fail);
     for (i, x) in t.per.iter().enumerate() {
         out(4 + i, *x);
     }
-    out(14, probe);
+    out(15, probe);
     out(1, 100);
 
     #[cfg(feature = "guard")]

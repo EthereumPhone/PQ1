@@ -2059,6 +2059,41 @@ pub unsafe extern "C" fn pqsigner_v2_prf_chain16(
     unsafe { v2_store4(out, v) };
 }
 
+/// A whole WOTS key's chains in one call: for chain `ci` in `0..43`, the secret
+/// `sk_seed ‖ A7_prf(ci)`, then `steps` chain steps from position 0, written to
+/// `out + 16 ci`. `p0`/`p1` and `a0`/`low24` are the WOTS_PRF and WOTS_HASH A7
+/// words of the key pair with `ci = cp = 0`; `ci` sits at A7 bits 23..18, i.e.
+/// bits 2..7 of the second DIN word.
+///
+/// # Safety
+/// `sk_seed` 32 and `seed` 16 readable bytes, `out` 688 writable; `steps <= 15`;
+/// no other stream in flight.
+#[cfg(feature = "v2")]
+#[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_wots_chains16(
+    sk_seed: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, low24: u32, steps: u32, out: *mut u8,
+) {
+    if steps > 15 {
+        hash_engine_fault();
+    }
+    // SAFETY: caller contract.
+    let s = unsafe { v2_load4(seed) };
+    let mut ci = 0u32;
+    while ci < 43 {
+        let c = ci << 2;
+        v2_begin();
+        // SAFETY: caller contract.
+        unsafe { feed_words(sk_seed, 8) };
+        write_word(p0);
+        write_word(p1 | c);
+        let v = v2_end16();
+        let v = v2_chain_core(s, v, a0, low24 | c, 0, steps);
+        // SAFETY: `out + 16 ci`, ci < 43, inside the caller's 688 bytes.
+        unsafe { v2_store4(out.add(16 * ci as usize), v) };
+        ci += 1;
+    }
+}
+
 /// H: `S ‖ L ‖ R ‖ A7`, 55 bytes.
 ///
 /// # Safety

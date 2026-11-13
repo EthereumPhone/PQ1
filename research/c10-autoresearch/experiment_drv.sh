@@ -12,10 +12,10 @@ L = open(sys.argv[1]).read().splitlines()
 w = next(([int(x, 16) for x in l.split()[1:]] for l in L if l.startswith('RESULT_WORDS 0x')), None)
 if not w: print(json.dumps({'ok': False, 'why': 'no result words'})); sys.exit(1)
 o = w[64:96]
-r = dict(status=hex(w[0]), magic=hex(o[0]), stage=o[1], checks=o[2], failed=o[3], per_group=o[4:12],
-         first_fail=(o[12], o[13]) if o[3] else None, v1_probes=o[14])
-groups = ['v1-oneshot', 'chain16', 'prf_chain16', 'node16', 'fors_leaf16', 'fors_subtree16', 'search43_target', 'v1-stream']
-r['per_group'] = dict(zip(groups, o[4:12]))
+r = dict(status=hex(w[0]), magic=hex(o[0]), stage=o[1], checks=o[2], failed=o[3], per_group=o[4:13],
+         first_fail=(o[13], o[14]) if o[3] else None, v1_probes=o[15])
+groups = ['v1-oneshot', 'chain16', 'prf_chain16', 'node16', 'fors_leaf16', 'fors_subtree16', 'search43_target', 'v1-stream', 'wots_chains16']
+r['per_group'] = dict(zip(groups, o[4:13]))
 if sys.argv[2] == 'guard':
     r['ok'] = w[0] == 0x484100F0 and o[1] == 200 and o[3] == 0
 else:

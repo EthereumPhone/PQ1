@@ -367,6 +367,30 @@ pub unsafe extern "C" fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32
     unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out, 16) };
 }
 #[no_mangle]
+pub unsafe extern "C" fn pqsigner_v2_wots_chains16(sk: *const u8, p0: u32, p1: u32, seed: *const u8, a0: u32, a1: u32, steps: u32, out: *mut u8) {
+    // ci enters as an integer (A7 bits 23..18), not through the driver's word patch.
+    for ci in 0..43u32 {
+        let mut b = [0u8; 39];
+        b[..32].copy_from_slice(&unsafe { rd::<32>(sk) });
+        b[32..].copy_from_slice(&a7_ci(p0, p1, ci));
+        let x: [u8; 16] = sw(&b)[..16].try_into().unwrap();
+        let ab = a7_ci(a0, a1, ci);
+        let (c0, c1) = (u32::from_le_bytes([ab[0], ab[1], ab[2], ab[3]]), u32::from_le_bytes([ab[4], ab[5], ab[6], 0]));
+        let mut v = v2_chain(&unsafe { rd::<16>(seed) }, x, c0, c1, 0, steps);
+        let call = CHAINS_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if call == FAULT_AT.load(std::sync::atomic::Ordering::Relaxed) {
+            v[0] ^= 1;
+        }
+        unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out.add(16 * ci as usize), 16) };
+    }
+}
+fn a7_ci(a0: u32, a1: u32, ci: u32) -> [u8; 7] {
+    let v = a7b(a0, a1).iter().fold(0u64, |v, &x| v << 8 | u64::from(x));
+    assert_eq!(v >> 18 & 0x3F, 0, "base A7 must have ci = 0");
+    let o = (v | u64::from(ci) << 18).to_be_bytes();
+    o[1..8].try_into().unwrap()
+}
+#[no_mangle]
 pub unsafe extern "C" fn pqsigner_v2_node16(seed: *const u8, l: *const u8, r: *const u8, a0: u32, a1: u32, out: *mut u8) {
     let mut b = [0u8; 55];
     b[..16].copy_from_slice(&unsafe { rd::<16>(seed) });

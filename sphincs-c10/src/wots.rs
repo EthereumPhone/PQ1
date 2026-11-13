@@ -170,6 +170,9 @@ pub fn keygen_pk(
     tree: u64,
     kp: u32,
 ) -> [u8; N] {
+    #[cfg(feature = "v2-fused")]
+    return crate::v2hash::wots_pk_fused(seed, sk_seed, layer, tree, kp);
+    #[allow(unreachable_code)]
     let base_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
     let mut pk_elements = [[0u8; N]; L];
     #[cfg(feature = "hw-sha256-prfchain")]
