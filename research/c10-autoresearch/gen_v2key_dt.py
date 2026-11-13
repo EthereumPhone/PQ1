@@ -39,17 +39,15 @@ din('r0','r1','r2','r3')
 a('ldrd r0, r1, [sp, #8]')
 din('r0','r1')
 a('mov.w r12, #280', 'str r12, [r4, #-4]', 'b 32f')
-c('==== chain step loop (S in r8..r11, a1 in r5): the v2 chain schedule ====')
+c('==== chain step loop (S in r8..r11, a1 in r5, a0 in r6, the DCAL value in r7) ====')
 a('1:', 'add.w r5, r5, #1048576', 'ldr r12, [sp, #4]', 'cmp r5, r12', 'beq 20f',
   'movs r12, #{spin}', '10:', 'subs r12, r12, #1', 'bne 10b',
   'ldr r12, [r4, #0x18]', 'lsls r12, r12, #30', 'bpl 11f',
   '4:', 'ldm r4, {{r0, r1, r2, r3}}', 'movs r12, #1', 'str r12, [r4, #0x18]',
   '3:', 'ldr r12, [r4, #0x18]', 'tst r12, #10', 'bne 40f',
   '41:', 'str lr, [r4, #-12]')
-din('r8','r9')
-a('ldr r12, [sp]')
-din('r10','r11','r0','r1','r2','r3','r12','r5')
-a('mov.w r12, #280', 'str r12, [r4, #-4]', 'b 1b',
+din('r8','r9','r10','r11','r0','r1','r2','r3','r6','r5')
+a('str r7, [r4, #-4]', 'b 1b',
   '11:', '.rept 7', 'ldr r12, [r4, #0x18]', 'lsls r12, r12, #30', 'bmi 4b', '.endr',
   'mov.w r0, #16777216',
   '12:', 'ldr r12, [r4, #0x18]', 'lsls r12, r12, #30', 'bmi 4b', 'subs r0, r0, #1', 'bne 12b', 'b 99f')
@@ -81,7 +79,8 @@ a('rev r0, r0', 'rev r1, r1', 'rev r2, r2', 'rev r3, r3',
   'ldr r12, [sp, #36]', 'str r0, [r12]', 'str r1, [r12, #4]', 'str r2, [r12, #8]', 'str r3, [r12, #12]',
   'add r12, r12, #16', 'str r12, [sp, #36]', 'movw lr, #0x4', 'movt lr, #0x6')
 c('(the first chain enters here) S back, the chain\'s a1 base, wait for the PRF')
-a('32:', 'add r12, sp, #40', 'ldm r12, {{r8, r9, r10, r11}}', 'ldr r5, [sp, #16]')
+a('32:', 'add r12, sp, #40', 'ldm r12, {{r8, r9, r10, r11}}', 'ldr r5, [sp, #16]',
+  'ldr r6, [sp]', 'mov.w r7, #280')
 ladder(33, 34)
 a('33:', 'b 4b')
 busy_slow(23, 24, 25, 26)
