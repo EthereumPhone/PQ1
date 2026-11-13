@@ -2766,7 +2766,8 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
 /// has bits 132..143 clear (`read_bits_le(D, 132, 11) == 0`: `HR3 & 0x7FF0 == 0`) writes R
 /// to `r_out`, D to `d_out` and is returned; `max` if none. Every digest: idle and no stale
 /// DCIS, STR 0, INIT, the words, NBLW then NBLW | DCAL as the one-shot (DCAL alone for whole
-/// words), DCIS poll with the 10,000,000 guard, SR clear.
+/// words), DCIS poll with the 10,000,000 guard, SR clear. Under `tick-batch` the digests
+/// are reported once, when the grind returns (about 2^11 nonces, ~1 M cycles, on average).
 ///
 /// # Safety
 /// `sk_seed` 32, `rand` 16 (or null), `message`, `seed`, `root` 32 readable bytes; `r_out`
@@ -2774,6 +2775,48 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
 #[cfg(feature = "v1-grindr")]
 #[no_mangle]
 pub unsafe extern "C" fn pqsigner_v1_grind_r(
+    sk_seed: *const u8,
+    rand: *const u8,
+    message: *const u8,
+    seed: *const u8,
+    root: *const u8,
+    max: u32,
+    r_out: *mut u8,
+    d_out: *mut u8,
+) -> u32 {
+    // SAFETY: this function's contract.
+    let found = unsafe { v1_grind_r_inner(sk_seed, rand, message, seed, root, max, r_out, d_out) };
+    // The inner frame held the PRF tail words (rand, message) in compiler-chosen slots beyond
+    // the arrays it wipes (round 8: a dead-stack scan found rand bytes in spill slots). Zero
+    // the dead stack below sp that the inner call used (its frame is under 400 bytes).
+    // SAFETY: writes only the 1,024 bytes directly below sp, which no live object occupies;
+    // asm without `nostack` may use the stack below sp.
+    unsafe {
+        core::arch::asm!(
+            "mov {p}, sp",
+            "sub {p}, {p}, #1024",
+            "movs {z}, #0",
+            "mov.w {c}, #256",
+            "1:",
+            "str {z}, [{p}], #4",
+            "subs {c}, {c}, #1",
+            "bne 1b",
+            p = out(reg) _,
+            z = out(reg) _,
+            c = out(reg) _,
+        );
+    }
+    found
+}
+
+/// `pqsigner_v1_grind_r`'s body, in its own frame so the caller can zero that frame after it.
+///
+/// # Safety
+/// As `pqsigner_v1_grind_r`.
+#[cfg(feature = "v1-grindr")]
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+unsafe fn v1_grind_r_inner(
     sk_seed: *const u8,
     rand: *const u8,
     message: *const u8,
@@ -2796,7 +2839,7 @@ pub unsafe extern "C" fn pqsigner_v1_grind_r(
         core::ptr::copy_nonoverlapping(message, tb.as_mut_ptr().add(off), 32);
     }
     off += 32;
-    let tw: [u32; 22] = core::array::from_fn(|i| u32::from_le_bytes([tb[4 * i], tb[4 * i + 1], tb[4 * i + 2], tb[4 * i + 3]]));
+    let mut tw: [u32; 22] = core::array::from_fn(|i| u32::from_le_bytes([tb[4 * i], tb[4 * i + 1], tb[4 * i + 2], tb[4 * i + 3]]));
     // SAFETY: caller contract (32 readable bytes each; public data).
     let ld8 = |p: *const u8| -> [u32; 8] { core::array::from_fn(|i| unsafe { p.add(4 * i).cast::<u32>().read_unaligned() }) };
     let (sw, rw, mw) = (ld8(seed), ld8(root), ld8(message));
@@ -2815,7 +2858,6 @@ pub unsafe extern "C" fn pqsigner_v1_grind_r(
         // SAFETY: a valid, exclusive reference.
         unsafe { core::ptr::write_volatile(b, 0) };
     }
-    let mut tw = tw;
     for w in tw.iter_mut() {
         // SAFETY: a valid, exclusive reference.
         unsafe { core::ptr::write_volatile(w, 0) };
@@ -2835,7 +2877,7 @@ pub unsafe extern "C" fn pqsigner_v1_grind_r(
     #[cfg(feature = "tick-batch")]
     // SAFETY: the engine is idle; the tick does not hash.
     unsafe {
-        pqsigner_hash_tick_n(found.saturating_add(1).saturating_mul(2));
+        pqsigner_hash_tick_n((if found < max { found + 1 } else { max }).saturating_mul(2));
     }
     found
 }

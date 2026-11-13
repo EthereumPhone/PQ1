@@ -21,7 +21,7 @@ if c != 12 or d != 0: r['ok'] = False
 c, d = q(12); r['search128_prednever_per_try'] = round(c / d, 1)
 c, d = q(14); r['search128_205_per_try'] = round(c / d, 1) if d else None; r['search128_205_tries'] = d
 c, d = q(16); r['th_multi16_43_per_call'] = round(c / d, 1)
-c, d = q(18); r['grind_per_nonce'] = round(c / d, 1) if d else None; r['grind_nonces'] = d
+c, d = q(18); r['grind_residue_mask'] = hex(d >> 24); d &= 0xFFFFFF; r['grind_per_nonce'] = round(c / d, 1) if d else None; r['grind_nonces'] = d
 c, d = q(20); r['oneshot160'] = round(c / d, 1)
 c, d = q(22); r['node16'] = round(c / d, 1)
 c, d = q(24); r['fors_leaf16'] = round(c / d, 1)

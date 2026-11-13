@@ -179,6 +179,7 @@ fn search_check() -> (u32, u32) {
 
 fn grind_check() -> (u32, u32, u32, u32) {
     let (mut checks, mut fails, mut cy, mut nn) = (0u32, 0u32, 0u32, 0u32);
+    let mut residue = 0u32;
     for case in 0..4u32 {
         let mut skb = [0u8; 33];
         let mut rb = [0u8; 17];
@@ -222,6 +223,16 @@ fn grind_check() -> (u32, u32, u32, u32) {
         }
         let mut ro = [0u8; 17];
         let mut dout = [0u8; 33];
+        // Clear the dead stack first, so the scan below sees only the grind call's residue.
+        {
+            let sp: usize;
+            // SAFETY: reads sp only.
+            unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
+            for a in (sp - 2048)..(sp - 64) {
+                // SAFETY: secure SRAM below the live stack, below this frame's own use (64-byte margin).
+                unsafe { core::ptr::write_volatile(a as *mut u8, 0) };
+            }
+        }
         let t = cyc();
         // SAFETY: valid buffers at odd addresses.
         let n = unsafe {
@@ -232,8 +243,27 @@ fn grind_check() -> (u32, u32, u32, u32) {
         nn += n + 1;
         checks += 1;
         if n != wn || ro[1..17] != wr || dout[1..33] != wd { fails += 1; }
+        // Residue: any 4-byte window of rand or sk_seed in the dead stack below sp (the
+        // callee's frame) after the call counts as a failure (one per call at most).
+        let sp: usize;
+        // SAFETY: reads sp only.
+        unsafe { core::arch::asm!("mov {0}, sp", out(reg) sp, options(nomem, nostack, preserves_flags)) };
+        let (mut lr_, mut ls_) = (false, false);
+        for a in (sp - 2048)..(sp - 4) {
+            // SAFETY: secure SRAM below the live stack (bench stack, no interrupts).
+            let w: [u8; 4] = unsafe { core::array::from_fn(|i| core::ptr::read_volatile((a + i) as *const u8)) };
+            for k in 0..13 {
+                if with_rand && w == rb[1 + k..5 + k] { lr_ = true; }
+            }
+            for k in 0..29 {
+                if w == skb[1 + k..5 + k] { ls_ = true; }
+            }
+        }
+        if lr_ { residue |= 1 << case; }
+        if ls_ { residue |= 1 << (4 + case); }
+        if lr_ || ls_ { fails += 1; }
     }
-    (checks, fails, cy, nn)
+    (checks, fails, cy, (nn & 0xFF_FFFF) | (residue & 0xFF) << 24)
 }
 
 #[cfg(feature = "win")]
