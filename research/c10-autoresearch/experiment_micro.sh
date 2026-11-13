@@ -20,7 +20,6 @@ if o[17]:  # round 7 probes
     for n, i in (('din_store', 20), ('sr_load', 22), ('hr_load', 24)):
         a, b = o[i] / 256, o[i + 1] / 256
         r[n + '_per_access'] = round((b - a) / 12, 2); r[n + '_k2'] = round(a, 1)
-    r['dcal_to_dcis'] = o[26] / 1000; r['dcal_to_busy_clear'] = o[27] / 1000
-    r['step_t1_issue'] = o[28] / 1000; r['step_t2_dcis'] = o[29] / 1000; r['step_t3_busyclr'] = o[30] / 1000; r['step_t2_with_gap39'] = o[31] / 1000
+    r['search205_per_try'] = round(o[26] / o[27], 1) if o[27] else None; r['search205_tries'] = o[27]
 print(json.dumps(r))
 PY

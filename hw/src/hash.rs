@@ -2683,6 +2683,264 @@ fn v2_digit_sum(w: &[u32; 5]) -> u32 {
         .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6))
 }
 
+/// `v2-asm-search` (round 7): the count search loop, hand-scheduled. Returns
+/// `(c, flag)`: flag 0 = no hit in `start..end` (`c = end`); 1 = try `c` hit and
+/// try `c + 1` is in flight; 2 = try `c` hit, nothing in flight. Per try it does
+/// what the Rust loop does (BUSY/stale-DCIS check, INIT, `S‖m`, count, A7, DCAL;
+/// DCIS poll with a 2^24 guard; SR clear) and the same exact early reject on
+/// digits 0..31. Differences are only in schedule: HR3..HR7 in one `ldm`, `S‖m`
+/// via two `ldm`, the digit sum in the next try's engine window, a timed first poll.
+#[cfg(feature = "v2-asm-search")]
+const V2_ASM_SEARCH_SPIN: u32 = 1;
+
+#[cfg(all(feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+macro_rules! v2_search_issue {
+    // Issue try r8: BUSY clear and no stale DCIS, INIT, S‖m (8), count, a0, a1, DCAL.
+    () => {
+        concat!(
+            "ldr r5, [sp, #16]\n",
+            "ldr r12, [r4, #0x24]\n",
+            "tst r12, #10\n",
+            "bne 40f\n",
+            "41:\n",
+            "str lr, [r4]\n",
+            "ldm r5!, {{r9, r11, r12, lr}}\n",
+            "str r9, [r4, #4]\n",
+            "str r11, [r4, #4]\n",
+            "str r12, [r4, #4]\n",
+            "str lr, [r4, #4]\n",
+            "ldm r5, {{r9, r11, r12, lr}}\n",
+            "str r9, [r4, #4]\n",
+            "str r11, [r4, #4]\n",
+            "str r12, [r4, #4]\n",
+            "str lr, [r4, #4]\n",
+            "rev r9, r8\n",
+            "str r9, [r4, #4]\n",
+            "ldrd r9, r11, [sp]\n",
+            "str r9, [r4, #4]\n",
+            "str r11, [r4, #4]\n",
+            "mov.w r12, #280\n",
+            "str r12, [r4, #8]\n",
+        )
+    };
+}
+
+#[cfg(all(feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v2_search_asm(sm: *const u8, a0: u32, a1: u32, start: u32, end: u32, target: u32) -> (u32, u32) {
+    let (c, flag): (u32, u32);
+    // SAFETY: drives only the secure HASH block (r4 = HASH_BASE); reads 32 bytes at
+    // `sm` (caller contract); pushes/pops its own 5-word frame; on a hang or a stale
+    // DCIS it calls `hash_engine_fault`, which does not return.
+    unsafe {
+        core::arch::asm!(
+            "push {{r0, r1, r2, r3, r5}}",     // [sp] a0, [4] a1, [8] end, [12] target, [16] sm
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            v2_search_issue!(),
+            "movw lr, #0x24",                 // the issue's ldm reused lr: CR value back
+            "movt lr, #0x6",
+            "b 1f",
+            // BUSY still set, or a stale DCIS (shared by both issue sites via 40/41 in the
+            // first expansion only: the second issue jumps to 42/43 below)
+            "40:",
+            "mov.w lr, #16777216",
+            "44:",
+            "tst r12, #8",
+            "beq 45f",
+            "subs lr, lr, #1",
+            "beq 99f",
+            "ldr r12, [r4, #0x24]",
+            "b 44b",
+            "45:",
+            "tst r12, #2",
+            "bne 99f",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "b 41b",
+            // wait for DCIS of the try in flight: timed spin, then the first poll
+            "1:",
+            "movs r12, #{spin}",
+            "10:",
+            "subs r12, r12, #1",
+            "bne 10b",
+            "2:",
+            "ldr r12, [r4, #0x24]",
+            "lsls r12, r12, #30",
+            "bpl 11f",
+            "4:",
+            "addw r12, r4, #796",              // HR3
+            "ldm r12, {{r0, r1, r2, r3, r10}}",  // w3, w4, w5, w6, w7
+            "movs r12, #1",
+            "str r12, [r4, #0x24]",
+            "add r8, r8, #1",
+            "ldr r12, [sp, #8]",
+            "cmp r8, r12",
+            "beq 5f",
+            // issue the next try (second site: its slow path is 42/43)
+            "ldr r5, [sp, #16]",
+            "ldr r12, [r4, #0x24]",
+            "tst r12, #10",
+            "bne 42f",
+            "43:",
+            "str lr, [r4]",
+            "ldm r5!, {{r9, r11, r12, lr}}",
+            "str r9, [r4, #4]",
+            "str r11, [r4, #4]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "ldm r5, {{r9, r11, r12, lr}}",
+            "str r9, [r4, #4]",
+            "str r11, [r4, #4]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "rev r9, r8",
+            "str r9, [r4, #4]",
+            "ldrd r9, r11, [sp]",
+            "str r9, [r4, #4]",
+            "str r11, [r4, #4]",
+            "mov.w r12, #280",
+            "str r12, [r4, #8]",
+            // digit sum of try r8 - 1 (r0..r3, r10), in the engine window. Digits 0..31 are
+            // w7[29:0], w7[31:30]|w6[0], w6[30:1], w6[31]|w5[1:0], w5[31:2] (w7 least
+            // significant, as in `g24`). Ten whole digits per word, paired under
+            // A = 0o0707070707 (fields <= 14, three words <= 42 < 64), folded to 12-bit
+            // fields under B, then summed by one multiply into bits 24..31 (<= 210; the
+            // next partial product starts at bit 36). Checked against the reference
+            // digit sum on 300k vectors (round 7 notes) before the kit run.
+            "5:",
+            "movw lr, #0x71C7",                // A = 0o0707070707
+            "movt lr, #0x071C",
+            "movw r9, #0xF03F",                // B = 0x3F03F03F (12-bit fold)
+            "movt r9, #0x3F03",
+            "and r5, r10, lr",
+            "and r11, lr, r10, lsr #3",
+            "add r5, r5, r11",
+            "and r11, lr, r3, lsr #1",
+            "add r5, r5, r11",
+            "and r11, lr, r3, lsr #4",
+            "add r5, r5, r11",
+            "and r11, lr, r2, lsr #2",
+            "add r5, r5, r11",
+            "and r11, lr, r2, lsr #5",
+            "add r5, r5, r11",
+            "and r11, r5, r9",
+            "and r5, r9, r5, lsr #6",
+            "add r5, r5, r11",
+            "movw r11, #0x1001",               // fields at 0, 12, 24 summed into bits 24..31
+            "movt r11, #0x0100",
+            "mul r5, r5, r11",
+            "lsr r5, r5, #24",
+            "lsr r11, r10, #30",
+            "bfi r11, r3, #2, #1",
+            "add r5, r5, r11",
+            "lsr r11, r3, #31",
+            "bfi r11, r2, #1, #2",
+            "add r5, r5, r11",
+            "ldr r12, [sp, #12]",
+            "add r11, r5, #77",
+            "cmp r11, r12",
+            "bhs 6f",
+            // early reject (lr back to the CR value before the next issue)
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "ldr r12, [sp, #8]",
+            "cmp r8, r12",
+            "bne 1b",
+            "movs r0, #0",
+            "b 97f",
+            "6:",
+            // digits 32..41 = w4[29:0], digit 42 = w4[31:30]|w3[0]
+            "and r11, r1, lr",
+            "and r12, lr, r1, lsr #3",
+            "add r11, r11, r12",
+            "and r12, r11, r9",
+            "and r11, r9, r11, lsr #6",
+            "add r11, r11, r12",
+            "movw r12, #0x1001",
+            "movt r12, #0x0100",
+            "mul r11, r11, r12",
+            "add r5, r5, r11, lsr #24",
+            "lsr r11, r1, #30",
+            "bfi r11, r0, #2, #1",
+            "add r5, r5, r11",
+            "ldr r12, [sp, #12]",
+            "cmp r5, r12",
+            "beq 7f",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "ldr r12, [sp, #8]",
+            "cmp r8, r12",
+            "bne 2b",
+            "movs r0, #0",
+            "b 97f",
+            // hit on try r8 - 1
+            "7:",
+            "ldr r12, [sp, #8]",
+            "cmp r8, r12",
+            "ite eq",
+            "moveq r0, #2",
+            "movne r0, #1",
+            "sub r8, r8, #1",
+            "b 97f",
+            // DCIS not yet: seven straight polls, then a counted poll (2^24)
+            "11:",
+            ".rept 7",
+            "ldr r12, [r4, #0x24]",
+            "lsls r12, r12, #30",
+            "bmi 4b",
+            ".endr",
+            "mov.w lr, #16777216",
+            "12:",
+            "ldr r12, [r4, #0x24]",
+            "lsls r12, r12, #30",
+            "bmi 13f",
+            "subs lr, lr, #1",
+            "bne 12b",
+            "b 99f",
+            "13:",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "b 4b",
+            // second issue site's slow path
+            "42:",
+            "mov.w lr, #16777216",
+            "46:",
+            "tst r12, #8",
+            "beq 47f",
+            "subs lr, lr, #1",
+            "beq 99f",
+            "ldr r12, [r4, #0x24]",
+            "b 46b",
+            "47:",
+            "tst r12, #2",
+            "bne 99f",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "b 43b",
+            "99:",
+            "bl {fault}",
+            "97:",
+            "add sp, sp, #20",
+            spin = const V2_ASM_SEARCH_SPIN,
+            fault = sym hash_engine_fault,
+            inout("r0") a0 => flag,
+            inout("r1") a1 => _,
+            inout("r2") end => _,
+            inout("r3") target => _,
+            in("r4") HASH_BASE,
+            inout("r5") sm => _,
+            inout("r8") start => c,
+            out("r9") _,
+            out("r10") _,
+            out("r11") _,
+            out("r12") _,
+            out("lr") _,
+        );
+    }
+    (c, flag)
+}
+
 /// v2 count search with the WOTS+C target in the driver (no callback): the
 /// first `c` in `start..start + n` whose digest's digit sum is `target`
 /// (digest to `out`), else `start + n`. Try `c + 1` is in the engine while the
@@ -2714,6 +2972,25 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
         write_word(a1);
         REG.str_.write(V2_NBLW | STR_DCAL);
     };
+    #[cfg(all(feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+    {
+        let _ = g24;
+        let (c, flag) = v2_search_asm(sm, a0, a1, start, end, target);
+        if flag == 0 {
+            return end;
+        }
+        // A hit: drop the try in flight, then recompute try `c` for all eight words.
+        let mut d = [0u32; 8];
+        if flag == 1 {
+            v2_collect(&mut d);
+        }
+        issue(c);
+        v2_collect(&mut d);
+        // SAFETY: `out` names 32 writable bytes.
+        unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+        return c;
+    }
+    #[allow(unreachable_code)]
     issue(start);
     let mut c = start;
     loop {

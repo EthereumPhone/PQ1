@@ -17,6 +17,7 @@ r = dict(status=hex(w[0]), magic=hex(o[0]), stage=o[1], checks=o[2], failed=o[3]
 groups = ['v1-oneshot', 'chain16', 'prf_chain16', 'node16', 'fors_leaf16', 'fors_subtree16', 'search43_target', 'v1-stream', 'wots_chains16', 'wots_pk16', 'grind_r']
 r['per_group'] = dict(zip(groups, o[4:15]))
 feats = sys.argv[2].split(',')
+if 'stale-search' in feats: feats.append('stale')
 if 'guard' in feats:
     r['ok'] = w[0] == 0x484100F0 and o[1] == 200 and o[3] == 0
 elif 'stale-positive' in feats:

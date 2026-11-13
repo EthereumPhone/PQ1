@@ -205,53 +205,6 @@ pub extern "C" fn c10_bench_main() {
         let b = timed!(14, "ldr {v}, [{a}]", 0x310, false);
         rec(a, b);
         hw(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
-        // 12. DCAL -> DCIS seen and DCAL -> BUSY clear (after DCIS), 1,000 trials: sums.
-        let (mut sd, mut sb) = (0u32, 0u32);
-        for _ in 0..1000 {
-            feed10();
-            let t = cyc();
-            hw(0x08, 24 | 1 << 8);
-            while hr(0x24) & 2 == 0 {}
-            let c1 = cyc().wrapping_sub(t);
-            while hr(0x24) & 8 != 0 {}
-            let c2 = cyc().wrapping_sub(t);
-            hw(0x24, 1);
-            sd += c1;
-            sb += c2;
-        }
-        rec(sd, sb);
-        // 13. A tight, real-shaped step: INIT, 10 DIN (asm), DCAL; t1 after DCAL is issued,
-        //     t2 at DCIS seen, t3 at BUSY clear after the HR read + SR clear. Sums over 1,000;
-        //     plus the same with a 40-cycle gap between INIT and the first DIN (t2 only).
-        let (mut s1, mut s2, mut s3, mut s4) = (0u32, 0u32, 0u32, 0u32);
-        for gap in [false, true] {
-            for _ in 0..1000 {
-                while hr(0x24) & 8 != 0 {}
-                let t0 = cyc();
-                hw(0x00, (0b10 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
-                if gap {
-                    spin(13);
-                }
-                core::arch::asm!(".rept 10", "str {v}, [{a}]", ".endr", a = in(reg) HB + 4, v = in(reg) 0x1234_5678u32, options(nostack));
-                hw(0x08, 24 | 1 << 8);
-                let t1 = cyc();
-                while hr(0x24) & 2 == 0 {}
-                let t2 = cyc();
-                let _ = hr(0x310);
-                hw(0x24, 1);
-                while hr(0x24) & 8 != 0 {}
-                let t3 = cyc();
-                if gap {
-                    s4 += t2.wrapping_sub(t0);
-                } else {
-                    s1 += t1.wrapping_sub(t0);
-                    s2 += t2.wrapping_sub(t0);
-                    s3 += t3.wrapping_sub(t0);
-                }
-            }
-        }
-        rec(s1, s2);
-        rec(s3, s4);
         // 11. search43 with the real target 205: 16 searches, (cycles, tries).
         let (mut cy, mut tries) = (0u32, 0u32);
         for m in 0..16u8 {

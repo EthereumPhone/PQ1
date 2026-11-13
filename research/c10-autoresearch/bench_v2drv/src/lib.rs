@@ -510,8 +510,17 @@ pub extern "C" fn c10_bench_main() {
         }
         let s = [0x5Au8; 16];
         let mut v = [0x11u8; 16];
+        #[cfg(not(feature = "stale-search"))]
         // SAFETY: valid buffers.
         unsafe { pqsigner_v2_chain16(s.as_ptr(), v.as_mut_ptr(), 0x0102_0304, 0x0000_0500, 0, 3) };
+        #[cfg(feature = "stale-search")]
+        {
+            let sm = [0x33u8; 32];
+            let mut d = [0u8; 32];
+            let _ = (&s, &mut v);
+            // SAFETY: valid buffers.
+            let _ = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), 0x0102_0307, 0, 0, 100, 205, d.as_mut_ptr()) };
+        }
         out(1, 301);
     }
 
