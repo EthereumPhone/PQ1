@@ -3496,6 +3496,220 @@ fn v1_search_asm(st: *mut u32, start: u32, end: u32) -> (u32, u32) {
     (c, flag)
 }
 
+/// `v1-asm-search-ga` (round 10, secure-only; the FSBL never names it): the WOTS+C count search
+/// for the WOTS digest shape as one standalone AAPCS function in `global_asm!` (the E9 pattern).
+/// Block 0 (`S`'s four words, three address words, zeros elsewhere) is constant across tries and
+/// stays in callee-saved r5..r11, which also survive the per-try `pred` call; only word 16 is
+/// loaded before the 17th store. The previous try's digest words, the block-1 words and the count
+/// go through the block-0 window; the last-try test runs in the engine window (two wait loops).
+/// Per try the same checks as the Rust loop (DCIS poll with a 2^24 guard, SR clear; BUSY wait with
+/// a 2^24 guard and stale-DCIS refusal before INIT; NBLW 0). Results and `pred` arguments as
+/// `v1_search_asm`. In `.text.pq1_c10_search` with `search128` and the signer's predicate, so a
+/// direct-mapped ICACHE cannot alias the loop and its per-try callback (round 8).
+#[cfg(all(feature = "v1-asm-search-ga", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+core::arch::global_asm!(
+    ".syntax unified",
+    ".section .text.pq1_c10_search,\"ax\",%progbits",
+    ".p2align 2",
+    ".global pq1_v1_search_z",
+    ".type pq1_v1_search_z,%function",
+    ".thumb_func",
+    "pq1_v1_search_z:",
+    "push {{r4, r5, r6, r7, r8, r9, r10, r11, lr}}",
+    "sub sp, sp, #68",
+    // frame: 0 d (pred argument, d[0..3] zero), 32 count (try in flight), 36 end, 40 pred, 44 ctx, 48 m0..m3, 64 HR7 temp
+    // ctx: 0..7 words 0..3, 8, 10, 12 (in r5..r11 throughout); 7..11 words 16..19; 11 start; 12 end; 13 pred; 14 c, 15 flag (out)
+    "str r0, [sp, #44]",
+    "mov r12, r0",
+    "ldm r12!, {{r5, r6, r7, r8, r9, r10, r11}}",
+    "ldm r12!, {{r0, r1, r2, r3}}",
+    "add lr, sp, #48",
+    "stm lr, {{r0, r1, r2, r3}}",
+    "ldm r12, {{r0, r1, r2}}",
+    "str r0, [sp, #32]",
+    "str r1, [sp, #36]",
+    "str r2, [sp, #40]",
+    "movs r3, #0",
+    "str r3, [sp]",
+    "str r3, [sp, #4]",
+    "str r3, [sp, #8]",
+    "movw r4, #{hb_lo}",
+    "movt r4, #{hb_hi}",
+    "adds r0, r0, #1",
+    "cmp r0, r1",
+    "beq 50f",
+    // ==== a try in flight, a next try to issue ====
+    "10:",
+    ".rept 16",
+    "ldr r12, [r4, #0x24]",
+    "lsls r12, r12, #30",
+    "bmi 11f",
+    ".endr",
+    "mov.w r0, #16777216",
+    "12:",
+    "ldr r12, [r4, #0x24]",
+    "lsls r12, r12, #30",
+    "bmi 11f",
+    "subs r0, r0, #1",
+    "bne 12b",
+    "b 99f",
+    "11:",
+    "addw r12, r4, #796",
+    "ldm r12, {{r0, r1, r2, r3, r12}}",
+    "mov.w lr, #1",
+    "str lr, [r4, #0x24]",
+    "ldr lr, [r4, #0x24]",
+    "tst lr, #10",
+    "bne 13f",
+    "14:",
+    "movw lr, #0x24",
+    "movt lr, #0x6",
+    "str lr, [r4]",
+    "movs.w lr, #0",
+    "str r12, [sp, #64]",
+    "ldr r12, [sp, #48]",
+    "str r5, [r4, #4]",
+    "str r6, [r4, #4]",
+    "str r7, [r4, #4]",
+    "str r8, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str r9, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str r10, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str r11, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str lr, [r4, #4]",
+    "str r12, [r4, #4]",
+    // block-0 window: the previous try's digest words for pred, block-1 words, the count
+    "rev r0, r0",
+    "rev r1, r1",
+    "rev r2, r2",
+    "rev r3, r3",
+    "str r0, [sp, #12]",
+    "str r1, [sp, #16]",
+    "str r2, [sp, #20]",
+    "str r3, [sp, #24]",
+    "ldr r0, [sp, #64]",
+    "rev r0, r0",
+    "str r0, [sp, #28]",
+    "ldr r3, [sp, #32]",
+    "adds r3, r3, #1",
+    "rev r3, r3",
+    "ldr r0, [sp, #52]",
+    "ldr r1, [sp, #56]",
+    "ldr r2, [sp, #60]",
+    "mov.w r12, #256",
+    "str r0, [r4, #4]",
+    "str r1, [r4, #4]",
+    "str r2, [r4, #4]",
+    ".rept 11",
+    "str lr, [r4, #4]",
+    ".endr",
+    "str r3, [r4, #4]",
+    "str r12, [r4, #8]",
+    // engine window: pred on the previous try (callee-saved r4..r11 survive the call)
+    "mov r0, sp",
+    "ldr r12, [sp, #40]",
+    "blx r12",
+    "tst r0, #0xFF",
+    "bne 60f",
+    "ldr r0, [sp, #32]",
+    "adds r0, r0, #1",
+    "str r0, [sp, #32]",
+    "ldr r1, [sp, #36]",
+    "adds r0, r0, #1",
+    "cmp r0, r1",
+    "beq 50f",
+    "b 10b",
+    // BUSY still set, or a stale DCIS (HR words live: the counter is pushed, two words)
+    "13:",
+    "push {{r0, r1}}",
+    "mov.w r0, #16777216",
+    "15:",
+    "tst lr, #8",
+    "beq 16f",
+    "subs r0, r0, #1",
+    "beq 99f",
+    "ldr lr, [r4, #0x24]",
+    "b 15b",
+    "16:",
+    "pop {{r0, r1}}",
+    "tst lr, #2",
+    "beq 14b",
+    "b 99f",
+    // ==== the last try in flight: nothing to issue ====
+    "50:",
+    ".rept 16",
+    "ldr r12, [r4, #0x24]",
+    "lsls r12, r12, #30",
+    "bmi 51f",
+    ".endr",
+    "mov.w r0, #16777216",
+    "52:",
+    "ldr r12, [r4, #0x24]",
+    "lsls r12, r12, #30",
+    "bmi 51f",
+    "subs r0, r0, #1",
+    "bne 52b",
+    "b 99f",
+    "51:",
+    "addw r12, r4, #796",
+    "ldm r12, {{r0, r1, r2, r3, r12}}",
+    "mov.w lr, #1",
+    "str lr, [r4, #0x24]",
+    "rev r0, r0",
+    "rev r1, r1",
+    "rev r2, r2",
+    "rev r3, r3",
+    "rev r12, r12",
+    "str r0, [sp, #12]",
+    "str r1, [sp, #16]",
+    "str r2, [sp, #20]",
+    "str r3, [sp, #24]",
+    "str r12, [sp, #28]",
+    "mov r0, sp",
+    "ldr r12, [sp, #40]",
+    "blx r12",
+    "tst r0, #0xFF",
+    "bne 61f",
+    "ldr r0, [sp, #36]",
+    "movs r1, #0",
+    "b 70f",
+    "60:",
+    "ldr r0, [sp, #32]",
+    "movs r1, #1",
+    "b 70f",
+    "61:",
+    "ldr r0, [sp, #32]",
+    "movs r1, #2",
+    "70:",
+    "ldr r12, [sp, #44]",
+    "str r0, [r12, #56]",
+    "str r1, [r12, #60]",
+    "b 98f",
+    "99:",
+    "bl {fault}",
+    "98:",
+    "add sp, sp, #68",
+    "pop {{r4, r5, r6, r7, r8, r9, r10, r11, pc}}",
+    ".size pq1_v1_search_z, . - pq1_v1_search_z",
+
+    hb_lo = const HASH_BASE & 0xFFFF,
+    hb_hi = const HASH_BASE >> 16,
+    fault = sym hash_engine_fault,
+);
+
+#[cfg(all(feature = "v1-asm-search-ga", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+extern "C" {
+    /// The `v1-asm-search-ga` loop above.
+    fn pq1_v1_search_z(ctx: *mut u32);
+}
+
 /// Counter search (`search`, secure image only): for `c` in `start..start+n`,
 /// SHA-256 the 128-byte message at `buf` with bytes [124..128) = `c`
 /// (big-endian); return the first `c` whose digest satisfies `pred` (the
@@ -3540,6 +3754,22 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
             st[33] = pred as usize as u32;
             // SAFETY: caller contract.
             unsafe { issue128(buf, start) };
+            // `v1-asm-search-ga`: with the address's zero words too (tree high word, type, ci, cp,
+            // ha: the WOTS digest address), block 0 is seven constant words kept in registers.
+            #[cfg(feature = "v1-asm-search-ga")]
+            let (c, flag) = if w(9) | w(11) | w(13) | w(14) | w(15) == 0 {
+                let mut ctx = [
+                    w(0), w(1), w(2), w(3), w(8), w(10), w(12), w(16), w(17), w(18), w(19),
+                    start, end, pred as usize as u32, 0, 0,
+                ];
+                // SAFETY: the function's contract (the context above, try `start` in flight;
+                // `pred` reads only its 32-byte argument, caller contract).
+                unsafe { pq1_v1_search_z(ctx.as_mut_ptr()) };
+                (ctx[14], ctx[15])
+            } else {
+                v1_search_asm(st.as_mut_ptr(), start, end)
+            };
+            #[cfg(not(feature = "v1-asm-search-ga"))]
             let (c, flag) = v1_search_asm(st.as_mut_ptr(), start, end);
             if flag == 0 {
                 #[cfg(feature = "tick-batch")]

@@ -17,7 +17,7 @@ if c != 4 or d != 0: r['ok'] = False
 c, d = q(6); r['chain16_x15_per_step'] = round(c / d, 1)
 c, d = q(8); r['fors_subtree16_per_call'] = round(c / d, 1); r['fors_subtree16_per_digest'] = round(c / d / 47, 1)
 c, d = q(10); r['searchcheck'] = c; r['searchcheck_fail'] = d
-if c != 12 or d != 0: r['ok'] = False
+if c != 24 or d != 0: r['ok'] = False
 c, d = q(12); r['search128_prednever_per_try'] = round(c / d, 1)
 c, d = q(14); r['search128_205_per_try'] = round(c / d, 1) if d else None; r['search128_205_tries'] = d
 c, d = q(16); r['th_multi16_43_per_call'] = round(c / d, 1)

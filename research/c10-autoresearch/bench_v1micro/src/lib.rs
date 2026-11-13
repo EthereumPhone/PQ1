@@ -284,10 +284,22 @@ unsafe extern "C" fn pred64z(p: *const u8) -> bool {
     d[..12].iter().all(|&b| b == 0) && d[31] & 0x3F == 0
 }
 fn search_check() -> (u32, u32) {
+    // Both address shapes: random address words (the E4 inline loop), and the WOTS digest
+    // address (words 9, 11, 13, 14, 15 zero: the round-10 global_asm loop).
+    let (a1, b1) = search_check_shape(false);
+    let (a2, b2) = search_check_shape(true);
+    (a1 + a2, b1 + b2)
+}
+fn search_check_shape(wots_adrs: bool) -> (u32, u32) {
     let mut mb = [0u8; 129];
     for i in 0..16 { mb[1 + i] = (i as u8).wrapping_mul(41) ^ 0xC3; }
     for i in 32..64 { mb[1 + i] = (i as u8).wrapping_mul(23) ^ 0x18; }
     for i in 64..80 { mb[1 + i] = (i as u8).wrapping_mul(71) ^ 0x9E; }
+    if wots_adrs {
+        for wd in [9usize, 11, 13, 14, 15] {
+            mb[1 + 4 * wd..5 + 4 * wd].copy_from_slice(&[0; 4]);
+        }
+    }
     let b = |mb: &[u8; 129]| -> [u8; 128] { let mut x = [0u8; 128]; x.copy_from_slice(&mb[1..]); x };
     let plain = |c: u32| -> [u8; 32] {
         let mut x = b(&mb);
@@ -509,6 +521,10 @@ pub extern "C" fn c10_bench_main() {
         let mut sb = [0u8; 128];
         sb[..64].copy_from_slice(&sa);
         sb[64..80].copy_from_slice(&[0x77; 16]);
+        // the WOTS digest address: tree high word, type, ci, cp, ha zero
+        for wd in [9usize, 11, 13, 14, 15] {
+            sb[4 * wd..4 * wd + 4].copy_from_slice(&[0; 4]);
+        }
         let mut d = [0u8; 32];
         let _ = pred_false;
         // [12,13] search128, digit-sum predicate that never holds: 20,000 tries.

@@ -22,7 +22,7 @@ stale-search = ["stale"]
 
 [dependencies]
 # The v1 kit image's driver configuration (as bench_avg_v1).
-pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-key-ga", "v1-asm-fors", "v1-asm-fors-ga", "v1-asm-search", "v1-grindr"] }
+pqsigner-hw = { path = "../../../hw", features = ["oneshot", "unrolled-io", "inline-barriers", "init-restart", "chain", "search", "gather", "prfchain", "forsleaf", "hra-ldm", "v1-asm-chain", "v1-asm-key", "v1-asm-key-ga", "v1-asm-fors", "v1-asm-fors-ga", "v1-asm-search", "v1-asm-search-ga", "v1-grindr"] }
 sha2 = { version = "0.10", default-features = false }
 
 [profile.release]
