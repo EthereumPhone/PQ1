@@ -960,6 +960,10 @@ Spins tuned in the signer, not the microbench: key-loop step **13** (golden keyg
 - **Gates at head (`276677480`, after the 512 B scrub and the `wots.rs` line-count fix):**
   - v1: golden (cached 197.66 M), kdiff 32/32 (it includes `opt_rand = None` cases), and the microbench checks (key 8/8, subtree 4/4, search 12/12, grind 4/4 with residue 0).
   - v2: gate 5 2,523/0 and the v2 golden. The v2 stale controls were not re-run; the v2 crates name none of the round-8 features.
+- **Astra on the post-review fixes (`dea4f6e91..276677480`):** the `tw` wipe, the exhaustion count, the overlap guard (whole `if` gated) and the colocation (one input section, 0x930 bytes, in this fat-LTO single-CGU build) conform. Two MEDIUMs:
+  - **The scrub wrote below `sp` without allocating it.** That is outside AAPCS and bypasses MSPLIM. **Fixed:** the scrub now does `sub sp, #512`, zeroes, then `add sp`, so a shortfall faults on the stack limit. Microbench residue 0 and all checks, golden, kdiff and FSBL re-run.
+  - **Open, predates the round:** a `hash_engine_fault` from inside the grind skips both the local wipes and the scrub. The secure hook zeroizes global state and resets, but not this frame.
+  - Also noted: colocation by section name is not guaranteed across separate input objects (it holds only with LTO + one codegen unit). The overlap guard's `16 * n` and `sk_seed + 32` are plain arithmetic (valid buffers cannot overflow; overflow checks would panic).
 - **Landing conditions found this round:**
   - `v1-asm-search` must ship with `hw-sha256-search-colocate`; without it the 1-way aliasing can come back.
   - The grind scrub size (512 B against a 376 B inner frame) and the stack headroom below that call must be re-checked in the product build.

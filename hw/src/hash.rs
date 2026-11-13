@@ -2790,18 +2790,20 @@ pub unsafe extern "C" fn pqsigner_v1_grind_r(
     // the arrays it wipes (round 8: a dead-stack scan found rand bytes in spill slots). Zero
     // the dead stack below sp that the inner call used (its frame is 376 bytes in the bench
     // build; landing must re-check the size and the stack headroom below this call).
-    // SAFETY: writes only the 512 bytes directly below sp, which no live object occupies;
-    // asm without `nostack` may use the stack below sp.
+    // SAFETY: the 512 bytes are first allocated (`sub sp`: AAPCS-conformant, 8-byte aligned,
+    // and bounded by MSPLIM, so a shortfall faults instead of overwriting), zeroed, then
+    // released; no live object lies below the incoming sp.
     unsafe {
         core::arch::asm!(
+            "sub sp, sp, #512",
             "mov {p}, sp",
-            "sub {p}, {p}, #512",
             "movs {z}, #0",
             "mov.w {c}, #128",
             "1:",
             "str {z}, [{p}], #4",
             "subs {c}, {c}, #1",
             "bne 1b",
+            "add sp, sp, #512",
             p = out(reg) _,
             z = out(reg) _,
             c = out(reg) _,
