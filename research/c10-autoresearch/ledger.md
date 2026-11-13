@@ -580,3 +580,10 @@ The chain loop sat about 16 cycles above the unit-cost floor (about 111). The di
 1. `target_sum` 205 → 200: about −5.8 M/pass and about +2.5–4.5k verify gas; reopens the proof constants.
 2. Two WOTS/FORS secrets per PRF digest: about −4 M/pass; keys change, the verifier does not.
 3. An 8 + 10 hypertree split with the top cache: about −11 M/pass; the cache becomes structural, and keygen doubles.
+
+**Round 6 close-out controls (advisor):**
+- **UI tick:** H9's inlined HR read had dropped the per-digest `pqsigner_hash_tick()` under `tick-hook`. Restored. With `--features tick` the search entry links three tick calls again. No bench enables the feature, so no measured number changes.
+- **H9's accept predicate** (`c10v2/h9_predicate.py`):
+  - transcribed against `sum((D >> 3i) & 7)` on 1,111,280 checks: 200k random digests, all 256 single-bit digests, 2,000 exact boundary digests (digits 0..31 sum to 128, digits 32..42 all 7), and 20k near-target digests, at 5 targets;
+  - 0 mismatches. The 77 → 76 control gives exactly 2,000 mismatches, the boundary cases.
+- **H7's Rust FORS+C re-check:** a `host_v2f` mirror that returns the first nonce whatever its index stops the sign at `v2hash.rs:313` ("driver FORS+C check disagrees"). Restored: GOLDEN OK.

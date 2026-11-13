@@ -2471,6 +2471,12 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
         let (w3, w4, w5, w6, w7) =
             unsafe { (REG.hr0.read_at(3), REG.hr0.read_at(4), REG.hr0.read_at(5), REG.hr0.read_at(6), REG.hr0.read_at(7)) };
         REG.sr.write(SR_DINIS);
+        // The per-digest UI tick, as in `v2_collect` (product builds only).
+        #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
+        // SAFETY: as in `final_body`: the digest is out and the engine idle.
+        unsafe {
+            pqsigner_hash_tick();
+        }
         let next = c.wrapping_add(1);
         let more = next != end;
         if more {

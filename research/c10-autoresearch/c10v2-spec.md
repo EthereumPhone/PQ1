@@ -311,16 +311,13 @@ review against the FORS+C argument and is not adopted here.
   - 4, partly: KATs, bit flips, the +C set and cross-version rejection. Fable
     independently emulated the Yul `mstore` sequence on all 9 vectors, and Astra
     modelled the packed stores on 2,000 cases. Neither model is a committed test.
-  - 5: `bench_v2drv` on the kit (`experiment_drv.sh`). It runs every fused v2
-    entry (chain, PRF+chain, node, FORS leaf, FORS subtree at every height 0..11,
-    count search) against software SHA-256: 1,878 checks, 0 failures. A v1
-    digest (oneshot or streamed, any length 0..200, so NBLW = 0) runs between
-    every v2 call: 835, all correct. Search boundaries are covered: n = 0, a hit
-    on the first try, a hit on the last of six, exhaustion, and a start next to
-    `u32::MAX` (count's top byte). Controls:
-    - an out-of-range subtree call halts through the fault hook;
-    - a corrupted `ha` patch plus a corrupted digit sum fail exactly the subtree
-      and search groups (55 failures), and nothing else.
+  - 5: `bench_v2drv` on the kit (`experiment_drv.sh`), updated through round 6.
+    - **Coverage:** every fused v2 entry against software SHA-256: chain, PRF+chain, node, FORS leaf, FORS subtree (every height 0..11), the per-key WOTS chains and whole-key T_43 entries, the R grind, and the count search, including long searches for the real target 205.
+    - **Result:** 2,091 checks, 0 failures.
+    - **Interleaving:** a v1 digest (NBLW = 0, oneshot or streamed) runs between every v2 call, and all of them are correct.
+    - **Search boundaries:** n = 0, a first-try hit, a last-of-six hit, exhaustion, and a start next to `u32::MAX`. For the R grind: the first hit, and a run stopped one try short.
+    - **Controls:** a misaligned subtree call halts through the fault hook; a corrupted `ha` patch plus a corrupted digit sum fail exactly the subtree and search groups.
+    - **The search's split accept predicate** (round 6 H9) is checked against the digit-sum definition in `c10v2/h9_predicate.py`: 1.11 M checks including the exact early-reject boundary. A 77 → 76 mutation fails exactly the 2,000 boundary cases.
   - 6: v1 golden and KATs (suite 82/0, kit v1 golden).
   - 7: see §4 and the ledger.
 - **Kit golden for v2:** `golden-v2.bin` (0.3) equals Python, `host_v2` and
