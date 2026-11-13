@@ -2650,6 +2650,10 @@ fn v1_search_asm(st: *mut u32, start: u32, end: u32) -> (u32, u32) {
 /// stream is in flight; `init_clock` has run.
 #[cfg(feature = "search")]
 #[no_mangle]
+// `v1-asm-search` calls `pred` once per try: keep the loop and the signer's predicate in one
+// section (the signer names the same one), so a direct-mapped ICACHE (the shipped 1-way
+// setting) can never map them onto the same lines whatever the link layout.
+#[cfg_attr(feature = "v1-asm-search", link_section = ".text.pq1_c10_search")]
 pub unsafe extern "C" fn pqsigner_sha256_search128(
     buf: *const u8,
     start: u32,

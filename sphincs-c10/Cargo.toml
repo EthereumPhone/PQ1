@@ -23,6 +23,9 @@ hw-sha256-oneshot = ["hw-sha256"]
 hw-sha256-chain = ["hw-sha256-oneshot"]
 # The WOTS+C count grind through `pqsigner_sha256_search128` (`pqsigner-hw/search`).
 hw-sha256-search = ["hw-sha256-oneshot"]
+# Round 8 (autoresearch): `hits_target` in the driver search's section (`.text.pq1_c10_search`), so the
+# search loop and its per-try callback never alias in a direct-mapped ICACHE. Layout only.
+hw-sha256-search-colocate = ["hw-sha256-search"]
 # th / th_pair without the preimage copy (`pqsigner-hw/gather`).
 hw-sha256-gather = ["hw-sha256-oneshot"]
 # WOTS secret + chain in one driver call (`pqsigner-hw/prfchain`); sk_seed is never copied.

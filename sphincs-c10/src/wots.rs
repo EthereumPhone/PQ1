@@ -82,6 +82,7 @@ pub(crate) fn find_count(
             ) -> u32;
         }
         /// The grind predicate, for the driver: `digit_sum(digest) == TARGET_SUM`.
+        #[cfg_attr(feature = "hw-sha256-search-colocate", link_section = ".text.pq1_c10_search")]
         unsafe extern "C" fn hits_target(d: *const u8) -> bool {
             // SAFETY: the driver passes a pointer to its 32-byte digest.
             digit_sum(unsafe { &*d.cast::<[u8; 32]>() }) == TARGET_SUM
