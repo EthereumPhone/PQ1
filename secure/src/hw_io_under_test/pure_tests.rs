@@ -3240,8 +3240,15 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
             .any(|p| l.starts_with(p))
     };
     let (mut inline, mut global) = (0, 0);
+    // The barrier: exactly this statement, inside `dsb()`'s inline-barriers
+    // block, is exempt — any other asm on its line or of its shape is not.
+    let barrier = "        unsafe { core::arch::asm!(\"dsb sy\", options(nomem, nostack, preserves_flags)) };";
+    assert!(HW_HASH_SRC.contains(&format!(
+        "fn dsb() {{\n    #[cfg(not(feature = \"inline-barriers\"))]\n    cortex_m::asm::dsb();\n    #[cfg(feature = \"inline-barriers\")]\n    {{\n        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);\n        // SAFETY: `dsb sy` only waits for earlier memory accesses to complete;\n        // it reads or writes no register or memory the compiler tracks, which\n        // is what cortex-m's own inline form declares.\n{barrier}\n        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);\n    }}\n}}\n"
+    )));
+    assert_eq!(lines.iter().filter(|l| l.contains("\"dsb sy\"")).count(), 1, "one dsb sy asm string");
     for (i, l) in lines.iter().enumerate() {
-        if l.contains("core::arch::asm!(\"dsb sy\"") {
+        if *l == barrier {
             continue;
         }
         if l.starts_with("core::arch::global_asm!(") {
@@ -3463,59 +3470,286 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
     // one call not after a clear is the FORS subtree's closing tick, after
     // its root is written out, as the function's last statement.
     let lines: std::vec::Vec<&str> = HW_HASH_SRC.lines().collect();
-    let per_digest = "#[cfg(all(feature = \"tick-hook\", not(feature = \"tick-batch\")))]";
+    // Each fused tick is pinned, in source order, as the exact code from its
+    // digest's DCIS wait (a guarded `while … SR_DCIS == 0` loop, closed, or one
+    // of the two guarded wait helpers below) through the HR read-out the site
+    // hands on, the DCIS clear, the `tick-hook`-without-`tick-batch` gate and
+    // the call: nothing may move into the wait loop, ahead of a read-out or
+    // ahead of the clear, or come between them. The FORS subtree's closing
+    // tick (no wait of its own: its root was read and DCIS cleared by
+    // `final16_regs`) is pinned as the function's tail instead.
+    #[rustfmt::skip]
+    let pinned: [(&str, &[&str]); 13] = [
+        (
+            "chain_steps",
+            &[
+                r#"while REG.sr.read() & SR_DCIS == 0 {"#,
+                r#"t += 1;"#,
+                r#"if t > 10_000_000 {"#,
+                r#"hash_engine_fault();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"v = read_hr4();"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"{"#,
+                r#"unsafe { pqsigner_hash_tick() };"#,
+            ],
+        ),
+        (
+            "pqsigner_wots_prf_chain16",
+            &[
+                r#"while REG.sr.read() & SR_DCIS == 0 {"#,
+                r#"t += 1;"#,
+                r#"if t > 10_000_000 {"#,
+                r#"hash_engine_fault();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"let v = read_hr4();"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "pqsigner_fors_leaf16",
+            &[
+                r#"while REG.sr.read() & SR_DCIS == 0 {"#,
+                r#"t += 1;"#,
+                r#"if t > 10_000_000 {"#,
+                r#"hash_engine_fault();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"let v = read_hr4();"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "pqsigner_wots_chains16",
+            &[
+                r#"while REG.sr.read() & SR_DCIS == 0 {"#,
+                r#"w += 1;"#,
+                r#"if w > 10_000_000 {"#,
+                r#"hash_engine_fault();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"let v = read_hr4();"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        ("pqsigner_fors_subtree16", &[]),
+        (
+            "collect",
+            &[
+                r#"while REG.sr.read() & SR_DCIS == 0 {"#,
+                r#"t += 1;"#,
+                r#"if t > 10_000_000 {"#,
+                r#"hash_engine_fault();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"unsafe {"#,
+                r#"if FULL {"#,
+                r#"d[0] = REG.hr0.read_at(0).swap_bytes();"#,
+                r#"d[1] = REG.hr0.read_at(1).swap_bytes();"#,
+                r#"d[2] = REG.hr0.read_at(2).swap_bytes();"#,
+                r#"} else {"#,
+                r#"d[0] = 0;"#,
+                r#"d[1] = 0;"#,
+                r#"d[2] = 0;"#,
+                r#"}"#,
+                r#"d[3] = REG.hr0.read_at(3).swap_bytes();"#,
+                r#"d[4] = REG.hr0.read_at(4).swap_bytes();"#,
+                r#"d[5] = REG.hr0.read_at(5).swap_bytes();"#,
+                r#"d[6] = REG.hr0.read_at(6).swap_bytes();"#,
+                r#"d[7] = REG.hr0.read_at(7).swap_bytes();"#,
+                r#"}"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "v1_grind_body",
+            &[
+                r#"wait();"#,
+                r#"let r = read_hr4();"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "v1_grind_body",
+            &[
+                r#"wait();"#,
+                r#"if unsafe { REG.hr0.read_at(3) } & 0x7FF0 == 0 {"#,
+                r#"unsafe {"#,
+                r#"for (i, x) in dd.iter_mut().enumerate() {"#,
+                r#"*x = REG.hr0.read_at(i).swap_bytes();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "v1_grind_body",
+            &[
+                r#"wait();"#,
+                r#"if unsafe { REG.hr0.read_at(3) } & 0x7FF0 == 0 {"#,
+                r#"unsafe {"#,
+                r#"for (i, x) in dd.iter_mut().enumerate() {"#,
+                r#"*x = REG.hr0.read_at(i).swap_bytes();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+                r#"}"#,
+                r#"*rr = r;"#,
+                r#"return nonce;"#,
+                r#"}"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "gather_final16",
+            &[
+                r#"while REG.sr.read() & SR_DCIS == 0 {"#,
+                r#"t += 1;"#,
+                r#"if t > 10_000_000 {"#,
+                r#"hash_engine_fault();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"unsafe {"#,
+                r#"let o = out.cast::<u32>();"#,
+                r#"o.write_unaligned(REG.hr0.read_at(0).swap_bytes());"#,
+                r#"o.add(1).write_unaligned(REG.hr0.read_at(1).swap_bytes());"#,
+                r#"o.add(2).write_unaligned(REG.hr0.read_at(2).swap_bytes());"#,
+                r#"o.add(3).write_unaligned(REG.hr0.read_at(3).swap_bytes());"#,
+                r#"}"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "v2_end16",
+            &[
+                r#"v2_wait_dcis();"#,
+                r#"let v = read_hr4();"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "v2_collect",
+            &[
+                r#"v2_wait_dcis();"#,
+                r#"unsafe {"#,
+                r#"for (i, x) in d.iter_mut().enumerate() {"#,
+                r#"*x = REG.hr0.read_at(i).swap_bytes();"#,
+                r#"}"#,
+                r#"}"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+        (
+            "pqsigner_v2_search43_target",
+            &[
+                r#"v2_wait_dcis();"#,
+                r#"let (w3, w4, w5, w6, w7) ="#,
+                r#"unsafe { (REG.hr0.read_at(3), REG.hr0.read_at(4), REG.hr0.read_at(5), REG.hr0.read_at(6), REG.hr0.read_at(7)) };"#,
+                r#"REG.sr.write(SR_DINIS);"#,
+                r#"#[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]"#,
+                r#"unsafe {"#,
+                r#"pqsigner_hash_tick();"#,
+            ],
+        ),
+    ];
     let fin_at = lines
         .iter()
         .position(|l| *l == "unsafe fn final_body_n<const W: usize>(out: *mut u8) {")
         .expect("final_body_n");
     let fin_end = fin_at + lines[fin_at..].iter().position(|l| *l == "}").expect("end of final_body_n");
-    let (mut fused, mut after_clear, mut closing) = (0, 0, 0);
+    let is_fn = |l: &str| {
+        ["fn ", "unsafe fn ", "pub fn ", "pub unsafe fn ", "pub(crate) fn ", "pub unsafe extern \"C\" fn "].iter().any(|p| l.starts_with(p))
+    };
+    let mut site = 0;
     for (i, l) in lines.iter().enumerate() {
-        if !l.contains("pqsigner_hash_tick()") || l.contains("fn pqsigner_hash_tick") {
+        if !l.contains("pqsigner_hash_tick()") || l.contains("fn pqsigner_hash_tick") || (fin_at < i && i < fin_end) {
             continue;
         }
-        if fin_at < i && i < fin_end {
-            continue; // the finalizer's, pinned above
-        }
-        let mut j = i - 1;
-        while lines[j].trim_start().starts_with("//") || matches!(lines[j].trim(), "unsafe {" | "{") {
+        assert!(site < pinned.len(), "unpinned tick at line {}", i + 1);
+        let (want_fn, want) = pinned[site];
+        site += 1;
+        let mut j = i;
+        while !is_fn(lines[j]) {
             j -= 1;
         }
-        assert_eq!(lines[j].trim(), per_digest, "tick at line {} gated by {}", i + 1, lines[j]);
-        fused += 1;
-        let mut k = j - 1;
-        while lines[k].trim().is_empty() || lines[k].trim_start().starts_with("//") {
+        let name = lines[j].split(" fn ").last().expect("fn").split(['(', '<']).next().expect("name");
+        let name = name.strip_prefix("fn ").unwrap_or(name);
+        assert_eq!(name, want_fn, "tick at line {}: site {site} is in another function", i + 1);
+        if want.is_empty() {
+            let mut k = i - 1;
+            while lines[k].trim_start().starts_with("//") || matches!(lines[k].trim(), "unsafe {" | "{") {
+                k -= 1;
+            }
+            assert_eq!(lines[k].trim(), "#[cfg(all(feature = \"tick-hook\", not(feature = \"tick-batch\")))]");
             k -= 1;
-        }
-        if lines[k].trim() == "REG.sr.write(SR_DINIS);" {
-            let mut w = k - 1;
-            while !(lines[w].contains("while REG.sr.read() & SR_DCIS == 0 {")
-                || matches!(lines[w].trim(), "wait();" | "v2_wait_dcis();"))
-            {
-                w -= 1;
+            while lines[k].trim_start().starts_with("//") {
+                k -= 1;
             }
-            let between = lines[w + 1..k].join("\n");
-            assert!(
-                between.contains("read_hr4()") || between.contains("REG.hr0.read_at("),
-                "tick at line {}: no HR read since DCIS",
-                i + 1
-            );
-            for bad in ["write_word(", "REG.din", "REG.str_.write(", "REG.cr.write("] {
-                assert!(!between.contains(bad), "tick at line {}: {bad} between DCIS and the tick", i + 1);
-            }
-            after_clear += 1;
-        } else {
             assert_eq!(
                 lines[k - 8..=k].join("\n"),
                 "    for (k, x) in stack[0].iter().enumerate() {\n        // SAFETY: `out + 4k`, k < 4, inside the caller's 16 bytes.\n        unsafe { out.add(4 * k).cast::<u32>().write_unaligned(*x) };\n    }\n    #[cfg(feature = \"tick-batch\")]\n    // SAFETY: the engine is idle; the tick does not hash.\n    unsafe {\n        pqsigner_hash_tick_n(16 * 2 + 15);\n    }",
-                "tick at line {}: neither after a DCIS clear nor the subtree's closing tick",
-                i + 1
+                "the subtree's closing tick"
             );
             assert_eq!(lines[i + 1..i + 3].join("\n"), "    }\n}", "nothing after the closing tick");
-            closing += 1;
+            continue;
         }
+        let mut got: std::vec::Vec<&str> = std::vec::Vec::new();
+        let mut k = i;
+        while got.len() < want.len() {
+            let t = lines[k].trim();
+            if !t.is_empty() && !t.starts_with("//") {
+                got.push(t);
+            }
+            k -= 1;
+        }
+        got.reverse();
+        assert_eq!(got, want, "tick at line {} in {want_fn}", i + 1);
     }
-    assert_eq!((fused, after_clear, closing), (13, 12, 1));
+    assert_eq!(site, pinned.len(), "every pinned tick present");
+    // The two wait helpers the pins name are guarded DCIS waits.
+    assert!(HW_HASH_SRC.contains(
+        "    let wait = || {\n        let mut t = 0u32;\n        while REG.sr.read() & SR_DCIS == 0 {\n            t += 1;\n            if t > 10_000_000 {\n                hash_engine_fault();\n            }\n        }\n    };\n"
+    ));
+    assert_eq!(HW_HASH_SRC.matches("let wait = || {").count(), 1);
+    assert!(HW_HASH_SRC.contains(
+        "fn v2_wait_dcis() {\n    let mut t = V2_POLLS;\n    while REG.sr.read() & SR_DCIS == 0 {\n        t -= 1;\n        if t == 0 {\n            hash_engine_fault();\n        }\n    }\n}\n"
+    ));
     // The batch ticks (`tick-batch`, measurement only; the callee must not
     // hash): each under that feature, which implies `tick-hook`; no secure
     // feature raises it, the FSBL never names it, and the secure world does
