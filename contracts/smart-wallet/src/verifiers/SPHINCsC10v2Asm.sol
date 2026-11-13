@@ -136,22 +136,26 @@ contract SPHINCsC10v2Asm {
                 mstore(TB, pkSeed)
                 mstore(add(TB, 0x10), shl(200, or(shl(52, 1), kpBase)))
                 let wotsPtr := add(sigBase, sigOff)
-                for { let i := 0 } lt(i, 43) { i := add(i, 1) } {
-                    let digit := and(shr(mul(i, 3), d), 0x7)
-                    // Chain i from position `digit` to 7 in place: the value stays at 0x10 of the F
-                    // preimage S || v16 || A7 and each step's output (outsize 16) overwrites it. The
-                    // A7 word for position p is chainA + p<<212 (cp = bits 15..12 of A7; p < 7, no
-                    // carry), so one add per step.
-                    calldatacopy(0x10, add(wotsPtr, shl(4, i)), 16)
-                    let chainA := shl(200, or(kpBase, shl(18, i))) // type 0 (WOTS_HASH), cp = 0
+                // Chain i (o = 16 i) runs from position digit_i = dd & 7 (dd = d >> 3i) to 7 in
+                // place: the value stays at 0x10 of the F preimage S || v16 || A7 and each step's
+                // output (outsize 16) overwrites it. The A7 word of chain i at position p is
+                // chainA + p<<212 with chainA = (kpBase | i<<18) << 200 (type 0, WOTS_HASH; ci =
+                // A7 bits 23..18, cp = bits 15..12; i < 43 and p < 7, so no add carries).
+                let dd := d
+                let chainA := shl(200, kpBase)
+                for { let o := 0 } lt(o, 688) { o := add(o, 16) } {
+                    calldatacopy(0x10, add(wotsPtr, o), 16)
+                    let a := add(chainA, shl(212, and(dd, 7)))
                     let aEnd := add(chainA, shl(212, 7))
-                    for { let a := add(chainA, shl(212, digit)) } lt(a, aEnd) { a := add(a, shl(212, 1)) } {
+                    for { } lt(a, aEnd) { a := add(a, shl(212, 1)) } {
                         mstore(0x20, a)
                         pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))
                     }
                     // 32-byte copy of the 16-byte end value: its trailing 16 bytes are overwritten by
                     // slot i+1, and for i = 42 they fall past the 712 bytes T_43 hashes.
-                    mstore(add(TB, add(24, shl(4, i))), mload(0x10))
+                    mstore(add(add(TB, 24), o), mload(0x10))
+                    dd := shr(3, dd)
+                    chainA := add(chainA, shl(218, 1))
                 }
                 // T_43: the WOTS pk lands in its half of the first Merkle preimage (in-place walk
                 // as in FORS); the root (index 0 at height 9) lands at 0x10, the next layer's m16.
