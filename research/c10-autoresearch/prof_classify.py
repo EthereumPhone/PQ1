@@ -29,7 +29,7 @@ def cls(n):
         return 'driver'
     if 'sphincs_c10::' in n:
         return 'signer'
-    if n.startswith(('pqsigner_fi::', 'subtle::', 'zeroize::', '<subtle', '<zeroize')):
+    if 'pqsigner_fi::' in n or 'subtle::' in n or 'zeroize::' in n:
         return 'fi_chain'
     if n.startswith(('compiler_builtins::mem', '__aeabi_mem', 'memcpy', 'memset', 'memmove', 'memcmp', '__aeabi_')):
         return 'mem'
@@ -43,13 +43,18 @@ import re
 callers = collections.defaultdict(set)
 cur = None
 for l in subprocess.run(['arm-none-eabi-objdump', '-d', '-C', '--no-show-raw-insn', elf], capture_output=True, text=True).stdout.splitlines():
-    m = re.match(r'^[0-9a-f]+ <(.+)>:', l)
+    m = re.match(r'^([0-9a-f]+) <.+>:', l)
     if m:
-        cur = m.group(1)
+        cur = name_of(int(m.group(1), 16))
         continue
-    m = re.search(r'\tbl?x?\s+[0-9a-f]+ <([^>+]+)>', l)
+    # Any direct branch (bl, blx, b, b.w, b.n, conditional b<cc>, each with an optional .w/.n) to an
+    # address: the target is resolved through the symbol table (the printed <name> of a nested Rust
+    # symbol cannot be parsed reliably).
+    m = re.search(r'\t(?:blx?|b(?:eq|ne|cs|cc|hs|lo|mi|pl|vs|vc|hi|ls|ge|lt|gt|le|al)?)(?:\.[wn])?\s+([0-9a-f]+)\b', l)
     if m and cur:
-        callers[m.group(1)].add(cur)
+        tgt = name_of(int(m.group(1), 16))
+        if tgt != cur:
+            callers[tgt].add(cur)
 def cls2(n, depth=0):
     c = cls(n)
     if c != 'other' or depth > 3:

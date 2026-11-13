@@ -29,7 +29,8 @@ const NPH: usize = 13;
 // zero checks, ShuffleSeed, wipes), 3 sign A, 4 random delay, 5 sign B, 6 ct_eq of the two
 // signatures, 7 random delay, 8 verify, 9 the verify sentinel check (two evaluations and a
 // delay), 10 the CFI check (sentinel check, delay), 11 delay-source check and OptRand wipe,
-// 12 the release copy of the signature out of the chain.
+// 12 the release: from the last internal stamp through the caller's extraction of the result (the
+// return copy and the drops on the way out).
 
 #[no_mangle]
 pub static mut SIG0: [u8; SIGNATURE_LEN] = [0; SIGNATURE_LEN];
@@ -63,6 +64,7 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 static mut TICKS: u32 = 0;
 static mut PROGRESS: u32 = 0;
 static mut DELAY_ITERS: u32 = 0;
+static mut T_LAST: u32 = 0;
 
 // bench_avg_v1's stubs of the secure world's `pqsigner_hash_tick` -> `film_tick_hash` (ui/px/lcd.rs)
 // with a film live; the time-paced frame draw is not modelled.
@@ -192,12 +194,13 @@ const CFI_EXPECTED: u32 = CfiCounter::INIT_VALUE
     .wrapping_add(S_VG);
 
 #[inline(never)]
-fn chain(sk: &SigningKey, msg_hash: &[u8; 32], seeds: ([u8; 32], [u8; 32]), ph: &mut [u32; NPH]) -> Result<[u8; SIGNATURE_LEN], ()> {
+fn chain(sk: &SigningKey, msg_hash: &[u8; 32], seeds: ([u8; 32], [u8; 32]), ph: &mut [u64; NPH]) -> Result<[u8; SIGNATURE_LEN], ()> {
     let mut t = cyc();
     let mut stamp = |k: usize| {
         let n = cyc();
-        ph[k] = ph[k].wrapping_add(n.wrapping_sub(t));
+        ph[k] += u64::from(n.wrapping_sub(t));
         t = n;
+        n
     };
     let mut cfi = CfiCounter::new();
     let charge = OK;
@@ -272,7 +275,10 @@ fn chain(sk: &SigningKey, msg_hash: &[u8; 32], seeds: ([u8; 32], [u8; 32]), ph: 
     }
     opt_rand_buf.zeroize();
     zeroize_barrier();
-    stamp(11);
+    let last = stamp(11);
+    // Phase 12 runs from here to the caller's extraction: the return copy and the drops between.
+    // SAFETY: single-threaded bench state.
+    unsafe { core::ptr::addr_of_mut!(T_LAST).write_volatile(last) };
     Ok(sig_a)
 }
 
@@ -295,7 +301,7 @@ pub extern "C" fn c10_bench_main() {
         PROGRESS = 0;
         DELAY_ITERS = 0;
     }
-    let mut ph = [0u32; NPH];
+    let mut ph = [0u64; NPH];
     let (mut ok, mut total) = (0u32, 0u64);
     for i in 0..NMSG {
         let mut m = MSG0;
@@ -307,7 +313,6 @@ pub extern "C" fn c10_bench_main() {
         sb[1] ^= i as u8;
         let t0 = cyc();
         let r = chain(&sk, &m, (sa, sb), &mut ph);
-        let t1 = cyc();
         let s = match r {
             Ok(s) => {
                 ok += 1;
@@ -315,7 +320,8 @@ pub extern "C" fn c10_bench_main() {
             }
             Err(()) => [0u8; SIGNATURE_LEN],
         };
-        ph[12] = ph[12].wrapping_add(cyc().wrapping_sub(t1));
+        // SAFETY: single-threaded bench state, written by `chain` before it returned.
+        ph[12] += u64::from(cyc().wrapping_sub(unsafe { core::ptr::addr_of!(T_LAST).read_volatile() }));
         total += u64::from(cyc().wrapping_sub(t0));
         // SAFETY: single-threaded; read by the runner after the halt.
         unsafe {
@@ -328,7 +334,7 @@ pub extern "C" fn c10_bench_main() {
     }
     out(3, ok);
     for (k, v) in ph.iter().enumerate() {
-        out(4 + k, v / NMSG);
+        out(4 + k, (v / u64::from(NMSG)) as u32);
     }
     out(17, (total / u64::from(NMSG)) as u32);
     // SAFETY: single-threaded bench counters.
@@ -345,6 +351,8 @@ pub extern "C" fn c10_bench_main() {
 // 80-byte `wots_secret` preimage (sk_seed first), 1 `oneshot` on an 80-byte secret-PRF preimage,
 // 2 the streaming init / update / final with the key in its own update. Patterns: the secret and
 // the digest (a first call gives it), then a second call on a cleared dead stack and the scan.
+// `residue-control` adds two positive controls: 3 a function that copies the key into its own
+// frame, 4 a key word written into the word just below sp (the scan's endpoint).
 // The secret buffers are statics, so the scanner never sees them in place. Result: 0 'RES1',
 // 1 stage 401, 2 cases, 3 the mask of cases with residue.
 #[cfg(feature = "residue")]
@@ -356,40 +364,6 @@ extern "C" {
     fn pqsigner_sha256_init();
     fn pqsigner_sha256_update(p: *const u8, n: usize);
     fn pqsigner_sha256_final(out: *mut u8);
-}
-/// `res_clear` leaves the 64 bytes just below sp alone, but `res_found` scans them: the bench's own
-/// `res_add` frame can leave pattern words there that a shallow driver call never overwrites.
-/// Zero them too (interrupts are masked; nothing below sp is live).
-#[cfg(feature = "residue")]
-#[inline(always)]
-fn res_clear_margin() {
-    let sp = res_sp();
-    let mut a = (sp - 64) & !3;
-    while a < sp {
-        // SAFETY: secure SRAM below the live stack (bench: interrupts masked).
-        unsafe { core::ptr::write_volatile(a as *mut u32, 0) };
-        a += 4;
-    }
-}
-/// Diagnostic: the lowest-offset hit, as (sp - address, word).
-#[cfg(feature = "residue")]
-#[inline(always)]
-fn res_first_hit() -> (usize, u32) {
-    let sp = res_sp();
-    // SAFETY: as `res_found`.
-    let n = unsafe { core::ptr::addr_of!(RES_N).read_volatile() };
-    // SAFETY: as `res_found`.
-    let pats = unsafe { core::slice::from_raw_parts(core::ptr::addr_of!(RES_PATS).cast::<u32>(), n) };
-    let mut a = sp - 4;
-    while a > sp - RES_DEPTH {
-        // SAFETY: as `res_found`.
-        let w = u32::from_le_bytes(unsafe { core::ptr::read_volatile(a as *const [u8; 4]) });
-        if w != 0 && pats.contains(&w) {
-            return (sp - a, w);
-        }
-        a -= 1;
-    }
-    (0, 0)
 }
 /// Positive control (`residue-control`, case 3): copies the key into its own frame and returns,
 /// so its dead frame holds the secret: the scan must flag it.
@@ -426,7 +400,7 @@ pub extern "C" fn c10_bench_main() {
     for (i, b) in sk.iter_mut().enumerate() {
         *b = (i as u8).wrapping_mul(151) ^ 0x6D;
     }
-    let ncase = if cfg!(feature = "residue-control") { 4u32 } else { 3 };
+    let ncase = if cfg!(feature = "residue-control") { 5u32 } else { 3 };
     // SAFETY (all calls): the statics are valid for the lengths given; single-threaded bench.
     unsafe {
         let buf = core::ptr::addr_of_mut!(RBUF).cast::<u8>();
@@ -445,6 +419,7 @@ pub extern "C" fn c10_bench_main() {
                 0 => pqsigner_sha256_oneshot16(buf, 80, d),
                 1 => pqsigner_sha256_oneshot(buf, 80, d),
                 3 => leak(buf, d),
+                4 => {}
                 _ => {
                     pqsigner_sha256_init();
                     pqsigner_sha256_update(buf, 32);
@@ -461,8 +436,12 @@ pub extern "C" fn c10_bench_main() {
             res_add(&sk);
             res_add(&dig[..if case == 0 { 16 } else { 32 }]);
             res_clear();
-            res_clear_margin();
             run();
+            if case == 4 {
+                // Endpoint positive control: a key word in the word just below sp.
+                let sp = res_sp();
+                core::ptr::write_volatile((sp - 4) as *mut [u8; 4], [sk[0], sk[1], sk[2], sk[3]]);
+            }
             if res_found() {
                 mask |= 1 << case;
                 if case < 3 {
