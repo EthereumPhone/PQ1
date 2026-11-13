@@ -7,6 +7,12 @@ import {SPHINCsC10Asm} from "../../src/verifiers/SPHINCsC10Asm.sol";
 import {SPHINCsC10v2Asm} from "../../src/verifiers/SPHINCsC10v2Asm.sol";
 import {RefSPHINCsC10Asm} from "../ref/RefSPHINCsC10Asm.sol";
 import {RefSPHINCsC10v2Asm} from "../ref/RefSPHINCsC10v2Asm.sol";
+import {SPHINCsC10v2Ts200Asm} from "../../src/verifiers/SPHINCsC10v2Ts200Asm.sol";
+import {SPHINCsC10v2Split810Asm} from "../../src/verifiers/SPHINCsC10v2Split810Asm.sol";
+import {SPHINCsC10v2All3Asm} from "../../src/verifiers/SPHINCsC10v2All3Asm.sol";
+import {RefSPHINCsC10v2Ts200Asm} from "../ref/RefSPHINCsC10v2Ts200Asm.sol";
+import {RefSPHINCsC10v2Split810Asm} from "../ref/RefSPHINCsC10v2Split810Asm.sol";
+import {RefSPHINCsC10v2All3Asm} from "../ref/RefSPHINCsC10v2All3Asm.sol";
 
 /// RESEARCH (#1155 gas track): verify gas, reference vs candidate, two methods.
 ///
@@ -68,7 +74,11 @@ contract C10GasBenchTest is Test {
     }
 
     function _v2Vecs() internal view returns (Vec[] memory vs) {
-        string memory j = vm.readFile("test/c10v2_kat_vectors.json");
+        return _katVecs("test/c10v2_kat_vectors.json");
+    }
+
+    function _katVecs(string memory file) internal view returns (Vec[] memory vs) {
+        string memory j = vm.readFile(file);
         vs = new Vec[](6);
         for (uint256 i = 0; i < 6; i++) {
             string memory p = string.concat(".v", vm.toString(i));
@@ -144,6 +154,16 @@ contract C10GasBenchTest is Test {
 
     function test_gas_v1() public {
         _bench("v1", address(new RefSPHINCsC10Asm()), address(new SPHINCsC10Asm()), _v1Vecs());
+    }
+
+    /// The research variants (ts200, split810, all3), each on its own KATs.
+    function test_gas_variants() public {
+        _bench("v2-ts200", address(new RefSPHINCsC10v2Ts200Asm()), address(new SPHINCsC10v2Ts200Asm()),
+            _katVecs("test/c10v2_kat_vectors_ts200.json"));
+        _bench("v2-split810", address(new RefSPHINCsC10v2Split810Asm()), address(new SPHINCsC10v2Split810Asm()),
+            _katVecs("test/c10v2_kat_vectors_split810.json"));
+        _bench("v2-all3", address(new RefSPHINCsC10v2All3Asm()), address(new SPHINCsC10v2All3Asm()),
+            _katVecs("test/c10v2_kat_vectors_all3.json"));
     }
 
     function test_gas_v2() public {

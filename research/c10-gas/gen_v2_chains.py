@@ -11,12 +11,13 @@ import sys
 I = " " * 16
 
 
-def block(indent=I, h0_line=None):
+def block(indent=I, ci_shift=218):
+    """ci_shift = 200 + the A7 bit of the chain-index field: 218 for draft 0.3, 217 for split810."""
     out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)"]
     for i in range(43):
         out.append(f"{indent}calldatacopy(0x10, add(wotsPtr, {16 * i}), 16) // chain {i}")
-        out.append(f"{indent}for {{ let a := add(chainA, or(shl(218, {i}), shl(212, and(shr({3 * i}, d), 7)))) }}"
-                   f" lt(a, add(chainA, or(shl(218, {i}), shl(212, 7)))) {{ a := add(a, shl(212, 1)) }} {{")
+        out.append(f"{indent}for {{ let a := add(chainA, or(shl({ci_shift}, {i}), shl(212, and(shr({3 * i}, d), 7)))) }}"
+                   f" lt(a, add(chainA, or(shl({ci_shift}, {i}), shl(212, 7)))) {{ a := add(a, shl(212, 1)) }} {{")
         out.append(f"{indent}    mstore(0x20, a)")
         out.append(f"{indent}    pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))")
         out.append(f"{indent}}}")
@@ -35,8 +36,9 @@ def splice(src, new):
 
 if __name__ == "__main__":
     mode, path = sys.argv[1], sys.argv[2]
+    ci = int(sys.argv[3]) if len(sys.argv) > 3 else 218
     src = open(path).read()
-    new = splice(src, block())
+    new = splice(src, block(ci_shift=ci))
     if mode == "--check":
         sys.exit(0 if new == src else "generated chain block differs from gen_v2_chains.py output")
     open(path, "w").write(new)
