@@ -386,6 +386,27 @@ pub extern "C" fn c10_bench_main() {
     }
     between!();
 
+    // 6b. Round 7: dense digit-sum sweep, driver search vs software, 96 tries per call.
+    //     Targets 140..160 sit near the mean (hits dense, the full-sum path); 180..200
+    //     straddle s4 + 77 (both sides of the early reject).
+    for _ in 0..6 {
+        let mut sm = [0u8; 32];
+        rng.fill(&mut sm);
+        let a = a7(7, rng.below(2).into(), rng.below(512).into(), rng.below(KP_RANGE).into(), 0, 0, 0);
+        let (a0, a1) = words(a);
+        let start = rng.u32() >> 1;
+        let sums: [u32; 96] = core::array::from_fn(|i| digit_sum(&wd(&sm, start + i as u32, a)));
+        for target in (140..=160u32).chain((180..=200u32).step_by(2)) {
+            let want = sums.iter().position(|&x| x == target).map_or(start + 96, |i| start + i as u32);
+            let mut d = [0xEEu8; 32];
+            between!();
+            // SAFETY: 32 readable, 32 writable; start + 96 does not overflow.
+            let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, 96, target, d.as_mut_ptr()) };
+            t.check(6, c, r == want && (r == start + 96 || d == wd(&sm, r, a)));
+            c += 1;
+        }
+    }
+
     // 7. wots_chains16: a whole key's 43 chains (PRF then `steps` steps each).
     out(1, 8);
     for c in 0..40u32 {

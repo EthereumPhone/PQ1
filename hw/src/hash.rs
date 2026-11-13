@@ -2264,6 +2264,47 @@ fn v2_chain_core(s: [u32; 4], mut v: [u32; 4], a0: u32, low24: u32, start: u32, 
     v
 }
 
+/// Round 7 attribution (a Rust timed poll in the chain loop gave 116-122 for
+/// spins 3..11, no gain: the chain needs the asm schedule): a fixed delay (3 cycles per iteration) inside the engine
+/// window, so the first DCIS poll lands just after the digest completes.
+#[cfg(feature = "v2-fold-sum")]
+#[inline(always)]
+fn v2_spin(n: u32) {
+    // SAFETY: a register-only countdown; n >= 1.
+    unsafe { core::arch::asm!("1:", "subs {0}, {0}, #1", "bne 1b", inout(reg) n => _, options(nomem, nostack)) }
+}
+#[cfg(feature = "v2-fold-sum")]
+const V2_RUST_SEARCH_SPIN: u32 = 1;
+
+/// Exact digits 0..31 of the WOTS+C digest (w5, w6, w7; w7 least significant), as
+/// `g24` sums them: ten whole digits per word paired under 0o0707070707, folded to
+/// 12-bit fields, summed by one multiply (see the round 7 ledger for the check).
+#[cfg(feature = "v2-fold-sum")]
+#[inline(always)]
+fn v2_fold_s4(w5: u32, w6: u32, w7: u32) -> u32 {
+    const A: u32 = 0x071C_71C7;
+    const B: u32 = 0x3F03_F03F;
+    let t = (w7 & A)
+        .wrapping_add((w7 >> 3) & A)
+        .wrapping_add((w6 >> 1) & A)
+        .wrapping_add((w6 >> 4) & A)
+        .wrapping_add((w5 >> 2) & A)
+        .wrapping_add((w5 >> 5) & A);
+    let u = (t & B).wrapping_add((t >> 6) & B);
+    (u.wrapping_mul(0x0100_1001) >> 24)
+        .wrapping_add(w7 >> 30 | (w6 & 1) << 2)
+        .wrapping_add(w6 >> 31 | (w5 & 3) << 1)
+}
+#[cfg(feature = "v2-fold-sum")]
+#[inline(always)]
+fn v2_fold_rest(w3: u32, w4: u32) -> u32 {
+    const A: u32 = 0x071C_71C7;
+    const B: u32 = 0x3F03_F03F;
+    let t = (w4 & A).wrapping_add((w4 >> 3) & A);
+    let u = (t & B).wrapping_add((t >> 6) & B);
+    (u.wrapping_mul(0x0100_1001) >> 24).wrapping_add(w4 >> 30 | (w3 & 1) << 2)
+}
+
 /// # Safety
 /// `seed` 16 readable bytes, `val` 16 readable and writable; no other stream in flight.
 #[cfg(feature = "v2")]
@@ -2730,11 +2771,11 @@ macro_rules! v2_search_issue {
 fn v2_search_asm(sm: *const u8, a0: u32, a1: u32, start: u32, end: u32, target: u32) -> (u32, u32) {
     let (c, flag): (u32, u32);
     // SAFETY: drives only the secure HASH block (r4 = HASH_BASE); reads 32 bytes at
-    // `sm` (caller contract); pushes/pops its own 5-word frame; on a hang or a stale
+    // `sm` (caller contract); pushes/pops its own 6-word frame; on a hang or a stale
     // DCIS it calls `hash_engine_fault`, which does not return.
     unsafe {
         core::arch::asm!(
-            "push {{r0, r1, r2, r3, r5}}",     // [sp] a0, [4] a1, [8] end, [12] target, [16] sm
+            "push {{r0, r1, r2, r3, r5, r12}}", // [sp] a0, [4] a1, [8] end, [12] target, [16] sm, [20] pad (8-byte sp)
             "movw lr, #0x24",
             "movt lr, #0x6",
             v2_search_issue!(),
@@ -2921,7 +2962,7 @@ fn v2_search_asm(sm: *const u8, a0: u32, a1: u32, start: u32, end: u32, target: 
             "99:",
             "bl {fault}",
             "97:",
-            "add sp, sp, #20",
+            "add sp, sp, #24",
             spin = const V2_ASM_SEARCH_SPIN,
             fault = sym hash_engine_fault,
             inout("r0") a0 => flag,
@@ -2995,6 +3036,8 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
     let mut c = start;
     loop {
         // Per try only HR3..HR7, the words the digit sum reads (big-endian).
+        #[cfg(feature = "v2-fold-sum")]
+        v2_spin(V2_RUST_SEARCH_SPIN);
         v2_wait_dcis();
         // SAFETY: HR3..HR7, inside the digest bank.
         let (w3, w4, w5, w6, w7) =
@@ -3014,15 +3057,22 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
         // Digits 0..31 first (`v2_digit_sum`'s first four groups). Digits
         // 32..42 add at most 11 x 7 = 77, so below `target - 77` there is no
         // hit and the rest is skipped (public grind data: branching is fine).
+        #[cfg(not(feature = "v2-fold-sum"))]
         let s4 = g24(w7 & 0x00FF_FFFF)
             .wrapping_add(g24(w7 >> 24 | (w6 & 0xFFFF) << 8))
             .wrapping_add(g24(w6 >> 16 | (w5 & 0xFF) << 16))
             .wrapping_add(g24(w5 >> 8));
+        #[cfg(feature = "v2-fold-sum")]
+        let s4 = v2_fold_s4(w5, w6, w7);
         if s4.wrapping_add(77) >= target {
-            let t = w4 >> 24 | (w3 & 1) << 8;
-            let sum = s4
-                .wrapping_add(g24(w4 & 0x00FF_FFFF))
-                .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6));
+            #[cfg(not(feature = "v2-fold-sum"))]
+            let sum = {
+                let t = w4 >> 24 | (w3 & 1) << 8;
+                s4.wrapping_add(g24(w4 & 0x00FF_FFFF))
+                    .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6))
+            };
+            #[cfg(feature = "v2-fold-sum")]
+            let sum = s4.wrapping_add(v2_fold_rest(w3, w4));
             debug_assert!(sum == v2_digit_sum(&[w3, w4, w5, w6, w7]));
             if sum == target {
                 // A hit (twice per pass): drop the try in flight, then recompute

@@ -750,3 +750,28 @@ Spin 13 gives a steady state of about 97 cycles, at the floor. One step early co
   - Fable's item 13, the `search128` digit sum and early reject in the driver. Not yet measured: v1's two-block try gives the predicate a ~130-cycle window, so the gain may be smaller than Fable's 3–5 M.
 - **Group B** (owner decisions): dropping the per-digest SR clear; #1151's no-BUSY-wait. On the asm loops, BUSY clears within the post-DCIS work, so the latter is now worth less.
 - **Bench-side tuning only:** the timed-spin constants (13, 1) are tuned on this kit at 160 MHz with ICACHE 2-way; a different clock or code placement needs a re-sweep. An early poll costs a few cycles, a late one the overshoot.
+
+### Round 7 follow-up checks (after the advisor review)
+
+**Attribution: is asm needed?** The two levers were tested in plain Rust, asm off:
+- **Timed poll in the Rust chain loop:** spins 3–11 give 116–122 cycles per digest, no gain over 116.2. Rust cannot hold the phase; the chain needs the asm schedule.
+- **Fold-multiply sum in the Rust search** (`v2-fold-sum`, kept off by default as a fallback): 137 → 126 per try. The asm gives 114, worth about 0.7 M per pass more.
+
+**Product configuration (caveat).**
+- Both asm paths compile out under `tick-hook` without `tick-batch`, the per-digest UI tick. A product build in that configuration silently runs the old loops.
+- The −8.4% is a no-tick bench figure and reaches the product only with the batched tick (#1149) or a tick inside the asm loops.
+
+**Rust fallback at head** (bench crates with both asm features off): gate 5 2,523/0; kit golden passes.
+
+**Dense digit-sum sweep, added to gate 5** (group 6b):
+- the driver search against software search over 96 tries, 6 random keys, 32 targets;
+- targets 140..160: hits dense, the full-sum path;
+- targets 180..200 even: both sides of the early reject.
+
+Gate 5 is now 2,523/0. Mutant: the straddling-digit field `bfi r11, r2, #1, #2` changed to `#1, #1` gives **125 failures** (search group); restored, 0.
+
+**Format variants at head (with the asm):**
+- goldens plain and cached (3 hits each) pass for ts200, prf2, split810 and all three;
+- gate 5: prf2 2,523/0, split810 2,530/0, prf2+split810 2,530/0.
+
+**Search asm stack:** now pushes 6 words, so `sp` stays 8-byte aligned at the `bl` to the fault hook.
