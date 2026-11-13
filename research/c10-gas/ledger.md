@@ -322,3 +322,9 @@ the chain index is now a per-chain constant `shl(217, N)` in the generated block
 would report "mutation did not apply". Its other patches (`shl(23, i))`, `shl(23, idxLeaf)`,
 `let hl := add(8, shl(1, layer))`, the target-sum and FORS+C revert lines) still apply once. Not
 edited here.
+
+## Batch 3 (2026-11-13): deploy size is part of the objective
+
+| # | experiment | verifier | callee-only before -> after (default) | deploy before -> after | size default / deploy | gates | decision |
+|---|---|---|---|---|---|---|---|
+| C1 | byte-wise chain A7 (Fable): `mstore(0x20, chainA)` once per layer; per chain `mstore8(0x24, ci<<2)` (split810: `or(kb, ci<<1)`, kb = kp bit 0 in byte 4); per step `mstore8(0x25, cp<<4)` with cp from position algebra (4-block at digit, 2-block at digit \\| 4, 1-block always 6); no `a` word | v2 + variants | 0.3 103,908..103,982 -> **101,296..101,466** (-2.5k); ts200 -> 103,554..103,624; split810 -> 102,041..102,133; all3 -> 104,161..104,217 | 0.3 100,766..100,879 -> 100,282..100,452 (-0.4k); ts200 -> 102,540..102,610; split810 -> 100,990..101,082; all3 -> 103,110..103,166 | 0.3 11,016 -> 9,979 / **18,820 -> 10,715** (split810 19,272 -> 11,298) | gate.sh green | keep (-8.1 kB deploy) |

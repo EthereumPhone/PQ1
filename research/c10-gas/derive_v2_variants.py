@@ -74,11 +74,15 @@ def split810(b):
                 let idxLeaf := and(idxTree, sub(shl(hl, 1), 1))
                 idxTree := shr(hl, idxTree)
                 let kpBase := or(or(shl(51, layer), shl(33, idxTree)), shl(23, idxLeaf))""")
-    b = sub(b, "// overwrites it. The A7 word of chain i at position p is chainA | i<<218 | p<<212\n"
-               "                // (type 0, WOTS_HASH; ci = A7 bits 23..18, cp = bits 15..12;",
-            "// overwrites it. The A7 word of chain i at position p is chainA | i<<217 | p<<212\n"
-            "                // (type 0, WOTS_HASH; ci = A7 bits 22..17 (split810), cp = bits 15..12;")
-    b = gen_v2_chains.splice(b, gen_v2_chains.block(ci_shift=217))
+    b = sub(b, "// overwrites it. A7 = chainA | i<<18 | p<<12 (type 0, WOTS_HASH): bytes 0..3 and 6\n"
+               "                // are those of chainA, written once per layer; byte 4 = ci<<2 is written per chain and",
+            "// overwrites it. A7 = chainA | i<<17 | p<<12 (type 0, WOTS_HASH): bytes 0..3 and 6\n"
+            "                // are those of chainA, written once per layer; byte 4 = kb | ci<<1 (split810: kp's\n"
+            "                // lowest bit, A7 bit 23, is byte 4's top bit, kept in kb) is written per chain and")
+    b = sub(b, "                mstore(0x20, shl(200, kpBase)) // A7 of chain 0 at position 0\n",
+            "                mstore(0x20, shl(200, kpBase)) // A7 of chain 0 at position 0\n"
+            "                let kb := byte(4, shl(200, kpBase)) // A7 byte 4 without ci: kp bit 0 at bit 7\n")
+    b = gen_v2_chains.splice(b, gen_v2_chains.block_bytes(split810=True))
     # Merkle: heights 1..8 for both layers, 9..10 for layer 1 only (gen_v2_walks.merkle(split810))
     b = sub(b, "// the FORS one (generated); the root (index 0 at height 9) lands at 0x10, the next\n"
                "                // layer's m16.",

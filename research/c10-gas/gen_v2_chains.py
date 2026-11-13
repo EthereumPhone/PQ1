@@ -35,6 +35,46 @@ def block(indent=I, ci_shift=218):
     return "\n".join(out) + "\n"
 
 
+def _digit16(i):
+    """digit_i << 4 = ((d >> 3i) & 7) << 4, i.e. cp byte (A7 byte 5) of the chain's first position."""
+    sh = 3 * i - 4
+    if sh >= 0:
+        return f"and(shr({sh}, d), 0x70)"
+    return f"and(shl({-sh}, d), 0x70)"
+
+
+def block_bytes(indent=I, split810=False):
+    """Byte-wise A7 (batch 3): the per-layer `mstore(0x20, chainA)` leaves A7 bytes 0..3 and byte 6
+    in place; per chain only byte 4 (ci) and per step only byte 5 (cp << 4) are written with
+    mstore8. Position algebra (s = 7 - digit = 4 b2 + 2 b1 + b0, blocks run 4, 2, 1): the 4-block
+    starts at digit, the 2-block at digit | 4, the 1-block is always position 6."""
+    out = [f"{indent}// BEGIN generated chains (research/c10-gas/gen_v2_chains.py; do not edit by hand)"]
+    call = "pop(staticcall(gas(), 0x02, 0x00, 39, 0x10, 16))"
+    for i in range(43):
+        out.append(f"{indent}calldatacopy(0x10, add(wotsPtr, {16 * i}), 16) // chain {i}")
+        ci = f"or(kb, {2 * i})" if split810 else f"{4 * i}"
+        out.append(f"{indent}mstore8(0x24, {ci}) // A7 byte 4: ci")
+        out.append(f"{indent}{{")
+        j = indent + "    "
+        out.append(f"{j}let p := {_digit16(i)}")
+        out.append(f"{j}if and(nd, shl({3 * i + 2}, 1)) {{")
+        for k in range(4):
+            v = "p" if k == 0 else f"add(p, {hex(16 * k)})"
+            out += [f"{j}    mstore8(0x25, {v})", f"{j}    {call}"]
+        out.append(f"{j}}}")
+        out.append(f"{j}if and(nd, shl({3 * i + 1}, 1)) {{")
+        out += [f"{j}    mstore8(0x25, or(p, 0x40))", f"{j}    {call}",
+                f"{j}    mstore8(0x25, add(or(p, 0x40), 0x10))", f"{j}    {call}"]
+        out.append(f"{j}}}")
+        out.append(f"{j}if and(nd, shl({3 * i}, 1)) {{")
+        out += [f"{j}    mstore8(0x25, 0x60)", f"{j}    {call}"]
+        out.append(f"{j}}}")
+        out.append(f"{indent}}}")
+        out.append(f"{indent}mstore(add(TB, {24 + 16 * i}), mload(0x10))")
+    out.append(f"{indent}// END generated chains")
+    return "\n".join(out) + "\n"
+
+
 def block_v1(indent=I):
     """The same blocks for the v1 (32-byte) layout: value word at 0x40 (low half zero), ADRS word
     at 0x20 = wotsAdrs | i<<64 | p<<32, 96-byte preimage, endpoint to TB + 0x40 + 32 i."""
@@ -72,7 +112,12 @@ if __name__ == "__main__":
     mode, path = sys.argv[1], sys.argv[2]
     arg = sys.argv[3] if len(sys.argv) > 3 else "218"
     src = open(path).read()
-    new = splice(src, block_v1() if arg == "v1" else block(ci_shift=int(arg)))
+    if arg == "v1":
+        new = splice(src, block_v1())
+    elif arg == "split810":
+        new = splice(src, block_bytes(split810=True))
+    else:
+        new = splice(src, block_bytes())
     if mode == "--check":
         sys.exit(0 if new == src else "generated chain block differs from gen_v2_chains.py output")
     open(path, "w").write(new)
