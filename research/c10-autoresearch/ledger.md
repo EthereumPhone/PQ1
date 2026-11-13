@@ -861,3 +861,26 @@ The asm's in-loop stale check (as in H3) cannot be reached by a control: the ent
 - v1 `search128`: three blocks per try (128 bytes + padding), so the predicate is likely hidden; profile first.
 - `node16`/T_43 are small.
 - **Product:** H1–H4 compile out under the per-digest tick (#1149).
+
+### Round 7 fixes (after the advisor's second review)
+
+- **H2 alignment bug, real.** The search asm loaded `S ‖ m` with `ldm` straight from the caller's byte pointer. LDM faults on an unaligned address, and the contract promises only "32 readable bytes".
+  - Gate 5's dense sweep now passes `sm` at an odd address. Before the fix it **hard-faulted** (status 0xfa170003, stage 7).
+  - The wrapper now copies `sm` (public data) into an aligned `[u32; 8]`. Gate 5 2,523/0 with the odd address.
+- **H3 secret copy removed.** The PRF transition now reads `sk_seed` in place with single `ldr`s (unaligned-safe) and stages only `[p0, p1']`, so there is no copy of the secret to wipe on the fault path. `fors_subtree16`: 111.9 → 110.6.
+- **Search spin re-swept** after the layout change: 1 (114.0 per try).
+- **Re-gated:**
+  - gate 5 for 0.3 and split810;
+  - guard, stale, stale-search and stale-v1 controls;
+  - v2 goldens, plain and cached; ts200, split810 and all-three goldens, plain and cached;
+  - v1 golden 225,840,970.
+- **Means (2-way):** v2 57.54 M; v1 106.49 M.
+- **Shipped 1-way ICACHE** (`EXP_CFLAGS=`), asm on against off:
+
+  | | asm off | asm on | change |
+  |---|---:|---:|---:|
+  | v2 | 65.61 M | 57.56 M | −12.3% |
+  | v1 | 110.21 M | 106.58 M | −3.3% |
+
+  The 2-way-tuned spins hold.
+- **"0.337":** not found in any session transcript (only timestamps), log or #1155 comment. The closest reported figure is 0.321 s (≈ 0.32 s), for all three options plus the cache.

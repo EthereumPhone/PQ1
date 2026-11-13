@@ -402,7 +402,11 @@ pub extern "C" fn c10_bench_main() {
             let mut d = [0xEEu8; 32];
             between!();
             // SAFETY: 32 readable, 32 writable; start + 96 does not overflow.
-            let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, 96, target, d.as_mut_ptr()) };
+            // `sm` at an odd address: the driver contract is "32 readable bytes", no alignment.
+            let mut smo = [0u8; 40];
+            smo[1..33].copy_from_slice(&sm);
+            // SAFETY: smo[1..33] is readable.
+            let r = unsafe { pqsigner_v2_search43_target(smo.as_ptr().add(1), a0, a1, start, 96, target, d.as_mut_ptr()) };
             t.check(6, c, r == want && (r == start + 96 || d == wd(&sm, r, a)));
             c += 1;
         }

@@ -2671,7 +2671,7 @@ fn v2_ha(x: u32) -> u32 {
 /// Rust caller prepares the next message's fixed words while the engine runs.
 #[cfg(feature = "v2-asm-fors")]
 macro_rules! v2x_head {
-    () => {
+    ($cr:literal) => {
         concat!(
             ".rept 16\n", "ldr r12, [{hb}, #0x18]\n", "lsls r12, r12, #30\n", "bmi 4f\n", ".endr\n",
             "mov.w r10, #16777216\n",
@@ -2682,7 +2682,7 @@ macro_rules! v2x_head {
             "rev r0, r0\n", "rev r1, r1\n", "rev r2, r2\n", "rev r3, r3\n",
             "ldr r12, [{hb}, #0x18]\n", "tst r12, #10\n", "bne 40f\n",
             "41:\n",
-            "str {cr}, [{hb}, #-12]\n",
+            "str ", $cr, ", [{hb}, #-12]\n",
         )
     };
 }
@@ -2717,7 +2717,7 @@ fn v2x_f(ss: *const u32) -> [u32; 4] {
     // a stale DCIS it calls `hash_engine_fault`, which does not return.
     unsafe {
         core::arch::asm!(
-            v2x_head!(),
+            v2x_head!("{cr}"),
             "ldm {ss}, {{r8, r9, r10, r12}}\n",
             v2x_store4!("r8", "r9", "r10", "r12"),
             v2x_store4!("r0", "r1", "r2", "r3"),
@@ -2741,7 +2741,7 @@ fn v2x_h(ss: *const u32, l: *const u32) -> [u32; 4] {
     // SAFETY: as `v2x_f`; also reads 16 bytes at `l`.
     unsafe {
         core::arch::asm!(
-            v2x_head!(),
+            v2x_head!("{cr}"),
             "ldm {ss}, {{r8, r9, r10, r12}}\n",
             v2x_store4!("r8", "r9", "r10", "r12"),
             "ldm {l}, {{r8, r9, r10, r12}}\n",
@@ -2758,23 +2758,26 @@ fn v2x_h(ss: *const u32, l: *const u32) -> [u32; 4] {
     [v0, v1, v2, v3]
 }
 
-/// Transition into the next leaf's PRF: message `ps[0..10]` (`sk_seed`, p0, p1').
+/// Transition into the next leaf's PRF: message `sk_seed ‖ p0 ‖ p1'`, `sk_seed`
+/// read in place with single-word loads (no copy; unaligned is fine), `pp` =
+/// `[p0, p1']`. The CR value is materialized in `lr` inside the engine window.
 #[cfg(feature = "v2-asm-fors")]
 #[inline(always)]
-fn v2x_prf(ps: *const u32) -> [u32; 4] {
+fn v2x_prf(sk: *const u8, pp: *const u32) -> [u32; 4] {
     let (v0, v1, v2, v3): (u32, u32, u32, u32);
-    // SAFETY: as `v2x_f`; reads 40 bytes at `ps`.
+    // SAFETY: as `v2x_f`; reads 32 bytes at `sk` and 8 at `pp`.
     unsafe {
         core::arch::asm!(
-            v2x_head!(),
-            "ldm {ps}, {{r8, r9, r10, r12}}\n",
+            "movw lr, #0x24\n", "movt lr, #0x6\n",
+            v2x_head!("lr"),
+            "ldr r8, [{sk}]\n", "ldr r9, [{sk}, #4]\n", "ldr r10, [{sk}, #8]\n", "ldr r12, [{sk}, #12]\n",
             v2x_store4!("r8", "r9", "r10", "r12"),
-            "ldr r8, [{ps}, #16]\n", "ldr r9, [{ps}, #20]\n", "ldr r10, [{ps}, #24]\n", "ldr r12, [{ps}, #28]\n",
+            "ldr r8, [{sk}, #16]\n", "ldr r9, [{sk}, #20]\n", "ldr r10, [{sk}, #24]\n", "ldr r12, [{sk}, #28]\n",
             v2x_store4!("r8", "r9", "r10", "r12"),
-            "ldrd r8, r9, [{ps}, #32]\n", "str r8, [{hb}, #-8]\n", "str r9, [{hb}, #-8]\n",
-            "movs r8, #0\n", "movs r9, #0\n", "movs r10, #0\n", "movs r12, #0\n",
+            "ldrd r8, r9, [{pp}]\n", "str r8, [{hb}, #-8]\n", "str r9, [{hb}, #-8]\n",
+            "movs r10, #0\n", "movs r12, #0\n",
             v2x_tail!(),
-            hb = in(reg) HASH_BASE + 0x0C, cr = in(reg) CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT, ps = in(reg) ps,
+            hb = in(reg) HASH_BASE + 0x0C, sk = in(reg) sk, pp = in(reg) pp,
             fault = sym hash_engine_fault,
             out("r0") v0, out("r1") v1, out("r2") v2, out("r3") v3,
             out("r8") _, out("r9") _, out("r10") _, out("r12") _, out("lr") _,
@@ -2810,21 +2813,15 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
     let end = j0 + (1 << h);
     #[cfg(all(feature = "v2-asm-fors", not(feature = "v2-prf2"), not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
     {
-        // Staging for the asm transitions: `ss` = S, a0, a1'; `ps` = sk_seed, p0, p1'
-        // (a copy of the secret seed: wiped below with volatile writes).
+        // Staging for the asm transitions: `ss` = S, a0, a1'; `pp` = p0, p1'. The
+        // PRF transitions read `sk_seed` in place (no copy of the secret).
         let mut ss = [s[0], s[1], s[2], s[3], a0, 0];
-        let mut ps = [0u32; 10];
-        let q = sk_seed.cast::<u32>();
-        for (i, w) in ps.iter_mut().take(8).enumerate() {
-            // SAFETY: caller contract, `sk_seed` names 32 readable bytes.
-            *w = unsafe { q.add(i).read_unaligned() };
-        }
-        ps[8] = p0;
-        ps[9] = p1 | v2_ha(j0);
+        let mut pp = [p0, p1 | v2_ha(j0)];
         v2_begin();
-        for w in ps {
-            write_word(w);
-        }
+        // SAFETY: caller contract.
+        unsafe { feed_words(sk_seed, 8) };
+        write_word(pp[0]);
+        write_word(pp[1]);
         REG.str_.write(V2_NBLW | STR_DCAL);
         let mut j = j0;
         loop {
@@ -2841,8 +2838,8 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
             }
             j += 1;
             let node = if j < end {
-                ps[9] = p1 | v2_ha(j);
-                v2x_prf(ps.as_ptr())
+                pp[1] = p1 | v2_ha(j);
+                v2x_prf(sk_seed, pp.as_ptr())
             } else {
                 v2_wait_dcis();
                 let v = read_hr4();
@@ -2855,11 +2852,6 @@ pub unsafe extern "C" fn pqsigner_v2_fors_subtree16(
                 break;
             }
         }
-        for w in ps.iter_mut() {
-            // SAFETY: a valid, aligned, exclusive reference.
-            unsafe { core::ptr::write_volatile(w, 0) };
-        }
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
         // SAFETY: caller contract.
         unsafe { v2_store4(out, stack[0]) };
         return;
@@ -3068,7 +3060,7 @@ fn v2_digit_sum(w: &[u32; 5]) -> u32 {
 /// digits 0..31. Differences are only in schedule: HR3..HR7 in one `ldm`, `S‖m`
 /// via two `ldm`, the digit sum in the next try's engine window, a timed first poll.
 #[cfg(feature = "v2-asm-search")]
-const V2_ASM_SEARCH_SPIN: u32 = 2;
+const V2_ASM_SEARCH_SPIN: u32 = 1;
 
 #[cfg(all(feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 macro_rules! v2_search_issue {
@@ -3352,7 +3344,11 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
     #[cfg(all(feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
     {
         let _ = g24;
-        let (c, flag) = v2_search_asm(sm, a0, a1, start, end, target);
+        // The asm reads `S ‖ m` with `ldm`, which needs a word-aligned address; the
+        // contract promises only 32 readable bytes, so copy it (public data).
+        // SAFETY: caller contract, `sm` names 32 readable bytes.
+        let smw: [u32; 8] = core::array::from_fn(|i| unsafe { sm.cast::<u32>().add(i).read_unaligned() });
+        let (c, flag) = v2_search_asm(smw.as_ptr().cast::<u8>(), a0, a1, start, end, target);
         if flag == 0 {
             return end;
         }
