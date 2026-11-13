@@ -18,7 +18,18 @@ for f in src/verifiers/SPHINCsC10v2Asm.sol src/verifiers/SPHINCsC10Asm.sol; do
   echo "  ok $f"
 done
 
+echo "== text pin: the C10-LANES lines of the unit gate are the only such lines of each v2 verifier"
+LT='// C10-LANES$'
+LSNIP=$(grep -h "$LT" test/gas/C10Lanes.t.sol | sed 's/^ *//')
+[ -n "$LSNIP" ] || { echo "FAIL: no C10-LANES lines in the unit test"; exit 1; }
+for f in src/verifiers/SPHINCsC10v2Asm.sol src/verifiers/SPHINCsC10v2Ts200Asm.sol src/verifiers/SPHINCsC10v2Split810Asm.sol src/verifiers/SPHINCsC10v2All3Asm.sol; do
+  got=$(grep -h "$LT" "$f" | sed 's/^ *//' | sort -u)
+  [ "$got" = "$(echo "$LSNIP" | sort -u)" ] || { echo "FAIL: $f C10-LANES lines differ from the unit-tested ones"; exit 1; }
+  echo "  ok $f"
+done
+
 echo "== generated blocks match their generators"
+python3 "$ROOT/research/c10-gas/gen_v2_walks.py" --check src/verifiers/SPHINCsC10v2Asm.sol && echo "  ok v2 walks"
 python3 "$ROOT/research/c10-gas/gen_v2_chains.py" --check src/verifiers/SPHINCsC10v2Asm.sol && echo "  ok v2 chains"
 python3 "$ROOT/research/c10-gas/derive_v2_variants.py" --check && echo "  ok v2 variants derived from the 0.3 candidate"
 

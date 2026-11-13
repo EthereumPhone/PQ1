@@ -23,6 +23,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 VER = os.path.join(ROOT, "contracts", "smart-wallet", "src", "verifiers")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_v2_chains  # noqa: E402
+import gen_v2_walks  # noqa: E402
 
 BASE = os.path.join(VER, "SPHINCsC10v2Asm.sol")
 I = " " * 16
@@ -78,32 +79,12 @@ def split810(b):
             "// overwrites it. The A7 word of chain i at position p is chainA | i<<217 | p<<212\n"
             "                // (type 0, WOTS_HASH; ci = A7 bits 22..17 (split810), cp = bits 15..12;")
     b = gen_v2_chains.splice(b, gen_v2_chains.block(ci_shift=217))
-    # Merkle: heights 1..8 for both layers (layer 0's root, index 0 at height 8, lands at 0x10 by the
-    # general slot rule), heights 9..10 for layer 1 only, its root at 0x10.
-    m0 = b.index("                // Unrolled as in FORS (x = 16 * idxLeaf; ha = idxLeaf >> h); the root (height 9,")
-    m1 = b.index("                sigOff := add(countOff, 148) // 4 + 9*16")
-    lines = [
-        "                // Unrolled as in FORS (x = 16 * idxLeaf; ha = idxLeaf >> h). Heights 1..8 for both",
-        "                // layers: layer 0's root (height 8, index 0) lands at 0x10 by the general slot rule;",
-        "                // layer 1 continues with heights 9..10, its root (index 0) at 0x10.",
-        "                let treeBase := or(or(shl(52, 2), shl(51, layer)), shl(33, idxTree))",
-        "                let aw := shl(200, treeBase)",
-        "                let x := shl(4, idxLeaf)",
-        "                let merklePtr := add(sigBase, add(countOff, 4))",
-    ]
-    for h in range(1, 9):
-        lines += [f"{I}calldatacopy(sub(0x20, and(shr({h - 1}, x), 0x10)), add(merklePtr, {16 * (h - 1)}), 16)",
-                  f"{I}mstore(0x30, or(or(aw, shl(212, {h})), shl(201, shr({h}, idxLeaf))))",
-                  f"{I}pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr({h}, x), 0x10)), 16))"]
-    lines += ["                if layer {",
-              "                    calldatacopy(sub(0x20, and(shr(8, x), 0x10)), add(merklePtr, 128), 16)",
-              "                    mstore(0x30, or(or(aw, shl(212, 9)), shl(201, shr(9, idxLeaf))))",
-              "                    pop(staticcall(gas(), 0x02, 0x00, 55, add(0x10, and(shr(9, x), 0x10)), 16))",
-              "                    calldatacopy(sub(0x20, and(shr(9, x), 0x10)), add(merklePtr, 144), 16)",
-              "                    mstore(0x30, or(aw, shl(212, 10)))",
-              "                    pop(staticcall(gas(), 0x02, 0x00, 55, 0x10, 16))",
-              "                }"]
-    b = b[:m0] + "\n".join(lines) + "\n" + b[m1:]
+    # Merkle: heights 1..8 for both layers, 9..10 for layer 1 only (gen_v2_walks.merkle(split810))
+    b = sub(b, "// the FORS one (generated); the root (index 0 at height 9) lands at 0x10, the next\n"
+               "                // layer's m16.",
+            "// the FORS one (generated); heights 1..8 for both layers, 9..10 for layer 1 only;\n"
+            "                // the root (index 0, height 8 or 10) lands at 0x10, the next layer's m16.")
+    b = gen_v2_walks.splice(b, "Merkle walk", gen_v2_walks.merkle(split810=True))
     b = sub(b, "                sigOff := add(countOff, 148) // 4 + 9*16",
             "                sigOff := add(countOff, add(4, shl(4, hl))) // 4 + hl*16: 132 (layer 0), 164 (layer 1)")
     return b

@@ -41,8 +41,8 @@ MUTANTS = [
      "count >= 2^31 hashed with the top bit cleared (only rejected inputs differ: trace-only)"),
     ("v2-root-cmp", V2, "valid := eq(and(mload(0x10), N_MASK), pkRoot)", "valid := eq(and(mload(0x10), N_MASK), and(mload(0x10), N_MASK))",
      "final root comparison"),
-    ("v2-e2-sib15", V2, "calldatacopy(sub(0x20, and(shr(4, x), 0x10)), add(merklePtr, 64), 16)",
-     "calldatacopy(sub(0x20, and(shr(4, x), 0x10)), add(merklePtr, 64), 15)",
+    ("v2-e2-sib15", V2, "calldatacopy(sub(0x30, byte(9, slots)), add(merklePtr, 64), 16)",
+     "calldatacopy(sub(0x30, byte(9, slots)), add(merklePtr, 64), 15)",
      "E2: hypertree sibling copy one byte short (stale last byte)"),
     ("v2-e2-forsroot-slot", V2, "pop(staticcall(gas(), 0x02, 0x00, 55, add(TB, add(24, shl(4, i))), 16))",
      "pop(staticcall(gas(), 0x02, 0x00, 55, add(TB, add(23, shl(4, i))), 16))",
@@ -57,11 +57,19 @@ MUTANTS = [
     ("v2-e3-digit7", V2, "calldatacopy(0x10, add(wotsPtr, 672), 16) // chain 42",
      "calldatacopy(0x10, add(wotsPtr, 672), 16) if eq(and(shr(126, d), 7), 7) { mstore(0x10, 0) }",
      "E3: zero-step (digit 7) chains lose their signature value"),
-    ("v2-e4-fors-h8-sibslot", V2, "calldatacopy(sub(0x20, and(shr(7, x), 0x10)), add(authPtr, 112), 16)",
-     "calldatacopy(sub(0x20, and(shr(8, x), 0x10)), add(authPtr, 112), 16)",
+    ("v2-e4-fors-h8-sibslot", V2, "calldatacopy(sub(0x30, byte(15, slots)), add(authPtr, 112), 16)",
+     "calldatacopy(sub(0x30, byte(17, slots)), add(authPtr, 112), 16)",
      "E4: FORS height-8 sibling slot from the wrong index bit"),
-    ("v2-e4-merkle-h5-ha", V2, "shl(201, shr(5, idxLeaf))", "shl(201, shr(4, idxLeaf))",
-     "E4: hypertree height-5 ha from the wrong shift"),
+    ("v2-e4-merkle-h5-ha", V2, "calldatacopy(sub(0x30, byte(11, slots)), add(merklePtr, 80), 16)",
+     "calldatacopy(sub(0x30, byte(13, slots)), add(merklePtr, 80), 16)",
+     "E4/B5: hypertree height-6 sibling slot from the wrong index bit"),
+    ("v2-b5-fors-h11-cpha", V2, "mstore(0x35, shl(160, cpha))", "mstore(0x35, shl(144, cpha))",
+     "B5: FORS root level hashed with height 10's (cp, ha)"),
+    ("v2-b5-merkle-a7base", V2, "mstore(0x30, shl(200, treeBase)) // A7 bytes 0..4 for every level (the chains overwrote 0x30)",
+     "pop(0)", "B5: hypertree A7 bytes 0..4 left as the last chain step's"),
+    ("v2-b5-lanes-pin", V2, "0x100020003000400050006000700080009000a000b00000000000000000000000) // C10-LANES",
+     "0x100020003000400050006000700080009000a000b00000000000000000000001) // C10-LANES",
+     "B5: unused low bits of the cp/ha constant changed (semantically equivalent; text pin only)"),
     ("v2-e5-ci-step", V2, "add(chainA, or(shl(218, 7), shl(212, and(shr(21, d), 7))))",
      "add(chainA, or(shl(218, 8), shl(212, and(shr(21, d), 7))))", "B2: chain 7 hashed under ci = 8"),
     ("v2-b2-slot", V2, "mstore(add(TB, 40), mload(0x10))", "mstore(add(TB, 41), mload(0x10))",
@@ -92,6 +100,14 @@ MUTANTS = [
     ("v1-root-cmp", V1, "valid := eq(and(mload(0x40), N_MASK), root)", "valid := eq(and(mload(0x40), N_MASK), and(mload(0x40), N_MASK))",
      "final root comparison"),
 ]
+
+
+def lanes_pin_ok():
+    tag = "// C10-LANES"
+    def lines(rel):
+        return sorted({l.strip() for l in open(os.path.join(SW, rel)) if l.rstrip().endswith(tag)})
+    want = lines("test/gas/C10Lanes.t.sol")
+    return bool(want) and lines(V2) == want
 
 
 def pin_ok():
@@ -142,7 +158,7 @@ def main():
             continue
         try:
             open(path, "w").write(src.replace(old, new))
-            pin = pin_ok()
+            pin = pin_ok() and lanes_pin_ok()
             rc, fails, first, _, out = run_gates(runs)
         finally:
             open(path, "w").write(src)
