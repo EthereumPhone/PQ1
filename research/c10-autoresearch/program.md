@@ -1,11 +1,11 @@
 # C10 autoresearch — speed up PQ1's SPHINCS+C10 signing
 
-Karpathy-style autoresearch loop (`ref/karpathy-program.md`), adapted to firmware.
+Karpathy-style autoresearch loop (the `program.md` of github.com/karpathy/autoresearch), adapted to firmware.
 One fixed evaluator, one change at a time, and only measured wins are kept.
 
 ## Branch and scope
 
-- Branch `research/c10-autoresearch` in `~/repos/pq1-autoresearch-wt`, cut from master `0bf8153f2`.
+- Branch `research/c10-autoresearch` in its own worktree, cut from master `0bf8153f2`.
 - Local commits only. **Never push.** A "keep" is a measured win on this research branch, not something ready to land.
 - Landing is a separate step that needs FV re-pins, FI/SCA review, from-flash confirmation and the owner's go.
 

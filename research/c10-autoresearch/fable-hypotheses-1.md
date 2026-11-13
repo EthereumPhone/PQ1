@@ -7,7 +7,7 @@ Advisor: Fable 5.2, 2026-11-12. Worktree `pq1-autoresearch-wt`, branch `research
 **Evidence labels.**
 - "RM" = RM0456 Rev 7, page numbers as printed in the page footer.
 - "Loop" = your `results.tsv`, `ledger.md` and the kept commits.
-- "Disasm" = objdump of `out/exp.elf` (the `chain16` build) for the current driver, and of an older product ELF (`~/repos/pq1-gates-wt/…/sphincs-tz-secure`, Oct 31, driver at `opt-level = "z"`) for the pre-loop driver.
+- "Disasm" = objdump of `out/exp.elf` (the `chain16` build) for the current driver, and of an older product ELF (a `sphincs-tz-secure` build from Oct 31, driver at `opt-level = "z"`) for the pre-loop driver.
 - Every saving I predict is an **estimate**. I built and ran nothing.
 
 ## Headline

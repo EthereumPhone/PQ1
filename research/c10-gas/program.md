@@ -1,6 +1,6 @@
 # C10 verifier gas: loop protocol (Track B, #1155)
 
-Branch `research/c10-gas` (from `0895dcc79`), worktree `~/repos/pq1-gas-wt`. Host only, local
+Branch `research/c10-gas` (from `0895dcc79`), in its own worktree. Host only, local
 commits only, never pushed.
 
 ## Goal
