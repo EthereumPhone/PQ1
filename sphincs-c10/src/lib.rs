@@ -34,7 +34,7 @@ pub(crate) mod hash;
 pub(crate) mod v2hash;
 #[cfg(all(feature = "v2", any(feature = "hw-sha256-chain", feature = "hw-sha256-search", feature = "hw-sha256-gather",
     feature = "hw-sha256-prfchain", feature = "hw-sha256-forsleaf", feature = "hw-sha256-forstree", feature = "hw-sha256-grindr",
-    feature = "hw-sha256-thmulti", feature = "hw-sha256-forssub", feature = "top-cache")))]
+    feature = "hw-sha256-thmulti", feature = "hw-sha256-forssub")))]
 compile_error!("`v2` routes through the generic hash functions only; the fused driver paths build v1 preimages");
 pub(crate) mod hypertree;
 pub(crate) mod merkle;

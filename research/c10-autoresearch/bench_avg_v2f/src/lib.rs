@@ -19,6 +19,9 @@ pub static mut SIG0: [u8; sphincs_c10::params::SIGNATURE_LEN] = [0; sphincs_c10:
 #[no_mangle]
 pub static mut SIG1: [u8; sphincs_c10::params::SIGNATURE_LEN] = [0; sphincs_c10::params::SIGNATURE_LEN];
 
+#[cfg(feature = "topcache")]
+static mut CACHE: sphincs_c10::topcache::TopCache = sphincs_c10::topcache::TopCache::empty();
+
 extern "C" {
     fn bench_halt(code: u32) -> !;
 }
@@ -53,6 +56,12 @@ pub extern "C" fn c10_bench_main() {
     unsafe { pqsigner_hw::hash::init_clock() };
     out(1, 1);
     let t = cyc();
+    #[cfg(feature = "topcache")]
+    // SAFETY: single-threaded bench; the only reference to CACHE.
+    let cache: &mut sphincs_c10::topcache::TopCache = unsafe { &mut *core::ptr::addr_of_mut!(CACHE) };
+    #[cfg(feature = "topcache")]
+    let sk = sphincs_c10::topcache::keygen_with_top_cache(SK_SEED, PK_SEED, cache);
+    #[cfg(not(feature = "topcache"))]
     let sk = SigningKey::keygen(SK_SEED, PK_SEED);
     out(3, cyc().wrapping_sub(t));
     let vk = sk.verifying_key();
@@ -62,6 +71,9 @@ pub extern "C" fn c10_bench_main() {
         m[0..4].copy_from_slice(&i.to_le_bytes());
         m[4] ^= 0xA5;
         let t = cyc();
+        #[cfg(feature = "topcache")]
+        let s = sk.sign_with_shuffle_cached(cache, &m, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
+        #[cfg(not(feature = "topcache"))]
         let s = sk.sign_with_shuffle_silent(&m, Some(&OPT_RAND), &ShuffleSeed(SHUFFLE_A));
         let dt = cyc().wrapping_sub(t);
         sum += u64::from(dt);
@@ -82,5 +94,7 @@ pub extern "C" fn c10_bench_main() {
     out(5, (sum >> 32) as u32);
     out(6, vsum as u32);
     out(7, ok);
+    #[cfg(feature = "topcache")]
+    out(8, sphincs_c10::topcache::HITS.load(core::sync::atomic::Ordering::Relaxed));
     out(1, 100);
 }

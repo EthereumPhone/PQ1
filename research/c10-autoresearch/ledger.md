@@ -409,3 +409,28 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 - Loop micro-tuning in the subtree entry: about 1 M.
 
 **Control for the Rust re-check:** a `host_v2f` mirror that reports a false hit (count `start + 1` with the wrong sum) stops the sign at `wots.rs:125` ("v2 grind: driver digit sum disagrees"). Restored: GOLDEN OK. Note: the `e7dc446bd` message says keygen and verify are unchanged; that was measured before the `pack` asserts went into the same commit (see the table above).
+
+## Round 6 (2026-11-13): more hypotheses on the v2 head
+
+### H1: v2 plus the top-layer cache (track B, #1148), measured
+
+- **Enabling it:** the round-5 `compile_error!` that excluded `top-cache` under `v2` is removed.
+  - The cache code is hash-agnostic except the confirm build's chain rotation, which existed only on the v1 `hw-sha256-prfchain` path. Under v2 the "independent" second build silently replayed the first, so the generic/v2 path now computes the same chains in rotated order.
+  - The host keygen-fault control injected only into the v1 chain hook, so under v2 it injected nothing and "SIGNED" vacuously. It now also injects into the v2 PRF+chain mirror.
+- **Host evidence** (`host_v2f --features topcache`):
+  - golden-v2 bytes with 3 cache hits;
+  - signing digests per pass 486,372 → 314,632;
+  - controls: a flipped node, a keygen fault and another key's cache are all REFUSED; the valid cache SIGNS;
+  - sweep: all 512 leaves' cached auth paths equal a full rebuild.
+- **Kit** (`experiment_v2b.sh`, `bench_v2fb`): golden-v2 bytes, 3 hits, cached sign (m0) **96.2 M = 0.601 s**. Keygen 49.9 M (0.31 s): fill plus the confirm build.
+- **16-message mean** (`BENCH_FEATURES=topcache ./experiment_avg.sh v2f`): 16/16 cache hits.
+
+| | mean sign | est. cached | vs master 3.41 s |
+|---|---:|---:|---:|
+| v1 fused head | 110.10 M | 1.377 s | −60% |
+| v2 head | 75.94 M | 0.950 s | −72% |
+| **v2 head + top cache** | **52.10 M** | **0.652 s** | **−81%** |
+
+- **Saving:** 23.8 M on every message (constant: the top-layer build).
+- **Projection check:** the round-4 projection was 0.68 s; m0 alone reads 0.60 s because its grinds are lucky.
+- **Still track B:** the FI trade (the top auth path is not double-computed per sign) and the keygen-confirm design need the owner's decision on #1148.

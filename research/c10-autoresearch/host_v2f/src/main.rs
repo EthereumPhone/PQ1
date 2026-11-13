@@ -358,7 +358,12 @@ pub unsafe extern "C" fn pqsigner_v2_prf_chain16(sk: *const u8, p0: u32, p1: u32
     b[32..].copy_from_slice(&a7b(p0, p1));
     let mut x = [0u8; 16];
     x.copy_from_slice(&sw(&b)[..16]);
-    let v = v2_chain(&unsafe { rd::<16>(seed) }, x, a0, a1, 0, steps);
+    let mut v = v2_chain(&unsafe { rd::<16>(seed) }, x, a0, a1, 0, steps);
+    // Fault injection for the track-B controls (shares the v1 hook's counter).
+    let call = CHAINS_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if call == FAULT_AT.load(std::sync::atomic::Ordering::Relaxed) {
+        v[0] ^= 1;
+    }
     unsafe { std::ptr::copy_nonoverlapping(v.as_ptr(), out, 16) };
 }
 #[no_mangle]

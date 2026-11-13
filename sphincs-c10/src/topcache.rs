@@ -170,8 +170,19 @@ fn leaf(seed: &[u8; 32], sk_seed: &[u8; 32], layer: u32, tree: u64, kp: u32, rot
         let pk_adrs = make_adrs(layer, tree, ADRS_WOTS_PK, kp, 0, 0, 0);
         crate::hash::th_multi(seed, &pk_adrs, &pk_elements)
     }
+    // Generic and v2 paths: the same chains in rotated order, so the confirm
+    // build is a different computation, not a replay of the first.
     #[cfg(not(feature = "hw-sha256-prfchain"))]
-    crate::wots::keygen_pk(seed, sk_seed, layer, tree, kp)
+    {
+        let base_adrs = make_adrs(layer, tree, ADRS_WOTS, kp, 0, 0, 0);
+        let mut pk_elements = [[0u8; N]; L];
+        for step in 0..L {
+            let i = (step + rot as usize) % L;
+            pk_elements[i] = crate::hash::wots_secret_chain(seed, sk_seed, &base_adrs, layer, tree, kp, i as u32, (W - 1) as u32);
+        }
+        let pk_adrs = make_adrs(layer, tree, ADRS_WOTS_PK, kp, 0, 0, 0);
+        crate::hash::th_multi(seed, &pk_adrs, &pk_elements)
+    }
 }
 
 /// Keygen that also fills and confirms a top-layer cache: two independent builds of the top tree
