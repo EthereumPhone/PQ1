@@ -257,16 +257,16 @@ theorem xmss_root_loop_spec (seed sk : Std.Array Std.U8 32#usize) (layer : Std.U
     (progress : hypertree.ProgressSink) (pct_lo pct_hi : Std.U8) :
     merkle.compute_subtree_root seed sk layer tree progress pct_lo pct_hi ⦃ r => r = xmssRootNode seed sk layer tree 9 0 ⦄ := by
   unfold merkle.compute_subtree_root
-  simp only [params.SUBTREE_LEAVES, params.SUBTREE_H, params.H, params.D]
+  simp only [params.layer_h, params.SUBTREE_H, params.H, params.D]
   step* <;> first | scalar_tac | skip
-  · have hx9 : x.val = 9 := by omega
+  · have hx9 : i.val = 9 := by omega
     have := System.Platform.numBits_eq
     omega
   have hn : n_leaves.val = 512 := by
     rw [n_leaves_post1]
     simp only [Usize.size, Usize.numBits]
     rcases System.Platform.numBits_eq with hb | hb <;>
-      norm_num [Nat.shiftLeft_eq, UScalarTy.numBits, hb, x_post]
+      norm_num [Nat.shiftLeft_eq, UScalarTy.numBits, hb, i_post]
   let* ⟨stack, hroot⟩ ← xmss_root_loop_spec seed sk layer tree progress pct_lo pct_hi n_leaves
     { start := 0#usize, «end» := n_leaves }
     (Array.repeat 10#usize (Array.repeat 16#usize 0#u8))
@@ -284,6 +284,14 @@ theorem xmss_root_loop_spec (seed sk : Std.Array Std.U8 32#usize) (layer : Std.U
   unfold hypertree.compute_pk_root hypertree.progress_none hypertree.compute_pk_root_inner
   simp only [WP.spec_ok, bind_tc_ok]
   let* ⟨padded, hpadded⟩ ← pad16_spec seed
+  -- The top layer is now passed as `(D - 1) as u32` (= 1) instead of `1u32`.
+  simp only [params.D, lift]
+  let* ⟨top, htop⟩ ← Usize.sub_spec
+  have hcast : UScalar.cast .U32 top = 1#u32 := by
+    apply UScalar.eq_of_val_eq
+    rw [UScalar.cast_val_eq]
+    simp [htop]
+  rw [hcast]
   let* ⟨root, hroot⟩ ← xmss_compute_root_spec padded sk 1#u32 0#u64 () 0#u8 0#u8
   rw [hroot, hpadded]
 

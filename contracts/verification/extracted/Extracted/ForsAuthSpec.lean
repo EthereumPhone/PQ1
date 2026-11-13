@@ -198,7 +198,6 @@ theorem fors_auth_loop_spec (seed sk : Std.Array Std.U8 32#usize) (ht tree leaf 
         apply UScalar.eq_of_val_eq
         rw [hcastv]
         exact (Nat.mod_eq_of_lt (show j.val < 2^32 by omega)).symm
-      let* ⟨secret, hsecret⟩ ← fors_secret_spec sk ht tree (UScalar.cast .U32 j)
       let* ⟨adrs, hadrs⟩ ← make_adrs_spec 0#u32
         (⟨BitVec.setWidth 64 ht.bv⟩ : Std.U64) params.ADRS_FORS_TREE tree 0#u32 0#u32
         (UScalar.cast .U32 j)
@@ -207,6 +206,10 @@ theorem fors_auth_loop_spec (seed sk : Std.Array Std.U8 32#usize) (ht tree leaf 
       simp only [show (0#u32 : Std.U32).val = 0 from rfl,
         show params.ADRS_FORS_TREE.val = 3 by simp [params.ADRS_FORS_TREE], hht, hcastv] at hadrs
       have hadeq := forsRecoveryAdrs_eq_of_map_val adrs ht tree 0 j.val hadrs
+      -- `fors_leaf` (sphincs-c10 `hash::fors_leaf`, non-fused path) is exactly
+      -- `fors_secret` → `pad16` → `th` at the leaf address.
+      simp only [hash.fors_leaf]
+      let* ⟨secret, hsecret⟩ ← fors_secret_spec sk ht tree (UScalar.cast .U32 j)
       let* ⟨padded, hpadded⟩ ← pad16_spec secret
       let* ⟨leafNode, hleafNode⟩ ← hash.th_spec seed adrs padded
       have hleafnode : leafNode = forsRootNode seed sk ht tree 0 j.val := by

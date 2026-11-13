@@ -29,7 +29,7 @@ def Usize.Insts.CoreFmtDisplay : core.fmt.Display Std.Usize := {
 }
 
 /-- [sphincs_c10::merkle::build_subtree_with_auth]: loop body 1:
-    Source: 'sphincs-c10/src/merkle.rs', lines 114:8-142:9 -/
+    Source: 'sphincs-c10/src/merkle.rs', lines 115:8-143:9 -/
 @[rust_loop_body]
 def merkle.build_subtree_with_auth_loop0_loop0.body
   (seed : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
@@ -90,7 +90,7 @@ def merkle.build_subtree_with_auth_loop0_loop0.body
   else ok (done (sp, keep, keep_set, node, node_h))
 
 /-- [sphincs_c10::merkle::build_subtree_with_auth]: loop 1:
-    Source: 'sphincs-c10/src/merkle.rs', lines 114:8-142:9 -/
+    Source: 'sphincs-c10/src/merkle.rs', lines 115:8-143:9 -/
 @[rust_loop]
 def merkle.build_subtree_with_auth_loop0_loop0
   (seed : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
@@ -109,7 +109,7 @@ def merkle.build_subtree_with_auth_loop0_loop0
     (sp, keep, keep_set, node, node_h)
 
 /-- [sphincs_c10::merkle::build_subtree_with_auth]: loop body 0:
-    Source: 'sphincs-c10/src/merkle.rs', lines 110:4-153:5 -/
+    Source: 'sphincs-c10/src/merkle.rs', lines 111:4-154:5 -/
 @[rust_loop_body]
 def merkle.build_subtree_with_auth_loop0.body
   (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)
@@ -162,7 +162,7 @@ def merkle.build_subtree_with_auth_loop0.body
       ok (cont (iter1, a1, a, sp2, keep1, keep_set1))
 
 /-- [sphincs_c10::merkle::build_subtree_with_auth]: loop 0:
-    Source: 'sphincs-c10/src/merkle.rs', lines 110:4-153:5 -/
+    Source: 'sphincs-c10/src/merkle.rs', lines 111:4-154:5 -/
 @[rust_loop]
 def merkle.build_subtree_with_auth_loop0
   (iter : core.ops.range.Range Std.Usize) (seed : Array Std.U8 32#usize)
@@ -184,7 +184,7 @@ def merkle.build_subtree_with_auth_loop0
     (iter, stack, stack_heights, sp, keep, keep_set)
 
 /-- [sphincs_c10::merkle::build_subtree_with_auth]: loop body 2:
-    Source: 'sphincs-c10/src/merkle.rs', lines 159:8-159:25 -/
+    Source: 'sphincs-c10/src/merkle.rs', lines 160:8-160:18 -/
 @[rust_loop_body]
 def merkle.build_subtree_with_auth_loop1.body
   (keep : Array (Array Std.U8 16#usize) 9#usize)
@@ -203,7 +203,7 @@ def merkle.build_subtree_with_auth_loop1.body
     ok (cont (iter1, a1))
 
 /-- [sphincs_c10::merkle::build_subtree_with_auth]: loop 2:
-    Source: 'sphincs-c10/src/merkle.rs', lines 159:8-159:25 -/
+    Source: 'sphincs-c10/src/merkle.rs', lines 160:8-160:18 -/
 @[rust_loop]
 def merkle.build_subtree_with_auth_loop1
   (iter : core.ops.range.Range Std.Usize)
@@ -217,14 +217,15 @@ def merkle.build_subtree_with_auth_loop1
     (iter, auth_path)
 
 /-- [sphincs_c10::merkle::build_subtree_with_auth]:
-    Source: 'sphincs-c10/src/merkle.rs', lines 85:0-165:1 -/
+    Source: 'sphincs-c10/src/merkle.rs', lines 85:0-166:1 -/
 def merkle.build_subtree_with_auth
   (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)
   (layer : Std.U32) (tree : Std.U64) (target_leaf : Std.U32)
   (progress : hypertree.ProgressSink) (pct_lo : Std.U8) (pct_hi : Std.U8) :
   Result ((Array (Array Std.U8 16#usize) 9#usize) × (Array Std.U8 16#usize))
   := do
-  let n_leaves ← params.SUBTREE_LEAVES
+  let lh ← params.layer_h layer
+  let n_leaves ← 1#usize <<< lh
   let a := Array.repeat 16#usize 0#u8
   let auth_path := Array.repeat 9#usize a
   let a1 := Array.repeat 16#usize 0#u8
@@ -239,9 +240,8 @@ def merkle.build_subtree_with_auth
       target_leaf progress pct_lo pct_hi n_leaves stack stack_heights 0#usize
       keep keep_set
   let root ← Array.index_usize stack1 0#usize
-  let i ← params.SUBTREE_H
   let auth_path1 ←
-    merkle.build_subtree_with_auth_loop1 { start := 0#usize, «end» := i }
+    merkle.build_subtree_with_auth_loop1 { start := 0#usize, «end» := lh }
       auth_path keep1
   ok (auth_path1, root)
 

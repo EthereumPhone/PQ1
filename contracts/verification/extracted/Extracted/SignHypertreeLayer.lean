@@ -93,7 +93,7 @@ def signLayerCompute {α : Type} (sk seed : Std.Array Std.U8 32#usize)
     (progress : hypertree.ProgressSink) (shuffle : sphincs_c10.shuffle.ShuffleSeed)
     (layer : Std.U32) (current : Std.Array Std.U8 16#usize) (idx_tree : Std.U32)
     (tail : SignLayerTail α) : Result α := do
-  let i ← params.SUBTREE_H
+  let i ← params.layer_h layer
   let i1 ← 1#u32 <<< i
   let i2 ← i1 - 1#u32
   let idx_leaf ← lift (idx_tree &&& i2)
@@ -166,6 +166,7 @@ private theorem sign_layer_compute_pure {α : Type}
             (xmssSigningPath seed sk (signLayerId layer)
               (UScalar.cast .U64 (signNextTree idx)) (signLeaf idx)) chains count) := by
   unfold signLayerCompute
+  simp only [params.layer_h]
   rw [serialization_subtree_height]
   simp only [bind_tc_ok]
   have hshift : (1#u32 <<< 9#usize) = .ok 512#u32 := by rfl

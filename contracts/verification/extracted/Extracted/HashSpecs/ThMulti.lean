@@ -181,7 +181,7 @@ theorem flatten_pad16_length (vals : Slice (Std.Array Std.U8 16#usize)) :
       simp [List.slice]
     rw [hsl, hbuf3, List.take_left' (by rw [hlen, hi4])]
   -- fold into th_multi_pure
-  rw [r_post, a_post, hs6, th_multi_pure_def,
+  rw [r_post, hs6, th_multi_pure_def,
       show (vals.val.map (fun v => (pad16Pure v).val))
         = (vals.val.map (fun v => v.val ++ List.replicate 16 0#u8)) from
         List.map_congr_left (fun v _ => pad16Pure_val v),

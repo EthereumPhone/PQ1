@@ -21,12 +21,12 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::params::ADRS_FORS_ROOTS]
-    Source: 'sphincs-c10/src/params.rs', lines 101:0-101:35
+    Source: 'sphincs-c10/src/params.rs', lines 139:0-139:35
     Visibility: public -/
 @[global_simps, irreducible] def params.ADRS_FORS_ROOTS : Std.U32 := 4#u32
 
 /-- [sphincs_c10::fors::compute_fors_pk]:
-    Source: 'sphincs-c10/src/fors.rs', lines 265:0-268:1
+    Source: 'sphincs-c10/src/fors.rs', lines 280:0-283:1
     Visibility: public -/
 def fors.compute_fors_pk
   (seed : Array Std.U8 32#usize) (ht_idx : Std.U32)

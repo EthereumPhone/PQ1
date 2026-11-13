@@ -66,7 +66,7 @@ def signerSerializeLayer (sig : C10Signature) (offset : Std.Usize)
     Result (C10Signature × Std.Usize) := do
   let (sig1,off1) ← hypertree.sign_inner_loop3_loop0 sig offset chains 0#usize
   let (sig2,off2) ← signerWriteCount sig1 off1 count
-  hypertree.sign_inner_loop3_loop1 9#usize sig2 off2 path 0#usize
+  hypertree.sign_inner_loop3_loop1 sig2 off2 9#usize path 0#usize
 
 /-- Keep the caller's computed height as a parameter when factoring its body;
     the current constant instantiation is exactly the proven nine-row writer. -/
@@ -75,7 +75,7 @@ def signerSerializeLayerHeight (height : Std.Usize) (sig : C10Signature) (offset
     Result (C10Signature × Std.Usize) := do
   let (sig1,off1) ← hypertree.sign_inner_loop3_loop0 sig offset chains 0#usize
   let (sig2,off2) ← signerWriteCount sig1 off1 count
-  hypertree.sign_inner_loop3_loop1 height sig2 off2 path 0#usize
+  hypertree.sign_inner_loop3_loop1 sig2 off2 height path 0#usize
 
 theorem signerSerializeLayerHeight_nine (sig : C10Signature) (offset : Std.Usize)
     (chains : WotsChains) (count : Std.U32) (path : XmssAuth) :

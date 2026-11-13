@@ -21,7 +21,7 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::hypertree::report]:
-    Source: 'sphincs-c10/src/hypertree.rs', lines 127:0-136:1 -/
+    Source: 'sphincs-c10/src/hypertree.rs', lines 141:0-150:1 -/
 def hypertree.report
   (progress : hypertree.ProgressSink) (pct : Std.U8) : Result Unit := do
   ok ()
@@ -31,7 +31,7 @@ def hypertree.report
 @[global_simps, irreducible] def wots.GRIND_REPORT_EVERY : Std.U32 := 4096#u32
 
 /-- [sphincs_c10::wots::digit_sum]: loop body 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 273:4-281:5 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 343:4-351:5 -/
 @[rust_loop_body]
 def wots.digit_sum_loop.body
   (digest : Array Std.U8 32#usize) (iter : core.ops.range.Range Std.Usize)
@@ -73,7 +73,7 @@ def wots.digit_sum_loop.body
     ok (cont (iter1, sum1))
 
 /-- [sphincs_c10::wots::digit_sum]: loop 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 273:4-281:5 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 343:4-351:5 -/
 @[rust_loop]
 def wots.digit_sum_loop
   (iter : core.ops.range.Range Std.Usize) (digest : Array Std.U8 32#usize)
@@ -85,7 +85,7 @@ def wots.digit_sum_loop
     (iter, sum)
 
 /-- [sphincs_c10::wots::digit_sum]:
-    Source: 'sphincs-c10/src/wots.rs', lines 271:0-286:1 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 341:0-356:1 -/
 def wots.digit_sum (digest : Array Std.U8 32#usize) : Result Std.Usize := do
   let sum ←
     wots.digit_sum_loop { start := 0#usize, «end» := 5#usize } digest 0#usize
@@ -107,7 +107,7 @@ def wots.digit_sum (digest : Array Std.U8 32#usize) : Result Std.Usize := do
   sum + i13
 
 /-- [sphincs_c10::wots::find_count]: loop body 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 74:4-94:1 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 139:4-159:1 -/
 @[rust_loop_body]
 def wots.find_count_loop.body
   (seed : Array Std.U8 32#usize) (msg_hash : Array Std.U8 32#usize)
@@ -132,7 +132,7 @@ def wots.find_count_loop.body
     ok (cont count1)
 
 /-- [sphincs_c10::wots::find_count]: loop 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 74:4-94:1 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 139:4-159:1 -/
 @[rust_loop]
 def wots.find_count_loop
   (seed : Array Std.U8 32#usize) (msg_hash : Array Std.U8 32#usize)
@@ -146,7 +146,7 @@ def wots.find_count_loop
     count
 
 /-- [sphincs_c10::wots::find_count]:
-    Source: 'sphincs-c10/src/wots.rs', lines 63:0-94:1 -/
+    Source: 'sphincs-c10/src/wots.rs', lines 63:0-159:1 -/
 def wots.find_count
   (seed : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
   (kp : Std.U32) (msg_hash : Array Std.U8 32#usize)

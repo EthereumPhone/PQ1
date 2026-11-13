@@ -2683,6 +2683,7 @@ _extract-verifier-impl:
 	  --kill 'sphincs_c10::params::K' \
 	  --kill 'sphincs_c10::params::D' \
 	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --kill 'sphincs_c10::params::layer_h' \
 	  --add-import Extracted.Adrs \
 	  --add-import Extracted.Fors.Funs \
 	  --add-import Extracted.Wots.Funs
@@ -2696,13 +2697,14 @@ _extract-wots-secret-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
 	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
-	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --opaque 'sphincs_c10::hash::sha256_bytes' \
 	  --start-from 'sphincs_c10::hash::wots_secret' --dest-file $${EXTRACTION_TMP_ROOT}/wotssecret.llbc 2>&1 | tail -1 )
 	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
 	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/wotssecret.llbc
 	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
 	  --sed-import 'Wotssecret.=Extracted.WotsSecret.' \
 	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::truncate' \
+	  --kill 'sphincs_c10::hash::sha256_bytes16' \
 	  --add-import Extracted.Hash.Funs
 	@diff -u $(EXTRACTED_DIR)/Extracted/WotsSecret/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-wots-secret $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
@@ -2728,13 +2730,14 @@ _extract-fors-secret-impl:
 	@$(_begin_private_extraction)
 	@( cd $(REPO_ROOT)/sphincs-c10 && RUSTFLAGS="--cfg lean_extract" \
 	  $(PQLEAN)/charon cargo --preset=aeneas --rustc-arg=-Cdebug-assertions=off --rustc-arg=-Coverflow-checks=on --opaque sha2 --opaque zeroize \
-	  --opaque 'sphincs_c10::hash::sha256_parts' \
+	  --opaque 'sphincs_c10::hash::sha256_bytes' \
 	  --start-from 'sphincs_c10::hash::fors_secret' --dest-file $${EXTRACTION_TMP_ROOT}/forssecret.llbc 2>&1 | tail -1 )
 	@mkdir -p $${EXTRACTION_TMP_ROOT}/out
 	@$(PQLEAN)/aeneas -backend lean -dest $${EXTRACTION_TMP_ROOT}/out -split-files $${EXTRACTION_TMP_ROOT}/forssecret.llbc
 	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
 	  --sed-import 'Forssecret.=Extracted.ForsSecret.' \
 	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::truncate' \
+	  --kill 'sphincs_c10::hash::sha256_bytes16' \
 	  --add-import Extracted.Hash.Funs
 	@diff -u $(EXTRACTED_DIR)/Extracted/ForsSecret/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-secret $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
@@ -2769,6 +2772,7 @@ _extract-fors-auth-impl:
 	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean \
 	  --sed-import 'Forsauth.=Extracted.ForsAuth.' \
 	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::params::ADRS_FORS_TREE' --kill 'sphincs_c10::params::A' --kill 'sphincs_c10::params::FORS_LEAVES' \
+	  --kill 'sphincs_c10::hash::fors_leaf' \
 	  --add-import Extracted.ForsRoot.Funs
 	@diff -u $(EXTRACTED_DIR)/Extracted/ForsAuth/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
 	@$(_FV_PYTHON3) scripts/check_extraction_regen_output.py extract-fors-auth $${EXTRACTION_TMP_ROOT}/out $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
@@ -2788,6 +2792,7 @@ _extract-xmss-auth-impl:
 	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::hypertree::report' --kill 'sphincs_c10::merkle::REPORT_EVERY' \
 	  --kill 'sphincs_c10::params::ADRS_TREE' --kill 'sphincs_c10::params::D' --kill 'sphincs_c10::params::H' \
 	  --kill 'sphincs_c10::params::SUBTREE_H' --kill 'sphincs_c10::params::SUBTREE_LEAVES' \
+	  --kill 'sphincs_c10::params::layer_h' \
 	  --add-import Extracted.XmssRoot.Funs
 	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
 	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
@@ -2808,6 +2813,7 @@ _extract-xmss-root-impl:
 	  --sed-import 'Xmssroot.=Extracted.XmssRoot.' \
 	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::params::ADRS_TREE' \
 	  --kill 'sphincs_c10::params::D' --kill 'sphincs_c10::params::H' --kill 'sphincs_c10::params::SUBTREE_H' --kill 'sphincs_c10::hypertree::report' \
+	  --kill 'sphincs_c10::params::layer_h' \
 	  --add-import Extracted.Merkle.Funs --add-import Extracted.FindCount.Funs
 	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
 	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
@@ -2860,7 +2866,8 @@ _extract-wots-sign-impl:
 	  --kill 'sphincs_c10::address::make_adrs' --kill 'sphincs_c10::address::set_chain_index' \
 	  --kill 'sphincs_c10::params::N' --kill 'sphincs_c10::hash::pad16' \
 	  --kill 'sphincs_c10::params::L' --kill 'sphincs_c10::params::ADRS_WOTS' \
-	  --add-import Extracted.PkFromSig.Funs
+	  --kill 'sphincs_c10::hash::wots_secret_chain' \
+	  --add-import Extracted.PkFromSig.Funs --add-import Extracted.WotsKeygen.Funs
 	@$(_FV_PYTHON3) scripts/dedup_extraction.py $${EXTRACTION_TMP_ROOT}/out/Types.lean $${EXTRACTION_TMP_ROOT}/out/Types.fixed.lean \
 	  --kill 'sphincs_c10::hypertree::ProgressSink' --add-import Extracted.FindCount.Types
 	@diff -u $(EXTRACTED_DIR)/Extracted/WotsSign/Funs.lean $${EXTRACTION_TMP_ROOT}/out/Funs.fixed.lean
@@ -2901,6 +2908,7 @@ _extract-sign-forest-impl:
 	  --kill 'sphincs_c10::params::D' \
 	  --kill 'sphincs_c10::params::H' \
 	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --kill 'sphincs_c10::params::layer_h' \
 	  --kill 'sphincs_c10::params::SIG_HT_LAYER' \
 	  --kill 'sphincs_c10::params::A' \
 	  --kill 'sphincs_c10::params::K' \
@@ -2954,6 +2962,7 @@ _extract-sign-release-impl:
 	  --kill 'sphincs_c10::params::D' \
 	  --kill 'sphincs_c10::params::H' \
 	  --kill 'sphincs_c10::params::SUBTREE_H' \
+	  --kill 'sphincs_c10::params::layer_h' \
 	  --kill 'sphincs_c10::params::SIG_HT_LAYER' \
 	  --kill 'sphincs_c10::params::A' \
 	  --kill 'sphincs_c10::params::K' \

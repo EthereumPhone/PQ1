@@ -1,8 +1,8 @@
 /- §33 axiom-collapse — `hash.chain_hash` spec: the extracted loop over `th`'s
    96-byte preimage (`chain_buf` = seed ‖ adrs ‖ pad16 val, built once; each
    step writes the chain position at bytes [56..60) — ADRS bytes [24..28) —
-   hashes the buffer with `sha256_bytes`, and writes the digest's first N bytes
-   back as the value at [64..80); `chain_value` reads it out) computes exactly
+   hashes the buffer with `sha256_bytes16` — the digest's first N bytes — and
+   writes them back as the value at [64..80); `chain_value` reads it out) computes exactly
    `chain_hash_pure`'s fold, for `start + steps ≤ u32::MAX` (the per-step
    `start_pos + step` would panic past that; the WOTS+C caller passes
    start = digit ≤ 7, steps = 7 − digit). -/
@@ -255,21 +255,21 @@ theorem chain_hash_loop_value
         rw [s_post3, s2_post, s1_post, Array.val_to_slice, a_post, u32_toBEBytes_map_mk i,
           hbv, hy]
         exact chainBuf_pos _ _ _ _ _ l_seed l_adrs hw (u32beBytes_length _)
-      have hd : d = sha256_pure (seed.val ++ (chainAdrs adrs0 i.val).val ++ (pad16Pure y).val) := by
+      have hd : d = truncate16
+          (sha256_pure (seed.val ++ (chainAdrs adrs0 i.val).val ++ (pad16Pure y).val)) := by
         rw [d_post, s3_post, Array.val_to_slice, hwr, chainAdrs_val]
-      have hs5 : s5.val = d.val.take 16 := by
-        rw [s5_post1, Array.val_to_slice]
-        simp [List.slice]
+      have hs5 : s5.val = d.val := by
+        rw [s5_post, Array.val_to_slice]
       have hebv : iter1.«end».val = it.«end».val := by rw [hend']
       refine ⟨by rw [hend']; exact hbnd, by omega,
         ⟨u32beBytes i.val, u32beBytes_length _, ?_⟩, by omega⟩
       have lm : (adrs0.val.take 24 ++ u32beBytes i.val ++ adrs0.val.drop 28).length = 32 := by
         simp [l_adrs, u32beBytes_length]
-      have ld : (d.val.take 16).length = 16 := by have := d.property; simp_all
+      have ld : d.val.length = 16 := by have := d.property; simp_all
       rw [s4_post3, s6_post, hs5, hwr, pad16Pure_val,
         chainBuf_val _ _ _ _ l_seed lm ld ly]
       rw [hstart', List.range_succ, List.foldl_append, List.foldl_cons, List.foldl_nil, hy,
-        pad16Pure_val, th_pure_def, truncate16_val, ← i_post, ← hd]
+        pad16Pure_val, th_pure_def, ← i_post, ← hd]
   · exact ⟨hend, hle, hbuf⟩
 
 set_option maxRecDepth 16384 in

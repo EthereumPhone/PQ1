@@ -74,15 +74,18 @@ theorem wots_sign_loop_spec (seed sk d : Std.Array Std.U8 32#usize)
         exact Nat.mod_eq_of_lt (by scalar_tac)
       have hcast : UScalar.cast .U32 (UScalar.cast .Usize byte) = (⟨BitVec.ofNat 32 byte.val⟩ : Std.U32) :=
         u32_eq_ofNat (by omega) hidx32
-      let* ⟨secret, hs⟩ ← wots_secret_spec sk layer tree kp (UScalar.cast .U32 (UScalar.cast .Usize byte))
-      let* ⟨adrs, hadrs⟩ ← set_chain_index_spec base (UScalar.cast .U32 (UScalar.cast .Usize byte))
-      rw [hbase, hidx32, specSetChainIndex_fresh] at hadrs
-      have hadeq : adrsArr layer tree 0 kp.val byte.val 0 0 = adrs := adrsArr_eq_of_map_val _ _ _ _ _ _ _ _ hadrs
       have hidxlen : (UScalar.cast .Usize byte).val < digits.val.length := by
         rw [digits.property]
         change (UScalar.cast .Usize byte).val < 43
         omega
       let* ⟨digit, hdigit⟩ ← Array.index_usize_spec digits (UScalar.cast .Usize byte) hidxlen
+      -- `wots_secret_chain` (sphincs-c10 `hash::wots_secret_chain`, non-fused
+      -- path) is exactly `wots_secret` → `set_chain_index` → `chain_hash`.
+      simp only [hash.wots_secret_chain]
+      let* ⟨secret, hs⟩ ← wots_secret_spec sk layer tree kp (UScalar.cast .U32 (UScalar.cast .Usize byte))
+      let* ⟨adrs, hadrs⟩ ← set_chain_index_spec base (UScalar.cast .U32 (UScalar.cast .Usize byte))
+      rw [hbase, hidx32, specSetChainIndex_fresh] at hadrs
+      have hadeq : adrsArr layer tree 0 kp.val byte.val 0 0 = adrs := adrsArr_eq_of_map_val _ _ _ _ _ _ _ _ hadrs
       have hdv : digit.val = wotsDigit d byte.val := by
         rw [hdigit, ← getElem!_pos digits.val (UScalar.cast .Usize byte).val hidxlen, hidx]
         exact hdigits byte.val hbyte43

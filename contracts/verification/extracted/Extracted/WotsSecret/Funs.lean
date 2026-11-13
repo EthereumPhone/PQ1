@@ -20,42 +20,64 @@ noncomputable section
 
 namespace sphincs_c10
 
-/-- [sphincs_c10::hash::u64_to_b32]:
-    Source: 'sphincs-c10/src/hash.rs', lines 178:0-182:1 -/
-def hash.u64_to_b32 (v : Std.U64) : Result (Array Std.U8 32#usize) := do
-  let out := Array.repeat 32#usize 0#u8
-  let (s, index_mut_back) ←
-    core.array.Array.index_mut (core.ops.index.IndexMutSlice
-      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) out
-      { start := 24#usize, «end» := 32#usize }
-  let a ← lift (core.num.U64.to_be_bytes v)
-  let s1 ← lift (Array.to_slice a)
-  let s2 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s s1
-  ok (index_mut_back s2)
-
 /-- [sphincs_c10::hash::wots_secret]:
-    Source: 'sphincs-c10/src/hash.rs', lines 378:0-395:1
+    Source: 'sphincs-c10/src/hash.rs', lines 450:0-477:1
     Visibility: public -/
 def hash.wots_secret
   (sk_seed : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
   (kp : Std.U32) (chain_idx : Std.U32) :
   Result (Array Std.U8 16#usize)
   := do
-  let tree_b32 ← hash.u64_to_b32 tree
-  let s ← lift (Array.to_slice sk_seed)
-  let s1 ←
+  let buf := Array.repeat 80#usize 0#u8
+  let (s, index_mut_back) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf
+      { start := 0#usize, «end» := 32#usize }
+  let s1 ← lift (Array.to_slice sk_seed)
+  let s2 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s s1
+  let buf1 := index_mut_back s2
+  let (s3, index_mut_back1) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf1
+      { start := 32#usize, «end» := 36#usize }
+  let s4 ←
     lift (Array.to_slice
       (Array.make 4#usize [ 119#u8, 111#u8, 116#u8, 115#u8 ]))
+  let s5 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s3 s4
+  let buf2 := index_mut_back1 s5
+  let (s6, index_mut_back2) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf2
+      { start := 36#usize, «end» := 40#usize }
   let a ← lift (core.num.U32.to_be_bytes layer)
-  let s2 ← lift (Array.to_slice a)
-  let s3 ← lift (Array.to_slice tree_b32)
-  let a1 ← lift (core.num.U32.to_be_bytes kp)
-  let s4 ← lift (Array.to_slice a1)
-  let a2 ← lift (core.num.U32.to_be_bytes chain_idx)
-  let s5 ← lift (Array.to_slice a2)
-  let s6 ←
-    lift (Array.to_slice (Array.make 6#usize [ s, s1, s2, s3, s4, s5 ]))
-  let a3 ← hash.sha256_parts s6
-  hash.truncate a3
+  let s7 ← lift (Array.to_slice a)
+  let s8 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s6 s7
+  let buf3 := index_mut_back2 s8
+  let (s9, index_mut_back3) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf3
+      { start := 64#usize, «end» := 72#usize }
+  let a1 ← lift (core.num.U64.to_be_bytes tree)
+  let s10 ← lift (Array.to_slice a1)
+  let s11 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s9 s10
+  let buf4 := index_mut_back3 s11
+  let (s12, index_mut_back4) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf4
+      { start := 72#usize, «end» := 76#usize }
+  let a2 ← lift (core.num.U32.to_be_bytes kp)
+  let s13 ← lift (Array.to_slice a2)
+  let s14 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s12 s13
+  let buf5 := index_mut_back4 s14
+  let (s15, index_mut_back5) ←
+    core.array.Array.index_mut (core.ops.index.IndexMutSlice
+      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf5
+      { start := 76#usize, «end» := 80#usize }
+  let a3 ← lift (core.num.U32.to_be_bytes chain_idx)
+  let s16 ← lift (Array.to_slice a3)
+  let s17 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s15 s16
+  let buf6 := index_mut_back5 s17
+  let s18 ← lift (Array.to_slice buf6)
+  hash.sha256_bytes16 s18
 
 end sphincs_c10

@@ -20,8 +20,20 @@ noncomputable section
 
 namespace sphincs_c10
 
+/-- [sphincs_c10::hash::wots_secret_chain]:
+    Source: 'sphincs-c10/src/hash.rs', lines 586:0-627:1 -/
+def hash.wots_secret_chain
+  (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)
+  (base_adrs : Array Std.U8 32#usize) (layer : Std.U32) (tree : Std.U64)
+  (kp : Std.U32) (ci : Std.U32) (steps : Std.U32) :
+  Result (Array Std.U8 16#usize)
+  := do
+  let sk_i ← hash.wots_secret sk_seed layer tree kp ci
+  let chain_adrs ← address.set_chain_index base_adrs ci
+  hash.chain_hash seed chain_adrs sk_i 0#u32 steps
+
 /-- [sphincs_c10::wots::keygen_pk]: loop body 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 110:4-114:5
+    Source: 'sphincs-c10/src/wots.rs', lines 181:4-183:5
     Visibility: public -/
 @[rust_loop_body]
 def wots.keygen_pk_loop.body
@@ -38,17 +50,14 @@ def wots.keygen_pk_loop.body
   | none => ok (done pk_elements)
   | some i =>
     let i1 ← lift (UScalar.cast .U32 i)
-    let sk_i ← hash.wots_secret sk_seed layer tree kp i1
-    let i2 ← lift (UScalar.cast .U32 i)
-    let chain_adrs ← address.set_chain_index base_adrs i2
-    let i3 ← params.W - 1#usize
-    let i4 ← lift (UScalar.cast .U32 i3)
-    let a ← hash.chain_hash seed chain_adrs sk_i 0#u32 i4
+    let i2 ← params.W - 1#usize
+    let i3 ← lift (UScalar.cast .U32 i2)
+    let a ← hash.wots_secret_chain seed sk_seed base_adrs layer tree kp i1 i3
     let a1 ← Array.update pk_elements i a
     ok (cont (iter1, a1))
 
 /-- [sphincs_c10::wots::keygen_pk]: loop 0:
-    Source: 'sphincs-c10/src/wots.rs', lines 110:4-114:5
+    Source: 'sphincs-c10/src/wots.rs', lines 181:4-183:5
     Visibility: public -/
 @[rust_loop]
 def wots.keygen_pk_loop
@@ -64,7 +73,7 @@ def wots.keygen_pk_loop
     (iter, pk_elements)
 
 /-- [sphincs_c10::wots::keygen_pk]:
-    Source: 'sphincs-c10/src/wots.rs', lines 101:0-117:1
+    Source: 'sphincs-c10/src/wots.rs', lines 166:0-186:1
     Visibility: public -/
 def wots.keygen_pk
   (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)

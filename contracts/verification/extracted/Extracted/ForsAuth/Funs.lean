@@ -21,7 +21,7 @@ noncomputable section
 namespace sphincs_c10
 
 /-- [sphincs_c10::fors::sign_fors_tree]: loop body 1:
-    Source: 'sphincs-c10/src/fors.rs', lines 214:8-252:9
+    Source: 'sphincs-c10/src/fors.rs', lines 229:8-267:9
     Visibility: public -/
 @[rust_loop_body]
 def fors.sign_fors_tree_loop0_loop0.body
@@ -83,7 +83,7 @@ def fors.sign_fors_tree_loop0_loop0.body
   else ok (done (auth_path, sp, node, node_h))
 
 /-- [sphincs_c10::fors::sign_fors_tree]: loop 1:
-    Source: 'sphincs-c10/src/fors.rs', lines 214:8-252:9
+    Source: 'sphincs-c10/src/fors.rs', lines 229:8-267:9
     Visibility: public -/
 @[rust_loop]
 def fors.sign_fors_tree_loop0_loop0
@@ -102,7 +102,7 @@ def fors.sign_fors_tree_loop0_loop0
     (auth_path, sp, node, node_h)
 
 /-- [sphincs_c10::fors::sign_fors_tree]: loop body 0:
-    Source: 'sphincs-c10/src/fors.rs', lines 208:4-257:5
+    Source: 'sphincs-c10/src/fors.rs', lines 224:4-272:5
     Visibility: public -/
 @[rust_loop_body]
 def fors.sign_fors_tree_loop0.body
@@ -121,24 +121,22 @@ def fors.sign_fors_tree_loop0.body
   match o with
   | none => ok (done auth_path)
   | some j =>
-    let i ← lift (UScalar.cast .U32 j)
-    let s ← hash.fors_secret sk_seed ht_idx tree_idx i
-    let i1 ← lift (core.convert.num.FromU64U32.from ht_idx)
-    let i2 ← lift (UScalar.cast .U32 j)
+    let i ← lift (core.convert.num.FromU64U32.from ht_idx)
+    let i1 ← lift (UScalar.cast .U32 j)
     let leaf_adrs ←
-      address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2
-    let a ← hash.pad16 s
-    let node ← hash.th seed leaf_adrs a
+      address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1
+    let i2 ← lift (UScalar.cast .U32 j)
+    let node ← hash.fors_leaf seed sk_seed leaf_adrs ht_idx tree_idx i2
     let (auth_path1, sp1, node1, node_h) ←
       fors.sign_fors_tree_loop0_loop0 seed ht_idx tree_idx leaf_idx auth_path
         stack stack_heights sp j node 0#u32
-    let a1 ← Array.update stack sp1 node1
-    let a2 ← Array.update stack_heights sp1 node_h
+    let a ← Array.update stack sp1 node1
+    let a1 ← Array.update stack_heights sp1 node_h
     let sp2 ← sp1 + 1#usize
-    ok (cont (iter1, auth_path1, a1, a2, sp2))
+    ok (cont (iter1, auth_path1, a, a1, sp2))
 
 /-- [sphincs_c10::fors::sign_fors_tree]: loop 0:
-    Source: 'sphincs-c10/src/fors.rs', lines 208:4-257:5
+    Source: 'sphincs-c10/src/fors.rs', lines 224:4-272:5
     Visibility: public -/
 @[rust_loop]
 def fors.sign_fors_tree_loop0
@@ -156,7 +154,7 @@ def fors.sign_fors_tree_loop0
     (iter, auth_path, stack, stack_heights, sp)
 
 /-- [sphincs_c10::fors::sign_fors_tree]:
-    Source: 'sphincs-c10/src/fors.rs', lines 188:0-260:1
+    Source: 'sphincs-c10/src/fors.rs', lines 200:0-275:1
     Visibility: public -/
 def fors.sign_fors_tree
   (seed : Array Std.U8 32#usize) (sk_seed : Array Std.U8 32#usize)

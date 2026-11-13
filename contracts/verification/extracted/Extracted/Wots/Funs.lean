@@ -16,22 +16,22 @@ set_option maxRecDepth 2048
 namespace sphincs_c10
 
 /-- [sphincs_c10::params::W]
-    Source: 'sphincs-c10/src/params.rs', lines 43:0-43:23
+    Source: 'sphincs-c10/src/params.rs', lines 71:0-71:23
     Visibility: public -/
 @[global_simps, irreducible] def params.W : Std.Usize := 8#usize
 
 /-- [sphincs_c10::params::LOG_W]
-    Source: 'sphincs-c10/src/params.rs', lines 46:0-46:27
+    Source: 'sphincs-c10/src/params.rs', lines 74:0-74:27
     Visibility: public -/
 @[global_simps, irreducible] def params.LOG_W : Std.Usize := 3#usize
 
 /-- [sphincs_c10::params::L]
-    Source: 'sphincs-c10/src/params.rs', lines 49:0-49:24
+    Source: 'sphincs-c10/src/params.rs', lines 77:0-77:24
     Visibility: public -/
 @[global_simps, irreducible] def params.L : Std.Usize := 43#usize
 
 /-- [sphincs_c10::params::W_MASK]
-    Source: 'sphincs-c10/src/params.rs', lines 55:0-55:37
+    Source: 'sphincs-c10/src/params.rs', lines 87:0-87:37
     Visibility: public -/
 @[global_simps, irreducible]
 def params.W_MASK : Result Std.U8 := do

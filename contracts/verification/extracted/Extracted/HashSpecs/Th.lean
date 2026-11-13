@@ -54,6 +54,6 @@ set_option maxHeartbeats 4000000 in
     norm_num
     rw [thBuf_eq _ _ _ l_seed l_adrs l_val]
     simp only [List.append_assoc]
-  rw [r_post, a_post, hs9, th_pure_def]
+  rw [r_post, hs9, th_pure_def]
 
 end sphincs_c10

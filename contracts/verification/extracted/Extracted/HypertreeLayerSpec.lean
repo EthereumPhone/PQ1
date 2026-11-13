@@ -38,16 +38,16 @@ theorem firmware_verify_layer_body (sig : C10Signature) (seed : Std.Array Std.U8
   · simp only [Prod.mk.injEq] at heq
     obtain ⟨rfl, rfl⟩ := heq
     have hlv : l.val = layer.val := by rw [hl, hstart]
-    simp only [params.SUBTREE_H, params.H, params.D]
+    simp only [params.layer_h, params.SUBTREE_H, params.H, params.D]
     step <;> first | scalar_tac | skip
-    have hie : i = 9#usize := by apply UScalar.eq_of_val_eq; scalar_tac
+    have hie : lh = 9#usize := by apply UScalar.eq_of_val_eq; scalar_tac
+    subst lh
+    step <;> first | scalar_tac | skip
+    have hi1e : i = 512#u32 := by apply UScalar.eq_of_val_eq; scalar_tac
     subst i
     step <;> first | scalar_tac | skip
-    have hi1e : i1 = 512#u32 := by apply UScalar.eq_of_val_eq; scalar_tac
+    have hi2e : i1 = 511#u32 := by apply UScalar.eq_of_val_eq; scalar_tac
     subst i1
-    step <;> first | scalar_tac | skip
-    have hi2e : i2 = 511#u32 := by apply UScalar.eq_of_val_eq; scalar_tac
-    subst i2
     simp only [lift]
     let* ⟨nextTree, hnextTree, _⟩ ← Std.U32.ShiftRight_spec idx 9#usize (by scalar_tac)
     have htree : nextTree.val = idx.val / 512 := by

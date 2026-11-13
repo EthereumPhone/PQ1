@@ -62,13 +62,17 @@ theorem wots_keygen_loop_spec (seed sk : Std.Array Std.U8 32#usize)
         exact Nat.mod_eq_of_lt (by scalar_tac)
       have hcast : UScalar.cast .U32 j = (⟨BitVec.ofNat 32 j.val⟩ : Std.U32) :=
         u32_eq_ofNat (by omega) hcastj
+      let* ⟨i3, hi3v⟩ ← Usize.sub_spec
+      have hi3 : i3 = 7#usize := by apply UScalar.eq_of_val_eq; scalar_tac
+      -- `wots_secret_chain` (sphincs-c10 `hash::wots_secret_chain`, non-fused
+      -- path) is exactly `wots_secret` → `set_chain_index` → `chain_hash`.
+      simp only [hash.wots_secret_chain]
       let* ⟨sk_i, hsk⟩ ← wots_secret_spec sk layer tree kp (UScalar.cast .U32 j)
       let* ⟨chain_adrs, hchain⟩ ← set_chain_index_spec base_adrs (UScalar.cast .U32 j)
       rw [hbase, hcastj, specSetChainIndex_fresh] at hchain
       have hchain_eq : adrsArr layer tree 0 kp.val j.val 0 0 = chain_adrs :=
         adrsArr_eq_of_map_val _ _ _ _ _ _ _ _ hchain
       step* <;> first | (simp only [UScalar.cast_val_eq]; scalar_tac) | scalar_tac | skip
-      have hi3 : i3 = 7#usize := by apply UScalar.eq_of_val_eq; scalar_tac
       refine ⟨by rw [hend']; exact hbnd, by omega, ?_, by rw [hend']; omega⟩
       intro jj hjj
       rw [a1_post, Array.set_val_eq]

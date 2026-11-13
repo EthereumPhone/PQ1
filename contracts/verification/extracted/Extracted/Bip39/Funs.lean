@@ -16,11 +16,11 @@ set_option maxRecDepth 2048
 namespace sphincs_tz_bip39
 
 /-- [sphincs_tz_bip39::BITS_PER_WORD]
-    Source: 'bip39/src/lib.rs', lines 56:0-56:32 -/
+    Source: 'bip39/src/lib.rs', lines 58:0-58:32 -/
 @[global_simps, irreducible] def BITS_PER_WORD : Std.Usize := 11#usize
 
 /-- [sphincs_tz_bip39::read_11_bits]:
-    Source: 'bip39/src/lib.rs', lines 150:0-165:1 -/
+    Source: 'bip39/src/lib.rs', lines 152:0-167:1 -/
 def read_11_bits (buf : Slice Std.U8) (bit : Std.Usize) : Result Std.U16 := do
   let byte ← bit / 8#usize
   let shift ← bit % 8#usize
