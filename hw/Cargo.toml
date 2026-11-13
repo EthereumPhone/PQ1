@@ -53,6 +53,8 @@ v1-asm-chain = ["chain"]
 v1-asm-key = ["v1-asm-chain", "prfchain"]
 # Round 8: v1 FORS subtree with asm digest transitions (PRF / leaf / node), tree logic in Rust (secure-only, output-identical).
 v1-asm-fors = ["forsleaf"]
+# Round 8: v1 count search (search128, WOTS-shaped zero words) in asm; the predicate callback is called from the loop (secure-only, output-identical).
+v1-asm-search = ["search"]
 # Secure image only (autoresearch): FORS secret + leaf hash in one call (`pqsigner_fors_leaf16`).
 forsleaf = ["gather"]
 # Autoresearch product variant: the driver's fused loops report finished digests in batches

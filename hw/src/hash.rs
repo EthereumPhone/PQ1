@@ -2444,6 +2444,190 @@ fn collect<const FULL: bool>(d: &mut [u32; 8]) {
     }
 }
 
+/// `v1-asm-search` (round 8, secure-only; the FSBL never names it): the `search128` loop
+/// for WOTS-shaped messages (words 4..8 and 20..31 zero), hand-scheduled. Per try it does
+/// what the Rust loop does: DCIS poll with a 2^24 guard, HR3..HR7 read, SR clear; if a next
+/// try exists, BUSY wait (2^24 guard) with stale-DCIS refusal, INIT, the 32 words (count
+/// big-endian last), DCAL; then `pred` on the previous try's digest (`d[0..3]` zero,
+/// `d[3..8]` HR3..HR7 in memory order), called from the engine window. Returns `(c, flag)`:
+/// 0 = no hit (`c = end`); 1 = try `c` hit and `c + 1` is in flight; 2 = try `c` hit, nothing
+/// in flight. `st`: words 0..20 the message words 0..19, 33 `pred`, 40..48 `d`.
+#[cfg(feature = "v1-asm-search")]
+const V1S_SPIN: u32 = 1;
+
+#[cfg(all(feature = "v1-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+#[inline(always)]
+fn v1_search_asm(st: *mut u32, start: u32, end: u32) -> (u32, u32) {
+    let (c, flag): (u32, u32);
+    // SAFETY: drives only the secure HASH block (r4 = HASH_BASE); reads the 48-word staging
+    // array at `st` and writes its words 43..48; calls `pred` (an `extern "C"` function that
+    // reads only its 32-byte argument, caller contract) with an 8-byte-aligned stack; on a
+    // hang or a stale DCIS it calls `hash_engine_fault`, which does not return.
+    unsafe {
+        core::arch::asm!(
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "1:",
+            "movs r12, #{spin}",
+            "10:",
+            "subs r12, r12, #1",
+            "bne 10b",
+            "ldr r12, [r4, #0x24]",
+            "lsls r12, r12, #30",
+            "bpl 11f",
+            "4:",
+            "add r12, r4, #0x31C",            // HR3
+            "ldm r12, {{r0, r1, r2, r3, r10}}", // HR3..HR7
+            "movs r12, #1",
+            "str r12, [r4, #0x24]",
+            "add r11, r8, #1",
+            "cmp r11, r9",
+            "beq 50f",
+            // issue try r11
+            "ldr r12, [r4, #0x24]",
+            "tst r12, #10",
+            "bne 40f",
+            "41:",
+            "str lr, [r4]",                   // INIT
+            "ldrd r12, lr, [r5]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "ldrd r12, lr, [r5, #8]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "movs r12, #0",
+            "str r12, [r4, #4]",
+            "str r12, [r4, #4]",
+            "str r12, [r4, #4]",
+            "str r12, [r4, #4]",
+            "ldrd r12, lr, [r5, #32]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "ldrd r12, lr, [r5, #40]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "ldrd r12, lr, [r5, #48]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "ldrd r12, lr, [r5, #56]",
+            "str r12, [r4, #4]",
+            "str lr, [r4, #4]",
+            "ldr r12, [r5, #64]",
+            "str r12, [r4, #4]",              // word 16: block 0 starts
+            // block-0 window: the previous try's digest words for `pred`, block-1 words
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "rev r10, r10",
+            "str r0, [r5, #172]",
+            "str r1, [r5, #176]",
+            "str r2, [r5, #180]",
+            "str r3, [r5, #184]",
+            "str r10, [r5, #188]",
+            "ldrd r0, r1, [r5, #68]",
+            "ldr r2, [r5, #76]",
+            "rev r3, r11",
+            "movs r12, #0",
+            "mov.w r10, #256",
+            "str r0, [r4, #4]",               // waits for block 0
+            "str r1, [r4, #4]",
+            "str r2, [r4, #4]",
+            ".rept 11",
+            "str r12, [r4, #4]",
+            ".endr",
+            "str r3, [r4, #4]",               // count
+            "str r10, [r4, #8]",              // DCAL (NBLW = 0)
+            // engine window: pred(d) for try r8
+            "add r0, r5, #160",
+            "ldr r12, [r5, #132]",
+            "blx r12",
+            "tst r0, #0xFF",
+            "bne 60f",
+            "mov r8, r11",
+            "movw lr, #0x24",
+            "movt lr, #0x6",
+            "b 1b",
+            // last try: nothing to issue
+            "50:",
+            "rev r0, r0",
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
+            "rev r10, r10",
+            "str r0, [r5, #172]",
+            "str r1, [r5, #176]",
+            "str r2, [r5, #180]",
+            "str r3, [r5, #184]",
+            "str r10, [r5, #188]",
+            "add r0, r5, #160",
+            "ldr r12, [r5, #132]",
+            "blx r12",
+            "tst r0, #0xFF",
+            "bne 61f",
+            "mov r8, r9",
+            "movs r0, #0",
+            "b 97f",
+            "60:",
+            "movs r0, #1",
+            "b 97f",
+            "61:",
+            "movs r0, #2",
+            "b 97f",
+            // DCIS not yet: seven straight polls, then a counted poll (2^24)
+            "11:",
+            ".rept 7",
+            "ldr r12, [r4, #0x24]",
+            "lsls r12, r12, #30",
+            "bmi 4b",
+            ".endr",
+            "mov.w r0, #16777216",
+            "12:",
+            "ldr r12, [r4, #0x24]",
+            "lsls r12, r12, #30",
+            "bmi 4b",
+            "subs r0, r0, #1",
+            "bne 12b",
+            "b 99f",
+            // BUSY still set, or a stale DCIS: the HR words are live, so the counter is pushed
+            // (two words: the stack stays 8-byte aligned)
+            "40:",
+            "push {{r0, r1}}",
+            "mov.w r0, #16777216",
+            "42:",
+            "tst r12, #8",
+            "beq 43f",
+            "subs r0, r0, #1",
+            "beq 99f",
+            "ldr r12, [r4, #0x24]",
+            "b 42b",
+            "43:",
+            "pop {{r0, r1}}",
+            "tst r12, #2",
+            "beq 41b",
+            "99:",
+            "bl {fault}",
+            "97:",
+            spin = const V1S_SPIN,
+            fault = sym hash_engine_fault,
+            out("r0") flag,
+            out("r1") _,
+            out("r2") _,
+            out("r3") _,
+            in("r4") HASH_BASE,
+            in("r5") st,
+            inout("r8") start => c,
+            in("r9") end,
+            out("r10") _,
+            out("r11") _,
+            out("r12") _,
+            out("lr") _,
+            clobber_abi("C"),
+        );
+    }
+    (c, flag)
+}
+
 /// Counter search (`search`, secure image only): for `c` in `start..start+n`,
 /// SHA-256 the 128-byte message at `buf` with bytes [124..128) = `c`
 /// (big-endian); return the first `c` whose digest satisfies `pred` (the
@@ -2470,6 +2654,48 @@ pub unsafe extern "C" fn pqsigner_sha256_search128(
         return end;
     }
     let mut d = [0u32; 8];
+    #[cfg(all(feature = "v1-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
+    {
+        // SAFETY: caller contract (128 readable bytes); unaligned word reads are legal.
+        let w = |i: usize| unsafe { buf.add(4 * i).cast::<u32>().read_unaligned() };
+        // The WOTS+C preimage shape: pad16(pk_seed)'s zero half (words 4..8) and the zero
+        // words after the 16-byte node (20..31). Public data, so the branch leaks nothing.
+        if w(4) | w(5) | w(6) | w(7) == 0 && (20..31).all(|i| w(i) == 0) {
+            let mut st = [0u32; 48];
+            for (i, x) in st.iter_mut().take(20).enumerate() {
+                *x = w(i);
+            }
+            st[33] = pred as usize as u32;
+            // SAFETY: caller contract.
+            unsafe { issue128(buf, start) };
+            let (c, flag) = v1_search_asm(st.as_mut_ptr(), start, end);
+            if flag == 0 {
+                #[cfg(feature = "tick-batch")]
+                // SAFETY: the engine is idle; the tick does not hash.
+                unsafe {
+                    pqsigner_hash_tick_n(n)
+                };
+                return end;
+            }
+            if flag == 1 {
+                let mut discard = [0u32; 8];
+                collect::<false>(&mut discard);
+            }
+            // The hit's first 12 bytes were not read: hash try `c` once more, in full.
+            // SAFETY: caller contract.
+            unsafe { issue128(buf, c) };
+            collect::<true>(&mut d);
+            // SAFETY: `out` names 32 writable bytes (caller contract).
+            unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+            #[cfg(feature = "tick-batch")]
+            // SAFETY: the engine is idle; the tick does not hash. Tries start..=c, the
+            // speculative try, and the recompute.
+            unsafe {
+                pqsigner_hash_tick_n(c - start + 1 + u32::from(flag == 1) + 1)
+            };
+            return c;
+        }
+    }
     // SAFETY: caller contract.
     unsafe { issue128(buf, start) };
     let mut c = start;
