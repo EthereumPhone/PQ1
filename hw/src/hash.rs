@@ -1953,14 +1953,55 @@ const V2_NBLW: u32 = 24;
 #[cfg(feature = "v2")]
 #[inline(always)]
 fn v2_entry() {
-    let _ = ready_sr_fast();
+    let _ = v2_ready_sr();
     REG.str_.write(V2_NBLW);
+}
+
+/// v2 polls give up after 2^24 status reads (a hung engine is a fault, as in
+/// `wait_ready_sr`). A down-counter from an encodable immediate keeps no
+/// constant live across the hot loops, which frees a register there.
+#[cfg(feature = "v2")]
+const V2_POLLS: u32 = 1 << 24;
+
+/// `wait_ready_sr` for the v2 loops: the status word once BUSY is clear.
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_ready_sr() -> u32 {
+    #[cfg(feature = "no-busy-wait")]
+    return REG.sr.read();
+    #[cfg(not(feature = "no-busy-wait"))]
+    {
+        let mut t = V2_POLLS;
+        loop {
+            let sr = REG.sr.read();
+            if sr & SR_BUSY == 0 {
+                return sr;
+            }
+            t -= 1;
+            if t == 0 {
+                hash_engine_fault();
+            }
+        }
+    }
+}
+
+/// Wait for DCIS (digest ready) in the v2 loops.
+#[cfg(feature = "v2")]
+#[inline(always)]
+fn v2_wait_dcis() {
+    let mut t = V2_POLLS;
+    while REG.sr.read() & SR_DCIS == 0 {
+        t -= 1;
+        if t == 0 {
+            hash_engine_fault();
+        }
+    }
 }
 
 #[cfg(feature = "v2")]
 #[inline(always)]
 fn v2_begin() {
-    if ready_sr_fast() & SR_DCIS != 0 {
+    if v2_ready_sr() & SR_DCIS != 0 {
         hash_engine_fault();
     }
     REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);
@@ -1970,13 +2011,7 @@ fn v2_begin() {
 #[inline(always)]
 fn v2_end16() -> [u32; 4] {
     REG.str_.write(V2_NBLW | STR_DCAL);
-    let mut t = 0u32;
-    while REG.sr.read() & SR_DCIS == 0 {
-        t += 1;
-        if t > 10_000_000 {
-            hash_engine_fault();
-        }
-    }
+    v2_wait_dcis();
     let v = read_hr4();
     REG.sr.write(SR_DINIS);
     #[cfg(all(feature = "tick-hook", not(feature = "tick-batch")))]
@@ -2021,14 +2056,17 @@ unsafe fn v2_store4(p: *mut u8, v: [u32; 4]) {
 #[cfg(feature = "v2")]
 #[inline(always)]
 fn v2_chain_core(s: [u32; 4], mut v: [u32; 4], a0: u32, low24: u32, start: u32, steps: u32) -> [u32; 4] {
-    let mut step = 0u32;
-    while step < steps {
+    // The second A7 word is the loop variable (`cp` is its bits 12..15, so a
+    // step adds 1 << 12): fewer live values, so `S` stays in registers.
+    let mut a1 = v2_a1(low24, start);
+    let end = v2_a1(low24, start.wrapping_add(steps));
+    while a1 != end {
         v2_begin();
         write_word(s[0]); write_word(s[1]); write_word(s[2]); write_word(s[3]);
         write_word(v[0]); write_word(v[1]); write_word(v[2]); write_word(v[3]);
-        write_word(a0); write_word(v2_a1(low24, start.wrapping_add(step)));
+        write_word(a0); write_word(a1);
         v = v2_end16();
-        step += 1;
+        a1 = a1.wrapping_add(1 << 12);
     }
     v
 }
@@ -2353,13 +2391,7 @@ fn v2_issue43(sm: &[u32; 8], count: u32, a0: u32, a1: u32) {
 #[cfg(feature = "v2")]
 #[inline(always)]
 fn v2_collect(d: &mut [u32; 8]) {
-    let mut t = 0u32;
-    while REG.sr.read() & SR_DCIS == 0 {
-        t += 1;
-        if t > 10_000_000 {
-            hash_engine_fault();
-        }
-    }
+    v2_wait_dcis();
     // SAFETY: HR0..HR7, the digest bank; byte-swapped into memory order.
     unsafe {
         for (i, x) in d.iter_mut().enumerate() {

@@ -500,3 +500,35 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 - **Est. cached sign:** 0.864 s, or **0.597 s** with the cache. Fable estimated about 0.7 M (`fable-hypotheses-5.md`, "not worth doing"); measured about 0.73 M mean.
 
 Fable's round-6 list is in `fable-hypotheses-5.md`.
+
+### Test zero and H8: register diet in the v2 loops, keep (output-identical)
+
+**Test zero** (`bench_v2micro`, `experiment_micro.sh`; DWT cycles per digest per entry, in isolation, not a gate). Before H8:
+
+| entry | cycles/digest |
+|---|---:|
+| `chain16`, 15 steps | 127.0 |
+| `chain16`, 1 step (entry + digest) | 198.0 |
+| `node16` | 175.0 |
+| `wots_chains16` | 119.6 |
+| `wots_pk16` | 123.2 |
+| `fors_subtree16` h = 11 | 145.2 |
+| `search43`, per try | 173.0 |
+
+The chain loop sat about 16 cycles above the unit-cost floor (about 111). The disassembly showed seven stack reloads per step, interleaved with the DIN stores (Fable item 1), and a register pinned to the non-encodable timeout constant 10,000,001.
+
+**H8:**
+- The chain loop's variable is the second A7 word (`a1 += 1 << 12` up to an end word). This frees `start`, `step`, `steps` and `low24`.
+- The v2-only polls (`v2_ready_sr`, `v2_wait_dcis`) count down from `1 << 24`, an encodable immediate, so no constant stays live. The shared v1/FSBL `wait_ready_sr` is untouched.
+
+| entry | before | after |
+|---|---:|---:|
+| `chain16`, 15 steps | 127.0 | **116.2** |
+| `wots_chains16` | 119.6 | 117.0 |
+| `node16` | 175.0 | 169.0 |
+| `fors_subtree16` | 145.2 | 142.4 |
+| `search43` per try | 173.0 | 174.0 |
+
+- **Evidence:** gate 5 2,089/0; the guard halts at stage 200; kit golden; golden + cache (3 hits, m0 cached 0.541 s).
+- **16-message mean:** v2 69.07 → **67.96 M (−1.61%)**, 1.00–1.18 M on every message; with the cache 47.71 → **47.05 M (−1.38%)**.
+- **Est. cached sign:** 0.850 s, or **0.589 s** with the cache. Against v1's fused head: −38.3% plain, −57.3% with the cache.
