@@ -8,17 +8,15 @@ FORGE="${FORGE:-$HOME/.foundry/bin/forge}"
 RUNS="${1:-256}"
 cd "$SW"
 
-echo "== text pin: the digit-sum snippet the unit test checks is in each verifier that uses it"
-SNIP=$(grep -h '// C10-SWAR-DIGITSUM$' test/gas/C10DigitSum.t.sol 2>/dev/null | sed 's/^ *//' | sort -u || true)
-if [ -n "$SNIP" ]; then
-  for f in src/verifiers/SPHINCsC10v2Asm.sol src/verifiers/SPHINCsC10Asm.sol; do
-    if grep -q 'C10-SWAR-DIGITSUM' "$f"; then
-      got=$(grep -h '// C10-SWAR-DIGITSUM$' "$f" | sed 's/^ *//' | sort -u)
-      [ "$got" = "$SNIP" ] || { echo "FAIL: $f digit-sum snippet differs from the unit-tested one"; exit 1; }
-      echo "  ok $f"
-    fi
-  done
-fi
+echo "== text pin: the digit-sum lines the unit test checks are, in order, the only tagged lines of each verifier"
+TAG='// C10-SWAR-DIGITSUM$'
+SNIP=$(grep -h "$TAG" test/gas/C10DigitSum.t.sol | sed 's/^ *//')
+[ -n "$SNIP" ] || { echo "FAIL: no tagged lines in the unit test"; exit 1; }
+for f in src/verifiers/SPHINCsC10v2Asm.sol src/verifiers/SPHINCsC10Asm.sol; do
+  got=$(grep -h "$TAG" "$f" | sed 's/^ *//')
+  [ "$got" = "$SNIP" ] || { echo "FAIL: $f digit-sum lines differ from (or are missing vs) the unit-tested ones"; exit 1; }
+  echo "  ok $f"
+done
 
 echo "== equivalence + per-primitive + unit + gas bench (fuzz runs $RUNS)"
 LOG="${GATE_LOG:-$(mktemp -t c10-gas-gate.XXXXXX)}"
@@ -31,6 +29,14 @@ echo "== gas under the deploy profile (runs=999999; production build), separate 
 DB="${DEPLOY_BUILD:-$HOME/.cache/c10-gas-deploy}"
 FOUNDRY_PROFILE=deploy "$FORGE" test --out "$DB/out" --cache-path "$DB/cache" \
   --match-path 'test/gas/C10GasBench.t.sol' --match-test 'test_gas_v' -vv | grep -E '(GAS .*callee-only|SIZE )' | sed 's/^ */  deploy: /'
+
+if [ "${DEPLOY_EQUIV:-1}" = 1 ]; then
+  echo "== equivalence + per-primitive + unit gates under the deploy profile (ref v1 anchored to the deploy pin)"
+  FOUNDRY_PROFILE=deploy FOUNDRY_FUZZ_RUNS="$RUNS" "$FORGE" test --out "$DB/out" --cache-path "$DB/cache" \
+    --match-path 'test/gas/C10*.t.sol' --no-match-path 'test/gas/C10GasBench.t.sol' >"$LOG.deploy" 2>&1 \
+    || { grep -E 'FAIL' "$LOG.deploy" | head; echo "FAIL: deploy-profile gates (log $LOG.deploy)"; exit 1; }
+  grep -E 'Suite result' "$LOG.deploy" | sed 's/^ */  deploy: /'
+fi
 
 echo "== existing verifier suites (minus the v1 codehash freeze, a pin)"
 "$FORGE" test --match-path 'test/SPHINCsC10*.t.sol' --no-match-test 'test_verifierBytecodeFrozen' | grep -E '^Suite result'

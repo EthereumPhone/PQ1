@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Test, Vm, console2} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {ISPHINCSVerifier} from "../../src/verifiers/ISPHINCSVerifier.sol";
 import {SPHINCsC10Asm} from "../../src/verifiers/SPHINCsC10Asm.sol";
 import {SPHINCsC10v2Asm} from "../../src/verifiers/SPHINCsC10v2Asm.sol";
@@ -29,6 +30,9 @@ contract C10EquivalenceTest is Test {
     /// reference must still hash to it, so "reference" means the deployed bytecode.
     bytes32 internal constant V1_PINNED_RUNTIME_CODEHASH =
         0x8fa670d53df0fd63bc64505463f268256ffbb51e57f62d8a5a41f5bcec5cf2eb;
+    /// The same pin for the deploy profile (runs=999999), the production build.
+    bytes32 internal constant V1_PINNED_RUNTIME_CODEHASH_DEPLOY =
+        0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989;
     /// The v2 DRAFT 0.3 runtime codehash at 0895dcc79 (default profile), captured when the
     /// reference copy was made.
     bytes32 internal constant V2_REF_RUNTIME_CODEHASH =
@@ -91,13 +95,21 @@ contract C10EquivalenceTest is Test {
         Vm.AccountAccess[] memory a = vm.stopAndReturnStateDiff();
         uint256 n;
         for (uint256 i = 0; i < a.length; i++) {
-            if (a[i].account == address(2)) n++;
+            if (_isPrecompileCall(a[i])) n++;
         }
         o.trace = new bytes32[](n);
         n = 0;
         for (uint256 i = 0; i < a.length; i++) {
-            if (a[i].account == address(2)) o.trace[n++] = keccak256(a[i].data);
+            if (_isPrecompileCall(a[i])) o.trace[n++] = keccak256(abi.encodePacked(uint8(a[i].kind), a[i].data));
         }
+    }
+
+    /// A call of any kind (CALL, DELEGATECALL, CALLCODE, STATICCALL) into the SHA-256 precompile;
+    /// the kind is part of the trace entry, so a candidate that switched call kinds would differ.
+    function _isPrecompileCall(Vm.AccountAccess memory x) internal pure returns (bool) {
+        return x.account == address(2)
+            && (x.kind == VmSafe.AccountAccessKind.Call || x.kind == VmSafe.AccountAccessKind.DelegateCall
+                || x.kind == VmSafe.AccountAccessKind.CallCode || x.kind == VmSafe.AccountAccessKind.StaticCall);
     }
 
     /// "" when the two observations are identical, else the first difference.
@@ -168,7 +180,11 @@ contract C10EquivalenceTest is Test {
 
     /// The reference is the deployed v1 bytecode; the v2 reference is the 0895dcc79 draft.
     function test_reference_anchors() public view {
-        if (keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("default")))) == keccak256(bytes("default"))) {
+        bytes32 prof = keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("default"))));
+        if (prof == keccak256(bytes("deploy"))) {
+            assertEq(refV1.codehash, V1_PINNED_RUNTIME_CODEHASH_DEPLOY, "ref v1 is not the pinned deployed bytecode (deploy)");
+        }
+        if (prof == keccak256(bytes("default"))) {
             assertEq(refV1.codehash, V1_PINNED_RUNTIME_CODEHASH, "ref v1 is not the pinned deployed bytecode");
             console2.log("ref v2 runtime codehash");
             console2.logBytes32(refV2.codehash);
@@ -462,6 +478,162 @@ contract C10EquivalenceTest is Test {
 
     function test_v1_trailing_junk() public {
         _trailingJunk(false);
+    }
+
+    /// Check order: wrong length x key shape x message, so a candidate that moved the key-mask
+    /// `false` before the length revert (or the reverse) differs.
+    function _checkOrderCross(bool v2) internal {
+        _resetTally();
+        Vec memory v = _base(v2, 0);
+        uint256[5] memory lens = [uint256(0), 4007, 4008, 4009, 8016];
+        bytes32[4] memory seeds = [v.s, v.s | bytes32(uint256(1)), v.s, v.s | bytes32(uint256(1))];
+        bytes32[4] memory roots = [v.r, v.r, v.r | bytes32(uint256(1)), v.r | bytes32(uint256(1))];
+        for (uint256 i = 0; i < lens.length; i++) {
+            bytes memory s = new bytes(lens[i]);
+            for (uint256 k = 0; k < lens[i] && k < 4008; k++) {
+                s[k] = v.sig[k];
+            }
+            for (uint256 j = 0; j < 4; j++) {
+                _check(v2, abi.encodeWithSelector(SEL, seeds[j], roots[j], v.m, s), "order");
+                _check(v2, abi.encodeWithSelector(SEL, seeds[j], roots[j], ~v.m, s), "order");
+            }
+        }
+        _logTally(v2 ? "v2 check order" : "v1 check order");
+        assertEq(tally[2], 32, "every wrong length reverts with the reason, whatever the keys");
+    }
+
+    function test_v2_check_order_cross() public {
+        _checkOrderCross(true);
+    }
+
+    function test_v1_check_order_cross() public {
+        _checkOrderCross(false);
+    }
+
+    /// Non-payable entry: any call with value reverts identically.
+    function test_value_calls() public {
+        bytes memory cd = _cd(baseV2[0]);
+        vm.deal(address(this), 10);
+        (bool a, bytes memory ra) = refV2.call{value: 1}(cd);
+        (bool b, bytes memory rb) = candV2.call{value: 1}(cd);
+        assertEq(a, b);
+        assertEq(ra, rb);
+        cd = _cd(baseV1[0]);
+        (a, ra) = refV1.call{value: 1}(cd);
+        (b, rb) = candV1.call{value: 1}(cd);
+        assertEq(a, b);
+        assertEq(ra, rb);
+        assertFalse(a, "value call must revert");
+    }
+
+    // ── deep conditioned garbage: inputs that pass both +C checks ───────────
+    //
+    // Random corruption almost always stops at the FORS+C or a WOTS+C check, so a candidate's
+    // chain/T_43/Merkle code would rarely run on garbage. Here a region is replaced by garbage and
+    // the WOTS+C counts are re-ground against the REFERENCE's own digest preimages (read from its
+    // SHA-256 trace), so the corrupted signature passes both digit-sum checks and every one of
+    // the 361 hashes runs on garbage before the root comparison returns false.
+
+    /// Index of the layer-l WOTS_DIGEST call in a full trace, and the offset of the 4-byte count
+    /// inside its preimage (v2: S16||m16||be32(count)||A7; v1: seed||adrs||node||uint256(count)).
+    function _digestIdx(uint256 l) internal pure returns (uint256) {
+        return l == 0 ? 147 : 254;
+    }
+
+    function _rawTrace(address v, bytes memory cd) internal returns (bytes[] memory ins) {
+        vm.startStateDiffRecording();
+        v.staticcall(cd);
+        Vm.AccountAccess[] memory a = vm.stopAndReturnStateDiff();
+        uint256 n;
+        for (uint256 i = 0; i < a.length; i++) {
+            if (_isPrecompileCall(a[i])) n++;
+        }
+        ins = new bytes[](n);
+        n = 0;
+        for (uint256 i = 0; i < a.length; i++) {
+            if (_isPrecompileCall(a[i])) ins[n++] = a[i].data;
+        }
+    }
+
+    function _digitSum(bytes32 h) internal pure returns (uint256 sum) {
+        uint256 d = uint256(h);
+        for (uint256 i = 0; i < 43; i++) {
+            sum += (d >> (3 * i)) & 7;
+        }
+    }
+
+    /// First count >= start whose digest (preimage `pre` with the count patched in) has digit sum 205.
+    function _grind(bytes memory pre, uint256 countAt, uint256 start) internal view returns (uint256 c) {
+        for (c = start;; c++) {
+            pre[countAt] = bytes1(uint8(c >> 24));
+            pre[countAt + 1] = bytes1(uint8(c >> 16));
+            pre[countAt + 2] = bytes1(uint8(c >> 8));
+            pre[countAt + 3] = bytes1(uint8(c));
+            (, bytes memory h) = address(2).staticcall(pre);
+            if (_digitSum(bytes32(h)) == 205) return c;
+        }
+    }
+
+    function _deep(bool v2, uint256 seed, uint256 region) internal {
+        Vec memory v = _base(v2, seed);
+        address ref = v2 ? refV2 : refV1;
+        (uint256[10] memory st, uint256[10] memory len) = _regions();
+        bytes memory s = _copy(v.sig);
+        // garbage over a random 16..64-byte window of the region (never R: that changes H_MSG)
+        uint256 w = 16 + _rnd(seed, 1) % 49;
+        if (w > len[region]) w = len[region];
+        uint256 at = st[region] + _rnd(seed, 2) % (len[region] - w + 1);
+        for (uint256 i = 0; i < w; i++) {
+            s[at + i] = bytes1(uint8(_rnd(seed, 3 + i / 32) >> (8 * (i % 32))));
+        }
+        uint256 countAt = v2 ? 32 : 124;
+        uint256[2] memory cOff = [uint256(3024), 3860];
+        for (uint256 l = 0; l < 2; l++) {
+            bytes[] memory tr = _rawTrace(ref, abi.encodeWithSelector(SEL, v.s, v.r, v.m, s));
+            require(tr.length > _digestIdx(l), "conditioned input stopped before the digest");
+            bytes memory pre = tr[_digestIdx(l)];
+            if (_digitSum(sha256(pre)) == 205) continue;
+            uint256 c = _grind(pre, countAt, _rnd(seed, 100 + l) % 0x100000);
+            for (uint256 q = 0; q < 4; q++) {
+                s[cOff[l] + q] = bytes1(uint8(c >> (24 - 8 * q)));
+            }
+        }
+        bytes memory cd = abi.encodeWithSelector(SEL, v.s, v.r, v.m, s);
+        assertEq(_rawTrace(ref, cd).length, 361, "conditioned input does not reach the root comparison");
+        _check(v2, cd, string.concat("deep region ", vm.toString(region)));
+    }
+
+    /// Every region except R and the counts themselves, two seeds each.
+    function _deepSweep(bool v2) internal {
+        _resetTally();
+        uint256[7] memory regions = [uint256(1), 2, 3, 4, 6, 7, 9];
+        for (uint256 j = 0; j < regions.length; j++) {
+            for (uint256 k = 0; k < 2; k++) {
+                _deep(v2, 1000 * j + k, regions[j]);
+            }
+        }
+        _logTally(v2 ? "v2 deep" : "v1 deep");
+        assertEq(tally[1], 14, "every conditioned input runs all 361 hashes and returns false");
+    }
+
+    function test_v2_deep_conditioned_garbage() public {
+        _deepSweep(true);
+    }
+
+    function test_v1_deep_conditioned_garbage() public {
+        _deepSweep(false);
+    }
+
+    /// forge-config: default.fuzz.runs = 24
+    function testFuzz_v2_deep(uint256 seed) public {
+        uint256[7] memory regions = [uint256(1), 2, 3, 4, 6, 7, 9];
+        _deep(true, seed, regions[seed % 7]);
+    }
+
+    /// forge-config: default.fuzz.runs = 24
+    function testFuzz_v1_deep(uint256 seed) public {
+        uint256[7] memory regions = [uint256(1), 2, 3, 4, 6, 7, 9];
+        _deep(false, seed, regions[seed % 7]);
     }
 
     // ── fuzzed mutations ────────────────────────────────────────────────────

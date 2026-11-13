@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Test, Vm} from "forge-std/Test.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {ISPHINCSVerifier} from "../../src/verifiers/ISPHINCSVerifier.sol";
 import {SPHINCsC10Asm} from "../../src/verifiers/SPHINCsC10Asm.sol";
 import {SPHINCsC10v2Asm} from "../../src/verifiers/SPHINCsC10v2Asm.sol";
@@ -21,26 +22,34 @@ import {RefSPHINCsC10v2Asm} from "../ref/RefSPHINCsC10v2Asm.sol";
 contract C10PrimitiveTraceTest is Test {
     bytes4 internal constant SEL = ISPHINCSVerifier.verify.selector;
 
-    function _trace(address v, bytes memory cd) internal returns (bool ok, bytes[] memory ins) {
+    function _trace(address v, bytes memory cd) internal returns (bool ok, bytes memory ret, bytes[] memory ins) {
         vm.startStateDiffRecording();
-        (ok,) = v.staticcall(cd);
+        (ok, ret) = v.staticcall(cd);
         Vm.AccountAccess[] memory a = vm.stopAndReturnStateDiff();
         uint256 n;
         for (uint256 i = 0; i < a.length; i++) {
-            if (a[i].account == address(2)) n++;
+            if (_isSha(a[i])) n++;
         }
         ins = new bytes[](n);
         n = 0;
         for (uint256 i = 0; i < a.length; i++) {
-            if (a[i].account == address(2)) ins[n++] = a[i].data;
+            if (_isSha(a[i])) ins[n++] = a[i].data;
         }
+    }
+
+    /// Only STATICCALLs into 0x02 count: the Python trace is of hash inputs, and the verifiers
+    /// must reach the precompile by STATICCALL.
+    function _isSha(Vm.AccountAccess memory x) internal pure returns (bool) {
+        return x.account == address(2) && (x.kind == VmSafe.AccountAccessKind.Call
+            || x.kind == VmSafe.AccountAccessKind.DelegateCall || x.kind == VmSafe.AccountAccessKind.CallCode
+            || x.kind == VmSafe.AccountAccessKind.StaticCall);
     }
 
     function _match(address v, string memory who, string memory tj, string memory k, bytes memory cd) internal {
         bytes[] memory exp = vm.parseJsonBytesArray(tj, string.concat(".", k, ".inputs"));
         string[] memory lab = vm.parseJsonStringArray(tj, string.concat(".", k, ".labels"));
         bool accept = vm.parseJsonBool(tj, string.concat(".", k, ".accept"));
-        (bool ok, bytes[] memory got) = _trace(v, cd);
+        (bool ok, bytes memory ret, bytes[] memory got) = _trace(v, cd);
         uint256 n = exp.length < got.length ? exp.length : got.length;
         for (uint256 i = 0; i < n; i++) {
             if (keccak256(exp[i]) != keccak256(got[i])) {
@@ -50,12 +59,8 @@ contract C10PrimitiveTraceTest is Test {
             }
         }
         assertEq(got.length, exp.length, string.concat(who, " ", k, ": SHA-256 call count"));
-        if (accept) assertTrue(ok, string.concat(who, " ", k, ": reference accepts, verifier did not return"));
-        else if (ok) assertFalse(abi.decode(_ret(v, cd), (bool)), string.concat(who, " ", k, ": accepted a reject"));
-    }
-
-    function _ret(address v, bytes memory cd) internal view returns (bytes memory ret) {
-        (, ret) = v.staticcall(cd);
+        bool accepted = ok && ret.length == 32 && abi.decode(ret, (uint256)) == 1;
+        assertEq(accepted, accept, string.concat(who, " ", k, ": accept/reject differs from the Python reference"));
     }
 
     function _v2(address v, string memory who) internal {

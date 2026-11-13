@@ -87,13 +87,9 @@ def pin_ok():
     the exact set of such lines in each verifier that carries the tag."""
     tag = "// C10-SWAR-DIGITSUM"
     def lines(rel):
-        return sorted({l.strip() for l in open(os.path.join(SW, rel)) if l.rstrip().endswith(tag)})
+        return [l.strip() for l in open(os.path.join(SW, rel)) if l.rstrip().endswith(tag)]
     want = lines("test/gas/C10DigitSum.t.sol")
-    for rel in (V1, V2):
-        got = lines(rel)
-        if got and got != want:
-            return False
-    return True
+    return bool(want) and all(lines(rel) == want for rel in (V1, V2))
 
 
 def run_gates(runs):
@@ -109,8 +105,12 @@ def run_gates(runs):
 
 def main():
     which = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "all"
+    if which not in ("v1", "v2", "all"):
+        sys.exit(f"unknown selection {which!r}: use v1, v2 or all")
     runs = int(sys.argv[sys.argv.index("--runs") + 1]) if "--runs" in sys.argv else 64
     sel = [m for m in MUTANTS if which == "all" or m[0].startswith(which + "-")]
+    if not sel:
+        sys.exit("no mutants selected")
     rc, fails, _, _, out = run_gates(runs)
     if rc != 0:
         print("BASELINE NOT GREEN — fix the candidate first:\n", "\n".join(fails), out[-3000:])
@@ -141,8 +141,9 @@ def main():
         elif fails and not semantic:
             print(f"BENCH   {mid:26s} only the gas bench failed: {what}")
             ok = False
-        elif "Compiler run failed" in out or "Error (" in out and not fails:
-            print(f"NOCOMP  {mid:26s} mutant did not compile")
+        elif not fails:
+            # nonzero exit with no failing test: compile error or infrastructure failure
+            print(f"INFRA   {mid:26s} gates exited {rc} without a failing test (compile error?)")
             ok = False
         else:
             print(f"CAUGHT  {mid:26s} by {len(semantic)} tests: {', '.join(semantic)[:200]}")
