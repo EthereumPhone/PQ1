@@ -20,8 +20,9 @@ FAMILIES = {
          "pureWotsSign seed sk 0#u32 tree leaf current"),
     ]),
     "body": (["SignLayerSerializeCaller", "SignHypertreeLayer"], "hypertree.sign_inner_loop3.body", [
-        ("wrong-leaf-mask", "lift (idx_tree &&& i2)", "lift (idx_tree &&& 255#u32)"),
-        ("wrong-tree-shift", "idx_tree >>> i", "idx_tree >>> 8#usize"),
+        # Research refactor: `lh ← params.layer_h layer` renumbers temporaries.
+        ("wrong-leaf-mask", "lift (idx_tree &&& i1)", "lift (idx_tree &&& 255#u32)"),
+        ("wrong-tree-shift", "idx_tree >>> lh", "idx_tree >>> 8#usize"),
         ("wrong-signing-seed", "wots.sign_with_shuffle seed sk_seed layer", "wots.sign_with_shuffle seed seed layer"),
     ]),
     "loop": (["SignHypertreeLoop"], "hypertree.sign_inner_loop3", [
