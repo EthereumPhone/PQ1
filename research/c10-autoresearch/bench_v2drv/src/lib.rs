@@ -678,9 +678,18 @@ pub extern "C" fn c10_bench_main() {
         }
         let s = [0x5Au8; 16];
         let mut v = [0x11u8; 16];
-        #[cfg(not(any(feature = "stale-search", feature = "stale-v1", feature = "stale-v2key")))]
+        #[cfg(not(any(feature = "stale-search", feature = "stale-v1", feature = "stale-v2key", feature = "stale-v2fors")))]
         // SAFETY: valid buffers.
         unsafe { pqsigner_v2_chain16(s.as_ptr(), v.as_mut_ptr(), 0x0102_0304, 0x0000_0500, 0, 3) };
+        #[cfg(feature = "stale-v2fors")]
+        {
+            // Round 11: the v2 subtree's own first-PRF check (its Rust entry waits for BUSY only).
+            let sk = [0x6Bu8; 32];
+            let mut o = [0u8; 16];
+            let _ = &mut v;
+            // SAFETY: valid buffers; h = 4, j0 = 16 (aligned, in range).
+            unsafe { pqsigner_v2_fors_subtree16(sk.as_ptr(), s.as_ptr(), 0x0102_0304, 0, 0x0102_0305, 0, 16, 4, o.as_mut_ptr()) };
+        }
         #[cfg(feature = "stale-v2key")]
         {
             // Round 10: the whole-key loop's own first-PRF check (its Rust entry waits for BUSY only).
