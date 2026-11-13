@@ -467,12 +467,12 @@ pub fn wots_secret(
     buf[72..76].copy_from_slice(&kp.to_be_bytes());
     buf[76..80].copy_from_slice(&chain_idx.to_be_bytes());
     let out = sha256_bytes16(&buf);
-    // Wipe the sk_seed copy (volatile, so the stores are not elided).
-    for b in buf.iter_mut() {
+    // Wipe the sk_seed copy (volatile, so the stores are not elided). Not under `lean_extract` (set only by the extraction recipes): Aeneas cannot translate the raw borrow behind `write_volatile`, so the model omits this output-irrelevant wipe of a dead local.
+    #[cfg(not(lean_extract))] for b in buf.iter_mut() {
         // SAFETY: `b` is a valid, aligned, exclusive reference.
         unsafe { core::ptr::write_volatile(b, 0) };
     }
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    #[cfg(not(lean_extract))] core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     out
 }
 
@@ -502,12 +502,12 @@ pub fn fors_secret(sk_seed: &[u8; 32], ht_idx: u32, tree_idx: u32, leaf_idx: u32
     buf[40..44].copy_from_slice(&tree_idx.to_be_bytes());
     buf[44..48].copy_from_slice(&leaf_idx.to_be_bytes());
     let out = sha256_bytes16(&buf);
-    // Wipe the sk_seed copy (volatile, so the stores are not elided).
-    for b in buf.iter_mut() {
+    // Wipe the sk_seed copy (volatile, so the stores are not elided). Not under `lean_extract` (set only by the extraction recipes): Aeneas cannot translate the raw borrow behind `write_volatile`, so the model omits this output-irrelevant wipe of a dead local.
+    #[cfg(not(lean_extract))] for b in buf.iter_mut() {
         // SAFETY: `b` is a valid, aligned, exclusive reference.
         unsafe { core::ptr::write_volatile(b, 0) };
     }
-    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    #[cfg(not(lean_extract))] core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
     out
 }
 
