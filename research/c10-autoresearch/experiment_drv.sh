@@ -13,7 +13,8 @@ w = next(([int(x, 16) for x in l.split()[1:]] for l in L if l.startswith('RESULT
 if not w: print(json.dumps({'ok': False, 'why': 'no result words'})); sys.exit(1)
 o = w[64:96]
 r = dict(status=hex(w[0]), magic=hex(o[0]), stage=o[1], checks=o[2], failed=o[3], per_group=o[4:15],
-         first_fail=(o[15], o[16]) if o[3] else None, v1_probes=o[17])
+         first_fail=(o[15], o[16]) if o[3] else None, v1_probes=o[17],
+         v1_entry_probes=o[18], v1_entry_failed=o[19])
 groups = ['v1-oneshot', 'chain16', 'prf_chain16', 'node16', 'fors_leaf16', 'fors_subtree16', 'search43_target', 'v1-stream', 'wots_chains16', 'wots_pk16', 'grind_r']
 r['per_group'] = dict(zip(groups, o[4:15]))
 feats = sys.argv[2].split(',')
@@ -25,6 +26,7 @@ elif 'stale-positive' in feats:
 elif 'stale' in feats:
     r['ok'] = w[0] == 0x484100F0 and o[1] == 300 and o[3] == 0
 else:
-    r['ok'] = w[0] == 0x444F4E45 and o[0] == 0x44525632 and o[1] == 100 and o[3] == 0 and o[2] > 0
+    # Round 11: the v1-entry-after-v2 control must have run (o[18]) without a failure (o[19]).
+    r['ok'] = w[0] == 0x444F4E45 and o[0] == 0x44525632 and o[1] == 100 and o[3] == 0 and o[2] > 0 and o[18] > 0 and o[19] == 0
 print(json.dumps(r))
 PY

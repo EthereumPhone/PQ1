@@ -29,6 +29,10 @@ extern "C" {
     fn pqsigner_v2_fors_subtree16(sk: *const u8, seed: *const u8, p0: u32, p1: u32, a0: u32, a1: u32, j0: u32, h: u32, out: *mut u8);
     fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, steps: u32);
     fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1: u32, start: u32, n: u32, target: u32, out: *mut u8) -> u32;
+    // v1 entries for the round-11 "v1 entry right after a v2 one" control.
+    fn pqsigner_wots_chains16(sk: *const u8, prf_tail: *const u8, seed_adrs: *const u8, order: *const u8, digits: *const u8, fixed_steps: u32, n: u32, out: *mut u8);
+    fn pqsigner_fors_subtree16(sk_seed: *const u8, tail: *const u8, leaf_sa: *const u8, node_sa: *const u8, j0: u32, out: *mut u8);
+    fn pqsigner_sha256_search128(buf: *const u8, start: u32, n: u32, pred: unsafe extern "C" fn(*const u8) -> bool, out: *mut u8) -> u32;
 }
 
 #[inline(always)]
@@ -272,6 +276,110 @@ fn residue_suite(rng: &mut Rng) -> (u32, u32) {
     (9, mask)
 }
 
+/// The v1 count-search predicate for the control: about 1 in 64 (the digest's last byte only).
+unsafe extern "C" fn pred_lo6(p: *const u8) -> bool {
+    // SAFETY: the driver passes 32 readable bytes.
+    unsafe { *p.add(31) & 0x3F == 0 }
+}
+
+/// Round 11 control (the coordinator's "a v1 entry right after a v2 one"): run right after every
+/// call to the DATATYPE-00 v2 functions (FORS subtree, count search, whole-key loop, pk16). One of
+/// the v1 global_asm entries (rotating: whole-key loop, FORS subtree, count search), with input in
+/// the shape that selects its asm path, against software SHA-256 from the v1 spec (the
+/// bench_v1micro references). A DATATYPE 00, or any other state the v2 asm leaves behind, shows up
+/// here as a wrong v1 result. Returns pass/fail.
+fn v1_entry_probe(rng: &mut Rng, case: u32) -> bool {
+    match case % 3 {
+        0 => {
+            // v1-asm-key-ga: seed_adrs words 4..7, 11 and 15 zero; fixed steps; no order/digits.
+            let (mut sk, mut tail, mut sa) = ([0u8; 32], [0u8; 48], [0u8; 64]);
+            rng.fill(&mut sk);
+            rng.fill(&mut tail);
+            rng.fill(&mut sa);
+            for w in [4usize, 5, 6, 7, 11, 15] {
+                sa[4 * w..4 * w + 4].fill(0);
+            }
+            let (steps, n) = (1 + rng.below(7), 3u32);
+            let mut o = [0u8; 48];
+            // SAFETY: 32, 48 and 64 readable, 48 writable (disjoint from sk); null order/digits.
+            unsafe { pqsigner_wots_chains16(sk.as_ptr(), tail.as_ptr(), sa.as_ptr(), core::ptr::null(), core::ptr::null(), steps, n, o.as_mut_ptr()) };
+            let mut ok = true;
+            for i in 0..n {
+                let mut v: [u8; 16] = sha(&[&sk, &tail[..44], &i.to_be_bytes()])[..16].try_into().unwrap();
+                let mut c = sa;
+                c[52..56].copy_from_slice(&i.to_be_bytes());
+                for pos in 0..steps {
+                    c[56..60].copy_from_slice(&pos.to_be_bytes());
+                    v = sha(&[&c, &v, &[0u8; 16]])[..16].try_into().unwrap();
+                }
+                ok &= o[16 * i as usize..16 * i as usize + 16] == v;
+            }
+            ok
+        }
+        1 => {
+            // v1-asm-fors-ga: leaf address words 4..9, 13, 14 zero; node address 4..9, 13 zero.
+            let (mut sk, mut tail, mut la, mut na) = ([0u8; 32], [0u8; 16], [0u8; 64], [0u8; 64]);
+            rng.fill(&mut sk);
+            rng.fill(&mut tail);
+            rng.fill(&mut la);
+            rng.fill(&mut na);
+            for w in [4usize, 5, 6, 7, 8, 9, 13, 14] {
+                la[4 * w..4 * w + 4].fill(0);
+            }
+            for w in [4usize, 5, 6, 7, 8, 9, 13] {
+                na[4 * w..4 * w + 4].fill(0);
+            }
+            let j0 = 16 * rng.below(64);
+            let mut o = [0u8; 16];
+            // SAFETY: 32, 16, 64 and 64 readable, 16 writable; j0 a multiple of 16.
+            unsafe { pqsigner_fors_subtree16(sk.as_ptr(), tail.as_ptr(), la.as_ptr(), na.as_ptr(), j0, o.as_mut_ptr()) };
+            let mut st = [[0u8; 16]; 5];
+            let mut hs = [0u32; 5];
+            let mut sp = 0usize;
+            for j in j0..j0 + 16 {
+                let sec = sha(&[&sk, &tail[..12], &j.to_be_bytes()]);
+                let mut node: [u8; 16] = sha(&[&la[..60], &j.to_be_bytes(), &sec[..16], &[0u8; 16]])[..16].try_into().unwrap();
+                let mut ht = 0u32;
+                while sp > 0 && hs[sp - 1] == ht {
+                    sp -= 1;
+                    node = sha(&[&na[..56], &(ht + 1).to_be_bytes(), &(j >> (ht + 1)).to_be_bytes(), &st[sp], &[0u8; 16], &node, &[0u8; 16]])[..16]
+                        .try_into()
+                        .unwrap();
+                    ht += 1;
+                }
+                st[sp] = node;
+                hs[sp] = ht;
+                sp += 1;
+            }
+            o == st[0]
+        }
+        _ => {
+            // v1-asm-search-ga: words 4..7, 9, 11, 13..15 and 20..30 zero; the count is word 31.
+            let mut b = [0u8; 128];
+            for w in [0usize, 1, 2, 3, 8, 10, 12, 16, 17, 18, 19] {
+                let x = rng.u32().to_le_bytes();
+                b[4 * w..4 * w + 4].copy_from_slice(&x);
+            }
+            let start = rng.u32() >> 2;
+            let n = if case % 2 == 0 { 100 } else { 5 };
+            let mut want = (start + n, [0u8; 32]);
+            let mut x = b;
+            for c in start..start + n {
+                x[124..128].copy_from_slice(&c.to_be_bytes());
+                let d = sha(&[&x]);
+                if d[31] & 0x3F == 0 {
+                    want = (c, d);
+                    break;
+                }
+            }
+            let mut d = [0u8; 32];
+            // SAFETY: 128 readable, 32 writable bytes.
+            let r = unsafe { pqsigner_sha256_search128(b.as_ptr(), start, n, pred_lo6, d.as_mut_ptr()) };
+            r == want.0 && (r == start + n || d == want.1)
+        }
+    }
+}
+
 /// A v1-shaped digest (NBLW = 0 for multiples of 4, any length) between v2 calls.
 fn v1_probe(rng: &mut Rng, t: &mut Tally, case: u32) {
     let mut buf = [0u8; 200];
@@ -330,6 +438,19 @@ pub extern "C" fn c10_bench_main() {
         () => {{
             v1_probe(&mut rng, &mut t, probe);
             probe += 1;
+        }};
+    }
+    // Round 11: groups 5..8 (the DATATYPE-00 functions) run a v1 entry first.
+    let (mut v1e, mut v1e_fail) = (0u32, 0u32);
+    macro_rules! between_e {
+        () => {{
+            let ok = v1_entry_probe(&mut rng, v1e);
+            t.check(0, v1e, ok);
+            if !ok {
+                v1e_fail += 1;
+            }
+            v1e += 1;
+            between!();
         }};
     }
 
@@ -428,7 +549,7 @@ pub extern "C" fn c10_bench_main() {
             let ((p0, p1), (a0, a1)) = (words(a7(6, 0, ht, tt, 0, 0, 0)), words(a7(3, 0, ht, tt, 0, 0, 0)));
             let want = subtree(&sk, &s, ht, tt, j0, h);
             let mut got = [0u8; 16];
-            between!();
+            between_e!();
             // SAFETY: 32 and 16 readable, 16 writable; h <= 11, j0 aligned, in range.
             unsafe { pqsigner_v2_fors_subtree16(sk.as_ptr(), s.as_ptr(), p0, p1, a0, a1, j0, h, got.as_mut_ptr()) };
             t.check(5, c, got == want);
@@ -447,14 +568,14 @@ pub extern "C" fn c10_bench_main() {
         let (a0, a1) = words(a);
         let start = rng.u32() >> 1;
         let mut d = [0xEEu8; 32];
-        between!();
+        between_e!();
         // SAFETY: 32 readable, 32 writable; start + n does not overflow.
         let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, 0, 205, d.as_mut_ptr()) };
         t.check(6, c, r == start && d == [0xEE; 32]);
         c += 1;
 
         let w0 = wd(&sm, start, a);
-        between!();
+        between_e!();
         // SAFETY: as above.
         let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, 9, digit_sum(&w0), d.as_mut_ptr()) };
         t.check(6, c, r == start && d == w0);
@@ -462,14 +583,14 @@ pub extern "C" fn c10_bench_main() {
 
         let sums: [u32; 6] = core::array::from_fn(|i| digit_sum(&wd(&sm, start + i as u32, a)));
         if !sums[..5].contains(&sums[5]) {
-            between!();
+            between_e!();
             // SAFETY: as above.
             let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, 6, sums[5], d.as_mut_ptr()) };
             t.check(6, c, r == start + 5 && d == wd(&sm, start + 5, a));
             c += 1;
         }
 
-        between!();
+        between_e!();
         // SAFETY: as above (301 = 43 x 7 is the largest digit sum).
         let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, start, 7, 302, d.as_mut_ptr()) };
         t.check(6, c, r == start + 7);
@@ -488,7 +609,7 @@ pub extern "C" fn c10_bench_main() {
                 }
             }
             if let Some((k, w)) = want {
-                between!();
+                between_e!();
                 // SAFETY: as above.
                 let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, s0, k - s0 + 10, 205, d.as_mut_ptr()) };
                 t.check(6, 1000 + c, r == k && d == w);
@@ -497,13 +618,13 @@ pub extern "C" fn c10_bench_main() {
 
         let hi = u32::MAX - 16;
         let wh = wd(&sm, hi, a);
-        between!();
+        between_e!();
         // SAFETY: as above; hi + 16 does not overflow.
         let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, hi, 16, digit_sum(&wh), d.as_mut_ptr()) };
         t.check(6, c, r == hi && d == wh);
         c += 1;
     }
-    between!();
+    between_e!();
 
     // 6b. Round 7: dense digit-sum sweep, driver search vs software, 96 tries per call.
     //     Targets 140..160 sit near the mean (hits dense, the full-sum path); 180..200
@@ -518,7 +639,7 @@ pub extern "C" fn c10_bench_main() {
         for target in (140..=160u32).chain((180..=200u32).step_by(2)) {
             let want = sums.iter().position(|&x| x == target).map_or(start + 96, |i| start + i as u32);
             let mut d = [0xEEu8; 32];
-            between!();
+            between_e!();
             // SAFETY: 32 readable, 32 writable; start + 96 does not overflow.
             // `sm` at an odd address: the driver contract is "32 readable bytes", no alignment.
             let mut smo = [0u8; 40];
@@ -540,7 +661,7 @@ pub extern "C" fn c10_bench_main() {
         let steps = if c % 2 == 0 { 7 } else { rng.below(16) };
         let mut got = [0u8; 688];
         let ((p0, p1), (a0, a1)) = (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)));
-        between!();
+        between_e!();
         // SAFETY: 32 and 16 readable, 688 writable; steps <= 15.
         unsafe { pqsigner_v2_wots_chains16(sk.as_ptr(), p0, p1, s.as_ptr(), a0, a1, steps, got.as_mut_ptr()) };
         let mut ok = true;
@@ -571,13 +692,13 @@ pub extern "C" fn c10_bench_main() {
             want[16 * ci as usize..16 * ci as usize + 16].copy_from_slice(&v);
         }
         let ((p0, p1), (a0, a1)) = (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)));
-        between!();
+        between_e!();
         let bp = buf.as_mut_ptr();
         // SAFETY: one 688-byte buffer serves as `sk_seed` (its first 32 bytes) and as `out`.
         unsafe { pqsigner_v2_wots_chains16(bp, p0, p1, s.as_ptr(), a0, a1, 3, bp) };
         t.check(8, 40, buf == want);
     }
-    between!();
+    between_e!();
 
     // 8. wots_pk16: the whole key, T_43 = S || A7(WOTS_PK) || 0x00 || v_0..v_42.
     out(1, 9);
@@ -589,7 +710,7 @@ pub extern "C" fn c10_bench_main() {
         let ((p0, p1), (a0, a1), (k0, k1)) =
             (words(a7(5, layer, tree, kp, 0, 0, 0)), words(a7(0, layer, tree, kp, 0, 0, 0)), words(a7(1, layer, tree, kp, 0, 0, 0)));
         let mut got = [0u8; 16];
-        between!();
+        between_e!();
         // SAFETY: 32 and 16 readable, 16 writable; steps = 7.
         unsafe { pqsigner_v2_wots_pk16(sk.as_ptr(), p0, p1, s.as_ptr(), a0, a1, k0, k1, 7, got.as_mut_ptr()) };
         let mut h = Sha256::new();
@@ -606,7 +727,7 @@ pub extern "C" fn c10_bench_main() {
         let want: [u8; 32] = h.finalize().into();
         t.check(9, c, got[..] == want[..16]);
     }
-    between!();
+    between_e!();
 
     // 9. grind_r: the first nonce whose last FORS index is 0, found in software;
     //    a run that stops one try short must report exhaustion.
@@ -655,6 +776,8 @@ pub extern "C" fn c10_bench_main() {
         out(4 + i, *x);
     }
     out(17, probe);
+    out(18, v1e);
+    out(19, v1e_fail);
     out(1, 100);
 
     #[cfg(feature = "stale")]
