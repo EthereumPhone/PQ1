@@ -11,6 +11,8 @@ path = "src/lib.rs"
 [workspace]
 
 [features]
+# Round 11: DATATYPE 00 (32-bit) last-word NBLW probe against software SHA-256 (replaces the timing set).
+nblw32 = []
 asm = ["pqsigner-hw/v2-asm-chain"]
 
 [dependencies]

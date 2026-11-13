@@ -79,6 +79,106 @@ unsafe fn drain() {
     }
 }
 
+/// Round 11 probe: one digest of `msg` with DATATYPE 00 (32-bit words, no swap): each DIN word is
+/// the big-endian value of four message bytes, the last partial word holds its bytes in the top
+/// bits, and NBLW = 8 x (len % 4) is written before DCAL (then NBLW | DCAL, as the driver does).
+/// Returns the eight HR words as digest bytes.
+#[cfg(feature = "nblw32")]
+fn dt32_digest(msg: &[u8]) -> [u8; 32] {
+    unsafe {
+        while hr(0x24) & 8 != 0 {}
+        hw(0x08, 0);
+        hw(0x00, (0b00 << 4) | (1 << 17) | (1 << 18) | (1 << 2));
+        let full = msg.len() / 4;
+        for k in 0..full {
+            hw(0x04, u32::from_be_bytes([msg[4 * k], msg[4 * k + 1], msg[4 * k + 2], msg[4 * k + 3]]));
+        }
+        let r = msg.len() % 4;
+        if r != 0 {
+            let mut b = [0u8; 4];
+            b[..r].copy_from_slice(&msg[4 * full..]);
+            hw(0x04, u32::from_be_bytes(b));
+        }
+        let nblw = 8 * r as u32;
+        hw(0x08, nblw);
+        hw(0x08, nblw | 1 << 8);
+        while hr(0x24) & 2 == 0 {}
+        let mut d = [0u8; 32];
+        for k in 0..8u32 {
+            d[4 * k as usize..4 * k as usize + 4].copy_from_slice(&hr(0x310 + 4 * k).to_be_bytes());
+        }
+        hw(0x24, 1);
+        d
+    }
+}
+
+#[cfg(feature = "nblw32")]
+#[no_mangle]
+pub extern "C" fn c10_bench_main() {
+    use sha2::{Digest, Sha256};
+    for i in 0..32 {
+        out(i, 0);
+    }
+    out(0, 0x4E42_4C57);
+    // SAFETY: single-threaded; keeps the runner's symbols.
+    unsafe {
+        core::ptr::addr_of_mut!(SIG0).cast::<u8>().write_volatile(0);
+        core::ptr::addr_of_mut!(SIG1).cast::<u8>().write_volatile(0);
+        pqsigner_hw::hash::init_clock();
+    }
+    let mut x: u32 = 0x2545_F491;
+    let mut rnd = || { x ^= x << 13; x ^= x >> 17; x ^= x << 5; x as u8 };
+    // [2..10): (checks, fails) per NBLW 0, 8, 16, 24; every length 0..=160, 4 messages each,
+    // then 400 messages of each v2 shape (39, 43, 55 bytes).
+    let mut cnt = [[0u32; 2]; 4];
+    let mut msg = [0u8; 160];
+    for len in 0..=160usize {
+        for _ in 0..4 {
+            for b in msg[..len].iter_mut() { *b = rnd(); }
+            let want: [u8; 32] = Sha256::digest(&msg[..len]).into();
+            let got = dt32_digest(&msg[..len]);
+            let c = len % 4;
+            cnt[c][0] += 1;
+            if got != want { cnt[c][1] += 1; }
+        }
+    }
+    for len in [39usize, 43, 55] {
+        for _ in 0..400 {
+            for b in msg[..len].iter_mut() { *b = rnd(); }
+            let want: [u8; 32] = Sha256::digest(&msg[..len]).into();
+            let got = dt32_digest(&msg[..len]);
+            cnt[3][0] += 1;
+            if got != want { cnt[3][1] += 1; }
+        }
+    }
+    for (k, c) in cnt.iter().enumerate() {
+        out(2 + 2 * k, c[0]);
+        out(3 + 2 * k, c[1]);
+    }
+    // [10, 11]: a byte-data (DATATYPE 10) one-shot right after, against software (the per-digest
+    // CR write must leave no 32-bit mode behind).
+    let mut fails = 0u32;
+    for len in [0usize, 39, 64, 96, 128, 155] {
+        for b in msg[..len].iter_mut() { *b = rnd(); }
+        let want: [u8; 32] = Sha256::digest(&msg[..len]).into();
+        let _ = dt32_digest(&msg[..39]);
+        let mut d = [0u8; 32];
+        // SAFETY: `len` readable, 32 writable bytes.
+        unsafe { pqsigner_sha256_oneshot_ext(msg.as_ptr(), len, d.as_mut_ptr()) };
+        if d != want { fails += 1; }
+    }
+    out(10, 6);
+    out(11, fails);
+    out(1, 100);
+}
+
+#[cfg(feature = "nblw32")]
+extern "C" {
+    #[link_name = "pqsigner_sha256_oneshot"]
+    fn pqsigner_sha256_oneshot_ext(p: *const u8, n: usize, out: *mut u8);
+}
+
+#[cfg(not(feature = "nblw32"))]
 #[no_mangle]
 pub extern "C" fn c10_bench_main() {
     for i in 0..32 {
