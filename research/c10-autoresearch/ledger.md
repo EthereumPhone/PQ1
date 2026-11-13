@@ -532,3 +532,15 @@ The chain loop sat about 16 cycles above the unit-cost floor (about 111). The di
 - **Evidence:** gate 5 2,089/0; the guard halts at stage 200; kit golden; golden + cache (3 hits, m0 cached 0.541 s).
 - **16-message mean:** v2 69.07 → **67.96 M (−1.61%)**, 1.00–1.18 M on every message; with the cache 47.71 → **47.05 M (−1.38%)**.
 - **Est. cached sign:** 0.850 s, or **0.589 s** with the cache. Against v1's fused head: −38.3% plain, −57.3% with the cache.
+
+### H9: count search with an exact early reject, keep (output-identical)
+
+- **The changes:** per try the loop now reads only HR3..HR7 and feeds the 8 fixed message words from memory in four-word groups (`feed_words`) instead of 8 stack reloads. It sums digits 0..31 first: digits 32..42 add at most 11 × 7 = 77, so `s4 + 77 < target` cannot hit and the rest of the sum is skipped. That is about 89% of tries at 205 (the 32-digit partial has mean 112 and sd 13). A hit (twice per pass) drops the try in flight and recomputes its digest to read all eight words.
+- **Branching:** on public grind data only, as before.
+- **Microbench:** 174 → **137 cycles per try** (measured with an unreachable target, so every try takes the early reject).
+- **Evidence:**
+  - gate 5 2,091/0. New cases search for the real target 205 over long runs against a software search, exercising the early reject on real digests.
+  - kit golden; golden + cache (3 hits, m0 cached **0.521 s**).
+- **16-message mean:** v2 67.96 → **65.59 M (−3.48%)**; with the cache 47.05 → **44.69 M (−5.02%)**. Per message 0.36–5.6 M, scaling with the message's grind tries.
+- **Est. cached sign:** 0.821 s, or **0.559 s** with the cache. Against v1's fused head: −40.4% plain, −59.4% with the cache.
+- **Why H5 failed and this works:** H5 also read 5 words but kept the full sum and the stack-fed issue. Neither the read count nor the sum alone was the limit; the sum plus 10 stack reloads exceeded the engine time.

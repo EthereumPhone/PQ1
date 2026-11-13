@@ -2447,28 +2447,61 @@ pub unsafe extern "C" fn pqsigner_v2_search43_target(sm: *const u8, a0: u32, a1:
     if n == 0 {
         return end;
     }
-    // SAFETY: caller contract (32 readable bytes).
-    let w: [u32; 8] = core::array::from_fn(|i| unsafe { sm.add(4 * i).cast::<u32>().read_unaligned() });
-    let mut d = [0u32; 8];
-    v2_issue43(&w, start, a0, a1);
+    #[inline(always)]
+    fn g24(v: u32) -> u32 {
+        let s = (v & 0o07070707).wrapping_add((v >> 3) & 0o07070707);
+        let s = (s & 0o00770077).wrapping_add((s >> 6) & 0o00770077);
+        (s & 0o7777).wrapping_add(s >> 12)
+    }
+    // SAFETY (issue): caller contract, `sm` names 32 readable bytes.
+    let issue = |count: u32| unsafe {
+        v2_begin();
+        feed_words(sm, 8);
+        write_word(count.swap_bytes());
+        write_word(a0);
+        write_word(a1);
+        REG.str_.write(V2_NBLW | STR_DCAL);
+    };
+    issue(start);
     let mut c = start;
     loop {
-        v2_collect(&mut d);
+        // Per try only HR3..HR7, the words the digit sum reads (big-endian).
+        v2_wait_dcis();
+        // SAFETY: HR3..HR7, inside the digest bank.
+        let (w3, w4, w5, w6, w7) =
+            unsafe { (REG.hr0.read_at(3), REG.hr0.read_at(4), REG.hr0.read_at(5), REG.hr0.read_at(6), REG.hr0.read_at(7)) };
+        REG.sr.write(SR_DINIS);
         let next = c.wrapping_add(1);
         let more = next != end;
         if more {
-            v2_issue43(&w, next, a0, a1);
+            issue(next);
         }
-        // `d` holds digest bytes in memory order; the sum wants big-endian words.
-        let sum = v2_digit_sum(&[d[3].swap_bytes(), d[4].swap_bytes(), d[5].swap_bytes(), d[6].swap_bytes(), d[7].swap_bytes()]);
-        if sum == target {
-            if more {
-                let mut discard = [0u32; 8];
-                v2_collect(&mut discard);
+        // Digits 0..31 first (`v2_digit_sum`'s first four groups). Digits
+        // 32..42 add at most 11 x 7 = 77, so below `target - 77` there is no
+        // hit and the rest is skipped (public grind data: branching is fine).
+        let s4 = g24(w7 & 0x00FF_FFFF)
+            .wrapping_add(g24(w7 >> 24 | (w6 & 0xFFFF) << 8))
+            .wrapping_add(g24(w6 >> 16 | (w5 & 0xFF) << 16))
+            .wrapping_add(g24(w5 >> 8));
+        if s4.wrapping_add(77) >= target {
+            let t = w4 >> 24 | (w3 & 1) << 8;
+            let sum = s4
+                .wrapping_add(g24(w4 & 0x00FF_FFFF))
+                .wrapping_add((t & 7).wrapping_add((t >> 3) & 7).wrapping_add(t >> 6));
+            debug_assert!(sum == v2_digit_sum(&[w3, w4, w5, w6, w7]));
+            if sum == target {
+                // A hit (twice per pass): drop the try in flight, then recompute
+                // this one to read all eight digest words.
+                let mut d = [0u32; 8];
+                if more {
+                    v2_collect(&mut d);
+                }
+                issue(c);
+                v2_collect(&mut d);
+                // SAFETY: `out` names 32 writable bytes.
+                unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+                return c;
             }
-            // SAFETY: `out` names 32 writable bytes.
-            unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
-            return c;
         }
         if !more {
             return end;

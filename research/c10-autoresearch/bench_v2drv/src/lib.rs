@@ -331,6 +331,26 @@ pub extern "C" fn c10_bench_main() {
         t.check(6, c, r == start + 7);
         c += 1;
 
+        // The real target (205) over a long run, against a software search:
+        // exercises the early reject on real digests, not only at the extremes.
+        if c < 12 {
+            let s0 = rng.u32() >> 2;
+            let mut want = None;
+            for k in s0..s0 + 150_000 {
+                let w = wd(&sm, k, a);
+                if digit_sum(&w) == 205 {
+                    want = Some((k, w));
+                    break;
+                }
+            }
+            if let Some((k, w)) = want {
+                between!();
+                // SAFETY: as above.
+                let r = unsafe { pqsigner_v2_search43_target(sm.as_ptr(), a0, a1, s0, k - s0 + 10, 205, d.as_mut_ptr()) };
+                t.check(6, 1000 + c, r == k && d == w);
+            }
+        }
+
         let hi = u32::MAX - 16;
         let wh = wd(&sm, hi, a);
         between!();
