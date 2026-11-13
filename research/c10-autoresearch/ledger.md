@@ -1219,7 +1219,11 @@ Total practical driver headroom: about **1.5–1.7 M (~1.8%)** of a 90 M sign. T
 - `p1|c` mutant: 77 gate-5 failures;
 - FSBL identical.
 
-**Astra:** pending at the time of writing.
+**Astra (round 11): one defect, fixed in `5554efeba`.** It is round 8's E2 overlap class again. The asm stores chain k after chain k + 1's PRF has read `sk_seed`; the Rust loop stores first. Astra reproduced the difference with `out == sk_seed`.
+- **Fix:** take the asm path only when the 688-byte `out` cannot overlap `sk_seed`.
+- **New gate-5 case:** `out == sk_seed` against a sequential software reference. Gate 5 is now 2,525/0, and a no-guard mutant fails exactly that check.
+- **Gate gap closed:** `bench_v2fb` (the cached goldens) had not named `v2-asm-key-ga`, so the cached goldens never ran E12. It does now: cached golden passes with 3 hits; plain golden passes; v2 mean 56.27 M.
+- **Everything else conforms:** the context and frame, indices and end, DIN order and endianness, the output pointer, hardware sequencing, ABI and secrets.
 
 ### Round 10 close (kit 160 MHz, keys/signatures unchanged)
 
