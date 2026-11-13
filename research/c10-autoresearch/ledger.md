@@ -1569,7 +1569,7 @@ It takes 13 DWT phase stamps per chain, averaged over 16 messages, and keygen on
 | **#1149**: research driver, batched tick | 91.7 M | **183.7 M (1.148 s)** | 31.4 M |
 | research driver, no tick | 91.4 M | 183.2 M | 31.4 M |
 
-In every configuration, the FI chain outside the two signs and the verify costs (re-measured with complete accounting after Astra's review: the 13 phases now sum to the chain within 300 cycles):
+In every configuration, the FI chain outside the two signs and the verify costs (re-measured with complete accounting after Astra's review). The 13 phases are contiguous from the chain's first internal stamp through the caller's extraction of the result. Only the caller's own timing overhead, 325–364 cycles per chain, lies outside them:
 - `ct_eq` 116 k;
 - the release (the return copy and the drops on the way out) 30 k;
 - the rest ~15 k (rate/CFI 2.7 k, OptRand 0.2 k, seeds 1.2 k, two delays ~3.9 k, verify gate 3.1 k, CFI check 3.3 k);
@@ -1657,6 +1657,8 @@ The verify is 0.21–0.24 M. Progress callbacks: 185 per chain. Ticks: 979 k per
 - the v1 suite is clean (7 cases);
 - the product one-shot cases are clean, with and without `oneshot-speed`;
 - **the v2 suite flags 0x44–0x46** (`prf_chain16` and `chain16`, and in one build `wots_pk16`). The hits sit at sp−16 and sp−12, which are the r5 and r6 slots of the entries' `push {r4, r5, r6, r7, lr}`. These are values the bench caller held in callee-saved registers, saved as AAPCS requires: the round-10 "caller-held secret spilled by the prologue" class, and codegen-sensitive.
+  - **Astra confirmed it from the disassembly:** the bench's software pattern computation leaves its final word in r5 before `prf_chain16` and in r6 before `chain16`. The recomputed words (`0x3eebfed4`, `0xeacefe30`) match the logs. These are not driver spills.
+  - The `wots_pk16` hit (one build only) has no diagnostic evidence yet.
 
 Separating bench-held from driver-held values needs the v2 suite to compute its patterns outside the calling frame. Until then the v2 standing residue gate is red for that reason. E20 does not touch those entries.
 

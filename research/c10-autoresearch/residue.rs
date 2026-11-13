@@ -115,7 +115,7 @@ fn res_first_hit() -> (usize, u32) {
     // SAFETY: as `res_found`.
     let pats = unsafe { core::slice::from_raw_parts(core::ptr::addr_of!(RES_PATS).cast::<u32>(), n) };
     let mut a = sp - 4;
-    while a > sp - RES_DEPTH {
+    while a >= sp - RES_DEPTH {
         let w = res_ld(a);
         if w != 0 {
             let mut k = 0;
