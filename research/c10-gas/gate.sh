@@ -9,11 +9,11 @@ RUNS="${1:-256}"
 cd "$SW"
 
 echo "== text pin: the digit-sum snippet the unit test checks is in each verifier that uses it"
-SNIP=$(grep -h 'C10-SWAR-DIGITSUM' test/gas/C10DigitSum.t.sol 2>/dev/null | sed 's/^ *//' | sort -u || true)
+SNIP=$(grep -h '// C10-SWAR-DIGITSUM$' test/gas/C10DigitSum.t.sol 2>/dev/null | sed 's/^ *//' | sort -u || true)
 if [ -n "$SNIP" ]; then
   for f in src/verifiers/SPHINCsC10v2Asm.sol src/verifiers/SPHINCsC10Asm.sol; do
     if grep -q 'C10-SWAR-DIGITSUM' "$f"; then
-      got=$(grep -h 'C10-SWAR-DIGITSUM' "$f" | sed 's/^ *//' | sort -u)
+      got=$(grep -h '// C10-SWAR-DIGITSUM$' "$f" | sed 's/^ *//' | sort -u)
       [ "$got" = "$SNIP" ] || { echo "FAIL: $f digit-sum snippet differs from the unit-tested one"; exit 1; }
       echo "  ok $f"
     fi
@@ -26,6 +26,11 @@ rc=0
 FOUNDRY_FUZZ_RUNS="$RUNS" "$FORGE" test --match-path 'test/gas/*.t.sol' -vv >"$LOG" 2>&1 || rc=$?
 grep -E '(Suite result|GAS |SIZE |FAIL)' "$LOG" | sed 's/^ */  /'
 [ "$rc" -eq 0 ] || { echo "FAIL: test/gas suites (log $LOG)"; exit 1; }
+
+echo "== gas under the deploy profile (runs=999999; production build), separate build dir"
+DB="${DEPLOY_BUILD:-$HOME/.cache/c10-gas-deploy}"
+FOUNDRY_PROFILE=deploy "$FORGE" test --out "$DB/out" --cache-path "$DB/cache" \
+  --match-path 'test/gas/C10GasBench.t.sol' --match-test 'test_gas_v' -vv | grep -E '(GAS .*callee-only|SIZE )' | sed 's/^ */  deploy: /'
 
 echo "== existing verifier suites (minus the v1 codehash freeze, a pin)"
 "$FORGE" test --match-path 'test/SPHINCsC10*.t.sol' --no-match-test 'test_verifierBytecodeFrozen' | grep -E '^Suite result'

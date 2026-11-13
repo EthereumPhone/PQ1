@@ -429,6 +429,41 @@ contract C10EquivalenceTest is Test {
         _spliceSweep(false);
     }
 
+    /// Non-zero bytes after the 4,008 signature bytes (ABI padding and beyond). The last 16-byte
+    /// field ends at 4,008, so a 32-byte `calldataload` of it reads padding: a verifier that
+    /// stops masking such a load (the historic GAP-1 site, offset 3,992) differs only here.
+    /// Valid signatures with junk padding must still be accepted; mutated ones compared as usual.
+    function _trailingJunk(bool v2) internal {
+        _resetTally();
+        uint256 nb = v2 ? baseV2.length : baseV1.length;
+        for (uint256 b = 0; b < nb; b++) {
+            Vec memory v = _base(v2, b);
+            for (uint256 k = 0; k < 4; k++) {
+                bytes memory cd = abi.encodeWithSelector(SEL, v.s, v.r, v.m, v.sig);
+                // canonical layout: 4 + 4*32 + 32 (length) + 4008 data, then 24 padding bytes
+                uint256 dataEnd = 4 + 160 + 4008;
+                bytes32 junk = k == 0 ? bytes32(type(uint256).max) : bytes32(_rnd(b, k));
+                for (uint256 i = 0; i < 24; i++) {
+                    cd[dataEnd + i] = junk[i];
+                }
+                if (k >= 2) cd = bytes.concat(cd, junk, junk); // extra trailing words
+                if (k == 3) cd[dataEnd - 1] = bytes1(uint8(cd[dataEnd - 1]) ^ 1); // last byte of last sibling
+                _check(v2, cd, string.concat("trailing junk ", vm.toString(k)));
+            }
+        }
+        _logTally(v2 ? "v2 trailing junk" : "v1 trailing junk");
+        assertEq(tally[0], 3 * nb, "valid signatures with junk padding must still be accepted");
+        assertEq(tally[1], nb, "last-byte flip with junk reaches the root comparison");
+    }
+
+    function test_v2_trailing_junk() public {
+        _trailingJunk(true);
+    }
+
+    function test_v1_trailing_junk() public {
+        _trailingJunk(false);
+    }
+
     // ── fuzzed mutations ────────────────────────────────────────────────────
 
     function _mutate(bool v2, uint256 seed) internal view returns (bytes memory cd) {

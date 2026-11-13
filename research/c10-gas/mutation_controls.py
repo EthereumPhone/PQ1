@@ -41,6 +41,9 @@ MUTANTS = [
      "count >= 2^31 hashed with the top bit cleared (only rejected inputs differ: trace-only)"),
     ("v2-root-cmp", V2, "valid := eq(currentNode, pkRoot)", "valid := eq(currentNode, currentNode)",
      "final root comparison"),
+    ("v2-swar-lane14", V2, "and(shr(3, d), 0xe070381c0e070381c0e070381c0e07)) // C10-SWAR-DIGITSUM",
+     "and(shr(3, d), 0x1c0e070381c0e070381c0e070381c0e07)) // C10-SWAR-DIGITSUM",
+     "SWAR digit sum counts would-be digit 43 (verifier copy only; text pin)"),
     ("v2-a7-last", V2, "shl(200, or(shl(52, 9), shl(33, htIdx)))", "shl(200, or(shl(52, 3), shl(33, htIdx)))",
      "FORS_LAST tweak type"),
     # ── v1 ──
@@ -55,9 +58,26 @@ MUTANTS = [
     ("v1-count-31bit", V1, "let count := shr(224, calldataload(add(sigBase, countOff)))",
      "let count := and(shr(224, calldataload(add(sigBase, countOff))), 0x7FFFFFFF)",
      "count >= 2^31 hashed with the top bit cleared (trace-only)"),
+    ("v1-l1h8-sibling-unmasked", V1, "let sibling := and(calldataload(add(merklePtr, shl(4, h))), N_MASK)",
+     "let sibling := and(calldataload(add(merklePtr, shl(4, h))), or(N_MASK, mul(and(eq(layer, 1), eq(h, 8)), not(N_MASK))))",
+     "last sibling (offset 3992) read unmasked: ABI padding leaks in (trailing-junk only, GAP-1 site)"),
     ("v1-root-cmp", V1, "valid := eq(currentNode, root)", "valid := eq(currentNode, currentNode)",
      "final root comparison"),
 ]
+
+
+def pin_ok():
+    """The gate.sh text pin, in Python: every `// C10-SWAR-DIGITSUM` line of the unit test must be
+    the exact set of such lines in each verifier that carries the tag."""
+    tag = "// C10-SWAR-DIGITSUM"
+    def lines(rel):
+        return sorted({l.strip() for l in open(os.path.join(SW, rel)) if l.rstrip().endswith(tag)})
+    want = lines("test/gas/C10DigitSum.t.sol")
+    for rel in (V1, V2):
+        got = lines(rel)
+        if got and got != want:
+            return False
+    return True
 
 
 def run_gates(runs):
@@ -86,22 +106,30 @@ def main():
         src = open(path).read()
         n = src.count(old)
         if n != 1:
-            print(f"STALE   {mid:18s} `old` found {n}x in {rel}")
+            print(f"STALE   {mid:26s} `old` found {n}x in {rel}")
             ok = False
             continue
         try:
             open(path, "w").write(src.replace(old, new))
+            pin = pin_ok()
             rc, fails, first, _, out = run_gates(runs)
         finally:
             open(path, "w").write(src)
+        semantic = [f for f in fails if not f.startswith("test_gas")]
+        if not pin:
+            print(f"CAUGHT  {mid:26s} by the text pin" + (f" and {len(semantic)} tests" if semantic else ""))
+            continue
         if rc == 0:
-            print(f"MISSED  {mid:18s} {what}")
+            print(f"MISSED  {mid:26s} {what}")
+            ok = False
+        elif fails and not semantic:
+            print(f"BENCH   {mid:26s} only the gas bench failed: {what}")
             ok = False
         elif "Compiler run failed" in out or "Error (" in out and not fails:
-            print(f"NOCOMP  {mid:18s} mutant did not compile")
+            print(f"NOCOMP  {mid:26s} mutant did not compile")
             ok = False
         else:
-            print(f"CAUGHT  {mid:18s} by {len(fails)} tests: {', '.join(f.split('(')[0] for f in fails)[:160]}")
+            print(f"CAUGHT  {mid:26s} by {len(semantic)} tests: {', '.join(semantic)[:200]}")
             if first:
                 print(f"          first: {first[:150]}")
     rc, fails, _, _, _ = run_gates(runs)

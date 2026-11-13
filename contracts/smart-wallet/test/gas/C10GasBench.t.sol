@@ -104,6 +104,44 @@ contract C10GasBenchTest is Test {
         console2.log(string.concat("SIZE ", name, " runtime ref/cand"), ref.code.length, cand.code.length);
     }
 
+    /// Gas by phase (v2): callee-only gas of the +C near-misses, which stop after H_MSG (n0),
+    /// after FORS + the layer-0 digest (n1) and after layer 0 + the layer-1 digest (n2), and of a
+    /// valid vector. Differences attribute the cost to FORS, layer 0 and layer 1.
+    function _anyGas(address a, bytes memory cd) internal view returns (uint256 used) {
+        assembly {
+            let g := gas()
+            pop(staticcall(gas(), a, add(cd, 0x20), mload(cd), 0x00, 0x20))
+            used := sub(g, gas())
+        }
+    }
+
+    function _phases(string memory name, address v) internal view {
+        string memory j = vm.readFile("test/c10v2_kat_vectors.json");
+        string[4] memory k = ["n0", "n1", "n2", "v0"];
+        uint256[4] memory g;
+        for (uint256 i = 0; i < 4; i++) {
+            string memory p = string.concat(".", k[i]);
+            bytes memory cd = abi.encodeWithSelector(
+                SEL,
+                vm.parseJsonBytes32(j, string.concat(p, ".pkSeed")),
+                vm.parseJsonBytes32(j, string.concat(p, ".pkRoot")),
+                vm.parseJsonBytes32(j, string.concat(p, ".message")),
+                vm.parseJsonBytes(j, string.concat(p, ".signature"))
+            );
+            _anyGas(v, cd);
+            g[i] = _anyGas(v, cd);
+        }
+        console2.log(string.concat("PHASE ", name, " to H_MSG+FORS+C check"), g[0]);
+        console2.log(string.concat("PHASE ", name, " FORS + layer-0 digest/sum"), g[1] - g[0]);
+        console2.log(string.concat("PHASE ", name, " layer 0 + layer-1 digest/sum"), g[2] - g[1]);
+        console2.log(string.concat("PHASE ", name, " layer 1 rest + root compare"), g[3] - g[2]);
+    }
+
+    function test_gas_phases_v2() public {
+        _phases("v2 ref", address(new RefSPHINCsC10v2Asm()));
+        _phases("v2 cand", address(new SPHINCsC10v2Asm()));
+    }
+
     function test_gas_v1() public {
         _bench("v1", address(new RefSPHINCsC10Asm()), address(new SPHINCsC10Asm()), _v1Vecs());
     }
