@@ -2912,15 +2912,14 @@ fn negative_hash_crosscheck_is_dev_only_and_checks_before_release() {
         "#[cfg(all(feature = \"hash-probe\", feature = \"hw-sha256-crosscheck\"))]\ncompile_error!("
     ));
     // Three hooks (begin, feed, check), each behind the feature; the
-    // software half on the secure side likewise.
+    // software half on the secure side likewise. Begin and feed are single
+    // gated statements; the check is the gated block pinned below, and its
+    // call is the only one.
     let lines: std::vec::Vec<&str> = HW_HASH_SRC.lines().collect();
     let mut hooks = 0;
     for (i, l) in lines.iter().enumerate() {
         let t = l.trim_start();
-        if t.starts_with("unsafe { pqsigner_xcheck_begin() };")
-            || t.starts_with("unsafe { pqsigner_xcheck_feed(ptr, len) };")
-            || t.starts_with("xcheck_digest(out);")
-        {
+        if t.starts_with("unsafe { pqsigner_xcheck_begin() };") || t.starts_with("unsafe { pqsigner_xcheck_feed(ptr, len) };") {
             let mut j = i - 1;
             while lines[j].trim_start().starts_with("//") {
                 j -= 1;
@@ -2929,22 +2928,105 @@ fn negative_hash_crosscheck_is_dev_only_and_checks_before_release() {
             hooks += 1;
         }
     }
-    assert_eq!(hooks, 3);
+    assert_eq!(hooks, 2);
+    assert_eq!(HW_HASH_SRC.matches("unsafe { pqsigner_xcheck_begin() };").count(), 1);
+    assert_eq!(HW_HASH_SRC.matches("unsafe { pqsigner_xcheck_feed(ptr, len) };").count(), 1);
+    assert_eq!(HW_HASH_SRC.matches("xcheck_digest(").count(), 2, "the definition and the one check");
     assert!(HW_HASH_SRC.contains("#[cfg(feature = \"hw-sha256-crosscheck\")]\nextern \"C\" {\n"));
     assert!(SECURE_HW_HASH_SRC.contains("#[cfg(feature = \"hw-sha256-crosscheck\")]\nmod xcheck {\n"));
     assert_eq!(SECURE_HW_HASH_SRC.matches("#[no_mangle]").count(), 4, "fault hook + three xcheck hooks");
-    // The check reads the digest the final just wrote — both read-outs come
-    // first — and runs before DCIS is cleared and before the UI tick.
+    // Round 11 (autoresearch): `final` is `final_body_n::<8>` and the 16-byte
+    // one-shot `final_body_n::<4>`, the only two read-out widths (the rolled
+    // and unrolled pairing and the one-shot shapes are pinned in the tests
+    // below). The check compares all 32 digest bytes in both: the bytes just
+    // handed on to `out`, then, for a 16-byte read-out, HR4..HR7 (still held
+    // before the DCIS clear) — never 32 bytes read from a 16-byte `out`.
+    assert_eq!(
+        HW_HASH_SRC.lines().filter(|l| !l.trim_start().starts_with("//") && l.contains("final_body_n::<")).count(),
+        2,
+        "two read-out widths"
+    );
+    assert!(HW_HASH_SRC.contains("    unsafe { final_body_n::<8>(out) }\n"));
+    assert!(HW_HASH_SRC.contains("        final_body_n::<4>(out);\n"));
     let fin = HW_HASH_SRC
-        .split("unsafe fn final_body(out: *mut u8) {")
+        .split("unsafe fn final_body_n<const W: usize>(out: *mut u8) {")
         .nth(1)
-        .expect("final_body");
+        .expect("final_body_n");
     let fin = &fin[..fin.find("\n}\n").expect("end of final")];
-    let check = fin.find("xcheck_digest(out);").expect("check in final");
-    assert!(fin.find("hr_out!(0 1 2 3 4 5 6 7);").expect("unrolled read-out") < check);
+    let head = "    #[cfg(feature = \"hw-sha256-crosscheck\")]\n    {\n        let mut full = [0u8; 32];\n";
+    let check = fin.find(head).expect("check block in final_body_n");
+    let blk = &fin[check + head.len()..];
+    let blk = &blk[..blk.find("\n    }\n").expect("end of the check block")];
+    let stmts: std::vec::Vec<&str> =
+        blk.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with("//")).collect();
+    assert_eq!(
+        stmts,
+        [
+            "unsafe { core::ptr::copy_nonoverlapping(out, full.as_mut_ptr(), 4 * W) };",
+            "for i in W..8 {",
+            "full[4 * i..4 * i + 4].copy_from_slice(&unsafe { REG.hr0.read_at(i) }.to_be_bytes());",
+            "}",
+            "xcheck_digest(full.as_ptr());",
+        ]
+    );
+    // Both read-outs come first; the check runs before either DCIS clear and
+    // before the UI tick.
+    assert!(fin.find("hr_out!(0 1 2 3);").expect("unrolled read-out") < check);
+    assert!(fin.find("hr_out!(4 5 6 7);").expect("unrolled read-out, W = 8") < check);
     assert!(fin.find("out.add(i * 4), 4);").expect("rolled read-out") < check);
+    assert!(check < fin.find("REG.sr.write(SR_DINIS);").expect("DCIS cleared (init-restart)"));
     assert!(check < fin.find("REG.sr.modify(|sr| sr & !SR_DCIS);").expect("DCIS cleared"));
     assert!(check < fin.find("pqsigner_hash_tick();").expect("tick"));
+    // The fused entries (every `#[no_mangle]` digest entry but these five,
+    // whose bodies are the hooked ones) run their digests without the hooks:
+    // the crosscheck refuses to build with any feature that compiles one, so
+    // a crosscheck image hands on no unchecked digest. The fence's list is
+    // exactly the set of features those entries are compiled under.
+    let hooked = [
+        "pqsigner_sha256_init",
+        "pqsigner_sha256_update",
+        "pqsigner_sha256_final",
+        "pqsigner_sha256_oneshot",
+        "pqsigner_sha256_oneshot16",
+    ];
+    let mut fused = std::collections::BTreeSet::new();
+    let mut entries = 0;
+    for (i, l) in lines.iter().enumerate() {
+        if l.trim() != "#[no_mangle]" {
+            continue;
+        }
+        let mut j = i + 1;
+        while !lines[j].contains(" fn ") {
+            j += 1;
+        }
+        let name = lines[j].split(" fn ").nth(1).expect("name").split('(').next().expect("name");
+        if hooked.contains(&name) {
+            continue;
+        }
+        let mut k = i - 1;
+        let mut gate = None;
+        while lines[k].starts_with("#[") {
+            if let Some(f) = lines[k].strip_prefix("#[cfg(feature = \"").and_then(|r| r.strip_suffix("\")]")) {
+                gate = Some(f);
+            }
+            k -= 1;
+        }
+        fused.insert(gate.unwrap_or_else(|| panic!("fused entry {name} compiled under no feature")));
+        entries += 1;
+    }
+    assert_eq!(entries, 20, "the fused entries");
+    let fence = HW_HASH_SRC
+        .split("#[cfg(all(feature = \"hw-sha256-crosscheck\", any(")
+        .nth(1)
+        .expect("fused-entry fence")
+        .split(")))]\ncompile_error!(\"`hw-sha256-crosscheck` with a fused-entry feature")
+        .next()
+        .expect("fence end");
+    let fenced: std::collections::BTreeSet<&str> = fence
+        .split(", ")
+        .map(|f| f.strip_prefix("feature = \"").and_then(|f| f.strip_suffix('"')).expect("feature"))
+        .collect();
+    assert_eq!(fenced, fused, "the crosscheck fence is every fused-entry feature");
     // A mismatch is the wedged-engine posture, never a return.
     let dig = HW_HASH_SRC.split("fn xcheck_digest(out: *const u8) {").nth(1).expect("xcheck_digest");
     let dig = &dig[..dig.find("\n}\n").expect("end")];
@@ -2981,12 +3063,29 @@ fn negative_hash_unrolled_io_is_secure_only_and_paired() {
     let upd = &upd[..upd.find("\n}\n").expect("end of update")];
     assert!(upd.contains("    #[cfg(not(feature = \"unrolled-io\"))]\n    while data.len() - i >= 4 {"));
     assert!(upd.contains("        i = data.len() - words.remainder().len();\n    }\n"));
+    // Round 11 (autoresearch): the read-out is `final_body_n::<W>` — `final`
+    // with W = 8, the 16-byte one-shot with W = 4. The rolled loop reads W
+    // words and the unrolled block four, then four more when W = 8, so the
+    // pair agrees only for W in {4, 8}: a compile-time assertion refuses any
+    // other width, and these are the only two instantiations.
     let fin = HW_HASH_SRC
-        .split("unsafe fn final_body(out: *mut u8) {")
+        .split("unsafe fn final_body_n<const W: usize>(out: *mut u8) {")
         .nth(1)
         .expect("final");
-    assert!(fin.contains("    #[cfg(not(feature = \"unrolled-io\"))]\n    for i in 0..8 {"));
-    assert!(fin.contains("        hr_out!(0 1 2 3 4 5 6 7);\n    }\n"));
+    let fin = &fin[..fin.find("\n}\n").expect("end of final")];
+    assert!(fin.starts_with(
+        "\n    // The rolled read-out takes `W` words, the unrolled one four or eight: equal only for these.\n    const { assert!(W == 4 || W == 8, \"final_body_n reads out 16 or 32 bytes\") };\n"
+    ));
+    assert!(fin.contains("    #[cfg(not(feature = \"unrolled-io\"))]\n    for i in 0..W {"));
+    assert!(fin.contains("        hr_out!(0 1 2 3);\n        if W == 8 {\n            hr_out!(4 5 6 7);\n        }\n    }\n"));
+    assert_eq!(fin.matches("hr_out!(").count(), 2, "two unrolled groups");
+    assert_eq!(
+        HW_HASH_SRC.lines().filter(|l| !l.trim_start().starts_with("//") && l.contains("final_body_n::<")).count(),
+        2,
+        "two read-out widths"
+    );
+    assert!(HW_HASH_SRC.contains("    unsafe { final_body_n::<8>(out) }\n"));
+    assert!(HW_HASH_SRC.contains("        final_body_n::<4>(out);\n"));
     // The boot self-test runs the split vector in the unrolled image, and
     // the vector reaches the merge, sixteen-byte, word and tail paths.
     let st = HW_HASH_SRC.split("unsafe fn self_test() {").nth(1).expect("self_test");
@@ -3065,18 +3164,89 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
     ));
     let cr = init.find("REG.cr.write(CR_DATATYPE_8B | CR_ALGO_SHA256 | CR_INIT);").expect("CR write");
     assert!(init[cr..].contains(gated), "CR before DIN");
-    let fin = body("unsafe fn final_body(out: *mut u8) {");
-    let nblw = fin.find("REG.str_.write(remaining_bits);\n").expect("NBLW write");
-    let dcal = fin.find("REG.str_.write(remaining_bits | STR_DCAL);").expect("DCAL write");
-    let g = fin.find(gated).expect("NBLW before DCAL");
+    // Round 11 (autoresearch): the finalizer is `final_body_n` (`final` is its
+    // W = 8 read-out). Under `init-restart` a whole-word message skips the
+    // NBLW write (the barrier with it), because `init` wrote STR = 0 before
+    // its INIT; every other build — the FSBL's — writes NBLW, the barrier,
+    // then DCAL, as before.
+    let fin = body("unsafe fn final_body_n<const W: usize>(out: *mut u8) {");
+    let gated8 = "        #[cfg(not(feature = \"inline-barriers\"))]\n        cortex_m::asm::dsb();\n";
+    assert!(fin.contains(
+        "    #[cfg(feature = \"init-restart\")]\n    let two_writes = remaining_bits != 0;\n    #[cfg(not(feature = \"init-restart\"))]\n    let two_writes = true;\n    if two_writes {\n        REG.str_.write(remaining_bits);\n"
+    ));
+    let nblw = fin.find("        REG.str_.write(remaining_bits);\n").expect("NBLW write");
+    let dcal = fin.find("    REG.str_.write(remaining_bits | STR_DCAL);").expect("DCAL write");
+    let g = fin.find(gated8).expect("NBLW before DCAL");
     assert!(nblw < g && g < dcal);
-    assert_eq!(HW_HASH_SRC.matches(gated).count(), 3, "CR, NBLW and the helper's own fallback");
+    assert_eq!(fin.matches("REG.str_.write(").count(), 2, "NBLW and DCAL, nothing else");
+    let str0 = init.find("    #[cfg(feature = \"init-restart\")]\n    REG.str_.write(0);\n").expect("init writes STR = 0");
+    assert!(str0 < cr, "STR = 0 before the INIT write");
+    assert_eq!(HW_HASH_SRC.matches(gated).count(), 2, "CR and the helper's own fallback");
+    assert_eq!(HW_HASH_SRC.matches(gated8).count(), 1, "NBLW");
+    assert_eq!(HW_HASH_SRC.matches("cortex_m::asm::dsb();").count(), 6, "three gated, three in init_clock");
     assert_eq!(body("pub unsafe fn init_clock() {").matches("    cortex_m::asm::dsb();\n").count(), 3);
     assert!(HW_HASH_SRC.contains(
         "fn dsb() {\n    #[cfg(not(feature = \"inline-barriers\"))]\n    cortex_m::asm::dsb();\n    #[cfg(feature = \"inline-barriers\")]\n    {\n"
     ));
-    assert_eq!(HW_HASH_SRC.matches("core::arch::asm!(").count(), 1);
-    assert!(HW_HASH_SRC.contains("core::arch::asm!(\"dsb sy\", options(nomem, nostack, preserves_flags))"));
+    // The barrier is the only inline asm outside the research paths
+    // (autoresearch, rounds 7..11): every other `asm!` / `global_asm!` sits
+    // under a cfg whose first, positive feature is one the FSBL refuses
+    // (`SECURE_IMAGE_ONLY`) beyond the shipping image's own seven, and the
+    // secure crate raises none of those.
+    assert_eq!(HW_HASH_SRC.matches("core::arch::asm!(\"dsb sy\", options(nomem, nostack, preserves_flags))").count(), 1);
+    let shipping = [
+        "unrolled-io",
+        "inline-barriers",
+        "oneshot",
+        "init-restart",
+        "tick-hook",
+        "hash-probe",
+        "hw-sha256-crosscheck",
+    ];
+    let research: std::vec::Vec<&str> = HW_HASH_SRC
+        .split("pub const SECURE_IMAGE_ONLY: bool = cfg!(any(\n")
+        .nth(1)
+        .expect("SECURE_IMAGE_ONLY")
+        .split("\n));")
+        .next()
+        .expect("end")
+        .lines()
+        .map(str::trim)
+        .filter_map(|l| l.strip_prefix("feature = \"").map(|f| f.trim_end_matches(',').trim_end_matches('"')))
+        .filter(|f| !shipping.contains(f))
+        .collect();
+    assert_eq!(research.len(), 26);
+    for r in &research {
+        assert!(!SECURE_CARGO_TOML_SRC.contains(&format!("\"pqsigner-hw/{r}\"")), "the secure crate raises {r}");
+        assert!(!FSBL_CARGO_SRC.contains(&format!("\"{r}\"")), "the FSBL names {r}");
+    }
+    let lines: std::vec::Vec<&str> = HW_HASH_SRC.lines().collect();
+    let (mut inline, mut global) = (0, 0);
+    for (i, l) in lines.iter().enumerate() {
+        let is_global = l.contains("core::arch::global_asm!(");
+        if !(is_global || l.contains("core::arch::asm!(")) || l.contains("core::arch::asm!(\"dsb sy\"") {
+            continue;
+        }
+        let mut j = i - 1;
+        while !lines[j].trim_start().starts_with("#[cfg(") {
+            j -= 1;
+        }
+        let first = lines[j]
+            .trim_start()
+            .strip_prefix("#[cfg(all(feature = \"")
+            .or_else(|| lines[j].trim_start().strip_prefix("#[cfg(feature = \""))
+            .unwrap_or_else(|| panic!("asm at line {} gated by {}", i + 1, lines[j]))
+            .split('"')
+            .next()
+            .expect("feature");
+        assert!(research.contains(&first), "asm at line {} under {} — not a research feature", i + 1, lines[j]);
+        if is_global {
+            global += 1;
+        } else {
+            inline += 1;
+        }
+    }
+    assert_eq!((inline, global), (16, 8), "research asm blocks");
     // Each streaming symbol is its body and nothing else, and the one-shot is
     // the three bodies in order and nothing else, so the paths cannot drift.
     fn code(b: &str) -> std::vec::Vec<std::string::String> {
@@ -3093,7 +3263,20 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
         ["unsafe {", "init_body();", "update_body(ptr, len);", "final_body(out);", "}"]
     );
     assert!(HW_HASH_SRC.contains("#[cfg(feature = \"oneshot\")]\n#[no_mangle]\npub unsafe extern \"C\" fn pqsigner_sha256_oneshot("));
-    for b in ["init_body() {", "update_body(ptr: *const u8, len: usize) {", "final_body(out: *mut u8) {"] {
+    // Round 11: `final_body` is the W = 8 read-out of `final_body_n`, and the
+    // 16-byte one-shot is the same three bodies with the W = 4 read-out.
+    assert_eq!(code(body("unsafe fn final_body(out: *mut u8) {")), ["unsafe { final_body_n::<8>(out) }"]);
+    assert_eq!(
+        code(body("pub unsafe extern \"C\" fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, out: *mut u8) {")),
+        ["unsafe {", "init_body();", "update_body(ptr, len);", "final_body_n::<4>(out);", "}"]
+    );
+    assert!(HW_HASH_SRC.contains("#[cfg(feature = \"oneshot\")]\n#[no_mangle]\npub unsafe extern \"C\" fn pqsigner_sha256_oneshot16("));
+    for b in [
+        "init_body() {",
+        "update_body(ptr: *const u8, len: usize) {",
+        "final_body(out: *mut u8) {",
+        "final_body_n<const W: usize>(out: *mut u8) {",
+    ] {
         assert!(HW_HASH_SRC.contains(&format!("#[inline(always)]\nunsafe fn {b}")), "{b} inlined");
     }
     // `sphincs-c10`: `sha256_bytes` is the backend call; the hook is declared
@@ -3101,6 +3284,16 @@ fn negative_hash_barriers_and_oneshot_are_secure_only() {
     let sb = C10_HASH_SRC.split("pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {\n").nth(1).expect("sha256_bytes");
     assert_eq!(code(&sb[..sb.find("\n}\n").expect("end")]), ["sha256_oneshot(data)"]);
     assert_eq!(C10_HASH_SRC.matches("fn pqsigner_sha256_oneshot(").count(), 1);
+    // `sha256_bytes16` (the truncated digest): the 16-byte one-shot in the
+    // secure image, `truncate(sha256_bytes)` everywhere else.
+    assert_eq!(C10_HASH_SRC.matches("fn pqsigner_sha256_oneshot16(").count(), 1);
+    assert!(C10_HASH_SRC.contains(
+        "#[cfg(feature = \"hw-sha256-oneshot\")]\n#[inline(always)]\npub(crate) fn sha256_bytes16(data: &[u8]) -> [u8; N] {\n    extern \"C\" {\n        fn pqsigner_sha256_oneshot16(ptr: *const u8, len: usize, out: *mut u8);\n    }\n    let mut out = [0u8; N];\n"
+    ));
+    assert!(C10_HASH_SRC.contains("    unsafe { pqsigner_sha256_oneshot16(data.as_ptr(), data.len(), out.as_mut_ptr()) };\n    out\n}\n"));
+    assert!(C10_HASH_SRC.contains(
+        "#[cfg(not(feature = \"hw-sha256-oneshot\"))]\n#[inline(always)]\npub(crate) fn sha256_bytes16(data: &[u8]) -> [u8; N] {\n    truncate(&sha256_bytes(data))\n}\n"
+    ));
     assert!(C10_HASH_SRC.contains(
         "#[cfg(feature = \"hw-sha256-oneshot\")]\n#[inline(always)]\nfn sha256_oneshot(data: &[u8]) -> [u8; 32] {\n    extern \"C\" {\n        fn pqsigner_sha256_oneshot(ptr: *const u8, len: usize, out: *mut u8);\n    }\n"
     ));
@@ -3224,21 +3417,108 @@ fn negative_hash_tick_is_the_secure_ui_px_images_alone() {
         .filter(|l| !l.trim_start().starts_with('#') && l.contains("tick-hook"))
         .collect();
     assert_eq!(raisers, ["ui-px = [\"pqsigner-hw/tick-hook\"]"]);
-    // One call, the finalizer's last statement: the digest is written out,
-    // DCIS cleared and the merge state reset before it.
-    assert_eq!(HW_HASH_SRC.matches("\n        pqsigner_hash_tick();\n").count(), 1);
+    // The finalizer (`final_body_n`, behind `final` and both one-shots): one
+    // call, its last statement — the digest is written out (either read-out),
+    // DCIS cleared (either form) and the merge state reset before it.
     let fin = HW_HASH_SRC
-        .split("unsafe fn final_body(out: *mut u8) {")
+        .split("unsafe fn final_body_n<const W: usize>(out: *mut u8) {")
         .nth(1)
-        .expect("final_body");
+        .expect("final_body_n");
     let fin = &fin[..fin.find("\n}\n").expect("end of final")];
+    assert_eq!(fin.matches("pqsigner_hash_tick();").count(), 1);
     let call = fin.find("pqsigner_hash_tick();").expect("the call is in final");
     assert!(fin.find("core::ptr::copy_nonoverlapping(bytes.as_ptr(), out.add(i * 4), 4);").expect("digest out") < call);
+    assert!(fin.find("hr_out!(0 1 2 3);").expect("digest out, unrolled") < call);
+    assert!(fin.find("hr_out!(4 5 6 7);").expect("digest out, unrolled, W = 8") < call);
+    assert!(fin.find("REG.sr.write(SR_DINIS);").expect("DCIS cleared (init-restart)") < call);
     assert!(fin.find("REG.sr.modify(|sr| sr & !SR_DCIS);").expect("DCIS cleared") < call);
     assert!(fin.find("state.pending = 0;").expect("state reset") < call);
     assert_eq!(fin[call..].trim_end(), "pqsigner_hash_tick();\n    }", "nothing after the tick");
     assert!(fin[..call].contains("    #[cfg(feature = \"tick-hook\")]\n    // SAFETY:"));
     assert!(HW_HASH_SRC.contains("#[cfg(feature = \"tick-hook\")]\nextern \"C\" {"));
+    // Round 11 (autoresearch): the fused entries — secure-only research
+    // features that no secure feature raises (the barriers test) — tick per
+    // digest as well. Every such call is behind `tick-hook` without
+    // `tick-batch` (under which no asm pipeline is compiled), and follows its
+    // digest's DCIS clear directly, with the digest read out of HR since DCIS
+    // rose and nothing fed, NBLW/DCAL written or INIT started in between. The
+    // one call not after a clear is the FORS subtree's closing tick, after
+    // its root is written out, as the function's last statement.
+    let lines: std::vec::Vec<&str> = HW_HASH_SRC.lines().collect();
+    let per_digest = "#[cfg(all(feature = \"tick-hook\", not(feature = \"tick-batch\")))]";
+    let fin_at = lines
+        .iter()
+        .position(|l| *l == "unsafe fn final_body_n<const W: usize>(out: *mut u8) {")
+        .expect("final_body_n");
+    let fin_end = fin_at + lines[fin_at..].iter().position(|l| *l == "}").expect("end of final_body_n");
+    let (mut fused, mut after_clear, mut closing) = (0, 0, 0);
+    for (i, l) in lines.iter().enumerate() {
+        if !l.contains("pqsigner_hash_tick()") || l.contains("fn pqsigner_hash_tick") {
+            continue;
+        }
+        if fin_at < i && i < fin_end {
+            continue; // the finalizer's, pinned above
+        }
+        let mut j = i - 1;
+        while lines[j].trim_start().starts_with("//") || matches!(lines[j].trim(), "unsafe {" | "{") {
+            j -= 1;
+        }
+        assert_eq!(lines[j].trim(), per_digest, "tick at line {} gated by {}", i + 1, lines[j]);
+        fused += 1;
+        let mut k = j - 1;
+        while lines[k].trim().is_empty() || lines[k].trim_start().starts_with("//") {
+            k -= 1;
+        }
+        if lines[k].trim() == "REG.sr.write(SR_DINIS);" {
+            let mut w = k - 1;
+            while !(lines[w].contains("while REG.sr.read() & SR_DCIS == 0 {")
+                || matches!(lines[w].trim(), "wait();" | "v2_wait_dcis();"))
+            {
+                w -= 1;
+            }
+            let between = lines[w + 1..k].join("\n");
+            assert!(
+                between.contains("read_hr4()") || between.contains("REG.hr0.read_at("),
+                "tick at line {}: no HR read since DCIS",
+                i + 1
+            );
+            for bad in ["write_word(", "REG.din", "REG.str_.write(", "REG.cr.write("] {
+                assert!(!between.contains(bad), "tick at line {}: {bad} between DCIS and the tick", i + 1);
+            }
+            after_clear += 1;
+        } else {
+            assert_eq!(
+                lines[k - 8..=k].join("\n"),
+                "    for (k, x) in stack[0].iter().enumerate() {\n        // SAFETY: `out + 4k`, k < 4, inside the caller's 16 bytes.\n        unsafe { out.add(4 * k).cast::<u32>().write_unaligned(*x) };\n    }\n    #[cfg(feature = \"tick-batch\")]\n    // SAFETY: the engine is idle; the tick does not hash.\n    unsafe {\n        pqsigner_hash_tick_n(16 * 2 + 15);\n    }",
+                "tick at line {}: neither after a DCIS clear nor the subtree's closing tick",
+                i + 1
+            );
+            assert_eq!(lines[i + 1..i + 3].join("\n"), "    }\n}", "nothing after the closing tick");
+            closing += 1;
+        }
+    }
+    assert_eq!((fused, after_clear, closing), (13, 12, 1));
+    // The batch ticks (`tick-batch`, measurement only; the callee must not
+    // hash): each under that feature, which implies `tick-hook`; no secure
+    // feature raises it, the FSBL never names it, and the secure world does
+    // not define the hook, so it cannot link into a secure image.
+    assert!(HW_CARGO_SRC.contains("\ntick-batch = [\"tick-hook\"]\n"));
+    assert!(!SECURE_CARGO_TOML_SRC.contains("tick-batch") && !FSBL_CARGO_SRC.contains("tick-batch"));
+    assert!(!MAIN_SRC.contains("pqsigner_hash_tick_n"));
+    assert!(HW_HASH_SRC.contains("#[cfg(feature = \"tick-batch\")]\nextern \"C\" {\n"));
+    let mut batch = 0;
+    for (i, l) in lines.iter().enumerate() {
+        if !l.contains("pqsigner_hash_tick_n(") || l.contains("fn pqsigner_hash_tick_n") {
+            continue;
+        }
+        let mut j = i - 1;
+        while !lines[j].trim_start().starts_with("#[cfg(") {
+            j -= 1;
+        }
+        assert_eq!(lines[j].trim(), "#[cfg(feature = \"tick-batch\")]", "batch tick at line {} gated by {}", i + 1, lines[j]);
+        batch += 1;
+    }
+    assert_eq!(batch, 13);
     // The secure end is a film tick and nothing else.
     assert!(MAIN_SRC.contains(
         "#[cfg(feature = \"ui-px\")]\n#[no_mangle]\npub extern \"C\" fn pqsigner_hash_tick() {\n    #[cfg(all(not(test), feature = \"ui-lcd\"))]\n    ui::px::lcd::film_tick_hash();\n}"

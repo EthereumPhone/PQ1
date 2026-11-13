@@ -330,6 +330,12 @@ pub mod probe {
 #[cfg(all(feature = "hash-probe", feature = "hw-sha256-crosscheck"))]
 compile_error!("`hash-probe` and `hw-sha256-crosscheck` are exclusive: the software hash would land in the probe's stages");
 
+// The fused entries (every `#[no_mangle]` digest entry but `init`, `update`, `final` and the two
+// one-shots) run their digests without the crosscheck hooks. With the crosscheck on they would hand
+// on unchecked digests in a build whose point is that every digest is compared: refuse the pair.
+#[cfg(all(feature = "hw-sha256-crosscheck", any(feature = "chain", feature = "prfchain", feature = "forsleaf", feature = "gather", feature = "search", feature = "v1-grindr", feature = "v2")))]
+compile_error!("`hw-sha256-crosscheck` with a fused-entry feature: those entries do not run the crosscheck hooks");
+
 /// True when a dev instrument rides in this driver. The secure world refuses
 /// to build `mode-production` with it set: a dependency feature
 /// (`--features pqsigner-hw/…`) is invisible to that crate's own `cfg` fence,
@@ -341,7 +347,9 @@ pub const DEV_INSTRUMENTED: bool = cfg!(any(feature = "hash-probe", feature = "h
 /// the silicon boot proof, and a feature can reach it through a manifest or a
 /// recipe that no source pin reads (the workspace dependency line, a
 /// `--features pqsigner-hw/…` in a build script). `tick-hook` alone would also
-/// fail to link there; the others would link and ship.
+/// fail to link there; the others would link and ship. From `chain` on: the
+/// autoresearch fused entries and their variants (rounds 7..11), which no
+/// secure feature raises either.
 pub const SECURE_IMAGE_ONLY: bool = cfg!(any(
     feature = "unrolled-io",
     feature = "inline-barriers",
@@ -349,7 +357,33 @@ pub const SECURE_IMAGE_ONLY: bool = cfg!(any(
     feature = "init-restart",
     feature = "tick-hook",
     feature = "hash-probe",
-    feature = "hw-sha256-crosscheck"
+    feature = "hw-sha256-crosscheck",
+    feature = "chain",
+    feature = "search",
+    feature = "gather",
+    feature = "prfchain",
+    feature = "v1-asm-chain",
+    feature = "v1-asm-key",
+    feature = "v1-asm-key-ga",
+    feature = "v1-asm-fors",
+    feature = "v1-asm-fors-ga",
+    feature = "v1-asm-search",
+    feature = "v1-asm-search-ga",
+    feature = "v1-grindr",
+    feature = "forsleaf",
+    feature = "tick-batch",
+    feature = "no-busy-wait",
+    feature = "hra-ldm",
+    feature = "v2",
+    feature = "v2-prf2",
+    feature = "v2-asm-chain",
+    feature = "v2-asm-key-ga",
+    feature = "v2-dt32",
+    feature = "v2-asm-search",
+    feature = "v2-asm-fors",
+    feature = "v2-asm-fors-ga",
+    feature = "v2-fold-sum",
+    feature = "v2-split810"
 ));
 
 #[cfg(feature = "hw-sha256-crosscheck")]
@@ -376,9 +410,8 @@ static mut XCHECKED: u32 = 0;
 #[cfg(feature = "hw-sha256-crosscheck")]
 #[inline(never)]
 fn xcheck_digest(out: *const u8) {
-    // SAFETY: category 3 — FFI to the binary's software half;
-    // `pqsigner_sha256_final` wrote all 32 bytes at `out` (valid by its own
-    // FFI contract) before calling this.
+    // SAFETY: category 3 — FFI to the binary's software half; the caller
+    // (`final_body_n`) passes the 32-byte digest it just assembled.
     let same = unsafe { pqsigner_xcheck_same(out) };
     // SAFETY: category 5 — the hash hooks are serialised by their FFI
     // contract and the secure world is single-threaded.
@@ -702,8 +735,9 @@ fn wait_ready_sr() -> u32 {
 }
 
 /// The per-digest idle check before INIT: under `no-busy-wait` (measurement only) one SR read for
-/// the stale-DCIS check, without waiting for BUSY to clear; otherwise `wait_ready_sr`.
-#[cfg(feature = "init-restart")]
+/// the stale-DCIS check, without waiting for BUSY to clear; otherwise `wait_ready_sr`. Only the
+/// fused entries use it (each of these features implies `init-restart`).
+#[cfg(any(feature = "prfchain", feature = "forsleaf", feature = "gather", feature = "search", feature = "v1-grindr"))]
 #[inline(always)]
 fn ready_sr_fast() -> u32 {
     #[cfg(feature = "no-busy-wait")]
@@ -715,6 +749,7 @@ fn ready_sr_fast() -> u32 {
 /// HR0..HR3 as the first 16 digest bytes' words (byte-swapped), read through the documented
 /// `HASH_HRA0..3` alias at offsets 0x0C..0x18 (RM0456 §51.6.4) with one load-multiple under
 /// `hra-ldm`; four separate HR reads otherwise. Only valid after DCIS.
+#[cfg(any(feature = "chain", feature = "prfchain", feature = "forsleaf", feature = "v1-grindr", feature = "v2"))]
 #[inline(always)]
 fn read_hr4() -> [u32; 4] {
     #[cfg(feature = "hra-ldm")]
@@ -1001,6 +1036,8 @@ unsafe fn final_body(out: *mut u8) {
 /// As `final_body`, with `[out, out + 4 * W)` writable.
 #[inline(always)]
 unsafe fn final_body_n<const W: usize>(out: *mut u8) {
+    // The rolled read-out takes `W` words, the unrolled one four or eight: equal only for these.
+    const { assert!(W == 4 || W == 8, "final_body_n reads out 16 or 32 bytes") };
     #[cfg(feature = "hash-probe")]
     probe::final_entered();
     // SAFETY: category 5 — exclusive mutable borrow of `static mut
@@ -1106,8 +1143,19 @@ unsafe fn final_body_n<const W: usize>(out: *mut u8) {
             hr_out!(4 5 6 7);
         }
     }
+    // The crosscheck compares all 32 bytes: the bytes just handed on, then (16-byte read-out,
+    // `W = 4`) the words not handed on, from HR4..HR7, which DCIS still holds.
     #[cfg(feature = "hw-sha256-crosscheck")]
-    xcheck_digest(out);
+    {
+        let mut full = [0u8; 32];
+        // SAFETY: `[out, out + 4 * W)` was just written (this function's contract) and `W <= 8`.
+        unsafe { core::ptr::copy_nonoverlapping(out, full.as_mut_ptr(), 4 * W) };
+        for i in W..8 {
+            // SAFETY: HR0..HR7, the 8-word digest bank; `i < 8`.
+            full[4 * i..4 * i + 4].copy_from_slice(&unsafe { REG.hr0.read_at(i) }.to_be_bytes());
+        }
+        xcheck_digest(full.as_ptr());
+    }
 
     // Clear DCIS (write 0 to bit 1 per STM32U5 RM — SR.DCIS is rc_w0).
     // DCIS and DINIS are rc_w0; writing DINIS's 1 and 0 everywhere else clears
@@ -1194,7 +1242,8 @@ pub unsafe extern "C" fn pqsigner_sha256_chain16(buf: *mut u8, start_pos: u32, s
     for (k, x) in v.iter().enumerate() {
         // SAFETY: `buf + 64 + 4k`, k < 4, is inside the caller's 96 bytes.
         unsafe { buf.add(64 + 4 * k).cast::<u32>().write_unaligned(*x) };
-    }    #[cfg(feature = "tick-batch")]
+    }
+    #[cfg(feature = "tick-batch")]
     // SAFETY: the engine is idle; the tick does not hash (tick-batch contract).
     unsafe {
         pqsigner_hash_tick_n(steps);
