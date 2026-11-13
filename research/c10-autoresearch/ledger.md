@@ -544,3 +544,39 @@ The chain loop sat about 16 cycles above the unit-cost floor (about 111). The di
 - **16-message mean:** v2 67.96 → **65.59 M (−3.48%)**; with the cache 47.05 → **44.69 M (−5.02%)**. Per message 0.36–5.6 M, scaling with the message's grind tries.
 - **Est. cached sign:** 0.821 s, or **0.559 s** with the cache. Against v1's fused head: −40.4% plain, −59.4% with the cache.
 - **Why H5 failed and this works:** H5 also read 5 words but kept the full sum and the stack-fed issue. Neither the read count nor the sum alone was the limit; the sum plus 10 stack reloads exceeded the engine time.
+
+### H10, H11: FORS subtree loop, discards
+
+- **H10:** `S` fed from the caller's buffer as a grouped load instead of stack reloads: 142.4 → 142.2 cycles/digest, no change. Interleaved reloads are not what makes the subtree slow.
+- **H11:** leaves processed in pairs (height-1 node straight from registers, closures for leaf and node): **142.4 → 151.1**, worse.
+- Both reverted; the microbench is back at 142.4.
+- The subtree's remaining excess over the chain loop (about 20 cycles/digest, about 1.6 M per pass) is per-leaf bookkeeping; not pursued further this round.
+
+### Round 6 summary (2026-11-13)
+
+| configuration (16-message mean) | sign | est. cached sign | vs v1 fused head |
+|---|---:|---:|---:|
+| v1 fused head | 110.10 M | 1.377 s | |
+| v2 at the start of round 6 | 75.94 M | 0.950 s | −31.0% |
+| **v2 head** | **65.59 M** | **0.821 s** | **−40.4%** |
+| v2 + top cache at round start (H1) | 52.10 M | 0.652 s | −52.7% |
+| **v2 head + top cache** | **44.69 M** | **0.559 s** | **−59.4%** |
+
+- **Against master as shipped** (3.41 s cached): −76% plain, **−84% with the cache**.
+- **Kept (output-identical):**
+  - H2 per-key WOTS chains (−6.1%);
+  - H4 whole-key entry (−0.6%);
+  - H6 NBLW once per entry (−1.5%);
+  - H7 R grind in the driver (−1.05%);
+  - H8 register diet (−1.6%);
+  - H9 search early reject (−3.5%).
+- **Track B:** H1 (the top cache under v2).
+- **Measured, not adopted:** H3, the last-slot PRF (about 0.94 M/pass deterministic; needs an owner decision).
+- **Discards:** H5 (5-word collect alone), H10, H11.
+- **Gate 5:** 2,091 checks, 0 failures, with every v2 entry including the new ones.
+- **Regression at the end:** v1 suite 82/0; v1 kit 233,078,504; v1 track B unchanged (163.35 M, 3 hits); option bytes identical to the baseline.
+
+**Format-level options from Fable (owner decisions, not tested):**
+1. `target_sum` 205 → 200: about −5.8 M/pass and about +2.5–4.5k verify gas; reopens the proof constants.
+2. Two WOTS/FORS secrets per PRF digest: about −4 M/pass; keys change, the verifier does not.
+3. An 8 + 10 hypertree split with the top cache: about −11 M/pass; the cache becomes structural, and keygen doubles.
