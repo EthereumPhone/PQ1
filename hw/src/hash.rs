@@ -1250,10 +1250,7 @@ fn v1_chain_asm(blk: &[u32; 10], v: [u32; 4], start_pos: u32) -> [u32; 4] {
             "ldm r4, {{r0, r1, r2, r3}}",
             "movs r8, #1",
             "str r8, [r4, #0x18]",
-            "rev r0, r0",
-            "rev r1, r1",
-            "rev r2, r2",
-            "rev r3, r3",
+            "rev r0, r0",                  // r1..r3 are byte-swapped in the block-0 window
             "3:",
             "ldr r8, [r4, #0x18]",
             "tst r8, #10",
@@ -1284,16 +1281,20 @@ fn v1_chain_asm(blk: &[u32; 10], v: [u32; 4], start_pos: u32) -> [u32; 4] {
             "str r10, [r4, #-8]",
             "str lr, [r4, #-8]",
             "str r0, [r4, #-8]",           // word 16: block 1 starts
-            "str r1, [r4, #-8]",           // waits for block 1
+            // block-0 window (~46 free cycles before the next store completes)
+            "rev r1, r1",
+            "rev r2, r2",
+            "rev r3, r3",
             "add r5, r5, #1",
             "ldr r11, [r12, #36]",
+            "mov.w r8, #256",
+            "str r1, [r4, #-8]",           // waits for block 0
             "str r2, [r4, #-8]",
             "str r3, [r4, #-8]",
             "str lr, [r4, #-8]",
             "str lr, [r4, #-8]",
             "str lr, [r4, #-8]",
             "str lr, [r4, #-8]",
-            "mov.w r8, #256",
             "str r8, [r4, #-4]",           // DCAL (NBLW = 0)
             "movw lr, #0x24",
             "movt lr, #0x6",
@@ -1351,9 +1352,10 @@ fn v1_chain_asm(blk: &[u32; 10], v: [u32; 4], start_pos: u32) -> [u32; 4] {
             spin = const V1_ASM_SPIN,
             fault = sym hash_engine_fault,
             inout("r0") v[0] => o0,
-            inout("r1") v[1] => o1,
-            inout("r2") v[2] => o2,
-            inout("r3") v[3] => o3,
+            // r1..r3 enter byte-swapped: the loop swaps them back in the block-0 window.
+            inout("r1") v[1].swap_bytes() => o1,
+            inout("r2") v[2].swap_bytes() => o2,
+            inout("r3") v[3].swap_bytes() => o3,
             in("r4") HASH_BASE + 0x0C,
             inout("r5") start_pos => _,
             out("r8") _,
