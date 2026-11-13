@@ -81,6 +81,8 @@ v2-prf2 = ["v2"]
 v2-asm-chain = ["v2"]
 # Round 10: the v2 whole-key WOTS loop (PRF + chains) as one standalone global_asm function.
 v2-asm-key-ga = ["v2-asm-chain"]
+# Round 11: the v2 global_asm loops with the HASH DATATYPE 00 (32-bit words: no per-digest byte swaps).
+v2-dt32 = ["v2-asm-key-ga"]
 # Round 7: hand-scheduled v2 count search (output-identical; same checks).
 v2-asm-search = ["v2"]
 # Round 7: FORS subtree with asm digest transitions (output-identical; same checks).
