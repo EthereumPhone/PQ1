@@ -1106,3 +1106,94 @@ Under the keep rule it is a discard. It is the fallback if the colocation landin
 **FSBL** byte-identical throughout.
 
 **No signer-crate edits this round**, so no new extraction drift. `check_extraction_freshness.py` still shows the same 22 drifted pins. The round-8 `fors.rs`/`wots.rs` edits sit under targets already drifted by rounds 1–7: `sign-release`, `sign-forest`, `fors-*`, `wots-*`, `xmss-*`, `verifier`.
+
+## Round 10 (2026-11-13): global_asm FORS and search, product-shaped measurement, v1 closing note
+
+### E10: FORS subtree as a `global_asm!` function, keep (`c33268ebf`, generator `gen_fors_ga.py`)
+
+**Premise checked first.** A timing-only probe with every block-0 load deleted from the three FORS transitions (garbage digests) took the subtree from 8,396 to 7,756 cycles/call. Loads were about 640 of the ~894-cycle gap to the ~7,500 floor.
+
+**What changed:** the whole FORS-shape subtree, tree logic included, is one AAPCS function (E9 pattern):
+- leaf constants live in r5..r11, so a leaf loads only `be32(j)`;
+- node words and `L[1..3]` load in the block-0 window;
+- the PRF finds `sk_seed[0..7)` preloaded (registers only);
+- pushes, index updates and constant reloads run in the engine windows.
+
+**The residue gate caught a leak in the first build.** The Rust wrapper had just fed `sk_seed` for the first PRF. The function's prologue `push {r4-r11}` then spilled those register-held words to the stack. Fix: the asm issues the first PRF itself (the same idle/stale check, STR 0, INIT as `gather_init`), so the caller never holds `sk_seed`. Afterwards: residue 0.
+
+**1-way ICACHE:** the gap to 2-way grew from 0.16 to 0.35 M. Putting the Rust wrapper in the function's section brought it back to 0.17 M.
+
+**Results:**
+- subtree 8,396 → **8,110** cycles/call;
+- golden cached sign 193.30 → 192.41 M;
+- v1 mean 91.15 → **90.68 M** (2-way), 91.31 → **90.85 M** (1-way).
+
+**Evidence:**
+- subtree check on both shapes (4/4, odd addresses), residue gate, kdiff 32/32;
+- stale-fors: on this path that is now the asm's own first-INIT check;
+- `h'`/`idx'` swap mutant 2/4;
+- FSBL identical.
+
+**Astra:** no defects. Its model matched 9,400 digest inputs and 200 roots against the generic heights-stack reference, including slow waits and unaligned seeds.
+
+### E11: search as a `global_asm!` function, keep (`38be65e1d`, generator `gen_search_ga.py`)
+
+**What changed.** For the WOTS digest address (words 9, 11, 13, 14, 15 zero, checked in Rust), block 0 is seven constant words. They stay in callee-saved r5..r11 across every try and the per-try `pred` call, so only word 16 is loaded before the 17th store. The digest words, block-1 words and the count go through the block-0 window, and the last-try test moves into the engine window (two wait loops). The function sits in `.text.pq1_c10_search` next to `search128` and `hits_target` (contiguous, 3.2 KB).
+
+**Results:**
+- 246 → **227** cycles/try (the floor is ~226);
+- golden cached sign 192.41 → 190.35 M;
+- v1 mean 90.68 → **89.97 M** (2-way), 90.85 → **90.18 M** (1-way).
+
+**Evidence:**
+- the search check now covers both address shapes (24/24, odd address, edges);
+- kdiff, residue gate, stale-search;
+- `a0`/`a2` swap mutant 5/24;
+- FSBL identical.
+
+**Astra:** pending at the time of writing.
+
+### Product-shaped measurement (measurement only; bench crates only, no firmware image flashed)
+
+**The tick in the product.** The secure world's `pqsigner_hash_tick` is `film_tick_hash()` (`secure/src/ui/px/lcd.rs`):
+- with no film live, an atomic load and a return;
+- with a film live, a counter load/add/store, and every `HASH_TICK_EVERY` = 64 digests a call to `film_tick_paced`. That draws a frame at a time-paced rate (about one 8 ms frame per 32 ms), independent of hashing speed, so it is not modelled.
+
+There is no `pqsigner_hash_tick_n` in the secure world: the batched tick (#1149) is still only a research variant. `bench_avg_v1` got the same per-call stubs as `bench` (`3c70a5f10`).
+
+| v1 16-message mean, head | 2-way | 1-way (shipped) |
+|---|---:|---:|
+| no tick (bench) | 89.97 M | 90.18 M |
+| **batched tick** (`tick-batch`, the #1149 variant) | 90.16 M | 90.46 M |
+| per-digest tick (`tick`, what `ui-px` builds today) | 120.09 M | 121.28 M |
+
+- **With the batched tick, essentially all of the round 7–10 gain reaches the product:** the batching costs 0.2–0.3%.
+- **With today's per-digest tick, none of the asm runs:** every round 7–10 asm path compiles out, and the sign costs about 120 M (golden-equivalent ~1.5 s). The R grind entry (E5, Rust) is the only round 7–10 change that survives.
+- The round 7–10 work therefore reaches users only if #1149 (batched tick) lands. That is an owner decision.
+
+### Closing note: v1 headroom (kit 160 MHz, head `38be65e1d`)
+
+**Profile at head (1-way):** key loop 65.6%, FORS subtree 13.9%, search 6.5% plus `hits_target` 5.4% (hidden in the engine window), `th_multi16` 2.3%, grind 1.8%, the rest about 4.5% (Rust glue, memcpy/memclr, one-shots, verify).
+
+| entry | now | engine floor (INIT→DCIS + ~14) | practical headroom per sign |
+|---|---:|---:|---:|
+| WOTS key loop | 167.0 cyc/digest | ~161 | **~0.7 M**: the remaining ~6 cycles are `ldm` c9/c10/c12/c13, `rev pos` and the zero register; all 14 registers are in use |
+| FORS subtree | 8,110 cyc/call | ~7,500 | **~0.3–0.5 M**: PRF tail loads, node `h'`/`idx'`/`L[0]`, poll lag |
+| search | 227 cyc/try | ~226 | ~0 (at the floor; the predicate is hidden) |
+| R grind | 513 cyc/nonce | ~385 | ~0.3 M |
+| `th_multi16` | 1,973 cyc/call | ~1,800 | ~0.2 M |
+
+Total practical driver headroom: about **1.5–1.7 M (~1.8%)** of a 90 M sign. That is below the ~2% mark, so v1 driver work is closing.
+
+**Hardware axes, measured (measure only):**
+
+| axis | result | status |
+|---|---|---|
+| ICACHE 2-way against the shipped 1-way | −0.23% | product setting (`rcc.rs`): owner |
+| `FLASH_ACR.PRFTEN` | −0.11% (2-way), −0.20% (1-way) | was noise in round 3, now visible; product setting: owner |
+| code in SRAM (C-bus alias) against flash + ICACHE | golden 198.23 M against 190.35 M (+4%) | not a lever |
+| flash wait states | 4 WS at 160 MHz is the device minimum for the range | changing it needs a clock or voltage change: out of scope |
+| HASH clock | on AHB at 160 MHz, no separate prescaler | — |
+| no-busy-wait (#1151) | −0.24% (round 8) | owner |
+
+**Untried: none safe within the rules.** The remaining levers are owner decisions (#1149 batched tick, by far the largest: about 25% in the product; 2-way ICACHE; prefetch; #1151) or format work.
