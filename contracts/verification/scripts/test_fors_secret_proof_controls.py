@@ -19,8 +19,24 @@ FAMILIES = {
         ("hypertree", "core.num.U32.to_be_bytes ht_idx", "core.num.U32.to_be_bytes 0#u32"),
         ("tree", "core.num.U32.to_be_bytes tree_idx", "core.num.U32.to_be_bytes 0#u32"),
         ("leaf", "core.num.U32.to_be_bytes leaf_idx", "core.num.U32.to_be_bytes 0#u32"),
-        ("field-order", "[ s, s1, s2, s3, s4 ]", "[ s, s1, s3, s2, s4 ]"),
-        ("digest", "hash.truncate a3", "hash.truncate (Array.repeat 32#usize 0#u8)"),
+        # Research refactor: one contiguous 48-byte preimage buffer, then
+        # `hash.sha256_bytes16`. Field order = the hypertree/tree writes swapped.
+        ("field-order", "core.num.U32.to_be_bytes ht_idx)\n  let s7 ← lift (Array.to_slice a)\n"
+         "  let s8 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s6 s7\n"
+         "  let buf3 := index_mut_back2 s8\n  let (s9, index_mut_back3) ←\n"
+         "    core.array.Array.index_mut (core.ops.index.IndexMutSlice\n"
+         "      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf3\n"
+         "      { start := 40#usize, «end» := 44#usize }\n"
+         "  let a1 ← lift (core.num.U32.to_be_bytes tree_idx)",
+         "core.num.U32.to_be_bytes tree_idx)\n  let s7 ← lift (Array.to_slice a)\n"
+         "  let s8 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s6 s7\n"
+         "  let buf3 := index_mut_back2 s8\n  let (s9, index_mut_back3) ←\n"
+         "    core.array.Array.index_mut (core.ops.index.IndexMutSlice\n"
+         "      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf3\n"
+         "      { start := 40#usize, «end» := 44#usize }\n"
+         "  let a1 ← lift (core.num.U32.to_be_bytes ht_idx)"),
+        ("position", "{ start := 44#usize, «end» := 48#usize }", "{ start := 40#usize, «end» := 44#usize }"),
+        ("digest", "hash.sha256_bytes16 s15", "hash.truncate (Array.repeat 32#usize 0#u8)"),
     ]),
     "spec-secret": ("ForsSecretBridge.lean", "forsSecret", [
         ("seed", "ByteSeg.ofByteVec skSeed", "ByteSeg.ofByteVec (zero 32)"),

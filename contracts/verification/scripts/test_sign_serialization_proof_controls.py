@@ -26,7 +26,7 @@ FAMILIES = {
         ("wrong-chain", "Array.index_usize wots_sigma i", "Array.index_usize wots_sigma 0#usize"),
     ]),
     "xmss": ("SignWriteSpec.lean", "hypertree.sign_inner_loop3_loop1", [
-        ("short-auth", "if h < i", "if h < 8#usize"),
+        ("short-auth", "if h < lh", "if h < 8#usize"),
     ]),
     "count": ("SignLayerSerialize.lean", "signerWriteCount", [
         ("little-endian", "core.num.U32.to_be_bytes count", "core.num.U32.to_le_bytes count"),

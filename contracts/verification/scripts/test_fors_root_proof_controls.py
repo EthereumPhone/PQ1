@@ -16,11 +16,15 @@ FAMILIES = {
     "actual-root": ("ForsRootSpec.lean", [
         ("leaf-count", "1#usize <<< params.A", "3#usize <<< params.A"),
         ("first-leaf", "{ start := 0#usize, «end» := n_leaves }", "{ start := 1#usize, «end» := n_leaves }"),
-        ("secret-seed", "hash.fors_secret sk_seed ht_idx tree_idx i", "hash.fors_secret seed ht_idx tree_idx i"),
-        ("secret-leaf", "hash.fors_secret sk_seed ht_idx tree_idx i", "hash.fors_secret sk_seed ht_idx tree_idx 0#u32"),
-        ("leaf-hypertree", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2", "address.make_adrs 0#u32 0#u64 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2"),
-        ("leaf-tree", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE 0#u32 0#u32 0#u32 i2"),
-        ("leaf-domain", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2", "address.make_adrs 0#u32 i1 2#u32 tree_idx 0#u32 0#u32 i2"),
+        # The leaf is now `hash.fors_leaf` (fors_secret -> pad16 -> th, research
+        # refactor): its inputs are mutated at the call site, its body below.
+        ("secret-seed", "hash.fors_leaf seed sk_seed leaf_adrs ht_idx tree_idx i2", "hash.fors_leaf seed seed leaf_adrs ht_idx tree_idx i2"),
+        ("secret-leaf", "hash.fors_leaf seed sk_seed leaf_adrs ht_idx tree_idx i2", "hash.fors_leaf seed sk_seed leaf_adrs ht_idx tree_idx 0#u32"),
+        ("leaf-prf-fields", "hash.fors_secret sk_seed ht_idx tree_idx leaf", "hash.fors_secret sk_seed ht_idx leaf tree_idx"),
+        ("leaf-hash-value", "hash.th seed leaf_adrs a", "hash.th seed leaf_adrs (Array.repeat 32#usize 0#u8)"),
+        ("leaf-hypertree", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1", "address.make_adrs 0#u32 0#u64 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1"),
+        ("leaf-tree", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE 0#u32 0#u32 0#u32 i1"),
+        ("leaf-domain", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1", "address.make_adrs 0#u32 i 2#u32 tree_idx 0#u32 0#u32 i1"),
         ("merge-condition", "if i1 = node_h", "if i1 ≠ node_h"),
         ("parent-height", "node_h + 1#u32", "node_h + 2#u32"),
         ("parent-index", "j >>> i2", "j >>> node_h"),
@@ -48,7 +52,7 @@ def fixture(family, before=None, after=None):
         source = (ROOT / "Extracted/ForsRoot/Funs.lean").read_text()
         declaration = source.split("namespace sphincs_c10\n", 1)[1].rsplit("end sphincs_c10", 1)[0]
         renames = ["fors.compute_fors_root_loop0_loop0", "fors.compute_fors_root_loop0",
-                   "fors.compute_fors_root", "params.FORS_LEAVES"]
+                   "fors.compute_fors_root", "params.FORS_LEAVES", "hash.fors_leaf"]
         ns = "sphincs_c10"
         opens = "open Aeneas Aeneas.Std Result ControlFlow Error"
     else:

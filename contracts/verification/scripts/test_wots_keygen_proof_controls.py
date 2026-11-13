@@ -13,26 +13,48 @@ from test_fors_auth_proof_controls import require_semantic_rejection
 ROOT = Path(__file__).resolve().parents[1] / "extracted"
 LAKE = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".elan/bin/lake"
 FAMILIES = {
-    "tree": ("WotsSecretSpec.lean", "hash.u64_to_b32", [
-        ("padding", "Array.repeat 32#usize 0#u8", "Array.repeat 32#usize 1#u8"),
-        ("position", "start := 24#usize, «end» := 32#usize", "start := 0#usize, «end» := 8#usize"),
-        ("value", "core.num.U64.to_be_bytes v", "core.num.U64.to_be_bytes 0#u64"),
-    ]),
+    # Research refactor: `wots_secret` builds one contiguous 80-byte buffer
+    # (`hash.u64_to_b32` is gone; the tree's 8 BE bytes go to [64..72) over a
+    # zero gap) and hashes it with `hash.sha256_bytes16`. The former "tree"
+    # family's padding/position/value mutations are the tree-* rows here.
     "secret": ("WotsSecretSpec.lean", "hash.wots_secret", [
         ("seed", "Array.to_slice sk_seed", "Array.to_slice (Array.repeat 32#usize 0#u8)"),
         ("tag", "119#u8, 111#u8", "118#u8, 111#u8"),
         ("layer", "core.num.U32.to_be_bytes layer", "core.num.U32.to_be_bytes 0#u32"),
-        ("tree", "hash.u64_to_b32 tree", "hash.u64_to_b32 0#u64"),
+        ("tree", "core.num.U64.to_be_bytes tree", "core.num.U64.to_be_bytes 0#u64"),
+        ("tree-padding", "Array.repeat 80#usize 0#u8", "Array.repeat 80#usize 1#u8"),
+        ("tree-position", "{ start := 64#usize, «end» := 72#usize }", "{ start := 40#usize, «end» := 48#usize }"),
         ("keypair", "core.num.U32.to_be_bytes kp", "core.num.U32.to_be_bytes 0#u32"),
         ("chain", "core.num.U32.to_be_bytes chain_idx", "core.num.U32.to_be_bytes 0#u32"),
-        ("field-order", "[ s, s1, s2, s3, s4, s5 ]", "[ s, s1, s2, s3, s5, s4 ]"),
+        ("field-order", "core.num.U32.to_be_bytes kp)\n  let s13 ← lift (Array.to_slice a2)\n"
+         "  let s14 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s12 s13\n"
+         "  let buf5 := index_mut_back4 s14\n  let (s15, index_mut_back5) ←\n"
+         "    core.array.Array.index_mut (core.ops.index.IndexMutSlice\n"
+         "      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf5\n"
+         "      { start := 76#usize, «end» := 80#usize }\n"
+         "  let a3 ← lift (core.num.U32.to_be_bytes chain_idx)",
+         "core.num.U32.to_be_bytes chain_idx)\n  let s13 ← lift (Array.to_slice a2)\n"
+         "  let s14 ← core.slice.Slice.copy_from_slice core.marker.CopyU8 s12 s13\n"
+         "  let buf5 := index_mut_back4 s14\n  let (s15, index_mut_back5) ←\n"
+         "    core.array.Array.index_mut (core.ops.index.IndexMutSlice\n"
+         "      (core.slice.index.SliceIndexRangeUsizeSlice Std.U8)) buf5\n"
+         "      { start := 76#usize, «end» := 80#usize }\n"
+         "  let a3 ← lift (core.num.U32.to_be_bytes kp)"),
+        ("digest", "hash.sha256_bytes16 s18", "hash.truncate (Array.repeat 32#usize 0#u8)"),
+    ]),
+    # `hash.wots_secret_chain` (wots_secret -> set_chain_index -> chain_hash),
+    # probed against `wots_secret_chain_spec` alone.
+    "chain": ("WotsKeygenSpec.lean", "hash.wots_secret_chain", [
+        ("secret-seed", "hash.wots_secret sk_seed", "hash.wots_secret seed"),
+        ("secret-index", "layer tree kp ci", "layer tree kp 0#u32"),
+        ("chain-index", "address.set_chain_index base_adrs ci", "address.set_chain_index base_adrs 0#u32"),
+        ("chain-start", "sk_i 0#u32 steps", "sk_i 1#u32 steps"),
+        ("chain-steps", "sk_i 0#u32 steps", "sk_i 0#u32 6#u32"),
     ]),
     "body": ("WotsKeygenSpec.lean", "wots.keygen_pk_loop", [
-        ("secret-seed", "hash.wots_secret sk_seed", "hash.wots_secret seed"),
-        ("secret-index", "tree kp i1", "tree kp 0#u32"),
-        ("chain-index", "address.set_chain_index base_adrs i2", "address.set_chain_index base_adrs 0#u32"),
-        ("chain-start", "sk_i 0#u32 i4", "sk_i 1#u32 i4"),
-        ("chain-steps", "sk_i 0#u32 i4", "sk_i 0#u32 6#u32"),
+        ("secret-seed", "hash.wots_secret_chain seed sk_seed", "hash.wots_secret_chain seed seed"),
+        ("secret-index", "tree kp i1 i3", "tree kp 0#u32 i3"),
+        ("chain-steps", "params.W - 1#usize", "params.W - 2#usize"),
         ("destination", "Array.update pk_elements i a", "Array.update pk_elements 0#usize a"),
     ]),
     "loop": ("WotsKeygenSpec.lean", "wots.keygen_pk_loop", [
@@ -69,9 +91,9 @@ def fixture(family, before=None, after=None):
         opens = "open SphincsCVerify.Spec ByteVec"
         attr = ""
     else:
-        folder = "WotsSecret" if family in ("tree", "secret") else "WotsKeygen"
+        folder = "WotsSecret" if family == "secret" else "WotsKeygen"
         source = (ROOT / "Extracted" / folder / "Funs.lean").read_text()
-        start = source.index("def " + name + (".body\n" if family == "body" else "\n" if family != "tree" else " "))
+        start = source.index("def " + name + (".body\n" if family == "body" else "\n"))
         if family == "body":
             end = source.index("\n/--", source.index("def " + name + "\n", start))
         else:
@@ -83,8 +105,8 @@ def fixture(family, before=None, after=None):
     if family == "spec-keygen":
         proof = proof.replace("attribute [local irreducible] SphincsCVerify.Spec.Sha256Impl.sha256Bytes",
                               "attribute [local irreducible] SphincsCVerify.Spec.Sha256Impl.sha256Bytes SphincsCVerify.Spec.chainHash")
-    if family == "tree":
-        proof = proof[:proof.index("@[step] theorem wots_secret_spec")] + "\nend Extracted.Equiv\n"
+    if family == "chain":
+        proof = proof[:proof.index("theorem wots_keygen_loop_spec")] + "\nend Extracted.Equiv\n"
     if family in ("body", "loop"):
         proof = proof[:proof.index("/-- Every input completes")] + "\nend Extracted.Equiv\n"
     declaration = source[start:end]

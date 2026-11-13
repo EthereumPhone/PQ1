@@ -15,10 +15,12 @@ FAMILIES = {
         ("leaf-count", "1#usize <<< params.A", "3#usize <<< params.A"),
         ("first-leaf", "{ start := 0#usize, «end» := n_leaves }", "{ start := 1#usize, «end» := n_leaves }"),
         ("returned-secret-input", "hash.fors_secret sk_seed ht_idx tree_idx leaf_idx", "hash.fors_secret sk_seed ht_idx tree_idx 0#u32"),
-        ("leaf-secret-seed", "hash.fors_secret sk_seed ht_idx tree_idx i", "hash.fors_secret seed ht_idx tree_idx i"),
-        ("leaf-hypertree", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2", "address.make_adrs 0#u32 0#u64 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2"),
-        ("leaf-tree", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE 0#u32 0#u32 0#u32 i2"),
-        ("leaf-domain", "address.make_adrs 0#u32 i1 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i2", "address.make_adrs 0#u32 i1 2#u32 tree_idx 0#u32 0#u32 i2"),
+        # The leaf is now `hash.fors_leaf` (fors_secret -> pad16 -> th, research
+        # refactor); its secret seed is mutated at the call site.
+        ("leaf-secret-seed", "hash.fors_leaf seed sk_seed leaf_adrs ht_idx tree_idx i2", "hash.fors_leaf seed seed leaf_adrs ht_idx tree_idx i2"),
+        ("leaf-hypertree", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1", "address.make_adrs 0#u32 0#u64 params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1"),
+        ("leaf-tree", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE 0#u32 0#u32 0#u32 i1"),
+        ("leaf-domain", "address.make_adrs 0#u32 i params.ADRS_FORS_TREE tree_idx 0#u32 0#u32 i1", "address.make_adrs 0#u32 i 2#u32 tree_idx 0#u32 0#u32 i1"),
         ("merge-condition", "if i1 = node_h", "if i1 ≠ node_h"),
         ("parent-height", "tree_idx 0#u32 i2\n          parent_idx", "tree_idx 0#u32 node_h\n          parent_idx"),
         ("parent-index", "let i3 ← j >>> i2", "let i3 ← j >>> node_h"),
