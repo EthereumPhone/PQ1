@@ -54,6 +54,9 @@ v2 = []
 # RESEARCH (#1155): v2 on fused one-block driver entries (`pqsigner-hw/v2`): chain, PRF+chain,
 # node, FORS leaf, count search. The linking binary must provide `pqsigner_v2_*`.
 v2-fused = ["v2", "hw-sha256-oneshot"]
+# MEASUREMENT ONLY (spec §6, #1158): PRF value in the last FORS slot instead of tree 12's root.
+# Changes signature bytes (not keys); the verifier is unchanged. Not adopted.
+v2-fors-last-prf = ["v2"]
 
 # Re-export otherwise-`pub(crate)` internals (PRF, ADRS, digest, FORS tree
 # helpers) under `sphincs_c10::sim_internals`, for the security-regression

@@ -249,7 +249,13 @@ fn sign_inner(
     }
 
     // Last tree (forced-zero): the "secret" is the tree root
+    #[cfg(not(feature = "v2-fors-last-prf"))]
     let last_root = fors::compute_fors_root(&seed, sk_seed, ht_idx, (K - 1) as u32);
+    // MEASUREMENT ONLY (spec §6, #1158; not adopted, changes signature bytes):
+    // the slot carries leaf 0's PRF value of tree 12 instead of the whole tree's
+    // root. Deterministic per ht_idx; the verifier only computes F over it.
+    #[cfg(feature = "v2-fors-last-prf")]
+    let last_root = crate::hash::fors_secret(sk_seed, ht_idx, (K - 1) as u32, 0);
     set_row(&mut fors_secrets, K - 1, last_root);
     let last_leaf_adrs =
         crate::address::make_adrs(0, u64::from(ht_idx), ADRS_FORS_TREE, (K - 1) as u32, 0, 0, 0);

@@ -19,6 +19,8 @@ no-busy-wait = ["pqsigner-hw/no-busy-wait"]
 hra-ldm = ["pqsigner-hw/hra-ldm"]
 # Track B (#1148): keygen fills + confirms the top-layer cache; every sign goes through it.
 topcache = ["sphincs-c10/top-cache"]
+# MEASUREMENT ONLY: spec §6 PRF value in the last FORS slot (signature bytes change).
+forslastprf = ["sphincs-c10/v2-fors-last-prf"]
 
 [dependencies]
 # The secure image's hashing configuration (secure/Cargo.toml feature `hw-sha256`, minus the

@@ -454,3 +454,11 @@ The release `assert!` in `pack` costs about 0.3 M in keygen and about 16 k in ve
 
 - **Size of the win:** about 3× the round-5 estimate (≈ −1.5 M). The per-chain Rust path (`set_chain_index` on a 32-byte ADRS, `a7_of` parsing it back, two `pack`s with release asserts, the call) cost about 100 cycles per chain, × 44 k chains per pass.
 - **Against v1's fused head:** −35.2% (plain), −55.1% (with the cache).
+
+### H3: PRF value in the last FORS slot (spec §6, #1158), measured, NOT adopted
+
+- **The variant:** feature `v2-fors-last-prf` (measurement only). The slot carries `fors_secret(sk_seed, ht_idx, 12, 0)` instead of the root of a fully built tree 12. Deterministic per `ht_idx`, and the verifier is unchanged.
+- **Kit:** all 16 variant signatures verify on the device.
+- **Why the measured mean (−1.79 M) is not the saving:** the slot value enters the FORS public key, which every WOTS+C grind hashes, so the counts change. The per-message delta spreads from −14.9 to +17.3 M: grind luck, not a saving.
+- **The deterministic saving** is one full FORS tree per pass: 6,142 digests, about 0.94 M from the subtree entry's measured per-tree cost, i.e. about 1.3% of the current pass.
+- **Adoption needs:** the owner's decision plus a review against the FORS+C argument (spec §6), and new KATs and golden, since signature bytes change.
