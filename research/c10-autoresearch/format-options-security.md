@@ -235,7 +235,7 @@ Every constant in those formulas is a proved hash-call budget or a proved univer
 - the target sum gives the accepted-encoding count A;
 - each layer's signing cost contains one subtree build, `303·2^h − 1` calls (`DomainLayerCost.ec`); the rest of the layer cost is affine in h, and the heights sum to 18 either way;
 - keygen is one build of the top layer;
-- the WOTS cut universe is `8 · 301 · (2^18 + 2^h_top)` (`WotsCoordinateUniverse.ec`);
+- the WOTS charge is `8 · 301 · (2^18 + 2^h_top)`: the cut universe is 301 per key (`WotsCoordinateUniverse.ec`), times the chain-vector guess multiplier 8 (`ChainCandidateMass.ec`);
 - the FORS universe, the coverage term, verify's 771 calls and the accepted-call caps do not change.
 
 **The anchor.** With v1's parameters, the script reproduces both project evaluators exactly, as rationals, term by term, at five cap pairs: `tools/wots_pool_examples.py` (ordinary and wrapper pool) and `tools/wrapper_nonnode_examples.py`. It asserts this before printing.
@@ -256,7 +256,9 @@ Every constant in those formulas is a proved hash-call budget or a proved univer
 
 **What this does not establish:**
 - The theorems are proved for v1's byte format: 32-byte seed blocks, width- and offset-based domain separation, and v1's FORS_LAST tweak sharing. For every v2 variant, 0.3 included, the table shows what the bound becomes *if* the proof ports with the same charge structure. It is not a proof about v2; porting the byte model to the one-block A7 encoding is the "re-run proofs" cost of adopting v2.
-- prf2's "no constant changes" holds in the ideal model only. A port has to re-prove that the private table keeps its distribution when one oracle output supplies two secrets. Length extension lies outside the ideal model; §2 and `format_options_checks.py` B cover the real-SHA-256 condition.
+- The checked programs hard-code 512-leaf, 9-level trees. The (8, 10) constants are derived from the cost decomposition and are not proved for asymmetric heights; the refined candidate exclusions (`LeafGrindingCandidates.ec`, `NodeQueryDomain.ec`) also depend on v1's byte layout.
+- prf2 changes no numerical constant: the secret-prefix hop charges public queries. The private memo table, however, stores one full digest per input, and under prf2 two secrets share an entry, which the chain-vector install overwrites whole. A port has to re-prove paired-coordinate indexing and that programming and disclosure preserve the sibling half. Length extension lies outside the ideal model; §2 and `format_options_checks.py` B cover the real-SHA-256 condition.
+- Astra reviewed the derivation read-only against the `.ec` sources. It found no arithmetic defect, confirmed the decomposition (no hidden 2^h term in recovery, shuffle or the auth path) and reproduced the split810 factors (×1.21279 ordinary, ×1.21263 wrapper). The three caveats above are its findings.
 - The fault-case margins (§1) and cross-format reuse (§4) are outside the bound: the theorem assumes one honest format and no faults.
 
 ## 9. Not done

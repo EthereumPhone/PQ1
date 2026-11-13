@@ -20,9 +20,12 @@ same formula can be evaluated for a variant:
                                   merkle build = q+155135 at h = 9; per-layer sign
                                   = build + 1 + 305 + (303 + h); recover = 303 + h)
                                   keygen = build(h_top)                (FullSessionCost: 155135)
-                                  WOTS cut universe = 8 * 301 * (2^18 + 2^h_top)
-                                                                       (WotsCoordinateUniverse:
-                                                                        2^18 + 512 keys, 43*7 cuts)
+                                  WOTS charge = 8 * 301 * (2^18 + 2^h_top): the cut
+                                                                       universe is 301 * keys
+                                                                       (WotsCoordinateUniverse: 2^18 + 512
+                                                                       keys, 43*7 cuts); the 8 is the
+                                                                       chain-vector guess multiplier
+                                                                       (ChainCandidateMass)
   FORS universe 2^18 * 12 * 2^11, coverage (18-bit / 11-bit / 12 trees), verify 771,
   exceptional R = qr + 2qs + 771, accepted-call caps: unchanged by every variant here.
 
@@ -33,11 +36,16 @@ printing anything else.
 SCOPE (read before quoting): the theorems are proved for v1's byte format. For any
 v2 variant, draft 0.3 included, this is the same formula with re-derived
 constants, i.e. what the bound becomes IF the proof ports with the same charge
-structure. It is not a proof about v2. prf2 changes no constant: in the ideal
-model the two halves of one uniform 256-bit output are independent uniform
-128-bit secrets, so the private table has the same distribution (argued, not
-proved), and length extension is outside the ideal model (see
-format_options_checks.py B for the real-SHA-256 condition).
+structure. It is not a proof about v2: the refined candidate exclusions
+(LeafGrindingCandidates, NodeQueryDomain) depend on v1's byte layout, and the
+checked programs hard-code 512-leaf, 9-level trees, so (8, 10) needs
+generalized-height statements. prf2 changes no numerical constant (the
+secret-prefix hop charges public queries), but the private memo table stores one
+full digest per input and prf2 makes two secrets share an entry, so a port must
+re-prove paired-coordinate indexing, sibling-preserving programming and
+disclosure (argued, reviewer-confirmed as conditional). Length extension is
+outside the ideal model (see format_options_checks.py B for the real-SHA-256
+condition).
 
 Run: python3 bound_variants.py
 """
