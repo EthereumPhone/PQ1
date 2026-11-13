@@ -65,8 +65,8 @@ def split810(b):
     b = sub(b, "            // A7 = type<<52 | layer<<51 | tree<<33 | kp<<24 | ci<<18 | cp<<12 | ha<<1 (spec §1).",
             "            // A7 (variant split810) = type<<52 | layer<<51 | tree<<33 | kp<<23 | ci<<17 | cp<<12 | ha<<1:\n"
             "            // kp widens to 10 bits (32..23), ci moves to 22..17; every other field as spec §1.")
-    b = sub(b, "let base := or(or(shl(52, 3), shl(33, htIdx)), shl(24, i))",
-            "let base := or(or(shl(52, 3), shl(33, htIdx)), shl(23, i))")
+    b = sub(b, "                base := add(base, shl(24, 1))\n",
+            "                base := add(base, shl(23, 1)) // split810: kp at A7 bit 23\n")
     b = sub(b, """                let idxLeaf := and(idxTree, 0x1FF)
                 idxTree := shr(9, idxTree)
                 let kpBase := or(or(shl(51, layer), shl(33, idxTree)), shl(24, idxLeaf))""",

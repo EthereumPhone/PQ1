@@ -47,11 +47,10 @@ def fors():
     o = [f"{I}// BEGIN generated FORS walk (research/c10-gas/gen_v2_walks.py; do not edit by hand)",
          f"{I}let t := treeIdx"] + [I + l for l in LANES] + [
         f"{I}pop(staticcall(gas(), 0x02, 0x00, 39, {gen_slot(0)}, 16)) // the leaf, at its slot",
-        f"{I}mstore(0x30, shl(200, base)) // A7 bytes 0..4 for all 11 levels",
-        f"{I}let authPtr := add(sigBase, add(224, mul(i, 176)))"]
+        f"{I}mstore(0x30, shl(200, base)) // A7 bytes 0..4 for all 11 levels"]
     for h in range(1, 11):
         o += level(I, h, "authPtr", gen_slot(h))
-    o += level(I, 11, "authPtr", "add(TB, add(24, shl(4, i)))")  # the root, into T_13 slot i
+    o += level(I, 11, "authPtr", "rootSlot")  # the root, into T_13 slot i
     o.append(f"{I}// END generated FORS walk")
     return "\n".join(o) + "\n"
 

@@ -61,11 +61,24 @@ contract SPHINCsC10v2Split810Asm {
             // FORS roots straight into the T_13 buffer: S || A7(4, tree=ht) || 0x00 || r_0..r_12.
             mstore(TB, pkSeed)
             mstore(add(TB, 0x10), shl(200, or(shl(52, 4), shl(33, htIdx))))
-            for { let i := 0 } lt(i, 12) { i := add(i, 1) } {
-                let treeIdx := and(shr(mul(i, 11), digest), 0x7FF)
-                let base := or(or(shl(52, 3), shl(33, htIdx)), shl(23, i))
+            // Tree i = 0..11, strength-reduced: dg = digest >> 11 i (its low 11 bits are tree i's leaf
+            // index), base = A7 of tree i at cp = ha = 0 (kp = i), secret / auth path / T_13 slot by
+            // running pointers (16, 176 and 16 bytes per tree).
+            let dg := digest
+            let base := or(shl(52, 3), shl(33, htIdx))
+            let secretPtr := add(sigBase, 16)
+            let authPtr := add(sigBase, 224)
+            let rootSlot := add(TB, 24)
+            for { } lt(rootSlot, add(TB, 216)) {
+                dg := shr(11, dg)
+                base := add(base, shl(23, 1)) // split810: kp at A7 bit 23
+                secretPtr := add(secretPtr, 16)
+                authPtr := add(authPtr, 176)
+                rootSlot := add(rootSlot, 16)
+            } {
+                let treeIdx := and(dg, 0x7FF)
                 // leaf F: S || secret || A7(3, ht, kp=i, ha=leaf)
-                mstore(0x10, calldataload(add(sigBase, add(16, shl(4, i))))) // low half: next store
+                mstore(0x10, calldataload(secretPtr)) // low half: next store
                 mstore(0x20, shl(200, or(base, shl(1, treeIdx))))
                 // In-place auth walk: every node is written (16 bytes) straight into its half of
                 // the next H preimage S || L16 || R16 || A7, left at 0x10 if its index is even,
@@ -79,7 +92,6 @@ contract SPHINCsC10v2Split810Asm {
                 let slots := sub(add(sbit, 0x2010201020102010201020102010201020102010201000000000000000000000), shl(8, sbit)) // C10-LANES
                 pop(staticcall(gas(), 0x02, 0x00, 39, byte(1, slots), 16)) // the leaf, at its slot
                 mstore(0x30, shl(200, base)) // A7 bytes 0..4 for all 11 levels
-                let authPtr := add(sigBase, add(224, mul(i, 176)))
                 calldatacopy(byte(0, slots), add(authPtr, 0), 16)
                 mstore(0x35, shl(0, cpha))
                 pop(staticcall(gas(), 0x02, 0x00, 55, byte(3, slots), 16))
@@ -112,7 +124,7 @@ contract SPHINCsC10v2Split810Asm {
                 pop(staticcall(gas(), 0x02, 0x00, 55, byte(21, slots), 16))
                 calldatacopy(byte(20, slots), add(authPtr, 160), 16)
                 mstore(0x35, shl(160, cpha))
-                pop(staticcall(gas(), 0x02, 0x00, 55, add(TB, add(24, shl(4, i))), 16))
+                pop(staticcall(gas(), 0x02, 0x00, 55, rootSlot, 16))
                 // END generated FORS walk
             }
             {
