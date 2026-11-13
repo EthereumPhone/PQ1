@@ -4,7 +4,7 @@ set -u
 D="$(cd "$(dirname "$0")" && pwd)"; cd "$D"; mkdir -p out
 CRATE=bench_v1micro LIBNAME=c10_bench_v1micro LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN ${EXP_CFLAGS--DICACHE_2WAY}" ./build_any.sh out/v1micro.elf > out/v1micro-build.log 2>&1 || { echo '{"ok": false, "why": "build failed"}'; exit 2; }
 timeout 600 bash harness/run_flash.sh out/v1micro.elf 0x30000000 96 300 > out/v1micro-run.log 2>&1
-python3 - out/v1micro.elf.openocd.log <<'PY'
+python3 - out/v1micro.elf.openocd.log "${BENCH_FEATURES:-}" <<'PY'
 import json, sys
 L = open(sys.argv[1]).read().splitlines()
 w = next(([int(x, 16) for x in l.split()[1:]] for l in L if l.startswith('RESULT_WORDS 0x')), None)
@@ -23,7 +23,11 @@ c, d = q(14); r['search128_205_per_try'] = round(c / d, 1) if d else None; r['se
 c, d = q(16); r['th_multi16_43_per_call'] = round(c / d, 1)
 c, d = q(18); r['grind_per_nonce'] = round(c / d, 1) if d else None; r['grind_nonces'] = d
 c, d = q(20); r['residue_cases'] = c; r['residue_mask'] = hex(d)
-if c != 7 or d != 0: r['ok'] = False
+# Round 14: a `residue-control` build runs two positive controls after the 7 cases (both must fire, the
+# 7 cases must stay clean); every other check above and below still has to pass.
+control = 'residue-control' in sys.argv[2].split(',')
+r['residue_control'] = control
+if (c, d) != ((9, 0x180) if control else (7, 0)): r['ok'] = False
 c, d = q(22); r['node16'] = round(c / d, 1)
 c, d = q(24); r['fors_leaf16'] = round(c / d, 1)
 c, d = q(26); r['keycheck_keys'] = c; r['keycheck_bad'] = d

@@ -46,6 +46,7 @@ r = dict(v1_cases=v1.get('residue_cases'), v1_mask=v1.get('residue_mask'),
          v2_cases=v2['cases'], v2_mask=hex(v2['mask']), v2_control=(v2c['cases'], hex(v2c['mask'])),
          product_cases=pr['cases'], product_mask=hex(pr['mask']), product_control=(prc['cases'], hex(prc['mask'])))
 r['ok'] = (bool(v1.get('ok')) and v1.get('residue_cases') == 7 and v1.get('residue_mask') == '0x0'
+           and bool(v1c.get('ok')) and v1c.get('residue_control') is True
            and v1c.get('residue_cases') == 9 and v1c.get('residue_mask') == '0x180'
            and v2['ok_run'] and v2['cases'] == 9 and v2['mask'] == 0
            and v2c['ok_run'] and v2c['cases'] == 11 and v2c['mask'] == 0x600
