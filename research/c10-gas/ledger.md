@@ -31,3 +31,23 @@ execution (v2 30,912; v1 37,656) = 67,012 (v2) / 73,756 (v1). Interpreter overhe
   result-only differential cannot see.
 
 ## Experiments
+
+Deploy profile (runs=999999, the production build; separate build dir): v1 164,847 / 1,889 B,
+v2 148,387 / 1,804 B callee-only. Keeps are judged on both columns.
+
+Phase profile (v2 ref, default profile, from the +C near-misses n0/n1/n2 and a valid KAT):
+H_MSG + checks 1,042; FORS (146 hashes) + layer-0 digest + digit sum 69,055; layer-0 chains/T_43/
+Merkle + layer-1 digest + sum 45,537; layer-1 rest + root compare 41,962. FORS overhead is about
+40k over its 146 hashes (~275 gas per hash), the largest share.
+
+Gas-starved precompile calls (relevant to every "write the output in place" change): a STATICCALL
+to 0x02 fails only if the forwarded gas (all but 1/64 of what is left) is below the precompile
+cost, at most 336 (v2 T_43) or 600 (v1 T_43). The frame then holds at most floor(g/64) <= 9 gas,
+and every call site is followed by more than 9 gas of work before any RETURN/REVERT, so a failed
+hash always ends in out-of-gas in both reference and candidate; stale memory never reaches a
+result. Re-checked per call site after each restructure. The gas threshold between success and
+out-of-gas moves, as with any optimization.
+
+| # | experiment | verifier | callee-only before -> after (default) | deploy before -> after | size | gates | decision |
+|---|---|---|---|---|---|---|---|
+| E1 | SWAR digit sum: 43-iteration loop -> 3 masks + adds + 1 MUL (exactness argument + unit gate `C10DigitSum.t.sol`, 20k+5k fuzz + structured; text pin) | v2 | 157,585 -> 151,371 (**-6,214**) | 148,387 -> 142,173 (-6,214) | 1,207 -> 1,263 | gate.sh green; controls 15/15 caught + 1 stale (re-targeted) | keep |

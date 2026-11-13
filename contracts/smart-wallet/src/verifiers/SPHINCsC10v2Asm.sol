@@ -99,11 +99,10 @@ contract SPHINCsC10v2Asm {
                 mstore(0x24, shl(200, or(shl(52, 7), kpBase)))
                 pop(staticcall(gas(), 0x02, 0x00, 43, OUT, 32))
                 let d := mload(OUT)
-                // digits as v1 (spec 0.3): the LOW 129 bits, digit i = (d >> 3i) & 7
-                let digitSum := 0
-                for { let ii := 0 } lt(ii, 43) { ii := add(ii, 1) } {
-                    digitSum := add(digitSum, and(shr(mul(ii, 3), d), 0x7))
-                }
+                // digits as v1 (spec 0.3): the LOW 129 bits, digit i = (d >> 3i) & 7, summed
+                // branch-free (exactness argument and unit gate: test/gas/C10DigitSum.t.sol)
+                let lanes := add(add(and(d, 0x1c0e070381c0e070381c0e070381c0e07), and(shr(3, d), 0xe070381c0e070381c0e070381c0e07)), and(shr(6, d), 0xe070381c0e070381c0e070381c0e07)) // C10-SWAR-DIGITSUM
+                let digitSum := and(shr(126, mul(lanes, 0x40201008040201008040201008040201)), 0x1FF) // C10-SWAR-DIGITSUM
                 if iszero(eq(digitSum, 205)) { revert(0, 0) } // WOTS+C target sum
 
                 // chains into the T_43 buffer: S || A7(1, layer, tree, kp) || 0x00 || v_0..v_42
