@@ -2732,7 +2732,7 @@ fn v2_digit_sum(w: &[u32; 5]) -> u32 {
 /// digits 0..31. Differences are only in schedule: HR3..HR7 in one `ldm`, `S‖m`
 /// via two `ldm`, the digit sum in the next try's engine window, a timed first poll.
 #[cfg(feature = "v2-asm-search")]
-const V2_ASM_SEARCH_SPIN: u32 = 1;
+const V2_ASM_SEARCH_SPIN: u32 = 2;
 
 #[cfg(all(feature = "v2-asm-search", not(all(feature = "tick-hook", not(feature = "tick-batch")))))]
 macro_rules! v2_search_issue {

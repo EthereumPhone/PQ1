@@ -775,3 +775,9 @@ Gate 5 is now 2,523/0. Mutant: the straddling-digit field `bfi r11, r2, #1, #2` 
 - gate 5: prf2 2,523/0, split810 2,530/0, prf2+split810 2,530/0.
 
 **Search asm stack:** now pushes 6 words, so `sp` stays 8-byte aligned at the `bl` to the fault hook.
+
+**Final head after the follow-ups:**
+- The 6-word push and the follow-up edits moved the search's best timed spin from 1 to 2, costing about 2 cycles per try (114 → 116; real target 115.1 → 117.1). Aligning the loop head (`.p2align 2`) made no difference, so it is not used.
+- **16-message mean:** sign **60.21 M (−8.2% vs 65.59 M at round start)**, keygen 19.69 M, verify 119.2k, est. cached sign 0.753 s (raw mean, not luck-corrected).
+- **Gates:** gate 5 2,523/0; stale-search control fires; kit golden; golden + cache (3 hits, m0 0.4835 s single message).
+- **The spin constants are phase-sensitive to code layout:** any edit near these loops needs a re-sweep.
