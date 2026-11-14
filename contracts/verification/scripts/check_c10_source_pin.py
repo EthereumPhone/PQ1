@@ -4,7 +4,8 @@ check_c10_source_pin.py — byte-pin for the A3.1 in-kernel parse theorem's SOUR
 
 The Lean module `lean/SphincsCVerify/Interpreter/C10Source.lean` embeds the
 deployed verifier's assembly interior — EXACTLY lines 37-230 of
-`contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` — as a raw string
+`contracts/smart-wallet/test/ref/RefSPHINCsC10Asm.sol` (the frozen copy of the deployed
+reference; `src/` now holds the optimized v1) — as a raw string
 literal `c10Source`. The kernel theorem `parse_c10 : parseYul c10Source = some
 c10ProgramFull` (Interpreter/C10Parse.lean, local `make verify-parse-transcription`)
 binds that LITERAL to the AST; THIS script binds the literal to the FILE:
@@ -32,7 +33,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 VERIF = HERE.parent
-SOL = VERIF.parent / "smart-wallet" / "src" / "verifiers" / "SPHINCsC10Asm.sol"
+SOL = VERIF.parent / "smart-wallet" / "test" / "ref" / "RefSPHINCsC10Asm.sol"
 LEAN = VERIF / "lean" / "SphincsCVerify" / "Interpreter" / "C10Source.lean"
 
 # 1-indexed inclusive line range of the assembly-block INTERIOR (not the

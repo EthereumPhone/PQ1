@@ -57,7 +57,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 VERIF = HERE.parent
-SOL = VERIF.parent / "smart-wallet" / "src" / "verifiers" / "SPHINCsC10Asm.sol"
+# the frozen copy of the deployed reference (src/ now holds the optimized v1)
+SOL = VERIF.parent / "smart-wallet" / "test" / "ref" / "RefSPHINCsC10Asm.sol"
 LEAN = VERIF / "lean" / "SphincsCVerify" / "Interpreter" / "C10Program.lean"
 
 # (N1) error-string mstores elided (same set as check_c10_transcription.py's

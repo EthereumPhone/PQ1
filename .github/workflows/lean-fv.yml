@@ -49,6 +49,11 @@ on:
       - 'sphincs-c10/src/address.rs'
       - 'sphincs-c10/src/params.rs'
       - 'sphincs-c10/tests/easycrypt_transcript.rs'
+      # Optimized v1 source <-> Lean literals (verify-head-transcription, 2026-11-14): the
+      # source, the generator and its printer; the C10Head* literals are under lean/**.
+      - 'contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol'
+      - 'research/c10-gas/gen_lean_head.py'
+      - 'research/c10-gas/lean/PrintHead.lean'
   pull_request:
     paths:
       - 'contracts/verification/lean/**'
@@ -67,6 +72,10 @@ on:
       - 'sphincs-c10/src/address.rs'
       - 'sphincs-c10/src/params.rs'
       - 'sphincs-c10/tests/easycrypt_transcript.rs'
+      # Optimized v1 source <-> Lean literals (verify-head-transcription) — see above.
+      - 'contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol'
+      - 'research/c10-gas/gen_lean_head.py'
+      - 'research/c10-gas/lean/PrintHead.lean'
 
 permissions:
   contents: read
@@ -111,6 +120,12 @@ jobs:
             lean-fv-lake-
       - name: lake build SphincsCVerify (0 errors / 0 sorry)
         run: cd contracts/verification/lean && lake build SphincsCVerify
+      - name: verify-head-transcription (optimized v1 source <-> C10Head* literals)
+        # The relational end theorems (RelFors.head_verdict_eq_full / execC10HeadAsm_eq) are
+        # about the literal c10HeadProgram; this regenerates it from
+        # contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol and compares (gen_lean_head.py
+        # --check, after building C10HeadSource + C10HeadParse). Fails on a stale literal.
+        run: make -C contracts/verification verify-head-transcription
       - name: verify-fv-lints (axiom-closure exact-set + opaque-guard + escape-hatch)
         run: make -C contracts/verification verify-fv-lints
       - name: verify-audit (sorry count + #print axioms dump)

@@ -1,7 +1,10 @@
 name: A3.1 transcription lint
 
 # Dedicated gate for the A3.1 hand-transcription residual: the deployed verifier
-# SOURCE (SPHINCsC10Asm.sol) and its Lean transcription (c10Program) must not drift.
+# SOURCE (SPHINCsC10Asm.sol; since 2026-11-14 its frozen copy
+# contracts/smart-wallet/test/ref/RefSPHINCsC10Asm.sol, because src/ holds the optimized v1,
+# whose own source leg is verify-head-transcription in lean-fv.yml) and its Lean
+# transcription (c10Program) must not drift.
 # This MUST run whenever EITHER side changes. The main `ci.yml` workflow is
 # unfiltered today; this dedicated workflow keeps a POSITIVE `paths:` filter so
 # the lint continues to fire exactly when transcription drift is possible even
@@ -28,7 +31,7 @@ on:
   push:
     branches: [master]
     paths:
-      - 'contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol'
+      - 'contracts/smart-wallet/test/ref/RefSPHINCsC10Asm.sol'
       - 'contracts/verification/lean/SphincsCVerify/Interpreter/C10Program.lean'
       - 'contracts/verification/scripts/check_c10_transcription.py'
       - 'contracts/verification/scripts/check_c10_transcription_ast.py'
@@ -43,7 +46,7 @@ on:
       - '.github/workflows/a31-transcription.yml'
   pull_request:
     paths:
-      - 'contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol'
+      - 'contracts/smart-wallet/test/ref/RefSPHINCsC10Asm.sol'
       - 'contracts/verification/lean/SphincsCVerify/Interpreter/C10Program.lean'
       - 'contracts/verification/scripts/check_c10_transcription.py'
       - 'contracts/verification/scripts/check_c10_transcription_ast.py'

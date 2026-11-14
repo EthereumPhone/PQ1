@@ -4,7 +4,8 @@ check_c10_transcription.py — positional transcription-fidelity lint for A3.1.
 
 Cross-checks the hand transcription `c10Program`
 (lean/SphincsCVerify/Interpreter/C10Program.lean) against the deployed verifier
-SOURCE (smart-wallet/src/verifiers/SPHINCsC10Asm.sol) — the single residual the
+SOURCE (smart-wallet/test/ref/RefSPHINCsC10Asm.sol, the frozen copy of the deployed
+reference; `src/` now holds the optimized v1) — the single residual the
 Lean kernel proof `execC10Asm_eq` CANNOT see (it relates c10Program <-> spec,
 never c10Program <-> .sol). This converts the one-time human diff (see
 docs/findings/A3_1_ADVERSARIAL_REVIEW_2026-06-18.md) into a re-runnable CI regression gate.
@@ -62,7 +63,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 VERIF = HERE.parent
-SOL = VERIF.parent / "smart-wallet" / "src" / "verifiers" / "SPHINCsC10Asm.sol"
+SOL = VERIF.parent / "smart-wallet" / "test" / "ref" / "RefSPHINCsC10Asm.sol"
 LEAN = VERIF / "lean" / "SphincsCVerify" / "Interpreter" / "C10Program.lean"
 
 # Lines of the .sol error-string revert body (4 mstores + the revert with its

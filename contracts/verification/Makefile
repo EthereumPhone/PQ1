@@ -297,7 +297,7 @@ override _FV_EVIDENCE_TARGETS := \
 	verify-verus verify-crux-ns-ptr verify-easycrypt verify-easycrypt-full \
 	verify-easycrypt-pins verify-easycrypt-split-pins verify-easycrypt-split verify-easycrypt-docker verify-forsc-margin \
 	verify-proof-mutation verify-lean4checker verify-kontrol verify-halmos \
-	verify-bulk verify-interp verify-transcription verify-parse-transcription \
+	verify-bulk verify-interp verify-transcription verify-parse-transcription verify-head-transcription \
 	verify-independent-signer verify-primitive-kat verify-cavp verify-build \
 	verify-audit verify-three-claims verify-exec-gate verify-bytecode-setup \
 	verify-bytecode verify-clean verify-extraction-freshness \
@@ -699,7 +699,8 @@ verify-interp: ## A3.1 interpreter<->bytecode KAT+bulk replay
 
 # A3.1 transcription-fidelity lint (POSITIONAL). Cross-checks the hand transcription
 # c10Program (lean/SphincsCVerify/Interpreter/C10Program.lean) against the deployed
-# verifier SOURCE (../smart-wallet/src/verifiers/SPHINCsC10Asm.sol) — the single
+# verifier SOURCE, frozen at ../smart-wallet/test/ref/RefSPHINCsC10Asm.sol since src/ holds
+# the optimized v1 (2026-11-14; the v1 source has its own leg, verify-head-transcription) — the single
 # residual the kernel proof `execC10Asm_eq` cannot see (it relates c10Program<->spec,
 # never c10Program<->.sol). Three checks: (A) POSITIONAL constant cross-check per the
 # `-- L<n>` anchors (catches a constant in the WRONG fragment — a cross-fragment swap —
@@ -730,6 +731,18 @@ verify-transcription: ## A3.1 c10Program <-> .sol transcription checks (position
 	@# docs/verification/fv-pilot-signed-digest-correspondence-2026-07-16.md.
 	@$(_FV_PYTHON3) scripts/check_sphincs_digest_field_order.py --self-test
 	@$(_FV_PYTHON3) scripts/check_sphincs_digest_field_order.py
+
+# Optimized v1 (HEAD) source <-> Lean literals (landed 2026-11-14, #1155). The relational end
+# theorems RelFors.head_verdict_eq_full / RelFors.execC10HeadAsm_eq are about the literal
+# `c10HeadProgram`; this binds it to ../smart-wallet/src/verifiers/SPHINCsC10Asm.sol.
+# research/c10-gas/gen_lean_head.py --check asserts C10HeadSource == the source's assembly
+# interior byte for byte, and C10HeadProgram == what the Lean parser prints for it. The printer
+# reads the BUILT C10HeadSource, so the target builds first; the build also kernel-checks
+# C10HeadParse.parse_c10_head (literal <-> AST). A regression gate on the source <-> model leg,
+# not a proof of the solc compile leg.
+verify-head-transcription: ## Optimized v1: src SPHINCsC10Asm.sol <-> C10HeadSource/C10HeadProgram (regenerate + compare) + kernel parse
+	@cd $(LEAN_DIR) && $(LAKE) build SphincsCVerify.Interpreter.C10HeadSource SphincsCVerify.Interpreter.C10HeadParse
+	@$(_FV_PYTHON3) ../../research/c10-gas/gen_lean_head.py --check
 
 # A3.1 R1a IN-KERNEL parser leg (2026-07-04). Lake-builds the Lean Yul-subset
 # parser (Interpreter/YulParse.lean), the pinned byte-exact source + faithful
