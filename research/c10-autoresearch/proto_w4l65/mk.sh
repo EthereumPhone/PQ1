@@ -10,13 +10,27 @@ rsync -a --exclude target "$D/bench_v2/" "$P/bench_v2/"
 rsync -a --exclude target "$R/hw/" "$P/hw/"
 rsync -a --exclude target "$D/bench_v2f/" "$P/bench_v2f/"
 rsync -a --exclude target "$D/bench_avg_v2f/" "$P/bench_avg_v2f/"
+rsync -a --exclude target "$R/domain/" "$P/domain/"
 cp "$D/harness/run_flash.sh" "$P/run_flash_sig.sh"; cp "$D/evaluate.py" "$P/evaluate_sig.py"; cp "$D/harness/run_profile.sh" "$P/run_profile_sig.sh"
-cp "$R/Cargo.lock" "$P/sphincs-c10/Cargo.lock"
+cp "$R/Cargo.lock" "$P/sphincs-c10/Cargo.lock"; cp "$R/Cargo.lock" "$P/domain/Cargo.lock"
 python3 "$D/proto_w4l65/apply.py" "$P"
 # Rust == Python (c10v2_ref.py --variant w4l65) KATs and +C near-misses; draft 0.3 KATs with the flag off
 ( cd "$P/sphincs-c10" && CARGO_TARGET_DIR=../tgt-kat cargo test --offline --release --features v2,v2-w4l65 --test v2_kat -q )
 ( cd "$P/sphincs-c10" && CARGO_TARGET_DIR=../tgt-kat0 cargo test --offline --release --features v2 --test v2_kat -q )
 ( cd "$P/sphincs-c10" && CARGO_TARGET_DIR=../tgt-katc cargo test --offline --release --features v2,v2-wprf2b --test v2_kat -q )
+# round 17, gate (d): the stock domain suite (every pinned recovery / tag vector) with format-kdf off, unchanged;
+# then the format tests once per format; then the two refusals (v2 without format-kdf, format-kdf on v1)
+( cd "$P/domain" && CARGO_TARGET_DIR=../tgt-dom cargo test --offline --release -q )
+for f in v2 w4l65 wprf2b w4l65,wprf2b ts200 prf2 split810 ts200,prf2,split810 forslastprf; do
+  ( cd "$P/domain" && CARGO_TARGET_DIR=../tgt-dom cargo test --offline --release -q --features format-kdf,$f --test format_kdf )
+done
+for ctl in "v2:must bind its format" "format-kdf:binds v2 formats only"; do
+  if out=$(cd "$P/domain" && CARGO_TARGET_DIR=../tgt-dom cargo check --offline -q --features "${ctl%%:*}" 2>&1); then
+    echo "CONTROL FAILED: --features ${ctl%%:*} compiled"; exit 1; fi
+  echo "$out" | grep -q "${ctl#*:}" || { echo "CONTROL FAILED for the wrong reason: ${ctl%%:*}"; echo "$out" | tail -5; exit 1; }
+  echo "control ok: --features ${ctl%%:*} refused (${ctl#*:})"
+done
+python3 "$D/proto_w4l65/plants_d.py" "$P"
 # exact SHA-256 digest counts (software hooks) and the kit golden
 ( cd "$P/host_v2" && CARGO_TARGET_DIR=../tgt cargo build --offline --release -q && CARGO_TARGET_DIR=../tgt-w4 cargo build --offline --release -q --features w4l65 )
 "$P/tgt/release/c10-ar-host" write "$P/golden-d03.bin"; cmp "$P/golden-d03.bin" "$D/golden-v2.bin"

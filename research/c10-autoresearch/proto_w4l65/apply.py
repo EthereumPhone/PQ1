@@ -382,4 +382,267 @@ for b in ("bench_v2f", "bench_avg_v2f"):
 edit("bench_v2/Cargo.toml", [('w4l65 = ["sphincs-c10/v2-w4l65"]', 'w4l65 = ["sphincs-c10/v2-w4l65"]\nwprf2b = ["sphincs-c10/v2-wprf2b"]')])
 edit("host_v2/Cargo.toml", [('w4l65 = ["sphincs-c10/v2-w4l65"]', 'w4l65 = ["sphincs-c10/v2-w4l65"]\nwprf2b = ["sphincs-c10/v2-wprf2b"]')])
 print(f"gate (c): replaced {n_ka} v2-asm-key-ga predicates")
+
+# ── 7. round 17, gate (d): the C10 format identifier bound into BOTH key-derivation branches ──────────────────
+# A copy of pqsigner-domain (domain/) against the sphincs-c10 copy. `format-kdf` (off by default) is required
+# by every v2 build and refused by v1 builds, so the stock account-0 / account>0 derivations stay byte-identical.
+open(f"{P}/sphincs-c10/src/params.rs", "a").write('''
+// RESEARCH PROTOTYPE (round 17, gate (d), proto_w4l65 section 7): the format facts key derivation binds. A new
+// format choice (tweak layout, PRF, last FORS slot, digit rule, H_MSG layout) must change one of these values.
+/// 1 = the v1 32-byte-ADRS hash layer; 2 = the v2 one-block A7 layer (spec 0.3, incl. its H_MSG and digit rule).
+pub const FMT_HASH_LAYER: u8 = if cfg!(feature = "v2") { 2 } else { 1 };
+const FMT_KP_BITS: u8 = if cfg!(feature = "v2-split810") { 10 } else { 9 };
+const FMT_CI_BITS: u8 = if cfg!(feature = "v2-w4l65") { 7 } else { 6 };
+/// A7 (width, shift) per field: type, layer, tree, kp, ci, cp, ha; all zero for v1.
+pub const FMT_A7: [u8; 14] = if cfg!(feature = "v2") {
+    [4, 52, 1, 51, 18, 33, FMT_KP_BITS, 33 - FMT_KP_BITS, FMT_CI_BITS, 33 - FMT_KP_BITS - FMT_CI_BITS, 4, 12, 11, 1]
+} else {
+    [0; 14]
+};
+/// WOTS secret PRF: 1 one block, 2 two blocks (`v2-wprf2b`), 3 paired (`v2-prf2`).
+pub const FMT_WOTS_PRF: u8 = if cfg!(feature = "v2-wprf2b") { 2 } else if cfg!(feature = "v2-prf2") { 3 } else { 1 };
+/// FORS secret PRF: 1 one secret per digest, 3 paired (`v2-prf2`).
+pub const FMT_FORS_PRF: u8 = if cfg!(feature = "v2-prf2") { 3 } else { 1 };
+/// Last FORS slot: 1 tree 12's root, 2 a PRF value (`v2-fors-last-prf`).
+pub const FMT_LAST_FORS: u8 = if cfg!(feature = "v2-fors-last-prf") { 2 } else { 1 };
+/// R-candidate PRF: 1 = v1's (`sk_seed ‖ "R_grind" ‖ …`), shared by every format today.
+pub const FMT_R_PRF: u8 = 1;
+''')
+edit("sphincs-c10/src/v2hash.rs", [("""const CI_SHIFT: u32 = KP_SHIFT - CI_BITS;""",
+                                    """const CI_SHIFT: u32 = KP_SHIFT - CI_BITS;
+// the key-derivation format facts (params::FMT_A7) describe this layout exactly
+const _: () = assert!(crate::params::FMT_A7[6] as u32 == KP_BITS && crate::params::FMT_A7[7] as u32 == KP_SHIFT
+    && crate::params::FMT_A7[8] as u32 == CI_BITS && crate::params::FMT_A7[9] as u32 == CI_SHIFT
+    && crate::params::FMT_A7[11] as u32 == CP_SHIFT);""")])
+edit("domain/Cargo.toml", [
+    ("edition.workspace = true", 'edition = "2021"'),
+    ("pqsigner-proto      = { workspace = true }", 'pqsigner-proto      = { path = "../../../../../proto" }'),
+    ('sphincs-tz-bip39    = { workspace = true, features = ["full-wordlist"] }',
+     'sphincs-tz-bip39    = { path = "../../../../../bip39", default-features = false, features = ["full-wordlist"] }'),
+    ("sphincs-c10         = { workspace = true }", 'sphincs-c10         = { path = "../sphincs-c10" }'),
+    ("zeroize = { workspace = true }", 'zeroize = { version = "1.8", default-features = false }'),
+    ("hmac    = { workspace = true }", 'hmac    = { version = "0.12", default-features = false }'),
+    ("hex = { workspace = true }", 'hex = "0.4"'),
+    ("hmac = { workspace = true }", 'hmac = { version = "0.12", default-features = false }'),
+    ('sphincs-tz-bip39 = { workspace = true, features = ["full-wordlist"] }',
+     'sphincs-tz-bip39 = { path = "../../../../../bip39", default-features = false, features = ["full-wordlist"] }'),
+    ("sphincs-c10 = { workspace = true }", 'sphincs-c10 = { path = "../sphincs-c10" }'),
+    ("pqsigner-proto = { workspace = true }", 'pqsigner-proto = { path = "../../../../../proto" }'),
+    ("[lints]\nworkspace = true\n", """[features]
+# RESEARCH PROTOTYPE (round 17, gate (d)): bind the C10 format identifier into both key-derivation branches.
+format-kdf = []
+# pass-throughs, so one crate can be tested against each format
+v2 = ["sphincs-c10/v2"]
+ts200 = ["v2", "sphincs-c10/v2-ts200"]
+prf2 = ["v2", "sphincs-c10/v2-prf2"]
+split810 = ["v2", "sphincs-c10/v2-split810"]
+w4l65 = ["v2", "sphincs-c10/v2-w4l65"]
+wprf2b = ["v2", "sphincs-c10/v2-wprf2b"]
+forslastprf = ["v2", "sphincs-c10/v2-fors-last-prf"]
+
+[workspace]
+"""),
+])
+edit("domain/src/lib.rs", [
+    ("""    let domain: &[u8] = if account_index == 0 {
+        b"sphincs-c6-v1"
+    } else {
+        b"sphincs-c6-v1-acct"
+    };
+    let mut master: [u8; 64] = if account_index == 0 {""",
+     """    #[cfg(feature = "format-kdf")]
+    let mut master: [u8; 64] = bootstrap_master_with_format(&compiled_format_id(), bip39_seed, account_index);
+    #[cfg(not(feature = "format-kdf"))]
+    let domain: &[u8] = if account_index == 0 {
+        b"sphincs-c6-v1"
+    } else {
+        b"sphincs-c6-v1-acct"
+    };
+    #[cfg(not(feature = "format-kdf"))]
+    let mut master: [u8; 64] = if account_index == 0 {"""),
+    ("""#[must_use]
+pub fn slot_master_entropy_from_bip39(
+    bip39_seed: &[u8; 64],
+    account_index: u32,
+) -> [u8; 32] {
+    if account_index == 0 {""",
+     """#[must_use]
+#[cfg_attr(feature = "format-kdf", allow(unreachable_code))]
+pub fn slot_master_entropy_from_bip39(
+    bip39_seed: &[u8; 64],
+    account_index: u32,
+) -> [u8; 32] {
+    #[cfg(feature = "format-kdf")]
+    return slot_master_with_format(&compiled_format_id(), bip39_seed, account_index);
+    if account_index == 0 {"""),
+    ("""fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    // sk_seed = sha256("slot_c10_sk_seed"[16] ‖ slot_entropy[32]) — 48 bytes.""",
+     """#[cfg_attr(feature = "format-kdf", allow(unreachable_code))]
+fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    #[cfg(feature = "format-kdf")]
+    return slot_seeds_with_format(&compiled_format_id(), slot_entropy);
+    // sk_seed = sha256("slot_c10_sk_seed"[16] ‖ slot_entropy[32]) — 48 bytes."""),
+])
+open(f"{P}/domain/src/lib.rs", "a").write('''
+// ---------------------------------------------------------------------------
+// RESEARCH PROTOTYPE (round 17, gate (d); research/c10-autoresearch/proto_w4l65 section 7): the C10 format
+// identifier, bound into BOTH key-derivation branches (bootstrap master, slot master and slot seeds; account 0
+// and account > 0). Off by default (`format-kdf`); required by every v2 build and refused by v1 builds, so the
+// stock derivations stay byte-identical. Ledger round 17 states the domain-separation argument.
+// ---------------------------------------------------------------------------
+
+/// Every parameter and encoding choice that makes two C10 builds produce different keys or signatures.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FormatParams {
+    /// 1 = v1 32-byte-ADRS hash layer; 2 = v2 one-block A7 layer (spec 0.3, incl. its H_MSG and digit rule).
+    pub hash_layer: u8,
+    pub n: u8,
+    pub h: u8,
+    pub d: u8,
+    /// per-layer subtree heights, layer 0 first
+    pub layer_h: [u8; 2],
+    pub a: u8,
+    pub k: u8,
+    pub w: u8,
+    pub l: u8,
+    pub target_sum: u16,
+    /// A7 (width, shift) per field: type, layer, tree, kp, ci, cp, ha; zero for v1
+    pub a7: [u8; 14],
+    /// 1 one block, 2 two blocks (wprf2b), 3 paired (prf2)
+    pub wots_prf: u8,
+    /// 1 one secret per digest, 3 paired (prf2)
+    pub fors_prf: u8,
+    /// 1 tree 12's root, 2 a PRF value
+    pub last_fors: u8,
+    /// 1 = v1's R-grind PRF
+    pub r_prf: u8,
+}
+
+/// `"PQ1-C10-FMT1"` and 30 fixed-width field bytes: injective on `FormatParams` (fixed positions, no separators).
+pub const FORMAT_DESCRIPTOR_LEN: usize = 42;
+
+/// The format this build signs with, from `sphincs_c10::params`.
+pub const COMPILED_FORMAT: FormatParams = {
+    use sphincs_c10::params as p;
+    FormatParams {
+        hash_layer: p::FMT_HASH_LAYER,
+        n: p::N as u8,
+        h: p::H as u8,
+        d: p::D as u8,
+        layer_h: [p::layer_h(0) as u8, p::layer_h(1) as u8],
+        a: p::A as u8,
+        k: p::K as u8,
+        w: p::W as u8,
+        l: p::L as u8,
+        target_sum: p::TARGET_SUM as u16,
+        a7: p::FMT_A7,
+        wots_prf: p::FMT_WOTS_PRF,
+        fors_prf: p::FMT_FORS_PRF,
+        last_fors: p::FMT_LAST_FORS,
+        r_prf: p::FMT_R_PRF,
+    }
+};
+
+#[cfg(feature = "format-kdf")]
+const _: () = assert!(COMPILED_FORMAT.hash_layer == 2, "`format-kdf` binds v2 formats only; v1 keeps its stock derivation");
+#[cfg(not(feature = "format-kdf"))]
+const _: () = assert!(COMPILED_FORMAT.hash_layer == 1, "a v2 build must bind its format into key derivation (`format-kdf`)");
+
+#[must_use]
+pub fn format_descriptor(f: &FormatParams) -> [u8; FORMAT_DESCRIPTOR_LEN] {
+    let mut b = [0u8; FORMAT_DESCRIPTOR_LEN];
+    b[0..12].copy_from_slice(b"PQ1-C10-FMT1");
+    let t = f.target_sum.to_be_bytes();
+    let head = [f.hash_layer, f.n, f.h, f.d, f.layer_h[0], f.layer_h[1], f.a, f.k, f.w, f.l, t[0], t[1]];
+    b[12..24].copy_from_slice(&head);
+    b[24..38].copy_from_slice(&f.a7);
+    b[38..42].copy_from_slice(&[f.wots_prf, f.fors_prf, f.last_fors, f.r_prf]);
+    b
+}
+
+/// `sha256(format_descriptor(f))`.
+#[must_use]
+pub fn format_id(f: &FormatParams) -> [u8; 32] {
+    sha256_bytes(&format_descriptor(f))
+}
+
+#[must_use]
+pub fn compiled_format_id() -> [u8; 32] {
+    format_id(&COMPILED_FORMAT)
+}
+
+/// Bootstrap master: HMAC-SHA512(key = "pq1-c10-fmt-boot" ‖ fid, msg = bip39_seed) for account 0, and
+/// HMAC-SHA512(key = "pq1-c10-fmt-boot-acct" ‖ fid, msg = bip39_seed ‖ be32(account)) otherwise. The keys differ
+/// from the stock "sphincs-c6-v1" / "sphincs-c6-v1-acct" and from each other for every fid.
+#[cfg(feature = "format-kdf")]
+#[must_use]
+pub fn bootstrap_master_with_format(fid: &[u8; 32], bip39_seed: &[u8; 64], account_index: u32) -> [u8; 64] {
+    if account_index == 0 {
+        let mut key = [0u8; 48];
+        key[0..16].copy_from_slice(b"pq1-c10-fmt-boot");
+        key[16..48].copy_from_slice(fid);
+        hmac_sha512_bytes(&key, bip39_seed)
+    } else {
+        let mut key = [0u8; 53];
+        key[0..21].copy_from_slice(b"pq1-c10-fmt-boot-acct");
+        key[21..53].copy_from_slice(fid);
+        let mut msg = [0u8; 68];
+        msg[0..64].copy_from_slice(bip39_seed);
+        msg[64..68].copy_from_slice(&account_index.to_be_bytes());
+        let m = hmac_sha512_bytes(&key, &msg);
+        msg.zeroize();
+        m
+    }
+}
+
+/// Slot master: sha256("pq1-c10-fmt-slot" ‖ fid ‖ bip39_seed ‖ 0x00) for account 0 (113 B), and
+/// sha256("pq1-c10-fmt-slot-acct" ‖ fid ‖ bip39_seed ‖ be32(account)) otherwise (121 B).
+#[cfg(feature = "format-kdf")]
+#[must_use]
+pub fn slot_master_with_format(fid: &[u8; 32], bip39_seed: &[u8; 64], account_index: u32) -> [u8; 32] {
+    if account_index == 0 {
+        let mut buf = [0u8; 113];
+        buf[0..16].copy_from_slice(b"pq1-c10-fmt-slot");
+        buf[16..48].copy_from_slice(fid);
+        buf[48..112].copy_from_slice(bip39_seed);
+        let out = sha256_bytes(&buf);
+        buf.zeroize();
+        out
+    } else {
+        let mut buf = [0u8; 121];
+        buf[0..21].copy_from_slice(b"pq1-c10-fmt-slot-acct");
+        buf[21..53].copy_from_slice(fid);
+        buf[53..117].copy_from_slice(bip39_seed);
+        buf[117..121].copy_from_slice(&account_index.to_be_bytes());
+        let out = sha256_bytes(&buf);
+        buf.zeroize();
+        out
+    }
+}
+
+/// Slot seeds, belt and braces (the slot master is already format-bound): sk_seed = sha256("slot_c10_sk_seed" ‖
+/// fid ‖ slot_entropy), pk_seed = mask_n(sha256("slot_c10_pk_seed" ‖ fid ‖ slot_entropy)), 80 B each.
+#[cfg(feature = "format-kdf")]
+#[must_use]
+pub fn slot_seeds_with_format(fid: &[u8; 32], slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    let mut sk_buf = [0u8; 80];
+    sk_buf[0..16].copy_from_slice(b"slot_c10_sk_seed");
+    sk_buf[16..48].copy_from_slice(fid);
+    sk_buf[48..80].copy_from_slice(slot_entropy);
+    let sk_seed: [u8; 32] = sha256_bytes(&sk_buf);
+    let mut pk_buf = [0u8; 80];
+    pk_buf[0..16].copy_from_slice(b"slot_c10_pk_seed");
+    pk_buf[16..48].copy_from_slice(fid);
+    pk_buf[48..80].copy_from_slice(slot_entropy);
+    let pk_digest: [u8; 32] = sha256_bytes(&pk_buf);
+    let mut pk_seed = [0u8; 32];
+    pk_seed[..16].copy_from_slice(&pk_digest[..16]);
+    sk_buf.zeroize();
+    pk_buf.zeroize();
+    (sk_seed, pk_seed)
+}
+''')
+import os
+open(f"{P}/domain/tests/format_kdf.rs", "w").write(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "format_kdf.rs")).read())
+print("gate (d): domain copy patched")
 print("applied")
