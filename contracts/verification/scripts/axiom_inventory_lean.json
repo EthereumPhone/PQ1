@@ -24,6 +24,10 @@
       "sha256": "17db8547199681a7ed8ccce5d2f8fbe64232c0bc4f69175e562ac290a32d0aa9",
       "axiom_mentions": 2
     },
+    "SphincsCVerify/Interpreter/C10HeadParse.lean": {
+      "sha256": "8395134d28c24662a733921657356594dfde74aa481ec88c8b0d7f7e7ade3bde",
+      "axiom_mentions": 1
+    },
     "SphincsCVerify/Interpreter/C10Parse.lean": {
       "sha256": "2ad073b800cf72424a656c20d5353b9574ece9b15e0efa7194012ac4fee158fa",
       "axiom_mentions": 1
@@ -52,16 +56,52 @@
       "sha256": "31791ea7d3f53187850d9fc680f89047966e4112805f0ea817c64f1667208400",
       "axiom_mentions": 2
     },
+    "SphincsCVerify/Interpreter/RelChain.lean": {
+      "sha256": "1281283192e2d83c9c818cae5b1a2365e95c77a1a52567fcb08498b068272784",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelE1.lean": {
+      "sha256": "065d96f603d4ff215b6b6f8db75ef2fb056194efe1dd4978434dcc6cbaa200ec",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelFors.lean": {
+      "sha256": "4a18b14ca59fbc628f60c29cc4215673cf2fbd1965ce18a5f2b8f390435b75ce",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelHmsg.lean": {
+      "sha256": "85d47550aa99186ba9a0658a3ee7fc2da8658c26fb9275c23cf046ba612a9ed0",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelMerkle.lean": {
+      "sha256": "63061833b70c42b7eb744b1d6b6b04fd37c367496097e359f7af228ba347824b",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelMid.lean": {
+      "sha256": "df78658a99b6f2a0eb4b0679e8bb24e29277c450578462e4e276ae44239426e3",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelSkeleton.lean": {
+      "sha256": "6c588e934e2139e4c15c4316a235335cc99645960f264dd2f6970500762510cd",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelWots.lean": {
+      "sha256": "b6bbe63e3b4c4093572cef38cfe83a0fcdb1efdf73a84c0b986fa9b9e8e0dcfc",
+      "axiom_mentions": 1
+    },
+    "SphincsCVerify/Interpreter/RelWotsEntry.lean": {
+      "sha256": "e5e3e958ee254db85ea8014486543e0aaae652858b0934c2f6faef741c634a3a",
+      "axiom_mentions": 1
+    },
     "SphincsCVerify/Interpreter/Sha256Bridge.lean": {
       "sha256": "6e361c3fc006c7a114081af120ed7df942181d98c80ecf73b8e97386094a0904",
       "axiom_mentions": 1
     },
     "SphincsCVerify/Interpreter/Yul.lean": {
-      "sha256": "6c8a81f20b826e1ae0e4124ad0c7996b95edb2bbe4ea479c0d32a8aa846b865a",
+      "sha256": "f72f3764790e5a364774cff41a1a70657c03021cd287616f03edc7750261a3c2",
       "axiom_mentions": 2
     },
     "SphincsCVerify/Interpreter/YulParse.lean": {
-      "sha256": "215a19eb4fb9f66e63db3d856643424f03b6015521450684d9f09bbc6bc081fd",
+      "sha256": "f9ab21c143776eca82089beef55dd1c50352c885649adeacda334e354dd0317d",
       "axiom_mentions": 1
     },
     "SphincsCVerify/Spec/Hash.lean": {
@@ -101,7 +141,7 @@
       "axiom_mentions": 2
     },
     "SphincsCVerify.lean": {
-      "sha256": "7bc63e62a3cd69d75121c8b239ba1e9bb08728166678606f88f9666d479f9cf8",
+      "sha256": "ec1d5afb47da6b4b6fbf75b66126a3ed63de414aa7829274c5f719352b91dc90",
       "axiom_mentions": 2
     }
   },
