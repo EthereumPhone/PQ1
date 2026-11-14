@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """prefix_check.py — round 20: the merged PRF keeps every sk_seed-keyed SHA-256 input block-prefix-free (the prf2
-PRF argument, format-options-security.md). Records every sha256 input that starts with sk_seed during a full-stack
+PRF argument, format-options-security.md); round 21: optional variant argument. Records every sha256 input that starts with sk_seed during a full-stack
 keygen and two signs (with and without opt_rand), pads each (SHA-256 Merkle-Damgard), and checks that no input's
 block sequence is a proper prefix of, or equal to, a different input's. Also prints the classes (length, byte 32)."""
 import collections
+import sys
 import c10v2_ref as r
 
 def blocks(m):
@@ -11,7 +12,8 @@ def blocks(m):
     p = m + b"\x80" + b"\x00" * ((55 - len(m)) % 64) + ml.to_bytes(8, "big")
     return tuple(p[i:i + 64] for i in range(0, len(p), 64))
 
-r.configure(("ts200", "prf2", "split810", "wprf2b"))
+# round 21: an optional variant list (default: the full stack), e.g. ts200,split810,wprf2b for the no-prf2 candidate
+r.configure(sys.argv[1].split(",") if len(sys.argv) > 1 else ("ts200", "prf2", "split810", "wprf2b"))
 sk, ps = r.kat_key(0)
 seen = set()
 _sha = r.sha256

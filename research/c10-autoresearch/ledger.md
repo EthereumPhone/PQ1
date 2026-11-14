@@ -2875,6 +2875,8 @@ How it was done:
 - **Mutants:** 7/7 caught in each language, with their signatures still verifying. Each Rust mutant fails `v2_kat` on its byte assertion, after the unmutated run passed.
 - **Product tests:** `fors_position_binding` (5) and the forgery fast guards (3) pass.
 - **The heavy shared-forest forgery is defeated:** 3,000 signatures harvested, a covered digest found, and the forged signature does not verify.
+- **The device path** (secrets inside `pq1_v2_key_loop` and `pq1_v2_fors_sub`) is covered as in round 20, by byte equality: kit fb == golden == Python reference. The golden's positions are ht 0x6860 and 0x3555a: layer-0 (tree, kp) = (104, 96) and (853, 90), layer-1 kp = 104 and 853. Every field a drop could zero is nonzero there, except the layer-1 tree, which is always 0 when d = 2 [m].
+- **Block-prefix-freeness:** `prefix_check.py ts200,split810,wprf2b` records 119,576 distinct `sk_seed`-keyed inputs in five classes, with **0 prefix relations** [m, Python].
 
 **Assurance on the copy** [m] / [h]:
 - **FI mirror:** 16/16 released. Sign B corrupted: **0/16** (stopped at the compare). Both corrupted alike: **0/16** (the compare passed, verify refused).
@@ -2891,7 +2893,7 @@ How it was done:
 
 | bench | value |
 |---|---|
-| `bench_chain`, cached chain | **0.3013 s** (48,206,137 cycles; round 20: 48,206,136 from the same ELF) |
+| `bench_chain`, cached chain | **0.3013 s** (48,206,137 cycles). Against round 20's 48,206,136 this is a deterministic replay (same ELF, same 16 messages), not an independent sample; the grind-luck range is the 16-message bench's 19.0–26.1 M per sign |
 | first chain after keygen | 0.2787 s |
 | keygen | 0.5547 s |
 | **keygen + first chain** | **0.833 s** |
@@ -2901,7 +2903,7 @@ How it was done:
 | 16-message estimate (research config) | **0.270 s** [c]; mean sign 21.52 M (min 19.00, max 26.14) |
 | golden compare (fb) | cached sign 0.2815 s, keygen 0.543 s |
 
-**Asm and Rust paths:** without prf2 every hot path is the asm one (`pq1_v2_key_loop`, `pq1_v2_fors_sub`, `pq1_v2_search_dt`, `pq1_v2_t43`).
+**Asm and Rust paths:** without prf2 every hot path is the asm one. All four `global_asm!` symbols (`pq1_v2_key_loop`, `pq1_v2_fors_sub`, `pq1_v2_search_dt`, `pq1_v2_t43`) are linked into the chain, avg and fb ELFs (`nm`).
 
 **Gate column (round-20 format):**
 
@@ -2909,7 +2911,7 @@ How it was done:
 |---|---|
 | (a) proven bound | **GAP:** not ported to the v2 byte format, and (8, 10) is not proved. split810 **OWNER-UNDECIDED (#1164):** ×1.21 as stated (today FAIL, ×1.213); ×1.00022 under tight accounting (+0.0003 b) [c]. ts200: total ×1.0000 [c] |
 | (a) quantum | GAP |
-| (b) hash assumption | conditional PASS: whole-hash RO; wprf2b's two-block PRF (rounds 17–18) and 0.3's one-block FORS PRF; no two-output prf2 argument needed. Still noted: the 39-B FORS-PRF / KDF overlap and the H_MSG inner collision |
+| (b) hash assumption | conditional PASS: whole-hash RO; wprf2b's two-block PRF (rounds 17–18) and 0.3's one-block FORS PRF; no two-output prf2 argument needed. `sk_seed`-keyed inputs block-prefix-free (119,576 inputs, 0 relations) [m]. Still noted: the 39-B FORS-PRF / KDF overlap and the H_MSG inner collision |
 | (c) fault fallback | ts200 **OWNER-UNDECIDED (#1165):** two-digest median 2^-55.3 → 2^-53.7 (1st percentile 2^-47.3 → 2^-45.6) [c] |
 | (c) top cache | **OWNER-UNDECIDED (#1148):** the FI trade. The cached height-4 nodes are shared by both passes, so the A/B compare cannot see a fault in them. The plants in §2 show the named checks that do catch it [m] |
 | (c) DPA `sk_seed` counter, per pass | **26,624, ×0.9995 of v1, cold and warm** [c] |
@@ -2953,6 +2955,8 @@ How it was done:
 
 - **Released or not:** every refused run has 0 chains complete and no signature bytes written. The baseline releases its signature.
 - **Each refusal comes from a named check:** a cache assert at its known line, or the chain's verify gate. No run crashed.
+- **How the cache code refuses:** it has no error return. Its checks are `assert!`s ("Panics (refuses to sign) on any integrity failure", `topcache.rs`), so a refusal is a panic, identified here by its source location in the bench's panic handler.
+- **What the auth-height rows show:** the root assert fires for every non-own node, so the auth heights 4, 6 and 9 follow from the construction; the runs confirm it on three of them. The run with the root assert compiled out exists only at b5.
 
 **What remains when the cache and its digest are corrupted consistently:**
 - **The digest is then useless.** The rebuilt-subtree check catches only the target's own node.
@@ -2984,7 +2988,7 @@ How it was done:
 | (c) top-cache FI trade | n/a | n/a | n/a | OWNER-UNDECIDED; plants 7/7 named [m] | OWNER-UNDECIDED; plants 7/7 named [m] |
 | (c) DPA `sk_seed` counter per pass | 26,636 | 26,624 (×0.9995) [c] | 26,624 (×0.9995) [c] | **13,324 (×0.500)** cold and warm [c] | 26,624 (×0.9995) cold and warm [c] |
 | (c) CV residual per pass (uncounted) | 44,118 | 44,118 [c] | 66,690 (×1.512) [c] | 28,246 (×0.640) cold / 6,070 (×0.138) warm [c] | 55,126 (×1.250) cold / 11,782 (×0.267) warm [c] |
-| (c) keygen exposure (`sk_seed` / CV) | 0 / 22,016 [c] | 0 / 22,016 (512 keys × 43, no cache) [c] | 0 / 33,280 (512 × 65) [c] | 0 / 66,560 [c] | 0 / 88,064 [c] |
+| (c) keygen exposure (`sk_seed` / CV), from `dossier_v2_03.py` | 0 / 22,016 [c] | 0 / 22,016 (512 keys × 43, no cache) [c] | 0 / 33,280 (512 × 65, no cache) [c] | 0 / 66,560 [c] | 0 / 88,064 [c] |
 | (c) physical SCA | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
 | (d) format id in the KDF | n/a | PASS in the copy | PASS in the copy | PASS in the copy (`all3-wprf2b`) | PASS in the copy (`ts200-split810-wprf2b`; Astra PASS) |
 | (e) review / reproducibility | PASS | PARTIAL | PARTIAL | PARTIAL | PARTIAL |

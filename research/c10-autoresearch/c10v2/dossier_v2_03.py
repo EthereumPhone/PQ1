@@ -155,6 +155,9 @@ def main():
     # two-block PRF (the asm key loop, then the per-chain confirm build): 43 + 43 per key, all CV block-2 compressions
     kg_np2 = 2 * 2**10 * p["l"]
     print(f"  keygen with the top cache, no-prf2 candidate: sk_seed counter 0, CV {kg_np2:,}")
+    # the round-18 candidates' keygen has no cache: one build of the 512-leaf top tree, the two-block WOTS PRF per chain
+    print(f"  keygen without a cache: v2 0.3 + wprf2b sk_seed 0, CV {2**hp * p['l']:,}; w4l65 + wprf2b sk_seed 0,"
+          f" CV {2**hp * 65:,}")
     # round 18 (UPDATE 2026-11-14): w4l65 + wprf2b — the WOTS PRF adds no sk_seed compression with varying words;
     # FORS is w4l65's (same k, a); the per-layer CV residual scales with l
     w4_cv_nc = 2 * (2**hp * 65 + 65)
