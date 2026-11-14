@@ -1078,11 +1078,13 @@ mod tests {
             confirmed[index] = pages.buf[prior_len];
         }
 
-        assert_eq!(&confirmed[0][1][..1], b"1");
-        assert_eq!(&confirmed[0][2][..3], b"wei");
+        // Decimal before wei (2026-11-14): sub-six-decimal dust is the exact
+        // decimal wrapped across both value rows, never a wei integer.
+        assert_eq!(&confirmed[0][1], b"0.0000000000000>");
+        assert_eq!(&confirmed[0][2][..10], b">00001 ETH");
         assert_eq!(&confirmed[1][1][..12], b"1.000000 ETH");
-        assert_eq!(&confirmed[2][1], b"1000000000000000");
-        assert_eq!(&confirmed[2][2][..7], b"001 wei");
+        assert_eq!(&confirmed[2][1], b"1.0000000000000>");
+        assert_eq!(&confirmed[2][2][..10], b">00001 ETH");
         assert_ne!(confirmed[0], confirmed[1]);
         assert_ne!(confirmed[1], confirmed[2]);
         assert_ne!(confirmed[0], confirmed[2]);

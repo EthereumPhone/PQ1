@@ -1440,7 +1440,7 @@ mod inner_kind_hint_tests {
     }
 
     #[test]
-    fn direct_safe_native_value_uses_exact_wei_fallback_or_refuses_overwide() {
+    fn direct_safe_native_value_uses_exact_decimal_or_refuses_overwide() {
         let resolver = NameResolver::new();
         let unknown_data = [0xde, 0xad, 0xbe, 0xef];
 
@@ -1455,15 +1455,17 @@ mod inner_kind_hint_tests {
             one_wei.value = be_u128(1);
             assert!(legacy_values_are_exactly_renderable(&one_wei, None));
             let one_wei_pages = render_safe_pages_inner(&one_wei, None, None, &resolver)
-                .expect("1 wei uses the exact base-unit fallback");
-            assert!(pages_contain(&one_wei_pages, b"wei"));
+                .expect("1 wei is the exact wrapped decimal");
+            assert!(pages_contain(&one_wei_pages, b"0.0000000000000>"));
+            assert!(!pages_contain(&one_wei_pages, b"wei"));
 
             let mut adjacent = render_input([0x44; 20], 0, raw_data);
             adjacent.value = be_u128(1_000_000_000_000_000_001);
             assert!(legacy_values_are_exactly_renderable(&adjacent, None));
             let adjacent_pages = render_safe_pages_inner(&adjacent, None, None, &resolver)
-                .expect("1 ETH + 1 wei uses the exact base-unit fallback");
-            assert!(pages_contain(&adjacent_pages, b"wei"));
+                .expect("1 ETH + 1 wei is the exact wrapped decimal");
+            assert!(pages_contain(&adjacent_pages, b"1.0000000000000>"));
+            assert!(!pages_contain(&adjacent_pages, b"wei"));
             assert_ne!(exact_pages.buf, one_wei_pages.buf);
             assert_ne!(exact_pages.buf, adjacent_pages.buf);
             assert_ne!(one_wei_pages.buf, adjacent_pages.buf);
@@ -1570,8 +1572,9 @@ mod inner_kind_hint_tests {
             let adjacent = render_input(multisend, 1, &adjacent_calldata);
             assert!(legacy_values_are_exactly_renderable(&adjacent, None));
             let adjacent_pages = render_safe_pages_inner(&adjacent, None, None, &resolver)
-                .expect("record values share the exact base-unit fallback");
-            assert!(pages_contain(&adjacent_pages, b"wei"));
+                .expect("record values share the exact wrapped decimal");
+            assert!(pages_contain(&adjacent_pages, b"1.0000000000000>"));
+            assert!(!pages_contain(&adjacent_pages, b"wei"));
             assert_ne!(exact_pages.buf, adjacent_pages.buf);
         }
 

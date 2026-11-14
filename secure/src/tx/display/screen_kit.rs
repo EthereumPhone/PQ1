@@ -13,8 +13,7 @@
 //! every caller turns into a refusal to sign.
 
 use super::primitives::{
-    amount_is_exact_at_fraction_digits, chain_name, eip55_hex, exact_fraction_digits, format_u64,
-    formatted_collapses_to_zero, known_native_ticker, NATIVE_DISPLAY_FRACTION_DIGITS,
+    chain_name, eip55_hex, format_u64, known_native_ticker, native_amount_form, token_amount_form, AmountForm,
 };
 use crate::names::NameResolver;
 use crate::tx::eip1559::U256;
@@ -305,86 +304,55 @@ impl Amount {
     }
 }
 
-/// `write_native_amount_two_rows`' policy: a known chain shows the stable
-/// six-decimal ticker form when exact, else the exact integer in `wei`; an
-/// unknown chain shows the exact integer as `raw`.
+/// A native amount in exactly the form its page painter uses
+/// (`primitives::native_amount_form`: the exact decimal, else `wei`; `raw` on
+/// an unknown chain). `None` where the page could not render it exactly (the
+/// dispatcher refused). There is no second policy here to drift.
 pub(crate) fn native_amount(value: &U256, chain_id: u64) -> Option<Amount> {
-    match known_native_ticker(chain_id) {
-        None => Amount::new(value, 0, 0, b"raw"),
-        Some(unit) => {
-            if amount_is_exact_at_fraction_digits(value, 18, NATIVE_DISPLAY_FRACTION_DIGITS) {
-                if let Some(a) = Amount::new(value, 18, NATIVE_DISPLAY_FRACTION_DIGITS, unit) {
-                    if !formatted_collapses_to_zero(value, a.digits()) {
-                        return Some(a);
-                    }
-                }
-            }
-            Amount::new(value, 0, 0, b"wei")
+    match native_amount_form(value, chain_id)? {
+        AmountForm::Decimal { frac } => Amount::new(value, 18, frac, known_native_ticker(chain_id)?),
+        AmountForm::BaseUnits => {
+            Amount::new(value, 0, 0, if known_native_ticker(chain_id).is_some() { b"wei" } else { b"raw" })
         }
     }
 }
 
-/// `write_native_derived_amount_two_rows`' policy: a derived bound may widen
-/// the fraction (6..=18) before the exact-wei fallback.
+/// A derived native bound (Safe refund estimate). Same policy as a signed
+/// native amount since 2026-11-14.
 pub(crate) fn native_derived_amount(value: &U256, chain_id: u64) -> Option<Amount> {
-    let Some(unit) = known_native_ticker(chain_id) else {
-        return native_amount(value, chain_id);
-    };
-    if let Some(frac) = exact_fraction_digits(value, 18, NATIVE_DISPLAY_FRACTION_DIGITS, 18) {
-        if let Some(a) = Amount::new(value, 18, frac, unit) {
-            if !formatted_collapses_to_zero(value, a.digits()) {
-                return Some(a);
-            }
-        }
-    }
     native_amount(value, chain_id)
 }
 
-/// `write_token_amount_two_rows`' policy: six fractional digits widened up
-/// to 18 to stay exact, else the signed integer in labelled base units.
+/// A token amount for metadata given as parts; see [`token_amount_as_page`].
 pub(crate) fn token_amount(value: &U256, decimals: u8, symbol: &[u8]) -> Option<Amount> {
-    if let Some(frac) = exact_fraction_digits(value, u32::from(decimals), 6, 18) {
-        if let Some(a) = Amount::new(value, u32::from(decimals), frac, symbol) {
-            if !formatted_collapses_to_zero(value, a.digits()) {
-                return Some(a);
-            }
-        }
-    }
-    let mut base = [0u8; 40];
-    const PREFIX: &[u8] = b"base ";
-    if PREFIX.len() + symbol.len() > base.len() {
-        return None;
-    }
-    base[..PREFIX.len()].copy_from_slice(PREFIX);
-    base[PREFIX.len()..PREFIX.len() + symbol.len()].copy_from_slice(symbol);
-    Amount::new(value, 0, 0, &base[..PREFIX.len() + symbol.len()])
+    let meta = crate::erc20::bundle::Erc20Metadata {
+        chain_id: 0,
+        contract: [0u8; 20],
+        decimals,
+        name: &[],
+        symbol,
+    };
+    token_amount_as_page(value, &meta)
 }
 
-/// A verified token amount in the representation its page painter chose
-/// (`write_token_amount_two_rows`): the widened exact fraction (on the page
-/// possibly wrapped across both rows), or — only when not even the wrapped
-/// decimal fit the page — the integer in labelled base units. `None` where
-/// the page could not render it exactly (the dispatcher refused).
+/// A verified token amount in exactly the form its page painter uses
+/// (`primitives::token_amount_form`): the widened exact decimal (on the page
+/// possibly split or wrapped across both rows), or — only when no decimal
+/// layout fit the page — the integer in labelled base units. `None` where the
+/// page could not render it exactly (the dispatcher refused).
 pub(crate) fn token_amount_as_page(value: &U256, meta: &crate::erc20::bundle::Erc20Metadata<'_>) -> Option<Amount> {
-    use super::primitives::{write_token_amount_two_rows, AmountFit};
-    use crate::ui::DISPLAY_COLS;
-    let mut r1 = [b' '; DISPLAY_COLS];
-    let mut r2 = [b' '; DISPLAY_COLS];
-    if write_token_amount_two_rows(&mut r1, &mut r2, value, meta) != AmountFit::Full {
-        return None;
-    }
-    let base = r1.windows(5).chain(r2.windows(5)).any(|w| w == b"base ");
-    if base {
-        let mut unit = [0u8; 40];
-        const PREFIX: &[u8] = b"base ";
-        if PREFIX.len() + meta.symbol.len() > unit.len() {
-            return None;
+    match token_amount_form(value, meta)? {
+        AmountForm::Decimal { frac } => Amount::new(value, u32::from(meta.decimals), frac, meta.symbol),
+        AmountForm::BaseUnits => {
+            let mut unit = [0u8; 40];
+            const PREFIX: &[u8] = b"base ";
+            if PREFIX.len() + meta.symbol.len() > unit.len() {
+                return None;
+            }
+            unit[..PREFIX.len()].copy_from_slice(PREFIX);
+            unit[PREFIX.len()..PREFIX.len() + meta.symbol.len()].copy_from_slice(meta.symbol);
+            Amount::new(value, 0, 0, &unit[..PREFIX.len() + meta.symbol.len()])
         }
-        unit[..PREFIX.len()].copy_from_slice(PREFIX);
-        unit[PREFIX.len()..PREFIX.len() + meta.symbol.len()].copy_from_slice(meta.symbol);
-        Amount::new(value, 0, 0, &unit[..PREFIX.len() + meta.symbol.len()])
-    } else {
-        token_amount(value, meta.decimals, meta.symbol)
     }
 }
 

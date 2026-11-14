@@ -1211,3 +1211,81 @@ fn se050_probe_readonly_names_no_write_path() {
         "{apdu_rel}: select_applet_probe must send exactly one fixed SELECT of SE050_AID"
     );
 }
+
+/// One amount-form policy, in one place (2026-11-14).
+///
+/// A CoW sell of `0.004423644323452363 AAVE` reached the device screen as
+/// `4423644323452363 base AAVE`: the page painter tried the wrapped decimal
+/// only after the base-unit form, and the pixel screens mirrored that choice
+/// through their own copy of the policy. Native amounts had the same shape
+/// (six decimals or `wei`), in a third copy.
+///
+/// The decision "exact decimal first, raw units only when no decimal layout
+/// fits" now lives in `pqsigner-erc7730/src/display/primitives.rs`
+/// (`token_amount_form` / `native_amount_form`, pinned over a large corpus by
+/// `amount_form_policy_tests`), and `secure/src/tx/display/screen_kit.rs` only
+/// adapts those forms for the pixel screens. A base-unit label anywhere else in
+/// display code is a second policy that the corpus test does not cover — route
+/// it through the shared form instead.
+#[test]
+fn amount_base_unit_labels_live_only_in_the_shared_policy() {
+    const ALLOWED: [&str; 2] = [
+        "pqsigner-erc7730/src/display/primitives.rs",
+        "secure/src/tx/display/screen_kit.rs",
+    ];
+    const LABELS: [&str; 4] = ["b\"wei\"", "\"wei\")", "b\" wei\"", "b\"base \""];
+    let root = {
+        let mut p = std::env::current_dir().expect("cwd");
+        while !fs::read_to_string(p.join("Cargo.toml")).unwrap_or_default().contains("[workspace]") {
+            assert!(p.pop(), "no [workspace] Cargo.toml above cwd");
+        }
+        p
+    };
+    let mut files = Vec::new();
+    let mut stack = vec![
+        root.join("secure/src/tx"),
+        root.join("pqsigner-erc7730/src"),
+        root.join("pqsigner-ui-px/src"),
+    ];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).unwrap_or_else(|e| panic!("read {}: {e}", dir.display())) {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|e| e == "rs") {
+                files.push(path);
+            }
+        }
+    }
+    assert!(files.len() > 50, "walked too few files: {}", files.len());
+    let mut offenders = Vec::new();
+    for path in files {
+        let rel = path.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
+        if ALLOWED.contains(&rel.as_str()) || rel.contains("test") {
+            continue;
+        }
+        let src = fs::read_to_string(&path).unwrap();
+        // Inline test modules sit at the end of a file.
+        let code = code_only(src.split("#[cfg(test)]").next().unwrap_or(""));
+        for label in LABELS {
+            if code.contains(label) {
+                offenders.push(format!("{rel}: {label}"));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "base-unit amount labels outside the shared amount-form policy \
+         (primitives::{{token,native}}_amount_form): {offenders:?}"
+    );
+    let shared = code_only(&read_workspace_file(ALLOWED[0]));
+    assert!(
+        shared.contains("pub fn token_amount_form(") && shared.contains("pub fn native_amount_form("),
+        "the shared amount-form decisions moved; update this pin"
+    );
+    let pixel = code_only(&read_workspace_file(ALLOWED[1]));
+    assert!(
+        pixel.contains("match token_amount_form(value, meta)?") && pixel.contains("match native_amount_form(value, chain_id)?"),
+        "pixel amounts must take their form from the shared policy, not decide it"
+    );
+}

@@ -8761,7 +8761,8 @@ fn positive_wsteth_wrap_renders_intent_and_amount_label() {
     // Exact outer native value: the dispatcher-owned page is additive to the
     // ERC-7730 transcript, and both proofs must survive the one-page batch
     // prefix shift. The friendly six-decimal form remains unchanged where it
-    // is exact; adjacent dust values use an explicit exact-wei fallback.
+    // is exact; adjacent dust values widen to the exact decimal, wrapped
+    // across both rows (decimal before wei, 2026-11-14).
     let mut exact_outer = envelope(1, entry.contract);
     exact_outer.value = u256_from_u64(1_000_000_000_000_000_000); // 1 ETH
     let (exact_inner, mut exact_outer_proofs) = dispatch_once(&exact_outer);
@@ -8782,8 +8783,8 @@ fn positive_wsteth_wrap_renders_intent_and_amount_label() {
         &one_wei_pages,
         find_page_by_label(&one_wei_pages, "! NATIVE ETH"),
     );
-    assert_eq!(one_wei_value[1], "1");
-    assert_eq!(one_wei_value[2], "wei");
+    assert_eq!(one_wei_value[1], "0.0000000000000>");
+    assert_eq!(one_wei_value[2], ">00001 ETH");
     let mut one_wei_verdict = crate::fi::FAIL_SENTINEL;
     one_wei_proofs.final_set_proof(
         &one_wei_pages,
@@ -8800,8 +8801,8 @@ fn positive_wsteth_wrap_renders_intent_and_amount_label() {
         &adjacent_outer_pages,
         find_page_by_label(&adjacent_outer_pages, "! NATIVE ETH"),
     );
-    assert_eq!(adjacent_value[1], "1000000000000000");
-    assert_eq!(adjacent_value[2], "001 wei");
+    assert_eq!(adjacent_value[1], "1.0000000000000>");
+    assert_eq!(adjacent_value[2], ">00001 ETH");
     assert_ne!(exact_inner.as_slice(), adjacent_outer_pages.as_slice());
     assert_ne!(one_wei_pages.as_slice(), adjacent_outer_pages.as_slice());
     let mut adjacent_outer_verdict = crate::fi::FAIL_SENTINEL;
