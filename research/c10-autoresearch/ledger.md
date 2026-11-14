@@ -2173,3 +2173,36 @@ Fixed in `0718898be`:
 Ledger corrections to §2d:
 - **The "totals ratio" column of the d ≥ 3 table** mixed C = 16 term and game sizes with C = 1 ordinary-total ratios. At C = 16 the wrapper totals ratios are **0.3367, 0.1550 and 0.3238**, against 0.325, 0.156 and 0.311 for the C = 1 ordinary totals.
 - **The cycles-per-call explanation is a hypothesis, not a measurement.** §2d says the rise from 388 to 454 happens *because* of per-chain glue and the 17-block T_65. Those effects are real, but the digit-sum implementation and the operation mix also change. Attributing the gap needs a profile of the copy, for example the round-13 PC-sampling bench.
+
+### 2f. w4l65 and the SCA half of gate (c); what is established (UPDATE 2026-11-14, [computed, not reviewed by Astra])
+
+**§2c's "DPA as v2" for w4l65 is wrong.** w4l65 makes 65 `sk_seed` WOTS PRF calls per key instead of 43. The measured host keygen count, 134,143 = 512 × 261 + 511, confirms the 65-chain key loop. `dossier_v2_03.py`'s exposure counter, extended in `530d040f5`, gives single compressions per signing pass that take `sk_seed` together with attacker-known varying words:
+
+| | no top cache | warm top cache |
+|---|---:|---:|
+| v1 | 26,636 | 26,636 |
+| v2 0.3 | 70,742 (×2.656 vs v1) | 49,414 (×1.855) |
+| **w4l65** | **93,314 (×3.503 vs v1, ×1.319 vs 0.3)** | **61,074 (×2.293, ×1.236)** |
+
+- **The fix costs more under w4l65.** The two-block WOTS PRF (§1, the costed fix for (c)) adds 66,690 compressions per pass, against 44,118 for 0.3.
+- **The gain shrinks once (c) is repaired.** Per WOTS key (PRF, chain steps and T_l blocks), 0.3 goes from 356 to 399 compressions and w4l65 from 277 to 342. The per-key gain narrows from ×0.778 to **×0.857**.
+- **The search marks cover gate (a) and the fault half of (c) only; DPA exposure is not marked.**
+- **w4l65 on (c):** fault margin +0.70 ± 0.11 b; DPA exposure ×1.32 over 0.3 and ×3.5 over v1. The SCA comparison stays UNKNOWN (an exposure count, not traces-to-key).
+
+**What is established for w4l65 against v2 0.3, and what is model-only:**
+- **Exact:**
+  - signature +704 B (4,712);
+  - SHA-256 calls −24.9% per sign and −14.4% per verify (309 calls);
+  - Rust equals Python on the KATs. Both are this loop's own; there is no independent implementation.
+- **Measured, generic one-shot path only:** sign cycles −12.1%, keygen −15.1%, verify −2.8%.
+  - As built, a w4l65 sign is 165.7 M cycles. Fused v2 0.3 is about 50 M per pass, so **"beats v2 0.3" holds only in the fused-driver model** (−26% cached sign). No w = 4 fused driver exists.
+- **Not established:** the gas advantage (model −1.7%, about 2.9k gas). There is no w4l65 verifier, and the kit's verify fell only 2.8% on 14% fewer calls, the same per-chain effect that the gas model's flat per-call overhead cannot see.
+
+**Task-3 deviations, stated plainly:**
+- The Rust is a build-time copy, not a flag in `sphincs-c10`. Landing it means re-extract, re-prove and re-pin.
+- Only one set (w4l65) was prototyped. The d ≥ 3 sets that lead under the totals reading were not.
+- `0718898be`, §2e and this section postdate Astra's third pass, and are [computed], not [reviewed].
+
+**w4 and w4l65 both remain conditional MODEL-PASS, not adoption approval, and (d) FAIL.** w4l65 shares 33 WOTS secrets and chain tweaks per key with 0.3 and w4, plus FORS secrets and R candidates, until a full format identifier is bound into both derivation branches.
+
+**Next discriminating experiment:** a PC-sampling profile of the copy (round-13 `prof_classify.py` method), to split per-chain glue from hash cost. It decides whether a w = 4 fused driver is worth writing.
