@@ -243,6 +243,15 @@ import SphincsCVerify
 -- must be exactly {kernel triple, solidityVerifier_compiles_correctly}.
 #print axioms SphincsCVerify.Interpreter.C10.execC10Asm_eq
 #print axioms SphincsCVerify.Bridge.deployed_verifier_refines_spec
+-- Optimized v1 (landed 2026-11-14, #1155): `head_verdict_eq_full` — the optimized v1 in
+-- src/ (`execC10HeadAsm`, over the literal `c10HeadProgram` bound to the source by
+-- verify-head-transcription) returns the reference's verdict (`execC10Asm`) for every key,
+-- message and signature under the real SHA-256 oracle; `execC10HeadAsm_eq` composes it with
+-- `execC10Asm_eq`. Interpreter-model level only (no bridge axiom; A3.1 still names the
+-- deployed reference bytecode); both MUST stay kernel-only {propext, Classical.choice,
+-- Quot.sound}.
+#print axioms SphincsCVerify.Interpreter.C10.RelFors.head_verdict_eq_full
+#print axioms SphincsCVerify.Interpreter.C10.RelFors.execC10HeadAsm_eq
 -- A3.1 generic env-frame (Interpreter/EnvFrame.lean): a var assigned nowhere is preserved.
 #print axioms SphincsCVerify.Interpreter.execStmt_env_frame
 #print axioms SphincsCVerify.Interpreter.execList_env_frame

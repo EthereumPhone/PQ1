@@ -96,9 +96,9 @@ TIER_ORDER = {"quick": 0, "default": 1, "full": 2}
 # Checker-owned exact identity pin.  The source-order-independent digest is over
 # the sorted fully-qualified names, one UTF-8 name per line with a final newline.
 # A legitimate headline change must consciously update both pins.
-EXPECTED_DUMP_HEADLINE_COUNT = 102
+EXPECTED_DUMP_HEADLINE_COUNT = 104
 EXPECTED_DUMP_HEADLINE_SET_SHA256 = (
-    "99b6c0bc2c53a4a25bca59d6de1bcabd414bc6a6ac7e4e502c04997e3a736acc"
+    "cce51d4d7a6477edab9be3ecf510cfb215ef9a5e19caeecf2f0fae1a77be96f2"
 )
 # Checker-owned corpus identity.  The definition digest is over the complete
 # mutation objects sorted by id and serialized as canonical JSON.  Pinning the
