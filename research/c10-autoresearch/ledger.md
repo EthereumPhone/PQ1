@@ -1910,3 +1910,30 @@ Computed items: `c10v2/dossier_v2_03.py`. It imports `bound_variants.py` (and ru
 - **Not yet airtight.** (a) is equal in numbers but not proven for v2's byte format, (c) has a ~1.5-bit DPA exposure increase, and (d) is missing.
 - The (c) and (d) fixes are small and specified: two-block WOTS PRF (about +8% sign), and a format-bound KDF tag.
 - (a) needs the EasyCrypt byte-model port. That is the real remaining cost of adopting v2.
+
+### 4. split810 (#1164) and ts200 (#1165) against gate (S)
+
+**split810: is the ×1.21 pure proof slack?** Mostly yes; the residual is negligible but real. Read-only analysis of the EasyCrypt sources; the numbers come from `bound_variants.py`'s formulas with memoized accounting; argued, not proved.
+- **Where the ×1.21 comes from.** The model signer rebuilds every layer's subtree on every signature (`RawLayer.ec:19` calls `RawMerkle.build`, per layer per signature, `RawSigner.ec:17–19`; twice per wrapper signature). The cost lemmas put that call count into the theorem's right-hand side through the `ChainVariable…Cost`, `LeafTarget…Cost` and `WrapperWotsCandidateCost` families.
+- **Why that is slack.** The adversary's budgets are only qr and qs, and the signer's call log keeps repeats (`DomainQueryCount.ec:1` says "including cached repeats"; `WrapperLayerMemo.ec:1–2`). Counting distinct calls gives a new right-hand side for the same game and the same scheme.
+- **Charging each hypertree subtree once** (FORS and the per-layer remainder kept; the wrapper still pays FORS twice), at qr = qs = 2^16:
+
+  | | ordinary | wrapper |
+  |---|---:|---:|
+  | v1 tight | 2^-63.51 (×0.153 of stock-as-proved) | 2^-62.52 (×0.152) |
+  | split810 tight vs v1 tight | ×1.00022 (+0.0003 bits) | ×1.00019 |
+
+- **The residual is real, not accounting.** split810's 512 extra top-layer WOTS keys are distinct nodes: 154,624 more distinct calls, and a WOTS universe ×1.00195.
+- **Verdict on the gate:**
+  - **today:** FAIL (×1.213; and not proved for (8, 10) at all);
+  - **after a tightened proof:** MINOR-LOSS of 0.0003 bits against v1 tight. "Tight split810 vs stock as proved" (×0.153) is not apples to apples, because the same tightening gives v1 ×0.153.
+- **Proof work (judgement; nothing in the repo calibrates it).** The EasyCrypt tree is 1,089 `.ec` files and 182k lines; 57 `*Cost*.ec` files in at least 7 parallel families re-prove the build charge.
+  - **Tightening at (9, 9):** a ghost set of built (layer, tree) pairs, with every build query of a built tree already in the log and the oracle table (keygen seeds the top tree with `build`'s inputs, so a rebuild adds 0 distinct calls). Either count `size (undup …)` with `RawSigner` kept, or add a memoizing signer plus an equivalence hop. About 3–6 new modules (0.5–1.5k lines) and edits in 40–60 files: **~10–30 person-days**. `functional_merkle_build_queries` exists, but over the fixed-function backend and hard-coding 9 levels.
+  - **Generalized heights** (needed for (8, 10) at all): 108 files hard-code the height (`%/512` ×135, `%%512` ×88, `kp < 512` ×34, `nseq 9` ×14, …): **~20–60 person-days**, separate.
+  - **The v2 byte port** (dossier (a)): separate again.
+- **Also tightens stock** by ×0.15 (2.7 bits), so it is worth doing for v1 alone if the proof is touched.
+
+**ts200 (#1165).**
+- **(a):** proven-bound total ×1.0000; the encoding term ×0.30 (better) at these caps [computed, format-options-security §8].
+- **(c): fault fallback 1.6–1.7 bits weaker** [computed: two-digest median 2^-55.3 → 2^-53.7; 1st percentile 2^-47.3 → 2^-45.6]. **FAIL under the strict reading.** Reported, not adopted.
+- **(d):** keys do not change. A seed that signed under 205 must never sign under 200, or every reused WOTS key becomes two-time (~2^53). ts200 therefore needs a format-bound KDF tag more than any other option.
