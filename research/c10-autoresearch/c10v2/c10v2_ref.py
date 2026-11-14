@@ -35,6 +35,11 @@ SIG_LEN = 4008
 #            124 (digits from the low 128 bits of WOTS_DIGEST, 2 bits each); every
 #            other parameter and the A7 layout unchanged (ci <= 63, cp <= 3 fit).
 #            Keys, signature length (4,680 B) and the verifier change.
+# w4l65    : round 16, the strict-PASS neighbour of w4 (research): w = 4, l = 65, target
+#            sum 125 (digits from the low 130 bits of WOTS_DIGEST), so the one-time
+#            digest space is 4^65 = 2^130 >= stock's 8^43 = 2^129. A7 ci widens to
+#            7 bits (bits 23..17, into the free bits 17..16 gap; every other field
+#            unchanged). Keys, signature length (4,712 B) and the verifier change.
 VARIANT = frozenset()
 HL = (SUBTREE_H, SUBTREE_H)   # per-layer subtree heights, layer 0 first
 
@@ -43,13 +48,17 @@ def configure(variant):
     """Select a variant set (iterable of 'ts200', 'prf2', 'split810')."""
     global VARIANT, TARGET_SUM, HL, _WIDTH, _SHIFT, W, L, LOG_W, W_MASK, SIG_LEN
     v = frozenset(x for x in variant if x)
-    unknown = v - {"ts200", "prf2", "split810", "w4"}
+    unknown = v - {"ts200", "prf2", "split810", "w4", "w4l65"}
     assert not unknown, f"unknown variant {sorted(unknown)}"
-    assert not ("w4" in v and "ts200" in v), "w4 sets its own target sum"
+    assert not (v & {"w4", "w4l65"} and "ts200" in v), "w4 / w4l65 set their own target sum"
+    assert not {"w4", "w4l65"} <= v, "w4 and w4l65 are alternatives"
+    assert not {"w4l65", "split810"} <= v, "w4l65 and split810 both re-lay out ci"
     VARIANT = v
     TARGET_SUM = 200 if "ts200" in v else 205
     if "w4" in v:
         W, L, LOG_W, W_MASK, TARGET_SUM = 4, 64, 2, 0x3, 124
+    elif "w4l65" in v:
+        W, L, LOG_W, W_MASK, TARGET_SUM = 4, 65, 2, 0x3, 125
     else:
         W, L, LOG_W, W_MASK = 8, 43, 3, 0x7
     SIG_LEN = N * (2 + (K - 1) * (A + 1)) + D * (4 + (L + H // D) * N)
@@ -59,6 +68,9 @@ def configure(variant):
     if "split810" in v:
         _WIDTH = dict(type=4, layer=1, tree=18, kp=10, ci=6, cp=4, ha=11)
         _SHIFT = dict(type=52, layer=51, tree=33, kp=23, ci=17, cp=12, ha=1)
+    elif "w4l65" in v:
+        _WIDTH = dict(type=4, layer=1, tree=18, kp=9, ci=7, cp=4, ha=11)
+        _SHIFT = dict(type=52, layer=51, tree=33, kp=24, ci=17, cp=12, ha=1)
     else:
         _WIDTH = dict(type=4, layer=1, tree=18, kp=9, ci=6, cp=4, ha=11)
         _SHIFT = dict(type=52, layer=51, tree=33, kp=24, ci=18, cp=12, ha=1)
@@ -417,7 +429,7 @@ def cross(variant):
     root1 = keygen(sk, ps)
     sig1 = sign(sk, ps, root1, m)
     print(f"[{variant_name()}] pk_root {root1.hex()} (0.3: {root0.hex()})")
-    if "prf2" in VARIANT or "split810" in VARIANT or "w4" in VARIANT:
+    if VARIANT & {"prf2", "split810", "w4", "w4l65"}:
         assert root1 != root0, "flag not live: pk_root unchanged"
     else:
         assert root1 == root0, "ts200 must not change keys"
