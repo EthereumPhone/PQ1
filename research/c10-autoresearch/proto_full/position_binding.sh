@@ -41,12 +41,12 @@ s = s.replace(w, w
     + '    let (tree, kp) = { let _ = (tree, kp); (0u64, 0u32) };\n')
 open(p, "w").write(s)
 EOF
-VARIANTS=(draft03 prf2 wprf2b prf2+wprf2b all3 full)
+VARIANTS=(draft03 prf2 wprf2b prf2+wprf2b all3 full noprf2)
 feat() {
   case "$1" in
     draft03) echo v2 ;; prf2) echo v2,v2-prf2 ;; wprf2b) echo v2,v2-wprf2b ;;
     prf2+wprf2b) echo v2,v2-prf2,v2-wprf2b ;; all3) echo v2,v2-ts200,v2-prf2,v2-split810 ;;
-    full) echo v2,v2-ts200,v2-prf2,v2-split810,v2-wprf2b ;; *) echo "unknown variant $1" >&2; exit 2 ;;
+    full) echo v2,v2-ts200,v2-prf2,v2-split810,v2-wprf2b ;; noprf2) echo v2,v2-ts200,v2-split810,v2-wprf2b ;; *) echo "unknown variant $1" >&2; exit 2 ;;
   esac
 }
 LOG=$Q/logs
@@ -67,7 +67,7 @@ for v in "${VARIANTS[@]}"; do
     echo "FAIL $v (see $l)"; bad=$((bad + 1))
   fi
   muts=(pb-mut-fors-ht pb-mut-fors-pairbit pb-mut-wots-layer pb-mut-wots-tree pb-mut-wots-kp pb-mut-wots-pairbit)
-  case "$v" in *wprf2b*|full) muts+=(pb-mut-2b-drop-a7-position) ;; esac
+  case "$v" in *wprf2b*|full|noprf2) muts+=(pb-mut-2b-drop-a7-position) ;; esac
   for m in "${muts[@]}"; do
     ml="$LOG/$v-$m.log"
     if [[ $m == pb-mut-fors-* ]]; then want="F FAILED"; ok_test=wots_binding_grid_and_honest_positions

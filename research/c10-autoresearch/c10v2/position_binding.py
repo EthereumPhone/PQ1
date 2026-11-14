@@ -39,6 +39,7 @@ VARIANTS = {
     "prf2+wprf2b": ("prf2", "wprf2b"),
     "all3": ("ts200", "prf2", "split810"),
     "full": ("ts200", "prf2", "split810", "wprf2b"),
+    "noprf2": ("ts200", "split810", "wprf2b"),   # round 21: the no-prf2 candidate
 }
 
 

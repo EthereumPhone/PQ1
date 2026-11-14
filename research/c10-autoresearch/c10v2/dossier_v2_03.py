@@ -151,6 +151,10 @@ def main():
     kg_v1 = 2**hp * p["l"]
     print(f"  keygen with the top cache: full stack sk_seed counter 0, CV {kg:,}; bridge sk_seed counter {kg:,}, CV 0"
           f" (v1 keygen: sk_seed 0, CV {kg_v1:,}); once per key derivation, not per signature")
+    # round 21: the no-prf2 candidate (ts200 + split810 + cache + wprf2b): both top-tree builds use the unpaired
+    # two-block PRF (the asm key loop, then the per-chain confirm build): 43 + 43 per key, all CV block-2 compressions
+    kg_np2 = 2 * 2**10 * p["l"]
+    print(f"  keygen with the top cache, no-prf2 candidate: sk_seed counter 0, CV {kg_np2:,}")
     # round 18 (UPDATE 2026-11-14): w4l65 + wprf2b — the WOTS PRF adds no sk_seed compression with varying words;
     # FORS is w4l65's (same k, a); the per-layer CV residual scales with l
     w4_cv_nc = 2 * (2**hp * 65 + 65)
