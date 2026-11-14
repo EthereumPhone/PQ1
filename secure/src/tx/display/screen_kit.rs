@@ -361,9 +361,10 @@ pub(crate) fn token_amount(value: &U256, decimals: u8, symbol: &[u8]) -> Option<
 }
 
 /// A verified token amount in the representation its page painter chose
-/// (`write_token_amount_two_rows`): the widened exact fraction, or — when
-/// that did not fit the page — the integer in labelled base units. `None`
-/// where the page could not render it exactly (the dispatcher refused).
+/// (`write_token_amount_two_rows`): the widened exact fraction (on the page
+/// possibly wrapped across both rows), or — only when not even the wrapped
+/// decimal fit the page — the integer in labelled base units. `None` where
+/// the page could not render it exactly (the dispatcher refused).
 pub(crate) fn token_amount_as_page(value: &U256, meta: &crate::erc20::bundle::Erc20Metadata<'_>) -> Option<Amount> {
     use super::primitives::{write_token_amount_two_rows, AmountFit};
     use crate::ui::DISPLAY_COLS;

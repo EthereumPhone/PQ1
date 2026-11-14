@@ -577,6 +577,51 @@ fn legacy_token_full_precision_18_decimals_wraps_exactly() {
     assert_eq!(row_str(&r1), "9.987654321 DAI");
 }
 
+/// Full-precision 18-decimal amounts under 10^16 base units used to fit the
+/// labelled base-unit form before the exact wrap was tried, so the user saw
+/// a bare integer (`4423644323452363 base AAVE`, Ambire NEXT CoW sell,
+/// 2026-11-14). They now wrap as exact decimals like the larger ones.
+#[test]
+fn legacy_token_small_full_precision_wraps_before_base_units() {
+    fn meta(symbol: &'static [u8]) -> Erc20Metadata<'static> {
+        Erc20Metadata { chain_id: 8453, contract: [0x63; 20], decimals: 18, name: b"Token", symbol }
+    }
+    for (raw, symbol, e1, e2) in [
+        (4_423_644_323_452_363u64, &b"AAVE"[..], "0.0044236443234>", ">52363 AAVE"),
+        (1_000_000_000_000_001, b"WETH", "0.0010000000000>", ">00001 WETH"),
+        (1, b"WETH", "0.0000000000000>", ">00001 WETH"),
+    ] {
+        let m = meta(symbol);
+        let amount = u256_from_u64(raw);
+        let mut r1 = [b' '; DISPLAY_COLS];
+        let mut r2 = [b' '; DISPLAY_COLS];
+        assert!(token_amount_is_exactly_renderable(&amount, &m), "{raw}");
+        assert_eq!(write_token_amount_two_rows(&mut r1, &mut r2, &amount, &m), AmountFit::Full);
+        assert_eq!(row_str(&r1), e1, "{raw}");
+        assert_eq!(row_str(&r2), e2, "{raw}");
+    }
+}
+
+/// Labelled base units stay the last resort: a 10-byte symbol leaves the
+/// wrapped row 2 no room for `>52363 ` + symbol, while `base ` + symbol
+/// still fits under the 16-digit integer.
+#[test]
+fn legacy_token_base_units_remain_the_last_resort() {
+    let meta = Erc20Metadata {
+        chain_id: 8453,
+        contract: [0x63; 20],
+        decimals: 18,
+        name: b"Long symbol",
+        symbol: b"ABCDEFGHIJ",
+    };
+    let amount = u256_from_u64(4_423_644_323_452_363);
+    let mut r1 = [b' '; DISPLAY_COLS];
+    let mut r2 = [b' '; DISPLAY_COLS];
+    assert_eq!(write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta), AmountFit::Full);
+    assert_eq!(row_str(&r1), "4423644323452363");
+    assert_eq!(row_str(&r2), "base ABCDEFGHIJ");
+}
+
 #[test]
 fn legacy_token_base_unit_fallback_never_truncates_symbol() {
     let meta = Erc20Metadata {

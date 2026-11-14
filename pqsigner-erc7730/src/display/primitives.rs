@@ -1276,9 +1276,24 @@ pub fn write_token_amount_two_rows(
         }
     }
 
-    // Tiny high-decimal amounts and other awkward exact decimals may not fit
-    // the two-row grid. Preserve availability without rounding by rendering
-    // the signed integer in explicitly labelled token base units.
+    // A full-precision amount of an 18-decimal token (a CoW quote-derived
+    // amount, say `1234.987654321098765432 DAI` or `0.004423644323452363
+    // AAVE`) fits neither decimal form above. Wrap the exact decimal across
+    // both rows with explicit continuation marks (owner decision 2026-09-23:
+    // exact and wrapped, never rounded).
+    //
+    // This MUST come before the base-unit fallback below. When the wrap was
+    // added after it, every such amount under 10^16 base units (under 0.01
+    // of an 18-decimal token) still fitted the base-unit form and reached the
+    // user as a bare integer — `4423644323452363 base AAVE` for a 0.0044 AAVE
+    // CoW sell (Ambire NEXT, 2026-11-14).
+    if write_amount_wrapped(row1, row2, amount, decimals, unit_bytes) == AmountFit::Full {
+        return AmountFit::Full;
+    }
+
+    // Last resort, when not even the wrapped decimal holds every digit and
+    // the complete symbol: the signed integer in explicitly labelled token
+    // base units — exact, never rounded.
     const BASE_PREFIX: &[u8] = b"base ";
     if unit_bytes.len() <= DISPLAY_COLS.saturating_sub(BASE_PREFIX.len() + 1) {
         let mut base_unit = [0u8; DISPLAY_COLS];
@@ -1298,12 +1313,10 @@ pub fn write_token_amount_two_rows(
         }
     }
 
-    // A full-precision amount of an 18-decimal token (a CoW quote-derived
-    // limit, say `1234.987654321098765432 DAI`) fits neither form. Wrap the
-    // exact decimal across both rows with explicit continuation marks.
-    // Refuse when even the wrapped form cannot hold every digit and the
-    // complete symbol.
-    write_amount_wrapped(row1, row2, amount, decimals, unit_bytes)
+    // Neither form fits: refuse (both rows blanked), never round.
+    *row1 = [b' '; DISPLAY_COLS];
+    *row2 = [b' '; DISPLAY_COLS];
+    AmountFit::Overflow
 }
 
 /// Continuation mark ending row 1 and opening row 2 of a wrapped amount.

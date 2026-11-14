@@ -97,7 +97,7 @@ fn sell_canonical(sell_token: [u8; 20], sell_amount: u128) -> [u8; 204] {
 }
 
 #[test]
-fn exact_preflight_accepts_decoded_dust_via_base_units() {
+fn exact_preflight_accepts_decoded_dust_via_exact_wrap() {
     let c = sell_canonical([0x33; 20], 1);
     let sell = leg(b"DUST", 18);
 
@@ -106,11 +106,34 @@ fn exact_preflight_accepts_decoded_dust_via_base_units() {
         "one signed base unit must remain available without rounding"
     );
 
+    // One base unit is the exact decimal 0.000000000000000001, wrapped —
+    // not the bare integer `1 base DUST`, which hides the decimals.
     let pages = render_cowswap_pages(&c, &sell, &CowLeg::AddrHex);
+    let text = page_concat(&pages, 1);
     assert!(
-        page_concat(&pages, 1).contains("base DUST"),
-        "the accepted value must use the exact base-unit fallback"
+        text.contains("0.0000000000000>") && text.contains(">00001 DUST"),
+        "the accepted value must use the exact wrapped decimal: {text}"
     );
+    assert!(!text.contains("base"), "no base-unit form when the decimal fits: {text}");
+}
+
+/// The 2026-11-14 Ambire NEXT report: a CoW sell of 0.004423644323452363
+/// AAVE (Base, quote-derived, full 18-decimal precision) reached the device
+/// as `4423644323452363 base AAVE`. The exact wrap ran only after the
+/// base-unit fallback, which any such amount under 10^16 base units fits.
+#[test]
+fn small_full_precision_cow_sell_shows_the_decimal_not_base_units() {
+    let c = sell_canonical([0x63; 20], 4_423_644_323_452_363);
+    let sell = leg(b"AAVE", 18);
+
+    assert!(amounts_are_exactly_renderable(&c, &sell, &CowLeg::AddrHex));
+    let pages = render_cowswap_pages(&c, &sell, &CowLeg::AddrHex);
+    let text = page_concat(&pages, 1);
+    assert!(
+        text.contains("0.0044236443234>") && text.contains(">52363 AAVE"),
+        "every digit of 0.004423644323452363, in order: {text}"
+    );
+    assert!(!text.contains("base"), "{text}");
 }
 
 #[test]

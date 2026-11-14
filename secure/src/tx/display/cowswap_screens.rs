@@ -15,8 +15,9 @@
 //! over its FULL contract address (the page's anti-DB-spoof backstop); an
 //! undecoded leg is the full address plus the raw uint256 amount word.
 //! Amounts use the page painter's own representation
-//! (`write_token_amount_two_rows`: widened exact fraction, else labelled
-//! base units), so a value the page renders exactly is rendered exactly here.
+//! (`write_token_amount_two_rows`: widened exact fraction, wrapped if it
+//! needs both rows, labelled base units only as the last resort), so a value
+//! the page renders exactly is rendered exactly here.
 
 use super::screen_kit::{addr42, raw_units, token_amount_as_page, wrap, BodyReceipt, Emit, Text};
 use super::userop_screens::Family;

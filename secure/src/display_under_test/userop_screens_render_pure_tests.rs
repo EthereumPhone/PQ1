@@ -463,7 +463,7 @@ fn erc20_known_placeholder_token_transfer_from_screens() {
     assert_eq!(hero.monogram(), Some(b'T'));
     assert_eq!(hero.tint(), Some(pqsigner_ui_px::placeholder_ramp(b"TOSHI")));
     assert!(ids(&l.screens).iter().any(|i| i == "FROM"));
-    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "347f9106d607f3fd0b132f6abc4f6878d5fbe8670aaa909c8545e0ccf7ead7d8");
+    check("erc20", "pull_toshi", &l, BASE, "erc20_known", "1af66906c97b02ee13eff0e473dee7fe9273abecb723815e19479ba7fc1b1561");
 }
 
 #[test]

@@ -124,6 +124,26 @@ fn cow_direct_decoded_screens() {
     check("cowswap", "swap", &l, MAINNET, "cow", "8dec40422069f258dc0c0ea6c1c9887bd0249db978eb4eaaa9728ff196d89b16");
 }
 
+/// Regression, Ambire NEXT on Base 2026-11-14: a CoW sell of
+/// `0.004423644323452363 AAVE` (an amount quoted to full 18-decimal
+/// precision) reached the screen as `4423644323452363 base AAVE`, because the
+/// exact wrapped decimal was tried only after the base-unit fallback. The
+/// pixel SELL leg must show the decimal, wrapped, never base units.
+#[test]
+fn cow_small_full_precision_sell_shows_the_decimal() {
+    let mut v3 = cow_order(true);
+    put(&mut v3.canonical, 68, 4_423_644_323_452_363);
+    put(&mut v3.canonical, 100, 467_563);
+    put(&mut v3.canonical, 132, 0);
+    v3.sell = cow_leg(b"AAVE", b"Aave Token", 18);
+    let l = lift_cow(&v3);
+    let text = screen_text(&l.screens);
+    assert!(text.lines().any(|l| l == "0.004423644323452363"), "{text}");
+    assert!(text.contains("0.467563"), "{text}");
+    assert!(!text.contains("base"), "base units shown: {text}");
+    assert!(!text.lines().any(|l| l.starts_with("4423644323452363")), "integer shown: {text}");
+}
+
 #[test]
 fn cow_direct_address_mode_screens() {
     let v3 = cow_order(false);
