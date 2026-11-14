@@ -31,18 +31,29 @@ SIG_LEN = 4008
 #            (first half only). Keys change; the verifier does not.
 # split810 : hypertree layer heights (8, 10) instead of (9, 9); A7 kp widens to
 #            10 bits (bits 32..23) and ci moves to bits 22..17 (verifier changes).
+# w4       : round 16 frontier set (research): WOTS+C with w = 4, l = 64, target sum
+#            124 (digits from the low 128 bits of WOTS_DIGEST, 2 bits each); every
+#            other parameter and the A7 layout unchanged (ci <= 63, cp <= 3 fit).
+#            Keys, signature length (4,680 B) and the verifier change.
 VARIANT = frozenset()
 HL = (SUBTREE_H, SUBTREE_H)   # per-layer subtree heights, layer 0 first
 
 
 def configure(variant):
     """Select a variant set (iterable of 'ts200', 'prf2', 'split810')."""
-    global VARIANT, TARGET_SUM, HL, _WIDTH, _SHIFT
+    global VARIANT, TARGET_SUM, HL, _WIDTH, _SHIFT, W, L, LOG_W, W_MASK, SIG_LEN
     v = frozenset(x for x in variant if x)
-    unknown = v - {"ts200", "prf2", "split810"}
+    unknown = v - {"ts200", "prf2", "split810", "w4"}
     assert not unknown, f"unknown variant {sorted(unknown)}"
+    assert not ("w4" in v and "ts200" in v), "w4 sets its own target sum"
     VARIANT = v
     TARGET_SUM = 200 if "ts200" in v else 205
+    if "w4" in v:
+        W, L, LOG_W, W_MASK, TARGET_SUM = 4, 64, 2, 0x3, 124
+    else:
+        W, L, LOG_W, W_MASK = 8, 43, 3, 0x7
+    SIG_LEN = N * (2 + (K - 1) * (A + 1)) + D * (4 + (L + H // D) * N)
+    assert L * LOG_W <= 256 and W ** L >= 2**128
     HL = (8, 10) if "split810" in v else (SUBTREE_H, SUBTREE_H)
     assert sum(HL) == H
     if "split810" in v:
@@ -326,7 +337,8 @@ def selftest():
     sig = sign(sk, ps, root, m)
     assert verify(ps, root, m, sig), "valid signature rejected"
     bad = 0
-    regions = [0, 16, 16 + 12 * 16, 2336, 2336 + 43 * 16 + 2, 2336 + 688 + 4 + 5, 2336 + 836 + 100, SIG_LEN - 1]
+    wsig = L * N + 4 + SUBTREE_H * N   # one WOTS layer section (836 B at l = 43)
+    regions = [0, 16, 16 + 12 * 16, 2336, 2336 + L * 16 + 2, 2336 + L * N + 4 + 5, 2336 + wsig + 100, SIG_LEN - 1]
     for off in regions:
         s2 = bytearray(sig); s2[off] ^= 1
         bad += not verify(ps, root, m, bytes(s2))
@@ -405,7 +417,7 @@ def cross(variant):
     root1 = keygen(sk, ps)
     sig1 = sign(sk, ps, root1, m)
     print(f"[{variant_name()}] pk_root {root1.hex()} (0.3: {root0.hex()})")
-    if "prf2" in VARIANT or "split810" in VARIANT:
+    if "prf2" in VARIANT or "split810" in VARIANT or "w4" in VARIANT:
         assert root1 != root0, "flag not live: pk_root unchanged"
     else:
         assert root1 == root0, "ts200 must not change keys"
