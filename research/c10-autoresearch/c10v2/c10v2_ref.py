@@ -31,23 +31,65 @@ SIG_LEN = 4008
 #            (first half only). Keys change; the verifier does not.
 # split810 : hypertree layer heights (8, 10) instead of (9, 9); A7 kp widens to
 #            10 bits (bits 32..23) and ci moves to bits 22..17 (verifier changes).
+# w4       : round 16 frontier set (research): WOTS+C with w = 4, l = 64, target sum
+#            124 (digits from the low 128 bits of WOTS_DIGEST, 2 bits each); every
+#            other parameter and the A7 layout unchanged (ci <= 63, cp <= 3 fit).
+#            Keys, signature length (4,680 B) and the verifier change.
+# w4l65    : round 16, the strict-PASS neighbour of w4 (research): w = 4, l = 65, target
+#            sum 125 (digits from the low 130 bits of WOTS_DIGEST), so the one-time
+#            digest space is 4^65 = 2^130 >= stock's 8^43 = 2^129. A7 ci widens to
+#            7 bits (bits 23..17, into the free bits 17..16 gap; every other field
+#            unchanged). Keys, signature length (4,712 B) and the verifier change.
+# wprf2b   : round 17, gate (c) (research): the WOTS secret PRF in v1's two-block shape,
+#            sha256(sk_seed || WPRF2B_TAG || be32(layer) || 0^12 || A7)[:16], 71 B. Its first
+#            block, sk_seed || tag || layer, is constant per layer, so sk_seed never meets a
+#            varying word in one compression (as v1's 80-B WOTS PRF). Keys change; the
+#            verifier does not (it never computes a secret).
+WPRF2B_TAG = b"C10v2-WOTS-PRF2B"
+# d3l46    : round 19, the d >= 3 insight point (research): h = 18 over d = 3 layers of height
+#            6, w = 8, l = 46, target sum 209 (digits from the low 138 bits), 4,844-B
+#            signatures. A7 re-laid out for a 2-bit layer: type 4 @52, layer 2 @50, tree 18
+#            @32, kp 8 @24, ci 6 @18, cp 4 @12, ha 11 @1. Keys, signatures and the verifier
+#            change.
 VARIANT = frozenset()
 HL = (SUBTREE_H, SUBTREE_H)   # per-layer subtree heights, layer 0 first
 
 
 def configure(variant):
     """Select a variant set (iterable of 'ts200', 'prf2', 'split810')."""
-    global VARIANT, TARGET_SUM, HL, _WIDTH, _SHIFT
+    global VARIANT, TARGET_SUM, HL, _WIDTH, _SHIFT, W, L, LOG_W, W_MASK, SIG_LEN, D
     v = frozenset(x for x in variant if x)
-    unknown = v - {"ts200", "prf2", "split810"}
+    unknown = v - {"ts200", "prf2", "split810", "w4", "w4l65", "wprf2b", "d3l46"}
     assert not unknown, f"unknown variant {sorted(unknown)}"
+    assert not (v & {"w4", "w4l65"} and "ts200" in v), "w4 / w4l65 set their own target sum"
+    assert not {"w4", "w4l65"} <= v, "w4 and w4l65 are alternatives"
+    assert not {"w4l65", "split810"} <= v, "w4l65 and split810 both re-lay out ci"
+    assert not {"wprf2b", "prf2"} <= v, "wprf2b and prf2 are different WOTS PRFs"
+    assert not ("d3l46" in v and v & {"ts200", "split810", "w4", "w4l65"}), "d3l46 sets d, l, T and the A7 layout"
     VARIANT = v
     TARGET_SUM = 200 if "ts200" in v else 205
-    HL = (8, 10) if "split810" in v else (SUBTREE_H, SUBTREE_H)
-    assert sum(HL) == H
+    if "w4" in v:
+        W, L, LOG_W, W_MASK, TARGET_SUM = 4, 64, 2, 0x3, 124
+    elif "w4l65" in v:
+        W, L, LOG_W, W_MASK, TARGET_SUM = 4, 65, 2, 0x3, 125
+    elif "d3l46" in v:
+        W, L, LOG_W, W_MASK, TARGET_SUM = 8, 46, 3, 0x7, 209
+    else:
+        W, L, LOG_W, W_MASK = 8, 43, 3, 0x7
+    D = 3 if "d3l46" in v else 2
+    SIG_LEN = N * (2 + (K - 1) * (A + 1)) + D * (4 + (L + H // D) * N)
+    assert L * LOG_W <= 256 and W ** L >= 2**128
+    HL = (8, 10) if "split810" in v else (6, 6, 6) if "d3l46" in v else (SUBTREE_H, SUBTREE_H)
+    assert sum(HL) == H and len(HL) == D
     if "split810" in v:
         _WIDTH = dict(type=4, layer=1, tree=18, kp=10, ci=6, cp=4, ha=11)
         _SHIFT = dict(type=52, layer=51, tree=33, kp=23, ci=17, cp=12, ha=1)
+    elif "d3l46" in v:
+        _WIDTH = dict(type=4, layer=2, tree=18, kp=8, ci=6, cp=4, ha=11)
+        _SHIFT = dict(type=52, layer=50, tree=32, kp=24, ci=18, cp=12, ha=1)
+    elif "w4l65" in v:
+        _WIDTH = dict(type=4, layer=1, tree=18, kp=9, ci=7, cp=4, ha=11)
+        _SHIFT = dict(type=52, layer=51, tree=33, kp=24, ci=17, cp=12, ha=1)
     else:
         _WIDTH = dict(type=4, layer=1, tree=18, kp=9, ci=6, cp=4, ha=11)
         _SHIFT = dict(type=52, layer=51, tree=33, kp=24, ci=18, cp=12, ha=1)
@@ -111,6 +153,10 @@ def T(S, adrs, vals):
 
 def wots_prf(sk_seed, layer, tree, kp, ci):
     assert len(sk_seed) == 32
+    if "wprf2b" in VARIANT:
+        blk = WPRF2B_TAG + be(layer, 4) + b"\x00" * 12           # 32 B: block 1 is sk_seed || blk
+        assert len(WPRF2B_TAG) == 16 and len(blk) == 32
+        return sha256(sk_seed + blk + a7(WOTS_PRF, layer, tree, kp, ci))[:N]   # 71 B
     if "prf2" in VARIANT:
         d = sha256(sk_seed + a7(WOTS_PRF, layer, tree, kp, ci & ~1))
         return d[N * (ci & 1):N * (ci & 1) + N]
@@ -326,7 +372,8 @@ def selftest():
     sig = sign(sk, ps, root, m)
     assert verify(ps, root, m, sig), "valid signature rejected"
     bad = 0
-    regions = [0, 16, 16 + 12 * 16, 2336, 2336 + 43 * 16 + 2, 2336 + 688 + 4 + 5, 2336 + 836 + 100, SIG_LEN - 1]
+    wsig = L * N + 4 + HL[0] * N   # one WOTS layer section (836 B at l = 43)
+    regions = [0, 16, 16 + 12 * 16, 2336, 2336 + L * 16 + 2, 2336 + L * N + 4 + 5, 2336 + wsig + 100, SIG_LEN - 1]
     for off in regions:
         s2 = bytearray(sig); s2[off] ^= 1
         bad += not verify(ps, root, m, bytes(s2))
@@ -405,7 +452,7 @@ def cross(variant):
     root1 = keygen(sk, ps)
     sig1 = sign(sk, ps, root1, m)
     print(f"[{variant_name()}] pk_root {root1.hex()} (0.3: {root0.hex()})")
-    if "prf2" in VARIANT or "split810" in VARIANT:
+    if VARIANT & {"prf2", "split810", "w4", "w4l65", "wprf2b", "d3l46"}:
         assert root1 != root0, "flag not live: pk_root unchanged"
     else:
         assert root1 == root0, "ts200 must not change keys"
@@ -414,16 +461,16 @@ def cross(variant):
     # a 0.3 signature (sum 205, 9+9) under the variant verifier, against the variant's own root
     # when keys agree, else against the 0.3 root (the verifier only sees bytes)
     rej = not verify(ps, root0, m, sig0)
-    if VARIANT <= {"prf2"}:
-        assert not rej, "prf2 changes no verifier rule: a 0.3 signature must still verify"
+    if VARIANT <= {"prf2", "wprf2b"}:
+        assert not rej, "prf2 / wprf2b change no verifier rule: a 0.3 signature must still verify"
     else:
         assert rej, "a draft-0.3 signature verified under a variant verifier"
     # the variant's signature under the 0.3 verifier
     vset = VARIANT
     configure(())
     acc = verify(ps, root1, m, sig1)
-    if vset == {"prf2"}:
-        assert acc, "the unchanged 0.3 verifier must accept a prf2 signature"
+    if vset <= {"prf2", "wprf2b"}:
+        assert acc, "the unchanged 0.3 verifier must accept a prf2 / wprf2b signature"
     else:
         assert not acc, "a variant signature verified under the draft-0.3 verifier"
     configure(variant)

@@ -1857,3 +1857,732 @@ This is a code change for a later round, with the owner's go.
 - a per-sign table: confirm→`film_start`, `film_start`→sign start, `pre_sign` wait, draws (per fill, per source), sign A, sign B, the verifies, commit, `t_ready`, the film wait, and the host total;
 - the fallback rate;
 - whether 0.3 s still holds.
+
+## Round 16 (2026-11-14): format changes as candidates — v2 0.3 dossier, family search, split810
+
+**Owner, 2026-11-14:** format changes may enter the final code if security is no weaker than stock C10 (v1: h=18 d=2 a=11 k=13 w=8 l=43 T=205, 4,008 B). A later refinement makes gate (S) a **reporting device**: each item is marked PASS, MINOR-LOSS or FAIL with its numbers, and the owner decides minor losses. SHA-256 stays.
+
+Labels: **[computed]** = a script printed it (named); **[argued]** = reasoning; **[reviewed]** = Astra.
+
+### 1. Dossier: v2 draft 0.3 (#1155, the one-block format) against stock C10
+
+Computed items: `c10v2/dossier_v2_03.py`. It imports `bound_variants.py` (and runs its anchor) and `format_options_numerics.py`.
+
+**(a) The proven bound: equal numbers, proof not yet ported. Mark: PASS on the numbers, NOT YET PROVEN for v2.**
+- **Quantitative.lean floor**, min(k·a, n − qBits, n − 2·qBits), equal [computed]: slot cap 2^16 gives 96 bits for both; the P14 bootstrap across C chains gives 94 b at C = 2 and 88 b at C = 16 for both. The Grover convention (half of each) gives 48, 47 and 44. That convention is not a QROM theorem.
+- **EasyCrypt-shape bound**, equal [computed]: v2 0.3 changes no constant (`consts()` is equal; the script asserts it).
+  - qr = qs = 2^16: ordinary 2^-60.80, wrapper 2^-59.80.
+  - Bootstrap C = 2: 2^-59.80 and 2^-58.80; C = 16: 2^-56.80 and 2^-55.78.
+- **Not proven:** the EasyCrypt theorems are proved for v1's byte format (32-byte seed blocks, 32-byte ADRS, v1's FORS_LAST tweak sharing). For v2 the equal row is "if the proof ports with the same charge structure". The port means re-checking the byte-layout-dependent refined exclusions (`LeafGrindingCandidates.ec`, `NodeQueryDomain.ec`) against the A7 one-block encoding, plus v2's dedicated FORS_LAST type 9, which removes v1's tweak sharing. Until then (a) is a computation, not a theorem.
+
+**(b) Hash assumption: the same assumption. Mark: PASS [argued].**
+- **The model:** both formats are the "simple" SHA-256 tweakable hash, modelled as a random oracle (classical) or quantum random oracle (Hülsing–Kudinov, ePrint 2022/346). The project's EasyCrypt proof is an ideal-oracle byte game over SHA-256 in either format, so v2 adds no assumption.
+- **What it needs instead is an injective encoding of logical inputs:**
+  - A7 injectivity [computed, `format_options_checks.py` A];
+  - v2 input lengths disjoint from v1's, except the shared R-grind PRF, which is the same function [spec §3, listed];
+  - the 39-byte KDF inputs separated by a fixed 7-byte ASCII prefix against hash outputs, plus secret keying [argued, spec §3].
+- **H_MSG with R last** relies on SHA-256 collision resistance in M. M is already an unrandomized SHA-256 digest of the signed object, so this is no new assumption [argued].
+- **Outside the random-oracle model** the constructions differ: v1's first compression block is seed ‖ ADRS, v2 makes one compression from the fixed IV. The project analyses neither in the standard model.
+
+**(c) Fault fallback and SCA margins. Mark: MINOR-LOSS (DPA exposure), with a costed fix.**
+- **Fault fallback: equal [computed].** One WOTS key signing two sum-205 digests leaves a median per-try forgery of 2^-55.21 (1st percentile 2^-47.27). That depends on (l, w, T) only. The FI chain (double compute, compare, verify-before-release, shuffle, sentinels) is the same code [argued].
+- **DPA exposure: higher [computed count, argued impact].** Per signing pass, these are the single compressions that take `sk_seed` together with attacker-known varying words:
+
+  | | FORS PRF | WOTS PRF | total |
+  |---|---:|---:|---:|
+  | v1 | 24,576 (one 48-B block) | 0 | 24,576 |
+  | v2 0.3 | 24,576 | 44,032 | 68,608 (×2.79, about 1.5 bits) |
+
+  v1's WOTS PRF is 80 B. Its `sk_seed` block, `sk_seed ‖ "wots" ‖ layer ‖ 0^24`, is constant per layer; the varying fields meet only a per-layer secret chaining value in block 2. v2's WOTS PRF is one block, `sk_seed ‖ A7`.
+
+  So an attacker gets the same `sk_seed` trace budget from about 2.8× fewer signing passes. This is an exposure count, not a measured DPA margin.
+- **Fix [argued, cost estimated]:** keep the WOTS secret PRF in v1's two-block shape, with `sk_seed` in a block that is constant per layer. The PRF is signer-side key derivation; the verifier never computes it. It costs +44,032 compressions per pass, about +4 M cycles (≈ +8% of 50.35 M), and restores v1's exposure. FORS is unchanged: v1's FORS PRF is already one block.
+- **HR residue:** both formats compute 32-byte PRF digests and use 16 bytes, so there is no change [argued].
+
+**(d) Format identifier in key derivation. Mark: FAIL as implemented, with a simple fix.**
+- v2 derives `(sk_seed, pk_seed)` with v1's tags (`domain/src/lib.rs`); nothing binds a format.
+- Between v1 and v2 the preimages are length-disjoint, so their chains and secrets are independent under the PRF assumption [argued]. Between v2 *variants* they are not (format-options-security §4: 2^53–2^77).
+- **Fix (proposal, not implemented):** under the v2 feature only, derive the v2 master with a format-bound tag (e.g. `"sphincs-c10v2-0.3"` / `"...-acct"`) so that any later v2 variant needs a new tag. Account-0 stock tags stay untouched in default builds. This means a new address per format, which invariant #6 accepts only if the format is fixed before the first v2 key signs.
+
+**(e) Review and reproducibility.** Every number above comes from `dossier_v2_03.py`, `bound_variants.py`, `format_options_numerics.py` and `format_options_checks.py`. Astra review: pending (next entry).
+
+**Dossier bottom line:**
+- **Not yet airtight.** (a) is equal in numbers but not proven for v2's byte format, (c) has a ~1.5-bit DPA exposure increase, and (d) is missing.
+- The (c) and (d) fixes are small and specified: two-block WOTS PRF (about +8% sign), and a format-bound KDF tag.
+- (a) needs the EasyCrypt byte-model port. That is the real remaining cost of adopting v2.
+
+### 4. split810 (#1164) and ts200 (#1165) against gate (S)
+
+**split810: is the ×1.21 pure proof slack?** Mostly yes; the residual is negligible but real. Read-only analysis of the EasyCrypt sources; the numbers come from `bound_variants.py`'s formulas with memoized accounting; argued, not proved.
+- **Where the ×1.21 comes from.** The model signer rebuilds every layer's subtree on every signature (`RawLayer.ec:19` calls `RawMerkle.build`, per layer per signature, `RawSigner.ec:17–19`; twice per wrapper signature). The cost lemmas put that call count into the theorem's right-hand side through the `ChainVariable…Cost`, `LeafTarget…Cost` and `WrapperWotsCandidateCost` families.
+- **Why that is slack.** The adversary's budgets are only qr and qs, and the signer's call log keeps repeats (`DomainQueryCount.ec:1` says "including cached repeats"; `WrapperLayerMemo.ec:1–2`). Counting distinct calls gives a new right-hand side for the same game and the same scheme.
+- **Charging each hypertree subtree once** (FORS and the per-layer remainder kept; the wrapper still pays FORS twice), at qr = qs = 2^16:
+
+  | | ordinary | wrapper |
+  |---|---:|---:|
+  | v1 tight | 2^-63.51 (×0.153 of stock-as-proved) | 2^-62.52 (×0.152) |
+  | split810 tight vs v1 tight | ×1.00022 (+0.0003 bits) | ×1.00019 |
+
+- **The residual is real, not accounting.** split810's 512 extra top-layer WOTS keys are distinct nodes: 154,624 more distinct calls, and a WOTS universe ×1.00195.
+- **Verdict on the gate:**
+  - **today:** FAIL (×1.213; and not proved for (8, 10) at all);
+  - **after a tightened proof:** MINOR-LOSS of 0.0003 bits against v1 tight. "Tight split810 vs stock as proved" (×0.153) is not apples to apples, because the same tightening gives v1 ×0.153.
+- **Proof work (judgement; nothing in the repo calibrates it).** The EasyCrypt tree is 1,089 `.ec` files and 182k lines; 57 `*Cost*.ec` files in at least 7 parallel families re-prove the build charge.
+  - **Tightening at (9, 9):** a ghost set of built (layer, tree) pairs, with every build query of a built tree already in the log and the oracle table (keygen seeds the top tree with `build`'s inputs, so a rebuild adds 0 distinct calls). Either count `size (undup …)` with `RawSigner` kept, or add a memoizing signer plus an equivalence hop. About 3–6 new modules (0.5–1.5k lines) and edits in 40–60 files: **~10–30 person-days**. `functional_merkle_build_queries` exists, but over the fixed-function backend and hard-coding 9 levels.
+  - **Generalized heights** (needed for (8, 10) at all): 108 files hard-code the height (`%/512` ×135, `%%512` ×88, `kp < 512` ×34, `nseq 9` ×14, …): **~20–60 person-days**, separate.
+  - **The v2 byte port** (dossier (a)): separate again.
+- **Also tightens stock** by ×0.15 (2.7 bits), so it is worth doing for v1 alone if the proof is touched.
+
+**ts200 (#1165).**
+- **(a):** proven-bound total ×1.0000; the encoding term ×0.30 (better) at these caps [computed, format-options-security §8].
+- **(c): fault fallback 1.6–1.7 bits weaker** [computed: two-digest median 2^-55.3 → 2^-53.7; 1st percentile 2^-47.3 → 2^-45.6]. **FAIL under the strict reading.** Reported, not adopted.
+- **(d):** keys do not change. A seed that signed under 205 must never sign under 200, or every reused WOTS key becomes two-time (~2^53). ts200 therefore needs a format-bound KDF tag more than any other option.
+
+### 1b. Astra's review of the dossier (amends §1; the original verdicts are kept above)
+
+Astra: **NO-GO against the strict a–e gate.** It reran the script: 500 samples give 55.00 / 47.59 bits, and the default 2,000 give 55.21 / 47.27. The corrected verdicts:
+
+| item | verdict | correction |
+|---|---|---|
+| **(a)** | **GAP, blocking** | Halving the floor is **not a quantum check**: Grover scaling applies to a specified search problem, not to classical probability bounds or honest birthday events, so those values are an unsupported heuristic. The Lean floor checks arithmetic over imported estimates (`Quantitative.lean:245`). The EasyCrypt numbers are advantage bounds at qr = 2^16, not security levels. Classical and quantum statements parameterized by hash queries and qs = C·2^16 are still needed; a classical byte-model port alone cannot close (a). |
+| **(b)** | **Conditional PASS** in the whole-hash random-oracle model | The EasyCrypt oracle samples whole byte strings and has no compression-block semantics, so it does not exploit v1's seed ‖ ADRS block (its exclusions do depend on v1 offsets). Gaps: the 39-byte KDF overlap is probabilistic, not structural, and needs a composition bound or disjoint encodings; H_MSG with R last lets one inner collision in `Compress(IV, S ‖ root ‖ M)` survive every R, which full SHA-256 collision resistance covers but which does not preserve a weaker randomized-hashing argument. |
+| **(c)** | **GAP, blocking** | Fault arithmetic: equal. **The DPA counts were wrong.** Corrected in `dossier_v2_03.py`, which now counts tree 12, v1's recomputed revealed FORS leaves and the signing PRFs, and separates the cache state. Without the top cache, v1 26,636 against v2 70,742 (×2.656, 1.41 b); with the warm top cache, 49,414 (×1.855, 0.89 b). These are exposure counts, not traces-to-key-recovery, so **the SCA comparison is UNKNOWN**, not MINOR-LOSS. The fix adds 44,118 compressions per pass without the cache (≈ +4 M, to be measured). Also: HASH cleanup covers HR **and CSR**, which the recorded dead-stack scan does not. |
+| **(d)** | **FAIL** | **The proposed tag fix is insufficient.** Slot keys use their own slot-master and slot-seed derivations (`domain/src/lib.rs:482`, `:742`). The format identifier must be bound into **both** branches, account variants included, and must distinguish target sum, address layout, PRF variant and the last-FORS-slot construction. Even v1 and v2 still share `sk_seed`, `pk_seed` and the R-candidate PRF, which needs joint-format accounting. |
+| **(e)** | **PARTIAL** | Numerics reproduced and source reviewed; no proof replay, no physical validation. |
+
+### 2. The family search (`c10v2/family_bound.py`, `format_options_numerics.py search`, `family_search.tsv.gz`)
+
+**Method.**
+- `family_bound.py` generalizes the EasyCrypt-shape bound, signer cost, verify gas, calldata and A7 fit over (h, d, a, k, w, l, T, n).
+- It reproduces `bound_variants.py` exactly: 108 term-by-term rational matches over six variants and six cap pairs.
+- 2,331,729 valid sets were checked in 223 s: PASS 21,830, MINOR-LOSS 15,710, FAIL 2,294,189.
+- **Marks:** loss = the maximum over the floor metrics (classical, the Grover convention, C = 1, 2, 16), the (c) fault margin and log2(set / stock) of the EasyCrypt totals and their coverage and FORS terms. PASS ≤ 0, MINOR-LOSS ≤ 1 bit, FAIL > 1.
+
+**Calibration.**
+- **Device cycles:** the stock model gives 51.18 M against 50.35 M measured (+1.65%). Using per-call units derived from the measured shares instead of the briefed ones reproduces 50.35 M by construction.
+- **Gas:** interpreter overhead fitted at 93.04 per call, to match Track B's 100,600 callee-only; plus 64,104 calldata, so 164,704 for stock.
+
+**Main result: stock is on the PASS frontier, and no PASS set beats it on all three objectives.** The only PASS set with a signature ≤ 4,008 B is stock itself, so every gain costs signature bytes. Selected PASS frontier rows:
+
+| set | cached sign, M (brief / share units) | sig B | verify gas (callee + calldata) | (c) Δ bits | EC ratio | A7 |
+|---|---:|---:|---:|---:|---:|---|
+| stock / v2 0.3 | 102.6 / 100.9 | 4,008 | 164,704 | 0 | 1 | fits |
+| **h18 d2 a11 k13 w4 l64 T124 ("w4")** | **75.3 / 71.9 (−27%)** | 4,680 (+672) | 160,182 (−2.7%) | +0.34 | 0.651 | **fits as-is** |
+| h18 d2 a10 k16 w8 l43 T205 | 95.6 / 93.9 | 4,344 | 175,910 | 0 | 0.622 | fits |
+| h18 d2 a9 k19 w4 l64 T124 | 63.9 / 60.5 | 5,256 | 179,407 | +0.34 | 0.222 | fits |
+| h16 d2 a10 k22 w4 l64 T124 | 46.5 / 43.0 | 6,040 | 205,538 | +0.34 | 0.082 | fits |
+| h18 d3 a11 k13 w8 l43 T205 | 54.8 / 53.9 | 4,700 | 203,166 | 0 | 0.311 | re-layout |
+| h18 d3 a11 k13 w8 l46 T209 | 39.7 / 36.3 | 4,844 | 219,635 | −0.04 (MINOR) | 0.325 | re-layout |
+| h20 d4 a8 k18 w8 l47 T211 | 20.7 / 17.2 | 5,824 | 276,087 | +0.23 | 0.156 | re-layout |
+| h18 d3 a8 k24 w4 l65 T124 | 20.3 / 16.6 | 6,764 | 233,322 | +0.05 | 0.035 | re-layout |
+
+**What the metrics cannot see (agent and Astra):**
+- The Lean floor is min(k·a, 112, 96): it never moves once k·a ≥ 96.
+- An EasyCrypt ratio below 1 mostly reflects a cheaper model signer (fewer node candidates), not more security.
+- Cycles for d ≥ 3 and w = 4 extrapolate from one calibration point. The driver asm is specialized to l = 43, w = 8.
+- The constants for d ≠ 2 (the WOTS universe) are labelled assumptions.
+- d = 1 rows and anything needing more than 56 address bits are excluded.
+
+**Re-proof cost (token counts).**
+- **Lean:** `Params.lean` has 6 hits; 3 of 12 other Spec files.
+- **EasyCrypt:** 266 of 1,089 split `.ec` files (1,188 hits for 43/205/512/2048), plus 95 files carrying derived literals (155135, 364892, 771, …).
+- **Scope:** any change other than T restates the cost, universe and encoding lemmas.
+
+### 3. Prototype: the w4 set (host Python only, this round)
+
+- **What exists:** `c10v2_ref.py --variant w4` (w = 4, l = 64, T = 124; digits from the low 128 bits; 4,680 B; A7 unchanged). Self-test: 8 bit-flips, wrong root, wrong message and 3 +C near-misses rejected. Cross-format checks pass both ways. 6 KATs and 3 near-misses (`kat-v2-w4.*`). Draft 0.3 and the other variants are unchanged: their KATs regenerate identically to the pre-change reference.
+- **Not done this round:**
+  - Rust host behind a flag and kit timing. The kit was off limits during the coordinator's pre-push host run, and the fused driver entries are specialised to l = 43, w = 8 (key loop, digit-sum fold, T_43 feed).
+  - Device cost is therefore the calibrated model only: 75.3 / 71.9 M cached, against 102.6 / 100.9.
+- **w4 against gate (S):**
+  - (a) PASS on the model's numbers, with the same scope caveats as §1b.
+  - (b) as v2.
+  - (c) fault margin +0.34 b, DPA as v2.
+  - **(d): it derives the same `sk_seed`, and its WOTS PRF A7 for ci < 43 equals 0.3's**, so it shares WOTS secrets with 0.3 unless a format identifier is bound into both derivation branches.
+  - The WOTS one-time term is w^l = 2^128 against stock's 2^129, which the EasyCrypt encoding term carries.
+
+### 2b. Astra's review of the search and w4, and the fixes (amends §2 and §3; the rows above are kept as first reported)
+
+Astra (search + w4): **"FIX reporting; conditional MODEL-PASS for w4, not adoption approval."** The anchor passed exactly (5 cap pairs, 108 term comparisons). The generalized terms are faithful extrapolations, **not EasyCrypt theorems**: d ≠ 2 and w ≠ 8 need proof ports (coverage and extraction across layers; chain vectors, digit distribution, acceptance and extraction for w), and shuffle expansion above 65 items is an extra implementation assumption. The EasyCrypt ratios compare advantage-bound right-hand sides at qr = qs = 2^16 and mostly reflect fewer charged signer queries; they are not security-level ratios.
+
+**Corrections to §2 / §3 [computed, `format_options_numerics.py search` at `39c5c34e7`]:**
+- **The w4 (c) delta was misreported.** The committed gzip carried +0.627 b (w4 kept its 800-sample estimate while stock had 4,000), and §2's table said +0.34, which matches neither. At 4,000 samples for both: **+0.439 b, SE 0.076.**
+- **Fix 1, consistent sampling:** every (w, l, T) on a reported frontier now gets the 4,000-sample estimate, and the sweep repeats until no frontier row is coarse. 226 triples are refined: 85 near a mark boundary plus 141 from the frontier closure, converging after one re-sweep. The TSV carries `c_samples` and `c_median_se_bits` per row. A (c) delta within about 2 SE of 0 is not an established ordering.
+- **Fix 2, the one-time digest term is marked on its own:** `enc` = log2(w^l), the per-query probability that one H_MSG output hits a given digit vector. Stock has 129; w4 has 128 (2^-129 → 2^-128). The total encoding term already contained it, but the mark rule did not penalize it separately.
+- **New marks:** PASS 20,334, MINOR-LOSS 17,206, FAIL 2,294,189 (was 21,830 / 15,710 / unchanged). Stock is still on the PASS frontier, and no PASS set weakly dominates it.
+
+**w4 (l = 64) is now MINOR-LOSS at exactly 1.000 bit, driven by `enc`.** Every other metric is no worse. Its strict-PASS neighbour, **w4l65**, costs almost the same:
+
+| set (strict marks) | cached M (brief / share) | sig B | verify gas | enc Δ | (c) Δ b (samples, SE) | EC ord ratio | mark | A7 |
+|---|---:|---:|---:|---:|---:|---:|---|---|
+| stock / v2 0.3 | 102.6 / 100.9 | 4,008 | 164,704 | 0 | 0 (4000, 0.075) | 1 | PASS | as-is |
+| **w4l65: h18 d2 a11 k13 w4 l65 T125** | **75.7 / 72.3 (−26% / −28%)** | 4,712 (+704) | 161,826 (−1.7%) | **+1** | **+0.70 (4000, 0.076)** | 0.659 | **PASS** | ci 7 bits |
+| w4l65 at T124 | 75.4 / 72.0 | 4,712 | 162,380 | +1 | +0.13 (4000, 0.089) | 0.659 | PASS, not robust | ci 7 bits |
+| w4: h18 d2 a11 k13 w4 l64 T124 | 75.3 / 71.9 | 4,680 | 160,182 | −1 | +0.44 (4000, 0.076) | 0.651 | MINOR-LOSS 1.00 [enc] | as-is |
+| h18 d2 a10 k16 w8 l43 T205 | 95.6 / 93.9 | 4,344 | 175,910 | 0 | 0 | 0.622 | PASS | as-is |
+| h18 d2 a10 k16 w8 l46 T209 | 89.6 / 86.2 | 4,440 | 186,889 | +9 | +0.12 | 0.667 | PASS | as-is |
+| h16 d2 a11 k18 w8 l43 T205 | 75.2 / 73.5 | 4,936 | 195,644 | 0 | 0 | 0.218 | PASS | as-is |
+| h18 d3 a11 k13 w8 l46 T209 | 39.7 / 36.3 | 4,844 | 219,635 | +9 | +0.12 (was −0.04 at 800) | 0.325 | PASS (was MINOR) | re-layout |
+| h20 d4 a8 k18 w8 l47 T211 | 20.7 / 17.2 | 5,824 | 276,087 | +12 | +0.18 | 0.156 | PASS | re-layout |
+| h18 d3 a8 k24 w4 l65 T124 | 20.3 / 16.6 | 6,764 | 233,322 | +1 | +0.13 | 0.035 | PASS | re-layout |
+
+All cycle and gas figures come from the model calibrated at one point (stock); none is measured. The d ≥ 3 and w = 4 rows carry the extrapolation caveats above.
+
+**Why T125 and not T124 for w4l65.** T124 is 0.3 M cycles cheaper. Its (c) delta of +0.13 b is within 2 SE, so its PASS on (c) is not established. T125's +0.70 b is about 9 SE clear.
+
+**w4l65 in the Python reference (`b4d46ed10`, `c10v2_ref.py --variant w4l65`):**
+- **Format:** w = 4, l = 65, T = 125; digits from the low 130 bits of WOTS_DIGEST; 4,712 B.
+- **Address:** A7 ci widens to 7 bits at 23..17 (into the free bits 17–16), with every other field unchanged. `_check_layout` asserts the fields are disjoint.
+- **Checks:** the self-test (8 bit-flips, wrong root and message, 3 +C near-misses) and the cross-format checks pass. Each format's signature is rejected by the other's verifier.
+- **KATs:** 6 KATs and 3 near-misses (`kat-v2-w4l65.*`, `c10v2_kat_vectors_w4l65.json`). The KAT vectors of draft 0.3, w4, ts200, prf2, split810 and all3 regenerate identically.
+- **Not done:** Rust and kit timing, for the same reasons as §3.
+
+**(d) applies to w4l65 as well [computed].** With identical seeds, w4l65's WOTS PRF output for ci = 0 equals draft 0.3's and w4's, because ci = 0 packs identically; for ci ≥ 1 it differs. FORS secrets and the R-candidate PRF are shared with every v2 variant. Gate (d) must therefore bind the complete parameter and encoding variant into both derivation branches before any w4-family key signs. Astra's review of these two commits follows in §2c.
+
+### 2c. Astra's review of §2b, and the strict per-term frontier (amends §2b; its table is kept as first written)
+
+Astra (`b4d46ed10`): **"FIX reporting; conditional MODEL-PASS for w4l65/T125."** Its checks:
+- The closure covers every printed frontier.
+- A7 with ci at bits 23..17 is disjoint, and ci = 64 sets bit 23, below kp.
+- No l ≤ 64 assumption remains in the Python verify, FORS, tree, digit or near-miss paths.
+- The KATs regenerate exactly.
+- The w4l65 numbers reproduce: 4,712 B; 75.73 / 72.33 M; 161,825.84 gas (86,457.84 callee + 75,368 calldata); (c) +0.702 b.
+
+Its three findings, all fixed or corrected here:
+
+1. **PASS hid term regressions (MEDIUM).** 142 of 173 PASS frontier rows worsened at least one bound term while the totals improved. For example, h18 d3 a11 k13 w8 l43 T208 has totals ×0.31 but encoding ×4.3, zero and prefix ×1.32, and wrapper node ×1.93.
+   - **Fix (`8d5a8443d`):** the mark now takes every returned term (node, zero, encoding, wots, fors, coverage, prefix) of both games at C = 1, 2 and 16.
+   - **New marks:** PASS 2,307, MINOR-LOSS 14,785, FAIL 2,314,637.
+   - These are bound-component regressions, not demonstrated attacks. Under a totals-only reading of gate (a), §2b's marks apply instead.
+   - For w4l65 T125 and w4 l64 T124, Astra computed every term at C = 1, 2, 16: **no term is worse than stock's.**
+2. **(c) uncertainty was overstated (MEDIUM).** One seed does not couple different l, because the second vector's stream shifts. The SE of the difference is about √(se² + se_stock²) ≈ 0.107.
+   - **T125:** paired bootstrap SE 0.104, 95% interval [+0.47, +0.89], about **6.7 SE**, not 9.
+   - **T124:** +0.13, interval [−0.10, +0.33], so its PASS on (c) is not established.
+   - The output now prints the delta SE, and the TSV has `c_delta_se_bits`.
+3. **Cross-format sharing is wider than §2b said (MEDIUM) [computed, confirmed].** w4l65's ci = 2j packs like 0.3's (and w4's) ci = j, for j = 0..32. That gives **33 shared WOTS secrets and 33 shared chain tweaks** per key against both formats, not only ci = 0. FORS secrets and the R candidates are identical too; prf2 and split810 change the sharing map. Gate (d) stands: a complete format identifier must be bound into both the bootstrap and slot derivation branches, account variants included, before any operational signature. Different roots and mutual signature rejection do not establish key separation.
+
+**Strict per-term frontier [computed, `8d5a8443d`].**
+- The PASS frontier is **stock plus w4, l = 65 shapes only**; no d ≥ 3 set passes.
+- Stock is still not weakly dominated by any PASS set.
+- Rows at T125 (robust on (c)); the cheaper T124 members are not established on (c):
+
+| set (every-term marks) | cached M (brief / share) | sig B | verify gas | (c) Δ b ± SE(Δ) | EC ord ratio | mark |
+|---|---:|---:|---:|---:|---:|---|
+| stock / v2 0.3 | 102.6 / 100.9 | 4,008 | 164,704 | 0 | 1 | PASS |
+| **w4l65: h18 d2 a11 k13 w4 l65 T125** | **75.7 / 72.3** | 4,712 | 161,826 | +0.70 ± 0.11 | 0.659 | **PASS** |
+| h18 d2 a10 k16 w4 l65 T125 | 68.8 / 65.4 | 5,048 | 173,032 | +0.70 ± 0.11 | 0.386 | PASS |
+| h18 d2 a9 k19 w4 l65 T125 | 64.4 / 61.0 | 5,288 | 181,051 | +0.70 ± 0.11 | 0.226 | PASS |
+| h16 d2 a11 k18 w4 l65 T125 | 56.0 / 52.5 | 5,640 | 192,766 | +0.70 ± 0.11 | 0.159 | PASS |
+| h16 d2 a10 k22 w4 l65 T125 | 46.6 / 43.1 | 6,072 | 207,182 | +0.70 ± 0.11 | 0.083 | PASS |
+| w4 (l64 T124) | 75.3 / 71.9 | 4,680 | 160,182 | +0.44 ± 0.11 | 0.651 | MINOR-LOSS 1.00 [enc] |
+| h18 d2 a10 k16 w8 l43 T205 | 95.6 / 93.9 | 4,344 | 175,910 | 0 | 0.622 | MINOR-LOSS 0.08 [wrapper node, C = 16] |
+| h16 d2 a11 k18 w8 l43 T205 | 75.2 / 73.5 | 4,936 | 195,644 | 0 | 0.218 | MINOR-LOSS 0.21 [wrapper node, C = 16] |
+| h18 d3 a8 k24 w4 l65 T124 | 20.3 / 16.6 | 6,764 | 233,322 | +0.13 ± 0.12 | 0.035 | MINOR-LOSS 0.40 [ordinary zero, C = 16] |
+| h18 d3 a11 k13 w8 l46 T209, h20 d4 a8 k18 w8 l47 T211 | | | | | | FAIL (off every frontier) |
+
+**Status of w4l65 against gate (S):**
+- (a) model PASS under every-term marks, but a d = 2, w = 4 port of the EasyCrypt proof and its quantum statement are required;
+- (b) as v2;
+- (c) fault margin +0.70 ± 0.11 b, DPA as v2 (UNKNOWN);
+- (d) FAIL until the format identifier lands;
+- (e) numerics reproduced by Astra; no proof replay, Rust, kit timing or physical validation.
+
+The cycle and gas figures are the calibrated model only.
+
+### 2d. Corrections to §2c, both readings of gate (a), and the w4l65 prototype on the kit (UPDATE 2026-11-14)
+
+**Corrections to §2c [computed, `5018af0e3`].**
+- **The PASS frontier has a seventh shape.** Besides stock and the w4 l = 65 shapes, it includes h18 d2 a11 k13 **w4 l66 T137** (147 M cached, gas 157,351): a slow, high-margin corner. §2c listed only l = 65 shapes.
+- **"No d ≥ 3 set passes" is now counted directly, not read off the frontier.**
+  - All 2,307 every-term PASS rows have d = 2: w4 with l = 65..68 (420, 533, 656 and 697 rows), plus stock.
+  - None needs more than 56 address bits.
+
+**Both readings, from one run.** Gate (a) as tasked compares the theorem's right-hand side, the game total at the caps; the every-term mark is the stricter lens. The TSV now carries both, `mark` and `mark_totals`:
+
+| | PASS | MINOR-LOSS | PASS d=2 / d=3 / d=4 / d=6 |
+|---|---:|---:|---|
+| every term (`mark`) | 2,307 | 14,785 | 2,307 / 0 / 0 / 0 |
+| totals at C = 1, 2, 16 (`mark_totals`) | 25,887 | 21,403 | 7,247 / 8,182 / 8,155 / 2,303 |
+
+- **What the totals reading admits.** Sets whose individual terms grow a lot while staying hidden under a larger term.
+  - h20 d4 a8 k16 w4 l65: coverage ×2^9.7 at C = 1 (2^-98 → 2^-88, under a total of about 2^-61).
+  - The d = 3 rows §2c called FAIL. Their worst terms sit about 10 bits below their game's total [computed, scalar `fb.ordinary_terms` / `wrapper_terms`]:
+
+    | set | worst term | its size | game total | totals ratio |
+    |---|---|---:|---:|---:|
+    | h18 d3 a11 k13 w8 l46 T209 | wrapper node, C = 16, ×2.17 (1.12 b) | 2^-67.7 | 2^-57.3 | ×0.33 |
+    | h20 d4 a8 k18 w8 l47 T211 | wrapper node, C = 16, ×3.77 (1.91 b) | 2^-66.9 | 2^-58.5 | ×0.16 |
+    | h18 d3 a11 k13 w8 l43 T205 | wrapper encoding, C = 16, ×2.24 | 2^-67.3 | 2^-57.4 | ×0.31 |
+
+  - Under the totals reading they PASS; under the every-term reading they FAIL. Which reading binds is the owner's call. Under both, a d ≠ 2 or w ≠ 8 bound is an extrapolation, not an EasyCrypt theorem.
+
+**w4l65 prototype: Rust and kit (`a7b7481fd`).**
+- **Why a build-time copy:** `params.rs`, `wots.rs`, `shuffle.rs` and `hash.rs` are pinned whole-file by the extraction-freshness gate, so editing them in place would need re-extraction, re-proof and re-pinning.
+- **The recipe:** `proto_w4l65/apply.py` holds every edit as an exact replacement asserted to occur once. `mk.sh` rebuilds the copy in the ignored `target/proto-w4l65` from scratch, and `run_kit.sh` runs the kit.
+- **What the variant changes:** params; a plain-sum `digit_sum`; a 65-item shuffle capacity (n = 65 uses exactly the 4 precomputed blocks); A7 ci at 7 bits; `TH_MULTI_MAX` = 65; fences against fused, prf2, split810, ts200 and near-miss-gen.
+- **The product crate is untouched.** The extraction-freshness gate stays green (35 fresh, 0 drifted).
+- **Correctness [measured]:**
+  - Rust equals Python on all 6 w4l65 KATs (pk_root, signature bytes, cross-verify, near-miss) and on the 3 +C near-misses.
+  - With the flag off, the copy reproduces `golden-v2.bin` byte for byte.
+  - A clean `mk.sh` rebuild reproduces the timed kit ELFs byte for byte.
+  - Caveat: both implementations are this loop's own. There is no independent implementation and no Solidity verifier for w4l65.
+- **Host, exact SHA-256 calls per operation (software hooks) [measured]:**
+
+  | | keygen | sign m0 | sign m1 | verify |
+  |---|---:|---:|---:|---:|
+  | draft 0.3 | 177,151 | 486,372 | 481,368 | 361 |
+  | w4l65 | 134,143 | 365,126 (−24.9%) | 362,383 (−24.7%) | 309 (−14.4%; formula 309) |
+
+- **Kit, 160 MHz, generic v2 one-shot path, flash-run harness [measured]:** 3 alternating repetitions each, after the coordinator's host walk had finished. Every run was DONE, both verifies true, pass A equal to pass B, and both signatures byte-identical to their goldens.
+
+  | M cycles (mean; range ≤ 109 cycles) | keygen | sign m0 | sign m1 | verify | cached sign |
+  |---|---:|---:|---:|---:|---:|
+  | draft 0.3 (copy) | 62.747 | 188.556 | 185.117 | 0.1716 | 377.28 (2.358 s) |
+  | w4l65 | 53.241 | 165.683 | 161.699 | 0.1669 | 331.53 (2.072 s) |
+  | ratio | **×0.849** | **×0.879** | ×0.874 | ×0.972 | **×0.879** |
+
+  - The committed `bench_v2` control is within 221 cycles of the copy (188,556,648 against 188,556,427).
+  - Option bytes were read back after the runs, identical to the baseline.
+- **Reading the kit numbers.**
+  - On the generic path, w4l65 saves 12.1% of sign cycles, though it makes 24.9% fewer SHA-256 calls. Cycles per call rise from 388 to 454, because the generic path pays per-chain glue (ADRS and A7 conversion, PRF setup) on 65 chains instead of 43, and T_65 is 17 blocks against 12.
+  - The model's −26% is for the fused one-block driver, which does not exist for w = 4: its assembly is specialized to l = 43 and w = 8.
+  - **The fused-path gain is therefore unmeasured. The model's −26% has not been reproduced on any path we can run.** The generic-path −12% is a measured lower anchor under this harness, not a prediction for the product path.
+
+**Gates this round.**
+- `git diff --stat 0e23558c5..HEAD` touches only `research/` and two KAT JSON files under `contracts/smart-wallet/test/`. No Solidity or Rust test reads them; their consumers name files explicitly.
+- v1, the product sphincs-c10, the hw driver and the FSBL are untouched by construction and were not re-run.
+- The extraction-freshness gate is green. The default `format_options_numerics.py` output is byte-identical.
+- The kit was flash-only, and the option bytes are unchanged.
+
+### 2e. Astra's third pass (amends §2d; §2d is kept as written)
+
+Astra (`69853a8a4`): **"FIX — benchmark-runner reliability; numerics and the tested generic w4l65 path check out."**
+- **Reproduced:** the full 2,331,729-set search regenerated every committed TSV data row in memory. PASS 2,307 / 25,887 with the stated d and l splits; all stock denominators positive; 59,136 scalar-against-vector term comparisons passed.
+- **Mark definitions:** `mark` covers all seven terms, both games and all three caps; `mark_totals` uses exactly the six totals plus the same eight bit metrics. The closure and the +0.702 ± 0.107 b delta reproduce.
+- **The copied variant:** it matches the parameters, A7 layout, 130-bit extraction, buffers and shuffle capacity, and no live generic-path assumption of l ≤ 64 or w = 8 was found.
+- **The product crate:** its diff is empty, and freshness reports 35 fresh, 0 drifted.
+
+Fixed in `0718898be`:
+- **MEDIUM:** `run_kit.sh` could print success after a failed runner (it re-read the previous log) or a failed evaluator. It now stops non-zero on either and keeps each repetition's log.
+  - Missing ELF: the runner returns rc 4 and the script exits 1.
+  - Evaluator against a wrong golden, and against signatures truncated to 4,008 B: exit 1.
+  - The missing-ELF control overwrote session 2's `d03-1` log. Its result is kept in the JSONL.
+- **LOW:** the copy's `sim_internals::find_count` still returned `[u8; 43]`; it now returns `[u8; L]`, and the `sim-internals` combination compiles.
+- **Kit re-run with the fixed runner** (session 2; all 13 runs in `proto_w4l65/kit-runs-2026-11-14.jsonl`): sign ×0.8787, keygen ×0.8485, verify ×0.9723. Ranges are ≤ 225 cycles, and session 1 is reproduced to within about 200 cycles. The option bytes are identical to the baseline after each session.
+
+Ledger corrections to §2d:
+- **The "totals ratio" column of the d ≥ 3 table** mixed C = 16 term and game sizes with C = 1 ordinary-total ratios. At C = 16 the wrapper totals ratios are **0.3367, 0.1550 and 0.3238**, against 0.325, 0.156 and 0.311 for the C = 1 ordinary totals.
+- **The cycles-per-call explanation is a hypothesis, not a measurement.** §2d says the rise from 388 to 454 happens *because* of per-chain glue and the 17-block T_65. Those effects are real, but the digit-sum implementation and the operation mix also change. Attributing the gap needs a profile of the copy, for example the round-13 PC-sampling bench.
+
+### 2f. w4l65 and the SCA half of gate (c); what is established (UPDATE 2026-11-14, [computed, not reviewed by Astra])
+
+**§2c's "DPA as v2" for w4l65 is wrong.** w4l65 makes 65 `sk_seed` WOTS PRF calls per key instead of 43. The measured host keygen count, 134,143 = 512 × 261 + 511, confirms the 65-chain key loop. `dossier_v2_03.py`'s exposure counter, extended in `530d040f5`, gives single compressions per signing pass that take `sk_seed` together with attacker-known varying words:
+
+| | no top cache | warm top cache |
+|---|---:|---:|
+| v1 | 26,636 | 26,636 |
+| v2 0.3 | 70,742 (×2.656 vs v1) | 49,414 (×1.855) |
+| **w4l65** | **93,314 (×3.503 vs v1, ×1.319 vs 0.3)** | **61,074 (×2.293, ×1.236)** |
+
+- **The fix costs more under w4l65.** The two-block WOTS PRF (§1, the costed fix for (c)) adds 66,690 compressions per pass, against 44,118 for 0.3.
+- **The gain shrinks once (c) is repaired.** Per WOTS key (PRF, chain steps and T_l blocks), 0.3 goes from 356 to 399 compressions and w4l65 from 277 to 342. The per-key gain narrows from ×0.778 to **×0.857**.
+- **The search marks cover gate (a) and the fault half of (c) only; DPA exposure is not marked.**
+- **w4l65 on (c):** fault margin +0.70 ± 0.11 b; DPA exposure ×1.32 over 0.3 and ×3.5 over v1. The SCA comparison stays UNKNOWN (an exposure count, not traces-to-key).
+
+**What is established for w4l65 against v2 0.3, and what is model-only:**
+- **Exact:**
+  - signature +704 B (4,712);
+  - SHA-256 calls −24.9% per sign and −14.4% per verify (309 calls);
+  - Rust equals Python on the KATs. Both are this loop's own; there is no independent implementation.
+- **Measured, generic one-shot path only:** sign cycles −12.1%, keygen −15.1%, verify −2.8%.
+  - As built, a w4l65 sign is 165.7 M cycles. Fused v2 0.3 is about 50 M per pass, so **"beats v2 0.3" holds only in the fused-driver model** (−26% cached sign). No w = 4 fused driver exists.
+- **Not established:** the gas advantage (model −1.7%, about 2.9k gas). There is no w4l65 verifier, and the kit's verify fell only 2.8% on 14% fewer calls, the same per-chain effect that the gas model's flat per-call overhead cannot see.
+
+**Task-3 deviations, stated plainly:**
+- The Rust is a build-time copy, not a flag in `sphincs-c10`. Landing it means re-extract, re-prove and re-pin.
+- Only one set (w4l65) was prototyped. The d ≥ 3 sets that lead under the totals reading were not.
+- `0718898be`, §2e and this section postdate Astra's third pass, and are [computed], not [reviewed].
+
+**w4 and w4l65 both remain conditional MODEL-PASS, not adoption approval, and (d) FAIL.** w4l65 shares 33 WOTS secrets and chain tweaks per key with 0.3 and w4, plus FORS secrets and R candidates, until a full format identifier is bound into both derivation branches.
+
+**Next discriminating experiment:** a PC-sampling profile of the copy (round-13 `prof_classify.py` method), to split per-chain glue from hash cost. It decides whether a w = 4 fused driver is worth writing.
+
+## Round 17 (2026-11-14): the w4l65 fused driver, gates (c) and (d) as flagged prototypes, quantum scoping
+
+Everything is in build-time copies generated by `proto_w4l65/apply.py` + `mk.sh` (ignored `target/proto-w4l65`). The extraction-freshness gate pins `sphincs-c10/{Cargo.toml,params,wots,shuffle,hash,…}.rs` and `domain/src/lib.rs`, so the product crates, hw and the FSBL are untouched; landing any of this means re-extract, re-prove and re-pin. Kit 0055002D throughout, flash-only. The option bytes were read back after every session and match the baseline. Labels: [measured], [computed], [argued]; Astra's review follows in §5.
+
+### 1. w4l65: profile split, fused-driver decision, kit
+
+**PC-sampling of the generic-path copy** [measured]. `run_profile_sig.sh` + `prof_classify.py`, 20,000 DWT_PCSR reads (9,912 / 8,579 while running), whole bench run, converted to cycles:
+
+| bucket | v2 0.3 | w4l65 | ratio |
+|---|---:|---:|---:|
+| HASH driver (one-shot entries) | 418.2 M | 317.1 M | ×0.758 |
+| signer Rust (`sign_with_shuffle_silent`, `chain_hash`, `keygen_pk`, …) | 138.6 M | 160.7 M | ×1.16 |
+| memclr / memcpy | 68.1 M | 68.4 M | ×1.00 |
+
+- **Per SHA-256 call** (exact host counts, 1,631,985 against 1,227,396 calls), the driver costs 256 against 258 cycles: the hash cost tracks the −24.9% call reduction exactly.
+- **Glue rises** from 127 to 187 cycles per call (per-chain Rust work on 65 chains instead of 43). That is round 16's 388 → 454.
+- **Decision: write the driver.** The fused v2 key loop already runs at 91.7 cycles per digest against a floor of about 90, per-chain PRF tail included, so per-chain overhead is small. The model with an added per-chain overhead *o* gives −26.2% at *o* = 0 and −22.3% at *o* = 60 cycles per chain, within 5 points for any plausible *o*.
+
+**The fused w = 4 driver** (`fa5f2169d`, apply.py section 5, a copy of `hw/`):
+- **Reused unchanged:** the DATATYPE-00 key-loop asm. It takes the chain count and chain length from its context, and the ci shift from `V2_CI_LSB` (1 for ci at A7 23..17, as split810).
+- **Changed:** the Rust wrappers' 43 / 688 / 178 / 712 are L-derived.
+- **Compiled out:** the T_43 feed and the w = 8 asm search. T_65 goes through the generic `oneshot16`; the Rust search gets a 2-bit digit sum over the low 130 bits, and sphincs-c10 re-checks the accepted digest.
+
+**Kit** [measured]:
+- **Fixed messages:** both signatures byte-identical to the goldens. m0 ×0.791 and m1 ×0.800; these two are grind-luck-biased.
+- **16 messages** (`bench_avg_v2f` copy, all 16 verified, 2 repetitions within 13 cycles):
+
+  | fused | sign per pass | cached (2 passes + verify) | keygen | verify |
+  |---|---:|---:|---:|---:|
+  | v2 0.3 (copy; head 50.35) | 50.345 M | 100.81 M (0.630 s) | 16.95 M | 0.120 M |
+  | **w4l65** | **37.194 M** | **74.52 M (0.466 s)** | 13.79 M | 0.130 M |
+  | ratio | **×0.739** | **×0.739** (model ×0.738) | ×0.813 | ×1.09 |
+
+- **The model's −26% is reproduced on the fused path.** Verify is 9% slower: the Rust verify pays per-chain glue on 65 chains.
+- **Not gated:** no FI, residue or timing gates were run on the copy. T_65 has no 32-bit feed and the search is in Rust, so some headroom remains.
+- **Still open for w4l65:**
+  - (d), until §3 lands;
+  - (a), its port, and a w = 4 extrapolation;
+  - (c): DPA exposure ×1.32 over 0.3 (§2f), or a ~×0.857 per-key gain once the two-block PRF is added (model).
+
+### 2. Gate (c) for v2 0.3: the two-block WOTS secret PRF (`wprf2b`)
+
+**Construction:** `sha256(sk_seed ‖ "C10v2-WOTS-PRF2B" ‖ be32(layer) ‖ 0^12 ‖ A7)[..16]`, 71 B. Block 1 (`sk_seed ‖ tag ‖ layer`) is constant per layer, so `sk_seed` never meets a varying word in one compression, as with v1's 80-B WOTS PRF. Keys change; the verifier does not.
+- **Where (`30622679a`):** `c10v2_ref.py --variant wprf2b`; the sphincs-c10 copy (`v2-wprf2b`, generic v2); and the hw copy's two Rust WOTS-PRF feeds. The asm key loop issues the one-block PRF itself, so `v2-rust-key` compiles it out for an equal-config A/B.
+- **Tests:** Python self-test and cross-format (the 0.3 verifier accepts wprf2b signatures both ways, as it should); 6 KATs and 3 near-misses; every other variant's KATs unchanged. Rust equals Python. On the kit, the fused fixed-message signatures are byte-identical to `golden-v2-wprf2b.bin`.
+
+**Cost [measured]:** keygen is deterministic, so it isolates the change.
+- Fused (Rust key loop): 19.49 → 21.65 M over 22,016 extra PRF blocks, **+98 cycles per block**. Generic: 62.75 → 64.45 M, +77 per block.
+- Per pass that is +44,118 blocks, **≈ +4.3 M (+8.6% of 50.35 M)**, and the cached sign goes ≈ 100.8 → 109.5 M (0.630 → 0.684 s) [computed from the per-block cost].
+- The 16-message sign means show +5.0 M per pass, but the keys change and so does the grind luck (about ±1.6 M).
+- Not measured inside the asm key loop: the 8 extra DIN words at its two PRF sites were not written.
+
+**Exposure [computed, `dossier_v2_03.py`]:**
+
+| | sk_seed compressions with varying words, per pass |
+|---|---:|
+| v1 | 26,636 |
+| v2 0.3 + wprf2b, no top cache | **26,624 (×0.9995)** |
+| v2 0.3 + wprf2b, warm top cache | **26,624 (×0.9995)** |
+
+- **Target exposure ≤ v1: met under this counter.** What is left is FORS only, where v2 has 12 fewer than v1 (v1 recomputes each revealed leaf).
+- **What the counter does not count, equal to v1:** the per-layer chaining value CV = Compress(IV, sk_seed ‖ tag ‖ layer) keys every WOTS secret of its layer, and it meets varying A7 words in block 2. That is 44,118 per pass for v1 and v2 + wprf2b alike (22,790 with the top cache). A CV recovered by DPA yields that layer's WOTS keys, so this stays a v1-equal residual, not a fix.
+- These are exposure counts, not traces-to-key-recovery, so physical SCA stays UNKNOWN.
+
+### 3. Gate (d): a format identifier in both key-derivation branches (design + flagged implementation)
+
+**Design (`format-kdf` in a copy of `pqsigner-domain`, apply.py section 7):**
+- **Format descriptor**, 42 bytes, fixed layout: `"PQ1-C10-FMT1"`, then 30 field bytes. The fields are hash layer (1 = v1 ADRS, 2 = v2 A7 incl. its H_MSG and digit rule), n, h, d, the two layer heights, a, k, w, l, T (2 B), the A7 (width, shift) pairs of all seven fields, WOTS PRF (one-block / two-block / paired), FORS PRF, last-FORS-slot construction, and R PRF. `FMT_ID = SHA-256(descriptor)`.
+- **Compiled format:** built from `sphincs_c10::params` constants (in the copy, `FMT_*` constants per variant feature). A const assert in `v2hash.rs` ties `FMT_A7` to the actual A7 shifts and widths.
+- **Bootstrap branch:** HMAC-SHA512 with key `"pq1-c10-fmt-boot" ‖ FMT_ID` (account 0, message = bip39_seed) or `"pq1-c10-fmt-boot-acct" ‖ FMT_ID` (accounts 1..255, message = bip39_seed ‖ be32(account)). The `pk_seed` / `sk_seed` splits are unchanged.
+- **Slot branch:**
+  - slot master: `sha256("pq1-c10-fmt-slot" ‖ FMT_ID ‖ bip39_seed ‖ 0x00)` (113 B) or `sha256("pq1-c10-fmt-slot-acct" ‖ FMT_ID ‖ bip39_seed ‖ be32(account))` (121 B);
+  - slot seeds bind the format again: `sha256("slot_c10_sk_seed" ‖ FMT_ID ‖ slot_entropy)`, and likewise for pk.
+- **Policy, enforced at compile time:** `format-kdf` is **required** by every v2 build and **refused** by v1 builds. The stock account-0 and account > 0 derivations stay byte-identical in default builds.
+- **Consequence:** the wallet address changes per format (CREATE2 salt over masterPkSeed / masterPkRoot). Invariant #6 holds per format, so fix the format before the first v2 key signs.
+
+**Domain-separation argument [argued]:**
+1. The descriptor is fixed-width and fixed-position, so it is injective on `FormatParams`. Distinct formats get distinct `FMT_ID`s unless SHA-256 collides.
+2. **Bootstrap:** the HMAC keys are distinct across formats, across the two account branches, and from the stock 13- and 18-byte keys. The stock separation of `"sphincs-c6-v1"` from `"-acct"` already rests on one assumption: HMAC-SHA512 behaves as a random oracle on these inputs, equivalently HMAC's dual-PRF property when keyed through the secret message. Under it, the masters of two formats are independent uniform values.
+3. **Slot:** the slot-master inputs differ in `FMT_ID` (and in length from the stock 85 and 93 B). Under the random-oracle model for SHA-256 on inputs containing the secret seed, slot masters, slot entropies and slot seeds are independent across formats. The slot seeds also bind `FMT_ID` directly, so even a refactor that reused slot entropy across formats could not share a slot key.
+4. **Hence** `(sk_seed, pk_seed)` of every bootstrap and slot key is independent across formats.
+   - Every WOTS secret, FORS secret and R candidate is a function keyed by `sk_seed`, and every tweakable-hash input starts with `pk_seed`.
+   - So no chain, FORS leaf or R stream is shared between two formats, except by chance collisions among independent 16-byte values (birthday-bounded, about q²/2^128).
+5. **The argument fails for any format difference the descriptor does not capture.** The rule is that every new variant must move a descriptor field. Today that is enforced for the known variants by the tests and by the A7 const assert, not by construction.
+
+**Joint-format accounting: what is shared today, without the format KDF [argued]:**
+- **v1 and every v2 variant share** `sk_seed`, `pk_seed` (same tags) and the R-candidate PRF (literally the same function, `sk_seed ‖ "R_grind" ‖ …`).
+- **Their WOTS/FORS PRF inputs** (v1: 80 / 48 B over v1 ADRS; v2: 39 / 71 B over A7) and all tweakable-hash inputs are length-disjoint:
+  - v1: 64 + 32k, 96, 128;
+  - v2: 39, 43, 55, 87, 24 + 16k (232 or 712 B).
+
+  So under the random-oracle model they are independent, and a v1 signing oracle on the same key adds to a v2 forger's game only what the reduction can lazily sample.
+- **Shared R:** R is public in both formats, and H_MSG differs, so a v1 signature reveals R for M earlier and nothing else. This is argued, not proved.
+- **Between v2 variants** the sharing is direct (same encodings):
+  - ts200 against 0.3 has identical keys, so a WOTS key used at both target sums becomes two-time (~2^53–2^55, format-options §4);
+  - w4l65 shares 33 WOTS secrets and chain tweaks per key with 0.3 and w4;
+  - prf2 publishes whole PRF outputs;
+  - split810 overlaps addresses.
+
+  The format KDF removes all of these, and also v1–v2 sharing on the same seed, because the v2 masters use different keys from v1's.
+
+**Tests [measured]** (`mk.sh`; `proto_w4l65/format_kdf.rs`, 7 tests; `plants_d.py`):
+- **Byte identity:** the stock domain suite passes with `format-kdf` off. That covers every pinned recovery and tag vector, account 0 and account > 0.
+- **Per format:** the 7 format tests pass under 9 format builds (v2 0.3, w4l65, wprf2b, w4l65 + wprf2b, ts200, prf2, split810, all3, fors-last-prf):
+  - IDs pairwise distinct over 11 known formats;
+  - each of the 30 descriptor field bytes moves exactly one descriptor byte and the ID;
+  - the compiled format equals the expected variant;
+  - bootstrap masters, slot masters and slot seeds pairwise distinct over 4 seeds × 11 formats × accounts {0, 1, 255}, and distinct from the stock derivation;
+  - the public API equals the format-bound derivation and never the stock one;
+  - the slot seeds bind the format directly.
+- **Controls:** a v2 build without `format-kdf`, and `format-kdf` on v1, both fail to compile with the intended messages.
+- **Plants:** the format id dropped from each of the 7 binding sites (bootstrap account 0 and > 0, slot master account 0 and > 0, slot sk_seed, slot pk_seed, the descriptor's A7) is caught by the named test every time. The first run of the plants found two gaps, now fixed: the slot-seed binding was not tested directly, and one plant expected the wrong failure.
+- **Not done:** the secure-world and tool consumers of the stock tags (`secure/src/sign_timing.rs`, `tools/dvt/derive`, `tools/sca/kdf_target`) are not adapted.
+
+### 4. Gate (a): scoping note for a post-quantum statement (not attempted)
+
+**What is needed.** An EUF-CMA bound in the quantum random-oracle model (QROM), stated in quantum hash queries q and classical signing queries qs = C·2^16 (C = 1 per slot key, C chains for the bootstrap key), for the format that ships (v2 byte layout, +C grinding, d = 2, w = 8 or 4).
+- **Each tweakable-hash property the classical proof uses needs a QROM version:** the PRF of `sk_seed`, the chain/tree properties (SM-TCR / DSPR in the Hülsing–Kudinov line, ePrint 2022/346), the H_MSG index properties behind FORS+C coverage, and the WOTS+C target-sum encoding's "no dominating digest" term.
+  - Generic quantum search turns q/2^n-type terms into roughly q²/2^n.
+  - The +C grinding loops are classical and signer-side. But the adversary's search for H_MSG outputs with the forced-zero last FORS index, or for dominating WOTS digests, gets a Grover-type speed-up, which the coverage and encoding terms must charge.
+- **The multi-target accounting at qs = C·2^16** carries over structurally. The bootstrap key's C-dependence (P14) needs restating with quantum query terms.
+- **The repo today** has a "halved floor" (48 / 47 / 44 b at C = 1 / 2 / 16). Astra ruled that it is a convention, not a theorem (§1b).
+
+**What it would take (judgement; nothing in the repo calibrates it):**
+- **Paper proof:** adapt the published QROM arguments for SPHINCS+ (Hülsing–Kudinov) to the +C variants (SPHINCS+C: Hülsing, Kudinov, Ronen, Yogev, ePrint 2022/778, whose analysis is classical) and to C10's parameters and grinding caps. About 1–3 person-months for a QROM specialist; the +C QROM terms are the new work.
+- **Machine-checked:** the project's EasyCrypt development (1,089 split files) is a classical byte-model game. QROM reasoning needs different oracle techniques (compressed or semi-classical oracles in place of lazy sampling). EasyPQC (Barbosa et al., CCS 2021) extends EasyCrypt for this, but the reduction core would be a new development, not a port. Our estimate is **6–18+ person-months**, the same order as the classical EUF-CMA port estimate and to be decided alongside it.
+- **Expected numbers:** terms of the form q²·(…)/2^128 put generic security near the 64-bit quantum level for n = 16, and the multi-target terms at C = 16 lower it. A real bound could land above or below the halved-floor convention. Until one exists, the owner should not cite a quantum security level for v1 or v2.
+- **References to verify before citing:** Hülsing and Kudinov, ePrint 2022/346; Hülsing, Kudinov, Ronen and Yogev, ePrint 2022/778; Barbosa et al., "EasyPQC", CCS 2021.
+
+### 5. Astra's review of round 17, and the fixes (amends §§1–4; they are kept as first written)
+
+Astra (`dc80e9fb6`; all 24 generated files match an in-memory replay of `apply.py`):
+- **Gate (d): FIX** for the coverage and argument claims. **No binding defect** in the current profiles: all six derivation sites are wired correctly.
+- **Gate (c): GO** for the construction and the narrow counter; physical SCA stays a GAP.
+- **w4l65 performance: GO** for the recorded sample.
+- **Quantum scoping note: FIX.**
+
+**Fixed or corrected:**
+1. **(d) test coverage (MEDIUM).**
+   - **The gap:** no test exercised the public slot-keypair route, so bypassing the format-bound slot seeds inside the public derivation would have escaped every test and plant. The new labels also had no independent pinned outputs.
+   - **Fix (this commit):** three new tests, now 10 in total:
+     - the documented layouts, re-implemented independently in the test;
+     - pinned vectors from a separate Python implementation (format id, bootstrap and slot masters for accounts 0 and 5, slot seeds);
+     - `derive_c10_slot_keypair` against the format-bound seeds, and never the stock ones.
+   - **Plants:** four new ones, now 11 — the bootstrap, slot-master and slot-seed routes bypassed, and one label byte changed. All are caught; the 10 tests pass under all 9 format builds.
+2. **(d) HMAC key normalization.**
+   - **Astra's point:** the 48-B and 53-B keys were not prefix-free after HMAC's zero padding. `fid₀ = "-acct" ‖ A²⁷` and `fid₁ = A²⁷ ‖ 0⁵` give equal padded keys. The 64-B and 68-B messages still kept the masters apart.
+   - **Fix:** both bootstrap keys are now 53 B (`"pq1-c10-fmt-boot-acc0"` / `"…-acct"` ‖ fid), so their padded forms differ for every pair of fids. Both slot tags are now 21 B (`"pq1-c10-fmt-slot-acc0"` / `"…-acct"`).
+   - **Corrected argument:** separation holds over normalized (key, message) pairs, under an explicit secret-message pseudorandomness (dual-PRF / random-oracle) assumption for HMAC-SHA512. Ordinary HMAC PRF security does not give it.
+   - "Prefix-free" was too strong for the SHA-256 inputs (stock slot-seed inputs can prefix the new ones). Distinct complete inputs suffice under the random-oracle model.
+3. **(d) descriptor coverage.** The descriptor is injective, but full-format coverage rests on frozen version semantics:
+   - `hash_layer = 2` means draft 0.3, including its forced-zero rule, index and digit positions, type assignments, n-masking, grinding policy and OptRand encoding;
+   - `r_prf = 1` names the current R construction;
+   - **any change to those must move a code.**
+
+   The compile-time policy binds the copied domain crate, not every standalone signer build.
+4. **Joint-format accounting (MEDIUM): §3 overstated it.**
+   - With the same message and absent or reused OptRand, v1 and v2 search the same R sequence today. Under independent forced-zero predicates, their first accepted R coincides with probability p/(2 − p) ≈ **1/4095** for p = 2^-11, not 2^-128. Astra reproduced this at the hash level.
+   - So a v1 signing oracle on the same key is **not** free, and **joint v1 + v2 security on one seed today is UNRESOLVED.** It needs the shared PRF, the correlated stopping times and both oracle budgets accounted for.
+   - This is not a forgery and not a defect of the format-bound derivation. The format KDF removes it, because R is keyed by the format-separated `sk_seed`.
+   - Missing lengths, now added: v1 H_MSG is 160 B, and w4l65's T_65 is 1,064 B. The length-disjointness itself holds.
+5. **(c) numbers, made precise.**
+   - The counter gives 26,624 for the fused path and **26,636 for the generic v2 path** (it recomputes revealed leaves, as v1 does). Both are ≤ v1.
+   - Equal counts do not mean equal leakage.
+   - Applying the +98 cycles per block to the asm baseline is a hypothesis. Measured: wprf2b 60.411 M per pass, against 55.420 M for the Rust-key-loop baseline and 50.345 M for asm.
+6. **w4l65 numbers.** 16 fixed messages plus repetitions establish sample performance and repeatability, not an exact population-to-model match.
+7. **Quantum note (§4), corrected.**
+   - SPHINCS+C is not classical-only. Per Astra, its Appendix E already analyses quantum S-TCR(+C), including Lemma E.4 (we have not verified this ourselves).
+   - The missing work is therefore the **C10-specific composition**: the bounded grinding caps, the target-sum encoding term, the multi-target bootstrap at C chains, and the v2 byte layout — on top of existing quantum component results, not a QROM treatment from scratch.
+   - Revised paper-proof estimate: about 0.5–2 person-months. The machine-checked estimate is unchanged (new oracle techniques, so a new development).
+
+### 6. Gate (d), final state and Astra's last pass (UPDATE 2026-11-14)
+
+**Final construction** (amends §3):
+- **Keys and tags:** the bootstrap HMAC keys are `"pq1-c10-fmt-boot-acc0"` / `"…-acct"` ‖ FMT_ID, 53 B each. The slot masters are `"pq1-c10-fmt-slot-acc0"` / `"…-acct"` ‖ FMT_ID ‖ seed ‖ (0x00 | be32(account)), 118 / 121 B. The slot seeds are `"slot_c10_{sk,pk}_seed"` ‖ FMT_ID ‖ slot_entropy, 80 B.
+- **Legacy routes removed:** the seven legacy "c7" seed-to-key routes (`slhdsa_seed_from_bip39`, `bootstrap_seed_from_bip39` and five wrappers) do not exist under `format-kdf` (`0457157fa`). They are retired in production (`RETIRED_LEGACY_VK`); their only callers are the `duress-provision-e2e` test and two DVT/SCA tools.
+- **Tests:** 11 tests pass under 9 format builds. The last one added is `public_entropy_routes_are_format_bound`, and the slot-route test now asserts what keygen consumed (`sk_seed()`, `pk_seed()`, `pk_root()`).
+- **Plants:** 13, all caught — 7 binding sites, 3 routing bypasses, 2 secret-seed-only substitutions, 1 label byte.
+- **Controls:** 3 — v2 without the flag, the flag on v1, and the 7 legacy names.
+
+**Astra (`0457157fa`): "FIX for gate (d)'s coverage claim. No current binding or label defect found."**
+- **Labels:** correct. The normalized HMAC (key, message) pairs and the SHA-256 inputs are distinct across formats, branches and the stock derivation.
+- **Pinned outputs:** all seven reproduce independently.
+- **Routes:** every dedicated BIP-39 or entropy derivation route is format-bound or compiled out.
+- **The one gap** was the keypair-consumption check: only the returned `pk_seed` was compared. It is closed in this commit, with the two secret-seed plants above.
+
+**Not covered:**
+- generic hashing, the explicit-fid helpers and raw `derive_signing_key` remain callable (not a universal prohibition);
+- the stock-derivation mirrors in `secure/src/sign_timing.rs`, `tools/dvt/derive` and `tools/sca/kdf_target` are outside the policy;
+- feature combinations beyond the 9-build matrix are untested.
+
+**Statement:** with the flag off, the stock derivation is byte-identical. Joint v1 + v2 security on one seed today is **UNRESOLVED**. For the covered profiles, under the stated assumptions, the format-bound derivation removes deterministic cross-format sharing. This is not a complete joint-security proof or deployment-wide enforcement.
+
+## Round 18 (2026-11-14): the two candidates, like for like
+
+Labels: **[m]** measured on kit 0055002D at 160 MHz (flash-only; option bytes read back after every session, identical to the baseline); **[c]** computed by a committed script or from measured components; **[e]** estimated (judgement or an extrapolation); **[h]** host analysis (binsec). Every kit run is in `proto_w4l65/kit-runs-2026-11-14-r18.jsonl`. All builds come from the `proto_w4l65` recipe (`apply.py` sections 8–10). The 13 round-17 ELFs rebuild byte-identically: the new asm is appended at the end of `hash.rs`, so no other build's panic locations move.
+
+### 1. wprf2b inside the dt32 asm key loop (v2 0.3)
+
+The 8 constant words (`"C10v2-WOTS-PRF2B"`, the layer from bit 27 of the byte-reversed p0, then zeros) are fed after `sk_seed` at both PRF sites. At the first site they use r0–r3; at the per-chain site they use r5, r6, r7, r10 and r11, which are free until label 32 reloads them.
+
+**Results [m]:**
+- **Fixed messages:** signatures byte-identical to `golden-v2-wprf2b.bin`.
+- **Keygen:** 16.93 → 19.17 M (0.106 → 0.120 s), **+102 cycles per extra block** (the Rust loop gave 98).
+- **16-message means:** sign 50.345 → 55.545 M per pass (+10.3%); cached 100.81 → 111.21 M (**0.630 → 0.695 s**). The keys change, so the grind luck does too, and the per-pass figure is luck-confounded. Applying keygen's 102 cycles per block to signing gives +44,118 blocks × 102 ≈ **+4.5 M per pass (≈ +8.9%)** [e]: an extrapolation, and the denominator still carries grind luck.
+- **FI chain (product-shaped `bench_chain` copy):** **0.725 s**, keygen 0.121 s.
+
+### 2. w4l65 at full speed, and w4l65 + wprf2b
+
+- **T_65 feed:** `gen_v2tl.py 266`. The same generator at 178 words reproduces `gen_v2t43.py` exactly.
+- **asm w = 4 search:** `gen_v2search_w4.py` reuses `gen_v2search_dt.py`'s issue, ladder and frame. Its 2-bit digit sum folds pairs into nibbles and nibbles into bytes, sums the four words, does one multiply, and adds `w3 & 3`. It matches the reference over 200,000 random digests [c].
+- **Correctness [m]:** fixed-message signatures are byte-identical to `golden-v2-w4l65.bin` and `golden-v2-w4l65-wprf2b.bin`. Rust equals Python on the w4l65 + wprf2b KATs.
+
+| fused, 16-message means [m] | sign per pass | cached | keygen | verify |
+|---|---:|---:|---:|---:|
+| w4l65, round 17 (generic T_65, Rust search; re-run) | 37.194 M | 0.466 s | 13.79 M | 0.130 M |
+| w4l65, full speed | 36.575 M (−1.7%) | 0.458 s | 13.50 M | 0.131 M |
+| **w4l65 + wprf2b** | **42.603 M** | **0.533 s** | 16.35 M (+86 cycles per extra block) | 0.131 M |
+| FI chain (product-shaped) | | **0.566 s** | 0.103 s | |
+
+**DPA recount [c] (`dossier_v2_03.py`):**
+- w4l65 + wprf2b: **26,624 `sk_seed` compressions with varying words, ×0.9995 of v1**, with or without the top cache. **Target ≤ v1: met.**
+- Not counted: the per-layer chaining-value residual. It is 66,690 per pass, **×1.512 of v1's 44,118** (65 chains per key), or 34,450 with the cache.
+
+### 3. Assurance on the two candidate copies
+
+| gate | v2 0.3 + wprf2b | w4l65 + wprf2b | how |
+|---|---|---|---|
+| FI double compute [m] | **PASS:** 16/16 released; sign A and sign B 57.85 M each, `ct_eq`, verify 0.12 M before release | **PASS:** 16/16; 45.08 M each, verify 0.13 M | `bench_chain` copy (the mirror of `crypto::c10_sign_verified_with_progress_inner`) on the fused copies |
+| FI positive controls [m] | sign B corrupted: **0/16** released (stops at the compare); both corrupted alike: **0/16** (compare passes, the verify gate refuses) | same, 0/16 and 0/16 | features `fi-control-cmp`, `fi-control-verify` |
+| residue gate [m] | **PASS:** 9 cases clean (mask 0); control build 11 cases, mask **0x600** (exactly the two positive controls) | **PASS**, same | `bench_v2drv` copy; patterns from the candidate's own PRF (two-block), l (65), ci layout (7 bits at 17) and chain length (3). The new asm paths covered: the wprf2b key loop (cases 0 and 1), T_65 inside `wots_pk16` (case 1), the wprf2b `prf_chain16` feed (case 2). The w4 search handles public data only. |
+| timing gate [h] | **PASS:** `driver_fors` 700/700 CF, 3,533/3,533 memory; `driver_th` 712/712, 3,659/3,659; new `driver_wprf` (two-block `wots_secret`) 1,026/1,026, 5,933/5,933; shuffle control INSECURE by design | **PASS**, identical counts (the control differs by one check: SHUFFLE_CAP 65) | `cargo-checkct` on a copy of `tools/sca/checkct` against the sphincs copy |
+
+**What could not run on a copy, and why:**
+- **The product FI function itself** (`secure/src/crypto.rs`) is not built against the copies; the evidence comes from its mirror in `bench_chain`. That is the round-13 arrangement.
+- **checkct of the fused asm and the HASH peripheral:** binsec models neither. The same is true of the product gate.
+- **checkct of the format KDF's HMAC:** not proved. The stock derivation is not in the product gate either.
+- **gate 5** (`bench_v2drv` driver-versus-reference correctness): its software reference is 0.3's. For the candidates, correctness rests instead on the KATs (Rust equals Python), kit goldens byte-identical, and the FI chain's verify.
+- **Extraction freshness / Aeneas re-extraction and the EasyCrypt/Lean proofs:** the copies are not extracted; this is the FV landing cost below.
+- **Physical SCA:** no traces.
+
+### 4. The comparison for the owner
+
+| | **v1 (shipping)** | **v2 0.3 + wprf2b + fmtKDF** | **w4l65 + wprf2b + fmtKDF** |
+|---|---|---|---|
+| cached sign, FI chain (product-shaped `bench_chain`, no UI tick) | **2.92 s** shipping driver, no tick (467.3 M; 3.03 s with the per-digest tick stub) [m, round 13]; 1.145 s research driver, no tick (183.2 M) [m, round 13] | **0.725 s** (115.99 M) [m] | **0.566 s** (90.48 M) [m] |
+| cached sign, 16-message est. (research bench, 2 × mean sign + mean verify) | 1.126 s (v1 research driver, 180.1 M) [c] | 0.695 s [c] (≈ 0.687 s if signing costs 102 cycles per block [e]) | 0.533 s [c] |
+| keygen | 0.485 s shipping (77.6 M, round 13) [m]; 0.195 s research driver [m] | 0.120 s [m] | 0.102 s [m] |
+| verify, cycles on the kit | 179,257 (research driver) [m]; 0.21–0.24 M in the product chain (round 13) [m] | 119,800 [m] | 130,619 [m] |
+| signature bytes | 4,008 | 4,008 | 4,712 (+704) |
+| (a) proven bound (classical, qr = qs = 2^16) | **PASS:** proved for v1 (EasyCrypt 2^-60.80 / 2^-59.80; floor 96 / 94 / 88) | **GAP:** same numbers [c], proof not ported to the v2 byte format | **GAP:** every-term model PASS [c] (ordinary ×0.659); a w ≠ 8 extrapolation, not a theorem; port + generalization needed |
+| (a) quantum | GAP (no QROM statement) | GAP | GAP |
+| (b) hash assumption | PASS (baseline) | conditional PASS (whole-hash RO; the 39-B FORS-PRF / KDF overlap and the H_MSG inner collision remain noted) [reviewed r16] | conditional PASS, same |
+| (c) fault fallback | baseline 2^-55.21 [c] | equal [c] | **+0.70 ± 0.11 b** [c] |
+| (c) DPA exposure vs v1 (`sk_seed` counter) | 26,636 | **26,624, ×0.9995** [c]; its asm-key-loop cost: keygen +102 cycles per block [m], sign +10.3% per pass [m, grind luck], ≈ +8.9% [e] | **26,624, ×0.9995** [c] |
+| (c) chaining-value residual (uncounted) | 44,118 | 44,118 (×1.000) [c] | 66,690 (**×1.512**) [c]: an exposure count; its security effect is UNKNOWN |
+| (c) physical SCA | UNKNOWN | UNKNOWN (GAP) | UNKNOWN (GAP) |
+| (d) format id in the KDF | n/a (stock) | **PASS in the copy:** fmtKDF, Astra "no binding or label defect"; 11 tests × 9 builds, 13 plants, 3 controls | **PASS in the copy**, same |
+| (e) review / reproducibility | PASS (machine-checked proof) | PARTIAL: numerics reproduced, Astra-reviewed, no proof replay, no physical validation | PARTIAL, same |
+| assurance gates on the copy (FI mirror, residue, timing) | product gates | PASS [m] / PASS [m] / PASS [h] (§3, limits in §5) | PASS [m] / PASS [m] / PASS [h] (§3, limits in §5) |
+| FV landing: re-extract / re-prove / re-pin [e] | none | `sphincs-c10` (`hash.rs`, `lib.rs`, `v2hash.rs`, `Cargo.toml`) + `domain/src/lib.rs`, plus the secure/tool consumers of the stock tags; order of the round-17 re-pin (`207139703`) | everything in the middle column plus `params.rs`, `wots.rs`, `shuffle.rs` (pinned whole-file) |
+| FV landing: EasyCrypt [e] | none | v2 byte-format port of the refined exclusions (dossier (a)): ~1–3 person-months (judgement) | the same, plus a parameter generalization (w = 4, l = 65, T = 125: 266 + 95 files carry literals; chain-vector, digit, acceptance and extraction proofs): **+2–6 person-months** (judgement) |
+| FV landing: quantum note [e] | 0.5–2 person-months paper, 6–18+ machine-checked (shared by all three) | same | same |
+| on-chain gas, per-UserOp cost (Track B) | | | |
+
+**How to read it:**
+- **Speed:** like for like (same product-shaped FI bench, no UI tick, bench substitutes for the SE randomness and UI, fixed seeds rather than fmtKDF-derived keys), the candidates are **1.6× / 2.0×** faster than v1 on the research driver. Against the shipping v1 driver (no tick) they are 4.0× / 5.2× faster; that ratio mixes the format change with the driver change. Neither ratio is product latency.
+- **w4l65 + wprf2b over v2 0.3 + wprf2b:** 22% faster on the FI chain (0.566 against 0.725 s). The price is 704 more signature bytes, a 1.5× larger uncounted chaining-value DPA residual, and a heavier EasyCrypt port.
+- **v2 0.3 + wprf2b** keeps v1's parameters and signature size. Its open proof work is the byte-format port, plus the new PRF (wprf2b) and fmtKDF correspondence, and the joint-security items stated in round 17 (§§3, 5).
+- **Neither candidate** has a proven classical bound, a quantum statement or physical SCA evidence. The decision is the owner's.
+
+### 5. Astra's review of round 18 (`2e009449f`), folded into §§1–4
+
+Astra: **"FIX the claims and evidence presentation; no new assembly correctness blocker found."** What it confirmed:
+- **The asm:** the 8 DIN words, the layer from bit 27, and the register lifetimes at both PRF sites are right. Word 17 triggers the compression and word 18 is expected backpressure. PRF NBLW is 24.
+- **T_65:** it feeds exactly words 0–265: 16 full blocks plus a 40-byte tail, 17 padded blocks, NBLW 0.
+- **The search:** its context matches dt32, and the digit-sum bounds are 6 → 12 → 48 → 192, at most 195. The saved golden logs and 200,000 random digit sums recheck.
+
+Corrected above:
+1. **The chaining-value residual (×1.512)** is an exposure count. Its "MINOR-LOSS ~0.6 b" label had no leakage-to-recovery model behind it, so it is now UNKNOWN.
+2. **Configuration axes are disclosed.** The shipping comparison now uses the no-tick product chain (2.92 s). The research cached times are [c] (2 × mean sign + mean verify), checkct is [h], and the +8.9% is [e]; "luck-free" is gone.
+3. **"Only the byte-format port" was too broad.** The wprf2b and fmtKDF correspondence and the joint-security gaps stay open.
+
+**Limits of the assurance results:**
+- **Residue coverage is sampled.** Intermediate chain values are scanned for chains 0–7 only, and the single-chain cases run 6 steps. The residue builds use driver opt-level 3 on Cortex-M33, while the FI builds use "z" and a generic target, so cleanliness does not automatically transfer.
+- **The FI controls** show that the mirror's compare and verify-before-release are live. They do not show production fault resistance, relocking or failure-path wiping, which the mirror lacks.
+- **`bench_chain` timing on rejected runs is bogus:** `T_LAST` is written only on success, so the 776–991 M "release_copy" figures in the control rows are artefacts. The 0/16-released results stand.
+- **`driver_wprf`** reaches the 71-byte implementation with `sk_seed` secret; the solver counts were not independently replayed.
+
+## Round 19 (2026-11-14): bounded exploration — a d = 3 point, the size knob, the v1 driver
+
+Labels as in round 18: [m] measured on kit 0055002D (flash-only, option bytes identical to the baseline after the session), [c] computed, [e] estimated. Round 18's copies and KAT paths are untouched. The d = 3 prototype is a separate recipe, `proto_d3/`, building into `target/proto-d3`. Every existing KAT set regenerates identically.
+
+### 1. The d ≥ 3 insight point: h18 d3 (6, 6, 6) a11 k13 w8 l46 T209
+
+The search's d = 3 rows: of 8,182 totals-PASS rows, none passes every-term, 3,157 are every-term MINOR-LOSS and 5,025 FAIL. The binding term is almost always the same one. I kept the named set: it is the fastest w8 point near 4.8 KB, its fault margin is positive, and it fails by only 0.12 b.
+
+**Implementation:**
+- **Python reference:** `c10v2_ref.py --variant d3l46`. A7 is re-laid out for a 2-bit layer (type 4 @52, layer 2 @50, tree 18 @32, kp 8 @24, ci 6 @18, cp 4 @12, ha 11 @1). Self-test (8 bit-flips, wrong root and message, 3 +C near-misses) and cross-format checks pass; 6 KATs and 3 near-misses (`kat-v2-d3l46.*`).
+- **Rust:** `proto_d3/apply.py`, a generic v2 copy (D = 3, L = 46, T = 209, a generic digit sum, the A7 shifts). Rust equals Python on the KATs.
+
+**Exact SHA-256 calls [m, host]:**
+
+| | keygen | sign m0 | sign m1 | verify |
+|---|---:|---:|---:|---:|
+| Rust host, bench inputs: draft 0.3 | 177,151 | 486,372 | 481,368 | 361 |
+| Rust host, bench inputs: d3l46 | 23,679 (×0.134) | 177,477 (×0.365) | 161,413 (×0.335) | 510 (×1.41) |
+
+The Python reference (`count_calls.py`, KAT key 0, 4 messages; the message derivation excluded) agrees on keygen (177,151 and 23,679). Its sign means are 526,633 and 168,939 (×0.32), and its verifier makes one extra call per layer (363 / 513).
+
+**Kit, generic v2 path [m]** (fixed messages, signatures byte-identical to `golden-v2-d3l46.bin`, 2 repetitions within 400 cycles):
+
+| | sign m0 / m1 | keygen | verify | cached |
+|---|---:|---:|---:|---:|
+| draft 0.3 | 188.56 / 185.12 M | 62.75 M | 171.6k | 2.358 s |
+| **d3l46** | **89.29 / 72.99 M (×0.474 / ×0.394)** | **8.36 M (×0.133)** | 229.7k (×1.34) | **1.117 s** |
+
+The fused-model estimate is −61% cached [e]. No fused driver was built, as instructed.
+
+**What fails every-term, exactly [c, `c10v2/d3_insight.py`]:**
+- **One term only:** the wrapper `node` term, **+1.116 b at C = 16** (and +1.115 at C = 1 and 2).
+- **Its size:** the term is 2^-67.7, against that game's total of 2^-57.3, so it sits 10.4 b below the total. The totals are ×0.325 (ordinary) and ×0.337 (wrapper, C = 16).
+- **Every other term** is within +0.40 b (wrapper zero/prefix).
+- **What it is:** the binding branch is exc(exc+1)/N with exc ≈ V0·qs, where V0 is the per-signature verification charge. V0 grows from 771 to 1,137 with the third layer.
+
+**Slack or real:**
+- **The slack part:** V0 is the EasyCrypt literal (771 for stock), and it charges a full l(w−1) chain per layer. The verifier computes only l(w−1) − T steps per layer, because the +C rule fixes the digit sum. Charged at the verifier's actual call count (510 against 361), the term moves **+0.988 b**.
+- **What remains:** +0.988 b under this call-count bound; no unavoidable security loss is established. The proof charges distinct non-ordinary memo keys and uses all verifier calls as an upper bound. An instrumented d3 verification made no new oracle inputs after signing, so further accounting slack is possible (Astra). The term stays 10 b below the total.
+
+**Verdict:** **yes, it could become a MINOR-LOSS candidate**, at +0.99 b on one term, but only with a tightened verification-cost lemma. That is the same class of proof slack as split810's rebuild accounting. Allow 10–30 person-days [e] for the cost tightening alone: a conservative, uncalibrated allowance, structurally simpler than split810's memoization. It is not an estimate for completing the d3 proof.
+- **What it does not get it:** a d = 3 generalization of the proof is needed regardless. Coverage and extraction across three layers are unsupported (round 16).
+- **Its costs:**
+  - 4,844 B (+836);
+  - model gas 219,635 (≈ 142,167 callee + 77,468 calldata) against the v2 stock-shape model's 164,704, +33%, from more verifier calls and calldata. This is a model figure, not measured d3 gas or complete UserOp gas; it matters for Track B.
+  - a re-laid-out A7.
+- **The neighbour:** h18 d3 l43 T203 is already MINOR-LOSS today (0.952 b loose, 0.72 b tight), but costs 0.71 b of fault margin [c].
+- **Under the totals reading** both PASS (×0.33).
+
+### 2. The size knob: ≤ 4,008 B and faster than v2 0.3 + wprf2b
+
+**Yes, but only by lowering T on the stock shape.** Model with wprf2b's +102 cycles per block; it gives 111.6 M for v2 0.3 + wprf2b, against 111.2 M measured on the kit:
+
+| ≤ 4,008 B, every-term PASS / MINOR-LOSS [c] | cached + wprf2b | vs v2 0.3 + wprf2b | every-term | fault Δ | gas |
+|---|---:|---:|---|---:|---:|
+| h18 d2 a11 k13 w8 l43 **T203** | 106.6 M | **−4.4%** | MINOR-LOSS 0.71 b [c] | −0.71 ± 0.10 | 165,812 |
+| h18 d2 a11 k13 w8 l43 **T204** | 108.7 M | **−2.5%** | MINOR-LOSS 0.37 b [c] | −0.37 ± 0.12 | 165,258 |
+| v2 0.3 (T205) | 111.6 M | 0 | PASS | 0 | 164,704 |
+| T206 / T207 | 115.3 / 120.2 M | slower | MINOR-LOSS (encoding) | +0.38 / +0.78 | |
+
+- **T203 and T204** are milder ts200s: same keys as 0.3, so the format KDF is required. Their only cost is the fault fallback; ts200's −1.7 b was a FAIL.
+- **Within the searched grid** (uniform layer heights, bounded parameter ranges), nothing else at or below 4,008 B passes every-term. The TSV has exactly five qualifying rows, T203–T207. The closest other shapes fail on coverage:
+  - h18 d2 a10 k14 (3,992 B): wrapper coverage at C = 16 ×2^6.4 (FAIL), totals MINOR 0.97 b;
+  - h18 d2 a12 k11 (3,784–3,880 B): ordinary coverage at C = 1 ×2^7.5 (FAIL), totals MINOR ~0.93–1.0 b.
+- **w = 16** rows (3,656 B) fail the fault margin by about 15 b.
+
+### 3. Landing the v1 research driver (no new work; from round 13 §Levers and E20)
+
+v1's cached sign would go from 2.92 s (shipping driver, no tick; 3.03 s with the per-digest tick) to 1.145 s with the research driver, output-identical. It is gated on these owner decisions:
+- **Land the rounds 7–12 driver with #1149's batched tick, together.** The asm paths compile out under the per-digest tick, which is why the driver alone reaches only 322 M. Landing means enabling the `pqsigner-hw` research features (chain, search, gather, prfchain, forsleaf, v1-asm-*, v1-grindr) and the matching sphincs-c10 `hw-sha256-*` features in the secure image. The batched tick changes the film's update granularity.
+  - Decisions: the secure flash budget (the image is already over its slot with `ui-px`), the film cadence, and the tick-must-not-hash contract.
+- **`oneshot-speed` (E20):** −4.5% on today's driver, +192 B. It needs the nightly `optimize_attribute`, and the five changed entries' machine code is not FI-evaluated. It helps only until the item above lands.
+- **The driver at opt-level 3 through the root profile:** it moves the FSBL's bytes (the FSBL shares `pqsigner-hw`).
+- **Evidence already in place for v1:** the residue gate is clean on the v1 entries (7/7 with controls), gate 5 interleaved probes pass, and goldens are byte-identical.
+- **Not kit-measurable:** the SE draws (~0.3 s) and film frames stay outside the chain.
+
+### 4. Astra's review of round 19 (`b9571400a`), folded in above
+
+Astra: **"Conditional MINOR-LOSS candidate is honest; correct the findings above."** What reproduces:
+- **The numbers:** the wrapper node term alone exceeds the 1-bit threshold, at +1.115987 b, and tightening both baselines gives +0.987601 b.
+- **The tightening is sound in principle.** 771 = 147 + 2 × (301 + 2 + 9). V0 bounds all public verification calls, and so the exceptional node keys. The +C check precedes chain traversal, so an accepted layer takes exactly l(w−1) − T steps (a rejected one fewer). 361 and 510 are therefore valid candidate upper bounds, pending proof integration.
+- **The size knob:** the five ≤ 4,008-B rows (T203–T207) are confirmed; only T203 and T204 beat T205. Adding the wprf2b cost equally is fair for identical shapes; the speed figures remain estimates.
+- **The d3l46 A7:** injective and sufficient (layer ≤ 2, tree < 2^18, kp ≤ 63, ci ≤ 45, cp ≤ 11, ha ≤ 2047). The third layer's +C near-miss is rejected.
+
+Corrected:
+- "real" is now "remains under this call-count bound; no unavoidable loss established" (MEDIUM);
+- the Python sign counts exclude the message derivation, and the docstring now says 363;
+- "within the searched grid";
+- the gas baseline is labelled as a model figure;
+- the 10–30 person-days is for the cost tightening only.
