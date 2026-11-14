@@ -103,6 +103,19 @@ def main():
     print(f"  the fix (WOTS PRF with a per-layer-constant sk_seed block) adds {wots_nocache:,} compressions per pass"
           " without the top cache (estimate ~+4 M cycles; to be measured)")
 
+    # round 17 (UPDATE 2026-11-14): gate (c) with the two-block WOTS PRF (`wprf2b`, c10v2_ref.py --variant wprf2b):
+    # sk_seed sits in a first block constant per layer, so the WOTS PRF adds 0 to this counter (v1's shape).
+    print("  with the two-block WOTS PRF (wprf2b): WOTS adds 0 sk_seed compressions with varying words")
+    for label in ("no top cache", "warm top cache"):
+        t = fors_v2
+        print(f"  {label:15s} v2 0.3 + wprf2b {t:,} (FORS only)   x{t/v1_total:.5f} vs v1 ({lg(t/v1_total):+.4f} b)")
+    # what the counter does not count, for v1 and v2 alike: the per-layer chaining value CV = Compress(IV,
+    # sk_seed || const) is itself a secret that keys every WOTS secret of its layer, and it meets the varying A7 /
+    # v1 address words in the PRF's second block
+    cv_v1 = wots_nocache
+    print(f"  NOT counted above (v1 and v2 + wprf2b alike): second-block compressions with the per-layer secret CV and"
+          f" varying words: v1 {cv_v1:,}; v2 + wprf2b {wots_nocache:,} without the top cache, {wots_cache:,} with it")
+    print(f"  cost: +1 compression per WOTS PRF = +{wots_nocache:,} per pass without the top cache (+{wots_cache:,} with it)")
     # round 16 (UPDATE 2026-11-14): the same counter for the w4l65 frontier set (l = 65 WOTS PRF calls per key)
     q = dict(p, w=4, l=65, T=125)
     wk = 2**hp * q["l"]

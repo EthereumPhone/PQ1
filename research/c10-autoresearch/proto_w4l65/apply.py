@@ -275,4 +275,111 @@ edit("bench_avg_v2f/Cargo.toml", [('path = "../../../sphincs-c10"', 'path = "../
                                    'forslastprf = ["sphincs-c10/v2-fors-last-prf"]\nw4l65 = ["sphincs-c10/v2-w4l65", "pqsigner-hw/v2-w4l65"]')])
 edit("bench_avg_v2f/src/lib.rs", [('include!("../../inputs.rs");', 'include!("../../../../inputs.rs");')])
 print(f"fused driver: replaced {n_t43} v2-asm-t43 and {n_srch} v2-asm-search predicates")
+
+# ── 6. round 17, gate (c): the two-block WOTS secret PRF `v2-wprf2b` (c10v2_ref.py --variant wprf2b) ─────────
+# sha256(sk_seed || "C10v2-WOTS-PRF2B" || be32(layer) || 0^12 || A7)[:16], 71 B: the first block is constant
+# per layer, so sk_seed never meets a varying word in one compression (v1's WOTS-PRF shape). Generic v2 path in
+# the sphincs-c10 copy; the fused driver's two Rust WOTS-PRF feeds in the hw copy. The asm key loop issues the
+# one-block PRF itself, so `v2-rust-key` compiles it out (the A/B baseline) and `v2-wprf2b` implies it.
+edit("sphincs-c10/Cargo.toml", [('v2-w4l65 = ["v2"]', 'v2-w4l65 = ["v2"]\n# RESEARCH PROTOTYPE (round 17, gate (c)): the two-block WOTS secret PRF (c10v2_ref.py --variant wprf2b).\nv2-wprf2b = ["v2"]')])
+edit("sphincs-c10/src/v2hash.rs", [
+    ("""pub fn wots_secret(sk_seed: &[u8; 32], layer: u32, tree: u64, kp: u32, chain_idx: u32) -> [u8; N] {
+    #[cfg(feature = "v2-prf2")]""",
+     """/// RESEARCH PROTOTYPE `v2-wprf2b`: `sk_seed ‖ "C10v2-WOTS-PRF2B" ‖ be32(layer) ‖ 0^12 ‖ A7`, 71 bytes, first 16
+/// digest bytes; the input copy is wiped.
+#[cfg(feature = "v2-wprf2b")]
+fn wots_prf2b(sk_seed: &[u8; 32], layer: u32, a: u64) -> [u8; N] {
+    let mut b = [0u8; 71];
+    b[0..32].copy_from_slice(sk_seed);
+    b[32..48].copy_from_slice(b"C10v2-WOTS-PRF2B");
+    b[48..52].copy_from_slice(&layer.to_be_bytes());
+    put7(&mut b[64..71], a);
+    let out = sha256_bytes16(&b);
+    for x in b.iter_mut() {
+        // SAFETY: `x` is a valid, aligned, exclusive reference.
+        unsafe { core::ptr::write_volatile(x, 0) };
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    out
+}
+
+pub fn wots_secret(sk_seed: &[u8; 32], layer: u32, tree: u64, kp: u32, chain_idx: u32) -> [u8; N] {
+    #[cfg(feature = "v2-wprf2b")]
+    return wots_prf2b(sk_seed, layer, pack(T_WOTS_PRF, u64::from(layer), tree, u64::from(kp), u64::from(chain_idx), 0, 0));
+    #[cfg(feature = "v2-prf2")]"""),
+])
+edit("sphincs-c10/src/lib.rs", [('''#[cfg(all(feature = "v2-w4l65", any(feature = "near-miss-gen", feature = "v2-prf2")))]''',
+                                 '''#[cfg(all(feature = "v2-wprf2b", feature = "v2-prf2"))]
+compile_error!("`v2-wprf2b` and `v2-prf2` are different WOTS PRFs");
+#[cfg(all(feature = "v2-w4l65", any(feature = "near-miss-gen", feature = "v2-prf2")))]''')])
+edit("sphincs-c10/tests/v2_kat.rs", [('''    if cfg!(feature = "v2-w4l65") {
+        return "w4l65";
+    }''', '''    if cfg!(feature = "v2-w4l65") {
+        assert!(!cfg!(feature = "v2-wprf2b"), "no KAT set for w4l65 + wprf2b");
+        return "w4l65";
+    }
+    if cfg!(feature = "v2-wprf2b") {
+        return "wprf2b";
+    }''')])
+edit("hw/Cargo.toml", [('v2-w4l65 = ["v2"]', 'v2-w4l65 = ["v2"]\n# RESEARCH PROTOTYPE (round 17): the Rust WOTS key loop (asm key loop compiled out), and the two-block WOTS PRF.\nv2-rust-key = ["v2"]\nv2-wprf2b = ["v2-rust-key"]')])
+hp = f"{P}/hw/src/hash.rs"
+t = open(hp).read()
+n_ka = t.count('feature = "v2-asm-key-ga"')
+assert n_ka > 0
+t = t.replace('feature = "v2-asm-key-ga"', 'all(feature = "v2-asm-key-ga", not(feature = "v2-rust-key"))')
+open(hp, "w").write(t)
+edit("hw/src/hash.rs", [
+    ("""compile_error!("`v2-w4l65` (research prototype) builds with neither prf2, split810 nor fold-sum");""",
+     """compile_error!("`v2-w4l65` (research prototype) builds with neither prf2, split810 nor fold-sum");
+#[cfg(all(feature = "v2-wprf2b", feature = "v2-prf2"))]
+compile_error!("`v2-wprf2b` and `v2-prf2` are different WOTS PRFs");
+/// RESEARCH PROTOTYPE `v2-wprf2b` (round 17, gate (c)): the WOTS PRF's second 32 bytes, constant per layer,
+/// `"C10v2-WOTS-PRF2B" ‖ be32(layer) ‖ 0^12`; `layer` is A7 bit 51, bit 3 of `p0`'s first byte.
+#[cfg(feature = "v2-wprf2b")]
+#[inline(always)]
+fn v2_wprf2b_block(p0: u32) {
+    let mut b = [0u8; 32];
+    b[..16].copy_from_slice(b"C10v2-WOTS-PRF2B");
+    b[19] = ((p0 >> 3) & 1) as u8;
+    // SAFETY: `b` names 32 readable bytes (public data).
+    unsafe { feed_words(b.as_ptr(), 8) };
+}"""),
+    ("""    v2_entry();
+    v2_begin();
+    // SAFETY: caller contract.
+    unsafe { feed_words(sk_seed, 8) };
+    write_word(p0);
+    #[cfg(not(feature = "v2-prf2"))]
+    let v = {
+        write_word(p1);""", """    v2_entry();
+    v2_begin();
+    // SAFETY: caller contract.
+    unsafe { feed_words(sk_seed, 8) };
+    #[cfg(feature = "v2-wprf2b")]
+    v2_wprf2b_block(p0);
+    write_word(p0);
+    #[cfg(not(feature = "v2-prf2"))]
+    let v = {
+        write_word(p1);"""),
+    ("""    while ci < V2_L {
+        let c = ci << V2_CI_LSB;
+        v2_begin();
+        // SAFETY: caller contract.
+        unsafe { feed_words(sk_seed, 8) };
+        write_word(p0);""", """    while ci < V2_L {
+        let c = ci << V2_CI_LSB;
+        v2_begin();
+        // SAFETY: caller contract.
+        unsafe { feed_words(sk_seed, 8) };
+        #[cfg(feature = "v2-wprf2b")]
+        v2_wprf2b_block(p0);
+        write_word(p0);"""),
+])
+for b in ("bench_v2f", "bench_avg_v2f"):
+    edit(f"{b}/Cargo.toml", [('w4l65 = ["sphincs-c10/v2-w4l65", "pqsigner-hw/v2-w4l65"]',
+                              'w4l65 = ["sphincs-c10/v2-w4l65", "pqsigner-hw/v2-w4l65"]\nrustkey = ["pqsigner-hw/v2-rust-key"]\n'
+                              'wprf2b = ["sphincs-c10/v2-wprf2b", "pqsigner-hw/v2-wprf2b"]')])
+edit("bench_v2/Cargo.toml", [('w4l65 = ["sphincs-c10/v2-w4l65"]', 'w4l65 = ["sphincs-c10/v2-w4l65"]\nwprf2b = ["sphincs-c10/v2-wprf2b"]')])
+edit("host_v2/Cargo.toml", [('w4l65 = ["sphincs-c10/v2-w4l65"]', 'w4l65 = ["sphincs-c10/v2-w4l65"]\nwprf2b = ["sphincs-c10/v2-wprf2b"]')])
+print(f"gate (c): replaced {n_ka} v2-asm-key-ga predicates")
 print("applied")

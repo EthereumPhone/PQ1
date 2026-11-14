@@ -40,6 +40,12 @@ SIG_LEN = 4008
 #            digest space is 4^65 = 2^130 >= stock's 8^43 = 2^129. A7 ci widens to
 #            7 bits (bits 23..17, into the free bits 17..16 gap; every other field
 #            unchanged). Keys, signature length (4,712 B) and the verifier change.
+# wprf2b   : round 17, gate (c) (research): the WOTS secret PRF in v1's two-block shape,
+#            sha256(sk_seed || WPRF2B_TAG || be32(layer) || 0^12 || A7)[:16], 71 B. Its first
+#            block, sk_seed || tag || layer, is constant per layer, so sk_seed never meets a
+#            varying word in one compression (as v1's 80-B WOTS PRF). Keys change; the
+#            verifier does not (it never computes a secret).
+WPRF2B_TAG = b"C10v2-WOTS-PRF2B"
 VARIANT = frozenset()
 HL = (SUBTREE_H, SUBTREE_H)   # per-layer subtree heights, layer 0 first
 
@@ -48,11 +54,12 @@ def configure(variant):
     """Select a variant set (iterable of 'ts200', 'prf2', 'split810')."""
     global VARIANT, TARGET_SUM, HL, _WIDTH, _SHIFT, W, L, LOG_W, W_MASK, SIG_LEN
     v = frozenset(x for x in variant if x)
-    unknown = v - {"ts200", "prf2", "split810", "w4", "w4l65"}
+    unknown = v - {"ts200", "prf2", "split810", "w4", "w4l65", "wprf2b"}
     assert not unknown, f"unknown variant {sorted(unknown)}"
     assert not (v & {"w4", "w4l65"} and "ts200" in v), "w4 / w4l65 set their own target sum"
     assert not {"w4", "w4l65"} <= v, "w4 and w4l65 are alternatives"
     assert not {"w4l65", "split810"} <= v, "w4l65 and split810 both re-lay out ci"
+    assert not {"wprf2b", "prf2"} <= v, "wprf2b and prf2 are different WOTS PRFs"
     VARIANT = v
     TARGET_SUM = 200 if "ts200" in v else 205
     if "w4" in v:
@@ -134,6 +141,10 @@ def T(S, adrs, vals):
 
 def wots_prf(sk_seed, layer, tree, kp, ci):
     assert len(sk_seed) == 32
+    if "wprf2b" in VARIANT:
+        blk = WPRF2B_TAG + be(layer, 4) + b"\x00" * 12           # 32 B: block 1 is sk_seed || blk
+        assert len(WPRF2B_TAG) == 16 and len(blk) == 32
+        return sha256(sk_seed + blk + a7(WOTS_PRF, layer, tree, kp, ci))[:N]   # 71 B
     if "prf2" in VARIANT:
         d = sha256(sk_seed + a7(WOTS_PRF, layer, tree, kp, ci & ~1))
         return d[N * (ci & 1):N * (ci & 1) + N]
@@ -429,7 +440,7 @@ def cross(variant):
     root1 = keygen(sk, ps)
     sig1 = sign(sk, ps, root1, m)
     print(f"[{variant_name()}] pk_root {root1.hex()} (0.3: {root0.hex()})")
-    if VARIANT & {"prf2", "split810", "w4", "w4l65"}:
+    if VARIANT & {"prf2", "split810", "w4", "w4l65", "wprf2b"}:
         assert root1 != root0, "flag not live: pk_root unchanged"
     else:
         assert root1 == root0, "ts200 must not change keys"
@@ -438,16 +449,16 @@ def cross(variant):
     # a 0.3 signature (sum 205, 9+9) under the variant verifier, against the variant's own root
     # when keys agree, else against the 0.3 root (the verifier only sees bytes)
     rej = not verify(ps, root0, m, sig0)
-    if VARIANT <= {"prf2"}:
-        assert not rej, "prf2 changes no verifier rule: a 0.3 signature must still verify"
+    if VARIANT <= {"prf2", "wprf2b"}:
+        assert not rej, "prf2 / wprf2b change no verifier rule: a 0.3 signature must still verify"
     else:
         assert rej, "a draft-0.3 signature verified under a variant verifier"
     # the variant's signature under the 0.3 verifier
     vset = VARIANT
     configure(())
     acc = verify(ps, root1, m, sig1)
-    if vset == {"prf2"}:
-        assert acc, "the unchanged 0.3 verifier must accept a prf2 signature"
+    if vset <= {"prf2", "wprf2b"}:
+        assert acc, "the unchanged 0.3 verifier must accept a prf2 / wprf2b signature"
     else:
         assert not acc, "a variant signature verified under the draft-0.3 verifier"
     configure(variant)
