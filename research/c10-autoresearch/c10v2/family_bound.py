@@ -148,9 +148,9 @@ def consts_g(p):
     tree = 2 ** (a + 1) - 1
     fors_sign = 1 + pf + (k - 1) * (tree + a + 1) + tree + 2
     layer_sign = [build(x, l, w) + 1 + (pw + chain) + (chain + 2 + x) for x in hs]
-    keys, below = 0, 0
+    nwots, below = 0, 0
     for x in hs:
-        keys += 2 ** (h - below)
+        nwots += 2 ** (h - below)
         below += x
     wrapper_plan = fors_sign + sum(build(x, l, w) + 1 + pw for x in hs)
     return dict(
@@ -158,7 +158,7 @@ def consts_g(p):
         keygen=build(hs[-1], l, w), fors_sign=fors_sign, sign=fors_sign + sum(layer_sign),
         verify=1 + (k - 1) * (a + 1) + 2 + sum(chain + 2 + x for x in hs),
         wrapper_wots=2 * wrapper_plan + d * chain,
-        wots_universe=w * chain * keys, fors_universe=2 ** h * (k - 1) * 2 ** a,
+        wots_universe=w * chain * nwots, fors_universe=2 ** h * (k - 1) * 2 ** a,
         dl=d * l, km1=k - 1, perm_assumed=(pw > 4 or pf > 4),
     )
 
