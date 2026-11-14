@@ -1,5 +1,55 @@
 # A3.1 — the verifier functional-equivalence gap (honest status)
 
+> ## UPDATE 2026-11-14 — the optimized v1 in `src/` is proven equal to the reference (interpreter model only)
+>
+> `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` now holds the **optimized v1** (#1155
+> gas track; callee-only ~113.8k gas against the reference's ~175.2k, default profile). It is
+> **not deployed**. The deployed reference is frozen at `test/ref/RefSPHINCsC10Asm.sol`.
+>
+> **What is proven.** `v1 ≡ reference` holds at the **interpreter-model level**:
+> - `RelFors.head_verdict_eq_full`: `execC10HeadAsm = execC10Asm` for every key, message and
+>   signature, under the real SHA-256 oracle;
+> - `RelFors.execC10HeadAsm_eq` composes it with `execC10Asm_eq`.
+>
+> Both depend only on `[propext, Classical.choice, Quot.sound]` and are in the `verify-audit`
+> headline dump. The Lean side is under
+> `lean/SphincsCVerify/Interpreter/{RelChain,RelWots,RelWotsEntry,RelMerkle,RelSkeleton,RelMid,RelHmsg,RelFors,...}.lean`.
+>
+> **What binds the model to `src/`.** `execC10HeadAsm` runs the literal `c10HeadProgram`.
+> `make verify-head-transcription` (CI: `lean-fv.yml`) binds that literal to the source:
+> - `research/c10-gas/gen_lean_head.py --check` requires `C10HeadSource` to equal the source's
+>   assembly interior byte for byte, and `C10HeadProgram` to equal what the Lean parser prints
+>   for it;
+> - `C10HeadParse.parse_c10_head` re-checks literal ↔ AST in the kernel.
+>
+> **A3.1 still names the Base bytecode,** deliberately. `solidityVerifier_compiles_correctly`,
+> `AXIOM_STATUS.json` and the verifier pins (`0x8fa670d5…` / `0xfd55ec70…`, Base `0x7Ab9Abd0…`)
+> are unchanged. A3.1's evidence was taken on that codehash, and `head_verdict_eq_full` makes the
+> two statements `= execC10Asm` and `= execC10HeadAsm` interderivable. The pin tests, the Halmos
+> input-gate rules and the deploy replay now build the reference from `test/ref/`
+> (`PINNED_CODEHASHES.md`, UPDATE 2026-11-14).
+>
+> **The v1 bytecode's compile leg** (solc source → bytecode) is covered today **only by
+> `research/c10-gas/gate.sh`'s differential vectors:** equivalence with the reference on the
+> vectors, the mutant corpus, sweeps and SHA-input traces, under the default and deploy
+> profiles. That is finite testing, not a proof.
+>
+> **Restating A3.1 for the v1 is a deployment-time step.** It has to re-run:
+> - the Halmos gates (`verify-bytecode`, with `HalmosVerifier` on the v1);
+> - the KAT and bulk exes (`lake exe verify-test-vectors`, `verify-bulk`) with a HEAD variant
+>   that runs `execC10HeadAsm` / the v1 bytecode;
+> - the ~250-mutant wrong-accept screen on the v1;
+> - the pins: the verifier legs of `PinnedCodehashSelector` / `DeployedBytecodeReproCheck`, and,
+>   if the verifier address changes, the wallet-implementation and factory addresses and the
+>   firmware CREATE2 constants (`proto/src/lib.rs`).
+>
+> **Deferred follow-ups:**
+> - a parsed-source theorem for the v1 (`execC10HeadAsm_eq_parsed_source`, the analogue of
+>   `execC10Asm_eq_parsed_source`), which puts the parse inside the end theorem's own
+>   dependencies;
+> - a balanced-brace extraction of the `verify` function's assembly node in `gen_lean_head.py`,
+>   which today finds the interior by the `assembly {` line and the first 8-space `}`.
+
 > ## ✅ RESOLVED 2026-06-13 — functional layer discharged
 >
 > The reconstruction-layer divergence described below is **fixed**. Two real
