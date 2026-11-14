@@ -1937,3 +1937,66 @@ Computed items: `c10v2/dossier_v2_03.py`. It imports `bound_variants.py` (and ru
 - **(a):** proven-bound total ×1.0000; the encoding term ×0.30 (better) at these caps [computed, format-options-security §8].
 - **(c): fault fallback 1.6–1.7 bits weaker** [computed: two-digest median 2^-55.3 → 2^-53.7; 1st percentile 2^-47.3 → 2^-45.6]. **FAIL under the strict reading.** Reported, not adopted.
 - **(d):** keys do not change. A seed that signed under 205 must never sign under 200, or every reused WOTS key becomes two-time (~2^53). ts200 therefore needs a format-bound KDF tag more than any other option.
+
+### 1b. Astra's review of the dossier (amends §1; the original verdicts are kept above)
+
+Astra: **NO-GO against the strict a–e gate.** It reran the script: 500 samples give 55.00 / 47.59 bits, and the default 2,000 give 55.21 / 47.27. The corrected verdicts:
+
+| item | verdict | correction |
+|---|---|---|
+| **(a)** | **GAP, blocking** | Halving the floor is **not a quantum check**: Grover scaling applies to a specified search problem, not to classical probability bounds or honest birthday events, so those values are an unsupported heuristic. The Lean floor checks arithmetic over imported estimates (`Quantitative.lean:245`). The EasyCrypt numbers are advantage bounds at qr = 2^16, not security levels. Classical and quantum statements parameterized by hash queries and qs = C·2^16 are still needed; a classical byte-model port alone cannot close (a). |
+| **(b)** | **Conditional PASS** in the whole-hash random-oracle model | The EasyCrypt oracle samples whole byte strings and has no compression-block semantics, so it does not exploit v1's seed ‖ ADRS block (its exclusions do depend on v1 offsets). Gaps: the 39-byte KDF overlap is probabilistic, not structural, and needs a composition bound or disjoint encodings; H_MSG with R last lets one inner collision in `Compress(IV, S ‖ root ‖ M)` survive every R, which full SHA-256 collision resistance covers but which does not preserve a weaker randomized-hashing argument. |
+| **(c)** | **GAP, blocking** | Fault arithmetic: equal. **The DPA counts were wrong.** Corrected in `dossier_v2_03.py`, which now counts tree 12, v1's recomputed revealed FORS leaves and the signing PRFs, and separates the cache state. Without the top cache, v1 26,636 against v2 70,742 (×2.656, 1.41 b); with the warm top cache, 49,414 (×1.855, 0.89 b). These are exposure counts, not traces-to-key-recovery, so **the SCA comparison is UNKNOWN**, not MINOR-LOSS. The fix adds 44,118 compressions per pass without the cache (≈ +4 M, to be measured). Also: HASH cleanup covers HR **and CSR**, which the recorded dead-stack scan does not. |
+| **(d)** | **FAIL** | **The proposed tag fix is insufficient.** Slot keys use their own slot-master and slot-seed derivations (`domain/src/lib.rs:482`, `:742`). The format identifier must be bound into **both** branches, account variants included, and must distinguish target sum, address layout, PRF variant and the last-FORS-slot construction. Even v1 and v2 still share `sk_seed`, `pk_seed` and the R-candidate PRF, which needs joint-format accounting. |
+| **(e)** | **PARTIAL** | Numerics reproduced and source reviewed; no proof replay, no physical validation. |
+
+### 2. The family search (`c10v2/family_bound.py`, `format_options_numerics.py search`, `family_search.tsv.gz`)
+
+**Method.**
+- `family_bound.py` generalizes the EasyCrypt-shape bound, signer cost, verify gas, calldata and A7 fit over (h, d, a, k, w, l, T, n).
+- It reproduces `bound_variants.py` exactly: 108 term-by-term rational matches over six variants and six cap pairs.
+- 2,331,729 valid sets were checked in 223 s: PASS 21,830, MINOR-LOSS 15,710, FAIL 2,294,189.
+- **Marks:** loss = the maximum over the floor metrics (classical, the Grover convention, C = 1, 2, 16), the (c) fault margin and log2(set / stock) of the EasyCrypt totals and their coverage and FORS terms. PASS ≤ 0, MINOR-LOSS ≤ 1 bit, FAIL > 1.
+
+**Calibration.**
+- **Device cycles:** the stock model gives 51.18 M against 50.35 M measured (+1.65%). Using per-call units derived from the measured shares instead of the briefed ones reproduces 50.35 M by construction.
+- **Gas:** interpreter overhead fitted at 93.04 per call, to match Track B's 100,600 callee-only; plus 64,104 calldata, so 164,704 for stock.
+
+**Main result: stock is on the PASS frontier, and no PASS set beats it on all three objectives.** The only PASS set with a signature ≤ 4,008 B is stock itself, so every gain costs signature bytes. Selected PASS frontier rows:
+
+| set | cached sign, M (brief / share units) | sig B | verify gas (callee + calldata) | (c) Δ bits | EC ratio | A7 |
+|---|---:|---:|---:|---:|---:|---|
+| stock / v2 0.3 | 102.6 / 100.9 | 4,008 | 164,704 | 0 | 1 | fits |
+| **h18 d2 a11 k13 w4 l64 T124 ("w4")** | **75.3 / 71.9 (−27%)** | 4,680 (+672) | 160,182 (−2.7%) | +0.34 | 0.651 | **fits as-is** |
+| h18 d2 a10 k16 w8 l43 T205 | 95.6 / 93.9 | 4,344 | 175,910 | 0 | 0.622 | fits |
+| h18 d2 a9 k19 w4 l64 T124 | 63.9 / 60.5 | 5,256 | 179,407 | +0.34 | 0.222 | fits |
+| h16 d2 a10 k22 w4 l64 T124 | 46.5 / 43.0 | 6,040 | 205,538 | +0.34 | 0.082 | fits |
+| h18 d3 a11 k13 w8 l43 T205 | 54.8 / 53.9 | 4,700 | 203,166 | 0 | 0.311 | re-layout |
+| h18 d3 a11 k13 w8 l46 T209 | 39.7 / 36.3 | 4,844 | 219,635 | −0.04 (MINOR) | 0.325 | re-layout |
+| h20 d4 a8 k18 w8 l47 T211 | 20.7 / 17.2 | 5,824 | 276,087 | +0.23 | 0.156 | re-layout |
+| h18 d3 a8 k24 w4 l65 T124 | 20.3 / 16.6 | 6,764 | 233,322 | +0.05 | 0.035 | re-layout |
+
+**What the metrics cannot see (agent and Astra):**
+- The Lean floor is min(k·a, 112, 96): it never moves once k·a ≥ 96.
+- An EasyCrypt ratio below 1 mostly reflects a cheaper model signer (fewer node candidates), not more security.
+- Cycles for d ≥ 3 and w = 4 extrapolate from one calibration point. The driver asm is specialized to l = 43, w = 8.
+- The constants for d ≠ 2 (the WOTS universe) are labelled assumptions.
+- d = 1 rows and anything needing more than 56 address bits are excluded.
+
+**Re-proof cost (token counts).**
+- **Lean:** `Params.lean` has 6 hits; 3 of 12 other Spec files.
+- **EasyCrypt:** 266 of 1,089 split `.ec` files (1,188 hits for 43/205/512/2048), plus 95 files carrying derived literals (155135, 364892, 771, …).
+- **Scope:** any change other than T restates the cost, universe and encoding lemmas.
+
+### 3. Prototype: the w4 set (host Python only, this round)
+
+- **What exists:** `c10v2_ref.py --variant w4` (w = 4, l = 64, T = 124; digits from the low 128 bits; 4,680 B; A7 unchanged). Self-test: 8 bit-flips, wrong root, wrong message and 3 +C near-misses rejected. Cross-format checks pass both ways. 6 KATs and 3 near-misses (`kat-v2-w4.*`). Draft 0.3 and the other variants are unchanged: their KATs regenerate identically to the pre-change reference.
+- **Not done this round:**
+  - Rust host behind a flag and kit timing. The kit was off limits during the coordinator's pre-push host run, and the fused driver entries are specialised to l = 43, w = 8 (key loop, digit-sum fold, T_43 feed).
+  - Device cost is therefore the calibrated model only: 75.3 / 71.9 M cached, against 102.6 / 100.9.
+- **w4 against gate (S):**
+  - (a) PASS on the model's numbers, with the same scope caveats as §1b.
+  - (b) as v2.
+  - (c) fault margin +0.34 b, DPA as v2.
+  - **(d): it derives the same `sk_seed`, and its WOTS PRF A7 for ci < 43 equals 0.3's**, so it shares WOTS secrets with 0.3 unless a format identifier is bound into both derivation branches.
+  - The WOTS one-time term is w^l = 2^128 against stock's 2^129, which the EasyCrypt encoding term carries.

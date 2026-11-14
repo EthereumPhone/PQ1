@@ -85,15 +85,23 @@ def main():
           " — a function of (l, w, T) only, so identical for stock and v2 0.3\n")
 
     print("(c2) DPA exposure: single compressions per signing pass with sk_seed and attacker-known varying words")
-    fors_prf = (p["k"] - 1) * 2**p["a"]
-    wots_prf = p["d"] * 2**(p["h"] // p["d"]) * p["l"]
-    v1 = fors_prf
-    v2 = fors_prf + wots_prf
-    print(f"  v1: FORS PRF {fors_prf:,} (one 48-B block); WOTS PRF 0 (its sk_seed block is constant per layer;"
-          f" the {wots_prf:,} block-2 compressions mix the varying fields with a per-layer secret chaining value)")
-    print(f"  v2 0.3: FORS PRF {fors_prf:,} + WOTS PRF {wots_prf:,} = {v2:,} (sk_seed || A7, one block each)")
-    print(f"  ratio x{v2/v1:.2f} ({lg(v2/v1):.2f} bits fewer signing passes for the same sk_seed trace budget)"
-          " — an exposure count, not a measured DPA margin")
+    print("     (corrected after Astra's review: tree 12, the recomputed revealed FORS leaves and the signing PRFs counted)")
+    leaves, hp = 2**p["a"], p["h"] // p["d"]
+    fors_v2 = p["k"] * leaves                       # the fused signer builds all k trees, siblings reused
+    fors_v1 = p["k"] * leaves + (p["k"] - 1)        # v1 also recomputes each revealed leaf's secret
+    wots_keygen_layer = 2**hp * p["l"]              # one subtree's WOTS keys per layer, rebuilt per pass
+    wots_sign_layer = p["l"]                        # the signed key's chain starts
+    wots_nocache = p["d"] * (wots_keygen_layer + wots_sign_layer)
+    # warm top cache (#1148): layer 1 rebuilds only the 16-leaf subtree under its leaf (height-4 nodes stored)
+    wots_cache = (wots_keygen_layer + wots_sign_layer) + (2**(hp - 5) * p["l"] + wots_sign_layer)
+    v1_total = fors_v1
+    for label, wots in (("no top cache", wots_nocache), ("warm top cache", wots_cache)):
+        v2_total = fors_v2 + wots
+        print(f"  {label:15s} v1 {v1_total:,} (FORS PRF; WOTS PRF 0: its sk_seed block is constant per layer)   "
+              f"v2 0.3 {v2_total:,} (FORS {fors_v2:,} + WOTS {wots:,})   ratio x{v2_total/v1_total:.3f} ({lg(v2_total/v1_total):.2f} b)")
+    print("  an exposure COUNT under one leakage criterion, not traces-to-key-recovery: the SCA comparison is UNKNOWN")
+    print(f"  the fix (WOTS PRF with a per-layer-constant sk_seed block) adds {wots_nocache:,} compressions per pass"
+          " without the top cache (estimate ~+4 M cycles; to be measured)")
 
 
 if __name__ == "__main__":
