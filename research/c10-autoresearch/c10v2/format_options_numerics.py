@@ -413,6 +413,9 @@ def search_main():
             M[f"fl{C}"] = row([fb.lean_floor_bits(128, qb, a, k) for k, a in Y]) + np.zeros((nx, 1))
             M[f"flq{C}"] = row([fb.lean_floor_bits_grover(128, qb, a, k) for k, a in Y]) + np.zeros((nx, 1))
         M["c"] = col([cm[x] for x in X]) + np.zeros((1, ny))
+        # one-time digest-match exponent log2(w^l): the per-query probability that one H_MSG output hits a given
+        # digit vector; it sits inside the encoding terms but is marked on its own (Astra r16: w4 2^-129 -> 2^-128)
+        M["enc"] = col([c_["digit_bits"] for c_ in cx]) + np.zeros((1, ny))
         M["dq1"] = row([dbits[(h, k, a)][0] for k, a in Y]) + np.zeros((nx, 1))
         M["dq16"] = row([dbits[(h, k, a)][1] for k, a in Y]) + np.zeros((nx, 1))
         M["bytes"] = col([s["bytes"] for s in sx]) + row([s["bytes"] for s in sy])
@@ -437,7 +440,7 @@ def search_main():
         return M
 
     ref = {k: v[0, 0] for k, v in block(18, 2, [X0], [Y0]).items()}
-    BITS = [f"fl{C}" for C in CS] + [f"flq{C}" for C in CS] + ["c"]
+    BITS = [f"fl{C}" for C in CS] + [f"flq{C}" for C in CS] + ["enc", "c"]
     RATIOS = ["ord", "wrap"] + [f"{g}{t}{C}" for C in CS for g in "ow" for t in ("cov", "fors")]
     DRIVERS = BITS + RATIOS
 
@@ -489,26 +492,56 @@ def search_main():
     _, noc = sweep()
     c0 = cm[X0]
     t_r = time.time()
+    csamp = {x: samples for x in triples}
+
+    def refine(xs):
+        for x in xs:
+            cstat[x] = fault_margin_stats(x[1], x[0], x[2], refine_samples)
+            cm[x] = cstat[x][0]
+            csamp[x] = refine_samples
+
     near = [x for i, x in enumerate(triples) if x == X0 or
             (noc[i] <= 1 and -1.75 <= cm[x] - c0 <= 0.75)]
-    for x in near:
-        cstat[x] = fault_margin_stats(x[1], x[0], x[2], refine_samples)
-        cm[x] = cstat[x][0]
-    t_r = time.time() - t_r
+    refine(near)
     c_stock = cm[X0]
     ref = {k: v[0, 0] for k, v in block(18, 2, [X0], [Y0]).items()}
-    G, _ = sweep()
+
+    def frontiers(G):
+        ok = G["addr"] <= 56                                  # address > 56 bits: one-block cost model void
+        idx = np.arange(len(G["mark"]), dtype=np.int64)[ok]
+        sb = lambda mask: idx[mask[ok]]
+        return idx, sb, dict(
+            all=_pareto(G["cycA"], G["gas"], G["bytes"], idx),
+            pass_=_pareto(G["cycA"], G["gas"], G["bytes"], sb(G["mark"] == 0)),
+            pm=_pareto(G["cycA"], G["gas"], G["bytes"], sb(G["mark"] <= 1)),
+            passB=_pareto(G["cycB"], G["gas"], G["bytes"], sb(G["mark"] == 0)),
+            asis=_pareto(G["cycA"], G["gas"], G["bytes"], sb((G["mark"] == 0) & G["asis"])),
+            pm_asis=_pareto(G["cycA"], G["gas"], G["bytes"], sb((G["mark"] <= 1) & G["asis"])))
+
+    # close over the reported frontiers: every (w, l, T) that appears on one gets the refined (c) estimate, then
+    # re-sweep, until the frontiers carry no coarse estimate (Astra r16 MEDIUM: w4 had kept its 800-sample +0.627 b
+    # against the 4000-sample stock; consistent sampling gives +0.439 b)
+    closure, closure_rounds = [], 0
+    while True:
+        G, _ = sweep()
+        allidx, sub, F = frontiers(G)
+        G_small = sub((G["mark"] == 0) & (G["bytes"] <= ref["bytes"]))
+        F["small"] = _pareto(G["cycA"], G["gas"], G["bytes"], G_small)
+        miss = sorted({triples[i] for f in F.values() for i in G["xi"][f].tolist()
+                       if csamp[triples[i]] != refine_samples})
+        if not miss:
+            break
+        assert closure_rounds < 8, "frontier closure did not converge"
+        refine(miss)
+        closure += miss
+        closure_rounds += 1
+    t_r = time.time() - t_r
     N = len(G["mark"])
     t_sweep = time.time() - t0
-    model_ok = G["addr"] <= 56
-
-    allidx = np.arange(N, dtype=np.int64)[model_ok]      # address > 56 bits: one-block cost model void
-    sub = lambda mask: allidx[mask[model_ok]]
-    f_all = _pareto(G["cycA"], G["gas"], G["bytes"], allidx)
-    f_pass = _pareto(G["cycA"], G["gas"], G["bytes"], sub(G["mark"] == 0))
-    f_pm = _pareto(G["cycA"], G["gas"], G["bytes"], sub(G["mark"] <= 1))
-    f_passB = _pareto(G["cycB"], G["gas"], G["bytes"], sub(G["mark"] == 0))
-    f_asis = _pareto(G["cycA"], G["gas"], G["bytes"], sub((G["mark"] == 0) & G["asis"]))
+    f_all, f_pass, f_pm, f_passB, f_asis = F["all"], F["pass_"], F["pm"], F["passB"], F["asis"]
+    f_pm_asis, f_small = F["pm_asis"], F["small"]
+    G["csamp"] = np.array([csamp[triples[i]] for i in range(len(triples))], np.int32)[G["xi"]]
+    G["cse"] = np.array([cstat[triples[i]][1] for i in range(len(triples))], np.float32)[G["xi"]]
 
     def params(j):
         h, d = hds[G["hd"][j]]
@@ -530,6 +563,7 @@ def search_main():
         r["ord"] = float(sum(fb.ordinary_terms(2 ** 16, 2 ** 16, c, fb.FLOAT)[1].values()))
         r["wrap"] = float(sum(fb.wrapper_terms(2 ** 16, 2 ** 16, c, fb.FLOAT)[1].values()))
         r["gas"] = r["callee"] + r["calldata"]
+        r["enc"] = p["l"] * fb.log2w(p["w"])
         return r
 
     stock = scalar_row(full(18, 2, X0, Y0))
@@ -578,17 +612,21 @@ def search_main():
           f"{stock['wrap']:.4e} (2^{lg2(stock['wrap']):.3f})")
     covs = {C: (cov[(18, 13, 11, 'o', C)], cov[(18, 13, 11, 'w', C)]) for C in CS}
     print("  coverage term (ordinary / wrapper): " + "; ".join(f"C={C}: 2^{lg2(o):.1f} / 2^{lg2(w_):.1f}" for C, (o, w_) in covs.items()))
-    ses = [cstat[x][1] for x in near]
+    fine = [x for x in triples if csamp[x] == refine_samples]
+    ses = [cstat[x][1] for x in fine]
     print(f"  (c) two-use WOTS margin: {c_stock:.2f} b median, SE {cstat[X0][1]:.2f} ({refine_samples} samples, CRN seed; "
-          f"legacy 4000-sample main(): 55.25). {len(near)} triples within reach of a mark boundary re-estimated at "
-          f"{refine_samples} samples (SE {min(ses):.2f}..{max(ses):.2f} b); the other {len(triples) - len(near)} at "
-          f"{samples} (SE ~{np.median([cstat[x][1] for x in triples if x not in near] or [0]):.2f} b)")
+          f"legacy 4000-sample main(): 55.25). {len(fine)} triples at {refine_samples} samples (SE {min(ses):.2f}.."
+          f"{max(ses):.2f} b): {len(near)} within reach of a mark boundary + {len(closure)} closing the reported "
+          f"frontiers ({closure_rounds} re-sweeps; every frontier row below is at {refine_samples}); the other "
+          f"{len(triples) - len(fine)} at {samples} (SE ~{np.median([cstat[x][1] for x in triples if x not in fine] or [0]):.2f} b)."
+          f" A (c) delta within ~2 SE of 0 is not an established ordering.")
     print(f"  (d, ours) FORS+C multi-use per-H_MSG-try bits: {stock['dq1']:.1f} at 2^16 sigs, {stock['dq16']:.1f} at 2^20 (C=16)")
     print(f"  grind: {tries[X0]:.1f} WOTS+C tries/WOTS sig, 2^11 R nonces; P[exhaust 10M] = 2^{fb.grind_fail_log2(fb.STOCK):.0f}\n")
 
     tot = np.bincount(G["mark"], minlength=3)
     print(f"marks over {N} sets: PASS {tot[0]}, MINOR-LOSS {tot[1]}, FAIL {tot[2]}")
-    print("mark rule: loss = max over [stock - set] of the bit metrics (Lean floor classical and Grover at C=1,2,16; (c))\n"
+    print("mark rule: loss = max over [stock - set] of the bit metrics (Lean floor classical and Grover at C=1,2,16;\n"
+          "  one-time digest-match exponent log2(w^l), stock 129; (c))\n"
           "  and log2(set/stock) of the bound metrics (ordinary and wrapper totals at C=1; coverage and FORS terms of both\n"
           "  games at C=1,2,16). PASS: loss <= 0; MINOR-LOSS: 0 < loss <= 1 (<= 1 bit / <= 2x); FAIL: loss > 1.\n"
           "  The Lean floor is min(k*a, 112, 96) at n=16: it never moves for k*a >= 96. (d) is reported, not marked.\n")
@@ -610,8 +648,9 @@ def search_main():
                 f"T{p['T']:3d} | {r['sig']:4d} B | pass {r['passA'] / 1e6:6.1f} cached {r['cycA'] / 1e6:6.1f} "
                 f"({r['cycB'] / 1e6:6.1f}) M | gas {r['callee']:7.0f}+{r['calldata']:5d} | floor {r['fl']}/{r['flq']:.0f} "
                 f"(d{r['fl'] - stock['fl']:+.0f}/{r['flq'] - stock['flq']:+.1f}) | EC x{r['ord'] / stock['ord']:.3g}/"
-                f"x{r['wrap'] / stock['wrap']:.3g} covfors 2^{G['covfors'][j]:+.1f} | (c) {r['c']:.1f} "
-                f"({r['c'] - c_stock:+.2f}) | (d) {r['dq1'] - stock['dq1']:+.1f} | {MARKS[G['mark'][j]]}"
+                f"x{r['wrap'] / stock['wrap']:.3g} covfors 2^{G['covfors'][j]:+.1f} | enc {r['enc'] - stock['enc']:+d} | "
+                f"(c) {r['c']:.1f} ({r['c'] - c_stock:+.2f} n{int(G['csamp'][j])} se{G['cse'][j]:.2f}) | "
+                f"(d) {r['dq1'] - stock['dq1']:+.1f} | {MARKS[G['mark'][j]]}"
                 f" loss {G['loss'][j]:+.2f} [{drv}] {' '.join(flags)} {tag}")
 
     hdr = ("  params                                     | sig    | M cycles: pass, cached (share units) | gas callee+calldata |"
@@ -638,7 +677,7 @@ def search_main():
     o_pass = show(f_pass, "PASS-only sets", 40)
     o_pm = show(f_pm, "PASS + MINOR-LOSS sets", 15)
     o_asis = show(f_asis, "PASS sets that fit the v2 0.3 compact address as-is", 25)
-    f_small = _pareto(G["cycA"], G["gas"], G["bytes"], sub((G["mark"] == 0) & (G["bytes"] <= stock["sig"])))
+    show(f_pm_asis, "PASS + MINOR-LOSS sets that fit the v2 0.3 compact address as-is", 15)
     show(f_small, f"PASS sets with sig <= {stock['sig']} B", 15)
     lmin_w = {4: 64, 8: 43, 16: 32}
     loff = sorted({(params(j)["w"], params(j)["l"] - lmin_w[params(j)["w"]]) for j in f_pass.tolist()})
@@ -676,21 +715,22 @@ def search_main():
           "  T alone moves only count_ds 43 8 T (WotsAcceptanceMass) and the T literals.\n")
 
     # TSV: PASS and MINOR-LOSS sets plus every frontier set
-    keep = np.union1d(np.nonzero(G["mark"] <= 1)[0], np.concatenate([f_all, f_pass, f_pm, f_passB, f_small, f_asis]))
-    fasis = set(f_asis.tolist())
+    keep = np.union1d(np.nonzero(G["mark"] <= 1)[0], np.concatenate([f_all, f_pass, f_pm, f_passB, f_small, f_asis, f_pm_asis]))
+    fasis, fpma = set(f_asis.tolist()), set(f_pm_asis.tolist())
     fa, fp, fpm = set(f_all.tolist()), set(f_pass.tolist()), set(f_pm.tolist())
     import os
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "family_search.tsv")
     cols = ["h", "d", "hp", "a", "k", "w", "l", "T", "n", "sig_bytes", "cached_Mcyc_brief", "cached_Mcyc_shares",
             "gas_total", "lean_floor_cls", "lean_floor_grover", "ec_ord_ratio", "ec_wrap_ratio",
-            "worst_cov_fors_log2ratio", "c_margin_delta_bits", "d_fors_multiuse_delta_bits",
+            "worst_cov_fors_log2ratio", "enc_delta_bits", "c_margin_delta_bits", "c_samples", "c_median_se_bits",
+            "d_fors_multiuse_delta_bits",
             "floor_delta_cls_C1", "floor_delta_cls_C2", "floor_delta_cls_C16", "floor_delta_grover_C1",
             "floor_delta_grover_C2", "floor_delta_grover_C16", "addr_bits", "flags", "mark", "loss_bits",
-            "driver", "front_all", "front_pass", "front_pass_minor", "front_pass_asis"]
+            "driver", "front_all", "front_pass", "front_pass_minor", "front_pass_asis", "front_pass_minor_asis"]
     with open(path, "w") as fh:
         fh.write("# family_search.tsv — format_options_numerics.py search (" + time.strftime("%Y-%m-%d") +
                  f"); SUBSET of {N} valid sets: PASS/MINOR-LOSS + every frontier set; stock cached {stock['cycA'] / 1e6:.3f} M, gas "
-                 f"{stock['gas']:.0f}, c {c_stock:.3f} b, samples {samples}\n")
+                 f"{stock['gas']:.0f}, c {c_stock:.3f} b, samples {samples} coarse / {refine_samples} refined (per-row c_samples)\n")
         fh.write("\t".join(cols) + "\n")
         for j in keep.tolist():
             p = params(j)
@@ -699,7 +739,8 @@ def search_main():
                 p["h"], p["d"], p["h"] // p["d"], p["a"], p["k"], p["w"], p["l"], p["T"], 16, int(G["bytes"][j]),
                 f"{G['cycA'][j] / 1e6:.3f}", f"{G['cycB'][j] / 1e6:.3f}", f"{G['gas'][j]:.0f}",
                 fb.lean_floor_bits(128, 16, ka[1], ka[0]), fb.lean_floor_bits_grover(128, 16, ka[1], ka[0]),
-                f"{G['ord'][j]:.5g}", f"{G['wrap'][j]:.5g}", f"{G['covfors'][j]:.3f}", f"{G['cdel'][j]:.3f}",
+                f"{G['ord'][j]:.5g}", f"{G['wrap'][j]:.5g}", f"{G['covfors'][j]:.3f}", p["l"] * fb.log2w(p["w"]) - 129, f"{G['cdel'][j]:.3f}", int(G["csamp"][j]),
+                f"{G['cse'][j]:.3f}",
                 f"{G['dq1'][j]:.2f}",
                 *[fb.lean_floor_bits(128, 16 + math.log2(C), ka[1], ka[0]) - fb.lean_floor_bits(128, 16 + math.log2(C), 11, 13)
                   for C in CS],
@@ -710,10 +751,10 @@ def search_main():
                                      "perm>4blk" if p["l"] > 65 else "", "(d)" if G["dq1"][j] < -1 else "") if f),
                 MARKS[G["mark"][j]], f"{G['loss'][j]:.3f}",
                 DRIVERS[G["drv"][j]] if G["mark"][j] else "-", int(j in fa), int(j in fp), int(j in fpm),
-                int(j in fasis))) + "\n")
+                int(j in fasis), int(j in fpma))) + "\n")
     print(f"wrote {path} ({len(keep)} rows)")
     print(f"runtime: total {time.time() - t0:.1f} s (sweep {t_sweep:.1f} s incl. (c): {len(triples)} triples x "
-          f"{samples} samples {t_c:.1f} s + {len(near)} x {refine_samples} {t_r:.1f} s)")
+          f"{samples} samples {t_c:.1f} s + {len(near) + len(closure)} x {refine_samples} {t_r:.1f} s)")
 
 
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "search":
