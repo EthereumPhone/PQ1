@@ -116,6 +116,13 @@ def main():
     print(f"  NOT counted above (v1 and v2 + wprf2b alike): second-block compressions with the per-layer secret CV and"
           f" varying words: v1 {cv_v1:,}; v2 + wprf2b {wots_nocache:,} without the top cache, {wots_cache:,} with it")
     print(f"  cost: +1 compression per WOTS PRF = +{wots_nocache:,} per pass without the top cache (+{wots_cache:,} with it)")
+    # round 18 (UPDATE 2026-11-14): w4l65 + wprf2b — the WOTS PRF adds no sk_seed compression with varying words;
+    # FORS is w4l65's (same k, a); the per-layer CV residual scales with l
+    w4_cv_nc = 2 * (2**hp * 65 + 65)
+    w4_cv_c = (2**hp * 65 + 65) + (2**(hp - 5) * 65 + 65)
+    print(f"  w4l65 + wprf2b: {fors_v2:,} sk_seed compressions (FORS only) x{fors_v2/v1_total:.5f} vs v1, with or without the"
+          f" top cache; NOT counted: CV second-block compressions {w4_cv_nc:,} without the cache (x{w4_cv_nc/cv_v1:.3f} of v1's"
+          f" {cv_v1:,}), {w4_cv_c:,} with it")
     # round 16 (UPDATE 2026-11-14): the same counter for the w4l65 frontier set (l = 65 WOTS PRF calls per key)
     q = dict(p, w=4, l=65, T=125)
     wk = 2**hp * q["l"]

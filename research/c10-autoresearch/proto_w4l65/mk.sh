@@ -11,6 +11,8 @@ rsync -a --exclude target "$R/hw/" "$P/hw/"
 rsync -a --exclude target "$D/bench_v2f/" "$P/bench_v2f/"
 rsync -a --exclude target "$D/bench_avg_v2f/" "$P/bench_avg_v2f/"
 rsync -a --exclude target "$R/domain/" "$P/domain/"
+rsync -a --exclude target "$D/bench_v2drv/" "$P/bench_v2drv/"
+rsync -a --exclude target "$D/bench_chain/" "$P/bench_chain/"
 cp "$D/harness/run_flash.sh" "$P/run_flash_sig.sh"; cp "$D/evaluate.py" "$P/evaluate_sig.py"; cp "$D/harness/run_profile.sh" "$P/run_profile_sig.sh"
 cp "$R/Cargo.lock" "$P/sphincs-c10/Cargo.lock"; cp "$R/Cargo.lock" "$P/domain/Cargo.lock"
 python3 "$D/proto_w4l65/apply.py" "$P"
@@ -18,6 +20,7 @@ python3 "$D/proto_w4l65/apply.py" "$P"
 ( cd "$P/sphincs-c10" && CARGO_TARGET_DIR=../tgt-kat cargo test --offline --release --features v2,v2-w4l65 --test v2_kat -q )
 ( cd "$P/sphincs-c10" && CARGO_TARGET_DIR=../tgt-kat0 cargo test --offline --release --features v2 --test v2_kat -q )
 ( cd "$P/sphincs-c10" && CARGO_TARGET_DIR=../tgt-katc cargo test --offline --release --features v2,v2-wprf2b --test v2_kat -q )
+( cd "$P/sphincs-c10" && CARGO_TARGET_DIR=../tgt-katc cargo test --offline --release --features v2,v2-w4l65,v2-wprf2b --test v2_kat -q )
 # round 17, gate (d): the stock domain suite (every pinned recovery / tag vector) with format-kdf off, unchanged;
 # then the format tests once per format; then the two refusals (v2 without format-kdf, format-kdf on v1)
 ( cd "$P/domain" && CARGO_TARGET_DIR=../tgt-dom cargo test --offline --release -q )
@@ -58,6 +61,8 @@ python3 "$D/proto_w4l65/plants_d.py" "$P"
 "$P/tgt-w4/release/c10-ar-host" write "$P/golden-w4l65.bin"; cmp "$P/golden-w4l65.bin" "$D/golden-v2-w4l65.bin"
 ( cd "$P/host_v2" && CARGO_TARGET_DIR=../tgt-c cargo build --offline --release -q --features wprf2b )
 "$P/tgt-c/release/c10-ar-host" write "$P/golden-wprf2b.bin"; cmp "$P/golden-wprf2b.bin" "$D/golden-v2-wprf2b.bin"
+( cd "$P/host_v2" && CARGO_TARGET_DIR=../tgt-cw cargo build --offline --release -q --features w4l65-wprf2b )
+"$P/tgt-cw/release/c10-ar-host" write "$P/golden-w4l65-wprf2b.bin"; cmp "$P/golden-w4l65-wprf2b.bin" "$D/golden-v2-w4l65-wprf2b.bin"
 # kit ELFs
 cd "$D"
 for v in d03 w4l65; do F=""; [ $v = w4l65 ] && F=w4l65
@@ -76,4 +81,21 @@ CRATE=target/proto-w4l65/bench_v2 LIBNAME=c10_bench_v2 LDSCRIPT=link_flash.ld EX
 for v in rk-d03 wprf2b; do F=rustkey; [ $v = wprf2b ] && F=wprf2b
   CRATE=target/proto-w4l65/bench_v2f LIBNAME=c10_bench_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$F ./build_any.sh out/proto-f-$v.elf
   CRATE=target/proto-w4l65/bench_avg_v2f LIBNAME=c10_bench_avg_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$F ./build_any.sh out/proto-avg-f-$v.elf
+done
+# round 18: wprf2b in the dt32 asm key loop (fixed messages + 16-message means)
+CRATE=target/proto-w4l65/bench_v2f LIBNAME=c10_bench_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=wprf2b-asm ./build_any.sh out/proto-f-wprf2b-asm.elf
+CRATE=target/proto-w4l65/bench_avg_v2f LIBNAME=c10_bench_avg_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=wprf2b-asm ./build_any.sh out/proto-avg-f-wprf2b-asm.elf
+# round 18: w4l65 at full speed (T_65 feed, w = 4 asm search), alone and with wprf2b
+for v in w4l65-asm w4l65-wprf2b; do
+  CRATE=target/proto-w4l65/bench_v2f LIBNAME=c10_bench_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$v ./build_any.sh out/proto-f-$v.elf
+  CRATE=target/proto-w4l65/bench_avg_v2f LIBNAME=c10_bench_avg_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$v ./build_any.sh out/proto-avg-f-$v.elf
+done
+# round 18 assurance builds: residue suites and the FI chain mirror on both candidates
+for c in d03w w4w; do
+  for f in residue residue-control; do
+    CRATE=target/proto-w4l65/bench_v2drv LIBNAME=c10_bench_v2drv LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$f,cand-$c ./build_any.sh out/proto-res-$c-$f.elf
+  done
+  for f in "" ,fi-control-cmp ,fi-control-verify; do
+    BENCH_RUSTFLAGS= CRATE=target/proto-w4l65/bench_chain LIBNAME=c10_bench_chain LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN" BENCH_FEATURES=cand-$c$f ./build_any.sh out/proto-chain-$c${f#,}.elf
+  done
 done
