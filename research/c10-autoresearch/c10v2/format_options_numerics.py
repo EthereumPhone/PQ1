@@ -234,8 +234,9 @@ def p_dominate_batch(m, T, w):
 def fault_margin_stats(l, w, T, samples):
     """(c): median log2(1/p) per forgery try after a fault makes one WOTS key sign two
     independent sum-T digests (r = 2 of main()), and its standard error from the order statistics
-    at N/2 +- sqrt(N)/2. Common random numbers: every triple uses the same seed, so deltas between
-    triples carry less sampling noise than independent runs."""
+    at N/2 +- sqrt(N)/2. Every triple uses the same seed, but that does NOT couple triples with different
+    l (the second digest vector's stream shifts with l), so a delta's SE is ~sqrt(se_a^2 + se_b^2): Astra's
+    paired bootstrap for w4l65 T125 gave 0.104 against sqrt(0.076^2 + 0.075^2) = 0.107."""
     rng = np.random.default_rng(SEARCH_SEED)
     d1, d2 = sample_ST_batch(l, w, T, samples, rng), sample_ST_batch(l, w, T, samples, rng)
     v = np.sort(-np.log2(p_dominate_batch(np.minimum(d1, d2), T, w)))
@@ -382,6 +383,8 @@ def search_main():
                 cov[(h, k, a, "w", C)] = fb.coverage_g(2 ** 16 + 3 * qs + 1, h, k, a, fb.FLOAT)
             dbits[(h, k, a)] = (fb.fors_multiuse_bits(h, k, a, 2 ** 16), fb.fors_multiuse_bits(h, k, a, 2 ** 20))
 
+    TERMS = ("node", "zero", "encoding", "wots", "fors", "coverage", "prefix")
+
     def block(h, d, X, Y):
         """All metrics for the grid X (w,l,T) x Y (k,a) at (h, d); arrays of shape (len X, len Y)."""
         p00 = full(h, d, X0, Y0)
@@ -405,8 +408,9 @@ def search_main():
             _, tw = fb.wrapper_terms(2 ** 16, qs, c, VEC, row([cov[(h, k, a, "w", C)] for k, a in Y]))
             if C == 1:
                 M["ord"], M["wrap"] = sum(to.values()), sum(tw.values())
-            M[f"ocov{C}"], M[f"ofors{C}"] = to["coverage"] + 0 * to["fors"], to["fors"]
-            M[f"wcov{C}"], M[f"wfors{C}"] = tw["coverage"] + 0 * tw["fors"], tw["fors"]
+            for t_ in TERMS:                                   # every returned term, both games, every C
+                M[f"o{t_}{C}"] = to[t_] + np.zeros((len(X), len(Y)))
+                M[f"w{t_}{C}"] = tw[t_] + np.zeros((len(X), len(Y)))
         nx, ny = len(X), len(Y)
         for C in CS:
             qb = 16 + math.log2(C)
@@ -441,7 +445,7 @@ def search_main():
 
     ref = {k: v[0, 0] for k, v in block(18, 2, [X0], [Y0]).items()}
     BITS = [f"fl{C}" for C in CS] + [f"flq{C}" for C in CS] + ["enc", "c"]
-    RATIOS = ["ord", "wrap"] + [f"{g}{t}{C}" for C in CS for g in "ow" for t in ("cov", "fors")]
+    RATIOS = ["ord", "wrap"] + [f"{g}{t}{C}" for C in CS for g in "ow" for t in TERMS]
     DRIVERS = BITS + RATIOS
 
     def mark(M):
@@ -455,7 +459,7 @@ def search_main():
 
     def sweep():
       store = {k: [] for k in ("cycA", "cycB", "gas", "bytes", "mark", "loss", "drv", "hd", "xi", "yi",
-                               "ord", "wrap", "cdel", "covfors", "dq1", "addr", "asis")}
+                               "ord", "wrap", "cdel", "wterm", "dq1", "addr", "asis")}
       noc = np.full(len(triples), np.inf)
       stock_cell = None
       for bi, (h, d) in enumerate(hds):
@@ -479,7 +483,7 @@ def search_main():
           store["wrap"].append((M["wrap"] / ref["wrap"])[ok].astype(np.float32))
           store["cdel"].append((M["c"] - ref["c"])[ok].astype(np.float32))
           cf = np.stack([np.log2(M[r] / ref[r]) for r in RATIOS[2:]]).max(axis=0)
-          store["covfors"].append(cf[ok].astype(np.float32))
+          store["wterm"].append(cf[ok].astype(np.float32))
           store["dq1"].append((M["dq1"] - ref["dq1"])[ok].astype(np.float32))
           store["addr"].append(M["addr"][ok].astype(np.int8)); store["asis"].append((M["asis"] & ok)[ok])
           losses_noc = np.stack([ref[b] - M[b] for b in BITS if b != "c"] + [np.log2(M[r] / ref[r]) for r in RATIOS])
@@ -614,12 +618,13 @@ def search_main():
     print("  coverage term (ordinary / wrapper): " + "; ".join(f"C={C}: 2^{lg2(o):.1f} / 2^{lg2(w_):.1f}" for C, (o, w_) in covs.items()))
     fine = [x for x in triples if csamp[x] == refine_samples]
     ses = [cstat[x][1] for x in fine]
-    print(f"  (c) two-use WOTS margin: {c_stock:.2f} b median, SE {cstat[X0][1]:.2f} ({refine_samples} samples, CRN seed; "
+    print(f"  (c) two-use WOTS margin: {c_stock:.2f} b median, SE {cstat[X0][1]:.2f} ({refine_samples} samples, fixed seed; "
           f"legacy 4000-sample main(): 55.25). {len(fine)} triples at {refine_samples} samples (SE {min(ses):.2f}.."
           f"{max(ses):.2f} b): {len(near)} within reach of a mark boundary + {len(closure)} closing the reported "
           f"frontiers ({closure_rounds} re-sweeps; every frontier row below is at {refine_samples}); the other "
           f"{len(triples) - len(fine)} at {samples} (SE ~{np.median([cstat[x][1] for x in triples if x not in fine] or [0]):.2f} b)."
-          f" A (c) delta within ~2 SE of 0 is not an established ordering.")
+          f" Row deltas print +-SE of the DIFFERENCE, ~sqrt(se_row^2 + se_stock^2) (one seed does not couple different l);"
+          f" a delta within ~2 of those SEs of 0 is not an established ordering.")
     print(f"  (d, ours) FORS+C multi-use per-H_MSG-try bits: {stock['dq1']:.1f} at 2^16 sigs, {stock['dq16']:.1f} at 2^20 (C=16)")
     print(f"  grind: {tries[X0]:.1f} WOTS+C tries/WOTS sig, 2^11 R nonces; P[exhaust 10M] = 2^{fb.grind_fail_log2(fb.STOCK):.0f}\n")
 
@@ -627,8 +632,8 @@ def search_main():
     print(f"marks over {N} sets: PASS {tot[0]}, MINOR-LOSS {tot[1]}, FAIL {tot[2]}")
     print("mark rule: loss = max over [stock - set] of the bit metrics (Lean floor classical and Grover at C=1,2,16;\n"
           "  one-time digest-match exponent log2(w^l), stock 129; (c))\n"
-          "  and log2(set/stock) of the bound metrics (ordinary and wrapper totals at C=1; coverage and FORS terms of both\n"
-          "  games at C=1,2,16). PASS: loss <= 0; MINOR-LOSS: 0 < loss <= 1 (<= 1 bit / <= 2x); FAIL: loss > 1.\n"
+          "  and log2(set/stock) of the bound metrics (ordinary and wrapper totals at C=1; EVERY returned term - node, zero,\n"
+          "  encoding, wots, fors, coverage, prefix - of both games at C=1,2,16: a better total cannot hide a worse term). PASS: loss <= 0; MINOR-LOSS: 0 < loss <= 1 (<= 1 bit / <= 2x); FAIL: loss > 1.\n"
           "  The Lean floor is min(k*a, 112, 96) at n=16: it never moves for k*a >= 96. (d) is reported, not marked.\n")
 
     def line(j, tag=""):
@@ -648,8 +653,8 @@ def search_main():
                 f"T{p['T']:3d} | {r['sig']:4d} B | pass {r['passA'] / 1e6:6.1f} cached {r['cycA'] / 1e6:6.1f} "
                 f"({r['cycB'] / 1e6:6.1f}) M | gas {r['callee']:7.0f}+{r['calldata']:5d} | floor {r['fl']}/{r['flq']:.0f} "
                 f"(d{r['fl'] - stock['fl']:+.0f}/{r['flq'] - stock['flq']:+.1f}) | EC x{r['ord'] / stock['ord']:.3g}/"
-                f"x{r['wrap'] / stock['wrap']:.3g} covfors 2^{G['covfors'][j]:+.1f} | enc {r['enc'] - stock['enc']:+d} | "
-                f"(c) {r['c']:.1f} ({r['c'] - c_stock:+.2f} n{int(G['csamp'][j])} se{G['cse'][j]:.2f}) | "
+                f"x{r['wrap'] / stock['wrap']:.3g} worst term 2^{G['wterm'][j]:+.2f} | enc {r['enc'] - stock['enc']:+d} | "
+                f"(c) {r['c']:.1f} ({r['c'] - c_stock:+.2f}+-{math.hypot(G['cse'][j], cstat[X0][1]):.2f} n{int(G['csamp'][j])}) | "
                 f"(d) {r['dq1'] - stock['dq1']:+.1f} | {MARKS[G['mark'][j]]}"
                 f" loss {G['loss'][j]:+.2f} [{drv}] {' '.join(flags)} {tag}")
 
@@ -722,7 +727,7 @@ def search_main():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "family_search.tsv")
     cols = ["h", "d", "hp", "a", "k", "w", "l", "T", "n", "sig_bytes", "cached_Mcyc_brief", "cached_Mcyc_shares",
             "gas_total", "lean_floor_cls", "lean_floor_grover", "ec_ord_ratio", "ec_wrap_ratio",
-            "worst_cov_fors_log2ratio", "enc_delta_bits", "c_margin_delta_bits", "c_samples", "c_median_se_bits",
+            "worst_term_log2ratio", "enc_delta_bits", "c_margin_delta_bits", "c_samples", "c_median_se_bits", "c_delta_se_bits",
             "d_fors_multiuse_delta_bits",
             "floor_delta_cls_C1", "floor_delta_cls_C2", "floor_delta_cls_C16", "floor_delta_grover_C1",
             "floor_delta_grover_C2", "floor_delta_grover_C16", "addr_bits", "flags", "mark", "loss_bits",
@@ -739,8 +744,8 @@ def search_main():
                 p["h"], p["d"], p["h"] // p["d"], p["a"], p["k"], p["w"], p["l"], p["T"], 16, int(G["bytes"][j]),
                 f"{G['cycA'][j] / 1e6:.3f}", f"{G['cycB'][j] / 1e6:.3f}", f"{G['gas'][j]:.0f}",
                 fb.lean_floor_bits(128, 16, ka[1], ka[0]), fb.lean_floor_bits_grover(128, 16, ka[1], ka[0]),
-                f"{G['ord'][j]:.5g}", f"{G['wrap'][j]:.5g}", f"{G['covfors'][j]:.3f}", p["l"] * fb.log2w(p["w"]) - 129, f"{G['cdel'][j]:.3f}", int(G["csamp"][j]),
-                f"{G['cse'][j]:.3f}",
+                f"{G['ord'][j]:.5g}", f"{G['wrap'][j]:.5g}", f"{G['wterm'][j]:.3f}", p["l"] * fb.log2w(p["w"]) - 129, f"{G['cdel'][j]:.3f}", int(G["csamp"][j]),
+                f"{G['cse'][j]:.3f}", f"{math.hypot(G['cse'][j], cstat[X0][1]):.3f}",
                 f"{G['dq1'][j]:.2f}",
                 *[fb.lean_floor_bits(128, 16 + math.log2(C), ka[1], ka[0]) - fb.lean_floor_bits(128, 16 + math.log2(C), 11, 13)
                   for C in CS],
