@@ -103,6 +103,22 @@ def main():
     print(f"  the fix (WOTS PRF with a per-layer-constant sk_seed block) adds {wots_nocache:,} compressions per pass"
           " without the top cache (estimate ~+4 M cycles; to be measured)")
 
+    # round 16 (UPDATE 2026-11-14): the same counter for the w4l65 frontier set (l = 65 WOTS PRF calls per key)
+    q = dict(p, w=4, l=65, T=125)
+    wk = 2**hp * q["l"]
+    w_nc = q["d"] * (wk + q["l"])
+    w_c = (wk + q["l"]) + (2**(hp - 5) * q["l"] + q["l"])
+    print("  w4l65 (h18 d2 a11 k13 w4 l65 T125), same counter:")
+    for label, wots, base in (("no top cache", w_nc, fors_v2 + wots_nocache), ("warm top cache", w_c, fors_v2 + wots_cache)):
+        t = fors_v2 + wots
+        print(f"  {label:15s} w4l65 {t:,} (FORS {fors_v2:,} + WOTS {wots:,})   x{t/v1_total:.3f} vs v1 ({lg(t/v1_total):.2f} b), "
+              f"x{t/base:.3f} vs v2 0.3 ({lg(t/base):.2f} b)")
+    per_key = lambda l_, w_, blocks: (l_ + l_ * (w_ - 1) + blocks, 2 * l_ + l_ * (w_ - 1) + blocks)
+    tb = lambda l_: -(-(24 + 16 * l_ + 9) // 64)       # T_l: S || A7 || 0x00 || l values, padded blocks
+    (a0, a1), (b0, b1) = per_key(43, 8, tb(43)), per_key(65, 4, tb(65))
+    print(f"  the same fix adds {w_nc:,} compressions per pass for w4l65; per WOTS key (PRF + chain steps + T_l blocks):"
+          f" v2 0.3 {a0} -> {a1} with the fix, w4l65 {b0} -> {b1}: the per-key gain narrows from x{b0/a0:.3f} to x{b1/a1:.3f}")
+
 
 if __name__ == "__main__":
     main()
