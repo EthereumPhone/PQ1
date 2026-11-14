@@ -2088,3 +2088,68 @@ Its three findings, all fixed or corrected here:
 - (e) numerics reproduced by Astra; no proof replay, Rust, kit timing or physical validation.
 
 The cycle and gas figures are the calibrated model only.
+
+### 2d. Corrections to §2c, both readings of gate (a), and the w4l65 prototype on the kit (UPDATE 2026-11-14)
+
+**Corrections to §2c [computed, `5018af0e3`].**
+- **The PASS frontier has a seventh shape.** Besides stock and the w4 l = 65 shapes, it includes h18 d2 a11 k13 **w4 l66 T137** (147 M cached, gas 157,351): a slow, high-margin corner. §2c listed only l = 65 shapes.
+- **"No d ≥ 3 set passes" is now counted directly, not read off the frontier.**
+  - All 2,307 every-term PASS rows have d = 2: w4 with l = 65..68 (420, 533, 656 and 697 rows), plus stock.
+  - None needs more than 56 address bits.
+
+**Both readings, from one run.** Gate (a) as tasked compares the theorem's right-hand side, the game total at the caps; the every-term mark is the stricter lens. The TSV now carries both, `mark` and `mark_totals`:
+
+| | PASS | MINOR-LOSS | PASS d=2 / d=3 / d=4 / d=6 |
+|---|---:|---:|---|
+| every term (`mark`) | 2,307 | 14,785 | 2,307 / 0 / 0 / 0 |
+| totals at C = 1, 2, 16 (`mark_totals`) | 25,887 | 21,403 | 7,247 / 8,182 / 8,155 / 2,303 |
+
+- **What the totals reading admits.** Sets whose individual terms grow a lot while staying hidden under a larger term.
+  - h20 d4 a8 k16 w4 l65: coverage ×2^9.7 at C = 1 (2^-98 → 2^-88, under a total of about 2^-61).
+  - The d = 3 rows §2c called FAIL. Their worst terms sit about 10 bits below their game's total [computed, scalar `fb.ordinary_terms` / `wrapper_terms`]:
+
+    | set | worst term | its size | game total | totals ratio |
+    |---|---|---:|---:|---:|
+    | h18 d3 a11 k13 w8 l46 T209 | wrapper node, C = 16, ×2.17 (1.12 b) | 2^-67.7 | 2^-57.3 | ×0.33 |
+    | h20 d4 a8 k18 w8 l47 T211 | wrapper node, C = 16, ×3.77 (1.91 b) | 2^-66.9 | 2^-58.5 | ×0.16 |
+    | h18 d3 a11 k13 w8 l43 T205 | wrapper encoding, C = 16, ×2.24 | 2^-67.3 | 2^-57.4 | ×0.31 |
+
+  - Under the totals reading they PASS; under the every-term reading they FAIL. Which reading binds is the owner's call. Under both, a d ≠ 2 or w ≠ 8 bound is an extrapolation, not an EasyCrypt theorem.
+
+**w4l65 prototype: Rust and kit (`a7b7481fd`).**
+- **Why a build-time copy:** `params.rs`, `wots.rs`, `shuffle.rs` and `hash.rs` are pinned whole-file by the extraction-freshness gate, so editing them in place would need re-extraction, re-proof and re-pinning.
+- **The recipe:** `proto_w4l65/apply.py` holds every edit as an exact replacement asserted to occur once. `mk.sh` rebuilds the copy in the ignored `target/proto-w4l65` from scratch, and `run_kit.sh` runs the kit.
+- **What the variant changes:** params; a plain-sum `digit_sum`; a 65-item shuffle capacity (n = 65 uses exactly the 4 precomputed blocks); A7 ci at 7 bits; `TH_MULTI_MAX` = 65; fences against fused, prf2, split810, ts200 and near-miss-gen.
+- **The product crate is untouched.** The extraction-freshness gate stays green (35 fresh, 0 drifted).
+- **Correctness [measured]:**
+  - Rust equals Python on all 6 w4l65 KATs (pk_root, signature bytes, cross-verify, near-miss) and on the 3 +C near-misses.
+  - With the flag off, the copy reproduces `golden-v2.bin` byte for byte.
+  - A clean `mk.sh` rebuild reproduces the timed kit ELFs byte for byte.
+  - Caveat: both implementations are this loop's own. There is no independent implementation and no Solidity verifier for w4l65.
+- **Host, exact SHA-256 calls per operation (software hooks) [measured]:**
+
+  | | keygen | sign m0 | sign m1 | verify |
+  |---|---:|---:|---:|---:|
+  | draft 0.3 | 177,151 | 486,372 | 481,368 | 361 |
+  | w4l65 | 134,143 | 365,126 (−24.9%) | 362,383 (−24.7%) | 309 (−14.4%; formula 309) |
+
+- **Kit, 160 MHz, generic v2 one-shot path, flash-run harness [measured]:** 3 alternating repetitions each, after the coordinator's host walk had finished. Every run was DONE, both verifies true, pass A equal to pass B, and both signatures byte-identical to their goldens.
+
+  | M cycles (mean; range ≤ 109 cycles) | keygen | sign m0 | sign m1 | verify | cached sign |
+  |---|---:|---:|---:|---:|---:|
+  | draft 0.3 (copy) | 62.747 | 188.556 | 185.117 | 0.1716 | 377.28 (2.358 s) |
+  | w4l65 | 53.241 | 165.683 | 161.699 | 0.1669 | 331.53 (2.072 s) |
+  | ratio | **×0.849** | **×0.879** | ×0.874 | ×0.972 | **×0.879** |
+
+  - The committed `bench_v2` control is within 221 cycles of the copy (188,556,648 against 188,556,427).
+  - Option bytes were read back after the runs, identical to the baseline.
+- **Reading the kit numbers.**
+  - On the generic path, w4l65 saves 12.1% of sign cycles, though it makes 24.9% fewer SHA-256 calls. Cycles per call rise from 388 to 454, because the generic path pays per-chain glue (ADRS and A7 conversion, PRF setup) on 65 chains instead of 43, and T_65 is 17 blocks against 12.
+  - The model's −26% is for the fused one-block driver, which does not exist for w = 4: its assembly is specialized to l = 43 and w = 8.
+  - **The fused-path gain is therefore unmeasured. The model's −26% has not been reproduced on any path we can run.** The generic-path −12% is a measured lower anchor under this harness, not a prediction for the product path.
+
+**Gates this round.**
+- `git diff --stat 0e23558c5..HEAD` touches only `research/` and two KAT JSON files under `contracts/smart-wallet/test/`. No Solidity or Rust test reads them; their consumers name files explicitly.
+- v1, the product sphincs-c10, the hw driver and the FSBL are untouched by construction and were not re-run.
+- The extraction-freshness gate is green. The default `format_options_numerics.py` output is byte-identical.
+- The kit was flash-only, and the option bytes are unchanged.
