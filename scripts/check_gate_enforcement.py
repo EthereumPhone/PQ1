@@ -124,6 +124,7 @@ ENFORCEMENT_POLICY = {
     "verify-extraction-regen": "local_documented",
     "verify-forsc-margin": "local_documented",
     "verify-fv-lints": "per_pr_blocking",
+    "verify-head-transcription": "per_pr_blocking",
     "verify-gate-enforcement": "per_pr_blocking",
     "verify-halmos": "local_documented",
     "verify-hw-assumptions": "per_pr_blocking",

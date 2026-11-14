@@ -382,7 +382,7 @@
       "id": "verify-transcription",
       "make": "make -C contracts/verification verify-transcription",
       "polices_paths": [
-        "contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol",
+        "contracts/smart-wallet/test/ref/RefSPHINCsC10Asm.sol",
         "contracts/verification/lean/SphincsCVerify/Interpreter/C10Program.lean",
         "contracts/verification/lean/SphincsCVerify/Interpreter/C10Source.lean",
         "contracts/verification/scripts/check_c10_transcription.py",
@@ -1550,11 +1550,48 @@
       "why": "Kontrol/KEVM symbolic proofs on the deployed bytecode need a K backend (`kup install kontrol` via nix, or the RV docker image); ~5 min build+prove when present, uninstallable on a stock runner. Enrolled 2026-08-20 (#664)."
     },
     {
+      "id": "verify-head-transcription",
+      "make": "make -C contracts/verification verify-head-transcription",
+      "polices_paths": [
+        "contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol",
+        "contracts/verification/lean/SphincsCVerify/Interpreter/C10HeadSource.lean",
+        "contracts/verification/lean/SphincsCVerify/Interpreter/C10HeadProgram.lean",
+        "contracts/verification/lean/SphincsCVerify/Interpreter/C10HeadParse.lean",
+        "contracts/verification/lean/SphincsCVerify/Interpreter/YulParse.lean",
+        "research/c10-gas/gen_lean_head.py",
+        "research/c10-gas/lean/PrintHead.lean",
+        "contracts/verification/Makefile",
+        ".github/workflows/lean-fv.yml"
+      ],
+      "runs_in": "lean-fv.yml",
+      "enforcement": "per_pr_blocking",
+      "note": "the optimized-v1 source leg (landed 2026-11-14): binds the literal c10HeadProgram, which the relational end theorems RelFors.head_verdict_eq_full / execC10HeadAsm_eq are about, to src/verifiers/SPHINCsC10Asm.sol (gen_lean_head.py --check after building C10HeadSource + C10HeadParse). The reference source leg is verify-transcription on the frozen copy test/ref/RefSPHINCsC10Asm.sol.",
+      "required_context": {
+        "step": {
+          "name": "verify-head-transcription (optimized v1 source <-> C10Head* literals)",
+          "run": "make -C contracts/verification verify-head-transcription"
+        },
+        "job_equals": {
+          "runs-on": "ubuntu-latest"
+        },
+        "job_absent": [
+          "container",
+          "env",
+          "if",
+          "needs",
+          "strategy",
+          "defaults",
+          "continue-on-error"
+        ],
+        "workflow_context": {}
+      }
+    },
+    {
       "id": "verify-parse-transcription",
       "make": "make -C contracts/verification verify-parse-transcription",
       "polices_paths": [
         "contracts/verification/lean/SphincsCVerify/Interpreter/**",
-        "contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol"
+        "contracts/smart-wallet/test/ref/RefSPHINCsC10Asm.sol"
       ],
       "enforcement": "local_documented",
       "why": "the A3.1 in-kernel Yul-parse leg (parseYul c10Source = some c10ProgramFull + elision bridge). Its kernel modules are compiled by lean-fv.yml's `lake build SphincsCVerify` via the root import, and its byte-pin leg runs per-PR in verify-transcription; this focused target (+ its closure echo) stays a local convenience (Makefile note, 2026-07-04). Enrolled 2026-08-20 (#664)."
