@@ -2828,3 +2828,175 @@ The golden's positions are ht 0xe138 and 0xe24: layer-0 (tree, kp) = (225, 56) a
 - **No asm prf2 path** was built (the §3 speed lever).
 - **The FV landing figures** are judgement, as in round 18.
 - **The 16-message estimates** come from a different configuration than the FI chain (§3).
+
+## Round 21 (2026-11-14): the no-prf2 candidate, and the planted top-cache faults (#1148)
+
+Round 21 does three things:
+- it makes round 20's no-prf2 ablation a full candidate, **v2 0.3 + ts200 + split810 + top cache + wprf2b + fmtKDF** (tag `ts200-split810-wprf2b`), with the evidence the full stack has;
+- it plants top-cache faults on the kit, on both candidates;
+- it updates the comparison table (§3).
+
+Labels as before ([m] measured on kit 0055002D, [c] computed, [e] estimated, [h] machine-checked).
+
+How it was done:
+- **The kit:** flash only. The option bytes read back identical to the baseline after the session.
+- **The recipe:** `proto_full/apply21.py` + `proto_full/mk21.sh`, on top of the round-20 tree. They edit tests, features and copies only.
+  - A sample of five round-20 ELFs across the four bench crates rebuilds **byte-identical** after them.
+  - `r21-chain-np2.elf` is byte-identical to round 20's `r20-chain-no-prf2.elf`.
+- **The plants** live in a separate copy, `target/proto-cf` (`proto_full/mk_plants.sh`).
+
+### 1. The no-prf2 candidate
+
+**Which verifier is the right one.** Its verifier rules are ts200's target sum (200), plus split810's heights (8, 10) and A7 layout; wprf2b changes only how the signer derives secrets. So the **unchanged all3 verifier** (`SPHINCsC10v2All3Asm.sol`, and `c10v2_ref.py` configured as all3 or as ts200 + split810) is the right one.
+
+**Correctness** [m]:
+- **KATs:** `c10v2_ref.py --variant ts200,split810,wprf2b kat`: 6 KATs and 3 +C near-misses. The cross check gives digit sums [200, 200]; the 0.3 and candidate verifiers each refuse the other's signatures.
+- **Rust == Python:** `v2_kat` passes under `v2,v2-ts200,v2-split810,v2-wprf2b`.
+- **Golden:** the host golden equals the committed `golden-v2-ts200-split810-wprf2b.bin`, which equals the Python reference (`golden_python_check.py`). The kit fb run is byte-identical to it.
+- **Python verifiers** (`verify_signer_side.py`, 6 signatures): accepted by the all3 and ts200 + split810 verifiers; refused by the 0.3, ts200-only and split810-only verifiers; corruptions refused.
+- **Solidity** (`proto_full/NoPrf2All3.t.sol`, verifiers copied byte-identically and `cmp`-checked; forge 3/3 new tests plus round 20's 3/3):
+  - the All3 verifier accepts the 6 KATs, and refuses corruptions and the 3 near-misses;
+  - the 0.3, Split810 and Ts200 verifiers refuse them;
+  - **positive controls:** each refusing verifier accepts its own format's 6 KATs, so a refusal is not a broken deployment.
+
+**fmtKDF:**
+- **The descriptor:** `ts200-split810-wprf2b` = target 200, WOTS PRF code 2, FORS PRF code 1, heights (8, 10), A7 layout 810. The 11 format tests pass for the candidate, and still pass for the full stack [m].
+- **Astra** (gpt-6-astra, read-only): **"PASS for this candidate's descriptor and format-bound KDF conformance; qualify the universal key-separation claim."**
+  - The descriptor the code computes matches `known()` field by field.
+  - It is distinct from all 12 other entries; against all3, the WOTS PRF code is 2 vs 3 and the FORS code 1 vs 3.
+  - All 32 descriptor-ID bytes enter every bootstrap and slot derivation.
+  - The test arm selects exactly this build.
+  - Qualifications, adopted here:
+    - separation holds for keys derived through the format-bound domain API, against the 13 listed formats (d3l46 is outside the list; the benches use fixed seeds);
+    - it is computational (distinct inputs), not "never".
+
+**Position binding** (round 20's suite with the candidate added) [m]:
+- **Python and Rust both PASS,** on the honest pair (msgs 2, 13; FORS t 7, j 1820; ht 0x14d42 / 0x354c9).
+- **Mutants:** 7/7 caught in each language, with their signatures still verifying. Each Rust mutant fails `v2_kat` on its byte assertion, after the unmutated run passed.
+- **Product tests:** `fors_position_binding` (5) and the forgery fast guards (3) pass.
+- **The heavy shared-forest forgery is defeated:** 3,000 signatures harvested, a covered digest found, and the forged signature does not verify.
+
+**Assurance on the copy** [m] / [h]:
+- **FI mirror:** 16/16 released. Sign B corrupted: **0/16** (stopped at the compare). Both corrupted alike: **0/16** (the compare passed, verify refused).
+- **Residue:** 9 cases clean (mask 0); the control has 11 cases, mask **0x600**. `cand-np2` = wprf2b's two-block PRF model (cand-d03w's) on split810's layout.
+- **checkct:** binsec "secure" for all three drivers; the shuffle control "insecure" by design. The counts are identical to round 18's v2 0.3 + wprf2b, as expected, since ts200 and split810 change neither PRF:
+
+  | driver | CF checks | memory checks |
+  |---|---:|---:|
+  | `driver_fors` (one-block FORS PRF) | 700/700 | 3,533/3,533 |
+  | `driver_th` | 712/712 | 3,659/3,659 |
+  | `driver_wprf` (unpaired two-block `wots_secret`) | 1,026/1,026 | 5,933/5,933 |
+
+**Measurements** (re-measured, not carried over) [m]:
+
+| bench | value |
+|---|---|
+| `bench_chain`, cached chain | **0.3013 s** (48,206,137 cycles; round 20: 48,206,136 from the same ELF) |
+| first chain after keygen | 0.2787 s |
+| keygen | 0.5547 s |
+| **keygen + first chain** | **0.833 s** |
+| sign A = sign B | 23.96 M |
+| verify | 0.123 M |
+| cache hits | 32 |
+| 16-message estimate (research config) | **0.270 s** [c]; mean sign 21.52 M (min 19.00, max 26.14) |
+| golden compare (fb) | cached sign 0.2815 s, keygen 0.543 s |
+
+**Asm and Rust paths:** without prf2 every hot path is the asm one (`pq1_v2_key_loop`, `pq1_v2_fors_sub`, `pq1_v2_search_dt`, `pq1_v2_t43`).
+
+**Gate column (round-20 format):**
+
+| gate | no-prf2 candidate |
+|---|---|
+| (a) proven bound | **GAP:** not ported to the v2 byte format, and (8, 10) is not proved. split810 **OWNER-UNDECIDED (#1164):** ×1.21 as stated (today FAIL, ×1.213); ×1.00022 under tight accounting (+0.0003 b) [c]. ts200: total ×1.0000 [c] |
+| (a) quantum | GAP |
+| (b) hash assumption | conditional PASS: whole-hash RO; wprf2b's two-block PRF (rounds 17–18) and 0.3's one-block FORS PRF; no two-output prf2 argument needed. Still noted: the 39-B FORS-PRF / KDF overlap and the H_MSG inner collision |
+| (c) fault fallback | ts200 **OWNER-UNDECIDED (#1165):** two-digest median 2^-55.3 → 2^-53.7 (1st percentile 2^-47.3 → 2^-45.6) [c] |
+| (c) top cache | **OWNER-UNDECIDED (#1148):** the FI trade. The cached height-4 nodes are shared by both passes, so the A/B compare cannot see a fault in them. The plants in §2 show the named checks that do catch it [m] |
+| (c) DPA `sk_seed` counter, per pass | **26,624, ×0.9995 of v1, cold and warm** [c] |
+| (c) chaining-value residual | 55,126 (**×1.250** of v1's 44,118) cold, 11,782 (×0.267) warm [c]. An exposure count; the security effect is UNKNOWN |
+| (c) keygen exposure (top tree twice) | `sk_seed` 0, CV **88,064** (43 + 43 PRFs per key) [c]; v1 keygen: `sk_seed` 0, CV 22,016 |
+| (c) physical SCA | UNKNOWN (GAP) |
+| (d) format id in the KDF | **PASS in the copy:** descriptor `ts200-split810-wprf2b`, 11 tests [m]; Astra PASS with the two qualifications above |
+| (e) review / reproducibility | PARTIAL: KATs Rust == Python, golden == Python, unchanged verifiers accept and the wrong ones refuse. No proof replay, no physical validation |
+| FI mirror / residue / timing | PASS [m] / PASS [m] / PASS [h] |
+| position binding | PASS, 7/7 mutants in each language [m] |
+| top-cache plants (§2) | 7/7 as expected [m] |
+| verifier gas (Track B C5) | the all3 verifier: 105,839 callee-only default / 105,331 deploy; calldata 4,008 B |
+
+### 2. Planted top-cache faults (#1148), in RAM on the kit
+
+**What the cache stores:**
+- **Contents:** the 64 nodes at height 4 of the 1,024-leaf top tree (split810), plus a SHA-256 digest of them.
+- **Each pass:**
+  1. checks the digest;
+  2. rebuilds the 16-leaf subtree under its target leaf and compares it with the target's stored node;
+  3. recomputes every auth node above height 4 from the 64 stored nodes;
+  4. checks the resulting root against `pk_root`, which lives in the signing key, not in the cache.
+- **So "a fault above height 4" means corrupting stored node `j = i0 ^ 2^b`** (`i0` = the target's node). That fault lands on the auth node at height 4 + b; b = 5 is the node just under `pk_root`.
+
+**How the plants were run:**
+- **Placement:** in RAM on the kit, after keygen, in the `bench_chain` FI mirror.
+- **Copy:** a separate copy (`target/proto-cf`). `plant_for_test` is appended to `topcache.rs`; the plant is relative to chain 0's top leaf, which the hook recomputes with `grind_r`. One chain per run; one bit flipped in byte 0 of the node.
+- **Recording:** the panic handler records the panic location, which names the assert (`topcache.rs` lines 110 / 111 / 142 / 155 of that copy). `proto_full/run_plants.sh` passes a run only if its refusal comes from the expected named check; any other halt is reported as a crash.
+
+**Results** (both candidates; full stack i0 = 39, no-prf2 i0 = 55) [m]:
+
+| plant | node corrupted | digest | caught by | released |
+|---|---|---|---|---|
+| none (baseline) | none (i0 computed only) | intact | — (chain completes) | **1/1** |
+| digest | i0 ^ 32 | stale | assert "top cache digest mismatch" | 0 |
+| own | i0 | recomputed | assert "top cache: rebuilt subtree differs" | 0 |
+| b0 (auth height 4) | i0 ^ 1 | recomputed | assert "top cache: root is not pk_root" | 0 |
+| b2 (auth height 6) | i0 ^ 4 | recomputed | assert "top cache: root is not pk_root" | 0 |
+| b5 (auth height 9, just under `pk_root`) | i0 ^ 32 | recomputed | assert "top cache: root is not pk_root" | 0 |
+| b5, root assert compiled out | i0 ^ 32 | recomputed | **A/B compare passed**; **verify-before-release refused** | 0 |
+
+- **Released or not:** every refused run has 0 chains complete and no signature bytes written. The baseline releases its signature.
+- **Each refusal comes from a named check:** a cache assert at its known line, or the chain's verify gate. No run crashed.
+
+**What remains when the cache and its digest are corrupted consistently:**
+- **The digest is then useless.** The rebuilt-subtree check catches only the target's own node.
+- **The root-path check catches every other node,** because `pk_root` is outside the cache.
+- **The A/B compare is blind to cache faults.** With the root assert also removed, both passes read the same corrupted node, produce identical signatures and pass it. Only verify-before-release stops the release, as it did.
+- **So the #1148 trade, stated with evidence:** A/B compare coverage is lost for the cached nodes. In-sign, the root-path check replaces it for every node a pass reads, and verify-before-release stays as the last check.
+
+**Limits:**
+- **The checks are plain `assert!`s,** not FI-hardened (one branch each). A fault that skips one leaves the next check; the noroot run shows this for the root assert only.
+- **The bench's panic handler halts.** The product's secure-world panic path is not modelled.
+- **The plant model is narrow:** one bit in one node per run, no sweep. A corrupted `pk_root` in the signing key, or the cache's valid flag, is not planted.
+
+### 3. The comparison table (round-21 copy, both candidates)
+
+| | **v1 (shipping)** | **v2 0.3 + wprf2b + fmtKDF** | **w4l65 + wprf2b + fmtKDF** | **full stack** (0.3 + ts200 + prf2 + split810 + cache + wprf2b + fmtKDF) | **no-prf2** (0.3 + ts200 + split810 + cache + wprf2b + fmtKDF) |
+|---|---|---|---|---|---|
+| cached sign, FI chain (`bench_chain`, no UI tick) | 2.92 s shipping; 1.145 s research driver [m, r13] | 0.725 s [m] | 0.566 s [m] | 0.412 s [m] | **0.301 s** [m] |
+| first chain after keygen | | 0.672 s [m] | | 0.411 s [m] | 0.279 s [m] |
+| keygen + first chain (a fresh key) | | **0.792 s** [m] | | 1.097 s [m] | 0.833 s [m] |
+| keygen, FI chain | 0.485 s / 0.195 s research [m] | 0.120 s [m] | 0.102 s [m] | 0.687 s [m] | 0.555 s [m] |
+| cached sign, 16-message est. (research bench) | 1.126 s [c] | 0.695 s [c] | 0.533 s [c] | 0.315 s [c] | 0.270 s [c] |
+| verify, cycles on the kit | 179,257 [m] | 119,800 [m] | 130,619 [m] | 0.12 M chain; 107,149 fb [m] | 0.12 M chain; 107,551 fb [m] |
+| signature bytes | 4,008 | 4,008 | 4,712 | 4,008 | 4,008 |
+| verifier | v1 | 0.3 | w4l65 | all3 (unchanged) | all3 (unchanged) |
+| (a) proven bound | PASS (v1) | GAP (byte port) | GAP (port + generalization) | GAP; split810 OWNER-UNDECIDED (×1.21 / ×1.00022 tight) | GAP; split810 OWNER-UNDECIDED (same) |
+| (a) quantum | GAP | GAP | GAP | GAP | GAP |
+| (b) hash assumption | PASS | conditional PASS | conditional PASS | conditional PASS (prf2 argument; merged PRF prefix-free) | conditional PASS (no prf2 argument) |
+| (c) fault fallback | 2^-55.21 [c] | equal [c] | +0.70 ± 0.11 b [c] | ts200 OWNER-UNDECIDED: 2^-55.3 → 2^-53.7 [c] | same |
+| (c) top-cache FI trade | n/a | n/a | n/a | OWNER-UNDECIDED; plants 7/7 named [m] | OWNER-UNDECIDED; plants 7/7 named [m] |
+| (c) DPA `sk_seed` counter per pass | 26,636 | 26,624 (×0.9995) [c] | 26,624 (×0.9995) [c] | **13,324 (×0.500)** cold and warm [c] | 26,624 (×0.9995) cold and warm [c] |
+| (c) CV residual per pass (uncounted) | 44,118 | 44,118 [c] | 66,690 (×1.512) [c] | 28,246 (×0.640) cold / 6,070 (×0.138) warm [c] | 55,126 (×1.250) cold / 11,782 (×0.267) warm [c] |
+| (c) keygen exposure (`sk_seed` / CV) | 0 / 22,016 [c] | 0 / 22,016 (512 keys × 43, no cache) [c] | 0 / 33,280 (512 × 65) [c] | 0 / 66,560 [c] | 0 / 88,064 [c] |
+| (c) physical SCA | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| (d) format id in the KDF | n/a | PASS in the copy | PASS in the copy | PASS in the copy (`all3-wprf2b`) | PASS in the copy (`ts200-split810-wprf2b`; Astra PASS) |
+| (e) review / reproducibility | PASS | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
+| assurance gates (FI mirror, residue, timing) | product gates | PASS / PASS / PASS | PASS / PASS / PASS | PASS / PASS / PASS | PASS / PASS / PASS |
+| position binding (Python + Rust, mutants) | product FORS guard | PASS (the round-20 `wprf2b` row) | not run | PASS | PASS |
+| verifier gas (Track B C5) | | 102,633 / 102,123 | | 105,839 / 105,331 | 105,839 / 105,331 |
+| FV landing [e] | none | `sphincs-c10` + `domain`; v2 byte port ~1–3 person-months | + generalization +2–6 person-months | v2 0.3's + heights generalization (~20–60 person-days) + split810 cost tightening (~10–30 person-days) + prf2, wprf2b and fmtKDF correspondence; `topcache.rs` new | as the full stack, without prf2's correspondence |
+
+**How to read it:**
+- **Cached, the no-prf2 candidate is the fastest measured row.** It is ×2.41 faster than v2 0.3 + wprf2b, ×1.88 faster than w4l65 + wprf2b and ×1.37 faster than the full stack. It keeps 4,008-byte signatures and the all3 verifier.
+- **Its DPA counter equals v1's** (×0.9995, cold and warm). Its CV residual is larger than v1's cold (×1.250) and smaller warm (×0.267).
+- **The full stack's distinction** is halving the `sk_seed` counter. It costs ×1.37 on the cached sign and is the slowest for a fresh key.
+- **For a fresh key** (keygen + first chain), v2 0.3 + wprf2b is fastest (0.792 s), then no-prf2 (0.833 s, ×1.05), then the full stack (1.097 s).
+- **Both cached candidates rest on the same three OWNER-UNDECIDED items:** ts200 (#1165), split810's bound (#1164) and the top cache's FI trade (#1148). The plants now show what catches a cache fault.
+- **None of the v2 columns** has a proven bound for its byte format, a quantum statement or physical SCA evidence. The choice is the owner's.
