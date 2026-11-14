@@ -2495,3 +2495,79 @@ Corrected above:
 - **The FI controls** show that the mirror's compare and verify-before-release are live. They do not show production fault resistance, relocking or failure-path wiping, which the mirror lacks.
 - **`bench_chain` timing on rejected runs is bogus:** `T_LAST` is written only on success, so the 776–991 M "release_copy" figures in the control rows are artefacts. The 0/16-released results stand.
 - **`driver_wprf`** reaches the 71-byte implementation with `sk_seed` secret; the solver counts were not independently replayed.
+
+## Round 19 (2026-11-14): bounded exploration — a d = 3 point, the size knob, the v1 driver
+
+Labels as in round 18: [m] measured on kit 0055002D (flash-only, option bytes identical to the baseline after the session), [c] computed, [e] estimated. Round 18's copies and KAT paths are untouched. The d = 3 prototype is a separate recipe, `proto_d3/`, building into `target/proto-d3`. Every existing KAT set regenerates identically.
+
+### 1. The d ≥ 3 insight point: h18 d3 (6, 6, 6) a11 k13 w8 l46 T209
+
+The search's d = 3 rows: of 8,182 totals-PASS rows, none passes every-term, 3,157 are every-term MINOR-LOSS and 5,025 FAIL. The binding term is almost always the same one. I kept the named set: it is the fastest w8 point near 4.8 KB, its fault margin is positive, and it fails by only 0.12 b.
+
+**Implementation:**
+- **Python reference:** `c10v2_ref.py --variant d3l46`. A7 is re-laid out for a 2-bit layer (type 4 @52, layer 2 @50, tree 18 @32, kp 8 @24, ci 6 @18, cp 4 @12, ha 11 @1). Self-test (8 bit-flips, wrong root and message, 3 +C near-misses) and cross-format checks pass; 6 KATs and 3 near-misses (`kat-v2-d3l46.*`).
+- **Rust:** `proto_d3/apply.py`, a generic v2 copy (D = 3, L = 46, T = 209, a generic digit sum, the A7 shifts). Rust equals Python on the KATs.
+
+**Exact SHA-256 calls [m, host]:**
+
+| | keygen | sign m0 | sign m1 | verify |
+|---|---:|---:|---:|---:|
+| Rust host, bench inputs: draft 0.3 | 177,151 | 486,372 | 481,368 | 361 |
+| Rust host, bench inputs: d3l46 | 23,679 (×0.134) | 177,477 (×0.365) | 161,413 (×0.335) | 510 (×1.41) |
+
+The Python reference (`count_calls.py`, KAT key 0, 4 messages) agrees on keygen (177,151 and 23,679) and on the sign ratio (×0.32). Its verifier makes one extra call per layer (363 / 513).
+
+**Kit, generic v2 path [m]** (fixed messages, signatures byte-identical to `golden-v2-d3l46.bin`, 2 repetitions within 400 cycles):
+
+| | sign m0 / m1 | keygen | verify | cached |
+|---|---:|---:|---:|---:|
+| draft 0.3 | 188.56 / 185.12 M | 62.75 M | 171.6k | 2.358 s |
+| **d3l46** | **89.29 / 72.99 M (×0.474 / ×0.394)** | **8.36 M (×0.133)** | 229.7k (×1.34) | **1.117 s** |
+
+The fused-model estimate is −61% cached [e]. No fused driver was built, as instructed.
+
+**What fails every-term, exactly [c, `c10v2/d3_insight.py`]:**
+- **One term only:** the wrapper `node` term, **+1.116 b at C = 16** (and +1.115 at C = 1 and 2).
+- **Its size:** the term is 2^-67.7, against that game's total of 2^-57.3, so it sits 10.4 b below the total. The totals are ×0.325 (ordinary) and ×0.337 (wrapper, C = 16).
+- **Every other term** is within +0.40 b (wrapper zero/prefix).
+- **What it is:** the binding branch is exc(exc+1)/N with exc ≈ V0·qs, where V0 is the per-signature verification charge. V0 grows from 771 to 1,137 with the third layer.
+
+**Slack or real:**
+- **The slack part:** V0 is the EasyCrypt literal (771 for stock), and it charges a full l(w−1) chain per layer. The verifier computes only l(w−1) − T steps per layer, because the +C rule fixes the digit sum. Charged at the verifier's actual call count (510 against 361), the term moves **+0.988 b**.
+- **The real part:** the remaining ~0.99 b is genuine within the bound's structure: three layers of verifier node queries per signature instead of two. It remains 10 b below the total.
+
+**Verdict:** **yes, it could become a MINOR-LOSS candidate**, at +0.99 b on one term, but only with a tightened verification-cost lemma. That is the same class of proof slack as split810's rebuild accounting; judgement 10–30 person-days [e], like split810's.
+- **What it does not get it:** a d = 3 generalization of the proof is needed regardless. Coverage and extraction across three layers are unsupported (round 16).
+- **Its costs:**
+  - 4,844 B (+836);
+  - model verify gas 219,635, +33% over stock, from more verifier calls and calldata. This matters for Track B.
+  - a re-laid-out A7.
+- **The neighbour:** h18 d3 l43 T203 is already MINOR-LOSS today (0.952 b loose, 0.72 b tight), but costs 0.71 b of fault margin [c].
+- **Under the totals reading** both PASS (×0.33).
+
+### 2. The size knob: ≤ 4,008 B and faster than v2 0.3 + wprf2b
+
+**Yes, but only by lowering T on the stock shape.** Model with wprf2b's +102 cycles per block; it gives 111.6 M for v2 0.3 + wprf2b, against 111.2 M measured on the kit:
+
+| ≤ 4,008 B, every-term PASS / MINOR-LOSS [c] | cached + wprf2b | vs v2 0.3 + wprf2b | every-term | fault Δ | gas |
+|---|---:|---:|---|---:|---:|
+| h18 d2 a11 k13 w8 l43 **T203** | 106.6 M | **−4.4%** | MINOR-LOSS 0.71 b [c] | −0.71 ± 0.10 | 165,812 |
+| h18 d2 a11 k13 w8 l43 **T204** | 108.7 M | **−2.5%** | MINOR-LOSS 0.37 b [c] | −0.37 ± 0.12 | 165,258 |
+| v2 0.3 (T205) | 111.6 M | 0 | PASS | 0 | 164,704 |
+| T206 / T207 | 115.3 / 120.2 M | slower | MINOR-LOSS (encoding) | +0.38 / +0.78 | |
+
+- **T203 and T204** are milder ts200s: same keys as 0.3, so the format KDF is required. Their only cost is the fault fallback; ts200's −1.7 b was a FAIL.
+- **Nothing else at or below 4,008 B passes every-term.** The closest shapes fail on coverage:
+  - h18 d2 a10 k14 (3,992 B): wrapper coverage at C = 16 ×2^6.4 (FAIL), totals MINOR 0.97 b;
+  - h18 d2 a12 k11 (3,784–3,880 B): ordinary coverage at C = 1 ×2^7.5 (FAIL), totals MINOR ~0.93–1.0 b.
+- **w = 16** rows (3,656 B) fail the fault margin by about 15 b.
+
+### 3. Landing the v1 research driver (no new work; from round 13 §Levers and E20)
+
+v1's cached sign would go from 2.92 s (shipping driver, no tick; 3.03 s with the per-digest tick) to 1.145 s with the research driver, output-identical. It is gated on these owner decisions:
+- **Land the rounds 7–12 driver with #1149's batched tick, together.** The asm paths compile out under the per-digest tick, which is why the driver alone reaches only 322 M. Landing means enabling the `pqsigner-hw` research features (chain, search, gather, prfchain, forsleaf, v1-asm-*, v1-grindr) and the matching sphincs-c10 `hw-sha256-*` features in the secure image. The batched tick changes the film's update granularity.
+  - Decisions: the secure flash budget (the image is already over its slot with `ui-px`), the film cadence, and the tick-must-not-hash contract.
+- **`oneshot-speed` (E20):** −4.5% on today's driver, +192 B. It needs the nightly `optimize_attribute`, and the five changed entries' machine code is not FI-evaluated. It helps only until the item above lands.
+- **The driver at opt-level 3 through the root profile:** it moves the FSBL's bytes (the FSBL shares `pqsigner-hw`).
+- **Evidence already in place for v1:** the residue gate is clean on the v1 entries (7/7 with controls), gate 5 interleaved probes pass, and goldens are byte-identical.
+- **Not kit-measurable:** the SE draws (~0.3 s) and film frames stay outside the chain.
