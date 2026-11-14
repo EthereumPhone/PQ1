@@ -2586,3 +2586,209 @@ Corrected:
 - "within the searched grid";
 - the gas baseline is labelled as a model figure;
 - the 10–30 person-days is for the cost tightening only.
+
+## Round 20 (2026-11-14): the full v2 stack, built and measured
+
+Owner request: "yes, build and measure the full stack". The full stack is v2 0.3 + ts200 + prf2 + split810 + top cache (#1148) + wprf2b + fmtKDF, measured on round 18's bench (`bench_chain`: the product-shaped FI chain, no UI tick).
+
+Labels as in round 18: [m] measured on kit 0055002D (flash-only; the option bytes read back identical to the baseline after the session), [c] computed, [e] estimated, [h] machine-checked.
+
+Where the work lives:
+- **The recipe:** `proto_full/` (`apply.py` runs after `proto_w4l65/apply.py`, building into `target/proto-full`). Round 17–19 copies and every existing KAT path are untouched, and every existing KAT set regenerates identically.
+- **No product crate is edited**, so extraction freshness stays green.
+
+### 1. prf2 and wprf2b, read from source, and the merged PRF
+
+**What each option changes** (Python `c10v2_ref.py` `wots_prf` / `fors_prf`; Rust `v2hash.rs` `prf_half` / `wots_prf2b` / `fors_secret`; hw `pqsigner_v2_prf_chain16`, the key loop, `fors_leaf16`, `fors_subtree16`):
+- **prf2 changes WOTS and FORS.** One 39-byte, one-block digest `sk_seed ‖ A7(index & ~1)` gives two secrets: the even index takes bytes 0..16 and the odd one 16..32. WOTS chain 42 has no partner and takes the first half. FORS pairs leaves on `ha & ~1`.
+- **wprf2b changes WOTS only.** Its PRF is a 71-byte, two-block digest `sk_seed ‖ "C10v2-WOTS-PRF2B" ‖ be32(layer) ‖ 0^12 ‖ A7(ci)`, first 16 bytes. Block 1 is constant per layer. FORS keeps its one-block PRF.
+- **Before this round the two were mutually exclusive:** a Python assert, plus `compile_error!` in `sphincs-c10/src/lib.rs` and in `hw/src/hash.rs`.
+
+**The merged PRF** (round 20; `FMT_WOTS_PRF` = 4):
+- **WOTS:** the 71-byte two-block digest over `A7(ci & ~1)`, with the half chosen by `ci & 1`. Chain 42 takes the first half.
+- **FORS:** prf2's one-block pairs, unchanged.
+
+**Against the two requirements:**
+- **(i) the `sk_seed` exposure counter ≤ v1's 26,636, cold and warm:** **13,324, ×0.500, cold and warm** [c]. That is 13,312 FORS pair digests plus the 12 revealed secrets, each of which repeats its pair's digest. v1's 26,636 is counted the same way, as executed compressions. 13,312 of the 13,324 inputs are distinct. WOTS adds 0, because its `sk_seed` block is constant per layer.
+- **(ii) block-prefix-free `sk_seed`-keyed inputs:** `c10v2/prefix_check.py` records every `sk_seed`-keyed SHA-256 input of a full-stack keygen + sign: 62,026 inputs in five classes, **0 prefix relations** [m, Python]. The classes separate at byte 32: FORS A7 `0x60`–`0x67` (one block), WOTS `C` (two blocks), and the R grind `R` (two blocks, 103 or 119 bytes).
+
+**Outcome: both requirements are met and nothing was dropped.** The cost is speed, not security: prf2 compiles the asm key loop and the asm FORS subtree out (`not(feature = "v2-prf2")`); see §2.
+
+**Astra's review** (gpt-6-astra, read-only, neutral conformance prompt): **"FIX the accounting claim. No merged-PRF byte mismatch or block-prefix violation found."**
+- **Confirmed:**
+  - The option semantics above.
+  - Block-prefix-freeness, "satisf[ying] the length-extension side condition, rather than proving the underlying PRF assumption".
+  - Signer-only compatibility: `verify_signer_side.py`, plus Astra's own 24 further KAT checks with neither, either or both secret-PRF flags on the verifier.
+  - The Rust and hw feeds agree with Python (a source-derived DIN model matched 31,623 cases).
+  - prf2 excludes the WOTS and FORS secret asm.
+- **The finding (MEDIUM), fixed in `dossier_v2_03.py`:** whole-key generation pairs the chains (22 digests per key), but signing calls the per-chain PRF 43 times per layer, and each revealed FORS secret repeats its pair's digest. Corrected counts:
+
+  | | before | corrected |
+  |---|---:|---:|
+  | `sk_seed` counter (cold = warm) | 13,312 | **13,324** |
+  | CV residual cold / warm | 28,204 / 6,028 | **28,246 / 6,070** |
+  | bridge `sk_seed` counter cold / warm | 41,516 / 19,340 | **41,570 / 19,394** |
+
+- **Astra's gap:** no fresh compilation or hardware execution on its side. Those are §§2–3 here.
+
+### 2. The full-stack build: cache semantics, asm and Rust paths, correctness
+
+**The top cache on `bench_chain`:**
+- **Support:** `bench_chain` had none, so the copy adds an atom, `topcache`: `keygen_with_top_cache`, then `sign_with_shuffle_cached` for both FI passes.
+- **One cache serves the whole chain.** It is built once at keygen; the top tree is built twice with rotated chain order and the results compared. Sign A and sign B share it.
+- **Each pass** rebuilds the 16-leaf subtree under its top leaf, checks it against the stored height-4 node, checks the path to `pk_root` and re-checks the cache digest. Hits = 32 = 16 chains × 2 passes [m].
+- **Verify** recomputes everything from the signature; it never touches the cache.
+- **This is the #1148 FI trade:** the auth nodes above height 4 are common to both passes, not computed twice. A fault there is invisible to the A/B compare; the in-sign root check, the cache digest and verify-before-release have to catch it.
+
+**Which paths run asm and which run Rust** (`nm` of each ELF). The HASH peripheral does every compression in every build; what differs is the feed.
+
+| build | `global_asm!` paths | Rust paths |
+|---|---|---|
+| full stack, bridge (both have prf2) | WOTS+C search (`pq1_v2_search_dt`), T_43 (`pq1_v2_t43`) | WOTS key loop: PRF feed and loop control in Rust; each chain's steps in the inline-asm chain core (`v2-asm-chain`). FORS subtree: the Rust driver `pqsigner_v2_fors_subtree16`. Per-chain sign PRF: `pqsigner_v2_prf_chain16`. |
+| no-prf2 ablation, v2 0.3 + wprf2b control | `pq1_v2_key_loop`, `pq1_v2_fors_sub`, `pq1_v2_search_dt`, `pq1_v2_t43` | sign PRF feed only |
+
+**Correctness:**
+- **KATs:** Rust == Python for the full stack (`all3-wprf2b`) and for all3.
+- **Goldens:** the host golden `golden-v2-all3-wprf2b.bin` and the kit fb-full golden are byte-identical [m].
+- **The Python all3 verifier, unchanged,** accepts full-stack signatures, and the full-stack verifier accepts all3 signatures. `c10v2/verify_signer_side.py`: 12 signatures, with corruptions refused.
+- **Solidity:** `SPHINCsC10v2All3Asm.sol`, copied byte-identically (`cmp`), runs in a scratch forge project (`proto_full/forge_check.sh`, `FullStackAll3.t.sol`) [m]:
+  - it accepts the six full-stack KATs;
+  - the 0.3 verifier refuses them;
+  - corrupted signatures and the three +C-only near-misses are refused;
+  - positive control: it accepts the six all3 KATs.
+
+### 3. Measurements (kit 0055002D, 160 MHz)
+
+**FI chain** (`bench_chain`: product-shaped, generic target, 1-way ICACHE, flash; 16 chains per row) [m]:
+
+| row | features | mean chain | first chain after keygen | keygen | sign A = sign B | released | cache hits |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **full stack** | ts200 prf2 split810 wprf2b topcache | **0.4120 s** (65.91 M) | 0.4107 s | 0.6865 s | 32.81 M | 16/16 | 32 |
+| **bridge** | ts200 prf2 split810 topcache | **0.3897 s** (62.35 M) | 0.3989 s | 0.6498 s | 31.03 M | 16/16 | 32 |
+| control, v2 0.3 + wprf2b (round 18: 0.725 s) | wprf2b | 0.7250 s (116.01 M) | 0.6715 s | 0.1207 s | 57.86 M | 16/16 | 0 |
+| ablation: no ts200 | prf2 split810 wprf2b topcache | 0.4634 s | 0.4451 s | 0.6865 s | 36.93 M | 16/16 | 32 |
+| ablation: no split810 | ts200 prf2 wprf2b topcache | 0.5281 s | 0.5457 s | 0.3425 s | 42.11 M | 16/16 | 32 |
+| ablation: no cache | ts200 prf2 split810 wprf2b | 0.9836 s | 0.9825 s | 0.2933 s | 78.55 M | 16/16 | 0 |
+| ablation: no prf2 (all asm) | ts200 split810 wprf2b topcache | **0.3013 s** | 0.2787 s | 0.5547 s | 23.96 M | 16/16 | 32 |
+| control: sign B corrupted | full + `fi-control-cmp` | | | | | **0/16** (stops at the compare) | |
+| control: both corrupted alike | full + `fi-control-verify` | | | | | **0/16** (compare passes, verify refuses) | |
+
+- **The chain's other phases** are unchanged from round 18: `ct_eq` 0.116 M and verify 0.12 M cycles before release.
+- **No first-sign penalty:** keygen builds the cache, so the first chain after keygen is no slower than the mean. Keygen is the cost: 0.69 s for the full stack against 0.12 s for v2 0.3 + wprf2b. It builds the 1,024-leaf top tree twice (cache confirmation) in the Rust key loop.
+
+**The 16-message estimate** (research configuration: `target-cpu=cortex-m33`, 2-way ICACHE; 2 × mean sign + mean verify) [c]:
+- **full stack:** **0.3145 s**. Mean sign 25.10 M (min 22.81, max 30.06), verify 0.120 M, keygen 0.562 s.
+- **bridge:** **0.3029 s**. Mean sign 24.17 M, keygen 0.531 s.
+- **The owner's "v2 cached ~0.3 s"** was this bridge estimate (0.307 s earlier); it reproduces at 0.303 s.
+- **On the FI chain** the same two configurations measure 0.390 s (bridge) and 0.412 s (full). The gap between the benches is 31% here, against 4% for v2 0.3 + wprf2b. Plausibly the Rust key-loop and FORS paths that prf2 forces are more sensitive to target-cpu and ICACHE ways than the asm paths [e].
+
+**Golden compare** (`bench_v2fb`, research configuration) [m]:
+- **full:** signature bytes identical to the golden, 3 cache hits, cached sign (2 × sign + verify) 0.2898 s, keygen 0.562 s.
+- **bridge:** identical, 0.2931 s.
+
+**Reading the ablations** [m]:
+- **The cache is the largest single lever** (×2.39). Without it, split810's 1,024-leaf top layer is rebuilt on every pass.
+- **split810 is worth ×1.28 given the cache, ts200 ×1.12.**
+- **Dropping prf2 makes the stack faster** (0.301 s against 0.412 s), because it restores the asm key loop and FORS subtree. prf2's halving of the PRF digests is worth less than the asm it disables.
+- **An asm prf2 path would be the speed lever, but it is not built.** Without prf2 the DPA counter returns to ×1.000 (below).
+
+### 4. Gate column for the full stack (round-18 format)
+
+| gate | full stack | bridge (all3 + cache, no wprf2b) |
+|---|---|---|
+| (a) proven bound | **GAP:** not ported to the v2 byte format, and (8, 10) is not proved at all. split810 **OWNER-UNDECIDED (#1164):** ×1.21 as stated (today FAIL, ×1.213); ×1.00022 under tight accounting (+0.0003 b, after a tightened proof plus the height generalization) [c]. ts200: total ×1.0000 [c] | same |
+| (a) quantum | GAP | GAP |
+| (b) hash assumption | conditional PASS: whole-hash RO plus the prf2 PRF argument (two outputs from one digest over block-prefix-free inputs). For the merged PRF the prefix-freeness is checked mechanically [m] and confirmed by Astra. Still noted: the 39-B FORS-PRF / KDF overlap and the H_MSG inner collision | conditional PASS (prf2 one-block, round 16) |
+| (c) fault fallback | ts200 **OWNER-UNDECIDED (#1165):** two-digest median 2^-55.3 → 2^-53.7 (1st percentile 2^-47.3 → 2^-45.6), 1.6–1.7 b weaker [c]; FAIL under the strict reading | same |
+| (c) top cache | **OWNER-UNDECIDED (#1148), the FI trade:** cached auth nodes above height 4 are shared by both passes. A fault there is invisible to the A/B compare; the in-sign root check, the cache digest and verify-before-release must catch it [argued]. The 0/16 controls test the compare and the verify, not a cache fault | same |
+| (c) DPA `sk_seed` counter | **13,324, ×0.500 of v1, cold and warm** [c] | 41,570 (×1.561) cold, 19,394 (×0.728) warm [c]: **fails (i) cold** |
+| (c) chaining-value residual | 28,246 (×0.640 of v1's 44,118) cold, 6,070 (×0.138) warm [c]. An exposure count; the security effect is UNKNOWN | 0 (one-block WOTS PRF) [c] |
+| (c) physical SCA | UNKNOWN (GAP) | UNKNOWN (GAP) |
+| (d) format id in the KDF | **PASS in the copy:** new descriptor `all3-wprf2b` (target 200, WOTS PRF code 4, FORS PRF code 3, heights (8, 10), A7 layout 810); the 11 format tests pass in the full and all3 builds [m]. The new descriptor was not reviewed by Astra; round 17's plants were not rerun | PASS in the copy: descriptor `all3` (WOTS PRF code 3), 11 tests [m] |
+| (e) review / reproducibility | PARTIAL: KATs Rust == Python, kit golden identical, unchanged Python and Solidity verifiers accept, merged PRF Astra-reviewed (FIX applied). No proof replay, no physical validation | PARTIAL, same (no new PRF) |
+| FI mirror [m] | **PASS:** 16/16 released; controls 0/16 and 0/16 | 16/16 released; controls not run |
+| residue [m] | **PASS:** 9 cases clean (mask 0); control 11 cases, mask **0x600** (`bench_v2drv`, `cand-full` with the merged PRF model) | not run |
+| timing [h] | **PASS:** `driver_fors` (prf2 pair FORS PRF) 984/984 CF, 4,112/4,112 memory; `driver_th` 712/712, 3,663/3,663; `driver_wprf` (the merged two-block paired `wots_secret`; `sk_seed` secret, `ci` public symbolic, so both halves) 1,405/1,405, 6,736/6,736. The shuffle control is INSECURE by design (1 CF + 2 memory leaks) | not run (its `prf_half` is the function `driver_fors` covers) |
+| position binding (§6) [m] | **PASS** (Python + Rust; all mutants caught) | PASS (as all3) |
+| verifier gas (Track B, `research/c10-gas/ledger.md` row C5) | all3 verifier 105,839 callee-only default / 105,331 deploy, against 0.3's 102,633 / 102,123; calldata unchanged (4,008 B) | same verifier |
+
+The no-prf2 ablation's DPA position [c]:
+- **`sk_seed` counter:** 26,624 (×1.000 of v1), cold and warm.
+- **CV residual:** 55,126 (×1.250) cold, 11,782 (×0.267) warm.
+
+### 5. The comparison table (copy of round 18 §4, two columns added)
+
+| | **v1 (shipping)** | **v2 0.3 + wprf2b + fmtKDF** | **w4l65 + wprf2b + fmtKDF** | **full stack** (+ ts200, prf2, split810, top cache) | **bridge** (all3 + cache, no wprf2b) |
+|---|---|---|---|---|---|
+| cached sign, FI chain (`bench_chain`, no UI tick) | 2.92 s shipping driver; 1.145 s research driver [m, round 13] | 0.725 s [m] (0.7250 s re-run, round 20) | 0.566 s [m] | **0.412 s** [m] | **0.390 s** [m] |
+| first sign after keygen, FI chain | | 0.672 s [m, r20] | | 0.411 s [m] | 0.399 s [m] |
+| cached sign, 16-message est. (research bench) | 1.126 s [c] | 0.695 s [c] | 0.533 s [c] | 0.315 s [c] | 0.303 s [c] |
+| keygen, FI chain | 0.485 s shipping; 0.195 s research [m] | 0.120 s [m] | 0.102 s [m] | 0.687 s [m] (Rust key loop, top tree built twice) | 0.650 s [m] |
+| verify, cycles on the kit | 179,257 [m] | 119,800 [m] | 130,619 [m] | 0.12 M in the chain; 107,149 in the fb bench [m] | same |
+| signature bytes | 4,008 | 4,008 | 4,712 | 4,008 | 4,008 |
+| (a) proven bound | PASS (v1) | GAP (port) | GAP (port + generalization) | GAP; split810 OWNER-UNDECIDED ×1.21 / ×1.00022 tight | same |
+| (a) quantum | GAP | GAP | GAP | GAP | GAP |
+| (b) hash assumption | PASS | conditional PASS | conditional PASS | conditional PASS (prf2 argument; merged PRF prefix-free) | conditional PASS |
+| (c) fault fallback | 2^-55.21 [c] | equal [c] | +0.70 ± 0.11 b [c] | ts200 OWNER-UNDECIDED: 2^-55.3 → 2^-53.7 [c] | same |
+| (c) top-cache FI trade | n/a | n/a | n/a | OWNER-UNDECIDED (#1148) | OWNER-UNDECIDED |
+| (c) DPA `sk_seed` counter vs v1 | 26,636 | 26,624, ×0.9995 [c] | 26,624, ×0.9995 [c] | **13,324, ×0.500** cold and warm [c] | 41,570 ×1.561 cold / 19,394 ×0.728 warm [c] |
+| (c) CV residual (uncounted) | 44,118 | 44,118 [c] | 66,690, ×1.512 [c] | 28,246 ×0.640 cold / 6,070 ×0.138 warm [c] | 0 [c] |
+| (c) physical SCA | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
+| (d) format id in the KDF | n/a | PASS in the copy | PASS in the copy | PASS in the copy (`all3-wprf2b`) | PASS in the copy (`all3`) |
+| (e) review / reproducibility | PASS | PARTIAL | PARTIAL | PARTIAL | PARTIAL |
+| assurance gates (FI mirror, residue, timing) | product gates | PASS / PASS / PASS | PASS / PASS / PASS | PASS [m] / PASS [m] / PASS [h] | FI 16/16 [m]; rest not run |
+| verifier gas (Track B C5) | | 102,633 / 102,123 (0.3 verifier) | | 105,839 / 105,331 (all3 verifier) | same |
+| FV landing [e] | none | `sphincs-c10` + `domain`; v2 byte port ~1–3 person-months | + generalization +2–6 person-months | v2 0.3's, plus a heights generalization (~20–60 person-days, #1164) and, for split810's bound, the cost tightening (~10–30 person-days), plus the prf2, wprf2b and fmtKDF correspondence; top cache and `topcache.rs` new to the pinned set | as full, without wprf2b |
+
+**How to read it:**
+- **The full stack is the fastest measured candidate** on the product-shaped FI chain: 0.412 s, ×1.76 faster than v2 0.3 + wprf2b and ×1.37 faster than w4l65 + wprf2b.
+- **It is also the only one that halves the `sk_seed` DPA counter.** It does this by stacking three owner-undecided items: ts200, split810's bound, and the top cache's FI trade.
+- **Keygen becomes the slow step:** 0.69 s, from 0.12 s.
+- **The bridge is ×1.06 faster than the full stack.** It pays with a `sk_seed` counter above v1 when the cache is cold.
+- **The no-prf2 ablation** (0.301 s, counter ×1.000) sits between the two: faster than both and DPA-neutral against v1, but without the full stack's halving.
+- **None of these** has a proven bound for its byte format, a quantum statement or physical SCA evidence. The choice is the owner's.
+
+### 6. Addendum: FORS / WOTS secret position-binding regression (coordinator, 2026-11-14)
+
+**The bug class:** upstream SPHINCs- B-01, and PQ1's own `fcee705a` fix. A secret PRF that drops a hypertree-position field shares one secret table across positions. The revealed secrets then accumulate across signatures until anyone can forge, and the verifier, self-verify and a twin implementation of the same spec all still pass.
+
+**What was there before:** the product already has a function-level FORS guard (`sphincs-c10/tests/fors_position_binding.rs`). It has no honest-signature shape, no WOTS analogue and no mutant control, and it had never run under the v2 features.
+
+**Written for this round,** from scratch (the upstream test file was not opened or copied):
+- **Python, `c10v2/position_binding.py`:**
+  - **F:** two honest signatures at different hypertree positions that open the same FORS (t, j) must reveal different secrets, each equal to `fors_prf` at its own position. The pair is found by digest search over `sha256("c10v2-posbind-msg" ‖ i)` with `kat_key(0)`, then both messages are signed and verified.
+  - **W:** the WOTS analogue. A grid of positions per chain index (0, 1, 2, 41, 42), with every single-field change, and the two honest signatures' own positions. Every revealed WOTS value must equal `chain^digit(wots_prf(position, ci))`, i.e. the signer uses this PRF.
+  - **Mutants:** drop `ht_idx` from the FORS PRF; drop layer, tree or kp from the WOTS PRF; and, for the two-block PRFs, squeeze tree and kp out of the A7 tail while block 1 keeps the layer. A mutant counts as caught only if:
+    - its intended check fails;
+    - the other check still holds;
+    - its signatures still verify.
+- **Rust:** `proto_full/v2_position_binding.rs` (F and W as two tests), run by `proto_full/position_binding.sh`.
+  - It runs on a separate copy of the round-20 sphincs copy (`target/proto-full-pb`), with `pb-mut-*` features added there only.
+  - For each mutant it also runs `v2_kat`.
+
+**Results** [m]:
+
+| variant | pair (msgs; FORS t, j; ht) | Python | Rust | mutants caught, Python / Rust |
+|---|---|---|---|---|
+| draft 0.3 | (1, 2); t 8, j 1973; 0x34e82 / 0x18d36 | PASS | PASS (+ product test 5/5) | 4/4, 4/4 |
+| prf2 | (6, 12); t 3, j 1529 | PASS | PASS (+ 5/5) | 4/4, 4/4 |
+| wprf2b | (1, 12); t 0, j 1459 | PASS | PASS (+ 5/5) | 5/5, 5/5 |
+| prf2 + wprf2b (merged PRF alone) | (8, 10); t 3, j 986 | PASS | PASS (+ 5/5) | 5/5, 5/5 |
+| all3 | (1, 25); t 6, j 123 | PASS | PASS (+ 5/5) | 4/4, 4/4 |
+| **full stack** | (1, 9); t 0, j 2039; 0x0f700 / 0x03a3c | PASS | PASS (+ 5/5) | 5/5, 5/5 |
+
+- **Rust and Python find the identical pair in every variant.**
+- **Every mutant's signatures still verify,** in both languages. This is upstream's observation: only the binding test sees the defect.
+- **Every Rust mutant also breaks `v2_kat` (Rust ≠ Python reference)** wherever a KAT set exists, so the KAT cross-check catches a Rust-only drop as well. Upstream's reference shared the bug, so its cross-check could not.
+
+**The device path** (the secrets inside the hw key loop and FORS subtree) is not covered by these host tests. Its coverage is the fb-full golden compare (byte-identical, §3). That golden's positions are ht 0xe138 and 0xe24: layer-0 (tree, kp) = (225, 56) and (14, 36), layer-1 kp = 225 and 14. Every field a drop could zero is nonzero there, except the layer-1 tree, which is always 0 when d = 2. So a device-side field drop would change the golden bytes [c].
+
+### 7. Not done, and limits
+
+- **Product FI function:** `secure/src/crypto.rs` itself is not built against the copy. The FI evidence comes from its mirror in `bench_chain`, as in round 18.
+- **The top cache's fault surface** has no positive control: no planted fault in a cached node.
+- **The bridge** got no FI positive controls, residue run or checkct run of its own (see §4).
+- **Round 17's 13 fmtKDF plants** were not rerun for the new descriptor.
+- **No asm prf2 path** was built (the §3 speed lever).
+- **The FV landing figures** are judgement, as in round 18.
+- **The 16-message estimates** come from a different configuration than the FI chain (§3).
