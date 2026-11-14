@@ -411,6 +411,8 @@ def search_main():
             for t_ in TERMS:                                   # every returned term, both games, every C
                 M[f"o{t_}{C}"] = to[t_] + np.zeros((len(X), len(Y)))
                 M[f"w{t_}{C}"] = tw[t_] + np.zeros((len(X), len(Y)))
+            M[f"otot{C}"] = sum(to.values()) + np.zeros((len(X), len(Y)))   # the theorem's right-hand side
+            M[f"wtot{C}"] = sum(tw.values()) + np.zeros((len(X), len(Y)))
         nx, ny = len(X), len(Y)
         for C in CS:
             qb = 16 + math.log2(C)
@@ -447,9 +449,13 @@ def search_main():
     BITS = [f"fl{C}" for C in CS] + [f"flq{C}" for C in CS] + ["enc", "c"]
     RATIOS = ["ord", "wrap"] + [f"{g}{t}{C}" for C in CS for g in "ow" for t in TERMS]
     DRIVERS = BITS + RATIOS
+    # the totals reading of gate (a): the bound as proved is the game total, so only the totals at the caps count
+    RATIOS_T = [f"{g}tot{C}" for C in CS for g in "ow"]
+    DRIVERS_T = BITS + RATIOS_T
 
-    def mark(M):
-        losses = [ref[b] - M[b] for b in BITS] + [np.log2(M[r] / ref[r]) for r in RATIOS]
+    def mark(M, ratios=None):
+        ratios = RATIOS if ratios is None else ratios
+        losses = [ref[b] - M[b] for b in BITS] + [np.log2(M[r] / ref[r]) for r in ratios]
         L = np.stack(losses)
         loss = L.max(axis=0)
         mk = np.where(loss <= 0, 0, np.where(loss <= 1, 1, 2))
@@ -458,7 +464,7 @@ def search_main():
     Xi = {x: i for i, x in enumerate(triples)}
 
     def sweep():
-      store = {k: [] for k in ("cycA", "cycB", "gas", "bytes", "mark", "loss", "drv", "hd", "xi", "yi",
+      store = {k: [] for k in ("cycA", "cycB", "gas", "bytes", "mark", "loss", "drv", "markT", "lossT", "drvT", "hd", "xi", "yi",
                                "ord", "wrap", "cdel", "wterm", "dq1", "addr", "asis")}
       noc = np.full(len(triples), np.inf)
       stock_cell = None
@@ -467,6 +473,7 @@ def search_main():
           Yi = [kas.index(y) for y in Y]
           M = block(h, d, triples, Y)
           mk, loss, drv = mark(M)
+          mkT, lossT, drvT = mark(M, RATIOS_T)
           if (h, d) == (18, 2):
               ix, iy = Xi[X0], Y.index(Y0)
               stock_cell = (mk[ix, iy], loss[ix, iy])
@@ -478,6 +485,8 @@ def search_main():
           store["gas"].append((M["gas_callee"] + M["gas_calldata"])[ok]); store["bytes"].append(M["bytes"][ok].astype(np.int32))
           store["mark"].append(mk[ok].astype(np.int8)); store["loss"].append(loss[ok].astype(np.float32))
           store["drv"].append(drv[ok].astype(np.int8)); store["hd"].append(np.full(len(xi), bi, np.int8))
+          store["markT"].append(mkT[ok].astype(np.int8)); store["lossT"].append(lossT[ok].astype(np.float32))
+          store["drvT"].append(drvT[ok].astype(np.int8))
           store["xi"].append(xi.astype(np.int16)); store["yi"].append(np.array(Yi, np.int16)[yi])
           store["ord"].append((M["ord"] / ref["ord"])[ok].astype(np.float32))
           store["wrap"].append((M["wrap"] / ref["wrap"])[ok].astype(np.float32))
@@ -520,7 +529,9 @@ def search_main():
             pm=_pareto(G["cycA"], G["gas"], G["bytes"], sb(G["mark"] <= 1)),
             passB=_pareto(G["cycB"], G["gas"], G["bytes"], sb(G["mark"] == 0)),
             asis=_pareto(G["cycA"], G["gas"], G["bytes"], sb((G["mark"] == 0) & G["asis"])),
-            pm_asis=_pareto(G["cycA"], G["gas"], G["bytes"], sb((G["mark"] <= 1) & G["asis"])))
+            pm_asis=_pareto(G["cycA"], G["gas"], G["bytes"], sb((G["mark"] <= 1) & G["asis"])),
+            passT=_pareto(G["cycA"], G["gas"], G["bytes"], sb(G["markT"] == 0)),
+            passT_asis=_pareto(G["cycA"], G["gas"], G["bytes"], sb((G["markT"] == 0) & G["asis"])))
 
     # close over the reported frontiers: every (w, l, T) that appears on one gets the refined (c) estimate, then
     # re-sweep, until the frontiers carry no coarse estimate (Astra r16 MEDIUM: w4 had kept its 800-sample +0.627 b
@@ -544,6 +555,7 @@ def search_main():
     t_sweep = time.time() - t0
     f_all, f_pass, f_pm, f_passB, f_asis = F["all"], F["pass_"], F["pm"], F["passB"], F["asis"]
     f_pm_asis, f_small = F["pm_asis"], F["small"]
+    f_passT, f_passT_asis = F["passT"], F["passT_asis"]
     G["csamp"] = np.array([csamp[triples[i]] for i in range(len(triples))], np.int32)[G["xi"]]
     G["cse"] = np.array([cstat[triples[i]][1] for i in range(len(triples))], np.float32)[G["xi"]]
 
@@ -629,7 +641,14 @@ def search_main():
     print(f"  grind: {tries[X0]:.1f} WOTS+C tries/WOTS sig, 2^11 R nonces; P[exhaust 10M] = 2^{fb.grind_fail_log2(fb.STOCK):.0f}\n")
 
     tot = np.bincount(G["mark"], minlength=3)
-    print(f"marks over {N} sets: PASS {tot[0]}, MINOR-LOSS {tot[1]}, FAIL {tot[2]}")
+    totT = np.bincount(G["markT"], minlength=3)
+    print(f"marks over {N} sets: PASS {tot[0]}, MINOR-LOSS {tot[1]}, FAIL {tot[2]} (every-term reading, column `mark`); "
+          f"totals reading (column `mark_totals`: the same bit metrics + both games' totals at C=1,2,16 only): "
+          f"PASS {totT[0]}, MINOR-LOSS {totT[1]}, FAIL {totT[2]}")
+    dvec = np.array([d_ for _, d_ in hds])[G["hd"]]
+    print("  PASS by d, every-term / totals: " + ", ".join(
+        f"d={d_}: {int(((G['mark'] == 0) & (dvec == d_)).sum())} / {int(((G['markT'] == 0) & (dvec == d_)).sum())}"
+        for d_ in sorted({d_ for _, d_ in hds})))
     print("mark rule: loss = max over [stock - set] of the bit metrics (Lean floor classical and Grover at C=1,2,16;\n"
           "  one-time digest-match exponent log2(w^l), stock 129; (c))\n"
           "  and log2(set/stock) of the bound metrics (ordinary and wrapper totals at C=1; EVERY returned term - node, zero,\n"
@@ -683,6 +702,9 @@ def search_main():
     o_pm = show(f_pm, "PASS + MINOR-LOSS sets", 15)
     o_asis = show(f_asis, "PASS sets that fit the v2 0.3 compact address as-is", 25)
     show(f_pm_asis, "PASS + MINOR-LOSS sets that fit the v2 0.3 compact address as-is", 15)
+    print("TOTALS READING (mark_totals): rows below still print the every-term mark; their totals mark is PASS")
+    show(f_passT, "PASS sets, totals reading", 25)
+    show(f_passT_asis, "PASS sets that fit A7 as-is, totals reading", 15)
     show(f_small, f"PASS sets with sig <= {stock['sig']} B", 15)
     lmin_w = {4: 64, 8: 43, 16: 32}
     loff = sorted({(params(j)["w"], params(j)["l"] - lmin_w[params(j)["w"]]) for j in f_pass.tolist()})
@@ -720,8 +742,10 @@ def search_main():
           "  T alone moves only count_ds 43 8 T (WotsAcceptanceMass) and the T literals.\n")
 
     # TSV: PASS and MINOR-LOSS sets plus every frontier set
-    keep = np.union1d(np.nonzero(G["mark"] <= 1)[0], np.concatenate([f_all, f_pass, f_pm, f_passB, f_small, f_asis, f_pm_asis]))
+    keep = np.union1d(np.nonzero(G["mark"] <= 1)[0], np.concatenate([f_all, f_pass, f_pm, f_passB, f_small, f_asis, f_pm_asis, f_passT, f_passT_asis]))
+    keep = np.union1d(keep, np.nonzero(G["markT"] <= 1)[0])
     fasis, fpma = set(f_asis.tolist()), set(f_pm_asis.tolist())
+    fpT, fpTa = set(f_passT.tolist()), set(f_passT_asis.tolist())
     fa, fp, fpm = set(f_all.tolist()), set(f_pass.tolist()), set(f_pm.tolist())
     import os
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "family_search.tsv")
@@ -731,10 +755,11 @@ def search_main():
             "d_fors_multiuse_delta_bits",
             "floor_delta_cls_C1", "floor_delta_cls_C2", "floor_delta_cls_C16", "floor_delta_grover_C1",
             "floor_delta_grover_C2", "floor_delta_grover_C16", "addr_bits", "flags", "mark", "loss_bits",
-            "driver", "front_all", "front_pass", "front_pass_minor", "front_pass_asis", "front_pass_minor_asis"]
+            "driver", "front_all", "front_pass", "front_pass_minor", "front_pass_asis", "front_pass_minor_asis", "mark_totals", "loss_totals_bits", "driver_totals",
+            "front_pass_totals", "front_pass_totals_asis"]
     with open(path, "w") as fh:
         fh.write("# family_search.tsv — format_options_numerics.py search (" + time.strftime("%Y-%m-%d") +
-                 f"); SUBSET of {N} valid sets: PASS/MINOR-LOSS + every frontier set; stock cached {stock['cycA'] / 1e6:.3f} M, gas "
+                 f"); SUBSET of {N} valid sets: PASS/MINOR-LOSS under either reading (mark, mark_totals) + every frontier set; stock cached {stock['cycA'] / 1e6:.3f} M, gas "
                  f"{stock['gas']:.0f}, c {c_stock:.3f} b, samples {samples} coarse / {refine_samples} refined (per-row c_samples)\n")
         fh.write("\t".join(cols) + "\n")
         for j in keep.tolist():
@@ -756,8 +781,9 @@ def search_main():
                                      "perm>4blk" if p["l"] > 65 else "", "(d)" if G["dq1"][j] < -1 else "") if f),
                 MARKS[G["mark"][j]], f"{G['loss'][j]:.3f}",
                 DRIVERS[G["drv"][j]] if G["mark"][j] else "-", int(j in fa), int(j in fp), int(j in fpm),
-                int(j in fasis), int(j in fpma))) + "\n")
-    print(f"wrote {path} ({len(keep)} rows)")
+                int(j in fasis), int(j in fpma), MARKS[G["markT"][j]], f"{G['lossT'][j]:.3f}",
+                DRIVERS_T[G["drvT"][j]] if G["markT"][j] else "-", int(j in fpT), int(j in fpTa))) + "\n")
+    print(f"wrote family_search.tsv ({len(keep)} rows)")
     print(f"runtime: total {time.time() - t0:.1f} s (sweep {t_sweep:.1f} s incl. (c): {len(triples)} triples x "
           f"{samples} samples {t_c:.1f} s + {len(near) + len(closure)} x {refine_samples} {t_r:.1f} s)")
 
