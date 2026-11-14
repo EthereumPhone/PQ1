@@ -28,9 +28,11 @@ import {PqsignerDeployment} from "../script/generated/PqsignerDeployment.sol";
 ///
 ///         STATUS: the EXPECTED_* values below are the 2026-10-20 Trail of
 ///         Bits audit-freeze set, DEPLOYED on Base Mainnet on 2026-10-21
-///         (deployments/base-mainnet.json, status "active"); `cast codehash
-///         <addr>` on Base equals these values (the impl hash only on chain
-///         8453: it embeds the chain id in Solady's EIP-712 cache). The
+///         (deployments/base-mainnet.json, status "active"); the on-chain
+///         `extcodehash` read on 2026-10-21 equals these values
+///         (contracts/verification/docs/DEPLOYED_BYTECODE_PIN_CAVEAT.md; the
+///         impl hash only on chain 8453: it embeds the chain id in Solady's
+///         EIP-712 cache). The
 ///         previous set (2026-06-12: impl 0x31e4…3590, factory 0xe8CE…d452,
 ///         verifier 0xdDE4…9cbB) is superseded.
 ///

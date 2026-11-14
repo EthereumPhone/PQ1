@@ -6,7 +6,10 @@ import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
 
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
-import {SPHINCsC10Asm} from "../src/verifiers/SPHINCsC10Asm.sol";
+// The verifier leg is the pinned (Base-deployed) reference, built from its frozen copy, like
+// PinnedCodehashes.t.sol: since 2026-11-14 src/verifiers/SPHINCsC10Asm.sol holds the undeployed
+// optimized v1.
+import {RefSPHINCsC10Asm} from "./ref/RefSPHINCsC10Asm.sol";
 import {ISPHINCSVerifier} from "../src/verifiers/ISPHINCSVerifier.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 import {PinnedCodehashSelector} from "./PinnedCodehashSelector.sol";
@@ -47,7 +50,7 @@ contract PinnedBytecodeImmutableLemmaTest is PinnedCodehashSelector {
     /// so this lemma is provably about the SAME compiled artifact the
     /// pinned-codehash certification (and therefore the Halmos session)
     /// names.
-    SPHINCsC10Asm internal sphincs;
+    RefSPHINCsC10Asm internal sphincs;
     MockSPHINCSVerifier internal c10;
     PQSmartWallet internal implA;
     PQSmartWalletFactory internal factoryA;
@@ -56,7 +59,7 @@ contract PinnedBytecodeImmutableLemmaTest is PinnedCodehashSelector {
         // EXACT deployment sequence of PinnedCodehashesTest.setUp() — same
         // test-contract deployer address, same nonces — so instance A's
         // immutables (and hence its codehash) reproduce the pin.
-        sphincs = new SPHINCsC10Asm();
+        sphincs = new RefSPHINCsC10Asm();
         c10 = new MockSPHINCSVerifier();
         implA = new PQSmartWallet(IEntryPoint(address(0x4337)), c10);
         factoryA = new PQSmartWalletFactory(address(implA), c10);
@@ -146,7 +149,7 @@ contract PinnedBytecodeImmutableLemmaTest is PinnedCodehashSelector {
     /// is plain codehash equality — two fresh deployments must hash
     /// identically (and to the pin, certified by PinnedCodehashes.t.sol).
     function test_verifier_runtime_has_no_immutables() external {
-        SPHINCsC10Asm v2 = new SPHINCsC10Asm();
+        RefSPHINCsC10Asm v2 = new RefSPHINCsC10Asm();
         assertEq(address(sphincs).codehash, address(v2).codehash, "verifier runtime not constant");
     }
 
