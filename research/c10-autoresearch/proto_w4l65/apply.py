@@ -960,6 +960,7 @@ for cand, feats in (("d03w", '"sim-internals", "v2", "v2-wprf2b"'), ("w4w", '"si
     shutil.copytree(os.path.join(SCA, "driver_fors"), os.path.join(dst, "driver_wprf"), ignore=shutil.ignore_patterns("target"))
     for f in ("Cargo.lock", "rust-toolchain.toml"):
         shutil.copy(os.path.join(SCA, f), os.path.join(dst, f))
+    shutil.copytree(os.path.join(SCA, ".cargo"), os.path.join(dst, ".cargo"))   # thumbv8m target + build-std
     ws = open(os.path.join(SCA, "Cargo.toml")).read()
     ws = ws.replace('members = ["driver", "driver_kdf", "driver_fors", "driver_th", "driver_saes", "driver_ct_eq"]',
                     'members = ["driver", "driver_fors", "driver_th", "driver_wprf"]')
