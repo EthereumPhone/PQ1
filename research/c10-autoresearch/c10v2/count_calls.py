@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """count_calls.py VARIANT... — round 19: exact SHA-256 call counts of c10v2_ref.py's keygen, sign and verify
-(KAT key 0; messages 0..3), by wrapping its sha256. Draft 0.3's keygen (177,151) and verify (361) equal the Rust
-host counts (round 16), which cross-checks the counter; sign depends on the message through the grinds."""
+(KAT key 0; messages 0..3), by wrapping its sha256. Draft 0.3's keygen (177,151) equals the Rust host count (round
+16), which cross-checks the counter; the Python verifier makes one call more per layer than Rust's (363 against 361);
+sign depends on the message through the grinds."""
 import sys
 import c10v2_ref as r
 
@@ -25,6 +26,7 @@ for name in sys.argv[1:] or ["draft03"]:
     signs, verifies = [], []
     for i in range(4):
         m = r.kat_msg(0, i)
+        take()                      # the message derivation is not part of sign (Astra r19)
         sig = r.sign(sk, ps, root, m)
         signs.append(take())
         assert r.verify(ps, root, m, sig)

@@ -2515,7 +2515,7 @@ The search's d = 3 rows: of 8,182 totals-PASS rows, none passes every-term, 3,15
 | Rust host, bench inputs: draft 0.3 | 177,151 | 486,372 | 481,368 | 361 |
 | Rust host, bench inputs: d3l46 | 23,679 (×0.134) | 177,477 (×0.365) | 161,413 (×0.335) | 510 (×1.41) |
 
-The Python reference (`count_calls.py`, KAT key 0, 4 messages) agrees on keygen (177,151 and 23,679) and on the sign ratio (×0.32). Its verifier makes one extra call per layer (363 / 513).
+The Python reference (`count_calls.py`, KAT key 0, 4 messages; the message derivation excluded) agrees on keygen (177,151 and 23,679). Its sign means are 526,633 and 168,939 (×0.32), and its verifier makes one extra call per layer (363 / 513).
 
 **Kit, generic v2 path [m]** (fixed messages, signatures byte-identical to `golden-v2-d3l46.bin`, 2 repetitions within 400 cycles):
 
@@ -2534,13 +2534,13 @@ The fused-model estimate is −61% cached [e]. No fused driver was built, as ins
 
 **Slack or real:**
 - **The slack part:** V0 is the EasyCrypt literal (771 for stock), and it charges a full l(w−1) chain per layer. The verifier computes only l(w−1) − T steps per layer, because the +C rule fixes the digit sum. Charged at the verifier's actual call count (510 against 361), the term moves **+0.988 b**.
-- **The real part:** the remaining ~0.99 b is genuine within the bound's structure: three layers of verifier node queries per signature instead of two. It remains 10 b below the total.
+- **What remains:** +0.988 b under this call-count bound; no unavoidable security loss is established. The proof charges distinct non-ordinary memo keys and uses all verifier calls as an upper bound. An instrumented d3 verification made no new oracle inputs after signing, so further accounting slack is possible (Astra). The term stays 10 b below the total.
 
-**Verdict:** **yes, it could become a MINOR-LOSS candidate**, at +0.99 b on one term, but only with a tightened verification-cost lemma. That is the same class of proof slack as split810's rebuild accounting; judgement 10–30 person-days [e], like split810's.
+**Verdict:** **yes, it could become a MINOR-LOSS candidate**, at +0.99 b on one term, but only with a tightened verification-cost lemma. That is the same class of proof slack as split810's rebuild accounting. Allow 10–30 person-days [e] for the cost tightening alone: a conservative, uncalibrated allowance, structurally simpler than split810's memoization. It is not an estimate for completing the d3 proof.
 - **What it does not get it:** a d = 3 generalization of the proof is needed regardless. Coverage and extraction across three layers are unsupported (round 16).
 - **Its costs:**
   - 4,844 B (+836);
-  - model verify gas 219,635, +33% over stock, from more verifier calls and calldata. This matters for Track B.
+  - model gas 219,635 (≈ 142,167 callee + 77,468 calldata) against the v2 stock-shape model's 164,704, +33%, from more verifier calls and calldata. This is a model figure, not measured d3 gas or complete UserOp gas; it matters for Track B.
   - a re-laid-out A7.
 - **The neighbour:** h18 d3 l43 T203 is already MINOR-LOSS today (0.952 b loose, 0.72 b tight), but costs 0.71 b of fault margin [c].
 - **Under the totals reading** both PASS (×0.33).
@@ -2557,7 +2557,7 @@ The fused-model estimate is −61% cached [e]. No fused driver was built, as ins
 | T206 / T207 | 115.3 / 120.2 M | slower | MINOR-LOSS (encoding) | +0.38 / +0.78 | |
 
 - **T203 and T204** are milder ts200s: same keys as 0.3, so the format KDF is required. Their only cost is the fault fallback; ts200's −1.7 b was a FAIL.
-- **Nothing else at or below 4,008 B passes every-term.** The closest shapes fail on coverage:
+- **Within the searched grid** (uniform layer heights, bounded parameter ranges), nothing else at or below 4,008 B passes every-term. The TSV has exactly five qualifying rows, T203–T207. The closest other shapes fail on coverage:
   - h18 d2 a10 k14 (3,992 B): wrapper coverage at C = 16 ×2^6.4 (FAIL), totals MINOR 0.97 b;
   - h18 d2 a12 k11 (3,784–3,880 B): ordinary coverage at C = 1 ×2^7.5 (FAIL), totals MINOR ~0.93–1.0 b.
 - **w = 16** rows (3,656 B) fail the fault margin by about 15 b.
@@ -2571,3 +2571,18 @@ v1's cached sign would go from 2.92 s (shipping driver, no tick; 3.03 s with the
 - **The driver at opt-level 3 through the root profile:** it moves the FSBL's bytes (the FSBL shares `pqsigner-hw`).
 - **Evidence already in place for v1:** the residue gate is clean on the v1 entries (7/7 with controls), gate 5 interleaved probes pass, and goldens are byte-identical.
 - **Not kit-measurable:** the SE draws (~0.3 s) and film frames stay outside the chain.
+
+### 4. Astra's review of round 19 (`b9571400a`), folded in above
+
+Astra: **"Conditional MINOR-LOSS candidate is honest; correct the findings above."** What reproduces:
+- **The numbers:** the wrapper node term alone exceeds the 1-bit threshold, at +1.115987 b, and tightening both baselines gives +0.987601 b.
+- **The tightening is sound in principle.** 771 = 147 + 2 × (301 + 2 + 9). V0 bounds all public verification calls, and so the exceptional node keys. The +C check precedes chain traversal, so an accepted layer takes exactly l(w−1) − T steps (a rejected one fewer). 361 and 510 are therefore valid candidate upper bounds, pending proof integration.
+- **The size knob:** the five ≤ 4,008-B rows (T203–T207) are confirmed; only T203 and T204 beat T205. Adding the wprf2b cost equally is fair for identical shapes; the speed figures remain estimates.
+- **The d3l46 A7:** injective and sufficient (layer ≤ 2, tree < 2^18, kp ≤ 63, ci ≤ 45, cp ≤ 11, ha ≤ 2047). The third layer's +C near-miss is rejected.
+
+Corrected:
+- "real" is now "remains under this call-count bound; no unavoidable loss established" (MEDIUM);
+- the Python sign counts exclude the message derivation, and the docstring now says 363;
+- "within the searched grid";
+- the gas baseline is labelled as a model figure;
+- the 10–30 person-days is for the cost tightening only.
