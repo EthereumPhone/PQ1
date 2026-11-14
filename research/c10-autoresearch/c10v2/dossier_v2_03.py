@@ -116,6 +116,32 @@ def main():
     print(f"  NOT counted above (v1 and v2 + wprf2b alike): second-block compressions with the per-layer secret CV and"
           f" varying words: v1 {cv_v1:,}; v2 + wprf2b {wots_nocache:,} without the top cache, {wots_cache:,} with it")
     print(f"  cost: +1 compression per WOTS PRF = +{wots_nocache:,} per pass without the top cache (+{wots_cache:,} with it)")
+    # round 20 (UPDATE 2026-11-14): the full stack — ts200 + prf2 + split810 + top cache + the merged two-block
+    # paired WOTS PRF — and the bridge all3 + cache (prf2's one-block WOTS pairs). Heights (8, 10); prf2 pairs WOTS
+    # chains (22 PRFs per key for l = 43) and FORS leaves (k * 2^a / 2); the warm cache (#1148, HC = 4) rebuilds only
+    # the 16-leaf subtree under the top leaf. Cold = no cache (every pass rebuilds the 1,024-leaf top tree).
+    # Corrected after Astra's round-20 review: whole-key generation pairs the chains (22 digests per key), but signing
+    # calls the per-chain PRF once per chain (d * l = 86), and each revealed FORS secret repeats its pair's digest
+    # (+ (k - 1), the same recomputation v1's 26,636 counts). Executed compressions, as for v1.
+    def full_stack_counts(merged):
+        pairs = (p["l"] + 1) // 2
+        fors = p["k"] * 2**p["a"] // 2 + (p["k"] - 1)
+        keys_cold, keys_warm = 2**8 + 2**10, 2**8 + 2**4
+        sign_chains = p["d"] * p["l"]
+        wots_cold, wots_warm = keys_cold * pairs + sign_chains, keys_warm * pairs + sign_chains
+        if merged == "no-prf2":   # ablation: wprf2b unpaired, all asm (fused FORS subtree: no recomputed leaf)
+            fors1 = p["k"] * 2**p["a"]
+            return dict(sk_cold=fors1, sk_warm=fors1, cv_cold=keys_cold * p["l"] + sign_chains,
+                        cv_warm=keys_warm * p["l"] + sign_chains)
+        if merged:   # two-block: no sk_seed compression with varying words; the pairs are CV block-2 compressions
+            return dict(sk_cold=fors, sk_warm=fors, cv_cold=wots_cold, cv_warm=wots_warm)
+        return dict(sk_cold=fors + wots_cold, sk_warm=fors + wots_warm, cv_cold=0, cv_warm=0)
+    for label, merged in (("full stack (merged WOTS PRF)", True), ("bridge all3 + cache (prf2 one-block)", False),
+                          ("ablation no-prf2 (ts200 + split810 + cache + wprf2b)", "no-prf2")):
+        c = full_stack_counts(merged)
+        print(f"  {label}: sk_seed counter cold {c['sk_cold']:,} (x{c['sk_cold']/v1_total:.3f} vs v1), warm {c['sk_warm']:,}"
+              f" (x{c['sk_warm']/v1_total:.3f}); CV residual cold {c['cv_cold']:,} (x{c['cv_cold']/cv_v1:.3f} of v1's"
+              f" {cv_v1:,}), warm {c['cv_warm']:,} (x{c['cv_warm']/cv_v1:.3f})")
     # round 18 (UPDATE 2026-11-14): w4l65 + wprf2b — the WOTS PRF adds no sk_seed compression with varying words;
     # FORS is w4l65's (same k, a); the per-layer CV residual scales with l
     w4_cv_nc = 2 * (2**hp * 65 + 65)

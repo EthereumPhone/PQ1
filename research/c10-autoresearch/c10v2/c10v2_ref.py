@@ -45,6 +45,9 @@ SIG_LEN = 4008
 #            block, sk_seed || tag || layer, is constant per layer, so sk_seed never meets a
 #            varying word in one compression (as v1's 80-B WOTS PRF). Keys change; the
 #            verifier does not (it never computes a secret).
+#            With prf2 as well (round 20, the merged PRF): one two-block digest over the A7
+#            of the even chain index 2j gives chains 2j (bytes 0..16) and 2j + 1 (16..32);
+#            FORS keeps prf2's pairing. Still signer-side only.
 WPRF2B_TAG = b"C10v2-WOTS-PRF2B"
 # d3l46    : round 19, the d >= 3 insight point (research): h = 18 over d = 3 layers of height
 #            6, w = 8, l = 46, target sum 209 (digits from the low 138 bits), 4,844-B
@@ -64,7 +67,6 @@ def configure(variant):
     assert not (v & {"w4", "w4l65"} and "ts200" in v), "w4 / w4l65 set their own target sum"
     assert not {"w4", "w4l65"} <= v, "w4 and w4l65 are alternatives"
     assert not {"w4l65", "split810"} <= v, "w4l65 and split810 both re-lay out ci"
-    assert not {"wprf2b", "prf2"} <= v, "wprf2b and prf2 are different WOTS PRFs"
     assert not ("d3l46" in v and v & {"ts200", "split810", "w4", "w4l65"}), "d3l46 sets d, l, T and the A7 layout"
     VARIANT = v
     TARGET_SUM = 200 if "ts200" in v else 205
@@ -156,6 +158,9 @@ def wots_prf(sk_seed, layer, tree, kp, ci):
     if "wprf2b" in VARIANT:
         blk = WPRF2B_TAG + be(layer, 4) + b"\x00" * 12           # 32 B: block 1 is sk_seed || blk
         assert len(WPRF2B_TAG) == 16 and len(blk) == 32
+        if "prf2" in VARIANT:                                   # round 20: the merged PRF, paired
+            d = sha256(sk_seed + blk + a7(WOTS_PRF, layer, tree, kp, ci & ~1))
+            return d[N * (ci & 1):N * (ci & 1) + N]
         return sha256(sk_seed + blk + a7(WOTS_PRF, layer, tree, kp, ci))[:N]   # 71 B
     if "prf2" in VARIANT:
         d = sha256(sk_seed + a7(WOTS_PRF, layer, tree, kp, ci & ~1))
